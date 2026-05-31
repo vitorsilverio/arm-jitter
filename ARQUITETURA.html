@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARM JIT Architecture — GBA Emulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap');
+
+        :root {
+          --bg: #0a0c10;
+          --surface: #0f1318;
+          --border: #1e2530;
+          --accent: #00e5ff;
+          --accent2: #ff6b35;
+          --accent3: #7fff6b;
+          --accent4: #c77dff;
+          --text: #cdd6f4;
+          --muted: #6c7a8d;
+          --glow: 0 0 20px rgba(0,229,255,0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: 'JetBrains Mono', monospace;
+          min-height: 100vh;
+          padding: 40px 24px;
+          overflow-x: hidden;
+        }
+
+        /* Grid de ruído de fundo */
+        body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background-image:
+            radial-gradient(ellipse 60% 40% at 80% 10%, rgba(0,229,255,0.04) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 50% at 10% 80%, rgba(199,125,255,0.04) 0%, transparent 60%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .wrapper {
+          max-width: 1100px;
+          margin: 0 auto;
+          position: relative;
+          z-index: 1;
+        }
+
+        /* Header */
+        header {
+          margin-bottom: 56px;
+        }
+        .badge {
+          display: inline-block;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 3px;
+          text-transform: uppercase;
+          color: var(--accent);
+          border: 1px solid rgba(0,229,255,0.3);
+          padding: 4px 12px;
+          margin-bottom: 16px;
+          border-radius: 2px;
+        }
+        h1 {
+          font-family: 'Syne', sans-serif;
+          font-size: clamp(28px, 5vw, 52px);
+          font-weight: 800;
+          line-height: 1.1;
+          letter-spacing: -1px;
+          color: #fff;
+        }
+        h1 span { color: var(--accent); }
+        .subtitle {
+          margin-top: 12px;
+          font-size: 13px;
+          color: var(--muted);
+          font-weight: 300;
+          line-height: 1.6;
+          max-width: 560px;
+        }
+
+        /* Section titles */
+        .section-title {
+          font-family: 'Syne', sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 4px;
+          text-transform: uppercase;
+          color: var(--muted);
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .section-title::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+        }
+
+        /* === PIPELINE FLOW === */
+        .pipeline {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          margin-bottom: 56px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+
+        .pipe-stage {
+          flex: 1;
+          min-width: 120px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          padding: 18px 14px;
+          position: relative;
+          text-align: center;
+          transition: border-color 0.2s;
+        }
+        .pipe-stage:hover { border-color: var(--accent); }
+        .pipe-stage:not(:last-child)::after {
+          content: '→';
+          position: absolute;
+          right: -14px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--accent);
+          font-size: 16px;
+          z-index: 2;
+          background: var(--bg);
+          padding: 0 2px;
+        }
+
+        .pipe-num {
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: 2px;
+          color: var(--muted);
+          margin-bottom: 8px;
+        }
+        .pipe-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: #fff;
+          margin-bottom: 4px;
+        }
+        .pipe-sub {
+          font-size: 9px;
+          color: var(--muted);
+          line-height: 1.5;
+        }
+
+        .pipe-stage.fetch { border-top: 2px solid var(--accent); }
+        .pipe-stage.decode { border-top: 2px solid var(--accent2); }
+        .pipe-stage.ir { border-top: 2px solid var(--accent4); }
+        .pipe-stage.opt { border-top: 2px solid var(--accent3); }
+        .pipe-stage.emit { border-top: 2px solid #ffd700; }
+        .pipe-stage.cache { border-top: 2px solid var(--accent); }
+
+        /* === OBJECT DIAGRAM === */
+        .obj-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          margin-bottom: 56px;
+        }
+
+        @media (max-width: 700px) {
+          .obj-grid { grid-template-columns: 1fr; }
+          .pipeline { flex-wrap: wrap; gap: 12px; }
+          .pipe-stage:not(:last-child)::after { display: none; }
+        }
+
+        .obj-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+
+        .obj-header {
+          padding: 10px 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border-bottom: 1px solid var(--border);
+        }
+        .obj-icon {
+          width: 28px; height: 28px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          flex-shrink: 0;
+        }
+        .obj-name {
+          font-size: 12px;
+          font-weight: 600;
+          color: #fff;
+          line-height: 1.2;
+        }
+        .obj-type {
+          font-size: 9px;
+          color: var(--muted);
+          letter-spacing: 1px;
+        }
+
+        .obj-body {
+          padding: 12px 14px;
+        }
+        .field {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          font-size: 10px;
+          padding: 3px 0;
+          border-bottom: 1px dotted rgba(255,255,255,0.04);
+          gap: 8px;
+        }
+        .field:last-child { border-bottom: none; }
+        .f-name { color: var(--muted); flex-shrink: 0; }
+        .f-type { color: var(--accent); text-align: right; font-size: 9px; }
+        .f-type.orange { color: var(--accent2); }
+        .f-type.purple { color: var(--accent4); }
+        .f-type.green { color: var(--accent3); }
+        .f-type.yellow { color: #ffd700; }
+
+        .obj-methods {
+          padding: 8px 14px;
+          border-top: 1px solid var(--border);
+          background: rgba(0,0,0,0.2);
+        }
+        .method {
+          font-size: 9px;
+          color: var(--accent);
+          padding: 2px 0;
+          line-height: 1.6;
+        }
+        .method.orange { color: var(--accent2); }
+        .method.purple { color: var(--accent4); }
+        .method.green { color: var(--accent3); }
+        .method.yellow { color: #ffd700; }
+
+        /* === MODULE MAP === */
+        .module-map {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin-bottom: 56px;
+        }
+        @media (max-width: 600px) { .module-map { grid-template-columns: 1fr; } }
+
+        .module-box {
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .module-title {
+          padding: 10px 14px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 1px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .module-title .dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .module-items {
+          padding: 8px 14px 12px;
+        }
+        .module-item {
+          font-size: 10px;
+          color: var(--muted);
+          padding: 3px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          line-height: 1.5;
+        }
+        .module-item::before {
+          content: '─';
+          color: var(--border);
+          flex-shrink: 0;
+        }
+        .module-item strong { color: var(--text); font-weight: 600; }
+
+        /* === IR TABLE === */
+        .ir-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 10px;
+          margin-bottom: 56px;
+        }
+        .ir-table th {
+          text-align: left;
+          padding: 8px 12px;
+          background: rgba(0,229,255,0.06);
+          border: 1px solid var(--border);
+          color: var(--accent);
+          font-weight: 600;
+          letter-spacing: 1px;
+          font-size: 9px;
+        }
+        .ir-table td {
+          padding: 8px 12px;
+          border: 1px solid var(--border);
+          color: var(--muted);
+          vertical-align: top;
+          line-height: 1.6;
+        }
+        .ir-table td:first-child { color: #fff; font-weight: 600; }
+        .ir-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+        /* === STRATEGY BLOCK === */
+        .strategy-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          margin-bottom: 56px;
+        }
+        @media (max-width: 650px) { .strategy-grid { grid-template-columns: 1fr; } }
+
+        .strat-card {
+          border: 1px solid var(--border);
+          padding: 20px;
+          border-radius: 4px;
+          position: relative;
+        }
+        .strat-num {
+          font-size: 40px;
+          font-weight: 800;
+          font-family: 'Syne', sans-serif;
+          line-height: 1;
+          margin-bottom: 10px;
+          opacity: 0.15;
+          color: #fff;
+          position: absolute;
+          top: 12px;
+          right: 16px;
+        }
+        .strat-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: #fff;
+          margin-bottom: 8px;
+          position: relative;
+        }
+        .strat-body {
+          font-size: 10px;
+          color: var(--muted);
+          line-height: 1.7;
+          position: relative;
+        }
+        .strat-card.s1 { border-top: 2px solid var(--accent); }
+        .strat-card.s2 { border-top: 2px solid var(--accent4); }
+        .strat-card.s3 { border-top: 2px solid var(--accent3); }
+
+        /* === FOOTER === */
+        footer {
+          border-top: 1px solid var(--border);
+          padding-top: 24px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: gap;
+          gap: 12px;
+        }
+        .foot-text { font-size: 10px; color: var(--muted); }
+        .foot-text strong { color: var(--text); }
+
+        /* Glow effects */
+        .pipe-stage.fetch:hover { box-shadow: 0 0 20px rgba(0,229,255,0.08); }
+        .pipe-stage.emit:hover { box-shadow: 0 0 20px rgba(255,215,0,0.08); }
+
+        /* Connector lines in module map */
+        .arrow-note {
+          font-size: 10px;
+          color: var(--muted);
+          text-align: center;
+          padding: 8px;
+          border: 1px dashed var(--border);
+          border-radius: 4px;
+          margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <header>
+        <div class="badge">ARM JIT · Java · GBA / NDS</div>
+        <h1>Arquitetura do<br><span>ARM JIT Compiler</span></h1>
+        <p class="subtitle">
+            Design modular para emulação de ARM7TDMI/ARM9, com pipeline JIT em três camadas — Fetch → IR → Codegen —, memória por interface por dispositivo e SWI resolvida via callbacks sem emular BIOS.
+        </p>
+    </header>
+
+    <!-- PIPELINE -->
+    <div class="section-title">01 · Pipeline JIT</div>
+    <div class="pipeline">
+        <div class="pipe-stage fetch">
+            <div class="pipe-num">STAGE 1</div>
+            <div class="pipe-label">Fetch</div>
+            <div class="pipe-sub">Lê ARM / THUMB da memória. Detecta modo pelo bit T do CPSR.</div>
+        </div>
+        <div class="pipe-stage decode">
+            <div class="pipe-num">STAGE 2</div>
+            <div class="pipe-label">Decode</div>
+            <div class="pipe-sub">ArmDecoder / ThumbDecoder. Extrai opcode, registradores, imediato, condição.</div>
+        </div>
+        <div class="pipe-stage ir">
+            <div class="pipe-num">STAGE 3</div>
+            <div class="pipe-label">IR Lift</div>
+            <div class="pipe-sub">Converte para IROp[] em IrBlock. Separa load/store, ALU, branch, coprocessor.</div>
+        </div>
+        <div class="pipe-stage opt">
+            <div class="pipe-num">STAGE 4</div>
+            <div class="pipe-label">Optimize</div>
+            <div class="pipe-sub">IrOptimizer: constant fold, dead code, merge flags.</div>
+        </div>
+        <div class="pipe-stage emit">
+            <div class="pipe-num">STAGE 5</div>
+            <div class="pipe-label">Codegen</div>
+            <div class="pipe-sub">CodeEmitter → bytecode JVM via ASM. Hospeda em CompiledBlock.</div>
+        </div>
+        <div class="pipe-stage cache">
+            <div class="pipe-num">STAGE 6</div>
+            <div class="pipe-label">BlockCache</div>
+            <div class="pipe-sub">Armazena por PC. Invalida quando a memória é escrita (SMC).</div>
+        </div>
+    </div>
+
+    <!-- OBJECT DIAGRAM -->
+    <div class="section-title">02 · Diagrama de Objetos Principais</div>
+    <div class="obj-grid">
+
+        <!-- ArmCore -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(0,229,255,0.1)">⚙️</div>
+                <div>
+                    <div class="obj-name">ArmCore</div>
+                    <div class="obj-type">CORE · CPU PRINCIPAL</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name">registers</span><span class="f-type">int[16]</span></div>
+                <div class="field"><span class="f-name">cpsr</span><span class="f-type">CpsrRegister</span></div>
+                <div class="field"><span class="f-name">spsr</span><span class="f-type">int[]</span></div>
+                <div class="field"><span class="f-name">mode</span><span class="f-type orange">CpuMode</span></div>
+                <div class="field"><span class="f-name">jit</span><span class="f-type purple">JitRuntime</span></div>
+                <div class="field"><span class="f-name">memory</span><span class="f-type green">AddressSpace</span></div>
+                <div class="field"><span class="f-name">swi</span><span class="f-type orange">SwiDispatcher</span></div>
+                <div class="field"><span class="f-name">interruptLine</span><span class="f-type">boolean</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method">+ step() : void</div>
+                <div class="method">+ runBlock() : int</div>
+                <div class="method">+ handleException(e: ArmException)</div>
+            </div>
+        </div>
+
+        <!-- CpsrRegister -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(255,107,53,0.1)">🏁</div>
+                <div>
+                    <div class="obj-name">CpsrRegister</div>
+                    <div class="obj-type">VALUE · FLAGS / MODO</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name">N, Z, C, V</span><span class="f-type">boolean</span></div>
+                <div class="field"><span class="f-name">thumbMode</span><span class="f-type">boolean</span></div>
+                <div class="field"><span class="f-name">irqDisable</span><span class="f-type">boolean</span></div>
+                <div class="field"><span class="f-name">fiqDisable</span><span class="f-type">boolean</span></div>
+                <div class="field"><span class="f-name">mode</span><span class="f-type orange">CpuMode</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method orange">+ get() : int</div>
+                <div class="method orange">+ set(v: int)</div>
+                <div class="method orange">+ evalCond(c: Cond) : boolean</div>
+            </div>
+        </div>
+
+        <!-- JitRuntime -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(199,125,255,0.1)">⚡</div>
+                <div>
+                    <div class="obj-name">JitRuntime</div>
+                    <div class="obj-type">CORE · MOTOR JIT</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name">blockCache</span><span class="f-type purple">BlockCache</span></div>
+                <div class="field"><span class="f-name">decoder</span><span class="f-type orange">InstructionDecoder</span></div>
+                <div class="field"><span class="f-name">irBuilder</span><span class="f-type purple">IrBuilder</span></div>
+                <div class="field"><span class="f-name">optimizer</span><span class="f-type green">IrOptimizer</span></div>
+                <div class="field"><span class="f-name">emitter</span><span class="f-type yellow">CodeEmitter</span></div>
+                <div class="field"><span class="f-name">threshold</span><span class="f-type">int</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method purple">+ execute(pc: int, core: ArmCore)</div>
+                <div class="method purple">+ compile(pc: int) : CompiledBlock</div>
+                <div class="method purple">+ invalidate(addr: int)</div>
+            </div>
+        </div>
+
+        <!-- BlockCache -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(0,229,255,0.08)">📦</div>
+                <div>
+                    <div class="obj-name">BlockCache</div>
+                    <div class="obj-type">INFRA · CACHE DE BLOCOS</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name">cache</span><span class="f-type">Map&lt;Integer, CompiledBlock&gt;</span></div>
+                <div class="field"><span class="f-name">hitCounter</span><span class="f-type">Map&lt;Integer, int&gt;</span></div>
+                <div class="field"><span class="f-name">dirtyPages</span><span class="f-type">Set&lt;Integer&gt;</span></div>
+                <div class="field"><span class="f-name">maxEntries</span><span class="f-type">int</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method">+ get(pc: int) : CompiledBlock?</div>
+                <div class="method">+ put(pc: int, b: CompiledBlock)</div>
+                <div class="method">+ invalidatePage(page: int)</div>
+                <div class="method">+ evict()</div>
+            </div>
+        </div>
+
+        <!-- IrBlock -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(199,125,255,0.1)">🔣</div>
+                <div>
+                    <div class="obj-name">IrBlock</div>
+                    <div class="obj-type">IR · BLOCO INTERMEDIÁRIO</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name">ops</span><span class="f-type purple">List&lt;IrOp&gt;</span></div>
+                <div class="field"><span class="f-name">startPc</span><span class="f-type">int</span></div>
+                <div class="field"><span class="f-name">endPc</span><span class="f-type">int</span></div>
+                <div class="field"><span class="f-name">cycleCount</span><span class="f-type">int</span></div>
+                <div class="field"><span class="f-name">hasCall</span><span class="f-type">boolean</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method purple">+ add(op: IrOp)</div>
+                <div class="method purple">+ sealed() : IrBlock</div>
+            </div>
+        </div>
+
+        <!-- AddressSpace -->
+        <div class="obj-card" style="border: 1px dashed rgba(127,255,107,0.35);">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(127,255,107,0.08)">🔌</div>
+                <div>
+                    <div class="obj-name">AddressSpace</div>
+                    <div class="obj-type">«interface» · BARRAMENTO</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field" style="color:var(--muted);font-size:9px;padding:4px 0 6px;border-bottom:1px solid var(--border)">
+                    Contrato único para qualquer dispositivo.<br>Implementações trazem seus próprios arrays e regiões.
+                </div>
+                <div class="field"><span class="f-name">— sem campos —</span><span class="f-type" style="color:var(--muted)">contrato puro</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method green">+ read8(addr: int) : int</div>
+                <div class="method green">+ read16(addr: int) : int</div>
+                <div class="method green">+ read32(addr: int) : int</div>
+                <div class="method green">+ write8/16/32(addr, v)</div>
+                <div class="method green">+ notifyWrite(addr: int)</div>
+            </div>
+        </div>
+
+        <!-- SwiDispatcher -->
+        <div class="obj-card" style="border: 1px dashed rgba(255,107,53,0.35);">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(255,107,53,0.1)">📞</div>
+                <div>
+                    <div class="obj-name">SwiDispatcher</div>
+                    <div class="obj-type">«interface» · SYSCALL HOST</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field" style="color:var(--muted);font-size:9px;padding:4px 0 6px;border-bottom:1px solid var(--border)">
+                    Callback registrado por SWI number.<br>Retorna CpuState modificado — sem emular BIOS.
+                </div>
+                <div class="field"><span class="f-name">handlers</span><span class="f-type orange">Map&lt;Int, SwiHandler&gt;</span></div>
+                <div class="field"><span class="f-name">fallback</span><span class="f-type orange">SwiHandler?</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method orange">+ register(swi: int, h: SwiHandler)</div>
+                <div class="method orange">+ dispatch(swi: int, state: CpuState) : CpuState</div>
+            </div>
+        </div>
+
+        <!-- CpuState + SwiHandler -->
+        <div class="obj-card">
+            <div class="obj-header">
+                <div class="obj-icon" style="background:rgba(255,107,53,0.08)">📋</div>
+                <div>
+                    <div class="obj-name">CpuState / SwiHandler</div>
+                    <div class="obj-type">VALUE · SNAPSHOT + CALLBACK</div>
+                </div>
+            </div>
+            <div class="obj-body">
+                <div class="field"><span class="f-name" style="color:var(--accent);font-size:9px">CpuState</span><span class="f-type" style="color:var(--muted)">record</span></div>
+                <div class="field"><span class="f-name">r0..r3</span><span class="f-type">int</span></div>
+                <div class="field"><span class="f-name">sp, lr, pc</span><span class="f-type">int</span></div>
+                <div class="field"><span class="f-name">cpsr</span><span class="f-type">int</span></div>
+                <div class="field" style="margin-top:8px"><span class="f-name" style="color:var(--accent);font-size:9px">SwiHandler</span><span class="f-type" style="color:var(--muted)">@FunctionalInterface</span></div>
+                <div class="field"><span class="f-name">handle(s: CpuState)</span><span class="f-type orange">→ CpuState</span></div>
+            </div>
+            <div class="obj-methods">
+                <div class="method orange">// ex: Sqrt → r0 = √r0; retorna state</div>
+                <div class="method orange">// ex: VBlankIntrWait → suspende CPU</div>
+                <div class="method orange">// fallback: emula via BIOS rom</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- HIERARQUIA AddressSpace -->
+    <div class="section-title">03 · Hierarquia AddressSpace por Dispositivo</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:20px 24px;margin-bottom:56px;overflow-x:auto">
+        <div style="display:flex;flex-direction:column;gap:0;align-items:flex-start;min-width:560px">
+
+            <!-- interface raiz -->
+            <div style="align-self:center;border:1px dashed rgba(127,255,107,0.4);padding:8px 28px;font-size:11px;font-weight:600;color:var(--accent3);letter-spacing:1px;border-radius:3px;background:rgba(127,255,107,0.04)">
+                «interface» AddressSpace
+            </div>
+            <!-- conectores -->
+            <div style="align-self:center;width:1px;height:24px;background:var(--border)"></div>
+            <div style="align-self:center;display:flex;gap:60px;align-items:flex-start">
+
+                <!-- ramo GBA -->
+                <div style="display:flex;flex-direction:column;align-items:center;gap:0">
+                    <div style="width:1px;height:16px;background:var(--border)"></div>
+                    <div style="border:1px solid rgba(0,229,255,0.3);padding:7px 16px;font-size:10px;font-weight:600;color:var(--accent);border-radius:3px;background:rgba(0,229,255,0.04);white-space:nowrap">
+                        GbaAddressSpace
+                    </div>
+                    <div style="width:1px;height:14px;background:var(--border)"></div>
+                    <div style="font-size:9px;color:var(--muted);text-align:center;line-height:1.7">
+                        BIOS 0x00–0x3FFF<br>EWRAM 0x02–0x02FFFFFF<br>IWRAM 0x03–0x03FFFFFF<br>IO 0x04–0x04FFFFFF<br>PAL/VRAM/OAM/ROM/SRAM
+                    </div>
+                </div>
+
+                <!-- ramo NDS ARM9 -->
+                <div style="display:flex;flex-direction:column;align-items:center;gap:0">
+                    <div style="width:1px;height:16px;background:var(--border)"></div>
+                    <div style="border:1px solid rgba(199,125,255,0.3);padding:7px 16px;font-size:10px;font-weight:600;color:var(--accent4);border-radius:3px;background:rgba(199,125,255,0.04);white-space:nowrap">
+                        NdsArm9AddressSpace
+                    </div>
+                    <div style="width:1px;height:14px;background:var(--border)"></div>
+                    <div style="font-size:9px;color:var(--muted);text-align:center;line-height:1.7">
+                        ITCM / DTCM<br>Main RAM 0x02–0x02FFFFFF<br>VRAM bancos A–I<br>IO Engine A/B<br>GBA Slot / Cart NDS
+                    </div>
+                </div>
+
+                <!-- ramo NDS ARM7 -->
+                <div style="display:flex;flex-direction:column;align-items:center;gap:0">
+                    <div style="width:1px;height:16px;background:var(--border)"></div>
+                    <div style="border:1px solid rgba(255,215,0,0.3);padding:7px 16px;font-size:10px;font-weight:600;color:#ffd700;border-radius:3px;background:rgba(255,215,0,0.04);white-space:nowrap">
+                        NdsArm7AddressSpace
+                    </div>
+                    <div style="width:1px;height:14px;background:var(--border)"></div>
+                    <div style="font-size:9px;color:var(--muted);text-align:center;line-height:1.7">
+                        ARM7 BIOS<br>WRAM shared / privada<br>IO Wifi / Sound<br>GBA ROM mirror
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- nota sobre SMC -->
+            <div style="align-self:center;margin-top:20px;font-size:9px;color:var(--muted);border:1px dashed var(--border);padding:8px 16px;border-radius:3px;text-align:center">
+                Todas as implementações chamam <span style="color:var(--accent)">notifyWrite(addr)</span> →
+                <span style="color:var(--accent4)">JitRuntime.invalidate(addr)</span> para SMC detection
+            </div>
+        </div>
+    </div>
+
+    <!-- MODULE MAP -->
+    <div class="section-title">04 · Organização de Módulos / Pacotes</div>
+    <div class="module-map">
+
+        <div class="module-box" style="border-top: 2px solid var(--accent);">
+            <div class="module-title" style="background:rgba(0,229,255,0.04);">
+                <div class="dot" style="background:var(--accent)"></div>
+                arm.core
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>ArmCore</strong> — CPU, registradores, ciclo</div>
+                <div class="module-item"><strong>CpsrRegister</strong> — flags NZCV + modo</div>
+                <div class="module-item"><strong>CpuMode</strong> — enum (USR, FIQ, IRQ, SVC…)</div>
+                <div class="module-item"><strong>ArmException</strong> — RESET, UND, SWI, IRQ…</div>
+                <div class="module-item"><strong>Condition</strong> — enum para condicionais ARM</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid var(--accent4);">
+            <div class="module-title" style="background:rgba(199,125,255,0.04);">
+                <div class="dot" style="background:var(--accent4)"></div>
+                arm.jit
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>JitRuntime</strong> — orquestra o pipeline</div>
+                <div class="module-item"><strong>BlockCache</strong> — cache LRU de blocos</div>
+                <div class="module-item"><strong>CompiledBlock</strong> — bytecode pronto</div>
+                <div class="module-item"><strong>ExecutionThreshold</strong> — interpreta N vezes antes de JIT</div>
+                <div class="module-item"><strong>SmcDetector</strong> — invalidação self-modifying code</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid var(--accent2);">
+            <div class="module-title" style="background:rgba(255,107,53,0.04);">
+                <div class="dot" style="background:var(--accent2)"></div>
+                arm.decoder
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>ArmDecoder</strong> — decodifica ARM32</div>
+                <div class="module-item"><strong>ThumbDecoder</strong> — decodifica THUMB16</div>
+                <div class="module-item"><strong>ArmInstruction</strong> — record decoded</div>
+                <div class="module-item"><strong>ShifterOperand</strong> — barrel shifter</div>
+                <div class="module-item"><strong>InstructionDecoder</strong> — interface comum</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid var(--accent4);">
+            <div class="module-title" style="background:rgba(199,125,255,0.04);">
+                <div class="dot" style="background:var(--accent4)"></div>
+                arm.ir
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>IrBlock</strong> — lista de IrOp</div>
+                <div class="module-item"><strong>IrOp</strong> — instrução IR (sealed interface)</div>
+                <div class="module-item"><strong>IrBuilder</strong> — constrói IrBlock a partir de decode</div>
+                <div class="module-item"><strong>IrOptimizer</strong> — passes: fold, DCE, merge</div>
+                <div class="module-item"><strong>IrOpType</strong> — ALU, LOAD, STORE, BRANCH…</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid #ffd700;">
+            <div class="module-title" style="background:rgba(255,215,0,0.04);">
+                <div class="dot" style="background:#ffd700"></div>
+                arm.codegen
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>CodeEmitter</strong> — interface; emite bytecode JVM</div>
+                <div class="module-item"><strong>AsmCodeEmitter</strong> — implementa via ASM lib</div>
+                <div class="module-item"><strong>GuestToHostMapper</strong> — mapeia reg ARM → var JVM</div>
+                <div class="module-item"><strong>FlagEmitter</strong> — emite lógica NZCV em bytecode</div>
+                <div class="module-item"><strong>MemAccessEmitter</strong> — chama MemoryBus via bytecode</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid var(--accent3);">
+            <div class="module-title" style="background:rgba(127,255,107,0.04);">
+                <div class="dot" style="background:var(--accent3)"></div>
+                arm.memory
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>AddressSpace</strong> — interface: read/write + notifyWrite</div>
+                <div class="module-item"><strong>GbaAddressSpace</strong> — BIOS/EWRAM/IWRAM/IO/VRAM/ROM</div>
+                <div class="module-item"><strong>NdsArm9AddressSpace</strong> — TCM, bancos VRAM, Engine A/B</div>
+                <div class="module-item"><strong>NdsArm7AddressSpace</strong> — WRAM, Wifi, Sound, GBA mirror</div>
+                <div class="module-item"><strong>IoRegisters</strong> — mapeamento de I/O (por dispositivo)</div>
+                <div class="module-item"><strong>DmaController</strong> — canais DMA abstratos</div>
+            </div>
+        </div>
+
+        <div class="module-box" style="border-top: 2px solid var(--accent2);">
+            <div class="module-title" style="background:rgba(255,107,53,0.04);">
+                <div class="dot" style="background:var(--accent2)"></div>
+                arm.swi
+            </div>
+            <div class="module-items">
+                <div class="module-item"><strong>SwiDispatcher</strong> — tabela de handlers por SWI number</div>
+                <div class="module-item"><strong>SwiHandler</strong> — @FunctionalInterface (CpuState → CpuState)</div>
+                <div class="module-item"><strong>CpuState</strong> — record imutável (r0–r3, sp, lr, pc, cpsr)</div>
+                <div class="module-item"><strong>GbaSwiHandlers</strong> — impl GBA: Sqrt, Div, CpuSet, VBlankIntrWait…</div>
+                <div class="module-item"><strong>NdsSwiHandlers</strong> — impl NDS: Sqrt, WaitByLoop, GetCRC16…</div>
+                <div class="module-item"><strong>BiosFallbackHandler</strong> — fallback: emula SWI pela ROM de BIOS</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- IR OP TYPES -->
+    <div class="section-title">05 · Tipos de IrOp (sealed interface)</div>
+    <table class="ir-table">
+        <thead>
+        <tr>
+            <th>IrOp</th>
+            <th>Campos</th>
+            <th>Descrição</th>
+            <th>Emite (JVM)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>AluOp</td>
+            <td>op, dst, src1, src2, setFlags</td>
+            <td>MOV, ADD, SUB, AND, ORR, EOR, BIC, CMP…</td>
+            <td>iadd / isub / ior / ixor + flags</td>
+        </tr>
+        <tr>
+            <td>LoadOp</td>
+            <td>dst, base, offset, size, signed, writeback</td>
+            <td>LDR/LDRB/LDRH/LDRSB/LDRSH</td>
+            <td>invokevirtual MemoryBus.read*</td>
+        </tr>
+        <tr>
+            <td>StoreOp</td>
+            <td>src, base, offset, size, writeback</td>
+            <td>STR/STRB/STRH</td>
+            <td>invokevirtual MemoryBus.write*</td>
+        </tr>
+        <tr>
+            <td>BranchOp</td>
+            <td>target, link, cond, mode</td>
+            <td>B, BL, BX, BLX</td>
+            <td>if_icmpeq / putfield PC + return</td>
+        </tr>
+        <tr>
+            <td>MultOp</td>
+            <td>dst, hi, src1, src2, acc, setFlags</td>
+            <td>MUL, MLA, UMULL, SMULL, UMLAL…</td>
+            <td>imul / lmul</td>
+        </tr>
+        <tr>
+            <td>PsrOp</td>
+            <td>read, src, mask</td>
+            <td>MRS, MSR</td>
+            <td>getfield/putfield cpsr</td>
+        </tr>
+        <tr>
+            <td>SwiOp</td>
+            <td>imm</td>
+            <td>SWI — delega ao SwiDispatcher; nunca entra na BIOS ROM</td>
+            <td>invokevirtual SwiDispatcher.dispatch → aplica CpuState retornado</td>
+        </tr>
+        <tr>
+            <td>CycleOp</td>
+            <td>count</td>
+            <td>Contagem de ciclos do bloco</td>
+            <td>putfield cycles (acumula)</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <!-- ESTRATÉGIAS DE EXECUÇÃO -->
+    <div class="section-title">06 · Estratégias de Execução</div>
+    <div class="strategy-grid" style="grid-template-columns: repeat(4,1fr)">
+        <div class="strat-card s1">
+            <div class="strat-num">1</div>
+            <div class="strat-title">Interpretador (cold)</div>
+            <div class="strat-body">
+                Executa ARM/THUMB diretamente via switch em <code>ArmInterpreter</code>. Usado nas primeiras N execuções de cada PC. Simples de manter; base para testes de corretude. Cada instrução consome ~20 ns de overhead no host.
+            </div>
+        </div>
+        <div class="strat-card s2">
+            <div class="strat-num">2</div>
+            <div class="strat-title">JIT por Bloco (hot)</div>
+            <div class="strat-body">
+                Quando <code>hitCounter[pc] ≥ threshold</code>, o <code>JitRuntime</code> compila o bloco até o próximo branch. <code>CompiledBlock</code> é um <code>Runnable</code> gerado via ASM lib. Execução host-native dentro da JVM — elimina overhead de dispatch por instrução.
+            </div>
+        </div>
+        <div class="strat-card s3">
+            <div class="strat-num">3</div>
+            <div class="strat-title">Invalidação SMC</div>
+            <div class="strat-body">
+                Todo <code>write*</code> em qualquer <code>AddressSpace</code> chama <code>JitRuntime.invalidate(addr)</code>. O cache descarta blocos cujo range de PC inclui o endereço escrito. Necessário para jogos que geram código em IWRAM/EWRAM em runtime.
+            </div>
+        </div>
+        <div class="strat-card" style="border-top: 2px solid var(--accent2);">
+            <div class="strat-num" style="color:var(--accent2)">4</div>
+            <div class="strat-title">SWI via Callback</div>
+            <div class="strat-body">
+                <code>SwiOp</code> no IR emite chamada ao <code>SwiDispatcher.dispatch(imm, state)</code>. O handler Java recebe e devolve <code>CpuState</code> — sem entrar na ROM de BIOS. <code>BiosFallbackHandler</code> cobre SWIs sem handler registrado.
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="foot-text">
+            <strong>arm-jit-core</strong> — extensível para GBA · NDS · futuros targets ARM
+        </div>
+        <div class="foot-text" style="text-align:right">
+            Java 25 · ASM bytecode lib · sem dependências externas no core
+        </div>
+    </footer>
+
+</div>
+</body>
+</html>
