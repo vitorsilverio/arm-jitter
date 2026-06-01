@@ -17,19 +17,23 @@ class ThumbAluExecutionTest {
         memory.put16(4, 0x41CA);
         memory.put16(6, 0x4253);
         memory.put16(8, 0x42D3);
+        memory.put16(10, 0x438C);
+        memory.put16(12, 0x428C);
         ArmCore core = thumbCore(memory);
         core.setRegister(0, 5);
         core.setRegister(1, 2);
         core.setRegister(2, 0x8000_0001);
         core.setRegister(3, 0);
+        core.setRegister(4, 0b1111);
         core.cpsr().setNzcv(false, false, true, false);
 
-        assertEquals(5, core.step(5));
+        assertEquals(7, core.step(7));
 
         assertEquals(5, core.register(0));
         assertEquals(0x6000_0000, core.register(2));
         assertEquals(-0x6000_0000, core.register(3));
-        assertTrue(core.cpsr().zero());
+        assertEquals(0b1101, core.register(4));
+        assertFalse(core.cpsr().zero());
         assertTrue(core.cpsr().carry());
     }
 

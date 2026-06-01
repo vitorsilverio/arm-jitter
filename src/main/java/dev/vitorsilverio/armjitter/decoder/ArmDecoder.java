@@ -8,7 +8,7 @@ public final class ArmDecoder implements InstructionDecoder {
     /// Decodifica uma instrucao ARM32 no endereco informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
-        int raw = memory.read32(address);
+        int raw = memory.read32(address & ~3);
         Condition condition = decodeCondition(raw >>> 28);
 
         if ((raw & 0x0F00_0000) == 0x0F00_0000) {
@@ -30,28 +30,83 @@ public final class ArmDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, false);
         }
 
-        if ((raw & 0x0FC0_00F0) == 0x0000_0090) {
-            boolean accumulate = (raw & (1 << 21)) != 0;
-            if (accumulate) {
-                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
-            }
-            boolean setFlags = (raw & (1 << 20)) != 0;
-            int rd = (raw >>> 16) & 0xF;
-            int rs = (raw >>> 8) & 0xF;
-            int rm = raw & 0xF;
-            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MUL,
-                    rd, rm, rs, 0, false, setFlags, false);
+        if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {
+            boolean spsr = (raw & (1 << 22)) != 0;
+            int rd = (raw >>> 12) & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MRS,
+                    rd, -1, -1, spsr ? 1 : 0, true, false, false);
         }
 
-        if ((raw & 0x0E00_0090) == 0x0000_0090 && (raw & (1 << 22)) != 0) {
+        if ((raw & 0x0DB0_FFF0) == 0x0120_F000) {
+            boolean spsr = (raw & (1 << 22)) != 0;
+            int fieldMask = (raw >>> 16) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MSR,
+                    -1, rm, -1, (spsr ? 0x10 : 0) | fieldMask, false, false, false);
+        }
+
+        if ((raw & 0x0FB0_F000) == 0x0320_F000) {
+            boolean spsr = (raw & (1 << 22)) != 0;
+            int fieldMask = (raw >>> 16) & 0xF;
+            int value = rotateRight(raw & 0xFF, ((raw >>> 8) & 0xF) * 2);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MSR,
+                    (spsr ? 0x10 : 0) | fieldMask, -1, -1, value, true, false, false);
+        }
+
+        if ((raw & 0x0FB0_0FF0) == 0x0100_0090) {
+            boolean byteAccess = (raw & (1 << 22)) != 0;
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SWAP,
+                    rd, rn, rm, 0, false, false, false, byteAccess ? 1 : 4, false);
+        }
+
+        if ((raw & 0x0F80_00F0) == 0x0080_0090) {
+            boolean signed = (raw & (1 << 22)) != 0;
+            boolean accumulate = (raw & (1 << 21)) != 0;
+            boolean setFlags = (raw & (1 << 20)) != 0;
+            int rdHigh = (raw >>> 16) & 0xF;
+            int rdLow = (raw >>> 12) & 0xF;
+            int rs = (raw >>> 8) & 0xF;
+            int rm = raw & 0xF;
+            InstructionKind kind = switch ((signed ? 0b10 : 0) | (accumulate ? 0b01 : 0)) {
+                case 0b00 -> InstructionKind.UMULL;
+                case 0b01 -> InstructionKind.UMLAL;
+                case 0b10 -> InstructionKind.SMULL;
+                case 0b11 -> InstructionKind.SMLAL;
+                default -> throw new IllegalStateException("Unexpected long multiply mode");
+            };
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, kind,
+                    rdLow, rm, rs, rdHigh, false, setFlags, false);
+        }
+
+        if ((raw & 0x0FC0_00F0) == 0x0000_0090) {
+            boolean accumulate = (raw & (1 << 21)) != 0;
+            boolean setFlags = (raw & (1 << 20)) != 0;
+            int rd = (raw >>> 16) & 0xF;
+            int rn = (raw >>> 12) & 0xF;
+            int rs = (raw >>> 8) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    accumulate ? InstructionKind.MLA : InstructionKind.MUL,
+                    rd, rm, rs, rn, false, setFlags, false);
+        }
+
+        if ((raw & 0x0E00_0090) == 0x0000_0090) {
+            boolean immediateOffset = (raw & (1 << 22)) != 0;
             boolean preIndexed = (raw & (1 << 24)) != 0;
             boolean addOffset = (raw & (1 << 23)) != 0;
+            boolean writeback = (raw & (1 << 21)) != 0;
             boolean load = (raw & (1 << 20)) != 0;
             int transferKind = (raw >>> 5) & 0x3;
             int rn = (raw >>> 16) & 0xF;
             int rd = (raw >>> 12) & 0xF;
-            int offset = ((raw >>> 4) & 0xF0) | (raw & 0xF);
-            if (!preIndexed || (!load && transferKind != 0b01)) {
+            int offset = immediateOffset ? ((raw >>> 4) & 0xF0) | (raw & 0xF) : raw & 0xF;
+            if (!load && transferKind != 0b01) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            if (!immediateOffset && (raw & 0x0F00) != 0) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
             int signedOffset = addOffset ? offset : -offset;
@@ -66,7 +121,8 @@ public final class ArmDecoder implements InstructionDecoder {
             }
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD : InstructionKind.STORE,
-                    rd, rn, -1, signedOffset, true, false, false, sizeBytes, transferKind != 0b01);
+                    rd, rn, immediateOffset ? -1 : offset, signedOffset, immediateOffset, false, false,
+                    sizeBytes, transferKind != 0b01, writeback || !preIndexed, !preIndexed);
         }
 
         if ((raw & 0x0C00_0000) == 0x0400_0000) {
@@ -74,36 +130,40 @@ public final class ArmDecoder implements InstructionDecoder {
             boolean preIndexed = (raw & (1 << 24)) != 0;
             boolean addOffset = (raw & (1 << 23)) != 0;
             boolean byteAccess = (raw & (1 << 22)) != 0;
+            boolean writeback = (raw & (1 << 21)) != 0;
             boolean load = (raw & (1 << 20)) != 0;
             int rn = (raw >>> 16) & 0xF;
             int rd = (raw >>> 12) & 0xF;
-            int offset = raw & 0xFFF;
-            if (!immediateOffset || !preIndexed) {
+            int offset = immediateOffset ? raw & 0xFFF : raw & 0xF;
+            if (!immediateOffset && (raw & 0x10) != 0) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
             int signedOffset = addOffset ? offset : -offset;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD : InstructionKind.STORE,
-                    rd, rn, -1, signedOffset, true, false, false, byteAccess ? 1 : 4, false);
+                    rd, rn, immediateOffset ? -1 : offset, signedOffset, immediateOffset, false, false,
+                    byteAccess ? 1 : 4, false, writeback || !preIndexed, !preIndexed);
         }
 
         if ((raw & 0x0E00_0000) == 0x0800_0000) {
             boolean preIndexed = (raw & (1 << 24)) != 0;
             boolean addOffset = (raw & (1 << 23)) != 0;
+            boolean userMode = (raw & (1 << 22)) != 0;
             boolean writeback = (raw & (1 << 21)) != 0;
             boolean load = (raw & (1 << 20)) != 0;
             int rn = (raw >>> 16) & 0xF;
             int mask = raw & 0xFFFF;
-            if (preIndexed || !addOffset || mask == 0) {
-                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
-            }
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE,
-                    -1, rn, -1, mask, true, false, false, 4, false, writeback);
+                    -1, rn, -1, mask, true, false, userMode, 4, false, writeback,
+                    false, BlockTransferMode.fromArmBits(preIndexed, addOffset), mask == 0);
         }
 
         if ((raw & 0x0C00_0000) == 0) {
             boolean immediate = (raw & (1 << 25)) != 0;
+            if (!immediate && (raw & (1 << 4)) != 0 && (raw & (1 << 7)) != 0) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
             int opcode = (raw >>> 21) & 0xF;
             boolean setFlags = (raw & (1 << 20)) != 0;
             int rn = (raw >>> 16) & 0xF;
@@ -115,9 +175,13 @@ public final class ArmDecoder implements InstructionDecoder {
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x1 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.EOR,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
+                case 0x3 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.RSB,
+                        rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x5 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.ADC,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x6 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SBC,
+                        rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
+                case 0x7 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.RSC,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x8 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.TST,
                         -1, rn, immediate ? -1 : operand, operand, immediate, true, false);

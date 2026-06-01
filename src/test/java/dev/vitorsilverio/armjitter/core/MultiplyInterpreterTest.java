@@ -30,4 +30,64 @@ class MultiplyInterpreterTest {
 
         assertEquals(42, thumb.register(0));
     }
+
+    @Test
+    void executesArmMla() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE021_3290);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 6);
+        core.setRegister(2, 7);
+        core.setRegister(3, 5);
+
+        core.step();
+
+        assertEquals(47, core.register(1));
+        assertEquals(4, core.programCounter());
+    }
+
+    @Test
+    void executesArmUnsignedLongMultiply() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE083_2190);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 0xFFFF_FFFF);
+        core.setRegister(1, 2);
+
+        core.step();
+
+        assertEquals(0xFFFF_FFFE, core.register(2));
+        assertEquals(1, core.register(3));
+        assertEquals(4, core.programCounter());
+    }
+
+    @Test
+    void executesArmSignedLongMultiply() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE0C3_2190);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, -2);
+        core.setRegister(1, 3);
+
+        core.step();
+
+        assertEquals(-6, core.register(2));
+        assertEquals(-1, core.register(3));
+    }
+
+    @Test
+    void executesArmLongMultiplyAccumulate() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE0A3_2190);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 2);
+        core.setRegister(1, 3);
+        core.setRegister(2, 4);
+        core.setRegister(3, 0);
+
+        core.step();
+
+        assertEquals(10, core.register(2));
+        assertEquals(0, core.register(3));
+    }
 }

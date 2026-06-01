@@ -39,4 +39,19 @@ class StandardIrBlockLifterTest {
         assertEquals(4, block.endPc());
         assertEquals(2, block.operations().size());
     }
+
+    @Test
+    void stopsBlockAtLoadIntoPc() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE590_F000);
+        memory.put32(4, 0xE3A0_0001);
+        StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder());
+
+        IrBlock block = lifter.lift(memory, 0, 4);
+
+        assertEquals(4, block.endPc());
+        assertEquals(2, block.operations().size());
+        assertInstanceOf(IrOp.Load.class, block.operations().get(0));
+        assertInstanceOf(IrOp.Cycle.class, block.operations().get(1));
+    }
 }

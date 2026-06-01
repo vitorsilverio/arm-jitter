@@ -24,4 +24,14 @@ class SwiDispatcherTest {
 
         assertEquals(0x18, result.pc());
     }
+
+    @Test
+    void fallbackCanInspectSwiNumber() {
+        SwiDispatcher dispatcher = SwiDispatcher.empty();
+        dispatcher.fallbackWithNumber((swi, state) -> state.withR0(swi));
+
+        CpuState result = dispatcher.dispatch(0xab, new CpuState(0, 0, 0, 0, 0, 0, 0, 0));
+
+        assertEquals(0xab, result.r0());
+    }
 }

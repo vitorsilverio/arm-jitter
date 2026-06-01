@@ -8,7 +8,7 @@ O projeto nao possui `Main`: ele e um core auxiliar para ser embutido por um emu
 
 Esta estrutura define os contratos principais da arquitetura e um interpretador frio inicial:
 
-- `core`: registradores, CPSR, modo de CPU e avaliacao condicional.
+- `core`: registradores, CPSR, modos bancados, SPSR, excecoes iniciais e avaliacao condicional.
 - `memory`: barramento abstrato `AddressSpace`.
 - `decoder`: contrato de decodificacao ARM/THUMB.
 - `ir`: representacao intermediaria imutavel.
@@ -16,7 +16,9 @@ Esta estrutura define os contratos principais da arquitetura e um interpretador 
 - `codegen`: contrato para emissores de codigo.
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
 
-O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testavel, de ARM/THUMB: `MOV`, `ADD`, `SUB`, `MUL`, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, `CMP`, high-register ops THUMB, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDMIA/STMIA` ARM/THUMB, `LDR/STR` word/halfword/byte ARM imediato, `LDR/STR` word/halfword/byte THUMB imediato, SP-relative THUMB e `SWI`.
+O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testavel, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e mascara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo mascara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotacao e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
+
+O core ja possui bancos de `SP/LR` por modo, banco FIQ para `r8-r14`, `SPSR` por modo privilegiado, entrada real de `SWI` no vetor `0x08` quando nao ha handler host registrado, entrada de `IRQ` no vetor `0x18` quando `interruptLine` esta ativa e o bit I do CPSR esta limpo, e entrada de instrucao indefinida no vetor `0x04` para opcodes ainda nao implementados.
 
 ## Uso basico
 
@@ -34,6 +36,39 @@ ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
 core.setProgramCounter(0x08000000);
 core.step();
 core.step(16);
+```
+
+Para skip BIOS ou restaurar snapshot de boot, configure PC e CPSR juntos para que
+os bancos de registradores acompanhem o modo da CPU:
+
+```java
+core.setBankedRegister(CpuMode.SUPERVISOR, 13, 0x03007FE0);
+core.setBankedRegister(CpuMode.IRQ, 13, 0x03007FA0);
+core.configureExecutionState(
+        0x08000000,
+        CpuMode.SYSTEM,
+        InstructionSet.ARM,
+        false,
+        true);
+```
+
+Para investigar loops de BIOS/ROM, instale um trace leve:
+
+```java
+core.setTraceListener(new ArmTraceListener() {
+    @Override
+    public void afterInstruction(ArmCore tracedCore, DecodedInstruction instruction) {
+        System.out.printf(
+                "pc=%08X raw=%08X kind=%s cpsr=%08X r0=%08X sp=%08X lr=%08X%n",
+                instruction.address(),
+                instruction.raw(),
+                instruction.kind(),
+                tracedCore.cpsr().get(),
+                tracedCore.register(0),
+                tracedCore.register(13),
+                tracedCore.register(14));
+    }
+});
 ```
 
 ## Gerando IR
@@ -58,6 +93,15 @@ Para invalidar blocos automaticamente em escrita de memoria:
 ```java
 AddressSpace memoryWithInvalidation = new InvalidationAwareAddressSpace(deviceMemory, runtime);
 ArmCore core = new ArmCore(memoryWithInvalidation, SwiDispatcher.empty());
+```
+
+Para interceptar SWIs no host mantendo acesso ao numero solicitado:
+
+```java
+SwiDispatcher dispatcher = SwiDispatcher.empty();
+dispatcher.fallbackWithNumber((swi, state) -> {
+    return state.withR0(swi);
+});
 ```
 
 Para publicar no repositorio Maven local e consumir em outro emulador:

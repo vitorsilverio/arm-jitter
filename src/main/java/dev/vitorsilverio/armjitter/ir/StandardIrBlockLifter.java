@@ -51,10 +51,29 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
     }
 
     private boolean isTerminal(DecodedInstruction instruction) {
+        if (instruction.kind() == InstructionKind.LOAD_MULTIPLE
+                && (instruction.emptyRegisterList() || (instruction.immediate() & (1 << 15)) != 0)) {
+            return true;
+        }
+        if ((instruction.kind() == InstructionKind.LOAD || instruction.kind() == InstructionKind.LOAD_LITERAL)
+                && instruction.destinationRegister() == 15) {
+            return true;
+        }
+        if (isAluTerminal(instruction)) {
+            return true;
+        }
         return switch (instruction.kind()) {
             case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, POP, SWI, UNIMPLEMENTED -> true;
-            case MOV, ADD, ADC, SUB, SBC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, BIC, MVN, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH -> false;
+            case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH -> false;
         };
+    }
+
+    private boolean isAluTerminal(DecodedInstruction instruction) {
+        return instruction.destinationRegister() == 15
+                && switch (instruction.kind()) {
+                    case MOV, ADD, ADC, SUB, RSB, SBC, RSC, AND, EOR, ORR, LSL, LSR, ASR, ROR, BIC, MVN -> true;
+                    default -> false;
+                };
     }
 
     private int instructionWidth(InstructionSet instructionSet) {

@@ -30,4 +30,14 @@ class ThumbDecoderTest {
         assertEquals(InstructionKind.BRANCH, instruction.kind());
         assertEquals(6, instruction.immediate());
     }
+
+    @Test
+    void decodesReservedConditionalBranchAsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xDE00);
+
+        DecodedInstruction instruction = new ThumbDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
 }

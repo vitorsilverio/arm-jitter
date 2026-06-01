@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.jit;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JitRuntimeTest {
+    private static final int RESET_CPSR = CpuMode.SUPERVISOR.bits()
+            | dev.vitorsilverio.armjitter.core.CpsrRegister.IRQ_DISABLE_FLAG
+            | dev.vitorsilverio.armjitter.core.CpsrRegister.FIQ_DISABLE_FLAG;
+
     @Test
     void interpretsColdThenCachesHotBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
@@ -45,5 +50,20 @@ class JitRuntimeTest {
         assertEquals(42, core.register(0));
         assertEquals(4, core.programCounter());
         assertEquals(1, cycles);
+    }
+
+    @Test
+    void compiledUnimplementedInstructionEntersUndefinedVector() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xEE00_0000);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        JitRuntime runtime = JitRuntimeFactory.interpretedArm(16, 1);
+
+        assertEquals(1, runtime.execute(0, core));
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+        assertEquals(4, core.register(14));
+        assertEquals(RESET_CPSR, core.spsr(CpuMode.UNDEFINED));
     }
 }

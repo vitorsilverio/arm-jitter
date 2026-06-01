@@ -8,7 +8,7 @@ public final class ThumbDecoder implements InstructionDecoder {
     /// Decodifica uma instrucao THUMB16 no endereco informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
-        int raw = memory.read16(address) & 0xFFFF;
+        int raw = memory.read16(address & ~1) & 0xFFFF;
 
         if ((raw & 0xE000) == 0x0000) {
             int op = (raw >>> 11) & 0x3;
@@ -91,9 +91,13 @@ public final class ThumbDecoder implements InstructionDecoder {
                         -1, rd, rs, 0, false, true, false);
                 case 0x9 -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.NEG,
                         rd, -1, rs, 0, false, true, false);
+                case 0xA -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.CMP,
+                        -1, rd, rs, 0, false, true, false);
                 case 0xB -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.CMN,
                         -1, rd, rs, 0, false, true, false);
                 case 0xD -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.MUL,
+                        rd, rd, rs, 0, false, true, false);
+                case 0xE -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.BIC,
                         rd, rd, rs, 0, false, true, false);
                 case 0xF -> new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.MVN,
                         rd, -1, rs, 0, false, true, false);
@@ -211,6 +215,10 @@ public final class ThumbDecoder implements InstructionDecoder {
                     rd, 13, -1, offset, true, false, false);
         }
 
+        if ((raw & 0xFF00) == 0xDE00) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+        }
+
         if ((raw & 0xF000) == 0xD000 && (raw & 0x0F00) != 0x0F00) {
             Condition condition = ArmDecoder.decodeCondition((raw >>> 8) & 0xF);
             int offset = signExtend(raw & 0xFF, 8) << 1;
@@ -223,12 +231,10 @@ public final class ThumbDecoder implements InstructionDecoder {
             boolean load = (raw & (1 << 11)) != 0;
             int rb = (raw >>> 8) & 0x7;
             int mask = raw & 0xFF;
-            if (mask == 0) {
-                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
-            }
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
                     load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE,
-                    -1, rb, -1, mask, true, false, false, 4, false, true);
+                    -1, rb, -1, mask, true, false, false, 4, false, true, false,
+                    BlockTransferMode.IA, mask == 0);
         }
 
         if ((raw & 0xFF00) == 0xB000) {

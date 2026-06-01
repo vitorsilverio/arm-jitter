@@ -100,13 +100,29 @@ class StandardIrBuilderTest {
 
         assertEquals(1, load.dst());
         assertEquals(0, load.base());
+        assertEquals(-1, load.baseValueOverride());
         assertEquals(new IrOperand.Immediate(4), load.offset());
         assertEquals(4, load.sizeBytes());
 
         assertEquals(1, store.src());
         assertEquals(0, store.base());
+        assertEquals(-1, store.baseValueOverride());
         assertEquals(new IrOperand.Immediate(8), store.offset());
         assertEquals(4, store.sizeBytes());
+    }
+
+    @Test
+    void liftsArmPcRelativeLoadWithPipelineBaseOverride() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(4, 0xE59F_1000);
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 4);
+        IrBlock.Builder block = IrBlock.builder(4);
+
+        new StandardIrBuilder().lift(instruction, block);
+        IrOp.Load load = (IrOp.Load) block.sealed().operations().getFirst();
+
+        assertEquals(15, load.base());
+        assertEquals(12, load.baseValueOverride());
     }
 
     @Test

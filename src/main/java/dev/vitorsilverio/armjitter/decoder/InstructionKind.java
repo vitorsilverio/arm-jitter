@@ -12,8 +12,12 @@ public enum InstructionKind {
     ADC,
     /// Subtrai valores.
     SUB,
+    /// Subtrai reverso: segundo operando menos primeiro operando.
+    RSB,
     /// Subtrai valores incluindo borrow invertido.
     SBC,
+    /// Subtrai reverso incluindo borrow invertido.
+    RSC,
     /// Negacao aritmetica.
     NEG,
     /// Operacao AND bit a bit.
@@ -32,10 +36,24 @@ public enum InstructionKind {
     ROR,
     /// Multiplicacao inteira baixa.
     MUL,
+    /// Multiplicacao inteira baixa com acumulador.
+    MLA,
+    /// Multiplicacao longa unsigned.
+    UMULL,
+    /// Multiplicacao longa unsigned com acumulador.
+    UMLAL,
+    /// Multiplicacao longa signed.
+    SMULL,
+    /// Multiplicacao longa signed com acumulador.
+    SMLAL,
     /// Bit clear.
     BIC,
     /// Move NOT.
     MVN,
+    /// Move PSR para registrador geral.
+    MRS,
+    /// Move registrador/imediato para PSR.
+    MSR,
     /// Testa bits como AND sem salvar resultado.
     TST,
     /// Testa bits como EOR sem salvar resultado.
@@ -50,6 +68,8 @@ public enum InstructionKind {
     LOAD,
     /// Escreve valor na memoria.
     STORE,
+    /// Troca atomica simples entre registrador e memoria.
+    SWAP,
     /// Le multiplos registradores da memoria.
     LOAD_MULTIPLE,
     /// Escreve multiplos registradores na memoria.

@@ -7,13 +7,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ThumbAluDecoderTest {
     @Test
-    void decodesCarryNegateRotateAndCmnOperations() {
+    void decodesCarryNegateRotateBicAndCmnOperations() {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put16(0, 0x4148);
         memory.put16(2, 0x4188);
         memory.put16(4, 0x41CA);
         memory.put16(6, 0x4253);
         memory.put16(8, 0x42D3);
+        memory.put16(10, 0x438C);
+        memory.put16(12, 0x428C);
         ThumbDecoder decoder = new ThumbDecoder();
 
         assertEquals(InstructionKind.ADC, decoder.decode(memory, 0).kind());
@@ -21,6 +23,15 @@ class ThumbAluDecoderTest {
         assertEquals(InstructionKind.ROR, decoder.decode(memory, 4).kind());
         assertEquals(InstructionKind.NEG, decoder.decode(memory, 6).kind());
         assertEquals(InstructionKind.CMN, decoder.decode(memory, 8).kind());
+        DecodedInstruction bic = decoder.decode(memory, 10);
+        assertEquals(InstructionKind.BIC, bic.kind());
+        assertEquals(4, bic.destinationRegister());
+        assertEquals(4, bic.sourceRegister());
+        assertEquals(1, bic.secondSourceRegister());
+        DecodedInstruction cmp = decoder.decode(memory, 12);
+        assertEquals(InstructionKind.CMP, cmp.kind());
+        assertEquals(4, cmp.sourceRegister());
+        assertEquals(1, cmp.secondSourceRegister());
     }
 
     @Test

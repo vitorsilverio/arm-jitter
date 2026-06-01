@@ -33,7 +33,13 @@ public record DecodedInstruction(
         /// Indica que load deve fazer extensao com sinal.
         boolean signedAccess,
         /// Indica writeback no registrador base.
-        boolean writeback) {
+        boolean writeback,
+        /// Indica enderecamento post-index para load/store simples.
+        boolean postIndexed,
+        /// Modo de enderecamento para transferencias multiplas.
+        BlockTransferMode blockTransferMode,
+        /// Indica mascara vazia em `LDM`/`STM`, caso especial do ARM7TDMI.
+        boolean emptyRegisterList) {
 
     /// Construtor compacto para instrucoes sem acesso de memoria.
     public DecodedInstruction(
@@ -47,10 +53,10 @@ public record DecodedInstruction(
             int secondSourceRegister,
             int immediate,
             boolean immediateOperand,
-        boolean setFlags,
-        boolean link) {
+            boolean setFlags,
+            boolean link) {
         this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
-                immediate, immediateOperand, setFlags, link, 0, false, false);
+                immediate, immediateOperand, setFlags, link, 0, false, false, false, BlockTransferMode.IA, false);
     }
 
     /// Construtor compacto para instrucoes com acesso de memoria.
@@ -70,12 +76,82 @@ public record DecodedInstruction(
             int accessSizeBytes,
             boolean signedAccess) {
         this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
-                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, false);
+                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, false, false,
+                BlockTransferMode.IA, false);
+    }
+
+    /// Construtor compacto para instrucoes com acesso de memoria e writeback.
+    public DecodedInstruction(
+            int address,
+            int raw,
+            InstructionSet instructionSet,
+            Condition condition,
+            InstructionKind kind,
+            int destinationRegister,
+            int sourceRegister,
+            int secondSourceRegister,
+            int immediate,
+            boolean immediateOperand,
+            boolean setFlags,
+            boolean link,
+            int accessSizeBytes,
+            boolean signedAccess,
+            boolean writeback) {
+        this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
+                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, writeback,
+                false, BlockTransferMode.IA, false);
+    }
+
+    /// Construtor compacto para instrucoes com acesso de memoria, writeback e post-index.
+    public DecodedInstruction(
+            int address,
+            int raw,
+            InstructionSet instructionSet,
+            Condition condition,
+            InstructionKind kind,
+            int destinationRegister,
+            int sourceRegister,
+            int secondSourceRegister,
+            int immediate,
+            boolean immediateOperand,
+            boolean setFlags,
+            boolean link,
+            int accessSizeBytes,
+            boolean signedAccess,
+            boolean writeback,
+            boolean postIndexed) {
+        this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
+                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, writeback, postIndexed,
+                BlockTransferMode.IA, false);
+    }
+
+    /// Construtor compacto para transferencias multiplas ARM com modo explicito.
+    public DecodedInstruction(
+            int address,
+            int raw,
+            InstructionSet instructionSet,
+            Condition condition,
+            InstructionKind kind,
+            int destinationRegister,
+            int sourceRegister,
+            int secondSourceRegister,
+            int immediate,
+            boolean immediateOperand,
+            boolean setFlags,
+            boolean link,
+            int accessSizeBytes,
+            boolean signedAccess,
+            boolean writeback,
+            boolean postIndexed,
+            BlockTransferMode blockTransferMode) {
+        this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
+                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, writeback, postIndexed,
+                blockTransferMode, false);
     }
 
     /// Cria uma instrucao nao implementada preservando endereco, bits e modo.
     public static DecodedInstruction unimplemented(int address, int raw, InstructionSet instructionSet, Condition condition) {
         return new DecodedInstruction(address, raw, instructionSet, condition, InstructionKind.UNIMPLEMENTED,
-                -1, -1, -1, 0, false, false, false, 0, false, false);
+                -1, -1, -1, 0, false, false, false, 0, false, false, false, BlockTransferMode.IA, false);
     }
 }
