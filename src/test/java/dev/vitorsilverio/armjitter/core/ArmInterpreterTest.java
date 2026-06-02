@@ -56,7 +56,7 @@ class ArmInterpreterTest {
     @Test
     void dispatchesSwiAndAppliesReturnedState() {
         TestAddressSpace memory = new TestAddressSpace(16);
-        memory.put32(0, 0xEF00_0008);
+        memory.put32(0, 0xEF08_0000);
         SwiDispatcher dispatcher = SwiDispatcher.empty();
         dispatcher.register(0x08, state -> state.withR0(99));
         ArmCore core = new ArmCore(memory, dispatcher);

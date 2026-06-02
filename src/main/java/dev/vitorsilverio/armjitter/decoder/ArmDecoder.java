@@ -13,7 +13,7 @@ public final class ArmDecoder implements InstructionDecoder {
 
         if ((raw & 0x0F00_0000) == 0x0F00_0000) {
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SWI,
-                    -1, -1, -1, raw & 0x00FF_FFFF, true, false, false);
+                    -1, -1, -1, (raw & 0x00FF_FFFF) >> 16, true, false, false);
         }
 
         if ((raw & 0x0E00_0000) == 0x0A00_0000) {
