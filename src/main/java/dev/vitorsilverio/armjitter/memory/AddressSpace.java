@@ -20,6 +20,20 @@ public interface AddressSpace {
     /// Escreve os 32 bits de `value` no endereco informado.
     void write32(int address, int value);
 
+    /// Retorna ciclos extras para um acesso de memoria.
+    ///
+    /// A implementacao padrao retorna `0` para manter compatibilidade com testes e
+    /// barramentos simples. Emuladores GBA podem sobrescrever este metodo para aplicar
+    /// waitstates de BIOS, IWRAM, EWRAM, VRAM e ROM.
+    ///
+    /// @param address endereco acessado
+    /// @param sizeBytes tamanho do acesso em bytes
+    /// @param type tipo de acesso realizado
+    /// @return ciclos extras consumidos pelo acesso
+    default int accessCycles(int address, int sizeBytes, MemoryAccessType type) {
+        return 0;
+    }
+
     /// Notifica que uma escrita ocorreu, permitindo invalidacao de codigo automodificado.
     default void notifyWrite(int address) {
     }

@@ -16,10 +16,12 @@ public final class JitRuntimeFactory {
         return new JitRuntime(
                 new BlockCache(cacheEntries),
                 new ArmDecoder(),
+                new ThumbDecoder(),
                 new StandardIrBuilder(),
                 IrOptimizer.identity(),
                 new InterpretedCodeEmitter(),
-                new ExecutionThreshold(hotThreshold));
+                new ExecutionThreshold(hotThreshold),
+                64);
     }
 
     /// Cria um runtime ARM/THUMB com emissor interpretado de IR.
@@ -39,10 +41,12 @@ public final class JitRuntimeFactory {
     public static JitRuntime interpretedThumb(int cacheEntries, int hotThreshold) {
         return new JitRuntime(
                 new BlockCache(cacheEntries),
+                new ArmDecoder(),
                 new ThumbDecoder(),
                 new StandardIrBuilder(),
                 IrOptimizer.identity(),
                 new InterpretedCodeEmitter(),
-                new ExecutionThreshold(hotThreshold));
+                new ExecutionThreshold(hotThreshold),
+                64);
     }
 }

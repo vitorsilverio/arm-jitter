@@ -28,6 +28,21 @@ class ThumbBootstrapDecoderTest {
     }
 
     @Test
+    void decodesZeroHalfwordAsThumbLslZero() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0x0000);
+
+        DecodedInstruction instruction = new ThumbDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.LSL, instruction.kind());
+        assertEquals(0, instruction.destinationRegister());
+        assertEquals(0, instruction.sourceRegister());
+        assertEquals(0, instruction.immediate());
+        assertTrue(instruction.immediateOperand());
+        assertTrue(instruction.setFlags());
+    }
+
+    @Test
     void decodesThumbLiteralLoadSpAdjustPushAndPop() {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put16(0, 0x4801);

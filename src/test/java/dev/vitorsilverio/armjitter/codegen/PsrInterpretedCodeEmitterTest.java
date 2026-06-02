@@ -39,4 +39,22 @@ class PsrInterpretedCodeEmitterTest {
 
         assertEquals(CpuMode.SUPERVISOR, core.mode());
     }
+
+    @Test
+    void userModeMsrToCpsrIgnoresControlFieldThroughRuntimeBlock() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE129_F003);
+        memory.put32(4, 0xE7F0_00F0);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.switchMode(CpuMode.USER);
+        core.setRegister(3, 0xA000_0013);
+        JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(16, 1);
+
+        assertEquals(1, core.runBlocks(runtime, 1));
+
+        assertEquals(CpuMode.USER, core.mode());
+        assertTrue(core.cpsr().negative());
+        assertFalse(core.cpsr().zero());
+        assertTrue(core.cpsr().carry());
+    }
 }

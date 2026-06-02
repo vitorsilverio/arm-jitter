@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
 /// Emissor que transforma IR em um bloco executavel por interpretacao de IR.
@@ -41,6 +42,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                 case IrOp.Swi swi -> pcChanged |= executeSwi(core, swi, block.endPc());
                 case IrOp.Undefined undefined -> pcChanged |= executeUndefined(core, undefined);
                 case IrOp.Cycle cycle -> cycles += cycle.count();
+                case IrOp.Fetch fetch -> core.addMemoryCycles(fetch.address(), fetch.sizeBytes(), MemoryAccessType.INSTRUCTION_FETCH);
             }
         }
 
@@ -140,6 +142,8 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     setLogicFlags(core, result, operandCarryOut(core, alu.src2()));
                 }
             }
+            case "CLZ" -> core.setRegister(alu.dst(), Integer.numberOfLeadingZeros(
+                    registerValue(core, alu.src1(), alu.src1ValueOverride())));
             case "LSL", "LSR", "ASR", "ROR" -> {
                 int value = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int amount = right & 0xFF;
@@ -217,8 +221,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         if (transfer.spsr()) {
             core.setSpsr(core.mode(), mergePsr(core.spsr(core.mode()), value, transfer.fieldMask()));
         } else {
-            core.cpsr().set(mergePsr(core.cpsr().get(), value, transfer.fieldMask()));
-            core.mode();
+            core.setCpsr(mergePsr(core.cpsr().get(), value, cpsrWriteFieldMask(core, transfer.fieldMask())));
         }
     }
 
@@ -268,7 +271,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int base = load.baseValueOverride() >= 0 ? load.baseValueOverride() : core.register(load.base());
         int address = load.postIndexed() ? base : base + offset;
         int value = switch (load.sizeBytes()) {
-            case 1 -> core.memory().read8(address);
+            case 1 -> read8Arm7(core, address);
             case 2 -> read16Arm7(core, address, load.signed());
             case 4 -> read32Arm7(core, address);
             default -> throw new UnsupportedOperationException("Unsupported IR load size: " + load.sizeBytes());
@@ -298,9 +301,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int address = store.postIndexed() ? base : base + offset;
         int value = registerValue(core, store.src(), store.srcValueOverride());
         switch (store.sizeBytes()) {
-            case 1 -> core.memory().write8(address, value);
+            case 1 -> write8Arm7(core, address, value);
             case 2 -> write16Arm7(core, address, value);
-            case 4 -> core.memory().write32(address, value);
+            case 4 -> write32Arm7(core, address, value);
             default -> throw new UnsupportedOperationException("Unsupported IR store size: " + store.sizeBytes());
         }
         if (store.writeback()) {
@@ -314,14 +317,14 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         }
         int address = registerValue(core, swap.base(), swap.baseValueOverride());
         int memoryValue = switch (swap.sizeBytes()) {
-            case 1 -> core.memory().read8(address);
+            case 1 -> read8Arm7(core, address);
             case 4 -> read32Arm7(core, address);
             default -> throw new UnsupportedOperationException("Unsupported IR swap size: " + swap.sizeBytes());
         };
         int registerValue = registerValue(core, swap.src(), swap.srcValueOverride());
         switch (swap.sizeBytes()) {
-            case 1 -> core.memory().write8(address, registerValue);
-            case 4 -> core.memory().write32(address, registerValue);
+            case 1 -> write8Arm7(core, address, registerValue);
+            case 4 -> write32Arm7(core, address, registerValue);
             default -> throw new UnsupportedOperationException("Unsupported IR swap size: " + swap.sizeBytes());
         }
         writeLoadedRegister(core, swap.dst(), memoryValue);
@@ -339,6 +342,8 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         boolean includesPc = (mask & (1 << 15)) != 0;
         boolean forceUser = transfer.userMode() && !includesPc;
         int loadedPc = 0;
+        int writebackAddress = transfer.mode().writebackAddress(base, count);
+        int firstRegister = Integer.numberOfTrailingZeros(mask);
         for (int register = 0; register <= 15; register++) {
             if ((mask & (1 << register)) != 0) {
                 if (transfer.load()) {
@@ -351,16 +356,14 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                         writeLoadedRegister(core, register, value);
                     }
                 } else {
-                    int value = transfer.userMode()
-                            ? core.bankedRegister(CpuMode.USER, register)
-                            : registerValue(core, register, register == 15 ? transfer.pcStoreValueOverride() : -1);
-                    core.memory().write32(address, value);
+                    int value = multipleStoreRegisterValue(core, transfer, register, firstRegister, writebackAddress);
+                    write32Arm7(core, address, value);
                 }
                 address += 4;
             }
         }
-        if (transfer.writeback()) {
-            core.setRegister(transfer.base(), transfer.mode().writebackAddress(base, count));
+        if (shouldWriteBackMultiple(transfer.writeback(), transfer.load(), mask, transfer.base())) {
+            core.setRegister(transfer.base(), writebackAddress);
         }
         if (transfer.load() && transfer.userMode() && includesPc) {
             restoreCpsrFromCurrentSpsr(core);
@@ -378,12 +381,12 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int current = address;
         for (int register = 0; register <= 7; register++) {
             if ((push.registerMask() & (1 << register)) != 0) {
-                core.memory().write32(current, core.register(register));
+                write32Arm7(core, current, core.register(register));
                 current += 4;
             }
         }
         if (push.includeLr()) {
-            core.memory().write32(current, core.register(14));
+            write32Arm7(core, current, core.register(14));
         }
         core.setRegister(13, address);
     }
@@ -395,13 +398,13 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int current = core.register(13);
         for (int register = 0; register <= 7; register++) {
             if ((pop.registerMask() & (1 << register)) != 0) {
-                core.setRegister(register, core.memory().read32(current));
+                core.setRegister(register, read32Arm7(core, current));
                 current += 4;
             }
         }
         boolean pcChanged = false;
         if (pop.includePc()) {
-            int value = core.memory().read32(current);
+            int value = read32Arm7(core, current);
             current += 4;
             core.cpsr().setThumbMode((value & 1) != 0);
             core.setProgramCounter(value & ~1);
@@ -499,18 +502,42 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
     private int read32Arm7(ArmCore core, int address) {
         int aligned = address & ~3;
         int value = core.memory().read32(aligned);
+        core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
         return Integer.rotateRight(value, (address & 3) * 8);
+    }
+
+    private int read8Arm7(ArmCore core, int address) {
+        int value = core.memory().read8(address);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+        return value;
     }
 
     private int read16Arm7(ArmCore core, int address, boolean signed) {
         if (signed && (address & 1) != 0) {
-            return (byte) core.memory().read8(address);
+            int value = core.memory().read8(address);
+            core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+            return (byte) value;
         }
-        return core.memory().read16(address & ~1);
+        int aligned = address & ~1;
+        int value = core.memory().read16(aligned);
+        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
+        return value;
     }
 
     private void write16Arm7(ArmCore core, int address, int value) {
-        core.memory().write16(address & ~1, value);
+        int aligned = address & ~1;
+        core.memory().write16(aligned, value);
+        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_WRITE);
+    }
+
+    private void write8Arm7(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+    }
+
+    private void write32Arm7(ArmCore core, int address, int value) {
+        core.memory().write32(address, value);
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
     }
 
     private int effectiveRegisterMask(int mask, boolean emptyRegisterList) {
@@ -523,8 +550,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
 
     private void restoreCpsrFromCurrentSpsr(ArmCore core) {
         CpuMode mode = core.mode();
-        core.cpsr().set(core.spsr(mode));
-        core.mode();
+        core.setCpsr(core.spsr(mode));
     }
 
     private boolean writeAluDestination(ArmCore core, int register, int value, boolean restoreSpsr) {
@@ -606,6 +632,31 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
             mask |= 0xFF00_0000;
         }
         return (current & ~mask) | (value & mask);
+    }
+
+    private int cpsrWriteFieldMask(ArmCore core, int fieldMask) {
+        return core.mode() == CpuMode.USER ? fieldMask & 0x8 : fieldMask;
+    }
+
+    private boolean shouldWriteBackMultiple(boolean writeback, boolean load, int mask, int baseRegister) {
+        return writeback && !(load && (mask & (1 << baseRegister)) != 0);
+    }
+
+    private int multipleStoreRegisterValue(
+            ArmCore core,
+            IrOp.MultipleTransfer transfer,
+            int register,
+            int firstRegister,
+            int writebackAddress) {
+        if (transfer.userMode()) {
+            return core.bankedRegister(CpuMode.USER, register);
+        }
+        if (transfer.writeback()
+                && register == transfer.base()
+                && register != firstRegister) {
+            return writebackAddress;
+        }
+        return registerValue(core, register, register == 15 ? transfer.pcStoreValueOverride() : -1);
     }
 
     private void setLogicFlags(ArmCore core, int result) {

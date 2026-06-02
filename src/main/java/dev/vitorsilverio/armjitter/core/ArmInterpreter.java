@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.ir.ShiftType;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
 /// Interpretador frio usado para debug, step-by-step e como oraculo do JIT.
@@ -29,6 +30,7 @@ public final class ArmInterpreter {
     public DecodedInstruction step(ArmCore core) {
         int pc = core.programCounter();
         DecodedInstruction instruction = decoderFor(core).decode(core.memory(), pc);
+        core.addMemoryCycles(pc, core.cpsr().isThumbMode() ? 2 : 4, MemoryAccessType.INSTRUCTION_FETCH);
         int sequentialPc = pc + (core.cpsr().isThumbMode() ? 2 : 4);
 
         if (!core.cpsr().evalCond(instruction.condition())) {
@@ -57,6 +59,7 @@ public final class ArmInterpreter {
             case MVN -> executeMvn(core, instruction, sequentialPc);
             case MRS -> executeMrs(core, instruction, sequentialPc);
             case MSR -> executeMsr(core, instruction, sequentialPc);
+            case CLZ -> executeClz(core, instruction, sequentialPc);
             case LSL, LSR, ASR, ROR -> executeShift(core, instruction, sequentialPc);
             case MUL, MLA -> executeMul(core, instruction, sequentialPc);
             case UMULL, UMLAL, SMULL, SMLAL -> executeLongMul(core, instruction, sequentialPc);
@@ -180,6 +183,12 @@ public final class ArmInterpreter {
         core.setProgramCounter(sequentialPc);
     }
 
+    private void executeClz(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
+        int value = readSourceRegister(core, instruction.sourceRegister(), instruction);
+        core.setRegister(instruction.destinationRegister(), Integer.numberOfLeadingZeros(value));
+        core.setProgramCounter(sequentialPc);
+    }
+
     private void executeMrs(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
         int value = instruction.immediate() == 0 ? core.cpsr().get() : core.spsr(core.mode());
         core.setRegister(instruction.destinationRegister(), value);
@@ -196,8 +205,7 @@ public final class ArmInterpreter {
         if (spsr) {
             core.setSpsr(core.mode(), mergePsr(core.spsr(core.mode()), value, fieldMask));
         } else {
-            core.cpsr().set(mergePsr(core.cpsr().get(), value, fieldMask));
-            core.mode();
+            core.setCpsr(mergePsr(core.cpsr().get(), value, cpsrWriteFieldMask(core, fieldMask)));
         }
         core.setProgramCounter(sequentialPc);
     }
@@ -293,7 +301,7 @@ public final class ArmInterpreter {
         int base = readMemoryBaseRegister(core, instruction);
         int address = instruction.postIndexed() ? base : base + offset;
         int value = switch (instruction.accessSizeBytes()) {
-            case 1 -> core.memory().read8(address);
+            case 1 -> read8Arm7(core, address);
             case 2 -> read16Arm7(core, address, instruction.signedAccess());
             case 4 -> read32Arm7(core, address);
             default -> throw new UnsupportedOperationException("Unsupported load size: " + instruction.accessSizeBytes());
@@ -321,9 +329,9 @@ public final class ArmInterpreter {
         int address = instruction.postIndexed() ? base : base + offset;
         int value = readMemoryStoreRegister(core, instruction.destinationRegister(), instruction);
         switch (instruction.accessSizeBytes()) {
-            case 1 -> core.memory().write8(address, value);
+            case 1 -> write8Arm7(core, address, value);
             case 2 -> write16Arm7(core, address, value);
-            case 4 -> core.memory().write32(address, value);
+            case 4 -> write32Arm7(core, address, value);
             default -> throw new UnsupportedOperationException("Unsupported store size: " + instruction.accessSizeBytes());
         }
         if (instruction.writeback()) {
@@ -335,14 +343,14 @@ public final class ArmInterpreter {
     private void executeSwap(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
         int address = readMemoryBaseRegister(core, instruction);
         int memoryValue = switch (instruction.accessSizeBytes()) {
-            case 1 -> core.memory().read8(address);
+            case 1 -> read8Arm7(core, address);
             case 4 -> read32Arm7(core, address);
             default -> throw new UnsupportedOperationException("Unsupported swap size: " + instruction.accessSizeBytes());
         };
         int registerValue = readMemoryStoreRegister(core, instruction.secondSourceRegister(), instruction);
         switch (instruction.accessSizeBytes()) {
-            case 1 -> core.memory().write8(address, registerValue);
-            case 4 -> core.memory().write32(address, registerValue);
+            case 1 -> write8Arm7(core, address, registerValue);
+            case 4 -> write32Arm7(core, address, registerValue);
             default -> throw new UnsupportedOperationException("Unsupported swap size: " + instruction.accessSizeBytes());
         }
         writeLoadedRegister(core, instruction.destinationRegister(), memoryValue);
@@ -372,7 +380,7 @@ public final class ArmInterpreter {
                 address += 4;
             }
         }
-        if (instruction.writeback()) {
+        if (shouldWriteBackMultiple(instruction.writeback(), true, mask, instruction.sourceRegister())) {
             core.setRegister(instruction.sourceRegister(),
                     instruction.blockTransferMode().writebackAddress(base, count));
         }
@@ -391,13 +399,19 @@ public final class ArmInterpreter {
         int base = core.register(instruction.sourceRegister());
         int address = instruction.blockTransferMode().startAddress(base, count);
         boolean forceUser = instruction.link();
+        int writebackAddress = instruction.blockTransferMode().writebackAddress(base, count);
+        int firstRegister = Integer.numberOfTrailingZeros(mask);
         for (int register = 0; register <= 15; register++) {
             if ((mask & (1 << register)) != 0) {
-                int value = forceUser
-                        ? core.bankedRegister(CpuMode.USER, register)
-                        : readMultipleStoreRegister(core, register, instruction);
+                int value = multipleStoreRegisterValue(
+                        core,
+                        instruction,
+                        register,
+                        forceUser,
+                        firstRegister,
+                        writebackAddress);
                 address += 4;
-                core.memory().write32(address - 4, value);
+                write32Arm7(core, address - 4, value);
             }
         }
         if (instruction.writeback()) {
@@ -413,12 +427,12 @@ public final class ArmInterpreter {
         int current = address;
         for (int register = 0; register <= 7; register++) {
             if ((instruction.immediate() & (1 << register)) != 0) {
-                core.memory().write32(current, core.register(register));
+                write32Arm7(core, current, core.register(register));
                 current += 4;
             }
         }
         if (instruction.link()) {
-            core.memory().write32(current, core.register(14));
+            write32Arm7(core, current, core.register(14));
         }
         core.setRegister(13, address);
         core.setProgramCounter(sequentialPc);
@@ -428,12 +442,12 @@ public final class ArmInterpreter {
         int current = core.register(13);
         for (int register = 0; register <= 7; register++) {
             if ((instruction.immediate() & (1 << register)) != 0) {
-                core.setRegister(register, core.memory().read32(current));
+                core.setRegister(register, read32Arm7(core, current));
                 current += 4;
             }
         }
         if (instruction.link()) {
-            int value = core.memory().read32(current);
+            int value = read32Arm7(core, current);
             current += 4;
             core.cpsr().setThumbMode((value & 1) != 0);
             core.setProgramCounter(value & ~1);
@@ -665,18 +679,42 @@ public final class ArmInterpreter {
     private int read32Arm7(ArmCore core, int address) {
         int aligned = address & ~3;
         int value = core.memory().read32(aligned);
+        core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
         return Integer.rotateRight(value, (address & 3) * 8);
+    }
+
+    private int read8Arm7(ArmCore core, int address) {
+        int value = core.memory().read8(address);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+        return value;
     }
 
     private int read16Arm7(ArmCore core, int address, boolean signed) {
         if (signed && (address & 1) != 0) {
-            return (byte) core.memory().read8(address);
+            int value = core.memory().read8(address);
+            core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+            return (byte) value;
         }
-        return core.memory().read16(address & ~1);
+        int aligned = address & ~1;
+        int value = core.memory().read16(aligned);
+        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
+        return value;
     }
 
     private void write16Arm7(ArmCore core, int address, int value) {
-        core.memory().write16(address & ~1, value);
+        int aligned = address & ~1;
+        core.memory().write16(aligned, value);
+        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_WRITE);
+    }
+
+    private void write8Arm7(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+    }
+
+    private void write32Arm7(ArmCore core, int address, int value) {
+        core.memory().write32(address, value);
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
     }
 
     private int effectiveRegisterMask(int mask, boolean emptyRegisterList) {
@@ -698,8 +736,7 @@ public final class ArmInterpreter {
 
     private void restoreCpsrFromCurrentSpsr(ArmCore core) {
         CpuMode mode = core.mode();
-        core.cpsr().set(core.spsr(mode));
-        core.mode();
+        core.setCpsr(core.spsr(mode));
     }
 
     private boolean writeAluDestination(ArmCore core, int register, int value, boolean restoreSpsr) {
@@ -734,6 +771,32 @@ public final class ArmInterpreter {
             mask |= 0xFF00_0000;
         }
         return (current & ~mask) | (value & mask);
+    }
+
+    private int cpsrWriteFieldMask(ArmCore core, int fieldMask) {
+        return core.mode() == CpuMode.USER ? fieldMask & 0x8 : fieldMask;
+    }
+
+    private boolean shouldWriteBackMultiple(boolean writeback, boolean load, int mask, int baseRegister) {
+        return writeback && !(load && (mask & (1 << baseRegister)) != 0);
+    }
+
+    private int multipleStoreRegisterValue(
+            ArmCore core,
+            DecodedInstruction instruction,
+            int register,
+            boolean forceUser,
+            int firstRegister,
+            int writebackAddress) {
+        if (forceUser) {
+            return core.bankedRegister(CpuMode.USER, register);
+        }
+        if (instruction.writeback()
+                && register == instruction.sourceRegister()
+                && register != firstRegister) {
+            return writebackAddress;
+        }
+        return readMultipleStoreRegister(core, register, instruction);
     }
 
     private void setLogicFlags(ArmCore core, int result) {

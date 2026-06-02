@@ -30,6 +30,13 @@ public final class ArmDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, false);
         }
 
+        if ((raw & 0x0FFF_0FF0) == 0x016F_0F10) {
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.CLZ,
+                    rd, rm, -1, 0, false, false, false);
+        }
+
         if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {
             boolean spsr = (raw & (1 << 22)) != 0;
             int rd = (raw >>> 12) & 0xF;

@@ -25,6 +25,25 @@ class ThumbBootstrapInterpreterTest {
     }
 
     @Test
+    void executesThumbZeroHalfwordAsLslZero() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0x0000);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.cpsr().setThumbMode(true);
+        core.setRegister(0, 0x1234);
+        core.cpsr().setNzcv(true, false, true, false);
+
+        core.step();
+
+        assertEquals(0x1234, core.register(0));
+        assertEquals(2, core.programCounter());
+        assertFalse(core.cpsr().negative());
+        assertFalse(core.cpsr().zero());
+        assertTrue(core.cpsr().carry());
+        assertEquals(CpuMode.SUPERVISOR, core.mode());
+    }
+
+    @Test
     void executesThumbPushAndPopWithPc() {
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put16(0, 0xB503);

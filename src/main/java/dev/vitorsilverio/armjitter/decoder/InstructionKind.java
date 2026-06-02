@@ -46,6 +46,8 @@ public enum InstructionKind {
     SMULL,
     /// Multiplicacao longa signed com acumulador.
     SMLAL,
+    /// Conta zeros a esquerda em uma palavra de 32 bits.
+    CLZ,
     /// Bit clear.
     BIC,
     /// Move NOT.

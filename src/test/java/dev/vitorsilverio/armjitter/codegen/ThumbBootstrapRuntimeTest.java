@@ -30,6 +30,26 @@ class ThumbBootstrapRuntimeTest {
     }
 
     @Test
+    void executesThumbZeroHalfwordThroughRuntime() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0x0000);
+        memory.put16(2, 0xE000);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.cpsr().setThumbMode(true);
+        core.setRegister(0, 0x1234);
+        core.cpsr().setNzcv(true, false, true, false);
+        JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(16, 1);
+
+        assertEquals(2, core.runBlocks(runtime, 1));
+
+        assertEquals(0x1234, core.register(0));
+        assertEquals(6, core.programCounter());
+        assertFalse(core.cpsr().negative());
+        assertFalse(core.cpsr().zero());
+        assertTrue(core.cpsr().carry());
+    }
+
+    @Test
     void executesThumbVisiblePcMovAndBxThroughRuntime() {
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put16(0, 0x467B);

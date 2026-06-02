@@ -25,4 +25,21 @@ class ArmThumbJitRuntimeTest {
         assertEquals(42, thumbCore.register(0));
         assertEquals(2, runtime.blockCache().size());
     }
+
+    @Test
+    void interpretedArmFactoryStillCompilesHotThumbBlocksAfterInterworking() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0x0000);
+        memory.put16(2, 0xE000);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.cpsr().setThumbMode(true);
+        core.setRegister(0, 0x1234);
+        JitRuntime runtime = JitRuntimeFactory.interpretedArm(16, 1);
+
+        assertEquals(2, core.runBlocks(runtime, 1));
+
+        assertEquals(0x1234, core.register(0));
+        assertEquals(6, core.programCounter());
+        assertTrue(core.cpsr().isThumbMode());
+    }
 }

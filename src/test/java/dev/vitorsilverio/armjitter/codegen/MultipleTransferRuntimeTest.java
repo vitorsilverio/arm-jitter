@@ -2,6 +2,12 @@ package dev.vitorsilverio.armjitter.codegen;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
+import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
+import dev.vitorsilverio.armjitter.ir.IrOptimizer;
+import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.jit.BlockCache;
+import dev.vitorsilverio.armjitter.jit.ExecutionThreshold;
 import dev.vitorsilverio.armjitter.jit.JitRuntime;
 import dev.vitorsilverio.armjitter.jit.JitRuntimeFactory;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -85,6 +91,39 @@ class MultipleTransferRuntimeTest {
     }
 
     @Test
+    void handlesArmLdmBaseInListThroughRuntime() {
+        TestAddressSpace memory = new TestAddressSpace(128);
+        memory.put32(0, 0xE8B0_0003);
+        memory.write32(64, 0x1111);
+        memory.write32(68, 0x2222);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 64);
+        JitRuntime runtime = singleInstructionRuntime();
+
+        assertEquals(1, core.runBlocks(runtime, 1));
+
+        assertEquals(0x1111, core.register(0));
+        assertEquals(0x2222, core.register(1));
+    }
+
+    @Test
+    void handlesArmStmBaseInListThroughRuntime() {
+        TestAddressSpace memory = new TestAddressSpace(128);
+        memory.put32(0, 0xE8A1_0003);
+        memory.put32(4, 0xE7F0_00F0);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 0xAAAA);
+        core.setRegister(1, 64);
+        JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(16, 1);
+
+        assertEquals(1, core.runBlocks(runtime, 1));
+
+        assertEquals(0xAAAA, memory.read32(64));
+        assertEquals(72, memory.read32(68));
+        assertEquals(72, core.register(1));
+    }
+
+    @Test
     void executesThumbMultipleTransferThroughRuntime() {
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put16(0, 0xC002);
@@ -143,5 +182,17 @@ class MultipleTransferRuntimeTest {
         assertTrue(core.cpsr().isThumbMode());
         assertEquals(0x44, core.programCounter());
         assertEquals(160, core.register(1));
+    }
+
+    private JitRuntime singleInstructionRuntime() {
+        return new JitRuntime(
+                new BlockCache(16),
+                new ArmDecoder(),
+                new ThumbDecoder(),
+                new StandardIrBuilder(),
+                IrOptimizer.identity(),
+                new InterpretedCodeEmitter(),
+                new ExecutionThreshold(1),
+                1);
     }
 }

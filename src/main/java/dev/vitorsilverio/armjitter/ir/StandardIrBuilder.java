@@ -73,6 +73,14 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.kind() == InstructionKind.UMLAL || instruction.kind() == InstructionKind.SMLAL,
                     instruction.setFlags(),
                     instruction.condition()));
+            case CLZ -> block.add(new IrOp.Alu(
+                    "CLZ",
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    registerValueOverride(instruction, instruction.sourceRegister()),
+                    new IrOperand.Immediate(0),
+                    false,
+                    instruction.condition()));
             case CMP -> liftAlu("CMP", instruction, block);
             case CMN -> liftAlu("CMN", instruction, block);
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
@@ -160,6 +168,7 @@ public final class StandardIrBuilder implements IrBuilder {
         }
 
         block.add(new IrOp.Cycle(1));
+        block.add(new IrOp.Fetch(instruction.address(), instructionWidth(instruction)));
         block.endPc(instruction.address() + instructionWidth(instruction));
     }
 

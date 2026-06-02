@@ -85,6 +85,21 @@ class InterpretedCodeEmitterTest {
     }
 
     @Test
+    void executesLiftedClz() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE16F_1F10);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 0x0000_8000);
+        IrBlock block = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder()).lift(memory, 0, 1);
+
+        int cycles = new InterpretedCodeEmitter().emit(block).execute(core);
+
+        assertEquals(16, core.register(1));
+        assertEquals(4, core.programCounter());
+        assertEquals(1, cycles);
+    }
+
+    @Test
     void executesLiftedArmAluReadsPipelinePcInsideBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A0_0001);

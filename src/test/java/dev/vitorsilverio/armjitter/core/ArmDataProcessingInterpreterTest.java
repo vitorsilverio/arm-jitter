@@ -136,4 +136,17 @@ class ArmDataProcessingInterpreterTest {
         assertTrue(core.cpsr().isThumbMode());
         assertEquals(0x100, core.programCounter());
     }
+
+    @Test
+    void executesArmClz() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE16F_1F10);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 0x0000_8000);
+
+        core.step();
+
+        assertEquals(16, core.register(1));
+        assertEquals(4, core.programCounter());
+    }
 }

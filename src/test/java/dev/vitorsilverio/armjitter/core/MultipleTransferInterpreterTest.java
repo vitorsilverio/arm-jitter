@@ -97,6 +97,51 @@ class MultipleTransferInterpreterTest {
     }
 
     @Test
+    void ldmWithBaseInRegisterListDoesNotWriteBack() {
+        TestAddressSpace memory = new TestAddressSpace(128);
+        memory.put32(0, 0xE8B0_0003);
+        memory.write32(64, 0x1111);
+        memory.write32(68, 0x2222);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 64);
+
+        core.step();
+
+        assertEquals(0x1111, core.register(0));
+        assertEquals(0x2222, core.register(1));
+    }
+
+    @Test
+    void stmWithBaseInRegisterListStoresOriginalWhenBaseIsFirst() {
+        TestAddressSpace memory = new TestAddressSpace(128);
+        memory.put32(0, 0xE8A0_0003);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 64);
+        core.setRegister(1, 0xBBBB);
+
+        core.step();
+
+        assertEquals(64, memory.read32(64));
+        assertEquals(0xBBBB, memory.read32(68));
+        assertEquals(72, core.register(0));
+    }
+
+    @Test
+    void stmWithBaseInRegisterListStoresWritebackWhenBaseIsNotFirst() {
+        TestAddressSpace memory = new TestAddressSpace(128);
+        memory.put32(0, 0xE8A1_0003);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(0, 0xAAAA);
+        core.setRegister(1, 64);
+
+        core.step();
+
+        assertEquals(0xAAAA, memory.read32(64));
+        assertEquals(72, memory.read32(68));
+        assertEquals(72, core.register(1));
+    }
+
+    @Test
     void executesArmLdmCaretWithoutPcIntoUserBank() {
         TestAddressSpace memory = new TestAddressSpace(128);
         memory.put32(0, 0xE8D0_6000);

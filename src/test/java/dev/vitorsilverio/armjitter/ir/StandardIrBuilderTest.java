@@ -30,6 +30,9 @@ class StandardIrBuilderTest {
         assertEquals(new IrOperand.Immediate(5), alu.src2());
         assertEquals(Condition.AL, alu.condition());
         assertInstanceOf(IrOp.Cycle.class, ir.operations().get(1));
+        IrOp.Fetch fetch = assertInstanceOf(IrOp.Fetch.class, ir.operations().get(2));
+        assertEquals(0, fetch.address());
+        assertEquals(4, fetch.sizeBytes());
     }
 
     @Test

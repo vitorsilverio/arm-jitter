@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Undefined, IrOp.Cycle {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Operacao ALU generica.
     record Alu(
             /// Mnemonico ou identificador interno da operacao.
@@ -274,5 +274,13 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     record Cycle(
             /// Quantidade de ciclos somada ao bloco.
             int count) implements IrOp {
+    }
+
+    /// Custo de fetch da instrucao original na memoria do dispositivo.
+    record Fetch(
+            /// Endereco da instrucao buscada.
+            int address,
+            /// Tamanho da instrucao em bytes.
+            int sizeBytes) implements IrOp {
     }
 }

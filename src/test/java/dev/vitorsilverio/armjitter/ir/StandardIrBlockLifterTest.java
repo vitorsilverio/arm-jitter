@@ -18,13 +18,16 @@ class StandardIrBlockLifterTest {
         IrBlock block = lifter.lift(memory, 0, 8);
 
         assertEquals(12, block.endPc());
-        assertEquals(6, block.operations().size());
+        assertEquals(9, block.operations().size());
         assertInstanceOf(IrOp.Alu.class, block.operations().get(0));
         assertInstanceOf(IrOp.Cycle.class, block.operations().get(1));
-        assertInstanceOf(IrOp.Alu.class, block.operations().get(2));
-        assertInstanceOf(IrOp.Cycle.class, block.operations().get(3));
-        assertInstanceOf(IrOp.Branch.class, block.operations().get(4));
-        assertInstanceOf(IrOp.Cycle.class, block.operations().get(5));
+        assertFetch(block.operations().get(2), 0, 4);
+        assertInstanceOf(IrOp.Alu.class, block.operations().get(3));
+        assertInstanceOf(IrOp.Cycle.class, block.operations().get(4));
+        assertFetch(block.operations().get(5), 4, 4);
+        assertInstanceOf(IrOp.Branch.class, block.operations().get(6));
+        assertInstanceOf(IrOp.Cycle.class, block.operations().get(7));
+        assertFetch(block.operations().get(8), 8, 4);
     }
 
     @Test
@@ -37,7 +40,7 @@ class StandardIrBlockLifterTest {
         IrBlock block = lifter.lift(memory, 0, 1);
 
         assertEquals(4, block.endPc());
-        assertEquals(2, block.operations().size());
+        assertEquals(3, block.operations().size());
     }
 
     @Test
@@ -50,8 +53,15 @@ class StandardIrBlockLifterTest {
         IrBlock block = lifter.lift(memory, 0, 4);
 
         assertEquals(4, block.endPc());
-        assertEquals(2, block.operations().size());
+        assertEquals(3, block.operations().size());
         assertInstanceOf(IrOp.Load.class, block.operations().get(0));
         assertInstanceOf(IrOp.Cycle.class, block.operations().get(1));
+        assertFetch(block.operations().get(2), 0, 4);
+    }
+
+    private void assertFetch(IrOp op, int address, int sizeBytes) {
+        IrOp.Fetch fetch = assertInstanceOf(IrOp.Fetch.class, op);
+        assertEquals(address, fetch.address());
+        assertEquals(sizeBytes, fetch.sizeBytes());
     }
 }

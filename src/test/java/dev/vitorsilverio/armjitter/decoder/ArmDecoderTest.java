@@ -32,4 +32,16 @@ class ArmDecoderTest {
         assertEquals(InstructionKind.BRANCH, instruction.kind());
         assertEquals(12, instruction.immediate());
     }
+
+    @Test
+    void decodesArmClz() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE16F_1F10);
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.CLZ, instruction.kind());
+        assertEquals(1, instruction.destinationRegister());
+        assertEquals(0, instruction.sourceRegister());
+    }
 }

@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.jit.JitRuntime;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 
@@ -41,6 +42,7 @@ public final class ArmCore {
     private boolean interruptLine;
     private CpuMode activeMode = CpuMode.SUPERVISOR;
     private ArmTraceListener traceListener = ArmTraceListener.none();
+    private CpuSleepState sleepState = CpuSleepState.RUNNING;
 
     /// Cria um core conectado a uma memoria e a um dispatcher de SWI.
     ///
@@ -196,14 +198,66 @@ public final class ArmCore {
         return cycles;
     }
 
+    /// Soma os ciclos extras informados pelo barramento para um acesso de memoria.
+    ///
+    /// @param address endereco acessado
+    /// @param sizeBytes tamanho em bytes
+    /// @param type tipo de acesso
+    public void addMemoryCycles(int address, int sizeBytes, MemoryAccessType type) {
+        int memoryCycles = memory.accessCycles(address, sizeBytes, Objects.requireNonNull(type, "type"));
+        if (memoryCycles < 0) {
+            throw new IllegalArgumentException("memory access cycles must be >= 0");
+        }
+        addCycles(memoryCycles);
+    }
+
     /// Atualiza a linha externa de interrupcao.
     public void setInterruptLine(boolean asserted) {
         interruptLine = asserted;
+        if (asserted) {
+            sleepState = CpuSleepState.RUNNING;
+        }
     }
 
     /// Retorna `true` quando a linha externa de interrupcao esta ativa.
     public boolean interruptLine() {
         return interruptLine;
+    }
+
+    /// Coloca a CPU em HALT ate uma interrupcao acordar o core.
+    public void halt() {
+        sleepState = CpuSleepState.HALTED;
+    }
+
+    /// Coloca a CPU em STOP ate uma interrupcao acordar o core.
+    public void stop() {
+        sleepState = CpuSleepState.STOPPED;
+    }
+
+    /// Acorda a CPU manualmente, sem alterar linhas de interrupcao.
+    public void wake() {
+        sleepState = CpuSleepState.RUNNING;
+    }
+
+    /// Retorna o estado de espera atual da CPU.
+    ///
+    /// @return estado de espera atual
+    public CpuSleepState sleepState() {
+        return sleepState;
+    }
+
+    /// Retorna `true` quando a CPU esta em HALT.
+    ///
+    /// @return `true` quando em HALT
+    public boolean halted() {
+        return sleepState == CpuSleepState.HALTED;
+    }
+
+    /// Retorna `true` quando a CPU esta em STOP.
+    ///
+    /// @return `true` quando em STOP
+    public boolean stopped() {
+        return sleepState == CpuSleepState.STOPPED;
     }
 
     /// Executa uma unica instrucao quando um interpretador estiver conectado.
@@ -212,6 +266,12 @@ public final class ArmCore {
         int pc = programCounter();
         InstructionSet instructionSet = currentInstructionSet();
         traceListener.beforeInstruction(this, pc, instructionSet);
+        if (sleepState != CpuSleepState.RUNNING) {
+            addCycles(1);
+            DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
+            traceListener.afterInstruction(this, instruction);
+            return instruction;
+        }
         if (servicePendingIrq()) {
             addCycles(1);
             DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
@@ -245,6 +305,11 @@ public final class ArmCore {
         int pc = programCounter();
         InstructionSet instructionSet = currentInstructionSet();
         traceListener.beforeBlock(this, pc, instructionSet);
+        if (sleepState != CpuSleepState.RUNNING) {
+            addCycles(1);
+            traceListener.afterBlock(this, pc, instructionSet, 1);
+            return 1;
+        }
         if (servicePendingIrq()) {
             addCycles(1);
             traceListener.afterBlock(this, pc, instructionSet, 1);
@@ -389,6 +454,7 @@ public final class ArmCore {
 
     private boolean servicePendingIrq() {
         if (interruptLine && !cpsr.irqDisabled()) {
+            sleepState = CpuSleepState.RUNNING;
             enterException(ArmException.IRQ, programCounter() + (cpsr.isThumbMode() ? 4 : 4));
             return true;
         }

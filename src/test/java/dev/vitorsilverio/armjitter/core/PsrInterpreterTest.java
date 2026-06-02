@@ -63,4 +63,20 @@ class PsrInterpreterTest {
 
         assertEquals(0xF000_001F, core.spsr(CpuMode.SUPERVISOR));
     }
+
+    @Test
+    void userModeMsrToCpsrIgnoresControlField() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE129_F003);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.switchMode(CpuMode.USER);
+        core.setRegister(3, 0xA000_0013);
+
+        core.step();
+
+        assertEquals(CpuMode.USER, core.mode());
+        assertTrue(core.cpsr().negative());
+        assertFalse(core.cpsr().zero());
+        assertTrue(core.cpsr().carry());
+    }
 }

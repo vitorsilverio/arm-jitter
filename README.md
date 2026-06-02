@@ -16,9 +16,10 @@ Esta estrutura define os contratos principais da arquitetura e um interpretador 
 - `codegen`: contrato para emissores de codigo.
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
 
-O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testavel, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e mascara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo mascara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotacao e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
+O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testavel, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `CLZ`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e mascara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo mascara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotacao e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
 
 O core ja possui bancos de `SP/LR` por modo, banco FIQ para `r8-r14`, `SPSR` por modo privilegiado, entrada real de `SWI` no vetor `0x08` quando nao ha handler host registrado, entrada de `IRQ` no vetor `0x18` quando `interruptLine` esta ativa e o bit I do CPSR esta limpo, e entrada de instrucao indefinida no vetor `0x04` para opcodes ainda nao implementados.
+Tambem ha estado explicito de `HALT/STOP` para integracao com registradores de I/O do dispositivo e waitstates opcionais por acesso de memoria via `AddressSpace.accessCycles(...)`.
 
 ## Uso basico
 
@@ -69,6 +70,26 @@ core.setTraceListener(new ArmTraceListener() {
                 tracedCore.register(14));
     }
 });
+```
+
+Para implementar waitstates de memoria no emulador hospedeiro, sobrescreva
+`accessCycles`. Esses ciclos extras sao acumulados em `core.cycles()`:
+
+```java
+@Override
+public int accessCycles(int address, int sizeBytes, MemoryAccessType type) {
+    if ((address & 0x0E000000) == 0x08000000) {
+        return type == MemoryAccessType.INSTRUCTION_FETCH ? 3 : 5;
+    }
+    return 0;
+}
+```
+
+Para mapear `HALTCNT` ou um mecanismo equivalente:
+
+```java
+core.halt();
+core.setInterruptLine(true);
 ```
 
 ## Gerando IR
