@@ -293,7 +293,7 @@ public final class StandardIrBuilder implements IrBuilder {
         }
         return switch (instruction.instructionSet()) {
             case ARM -> instruction.address() + 8;
-            case THUMB -> (instruction.address() + 4) & ~3;
+            case THUMB -> (instruction.address() + 4);
         };
     }
 

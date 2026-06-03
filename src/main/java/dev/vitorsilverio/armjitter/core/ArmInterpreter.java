@@ -645,7 +645,7 @@ public final class ArmInterpreter {
     private int readSourceRegister(ArmCore core, int register, DecodedInstruction instruction) {
         if (register == 15) {
             if (instruction.instructionSet() == dev.vitorsilverio.armjitter.decoder.InstructionSet.THUMB) {
-                return (instruction.address() + 4) & ~3;
+                return (instruction.address() + 4);
             }
             return instruction.address() + 8;
         }
