@@ -455,7 +455,7 @@ public final class ArmCore {
     private boolean servicePendingIrq() {
         if (interruptLine && !cpsr.irqDisabled()) {
             sleepState = CpuSleepState.RUNNING;
-            enterException(ArmException.IRQ, programCounter() + (cpsr.isThumbMode() ? 4 : 4));
+            enterException(ArmException.IRQ, programCounter() + (cpsr.isThumbMode() ? 4 : 8));
             return true;
         }
         return false;
@@ -518,26 +518,18 @@ public final class ArmCore {
     private void saveBank(CpuMode mode) {
         saveSpLr(mode);
         if (mode == CpuMode.FIQ) {
-            for (int register = 8; register <= 12; register++) {
-                fiqR8ToR14[register - 8] = registers[register];
-            }
+            System.arraycopy(registers, 8, fiqR8ToR14, 0, 5);
         } else {
-            for (int register = 8; register <= 12; register++) {
-                commonR8ToR12[register - 8] = registers[register];
-            }
+            System.arraycopy(registers, 8, commonR8ToR12, 0, 5);
         }
     }
 
     private void restoreBank(CpuMode mode) {
         restoreSpLr(mode);
         if (mode == CpuMode.FIQ) {
-            for (int register = 8; register <= 12; register++) {
-                registers[register] = fiqR8ToR14[register - 8];
-            }
+            System.arraycopy(fiqR8ToR14, 0, registers, 8, 5);
         } else {
-            for (int register = 8; register <= 12; register++) {
-                registers[register] = commonR8ToR12[register - 8];
-            }
+            System.arraycopy(commonR8ToR12, 0, registers, 8, 5);
         }
     }
 
