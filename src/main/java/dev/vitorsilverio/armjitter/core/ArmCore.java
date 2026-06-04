@@ -455,7 +455,7 @@ public final class ArmCore {
     private boolean servicePendingIrq() {
         if (interruptLine && !cpsr.irqDisabled()) {
             sleepState = CpuSleepState.RUNNING;
-            enterException(ArmException.IRQ, programCounter() + (cpsr.isThumbMode() ? 4 : 8));
+            enterException(ArmException.IRQ, programCounter() + 4);
             return true;
         }
         return false;

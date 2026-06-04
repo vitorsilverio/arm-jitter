@@ -213,7 +213,7 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(3, core.runBlocks(runtime, 1));
 
-        assertEquals(0x8034, core.register(1));
+        assertEquals(0x3400_0080, core.register(1));
         assertEquals(-128, core.register(2));
         assertEquals(0xABCD, memory.read16(64));
     }

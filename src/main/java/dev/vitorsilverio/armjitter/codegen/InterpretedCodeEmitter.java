@@ -521,7 +521,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int aligned = address & ~1;
         int value = core.memory().read16(aligned);
         core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
-        return value;
+        return (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
     }
 
     private void write16Arm7(ArmCore core, int address, int value) {
