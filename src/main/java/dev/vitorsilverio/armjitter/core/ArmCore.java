@@ -1,9 +1,9 @@
 package dev.vitorsilverio.armjitter.core;
 
-import dev.vitorsilverio.armjitter.memory.AddressSpace;
-import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
+import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.jit.JitRuntime;
+import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -11,7 +11,7 @@ import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.Arrays;
 import java.util.Objects;
 
-/// Estado basico de uma CPU ARM usado pelo interpretador e pelo JIT.
+/// Estado básico de uma CPU ARM usado pelo interpretador e pelo JIT.
 public final class ArmCore {
     private static final int REGISTER_COUNT = 16;
     private static final int PC = 15;
@@ -44,7 +44,7 @@ public final class ArmCore {
     private ArmTraceListener traceListener = ArmTraceListener.none();
     private CpuSleepState sleepState = CpuSleepState.RUNNING;
 
-    /// Cria um core conectado a uma memoria e a um dispatcher de SWI.
+    /// Cria um core conectado a uma memória e a um dispatcher de SWI.
     ///
     /// O estado inicial segue o reset de um ARM7TDMI: modo Supervisor, ARM state,
     /// IRQ/FIQ mascaradas e `PC = 0`.
@@ -52,7 +52,7 @@ public final class ArmCore {
         this(memory, swiDispatcher, new ArmInterpreter());
     }
 
-    /// Cria um core conectado a uma memoria, SWI e interpretador customizado.
+    /// Cria um core conectado a uma memória, SWI e interpretador customizado.
     ///
     /// O estado inicial segue o reset de um ARM7TDMI: modo Supervisor, ARM state,
     /// IRQ/FIQ mascaradas e `PC = 0`.
@@ -63,18 +63,18 @@ public final class ArmCore {
         cpsr.set(RESET_CPSR);
     }
 
-    /// Retorna uma copia dos registradores r0-r15.
+    /// Retorna uma cópia dos registradores r0-r15.
     public int[] registersSnapshot() {
         return Arrays.copyOf(registers, registers.length);
     }
 
-    /// Le um registrador pelo indice ARM, de 0 a 15.
+    /// Lê um registrador pelo índice ARM, de 0 a 15.
     public int register(int index) {
         checkRegister(index);
         return registers[index];
     }
 
-    /// Atualiza um registrador pelo indice ARM, de 0 a 15.
+    /// Atualiza um registrador pelo índice ARM, de 0 a 15.
     public void setRegister(int index, int value) {
         checkRegister(index);
         registers[index] = value;
@@ -90,7 +90,7 @@ public final class ArmCore {
         registers[PC] = value;
     }
 
-    /// Retorna o CPSR mutavel associado ao core.
+    /// Retorna o CPSR mutável associado ao core.
     public CpsrRegister cpsr() {
         return cpsr;
     }
@@ -103,7 +103,7 @@ public final class ArmCore {
 
     /// Substitui o CPSR e sincroniza o banco de registradores com o modo codificado.
     ///
-    /// Este metodo e preferivel a alterar `cpsr().set(...)` diretamente quando o valor
+    /// Este método e preferível a alterar `cpsr().set(...)` diretamente quando o valor
     /// novo troca o modo da CPU, como em handoff de boot ou skip BIOS.
     ///
     /// @param value valor bruto de 32 bits para o CPSR
@@ -119,7 +119,7 @@ public final class ArmCore {
         cpsr.set(value);
     }
 
-    /// Configura somente o conjunto de instrucoes atual no CPSR.
+    /// Configura somente o conjunto de instruções atual no CPSR.
     ///
     /// @param instructionSet conjunto ARM ou THUMB desejado
     public void setInstructionSet(InstructionSet instructionSet) {
@@ -135,7 +135,7 @@ public final class ArmCore {
         setProgramCounter(pc);
     }
 
-    /// Configura PC, modo, ARM/THUMB e mascaras de interrupcao para handoff de boot.
+    /// Configura PC, modo, ARM/THUMB e máscaras de interrupção para handoff de boot.
     ///
     /// @param pc novo program counter
     /// @param mode modo de CPU desejado
@@ -168,14 +168,14 @@ public final class ArmCore {
         return traceListener;
     }
 
-    /// Instala um listener de trace para observar instrucao e bloco executados.
+    /// Instala um listener de trace para observar instrução e bloco executados.
     ///
     /// @param traceListener novo listener
     public void setTraceListener(ArmTraceListener traceListener) {
         this.traceListener = Objects.requireNonNull(traceListener, "traceListener");
     }
 
-    /// Retorna o barramento de memoria conectado ao core.
+    /// Retorna o barramento de memória conectado ao core.
     public AddressSpace memory() {
         return memory;
     }
@@ -185,7 +185,7 @@ public final class ArmCore {
         return swiDispatcher;
     }
 
-    /// Soma ciclos consumidos por interpretacao ou bloco compilado.
+    /// Soma ciclos consumidos por interpretação ou bloco compilado.
     public void addCycles(long amount) {
         if (amount < 0) {
             throw new IllegalArgumentException("cycles must be positive");
@@ -198,9 +198,9 @@ public final class ArmCore {
         return cycles;
     }
 
-    /// Soma os ciclos extras informados pelo barramento para um acesso de memoria.
+    /// Soma os ciclos extras informados pelo barramento para um acesso de memória.
     ///
-    /// @param address endereco acessado
+    /// @param address endereço acessado
     /// @param sizeBytes tamanho em bytes
     /// @param type tipo de acesso
     public void addMemoryCycles(int address, int sizeBytes, MemoryAccessType type) {
@@ -211,7 +211,7 @@ public final class ArmCore {
         addCycles(memoryCycles);
     }
 
-    /// Atualiza a linha externa de interrupcao.
+    /// Atualiza a linha externa de interrupção.
     public void setInterruptLine(boolean asserted) {
         interruptLine = asserted;
         if (asserted) {
@@ -219,22 +219,22 @@ public final class ArmCore {
         }
     }
 
-    /// Retorna `true` quando a linha externa de interrupcao esta ativa.
+    /// Retorna `true` quando a linha externa de interrupção está ativa.
     public boolean interruptLine() {
         return interruptLine;
     }
 
-    /// Coloca a CPU em HALT ate uma interrupcao acordar o core.
+    /// Coloca a CPU em HALT até uma interrupção acordar o core.
     public void halt() {
         sleepState = CpuSleepState.HALTED;
     }
 
-    /// Coloca a CPU em STOP ate uma interrupcao acordar o core.
+    /// Coloca a CPU em STOP até uma interrupção acordar o core.
     public void stop() {
         sleepState = CpuSleepState.STOPPED;
     }
 
-    /// Acorda a CPU manualmente, sem alterar linhas de interrupcao.
+    /// Acorda a CPU manualmente, sem alterar linhas de interrupção.
     public void wake() {
         sleepState = CpuSleepState.RUNNING;
     }
@@ -246,21 +246,21 @@ public final class ArmCore {
         return sleepState;
     }
 
-    /// Retorna `true` quando a CPU esta em HALT.
+    /// Retorna `true` quando a CPU está em HALT.
     ///
     /// @return `true` quando em HALT
     public boolean halted() {
         return sleepState == CpuSleepState.HALTED;
     }
 
-    /// Retorna `true` quando a CPU esta em STOP.
+    /// Retorna `true` quando a CPU está em STOP.
     ///
     /// @return `true` quando em STOP
     public boolean stopped() {
         return sleepState == CpuSleepState.STOPPED;
     }
 
-    /// Executa uma unica instrucao quando um interpretador estiver conectado.
+    /// Executa uma única instrução quando um interpretador estiver conectado.
     public DecodedInstruction step() {
         synchronizeModeFromCpsr();
         int pc = programCounter();
@@ -283,7 +283,7 @@ public final class ArmCore {
         return instruction;
     }
 
-    /// Executa ate `instructionCount` instrucoes pelo interpretador frio.
+    /// Executa até `instructionCount` instruções pelo interpretador frio.
     public int step(int instructionCount) {
         if (instructionCount < 0) {
             throw new IllegalArgumentException("instructionCount must be >= 0");
@@ -332,19 +332,19 @@ public final class ArmCore {
         return consumed;
     }
 
-    /// Processa uma excecao ARM futura.
+    /// Processa uma exceção ARM futura.
     public void handleException(ArmException exception) {
         requestException(exception);
     }
 
-    /// Solicita entrada em uma excecao ARM usando o PC atual como base de retorno.
+    /// Solicita entrada numa exceção ARM usando o PC atual como base de retorno.
     public void requestException(ArmException exception) {
         Objects.requireNonNull(exception, "exception");
         int returnAddress = exceptionReturnAddress(exception);
         enterException(exception, returnAddress);
     }
 
-    /// Le um registrador bancado para o modo informado.
+    /// Lê um registrador bancado para o modo informado.
     public int bankedRegister(CpuMode mode, int register) {
         Objects.requireNonNull(mode, "mode");
         checkRegister(register);
@@ -393,7 +393,7 @@ public final class ArmCore {
         bank[register - SP] = value;
     }
 
-    /// Le o SPSR associado a um modo privilegiado.
+    /// Lê o SPSR associado a um modo privilegiado.
     public int spsr(CpuMode mode) {
         return switch (Objects.requireNonNull(mode, "mode")) {
             case SUPERVISOR -> supervisorSpsr;
@@ -430,7 +430,7 @@ public final class ArmCore {
         restoreBank(mode);
     }
 
-    /// Exporta um snapshot imutavel usado por handlers de SWI.
+    /// Exporta um snapshot imutável usado por handlers de SWI.
     public CpuState toCpuState() {
         return new CpuState(registers[0], registers[1], registers[2], registers[3],
                 registers[13], registers[14], registers[15], cpsr.get());
