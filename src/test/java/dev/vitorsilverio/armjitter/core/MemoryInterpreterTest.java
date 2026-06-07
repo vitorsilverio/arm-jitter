@@ -187,7 +187,7 @@ class MemoryInterpreterTest {
         TestAddressSpace memory = new TestAddressSpace(96);
         memory.put32(0, 0xE190_20D1);
         memory.put32(4, 0xE190_30F1);
-        memory.write16(65, 0xFF80);
+        memory.put16(65, 0xFF80); // raw setup: byte 0x80 at the odd address 65
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
         core.setRegister(0, 64);
         core.setRegister(1, 1);

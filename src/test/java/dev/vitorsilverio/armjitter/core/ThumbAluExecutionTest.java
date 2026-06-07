@@ -43,8 +43,7 @@ class ThumbAluExecutionTest {
         memory.put16(0, 0x5642);
         memory.put16(2, 0x5E43);
         memory.put16(4, 0xB100);
-        memory.write8(33, 0x80);
-        memory.write16(33, 0xFF80);
+        memory.put16(33, 0xFF80); // raw setup: signed byte 0x80 at the odd address 33
         ArmCore core = thumbCore(memory);
         core.setRegister(0, 32);
         core.setRegister(1, 1);

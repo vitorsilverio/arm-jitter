@@ -44,8 +44,10 @@ public final class TestAddressSpace implements AddressSpace {
 
     @Override
     public void write16(int address, int value) {
-        write8(address, value);
-        write8(address + 1, value >>> 8);
+        // Models normal RAM: a halfword store forces alignment (bit 0 ignored).
+        int aligned = address & ~1;
+        write8(aligned, value);
+        write8(aligned + 1, value >>> 8);
     }
 
     @Override

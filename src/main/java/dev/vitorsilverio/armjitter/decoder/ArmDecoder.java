@@ -191,11 +191,11 @@ public final class ArmDecoder implements InstructionDecoder {
                 case 0x7 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.RSC,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x8 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.TST,
-                        -1, rn, immediate ? -1 : operand, operand, immediate, true, false);
+                        rd, rn, immediate ? -1 : operand, operand, immediate, true, false);
                 case 0x9 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.TEQ,
-                        -1, rn, immediate ? -1 : operand, operand, immediate, true, false);
+                        rd, rn, immediate ? -1 : operand, operand, immediate, true, false);
                 case 0xB -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.CMN,
-                        -1, rn, immediate ? -1 : operand, operand, immediate, true, false);
+                        rd, rn, immediate ? -1 : operand, operand, immediate, true, false);
                 case 0xD -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MOV,
                         rd, -1, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0x4 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.ADD,
@@ -203,7 +203,7 @@ public final class ArmDecoder implements InstructionDecoder {
                 case 0x2 -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SUB,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0xA -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.CMP,
-                        -1, rn, immediate ? -1 : operand, operand, immediate, true, false);
+                        rd, rn, immediate ? -1 : operand, operand, immediate, true, false);
                 case 0xC -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.ORR,
                         rd, rn, immediate ? -1 : operand, operand, immediate, setFlags, false);
                 case 0xE -> new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.BIC,

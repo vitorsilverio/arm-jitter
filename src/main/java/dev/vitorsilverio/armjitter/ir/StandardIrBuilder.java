@@ -99,7 +99,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             case STORE -> block.add(new IrOp.Store(
                     instruction.destinationRegister(),
-                    registerValueOverride(instruction, instruction.destinationRegister()),
+                    storeSourceValueOverride(instruction),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     offset(instruction),
@@ -177,7 +177,7 @@ public final class StandardIrBuilder implements IrBuilder {
                 opcode,
                 instruction.destinationRegister(),
                 instruction.sourceRegister(),
-                registerValueOverride(instruction, instruction.sourceRegister()),
+                aluSourceValueOverride(instruction),
                 operand(instruction),
                 instruction.setFlags() || instruction.kind() == InstructionKind.CMP || instruction.kind() == InstructionKind.CMN,
                 instruction.condition()));
@@ -205,8 +205,8 @@ public final class StandardIrBuilder implements IrBuilder {
                         shiftType(shiftBits),
                         0,
                         amountRegister,
-                        registerValueOverride(instruction, instruction.secondSourceRegister()),
-                        registerValueOverride(instruction, amountRegister),
+                        armRegisterShiftPcValue(instruction, instruction.secondSourceRegister()),
+                        armRegisterShiftPcValue(instruction, amountRegister),
                         false,
                         false);
             }
@@ -295,6 +295,37 @@ public final class StandardIrBuilder implements IrBuilder {
             case ARM -> instruction.address() + 8;
             case THUMB -> (instruction.address() + 4);
         };
+    }
+
+    /// Operand-1 (Rn) PC override for a data-processing instruction. ARM7TDMI reads R15
+    /// as PC+12 when the instruction uses a register-specified shift (the extra shift
+    /// cycle advances the prefetch), otherwise as the usual PC+8.
+    private int aluSourceValueOverride(DecodedInstruction instruction) {
+        if (instruction.sourceRegister() == 15 && usesRegisterSpecifiedShift(instruction)) {
+            return instruction.address() + 12;
+        }
+        return registerValueOverride(instruction, instruction.sourceRegister());
+    }
+
+    /// PC value for Rm/Rs of a register-specified-shift operand: R15 reads as PC+12.
+    private int armRegisterShiftPcValue(DecodedInstruction instruction, int register) {
+        return register == 15 ? instruction.address() + 12 : -1;
+    }
+
+    private boolean usesRegisterSpecifiedShift(DecodedInstruction instruction) {
+        return instruction.instructionSet() == InstructionSet.ARM
+                && !instruction.immediateOperand()
+                && (instruction.raw() & (1 << 4)) != 0;
+    }
+
+    /// Stored-data PC override for a single STR. ARM7TDMI stores R15 as PC+12 (one
+    /// instruction width past the PC+8 read value); THUMB single stores cannot target PC.
+    private int storeSourceValueOverride(DecodedInstruction instruction) {
+        if (instruction.destinationRegister() == 15
+                && instruction.instructionSet() == InstructionSet.ARM) {
+            return instruction.address() + 12;
+        }
+        return registerValueOverride(instruction, instruction.destinationRegister());
     }
 
     private int pcStoreValueOverride(DecodedInstruction instruction) {

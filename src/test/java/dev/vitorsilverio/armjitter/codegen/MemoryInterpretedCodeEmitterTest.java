@@ -195,7 +195,8 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(2, core.runBlocks(runtime, 1));
 
-        assertEquals(12, memory.read32(16));
+        // ARM7TDMI stores R15 as PC+12 (STR at address 4 -> 4 + 12 = 16).
+        assertEquals(16, memory.read32(16));
         assertEquals(8, core.programCounter());
     }
 

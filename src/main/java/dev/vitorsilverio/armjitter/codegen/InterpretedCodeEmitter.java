@@ -18,7 +18,13 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         return core -> execute(block, core);
     }
 
-    private int execute(IrBlock block, ArmCore core) {
+    /// Interpreta um bloco IR sobre o core informado e devolve os ciclos internos
+    /// (IrOp.Cycle) consumidos; ciclos de memoria sao somados diretamente ao core.
+    ///
+    /// Esta e a unica implementacao da semantica das instrucoes: tanto o caminho JIT
+    /// (blocos compilados) quanto o interpretador frio (ArmInterpreter) a utilizam,
+    /// de modo que correcoes de comportamento vivem em um unico lugar.
+    public int execute(IrBlock block, ArmCore core) {
         int cycles = 0;
         boolean pcChanged = false;
 
@@ -106,14 +112,22 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     }
                 }
                 if (alu.setFlags()) {
-                    setSbcFlags(core, left, subRight, borrow, result);
+                    if (alu.dst() == 15) {
+                        restoreCpsrFromCurrentSpsr(core); // ARMv4 CMP{P}: CPSR = SPSR, no NZCV write
+                    } else {
+                        setSbcFlags(core, left, subRight, borrow, result);
+                    }
                 }
             }
             case "CMN" -> {
                 int left = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int result = left + right;
                 if (alu.setFlags()) {
-                    setAddFlags(core, left, right, result);
+                    if (alu.dst() == 15) {
+                        restoreCpsrFromCurrentSpsr(core); // ARMv4 CMN{P}: CPSR = SPSR
+                    } else {
+                        setAddFlags(core, left, right, result);
+                    }
                 }
             }
             case "AND", "EOR", "ORR", "BIC", "TST", "TEQ" -> {
@@ -136,7 +150,11 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     }
                 }
                 if (alu.setFlags()) {
-                    setLogicFlags(core, result, carry);
+                    if (alu.dst() == 15) {
+                        restoreCpsrFromCurrentSpsr(core); // ARMv4 TST{P}/TEQ{P}: CPSR = SPSR
+                    } else {
+                        setLogicFlags(core, result, carry);
+                    }
                 }
             }
             case "MVN" -> {
@@ -291,7 +309,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         };
         value = signExtendIfNeeded(value, load.sizeBytes(), load.signed());
         writeLoadedRegister(core, load.dst(), value);
-        if (load.writeback()) {
+        // ARM7TDMI: if the base register is also the loaded register, the loaded value
+        // wins and the base writeback is suppressed.
+        if (load.writeback() && load.base() != load.dst()) {
             core.setRegister(load.base(), base + offset);
         }
         return load.dst() == 15;
@@ -351,7 +371,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int mask = effectiveRegisterMask(transfer.registerMask(), transfer.emptyRegisterList());
         int count = effectiveRegisterCount(transfer.registerMask(), transfer.emptyRegisterList());
         int base = core.register(transfer.base());
-        int address = transfer.mode().startAddress(base, count);
+        // ARM7TDMI: block transfers force word alignment of the access address; the
+        // base register itself (and any writeback) keeps its unaligned value.
+        int address = transfer.mode().startAddress(base, count) & ~3;
         boolean includesPc = (mask & (1 << 15)) != 0;
         boolean forceUser = transfer.userMode() && !includesPc;
         int loadedPc = 0;
@@ -540,9 +562,11 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
     }
 
     private void write16Arm7(ArmCore core, int address, int value) {
-        int aligned = address & ~1;
-        core.memory().write16(aligned, value);
-        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_WRITE);
+        // Pass the raw address (like write32Arm7); forcing alignment is the memory's
+        // responsibility. Normal RAM ignores bit 0, but an 8-bit save bus uses it to
+        // select the byte lane, so the device must see it.
+        core.memory().write16(address, value);
+        core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
     }
 
     private void write8Arm7(ArmCore core, int address, int value) {
