@@ -60,11 +60,14 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         int right = operand(core, alu.src2());
         switch (alu.opcode()) {
             case "MOV" -> {
+                // Read the shifter carry-out before the destination is written, since
+                // Rd may alias the shifted source register.
+                boolean carry = alu.setFlags() && operandCarryOut(core, alu.src2());
                 if (writeAluDestination(core, alu.dst(), right, alu.setFlags())) {
                     return true;
                 }
                 if (alu.setFlags()) {
-                    setLogicFlags(core, right, operandCarryOut(core, alu.src2()));
+                    setLogicFlags(core, right, carry);
                 }
             }
             case "ADD" -> {
@@ -124,22 +127,28 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     case "TEQ" -> left ^ right;
                     default -> throw new IllegalStateException("Unexpected logic opcode: " + alu.opcode());
                 };
+                // Read the shifter carry-out before the destination is written, since
+                // Rd may alias the shifted source register.
+                boolean carry = alu.setFlags() && operandCarryOut(core, alu.src2());
                 if (!"TST".equals(alu.opcode()) && !"TEQ".equals(alu.opcode())) {
                     if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
                         return true;
                     }
                 }
                 if (alu.setFlags()) {
-                    setLogicFlags(core, result, operandCarryOut(core, alu.src2()));
+                    setLogicFlags(core, result, carry);
                 }
             }
             case "MVN" -> {
                 int result = ~right;
+                // Read the shifter carry-out before the destination is written, since
+                // Rd may alias the shifted source register.
+                boolean carry = alu.setFlags() && operandCarryOut(core, alu.src2());
                 if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
                     return true;
                 }
                 if (alu.setFlags()) {
-                    setLogicFlags(core, result, operandCarryOut(core, alu.src2()));
+                    setLogicFlags(core, result, carry);
                 }
             }
             case "CLZ" -> core.setRegister(alu.dst(), Integer.numberOfLeadingZeros(
@@ -210,8 +219,10 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         if (!core.cpsr().evalCond(transfer.condition())) {
             return;
         }
+        CpuMode psrMode = core.mode();
+        boolean hasSPSR = psrMode != CpuMode.USER && psrMode != CpuMode.SYSTEM;
         if (transfer.read()) {
-            int value = transfer.spsr() ? core.spsr(core.mode()) : core.cpsr().get();
+            int value = (transfer.spsr() && hasSPSR) ? core.spsr(psrMode) : core.cpsr().get();
             core.setRegister(transfer.register(), value);
             return;
         }
@@ -219,7 +230,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                 ? transfer.immediate()
                 : registerValue(core, transfer.register(), transfer.registerValueOverride());
         if (transfer.spsr()) {
-            core.setSpsr(core.mode(), mergePsr(core.spsr(core.mode()), value, transfer.fieldMask()));
+            if (hasSPSR) {
+                core.setSpsr(psrMode, mergePsr(core.spsr(psrMode), value, transfer.fieldMask()));
+            }
         } else {
             core.setCpsr(mergePsr(core.cpsr().get(), value, cpsrWriteFieldMask(core, transfer.fieldMask())));
         }
@@ -406,7 +419,8 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         if (pop.includePc()) {
             int value = read32Arm7(core, current);
             current += 4;
-            core.cpsr().setThumbMode((value & 1) != 0);
+            // ARMv4T (ARM7TDMI): POP {pc} does not interwork. Bit 0 of the loaded
+            // value is ignored and the CPU stays in THUMB state; only BX switches.
             core.setProgramCounter(value & ~1);
             pcChanged = true;
         }
@@ -488,8 +502,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
 
     private void writeLoadedRegister(ArmCore core, int register, int value) {
         if (register == 15) {
-            core.cpsr().setThumbMode((value & 1) != 0);
-            core.setProgramCounter(value & ~1);
+            // ARMv4T (ARM7TDMI): LDR/LDM into PC do not interwork. The address is
+            // masked to the current instruction width and the T bit is preserved.
+            alignAndSetPc(core, value);
             return;
         }
         core.setRegister(register, value);
@@ -550,6 +565,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
 
     private void restoreCpsrFromCurrentSpsr(ArmCore core) {
         CpuMode mode = core.mode();
+        if (mode == CpuMode.USER || mode == CpuMode.SYSTEM) return;
         core.setCpsr(core.spsr(mode));
     }
 

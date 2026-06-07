@@ -298,9 +298,12 @@ public final class StandardIrBuilder implements IrBuilder {
     }
 
     private int pcStoreValueOverride(DecodedInstruction instruction) {
+        // ARM7TDMI block-store PC penalty: a stored PC is one extra instruction width
+        // ahead of the read value (ARM reads addr+8/stores addr+12; THUMB reads
+        // addr+4/stores addr+6). Only relevant for the empty-rlist STM quirk in THUMB.
         return switch (instruction.instructionSet()) {
             case ARM -> instruction.address() + 12;
-            case THUMB -> instruction.address() + 4;
+            case THUMB -> instruction.address() + 6;
         };
     }
 

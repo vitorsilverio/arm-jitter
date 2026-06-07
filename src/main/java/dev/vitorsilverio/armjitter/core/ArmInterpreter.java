@@ -82,11 +82,14 @@ public final class ArmInterpreter {
 
     private void executeMove(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
         int result = operand2(core, instruction);
+        // The shifter carry-out must be read from the original operand, before the
+        // destination is written (Rd may alias the shifted source register).
+        boolean carry = instruction.setFlags() && operandCarryOut(core, instruction);
         if (writeAluDestination(core, instruction.destinationRegister(), result, instruction.setFlags())) {
             return;
         }
         if (instruction.setFlags()) {
-            setLogicFlags(core, result, operandCarryOut(core, instruction));
+            setLogicFlags(core, result, carry);
         }
         core.setProgramCounter(sequentialPc);
     }
@@ -161,24 +164,30 @@ public final class ArmInterpreter {
             case TEQ -> left ^ right;
             default -> throw new IllegalStateException("Unexpected logic op: " + instruction.kind());
         };
+        // The shifter carry-out must be read from the original operand, before the
+        // destination is written (Rd may alias the shifted source register).
+        boolean carry = instruction.setFlags() && operandCarryOut(core, instruction);
         if (instruction.kind() != InstructionKind.TST && instruction.kind() != InstructionKind.TEQ) {
             if (writeAluDestination(core, instruction.destinationRegister(), result, instruction.setFlags())) {
                 return;
             }
         }
         if (instruction.setFlags()) {
-            setLogicFlags(core, result, operandCarryOut(core, instruction));
+            setLogicFlags(core, result, carry);
         }
         core.setProgramCounter(sequentialPc);
     }
 
     private void executeMvn(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
         int result = ~operand2(core, instruction);
+        // The shifter carry-out must be read from the original operand, before the
+        // destination is written (Rd may alias the shifted source register).
+        boolean carry = instruction.setFlags() && operandCarryOut(core, instruction);
         if (writeAluDestination(core, instruction.destinationRegister(), result, instruction.setFlags())) {
             return;
         }
         if (instruction.setFlags()) {
-            setLogicFlags(core, result, operandCarryOut(core, instruction));
+            setLogicFlags(core, result, carry);
         }
         core.setProgramCounter(sequentialPc);
     }
@@ -190,7 +199,11 @@ public final class ArmInterpreter {
     }
 
     private void executeMrs(ArmCore core, DecodedInstruction instruction, int sequentialPc) {
-        int value = instruction.immediate() == 0 ? core.cpsr().get() : core.spsr(core.mode());
+        CpuMode mode = core.mode();
+        boolean readSpsr = instruction.immediate() != 0;
+        int value = (!readSpsr || mode == CpuMode.USER || mode == CpuMode.SYSTEM)
+                ? core.cpsr().get()
+                : core.spsr(mode);
         core.setRegister(instruction.destinationRegister(), value);
         core.setProgramCounter(sequentialPc);
     }
@@ -203,7 +216,10 @@ public final class ArmInterpreter {
                 ? instruction.immediate()
                 : readSourceRegister(core, instruction.sourceRegister(), instruction);
         if (spsr) {
-            core.setSpsr(core.mode(), mergePsr(core.spsr(core.mode()), value, fieldMask));
+            CpuMode mode = core.mode();
+            if (mode != CpuMode.USER && mode != CpuMode.SYSTEM) {
+                core.setSpsr(mode, mergePsr(core.spsr(mode), value, fieldMask));
+            }
         } else {
             core.setCpsr(mergePsr(core.cpsr().get(), value, cpsrWriteFieldMask(core, fieldMask)));
         }
@@ -449,7 +465,8 @@ public final class ArmInterpreter {
         if (instruction.link()) {
             int value = read32Arm7(core, current);
             current += 4;
-            core.cpsr().setThumbMode((value & 1) != 0);
+            // ARMv4T (ARM7TDMI): POP {pc} does not interwork. Bit 0 of the loaded
+            // value is ignored and the CPU stays in THUMB state; only BX switches.
             core.setProgramCounter(value & ~1);
         } else {
             core.setProgramCounter(sequentialPc);
@@ -663,8 +680,12 @@ public final class ArmInterpreter {
     }
 
     private int readMultipleStoreRegister(ArmCore core, int register, DecodedInstruction instruction) {
-        if (register == 15 && instruction.instructionSet() == InstructionSet.ARM) {
-            return instruction.address() + 12;
+        if (register == 15) {
+            // ARM7TDMI block-store PC penalty: a stored PC is one extra instruction
+            // width ahead of the read value (ARM stores addr+12, THUMB stores addr+6).
+            return instruction.instructionSet() == InstructionSet.ARM
+                    ? instruction.address() + 12
+                    : instruction.address() + 6;
         }
         return readMemoryStoreRegister(core, register, instruction);
     }
@@ -727,8 +748,9 @@ public final class ArmInterpreter {
 
     private void writeLoadedRegister(ArmCore core, int register, int value) {
         if (register == 15) {
-            core.cpsr().setThumbMode((value & 1) != 0);
-            core.setProgramCounter(value & ~1);
+            // ARMv4T (ARM7TDMI): LDR/LDM into PC do not interwork. The address is
+            // masked to the current instruction width and the T bit is preserved.
+            alignAndSetPc(core, value);
             return;
         }
         core.setRegister(register, value);
@@ -736,6 +758,7 @@ public final class ArmInterpreter {
 
     private void restoreCpsrFromCurrentSpsr(ArmCore core) {
         CpuMode mode = core.mode();
+        if (mode == CpuMode.USER || mode == CpuMode.SYSTEM) return;
         core.setCpsr(core.spsr(mode));
     }
 

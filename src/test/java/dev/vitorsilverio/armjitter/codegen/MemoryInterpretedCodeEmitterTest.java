@@ -144,7 +144,8 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(1, core.runBlocks(runtime, 1));
 
-        assertTrue(core.cpsr().isThumbMode());
+        // ARMv4T (ARM7TDMI): LDR into PC does not interwork; the CPU stays in ARM.
+        assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x100, core.programCounter());
         assertEquals(0, core.register(1));
     }
@@ -160,7 +161,8 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(1, core.runBlocks(runtime, 1));
 
-        assertTrue(core.cpsr().isThumbMode());
+        // ARMv4T (ARM7TDMI): literal LDR into PC does not interwork; stays in ARM.
+        assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x80, core.programCounter());
         assertEquals(0, core.register(1));
     }
