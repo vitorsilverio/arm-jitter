@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,8 @@ class ArmDecoderTest {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE16F_1F10);
 
-        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+        // CLZ is an ARMv5 instruction; the base ARMv4T decoder rejects it.
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0);
 
         assertEquals(InstructionKind.CLZ, instruction.kind());
         assertEquals(1, instruction.destinationRegister());

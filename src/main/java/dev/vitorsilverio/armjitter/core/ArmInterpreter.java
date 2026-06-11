@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
@@ -22,9 +23,15 @@ public final class ArmInterpreter {
     private final IrBuilder irBuilder;
     private final InterpretedCodeEmitter executor;
 
-    /// Cria um interpretador com decoders ARM e THUMB padrao.
+    /// Cria um interpretador com decoders ARM e THUMB padrao (ARMv4T).
     public ArmInterpreter() {
         this(new ArmDecoder(), new ThumbDecoder());
+    }
+
+    /// Cria um interpretador para a arquitetura informada (decoders + emitter ligados a ela).
+    public ArmInterpreter(ArmArchitecture architecture) {
+        this(new ArmDecoder(architecture), new ThumbDecoder(architecture),
+                new StandardIrBuilder(), new InterpretedCodeEmitter(architecture));
     }
 
     /// Cria um interpretador com decoders customizados.

@@ -1,10 +1,23 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 /// Decoder THUMB16 inicial para o caminho interpretado frio.
 public final class ThumbDecoder implements InstructionDecoder {
+    private final ArmArchitecture architecture;
+
+    /// Decoder THUMB para a arquitetura base (ARMv4T / GBA).
+    public ThumbDecoder() {
+        this(ArmArchitecture.ARMV4T);
+    }
+
+    /// Decoder THUMB ligado a uma arquitetura (para futuros gates Thumb BLX / Thumb-2).
+    public ThumbDecoder(ArmArchitecture architecture) {
+        this.architecture = architecture;
+    }
+
     /// Decodifica uma instrucao THUMB16 no endereco informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {

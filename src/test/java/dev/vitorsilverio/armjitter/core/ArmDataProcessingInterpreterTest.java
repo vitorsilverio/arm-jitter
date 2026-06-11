@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -141,7 +142,8 @@ class ArmDataProcessingInterpreterTest {
     void executesArmClz() {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE16F_1F10);
-        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        // CLZ is an ARMv5 instruction, so the core must use an ARMv5 architecture.
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
         core.setRegister(0, 0x0000_8000);
 
         core.step();

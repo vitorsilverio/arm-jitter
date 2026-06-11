@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.jit;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
@@ -11,41 +12,44 @@ public final class JitRuntimeFactory {
     private JitRuntimeFactory() {
     }
 
-    /// Cria um runtime ARM32 com emissor interpretado de IR.
+    /// Cria um runtime ARM32 com emissor interpretado de IR (ARMv4T).
     public static JitRuntime interpretedArm(int cacheEntries, int hotThreshold) {
-        return new JitRuntime(
-                new BlockCache(cacheEntries),
-                new ArmDecoder(),
-                new ThumbDecoder(),
-                new StandardIrBuilder(),
-                IrOptimizer.identity(),
-                new InterpretedCodeEmitter(),
-                new ExecutionThreshold(hotThreshold),
-                64);
+        return interpretedArm(cacheEntries, hotThreshold, ArmArchitecture.ARMV4T);
     }
 
-    /// Cria um runtime ARM/THUMB com emissor interpretado de IR.
+    /// Cria um runtime ARM/THUMB com emissor interpretado de IR (ARMv4T).
     public static JitRuntime interpretedArmThumb(int cacheEntries, int hotThreshold) {
-        return new JitRuntime(
-                new BlockCache(cacheEntries),
-                new ArmDecoder(),
-                new ThumbDecoder(),
-                new StandardIrBuilder(),
-                IrOptimizer.identity(),
-                new InterpretedCodeEmitter(),
-                new ExecutionThreshold(hotThreshold),
-                64);
+        return interpretedArmThumb(cacheEntries, hotThreshold, ArmArchitecture.ARMV4T);
     }
 
-    /// Cria um runtime THUMB16 com emissor interpretado de IR.
+    /// Cria um runtime THUMB16 com emissor interpretado de IR (ARMv4T).
     public static JitRuntime interpretedThumb(int cacheEntries, int hotThreshold) {
+        return interpretedThumb(cacheEntries, hotThreshold, ArmArchitecture.ARMV4T);
+    }
+
+    /// Cria um runtime ARM32 para a arquitetura informada.
+    public static JitRuntime interpretedArm(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        return build(cacheEntries, hotThreshold, architecture);
+    }
+
+    /// Cria um runtime ARM/THUMB para a arquitetura informada.
+    public static JitRuntime interpretedArmThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        return build(cacheEntries, hotThreshold, architecture);
+    }
+
+    /// Cria um runtime THUMB16 para a arquitetura informada.
+    public static JitRuntime interpretedThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        return build(cacheEntries, hotThreshold, architecture);
+    }
+
+    private static JitRuntime build(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
         return new JitRuntime(
                 new BlockCache(cacheEntries),
-                new ArmDecoder(),
-                new ThumbDecoder(),
+                new ArmDecoder(architecture),
+                new ThumbDecoder(architecture),
                 new StandardIrBuilder(),
                 IrOptimizer.identity(),
-                new InterpretedCodeEmitter(),
+                new InterpretedCodeEmitter(architecture),
                 new ExecutionThreshold(hotThreshold),
                 64);
     }

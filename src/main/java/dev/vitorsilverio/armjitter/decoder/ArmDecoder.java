@@ -1,10 +1,26 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
+import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 /// Decoder ARM32 inicial para o caminho interpretado frio.
 public final class ArmDecoder implements InstructionDecoder {
+    private final ArmArchitecture architecture;
+
+    /// Decoder para a arquitetura base (ARMv4T / GBA).
+    public ArmDecoder() {
+        this(ArmArchitecture.ARMV4T);
+    }
+
+    /// Decoder ligado a uma arquitetura: instrucoes ARMv5+ (CLZ, etc.) so sao
+    /// decodificadas se a arquitetura as suporta; o resto cai para UNIMPLEMENTED.
+    public ArmDecoder(ArmArchitecture architecture) {
+        this.architecture = architecture;
+    }
+
     /// Decodifica uma instrucao ARM32 no endereco informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
@@ -31,6 +47,9 @@ public final class ArmDecoder implements InstructionDecoder {
         }
 
         if ((raw & 0x0FFF_0FF0) == 0x016F_0F10) {
+            if (!architecture.has(ArmFeature.CLZ)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
             int rd = (raw >>> 12) & 0xF;
             int rm = raw & 0xF;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.CLZ,
@@ -214,6 +233,14 @@ public final class ArmDecoder implements InstructionDecoder {
             };
         }
 
+        // Instruction groups a higher architecture adds (e.g. the ARMv5 BLX/DSP space)
+        // plug in here without touching the shared decoder. Empty on ARMv4T/ARMv5TE today.
+        for (DecoderExtension extension : architecture.decoderExtensions()) {
+            DecodedInstruction decoded = extension.tryDecode(raw, address, condition);
+            if (decoded != null) {
+                return decoded;
+            }
+        }
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 

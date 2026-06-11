@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
@@ -90,7 +91,9 @@ class InterpretedCodeEmitterTest {
         memory.put32(0, 0xE16F_1F10);
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
         core.setRegister(0, 0x0000_8000);
-        IrBlock block = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder()).lift(memory, 0, 1);
+        // CLZ is ARMv5-only, so the decoder must target an ARMv5 architecture.
+        IrBlock block = new StandardIrBlockLifter(new ArmDecoder(ArmArchitecture.ARMV5TE), new StandardIrBuilder())
+                .lift(memory, 0, 1);
 
         int cycles = new InterpretedCodeEmitter().emit(block).execute(core);
 

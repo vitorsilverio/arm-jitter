@@ -52,6 +52,13 @@ public final class ArmCore {
         this(memory, swiDispatcher, new ArmInterpreter());
     }
 
+    /// Cria um core para uma arquitetura ARM especifica (ex.: ARMv4T para o GBA,
+    /// ARMv5TE para o ARM9 do NDS). O interpretador interno e construido com ela.
+    public ArmCore(AddressSpace memory, SwiDispatcher swiDispatcher,
+                   dev.vitorsilverio.armjitter.arch.ArmArchitecture architecture) {
+        this(memory, swiDispatcher, new ArmInterpreter(architecture));
+    }
+
     /// Cria um core conectado a uma memória, SWI e interpretador customizado.
     ///
     /// O estado inicial segue o reset de um ARM7TDMI: modo Supervisor, ARM state,

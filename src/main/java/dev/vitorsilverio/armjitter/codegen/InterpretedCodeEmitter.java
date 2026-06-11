@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpuMode;
@@ -12,6 +14,19 @@ import dev.vitorsilverio.armjitter.swi.CpuState;
 
 /// Emissor que transforma IR em um bloco executavel por interpretacao de IR.
 public final class InterpretedCodeEmitter implements CodeEmitter {
+    private final ArmArchitecture architecture;
+
+    /// Emissor para a arquitetura base (ARMv4T / GBA).
+    public InterpretedCodeEmitter() {
+        this(ArmArchitecture.ARMV4T);
+    }
+
+    /// Emissor ligado a uma arquitetura: os poucos forks de comportamento entre versoes
+    /// (ex.: interworking de load->PC) consultam {@code architecture}.
+    public InterpretedCodeEmitter(ArmArchitecture architecture) {
+        this.architecture = architecture;
+    }
+
     /// Emite um bloco executavel que interpreta as operacoes IR em ordem.
     @Override
     public CompiledBlock emit(IrBlock block) {
@@ -441,9 +456,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         if (pop.includePc()) {
             int value = read32Arm7(core, current);
             current += 4;
-            // ARMv4T (ARM7TDMI): POP {pc} does not interwork. Bit 0 of the loaded
-            // value is ignored and the CPU stays in THUMB state; only BX switches.
-            core.setProgramCounter(value & ~1);
+            loadToPc(core, value);
             pcChanged = true;
         }
         core.setRegister(13, current);
@@ -524,12 +537,22 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
 
     private void writeLoadedRegister(ArmCore core, int register, int value) {
         if (register == 15) {
-            // ARMv4T (ARM7TDMI): LDR/LDM into PC do not interwork. The address is
-            // masked to the current instruction width and the T bit is preserved.
-            alignAndSetPc(core, value);
+            loadToPc(core, value);
             return;
         }
         core.setRegister(register, value);
+    }
+
+    /// Writes a value loaded from memory into PC (LDR/LDM/POP into PC). On ARMv5+
+    /// (LOAD_PC_INTERWORKING) bit 0 selects ARM/Thumb; on ARMv4T (ARM7TDMI) bit 0 is
+    /// ignored and the T bit is preserved — only BX switches state there.
+    private void loadToPc(ArmCore core, int value) {
+        if (architecture.has(ArmFeature.LOAD_PC_INTERWORKING)) {
+            core.cpsr().setThumbMode((value & 1) != 0);
+            core.setProgramCounter(value & ~1);
+        } else {
+            alignAndSetPc(core, value);
+        }
     }
 
     private int registerValue(ArmCore core, int register, int valueOverride) {
