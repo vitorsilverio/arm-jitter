@@ -27,4 +27,56 @@ class BlockCacheRangeTest {
 
         assertTrue(cache.get(key).isPresent());
     }
+
+    @Test
+    void keepsBlockWhenWriteHitsAFarUnrelatedPage() {
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x03000000, InstructionSet.ARM);
+        cache.put(key, core -> 1, 0x03000000, 0x03000010);
+
+        cache.invalidate(0x06000000); // VRAM write: different page, no code there
+
+        assertTrue(cache.get(key).isPresent());
+    }
+
+    @Test
+    void invalidatesBlockThatSpansTwoPagesFromTheSecondPage() {
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x000003F0, InstructionSet.ARM);
+        // [0x3F0, 0x410) crosses the 1 KiB page boundary at 0x400.
+        cache.put(key, core -> 1, 0x000003F0, 0x00000410);
+
+        cache.invalidate(0x00000404); // write lands in the second page
+
+        assertTrue(cache.get(key).isEmpty());
+    }
+
+    @Test
+    void reindexesWhenSameKeyIsRecompiledWithANewRange() {
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x1000, InstructionSet.ARM);
+        cache.put(key, core -> 1, 0x1000, 0x1008);
+        cache.put(key, core -> 2, 0x2000, 0x2008); // recompiled elsewhere
+
+        cache.invalidate(0x1004); // old range must no longer match
+        assertTrue(cache.get(key).isPresent());
+
+        cache.invalidate(0x2004); // new range must match
+        assertTrue(cache.get(key).isEmpty());
+    }
+
+    @Test
+    void doesNotResurrectEvictedBlockOnLaterWriteToItsOldPage() {
+        BlockCache cache = new BlockCache(1);
+        BlockKey first = new BlockKey(0x1000, InstructionSet.ARM);
+        BlockKey second = new BlockKey(0x5000, InstructionSet.ARM);
+        cache.put(first, core -> 1, 0x1000, 0x1008);
+        cache.put(second, core -> 2, 0x5000, 0x5008); // evicts `first`
+
+        assertTrue(cache.get(first).isEmpty());
+        cache.invalidate(0x1004); // must be a harmless no-op, not touch `second`
+
+        assertTrue(cache.get(second).isPresent());
+        assertEquals(1, cache.size());
+    }
 }

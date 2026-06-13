@@ -75,6 +75,63 @@ public final class ArmCore {
         return Arrays.copyOf(registers, registers.length);
     }
 
+    /// Serializa o estado completo da CPU (todos os bancos, SPSRs, CPSR, modo e flags)
+    /// para um save state. Restaurado por {@link #loadState}.
+    public void saveState(java.io.DataOutputStream out) throws java.io.IOException {
+        writeInts(out, registers);
+        writeInts(out, commonR8ToR12);
+        writeInts(out, userSystemSpLr);
+        writeInts(out, fiqR8ToR14);
+        writeInts(out, irqSpLr);
+        writeInts(out, supervisorSpLr);
+        writeInts(out, abortSpLr);
+        writeInts(out, undefinedSpLr);
+        out.writeInt(supervisorSpsr);
+        out.writeInt(irqSpsr);
+        out.writeInt(fiqSpsr);
+        out.writeInt(abortSpsr);
+        out.writeInt(undefinedSpsr);
+        out.writeInt(cpsr.get());
+        out.writeLong(cycles);
+        out.writeBoolean(interruptLine);
+        out.writeInt(activeMode.ordinal());
+        out.writeInt(sleepState.ordinal());
+    }
+
+    /// Restaura o estado completo da CPU gravado por {@link #saveState}.
+    public void loadState(java.io.DataInputStream in) throws java.io.IOException {
+        readInts(in, registers);
+        readInts(in, commonR8ToR12);
+        readInts(in, userSystemSpLr);
+        readInts(in, fiqR8ToR14);
+        readInts(in, irqSpLr);
+        readInts(in, supervisorSpLr);
+        readInts(in, abortSpLr);
+        readInts(in, undefinedSpLr);
+        supervisorSpsr = in.readInt();
+        irqSpsr = in.readInt();
+        fiqSpsr = in.readInt();
+        abortSpsr = in.readInt();
+        undefinedSpsr = in.readInt();
+        cpsr.set(in.readInt());
+        cycles = in.readLong();
+        interruptLine = in.readBoolean();
+        activeMode = CpuMode.values()[in.readInt()];
+        sleepState = CpuSleepState.values()[in.readInt()];
+    }
+
+    private static void writeInts(java.io.DataOutputStream out, int[] values) throws java.io.IOException {
+        for (int value : values) {
+            out.writeInt(value);
+        }
+    }
+
+    private static void readInts(java.io.DataInputStream in, int[] values) throws java.io.IOException {
+        for (int i = 0; i < values.length; i++) {
+            values[i] = in.readInt();
+        }
+    }
+
     /// Lê um registrador pelo índice ARM, de 0 a 15.
     public int register(int index) {
         checkRegister(index);
