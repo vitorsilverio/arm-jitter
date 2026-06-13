@@ -269,7 +269,7 @@ public final class ArmCore {
         return highVectors;
     }
 
-    /// Selects the high (`0xFFFF0000`) exception vector base, driven by the ARM9 CP15 c1[V].
+    /// Selects the high (`0xFFFF0000`) exception vector base, driven by the ARM9 CP15 c1\[V\].
     public void setHighVectors(boolean highVectors) {
         this.highVectors = highVectors;
     }
