@@ -15,7 +15,8 @@ public final class ArmArchitecture {
     /// ARM7TDMI — the GBA CPU (also the NDS ARM7). The base set: no extra features.
     public static final ArmArchitecture ARMV4T = of("ARMv4T");
 
-    /// ARM9 — the NDS main CPU. ARMv4T plus the ARMv5TE feature set (no Thumb-2).
+    /// ARM9 — the NDS main CPU. ARMv4T plus the ARMv5TE feature set (no Thumb-2). The
+    /// coprocessor decoder is attached here so only ARMv5 cores decode `MCR`/`MRC` (CP15).
     public static final ArmArchitecture ARMV5TE = of("ARMv5TE",
             ArmFeature.BLX,
             ArmFeature.CLZ,
@@ -23,7 +24,8 @@ public final class ArmArchitecture {
             ArmFeature.SATURATING,
             ArmFeature.LDRD_STRD,
             ArmFeature.LOAD_PC_INTERWORKING,
-            ArmFeature.MUL_PRESERVES_CARRY);
+            ArmFeature.MUL_PRESERVES_CARRY)
+            .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     private final String name;
     private final EnumSet<ArmFeature> features;

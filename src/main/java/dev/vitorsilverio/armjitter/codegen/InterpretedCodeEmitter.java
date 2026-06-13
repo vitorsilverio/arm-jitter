@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.codegen;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
+import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpuMode;
@@ -61,6 +62,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                 case IrOp.Push push -> executePush(core, push);
                 case IrOp.Pop pop -> pcChanged |= executePop(core, pop);
                 case IrOp.Swi swi -> pcChanged |= executeSwi(core, swi, block.endPc());
+                case IrOp.Coprocessor cp -> pcChanged |= executeCoprocessor(core, cp);
                 case IrOp.Undefined undefined -> pcChanged |= executeUndefined(core, undefined);
                 case IrOp.Cycle cycle -> cycles += cycle.count();
                 case IrOp.Fetch fetch -> core.addMemoryCycles(fetch.address(), fetch.sizeBytes(), MemoryAccessType.INSTRUCTION_FETCH);
@@ -475,6 +477,33 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         }
         core.requestException(ArmException.SWI);
         return true;
+    }
+
+    private boolean executeCoprocessor(ArmCore core, IrOp.Coprocessor cp) {
+        if (!core.cpsr().evalCond(cp.condition())) {
+            return false;
+        }
+        CoprocessorBus bus = core.coprocessorBus();
+        if (!bus.handles(cp.coprocessor())) {
+            // No such coprocessor: behave like real hardware and take the Undefined vector.
+            core.setProgramCounter(cp.sequentialPc());
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        if (cp.load()) {
+            int value = bus.read(cp.coprocessor(), cp.opcode1(), cp.crn(), cp.crm(), cp.opcode2());
+            if (cp.register() == 15) {
+                // MRC with Rd=15 writes NZCV from bits 31-28 rather than a general register.
+                core.cpsr().setNzcv((value & 0x8000_0000) != 0, (value & 0x4000_0000) != 0,
+                        (value & 0x2000_0000) != 0, (value & 0x1000_0000) != 0);
+            } else {
+                core.setRegister(cp.register(), value);
+            }
+        } else {
+            bus.write(cp.coprocessor(), cp.opcode1(), cp.crn(), cp.crm(), cp.opcode2(),
+                    core.register(cp.register()));
+        }
+        return false;
     }
 
     private boolean executeUndefined(ArmCore core, IrOp.Undefined undefined) {

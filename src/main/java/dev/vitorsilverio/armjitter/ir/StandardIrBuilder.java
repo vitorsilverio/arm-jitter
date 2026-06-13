@@ -162,6 +162,16 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.link(),
                     instruction.condition()));
             case SWI -> block.add(new IrOp.Swi(instruction.immediate(), instruction.condition()));
+            case COPROCESSOR -> block.add(new IrOp.Coprocessor(
+                    instruction.link(),
+                    instruction.immediate() & 0xF,
+                    (instruction.immediate() >>> 4) & 0x7,
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    (instruction.immediate() >>> 8) & 0x7,
+                    instruction.destinationRegister(),
+                    instruction.address() + instructionWidth(instruction),
+                    instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));

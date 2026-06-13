@@ -89,5 +89,7 @@ public enum InstructionKind {
     /// Restaura registradores da pilha.
     POP,
     /// Software interrupt.
-    SWI
+    SWI,
+    /// Coprocessor register transfer (`MCR`/`MRC`), e.g. CP15 on the ARM9.
+    COPROCESSOR
 }

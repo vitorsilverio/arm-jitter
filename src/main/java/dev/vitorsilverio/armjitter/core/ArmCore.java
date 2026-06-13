@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.jit.JitRuntime;
@@ -37,6 +38,8 @@ public final class ArmCore {
     private final CpsrRegister cpsr = new CpsrRegister();
     private final AddressSpace memory;
     private final SwiDispatcher swiDispatcher;
+    private CoprocessorBus coprocessorBus = CoprocessorBus.none();
+    private boolean highVectors;
     private final ArmInterpreter interpreter;
     private long cycles;
     private boolean interruptLine;
@@ -247,6 +250,28 @@ public final class ArmCore {
     /// Retorna o dispatcher de SWI configurado para o core.
     public SwiDispatcher swiDispatcher() {
         return swiDispatcher;
+    }
+
+    /// Returns the coprocessor bus serving `MCR`/`MRC` (e.g. the ARM9 CP15). Defaults to
+    /// {@link CoprocessorBus#none()} until {@link #setCoprocessorBus} installs one.
+    public CoprocessorBus coprocessorBus() {
+        return coprocessorBus;
+    }
+
+    /// Installs the coprocessor bus used by `MCR`/`MRC` instructions (e.g. the ARM9 CP15).
+    public void setCoprocessorBus(CoprocessorBus coprocessorBus) {
+        this.coprocessorBus = Objects.requireNonNull(coprocessorBus, "coprocessorBus");
+    }
+
+    /// Whether exceptions vector to the high base `0xFFFF0000` (ARM9 with the CP15 c1 V bit
+    /// set) instead of `0x00000000`. The GBA and the NDS ARM7 keep this off.
+    public boolean highVectors() {
+        return highVectors;
+    }
+
+    /// Selects the high (`0xFFFF0000`) exception vector base, driven by the ARM9 CP15 c1[V].
+    public void setHighVectors(boolean highVectors) {
+        this.highVectors = highVectors;
     }
 
     /// Soma ciclos consumidos por interpretação ou bloco compilado.
@@ -544,7 +569,7 @@ public final class ArmCore {
         if (exception == ArmException.RESET || exception == ArmException.FIQ) {
             cpsr.setFiqDisabled(true);
         }
-        setProgramCounter(vector);
+        setProgramCounter((highVectors ? 0xFFFF0000 : 0) + vector);
     }
 
     private int exceptionReturnAddress(ArmException exception) {

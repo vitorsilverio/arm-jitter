@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Operacao ALU generica.
     record Alu(
             /// Mnemonico ou identificador interno da operacao.
@@ -259,6 +259,28 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Imediato da instrucao SWI.
             int immediate,
             /// Condicao necessaria para disparar a SWI.
+            Condition condition) implements IrOp {
+    }
+
+    /// Coprocessor register transfer (`MCR`/`MRC`), delegated to the core's coprocessor bus.
+    record Coprocessor(
+            /// `true` for `MRC` (coprocessor -> ARM register), `false` for `MCR`.
+            boolean load,
+            /// Coprocessor number (15 for CP15).
+            int coprocessor,
+            /// Primary opcode (instruction bits 23-21).
+            int opcode1,
+            /// Primary coprocessor register (CRn).
+            int crn,
+            /// Secondary coprocessor register (CRm).
+            int crm,
+            /// Secondary opcode (instruction bits 7-5).
+            int opcode2,
+            /// ARM register (Rd) read for `MCR` or written for `MRC`.
+            int register,
+            /// Sequential PC used as the return address if the transfer is undefined.
+            int sequentialPc,
+            /// Condicao necessaria para executar a transferencia.
             Condition condition) implements IrOp {
     }
 
