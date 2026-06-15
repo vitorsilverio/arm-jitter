@@ -98,22 +98,22 @@ public final class CpsrRegister {
         return (value & OVERFLOW_FLAG) != 0;
     }
 
-    /// Retorna `true` quando IRQ esta mascarada pelo bit I.
+    /// Retorna `true` quando IRQ está mascarada pelo bit I.
     public boolean irqDisabled() {
         return (value & IRQ_DISABLE_FLAG) != 0;
     }
 
-    /// Ativa ou desativa a mascara de IRQ.
+    /// Ativa ou desativa a máscara de IRQ.
     public void setIrqDisabled(boolean disabled) {
         setFlag(IRQ_DISABLE_FLAG, disabled);
     }
 
-    /// Retorna `true` quando FIQ esta mascarada pelo bit F.
+    /// Retorna `true` quando FIQ está mascarada pelo bit F.
     public boolean fiqDisabled() {
         return (value & FIQ_DISABLE_FLAG) != 0;
     }
 
-    /// Ativa ou desativa a mascara de FIQ.
+    /// Ativa ou desativa a máscara de FIQ.
     public void setFiqDisabled(boolean disabled) {
         setFlag(FIQ_DISABLE_FLAG, disabled);
     }

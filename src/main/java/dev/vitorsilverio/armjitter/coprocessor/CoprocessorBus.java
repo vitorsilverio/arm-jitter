@@ -1,33 +1,33 @@
 package dev.vitorsilverio.armjitter.coprocessor;
 
-/// Host hook for ARM coprocessor register transfers (`MCR`/`MRC`), mirroring the SWI
-/// dispatcher model. The ARM9's CP15 (system control: TCM, cache, MPU, high vectors) is the
-/// primary user; a device installs an implementation on its core via
+/// Gancho do hospedeiro para transferências de registrador de coprocessador ARM (`MCR`/`MRC`), espelhando o modelo do
+/// dispatcher de SWI. O CP15 do ARM9 (controle do sistema: TCM, cache, MPU, vetores altos) é o
+/// usuário primário; um dispositivo instala uma implementação em seu core via
 /// {@link dev.vitorsilverio.armjitter.core.ArmCore#setCoprocessorBus}.
 ///
-/// When a coprocessor instruction targets a coprocessor that {@link #handles} reports
-/// `false` for, the core raises an Undefined Instruction exception — as real hardware does
-/// for an absent coprocessor. ARMv4T cores (GBA / NDS ARM7) keep the default {@link #none}.
+/// Quando uma instrução de coprocessador aponta para um coprocessador que {@link #handles} retorna
+/// `false`, o core lança uma exceção de Instrução Indefinida — como o hardware real faz
+/// para um coprocessador ausente. Cores ARMv4T (GBA / NDS ARM7) mantêm o padrão {@link #none}.
 public interface CoprocessorBus {
-    /// Whether this bus services the given coprocessor number (15 = CP15).
+    /// Se este barramento atende o número de coprocessador fornecido (15 = CP15).
     boolean handles(int coprocessor);
 
-    /// `MRC`: reads a coprocessor register into the ARM core.
+    /// `MRC`: lê um registrador de coprocessador para o core ARM.
     ///
-    /// @param coprocessor coprocessor number (15 for CP15)
-    /// @param opcode1     primary opcode (bits 23-21 of the instruction)
-    /// @param crn         primary coprocessor register (CRn)
-    /// @param crm         secondary coprocessor register (CRm)
-    /// @param opcode2     secondary opcode (bits 7-5)
-    /// @return the 32-bit register value
+    /// @param coprocessor número do coprocessador (15 para CP15)
+    /// @param opcode1     código de operação primário (bits 23-21 da instrução)
+    /// @param crn         registrador de coprocessador primário (CRn)
+    /// @param crm         registrador de coprocessador secundário (CRm)
+    /// @param opcode2     código de operação secundário (bits 7-5)
+    /// @return o valor do registrador de 32 bits
     int read(int coprocessor, int opcode1, int crn, int crm, int opcode2);
 
-    /// `MCR`: writes an ARM register value into a coprocessor register. Parameters mirror
+    /// `MCR`: escreve um valor de registrador ARM em um registrador de coprocessador. Os parâmetros espelham
     /// {@link #read}.
     void write(int coprocessor, int opcode1, int crn, int crm, int opcode2, int value);
 
-    /// A bus with no coprocessors — every transfer is treated as undefined. Default for cores
-    /// that never use coprocessors (the GBA and the NDS ARM7).
+    /// Um barramento sem coprocessadores — toda transferência é tratada como indefinida. Padrão para cores
+    /// que nunca usam coprocessadores (o GBA e o NDS ARM7).
     static CoprocessorBus none() {
         return NoCoprocessor.INSTANCE;
     }

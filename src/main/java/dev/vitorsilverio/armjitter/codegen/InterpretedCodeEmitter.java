@@ -572,9 +572,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         core.setRegister(register, value);
     }
 
-    /// Writes a value loaded from memory into PC (LDR/LDM/POP into PC). On ARMv5+
-    /// (LOAD_PC_INTERWORKING) bit 0 selects ARM/Thumb; on ARMv4T (ARM7TDMI) bit 0 is
-    /// ignored and the T bit is preserved — only BX switches state there.
+    /// Escreve um valor carregado da memória em PC (LDR/LDM/POP em PC). Em ARMv5+
+    /// (LOAD_PC_INTERWORKING) o bit 0 seleciona ARM/Thumb; em ARMv4T (ARM7TDMI) o bit 0 é
+    /// ignorado e o bit T é preservado — apenas BX muda o estado ali.
     private void loadToPc(ArmCore core, int value) {
         if (architecture.has(ArmFeature.LOAD_PC_INTERWORKING)) {
             core.cpsr().setThumbMode((value & 1) != 0);
@@ -614,9 +614,9 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
     }
 
     private void write16Arm7(ArmCore core, int address, int value) {
-        // Pass the raw address (like write32Arm7); forcing alignment is the memory's
-        // responsibility. Normal RAM ignores bit 0, but an 8-bit save bus uses it to
-        // select the byte lane, so the device must see it.
+        // Passe o endereço bruto (como Write32Arm7); forçar o alinhamento é responsabilidade da memória.
+        // NRAM normal ignora o bit 0, mas um barramento de salvamento de 8 bits o usa para
+        // selecionar a lane de byte, então o dispositivo deve vê-lo.
         core.memory().write16(address, value);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
     }

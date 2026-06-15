@@ -5,18 +5,18 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 
-/// An immutable description of an ARM architecture version as a **set of features**
-/// (plus optional decoder extensions), rather than a version number. Decoders and the
-/// execution engine query {@link #has(ArmFeature)} at the few points where ARM versions
-/// differ, so adding a new version is just declaring a new feature set here (and, for
-/// genuinely new instruction groups, supplying a {@link DecoderExtension}) — the shared
-/// pipeline is never forked.
+/// Uma descrição imutável de uma versão de arquitetura ARM como um **conjunto de features**
+/// (mais extensões de decoder opcionais), em vez de um número de versão. Decoders e o
+/// mecanismo de execução consultam {@link #has(ArmFeature)} nos poucos pontos onde versões ARM
+/// diferem, então adicionar uma nova versão é apenas declarar um novo conjunto de features aqui (e, para
+/// grupos de instruções realmente novos, fornecer uma {@link DecoderExtension}) — o pipeline compartilhado
+/// nunca é bifurcado.
 public final class ArmArchitecture {
-    /// ARM7TDMI — the GBA CPU (also the NDS ARM7). The base set: no extra features.
+    /// ARM7TDMI — a CPU do GBA (também o ARM7 do NDS). O conjunto base: sem features extras.
     public static final ArmArchitecture ARMV4T = of("ARMv4T");
 
-    /// ARM9 — the NDS main CPU. ARMv4T plus the ARMv5TE feature set (no Thumb-2). The
-    /// coprocessor decoder is attached here so only ARMv5 cores decode `MCR`/`MRC` (CP15).
+    /// ARM9 — a CPU principal do NDS. ARMv4T mais o conjunto de features ARMv5TE (sem Thumb-2). O
+    /// decoder de coprocessador é anexado aqui para que apenas cores ARMv5 decodifiquem `MCR`/`MRC` (CP15).
     public static final ArmArchitecture ARMV5TE = of("ARMv5TE",
             ArmFeature.BLX,
             ArmFeature.CLZ,
@@ -37,7 +37,7 @@ public final class ArmArchitecture {
         this.decoderExtensions = List.copyOf(decoderExtensions);
     }
 
-    /// Builds an architecture from a name and the features it supports.
+    /// Constrói uma arquitetura a partir de um nome e das features que ela suporta.
     public static ArmArchitecture of(String name, ArmFeature... features) {
         EnumSet<ArmFeature> set = EnumSet.noneOf(ArmFeature.class);
         Collections.addAll(set, features);
@@ -52,8 +52,8 @@ public final class ArmArchitecture {
         return decoderExtensions;
     }
 
-    /// Returns a copy of this architecture with the given decoder extensions, used to
-    /// plug in instruction groups a future version adds.
+    /// Retorna uma cópia desta arquitetura com as extensões de decoder fornecidas, usadas para
+    /// plugar grupos de instruções que uma versão futura adiciona.
     public ArmArchitecture withDecoderExtensions(List<DecoderExtension> extensions) {
         return new ArmArchitecture(name, features, extensions);
     }

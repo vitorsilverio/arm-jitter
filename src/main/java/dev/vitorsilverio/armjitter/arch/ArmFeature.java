@@ -1,32 +1,32 @@
 package dev.vitorsilverio.armjitter.arch;
 
-/// A single architectural capability or behaviour that can differ between ARM
-/// architecture versions. An {@link ArmArchitecture} is defined by the set of features
-/// it has, so a new version is just a different feature set — not a new code path.
+/// Uma capacidade arquitetônica única ou comportamento que pode diferir entre versões de
+/// arquitetura ARM. Uma {@link ArmArchitecture} é definida pelo conjunto de features que
+/// ela possui, então uma nova versão é apenas um conjunto de features diferente — não um novo caminho de código.
 ///
-/// Grouped loosely as instruction-availability features and behaviour policies; see
-/// the gbaemu `gba-vs-nds-rules` notes for what each implies on ARMv4T vs ARMv5.
+/// Agrupadas livremente como features de disponibilidade de instrução e políticas de comportamento; veja
+/// as notas `gba-vs-nds-rules` do gbaemu para entender o que cada uma implica em ARMv4T vs ARMv5.
 public enum ArmFeature {
-    // ---- Instruction availability (decoder gates) ----
-    /// `BLX` (branch with link and exchange), immediate and register forms. ARMv5+.
+    // ---- Disponibilidade de instrução (gates de decoder) ----
+    /// `BLX` (branch with link and exchange), formas imediata e por registrador. ARMv5+.
     BLX,
     /// `CLZ` (count leading zeros). ARMv5+.
     CLZ,
-    /// DSP multiplies (SMUL\<x>\<y>, SMLA\<x>\<y>, SMLAW, SMULW, SMLAL\<x>\<y>). ARMv5TE+.
+    /// Multiplicações DSP (SMUL\<x>\<y>, SMLA\<x>\<y>, SMLAW, SMULW, SMLAL\<x>\<y>). ARMv5TE+.
     DSP_MULTIPLY,
-    /// Saturating arithmetic (QADD/QSUB/QDADD/QDSUB). ARMv5TE+.
+    /// Aritmética de saturação (QADD/QSUB/QDADD/QDSUB). ARMv5TE+.
     SATURATING,
-    /// Double-word load/store (`LDRD`/`STRD`). ARMv5TE+.
+    /// Carregamento/armazenamento de palavra dupla (`LDRD`/`STRD`). ARMv5TE+.
     LDRD_STRD,
-    /// Thumb-2 32-bit Thumb encodings. ARMv6T2/ARMv7+.
+    /// Encodings Thumb-2 de 32-bit Thumb. ARMv6T2/ARMv7+.
     THUMB2,
 
-    // ---- Behaviour policies (execution forks) ----
-    /// Loads into PC (`LDR`/`LDM`/`POP {PC}`) switch ARM/Thumb state from bit 0 of the
-    /// loaded value. ARMv5+. On ARMv4T such loads ignore bit 0 and stay in the current
-    /// state (only `BX` switches).
+    // ---- Políticas de comportamento (forks de execução) ----
+    /// Carregamentos em PC (`LDR`/`LDM`/`POP {PC}`) trocam o estado ARM/Thumb a partir do bit 0 do valor
+    /// carregado. ARMv5+. Em ARMv4T tais carregamentos ignoram o bit 0 e permanecem no estado atual
+    /// (apenas `BX` troca).
     LOAD_PC_INTERWORKING,
-    /// Integer multiplies leave the carry flag unchanged. On ARMv4 the carry is left
-    /// UNPREDICTABLE by `MUL`/`MLA`, so emulating it as "unchanged" is acceptable there.
+    /// Multiplicações inteiras deixam o carry flag inalterado. Em ARMv4 o carry é deixado
+    /// UNPREDICTABLE por `MUL`/`MLA`, então emulá-lo como "inalterado" é aceitável lá.
     MUL_PRESERVES_CARRY
 }

@@ -14,20 +14,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/// A minimal GDB remote-serial-protocol stub for an {@link ArmCore}, so a host debugger
-/// (e.g. arm-none-eabi-gdb) can inspect and control the emulated CPU exactly like the
-/// mGBA stub: read/write registers and memory, set PC breakpoints and write watchpoints,
-/// continue and single-step. Drives execution one instruction at a time through a
-/// host-supplied stepper (which must also tick the rest of the hardware), all on the
-/// caller's thread — no concurrent access to the CPU/memory.
+/// Um stub mínimo do protocolo de série remota GDB para um {@link ArmCore}, para que um depurador hospedeiro
+/// (ex. arm-none-eabi-gdb) possa inspecionar e controlar a CPU emulada como o
+/// stub mGBA: ler/escrever registradores e memória, definir breakpoints em PC e watchpoints de escrita,
+/// continuar e avançar um passo por vez. Orienta a execução uma instrução por vez através de um
+/// avançador fornecido pela hospedagem (que também deve atualizar o resto do hardware), tudo na
+/// thread do chamador — não há acesso concorrente à CPU/memória.
 ///
-/// Scope: write watchpoints are detected by value-compare after each instruction (read
-/// and access watchpoints are not supported). The `g` packet uses the legacy ARM layout
-/// (r0-r15, FPA f0-f7 + fps as zero, then cpsr) so gdb works without a target description.
+/// Escopo: watchpoints de escrita são detectados por comparação de valor após cada instrução (watchpoints de
+/// leitura e acesso não são suportados). O pacote `g` usa o layout ARM legado
+/// (r0-r15, FPA f0-f7 + fps como zero, depois cpsr) para que o gdb funcione sem descrição de target.
 public final class GdbServer {
     private static final int SIGTRAP = 5;
     private static final int SIGINT = 2;
-    /// Poll the socket for an interrupt (Ctrl-C) only every N steps to keep `continue` fast.
+    /// Consulta o soquete por uma interrupção (Ctrl-C) apenas a cada N passos para manter `continue` rápido.
     private static final int INTERRUPT_POLL_INTERVAL = 0x10000;
 
     private final ArmCore cpu;
@@ -48,8 +48,8 @@ public final class GdbServer {
         this.out = out;
     }
 
-    /// Listens on {@code port}, accepts a single client and serves it until it detaches.
-    /// Blocks the calling thread (intended: the emulation thread, halted until gdb attaches).
+    /// Escuta na {@code porta}, aceita um único cliente e o atende até que se desconecte.
+    /// Bloqueia a thread chamadora (intenção: a thread de emulação, interrompida até que o gdb se conecte).
     public static void listenAndServe(int port, ArmCore cpu, AddressSpace memory, Runnable stepOne) {
         try (ServerSocket server = new ServerSocket(port)) {
             System.out.println("[gdb] listening on port " + port + " — waiting for a client (e.g. arm-none-eabi-gdb 'target remote :" + port + "')");
@@ -64,7 +64,7 @@ public final class GdbServer {
         }
     }
 
-    /// Runs the protocol loop until the client detaches/kills or the connection closes.
+    /// Executa o loop do protocolo até que o cliente se desconecte/mate a conexão ou a conexão se feche.
     public void run() throws IOException {
         Mode mode = Mode.HALTED;
         while (true) {

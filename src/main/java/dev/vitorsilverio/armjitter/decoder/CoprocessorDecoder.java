@@ -3,13 +3,13 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 
-/// Decodes the ARM coprocessor register-transfer space (`MCR`/`MRC`) that ARMv5 adds on top
-/// of the shared ARMv4T base. Attached to {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV5TE},
-/// so only ARMv5 cores (the NDS ARM9) decode these; the base decoder is untouched.
+/// Decodifica o espaço de transferência de registrador de coprocessador ARM (`MCR`/`MRC`) que ARMv5 adiciona acima
+/// da base compartilhada ARMv4T. Anexado à {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV5TE},
+/// para que apenas cores ARMv5 (o ARM9 do NDS) decodifiquem estes; o decoder base não é alterado.
 ///
-/// Encoding: `cccc 1110 ooo L NNNN dddd pppp qqq 1 MMMM` — bits 27-24 = 1110, bit 4 = 1.
-/// `L` selects `MRC` (1, read coprocessor) vs `MCR` (0, write coprocessor). `CDP`, `LDC` and
-/// `STC` are not produced here (CP15 control uses only `MCR`/`MRC`); they fall through to
+/// Codificação: `cccc 1110 ooo L NNNN dddd pppp qqq 1 MMMM` — bits 27-24 = 1110, bit 4 = 1.
+/// `L` seleciona `MRC` (1, ler coprocessador) vs `MCR` (0, escrever coprocessador). `CDP`, `LDC` e
+/// `STC` não são produzidos aqui (o controle CP15 usa apenas `MCR`/`MRC`); elas caem para
 /// UNIMPLEMENTED.
 public final class CoprocessorDecoder implements DecoderExtension {
     @Override

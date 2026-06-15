@@ -3,13 +3,13 @@ package dev.vitorsilverio.armjitter.arch;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 
-/// Decodes instruction encodings an architecture adds beyond the shared ARMv4T base set
-/// (e.g. the ARMv5 BLX/DSP space, or a future Thumb-2 group). The base decoder consults
-/// the current {@link ArmArchitecture}'s extensions before falling back to UNIMPLEMENTED,
-/// so new instruction groups plug in here without touching the shared decoder.
+/// Decodifica encodings de instruções que uma arquitetura adiciona além do conjunto base compartilhado ARMv4T
+/// (ex. o espaço ARMv5 BLX/DSP, ou um futuro grupo Thumb-2). O decoder base consulta
+/// as extensões da {@link ArmArchitecture} atual antes de recorrer a UNIMPLEMENTED,
+/// para que novos grupos de instruções sejam conectados aqui sem tocar no decoder compartilhado.
 @FunctionalInterface
 public interface DecoderExtension {
-    /// Tries to decode the already-fetched ARM word. Returns {@code null} if this
-    /// extension does not handle the encoding (so the base decoder keeps trying).
+    /// Tenta decodificar a palavra ARM já buscada. Retorna {@code null} se esta
+    /// extensão não manipula o encoding (para que o decoder base continue tentando).
     DecodedInstruction tryDecode(int raw, int address, Condition condition);
 }

@@ -2,12 +2,12 @@ package dev.vitorsilverio.armjitter.ir;
 
 /// Tipo de deslocamento usado pelo barrel shifter ARM.
 public enum ShiftType {
-    /// Logical shift left.
+    /// Deslocamento lógico à esquerda.
     LSL,
-    /// Logical shift right.
+    /// Deslocamento lógico à direita.
     LSR,
-    /// Arithmetic shift right.
+    /// Deslocamento aritmético à direita.
     ASR,
-    /// Rotate right.
+    /// Rotação à direita.
     ROR
 }

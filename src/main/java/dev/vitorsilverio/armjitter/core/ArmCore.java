@@ -252,24 +252,24 @@ public final class ArmCore {
         return swiDispatcher;
     }
 
-    /// Returns the coprocessor bus serving `MCR`/`MRC` (e.g. the ARM9 CP15). Defaults to
-    /// {@link CoprocessorBus#none()} until {@link #setCoprocessorBus} installs one.
+    /// Retorna o barramento do coprocessador que atende `MCR`/`MRC` (ex. CP15 do ARM9). Padrão é
+    /// {@link CoprocessorBus#none()} até que {@link #setCoprocessorBus} instale um.
     public CoprocessorBus coprocessorBus() {
         return coprocessorBus;
     }
 
-    /// Installs the coprocessor bus used by `MCR`/`MRC` instructions (e.g. the ARM9 CP15).
+    /// Instala o barramento de coprocessador usado pelas instruções `MCR`/`MRC` (ex. CP15 do ARM9).
     public void setCoprocessorBus(CoprocessorBus coprocessorBus) {
         this.coprocessorBus = Objects.requireNonNull(coprocessorBus, "coprocessorBus");
     }
 
-    /// Whether exceptions vector to the high base `0xFFFF0000` (ARM9 with the CP15 c1 V bit
-    /// set) instead of `0x00000000`. The GBA and the NDS ARM7 keep this off.
+    /// Define se as exceções vetorizam para a base alta `0xFFFF0000` (ARM9 com o bit V do CP15 c1
+    /// ativado) em vez de `0x00000000`. O GBA e o NDS ARM7 mantêm isto desativado.
     public boolean highVectors() {
         return highVectors;
     }
 
-    /// Selects the high (`0xFFFF0000`) exception vector base, driven by the ARM9 CP15 c1\[V\].
+    /// Seleciona a base de vetor de exceção alta (`0xFFFF0000`), controlada pelo CP15 c1\[V\] do ARM9.
     public void setHighVectors(boolean highVectors) {
         this.highVectors = highVectors;
     }
