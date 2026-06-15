@@ -15,13 +15,13 @@ public final class ArmDecoder implements InstructionDecoder {
         this(ArmArchitecture.ARMV4T);
     }
 
-    /// Decoder ligado a uma arquitetura: instrucoes ARMv5+ (CLZ, etc.) so sao
+    /// Decoder ligado a uma arquitetura: instruções ARMv5+ (CLZ, etc.) só são
     /// decodificadas se a arquitetura as suporta; o resto cai para UNIMPLEMENTED.
     public ArmDecoder(ArmArchitecture architecture) {
         this.architecture = architecture;
     }
 
-    /// Decodifica uma instrucao ARM32 no endereco informado.
+    /// Decodifica uma instrução ARM32 no endereço informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
         int raw = memory.read32(address & ~3);
@@ -244,7 +244,7 @@ public final class ArmDecoder implements InstructionDecoder {
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
-    /// Converte o nibble de condicao ARM para `Condition`.
+    /// Converte o nibble de condição ARM para `Condition`.
     public static Condition decodeCondition(int bits) {
         return switch (bits & 0xF) {
             case 0x0 -> Condition.EQ;

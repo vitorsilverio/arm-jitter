@@ -1,32 +1,32 @@
 package dev.vitorsilverio.armjitter.memory;
 
-/// Barramento de memoria implementado pelo dispositivo hospedeiro.
+/// Barramento de memória implementado pelo dispositivo hospedeiro.
 public interface AddressSpace {
-    /// Le um byte sem sinal no endereco informado.
+    /// Lê um byte sem sinal no endereço informado.
     int read8(int address);
 
-    /// Le uma halfword de 16 bits no endereco informado.
+    /// Lê uma halfword de 16 bits no endereço informado.
     int read16(int address);
 
-    /// Le uma word de 32 bits no endereco informado.
+    /// Lê uma word de 32 bits no endereço informado.
     int read32(int address);
 
-    /// Escreve os 8 bits inferiores de `value` no endereco informado.
+    /// Escreve os 8 bits inferiores de `value` no endereço informado.
     void write8(int address, int value);
 
-    /// Escreve os 16 bits inferiores de `value` no endereco informado.
+    /// Escreve os 16 bits inferiores de `value` no endereço informado.
     void write16(int address, int value);
 
-    /// Escreve os 32 bits de `value` no endereco informado.
+    /// Escreve os 32 bits de `value` no endereço informado.
     void write32(int address, int value);
 
-    /// Retorna ciclos extras para um acesso de memoria.
+    /// Retorna ciclos extras para um acesso de memória.
     ///
-    /// A implementacao padrao retorna `0` para manter compatibilidade com testes e
-    /// barramentos simples. Emuladores GBA podem sobrescrever este metodo para aplicar
+    /// A implementação padrão retorna `0` para manter compatibilidade com testes e
+    /// barramentos simples. Emuladores GBA podem sobrescrever este método para aplicar
     /// waitstates de BIOS, IWRAM, EWRAM, VRAM e ROM.
     ///
-    /// @param address endereco acessado
+    /// @param address endereço acessado
     /// @param sizeBytes tamanho do acesso em bytes
     /// @param type tipo de acesso realizado
     /// @return ciclos extras consumidos pelo acesso
@@ -34,7 +34,7 @@ public interface AddressSpace {
         return 0;
     }
 
-    /// Notifica que uma escrita ocorreu, permitindo invalidacao de codigo automodificado.
+    /// Notifica que uma escrita ocorreu, permitindo invalidação de código automodificado.
     default void notifyWrite(int address) {
     }
 }

@@ -10,13 +10,13 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrBuilder;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 
-/// Interpretador frio usado para debug, step-by-step e como oraculo do JIT.
+/// Interpretador frio usado para debug, step-by-step e como oráculo do JIT.
 ///
-/// Para evitar duas implementacoes da semantica das instrucoes (uma aqui e outra no
-/// caminho JIT), o interpretador decodifica uma unica instrucao, eleva-a para IR com
+/// Para evitar duas implementações da semântica das instruções (uma aqui e outra no
+/// caminho JIT), o interpretador decodifica uma única instrução, eleva-a para IR com
 /// o mesmo [IrBuilder] do JIT e executa o bloco resultante pela mesma engine
-/// ([InterpretedCodeEmitter#execute]). Assim qualquer correcao de comportamento de
-/// instrucao vale para os dois caminhos automaticamente.
+/// ([InterpretedCodeEmitter#execute]). Assim qualquer correção de comportamento de
+/// instrução vale para os dois caminhos automaticamente.
 public final class ArmInterpreter {
     private final InstructionDecoder armDecoder;
     private final InstructionDecoder thumbDecoder;
@@ -39,7 +39,7 @@ public final class ArmInterpreter {
         this(armDecoder, thumbDecoder, new StandardIrBuilder(), new InterpretedCodeEmitter());
     }
 
-    /// Cria um interpretador com decoders, builder de IR e engine de execucao customizados.
+    /// Cria um interpretador com decoders, builder de IR e engine de execução customizados.
     public ArmInterpreter(
             InstructionDecoder armDecoder,
             InstructionDecoder thumbDecoder,
@@ -51,11 +51,11 @@ public final class ArmInterpreter {
         this.executor = executor;
     }
 
-    /// Executa exatamente uma instrucao e retorna a instrucao decodificada.
+    /// Executa exatamente uma instrução e retorna a instrução decodificada.
     ///
-    /// A instrucao e elevada para um bloco IR de uma unica operacao e executada pela
-    /// engine compartilhada com o JIT. Os ciclos de fetch e de memoria sao somados
-    /// pelos proprios IrOp.Fetch/acessos; os ciclos internos retornados sao somados aqui.
+    /// A instrução é elevada para um bloco IR de uma única operação e executada pela
+    /// engine compartilhada com o JIT. Os ciclos de fetch e de memória são somados
+    /// pelos próprios IrOp.Fetch/acessos; os ciclos internos retornados são somados aqui.
     public DecodedInstruction step(ArmCore core) {
         int pc = core.programCounter();
         InstructionDecoder decoder = core.cpsr().isThumbMode() ? thumbDecoder : armDecoder;

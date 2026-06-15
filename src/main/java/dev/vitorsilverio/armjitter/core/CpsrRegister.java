@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.core;
 
-/// Representa o CPSR com helpers para flags, modo e avaliacao condicional.
+/// Representa o CPSR com helpers para flags, modo e avaliação condicional.
 public final class CpsrRegister {
     /// Bit N do CPSR.
     public static final int NEGATIVE_FLAG = 1 << 31;
@@ -29,12 +29,12 @@ public final class CpsrRegister {
         this.value = value;
     }
 
-    /// Retorna `true` quando o bit T indica execucao THUMB.
+    /// Retorna `true` quando o bit T indica execução THUMB.
     public boolean isThumbMode() {
         return (value & THUMB_FLAG) != 0;
     }
 
-    /// Ativa ou desativa o bit T de execucao THUMB.
+    /// Ativa ou desativa o bit T de execução THUMB.
     public void setThumbMode(boolean enabled) {
         setFlag(THUMB_FLAG, enabled);
     }
@@ -57,7 +57,7 @@ public final class CpsrRegister {
         setFlag(OVERFLOW_FLAG, overflow);
     }
 
-    /// Avalia uma condicao ARM usando os flags atuais.
+    /// Avalia uma condição ARM usando os flags atuais.
     public boolean evalCond(Condition condition) {
         return switch (condition) {
             case EQ -> zero();

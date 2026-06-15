@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.jit.JitRuntime;
 
 import java.util.Objects;
 
-/// `AddressSpace` decorador que invalida o JIT apos escritas.
+/// `AddressSpace` decorador que invalida o JIT após escritas.
 public final class InvalidationAwareAddressSpace implements AddressSpace {
     private final AddressSpace delegate;
     private final JitRuntime runtime;
@@ -15,48 +15,48 @@ public final class InvalidationAwareAddressSpace implements AddressSpace {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
     }
 
-    /// Le um byte pelo barramento delegado.
+    /// Lê um byte pelo barramento delegado.
     @Override
     public int read8(int address) {
         return delegate.read8(address);
     }
 
-    /// Le uma halfword pelo barramento delegado.
+    /// Lê uma halfword pelo barramento delegado.
     @Override
     public int read16(int address) {
         return delegate.read16(address);
     }
 
-    /// Le uma word pelo barramento delegado.
+    /// Lê uma word pelo barramento delegado.
     @Override
     public int read32(int address) {
         return delegate.read32(address);
     }
 
-    /// Escreve um byte e invalida o endereco escrito.
+    /// Escreve um byte e invalida o endereço escrito.
     @Override
     public void write8(int address, int value) {
         delegate.write8(address, value);
         runtime.invalidate(address);
     }
 
-    /// Escreve uma halfword e invalida o endereco escrito.
+    /// Escreve uma halfword e invalida o endereço escrito.
     @Override
     public void write16(int address, int value) {
         delegate.write16(address, value);
         runtime.invalidate(address);
     }
 
-    /// Escreve uma word e invalida o endereco escrito.
+    /// Escreve uma word e invalida o endereço escrito.
     @Override
     public void write32(int address, int value) {
         delegate.write32(address, value);
         runtime.invalidate(address);
     }
 
-    /// Repassa o calculo de waitstates ao barramento delegado.
+    /// Repassa o cálculo de waitstates ao barramento delegado.
     ///
-    /// @param address endereco acessado
+    /// @param address endereço acessado
     /// @param sizeBytes tamanho do acesso em bytes
     /// @param type tipo de acesso realizado
     /// @return ciclos extras consumidos pelo acesso delegado
@@ -65,7 +65,7 @@ public final class InvalidationAwareAddressSpace implements AddressSpace {
         return delegate.accessCycles(address, sizeBytes, type);
     }
 
-    /// Repassa a notificacao manual ao barramento delegado e invalida o runtime.
+    /// Repassa a notificação manual ao barramento delegado e invalida o runtime.
     @Override
     public void notifyWrite(int address) {
         delegate.notifyWrite(address);

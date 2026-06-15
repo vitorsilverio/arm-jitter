@@ -22,24 +22,24 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         this(ArmArchitecture.ARMV4T);
     }
 
-    /// Emissor ligado a uma arquitetura: os poucos forks de comportamento entre versoes
+    /// Emissor ligado a uma arquitetura: os poucos forks de comportamento entre versões
     /// (ex.: interworking de load->PC) consultam {@code architecture}.
     public InterpretedCodeEmitter(ArmArchitecture architecture) {
         this.architecture = architecture;
     }
 
-    /// Emite um bloco executavel que interpreta as operacoes IR em ordem.
+    /// Emite um bloco executável que interpreta as operações IR em ordem.
     @Override
     public CompiledBlock emit(IrBlock block) {
         return core -> execute(block, core);
     }
 
     /// Interpreta um bloco IR sobre o core informado e devolve os ciclos internos
-    /// (IrOp.Cycle) consumidos; ciclos de memoria sao somados diretamente ao core.
+    /// (IrOp.Cycle) consumidos; ciclos de memória são somados diretamente ao core.
     ///
-    /// Esta e a unica implementacao da semantica das instrucoes: tanto o caminho JIT
+    /// Esta é a única implementação da semântica das instruções: tanto o caminho JIT
     /// (blocos compilados) quanto o interpretador frio (ArmInterpreter) a utilizam,
-    /// de modo que correcoes de comportamento vivem em um unico lugar.
+    /// de modo que correções de comportamento vivem em um único lugar.
     public int execute(IrBlock block, ArmCore core) {
         int cycles = 0;
         boolean pcChanged = false;

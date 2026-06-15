@@ -18,7 +18,7 @@ public final class ThumbDecoder implements InstructionDecoder {
         this.architecture = architecture;
     }
 
-    /// Decodifica uma instrucao THUMB16 no endereco informado.
+    /// Decodifica uma instrução THUMB16 no endereço informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
         int raw = memory.read16(address & ~1) & 0xFFFF;

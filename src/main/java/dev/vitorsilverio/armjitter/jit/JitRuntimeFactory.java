@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.ir.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 
-/// Fabrica de runtimes comuns para integracao com emuladores.
+/// Fábrica de runtimes comuns para integração com emuladores.
 public final class JitRuntimeFactory {
     private JitRuntimeFactory() {
     }

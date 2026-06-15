@@ -1,21 +1,21 @@
 package dev.vitorsilverio.armjitter.ir;
 
-/// Operando usado por operacoes IR.
+/// Operando usado por operações IR.
 public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediate, IrOperand.ShiftedRegister {
     /// Operando que referencia um registrador ARM.
     record Register(
-            /// Indice do registrador ARM.
+            /// Índice do registrador ARM.
             int index,
             /// Valor fixo para usar no lugar do registrador, ou `-1`.
             int valueOverride) implements IrOperand {
-        /// Cria uma referencia direta a registrador.
-        /// @param index indice do registrador ARM.
+        /// Cria uma referência direta a registrador.
+        /// @param index índice do registrador ARM.
         public Register(int index) {
             this(index, -1);
         }
     }
 
-    /// Operando imediato ja expandido pelo decoder.
+    /// Operando imediato já expandido pelo decoder.
     record Immediate(
             /// Valor imediato de 32 bits.
             int value,
@@ -23,7 +23,7 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
             boolean carryOutKnown,
             /// Carry produzido pelo barrel shifter ARM quando conhecido.
             boolean carryOut) implements IrOperand {
-        /// Cria um imediato sem carry explicito do barrel shifter.
+        /// Cria um imediato sem carry explícito do barrel shifter.
         /// @param value valor imediato de 32 bits.
         public Immediate(int value) {
             this(value, false, false);
@@ -32,7 +32,7 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
 
     /// Operando de registrador passado pelo barrel shifter ARM.
     record ShiftedRegister(
-            /// Indice do registrador ARM.
+            /// Índice do registrador ARM.
             int index,
             /// Tipo de deslocamento aplicado.
             ShiftType shiftType,
@@ -49,7 +49,7 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
             /// Indica que o resultado deslocado deve ser negado.
             boolean negated) implements IrOperand {
         /// Cria um operando deslocado positivo.
-        /// @param index indice do registrador ARM.
+        /// @param index índice do registrador ARM.
         /// @param shiftType tipo de deslocamento aplicado.
         /// @param amount quantidade imediata de deslocamento.
         public ShiftedRegister(int index, ShiftType shiftType, int amount) {
@@ -57,7 +57,7 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
         }
 
         /// Cria um operando deslocado com sinal opcional.
-        /// @param index indice do registrador ARM.
+        /// @param index índice do registrador ARM.
         /// @param shiftType tipo de deslocamento aplicado.
         /// @param amount quantidade imediata de deslocamento.
         /// @param negated indica que o resultado deslocado deve ser negado.
@@ -66,7 +66,7 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
         }
 
         /// Cria um operando deslocado ARM completo.
-        /// @param index indice do registrador ARM.
+        /// @param index índice do registrador ARM.
         /// @param shiftType tipo de deslocamento aplicado.
         /// @param amount quantidade imediata de deslocamento.
         /// @param amountRegister registrador que fornece a quantidade, ou `-1`.

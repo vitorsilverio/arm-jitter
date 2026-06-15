@@ -2,24 +2,24 @@
 
 Biblioteca Java 25 para executar, depurar e futuramente compilar blocos ARM/THUMB em emuladores de Game Boy Advance, Nintendo DS e outros dispositivos ARM.
 
-O projeto nao possui `Main`: ele e um core auxiliar para ser embutido por um emulador hospedeiro.
+O projeto não possui `Main`: ele é um core auxiliar para ser embutido por um emulador hospedeiro.
 
 ## Estado atual
 
 Esta estrutura define os contratos principais da arquitetura e um interpretador frio inicial:
 
-- `core`: registradores, CPSR, modos bancados, SPSR, excecoes iniciais e avaliacao condicional.
+- `core`: registradores, CPSR, modos bancados, SPSR, exceções iniciais e avaliação condicional.
 - `memory`: barramento abstrato `AddressSpace`.
-- `decoder`: contrato de decodificacao ARM/THUMB.
-- `ir`: representacao intermediaria imutavel.
-- `jit`: runtime, cache de blocos e estrategia interpretado/JIT.
-- `codegen`: contrato para emissores de codigo.
+- `decoder`: contrato de decodificação ARM/THUMB.
+- `ir`: representação intermediária imutável.
+- `jit`: runtime, cache de blocos e estratégia interpretado/JIT.
+- `codegen`: contrato para emissores de código.
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
 
-O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testavel, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `CLZ`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e mascara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo mascara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotacao e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
+O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testável, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `CLZ`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e máscara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo máscara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotação e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
 
-O core ja possui bancos de `SP/LR` por modo, banco FIQ para `r8-r14`, `SPSR` por modo privilegiado, entrada real de `SWI` no vetor `0x08` quando nao ha handler host registrado, entrada de `IRQ` no vetor `0x18` quando `interruptLine` esta ativa e o bit I do CPSR esta limpo, e entrada de instrucao indefinida no vetor `0x04` para opcodes ainda nao implementados.
-Tambem ha estado explicito de `HALT/STOP` para integracao com registradores de I/O do dispositivo e waitstates opcionais por acesso de memoria via `AddressSpace.accessCycles(...)`.
+O core já possui bancos de `SP/LR` por modo, banco FIQ para `r8-r14`, `SPSR` por modo privilegiado, entrada real de `SWI` no vetor `0x08` quando não há handler host registrado, entrada de `IRQ` no vetor `0x18` quando `interruptLine` está ativa e o bit I do CPSR está limpo, e entrada de instrução indefinida no vetor `0x04` para opcodes ainda não implementados.
+Também há estado explícito de `HALT/STOP` para integração com registradores de I/O do dispositivo e waitstates opcionais por acesso de memória via `AddressSpace.accessCycles(...)`.
 
 ## Uso basico
 
@@ -72,8 +72,8 @@ core.setTraceListener(new ArmTraceListener() {
 });
 ```
 
-Para implementar waitstates de memoria no emulador hospedeiro, sobrescreva
-`accessCycles`. Esses ciclos extras sao acumulados em `core.cycles()`:
+Para implementar waitstates de memória no emulador hospedeiro, sobrescreva
+`accessCycles`. Esses ciclos extras são acumulados em `core.cycles()`:
 
 ```java
 @Override
@@ -101,7 +101,7 @@ IrBlock block = lifter.lift(memory, 0x08000000, 32);
 
 ## Runtime JIT interpretado
 
-Enquanto o emissor ASM nao entra, `InterpretedCodeEmitter` executa blocos IR e permite integrar o pipeline completo no emulador:
+Enquanto o emissor ASM não entra, `InterpretedCodeEmitter` executa blocos IR e permite integrar o pipeline completo no emulador:
 
 ```java
 JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(1024, 3);
@@ -141,9 +141,9 @@ Coordenadas Maven atuais:
 </dependency>
 ```
 
-## Compilacao e testes
+## Compilação e testes
 
-Por regra do projeto, o agente nao deve executar compilacao/testes fora do sandbox. Execute localmente:
+Por regra do projeto, o agente não deve executar compilação/testes fora do sandbox. Execute localmente:
 
 ```bash
 mvn test

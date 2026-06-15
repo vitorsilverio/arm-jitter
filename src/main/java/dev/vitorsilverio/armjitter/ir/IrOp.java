@@ -36,7 +36,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int rs,
             /// Valor fixo para `rs`, ou `-1`.
             int rsValueOverride,
-            /// Registrador acumulador, ou `-1` quando nao se aplica.
+            /// Registrador acumulador, ou `-1` quando não se aplica.
             int rn,
             /// Valor fixo para `rn`, ou `-1`.
             int rnValueOverride,
@@ -44,11 +44,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean accumulate,
             /// Indica se NZ deve ser atualizado.
             boolean setFlags,
-            /// Condicao necessaria para executar a operacao.
+            /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de multiplicacao longa, com acumulador opcional.
+    /// Operação de multiplicação longa, com acumulador opcional.
     record LongMultiply(
             /// Registrador que recebe os 32 bits baixos.
             int dstLow,
@@ -62,21 +62,21 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int rs,
             /// Valor fixo para `rs`, ou `-1`.
             int rsValueOverride,
-            /// Valor fixo para o registrador alto atual em acumulacao, ou `-1`.
+            /// Valor fixo para o registrador alto atual em acumulação, ou `-1`.
             int dstHighValueOverride,
-            /// Valor fixo para o registrador baixo atual em acumulacao, ou `-1`.
+            /// Valor fixo para o registrador baixo atual em acumulação, ou `-1`.
             int dstLowValueOverride,
-            /// Indica multiplicacao com sinal.
+            /// Indica multiplicação com sinal.
             boolean signed,
             /// Indica se o par destino deve ser somado ao produto.
             boolean accumulate,
             /// Indica se NZ deve ser atualizado a partir do resultado de 64 bits.
             boolean setFlags,
-            /// Condicao necessaria para executar a operacao.
+            /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }
 
-    /// Transferencia entre registradores gerais e CPSR/SPSR.
+    /// Transferência entre registradores gerais e CPSR/SPSR.
     record PsrTransfer(
             /// `true` para MRS, `false` para MSR.
             boolean read,
@@ -90,175 +90,175 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int immediate,
             /// Indica que `immediate` deve ser usado no lugar de `register`.
             boolean immediateOperand,
-            /// Mascara de campos PSR para MSR.
+            /// Máscara de campos PSR para MSR.
             int fieldMask,
-            /// Condicao necessaria para executar a transferencia.
+            /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de leitura de memoria.
+    /// Operação de leitura de memória.
     record Load(
             /// Registrador de destino.
             int dst,
-            /// Registrador base do endereco.
+            /// Registrador base do endereço.
             int base,
-            /// Valor fixo para usar como base quando o registrador base e `PC`, ou `-1`.
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1`.
             int baseValueOverride,
-            /// Offset ja normalizado pelo decoder/lifter.
+            /// Offset já normalizado pelo decoder/lifter.
             IrOperand offset,
             /// Tamanho do acesso em bytes.
             int sizeBytes,
-            /// Indica extensao com sinal.
+            /// Indica extensão com sinal.
             boolean signed,
             /// Indica writeback no registrador base.
             boolean writeback,
-            /// Indica enderecamento post-index.
+            /// Indica endereçamento post-index.
             boolean postIndexed,
-            /// Condicao necessaria para executar a leitura.
+            /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de escrita de memoria.
+    /// Operação de escrita de memória.
     record Store(
             /// Registrador de origem.
             int src,
             /// Valor fixo para usar como valor armazenado, ou `-1`.
             int srcValueOverride,
-            /// Registrador base do endereco.
+            /// Registrador base do endereço.
             int base,
-            /// Valor fixo para usar como base quando o registrador base e `PC`, ou `-1`.
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1`.
             int baseValueOverride,
-            /// Offset ja normalizado pelo decoder/lifter.
+            /// Offset já normalizado pelo decoder/lifter.
             IrOperand offset,
             /// Tamanho do acesso em bytes.
             int sizeBytes,
             /// Indica writeback no registrador base.
             boolean writeback,
-            /// Indica enderecamento post-index.
+            /// Indica endereçamento post-index.
             boolean postIndexed,
-            /// Condicao necessaria para executar a escrita.
+            /// Condição necessária para executar a escrita.
             Condition condition) implements IrOp {
     }
 
-    /// Troca valor de memoria com registrador.
+    /// Troca valor de memória com registrador.
     record Swap(
-            /// Registrador que recebe o valor antigo da memoria.
+            /// Registrador que recebe o valor antigo da memória.
             int dst,
-            /// Registrador base do endereco.
+            /// Registrador base do endereço.
             int base,
-            /// Valor fixo para usar como base quando o registrador base e `PC`, ou `-1`.
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1`.
             int baseValueOverride,
-            /// Registrador cujo valor sera escrito na memoria.
+            /// Registrador cujo valor será escrito na memória.
             int src,
             /// Valor fixo para usar como valor escrito, ou `-1`.
             int srcValueOverride,
             /// Tamanho do acesso em bytes.
             int sizeBytes,
-            /// Condicao necessaria para executar a troca.
+            /// Condição necessária para executar a troca.
             Condition condition) implements IrOp {
     }
 
-    /// Le uma word de endereco absoluto literal.
+    /// Lê uma word de endereço absoluto literal.
     record LoadLiteral(
             /// Registrador de destino.
             int dst,
-            /// Endereco absoluto a ler.
+            /// Endereço absoluto a ler.
             int address,
-            /// Condicao necessaria para executar a leitura.
+            /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
     }
 
-    /// Transferencia sequencial de multiplos registradores.
+    /// Transferência sequencial de múltiplos registradores.
     record MultipleTransfer(
             /// `true` para load, `false` para store.
             boolean load,
             /// Registrador base.
             int base,
-            /// Mascara de registradores.
+            /// Máscara de registradores.
             int registerMask,
             /// Indica writeback no registrador base.
             boolean writeback,
-            /// Valor de `PC` a armazenar quando a mascara contem r15, ou `-1`.
+            /// Valor de `PC` a armazenar quando a máscara contém r15, ou `-1`.
             int pcStoreValueOverride,
             /// Usa banco USR/SYS ou restaura CPSR pelo SPSR em `LDM ... pc^`.
             boolean userMode,
-            /// Modo de enderecamento ARM/THUMB.
+            /// Modo de endereçamento ARM/THUMB.
             BlockTransferMode mode,
-            /// Indica mascara vazia em `LDM`/`STM`, caso especial do ARM7TDMI.
+            /// Indica máscara vazia em `LDM`/`STM`, caso especial do ARM7TDMI.
             boolean emptyRegisterList,
-            /// Condicao necessaria para executar.
+            /// Condição necessária para executar.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de branch.
+    /// Operação de branch.
     record Branch(
-            /// Endereco absoluto de destino quando conhecido.
+            /// Endereço absoluto de destino quando conhecido.
             int target,
             /// Valor a gravar no link register quando `link` estiver ativo.
             int returnAddress,
-            /// Indica atualizacao do link register.
+            /// Indica atualização do link register.
             boolean link,
-            /// Condicao necessaria para tomar o branch.
+            /// Condição necessária para tomar o branch.
             Condition condition,
-            /// Conjunto de instrucoes esperado apos o branch.
+            /// Conjunto de instruções esperado após o branch.
             InstructionSet targetSet) implements IrOp {
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB.
     record BranchExchange(
-            /// Registrador que contem o destino.
+            /// Registrador que contém o destino.
             int sourceRegister,
             /// Valor fixo para usar como destino, ou `-1`.
             int sourceValueOverride,
-            /// Condicao necessaria para tomar o branch.
+            /// Condição necessária para tomar o branch.
             Condition condition) implements IrOp {
     }
 
     /// Primeira metade de `BL` THUMB.
     record ThumbBlPrefix(
-            /// Valor assinado alto ja deslocado.
+            /// Valor assinado alto já deslocado.
             int highOffset,
-            /// Endereco da instrucao.
+            /// Endereço da instrução.
             int address,
-            /// Condicao necessaria para executar a operacao.
+            /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }
 
     /// Segunda metade de `BL` THUMB.
     record ThumbBlSuffix(
-            /// Valor baixo ja deslocado.
+            /// Valor baixo já deslocado.
             int lowOffset,
-            /// Endereco da instrucao.
+            /// Endereço da instrução.
             int address,
-            /// Condicao necessaria para executar a operacao.
+            /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de push THUMB.
+    /// Operação de push THUMB.
     record Push(
-            /// Mascara de registradores r0-r7.
+            /// Máscara de registradores r0-r7.
             int registerMask,
-            /// Indica inclusao de LR.
+            /// Indica inclusão de LR.
             boolean includeLr,
-            /// Condicao necessaria para executar.
+            /// Condição necessária para executar.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao de pop THUMB.
+    /// Operação de pop THUMB.
     record Pop(
-            /// Mascara de registradores r0-r7.
+            /// Máscara de registradores r0-r7.
             int registerMask,
-            /// Indica inclusao de PC.
+            /// Indica inclusão de PC.
             boolean includePc,
-            /// Condicao necessaria para executar.
+            /// Condição necessária para executar.
             Condition condition) implements IrOp {
     }
 
-    /// Operacao SWI delegada ao dispatcher do host.
+    /// Operação SWI delegada ao dispatcher do host.
     record Swi(
-            /// Imediato da instrucao SWI.
+            /// Imediato da instrução SWI.
             int immediate,
-            /// Condicao necessaria para disparar a SWI.
+            /// Condição necessária para disparar a SWI.
             Condition condition) implements IrOp {
     }
 
@@ -280,15 +280,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int register,
             /// Sequential PC used as the return address if the transfer is undefined.
             int sequentialPc,
-            /// Condicao necessaria para executar a transferencia.
+            /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
     }
 
-    /// Instrucao nao implementada/indefinida que deve entrar no vetor `0x04`.
+    /// Instrução não implementada/indefinida que deve entrar no vetor `0x04`.
     record Undefined(
-            /// PC sequencial usado como endereco de retorno da excecao.
+            /// PC sequencial usado como endereço de retorno da exceção.
             int sequentialPc,
-            /// Condicao necessaria para disparar a excecao.
+            /// Condição necessária para disparar a exceção.
             Condition condition) implements IrOp {
     }
 
@@ -298,11 +298,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int count) implements IrOp {
     }
 
-    /// Custo de fetch da instrucao original na memoria do dispositivo.
+    /// Custo de fetch da instrução original na memória do dispositivo.
     record Fetch(
-            /// Endereco da instrucao buscada.
+            /// Endereço da instrução buscada.
             int address,
-            /// Tamanho da instrucao em bytes.
+            /// Tamanho da instrução em bytes.
             int sizeBytes) implements IrOp {
     }
 }

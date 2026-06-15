@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.memory;
 
-/// Tipo de acesso de memoria usado para calculo de waitstates.
+/// Tipo de acesso de memória usado para cálculo de waitstates.
 public enum MemoryAccessType {
-    /// Busca de instrucao ARM ou THUMB.
+    /// Busca de instrução ARM ou THUMB.
     INSTRUCTION_FETCH,
     /// Leitura de dados.
     DATA_READ,

@@ -6,6 +6,6 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 public record BlockKey(
         /// Program counter inicial do bloco.
         int pc,
-        /// Conjunto de instrucoes usado para decodificar o bloco.
+        /// Conjunto de instruções usado para decodificar o bloco.
         InstructionSet instructionSet) {
 }

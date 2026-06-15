@@ -9,31 +9,31 @@ import java.util.Optional;
 
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
-/// Cache LRU de blocos compilados indexados por PC e conjunto de instrucoes.
+/// Cache LRU de blocos compilados indexados por PC e conjunto de instruções.
 ///
-/// Para que a invalidacao por escrita (codigo automodificavel) nao percorra todo
-/// o cache a cada escrita da CPU, os blocos sao indexados por pagina de memoria:
-/// um bitset sem alocacao filtra a esmagadora maioria das escritas (regioes de
-/// dados que nunca contem codigo) em O(1), e um indice pagina->blocos limita a
-/// remocao real aos poucos blocos que tocam aquela pagina.
+/// Para que a invalidação por escrita (código automodificável) não percorra todo
+/// o cache a cada escrita da CPU, os blocos são indexados por página de memória:
+/// um bitset sem alocação filtra a esmagadora maioria das escritas (regiões de
+/// dados que nunca contêm código) em O(1), e um índice página->blocos limita a
+/// remoção real aos poucos blocos que tocam aquela página.
 public final class BlockCache {
-    /// Tamanho da pagina de indexacao (1 KiB). Um bloco compilado (<= 64 instrucoes
-    /// ARM = 256 bytes) cruza no maximo duas paginas.
+    /// Tamanho da página de indexação (1 KiB). Um bloco compilado (<= 64 instruções
+    /// ARM = 256 bytes) cruza no máximo duas páginas.
     private static final int PAGE_BITS = 10;
-    /// Numero de paginas que cobrem o espaco de 32 bits (2^22).
+    /// Número de páginas que cobrem o espaço de 32 bits (2^22).
     private static final int PAGE_COUNT = 1 << (32 - PAGE_BITS);
 
     private final int maxEntries;
     private final LinkedHashMap<BlockKey, CacheEntry> cache;
     private final Map<BlockKey, Integer> hitCounters = new LinkedHashMap<>();
-    /// Indice pagina -> blocos cujo intervalo [startPc, endPc) intersecta a pagina.
+    /// Índice página -> blocos cujo intervalo [startPc, endPc) intersecta a página.
     private final Map<Integer, List<Located>> blocksByPage = new HashMap<>();
-    /// Bitset (sem boxing) marcando paginas que ja receberam algum bloco. Serve de
-    /// porta rapida na invalidacao; e definido ao indexar e nunca limpo (uma pagina
+    /// Bitset (sem boxing) marcando páginas que já receberam algum bloco. Serve de
+    /// porta rápida na invalidação; é definido ao indexar e nunca limpo (uma página
     /// marcada que ficou sem blocos apenas cai no caminho do mapa, que retorna vazio).
     private final long[] pageOccupied = new long[PAGE_COUNT >>> 6];
 
-    /// Cria um cache com limite maximo de entradas.
+    /// Cria um cache com limite máximo de entradas.
     public BlockCache(int maxEntries) {
         if (maxEntries <= 0) {
             throw new IllegalArgumentException("maxEntries must be positive");
@@ -73,7 +73,7 @@ public final class BlockCache {
         put(key, block, key.pc(), key.pc() + instructionWidth(key.instructionSet()));
     }
 
-    /// Armazena ou substitui um bloco compilado com intervalo de endereco.
+    /// Armazena ou substitui um bloco compilado com intervalo de endereço.
     public void put(BlockKey key, CompiledBlock block, int startPc, int endPc) {
         if (endPc <= startPc) {
             throw new IllegalArgumentException("endPc must be greater than startPc");
@@ -86,22 +86,22 @@ public final class BlockCache {
         indexBlock(key, startPc, endPc);
     }
 
-    /// Incrementa e retorna o contador ARM de execucoes de um PC.
+    /// Incrementa e retorna o contador ARM de execuções de um PC.
     public int hit(int pc) {
         return hit(new BlockKey(pc, InstructionSet.ARM));
     }
 
-    /// Incrementa e retorna o contador de execucoes de uma chave.
+    /// Incrementa e retorna o contador de execuções de uma chave.
     public int hit(BlockKey key) {
         int hits = hitCounters.getOrDefault(key, 0) + 1;
         hitCounters.put(key, hits);
         return hits;
     }
 
-    /// Remove blocos compilados afetados por uma escrita no endereco informado.
+    /// Remove blocos compilados afetados por uma escrita no endereço informado.
     ///
-    /// Caminho comum (escrita em regiao sem codigo): apenas testa um bit -> O(1).
-    /// Caminho raro (pagina com codigo): percorre somente os blocos daquela pagina.
+    /// Caminho comum (escrita em região sem código): apenas testa um bit -> O(1).
+    /// Caminho raro (página com código): percorre somente os blocos daquela página.
     public void invalidate(int address) {
         int page = pageIndex(address);
         if (!isPageOccupied(page)) {

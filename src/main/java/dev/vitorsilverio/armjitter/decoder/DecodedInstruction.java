@@ -2,46 +2,46 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.core.Condition;
 
-/// Instrucao ARM/THUMB decodificada em um formato neutro inicial.
+/// Instrução ARM/THUMB decodificada em um formato neutro inicial.
 public record DecodedInstruction(
-        /// Endereco de origem da instrucao.
+        /// Endereço de origem da instrução.
         int address,
-        /// Palavra ou halfword bruta lida da memoria.
+        /// Palavra ou halfword bruta lida da memória.
         int raw,
-        /// Conjunto de instrucoes usado.
+        /// Conjunto de instruções usado.
         InstructionSet instructionSet,
-        /// Condicao ARM associada; em THUMB normal costuma ser `AL`.
+        /// Condição ARM associada; em THUMB normal costuma ser `AL`.
         Condition condition,
-        /// Tipo semantico decodificado.
+        /// Tipo semântico decodificado.
         InstructionKind kind,
-        /// Registrador de destino, ou `-1` quando nao se aplica.
+        /// Registrador de destino, ou `-1` quando não se aplica.
         int destinationRegister,
-        /// Primeiro registrador de origem, ou `-1` quando nao se aplica.
+        /// Primeiro registrador de origem, ou `-1` quando não se aplica.
         int sourceRegister,
-        /// Segundo registrador de origem, ou `-1` quando nao se aplica.
+        /// Segundo registrador de origem, ou `-1` quando não se aplica.
         int secondSourceRegister,
-        /// Imediato ja expandido, offset de branch ou numero de SWI.
+        /// Imediato já expandido, offset de branch ou número de SWI.
         int immediate,
         /// Indica que o imediato deve ser usado como segundo operando.
         boolean immediateOperand,
-        /// Indica que a instrucao atualiza NZCV.
+        /// Indica que a instrução atualiza NZCV.
         boolean setFlags,
         /// Indica que branch deve atualizar o link register.
         boolean link,
-        /// Tamanho do acesso de memoria em bytes.
+        /// Tamanho do acesso de memória em bytes.
         int accessSizeBytes,
-        /// Indica que load deve fazer extensao com sinal.
+        /// Indica que load deve fazer extensão com sinal.
         boolean signedAccess,
         /// Indica writeback no registrador base.
         boolean writeback,
-        /// Indica enderecamento post-index para load/store simples.
+        /// Indica endereçamento post-index para load/store simples.
         boolean postIndexed,
-        /// Modo de enderecamento para transferencias multiplas.
+        /// Modo de endereçamento para transferências múltiplas.
         BlockTransferMode blockTransferMode,
-        /// Indica mascara vazia em `LDM`/`STM`, caso especial do ARM7TDMI.
+        /// Indica máscara vazia em `LDM`/`STM`, caso especial do ARM7TDMI.
         boolean emptyRegisterList) {
 
-    /// Construtor compacto para instrucoes sem acesso de memoria.
+    /// Construtor compacto para instruções sem acesso de memória.
     public DecodedInstruction(
             int address,
             int raw,
@@ -59,7 +59,7 @@ public record DecodedInstruction(
                 immediate, immediateOperand, setFlags, link, 0, false, false, false, BlockTransferMode.IA, false);
     }
 
-    /// Construtor compacto para instrucoes com acesso de memoria.
+    /// Construtor compacto para instruções com acesso de memória.
     public DecodedInstruction(
             int address,
             int raw,
@@ -80,7 +80,7 @@ public record DecodedInstruction(
                 BlockTransferMode.IA, false);
     }
 
-    /// Construtor compacto para instrucoes com acesso de memoria e writeback.
+    /// Construtor compacto para instruções com acesso de memória e writeback.
     public DecodedInstruction(
             int address,
             int raw,
@@ -102,7 +102,7 @@ public record DecodedInstruction(
                 false, BlockTransferMode.IA, false);
     }
 
-    /// Construtor compacto para instrucoes com acesso de memoria, writeback e post-index.
+    /// Construtor compacto para instruções com acesso de memória, writeback e post-index.
     public DecodedInstruction(
             int address,
             int raw,

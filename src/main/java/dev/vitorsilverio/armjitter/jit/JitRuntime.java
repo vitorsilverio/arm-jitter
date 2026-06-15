@@ -15,7 +15,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 import java.util.Objects;
 
-/// Orquestra cache, decodificacao, IR, otimizacao e codegen.
+/// Orquestra cache, decodificação, IR, otimização e codegen.
 public final class JitRuntime {
     private final BlockCache blockCache;
     private final InstructionDecoder armDecoder;
@@ -37,7 +37,7 @@ public final class JitRuntime {
         this(blockCache, decoder, irBuilder, optimizer, emitter, threshold, 64);
     }
 
-    /// Cria um runtime JIT com limite customizado de instrucoes por bloco.
+    /// Cria um runtime JIT com limite customizado de instruções por bloco.
     public JitRuntime(
             BlockCache blockCache,
             InstructionDecoder decoder,
@@ -82,12 +82,12 @@ public final class JitRuntime {
         this.maxBlockInstructions = maxBlockInstructions;
     }
 
-    /// Cria um runtime JIT ARM/THUMB com componentes padrao, exceto cache e emissor.
+    /// Cria um runtime JIT ARM/THUMB com componentes padrão, exceto cache e emissor.
     public JitRuntime(BlockCache blockCache, IrBuilder irBuilder, IrOptimizer optimizer, CodeEmitter emitter, ExecutionThreshold threshold) {
         this(blockCache, new ArmDecoder(), new ThumbDecoder(), irBuilder, optimizer, emitter, threshold, 64);
     }
 
-    /// Executa em `pc`, usando interpretacao fria ate o threshold e cache depois.
+    /// Executa em `pc`, usando interpretação fria até o threshold e cache depois.
     public int execute(int pc, ArmCore core) {
         InstructionSet instructionSet = instructionSet(core);
         BlockKey key = new BlockKey(pc, instructionSet);
@@ -113,18 +113,18 @@ public final class JitRuntime {
         throw new UnsupportedOperationException("Use compile(int, AddressSpace) so the runtime can read guest memory");
     }
 
-    /// Compila um bloco iniciando em `pc` lendo instrucoes da memoria informada.
+    /// Compila um bloco iniciando em `pc` lendo instruções da memória informada.
     public CompiledBlock compile(int pc, AddressSpace memory) {
         return compile(pc, memory, InstructionSet.ARM);
     }
 
-    /// Compila um bloco iniciando em `pc` usando o conjunto de instrucoes informado.
+    /// Compila um bloco iniciando em `pc` usando o conjunto de instruções informado.
     public CompiledBlock compile(int pc, AddressSpace memory, InstructionSet instructionSet) {
         IrBlock block = lift(pc, memory, instructionSet);
         return emitter.emit(optimizer.optimize(block));
     }
 
-    /// Invalida codigo compilado afetado por uma escrita de memoria.
+    /// Invalida código compilado afetado por uma escrita de memória.
     public void invalidate(int address) {
         blockCache.invalidate(address);
     }
@@ -159,17 +159,17 @@ public final class JitRuntime {
         return optimizer;
     }
 
-    /// Retorna o emissor de codigo configurado.
+    /// Retorna o emissor de código configurado.
     public CodeEmitter emitter() {
         return emitter;
     }
 
-    /// Retorna a politica de aquecimento configurada.
+    /// Retorna a política de aquecimento configurada.
     public ExecutionThreshold threshold() {
         return threshold;
     }
 
-    /// Retorna o limite maximo de instrucoes por bloco.
+    /// Retorna o limite máximo de instruções por bloco.
     public int maxBlockInstructions() {
         return maxBlockInstructions;
     }

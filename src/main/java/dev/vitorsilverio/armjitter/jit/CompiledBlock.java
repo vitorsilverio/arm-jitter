@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.jit;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
 
-/// Bloco pronto para execucao pelo runtime JIT.
+/// Bloco pronto para execução pelo runtime JIT.
 @FunctionalInterface
 public interface CompiledBlock {
     /// Executa o bloco contra o core e retorna os ciclos consumidos.

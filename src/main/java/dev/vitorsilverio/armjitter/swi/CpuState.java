@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.swi;
 
-/// Snapshot imutavel dos registradores visiveis para handlers de SWI.
+/// Snapshot imutável dos registradores visíveis para handlers de SWI.
 public record CpuState(
         /// Registrador r0.
         int r0,
@@ -19,12 +19,12 @@ public record CpuState(
         /// Valor bruto do CPSR.
         int cpsr) {
 
-    /// Cria uma copia alterando somente `r0`.
+    /// Cria uma cópia alterando somente `r0`.
     public CpuState withR0(int value) {
         return new CpuState(value, r1, r2, r3, sp, lr, pc, cpsr);
     }
 
-    /// Cria uma copia alterando somente o `pc`.
+    /// Cria uma cópia alterando somente o `pc`.
     public CpuState withPc(int value) {
         return new CpuState(r0, r1, r2, r3, sp, lr, value, cpsr);
     }

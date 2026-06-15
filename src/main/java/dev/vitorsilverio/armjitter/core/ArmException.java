@@ -1,10 +1,10 @@
 package dev.vitorsilverio.armjitter.core;
 
-/// Tipos de excecao ARM que podem interromper a execucao normal.
+/// Tipos de exceção ARM que podem interromper a execução normal.
 public enum ArmException {
     /// Reset de CPU.
     RESET,
-    /// Instrucao indefinida.
+    /// Instrução indefinida.
     UNDEFINED,
     /// Software interrupt.
     SWI,

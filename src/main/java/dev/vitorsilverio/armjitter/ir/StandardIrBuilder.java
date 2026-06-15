@@ -4,9 +4,9 @@ import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
-/// Builder padrao que converte o subconjunto decodificado atual em IR.
+/// Builder padrão que converte o subconjunto decodificado atual em IR.
 public final class StandardIrBuilder implements IrBuilder {
-    /// Eleva uma instrucao decodificada para uma ou mais operacoes IR.
+    /// Eleva uma instrução decodificada para uma ou mais operações IR.
     @Override
     public void lift(DecodedInstruction instruction, IrBlock.Builder block) {
         switch (instruction.kind()) {

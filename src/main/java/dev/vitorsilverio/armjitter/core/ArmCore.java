@@ -55,8 +55,8 @@ public final class ArmCore {
         this(memory, swiDispatcher, new ArmInterpreter());
     }
 
-    /// Cria um core para uma arquitetura ARM especifica (ex.: ARMv4T para o GBA,
-    /// ARMv5TE para o ARM9 do NDS). O interpretador interno e construido com ela.
+    /// Cria um core para uma arquitetura ARM específica (ex.: ARMv4T para o GBA,
+    /// ARMv5TE para o ARM9 do NDS). O interpretador interno é construído com ela.
     public ArmCore(AddressSpace memory, SwiDispatcher swiDispatcher,
                    dev.vitorsilverio.armjitter.arch.ArmArchitecture architecture) {
         this(memory, swiDispatcher, new ArmInterpreter(architecture));
@@ -193,7 +193,7 @@ public final class ArmCore {
         cpsr.setThumbMode(Objects.requireNonNull(instructionSet, "instructionSet") == InstructionSet.THUMB);
     }
 
-    /// Configura PC e CPSR em uma unica chamada, util para skip BIOS e snapshots.
+    /// Configura PC e CPSR em uma única chamada, útil para skip BIOS e snapshots.
     ///
     /// @param pc novo program counter
     /// @param cpsrValue valor bruto de 32 bits para o CPSR
