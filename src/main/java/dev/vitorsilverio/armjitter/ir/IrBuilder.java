@@ -2,8 +2,8 @@ package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 
-/// Converte instrucoes decodificadas em representacao intermediaria.
+/// Converte instruções decodificadas em representação intermediaria.
 public interface IrBuilder {
-    /// Adiciona uma instrucao decodificada ao bloco em construcao.
+    /// Adiciona uma instrução decodificada ao bloco em construção.
     void lift(DecodedInstruction instruction, IrBlock.Builder block);
 }

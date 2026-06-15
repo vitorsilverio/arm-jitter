@@ -3,26 +3,26 @@ package dev.vitorsilverio.armjitter.ir;
 import java.util.ArrayList;
 import java.util.List;
 
-/// Bloco imutavel de IR associado a um intervalo de PC.
+/// Bloco imutável de IR associado a um intervalo de PC.
+/// Cada bloco representa um trecho linear de código que pode ser otimizado e compilado como uma unidade.
+/// O endereço de início é inclusivo e o endereço de fim é exclusivo, formando um intervalo [startPc, endPc).
+/// As operações IR são mantidas em uma lista imutável para garantir a integridade do bloco após a sua criação.
 public record IrBlock(
-        /// Endereco inicial do bloco.
         int startPc,
-        /// Endereco exclusivo do fim do bloco.
         int endPc,
-        /// Operacoes IR na ordem de execucao.
         List<IrOp> operations) {
 
-    /// Cria um bloco copiando a lista de operacoes para preservar imutabilidade.
+    /// Cria um bloco copiando a lista de operações para preservar imutabilidade.
     public IrBlock {
         operations = List.copyOf(operations);
     }
 
-    /// Cria um builder mutavel para montar um bloco antes de sela-lo.
+    /// Cria um builder mutável para montar um bloco antes de selá-lo.
     public static Builder builder(int startPc) {
         return new Builder(startPc);
     }
 
-    /// Builder mutavel usado pelo `IrBuilder`.
+    /// Builder mutável usado pelo `IrBuilder`.
     public static final class Builder {
         private final int startPc;
         private final List<IrOp> operations = new ArrayList<>();
@@ -33,24 +33,24 @@ public record IrBlock(
             this.endPc = startPc;
         }
 
-        /// Adiciona uma operacao IR ao bloco em construcao.
+        /// Adiciona uma operação IR ao bloco em construção.
         public Builder add(IrOp op) {
             operations.add(op);
             return this;
         }
 
-        /// Retorna `true` quando nenhuma operacao foi adicionada ainda.
+        /// Retorna `true` quando nenhuma operação foi adicionada ainda.
         public boolean isEmpty() {
             return operations.isEmpty();
         }
 
-        /// Define o endereco exclusivo de fim do bloco.
+        /// Define o endereço exclusivo de fim do bloco.
         public Builder endPc(int endPc) {
             this.endPc = endPc;
             return this;
         }
 
-        /// Sela o bloco e devolve uma instancia imutavel.
+        /// Sela o bloco e devolve uma instância imutável.
         public IrBlock sealed() {
             return new IrBlock(startPc, endPc, operations);
         }
