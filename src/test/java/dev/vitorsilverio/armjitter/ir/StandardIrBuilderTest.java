@@ -24,7 +24,7 @@ class StandardIrBuilderTest {
         assertEquals(4, ir.endPc());
         assertInstanceOf(IrOp.Alu.class, ir.operations().getFirst());
         IrOp.Alu alu = (IrOp.Alu) ir.operations().getFirst();
-        assertEquals("ADD", alu.opcode());
+        assertEquals(IrOpCode.ADD, alu.opcode());
         assertEquals(0, alu.dst());
         assertEquals(0, alu.src1());
         assertEquals(new IrOperand.Immediate(5), alu.src2());

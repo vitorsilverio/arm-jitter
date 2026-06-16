@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
@@ -82,7 +83,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
 
         int right = operand(core, alu.src2());
         switch (alu.opcode()) {
-            case "MOV" -> {
+            case IrOpCode.MOV -> {
                 // Read the shifter carry-out before the destination is written, since
                 // Rd may alias the shifted source register.
                 boolean carry = alu.setFlags() && operandCarryOut(core, alu.src2());
@@ -93,7 +94,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     setLogicFlags(core, right, carry);
                 }
             }
-            case "ADD" -> {
+            case IrOpCode.ADD -> {
                 int left = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int result = left + right;
                 if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
@@ -103,7 +104,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     setAddFlags(core, left, right, result);
                 }
             }
-            case "ADC" -> {
+            case IrOpCode.ADC -> {
                 int left = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int carry = core.cpsr().carry() ? 1 : 0;
                 int result = left + right + carry;
@@ -114,16 +115,16 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     setAdcFlags(core, left, right, carry, result);
                 }
             }
-            case "SUB", "RSB", "CMP", "SBC", "RSC", "NEG" -> {
-                int source = "NEG".equals(alu.opcode()) ? 0 : registerValue(core, alu.src1(), alu.src1ValueOverride());
-                boolean reverse = "RSB".equals(alu.opcode()) || "RSC".equals(alu.opcode());
+            case IrOpCode.SUB, IrOpCode.RSB, IrOpCode.CMP, IrOpCode.SBC, IrOpCode.RSC, IrOpCode.NEG -> {
+                int source = IrOpCode.NEG.equals(alu.opcode()) ? 0 : registerValue(core, alu.src1(), alu.src1ValueOverride());
+                boolean reverse = IrOpCode.RSB.equals(alu.opcode()) || IrOpCode.RSC.equals(alu.opcode());
                 int left = reverse ? right : source;
                 int subRight = reverse ? source : right;
-                int borrow = ("SBC".equals(alu.opcode()) || "RSC".equals(alu.opcode()))
+                int borrow = (IrOpCode.SBC.equals(alu.opcode()) || IrOpCode.RSC.equals(alu.opcode()))
                         && !core.cpsr().carry() ? 1 : 0;
                 int subtrahend = subRight + borrow;
                 int result = left - subtrahend;
-                if (!"CMP".equals(alu.opcode())) {
+                if (!IrOpCode.CMP.equals(alu.opcode())) {
                     if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
                         return true;
                     }
@@ -136,7 +137,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     }
                 }
             }
-            case "CMN" -> {
+            case IrOpCode.CMN -> {
                 int left = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int result = left + right;
                 if (alu.setFlags()) {
@@ -147,21 +148,21 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     }
                 }
             }
-            case "AND", "EOR", "ORR", "BIC", "TST", "TEQ" -> {
+            case IrOpCode.AND, IrOpCode.EOR, IrOpCode.ORR, IrOpCode.BIC, IrOpCode.TST, IrOpCode.TEQ -> {
                 int left = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int result = switch (alu.opcode()) {
-                    case "AND" -> left & right;
-                    case "EOR" -> left ^ right;
-                    case "ORR" -> left | right;
-                    case "BIC" -> left & ~right;
-                    case "TST" -> left & right;
-                    case "TEQ" -> left ^ right;
+                    case IrOpCode.AND -> left & right;
+                    case IrOpCode.EOR -> left ^ right;
+                    case IrOpCode.ORR -> left | right;
+                    case IrOpCode.BIC -> left & ~right;
+                    case IrOpCode.TST -> left & right;
+                    case IrOpCode.TEQ -> left ^ right;
                     default -> throw new IllegalStateException("Unexpected logic opcode: " + alu.opcode());
                 };
                 // Read the shifter carry-out before the destination is written, since
                 // Rd may alias the shifted source register.
                 boolean carry = alu.setFlags() && operandCarryOut(core, alu.src2());
-                if (!"TST".equals(alu.opcode()) && !"TEQ".equals(alu.opcode())) {
+                if (!IrOpCode.TST.equals(alu.opcode()) && !IrOpCode.TEQ.equals(alu.opcode())) {
                     if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
                         return true;
                     }
@@ -174,7 +175,7 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     }
                 }
             }
-            case "MVN" -> {
+            case IrOpCode.MVN -> {
                 int result = ~right;
                 // Read the shifter carry-out before the destination is written, since
                 // Rd may alias the shifted source register.
@@ -186,16 +187,16 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
                     setLogicFlags(core, result, carry);
                 }
             }
-            case "CLZ" -> core.setRegister(alu.dst(), Integer.numberOfLeadingZeros(
+            case IrOpCode.CLZ -> core.setRegister(alu.dst(), Integer.numberOfLeadingZeros(
                     registerValue(core, alu.src1(), alu.src1ValueOverride())));
-            case "LSL", "LSR", "ASR", "ROR" -> {
+            case IrOpCode.LSL, IrOpCode.LSR, IrOpCode.ASR, IrOpCode.ROR -> {
                 int value = registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int amount = right & 0xFF;
                 int result = switch (alu.opcode()) {
-                    case "LSL" -> amount >= 32 ? 0 : value << amount;
-                    case "LSR" -> amount == 0 ? value : (amount >= 32 ? 0 : value >>> amount);
-                    case "ASR" -> amount == 0 ? value : (amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount);
-                    case "ROR" -> amount == 0 ? value : Integer.rotateRight(value, amount & 31);
+                    case IrOpCode.LSL -> amount >= 32 ? 0 : value << amount;
+                    case IrOpCode.LSR -> amount == 0 ? value : (amount >= 32 ? 0 : value >>> amount);
+                    case IrOpCode.ASR -> amount == 0 ? value : (amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount);
+                    case IrOpCode.ROR -> amount == 0 ? value : Integer.rotateRight(value, amount & 31);
                     default -> throw new IllegalStateException("Unexpected shift opcode: " + alu.opcode());
                 };
                 if (writeAluDestination(core, alu.dst(), result, alu.setFlags())) {
@@ -671,15 +672,15 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         };
     }
 
-    private boolean shiftCarryOut(ArmCore core, int value, String opcode, int amount, boolean immediateShift) {
+    private boolean shiftCarryOut(ArmCore core, int value, IrOpCode opcode, int amount, boolean immediateShift) {
         if (!immediateShift && amount == 0) {
             return core.cpsr().carry();
         }
         return switch (opcode) {
-            case "LSL" -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.LSL, amount);
-            case "LSR" -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.LSR, amount);
-            case "ASR" -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.ASR, amount);
-            case "ROR" -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.ROR, amount);
+            case LSL -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.LSL, amount);
+            case LSR -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.LSR, amount);
+            case ASR -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.ASR, amount);
+            case ROR -> amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, dev.vitorsilverio.armjitter.ir.ShiftType.ROR, amount);
             default -> throw new IllegalStateException("Unexpected shift opcode: " + opcode);
         };
     }

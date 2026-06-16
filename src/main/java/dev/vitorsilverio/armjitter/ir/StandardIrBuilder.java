@@ -10,19 +10,19 @@ public final class StandardIrBuilder implements IrBuilder {
     @Override
     public void lift(DecodedInstruction instruction, IrBlock.Builder block) {
         switch (instruction.kind()) {
-            case MOV -> liftAlu("MOV", instruction, block);
-            case ADD -> liftAlu("ADD", instruction, block);
-            case ADC -> liftAlu("ADC", instruction, block);
-            case SUB -> liftAlu("SUB", instruction, block);
-            case RSB -> liftAlu("RSB", instruction, block);
-            case SBC -> liftAlu("SBC", instruction, block);
-            case RSC -> liftAlu("RSC", instruction, block);
-            case NEG -> liftAlu("NEG", instruction, block);
-            case AND -> liftAlu("AND", instruction, block);
-            case EOR -> liftAlu("EOR", instruction, block);
-            case ORR -> liftAlu("ORR", instruction, block);
-            case BIC -> liftAlu("BIC", instruction, block);
-            case MVN -> liftAlu("MVN", instruction, block);
+            case MOV -> liftAlu(IrOpCode.MOV, instruction, block);
+            case ADD -> liftAlu(IrOpCode.ADD, instruction, block);
+            case ADC -> liftAlu(IrOpCode.ADC, instruction, block);
+            case SUB -> liftAlu(IrOpCode.SUB, instruction, block);
+            case RSB -> liftAlu(IrOpCode.RSB, instruction, block);
+            case SBC -> liftAlu(IrOpCode.SBC, instruction, block);
+            case RSC -> liftAlu(IrOpCode.RSC, instruction, block);
+            case NEG -> liftAlu(IrOpCode.NEG, instruction, block);
+            case AND -> liftAlu(IrOpCode.AND, instruction, block);
+            case EOR -> liftAlu(IrOpCode.EOR, instruction, block);
+            case ORR -> liftAlu(IrOpCode.ORR, instruction, block);
+            case BIC -> liftAlu(IrOpCode.BIC, instruction, block);
+            case MVN -> liftAlu(IrOpCode.MVN, instruction, block);
             case MRS -> block.add(new IrOp.PsrTransfer(
                     true,
                     instruction.immediate() != 0,
@@ -41,12 +41,12 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.immediateOperand(),
                     (instruction.immediateOperand() ? instruction.destinationRegister() : instruction.immediate()) & 0xF,
                     instruction.condition()));
-            case TST -> liftAlu("TST", instruction, block);
-            case TEQ -> liftAlu("TEQ", instruction, block);
-            case LSL -> liftAlu("LSL", instruction, block);
-            case LSR -> liftAlu("LSR", instruction, block);
-            case ASR -> liftAlu("ASR", instruction, block);
-            case ROR -> liftAlu("ROR", instruction, block);
+            case TST -> liftAlu(IrOpCode.TST, instruction, block);
+            case TEQ -> liftAlu(IrOpCode.TEQ, instruction, block);
+            case LSL -> liftAlu(IrOpCode.LSL, instruction, block);
+            case LSR -> liftAlu(IrOpCode.LSR, instruction, block);
+            case ASR -> liftAlu(IrOpCode.ASR, instruction, block);
+            case ROR -> liftAlu(IrOpCode.ROR, instruction, block);
             case MUL, MLA -> block.add(new IrOp.Multiply(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
@@ -74,15 +74,15 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.setFlags(),
                     instruction.condition()));
             case CLZ -> block.add(new IrOp.Alu(
-                    "CLZ",
+                    IrOpCode.CLZ,
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     registerValueOverride(instruction, instruction.sourceRegister()),
                     new IrOperand.Immediate(0),
                     false,
                     instruction.condition()));
-            case CMP -> liftAlu("CMP", instruction, block);
-            case CMN -> liftAlu("CMN", instruction, block);
+            case CMP -> liftAlu(IrOpCode.CMP, instruction, block);
+            case CMN -> liftAlu(IrOpCode.CMN, instruction, block);
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
                     instruction.destinationRegister(),
                     instruction.immediate(),
@@ -182,7 +182,7 @@ public final class StandardIrBuilder implements IrBuilder {
         block.endPc(instruction.address() + instructionWidth(instruction));
     }
 
-    private void liftAlu(String opcode, DecodedInstruction instruction, IrBlock.Builder block) {
+    private void liftAlu(IrOpCode opcode, DecodedInstruction instruction, IrBlock.Builder block) {
         block.add(new IrOp.Alu(
                 opcode,
                 instruction.destinationRegister(),

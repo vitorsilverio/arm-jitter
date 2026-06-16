@@ -9,7 +9,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// Operacao ALU generica.
     record Alu(
             /// Mnemonico ou identificador interno da operacao.
-            String opcode,
+            IrOpCode opcode,
             /// Registrador de destino.
             int dst,
             /// Primeiro registrador de origem.
