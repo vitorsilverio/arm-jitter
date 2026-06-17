@@ -1,0 +1,227 @@
+*-# ROADMAP — Codegen JVM (problema 3)
+
+Plano incremental para alinhar o runtime ao desenho de `ARQUITETURA.html`: emissão real de
+bytecode JVM via ASM, mantendo `InterpretedCodeEmitter` como oráculo de corretude e sem quebrar
+integradores que usam `JitRuntimeFactory.interpretedArmThumb(...)`.
+
+**Referência visual:** [ARQUITETURA.html](ARQUITETURA.html)
+
+## Objetivo
+
+| Hoje | Alvo |
+|------|------|
+| `CompiledBlock` = closure que interpreta `IrOp[]` | `CompiledBlock` = método JVM gerado via ASM |
+| `JitRuntime` = cache + lift + interpretação IR | Mesmo pipeline; codegen plugável |
+| Ganho = amortizar decode/lift | Ganho = eliminar dispatch por `IrOp` no hot path |
+
+## Princípios
+
+1. **Cada fase é mergeável sozinha** — testes verdes; comportamento padrão inalterado até opt-in.
+2. **Semântica única** — `InterpretedCodeEmitter` permanece referência; ASM passa em harness de equivalência.
+3. **Compatibilidade retroativa** — `JitRuntime`, `CompiledBlock`, factories `interpreted*` mantidos.
+4. **Fallback por `IrOp`** — `AsmCodeEmitter` delega ao interpretado o que ainda não emitir.
+5. **Critério de feito** — mesmo estado de CPU e mesmo retorno de ciclos internos que o interpretado.
+
+## Legenda de status
+
+| Símbolo | Significado |
+|---------|-------------|
+| ✅ | Implementado |
+| 🟡 | Parcial / infraestrutura |
+| ⬜ | Planejado |
+
+## Visão das fases
+
+```
+Fase 0  — Documentação e contratos (CodegenBackend)
+Fase 1  — Infra ASM mínima (bloco vazio)          ┐
+Fase 2  — Refatorar InterpretedCodeEmitter        ├─ Fase 1 ∥ Fase 2
+Fase 3  — Harness de equivalência + GuestToHostMapper
+Fase 4  — AsmCodeEmitter ALU mínima
+Fase 5a–5f — Expansão por categoria de IrOp
+Fase 6  — IrOptimizer (fold, DCE, merge flags)
+Fase 7  — Política de fallback e métricas
+Fase 8  — Default ASM + deprecations suaves (após cobertura GBA)
+```
+
+---
+
+## Fase 0 — Clareza de API ✅
+
+**Objetivo:** eliminar ambiguidade sem breaking change.
+
+| Entrega | Status |
+|---------|--------|
+| Enum `CodegenBackend` (`INTERPRETED_IR`, `JVM_BYTECODE`) | ✅ |
+| `CodeEmitter.backend()` | ✅ |
+| `JitRuntime.codegenBackend()` | ✅ |
+| Javadoc em `JitRuntime`, `CompiledBlock`, `CodeEmitter` | ✅ |
+| README — seção “Backends de execução” | ✅ |
+| `ARQUITETURA.html` — legenda implementado / planejado | ✅ |
+
+**Não fazer:** renomear `JitRuntime` (custo sem benefício antes do ASM existir).
+
+**Aceite:** documentação alinhada; zero mudança de comportamento padrão.
+
+---
+
+## Fase 1 — Infraestrutura ASM (bloco vazio) ✅
+
+**Objetivo:** gerar, carregar e invocar classe JVM a partir do pipeline.
+
+| Entrega | Arquivo | Status |
+|---------|---------|--------|
+| Dependência `org.ow2.asm:asm` | `pom.xml` | ✅ |
+| `JvmBlockClassLoader` | `codegen/jvm/JvmBlockClassLoader.java` | ✅ |
+| `JvmBlockLoader` | `codegen/jvm/JvmBlockLoader.java` | ✅ |
+| `AsmBlockBuilder` | `codegen/jvm/AsmBlockBuilder.java` | ✅ |
+| `EmptyAsmCodeEmitter` | `codegen/EmptyAsmCodeEmitter.java` | ✅ |
+| Teste de fumaça | `EmptyAsmCodeEmitterTest.java` | ✅ |
+
+**Decisões:**
+
+- Um `JvmBlockClassLoader` por emissor (facilita descarte futuro de classes).
+- Assinatura gerada: `static int execute(ArmCore core)`.
+- Exceções propagadas sem envolver na Fase 1.
+
+**Aceite:** `emit(irBlock).execute(core)` retorna `0` sem lançar exceção.
+
+---
+
+## Fase 2 — Refatorar `InterpretedCodeEmitter` ⬜
+
+**Objetivo:** extrair executores espelháveis pelo ASM (~800 linhas hoje).
+
+| Extrair | Responsabilidade |
+|---------|------------------|
+| `IrAluExecutor` | ALU + flags NZCV |
+| `IrMemoryExecutor` | Load / Store / Swap / Literal |
+| `IrBranchExecutor` | Branch, BX, Thumb BL |
+| `IrTransferExecutor` | LDM/STM, Push/Pop |
+| `IrSystemExecutor` | PSR, SWI, Coprocessor, Undefined |
+| `IrCycleExecutor` | `IrOp.Cycle`, `IrOp.Fetch` |
+
+`InterpretedCodeEmitter` vira dispatcher fino; testes existentes inalterados.
+
+**Aceite:** diff de comportamento = zero.
+
+---
+
+## Fase 3 — Harness de equivalência + `GuestToHostMapper` ⬜
+
+| Entrega | Detalhe |
+|---------|---------|
+| `BlockEquivalenceTest` (base) | Mesmo `IrBlock` → compara regs, PC, CPSR, ciclos |
+| `GuestToHostMapper` | `ArmCore.register(n)`, `cpsr()`, `memory()` → bytecode |
+| `FlagEmitter` | Contrato NZCV |
+| `MemAccessEmitter` | `read*` / `write*` + waitstates |
+
+**Aceite:** falha clara quando ASM divergir do interpretado.
+
+---
+
+## Fase 4 — Primeiro `AsmCodeEmitter` real (ALU mínima) ⬜
+
+**Cobrir primeiro:**
+
+- `IrOp.Alu` — `MOV`, `ADD`, `SUB`, `AND`, `CMP` (condição `AL` apenas).
+- `IrOp.Cycle`, `IrOp.Fetch`.
+- Demais ops → fallback.
+
+**Factory opt-in:**
+
+```java
+JitRuntimeFactory.jvmArmThumb(cacheEntries, hotThreshold); // futuro
+```
+
+**Aceite:** 5–10 snippets ARM/THUMB em equivalência; `interpreted*` continua default.
+
+---
+
+## Fases 5a–5f — Expansão por `IrOp`
+
+| Subfase | `IrOp` | Notas |
+|---------|--------|-------|
+| **5a** | Load, Store, LoadLiteral | `MemAccessEmitter`; writeback/rotação → fallback inicial |
+| **5b** | Branch, BranchExchange | saída antecipada do método gerado |
+| **5c** | Multiply, LongMultiply | `imul` / `lmul` |
+| **5d** | MultipleTransfer, Push, Pop | loop bytecode ou fallback pragmático |
+| **5e** | PsrTransfer, Swi, Coprocessor | `invokevirtual` no core |
+| **5f** | Undefined, ThumbBlPrefix/Suffix | vetores de exceção |
+
+**Ordem GBA:** 5a → 5b → 5c → 5d → 5e.
+
+---
+
+## Fase 6 — `IrOptimizer` ⬜
+
+Passes mínimos (nessa ordem):
+
+1. Constant fold em `IrOp.Alu`
+2. DCE de ALU morto
+3. Merge de sequências `setFlags`
+
+`IrOptimizer.identity()` permanece disponível.
+
+---
+
+## Fase 7 — Política de fallback ⬜
+
+| Entrega | Detalhe |
+|---------|---------|
+| `AsmCodeEmitter.supportedOps()` | ops emitidas nativamente |
+| `AsmFallbackPolicy` | `PER_OP`, `WHOLE_BLOCK`, `FAIL_FAST` |
+| Contador de fallbacks | debug / trace |
+
+---
+
+## Fase 8 — API pública honesta (após cobertura GBA > 90%) ⬜
+
+- `JitRuntimeFactory.armThumb(...)` → default JVM bytecode.
+- `interpretedArmThumb(...)` → debug / oráculo.
+- `@Deprecated` suave em nomes enganosos, se necessário.
+- Guia de migração no README.
+
+---
+
+## Riscos
+
+| Risco | Mitigação |
+|-------|-----------|
+| Metaspace / leak de classes | `JvmBlockClassLoader` por runtime; SMC descarta `CompiledBlock` |
+| Divergência ASM vs interpretado | Harness obrigatório em cada PR de codegen |
+| Branches no bloco | Fase 5b: `ireturn` antecipado; relift no novo PC |
+| Condições ARM | guardas no bytecode ou fallback até 5b+ |
+
+## Fora de escopo
+
+- `GbaAddressSpace` / `Nds*AddressSpace` (emulador hospedeiro).
+- Handlers SWI GBA/NDS.
+- Thumb-2.
+
+---
+
+## Checklist de execução
+
+- [x] Fase 0 — docs + `CodegenBackend`
+- [x] Fase 1 — infra ASM (bloco vazio)
+- [ ] Fase 2 — refatorar `InterpretedCodeEmitter`
+- [ ] Fase 3 — harness + `GuestToHostMapper`
+- [ ] Fase 4 — `AsmCodeEmitter` ALU mínima
+- [ ] Fase 5a — memória
+- [ ] Fase 5b — branches
+- [ ] Fase 5c — multiply
+- [ ] Fase 5d — LDM/STM
+- [ ] Fase 5e — PSR/SWI/coprocessor
+- [ ] Fase 6 — `IrOptimizer`
+- [ ] Fase 7 — fallback policy
+- [ ] Fase 8 — default ASM
+
+---
+
+## Histórico
+
+| Data | Fase | Notas |
+|------|------|-------|
+| 2026-06-16 | 0–1 | `CodegenBackend`, infra ASM (`EmptyAsmCodeEmitter`), docs |
+| 2026-06-16 | — | ROADMAP criado |

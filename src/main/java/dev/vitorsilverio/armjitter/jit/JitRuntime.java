@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.jit;
 
 import dev.vitorsilverio.armjitter.codegen.CodeEmitter;
+import dev.vitorsilverio.armjitter.codegen.CodegenBackend;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.InstructionDecoder;
@@ -16,6 +17,11 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import java.util.Objects;
 
 /// Orquestra cache, decodificação, IR, otimização e codegen.
+///
+/// O nome histórico *JIT* refere-se ao pipeline de blocos cacheados; o backend efetivo
+/// depende do {@link dev.vitorsilverio.armjitter.codegen.CodeEmitter} configurado — hoje o
+/// padrão da fábrica é {@link dev.vitorsilverio.armjitter.codegen.CodegenBackend#INTERPRETED_IR}.
+/// A migração para bytecode JVM está descrita em `ROADMAP.md`.
 public final class JitRuntime {
     private final BlockCache blockCache;
     private final InstructionDecoder armDecoder;
@@ -165,6 +171,11 @@ public final class JitRuntime {
     /// Retorna o emissor de código configurado.
     public CodeEmitter emitter() {
         return emitter;
+    }
+
+    /// Retorna o backend de codegen do emissor configurado.
+    public CodegenBackend codegenBackend() {
+        return emitter.backend();
     }
 
     /// Retorna a política de aquecimento configurada.

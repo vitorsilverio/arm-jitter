@@ -380,6 +380,25 @@
         .foot-text { font-size: 10px; color: var(--muted); }
         .foot-text strong { color: var(--text); }
 
+        /* Status legend */
+        .status-legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          margin-bottom: 32px;
+          font-size: 10px;
+          color: var(--muted);
+        }
+        .status-legend span { display: flex; align-items: center; gap: 6px; }
+        .status-dot {
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .status-dot.done { background: var(--accent3); }
+        .status-dot.partial { background: #ffd700; }
+        .status-dot.planned { background: var(--muted); }
+
         /* Glow effects */
         .pipe-stage.fetch:hover { box-shadow: 0 0 20px rgba(0,229,255,0.08); }
         .pipe-stage.emit:hover { box-shadow: 0 0 20px rgba(255,215,0,0.08); }
@@ -405,6 +424,11 @@
         <p class="subtitle">
             Design modular para emulação de ARM7TDMI/ARM9, com pipeline JIT em três camadas — Fetch → IR → Codegen —, memória por interface por dispositivo e SWI resolvida via callbacks sem emular BIOS.
         </p>
+        <div class="status-legend">
+            <span><span class="status-dot done"></span> ✅ implementado</span>
+            <span><span class="status-dot partial"></span> 🟡 parcial / infraestrutura</span>
+            <span><span class="status-dot planned"></span> ⬜ planejado — ver <strong>ROADMAP.md</strong></span>
+        </div>
     </header>
 
     <!-- PIPELINE -->
@@ -428,12 +452,12 @@
         <div class="pipe-stage opt">
             <div class="pipe-num">STAGE 4</div>
             <div class="pipe-label">Optimize</div>
-            <div class="pipe-sub">IrOptimizer: constant fold, dead code, merge flags.</div>
+            <div class="pipe-sub">IrOptimizer: constant fold, dead code, merge flags. <em>(⬜ identity hoje)</em></div>
         </div>
         <div class="pipe-stage emit">
             <div class="pipe-num">STAGE 5</div>
             <div class="pipe-label">Codegen</div>
-            <div class="pipe-sub">CodeEmitter → bytecode JVM via ASM. Hospeda em CompiledBlock.</div>
+            <div class="pipe-sub">CodeEmitter → bytecode JVM via ASM. Hospeda em CompiledBlock. <em>(🟡 infra ASM; emissor real em ROADMAP)</em></div>
         </div>
         <div class="pipe-stage cache">
             <div class="pipe-num">STAGE 6</div>
@@ -761,11 +785,12 @@
                 arm.codegen
             </div>
             <div class="module-items">
-                <div class="module-item"><strong>CodeEmitter</strong> — interface; emite bytecode JVM</div>
-                <div class="module-item"><strong>AsmCodeEmitter</strong> — implementa via ASM lib</div>
-                <div class="module-item"><strong>GuestToHostMapper</strong> — mapeia reg ARM → var JVM</div>
-                <div class="module-item"><strong>FlagEmitter</strong> — emite lógica NZCV em bytecode</div>
-                <div class="module-item"><strong>MemAccessEmitter</strong> — chama MemoryBus via bytecode</div>
+                <div class="module-item"><strong>InterpretedCodeEmitter</strong> — ✅ IR em loop Java (padrão)</div>
+                <div class="module-item"><strong>EmptyAsmCodeEmitter</strong> — 🟡 infra JVM (bloco vazio)</div>
+                <div class="module-item"><strong>AsmCodeEmitter</strong> — ⬜ emissão real por IrOp</div>
+                <div class="module-item"><strong>GuestToHostMapper</strong> — ⬜ mapeia reg ARM → var JVM</div>
+                <div class="module-item"><strong>FlagEmitter</strong> — ⬜ emite lógica NZCV em bytecode</div>
+                <div class="module-item"><strong>MemAccessEmitter</strong> — ⬜ chama MemoryBus via bytecode</div>
             </div>
         </div>
 
@@ -878,7 +903,7 @@
             <div class="strat-num">2</div>
             <div class="strat-title">JIT por Bloco (hot)</div>
             <div class="strat-body">
-                Quando <code>hitCounter[pc] ≥ threshold</code>, o <code>JitRuntime</code> compila o bloco até o próximo branch. <code>CompiledBlock</code> é um <code>Runnable</code> gerado via ASM lib. Execução host-native dentro da JVM — elimina overhead de dispatch por instrução.
+                Quando <code>hitCounter[pc] ≥ threshold</code>, o <code>JitRuntime</code> compila o bloco até o próximo branch. <code>CompiledBlock</code> pode ser IR interpretado (✅ hoje) ou método JVM via ASM (🟡 em progresso — <code>ROADMAP.md</code>).
             </div>
         </div>
         <div class="strat-card s3">
@@ -903,7 +928,7 @@
             <strong>arm-jit-core</strong> — extensível para GBA · NDS · futuros targets ARM
         </div>
         <div class="foot-text" style="text-align:right">
-            Java 25 · ASM bytecode lib · sem dependências externas no core
+            Java 25 · ASM (org.ow2.asm) · ver ROADMAP.md
         </div>
     </footer>
 

@@ -35,6 +35,11 @@ public final class InterpretedCodeEmitter implements CodeEmitter {
         return core -> execute(block, core);
     }
 
+    @Override
+    public CodegenBackend backend() {
+        return CodegenBackend.INTERPRETED_IR;
+    }
+
     /// Interpreta um bloco IR sobre o core informado e devolve os ciclos internos
     /// (IrOp.Cycle) consumidos; ciclos de memória são somados diretamente ao core.
     ///

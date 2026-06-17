@@ -109,6 +109,25 @@ int cycles = runtime.execute(core.programCounter(), core);
 long frameSliceCycles = core.runBlocks(runtime, 256);
 ```
 
+### Backends de execução
+
+O pipeline de blocos é o mesmo; o que muda é como `CompiledBlock` executa o IR:
+
+| Backend | Classe | Comportamento | Quando usar |
+|---------|--------|---------------|-------------|
+| `INTERPRETED_IR` | `InterpretedCodeEmitter` | Loop Java sobre `IrOp[]` | Padrão atual; debug, step, oráculo de testes |
+| `JVM_BYTECODE` | `EmptyAsmCodeEmitter` / futuro `AsmCodeEmitter` | Bytecode JVM via ASM | Hot path de performance (em progresso) |
+
+Introspecção:
+
+```java
+CodegenBackend backend = runtime.codegenBackend(); // INTERPRETED_IR nas factories interpreted*
+```
+
+A migração gradual está descrita em [ROADMAP.md](ROADMAP.md).
+
+## Invalidação SMC
+
 Para invalidar blocos automaticamente em escrita de memoria:
 
 ```java

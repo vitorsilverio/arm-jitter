@@ -8,6 +8,10 @@ import dev.vitorsilverio.armjitter.ir.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 
 /// Fábrica de runtimes comuns para integração com emuladores.
+///
+/// Os métodos `interpreted*` criam runtimes com
+/// {@link dev.vitorsilverio.armjitter.codegen.CodegenBackend#INTERPRETED_IR}, o backend
+/// padrão e recomendado até a cobertura ASM descrita em `ROADMAP.md`.
 public final class JitRuntimeFactory {
     private JitRuntimeFactory() {
     }
