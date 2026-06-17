@@ -126,6 +126,17 @@ CodegenBackend backend = runtime.codegenBackend(); // INTERPRETED_IR nas factori
 
 A migração gradual está descrita em [ROADMAP.md](ROADMAP.md).
 
+Testes de equivalência entre emissores (referência interpretada vs candidato ASM):
+
+```java
+BlockEquivalenceHarness harness = new BlockEquivalenceHarness();
+harness.assertEquivalent(
+        new InterpretedCodeEmitter(),
+        candidateEmitter,
+        irBlock,
+        EquivalenceTestSupport.independentPair(memory, core -> core.setRegister(0, 1)));
+```
+
 ## Invalidação SMC
 
 Para invalidar blocos automaticamente em escrita de memoria:

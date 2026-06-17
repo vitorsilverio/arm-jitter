@@ -21,6 +21,13 @@ public final class TestAddressSpace implements AddressSpace {
         data[address + 3] = (byte) (value >>> 24);
     }
 
+    /// Copia o conteúdo da memória para um novo barramento independente.
+    public TestAddressSpace copy() {
+        TestAddressSpace copy = new TestAddressSpace(data.length);
+        System.arraycopy(data, 0, copy.data, 0, data.length);
+        return copy;
+    }
+
     @Override
     public int read8(int address) {
         return data[address] & 0xFF;

@@ -109,16 +109,18 @@ Fase 8  — Default ASM + deprecations suaves (após cobertura GBA)
 
 ---
 
-## Fase 3 — Harness de equivalência + `GuestToHostMapper` ⬜
+## Fase 3 — Harness de equivalência + `GuestToHostMapper` ✅
 
-| Entrega | Detalhe |
-|---------|---------|
-| `BlockEquivalenceTest` (base) | Mesmo `IrBlock` → compara regs, PC, CPSR, ciclos |
-| `GuestToHostMapper` | `ArmCore.register(n)`, `cpsr()`, `memory()` → bytecode |
-| `FlagEmitter` | Contrato NZCV |
-| `MemAccessEmitter` | `read*` / `write*` + waitstates |
+| Entrega | Arquivo | Status |
+|---------|---------|--------|
+| `CpuSnapshot` | `codegen/equivalence/CpuSnapshot.java` | ✅ |
+| `BlockEquivalenceHarness` | `codegen/equivalence/BlockEquivalenceHarness.java` | ✅ |
+| `BlockEquivalenceTest` (base) | `test/.../equivalence/BlockEquivalenceTest.java` | ✅ |
+| `GuestToHostMapper` | `codegen/jvm/GuestToHostMapper.java` | ✅ |
+| `FlagEmitter` / `MemAccessEmitter` | `codegen/jvm/` | ✅ |
+| `StandardJvmEmitters` | `codegen/jvm/StandardJvmEmitters.java` | ✅ |
 
-**Aceite:** falha clara quando ASM divergir do interpretado.
+**Aceite:** falha clara quando ASM divergir do interpretado (`EquivalenceMismatchException`).
 
 ---
 
@@ -208,7 +210,7 @@ Passes mínimos (nessa ordem):
 - [x] Fase 0 — docs + `CodegenBackend`
 - [x] Fase 1 — infra ASM (bloco vazio)
 - [x] Fase 2 — refatorar `InterpretedCodeEmitter`
-- [ ] Fase 3 — harness + `GuestToHostMapper`
+- [x] Fase 3 — harness + `GuestToHostMapper`
 - [ ] Fase 4 — `AsmCodeEmitter` ALU mínima
 - [ ] Fase 5a — memória
 - [ ] Fase 5b — branches
@@ -225,6 +227,7 @@ Passes mínimos (nessa ordem):
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-16 | 3 | Harness de equivalência + `GuestToHostMapper` / emitters JVM |
 | 2026-06-16 | 2 | Executores IR em `codegen/executor/`; `InterpretedCodeEmitter` enxuto |
 | 2026-06-16 | 0–1 | `CodegenBackend`, infra ASM (`EmptyAsmCodeEmitter`), docs |
 | 2026-06-16 | — | ROADMAP criado |
