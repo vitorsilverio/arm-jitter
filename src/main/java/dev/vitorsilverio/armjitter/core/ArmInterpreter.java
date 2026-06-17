@@ -51,18 +51,28 @@ public final class ArmInterpreter {
         this.executor = executor;
     }
 
+    /// Resultado de uma instrução executada pelo interpretador frio.
+    public record StepResult(DecodedInstruction instruction, int internalCycles) {
+    }
+
     /// Executa exatamente uma instrução e retorna a instrução decodificada.
     ///
     /// A instrução é elevada para um bloco IR de uma única operação e executada pela
     /// engine compartilhada com o JIT. Os ciclos de fetch e de memória são somados
     /// pelos próprios IrOp.Fetch/acessos; os ciclos internos retornados são somados aqui.
     public DecodedInstruction step(ArmCore core) {
+        return stepWithResult(core).instruction();
+    }
+
+    /// Executa exatamente uma instrução e retorna instrução e ciclos internos (`IrOp.Cycle`).
+    public StepResult stepWithResult(ArmCore core) {
         int pc = core.programCounter();
         InstructionDecoder decoder = core.cpsr().isThumbMode() ? thumbDecoder : armDecoder;
         DecodedInstruction instruction = decoder.decode(core.memory(), pc);
         IrBlock.Builder block = IrBlock.builder(pc);
         irBuilder.lift(instruction, block);
-        core.addCycles(executor.execute(block.sealed(), core));
-        return instruction;
+        int internalCycles = executor.execute(block.sealed(), core);
+        core.addCycles(internalCycles);
+        return new StepResult(instruction, internalCycles);
     }
 }

@@ -88,6 +88,10 @@ public final class JitRuntime {
     }
 
     /// Executa em `pc`, usando interpretação fria até o threshold e cache depois.
+    ///
+    /// O retorno conta apenas ciclos internos (`IrOp.Cycle`) do bloco ou instrução
+    /// executada; fetch e waitstates de memória são somados diretamente em
+    /// {@link ArmCore#cycles()}.
     public int execute(int pc, ArmCore core) {
         InstructionSet instructionSet = instructionSet(core);
         BlockKey key = new BlockKey(pc, instructionSet);
@@ -96,8 +100,7 @@ public final class JitRuntime {
             int hits = blockCache.hit(key);
             if (!threshold.isHot(hits)) {
                 core.setProgramCounter(pc);
-                core.step();
-                return 1;
+                return core.stepReturningInternalCycles();
             }
             IrBlock irBlock = lift(pc, core.memory(), instructionSet);
             block = emitter.emit(optimizer.optimize(irBlock));

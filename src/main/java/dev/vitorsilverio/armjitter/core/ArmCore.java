@@ -351,6 +351,18 @@ public final class ArmCore {
 
     /// Executa uma única instrução quando um interpretador estiver conectado.
     public DecodedInstruction step() {
+        return executeSingleInstruction().instruction();
+    }
+
+    /// Executa uma instrução no caminho frio e retorna apenas os ciclos internos (`IrOp.Cycle`).
+    ///
+    /// Fetch e waitstates de memória continuam sendo somados em {@link #cycles()}, mas não
+    /// entram no retorno — o mesmo contrato de {@link dev.vitorsilverio.armjitter.jit.JitRuntime#execute}.
+    public int stepReturningInternalCycles() {
+        return executeSingleInstruction().internalCycles();
+    }
+
+    private SingleInstructionExecution executeSingleInstruction() {
         synchronizeModeFromCpsr();
         int pc = programCounter();
         InstructionSet instructionSet = currentInstructionSet();
@@ -359,17 +371,20 @@ public final class ArmCore {
             addCycles(1);
             DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
             traceListener.afterInstruction(this, instruction);
-            return instruction;
+            return new SingleInstructionExecution(instruction, 1);
         }
         if (servicePendingIrq()) {
             addCycles(1);
             DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
             traceListener.afterInstruction(this, instruction);
-            return instruction;
+            return new SingleInstructionExecution(instruction, 1);
         }
-        DecodedInstruction instruction = interpreter.step(this);
-        traceListener.afterInstruction(this, instruction);
-        return instruction;
+        ArmInterpreter.StepResult result = interpreter.stepWithResult(this);
+        traceListener.afterInstruction(this, result.instruction());
+        return new SingleInstructionExecution(result.instruction(), result.internalCycles());
+    }
+
+    private record SingleInstructionExecution(DecodedInstruction instruction, int internalCycles) {
     }
 
     /// Executa até `instructionCount` instruções pelo interpretador frio.
