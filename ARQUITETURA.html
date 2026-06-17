@@ -785,7 +785,8 @@
                 arm.codegen
             </div>
             <div class="module-items">
-                <div class="module-item"><strong>InterpretedCodeEmitter</strong> — ✅ IR em loop Java (padrão)</div>
+                <div class="module-item"><strong>InterpretedCodeEmitter</strong> — ✅ delega a <code>IrBlockExecutor</code></div>
+                <div class="module-item"><strong>IrBlockExecutor</strong> — ✅ orquestra executores por IrOp</div>
                 <div class="module-item"><strong>EmptyAsmCodeEmitter</strong> — 🟡 infra JVM (bloco vazio)</div>
                 <div class="module-item"><strong>AsmCodeEmitter</strong> — ⬜ emissão real por IrOp</div>
                 <div class="module-item"><strong>GuestToHostMapper</strong> — ⬜ mapeia reg ARM → var JVM</div>

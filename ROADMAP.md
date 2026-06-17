@@ -88,20 +88,22 @@ Fase 8  — Default ASM + deprecations suaves (após cobertura GBA)
 
 ---
 
-## Fase 2 — Refatorar `InterpretedCodeEmitter` ⬜
+## Fase 2 — Refatorar `InterpretedCodeEmitter` ✅
 
-**Objetivo:** extrair executores espelháveis pelo ASM (~800 linhas hoje).
+**Objetivo:** extrair executores espelháveis pelo ASM (~800 linhas antes).
 
-| Extrair | Responsabilidade |
-|---------|------------------|
-| `IrAluExecutor` | ALU + flags NZCV |
-| `IrMemoryExecutor` | Load / Store / Swap / Literal |
-| `IrBranchExecutor` | Branch, BX, Thumb BL |
-| `IrTransferExecutor` | LDM/STM, Push/Pop |
-| `IrSystemExecutor` | PSR, SWI, Coprocessor, Undefined |
-| `IrCycleExecutor` | `IrOp.Cycle`, `IrOp.Fetch` |
+| Extrair | Arquivo | Status |
+|---------|---------|--------|
+| `IrExecutionSupport` | `codegen/executor/IrExecutionSupport.java` | ✅ |
+| `IrAluExecutor` | `codegen/executor/IrAluExecutor.java` | ✅ |
+| `IrMemoryExecutor` | `codegen/executor/IrMemoryExecutor.java` | ✅ |
+| `IrBranchExecutor` | `codegen/executor/IrBranchExecutor.java` | ✅ |
+| `IrTransferExecutor` | `codegen/executor/IrTransferExecutor.java` | ✅ |
+| `IrSystemExecutor` | `codegen/executor/IrSystemExecutor.java` | ✅ |
+| `IrCycleExecutor` | `codegen/executor/IrCycleExecutor.java` | ✅ |
+| `IrBlockExecutor` | `codegen/executor/IrBlockExecutor.java` | ✅ |
 
-`InterpretedCodeEmitter` vira dispatcher fino; testes existentes inalterados.
+`InterpretedCodeEmitter` delega a `IrBlockExecutor`; comportamento inalterado.
 
 **Aceite:** diff de comportamento = zero.
 
@@ -205,7 +207,7 @@ Passes mínimos (nessa ordem):
 
 - [x] Fase 0 — docs + `CodegenBackend`
 - [x] Fase 1 — infra ASM (bloco vazio)
-- [ ] Fase 2 — refatorar `InterpretedCodeEmitter`
+- [x] Fase 2 — refatorar `InterpretedCodeEmitter`
 - [ ] Fase 3 — harness + `GuestToHostMapper`
 - [ ] Fase 4 — `AsmCodeEmitter` ALU mínima
 - [ ] Fase 5a — memória
@@ -223,5 +225,6 @@ Passes mínimos (nessa ordem):
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-16 | 2 | Executores IR em `codegen/executor/`; `InterpretedCodeEmitter` enxuto |
 | 2026-06-16 | 0–1 | `CodegenBackend`, infra ASM (`EmptyAsmCodeEmitter`), docs |
 | 2026-06-16 | — | ROADMAP criado |
