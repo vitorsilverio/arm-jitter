@@ -210,12 +210,18 @@ no bytecode gerado. Blocos parcialmente suportados são compilados sem fallback 
 
 ---
 
-## Fase 8 — API pública honesta (após cobertura GBA > 90%) ⬜
+## Fase 8 — API pública honesta ✅
 
-- `JitRuntimeFactory.armThumb(...)` → default JVM bytecode.
-- `interpretedArmThumb(...)` → debug / oráculo.
-- `@Deprecated` suave em nomes enganosos, se necessário.
-- Guia de migração no README.
+| Entrega | Detalhe | Status |
+|---------|---------|--------|
+| `JitRuntimeFactory.armThumb(...)` | Default JVM bytecode + `StandardIrOptimizer.gba()` | ✅ |
+| `interpretedArmThumb(...)` | Mantido como debug / oráculo | ✅ |
+| `@Deprecated` em `jvmArmThumb` | Aponta para `armThumb`; `forRemoval = false` | ✅ |
+| Javadoc `JitRuntime` + `JitRuntimeFactory` | Reflete novo default e papel de cada factory | ✅ |
+| Guia de migração no README | Seção "Migração de `jvmArmThumb`" | ✅ |
+| Testes `JitRuntimeJvmFactoryTest` | Cobre `armThumb`, `jvmArmThumb` (deprecated), `interpretedArmThumb` | ✅ |
+
+**285 testes verdes.**
 
 ---
 
@@ -251,7 +257,7 @@ no bytecode gerado. Blocos parcialmente suportados são compilados sem fallback 
 - [x] Fase 5f — Undefined, ThumbBL, ALU completo
 - [x] Fase 6 — `IrOptimizer`
 - [x] Fase 7 — fallback policy
-- [ ] Fase 8 — default ASM
+- [x] Fase 8 — default ASM
 
 ---
 
@@ -259,6 +265,7 @@ no bytecode gerado. Blocos parcialmente suportados são compilados sem fallback 
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-18 | 8 | `armThumb` como default, `jvmArmThumb` deprecated, README + migração; 285 testes verdes |
 | 2026-06-18 | 7 | `AsmFallbackPolicy` + contadores + `IrOptimizer` wiring + `IrOpInterop`; 282 testes verdes |
 | 2026-06-18 | 6 | `IrOptimizer` — constant fold, DCE, flag merge; 269 testes verdes |
 | 2026-06-17 | 5 | Todas as 19 categorias de `IrOp` nativas (cond=AL); 235 testes verdes |

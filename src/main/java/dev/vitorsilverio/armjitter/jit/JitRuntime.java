@@ -19,9 +19,12 @@ import java.util.Objects;
 /// Orquestra cache, decodificação, IR, otimização e codegen.
 ///
 /// O nome histórico *JIT* refere-se ao pipeline de blocos cacheados; o backend efetivo
-/// depende do {@link dev.vitorsilverio.armjitter.codegen.CodeEmitter} configurado — hoje o
-/// padrão da fábrica é {@link dev.vitorsilverio.armjitter.codegen.CodegenBackend#INTERPRETED_IR}.
-/// A migração para bytecode JVM está descrita em `ROADMAP.md`.
+/// depende do {@link dev.vitorsilverio.armjitter.codegen.CodeEmitter} configurado.
+/// O factory recomendado ({@link JitRuntimeFactory#armThumb}) usa
+/// {@link dev.vitorsilverio.armjitter.codegen.CodegenBackend#JVM_BYTECODE} com
+/// o otimizador GBA ativo desde a Fase 8. Os factories {@code interpreted*} mantêm
+/// {@link dev.vitorsilverio.armjitter.codegen.CodegenBackend#INTERPRETED_IR} como
+/// debug/oráculo.
 public final class JitRuntime {
     private final BlockCache blockCache;
     private final InstructionDecoder armDecoder;

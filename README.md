@@ -99,40 +99,66 @@ IrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(), new StandardI
 IrBlock block = lifter.lift(memory, 0x08000000, 32);
 ```
 
-## Runtime JIT interpretado
+## Runtime JIT
 
-Enquanto o emissor ASM não entra, `InterpretedCodeEmitter` executa blocos IR e permite integrar o pipeline completo no emulador:
+O pipeline é o mesmo (cache → decode → lift → otimizar → emit); o que muda é o backend:
+
+| Backend | Factory | Comportamento | Quando usar |
+|---------|---------|---------------|-------------|
+| `JVM_BYTECODE` | `armThumb(...)` | Bytecode JVM via ASM + otimizador GBA | **Padrão recomendado** |
+| `INTERPRETED_IR` | `interpretedArmThumb(...)` | Loop Java sobre `IrOp[]` | Debug, step-by-step, oráculo de testes |
+
+### Uso recomendado
 
 ```java
-JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(1024, 3);
+// Produção — bytecode JVM com constant fold + DCE + flag merge
+JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
 int cycles = runtime.execute(core.programCounter(), core);
 long frameSliceCycles = core.runBlocks(runtime, 256);
 ```
 
-### Backends de execução
-
-O pipeline de blocos é o mesmo; o que muda é como `CompiledBlock` executa o IR:
-
-| Backend | Classe | Comportamento | Quando usar |
-|---------|--------|---------------|-------------|
-| `INTERPRETED_IR` | `InterpretedCodeEmitter` | Loop Java sobre `IrOp[]` | Padrão atual; debug, step, oráculo de testes |
-| `JVM_BYTECODE` | `AsmCodeEmitter` (ALU simples + fallback) | Bytecode JVM via ASM | Opt-in: `JitRuntimeFactory.jvmArmThumb(...)` |
-
-Introspecção:
+### Debug / oráculo
 
 ```java
-CodegenBackend backend = runtime.codegenBackend(); // INTERPRETED_IR nas factories interpreted*
+// Interpretador IR puro — útil para comparar comportamento ou depurar
+JitRuntime oracle = JitRuntimeFactory.interpretedArmThumb(1024, 3);
 ```
 
-Runtime com emissor ASM (opt-in, ALU simples hoje):
+### Introspecção
 
 ```java
+CodegenBackend backend = runtime.codegenBackend(); // JVM_BYTECODE para armThumb(...)
+```
+
+### Migração de `jvmArmThumb`
+
+`JitRuntimeFactory.jvmArmThumb(...)` está depreciado desde a Fase 8. Substitua por `armThumb(...)`:
+
+```java
+// Antes
 JitRuntime runtime = JitRuntimeFactory.jvmArmThumb(1024, 3);
+
+// Depois — inclui otimizador GBA (constant fold + DCE + flag merge)
+JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
 ```
 
-A migração gradual está descrita em [ROADMAP.md](ROADMAP.md).
+### Política de fallback e métricas (AsmCodeEmitter)
 
-Testes de equivalência entre emissores (referência interpretada vs candidato ASM):
+```java
+// PER_OP: instrucoes condicionais/Swap ficam inline no bloco compilado em vez de cair no interpretado
+AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba());
+
+// Contadores de diagnóstico
+long native   = emitter.nativeBlockCount();
+long fallback = emitter.fallbackBlockCount();
+long perOpOps = emitter.perOpFallbackOpCount();
+emitter.resetCounters();
+
+// Tipos de IrOp emitidos nativamente (todos exceto Swap)
+Set<Class<? extends IrOp>> supported = AsmCodeEmitter.supportedOps();
+```
+
+### Testes de equivalência entre emissores
 
 ```java
 BlockEquivalenceHarness harness = new BlockEquivalenceHarness();
