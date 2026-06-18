@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
+import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
@@ -54,8 +55,11 @@ public final class FlagMergePass implements IrOptimizer {
 
     // ── flag liveness helpers ──────────────────────────────────────────────────
 
-    /// Retorna {@code true} quando a op consome o carry do CPSR.
+    /// Retorna {@code true} quando a op lê CPSR (condição != AL ou carry em ADC/SBC/RSC).
     private static boolean flagUse(IrOp op) {
+        // Any conditional instruction evaluates CPSR to decide whether to execute
+        if (op.condition() != Condition.AL) return true;
+        // ADC/SBC/RSC also consume the carry flag even when unconditional
         return op instanceof IrOp.Alu alu && switch (alu.opcode()) {
             case ADC, SBC, RSC -> true;
             default -> false;

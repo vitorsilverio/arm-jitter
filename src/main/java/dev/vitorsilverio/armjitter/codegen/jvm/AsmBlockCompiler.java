@@ -896,13 +896,17 @@ public final class AsmBlockCompiler {
 
     private void emitStoreRegister(MethodVisitor method, int dst) {
         method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
-        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        AsmBytecode.visitIntConst(method, dst);
-        method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
-        AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
         if (dst == 15) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadToPcArm4", CORE_I_TO_V);
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.visitIntConst(method, dst);
+            method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
         }
     }
 

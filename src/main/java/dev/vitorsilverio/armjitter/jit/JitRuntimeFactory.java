@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.codegen.AsmFallbackPolicy;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
-import dev.vitorsilverio.armjitter.ir.IrOptimizer;
+import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.ir.opt.StandardIrOptimizer;
 

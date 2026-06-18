@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
-import dev.vitorsilverio.armjitter.ir.IrOptimizer;
+import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.jit.BlockCache;
 import dev.vitorsilverio.armjitter.jit.ExecutionThreshold;

@@ -111,8 +111,15 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Push p -> (1 << 13) | p.registerMask() | (p.includeLr() ? (1 << 14) : 0);
             case IrOp.Pop ignored -> (1 << 13);              // lê SP
             case IrOp.PsrTransfer t -> {
-                if (t.read() || t.immediateOperand() || t.registerValueOverride() >= 0) yield 0;
-                yield (1 << t.register());
+                if (t.read()) yield 0;
+                int mask = 0;
+                if (!t.immediateOperand() && t.registerValueOverride() < 0) mask = (1 << t.register());
+                // Writing the control field (bit 0) of CPSR can switch CPU mode, which saves the
+                // current register bank r8-r14. Treat all r0-r14 as live so DCE does not eliminate
+                // writes to banked registers that appear dead only because the new mode's same-indexed
+                // register gets written later in the same block.
+                if (!t.spsr() && (t.fieldMask() & 1) != 0) mask |= 0x7F00;
+                yield mask;
             }
             case IrOp.Coprocessor c -> !c.load() ? (1 << c.register()) : 0;
             case IrOp.Swap s -> {
@@ -130,7 +137,11 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
 
     private static int regDef(IrOp op) {
         return switch (op) {
-            case IrOp.Alu a -> (1 << a.dst());
+            case IrOp.Alu a -> switch (a.opcode()) {
+                // Comparison ops update only CPSR — no general-purpose register written
+                case CMP, CMN, TST, TEQ -> 0;
+                default -> (1 << a.dst());
+            };
             case IrOp.Multiply m -> (1 << m.dst());
             case IrOp.LongMultiply m -> (1 << m.dstLow()) | (1 << m.dstHigh());
             case IrOp.Load l -> {
@@ -147,6 +158,11 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.MultipleTransfer mt -> {
                 int mask = mt.load() ? mt.registerMask() : 0;
                 if (mt.writeback()) mask |= (1 << mt.base());
+                // User-mode LDM (^ without PC) loads into the USER/SYS bank r8-r14, not the
+                // current mode's banked r8-r14. Exclude r8-r14 from the def set so DCE does
+                // not eliminate writes to the current mode's r8-r14 that precede such an op.
+                if (mt.load() && mt.userMode() && (mt.registerMask() & (1 << 15)) == 0)
+                    mask &= 0xFF;
                 yield mask;
             }
             case IrOp.Push ignored -> (1 << 13);

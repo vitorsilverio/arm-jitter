@@ -10,7 +10,7 @@ import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.ir.IrBuilder;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrBlockLifter;
-import dev.vitorsilverio.armjitter.ir.IrOptimizer;
+import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
