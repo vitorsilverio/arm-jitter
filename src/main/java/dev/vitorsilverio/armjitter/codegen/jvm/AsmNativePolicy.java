@@ -35,7 +35,7 @@ public final class AsmNativePolicy {
         return true;
     }
 
-    static boolean supports(IrOp op) {
+    public static boolean supports(IrOp op) {
         return switch (op) {
             case IrOp.Alu alu -> supportsAlu(alu);
             case IrOp.Multiply m -> m.condition() == Condition.AL;

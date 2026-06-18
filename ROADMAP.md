@@ -189,13 +189,24 @@ com condições != AL, `Swap`, `ShiftedRegister` em src2/offset.
 
 ---
 
-## Fase 7 — Política de fallback ⬜
+## Fase 7 — Política de fallback ✅
 
-| Entrega | Detalhe |
-|---------|---------|
-| `AsmCodeEmitter.supportedOps()` | ops emitidas nativamente |
-| `AsmFallbackPolicy` | `PER_OP`, `WHOLE_BLOCK`, `FAIL_FAST` |
-| Contador de fallbacks | debug / trace |
+| Entrega | Arquivo | Status |
+|---------|---------|--------|
+| `AsmFallbackPolicy` (`WHOLE_BLOCK`, `PER_OP`, `FAIL_FAST`) | `codegen/AsmFallbackPolicy.java` | ✅ |
+| `AsmCodeEmitter.supportedOps()` | `codegen/AsmCodeEmitter.java` | ✅ |
+| Contadores (`nativeBlockCount`, `fallbackBlockCount`, `perOpFallbackOpCount`) | `codegen/AsmCodeEmitter.java` | ✅ |
+| `IrOpInterop` — registro global + fallback por-op inline | `codegen/jvm/IrOpInterop.java` | ✅ |
+| `IrBlockExecutor.executeOp` — execução de op única | `codegen/executor/IrBlockExecutor.java` | ✅ |
+| `AsmBlockCompiler.compilePerOp` — bytecode com fallback inline | `codegen/jvm/AsmBlockCompiler.java` | ✅ |
+| Wire `IrOptimizer` no pipeline de emissão | `codegen/AsmCodeEmitter.java` | ✅ |
+| Testes | `codegen/AsmFallbackPolicyTest.java` | ✅ |
+
+**PER_OP:** ops não suportadas (Swap, condições != AL, ShiftedRegister) são registradas em
+`IrOpInterop` em tempo de compilação e despachadas ao interpretado via `INVOKESTATIC` inline
+no bytecode gerado. Blocos parcialmente suportados são compilados sem fallback de bloco inteiro.
+
+**282 testes verdes.**
 
 ---
 
@@ -239,7 +250,7 @@ com condições != AL, `Swap`, `ShiftedRegister` em src2/offset.
 - [x] Fase 5e — PSR/SWI/coprocessor
 - [x] Fase 5f — Undefined, ThumbBL, ALU completo
 - [x] Fase 6 — `IrOptimizer`
-- [ ] Fase 7 — fallback policy
+- [x] Fase 7 — fallback policy
 - [ ] Fase 8 — default ASM
 
 ---
@@ -248,6 +259,7 @@ com condições != AL, `Swap`, `ShiftedRegister` em src2/offset.
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-18 | 7 | `AsmFallbackPolicy` + contadores + `IrOptimizer` wiring + `IrOpInterop`; 282 testes verdes |
 | 2026-06-18 | 6 | `IrOptimizer` — constant fold, DCE, flag merge; 269 testes verdes |
 | 2026-06-17 | 5 | Todas as 19 categorias de `IrOp` nativas (cond=AL); 235 testes verdes |
 | 2026-06-16 | 4 | `AsmCodeEmitter` ALU nativa + fallback + `jvmArmThumb` factory |

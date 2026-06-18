@@ -48,7 +48,19 @@ public final class AsmBlockCompiler {
     private static final String CORE_IZ_TO_V = "(" + CORE_REF + "IZ)V";
     private static final String CORE_IZ_TO_Z = "(" + CORE_REF + "IZ)Z";
 
+    /// Compila o bloco em bytecode JVM. Todos os ops devem ser suportados por {@link AsmNativePolicy};
+    /// ops não suportadas lançam {@link IllegalStateException}.
     public byte[] compile(String internalName, IrBlock block) {
+        return compile(internalName, block, false);
+    }
+
+    /// Compila o bloco em bytecode JVM no modo PER_OP: ops não suportadas por {@link AsmNativePolicy}
+    /// são despachadas ao interpretado via {@link IrOpInterop#executeInterpreted} inline no bytecode.
+    public byte[] compilePerOp(String internalName, IrBlock block) {
+        return compile(internalName, block, true);
+    }
+
+    private byte[] compile(String internalName, IrBlock block, boolean perOpFallback) {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER,
                 internalName, null, "java/lang/Object", null);
@@ -62,6 +74,10 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
 
         for (IrOp op : block.operations()) {
+            if (perOpFallback && !AsmNativePolicy.supports(op)) {
+                emitPerOpFallback(method, op, block.endPc());
+                continue;
+            }
             switch (op) {
                 case IrOp.Alu alu -> emitAlu(method, alu);
                 case IrOp.Multiply mul -> emitMultiply(method, mul);
@@ -93,6 +109,20 @@ public final class AsmBlockCompiler {
         method.visitEnd();
         writer.visitEnd();
         return writer.toByteArray();
+    }
+
+    /// Emite bytecode que delega uma op não suportada ao interpretado via {@link IrOpInterop}.
+    private void emitPerOpFallback(MethodVisitor method, IrOp op, int blockEndPc) {
+        int opId = IrOpInterop.register(op);
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.visitIntConst(method, opId);
+        AsmBytecode.visitIntConst(method, blockEndPc);
+        method.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "dev/vitorsilverio/armjitter/codegen/jvm/IrOpInterop",
+                "executeInterpreted",
+                "(" + CORE_REF + "II)Z",
+                false);
+        emitConditionalSetPcChanged(method);
     }
 
     // ── ALU ────────────────────────────────────────────────────────────────────

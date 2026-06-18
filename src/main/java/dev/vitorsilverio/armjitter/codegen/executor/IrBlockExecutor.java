@@ -64,4 +64,35 @@ public final class IrBlockExecutor {
         }
         return cycles;
     }
+
+    /// Executa uma única {@link IrOp} sem o ajuste final de PC, e devolve se o PC foi alterado.
+    ///
+    /// Usado pela infraestrutura {@link dev.vitorsilverio.armjitter.codegen.AsmFallbackPolicy#PER_OP}
+    /// para executar ops não suportadas nativamente inline no bytecode JVM gerado.
+    ///
+    /// @param blockEndPc PC sequencial do fim do bloco (necessário para {@link IrOp.Swi})
+    public boolean executeOp(ArmCore core, IrOp op, int blockEndPc) {
+        return switch (op) {
+            case IrOp.Alu aluOp -> alu.execute(core, aluOp);
+            case IrOp.Multiply multiply -> { alu.executeMultiply(core, multiply); yield false; }
+            case IrOp.LongMultiply lm -> { alu.executeLongMultiply(core, lm); yield false; }
+            case IrOp.PsrTransfer psr -> { system.executePsrTransfer(core, psr); yield false; }
+            case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
+            case IrOp.Load load -> memory.executeLoad(core, load);
+            case IrOp.Store store -> { memory.executeStore(core, store); yield false; }
+            case IrOp.Swap swap -> memory.executeSwap(core, swap);
+            case IrOp.MultipleTransfer mt -> transfer.executeMultipleTransfer(core, mt);
+            case IrOp.Branch b -> branch.executeBranch(core, b);
+            case IrOp.BranchExchange bx -> branch.executeBranchExchange(core, bx);
+            case IrOp.ThumbBlPrefix prefix -> { branch.executeThumbBlPrefix(core, prefix); yield false; }
+            case IrOp.ThumbBlSuffix suffix -> branch.executeThumbBlSuffix(core, suffix);
+            case IrOp.Push push -> { transfer.executePush(core, push); yield false; }
+            case IrOp.Pop pop -> transfer.executePop(core, pop);
+            case IrOp.Swi swi -> system.executeSwi(core, swi, blockEndPc);
+            case IrOp.Coprocessor cp -> system.executeCoprocessor(core, cp);
+            case IrOp.Undefined undef -> system.executeUndefined(core, undef);
+            case IrOp.Cycle cycleOp -> { cycle.executeCycle(cycleOp); yield false; }
+            case IrOp.Fetch fetch -> { cycle.executeFetch(core, fetch); yield false; }
+        };
+    }
 }
