@@ -1,24 +1,310 @@
 package dev.vitorsilverio.armjitter.codegen.jvm;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
-import dev.vitorsilverio.armjitter.core.CpsrRegister;
+import dev.vitorsilverio.armjitter.core.ArmException;
+import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
+import dev.vitorsilverio.armjitter.swi.CpuState;
 
-/// Helpers invocados pelo bytecode ASM gerado (flags e operações não triviais).
+/// Helpers estáticos invocados pelo bytecode ASM gerado.
+///
+/// Cada método espelha a lógica do executor interpretado correspondente, garantindo
+/// equivalência verificável pelo {@link dev.vitorsilverio.armjitter.codegen.equivalence.BlockEquivalenceHarness}.
 public final class AsmRuntimeHelpers {
     private AsmRuntimeHelpers() {
     }
 
-    /// Atualiza NZCV após {@code CMP} (borrow = 0).
+    // ── flags ALU ──────────────────────────────────────────────────────────────
+
     public static void updateCmpFlags(ArmCore core, int left, int right) {
         int result = left - right;
-        setSbcFlags(core.cpsr(), left, right, 0, result);
+        updateSbcFlags(core, left, right, 0, result);
     }
 
-    private static void setSbcFlags(CpsrRegister cpsr, int left, int right, int borrow, int result) {
+    public static void updateAddFlags(ArmCore core, int left, int right, int result) {
+        boolean carry = Integer.compareUnsigned(result, left) < 0;
+        boolean overflow = ((left ^ result) & (right ^ result)) < 0;
+        core.cpsr().setNzcv(result < 0, result == 0, carry, overflow);
+    }
+
+    public static void updateAdcFlags(ArmCore core, int left, int right, int carryIn, int result) {
+        long unsigned = Integer.toUnsignedLong(left) + Integer.toUnsignedLong(right) + carryIn;
+        long signed = (long) left + (long) right + carryIn;
+        boolean carry = (unsigned >>> 32) != 0;
+        boolean overflow = signed > Integer.MAX_VALUE || signed < Integer.MIN_VALUE;
+        core.cpsr().setNzcv(result < 0, result == 0, carry, overflow);
+    }
+
+    public static void updateSbcFlags(ArmCore core, int left, int right, int borrow, int result) {
         long subtrahend = Integer.toUnsignedLong(right) + borrow;
         long signed = (long) left - (long) right - borrow;
         boolean carry = Integer.toUnsignedLong(left) >= subtrahend;
         boolean overflow = signed > Integer.MAX_VALUE || signed < Integer.MIN_VALUE;
-        cpsr.setNzcv(result < 0, result == 0, carry, overflow);
+        core.cpsr().setNzcv(result < 0, result == 0, carry, overflow);
+    }
+
+    public static void updateLogicFlags(ArmCore core, int result, boolean carry) {
+        core.cpsr().setNzcv(result < 0, result == 0, carry, core.cpsr().overflow());
+    }
+
+    public static void updateNzFlags(ArmCore core, int result) {
+        core.cpsr().setNzcv(result < 0, result == 0, core.cpsr().carry(), core.cpsr().overflow());
+    }
+
+    public static void updateLongNzFlags(ArmCore core, long result) {
+        core.cpsr().setNzcv(result < 0, result == 0, core.cpsr().carry(), core.cpsr().overflow());
+    }
+
+    // ── shifts ─────────────────────────────────────────────────────────────────
+
+    public static int doLsl(int value, int amount) {
+        return amount >= 32 ? 0 : value << amount;
+    }
+
+    public static int doLsr(int value, int amount) {
+        return amount == 0 ? value : (amount >= 32 ? 0 : value >>> amount);
+    }
+
+    public static int doAsr(int value, int amount) {
+        return amount == 0 ? value : (amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount);
+    }
+
+    public static int doRor(int value, int amount) {
+        return amount == 0 ? value : Integer.rotateRight(value, amount & 31);
+    }
+
+    // ── memória ────────────────────────────────────────────────────────────────
+
+    public static int loadByte(ArmCore core, int address) {
+        int value = core.memory().read8(address);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+        return value;
+    }
+
+    public static int loadHalf(ArmCore core, int address) {
+        int aligned = address & ~1;
+        int value = core.memory().read16(aligned);
+        core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
+        return (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
+    }
+
+    public static int loadHalfSigned(ArmCore core, int address) {
+        if ((address & 1) != 0) {
+            int value = core.memory().read8(address);
+            core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+            return (byte) value;
+        }
+        int value = core.memory().read16(address);
+        core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
+        return (short) value;
+    }
+
+    public static int loadWord(ArmCore core, int address) {
+        int aligned = address & ~3;
+        int value = core.memory().read32(aligned);
+        core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
+        return Integer.rotateRight(value, (address & 3) * 8);
+    }
+
+    public static void storeByte(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+    }
+
+    public static void storeHalf(ArmCore core, int address, int value) {
+        core.memory().write16(address, value);
+        core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+    }
+
+    public static void storeWord(ArmCore core, int address, int value) {
+        core.memory().write32(address, value);
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+    }
+
+    // ── branches ───────────────────────────────────────────────────────────────
+
+    /// Sets thumb mode from bit 0 of target and updates PC (ARMv4T BX semantics).
+    public static void branchExchange(ArmCore core, int target) {
+        core.cpsr().setThumbMode((target & 1) != 0);
+        core.setProgramCounter(target & ~1);
+    }
+
+    /// Loads a value into PC, aligning to 4 bytes in ARM mode or 2 in THUMB (ARMv4T — no interworking).
+    public static void loadToPcArm4(ArmCore core, int value) {
+        int mask = core.cpsr().isThumbMode() ? ~1 : ~3;
+        core.setProgramCounter(value & mask);
+    }
+
+    // ── LDM/STM/PUSH/POP ───────────────────────────────────────────────────────
+
+    public static void executePush(ArmCore core, int registerMask, boolean includeLr) {
+        int count = Integer.bitCount(registerMask) + (includeLr ? 1 : 0);
+        int address = core.register(13) - count * 4;
+        int current = address;
+        for (int reg = 0; reg <= 7; reg++) {
+            if ((registerMask & (1 << reg)) != 0) {
+                storeWord(core, current, core.register(reg));
+                current += 4;
+            }
+        }
+        if (includeLr) {
+            storeWord(core, current, core.register(14));
+        }
+        core.setRegister(13, address);
+    }
+
+    /// @return {@code true} when PC was loaded (the JIT block must exit after this)
+    public static boolean executePop(ArmCore core, int registerMask, boolean includePc) {
+        int current = core.register(13);
+        for (int reg = 0; reg <= 7; reg++) {
+            if ((registerMask & (1 << reg)) != 0) {
+                core.setRegister(reg, loadWord(core, current));
+                current += 4;
+            }
+        }
+        if (includePc) {
+            loadToPcArm4(core, loadWord(core, current));
+            current += 4;
+            core.setRegister(13, current);
+            return true;
+        }
+        core.setRegister(13, current);
+        return false;
+    }
+
+    /// @return {@code true} when PC was loaded (the JIT block must exit after this)
+    public static boolean executeMultipleTransfer(
+            ArmCore core, boolean load, int baseRegister, int registerMask,
+            boolean writeback, boolean userMode, boolean emptyList, int modeOrdinal) {
+        int mask = emptyList ? (1 << 15) : registerMask;
+        int count = emptyList ? 16 : Integer.bitCount(registerMask);
+        int base = core.register(baseRegister);
+        BlockTransferMode mode = BlockTransferMode.values()[modeOrdinal];
+        int address = mode.startAddress(base, count) & ~3;
+        int writebackAddress = mode.writebackAddress(base, count);
+        boolean includesPc = (mask & (1 << 15)) != 0;
+        boolean forceUser = userMode && !includesPc;
+        int firstRegister = Integer.numberOfTrailingZeros(mask);
+        int loadedPc = 0;
+        for (int reg = 0; reg <= 15; reg++) {
+            if ((mask & (1 << reg)) != 0) {
+                if (load) {
+                    int value = loadWord(core, address);
+                    if (userMode && includesPc && reg == 15) {
+                        loadedPc = value;
+                    } else if (forceUser) {
+                        core.setBankedRegister(CpuMode.USER, reg, value);
+                    } else if (reg == 15) {
+                        loadToPcArm4(core, value);
+                    } else {
+                        core.setRegister(reg, value);
+                    }
+                } else {
+                    int value;
+                    if (userMode) {
+                        value = core.bankedRegister(CpuMode.USER, reg);
+                    } else if (writeback && reg == baseRegister && reg != firstRegister) {
+                        value = writebackAddress;
+                    } else {
+                        value = core.register(reg);
+                    }
+                    storeWord(core, address, value);
+                }
+                address += 4;
+            }
+        }
+        if (writeback && !(load && (mask & (1 << baseRegister)) != 0)) {
+            core.setRegister(baseRegister, writebackAddress);
+        }
+        if (load && userMode && includesPc) {
+            CpuMode psrMode = core.mode();
+            if (psrMode != CpuMode.USER && psrMode != CpuMode.SYSTEM) {
+                core.setCpsr(core.spsr(psrMode));
+            }
+            loadToPcArm4(core, loadedPc);
+        }
+        return load && includesPc;
+    }
+
+    // ── PSR ────────────────────────────────────────────────────────────────────
+
+    public static void executePsrRead(ArmCore core, boolean spsr, int register) {
+        CpuMode mode = core.mode();
+        boolean hasSPSR = mode != CpuMode.USER && mode != CpuMode.SYSTEM;
+        int value = (spsr && hasSPSR) ? core.spsr(mode) : core.cpsr().get();
+        core.setRegister(register, value);
+    }
+
+    public static void executePsrWrite(ArmCore core, boolean spsr, int value, int fieldMask) {
+        CpuMode mode = core.mode();
+        boolean hasSPSR = mode != CpuMode.USER && mode != CpuMode.SYSTEM;
+        int effectiveMask = (spsr || mode != CpuMode.USER) ? fieldMask : fieldMask & 0x8;
+        if (spsr) {
+            if (hasSPSR) {
+                core.setSpsr(mode, mergePsr(core.spsr(mode), value, effectiveMask));
+            }
+        } else {
+            core.setCpsr(mergePsr(core.cpsr().get(), value, effectiveMask));
+        }
+    }
+
+    private static int mergePsr(int current, int value, int fieldMask) {
+        int mask = 0;
+        if ((fieldMask & 0x1) != 0) mask |= 0x0000_00FF;
+        if ((fieldMask & 0x2) != 0) mask |= 0x0000_FF00;
+        if ((fieldMask & 0x4) != 0) mask |= 0x00FF_0000;
+        if ((fieldMask & 0x8) != 0) mask |= 0xFF00_0000;
+        return (current & ~mask) | (value & mask);
+    }
+
+    // ── SWI ────────────────────────────────────────────────────────────────────
+
+    /// Dispatches a software interrupt. Always returns {@code true} (PC always changes).
+    public static boolean executeSwi(ArmCore core, int immediate, int sequentialPc) {
+        core.setProgramCounter(sequentialPc);
+        if (core.swiDispatcher().canDispatch(immediate)) {
+            CpuState next = core.swiDispatcher().dispatch(immediate, core.toCpuState());
+            core.apply(next);
+        } else {
+            core.requestException(ArmException.SWI);
+        }
+        return true;
+    }
+
+    // ── coprocessor ────────────────────────────────────────────────────────────
+
+    /// @return {@code true} when PC was changed (undefined exception triggered)
+    public static boolean executeCoprocessor(
+            ArmCore core, boolean load, int coprocessorNum, int opcode1,
+            int crn, int crm, int opcode2, int register, int sequentialPc) {
+        var bus = core.coprocessorBus();
+        if (!bus.handles(coprocessorNum)) {
+            core.setProgramCounter(sequentialPc);
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        if (load) {
+            int value = bus.read(coprocessorNum, opcode1, crn, crm, opcode2);
+            if (register == 15) {
+                core.cpsr().setNzcv(
+                        (value & 0x8000_0000) != 0,
+                        (value & 0x4000_0000) != 0,
+                        (value & 0x2000_0000) != 0,
+                        (value & 0x1000_0000) != 0);
+            } else {
+                core.setRegister(register, value);
+            }
+        } else {
+            bus.write(coprocessorNum, opcode1, crn, crm, opcode2, core.register(register));
+        }
+        return false;
+    }
+
+    // ── undefined ──────────────────────────────────────────────────────────────
+
+    public static void executeUndefined(ArmCore core, int sequentialPc) {
+        core.setProgramCounter(sequentialPc);
+        core.requestException(ArmException.UNDEFINED);
     }
 }

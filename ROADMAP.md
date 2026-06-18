@@ -145,18 +145,25 @@ Fase 8  — Default ASM + deprecations suaves (após cobertura GBA)
 
 ---
 
-## Fases 5a–5f — Expansão por `IrOp`
+## Fases 5a–5f — Expansão por `IrOp` ✅
 
-| Subfase | `IrOp` | Notas |
-|---------|--------|-------|
-| **5a** | Load, Store, LoadLiteral | `MemAccessEmitter`; writeback/rotação → fallback inicial |
-| **5b** | Branch, BranchExchange | saída antecipada do método gerado |
-| **5c** | Multiply, LongMultiply | `imul` / `lmul` |
-| **5d** | MultipleTransfer, Push, Pop | loop bytecode ou fallback pragmático |
-| **5e** | PsrTransfer, Swi, Coprocessor | `invokevirtual` no core |
-| **5f** | Undefined, ThumbBlPrefix/Suffix | vetores de exceção |
+Todas as 19 categorias de `IrOp` implementadas com condição `AL`. Fallback para blocos
+com condições != AL, `Swap`, `ShiftedRegister` em src2/offset.
 
-**Ordem GBA:** 5a → 5b → 5c → 5d → 5e.
+| Subfase | `IrOp` | Status |
+|---------|--------|--------|
+| **5a** | Load, Store, LoadLiteral | ✅ |
+| **5b** | Branch, BranchExchange, ThumbBL | ✅ |
+| **5c** | Multiply, LongMultiply | ✅ |
+| **5d** | MultipleTransfer, Push, Pop | ✅ |
+| **5e** | PsrTransfer, Swi, Coprocessor | ✅ |
+| **5f** | Undefined, ALU expandido (todos os IrOpCodes) | ✅ |
+
+**Arquivos principais:** `AsmBlockCompiler.java`, `AsmNativePolicy.java`, `AsmRuntimeHelpers.java`.
+
+**Testes de equivalência:** `AsmCodeEmitterEquivalenceTest.java` — 10 testes (Load, Store, Branch, BX, Multiply, LDM + 4 de fase 4).
+
+**235 testes verdes.**
 
 ---
 
@@ -215,11 +222,12 @@ Passes mínimos (nessa ordem):
 - [x] Fase 2 — refatorar `InterpretedCodeEmitter`
 - [x] Fase 3 — harness + `GuestToHostMapper`
 - [x] Fase 4 — `AsmCodeEmitter` ALU mínima
-- [ ] Fase 5a — memória
-- [ ] Fase 5b — branches
-- [ ] Fase 5c — multiply
-- [ ] Fase 5d — LDM/STM
-- [ ] Fase 5e — PSR/SWI/coprocessor
+- [x] Fase 5a — memória
+- [x] Fase 5b — branches
+- [x] Fase 5c — multiply
+- [x] Fase 5d — LDM/STM
+- [x] Fase 5e — PSR/SWI/coprocessor
+- [x] Fase 5f — Undefined, ThumbBL, ALU completo
 - [ ] Fase 6 — `IrOptimizer`
 - [ ] Fase 7 — fallback policy
 - [ ] Fase 8 — default ASM
@@ -230,6 +238,7 @@ Passes mínimos (nessa ordem):
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-17 | 5 | Todas as 19 categorias de `IrOp` nativas (cond=AL); 235 testes verdes |
 | 2026-06-16 | 4 | `AsmCodeEmitter` ALU nativa + fallback + `jvmArmThumb` factory |
 | 2026-06-16 | 3 | Harness de equivalência + `GuestToHostMapper` / emitters JVM |
 | 2026-06-16 | 2 | Executores IR em `codegen/executor/`; `InterpretedCodeEmitter` enxuto |
