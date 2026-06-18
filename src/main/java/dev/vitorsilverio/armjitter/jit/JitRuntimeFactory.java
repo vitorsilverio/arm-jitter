@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.jit;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.codegen.AsmCodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
@@ -43,17 +44,35 @@ public final class JitRuntimeFactory {
 
     /// Cria um runtime THUMB16 para a arquitetura informada.
     public static JitRuntime interpretedThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
-        return build(cacheEntries, hotThreshold, architecture);
+        return build(cacheEntries, hotThreshold, architecture, new InterpretedCodeEmitter(architecture));
+    }
+
+    /// Cria um runtime ARM/THUMB com emissor ASM (ALU simples + fallback interpretado).
+    public static JitRuntime jvmArmThumb(int cacheEntries, int hotThreshold) {
+        return jvmArmThumb(cacheEntries, hotThreshold, ArmArchitecture.ARMV4T);
+    }
+
+    /// Cria um runtime ARM/THUMB com emissor ASM para a arquitetura informada.
+    public static JitRuntime jvmArmThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        return build(cacheEntries, hotThreshold, architecture, new AsmCodeEmitter(architecture));
     }
 
     private static JitRuntime build(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        return build(cacheEntries, hotThreshold, architecture, new InterpretedCodeEmitter(architecture));
+    }
+
+    private static JitRuntime build(
+            int cacheEntries,
+            int hotThreshold,
+            ArmArchitecture architecture,
+            dev.vitorsilverio.armjitter.codegen.CodeEmitter emitter) {
         return new JitRuntime(
                 new BlockCache(cacheEntries),
                 new ArmDecoder(architecture),
                 new ThumbDecoder(architecture),
                 new StandardIrBuilder(),
                 IrOptimizer.identity(),
-                new InterpretedCodeEmitter(architecture),
+                emitter,
                 new ExecutionThreshold(hotThreshold),
                 64);
     }

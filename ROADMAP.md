@@ -124,21 +124,24 @@ Fase 8  — Default ASM + deprecations suaves (após cobertura GBA)
 
 ---
 
-## Fase 4 — Primeiro `AsmCodeEmitter` real (ALU mínima) ⬜
+## Fase 4 — Primeiro `AsmCodeEmitter` real (ALU mínima) ✅
 
-**Cobrir primeiro:**
+**Coberto:**
 
-- `IrOp.Alu` — `MOV`, `ADD`, `SUB`, `AND`, `CMP` (condição `AL` apenas).
-- `IrOp.Cycle`, `IrOp.Fetch`.
-- Demais ops → fallback.
+- `IrOp.Alu` — `MOV`, `ADD`, `SUB`, `AND`, `CMP` (condição `AL`, sem flags exceto `CMP`)
+- `IrOp.Cycle`, `IrOp.Fetch`
+- Demais ops / operandos complexos → fallback interpretado no bloco inteiro
 
-**Factory opt-in:**
+| Entrega | Arquivo | Status |
+|---------|---------|--------|
+| `AsmCodeEmitter` | `codegen/AsmCodeEmitter.java` | ✅ |
+| `AsmBlockCompiler` | `codegen/jvm/AsmBlockCompiler.java` | ✅ |
+| `AsmNativePolicy` | `codegen/jvm/AsmNativePolicy.java` | ✅ |
+| `AsmRuntimeHelpers` | `codegen/jvm/AsmRuntimeHelpers.java` | ✅ |
+| `JitRuntimeFactory.jvmArmThumb` | `jit/JitRuntimeFactory.java` | ✅ |
+| Testes de equivalência | `AsmCodeEmitterEquivalenceTest.java` | ✅ |
 
-```java
-JitRuntimeFactory.jvmArmThumb(cacheEntries, hotThreshold); // futuro
-```
-
-**Aceite:** 5–10 snippets ARM/THUMB em equivalência; `interpreted*` continua default.
+**Aceite:** harness verde para ALU simples; `interpreted*` continua default.
 
 ---
 
@@ -211,7 +214,7 @@ Passes mínimos (nessa ordem):
 - [x] Fase 1 — infra ASM (bloco vazio)
 - [x] Fase 2 — refatorar `InterpretedCodeEmitter`
 - [x] Fase 3 — harness + `GuestToHostMapper`
-- [ ] Fase 4 — `AsmCodeEmitter` ALU mínima
+- [x] Fase 4 — `AsmCodeEmitter` ALU mínima
 - [ ] Fase 5a — memória
 - [ ] Fase 5b — branches
 - [ ] Fase 5c — multiply
@@ -227,6 +230,7 @@ Passes mínimos (nessa ordem):
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-16 | 4 | `AsmCodeEmitter` ALU nativa + fallback + `jvmArmThumb` factory |
 | 2026-06-16 | 3 | Harness de equivalência + `GuestToHostMapper` / emitters JVM |
 | 2026-06-16 | 2 | Executores IR em `codegen/executor/`; `InterpretedCodeEmitter` enxuto |
 | 2026-06-16 | 0–1 | `CodegenBackend`, infra ASM (`EmptyAsmCodeEmitter`), docs |

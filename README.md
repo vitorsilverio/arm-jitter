@@ -116,12 +116,18 @@ O pipeline de blocos é o mesmo; o que muda é como `CompiledBlock` executa o IR
 | Backend | Classe | Comportamento | Quando usar |
 |---------|--------|---------------|-------------|
 | `INTERPRETED_IR` | `InterpretedCodeEmitter` | Loop Java sobre `IrOp[]` | Padrão atual; debug, step, oráculo de testes |
-| `JVM_BYTECODE` | `EmptyAsmCodeEmitter` / futuro `AsmCodeEmitter` | Bytecode JVM via ASM | Hot path de performance (em progresso) |
+| `JVM_BYTECODE` | `AsmCodeEmitter` (ALU simples + fallback) | Bytecode JVM via ASM | Opt-in: `JitRuntimeFactory.jvmArmThumb(...)` |
 
 Introspecção:
 
 ```java
 CodegenBackend backend = runtime.codegenBackend(); // INTERPRETED_IR nas factories interpreted*
+```
+
+Runtime com emissor ASM (opt-in, ALU simples hoje):
+
+```java
+JitRuntime runtime = JitRuntimeFactory.jvmArmThumb(1024, 3);
 ```
 
 A migração gradual está descrita em [ROADMAP.md](ROADMAP.md).
