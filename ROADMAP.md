@@ -167,15 +167,25 @@ com condições != AL, `Swap`, `ShiftedRegister` em src2/offset.
 
 ---
 
-## Fase 6 — `IrOptimizer` ⬜
+## Fase 6 — `IrOptimizer` ✅
 
-Passes mínimos (nessa ordem):
+| Entrega | Arquivo | Status |
+|---------|---------|--------|
+| `IrOptimizer` (interface + `identity()` + `then()`) | `ir/opt/IrOptimizer.java` | ✅ |
+| `ConstantFoldPass` | `ir/opt/ConstantFoldPass.java` | ✅ |
+| `DeadCodeEliminationPass` | `ir/opt/DeadCodeEliminationPass.java` | ✅ |
+| `FlagMergePass` | `ir/opt/FlagMergePass.java` | ✅ |
+| `StandardIrOptimizer.gba()` | `ir/opt/StandardIrOptimizer.java` | ✅ |
+| Testes unitários | `ir/opt/*Test.java` | ✅ |
 
-1. Constant fold em `IrOp.Alu`
-2. DCE de ALU morto
-3. Merge de sequências `setFlags`
+**Passes implementados:**
+1. **Constant fold** — `IrOp.Alu` com `setFlags=false`, `dst≠15`, `src2=Immediate` e src1 conhecido → `MOV dst, #resultado`. Cobre: MOV, MVN, NEG, ADD, SUB, RSB, AND, EOR, ORR, BIC, CLZ, LSL, LSR, ASR, ROR.
+2. **DCE** — elimina `IrOp.Alu` com `setFlags=false`, `dst≠15` cujo dst não é lido por nenhuma op posterior no bloco. Análise de vivência backward sobre bitmask de 16 registradores.
+3. **Flag merge** — remove `setFlags=true` de ops ALU cujos flags NZCV são sobrescritos antes de qualquer leitura (ADC/SBC/RSC leem carry). Análise de vivência backward de CPSR.
 
-`IrOptimizer.identity()` permanece disponível.
+**Nota:** integração ao pipeline `JitRuntime` (wire `StandardIrOptimizer.gba()` no lift) fica para Fase 7/8. O otimizador é standalone e aplicável via `block = optimizer.optimize(block)` antes de `emitter.emit(block)`.
+
+**269 testes verdes.**
 
 ---
 
@@ -228,7 +238,7 @@ Passes mínimos (nessa ordem):
 - [x] Fase 5d — LDM/STM
 - [x] Fase 5e — PSR/SWI/coprocessor
 - [x] Fase 5f — Undefined, ThumbBL, ALU completo
-- [ ] Fase 6 — `IrOptimizer`
+- [x] Fase 6 — `IrOptimizer`
 - [ ] Fase 7 — fallback policy
 - [ ] Fase 8 — default ASM
 
@@ -238,6 +248,7 @@ Passes mínimos (nessa ordem):
 
 | Data | Fase | Notas |
 |------|------|-------|
+| 2026-06-18 | 6 | `IrOptimizer` — constant fold, DCE, flag merge; 269 testes verdes |
 | 2026-06-17 | 5 | Todas as 19 categorias de `IrOp` nativas (cond=AL); 235 testes verdes |
 | 2026-06-16 | 4 | `AsmCodeEmitter` ALU nativa + fallback + `jvmArmThumb` factory |
 | 2026-06-16 | 3 | Harness de equivalência + `GuestToHostMapper` / emitters JVM |
