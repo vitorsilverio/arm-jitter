@@ -93,6 +93,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             }
             case IrOp.BranchExchange bx ->
                     bx.sourceValueOverride() < 0 ? (1 << bx.sourceRegister()) : 0;
+            case IrOp.Saturating sat -> (1 << sat.rm()) | (1 << sat.rn());
             case IrOp.MultipleTransfer mt -> {
                 int mask = (1 << mt.base());
                 if (!mt.load()) mask |= mt.registerMask();   // store lê todos os registradores da lista
@@ -160,6 +161,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             };
             case IrOp.Multiply m -> (1 << m.dst());
             case IrOp.LongMultiply m -> (1 << m.dstLow()) | (1 << m.dstHigh());
+            case IrOp.Saturating sat -> (1 << sat.dst());
             case IrOp.Load l -> {
                 int mask = (1 << l.dst());
                 if (l.writeback()) mask |= (1 << l.base());

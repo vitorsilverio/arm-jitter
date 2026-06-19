@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -205,6 +205,21 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             Condition condition,
             /// Conjunto de instruções esperado após o branch.
             InstructionSet targetSet) implements IrOp {
+    }
+
+    /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB). `op`: 0=QADD, 1=QSUB,
+    /// 2=QDADD, 3=QDSUB. Satura em 32 bits com sinal e ativa o bit Q em overflow.
+    record Saturating(
+            /// Registrador de destino.
+            int dst,
+            /// Operando somado/subtraído (Rm).
+            int rm,
+            /// Operando "n" (Rn), dobrado nas formas QD*.
+            int rn,
+            /// Seleciona a operação (0..3).
+            int op,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).

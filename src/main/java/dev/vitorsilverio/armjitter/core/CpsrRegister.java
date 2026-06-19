@@ -10,6 +10,8 @@ public final class CpsrRegister {
     public static final int CARRY_FLAG = 1 << 29;
     /// Bit V do CPSR.
     public static final int OVERFLOW_FLAG = 1 << 28;
+    /// Bit Q do CPSR (saturação sticky das instruções DSP/saturadas ARMv5TE).
+    public static final int SATURATION_FLAG = 1 << 27;
     /// Bit T do CPSR.
     public static final int THUMB_FLAG = 1 << 5;
     /// Bit I do CPSR.
@@ -96,6 +98,16 @@ public final class CpsrRegister {
     /// Retorna `true` quando V esta setado.
     public boolean overflow() {
         return (value & OVERFLOW_FLAG) != 0;
+    }
+
+    /// Retorna `true` quando o bit Q (saturação sticky) está setado.
+    public boolean saturation() {
+        return (value & SATURATION_FLAG) != 0;
+    }
+
+    /// Seta o bit Q. As instruções saturadas só o ativam (sticky); software o limpa via MSR.
+    public void setSaturation(boolean saturated) {
+        setFlag(SATURATION_FLAG, saturated);
     }
 
     /// Retorna `true` quando IRQ está mascarada pelo bit I.

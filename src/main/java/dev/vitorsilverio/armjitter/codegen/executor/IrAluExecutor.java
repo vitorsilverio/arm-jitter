@@ -182,4 +182,37 @@ final class IrAluExecutor {
             core.cpsr().setNzcv(result < 0, result == 0, core.cpsr().carry(), core.cpsr().overflow());
         }
     }
+
+    /// ARMv5TE saturating add/subtract (QADD/QSUB/QDADD/QDSUB), all clamped to signed 32 bits and
+    /// setting the sticky Q flag on any saturation.
+    void executeSaturating(ArmCore core, IrOp.Saturating op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int rm = core.register(op.rm());
+        int rn = core.register(op.rn());
+        boolean[] q = {false};
+        int result = switch (op.op()) {
+            case 0 -> clamp((long) rm + rn, q);                 // QADD:  sat(Rm + Rn)
+            case 1 -> clamp((long) rm - rn, q);                 // QSUB:  sat(Rm - Rn)
+            case 2 -> clamp((long) rm + clamp(2L * rn, q), q);  // QDADD: sat(Rm + sat(2*Rn))
+            default -> clamp((long) rm - clamp(2L * rn, q), q); // QDSUB: sat(Rm - sat(2*Rn))
+        };
+        core.setRegister(op.dst(), result);
+        if (q[0]) {
+            core.cpsr().setSaturation(true); // sticky: only ever set here
+        }
+    }
+
+    private static int clamp(long value, boolean[] saturated) {
+        if (value > Integer.MAX_VALUE) {
+            saturated[0] = true;
+            return Integer.MAX_VALUE;
+        }
+        if (value < Integer.MIN_VALUE) {
+            saturated[0] = true;
+            return Integer.MIN_VALUE;
+        }
+        return (int) value;
+    }
 }

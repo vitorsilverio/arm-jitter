@@ -79,6 +79,17 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, -1, 0, false, false, false);
         }
 
+        // Saturating arithmetic (ARMv5TE): QADD/QSUB/QDADD/QDSUB. `cccc 0001 0PP0 nnnn dddd 0000 0101 mmmm`.
+        // Only intercepted when the architecture has the feature, so ARMv4T keeps its prior behaviour.
+        if ((raw & 0x0F90_0FF0) == 0x0100_0050 && architecture.has(ArmFeature.SATURATING)) {
+            int op = (raw >>> 21) & 0x3;
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SATURATING,
+                    rd, rm, rn, op, false, false, false);
+        }
+
         if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {
             boolean spsr = (raw & (1 << 22)) != 0;
             int rd = (raw >>> 12) & 0xF;

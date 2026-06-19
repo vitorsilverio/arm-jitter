@@ -48,6 +48,8 @@ public enum InstructionKind {
     SMLAL,
     /// Conta zeros a esquerda em uma palavra de 32 bits.
     CLZ,
+    /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB).
+    SATURATING,
     /// Bit clear.
     BIC,
     /// Move NOT.

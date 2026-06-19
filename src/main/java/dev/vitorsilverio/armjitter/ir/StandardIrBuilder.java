@@ -135,6 +135,12 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.blockTransferMode(),
                     instruction.emptyRegisterList(),
                     instruction.condition()));
+            case SATURATING -> block.add(new IrOp.Saturating(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.immediate(),
+                    instruction.condition()));
             case BRANCH -> block.add(new IrOp.Branch(
                     instruction.immediate(),
                     instruction.address() + instructionWidth(instruction),
