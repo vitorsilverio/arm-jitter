@@ -61,6 +61,32 @@ final class IrMemoryExecutor {
         }
     }
 
+    /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `first+1` sharing one address.
+    /// @return {@code true} quando o PC foi alterado pela operação
+    boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {
+        if (!core.cpsr().evalCond(dt.condition())) {
+            return false;
+        }
+        int offset = support.operand(core, dt.offset());
+        int base = dt.baseValueOverride() >= 0 ? dt.baseValueOverride() : core.register(dt.base());
+        int address = dt.postIndexed() ? base : base + offset;
+        int second = dt.first() + 1;
+        if (dt.load()) {
+            int low = support.read32Arm7(core, address);
+            int high = support.read32Arm7(core, address + 4);
+            support.writeLoadedRegister(core, dt.first(), low);
+            support.writeLoadedRegister(core, second, high);
+        } else {
+            support.write32Arm7(core, address, core.register(dt.first()));
+            support.write32Arm7(core, address + 4, core.register(second));
+        }
+        // Writeback (skip when a load would clobber the base it still needs — UNPREDICTABLE).
+        if (dt.writeback() && (!dt.load() || (dt.base() != dt.first() && dt.base() != second))) {
+            core.setRegister(dt.base(), base + offset);
+        }
+        return dt.load() && (dt.first() == 15 || second == 15);
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação
     boolean executeSwap(ArmCore core, IrOp.Swap swap) {
         if (!core.cpsr().evalCond(swap.condition())) {

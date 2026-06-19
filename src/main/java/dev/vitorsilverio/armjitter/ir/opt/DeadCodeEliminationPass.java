@@ -95,6 +95,12 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                     bx.sourceValueOverride() < 0 ? (1 << bx.sourceRegister()) : 0;
             case IrOp.Saturating sat -> (1 << sat.rm()) | (1 << sat.rn());
             case IrOp.DspMultiply dsp -> (1 << dsp.rm()) | (1 << dsp.rs()) | (1 << dsp.rn());
+            case IrOp.DoubleTransfer dt -> {
+                int mask = dt.baseValueOverride() < 0 ? (1 << dt.base()) : 0;
+                mask |= operandUse(dt.offset());
+                if (!dt.load()) mask |= (1 << dt.first()) | (1 << (dt.first() + 1)); // STRD reads the pair
+                yield mask;
+            }
             case IrOp.MultipleTransfer mt -> {
                 int mask = (1 << mt.base());
                 if (!mt.load()) mask |= mt.registerMask();   // store lê todos os registradores da lista
@@ -164,6 +170,11 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.LongMultiply m -> (1 << m.dstLow()) | (1 << m.dstHigh());
             case IrOp.Saturating sat -> (1 << sat.dst());
             case IrOp.DspMultiply dsp -> (1 << dsp.dst()) | (dsp.op2() == 2 ? (1 << dsp.rn()) : 0);
+            case IrOp.DoubleTransfer dt -> {
+                int mask = dt.load() ? (1 << dt.first()) | (1 << (dt.first() + 1)) : 0;
+                if (dt.writeback()) mask |= (1 << dt.base());
+                yield mask;
+            }
             case IrOp.Load l -> {
                 int mask = (1 << l.dst());
                 if (l.writeback()) mask |= (1 << l.base());

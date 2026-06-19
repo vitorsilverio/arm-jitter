@@ -107,6 +107,15 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.writeback(),
                     instruction.postIndexed(),
                     instruction.condition()));
+            case DOUBLE_TRANSFER -> block.add(new IrOp.DoubleTransfer(
+                    instruction.link(), // carries LDRD (load) vs STRD (store)
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    baseValueOverride(instruction),
+                    offset(instruction),
+                    instruction.writeback(),
+                    instruction.postIndexed(),
+                    instruction.condition()));
             case SWAP -> block.add(new IrOp.Swap(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),

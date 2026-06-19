@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -140,6 +140,27 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Indica endereçamento post-index.
             boolean postIndexed,
             /// Condição necessária para executar a escrita.
+            Condition condition) implements IrOp {
+    }
+
+    /// Transferência de palavra dupla ARMv5TE (LDRD/STRD): dois acessos de 32 bits consecutivos
+    /// a `first` e `first+1`, com um único cálculo de endereço/writeback.
+    record DoubleTransfer(
+            /// `true` para LDRD (load), `false` para STRD (store).
+            boolean load,
+            /// Primeiro registrador do par (Rd); o segundo é `first + 1`.
+            int first,
+            /// Registrador base do endereço.
+            int base,
+            /// Valor fixo da base quando o registrador base é `PC`, ou `-1`.
+            int baseValueOverride,
+            /// Offset já normalizado pelo decoder/lifter.
+            IrOperand offset,
+            /// Indica writeback no registrador base.
+            boolean writeback,
+            /// Indica endereçamento post-index.
+            boolean postIndexed,
+            /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }
 

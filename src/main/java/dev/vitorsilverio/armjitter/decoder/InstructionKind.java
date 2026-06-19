@@ -52,6 +52,8 @@ public enum InstructionKind {
     SATURATING,
     /// Multiplicações DSP ARMv5TE (SMUL\<xy>, SMLA\<xy>, SMLAW\<y>, SMULW\<y>, SMLAL\<xy>).
     DSP_MULTIPLY,
+    /// Transferência de palavra dupla ARMv5TE (LDRD/STRD) — par de registradores Rd, Rd+1.
+    DOUBLE_TRANSFER,
     /// Bit clear.
     BIC,
     /// Move NOT.

@@ -45,6 +45,7 @@ public final class IrBlockExecutor {
                 case IrOp.LoadLiteral loadLiteral -> pcChanged |= memory.executeLoadLiteral(core, loadLiteral);
                 case IrOp.Load load -> pcChanged |= memory.executeLoad(core, load);
                 case IrOp.Store store -> memory.executeStore(core, store);
+                case IrOp.DoubleTransfer dt -> pcChanged |= memory.executeDoubleTransfer(core, dt);
                 case IrOp.Swap swap -> pcChanged |= memory.executeSwap(core, swap);
                 case IrOp.MultipleTransfer multipleTransfer -> pcChanged |= transfer.executeMultipleTransfer(core, multipleTransfer);
                 case IrOp.Branch branchOp -> pcChanged |= branch.executeBranch(core, branchOp);
@@ -84,6 +85,7 @@ public final class IrBlockExecutor {
             case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
             case IrOp.Load load -> memory.executeLoad(core, load);
             case IrOp.Store store -> { memory.executeStore(core, store); yield false; }
+            case IrOp.DoubleTransfer dt -> memory.executeDoubleTransfer(core, dt);
             case IrOp.Swap swap -> memory.executeSwap(core, swap);
             case IrOp.MultipleTransfer mt -> transfer.executeMultipleTransfer(core, mt);
             case IrOp.Branch b -> branch.executeBranch(core, b);

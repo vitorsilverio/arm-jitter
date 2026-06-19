@@ -178,6 +178,15 @@ public final class ArmDecoder implements InstructionDecoder {
             int rn = (raw >>> 16) & 0xF;
             int rd = (raw >>> 12) & 0xF;
             int offset = immediateOffset ? ((raw >>> 4) & 0xF0) | (raw & 0xF) : raw & 0xF;
+            // LDRD/STRD (ARMv5TE): L=0 with transferKind 10 (LDRD) or 11 (STRD). Checked before the
+            // generic store rejection below; only when the architecture has the feature.
+            if (!load && (transferKind == 0b10 || transferKind == 0b11) && architecture.has(ArmFeature.LDRD_STRD)) {
+                boolean isLoad = transferKind == 0b10; // 10 = LDRD, 11 = STRD
+                int signed = addOffset ? offset : -offset;
+                return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.DOUBLE_TRANSFER,
+                        rd, rn, immediateOffset ? -1 : offset, signed, immediateOffset, false, isLoad,
+                        8, false, writeback || !preIndexed, !preIndexed);
+            }
             if (!load && transferKind != 0b01) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
