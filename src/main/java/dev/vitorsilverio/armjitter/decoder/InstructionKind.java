@@ -50,6 +50,8 @@ public enum InstructionKind {
     CLZ,
     /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB).
     SATURATING,
+    /// Multiplicações DSP ARMv5TE (SMUL\<xy>, SMLA\<xy>, SMLAW\<y>, SMULW\<y>, SMLAL\<xy>).
+    DSP_MULTIPLY,
     /// Bit clear.
     BIC,
     /// Move NOT.

@@ -204,6 +204,52 @@ final class IrAluExecutor {
         }
     }
 
+    /// ARMv5TE DSP multiplies: signed 16x16 (and 32x16 word) products with optional accumulate.
+    /// SMLA/SMLAW set the sticky Q flag if the accumulate overflows; SMUL/SMULW/SMLAL do not.
+    void executeDspMultiply(ArmCore core, IrOp.DspMultiply op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int rm = core.register(op.rm());
+        int rs = core.register(op.rs());
+        int rsHalf = half(rs, op.y());
+        switch (op.op2()) {
+            case 0 -> { // SMLAxy: (Rm.x * Rs.y) + Rn
+                long sum = (long) (half(rm, op.x()) * rsHalf) + core.register(op.rn());
+                core.setRegister(op.dst(), (int) sum);
+                if (sum != (int) sum) {
+                    core.cpsr().setSaturation(true);
+                }
+            }
+            case 1 -> { // SMLAWy (x=0) / SMULWy (x=1): (Rm * Rs.y) >> 16, optionally + Rn
+                int product = (int) (((long) rm * rsHalf) >> 16);
+                if (op.x() == 0) {
+                    long sum = (long) product + core.register(op.rn());
+                    core.setRegister(op.dst(), (int) sum);
+                    if (sum != (int) sum) {
+                        core.cpsr().setSaturation(true);
+                    }
+                } else {
+                    core.setRegister(op.dst(), product);
+                }
+            }
+            case 2 -> { // SMLALxy: {RdHi:RdLo} += Rm.x * Rs.y (64-bit, no Q)
+                long acc = ((long) core.register(op.dst()) << 32)
+                        | (core.register(op.rn()) & 0xFFFF_FFFFL);
+                acc += (long) half(rm, op.x()) * rsHalf;
+                core.setRegister(op.rn(), (int) acc);          // RdLo
+                core.setRegister(op.dst(), (int) (acc >>> 32)); // RdHi
+            }
+            default -> // SMULxy: Rm.x * Rs.y (no accumulate, no Q)
+                    core.setRegister(op.dst(), half(rm, op.x()) * rsHalf);
+        }
+    }
+
+    /// Sign-extended 16-bit half of a register: low half when `sel`==0, high half when 1.
+    private static int half(int value, int sel) {
+        return sel == 0 ? (short) value : (short) (value >> 16);
+    }
+
     private static int clamp(long value, boolean[] saturated) {
         if (value > Integer.MAX_VALUE) {
             saturated[0] = true;

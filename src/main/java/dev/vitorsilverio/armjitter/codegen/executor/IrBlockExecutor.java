@@ -40,6 +40,7 @@ public final class IrBlockExecutor {
                 case IrOp.Multiply multiply -> alu.executeMultiply(core, multiply);
                 case IrOp.LongMultiply longMultiply -> alu.executeLongMultiply(core, longMultiply);
                 case IrOp.Saturating saturating -> alu.executeSaturating(core, saturating);
+                case IrOp.DspMultiply dsp -> alu.executeDspMultiply(core, dsp);
                 case IrOp.PsrTransfer psr -> system.executePsrTransfer(core, psr);
                 case IrOp.LoadLiteral loadLiteral -> pcChanged |= memory.executeLoadLiteral(core, loadLiteral);
                 case IrOp.Load load -> pcChanged |= memory.executeLoad(core, load);
@@ -78,6 +79,7 @@ public final class IrBlockExecutor {
             case IrOp.Multiply multiply -> { alu.executeMultiply(core, multiply); yield false; }
             case IrOp.LongMultiply lm -> { alu.executeLongMultiply(core, lm); yield false; }
             case IrOp.Saturating sat -> { alu.executeSaturating(core, sat); yield false; }
+            case IrOp.DspMultiply dsp -> { alu.executeDspMultiply(core, dsp); yield false; }
             case IrOp.PsrTransfer psr -> { system.executePsrTransfer(core, psr); yield false; }
             case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
             case IrOp.Load load -> memory.executeLoad(core, load);

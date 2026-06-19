@@ -90,6 +90,21 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, rn, op, false, false, false);
         }
 
+        // DSP multiplies (ARMv5TE): `cccc 0001 0PP0 dddd nnnn ssss 1yx0 mmmm`. The 16-bit halves and
+        // the accumulator register are packed into the immediate for the builder to unpack.
+        if ((raw & 0x0F90_0090) == 0x0100_0080 && architecture.has(ArmFeature.DSP_MULTIPLY)) {
+            int op2 = (raw >>> 21) & 0x3;
+            int rd = (raw >>> 16) & 0xF;
+            int rn = (raw >>> 12) & 0xF;
+            int rs = (raw >>> 8) & 0xF;
+            int x = (raw >>> 5) & 1;
+            int y = (raw >>> 6) & 1;
+            int rm = raw & 0xF;
+            int packed = rn | (op2 << 4) | (x << 6) | (y << 7);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.DSP_MULTIPLY,
+                    rd, rm, rs, packed, false, false, false);
+        }
+
         if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {
             boolean spsr = (raw & (1 << 22)) != 0;
             int rd = (raw >>> 12) & 0xF;

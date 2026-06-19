@@ -141,6 +141,18 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.secondSourceRegister(),
                     instruction.immediate(),
                     instruction.condition()));
+            case DSP_MULTIPLY -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.DspMultiply(
+                        instruction.destinationRegister(),
+                        packed & 0xF,            // Rn (RdLo in SMLAL)
+                        instruction.sourceRegister(),
+                        instruction.secondSourceRegister(),
+                        (packed >> 4) & 0x3,     // op2
+                        (packed >> 6) & 0x1,     // x
+                        (packed >> 7) & 0x1,     // y
+                        instruction.condition()));
+            }
             case BRANCH -> block.add(new IrOp.Branch(
                     instruction.immediate(),
                     instruction.address() + instructionWidth(instruction),

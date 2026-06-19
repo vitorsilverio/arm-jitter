@@ -40,7 +40,8 @@ public final class AsmNativePolicy {
             case IrOp.Alu alu -> supportsAlu(alu);
             case IrOp.Multiply m -> m.condition() == Condition.AL;
             case IrOp.LongMultiply m -> m.condition() == Condition.AL;
-            case IrOp.Saturating ignored -> false; // ARMv5TE saturating arithmetic -> interpret
+            case IrOp.Saturating ignored -> false;  // ARMv5TE saturating arithmetic -> interpret
+            case IrOp.DspMultiply ignored -> false; // ARMv5TE DSP multiplies -> interpret
             case IrOp.Load l -> l.condition() == Condition.AL && !(l.offset() instanceof IrOperand.ShiftedRegister);
             case IrOp.Store s -> s.condition() == Condition.AL && !(s.offset() instanceof IrOperand.ShiftedRegister);
             case IrOp.LoadLiteral l -> l.condition() == Condition.AL;
