@@ -45,7 +45,7 @@ public final class AsmNativePolicy {
             case IrOp.LoadLiteral l -> l.condition() == Condition.AL;
             case IrOp.MultipleTransfer t -> t.condition() == Condition.AL;
             case IrOp.Branch b -> b.condition() == Condition.AL;
-            case IrOp.BranchExchange b -> b.condition() == Condition.AL;
+            case IrOp.BranchExchange b -> b.condition() == Condition.AL && !b.link(); // BLX -> interpret
             case IrOp.ThumbBlPrefix p -> p.condition() == Condition.AL;
             case IrOp.ThumbBlSuffix s -> s.condition() == Condition.AL;
             case IrOp.Push p -> p.condition() == Condition.AL;

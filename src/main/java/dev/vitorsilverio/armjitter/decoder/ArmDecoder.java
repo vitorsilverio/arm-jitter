@@ -32,6 +32,19 @@ public final class ArmDecoder implements InstructionDecoder {
                     -1, -1, -1, (raw & 0x00FF_FFFF) >> 16, true, false, false);
         }
 
+        // BLX (immediate): the cond==1111 unconditional space, `1111 101H <24-bit offset>`. Always
+        // links and always switches to Thumb; the target carries bit 0 set so the exchange picks it.
+        if ((raw & 0xFE00_0000) == 0xFA00_0000) {
+            if (!architecture.has(ArmFeature.BLX)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int halfword = (raw >>> 24) & 1;
+            int offset = (signExtend(raw & 0x00FF_FFFF, 24) << 2) + (halfword << 1);
+            int target = address + 8 + offset;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.BRANCH_EXCHANGE, -1, -1, -1, target | 1, false, false, true);
+        }
+
         if ((raw & 0x0E00_0000) == 0x0A00_0000) {
             boolean link = (raw & (1 << 24)) != 0;
             int offset = signExtend(raw & 0x00FF_FFFF, 24) << 2;
@@ -44,6 +57,16 @@ public final class ArmDecoder implements InstructionDecoder {
             int rm = raw & 0xF;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.BRANCH_EXCHANGE,
                     -1, rm, -1, 0, false, false, false);
+        }
+
+        // BLX (register): `cccc 0001 0010 1111 1111 1111 0011 mmmm` — like BX but also links.
+        if ((raw & 0x0FFF_FFF0) == 0x012F_FF30) {
+            if (!architecture.has(ArmFeature.BLX)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.BRANCH_EXCHANGE,
+                    -1, rm, -1, 0, false, false, true);
         }
 
         if ((raw & 0x0FFF_0FF0) == 0x016F_0F10) {

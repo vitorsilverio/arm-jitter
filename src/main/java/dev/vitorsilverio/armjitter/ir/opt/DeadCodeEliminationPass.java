@@ -168,7 +168,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Store s -> s.writeback() ? (1 << s.base()) : 0;
             case IrOp.LoadLiteral l -> (1 << l.dst());
             case IrOp.Branch b -> (1 << 15) | (b.link() ? (1 << 14) : 0);
-            case IrOp.BranchExchange ignored -> (1 << 15);
+            case IrOp.BranchExchange bx -> (1 << 15) | (bx.link() ? (1 << 14) : 0);
             case IrOp.ThumbBlSuffix ignored -> (1 << 15);
             case IrOp.ThumbBlPrefix ignored -> (1 << 14);
             case IrOp.MultipleTransfer mt -> {

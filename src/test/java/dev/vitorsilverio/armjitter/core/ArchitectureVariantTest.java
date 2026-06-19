@@ -39,6 +39,39 @@ class ArchitectureVariantTest {
         assertEquals(0x0000_0100, v5.programCounter());
     }
 
+    @Test
+    void blxImmediateLinksAndSwitchesToThumb() {
+        TestAddressSpace memory = new TestAddressSpace(0x200);
+        memory.put32(0, 0xFA00_003E); // BLX #0x100 (unconditional, always Thumb)
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
+        core.step();
+        assertTrue(core.cpsr().isThumbMode(), "BLX immediate always switches to Thumb");
+        assertEquals(0x100, core.programCounter());
+        assertEquals(0x4, core.register(14), "LR holds the return address");
+    }
+
+    @Test
+    void blxRegisterLinksAndInterworks() {
+        TestAddressSpace memory = new TestAddressSpace(0x10);
+        memory.put32(0, 0xE12F_FF30); // BLX r0
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
+        core.setRegister(0, 0x201); // bit 0 set -> Thumb at 0x200
+        core.step();
+        assertTrue(core.cpsr().isThumbMode());
+        assertEquals(0x200, core.programCounter());
+        assertEquals(0x4, core.register(14), "LR holds the return address");
+    }
+
+    @Test
+    void blxDecodesOnlyOnArmv5() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put32(0, 0xE12F_FF30); // BLX r0
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ArmDecoder(ArmArchitecture.ARMV4T).decode(memory, 0).kind());
+        assertEquals(InstructionKind.BRANCH_EXCHANGE,
+                new ArmDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0).kind());
+    }
+
     private static ArmCore stepLoadPc(ArmArchitecture architecture, int instruction, int loadedValue) {
         TestAddressSpace memory = new TestAddressSpace(0x80);
         memory.put32(0, instruction);

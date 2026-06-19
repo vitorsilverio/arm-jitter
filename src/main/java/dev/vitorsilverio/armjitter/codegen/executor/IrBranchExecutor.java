@@ -29,6 +29,9 @@ final class IrBranchExecutor {
             return false;
         }
         int target = support.registerValue(core, branch.sourceRegister(), branch.sourceValueOverride());
+        if (branch.link()) {
+            core.setRegister(14, branch.returnAddress()); // BLX: capture return before exchanging
+        }
         core.cpsr().setThumbMode((target & 1) != 0);
         core.setProgramCounter(target & ~1);
         return true;

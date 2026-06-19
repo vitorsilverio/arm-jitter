@@ -207,12 +207,16 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             InstructionSet targetSet) implements IrOp {
     }
 
-    /// Branch exchange, usado para trocar entre ARM e THUMB.
+    /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).
     record BranchExchange(
             /// Registrador que contém o destino.
             int sourceRegister,
             /// Valor fixo para usar como destino, ou `-1`.
             int sourceValueOverride,
+            /// Indica gravação do endereço de retorno no link register (BLX).
+            boolean link,
+            /// Valor a gravar no link register quando `link` estiver ativo.
+            int returnAddress,
             /// Condição necessária para tomar o branch.
             Condition condition) implements IrOp {
     }

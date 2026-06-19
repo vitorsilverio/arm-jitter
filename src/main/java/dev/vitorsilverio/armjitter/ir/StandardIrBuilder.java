@@ -143,7 +143,13 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.instructionSet()));
             case BRANCH_EXCHANGE -> block.add(new IrOp.BranchExchange(
                     instruction.sourceRegister(),
-                    registerValueOverride(instruction, instruction.sourceRegister()),
+                    // BLX-immediate carries its (Thumb-forced) target in the immediate field; the
+                    // register forms (BX/BLX reg) take the destination from a register.
+                    instruction.sourceRegister() < 0
+                            ? instruction.immediate()
+                            : registerValueOverride(instruction, instruction.sourceRegister()),
+                    instruction.link(),
+                    instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
             case LONG_BRANCH_PREFIX -> block.add(new IrOp.ThumbBlPrefix(
                     instruction.immediate(),
