@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.core;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
+import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,43 @@ class ArchitectureVariantTest {
                 new ArmDecoder(ArmArchitecture.ARMV4T).decode(memory, 0).kind());
         assertEquals(InstructionKind.BRANCH_EXCHANGE,
                 new ArmDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumbBlxRegisterSwitchesToArmAndLinks() {
+        TestAddressSpace memory = new TestAddressSpace(0x10);
+        memory.put16(0, 0x4788); // BLX r1
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
+        core.cpsr().setThumbMode(true);
+        core.setRegister(1, 0x100); // bit 0 clear -> ARM at 0x100
+        core.step();
+        assertFalse(core.cpsr().isThumbMode(), "BLX to an even target switches to ARM");
+        assertEquals(0x100, core.programCounter());
+        assertEquals(0x3, core.register(14), "Thumb return address keeps bit 0 set");
+    }
+
+    @Test
+    void thumbBlxImmediateSwitchesToArm() {
+        TestAddressSpace memory = new TestAddressSpace(0x200);
+        memory.put16(0, 0xF000); // BL/BLX prefix, high offset 0
+        memory.put16(2, 0xE87E); // BLX suffix -> target 0x100 (ARM)
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
+        core.cpsr().setThumbMode(true);
+        core.step(); // prefix: LR = 4
+        core.step(); // suffix: BLX
+        assertFalse(core.cpsr().isThumbMode(), "BLX immediate switches to ARM");
+        assertEquals(0x100, core.programCounter());
+        assertEquals(0x5, core.register(14), "LR is the Thumb return address");
+    }
+
+    @Test
+    void thumbBlxDecodesOnlyOnArmv5() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put16(0, 0x4780); // BLX r0
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV4T).decode(memory, 0).kind());
+        assertEquals(InstructionKind.BRANCH_EXCHANGE,
+                new ThumbDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0).kind());
     }
 
     private static ArmCore stepLoadPc(ArmArchitecture architecture, int instruction, int loadedValue) {

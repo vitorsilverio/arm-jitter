@@ -149,7 +149,10 @@ public final class StandardIrBuilder implements IrBuilder {
                             ? instruction.immediate()
                             : registerValueOverride(instruction, instruction.sourceRegister()),
                     instruction.link(),
-                    instruction.address() + instructionWidth(instruction),
+                    // BLX from Thumb returns to Thumb, so the link address keeps bit 0 set.
+                    instruction.instructionSet() == InstructionSet.THUMB
+                            ? ((instruction.address() + instructionWidth(instruction)) | 1)
+                            : (instruction.address() + instructionWidth(instruction)),
                     instruction.condition()));
             case LONG_BRANCH_PREFIX -> block.add(new IrOp.ThumbBlPrefix(
                     instruction.immediate(),
@@ -158,6 +161,7 @@ public final class StandardIrBuilder implements IrBuilder {
             case LONG_BRANCH_SUFFIX -> block.add(new IrOp.ThumbBlSuffix(
                     instruction.immediate(),
                     instruction.address(),
+                    (instruction.raw() & 0xF800) == 0xE800, // H=01 -> BLX (switch to ARM)
                     instruction.condition()));
             case PUSH -> block.add(new IrOp.Push(
                     instruction.immediate(),

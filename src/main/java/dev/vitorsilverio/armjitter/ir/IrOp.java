@@ -231,12 +231,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             Condition condition) implements IrOp {
     }
 
-    /// Segunda metade de `BL` THUMB.
+    /// Segunda metade de `BL`/`BLX` THUMB.
     record ThumbBlSuffix(
             /// Valor baixo já deslocado.
             int lowOffset,
             /// Endereço da instrução.
             int address,
+            /// `true` para a forma BLX (alinha o destino e troca para ARM).
+            boolean exchange,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
     }

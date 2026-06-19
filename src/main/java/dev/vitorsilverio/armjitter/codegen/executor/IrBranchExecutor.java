@@ -51,7 +51,13 @@ final class IrBranchExecutor {
         }
         int oldLink = core.register(14);
         core.setRegister(14, (suffix.address() + 2) | 1);
-        core.setProgramCounter(oldLink + suffix.lowOffset());
+        int target = oldLink + suffix.lowOffset();
+        if (suffix.exchange()) {
+            core.cpsr().setThumbMode(false);   // BLX: back to ARM state
+            core.setProgramCounter(target & ~3); // and word-align the destination
+        } else {
+            core.setProgramCounter(target);
+        }
         return true;
     }
 }

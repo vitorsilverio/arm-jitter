@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
@@ -152,6 +153,16 @@ public final class ThumbDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, false);
         }
 
+        // BLX (register): `0100 0111 1 mmmm 000` — like Thumb BX but also links (ARMv5T+).
+        if ((raw & 0xFF87) == 0x4780) {
+            if (!architecture.has(ArmFeature.BLX)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int rm = (raw >>> 3) & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.BRANCH_EXCHANGE,
+                    -1, rm, -1, 0, false, false, true);
+        }
+
         if ((raw & 0xFC00) == 0x4400) {
             int op = (raw >>> 8) & 0x3;
             int highDestination = (raw >>> 7) & 0x1;
@@ -278,6 +289,16 @@ public final class ThumbDecoder implements InstructionDecoder {
         }
 
         if ((raw & 0xF800) == 0xF800) {
+            int lowOffset = (raw & 0x7FF) << 1;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.LONG_BRANCH_SUFFIX,
+                    -1, -1, -1, lowOffset, true, false, true);
+        }
+
+        // BLX suffix (H=01): the second half of a long branch that exchanges to ARM (ARMv5T+).
+        if ((raw & 0xF800) == 0xE800) {
+            if (!architecture.has(ArmFeature.BLX)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
             int lowOffset = (raw & 0x7FF) << 1;
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.LONG_BRANCH_SUFFIX,
                     -1, -1, -1, lowOffset, true, false, true);
