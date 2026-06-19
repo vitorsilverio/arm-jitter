@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
+import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
@@ -61,16 +62,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                     default -> true;
                 };
                 int mask = (usesSrc1 && a.src1ValueOverride() < 0) ? (1 << a.src1()) : 0;
-                mask |= switch (a.src2()) {
-                    case IrOperand.Register r when r.valueOverride() < 0 -> (1 << r.index());
-                    case IrOperand.ShiftedRegister s -> {
-                        int m = s.valueOverride() < 0 ? (1 << s.index()) : 0;
-                        if (s.amountRegister() >= 0 && s.amountValueOverride() < 0)
-                            m |= (1 << s.amountRegister());
-                        yield m;
-                    }
-                    default -> 0;
-                };
+                mask |= operandUse(a.src2());
                 yield mask;
             }
             case IrOp.Multiply m -> {
@@ -90,15 +82,13 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             }
             case IrOp.Load l -> {
                 int mask = l.baseValueOverride() < 0 ? (1 << l.base()) : 0;
-                if (l.offset() instanceof IrOperand.Register r && r.valueOverride() < 0)
-                    mask |= (1 << r.index());
+                mask |= operandUse(l.offset());
                 yield mask;
             }
             case IrOp.Store s -> {
                 int mask = s.baseValueOverride() < 0 ? (1 << s.base()) : 0;
                 if (s.srcValueOverride() < 0) mask |= (1 << s.src());
-                if (s.offset() instanceof IrOperand.Register r && r.valueOverride() < 0)
-                    mask |= (1 << r.index());
+                mask |= operandUse(s.offset());
                 yield mask;
             }
             case IrOp.BranchExchange bx ->
@@ -135,7 +125,33 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
         };
     }
 
+    /// Registradores lidos por um operando (src2 de ALU ou offset de Load/Store). Cobre
+    /// {@link IrOperand.Register} e {@link IrOperand.ShiftedRegister} (índice + registrador de
+    /// shift, quando aplicável). Imediatos não leem registradores.
+    ///
+    /// <p>Crucial para Load/Store com offset shiftado (ex.: {@code LDRSH r,[base, r12, LSL #0]}):
+    /// o registrador-índice precisa ser marcado vivo, ou a DCE elimina a instrução que o define.
+    private static int operandUse(IrOperand operand) {
+        return switch (operand) {
+            case IrOperand.Register r when r.valueOverride() < 0 -> (1 << r.index());
+            case IrOperand.ShiftedRegister s -> {
+                int m = s.valueOverride() < 0 ? (1 << s.index()) : 0;
+                if (s.amountRegister() >= 0 && s.amountValueOverride() < 0)
+                    m |= (1 << s.amountRegister());
+                yield m;
+            }
+            default -> 0;
+        };
+    }
+
     private static int regDef(IrOp op) {
+        // A predicated (conditionally-executed) op is NOT a must-def: it might not run, so it
+        // cannot kill the liveness of an earlier write to the same register (e.g. the classic
+        // `ADDEQ r,..` / `ADDNE r,..` if-then-else pair). Treat its def set as empty so backward
+        // liveness stays conservative and DCE does not delete the complementary write.
+        if (op.condition() != Condition.AL) {
+            return 0;
+        }
         return switch (op) {
             case IrOp.Alu a -> switch (a.opcode()) {
                 // Comparison ops update only CPSR — no general-purpose register written
