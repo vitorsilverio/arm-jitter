@@ -138,7 +138,20 @@ final class IrExecutionSupport {
     }
 
     boolean shouldWriteBackMultiple(boolean writeback, boolean load, int mask, int baseRegister) {
-        return writeback && !(load && (mask & (1 << baseRegister)) != 0);
+        if (!writeback) {
+            return false;
+        }
+        if (load && (mask & (1 << baseRegister)) != 0) {
+            if (!architecture.has(ArmFeature.LDM_WRITEBACK_BASE_IN_LIST)) {
+                return false; // ARMv4: a base in the list always keeps the loaded value
+            }
+            // ARMv5: writeback still happens unless the base is the highest register of a
+            // multi-register transfer, in which case the loaded value wins.
+            boolean baseIsHighest = (mask >>> baseRegister) == 1;
+            boolean multiple = Integer.bitCount(mask) > 1;
+            return !(baseIsHighest && multiple);
+        }
+        return true;
     }
 
     int multipleStoreRegisterValue(

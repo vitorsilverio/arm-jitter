@@ -28,5 +28,10 @@ public enum ArmFeature {
     LOAD_PC_INTERWORKING,
     /// Multiplicações inteiras deixam o carry flag inalterado. Em ARMv4 o carry é deixado
     /// UNPREDICTABLE por `MUL`/`MLA`, então emulá-lo como "inalterado" é aceitável lá.
-    MUL_PRESERVES_CARRY
+    MUL_PRESERVES_CARRY,
+    /// `LDM` com writeback e a base presente na lista de registradores ainda faz o writeback,
+    /// exceto quando a base é o registrador mais alto de uma lista com mais de um registrador
+    /// (nesse caso vence o valor carregado da memória). Em ARMv4 a base na lista sempre recebe o
+    /// valor carregado (writeback suprimido). ARMv5+.
+    LDM_WRITEBACK_BASE_IN_LIST
 }

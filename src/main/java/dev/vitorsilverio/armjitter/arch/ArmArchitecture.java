@@ -24,7 +24,8 @@ public final class ArmArchitecture {
             ArmFeature.SATURATING,
             ArmFeature.LDRD_STRD,
             ArmFeature.LOAD_PC_INTERWORKING,
-            ArmFeature.MUL_PRESERVES_CARRY)
+            ArmFeature.MUL_PRESERVES_CARRY,
+            ArmFeature.LDM_WRITEBACK_BASE_IN_LIST)
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     private final String name;
