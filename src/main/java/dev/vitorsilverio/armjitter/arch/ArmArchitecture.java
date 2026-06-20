@@ -26,7 +26,8 @@ public final class ArmArchitecture {
             ArmFeature.LOAD_PC_INTERWORKING,
             ArmFeature.MUL_PRESERVES_CARRY,
             ArmFeature.LDM_WRITEBACK_BASE_IN_LIST,
-            ArmFeature.EMPTY_RLIST_NO_TRANSFER)
+            ArmFeature.EMPTY_RLIST_NO_TRANSFER,
+            ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL)
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     private final String name;

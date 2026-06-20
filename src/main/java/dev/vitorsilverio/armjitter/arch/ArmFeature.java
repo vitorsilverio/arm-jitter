@@ -36,5 +36,9 @@ public enum ArmFeature {
     LDM_WRITEBACK_BASE_IN_LIST,
     /// `LDM`/`STM` com lista de registradores vazia não transfere registrador algum (apenas ajusta
     /// a base em ±40h). Em ARMv4 (ARM7TDMI) a lista vazia transfere `R15` em vez disso. ARMv5+.
-    EMPTY_RLIST_NO_TRANSFER
+    EMPTY_RLIST_NO_TRANSFER,
+    /// `STM` com writeback e a base presente na lista sempre armazena o valor **original** da base.
+    /// Em ARMv4 (ARM7TDMI) a base armazena o valor já incrementado (writeback) quando não é o
+    /// primeiro registrador da lista. ARMv5+.
+    STM_BASE_IN_LIST_STORES_ORIGINAL
 }

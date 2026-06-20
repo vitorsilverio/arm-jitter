@@ -168,7 +168,10 @@ final class IrExecutionSupport {
         if (transfer.userMode()) {
             return core.bankedRegister(CpuMode.USER, register);
         }
-        if (transfer.writeback()
+        // ARM7TDMI quirk: STM of the base register, when it is not the first in the list, stores
+        // the already-incremented (writeback) value. ARMv5 always stores the original base.
+        if (!architecture.has(ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL)
+                && transfer.writeback()
                 && register == transfer.base()
                 && register != firstRegister) {
             return writebackAddress;

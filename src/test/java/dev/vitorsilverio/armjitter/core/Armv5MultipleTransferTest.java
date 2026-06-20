@@ -68,4 +68,29 @@ class Armv5MultipleTransferTest {
         core.step();
         assertEquals(W0, core.register(1), "ARMv4 suppresses writeback when the base is in the list");
     }
+
+    @Test
+    void stmBaseInListStoresOriginalOnArmv5() {
+        TestAddressSpace memory = new TestAddressSpace(0x200);
+        memory.put32(0, 0xE8A3_000E); // stmia r3!, {r1-r3}
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
+        core.setRegister(1, 0xAAAA);
+        core.setRegister(2, 0xBBBB);
+        core.setRegister(3, 0x100);
+        core.step();
+        assertEquals(0x100, memory.read32(0x108), "the base stores its original value on ARMv5");
+        assertEquals(0x10C, core.register(3), "base written back by three words");
+    }
+
+    @Test
+    void stmBaseInListStoresWrittenBackValueOnArmv4() {
+        TestAddressSpace memory = new TestAddressSpace(0x200);
+        memory.put32(0, 0xE8A3_000E); // stmia r3!, {r1-r3}
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV4T);
+        core.setRegister(1, 0xAAAA);
+        core.setRegister(2, 0xBBBB);
+        core.setRegister(3, 0x100);
+        core.step();
+        assertEquals(0x10C, memory.read32(0x108), "ARMv4 stores the incremented base when not first");
+    }
 }
