@@ -561,7 +561,7 @@ public final class AsmBlockCompiler {
 
     private void emitLoad(MethodVisitor method, IrOp.Load load) {
         // base value
-        if (load.baseValueOverride() >= 0) {
+        if (load.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, load.baseValueOverride());
         } else {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -621,7 +621,7 @@ public final class AsmBlockCompiler {
 
     private void emitStore(MethodVisitor method, IrOp.Store store) {
         // base value
-        if (store.baseValueOverride() >= 0) {
+        if (store.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.baseValueOverride());
         } else {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -642,7 +642,7 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
 
         // src value
-        if (store.srcValueOverride() >= 0) {
+        if (store.srcValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.srcValueOverride());
         } else {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -738,7 +738,7 @@ public final class AsmBlockCompiler {
 
     private void emitBranchExchange(MethodVisitor method, IrOp.BranchExchange bx) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        if (bx.sourceValueOverride() >= 0) {
+        if (bx.sourceValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, bx.sourceValueOverride());
         } else {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -792,7 +792,7 @@ public final class AsmBlockCompiler {
             boolean needRuntime = false;
             if (psr.immediateOperand()) {
                 value = psr.immediate();
-            } else if (psr.registerValueOverride() >= 0) {
+            } else if (psr.registerValueOverride() != -1) {
                 value = psr.registerValueOverride();
             } else {
                 needRuntime = true;
@@ -868,7 +868,7 @@ public final class AsmBlockCompiler {
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private void emitSrc1(MethodVisitor method, int register, int valueOverride) {
-        if (valueOverride >= 0) {
+        if (valueOverride != -1) {
             AsmBytecode.visitIntConst(method, valueOverride);
             return;
         }

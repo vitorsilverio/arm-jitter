@@ -34,7 +34,10 @@ final class IrExecutionSupport {
     }
 
     int registerValue(ArmCore core, int register, int valueOverride) {
-        return valueOverride >= 0 ? valueOverride : core.register(register);
+        // -1 is the "no override" sentinel; a real PC override (address+8/12) is always word/half
+        // aligned and so can never be -1. Comparing against -1 (not >= 0) is essential for high
+        // addresses such as the ARM9 BIOS at 0xFFFF0000+, whose overrides are negative as ints.
+        return valueOverride != -1 ? valueOverride : core.register(register);
     }
 
     boolean operandCarryOut(ArmCore core, IrOperand operand) {

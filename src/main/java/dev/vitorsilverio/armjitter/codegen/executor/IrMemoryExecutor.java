@@ -17,7 +17,7 @@ final class IrMemoryExecutor {
             return false;
         }
         int offset = support.operand(core, load.offset());
-        int base = load.baseValueOverride() >= 0 ? load.baseValueOverride() : core.register(load.base());
+        int base = load.baseValueOverride() != -1 ? load.baseValueOverride() : core.register(load.base());
         int address = load.postIndexed() ? base : base + offset;
         int value = switch (load.sizeBytes()) {
             case 1 -> support.read8Arm7(core, address);
@@ -47,7 +47,7 @@ final class IrMemoryExecutor {
             return;
         }
         int offset = support.operand(core, store.offset());
-        int base = store.baseValueOverride() >= 0 ? store.baseValueOverride() : core.register(store.base());
+        int base = store.baseValueOverride() != -1 ? store.baseValueOverride() : core.register(store.base());
         int address = store.postIndexed() ? base : base + offset;
         int value = support.registerValue(core, store.src(), store.srcValueOverride());
         switch (store.sizeBytes()) {
@@ -68,7 +68,7 @@ final class IrMemoryExecutor {
             return false;
         }
         int offset = support.operand(core, dt.offset());
-        int base = dt.baseValueOverride() >= 0 ? dt.baseValueOverride() : core.register(dt.base());
+        int base = dt.baseValueOverride() != -1 ? dt.baseValueOverride() : core.register(dt.base());
         int address = dt.postIndexed() ? base : base + offset;
         int second = dt.first() + 1;
         if (dt.load()) {
