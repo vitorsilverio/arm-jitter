@@ -53,6 +53,15 @@ class Armv5MultipleTransferTest {
     }
 
     @Test
+    void emptyListTransfersNothingButAdvancesBaseByThe16WordCount() {
+        ArmCore core = boot(ArmArchitecture.ARMV5TE, 0xE8B2_0000); // ldmia r2!, {} (empty list)
+        core.setRegister(2, 0x100);
+        core.step();
+        assertEquals(0x140, core.register(2), "empty list still bumps the base by 0x40");
+        assertEquals(4, core.programCounter(), "ARMv5 transfers no register (PC was not loaded)");
+    }
+
+    @Test
     void armv4AlwaysKeepsLoadedValue() {
         ArmCore core = boot(ArmArchitecture.ARMV4T, 0xE8B1_0002); // ldmia r1!, {r1}
         core.setRegister(1, 0x100);

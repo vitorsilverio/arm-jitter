@@ -33,5 +33,8 @@ public enum ArmFeature {
     /// exceto quando a base é o registrador mais alto de uma lista com mais de um registrador
     /// (nesse caso vence o valor carregado da memória). Em ARMv4 a base na lista sempre recebe o
     /// valor carregado (writeback suprimido). ARMv5+.
-    LDM_WRITEBACK_BASE_IN_LIST
+    LDM_WRITEBACK_BASE_IN_LIST,
+    /// `LDM`/`STM` com lista de registradores vazia não transfere registrador algum (apenas ajusta
+    /// a base em ±40h). Em ARMv4 (ARM7TDMI) a lista vazia transfere `R15` em vez disso. ARMv5+.
+    EMPTY_RLIST_NO_TRANSFER
 }

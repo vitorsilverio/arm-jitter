@@ -130,7 +130,12 @@ final class IrExecutionSupport {
     }
 
     int effectiveRegisterMask(int mask, boolean emptyRegisterList) {
-        return emptyRegisterList ? 1 << 15 : mask;
+        if (!emptyRegisterList) {
+            return mask;
+        }
+        // ARM7TDMI transfers R15 for an empty list; ARMv5 transfers nothing (just the ±0x40 base
+        // writeback, which still uses the count of 16).
+        return architecture.has(ArmFeature.EMPTY_RLIST_NO_TRANSFER) ? 0 : (1 << 15);
     }
 
     int effectiveRegisterCount(int mask, boolean emptyRegisterList) {
