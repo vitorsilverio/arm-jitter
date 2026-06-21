@@ -47,6 +47,27 @@ public final class AsmBlockCompiler {
     private static final String CORE_I_TO_V = "(" + CORE_REF + "I)V";
     private static final String CORE_IZ_TO_V = "(" + CORE_REF + "IZ)V";
     private static final String CORE_IZ_TO_Z = "(" + CORE_REF + "IZ)Z";
+    private static final String CORE_IZZ_TO_Z = "(" + CORE_REF + "IZZ)Z";
+
+    /// `true` em ARMv5T+: LDR/LDM/POP para PC interworkam pelo bit 0 do valor carregado.
+    /// Decidido na construção (a partir da arquitetura do emissor); ARMv4T usa `false`.
+    private final boolean loadPcInterworks;
+
+    /// Cria um compilador ARMv4T (sem interworking em load->PC).
+    public AsmBlockCompiler() {
+        this(false);
+    }
+
+    /// Cria um compilador para a arquitetura informada via flag de interworking em load->PC.
+    public AsmBlockCompiler(boolean loadPcInterworks) {
+        this.loadPcInterworks = loadPcInterworks;
+    }
+
+    /// Nome do helper de load->PC para LDR/LDM/POP (interworking conforme a arquitetura).
+    /// Data-processing para PC (MOV pc, ...) usa sempre {@code loadToPcArm4} (não interworka).
+    private String loadToPcHelper() {
+        return loadPcInterworks ? "loadToPcArm5" : "loadToPcArm4";
+    }
 
     /// Compila o bloco em bytecode JVM. Todos os ops devem ser suportados por {@link AsmNativePolicy};
     /// ops não suportadas lançam {@link IllegalStateException}.
@@ -601,7 +622,7 @@ public final class AsmBlockCompiler {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
-            AsmBytecode.invokeStatic(method, HELPERS, "loadToPcArm4", CORE_I_TO_V);
+            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V); // LDR pc: interworka em ARMv5
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
         } else {
@@ -681,7 +702,7 @@ public final class AsmBlockCompiler {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
-            AsmBytecode.invokeStatic(method, HELPERS, "loadToPcArm4", CORE_I_TO_V);
+            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V); // LDR pc,=lit: interworka em ARMv5
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
         } else {
@@ -700,8 +721,9 @@ public final class AsmBlockCompiler {
         method.visitInsn(mt.userMode() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         method.visitInsn(mt.emptyRegisterList() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, mt.mode().ordinal());
+        method.visitInsn(loadPcInterworks ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.invokeStatic(method, HELPERS, "executeMultipleTransfer",
-                "(" + CORE_REF + "ZIIZZZI)Z");
+                "(" + CORE_REF + "ZIIZZZIZ)Z");
         emitConditionalSetPcChanged(method);
     }
 
@@ -716,7 +738,8 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, pop.registerMask());
         method.visitInsn(pop.includePc() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-        AsmBytecode.invokeStatic(method, HELPERS, "executePop", CORE_IZ_TO_Z);
+        method.visitInsn(loadPcInterworks ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.invokeStatic(method, HELPERS, "executePop", CORE_IZZ_TO_Z);
         emitConditionalSetPcChanged(method);
     }
 

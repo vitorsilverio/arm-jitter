@@ -65,6 +65,13 @@ public final class InvalidationAwareAddressSpace implements AddressSpace {
         return delegate.accessCycles(address, sizeBytes, type);
     }
 
+    /// Encaminha a capacidade de waitstates do barramento delegado, para que o core possa
+    /// pular a contabilização por acesso quando o delegado não tem waitstates.
+    @Override
+    public boolean providesAccessCycles() {
+        return delegate.providesAccessCycles();
+    }
+
     /// Repassa a notificação manual ao barramento delegado e invalida o runtime.
     @Override
     public void notifyWrite(int address) {

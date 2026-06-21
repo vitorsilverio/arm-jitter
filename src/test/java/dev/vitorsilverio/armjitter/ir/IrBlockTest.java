@@ -18,4 +18,23 @@ class IrBlockTest {
         assertEquals(1, block.operations().size());
         assertThrows(UnsupportedOperationException.class, () -> block.operations().add(new IrOp.Cycle(3)));
     }
+
+    @Test
+    void cachedArrayMirrorsOperationsSnapshotInOrder() {
+        ArrayList<IrOp> ops = new ArrayList<>();
+        IrOp.Cycle first = new IrOp.Cycle(1);
+        IrOp.Cycle second = new IrOp.Cycle(2);
+        ops.add(first);
+        ops.add(second);
+
+        IrBlock block = new IrBlock(0x200, 0x208, ops);
+        ops.add(new IrOp.Cycle(3)); // mutação posterior não afeta o snapshot
+
+        IrOp[] array = block.operationsArray();
+        assertEquals(2, array.length);
+        assertSame(first, array[0]);
+        assertSame(second, array[1]);
+        // mesma sequência que a lista pública
+        assertEquals(block.operations(), java.util.List.of(array));
+    }
 }

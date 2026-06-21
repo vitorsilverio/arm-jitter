@@ -136,6 +136,22 @@ public final class AsmRuntimeHelpers {
         core.setProgramCounter(value & mask);
     }
 
+    /// Loads a value into PC WITH interworking (ARMv5T+): bit 0 selects THUMB/ARM state.
+    /// Used by LDR/LDM/POP to PC on ARMv5; data-processing to PC still uses {@link #loadToPcArm4}.
+    public static void loadToPcArm5(ArmCore core, int value) {
+        core.cpsr().setThumbMode((value & 1) != 0);
+        core.setProgramCounter(value & ~1);
+    }
+
+    /// Load-to-PC escolhendo interworking conforme a arquitetura (decidida no emit).
+    private static void loadToPc(ArmCore core, int value, boolean interwork) {
+        if (interwork) {
+            loadToPcArm5(core, value);
+        } else {
+            loadToPcArm4(core, value);
+        }
+    }
+
     // ── LDM/STM/PUSH/POP ───────────────────────────────────────────────────────
 
     public static void executePush(ArmCore core, int registerMask, boolean includeLr) {
@@ -154,8 +170,9 @@ public final class AsmRuntimeHelpers {
         core.setRegister(13, address);
     }
 
+    /// @param interwork `true` em ARMv5+ (POP {pc} interworka pelo bit 0 do valor carregado)
     /// @return {@code true} when PC was loaded (the JIT block must exit after this)
-    public static boolean executePop(ArmCore core, int registerMask, boolean includePc) {
+    public static boolean executePop(ArmCore core, int registerMask, boolean includePc, boolean interwork) {
         int current = core.register(13);
         for (int reg = 0; reg <= 7; reg++) {
             if ((registerMask & (1 << reg)) != 0) {
@@ -164,7 +181,7 @@ public final class AsmRuntimeHelpers {
             }
         }
         if (includePc) {
-            loadToPcArm4(core, loadWord(core, current));
+            loadToPc(core, loadWord(core, current), interwork);
             current += 4;
             core.setRegister(13, current);
             return true;
@@ -176,7 +193,7 @@ public final class AsmRuntimeHelpers {
     /// @return {@code true} when PC was loaded (the JIT block must exit after this)
     public static boolean executeMultipleTransfer(
             ArmCore core, boolean load, int baseRegister, int registerMask,
-            boolean writeback, boolean userMode, boolean emptyList, int modeOrdinal) {
+            boolean writeback, boolean userMode, boolean emptyList, int modeOrdinal, boolean interwork) {
         int mask = emptyList ? (1 << 15) : registerMask;
         int count = emptyList ? 16 : Integer.bitCount(registerMask);
         int base = core.register(baseRegister);
@@ -196,7 +213,7 @@ public final class AsmRuntimeHelpers {
                     } else if (forceUser) {
                         core.setBankedRegister(CpuMode.USER, reg, value);
                     } else if (reg == 15) {
-                        loadToPcArm4(core, value);
+                        loadToPc(core, value, interwork); // LDM reg15 normal: interworka em ARMv5
                     } else {
                         core.setRegister(reg, value);
                     }

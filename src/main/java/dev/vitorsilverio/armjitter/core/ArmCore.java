@@ -37,6 +37,9 @@ public final class ArmCore {
     private int undefinedSpsr;
     private final CpsrRegister cpsr = new CpsrRegister();
     private final AddressSpace memory;
+    /// Cache de {@link AddressSpace#providesAccessCycles()} do barramento (capacidade estática):
+    /// quando `false`, {@link #addMemoryCycles} retorna sem a chamada virtual por acesso.
+    private final boolean memoryProvidesAccessCycles;
     private final SwiDispatcher swiDispatcher;
     private CoprocessorBus coprocessorBus = CoprocessorBus.none();
     private boolean highVectors;
@@ -68,6 +71,7 @@ public final class ArmCore {
     /// IRQ/FIQ mascaradas e `PC = 0`.
     public ArmCore(AddressSpace memory, SwiDispatcher swiDispatcher, ArmInterpreter interpreter) {
         this.memory = Objects.requireNonNull(memory, "memory");
+        this.memoryProvidesAccessCycles = memory.providesAccessCycles();
         this.swiDispatcher = Objects.requireNonNull(swiDispatcher, "swiDispatcher");
         this.interpreter = Objects.requireNonNull(interpreter, "interpreter");
         cpsr.set(RESET_CPSR);
@@ -293,6 +297,11 @@ public final class ArmCore {
     /// @param sizeBytes tamanho em bytes
     /// @param type tipo de acesso
     public void addMemoryCycles(int address, int sizeBytes, MemoryAccessType type) {
+        // Barramentos sem waitstates (ex.: NDS) reportam providesAccessCycles()==false:
+        // pula a chamada virtual por acesso (chamada por fetch e por load/store).
+        if (!memoryProvidesAccessCycles) {
+            return;
+        }
         int memoryCycles = memory.accessCycles(address, sizeBytes, Objects.requireNonNull(type, "type"));
         if (memoryCycles < 0) {
             throw new IllegalArgumentException("memory access cycles must be >= 0");

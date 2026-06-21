@@ -34,6 +34,17 @@ public interface AddressSpace {
         return 0;
     }
 
+    /// Indica se {@link #accessCycles} pode retornar valores diferentes de zero.
+    ///
+    /// O padrão conservador é `true`. Um barramento que SEMPRE retorna `0` (sem waitstates)
+    /// pode sobrescrever para `false`: nesse caso o core pula inteiramente a contabilização
+    /// por acesso no caminho quente (uma chamada virtual por fetch/load/store). Sobrescreva
+    /// em conjunto com {@link #accessCycles} — se aquele puder ser não-zero, este DEVE
+    /// permanecer `true`, sob pena de perder os waitstates.
+    default boolean providesAccessCycles() {
+        return true;
+    }
+
     /// Notifica que uma escrita ocorreu, permitindo invalidação de código automodificado.
     default void notifyWrite(int address) {
     }

@@ -9,6 +9,46 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
+
+    /// Discriminador de tipo para dispatch O(1) no interpretador (constantes em {@link Kind}).
+    ///
+    /// Permite ao {@link dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} usar um
+    /// `switch` inteiro (`tableswitch`) em vez do `switch` por padrão de tipo, cuja varredura
+    /// linear de `instanceof` (via `SwitchBootstraps.typeSwitch`) custava ~13% do tempo no
+    /// loop quente do interpretador.
+    int kind();
+
+    /// Constantes de {@link IrOp#kind()} — uma por subtipo selado, contíguas a partir de 0
+    /// para que o `switch` do interpretador compile como `tableswitch`.
+    final class Kind {
+        private Kind() {
+        }
+
+        public static final int ALU = 0;
+        public static final int MULTIPLY = 1;
+        public static final int LONG_MULTIPLY = 2;
+        public static final int SATURATING = 3;
+        public static final int DSP_MULTIPLY = 4;
+        public static final int PSR_TRANSFER = 5;
+        public static final int LOAD = 6;
+        public static final int STORE = 7;
+        public static final int DOUBLE_TRANSFER = 8;
+        public static final int SWAP = 9;
+        public static final int LOAD_LITERAL = 10;
+        public static final int MULTIPLE_TRANSFER = 11;
+        public static final int BRANCH = 12;
+        public static final int BRANCH_EXCHANGE = 13;
+        public static final int THUMB_BL_PREFIX = 14;
+        public static final int THUMB_BL_SUFFIX = 15;
+        public static final int PUSH = 16;
+        public static final int POP = 17;
+        public static final int SWI = 18;
+        public static final int COPROCESSOR = 19;
+        public static final int UNDEFINED = 20;
+        public static final int CYCLE = 21;
+        public static final int FETCH = 22;
+    }
+
     /// Operacao ALU generica.
     record Alu(
             /// Mnemonico ou identificador interno da operacao.
@@ -25,6 +65,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean setFlags,
             /// Condicao necessaria para executar a operacao.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.ALU; }
     }
 
     /// Operacao de multiplicacao baixa, com acumulador opcional.
@@ -49,6 +90,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean setFlags,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MULTIPLY; }
     }
 
     /// Operação de multiplicação longa, com acumulador opcional.
@@ -77,6 +119,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean setFlags,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LONG_MULTIPLY; }
     }
 
     /// Transferência entre registradores gerais e CPSR/SPSR.
@@ -97,6 +140,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int fieldMask,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.PSR_TRANSFER; }
     }
 
     /// Operação de leitura de memória.
@@ -119,6 +163,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean postIndexed,
             /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOAD; }
     }
 
     /// Operação de escrita de memória.
@@ -141,6 +186,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean postIndexed,
             /// Condição necessária para executar a escrita.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.STORE; }
     }
 
     /// Transferência de palavra dupla ARMv5TE (LDRD/STRD): dois acessos de 32 bits consecutivos
@@ -162,6 +208,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean postIndexed,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.DOUBLE_TRANSFER; }
     }
 
     /// Troca valor de memória com registrador.
@@ -180,6 +227,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int sizeBytes,
             /// Condição necessária para executar a troca.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SWAP; }
     }
 
     /// Lê uma word de endereço absoluto literal.
@@ -190,6 +238,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int address,
             /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOAD_LITERAL; }
     }
 
     /// Transferência sequencial de múltiplos registradores.
@@ -212,6 +261,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean emptyRegisterList,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MULTIPLE_TRANSFER; }
     }
 
     /// Operação de branch.
@@ -226,6 +276,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             Condition condition,
             /// Conjunto de instruções esperado após o branch.
             InstructionSet targetSet) implements IrOp {
+        @Override public int kind() { return Kind.BRANCH; }
     }
 
     /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB). `op`: 0=QADD, 1=QSUB,
@@ -241,6 +292,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int op,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SATURATING; }
     }
 
     /// Multiplicações DSP ARMv5TE. `op2`: 0=SMLAxy, 1=SMLAW(x=0)/SMULW(x=1), 2=SMLALxy, 3=SMULxy.
@@ -263,6 +315,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int y,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.DSP_MULTIPLY; }
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).
@@ -277,6 +330,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int returnAddress,
             /// Condição necessária para tomar o branch.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.BRANCH_EXCHANGE; }
     }
 
     /// Primeira metade de `BL` THUMB.
@@ -287,6 +341,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int address,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.THUMB_BL_PREFIX; }
     }
 
     /// Segunda metade de `BL`/`BLX` THUMB.
@@ -299,6 +354,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean exchange,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.THUMB_BL_SUFFIX; }
     }
 
     /// Operação de push THUMB.
@@ -309,6 +365,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean includeLr,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.PUSH; }
     }
 
     /// Operação de pop THUMB.
@@ -319,6 +376,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean includePc,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.POP; }
     }
 
     /// Operação SWI delegada ao dispatcher do host.
@@ -327,6 +385,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int immediate,
             /// Condição necessária para disparar a SWI.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SWI; }
     }
 
     /// Coprocessor register transfer (`MCR`/`MRC`), delegated to the core's coprocessor bus.
@@ -349,6 +408,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int sequentialPc,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.COPROCESSOR; }
     }
 
     /// Instrução não implementada/indefinida que deve entrar no vetor `0x04`.
@@ -357,12 +417,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int sequentialPc,
             /// Condição necessária para disparar a exceção.
             Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.UNDEFINED; }
     }
 
     /// Contagem de ciclos agregada ao bloco.
     record Cycle(
             /// Quantidade de ciclos somada ao bloco.
             int count) implements IrOp {
+        @Override public int kind() { return Kind.CYCLE; }
     }
 
     /// Custo de fetch da instrução original na memória do dispositivo.
@@ -371,5 +433,6 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int address,
             /// Tamanho da instrução em bytes.
             int sizeBytes) implements IrOp {
+        @Override public int kind() { return Kind.FETCH; }
     }
 }

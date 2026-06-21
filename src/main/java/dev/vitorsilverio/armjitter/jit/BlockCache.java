@@ -26,6 +26,13 @@ public final class BlockCache {
     private final int maxEntries;
     private final LinkedHashMap<BlockKey, CacheEntry> cache;
     private final Map<BlockKey, Integer> hitCounters = new LinkedHashMap<>();
+    /// Contador monotônico incrementado a cada remoção/substituição estrutural de bloco
+    /// (invalidação por SMC, evicção LRU, sobrescrita de chave, {@link #clear()}).
+    ///
+    /// Permite que caches front-side (p.ex. o inline cache do {@link JitRuntime}) detectem
+    /// em O(1) que algum {@link CompiledBlock} pode ter sido descartado e revalidem suas
+    /// entradas — garantindo que um bloco obsoleto (código automodificável) nunca execute.
+    private long generation;
     /// Índice página -> blocos cujo intervalo [startPc, endPc) intersecta a página.
     private final Map<Integer, List<Located>> blocksByPage = new HashMap<>();
     /// Bitset (sem boxing) marcando páginas que já receberam algum bloco. Serve de
@@ -45,6 +52,7 @@ public final class BlockCache {
                 if (size() > BlockCache.this.maxEntries) {
                     CacheEntry evicted = eldest.getValue();
                     dropFromIndex(eldest.getKey(), evicted.startPc(), evicted.endPc());
+                    BlockCache.this.generation++;
                     return true;
                 }
                 return false;
@@ -59,8 +67,20 @@ public final class BlockCache {
 
     /// Busca um bloco compilado por chave.
     public Optional<CompiledBlock> get(BlockKey key) {
+        return Optional.ofNullable(getOrNull(key));
+    }
+
+    /// Busca um bloco compilado por chave retornando `null` se ausente.
+    ///
+    /// Variante sem alocação de {@link Optional} para o caminho quente do runtime.
+    public CompiledBlock getOrNull(BlockKey key) {
         CacheEntry entry = cache.get(key);
-        return entry == null ? Optional.empty() : Optional.of(entry.block());
+        return entry == null ? null : entry.block();
+    }
+
+    /// Retorna a geração atual do cache (ver {@link #generation}).
+    public long generation() {
+        return generation;
     }
 
     /// Armazena ou substitui um bloco ARM compilado por PC.
@@ -81,6 +101,7 @@ public final class BlockCache {
         CacheEntry previous = cache.get(key);
         if (previous != null) {
             dropFromIndex(key, previous.startPc(), previous.endPc());
+            generation++;
         }
         cache.put(key, new CacheEntry(block, startPc, endPc));
         indexBlock(key, startPc, endPc);
@@ -127,12 +148,14 @@ public final class BlockCache {
             cache.remove(hit.key());
             dropFromIndex(hit.key(), hit.startPc(), hit.endPc());
         }
+        generation++;
     }
 
     /// Remove todos os blocos compilados.
     public void clear() {
         cache.clear();
         blocksByPage.clear();
+        generation++;
     }
 
     /// Retorna a quantidade atual de blocos compilados em cache.

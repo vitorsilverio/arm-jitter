@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.codegen.jvm.AsmBlockCompiler;
 import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
@@ -63,7 +64,7 @@ public final class AsmCodeEmitter implements CodeEmitter {
     public AsmCodeEmitter(ArmArchitecture architecture, AsmFallbackPolicy policy, IrOptimizer optimizer) {
         this.fallback = new InterpretedCodeEmitter(architecture);
         this.loader = new JvmBlockLoader();
-        this.compiler = new AsmBlockCompiler();
+        this.compiler = new AsmBlockCompiler(architecture.has(ArmFeature.LOAD_PC_INTERWORKING));
         this.blockSequence = new AtomicInteger();
         this.policy = policy;
         this.optimizer = optimizer;

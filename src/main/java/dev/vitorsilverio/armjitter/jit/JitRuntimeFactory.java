@@ -49,6 +49,19 @@ public final class JitRuntimeFactory {
                 new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba()));
     }
 
+    /// Cria um runtime de DIAGNÓSTICO que executa cada bloco pelo interpretador (oráculo) e
+    /// pelo backend ASM de produção, comparando o estado da CPU e lançando ao primeiro divergir.
+    ///
+    /// <p>Lento (dupla execução + save/restore por bloco) e destinado a localizar bugs de
+    /// emissão ASM (ver {@link dev.vitorsilverio.armjitter.codegen.equivalence.DivergenceCheckingCodeEmitter}).</p>
+    public static JitRuntime divergenceCheckingArmThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        dev.vitorsilverio.armjitter.codegen.CodeEmitter reference = new InterpretedCodeEmitter(architecture);
+        dev.vitorsilverio.armjitter.codegen.CodeEmitter candidate =
+                new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba());
+        return build(cacheEntries, hotThreshold, architecture,
+                new dev.vitorsilverio.armjitter.codegen.equivalence.DivergenceCheckingCodeEmitter(reference, candidate, architecture));
+    }
+
     // ── Factories interpretadas (debug / oráculo) ─────────────────────────────
 
     /// Cria um runtime ARM32 com emissor interpretado de IR (ARMv4T).

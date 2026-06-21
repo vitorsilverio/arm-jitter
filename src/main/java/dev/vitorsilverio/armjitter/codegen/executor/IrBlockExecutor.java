@@ -34,31 +34,39 @@ public final class IrBlockExecutor {
         int cycles = 0;
         boolean pcChanged = false;
 
-        for (IrOp op : block.operations()) {
-            switch (op) {
-                case IrOp.Alu aluOp -> pcChanged |= alu.execute(core, aluOp);
-                case IrOp.Multiply multiply -> alu.executeMultiply(core, multiply);
-                case IrOp.LongMultiply longMultiply -> alu.executeLongMultiply(core, longMultiply);
-                case IrOp.Saturating saturating -> alu.executeSaturating(core, saturating);
-                case IrOp.DspMultiply dsp -> alu.executeDspMultiply(core, dsp);
-                case IrOp.PsrTransfer psr -> system.executePsrTransfer(core, psr);
-                case IrOp.LoadLiteral loadLiteral -> pcChanged |= memory.executeLoadLiteral(core, loadLiteral);
-                case IrOp.Load load -> pcChanged |= memory.executeLoad(core, load);
-                case IrOp.Store store -> memory.executeStore(core, store);
-                case IrOp.DoubleTransfer dt -> pcChanged |= memory.executeDoubleTransfer(core, dt);
-                case IrOp.Swap swap -> pcChanged |= memory.executeSwap(core, swap);
-                case IrOp.MultipleTransfer multipleTransfer -> pcChanged |= transfer.executeMultipleTransfer(core, multipleTransfer);
-                case IrOp.Branch branchOp -> pcChanged |= branch.executeBranch(core, branchOp);
-                case IrOp.BranchExchange branchExchange -> pcChanged |= branch.executeBranchExchange(core, branchExchange);
-                case IrOp.ThumbBlPrefix prefix -> branch.executeThumbBlPrefix(core, prefix);
-                case IrOp.ThumbBlSuffix suffix -> pcChanged |= branch.executeThumbBlSuffix(core, suffix);
-                case IrOp.Push push -> transfer.executePush(core, push);
-                case IrOp.Pop pop -> pcChanged |= transfer.executePop(core, pop);
-                case IrOp.Swi swi -> pcChanged |= system.executeSwi(core, swi, block.endPc());
-                case IrOp.Coprocessor cp -> pcChanged |= system.executeCoprocessor(core, cp);
-                case IrOp.Undefined undefined -> pcChanged |= system.executeUndefined(core, undefined);
-                case IrOp.Cycle cycleOp -> cycles += cycle.executeCycle(cycleOp);
-                case IrOp.Fetch fetch -> cycle.executeFetch(core, fetch);
+        // Itera o array cacheado por índice (sem alocar Iterator nem checkIndex por op):
+        // este loop roda milhões de vezes, é o frame mais quente do interpretador.
+        IrOp[] ops = block.operationsArray();
+        for (int i = 0, n = ops.length; i < n; i++) {
+            // Dispatch O(1) por discriminador inteiro (tableswitch), em vez do `switch` por
+            // padrão de tipo, cuja varredura linear de `instanceof` era o 2º frame mais quente.
+            // O cast em cada case é garantido por IrOp.kind() (ver IrOp.Kind).
+            IrOp op = ops[i];
+            switch (op.kind()) {
+                case IrOp.Kind.ALU -> pcChanged |= alu.execute(core, (IrOp.Alu) op);
+                case IrOp.Kind.MULTIPLY -> alu.executeMultiply(core, (IrOp.Multiply) op);
+                case IrOp.Kind.LONG_MULTIPLY -> alu.executeLongMultiply(core, (IrOp.LongMultiply) op);
+                case IrOp.Kind.SATURATING -> alu.executeSaturating(core, (IrOp.Saturating) op);
+                case IrOp.Kind.DSP_MULTIPLY -> alu.executeDspMultiply(core, (IrOp.DspMultiply) op);
+                case IrOp.Kind.PSR_TRANSFER -> system.executePsrTransfer(core, (IrOp.PsrTransfer) op);
+                case IrOp.Kind.LOAD -> pcChanged |= memory.executeLoad(core, (IrOp.Load) op);
+                case IrOp.Kind.STORE -> memory.executeStore(core, (IrOp.Store) op);
+                case IrOp.Kind.DOUBLE_TRANSFER -> pcChanged |= memory.executeDoubleTransfer(core, (IrOp.DoubleTransfer) op);
+                case IrOp.Kind.SWAP -> pcChanged |= memory.executeSwap(core, (IrOp.Swap) op);
+                case IrOp.Kind.LOAD_LITERAL -> pcChanged |= memory.executeLoadLiteral(core, (IrOp.LoadLiteral) op);
+                case IrOp.Kind.MULTIPLE_TRANSFER -> pcChanged |= transfer.executeMultipleTransfer(core, (IrOp.MultipleTransfer) op);
+                case IrOp.Kind.BRANCH -> pcChanged |= branch.executeBranch(core, (IrOp.Branch) op);
+                case IrOp.Kind.BRANCH_EXCHANGE -> pcChanged |= branch.executeBranchExchange(core, (IrOp.BranchExchange) op);
+                case IrOp.Kind.THUMB_BL_PREFIX -> branch.executeThumbBlPrefix(core, (IrOp.ThumbBlPrefix) op);
+                case IrOp.Kind.THUMB_BL_SUFFIX -> pcChanged |= branch.executeThumbBlSuffix(core, (IrOp.ThumbBlSuffix) op);
+                case IrOp.Kind.PUSH -> transfer.executePush(core, (IrOp.Push) op);
+                case IrOp.Kind.POP -> pcChanged |= transfer.executePop(core, (IrOp.Pop) op);
+                case IrOp.Kind.SWI -> pcChanged |= system.executeSwi(core, (IrOp.Swi) op, block.endPc());
+                case IrOp.Kind.COPROCESSOR -> pcChanged |= system.executeCoprocessor(core, (IrOp.Coprocessor) op);
+                case IrOp.Kind.UNDEFINED -> pcChanged |= system.executeUndefined(core, (IrOp.Undefined) op);
+                case IrOp.Kind.CYCLE -> cycles += cycle.executeCycle((IrOp.Cycle) op);
+                case IrOp.Kind.FETCH -> cycle.executeFetch(core, (IrOp.Fetch) op);
+                default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
 

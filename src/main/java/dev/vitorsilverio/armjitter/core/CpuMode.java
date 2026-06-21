@@ -19,8 +19,21 @@ public enum CpuMode {
 
     private final int bits;
 
+    /// Tabela de lookup indexada pelos cinco bits de modo (0..31), preenchida uma vez.
+    /// Evita, em {@link #fromBits}, a alocação de `values()` e a varredura linear por chamada
+    /// — `fromBits` é chamado por bloco (via `synchronizeModeFromCpsr`) e em acessos bancados.
+    private static final CpuMode[] BY_BITS = buildLookup();
+
     CpuMode(int bits) {
         this.bits = bits;
+    }
+
+    private static CpuMode[] buildLookup() {
+        CpuMode[] table = new CpuMode[32];
+        for (CpuMode mode : values()) {
+            table[mode.bits] = mode;
+        }
+        return table;
     }
 
     /// Retorna os cinco bits usados pelo CPSR para representar este modo.
@@ -28,14 +41,12 @@ public enum CpuMode {
         return bits;
     }
 
-    /// Converte os cinco bits de modo do CPSR para um `CpuMode`.
+    /// Converte os cinco bits de modo do CPSR para um `CpuMode` em O(1).
     public static CpuMode fromBits(int bits) {
-        int normalized = bits & 0b11111;
-        for (CpuMode mode : values()) {
-            if (mode.bits == normalized) {
-                return mode;
-            }
+        CpuMode mode = BY_BITS[bits & 0b11111];
+        if (mode == null) {
+            throw new IllegalArgumentException("Unknown ARM CPU mode bits: 0x" + Integer.toHexString(bits & 0b11111));
         }
-        throw new IllegalArgumentException("Unknown ARM CPU mode bits: 0x" + Integer.toHexString(normalized));
+        return mode;
     }
 }
