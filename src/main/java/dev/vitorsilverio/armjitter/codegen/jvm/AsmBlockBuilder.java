@@ -10,11 +10,13 @@ import org.objectweb.asm.Opcodes;
 public final class AsmBlockBuilder {
     private static final String ARM_CORE = "dev/vitorsilverio/armjitter/core/ArmCore";
     private static final String EXECUTE_DESCRIPTOR = "(L" + ARM_CORE + ";)I";
+    private static final String COMPILED_BLOCK = "dev/vitorsilverio/armjitter/jit/CompiledBlock";
 
     private AsmBlockBuilder() {
     }
 
-    /// Gera uma classe com {@code static int execute(ArmCore core)} que retorna {@code 0}.
+    /// Gera uma classe que implementa {@link CompiledBlock} com `int execute(ArmCore)` retornando
+    /// {@code 0} — instanciável e chamável por dispatch virtual direto (sem MethodHandle).
     public static byte[] buildEmptyExecuteMethod(String internalName) {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         writer.visit(
@@ -23,10 +25,18 @@ public final class AsmBlockBuilder {
                 internalName,
                 null,
                 "java/lang/Object",
-                null);
+                new String[]{COMPILED_BLOCK});
+
+        MethodVisitor ctor = writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        ctor.visitCode();
+        ctor.visitVarInsn(Opcodes.ALOAD, 0);
+        ctor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+        ctor.visitInsn(Opcodes.RETURN);
+        ctor.visitMaxs(0, 0);
+        ctor.visitEnd();
 
         MethodVisitor method = writer.visitMethod(
-                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC,
+                Opcodes.ACC_PUBLIC,
                 "execute",
                 EXECUTE_DESCRIPTOR,
                 null,
@@ -34,7 +44,7 @@ public final class AsmBlockBuilder {
         method.visitCode();
         method.visitInsn(Opcodes.ICONST_0);
         method.visitInsn(Opcodes.IRETURN);
-        method.visitMaxs(1, 1);
+        method.visitMaxs(0, 0);
         method.visitEnd();
         writer.visitEnd();
         return writer.toByteArray();

@@ -34,28 +34,27 @@ class JitRuntimeInlineCacheTest {
         AddressSpace memory = new InvalidationAwareAddressSpace(backing, runtime);
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
 
-        // 1ª execução: compila o bloco em pc=0 e popula o inline cache.
+        // 1ª execução: o bloco em pc=0 entra no cache (compilado no caminho clássico, ou
+        // frio/interpretado no caminho tiered).
         runtime.execute(0, core);
         assertEquals(10, core.register(0));
         assertEquals(1, runtime.blockCache().size());
 
-        // 2ª execução: acerta o inline cache (nenhum bloco novo entra no cache).
+        // 2ª execução: re-executa o mesmo bloco (sem bloco novo no cache).
         core.setRegister(0, 0);
         runtime.execute(0, core);
         assertEquals(10, core.register(0));
         assertEquals(1, runtime.blockCache().size());
 
-        // SMC: reescreve o código em pc=0. A escrita invalida o bloco e bumpa a geração;
-        // o inline cache precisa descartar a entrada obsoleta.
-        long genBefore = runtime.blockCache().generation();
+        // SMC: reescreve o código em pc=0. A escrita invalida o bloco (removido do cache);
+        // nenhuma entrada obsoleta — nem do cache nem do inline cache — pode sobreviver.
         memory.write32(0, MOV_R0_20);
-        assertTrue(runtime.blockCache().generation() > genBefore, "SMC deve bumpar a geração");
         assertEquals(0, runtime.blockCache().size(), "bloco obsoleto removido do cache");
 
-        // 3ª execução: recompila a partir do novo código — não pode devolver o bloco velho.
+        // 3ª execução: re-lift a partir do novo código — não pode devolver o bloco velho.
         core.setRegister(0, 0);
         runtime.execute(0, core);
-        assertEquals(20, core.register(0), "inline cache não pode devolver o bloco obsoleto após SMC");
+        assertEquals(20, core.register(0), "não pode devolver o bloco obsoleto após SMC");
     }
 
     @Test

@@ -45,8 +45,10 @@ public final class JitRuntimeFactory {
 
     /// Cria um runtime ARM/THUMB com bytecode JVM e otimizador GBA para a arquitetura informada.
     public static JitRuntime armThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
+        // Tiered: tier frio interpretado (sem classloading) + tier quente compilado em background.
         return build(cacheEntries, hotThreshold, architecture,
-                new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba()));
+                new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba()),
+                new InterpretedCodeEmitter(architecture));
     }
 
     /// Cria um runtime de DIAGNÓSTICO que executa cada bloco pelo interpretador (oráculo) e
@@ -132,6 +134,17 @@ public final class JitRuntimeFactory {
             int hotThreshold,
             ArmArchitecture architecture,
             dev.vitorsilverio.armjitter.codegen.CodeEmitter emitter) {
+        return build(cacheEntries, hotThreshold, architecture, emitter, null);
+    }
+
+    /// Variante com `coldEmitter`: quando ≠ null ativa o modo TIERED (blocos novos rodam
+    /// interpretados sem classloading; só os quentes compilam, em background).
+    private static JitRuntime build(
+            int cacheEntries,
+            int hotThreshold,
+            ArmArchitecture architecture,
+            dev.vitorsilverio.armjitter.codegen.CodeEmitter emitter,
+            dev.vitorsilverio.armjitter.codegen.CodeEmitter coldEmitter) {
         return new JitRuntime(
                 new BlockCache(cacheEntries),
                 new ArmDecoder(architecture),
@@ -139,6 +152,7 @@ public final class JitRuntimeFactory {
                 new StandardIrBuilder(),
                 IrOptimizer.identity(),
                 emitter,
+                coldEmitter,
                 new ExecutionThreshold(hotThreshold),
                 64);
     }

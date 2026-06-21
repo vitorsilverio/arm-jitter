@@ -33,8 +33,27 @@ public final class JitRuntime {
     private final IrBuilder irBuilder;
     private final IrOptimizer optimizer;
     private final CodeEmitter emitter;
+    /// Emissor do tier FRIO: quando presente (≠ null), blocos novos rodam interpretados
+    /// (closure cacheada, sem classloading) e só os QUENTES (≥ threshold) compilam via
+    /// {@link #emitter}. Quando null, mantém o caminho antigo (single-step frio).
+    private final CodeEmitter coldEmitter;
     private final ExecutionThreshold threshold;
     private final int maxBlockInstructions;
+    /// Compilação assíncrona (apenas no modo tiered): o `emit` do tier quente (gerar bytecode
+    /// + classload, a parte que trava) roda numa thread daemon de background sobre o `IrBlock`
+    /// imutável, enquanto a emulação segue interpretando; o resultado é integrado depois.
+    private final java.util.concurrent.ExecutorService compileExecutor;
+    /// Fila de resultados de compilação prontos (background → emulação).
+    private final java.util.Queue<CompileResult> compiled = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    /// Closures frias com compilação em voo (evita re-submeter; só a thread de emulação acessa).
+    private final java.util.Set<CompiledBlock> compilingColdBlocks =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+    /// Resultado de uma compilação de background, com a closure fria de origem para checar
+    /// staleness (se o bloco foi invalidado/re-liftado por SMC, descarta).
+    private record CompileResult(BlockKey key, CompiledBlock coldBlock, CompiledBlock compiledBlock,
+                                 int startPc, int endPc) {
+    }
 
     // ── Inline cache de dispatch ────────────────────────────────────────────────
     // Cache front-side direct-mapped sobre o {@link BlockCache}: evita, no caminho
@@ -79,17 +98,7 @@ public final class JitRuntime {
             CodeEmitter emitter,
             ExecutionThreshold threshold,
             int maxBlockInstructions) {
-        this.blockCache = Objects.requireNonNull(blockCache, "blockCache");
-        this.armDecoder = Objects.requireNonNull(decoder, "decoder");
-        this.thumbDecoder = Objects.requireNonNull(decoder, "decoder");
-        this.irBuilder = Objects.requireNonNull(irBuilder, "irBuilder");
-        this.optimizer = Objects.requireNonNull(optimizer, "optimizer");
-        this.emitter = Objects.requireNonNull(emitter, "emitter");
-        this.threshold = Objects.requireNonNull(threshold, "threshold");
-        if (maxBlockInstructions <= 0) {
-            throw new IllegalArgumentException("maxBlockInstructions must be positive");
-        }
-        this.maxBlockInstructions = maxBlockInstructions;
+        this(blockCache, decoder, decoder, irBuilder, optimizer, emitter, null, threshold, maxBlockInstructions);
     }
 
     /// Cria um runtime JIT capaz de alternar entre decoders ARM e THUMB.
@@ -102,17 +111,44 @@ public final class JitRuntime {
             CodeEmitter emitter,
             ExecutionThreshold threshold,
             int maxBlockInstructions) {
+        this(blockCache, armDecoder, thumbDecoder, irBuilder, optimizer, emitter, null, threshold, maxBlockInstructions);
+    }
+
+    /// Construtor terminal: aceita um `coldEmitter` opcional que ativa o modo TIERED
+    /// (frio interpretado + compilação assíncrona em background). `coldEmitter == null`
+    /// mantém o caminho clássico (single-step frio, compilação síncrona).
+    public JitRuntime(
+            BlockCache blockCache,
+            InstructionDecoder armDecoder,
+            InstructionDecoder thumbDecoder,
+            IrBuilder irBuilder,
+            IrOptimizer optimizer,
+            CodeEmitter emitter,
+            CodeEmitter coldEmitter,
+            ExecutionThreshold threshold,
+            int maxBlockInstructions) {
         this.blockCache = Objects.requireNonNull(blockCache, "blockCache");
         this.armDecoder = Objects.requireNonNull(armDecoder, "armDecoder");
         this.thumbDecoder = Objects.requireNonNull(thumbDecoder, "thumbDecoder");
         this.irBuilder = Objects.requireNonNull(irBuilder, "irBuilder");
         this.optimizer = Objects.requireNonNull(optimizer, "optimizer");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
+        this.coldEmitter = coldEmitter; // null = sem tiering
         this.threshold = Objects.requireNonNull(threshold, "threshold");
         if (maxBlockInstructions <= 0) {
             throw new IllegalArgumentException("maxBlockInstructions must be positive");
         }
         this.maxBlockInstructions = maxBlockInstructions;
+        this.compileExecutor = coldEmitter == null ? null
+                : java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+                    Thread thread = new Thread(runnable, "arm-jitter-compile");
+                    thread.setDaemon(true);
+                    // Prioridade mínima: a compilação é background e não-latência-crítica. Cede
+                    // CPU à thread de emulação (frames/input) e à EDT, compilando nas folgas do
+                    // frame pacing em vez de disputar — evita atrasar frames/input numa rajada.
+                    thread.setPriority(Thread.MIN_PRIORITY);
+                    return thread;
+                });
     }
 
     /// Cria um runtime JIT ARM/THUMB com componentes padrão, exceto cache e emissor.
@@ -141,8 +177,12 @@ public final class JitRuntime {
             return cycles;
         }
 
-        // ── Caminho frio: lookup no HashMap, threshold de aquecimento, compilação ─
         BlockKey key = new BlockKey(pc, instructionSet);
+        if (coldEmitter != null) {
+            return executeTiered(pc, core, instructionSet, key, slot, tag);
+        }
+
+        // ── Caminho clássico (sem tiering): lookup, threshold, compilação síncrona ─
         CompiledBlock block = blockCache.getOrNull(key);
         if (block == null) {
             int hits = blockCache.hit(key);
@@ -155,9 +195,64 @@ public final class JitRuntime {
             blockCache.put(key, block, irBlock.startPc(), irBlock.endPc());
         }
         inlineRecord(slot, tag, block);
+        return run(block, core);
+    }
+
+    /// Caminho TIERED: integra compilações de background prontas, depois despacha o tier do
+    /// bloco (frio interpretado / quente compilado), submetendo a compilação ao esquentar.
+    private int executeTiered(int pc, ArmCore core, InstructionSet instructionSet, BlockKey key, int slot, long tag) {
+        integrateCompiled();
+        BlockCache.CacheEntry entry = blockCache.entry(key);
+        if (entry == null) {
+            // Primeira visão: interpreta o bloco inteiro (frio) e cacheia. Sem classloading.
+            IrBlock irBlock = lift(pc, core.memory(), instructionSet);
+            CompiledBlock cold = coldEmitter.emit(irBlock);
+            blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
+            return run(cold, core);
+        }
+        if (entry.compiled()) {
+            inlineRecord(slot, tag, entry.block());
+            return run(entry.block(), core);
+        }
+        // Tier frio: conta execuções; ao esquentar, submete a compilação ao background (uma vez).
+        CompiledBlock cold = entry.block();
+        int hits = blockCache.hit(key);
+        if (threshold.isHot(hits) && compilingColdBlocks.add(cold)) {
+            submitCompile(key, cold, lift(pc, core.memory(), instructionSet));
+        }
+        return run(cold, core);
+    }
+
+    private int run(CompiledBlock block, ArmCore core) {
         int cycles = block.execute(core);
         core.addCycles(cycles);
         return cycles;
+    }
+
+    /// Submete o `emit` (bytecode + classload — a parte que trava) ao background, sobre o
+    /// `IrBlock` imutável (o lift já rodou na thread de emulação, então não toca a memória do
+    /// guest concorrentemente).
+    private void submitCompile(BlockKey key, CompiledBlock cold, IrBlock irBlock) {
+        int startPc = irBlock.startPc();
+        int endPc = irBlock.endPc();
+        compileExecutor.execute(() -> {
+            CompiledBlock hot = emitter.emit(optimizer.optimize(irBlock));
+            compiled.add(new CompileResult(key, cold, hot, startPc, endPc));
+        });
+    }
+
+    /// Integra (na thread de emulação) compilações prontas, promovendo frio→quente. Descarta
+    /// resultados obsoletos: se a closure fria de origem não está mais no cache (SMC invalidou/
+    /// re-liftou), o bytecode veio de código que mudou.
+    private void integrateCompiled() {
+        CompileResult result;
+        while ((result = compiled.poll()) != null) {
+            compilingColdBlocks.remove(result.coldBlock());
+            BlockCache.CacheEntry current = blockCache.entry(result.key());
+            if (current != null && !current.compiled() && current.block() == result.coldBlock()) {
+                blockCache.put(result.key(), result.compiledBlock(), true, result.startPc(), result.endPc());
+            }
+        }
     }
 
     /// Tag do inline cache: `pc` (32 bits) + conjunto de instruções no bit 32.

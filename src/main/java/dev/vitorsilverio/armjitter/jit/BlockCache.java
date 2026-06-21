@@ -52,7 +52,9 @@ public final class BlockCache {
                 if (size() > BlockCache.this.maxEntries) {
                     CacheEntry evicted = eldest.getValue();
                     dropFromIndex(eldest.getKey(), evicted.startPc(), evicted.endPc());
-                    BlockCache.this.generation++;
+                    if (evicted.compiled()) {
+                        BlockCache.this.generation++;
+                    }
                     return true;
                 }
                 return false;
@@ -78,6 +80,12 @@ public final class BlockCache {
         return entry == null ? null : entry.block();
     }
 
+    /// Retorna a entrada (bloco + flag compiled + intervalo) ou `null`. Uso interno do runtime
+    /// para distinguir o tier frio/quente numa única busca.
+    CacheEntry entry(BlockKey key) {
+        return cache.get(key);
+    }
+
     /// Retorna a geração atual do cache (ver {@link #generation}).
     public long generation() {
         return generation;
@@ -93,17 +101,29 @@ public final class BlockCache {
         put(key, block, key.pc(), key.pc() + instructionWidth(key.instructionSet()));
     }
 
-    /// Armazena ou substitui um bloco compilado com intervalo de endereço.
+    /// Armazena ou substitui um bloco COMPILADO com intervalo de endereço.
     public void put(BlockKey key, CompiledBlock block, int startPc, int endPc) {
+        put(key, block, true, startPc, endPc);
+    }
+
+    /// Armazena ou substitui um bloco (compilado ou interpretado/frio) com intervalo de endereço.
+    ///
+    /// A geração só é incrementada quando um bloco COMPILADO anterior é descartado: apenas
+    /// blocos compilados podem estar no inline cache do runtime, então promover um bloco frio
+    /// (previous frio) para compilado NÃO precisa invalidar o IC — evitando thrash a cada
+    /// promoção (crítico quando o threshold é 1, como no ndsemu).
+    public void put(BlockKey key, CompiledBlock block, boolean compiled, int startPc, int endPc) {
         if (endPc <= startPc) {
             throw new IllegalArgumentException("endPc must be greater than startPc");
         }
         CacheEntry previous = cache.get(key);
         if (previous != null) {
             dropFromIndex(key, previous.startPc(), previous.endPc());
-            generation++;
+            if (previous.compiled()) {
+                generation++;
+            }
         }
-        cache.put(key, new CacheEntry(block, startPc, endPc));
+        cache.put(key, new CacheEntry(block, compiled, startPc, endPc));
         indexBlock(key, startPc, endPc);
     }
 
@@ -144,11 +164,17 @@ public final class BlockCache {
         if (hits == null) {
             return;
         }
+        boolean removedCompiled = false;
         for (Located hit : hits) {
-            cache.remove(hit.key());
+            CacheEntry removed = cache.remove(hit.key());
+            if (removed != null && removed.compiled()) {
+                removedCompiled = true;
+            }
             dropFromIndex(hit.key(), hit.startPc(), hit.endPc());
         }
-        generation++;
+        if (removedCompiled) {
+            generation++;
+        }
     }
 
     /// Remove todos os blocos compilados.
@@ -206,7 +232,10 @@ public final class BlockCache {
         };
     }
 
-    private record CacheEntry(CompiledBlock block, int startPc, int endPc) {
+    /// Entrada do cache: o bloco, se já foi COMPILADO para bytecode (vs. interpretado/frio),
+    /// e o intervalo de PC coberto. O flag `compiled` distingue os tiers e governa o bump de
+    /// geração — só blocos compilados podem estar no inline cache do {@link JitRuntime}.
+    record CacheEntry(CompiledBlock block, boolean compiled, int startPc, int endPc) {
     }
 
     private record Located(BlockKey key, int startPc, int endPc) {

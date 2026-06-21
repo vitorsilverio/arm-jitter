@@ -25,7 +25,12 @@ import org.objectweb.asm.Opcodes;
 /// </pre>
 public final class AsmBlockCompiler {
     private static final String EXECUTE = "execute";
+    /// Método estático com o corpo gerado (mantém `core` no slot 0); o método de instância
+    /// {@link #EXECUTE} (que implementa {@link dev.vitorsilverio.armjitter.jit.CompiledBlock})
+    /// apenas delega a ele. Evita o overhead de `MethodHandle.invokeExact` por execução.
+    private static final String EXECUTE_IMPL = "execute0";
     private static final String EXECUTE_DESCRIPTOR = "(L" + GuestToHostMapper.ARM_CORE + ";)I";
+    private static final String COMPILED_BLOCK = "dev/vitorsilverio/armjitter/jit/CompiledBlock";
     private static final String CORE = GuestToHostMapper.ARM_CORE;
     private static final String CORE_REF = "L" + CORE + ";";
     private static final String HELPERS = "dev/vitorsilverio/armjitter/codegen/jvm/AsmRuntimeHelpers";
@@ -83,11 +88,15 @@ public final class AsmBlockCompiler {
 
     private byte[] compile(String internalName, IrBlock block, boolean perOpFallback) {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        // A classe implementa CompiledBlock: o runtime a executa por chamada virtual direta
+        // (block.execute(core)), sem MethodHandle.
         writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER,
-                internalName, null, "java/lang/Object", null);
+                internalName, null, "java/lang/Object", new String[]{COMPILED_BLOCK});
+        emitConstructor(writer);
+        emitExecuteBridge(writer, internalName);
 
         MethodVisitor method = writer.visitMethod(
-                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, EXECUTE, EXECUTE_DESCRIPTOR, null, null);
+                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, EXECUTE_IMPL, EXECUTE_DESCRIPTOR, null, null);
         method.visitCode();
         method.visitInsn(Opcodes.ICONST_0);
         method.visitVarInsn(Opcodes.ISTORE, CYCLES_LOCAL);
@@ -130,6 +139,29 @@ public final class AsmBlockCompiler {
         method.visitEnd();
         writer.visitEnd();
         return writer.toByteArray();
+    }
+
+    /// Construtor público sem-arg (o {@link JvmBlockLoader} instancia a classe).
+    private static void emitConstructor(ClassWriter writer) {
+        MethodVisitor ctor = writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        ctor.visitCode();
+        ctor.visitVarInsn(Opcodes.ALOAD, 0);
+        ctor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+        ctor.visitInsn(Opcodes.RETURN);
+        ctor.visitMaxs(0, 0);
+        ctor.visitEnd();
+    }
+
+    /// Método de instância `int execute(ArmCore)` que implementa {@link CompiledBlock}, delegando
+    /// ao estático {@link #EXECUTE_IMPL} (locais: this=0, core=1).
+    private static void emitExecuteBridge(ClassWriter writer, String internalName) {
+        MethodVisitor bridge = writer.visitMethod(Opcodes.ACC_PUBLIC, EXECUTE, EXECUTE_DESCRIPTOR, null, null);
+        bridge.visitCode();
+        bridge.visitVarInsn(Opcodes.ALOAD, 1);
+        bridge.visitMethodInsn(Opcodes.INVOKESTATIC, internalName, EXECUTE_IMPL, EXECUTE_DESCRIPTOR, false);
+        bridge.visitInsn(Opcodes.IRETURN);
+        bridge.visitMaxs(0, 0);
+        bridge.visitEnd();
     }
 
     /// Emite bytecode que delega uma op não suportada ao interpretado via {@link IrOpInterop}.
