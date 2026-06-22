@@ -20,13 +20,15 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
                 .lift(memory, 0, count);
     }
 
-    /// Bloco com instrução condicional (cond != AL) — não suportada nativamente no modo WHOLE_BLOCK.
-    /// 0xE3A00064 = MOV r0, #100 (AL)
-    /// 0x13A01042 = MOVNE r1, #66 (NE)
+    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (operando shiftado por
+    /// registrador, carry-out complexo) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST.
+    /// (Condição ≠ AL agora É emitida nativamente via guard, então não serve mais para este teste.)
+    /// 0xE3A00064 = MOV r0, #100        (AL — nativo)
+    /// 0xE1A01312 = MOV r1, r2, LSL r3  (ShiftedRegister src2 — nunca nativo)
     private static TestAddressSpace buildMixedBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A00064);  // MOV r0, #100  (AL — native)
-        memory.put32(4, 0x13A01042);  // MOVNE r1, #66 (NE — not native in WHOLE_BLOCK)
+        memory.put32(0, 0xE3A00064);  // MOV r0, #100       (AL — native)
+        memory.put32(4, 0xE1A01312);  // MOV r1, r2, LSL r3 (ShiftedRegister — never native)
         return memory;
     }
 
@@ -102,7 +104,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
 
         emitter.emit(block);
 
-        // 1 non-native op (MOVNE) must be counted
+        // 1 non-native op (MOV r1, r2, LSL r3 — ShiftedRegister) must be counted
         assertTrue(emitter.perOpFallbackOpCount() >= 1,
                 "Expected at least 1 per-op fallback; got " + emitter.perOpFallbackOpCount());
         assertEquals(1, emitter.nativeBlockCount());

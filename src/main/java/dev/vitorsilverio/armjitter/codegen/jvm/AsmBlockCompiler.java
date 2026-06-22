@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen.jvm;
 
+import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -108,6 +109,20 @@ public final class AsmBlockCompiler {
                 emitPerOpFallback(method, op, block.endPc());
                 continue;
             }
+            // Guard condicional por-op: espelha o `if (!evalCond(op.condition())) return false;` no
+            // topo de cada executor interpretado. `Cycle`/`Fetch` têm condição AL (default) e NUNCA
+            // são guardados — uma instrução de condição falsa ainda consome o ciclo S + o fetch (ops
+            // AL separados, rodados incondicionalmente como no interpretador). Ops não-suportadas do
+            // caminho PER_OP já checam a condição dentro do interpretado e saíram pelo `continue`.
+            Condition cond = op.condition();
+            Label condSkip = null;
+            if (cond != Condition.AL) {
+                condSkip = new Label();
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                AsmBytecode.visitIntConst(method, cond.ordinal());
+                AsmBytecode.invokeStatic(method, HELPERS, "evalCond", "(" + CORE_REF + "I)Z");
+                method.visitJumpInsn(Opcodes.IFEQ, condSkip);
+            }
             switch (op) {
                 case IrOp.Alu alu -> emitAlu(method, alu);
                 case IrOp.Multiply mul -> emitMultiply(method, mul);
@@ -129,6 +144,14 @@ public final class AsmBlockCompiler {
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
                 default -> throw new IllegalStateException("Unsupported IR op in native compile: " + op);
+            }
+            // Op pulado (condição falsa) cai aqui sem tocar PC_CHANGED — `emitProgramCounterFixup`
+            // põe PC=endPc (sequencial), idêntico ao `return false` do executor interpretado.
+            // Cada `emitXxx` termina com a pilha JVM vazia, então o merge no label é consistente
+            // (o ClassWriter usa COMPUTE_FRAMES; locais escritos só em um ramo viram TOP, mas todo
+            // temp é escrito-antes-de-ler dentro de cada `emitXxx`, nunca lido através do merge).
+            if (condSkip != null) {
+                method.visitLabel(condSkip);
             }
         }
 

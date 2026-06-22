@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.codegen.jvm;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
+import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
@@ -12,7 +13,22 @@ import dev.vitorsilverio.armjitter.swi.CpuState;
 /// Cada método espelha a lógica do executor interpretado correspondente, garantindo
 /// equivalência verificável pelo {@link dev.vitorsilverio.armjitter.codegen.equivalence.BlockEquivalenceHarness}.
 public final class AsmRuntimeHelpers {
+    /// Cacheado: {@link Condition#values()} clona o array a cada chamada; o guard condicional
+    /// roda por op compilado, então indexamos este array fixo pelo ordinal.
+    private static final Condition[] CONDITIONS = Condition.values();
+
     private AsmRuntimeHelpers() {
+    }
+
+    // ── condição ───────────────────────────────────────────────────────────────
+
+    /// Avalia a condição de execução de uma op a partir do ordinal de {@link Condition}.
+    ///
+    /// Chama o MESMO {@code cpsr().evalCond} do interpretador (ver topo de cada executor, ex.
+    /// {@link dev.vitorsilverio.armjitter.codegen.executor.IrAluExecutor}), garantindo que o guard
+    /// condicional emitido pelo {@link AsmBlockCompiler} seja idêntico por construção. A JVM inlina.
+    public static boolean evalCond(ArmCore core, int ordinal) {
+        return core.cpsr().evalCond(CONDITIONS[ordinal]);
     }
 
     // ── flags ALU ──────────────────────────────────────────────────────────────

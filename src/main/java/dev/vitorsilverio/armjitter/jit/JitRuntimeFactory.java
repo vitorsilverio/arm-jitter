@@ -46,8 +46,12 @@ public final class JitRuntimeFactory {
     /// Cria um runtime ARM/THUMB com bytecode JVM e otimizador GBA para a arquitetura informada.
     public static JitRuntime armThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
         // Tiered: tier frio interpretado (sem classloading) + tier quente compilado em background.
+        // PER_OP: um bloco com uma op ainda-não-suportada nativamente (DSP/Saturating/BLX/...) compila
+        // o RESTO nativo e despacha só aquela op ao interpretado inline (IrOpInterop), em vez de cair
+        // inteiro. Multiplica o ganho do condicional em blocos grandes com 1 op exótica (ex.: vídeo
+        // Mobiclip = SMUL/SMLA). Ops AL suportadas e o guard condicional por-op são idênticos a WHOLE_BLOCK.
         return build(cacheEntries, hotThreshold, architecture,
-                new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba()),
+                new AsmCodeEmitter(architecture, AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba()),
                 new InterpretedCodeEmitter(architecture));
     }
 
@@ -58,8 +62,9 @@ public final class JitRuntimeFactory {
     /// emissão ASM (ver {@link dev.vitorsilverio.armjitter.codegen.equivalence.DivergenceCheckingCodeEmitter}).</p>
     public static JitRuntime divergenceCheckingArmThumb(int cacheEntries, int hotThreshold, ArmArchitecture architecture) {
         dev.vitorsilverio.armjitter.codegen.CodeEmitter reference = new InterpretedCodeEmitter(architecture);
+        // Candidato = o backend ASM de PRODUÇÃO (PER_OP), para o asmcheck validar o caminho real.
         dev.vitorsilverio.armjitter.codegen.CodeEmitter candidate =
-                new AsmCodeEmitter(architecture, AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba());
+                new AsmCodeEmitter(architecture, AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba());
         return build(cacheEntries, hotThreshold, architecture,
                 new dev.vitorsilverio.armjitter.codegen.equivalence.DivergenceCheckingCodeEmitter(reference, candidate, architecture));
     }

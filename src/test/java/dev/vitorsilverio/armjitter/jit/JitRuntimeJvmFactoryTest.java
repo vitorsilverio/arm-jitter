@@ -17,11 +17,13 @@ class JitRuntimeJvmFactoryTest {
     }
 
     @Test
-    void armThumbEmitterHasWholeBlockPolicy() {
+    void armThumbEmitterHasPerOpPolicy() {
+        // PER_OP (Fase: execução condicional + compilação parcial): um bloco com uma op exótica
+        // (DSP/Saturating/BLX/ShiftedRegister) compila o resto nativo em vez de cair inteiro.
         JitRuntime runtime = JitRuntimeFactory.armThumb(16, 1);
 
         AsmCodeEmitter emitter = (AsmCodeEmitter) runtime.emitter();
-        assertEquals(AsmFallbackPolicy.WHOLE_BLOCK, emitter.policy());
+        assertEquals(AsmFallbackPolicy.PER_OP, emitter.policy());
     }
 
     @Test

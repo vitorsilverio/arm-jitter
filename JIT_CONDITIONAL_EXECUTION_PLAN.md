@@ -8,6 +8,25 @@
 
 ---
 
+## ✅ IMPLEMENTADO E VALIDADO (sessão 2026-06-22)
+
+As 7 tarefas concluídas. **O ASM JIT do JUS saiu de +6% para +68% sobre o interpretador** (bench 600 frames), e o PER_OP somou mais ~+27% na fase de vídeo (1500 frames) ⇒ **~2× o interpretador**.
+
+**Mudanças (arm-jitter):**
+- `AsmRuntimeHelpers.evalCond(core, ordinal)` — chama o MESMO `cpsr().evalCond` do interpretador (idêntico por construção). `CONDITIONS = Condition.values()` cacheado. + `AsmRuntimeHelpersTest`.
+- `AsmBlockCompiler.compile` — guard por-op (`ALOAD core; ICONST ordinal; INVOKESTATIC evalCond; IFEQ condSkip; …; condSkip:`) quando `op.condition() != AL`. `Cycle`/`Fetch` (condição AL via default) NUNCA guardados — instrução de condição falsa ainda consome ciclo+fetch. Ops PER_OP não-suportadas saem pelo `continue` antes do guard (o interop checa a condição internamente). `condSkip` colocado após o `switch` (merge com pilha vazia; temps são escritos-antes-de-ler dentro de cada `emitXxx`, nunca lidos através do merge).
+- `AsmNativePolicy.supports` — removida SÓ a exigência `condition()==AL`. MANTIDAS as rejeições não-condicionais: ShiftedRegister (Alu src2 e Load/Store offset), shift+setFlags, dst15+setFlags, BLX (`BranchExchange.link`/`ThumbBlSuffix.exchange`), Saturating, DspMultiply, DoubleTransfer, Swap.
+- `JitRuntimeFactory.armThumb` e `divergenceCheckingArmThumb` — `WHOLE_BLOCK` → **`PER_OP`** (tarefa 7): bloco com 1 op exótica compila o resto nativo em vez de cair inteiro.
+
+**Validação:**
+- `asmcheck` JUS **1500 chunks (WHOLE_BLOCK)** + **500 chunks (PER_OP)**: **zero divergências** (o checker usa o candidato PER_OP de produção).
+- Testes: arm-jitter **345** (+11: 9 de equivalência condicional incl. exaustivo 14 cond × 16 NZCV para MOV e ADDS, + 2 do helper), gbaemu **215**, ndsemu **139** — todos verdes. Testes ajustados: `AsmFallbackPolicyTest.buildMixedBlock` (motivo de fallback trocado de condicional p/ ShiftedRegister), `JitRuntimeJvmFactoryTest` (armThumb agora PER_OP).
+- Bench JUS (mesma máquina/sessão): 600 frames interp 13.3 → asm 22.3 fps (**+68%**); 1500 frames (vídeo) WHOLE_BLOCK 20.6 → PER_OP ~26 fps (**+27%**).
+
+**Próximo lever (não feito):** `DspMultiply` nativo (Mobiclip = SMUL/SMLA) — agora o maior resto interpretado na fase de vídeo. Depois `Saturating` (QADD/QSUB), `DoubleTransfer` (LDRD/STRD), BLX.
+
+---
+
 ## Mecanismo exato
 
 ### 1. Helper de avaliação de condição

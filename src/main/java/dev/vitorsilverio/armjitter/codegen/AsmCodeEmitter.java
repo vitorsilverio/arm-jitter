@@ -178,7 +178,8 @@ public final class AsmCodeEmitter implements CodeEmitter {
         perOpFallbackOpCount.set(0);
     }
 
-    /// Conjunto de subtipos de {@link IrOp} que podem ser emitidos nativamente (condição {@code AL}).
+    /// Conjunto de subtipos de {@link IrOp} que podem ser emitidos nativamente (qualquer condição —
+    /// o compilador emite um guard {@code evalCond} por op).
     /// {@link IrOp.Swap} não está incluído (sempre delegado ao interpretado).
     @SuppressWarnings("unchecked")
     public static Set<Class<? extends IrOp>> supportedOps() {
