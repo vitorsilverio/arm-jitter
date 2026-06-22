@@ -4,8 +4,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /// Registro global de {@link IrOp} para fallback por-op no bytecode JVM gerado.
 ///
@@ -20,8 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 /// {@link dev.vitorsilverio.armjitter.codegen.AsmCodeEmitter} a ser construída define o executor.
 /// Para uso com múltiplas arquiteturas simultâneas, crie apenas um emissor ativo por vez.</p>
 public final class IrOpInterop {
-    private static final ConcurrentHashMap<Integer, IrOp> REGISTRY = new ConcurrentHashMap<>();
-    private static final AtomicInteger ID_SEQ = new AtomicInteger();
+    /// Lista append-only indexada pelo id (denso/sequencial). Substitui um {@code Map<Integer,IrOp>}
+    /// para evitar o boxing do `int opId` + lookup de hash a CADA op interpretada no caminho quente
+    /// (o `get(id)` aqui é só um acesso de array no snapshot volátil — sem boxing). A escrita
+    /// (compilação, fria) é serializada para garantir `id == índice`.
+    private static final CopyOnWriteArrayList<IrOp> REGISTRY = new CopyOnWriteArrayList<>();
 
     private static volatile IrBlockExecutor EXECUTOR;
 
@@ -35,10 +37,13 @@ public final class IrOpInterop {
     }
 
     /// Registra uma op e devolve o id a ser emitido como constante no bytecode gerado.
+    /// Serializado para que o id devolvido seja exatamente o índice na lista.
     static int register(IrOp op) {
-        int id = ID_SEQ.getAndIncrement();
-        REGISTRY.put(id, op);
-        return id;
+        synchronized (REGISTRY) {
+            int id = REGISTRY.size();
+            REGISTRY.add(op);
+            return id;
+        }
     }
 
     /// Chamado pelo bytecode JVM gerado para executar uma op registrada via interpretador.
