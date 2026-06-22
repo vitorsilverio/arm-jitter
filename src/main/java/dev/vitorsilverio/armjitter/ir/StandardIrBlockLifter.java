@@ -63,8 +63,13 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             return true;
         }
         return switch (instruction.kind()) {
-            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, POP, SWI, UNIMPLEMENTED -> true;
-            case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH, COPROCESSOR -> false;
+            // COPROCESSOR ends the block: a CP15 MCR can change CPU/memory state (TCM/MMU/high
+            // vectors) and, critically, the ARM9 wait-for-interrupt (MCR p15,0,Rd,c7,c0,4) must end
+            // the block so the run loop re-checks the interrupt line while IME is still set — the
+            // libnds swiIntrWait loop toggles IME=1/halt/IME=0 within one block, so a non-terminal
+            // coprocessor op would hide the only IME=1 window and the awaited IRQ would never fire.
+            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, POP, SWI, UNIMPLEMENTED, COPROCESSOR -> true;
+            case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH -> false;
         };
     }
 
