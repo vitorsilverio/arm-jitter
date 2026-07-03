@@ -23,7 +23,20 @@ import org.objectweb.asm.Opcodes;
 ///   5 = TEMP3 — uso interno de emitStoreRegister
 ///   6 = ADDR  — endereço calculado (load/store)
 ///   7+8 = LONG_RESULT — resultado de 64 bits (LongMultiply)
+///   9+  = registradores guest cacheados (ver {@link RegCache})
 /// </pre>
+///
+/// **Register cache:** registradores guest (r0–r14) acessados ≥2 vezes pelo bloco vivem em locais
+/// JVM: carregados uma vez no prólogo, lidos/escritos como locais pelos ops "simples"
+/// (ALU/Load/Store/Branch/BX/Thumb-BL/Multiply), e descarregados (`flush`) de volta ao core no fim
+/// do bloco. Ops cujos HELPERS leem/escrevem registradores no core diretamente (LDM/STM, Push/Pop,
+/// SWI, MSR/MRS, coprocessador, Undefined e o fallback PER_OP interpretado) são cercados por
+/// flush + reload — o cache nunca fica stale através deles. r15 nunca é cacheado (o PC só é
+/// materializado por helpers/fixup). O guard condicional não afeta o invariante: um op pulado não
+/// toca os locais, então `local == core.register(r)` continua valendo nos dois ramos do merge.
+///
+/// Instâncias NÃO são thread-safe (estado por-compilação em {@link #cache}); cada emissor usa o
+/// seu compilador numa única thread (emu ou a thread única de compilação em background).
 public final class AsmBlockCompiler {
     private static final String EXECUTE = "execute";
     /// Método estático com o corpo gerado (mantém `core` no slot 0); o método de instância
@@ -46,6 +59,13 @@ public final class AsmBlockCompiler {
     private static final int TEMP3_LOCAL = 5;  // used internally by emitStoreRegister
     private static final int ADDR_LOCAL = 6;
     private static final int LONG_RESULT_LOCAL = 7;  // long occupies slots 7+8
+    private static final int CACHE_BASE_LOCAL = 9;   // first guest-register cache slot
+
+    // Registradores guest com papel arquitetural fixo.
+    private static final int LR_REGISTER = 14;
+    private static final int PC_REGISTER = 15;
+    /// r0..r14 são cacheáveis; r15 (o PC) nunca é — só é materializado por helpers/fixup.
+    private static final int CACHEABLE_REGISTERS = 15;
 
     // Descriptors for helpers that share the same signature
     private static final String CORE_I_TO_I = "(" + CORE_REF + "I)I";
@@ -58,6 +78,25 @@ public final class AsmBlockCompiler {
     /// `true` em ARMv5T+: LDR/LDM/POP para PC interworkam pelo bit 0 do valor carregado.
     /// Decidido na construção (a partir da arquitetura do emissor); ARMv4T usa `false`.
     private final boolean loadPcInterworks;
+
+    /// Cache de registradores guest do bloco em compilação (ver doc da classe). Estado
+    /// por-compilação: atribuído no início de {@link #compile} e lido pelos `emitXxx`.
+    private RegCache cache = RegCache.EMPTY;
+
+    /// Mapa registrador-guest → local JVM do bloco corrente + flag estático de escrita.
+    private static final class RegCache {
+        static final RegCache EMPTY = new RegCache();
+        final int[] slot = new int[CACHEABLE_REGISTERS];      // r0..r14; -1 = não cacheado
+        final boolean[] dirty = new boolean[CACHEABLE_REGISTERS]; // o bloco PODE escrever o reg
+
+        RegCache() {
+            java.util.Arrays.fill(slot, -1);
+        }
+
+        boolean cached(int reg) {
+            return reg >= 0 && reg < CACHEABLE_REGISTERS && slot[reg] >= 0;
+        }
+    }
 
     /// Cria um compilador ARMv4T (sem interworking em load->PC).
     public AsmBlockCompiler() {
@@ -104,9 +143,15 @@ public final class AsmBlockCompiler {
         method.visitInsn(Opcodes.ICONST_0);
         method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
 
+        cache = buildRegCache(block, perOpFallback);
+        emitCachePrologue(method);
+
         for (IrOp op : block.operations()) {
             if (perOpFallback && !AsmNativePolicy.supports(op)) {
+                // O interpretado lê/escreve registradores no core: flush antes, reload depois.
+                emitCacheFlush(method);
                 emitPerOpFallback(method, op, block.endPc());
+                emitCacheReload(method);
                 continue;
             }
             // Guard condicional por-op: espelha o `if (!evalCond(op.condition())) return false;` no
@@ -130,17 +175,19 @@ public final class AsmBlockCompiler {
                 case IrOp.Load load -> emitLoad(method, load);
                 case IrOp.Store store -> emitStore(method, store);
                 case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
-                case IrOp.MultipleTransfer mt -> emitMultipleTransfer(method, mt);
+                // Ops cujos helpers acessam registradores diretamente no core: flush + reload
+                // em volta, para o cache nunca ficar stale (ver doc da classe).
+                case IrOp.MultipleTransfer mt -> emitSpilled(method, () -> emitMultipleTransfer(method, mt));
                 case IrOp.Branch b -> emitBranch(method, b);
                 case IrOp.BranchExchange bx -> emitBranchExchange(method, bx);
                 case IrOp.ThumbBlPrefix prefix -> emitThumbBlPrefix(method, prefix);
                 case IrOp.ThumbBlSuffix suffix -> emitThumbBlSuffix(method, suffix);
-                case IrOp.Push push -> emitPush(method, push);
-                case IrOp.Pop pop -> emitPop(method, pop);
-                case IrOp.PsrTransfer psr -> emitPsrTransfer(method, psr);
-                case IrOp.Swi swi -> emitSwi(method, swi, block.endPc());
-                case IrOp.Coprocessor cp -> emitCoprocessor(method, cp);
-                case IrOp.Undefined undef -> emitUndefined(method, undef);
+                case IrOp.Push push -> emitSpilled(method, () -> emitPush(method, push));
+                case IrOp.Pop pop -> emitSpilled(method, () -> emitPop(method, pop));
+                case IrOp.PsrTransfer psr -> emitSpilled(method, () -> emitPsrTransfer(method, psr));
+                case IrOp.Swi swi -> emitSpilled(method, () -> emitSwi(method, swi, block.endPc()));
+                case IrOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
+                case IrOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
                 default -> throw new IllegalStateException("Unsupported IR op in native compile: " + op);
@@ -155,13 +202,190 @@ public final class AsmBlockCompiler {
             }
         }
 
+        emitCacheFlush(method);
         emitProgramCounterFixup(method, block.endPc());
         method.visitVarInsn(Opcodes.ILOAD, CYCLES_LOCAL);
         method.visitInsn(Opcodes.IRETURN);
         method.visitMaxs(0, 0);
         method.visitEnd();
         writer.visitEnd();
+        cache = RegCache.EMPTY;
         return writer.toByteArray();
+    }
+
+    // ── register cache ─────────────────────────────────────────────────────────
+
+    /// Analisa o bloco e decide quais registradores guest viram locais JVM: os com ≥2 acessos
+    /// pelos ops de emissão direta (um único acesso não paga o prólogo). Acessos feitos DENTRO de
+    /// helpers (LDM/STM/Push/Pop/SWI/PSR/coprocessador/Undefined/fallback PER_OP) não contam —
+    /// esses ops são cercados por flush/reload e continuam lendo o core diretamente.
+    private static RegCache buildRegCache(IrBlock block, boolean perOpFallback) {
+        int[] accesses = new int[15];
+        boolean[] writes = new boolean[15];
+        for (IrOp op : block.operations()) {
+            if (perOpFallback && !AsmNativePolicy.supports(op)) {
+                continue; // vai pelo interpretado (flush/reload em volta)
+            }
+            countAccesses(op, accesses, writes);
+        }
+        RegCache cache = new RegCache();
+        int next = CACHE_BASE_LOCAL;
+        for (int reg = 0; reg < CACHEABLE_REGISTERS; reg++) {
+            if (accesses[reg] >= 2) {
+                cache.slot[reg] = next++;
+                cache.dirty[reg] = writes[reg];
+            }
+        }
+        return cache;
+    }
+
+    private static void countAccesses(IrOp op, int[] accesses, boolean[] writes) {
+        switch (op) {
+            case IrOp.Alu alu -> {
+                if (aluUsesSrc1(alu.opcode()) && alu.src1ValueOverride() == -1) {
+                    countRead(accesses, alu.src1());
+                }
+                if (alu.src2() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
+                    countRead(accesses, reg.index());
+                }
+                if (aluWritesDst(alu.opcode())) {
+                    countWrite(accesses, writes, alu.dst());
+                }
+            }
+            case IrOp.Multiply mul -> {
+                if (mul.rmValueOverride() == -1) countRead(accesses, mul.rm());
+                if (mul.rsValueOverride() == -1) countRead(accesses, mul.rs());
+                if (mul.accumulate() && mul.rnValueOverride() == -1) countRead(accesses, mul.rn());
+                countWrite(accesses, writes, mul.dst());
+            }
+            case IrOp.LongMultiply mul -> {
+                if (mul.rmValueOverride() == -1) countRead(accesses, mul.rm());
+                if (mul.rsValueOverride() == -1) countRead(accesses, mul.rs());
+                if (mul.accumulate()) {
+                    if (mul.dstLowValueOverride() == -1) countRead(accesses, mul.dstLow());
+                    if (mul.dstHighValueOverride() == -1) countRead(accesses, mul.dstHigh());
+                }
+                countWrite(accesses, writes, mul.dstLow());
+                countWrite(accesses, writes, mul.dstHigh());
+            }
+            case IrOp.Load load -> {
+                if (load.baseValueOverride() == -1) countRead(accesses, load.base());
+                if (load.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
+                    countRead(accesses, reg.index());
+                }
+                countWrite(accesses, writes, load.dst());
+                if (load.writeback() && load.base() != load.dst()) {
+                    countWrite(accesses, writes, load.base());
+                }
+            }
+            case IrOp.Store store -> {
+                if (store.baseValueOverride() == -1) countRead(accesses, store.base());
+                if (store.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
+                    countRead(accesses, reg.index());
+                }
+                if (store.srcValueOverride() == -1) countRead(accesses, store.src());
+                if (store.writeback()) {
+                    countWrite(accesses, writes, store.base());
+                }
+            }
+            case IrOp.LoadLiteral lit -> countWrite(accesses, writes, lit.dst());
+            case IrOp.Branch b -> {
+                if (b.link()) countWrite(accesses, writes, LR_REGISTER);
+            }
+            case IrOp.BranchExchange bx -> {
+                if (bx.sourceValueOverride() == -1) countRead(accesses, bx.sourceRegister());
+            }
+            case IrOp.ThumbBlPrefix ignored -> countWrite(accesses, writes, LR_REGISTER);
+            case IrOp.ThumbBlSuffix ignored -> {
+                countRead(accesses, LR_REGISTER);
+                countWrite(accesses, writes, LR_REGISTER);
+            }
+            default -> {
+            }
+        }
+    }
+
+    private static void countRead(int[] accesses, int reg) {
+        if (reg >= 0 && reg < CACHEABLE_REGISTERS) {
+            accesses[reg]++;
+        }
+    }
+
+    private static void countWrite(int[] accesses, boolean[] writes, int reg) {
+        if (reg >= 0 && reg < CACHEABLE_REGISTERS) {
+            accesses[reg]++;
+            writes[reg] = true;
+        }
+    }
+
+    /// Opcodes ALU que leem src1 (espelha os `emitAluXxx` que chamam `emitSrc1`).
+    private static boolean aluUsesSrc1(IrOpCode opcode) {
+        return switch (opcode) {
+            case MOV, MVN, NEG, CLZ -> false;
+            default -> true;
+        };
+    }
+
+    /// Opcodes ALU que escrevem dst (todos menos os de comparação/teste).
+    private static boolean aluWritesDst(IrOpCode opcode) {
+        return switch (opcode) {
+            case CMP, CMN, TST, TEQ -> false;
+            default -> true;
+        };
+    }
+
+    /// Prólogo: carrega cada registrador cacheado do core para o seu local.
+    private void emitCachePrologue(MethodVisitor method) {
+        for (int reg = 0; reg < CACHEABLE_REGISTERS; reg++) {
+            if (cache.slot[reg] >= 0) {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                AsmBytecode.visitIntConst(method, reg);
+                AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+                method.visitVarInsn(Opcodes.ISTORE, cache.slot[reg]);
+            }
+        }
+    }
+
+    /// Descarrega os registradores cacheados possivelmente escritos de volta ao core.
+    private void emitCacheFlush(MethodVisitor method) {
+        for (int reg = 0; reg < CACHEABLE_REGISTERS; reg++) {
+            if (cache.slot[reg] >= 0 && cache.dirty[reg]) {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                AsmBytecode.visitIntConst(method, reg);
+                method.visitVarInsn(Opcodes.ILOAD, cache.slot[reg]);
+                AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+            }
+        }
+    }
+
+    /// Recarrega todos os registradores cacheados do core (após um helper que pode tê-los mudado).
+    private void emitCacheReload(MethodVisitor method) {
+        for (int reg = 0; reg < CACHEABLE_REGISTERS; reg++) {
+            if (cache.slot[reg] >= 0) {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                AsmBytecode.visitIntConst(method, reg);
+                AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+                method.visitVarInsn(Opcodes.ISTORE, cache.slot[reg]);
+            }
+        }
+    }
+
+    /// Emite um op "spilled": flush do cache, corpo, reload — o helper vê e deixa o core coerente.
+    private void emitSpilled(MethodVisitor method, Runnable body) {
+        emitCacheFlush(method);
+        body.run();
+        emitCacheReload(method);
+    }
+
+    /// Lê um registrador guest para a pilha: do cache se cacheado, senão do core.
+    private void emitReadRegister(MethodVisitor method, int reg) {
+        if (cache.cached(reg)) {
+            method.visitVarInsn(Opcodes.ILOAD, cache.slot[reg]);
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.visitIntConst(method, reg);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+        }
     }
 
     /// Construtor público sem-arg (o {@link JvmBlockLoader} instancia a classe).
@@ -640,9 +864,7 @@ public final class AsmBlockCompiler {
         if (load.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, load.baseValueOverride());
         } else {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, load.base());
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+            emitReadRegister(method, load.base());
         }
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // base
 
@@ -673,7 +895,7 @@ public final class AsmBlockCompiler {
         }
 
         // store to dst
-        if (load.dst() == 15) {
+        if (load.dst() == PC_REGISTER) {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
@@ -686,12 +908,10 @@ public final class AsmBlockCompiler {
 
         // writeback: base register = base + offset (only when base != dst)
         if (load.writeback() && load.base() != load.dst()) {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, load.base());
             method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
             method.visitInsn(Opcodes.IADD);
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+            emitStoreRegister(method, load.base());
         }
     }
 
@@ -700,9 +920,7 @@ public final class AsmBlockCompiler {
         if (store.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.baseValueOverride());
         } else {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, store.base());
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+            emitReadRegister(method, store.base());
         }
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // base
 
@@ -721,9 +939,7 @@ public final class AsmBlockCompiler {
         if (store.srcValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.srcValueOverride());
         } else {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, store.src());
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+            emitReadRegister(method, store.src());
         }
         method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);   // value
 
@@ -740,12 +956,10 @@ public final class AsmBlockCompiler {
 
         // writeback
         if (store.writeback()) {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, store.base());
             method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
             method.visitInsn(Opcodes.IADD);
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+            emitStoreRegister(method, store.base());
         }
     }
 
@@ -753,7 +967,7 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, lit.address());
         AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
-        if (lit.dst() == 15) {
+        if (lit.dst() == PC_REGISTER) {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
@@ -802,10 +1016,8 @@ public final class AsmBlockCompiler {
 
     private void emitBranch(MethodVisitor method, IrOp.Branch branch) {
         if (branch.link()) {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, 14);
             AsmBytecode.visitIntConst(method, branch.returnAddress());
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+            emitStoreRegister(method, LR_REGISTER);
         }
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, branch.target());
@@ -819,9 +1031,7 @@ public final class AsmBlockCompiler {
         if (bx.sourceValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, bx.sourceValueOverride());
         } else {
-            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-            AsmBytecode.visitIntConst(method, bx.sourceRegister());
-            AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+            emitReadRegister(method, bx.sourceRegister());
         }
         AsmBytecode.invokeStatic(method, HELPERS, "branchExchange", CORE_I_TO_V);
         method.visitInsn(Opcodes.ICONST_1);
@@ -830,23 +1040,17 @@ public final class AsmBlockCompiler {
 
     private void emitThumbBlPrefix(MethodVisitor method, IrOp.ThumbBlPrefix prefix) {
         // LR = address + 4 + highOffset (no PC change)
-        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        AsmBytecode.visitIntConst(method, 14);
         AsmBytecode.visitIntConst(method, prefix.address() + 4 + prefix.highOffset());
-        AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+        emitStoreRegister(method, LR_REGISTER);
     }
 
     private void emitThumbBlSuffix(MethodVisitor method, IrOp.ThumbBlSuffix suffix) {
         // oldLR = register(14)
-        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        AsmBytecode.visitIntConst(method, 14);
-        AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+        emitReadRegister(method, LR_REGISTER);
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // oldLR
         // LR = (address + 2) | 1
-        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        AsmBytecode.visitIntConst(method, 14);
         AsmBytecode.visitIntConst(method, (suffix.address() + 2) | 1);
-        AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerWrite());
+        emitStoreRegister(method, LR_REGISTER);
         // PC = oldLR + lowOffset
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
@@ -950,9 +1154,7 @@ public final class AsmBlockCompiler {
             AsmBytecode.visitIntConst(method, valueOverride);
             return;
         }
-        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-        AsmBytecode.visitIntConst(method, register);
-        AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+        emitReadRegister(method, register);
     }
 
     private void emitOperand(MethodVisitor method, IrOperand operand) {
@@ -962,9 +1164,7 @@ public final class AsmBlockCompiler {
                 if (reg.valueOverride() >= 0) {
                     AsmBytecode.visitIntConst(method, reg.valueOverride());
                 } else {
-                    method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-                    AsmBytecode.visitIntConst(method, reg.index());
-                    AsmBytecode.invokeVirtual(method, GuestToHostMapper.registerRead());
+                    emitReadRegister(method, reg.index());
                 }
             }
             case IrOperand.ShiftedRegister ignored ->
@@ -973,8 +1173,12 @@ public final class AsmBlockCompiler {
     }
 
     private void emitStoreRegister(MethodVisitor method, int dst) {
+        if (dst != PC_REGISTER && cache.cached(dst)) {
+            method.visitVarInsn(Opcodes.ISTORE, cache.slot[dst]);
+            return;
+        }
         method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
-        if (dst == 15) {
+        if (dst == PC_REGISTER) {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
             AsmBytecode.invokeStatic(method, HELPERS, "loadToPcArm4", CORE_I_TO_V);

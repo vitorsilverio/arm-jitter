@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.jit;
 import dev.vitorsilverio.armjitter.codegen.CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.CodegenBackend;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.InstructionDecoder;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
@@ -64,12 +65,20 @@ public final class JitRuntime {
     // {@link BlockCache#generation()}. Qualquer remoção estrutural no cache principal
     // (SMC, evicção LRU, sobrescrita, clear) incrementa a geração; ao detectar a
     // divergência o IC é esvaziado preguiçosamente, então um bloco obsoleto nunca executa.
-    /// Número de entradas do inline cache (potência de 2).
-    private static final int IC_SIZE = 1 << 12;
+    /// Número de entradas do inline cache (potência de 2). 32K slots: com 4K o working set de um
+    /// jogo comercial (MKDS) sofria conflitos direct-mapped — o caminho de miss (executeTiered:
+    /// lookup no HashMap + alocação de BlockKey) chegou a 22% do tempo de CPU no profile.
+    private static final int IC_SIZE = 1 << 15;
     /// Máscara de indexação do inline cache.
     private static final int IC_MASK = IC_SIZE - 1;
     /// Tag sentinela para slot vazio (nenhuma tag válida é negativa).
     private static final long IC_EMPTY = -1L;
+    /// Orçamento de ciclos internos do encadeamento de blocos (ver `execute`): a corrente para de
+    /// seguir o PC ao atingir isto. 0 = encadeamento desligado (default seguro). Configurável por
+    /// runtime ({@link #setChainCycleBudget}): handshakes de boot cross-CPU (NitroSDK IPC-sync,
+    /// HLE de boot do host) dependem de o scheduler do emulador rodar ENTRE blocos, então o host
+    /// decide onde encadear é seguro (ex.: só na CPU principal, ou com orçamento pequeno).
+    private int chainCycleBudget;
     /// Tags `(pc & 0xFFFFFFFF) | (instructionSet.ordinal() << 32)` por slot.
     private final long[] icTags = new long[IC_SIZE];
     /// Blocos compilados por slot, alinhados a {@link #icTags}.
@@ -77,6 +86,24 @@ public final class JitRuntime {
     /// Geração do {@link BlockCache} para a qual o IC é válido. Inicia em -1
     /// (sentinela impossível) para forçar o flush/preenchimento no primeiro `execute`.
     private long icGeneration = -1L;
+
+    /// Diagnóstico (leitura externa; incrementos não-atômicos no caminho quente): acertos e
+    /// faltas do inline cache e flushes por mudança de geração — para dimensionar IC/hash e
+    /// detectar thrash por invalidação (SMC/DMA).
+    public long icHits;
+    public long icMisses;
+    public long icFlushes;
+    /// Blocos executados por encadeamento (sem round-trip pelo scheduler).
+    public long chainedBlocks;
+
+    /// Define o orçamento de ciclos do encadeamento de blocos (0 desliga). Ver o comentário de
+    /// {@link #chainCycleBudget} para as restrições de quando encadear é seguro.
+    public void setChainCycleBudget(int cycles) {
+        if (cycles < 0) {
+            throw new IllegalArgumentException("chain cycle budget must be >= 0");
+        }
+        this.chainCycleBudget = cycles;
+    }
 
     /// Cria um runtime JIT com seus componentes principais.
     public JitRuntime(
@@ -168,14 +195,47 @@ public final class JitRuntime {
         // Revalida o IC contra a geração do cache (esvazia se algo foi removido) e
         // tenta o slot direto. Hit ⇒ executa sem tocar BlockKey/HashMap/Optional.
         syncInlineCacheGeneration();
-        int slot = (pc >>> 1) & IC_MASK;
+        int slot = icSlot(pc);
         long tag = inlineTag(pc, instructionSet);
         if (icTags[slot] == tag) {
             // Invariante: tag válida ⇒ bloco não-nulo (gravados juntos em inlineRecord).
+            icHits++;
             int cycles = icBlocks[slot].execute(core);
+            // ── Encadeamento de blocos (chain fast path) ───────────────────────
+            // Loops de spin (poll de IPC/VCOUNT/flags, com ou sem `bl` para um helper) são ciclos
+            // de blocos de 1-4 instruções: sem isto, CADA bloco paga o round-trip completo
+            // (scheduler + runBlock + IC + chamada megamórfica) — medido ~1,25 ciclos/bloco no
+            // title screen de MKDS, com o despacho dominando o tempo de CPU. Enquanto o próximo
+            // PC acertar o inline cache, executa o próximo bloco AQUI, até um orçamento de ciclos.
+            // Limites de segurança:
+            //  - orçamento: latência de interleave/IRQ fica na ordem de um bloco longo normal;
+            //  - interruptLine: linha pendente volta ao runBlock, que a serve;
+            //  - sleepState: um bloco pode ter dormido a CPU (SWI Halt/WFI);
+            //  - generation: escrita automodificável esvazia o IC ⇒ quebra a corrente;
+            //  - progresso: um passo sem ciclos internos aborta (nunca gira sem avançar o tempo);
+            //  - `core.mode()` por passo re-sincroniza o banco de registradores como o runBlock faz.
+            while (cycles < chainCycleBudget
+                    && core.sleepState() == CpuSleepState.RUNNING
+                    && !core.interruptLine()
+                    && blockCache.generation() == icGeneration) {
+                core.mode(); // sincroniza modo/banking a partir do CPSR (como no runBlock)
+                int nextPc = core.programCounter();
+                InstructionSet nextSet = instructionSet(core);
+                int nextSlot = icSlot(nextPc);
+                if (icTags[nextSlot] != inlineTag(nextPc, nextSet)) {
+                    break; // próximo bloco não está no IC: volta ao caminho normal
+                }
+                int step = icBlocks[nextSlot].execute(core);
+                cycles += step;
+                chainedBlocks++;
+                if (step <= 0) {
+                    break;
+                }
+            }
             core.addCycles(cycles);
             return cycles;
         }
+        icMisses++;
 
         BlockKey key = new BlockKey(pc, instructionSet);
         if (coldEmitter != null) {
@@ -255,6 +315,13 @@ public final class JitRuntime {
         }
     }
 
+    /// Índice do inline cache para um PC. Dobra os bits altos no índice: sem isso, blocos a
+    /// strides de IC_SIZE*2 bytes (e regiões diferentes: main RAM 0x02xxxxxx vs WRAM 0x03xxxxxx)
+    /// aliasam no mesmo slot.
+    private static int icSlot(int pc) {
+        return ((pc >>> 1) ^ (pc >>> 16)) & IC_MASK;
+    }
+
     /// Tag do inline cache: `pc` (32 bits) + conjunto de instruções no bit 32.
     private static long inlineTag(int pc, InstructionSet instructionSet) {
         return (pc & 0xFFFF_FFFFL) | ((long) instructionSet.ordinal() << 32);
@@ -268,6 +335,7 @@ public final class JitRuntime {
         if (gen != icGeneration) {
             Arrays.fill(icTags, IC_EMPTY);
             icGeneration = gen;
+            icFlushes++;
         }
     }
 
