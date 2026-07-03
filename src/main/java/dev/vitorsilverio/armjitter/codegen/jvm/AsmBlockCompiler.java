@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.jvm;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -62,6 +63,7 @@ public final class AsmBlockCompiler {
     private static final int CACHE_BASE_LOCAL = 9;   // first guest-register cache slot
 
     // Registradores guest com papel arquitetural fixo.
+    private static final int SP_REGISTER = 13;
     private static final int LR_REGISTER = 14;
     private static final int PC_REGISTER = 15;
     /// r0..r14 são cacheáveis; r15 (o PC) nunca é — só é materializado por helpers/fixup.
@@ -114,6 +116,27 @@ public final class AsmBlockCompiler {
         return loadPcInterworks ? "loadToPcArm5" : "loadToPcArm4";
     }
 
+    /// Helper de guard especializado para uma condição (ver os `condXx` em AsmRuntimeHelpers).
+    private static String condHelperName(Condition cond) {
+        return switch (cond) {
+            case EQ -> "condEq";
+            case NE -> "condNe";
+            case CS -> "condCs";
+            case CC -> "condCc";
+            case MI -> "condMi";
+            case PL -> "condPl";
+            case VS -> "condVs";
+            case VC -> "condVc";
+            case HI -> "condHi";
+            case LS -> "condLs";
+            case GE -> "condGe";
+            case LT -> "condLt";
+            case GT -> "condGt";
+            case LE -> "condLe";
+            case AL -> throw new IllegalStateException("condição AL nunca é guardada");
+        };
+    }
+
     /// Compila o bloco em bytecode JVM. Todos os ops devem ser suportados por {@link AsmNativePolicy};
     /// ops não suportadas lançam {@link IllegalStateException}.
     public byte[] compile(String internalName, IrBlock block) {
@@ -164,8 +187,9 @@ public final class AsmBlockCompiler {
             if (cond != Condition.AL) {
                 condSkip = new Label();
                 method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-                AsmBytecode.visitIntConst(method, cond.ordinal());
-                AsmBytecode.invokeStatic(method, HELPERS, "evalCond", "(" + CORE_REF + "I)Z");
+                // Guard ESPECIALIZADO pela condição em tempo de compilação (condEq/condNe/...):
+                // elimina o switch-por-execução de evalCond; inlina a um teste de bits do CPSR.
+                AsmBytecode.invokeStatic(method, HELPERS, condHelperName(cond), "(" + CORE_REF + ")Z");
                 method.visitJumpInsn(Opcodes.IFEQ, condSkip);
             }
             switch (op) {
@@ -175,15 +199,22 @@ public final class AsmBlockCompiler {
                 case IrOp.Load load -> emitLoad(method, load);
                 case IrOp.Store store -> emitStore(method, store);
                 case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
-                // Ops cujos helpers acessam registradores diretamente no core: flush + reload
-                // em volta, para o cache nunca ficar stale (ver doc da classe).
-                case IrOp.MultipleTransfer mt -> emitSpilled(method, () -> emitMultipleTransfer(method, mt));
+                // LDM/STM/PUSH/POP: o caso comum é DESENROLADO inline (a lista de registradores é
+                // constante de compilação) integrado ao register cache; só as formas raras
+                // (user-mode, lista vazia, PC na lista) caem no helper, com flush + reload.
+                case IrOp.MultipleTransfer mt -> {
+                    if (canInlineMultipleTransfer(mt)) {
+                        emitMultipleTransferInline(method, mt);
+                    } else {
+                        emitSpilled(method, () -> emitMultipleTransfer(method, mt));
+                    }
+                }
                 case IrOp.Branch b -> emitBranch(method, b);
                 case IrOp.BranchExchange bx -> emitBranchExchange(method, bx);
                 case IrOp.ThumbBlPrefix prefix -> emitThumbBlPrefix(method, prefix);
                 case IrOp.ThumbBlSuffix suffix -> emitThumbBlSuffix(method, suffix);
-                case IrOp.Push push -> emitSpilled(method, () -> emitPush(method, push));
-                case IrOp.Pop pop -> emitSpilled(method, () -> emitPop(method, pop));
+                case IrOp.Push push -> emitPushInline(method, push);
+                case IrOp.Pop pop -> emitPopInline(method, pop);
                 case IrOp.PsrTransfer psr -> emitSpilled(method, () -> emitPsrTransfer(method, psr));
                 case IrOp.Swi swi -> emitSpilled(method, () -> emitSwi(method, swi, block.endPc()));
                 case IrOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
@@ -300,6 +331,44 @@ public final class AsmBlockCompiler {
                 countRead(accesses, LR_REGISTER);
                 countWrite(accesses, writes, LR_REGISTER);
             }
+            case IrOp.MultipleTransfer mt -> {
+                if (canInlineMultipleTransfer(mt)) { // as formas raras vão pelo helper (spill)
+                    countRead(accesses, mt.base());
+                    if (mt.writeback()) {
+                        countWrite(accesses, writes, mt.base());
+                    }
+                    for (int reg = 0; reg < PC_REGISTER; reg++) {
+                        if ((mt.registerMask() & (1 << reg)) != 0) {
+                            if (mt.load()) {
+                                countWrite(accesses, writes, reg);
+                            } else {
+                                countRead(accesses, reg);
+                            }
+                        }
+                    }
+                }
+            }
+            case IrOp.Push push -> {
+                countRead(accesses, SP_REGISTER);
+                countWrite(accesses, writes, SP_REGISTER);
+                for (int reg = 0; reg <= 7; reg++) {
+                    if ((push.registerMask() & (1 << reg)) != 0) {
+                        countRead(accesses, reg);
+                    }
+                }
+                if (push.includeLr()) {
+                    countRead(accesses, LR_REGISTER);
+                }
+            }
+            case IrOp.Pop pop -> {
+                countRead(accesses, SP_REGISTER);
+                countWrite(accesses, writes, SP_REGISTER);
+                for (int reg = 0; reg <= 7; reg++) {
+                    if ((pop.registerMask() & (1 << reg)) != 0) {
+                        countWrite(accesses, writes, reg);
+                    }
+                }
+            }
             default -> {
             }
         }
@@ -375,6 +444,150 @@ public final class AsmBlockCompiler {
         emitCacheFlush(method);
         body.run();
         emitCacheReload(method);
+    }
+
+    // ── LDM/STM inline ─────────────────────────────────────────────────────────
+
+    /// O caso comum de LDM/STM que pode ser desenrolado inline: sem user-mode, sem lista vazia e
+    /// sem PC na lista (LDM→PC troca de bloco/interworka; STM de PC leria o r15 do core — ambos
+    /// ficam no helper).
+    private static boolean canInlineMultipleTransfer(IrOp.MultipleTransfer mt) {
+        return !mt.userMode()
+                && !mt.emptyRegisterList()
+                && mt.registerMask() != 0
+                && (mt.registerMask() & (1 << PC_REGISTER)) == 0;
+    }
+
+    /// Offset compile-time do primeiro endereço acessado em relação à base (LDM/STM acessa sempre
+    /// ascendente a partir do menor endereço).
+    private static int startOffset(BlockTransferMode mode, int count) {
+        return switch (mode) {
+            case IA -> 0;
+            case IB -> 4;
+            case DA -> -(count - 1) * 4;
+            case DB -> -count * 4;
+        };
+    }
+
+    /// Offset compile-time do writeback em relação à base.
+    private static int writebackOffset(BlockTransferMode mode, int count) {
+        return switch (mode) {
+            case IA, IB -> count * 4;
+            case DA, DB -> -count * 4;
+        };
+    }
+
+    /// LDM/STM desenrolado: espelha AsmRuntimeHelpers.executeMultipleTransfer para o caso comum,
+    /// registrador a registrador, lendo/escrevendo pelo register cache (sem flush/reload).
+    private void emitMultipleTransferInline(MethodVisitor method, IrOp.MultipleTransfer mt) {
+        int mask = mt.registerMask();
+        int count = Integer.bitCount(mask);
+        int base = mt.base();
+        int firstRegister = Integer.numberOfTrailingZeros(mask);
+        boolean baseInMask = (mask & (1 << base)) != 0;
+        boolean needWriteback = mt.writeback();
+
+        // ADDR = (baseValue + startOffset) & ~3 — o endereço corrente, incrementado por transferência.
+        emitReadRegister(method, base);
+        int start = startOffset(mt.mode(), count);
+        if (start != 0) {
+            AsmBytecode.visitIntConst(method, start);
+            method.visitInsn(Opcodes.IADD);
+        }
+        AsmBytecode.visitIntConst(method, ~3);
+        method.visitInsn(Opcodes.IAND);
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+        // TEMP2 = endereço de writeback (também é o valor gravado por STM quando a base está na
+        // lista além da primeira posição).
+        if (needWriteback) {
+            emitReadRegister(method, base);
+            AsmBytecode.visitIntConst(method, writebackOffset(mt.mode(), count));
+            method.visitInsn(Opcodes.IADD);
+            method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);
+        }
+        for (int reg = 0; reg < PC_REGISTER; reg++) {
+            if ((mask & (1 << reg)) == 0) {
+                continue;
+            }
+            if (mt.load()) {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+                AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+                emitStoreRegister(method, reg);
+            } else {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+                if (needWriteback && reg == base && reg != firstRegister) {
+                    method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL); // STM da base pós-writeback
+                } else {
+                    emitReadRegister(method, reg);
+                }
+                AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+            }
+            method.visitIincInsn(ADDR_LOCAL, 4);
+        }
+        if (needWriteback && !(mt.load() && baseInMask)) {
+            method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+            emitStoreRegister(method, base);
+        }
+    }
+
+    /// PUSH desenrolado (THUMB): stores ascendentes a partir de sp-4n, depois sp = sp-4n.
+    private void emitPushInline(MethodVisitor method, IrOp.Push push) {
+        int count = Integer.bitCount(push.registerMask()) + (push.includeLr() ? 1 : 0);
+        emitReadRegister(method, SP_REGISTER);
+        AsmBytecode.visitIntConst(method, count * 4);
+        method.visitInsn(Opcodes.ISUB);
+        method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL); // novo sp = primeiro endereço
+        method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+        for (int reg = 0; reg <= 7; reg++) {
+            if ((push.registerMask() & (1 << reg)) == 0) {
+                continue;
+            }
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            emitReadRegister(method, reg);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+            method.visitIincInsn(ADDR_LOCAL, 4);
+        }
+        if (push.includeLr()) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            emitReadRegister(method, LR_REGISTER);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+        }
+        method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+        emitStoreRegister(method, SP_REGISTER);
+    }
+
+    /// POP desenrolado (THUMB): loads ascendentes a partir de sp; POP {..,pc} carrega o PC pelo
+    /// helper de interworking da arquitetura e encerra o bloco (pc_changed).
+    private void emitPopInline(MethodVisitor method, IrOp.Pop pop) {
+        emitReadRegister(method, SP_REGISTER);
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+        for (int reg = 0; reg <= 7; reg++) {
+            if ((pop.registerMask() & (1 << reg)) == 0) {
+                continue;
+            }
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            emitStoreRegister(method, reg);
+            method.visitIincInsn(ADDR_LOCAL, 4);
+        }
+        if (pop.includePc()) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V);
+            method.visitIincInsn(ADDR_LOCAL, 4);
+            method.visitInsn(Opcodes.ICONST_1);
+            method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
+        }
+        method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+        emitStoreRegister(method, SP_REGISTER);
     }
 
     /// Lê um registrador guest para a pilha: do cache se cacheado, senão do core.

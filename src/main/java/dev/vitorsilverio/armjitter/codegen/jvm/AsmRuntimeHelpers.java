@@ -31,6 +31,68 @@ public final class AsmRuntimeHelpers {
         return core.cpsr().evalCond(CONDITIONS[ordinal]);
     }
 
+    // Guards especializados POR CONDIÇÃO, escolhidos em tempo de compilação pelo
+    // AsmBlockCompiler: eliminam o switch-por-execução de evalCond (o guard roda por op
+    // condicional compilado — código ARM é denso em condições, e este era um dos leaves mais
+    // quentes do JFR). Cada um espelha um caso de CpsrRegister.evalCond e inlina a um teste
+    // de bits.
+
+    public static boolean condEq(ArmCore core) {
+        return core.cpsr().zero();
+    }
+
+    public static boolean condNe(ArmCore core) {
+        return !core.cpsr().zero();
+    }
+
+    public static boolean condCs(ArmCore core) {
+        return core.cpsr().carry();
+    }
+
+    public static boolean condCc(ArmCore core) {
+        return !core.cpsr().carry();
+    }
+
+    public static boolean condMi(ArmCore core) {
+        return core.cpsr().negative();
+    }
+
+    public static boolean condPl(ArmCore core) {
+        return !core.cpsr().negative();
+    }
+
+    public static boolean condVs(ArmCore core) {
+        return core.cpsr().overflow();
+    }
+
+    public static boolean condVc(ArmCore core) {
+        return !core.cpsr().overflow();
+    }
+
+    public static boolean condHi(ArmCore core) {
+        return core.cpsr().carry() && !core.cpsr().zero();
+    }
+
+    public static boolean condLs(ArmCore core) {
+        return !core.cpsr().carry() || core.cpsr().zero();
+    }
+
+    public static boolean condGe(ArmCore core) {
+        return core.cpsr().negative() == core.cpsr().overflow();
+    }
+
+    public static boolean condLt(ArmCore core) {
+        return core.cpsr().negative() != core.cpsr().overflow();
+    }
+
+    public static boolean condGt(ArmCore core) {
+        return !core.cpsr().zero() && core.cpsr().negative() == core.cpsr().overflow();
+    }
+
+    public static boolean condLe(ArmCore core) {
+        return core.cpsr().zero() || core.cpsr().negative() != core.cpsr().overflow();
+    }
+
     // ── flags ALU ──────────────────────────────────────────────────────────────
 
     public static void updateCmpFlags(ArmCore core, int left, int right) {
