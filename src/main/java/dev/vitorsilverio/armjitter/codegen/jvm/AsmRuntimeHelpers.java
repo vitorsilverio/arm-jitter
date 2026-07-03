@@ -322,6 +322,80 @@ public final class AsmRuntimeHelpers {
         return load && includesPc;
     }
 
+    // ── ARMv5TE (saturação / DSP) ──────────────────────────────────────────────
+    // Espelham IrAluExecutor.executeSaturating/executeDspMultiply. Recebem VALORES e devolvem o
+    // resultado (o bytecode lê/escreve registradores pelo register cache); só o bit Q sticky é
+    // efeito colateral no core.
+
+    /// QADD/QSUB/QDADD/QDSUB. `op`: 0=QADD, 1=QSUB, 2=QDADD, 3=QDSUB. Satura em 32 bits com sinal
+    /// e seta o bit Q em overflow (de qualquer etapa, como no interpretador).
+    public static int saturating(ArmCore core, int rm, int rn, int op) {
+        boolean q = false;
+        long result;
+        if (op == 0) {
+            result = (long) rm + rn;
+        } else if (op == 1) {
+            result = (long) rm - rn;
+        } else {
+            long doubled = 2L * rn;
+            int clamped;
+            if (doubled > Integer.MAX_VALUE) {
+                q = true;
+                clamped = Integer.MAX_VALUE;
+            } else if (doubled < Integer.MIN_VALUE) {
+                q = true;
+                clamped = Integer.MIN_VALUE;
+            } else {
+                clamped = (int) doubled;
+            }
+            result = op == 2 ? (long) rm + clamped : (long) rm - clamped;
+        }
+        int out;
+        if (result > Integer.MAX_VALUE) {
+            q = true;
+            out = Integer.MAX_VALUE;
+        } else if (result < Integer.MIN_VALUE) {
+            q = true;
+            out = Integer.MIN_VALUE;
+        } else {
+            out = (int) result;
+        }
+        if (q) {
+            core.cpsr().setSaturation(true); // sticky
+        }
+        return out;
+    }
+
+    /// SMLAxy: (Rm.x * Rs.y) + Rn, com Q se o acúmulo de 32 bits estoura.
+    public static int dspSmla(ArmCore core, int rmHalf, int rsHalf, int rn) {
+        long sum = (long) (rmHalf * rsHalf) + rn;
+        if (sum != (int) sum) {
+            core.cpsr().setSaturation(true);
+        }
+        return (int) sum;
+    }
+
+    /// SMLAWy: ((Rm * Rs.y) >> 16) + Rn, com Q se o acúmulo estoura.
+    public static int dspSmlaw(ArmCore core, int rm, int rsHalf, int rn) {
+        int product = (int) (((long) rm * rsHalf) >> 16);
+        long sum = (long) product + rn;
+        if (sum != (int) sum) {
+            core.cpsr().setSaturation(true);
+        }
+        return (int) sum;
+    }
+
+    /// SMULWy: (Rm * Rs.y) >> 16 (sem acumular, sem Q).
+    public static int dspSmulw(int rm, int rsHalf) {
+        return (int) (((long) rm * rsHalf) >> 16);
+    }
+
+    /// SMLALxy: {RdHi:RdLo} + RmHalf*RsHalf em 64 bits (sem Q).
+    public static long dspSmlal(int rdHi, int rdLo, int rmHalf, int rsHalf) {
+        long acc = ((long) rdHi << 32) | (rdLo & 0xFFFF_FFFFL);
+        return acc + (long) rmHalf * rsHalf;
+    }
+
     // ── PSR ────────────────────────────────────────────────────────────────────
 
     public static void executePsrRead(ArmCore core, boolean spsr, int register) {

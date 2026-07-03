@@ -196,6 +196,9 @@ public final class AsmBlockCompiler {
                 case IrOp.Alu alu -> emitAlu(method, alu);
                 case IrOp.Multiply mul -> emitMultiply(method, mul);
                 case IrOp.LongMultiply mul -> emitLongMultiply(method, mul);
+                case IrOp.Saturating sat -> emitSaturating(method, sat);
+                case IrOp.DspMultiply dsp -> emitDspMultiply(method, dsp);
+                case IrOp.DoubleTransfer dt -> emitDoubleTransfer(method, dt);
                 case IrOp.Load load -> emitLoad(method, load);
                 case IrOp.Store store -> emitStore(method, store);
                 case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
@@ -348,6 +351,42 @@ public final class AsmBlockCompiler {
                     }
                 }
             }
+            case IrOp.Saturating sat -> {
+                countRead(accesses, sat.rm());
+                countRead(accesses, sat.rn());
+                countWrite(accesses, writes, sat.dst());
+            }
+            case IrOp.DspMultiply dsp -> {
+                countRead(accesses, dsp.rm());
+                countRead(accesses, dsp.rs());
+                if (dsp.op2() == 0 || (dsp.op2() == 1 && dsp.x() == 0)) {
+                    countRead(accesses, dsp.rn());
+                }
+                if (dsp.op2() == 2) { // SMLAL: lê e escreve o par RdLo/RdHi
+                    countRead(accesses, dsp.rn());
+                    countRead(accesses, dsp.dst());
+                    countWrite(accesses, writes, dsp.rn());
+                }
+                countWrite(accesses, writes, dsp.dst());
+            }
+            case IrOp.DoubleTransfer dt -> {
+                if (dt.baseValueOverride() == -1) {
+                    countRead(accesses, dt.base());
+                }
+                if (dt.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
+                    countRead(accesses, reg.index());
+                }
+                if (dt.load()) {
+                    countWrite(accesses, writes, dt.first());
+                    countWrite(accesses, writes, dt.first() + 1);
+                } else {
+                    countRead(accesses, dt.first());
+                    countRead(accesses, dt.first() + 1);
+                }
+                if (dt.writeback()) {
+                    countWrite(accesses, writes, dt.base());
+                }
+            }
             case IrOp.Push push -> {
                 countRead(accesses, SP_REGISTER);
                 countWrite(accesses, writes, SP_REGISTER);
@@ -444,6 +483,129 @@ public final class AsmBlockCompiler {
         emitCacheFlush(method);
         body.run();
         emitCacheReload(method);
+    }
+
+    // ── ARMv5TE (saturação / DSP / LDRD-STRD) ──────────────────────────────────
+
+    /// QADD/QSUB/QDADD/QDSUB via helper por-valor (o bit Q sticky é o único efeito no core).
+    private void emitSaturating(MethodVisitor method, IrOp.Saturating sat) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        emitReadRegister(method, sat.rm());
+        emitReadRegister(method, sat.rn());
+        AsmBytecode.visitIntConst(method, sat.op());
+        AsmBytecode.invokeStatic(method, HELPERS, "saturating", "(" + CORE_REF + "III)I");
+        emitStoreRegister(method, sat.dst());
+    }
+
+    /// Lê a metade de 16 bits (com sinal) de um registrador para a pilha: baixa (sel 0) ou alta.
+    private void emitReadHalf(MethodVisitor method, int register, int sel) {
+        emitReadRegister(method, register);
+        if (sel != 0) {
+            AsmBytecode.visitIntConst(method, 16);
+            method.visitInsn(Opcodes.ISHR);
+        }
+        method.visitInsn(Opcodes.I2S);
+    }
+
+    /// SMLAxy / SMLAWy / SMULWy / SMLALxy / SMULxy (espelha IrAluExecutor.executeDspMultiply).
+    private void emitDspMultiply(MethodVisitor method, IrOp.DspMultiply dsp) {
+        switch (dsp.op2()) {
+            case 0 -> { // SMLAxy: (Rm.x * Rs.y) + Rn, Q em overflow
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                emitReadHalf(method, dsp.rm(), dsp.x());
+                emitReadHalf(method, dsp.rs(), dsp.y());
+                emitReadRegister(method, dsp.rn());
+                AsmBytecode.invokeStatic(method, HELPERS, "dspSmla", "(" + CORE_REF + "III)I");
+                emitStoreRegister(method, dsp.dst());
+            }
+            case 1 -> {
+                if (dsp.x() == 0) { // SMLAWy
+                    method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                    emitReadRegister(method, dsp.rm());
+                    emitReadHalf(method, dsp.rs(), dsp.y());
+                    emitReadRegister(method, dsp.rn());
+                    AsmBytecode.invokeStatic(method, HELPERS, "dspSmlaw", "(" + CORE_REF + "III)I");
+                } else { // SMULWy
+                    emitReadRegister(method, dsp.rm());
+                    emitReadHalf(method, dsp.rs(), dsp.y());
+                    AsmBytecode.invokeStatic(method, HELPERS, "dspSmulw", "(II)I");
+                }
+                emitStoreRegister(method, dsp.dst());
+            }
+            case 2 -> { // SMLALxy: {RdHi:RdLo} += Rm.x * Rs.y
+                emitReadRegister(method, dsp.dst()); // RdHi
+                emitReadRegister(method, dsp.rn());  // RdLo
+                emitReadHalf(method, dsp.rm(), dsp.x());
+                emitReadHalf(method, dsp.rs(), dsp.y());
+                AsmBytecode.invokeStatic(method, HELPERS, "dspSmlal", "(IIII)J");
+                method.visitVarInsn(Opcodes.LSTORE, LONG_RESULT_LOCAL);
+                method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+                method.visitInsn(Opcodes.L2I);
+                emitStoreRegister(method, dsp.rn());  // RdLo primeiro, como no interpretador
+                method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+                AsmBytecode.visitIntConst(method, 32);
+                method.visitInsn(Opcodes.LUSHR);
+                method.visitInsn(Opcodes.L2I);
+                emitStoreRegister(method, dsp.dst()); // RdHi
+            }
+            default -> { // SMULxy: Rm.x * Rs.y (puro)
+                emitReadHalf(method, dsp.rm(), dsp.x());
+                emitReadHalf(method, dsp.rs(), dsp.y());
+                method.visitInsn(Opcodes.IMUL);
+                emitStoreRegister(method, dsp.dst());
+            }
+        }
+    }
+
+    /// LDRD/STRD (espelha IrMemoryExecutor.executeDoubleTransfer): dois acessos de 32 bits, um
+    /// cálculo de endereço/writeback. PC no par é rejeitado pela policy (fica no interpretado).
+    private void emitDoubleTransfer(MethodVisitor method, IrOp.DoubleTransfer dt) {
+        emitOperand(method, dt.offset());
+        method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);   // offset
+        if (dt.baseValueOverride() != -1) {
+            AsmBytecode.visitIntConst(method, dt.baseValueOverride());
+        } else {
+            emitReadRegister(method, dt.base());
+        }
+        method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // base
+        method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+        if (!dt.postIndexed()) {
+            method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+            method.visitInsn(Opcodes.IADD);
+        }
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+
+        int second = dt.first() + 1;
+        if (dt.load()) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            emitStoreRegister(method, dt.first());
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            emitStoreRegister(method, second);
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            emitReadRegister(method, dt.first());
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            emitReadRegister(method, second);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+        }
+        // Writeback (não quando um load clobra a base — UNPREDICTABLE, como no interpretador).
+        if (dt.writeback() && (!dt.load() || (dt.base() != dt.first() && dt.base() != second))) {
+            method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+            method.visitInsn(Opcodes.IADD);
+            emitStoreRegister(method, dt.base());
+        }
     }
 
     // ── LDM/STM inline ─────────────────────────────────────────────────────────

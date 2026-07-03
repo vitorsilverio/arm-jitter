@@ -20,7 +20,8 @@ import java.util.Set;
 ///   <li>{@link IrOp.Alu} com {@code dst=15} e {@code setFlags=true} — restaura SPSR.</li>
 ///   <li>{@link IrOp.Load}/{@link IrOp.Store} com offset {@link IrOperand.ShiftedRegister}.</li>
 ///   <li>BLX ({@link IrOp.BranchExchange} com {@code link}, {@link IrOp.ThumbBlSuffix} com {@code exchange}).</li>
-///   <li>ARMv5TE ainda não emitidas: {@link IrOp.Saturating}, {@link IrOp.DspMultiply}, {@link IrOp.DoubleTransfer}.</li>
+///   <li>Formas ARMv5TE com escrita em PC (o comum — Saturating/DspMultiply/LDRD/STRD sem PC —
+///       é emitido nativamente).</li>
 /// </ul>
 public final class AsmNativePolicy {
     private static final Set<IrOpCode> SHIFT_OPCODES = EnumSet.of(
@@ -47,9 +48,12 @@ public final class AsmNativePolicy {
             case IrOp.Alu alu -> supportsAlu(alu);
             case IrOp.Multiply ignored -> true;
             case IrOp.LongMultiply ignored -> true;
-            case IrOp.Saturating ignored -> false;  // ARMv5TE saturating arithmetic -> interpret
-            case IrOp.DspMultiply ignored -> false;    // ARMv5TE DSP multiplies -> interpret
-            case IrOp.DoubleTransfer ignored -> false; // ARMv5TE LDRD/STRD -> interpret
+            // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
+            // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
+            case IrOp.Saturating s -> s.dst() != 15;
+            case IrOp.DspMultiply d -> d.dst() != 15 && !(d.op2() == 2 && d.rn() == 15);
+            case IrOp.DoubleTransfer d -> !(d.offset() instanceof IrOperand.ShiftedRegister)
+                    && d.first() + 1 <= (d.load() ? 14 : 15);
             case IrOp.Load l -> !(l.offset() instanceof IrOperand.ShiftedRegister);
             case IrOp.Store s -> !(s.offset() instanceof IrOperand.ShiftedRegister);
             case IrOp.LoadLiteral ignored -> true;
