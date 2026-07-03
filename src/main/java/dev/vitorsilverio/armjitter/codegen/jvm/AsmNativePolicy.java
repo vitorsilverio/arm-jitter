@@ -52,10 +52,9 @@ public final class AsmNativePolicy {
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
             case IrOp.DspMultiply d -> d.dst() != 15 && !(d.op2() == 2 && d.rn() == 15);
-            case IrOp.DoubleTransfer d -> !(d.offset() instanceof IrOperand.ShiftedRegister)
-                    && d.first() + 1 <= (d.load() ? 14 : 15);
-            case IrOp.Load l -> !(l.offset() instanceof IrOperand.ShiftedRegister);
-            case IrOp.Store s -> !(s.offset() instanceof IrOperand.ShiftedRegister);
+            case IrOp.DoubleTransfer d -> d.first() + 1 <= (d.load() ? 14 : 15);
+            case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
+            case IrOp.Store ignored -> true;
             case IrOp.LoadLiteral ignored -> true;
             case IrOp.MultipleTransfer ignored -> true;
             case IrOp.Branch ignored -> true;
@@ -75,12 +74,26 @@ public final class AsmNativePolicy {
     }
 
     private static boolean supportsAlu(IrOp.Alu alu) {
-        if (alu.src2() instanceof IrOperand.ShiftedRegister) return false;
+        // src2 shifted-register é nativo, EXCETO quando flags LÓGICOS precisam do carry-out do
+        // barrel shifter (MOV/MVN/AND/EOR/ORR/BIC/TST/TEQ com S) — os flags aritméticos (ADD/SUB/
+        // CMP/...) vêm da própria aritmética e não dependem do shifter.
+        if (alu.src2() instanceof IrOperand.ShiftedRegister
+                && alu.setFlags() && !arithmeticFlags(alu.opcode())) {
+            return false;
+        }
         // Shift+setFlags: carry-out computation is complex, defer to interpreted.
         if (SHIFT_OPCODES.contains(alu.opcode()) && alu.setFlags()) return false;
         // dst=15 + setFlags: restores CPSR from SPSR, defer to interpreted.
         if (alu.dst() == 15 && alu.setFlags()) return false;
         return true;
+    }
+
+    /// Opcodes cujos flags-S vêm da aritmética (independem do carry-out do shifter).
+    private static boolean arithmeticFlags(IrOpCode opcode) {
+        return switch (opcode) {
+            case ADD, ADC, SUB, SBC, RSB, RSC, CMP, CMN, NEG -> true;
+            default -> false;
+        };
     }
 
     /// Opcodes ALU actualmente emitidos nativamente (pode incluir todos exceto os filtrados acima).

@@ -322,6 +322,28 @@ public final class AsmRuntimeHelpers {
         return load && includesPc;
     }
 
+    // ── operando shifted-register ──────────────────────────────────────────────
+
+    /// Valor de um operando shifted-register (espelha IrExecutionSupport.shiftedRegisterOperand).
+    /// `value` já foi lido pelo bytecode (via register cache); `shiftType` é o ordinal de
+    /// ShiftType (LSL/LSR/ASR/ROR); para shift por registrador, `amount` já vem mascarado com
+    /// 0xFF e `regSpecified`=true (amount 0 devolve o valor intacto); RRX consome o carry atual.
+    public static int shiftedOperand(ArmCore core, int value, int shiftType, int amount,
+                                     boolean regSpecified, boolean rrx) {
+        if (rrx) {
+            return (core.cpsr().carry() ? 0x8000_0000 : 0) | (value >>> 1);
+        }
+        if (regSpecified && amount == 0) {
+            return value;
+        }
+        return switch (shiftType) {
+            case 0 -> amount >= 32 ? 0 : value << amount;               // LSL
+            case 1 -> amount >= 32 ? 0 : value >>> amount;              // LSR
+            case 2 -> amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount; // ASR
+            default -> Integer.rotateRight(value, amount & 31);         // ROR
+        };
+    }
+
     // ── ARMv5TE (saturação / DSP) ──────────────────────────────────────────────
     // Espelham IrAluExecutor.executeSaturating/executeDspMultiply. Recebem VALORES e devolvem o
     // resultado (o bytecode lê/escreve registradores pelo register cache); só o bit Q sticky é

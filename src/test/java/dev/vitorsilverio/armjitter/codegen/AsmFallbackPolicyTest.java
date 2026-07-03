@@ -20,15 +20,16 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
                 .lift(memory, 0, count);
     }
 
-    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (operando shiftado por
-    /// registrador, carry-out complexo) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST.
-    /// (Condição ≠ AL agora É emitida nativamente via guard, então não serve mais para este teste.)
-    /// 0xE3A00064 = MOV r0, #100        (AL — nativo)
-    /// 0xE1A01312 = MOV r1, r2, LSL r3  (ShiftedRegister src2 — nunca nativo)
+    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (flags LÓGICOS que
+    /// dependem do carry-out do barrel shifter) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST.
+    /// (Condição ≠ AL e ShiftedRegister sem flags agora SÃO emitidos nativamente, então não servem
+    /// mais para este teste.)
+    /// 0xE3A00064 = MOV r0, #100          (AL — nativo)
+    /// 0xE1B01312 = MOVS r1, r2, LSL r3   (flags lógicos + shifter carry — não nativo)
     private static TestAddressSpace buildMixedBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A00064);  // MOV r0, #100       (AL — native)
-        memory.put32(4, 0xE1A01312);  // MOV r1, r2, LSL r3 (ShiftedRegister — never native)
+        memory.put32(0, 0xE3A00064);  // MOV r0, #100        (AL — native)
+        memory.put32(4, 0xE1B01312);  // MOVS r1, r2, LSL r3 (logic flags + shifter carry — not native)
         return memory;
     }
 

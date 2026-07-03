@@ -46,10 +46,11 @@ class AsmCodeEmitterEquivalenceTest extends BlockEquivalenceTest {
 
     @Test
     void fallsBackToInterpretedForUnsupportedBlocks() {
-        // 0xE1A00211 = MOV r0, r1, LSL r2 — ShiftedRegister src2, always unsupported.
+        // 0xE1B00211 = MOVS r0, r1, LSL r2 — flags lógicos + shifter carry, não nativo.
+        // (ShiftedRegister SEM flags agora é emitido nativamente.)
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A0_000A);
-        memory.put32(4, 0xE1A00211);
+        memory.put32(4, 0xE1B00211);
         IrBlock block = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder()).lift(memory, 0, 2);
 
         assertFalse(asmEmitter.isNativeSupported(block));
@@ -294,13 +295,16 @@ class AsmCodeEmitterEquivalenceTest extends BlockEquivalenceTest {
     }
 
     @Test
-    void conditionalShiftedRegisterStillFallsBack() {
-        // MOVEQ r0, r1, LSL r2 = 0x01A00211 — ShiftedRegister é rejeitado por motivo NÃO-condicional.
+    void conditionalShiftedRegisterIsNativeAndEquivalent() {
+        // MOVEQ r0, r1, LSL r2 = 0x01A00211 — ShiftedRegister sem flags agora é NATIVO (guard
+        // condicional especializado + helper shiftedOperand); valida os dois ramos.
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0x01A00211);
         IrBlock block = liftArm(memory, 1);
-        assertFalse(asmEmitter.isNativeSupported(block));
+        assertTrue(asmEmitter.isNativeSupported(block));
         assertBlockEquivalent(asmEmitter, block,
-                EquivalenceTestSupport.independentPair(memory, core -> { core.setRegister(1, 0xFF); core.setRegister(2, 2); applyFlags(core, 0b0100); }));
+                EquivalenceTestSupport.independentPair(memory, core -> { core.setRegister(1, 0xFF); core.setRegister(2, 2); applyFlags(core, 0b0100); }));  // tomado
+        assertBlockEquivalent(asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> { core.setRegister(1, 0xFF); core.setRegister(2, 2); applyFlags(core, 0b0000); }));  // pulado
     }
 }

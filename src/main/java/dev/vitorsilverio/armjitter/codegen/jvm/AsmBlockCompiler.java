@@ -279,9 +279,7 @@ public final class AsmBlockCompiler {
                 if (aluUsesSrc1(alu.opcode()) && alu.src1ValueOverride() == -1) {
                     countRead(accesses, alu.src1());
                 }
-                if (alu.src2() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
-                    countRead(accesses, reg.index());
-                }
+                countOperand(accesses, alu.src2());
                 if (aluWritesDst(alu.opcode())) {
                     countWrite(accesses, writes, alu.dst());
                 }
@@ -304,9 +302,7 @@ public final class AsmBlockCompiler {
             }
             case IrOp.Load load -> {
                 if (load.baseValueOverride() == -1) countRead(accesses, load.base());
-                if (load.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
-                    countRead(accesses, reg.index());
-                }
+                countOperand(accesses, load.offset());
                 countWrite(accesses, writes, load.dst());
                 if (load.writeback() && load.base() != load.dst()) {
                     countWrite(accesses, writes, load.base());
@@ -314,9 +310,7 @@ public final class AsmBlockCompiler {
             }
             case IrOp.Store store -> {
                 if (store.baseValueOverride() == -1) countRead(accesses, store.base());
-                if (store.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
-                    countRead(accesses, reg.index());
-                }
+                countOperand(accesses, store.offset());
                 if (store.srcValueOverride() == -1) countRead(accesses, store.src());
                 if (store.writeback()) {
                     countWrite(accesses, writes, store.base());
@@ -373,9 +367,7 @@ public final class AsmBlockCompiler {
                 if (dt.baseValueOverride() == -1) {
                     countRead(accesses, dt.base());
                 }
-                if (dt.offset() instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
-                    countRead(accesses, reg.index());
-                }
+                countOperand(accesses, dt.offset());
                 if (dt.load()) {
                     countWrite(accesses, writes, dt.first());
                     countWrite(accesses, writes, dt.first() + 1);
@@ -409,6 +401,20 @@ public final class AsmBlockCompiler {
                 }
             }
             default -> {
+            }
+        }
+    }
+
+    /// Conta as leituras de registrador de um operando (Register ou ShiftedRegister).
+    private static void countOperand(int[] accesses, IrOperand operand) {
+        if (operand instanceof IrOperand.Register reg && reg.valueOverride() < 0) {
+            countRead(accesses, reg.index());
+        } else if (operand instanceof IrOperand.ShiftedRegister sr) {
+            if (sr.valueOverride() == -1) {
+                countRead(accesses, sr.index());
+            }
+            if (sr.amountRegister() >= 0 && sr.amountValueOverride() == -1) {
+                countRead(accesses, sr.amountRegister());
             }
         }
     }
@@ -1542,8 +1548,35 @@ public final class AsmBlockCompiler {
                     emitReadRegister(method, reg.index());
                 }
             }
-            case IrOperand.ShiftedRegister ignored ->
-                    throw new IllegalStateException("ShiftedRegister operand is not native-supported");
+            case IrOperand.ShiftedRegister sr -> {
+                // shiftedOperand(core, value, shiftType, amount, regSpecified, rrx) espelha o
+                // interpretador; o VALOR e a QUANTIDADE fluem pelo register cache.
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                if (sr.valueOverride() != -1) {
+                    AsmBytecode.visitIntConst(method, sr.valueOverride());
+                } else {
+                    emitReadRegister(method, sr.index());
+                }
+                AsmBytecode.visitIntConst(method, sr.shiftType().ordinal());
+                boolean regSpecified = sr.amountRegister() >= 0;
+                if (regSpecified) {
+                    if (sr.amountValueOverride() != -1) {
+                        AsmBytecode.visitIntConst(method, sr.amountValueOverride() & 0xFF);
+                    } else {
+                        emitReadRegister(method, sr.amountRegister());
+                        AsmBytecode.visitIntConst(method, 0xFF);
+                        method.visitInsn(Opcodes.IAND);
+                    }
+                } else {
+                    AsmBytecode.visitIntConst(method, sr.amount());
+                }
+                method.visitInsn(regSpecified ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                method.visitInsn(sr.rrx() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                AsmBytecode.invokeStatic(method, HELPERS, "shiftedOperand", "(" + CORE_REF + "IIIZZ)I");
+                if (sr.negated()) {
+                    method.visitInsn(Opcodes.INEG);
+                }
+            }
         }
     }
 
