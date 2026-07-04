@@ -10,7 +10,7 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// The ARMv5TE doubleword transfers LDRD/STRD (a register pair Rd, Rd+1 over two words).
+/// As transferências de doubleword ARMv5TE LDRD/STRD (um par de registradores Rd, Rd+1 em duas words).
 class LoadStoreDoubleTest {
 
     private static ArmCore core(TestAddressSpace memory) {

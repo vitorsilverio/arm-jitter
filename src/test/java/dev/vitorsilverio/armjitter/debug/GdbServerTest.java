@@ -82,7 +82,7 @@ class GdbServerTest {
         return extractPackets(out.toString(StandardCharsets.US_ASCII));
     }
 
-    /// Extracts the payloads of every `$...#` reply packet from the captured output.
+    /// Extrai o conteúdo (payloads) de cada pacote de resposta `$...#` do output capturado.
     private static List<String> extractPackets(String output) {
         List<String> packets = new ArrayList<>();
         int i = 0;
@@ -102,7 +102,7 @@ class GdbServerTest {
         return "$" + data + "#" + String.format("%02x", checksum);
     }
 
-    /// 64 KB flat memory for the protocol tests.
+    /// 64 KB de memória plana para os testes do protocolo.
     private static final class ArrayMemory implements AddressSpace {
         private final byte[] data = new byte[0x10000];
 

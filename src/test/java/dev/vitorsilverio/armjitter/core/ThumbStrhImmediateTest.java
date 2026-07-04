@@ -6,19 +6,17 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * t217: THUMB STRH rd, [rb, imm5<<1] — store halfword com offset imediato.
- *
- * Sequência:
- *   MOVS r0, #0         ; r0 = 0
- *   MVN  r0, r0         ; r0 = 0xFFFFFFFF
- *   LSR  r1, r0, #16    ; r1 = 0x0000FFFF
- *   STRH r0, [r4, #4]   ; mem[r4+4..r4+5] = 0xFFFF (16 bits baixos)
- *   LDR  r2, [r4, #4]   ; r2 = mem32[r4+4] = 0x0000FFFF (16 altos zerados)
- *   CMP  r2, r1         ; 0x0000FFFF == 0x0000FFFF → passa
- *
- * r4 = 0x20 (base de dados), instruções em 0x00-0x14, dados em 0x20+.
- */
+/// t217: THUMB STRH rd, [rb, imm5<<1] — store halfword com offset imediato.
+///
+/// Sequência:
+///   MOVS r0, #0         ; r0 = 0
+///   MVN  r0, r0         ; r0 = 0xFFFFFFFF
+///   LSR  r1, r0, #16    ; r1 = 0x0000FFFF
+///   STRH r0, [r4, #4]   ; mem[r4+4..r4+5] = 0xFFFF (16 bits baixos)
+///   LDR  r2, [r4, #4]   ; r2 = mem32[r4+4] = 0x0000FFFF (16 altos zerados)
+///   CMP  r2, r1         ; 0x0000FFFF == 0x0000FFFF → passa
+///
+/// r4 = 0x20 (base de dados), instruções em 0x00-0x14, dados em 0x20+.
 class ThumbStrhImmediateTest {
 
     private static TestAddressSpace buildMemory() {

@@ -10,10 +10,10 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// The ARMv5TE DSP multiplies: SMUL/SMLA/SMLAW/SMULW/SMLAL with 16-bit half selection.
+/// As multiplicações DSP ARMv5TE: SMUL/SMLA/SMLAW/SMULW/SMLAL com seleção de metade de 16 bits.
 class Armv5DspMultiplyTest {
 
-    /// Encodes a DSP multiply. op2: 0=SMLA, 1=SMLAW/SMULW, 2=SMLAL, 3=SMUL.
+    /// Codifica uma multiplicação DSP. op2: 0=SMLA, 1=SMLAW/SMULW, 2=SMLAL, 3=SMUL.
     private static int dsp(int op2, int rd, int rn, int rs, int rm, int x, int y) {
         return 0xE100_0080 | (op2 << 21) | (rd << 16) | (rn << 12) | (rs << 8) | (y << 6) | (x << 5) | rm;
     }

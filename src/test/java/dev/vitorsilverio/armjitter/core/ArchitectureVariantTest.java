@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/// Verifies the few behaviours that differ between ARM architecture versions, so an
-/// ARMv5 rule never silently regresses the ARMv4T (GBA) path and vice-versa.
+/// Verifica os poucos comportamentos que diferem entre versões da arquitetura ARM, para que uma
+/// regra ARMv5 nunca regresse silenciosamente o caminho ARMv4T (GBA) e vice-versa.
 class ArchitectureVariantTest {
     @Test
     void clzDecodesOnlyOnArmv5() {

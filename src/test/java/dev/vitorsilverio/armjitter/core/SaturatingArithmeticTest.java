@@ -12,10 +12,10 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// The ARMv5TE saturating arithmetic (QADD/QSUB/QDADD/QDSUB), with the sticky Q flag.
+/// A aritmética saturante ARMv5TE (QADD/QSUB/QDADD/QDSUB), com a flag sticky Q.
 class SaturatingArithmeticTest {
 
-    /// Encodes `Q<op> r<rd>, r<rm>, r<rn>` (cond AL). op: 0=QADD, 1=QSUB, 2=QDADD, 3=QDSUB.
+    /// Codifica `Q<op> r<rd>, r<rm>, r<rn>` (cond AL). op: 0=QADD, 1=QSUB, 2=QDADD, 3=QDSUB.
     private static int qOp(int op, int rd, int rm, int rn) {
         return 0xE100_0050 | (op << 21) | (rn << 16) | (rd << 12) | rm;
     }

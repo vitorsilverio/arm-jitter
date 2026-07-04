@@ -8,29 +8,27 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * t121: THUMB hi-register ADD PC, Rm — alinhamento do PC lido como operando.
- *
- * A spec ARM7TDMI define que quando PC é lido como operando em hi-reg ops
- * (ADD PC, Rm), o valor é (instruction_address + 4) SEM mascarar bit1.
- *
- * Layout de memória:
- *   0x00: MOV r0, #3             ; R0 = 3
- *   0x02: ADD PC, r0             ; PC = (0x02+4) + 3 = 0x06+3 = 0x09 → 0x08
- *   0x04: B f121                 ; reprova (alvo do ADD com bug &~3)
- *   0x06: B f121                 ; reprova (alvo do ADD com bug &~3)
- *   0x08: B arithmetic_passed    ; ← alvo correto do ADD PC
- *   0x0A: MOV r1, #0             ; f121: reprova
- *   0x0C: B fim                  ; (→ 0x12)
- *   0x0E: NOP
- *   0x10: MOV r1, #1             ; arithmetic_passed: passa
- *   0x12: B fim                  ; (→ 0x14, self-loop terminal)
- *   0x14: B .                    ; fim: loop infinito — garante término do bloco JIT
- *
- * Bug em readSourceRegister: usa (addr + 4) & ~3 em vez de (addr + 4).
- * Com o bug: PC_lido = (0x02+4) & ~3 = 0x04 → resultado = 0x07 → 0x06 (B f121, falha).
- * Correto:   PC_lido =  0x02+4       = 0x06 → resultado = 0x09 → 0x08 (B passed, ok).
- */
+/// t121: THUMB hi-register ADD PC, Rm — alinhamento do PC lido como operando.
+///
+/// A spec ARM7TDMI define que quando PC é lido como operando em hi-reg ops
+/// (ADD PC, Rm), o valor é (instruction_address + 4) SEM mascarar bit1.
+///
+/// Layout de memória:
+///   0x00: MOV r0, #3             ; R0 = 3
+///   0x02: ADD PC, r0             ; PC = (0x02+4) + 3 = 0x06+3 = 0x09 → 0x08
+///   0x04: B f121                 ; reprova (alvo do ADD com bug &~3)
+///   0x06: B f121                 ; reprova (alvo do ADD com bug &~3)
+///   0x08: B arithmetic_passed    ; ← alvo correto do ADD PC
+///   0x0A: MOV r1, #0             ; f121: reprova
+///   0x0C: B fim                  ; (→ 0x12)
+///   0x0E: NOP
+///   0x10: MOV r1, #1             ; arithmetic_passed: passa
+///   0x12: B fim                  ; (→ 0x14, self-loop terminal)
+///   0x14: B .                    ; fim: loop infinito — garante término do bloco JIT
+///
+/// Bug em readSourceRegister: usa (addr + 4) & ~3 em vez de (addr + 4).
+/// Com o bug: PC_lido = (0x02+4) & ~3 = 0x04 → resultado = 0x07 → 0x06 (B f121, falha).
+/// Correto:   PC_lido =  0x02+4       = 0x06 → resultado = 0x09 → 0x08 (B passed, ok).
 class ThumbPcAddAlignmentTest {
 
     private static TestAddressSpace buildMemory() {
@@ -55,10 +53,8 @@ class ThumbPcAddAlignmentTest {
         return core;
     }
 
-    /**
-     * Executa via interpretador puro.
-     * ADD PC, r0 deve ler PC = 0x06 (addr+4, sem &~3) e saltar para 0x08.
-     */
+    /// Executa via interpretador puro.
+    /// ADD PC, r0 deve ler PC = 0x06 (addr+4, sem &~3) e saltar para 0x08.
     @Test
     void addPcAlignmentInterpreter() {
         ArmCore core = thumbCore(buildMemory());
@@ -72,10 +68,8 @@ class ThumbPcAddAlignmentTest {
                         "em vez de sem máscara (correto: 0x06+3=0x09→0x08=B passed).");
     }
 
-    /**
-     * Mesmo teste via JIT (InterpretedCodeEmitter).
-     * Verifica que o caminho IR tem o mesmo comportamento correto.
-     */
+    /// Mesmo teste via JIT (InterpretedCodeEmitter).
+    /// Verifica que o caminho IR tem o mesmo comportamento correto.
     @Test
     void addPcAlignmentJit() {
         ArmCore core = thumbCore(buildMemory());
@@ -90,9 +84,7 @@ class ThumbPcAddAlignmentTest {
                         "Se for 0, o IrBuilder ou CodeEmitter também está mascarando o PC com &~3.");
     }
 
-    /**
-     * Verifica o PC diretamente após o ADD, sem depender de branches subsequentes.
-     */
+    /// Verifica o PC diretamente após o ADD, sem depender de branches subsequentes.
     @Test
     void addPcLandsAtCorrectAddress() {
         ArmCore core = thumbCore(buildMemory());

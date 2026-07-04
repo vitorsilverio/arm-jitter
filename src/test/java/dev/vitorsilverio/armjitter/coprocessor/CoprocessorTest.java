@@ -11,9 +11,9 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// Exercises the ARMv5 coprocessor (MCR/MRC) path end to end: decode via the extension on
-/// ARMV5TE, lift to IR, execute, and hand off to the core's coprocessor bus. The fake CP15
-/// only records the transfer — no real semantics — so this validates the plumbing.
+/// Exercita o caminho de coprocessador ARMv5 (MCR/MRC) de ponta a ponta: decodifica via a
+/// extensão em ARMV5TE, levanta para IR, executa e entrega ao coprocessor bus do core. O CP15
+/// fake apenas registra a transferência — sem semântica real — portanto valida o encadeamento.
 class CoprocessorTest {
     // MCR p15, 0, r1, c9, c1, 0   and   MRC p15, 0, r2, c9, c1, 0
     private static final int MCR_P15_R1_C9_C1_0 = 0xEE091F11;
@@ -71,7 +71,7 @@ class CoprocessorTest {
         return core;
     }
 
-    /// A CP15 stand-in that records the last transfer and returns a fixed value on reads.
+    /// Um CP15 substituto que registra a última transferência e retorna um valor fixo nas leituras.
     private static final class CapturingCp15 implements CoprocessorBus {
         private final int readValue;
         private boolean wrote;
@@ -113,7 +113,7 @@ class CoprocessorTest {
         }
     }
 
-    /// A tiny 256-byte little-endian address space for single-instruction tests.
+    /// Um pequeno address space little-endian de 256 bytes para testes de instrução única.
     private static final class ArrayMemory implements AddressSpace {
         private final byte[] data = new byte[0x100];
 
