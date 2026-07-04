@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
