@@ -31,7 +31,11 @@ public final class AsmCodeEmitter implements CodeEmitter {
 
     private final InterpretedCodeEmitter fallback;
     private final JvmBlockLoader loader;
-    private final AsmBlockCompiler compiler;
+    // Per-thread compiler: an AsmBlockCompiler holds per-compilation mutable state (the register
+    // cache) so it is NOT thread-safe, but the JIT compiles on a POOL of background threads — each
+    // gets its own instance here while the loader + blockSequence (unique class names) are shared and
+    // thread-safe. See JitRuntime's compile executor.
+    private final ThreadLocal<AsmBlockCompiler> compiler;
     private final AtomicInteger blockSequence;
     private final AsmFallbackPolicy policy;
     private final IrOptimizer optimizer;
@@ -64,7 +68,8 @@ public final class AsmCodeEmitter implements CodeEmitter {
     public AsmCodeEmitter(ArmArchitecture architecture, AsmFallbackPolicy policy, IrOptimizer optimizer) {
         this.fallback = new InterpretedCodeEmitter(architecture);
         this.loader = new JvmBlockLoader();
-        this.compiler = new AsmBlockCompiler(architecture.has(ArmFeature.LOAD_PC_INTERWORKING));
+        boolean interworks = architecture.has(ArmFeature.LOAD_PC_INTERWORKING);
+        this.compiler = ThreadLocal.withInitial(() -> new AsmBlockCompiler(interworks));
         this.blockSequence = new AtomicInteger();
         this.policy = policy;
         this.optimizer = optimizer;
@@ -89,7 +94,8 @@ public final class AsmCodeEmitter implements CodeEmitter {
             IrOptimizer optimizer) {
         this.fallback = fallback;
         this.loader = loader;
-        this.compiler = compiler;
+        // Test path: a specific compiler instance is supplied and reused (tests emit single-threaded).
+        this.compiler = ThreadLocal.withInitial(() -> compiler);
         this.blockSequence = blockSequence;
         this.policy = policy;
         this.optimizer = optimizer;
@@ -121,7 +127,7 @@ public final class AsmCodeEmitter implements CodeEmitter {
         perOpFallbackOpCount.addAndGet(unsupportedOps);
         nativeBlockCount.incrementAndGet();
         String internalName = GENERATED_PACKAGE + "/AluBlock" + blockSequence.getAndIncrement();
-        byte[] bytecode = compiler.compilePerOp(internalName, block);
+        byte[] bytecode = compiler.get().compilePerOp(internalName, block);
         return loader.load(bytecode, internalName);
     }
 
@@ -137,7 +143,7 @@ public final class AsmCodeEmitter implements CodeEmitter {
 
     private CompiledBlock compileNative(IrBlock block) {
         String internalName = GENERATED_PACKAGE + "/AluBlock" + blockSequence.getAndIncrement();
-        byte[] bytecode = compiler.compile(internalName, block);
+        byte[] bytecode = compiler.get().compile(internalName, block);
         return loader.load(bytecode, internalName);
     }
 

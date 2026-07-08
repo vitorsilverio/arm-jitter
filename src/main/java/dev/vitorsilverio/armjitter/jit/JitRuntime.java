@@ -167,15 +167,32 @@ public final class JitRuntime {
         }
         this.maxBlockInstructions = maxBlockInstructions;
         this.compileExecutor = coldEmitter == null ? null
-                : java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
-                    Thread thread = new Thread(runnable, "arm-jitter-compile");
-                    thread.setDaemon(true);
-                    // Prioridade mínima: a compilação é background e não-latência-crítica. Cede
-                    // CPU à thread de emulação (frames/input) e à EDT, compilando nas folgas do
-                    // frame pacing em vez de disputar — evita atrasar frames/input numa rajada.
-                    thread.setPriority(Thread.MIN_PRIORITY);
-                    return thread;
+                : java.util.concurrent.Executors.newFixedThreadPool(compileThreadCount(), new java.util.concurrent.ThreadFactory() {
+                    private final java.util.concurrent.atomic.AtomicInteger seq =
+                            new java.util.concurrent.atomic.AtomicInteger();
+
+                    @Override
+                    public Thread newThread(Runnable runnable) {
+                        Thread thread = new Thread(runnable, "arm-jitter-compile-" + seq.getAndIncrement());
+                        thread.setDaemon(true);
+                        // Prioridade mínima: a compilação é background e não-latência-crítica. Cede
+                        // CPU à thread de emulação (frames/input) e à EDT, compilando nas folgas do
+                        // frame pacing em vez de disputar — evita atrasar frames/input numa rajada.
+                        // Um POOL (não uma thread só) drena o backlog de blocos novos ao entrar numa
+                        // cena N× mais rápido — encurta o "warmup" visível (cada bloco novo roda
+                        // interpretado até compilar). Cada thread usa seu próprio AsmBlockCompiler
+                        // (ThreadLocal no AsmCodeEmitter); loader/blockSequence são thread-safe.
+                        thread.setPriority(Thread.MIN_PRIORITY);
+                        return thread;
+                    }
                 });
+    }
+
+    /// Background-compile threads per runtime: a few, capped, so a scene-change block backlog drains
+    /// in parallel without oversubscribing (there are two runtimes — ARM9/ARM7 — plus the emu and
+    /// render threads; the pools idle between bursts and run at MIN_PRIORITY).
+    private static int compileThreadCount() {
+        return Math.max(1, Math.min(3, Runtime.getRuntime().availableProcessors() - 1));
     }
 
     /// Cria um runtime JIT ARM/THUMB com componentes padrão, exceto cache e emissor.
