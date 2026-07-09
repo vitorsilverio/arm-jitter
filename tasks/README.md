@@ -64,7 +64,7 @@ uma task [REFINAR] diretamente.
 | [B1.6](trilha-b-arquiteturas/b1.6-armv6-asm-nativo.md) | Emissão nativa ASM das ops v6 | B1.2–B1.5 | ⬜ |
 | [B2](trilha-b-arquiteturas/b2-thumb2.md) | Thumb-2 (decoder 32-bit + IT blocks) [REFINAR] | B1.6 | ⬜ |
 | [B3](trilha-b-arquiteturas/b3-armv7a-vfp.md) | ARMv7-A user-level + VFP [REFINAR] | B2 | ⬜ |
-| [B4.0](trilha-b-arquiteturas/b4.0-runner-user-mode.md) | Runner Linux user-mode (estilo qemu-user) | — | 🟡 (repo `armbox`) |
+| [B4.0](trilha-b-arquiteturas/b4.0-runner-user-mode.md) | Runner Linux user-mode (estilo qemu-user) | — | ✅ (repo `armbox`: hello + busybox echo/sh; sem fork/pipes) |
 | [B4.1](trilha-b-arquiteturas/b4.1-mmu-softmmu.md) | MMU/softmmu full-system [REFINAR] | B3, RFC própria | ⬜ |
 | [B5](trilha-b-arquiteturas/b5-3ds.md) | 3DS enablement (checklist) [REFINAR] | B1.6, VFPv2 de B3 | ⬜ |
 | [B6](trilha-b-arquiteturas/b6-aarch64.md) | AArch64 (épico) [REFINAR] | B0 | ⬜ |
