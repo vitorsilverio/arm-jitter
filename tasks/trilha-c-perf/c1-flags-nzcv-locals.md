@@ -3,13 +3,21 @@
 **Trilha:** C (perf) · **Depende de:** — · **Repo:** arm-jitter
 **Risco: ALTO (corretude). É a task mais delicada da trilha — siga os invariantes à risca.**
 
+## ⚠️ Prioridade rebaixada (leia antes de executar)
+
+O re-profile de 2026-07-08 (MKDS corrida, savestate) mostrou que os helpers de flags e
+os guards de condição NÃO aparecem nas folhas quentes de gameplay — o ganho desta task
+isolada tende a ~0 nesses cenários (era candidata da era title-screen). Ela continua
+válida como SUBPRODUTO de C0 (superblocos), onde flags em locals atravessando
+fronteiras de bloco fazem sentido. **Só execute isolada com A/B bench provando ganho;
+sem ganho medido, feche com o resultado negativo registrado.**
+
 ## Contexto
 
 Hoje cada op ALU com `setFlags` lê/escreve os flags no objeto CPSR (campo do core) via
 chamadas. A ideia: dentro de um bloco compilado, manter N, Z, C, V como **locals JVM**
 (4 ints 0/1, alocados via `GuestToHostMapper`), sincronizando com o CPSR só nas
-fronteiras. É o maior ganho restante do codegen (identificado por profiling — ver
-memória do projeto/JFR).
+fronteiras.
 
 ## Especificação
 

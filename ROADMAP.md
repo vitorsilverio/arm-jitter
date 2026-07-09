@@ -180,11 +180,13 @@ ser escrita cedo, pois influencia decisões de B1–B3.
 
 ## Trilha C — Perf contínua (backlog medido, ndsemu como bancada)
 
-Itens já identificados por profiling, em ordem de expectativa de ganho:
+Itens já identificados por profiling, em ordem de expectativa de ganho
+(re-profile 2026-07-08: dispatch megamórfico entre blocos = custo nº 1 em gameplay):
 
 | Item | Ideia | Nota |
 |------|-------|------|
-| Flags NZCV em locals JVM | Manter flags em locals dentro do bloco em vez de ler/escrever CPSR por op | Maior item restante do codegen |
+| Superblocos / trace-JIT | Fundir sequências encadeadas quentes em um método compilado (N chamadas megamórficas → 1) | A alavanca grande (~26–36% do CPU em gameplay); projeto multi-sessão |
+| Flags NZCV em locals JVM | Manter flags em locals dentro do bloco em vez de ler/escrever CPSR por op | ⚠️ Rebaixado: ganho ≈0 medido em gameplay isolado; vira subproduto dos superblocos |
 | Logic-flags + shifter nativo completo | Carry-out do shifter em ops lógicas `S` sem helper | Complementa o shifted-register nativo |
 | Page-table dispatch no `AddressSpace` | Despacho de memória O(1) por página em vez de if-chain no hospedeiro | Par com softmmu de B4 |
 | Chain budgets pós-boot | Subir budget de chaining depois do boot (~+9% medido) | ⚠️ ARM7 ≥16 quebra boot de Platinum/SM64DS — validar boot dos 4 jogos de referência |
