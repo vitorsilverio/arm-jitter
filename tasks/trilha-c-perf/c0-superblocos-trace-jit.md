@@ -21,6 +21,16 @@ Fundir uma SEQUÊNCIA de blocos encadeados quentes em UM método compilado
 através das fronteiras de bloco (registradores/flags vivem em locals ao longo do trace
 — o que torna C1/C2 subprodutos disto).
 
+## Dado novo do spike A0 (2026-07-09): considerar backend Truffle para superblocos
+
+O spike A0 (`trilha-a-truffle/RELATORIO-A0.md`) mediu que o C2 DEGRADA em métodos
+retos gigantes — o bloco ASM de 320 instruções (7099 bytes de bytecode, compilado
+tier 4 normalmente) roda a 2,4 ns/instr contra 0,36 ns/instr do bloco de 20; o mesmo
+bloco via Truffle/Graal PE mantém 0,33 ns/instr (7× mais rápido que o ASM nesse
+tamanho). Superblocos emitidos como um método ASM único vão esbarrar exatamente
+nisso. Desenho híbrido a avaliar no refinamento: blocos pequenos → ASM (C2),
+superblocos/traces → Truffle (Graal, via Unchained — receita de flags no relatório).
+
 ## Questões para o refinamento (escrever spec detalhada antes de codar)
 
 1. **Seleção de traces:** perfil de sequências no chaining atual (contadores de pares

@@ -49,7 +49,7 @@ uma task [REFINAR] diretamente.
 
 | Task | Título | Depende de | Status |
 |------|--------|-----------|--------|
-| [A0](trilha-a-truffle/a0-spike-viabilidade.md) | Spike de viabilidade Truffle | — | ⬜ |
+| [A0](trilha-a-truffle/a0-spike-viabilidade.md) | Spike de viabilidade Truffle | — | ✅ ([relatório](trilha-a-truffle/RELATORIO-A0.md): viável; JITta no JBR 25 via Unchained; supera ASM em blocos grandes) |
 | [A1](trilha-a-truffle/a1-multi-modulo-maven.md) | Build multi-módulo Maven | — | ⬜ |
 | [A2](trilha-a-truffle/a2-emissor-minimo.md) | TruffleCodeEmitter mínimo (ALU) | A0, A1 | ⬜ |
 | [A3](trilha-a-truffle/a3-cobertura-completa.md) | Cobertura completa de IrOp | A2 | ⬜ |
