@@ -4,6 +4,8 @@ Roadmap de evolução da biblioteca. Cada trilha é independente; cada fase é m
 sozinha, com testes verdes e comportamento padrão inalterado até opt-in explícito.
 
 **Referência visual da arquitetura:** [ARQUITETURA.html](ARQUITETURA.html)
+**Tasks executáveis (Spec Driven Development):** [tasks/](tasks/README.md) — cada fase
+deste roadmap tem uma spec autocontida com escopo, aceite e armadilhas.
 
 ---
 

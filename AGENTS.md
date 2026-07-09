@@ -9,4 +9,5 @@
 - Mudanças precisam incluir ou preservar testes automatizados quando houver comportamento observável.
 - Documentação de uso deve acompanhar a API pública.
 - O roadmap do projeto (backend Truffle/GraalVM, novas arquiteturas guest, perf) está em `ROADMAP.md`; planos concluídos são removidos e vivem no histórico do git.
+- As tasks executáveis estão em `tasks/` (Spec Driven Development). Antes de implementar qualquer task, leia `tasks/README.md` inteiro — protocolo de execução e invariantes globais G1–G7 são obrigatórios.
 - Não executar comandos fora do sandbox. Quando for necessário compilar ou testar, pedir ao usuário para executar.
