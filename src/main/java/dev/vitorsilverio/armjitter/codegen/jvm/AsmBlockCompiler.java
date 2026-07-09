@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.jvm;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
@@ -82,6 +84,10 @@ public final class AsmBlockCompiler {
     /// Decidido na construção (a partir da arquitetura do emissor); ARMv4T usa `false`.
     private final boolean loadPcInterworks;
 
+    /// Executor interpretado da arquitetura deste compilador, registrado com cada op de fallback
+    /// PER_OP para que ela rode com a semântica correta (ver {@link IrOpInterop}).
+    private final IrBlockExecutor perOpExecutor;
+
     /// Cache de registradores guest do bloco em compilação (ver doc da classe). Estado
     /// por-compilação: atribuído no início de {@link #compile} e lido pelos `emitXxx`.
     private RegCache cache = RegCache.EMPTY;
@@ -103,12 +109,19 @@ public final class AsmBlockCompiler {
 
     /// Cria um compilador ARMv4T (sem interworking em load->PC).
     public AsmBlockCompiler() {
-        this(false);
+        this(false, new IrBlockExecutor(ArmArchitecture.ARMV4T));
     }
 
-    /// Cria um compilador para a arquitetura informada via flag de interworking em load->PC.
+    /// Cria um compilador para a arquitetura informada via flag de interworking em load->PC,
+    /// com um executor ARMv4T padrão para o fallback PER_OP.
     public AsmBlockCompiler(boolean loadPcInterworks) {
+        this(loadPcInterworks, new IrBlockExecutor(ArmArchitecture.ARMV4T));
+    }
+
+    /// Cria um compilador com o executor interpretado da sua arquitetura (usado no fallback PER_OP).
+    public AsmBlockCompiler(boolean loadPcInterworks, IrBlockExecutor perOpExecutor) {
         this.loadPcInterworks = loadPcInterworks;
+        this.perOpExecutor = perOpExecutor;
     }
 
     /// Nome do helper de load->PC para LDR/LDM/POP (interworking conforme a arquitetura).
@@ -795,7 +808,7 @@ public final class AsmBlockCompiler {
 
     /// Emite bytecode que delega uma op não suportada ao interpretado via {@link IrOpInterop}.
     private void emitPerOpFallback(MethodVisitor method, IrOp op, int blockEndPc) {
-        int opId = IrOpInterop.register(op);
+        int opId = IrOpInterop.register(op, perOpExecutor);
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, opId);
         AsmBytecode.visitIntConst(method, blockEndPc);
