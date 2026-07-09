@@ -1,22 +1,30 @@
 # arm-jitter
 
-Biblioteca Java 25 para executar, depurar e futuramente compilar blocos ARM/THUMB em emuladores de Game Boy Advance, Nintendo DS e outros dispositivos ARM.
+Biblioteca Java 25 para executar, depurar e compilar (JIT) blocos ARM/THUMB em emuladores de Game Boy Advance, Nintendo DS e outros dispositivos ARM.
 
-O projeto não possui `Main`: ele é um core auxiliar para ser embutido por um emulador hospedeiro.
+O projeto não possui `Main`: ele é um core auxiliar para ser embutido por um emulador hospedeiro. É usado em produção pelo gbaemu e pelo ndsemu.
 
 ## Estado atual
 
-Esta estrutura define os contratos principais da arquitetura e um interpretador frio inicial:
+Pacotes principais:
 
-- `core`: registradores, CPSR, modos bancados, SPSR, exceções iniciais e avaliação condicional.
-- `memory`: barramento abstrato `AddressSpace`.
-- `decoder`: contrato de decodificação ARM/THUMB.
-- `ir`: representação intermediária imutável.
-- `jit`: runtime, cache de blocos e estratégia interpretado/JIT.
-- `codegen`: contrato para emissores de código.
+- `core`: registradores, CPSR, modos bancados, SPSR, exceções e avaliação condicional.
+- `memory`: barramento abstrato `AddressSpace` + invalidação SMC.
+- `decoder`: decodificação ARM/THUMB.
+- `arch`: `ArmArchitecture`/`ArmFeature` — presets `ARMV4T` e `ARMV5TE` e quirks por arquitetura.
+- `ir` / `ir.opt`: representação intermediária imutável + otimizador (constant fold, DCE, flag merge).
+- `jit`: runtime tiered, cache de blocos com inline cache e encadeamento de blocos.
+- `codegen` / `codegen.jvm`: emissores de código (interpretado, bytecode JVM via ASM) + harness de equivalência.
+- `coprocessor`: barramento de coprocessadores (CP15 etc. ficam no hospedeiro).
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
+- `debug`: `GdbServer` (stub GDB remote serial) e trace listener.
 
-O interpretador e o lifter IR atuais cobrem uma fatia pequena, mas testável, de ARM/THUMB: `MOV`, `ADD`, `ADC`, `SUB`, `RSB`, `SBC`, `RSC`, `NEG`, `CMN`, `MUL`, `MLA`, `UMULL/UMLAL/SMULL/SMLAL`, `CLZ`, `SWP/SWPB`, `MRS/MSR` por registrador e `MSR` imediato, `AND/EOR/ORR/BIC/MVN/TST/TEQ`, shifts THUMB, operand2 ARM com shift imediato, shift por registrador e `RRX`, `CMP`, high-register ops THUMB, escrita ALU em `PC` e retorno `S` via `SPSR`, branch incondicional, branch condicional THUMB, `BX`, `BL` ARM/THUMB, `LDR` literal THUMB, `PUSH/POP` THUMB, ajuste de SP THUMB, `LDM/STM` ARM com modos `IA/IB/DA/DB`, bit `^` inicial e máscara vazia ARM7TDMI, `LDMIA/STMIA` THUMB incluindo máscara vazia, `LDR/STR` word/halfword/byte ARM imediato e offset por registrador simples/subtrativo/shiftado incluindo `RRX`, writeback pre-index/post-index ARM, loads ARM assinados byte/halfword, load em `PC`, fetch ARM/THUMB alinhado, leitura word desalinhada com rotação e halfword desalinhado aproximados ao ARM7TDMI, `LDR/STR` word/halfword/byte THUMB imediato e offset por registrador, SP-relative THUMB e `SWI`.
+Cobertura de instruções: **ARMv4T completo** (ARM7TDMI — todo o conjunto ARM/THUMB
+incluindo quirks de LDM/STM, acessos desalinhados com rotação e máscaras vazias) e
+**ARMv5TE** (ARM9E — `BLX`, `CLZ`, DSP multiplies `SMUL/SMLA/SMULW/SMLAW`, saturating
+`QADD/QSUB/QDADD/QDSUB`, `LDRD/STRD`, load-to-PC com interworking), tudo com emissão
+nativa no backend JVM. O interpretador é a referência de semântica; o backend compilado
+passa em harness de equivalência e em runs longos de divergence-checking com ROMs reais.
 
 O core já possui bancos de `SP/LR` por modo, banco FIQ para `r8-r14`, `SPSR` por modo privilegiado, entrada real de `SWI` no vetor `0x08` quando não há handler host registrado, entrada de `IRQ` no vetor `0x18` quando `interruptLine` está ativa e o bit I do CPSR está limpo, e entrada de instrução indefinida no vetor `0x04` para opcodes ainda não implementados.
 Também há estado explícito de `HALT/STOP` para integração com registradores de I/O do dispositivo e waitstates opcionais por acesso de memória via `AddressSpace.accessCycles(...)`.
@@ -105,23 +113,52 @@ O pipeline é o mesmo (cache → decode → lift → otimizar → emit); o que m
 
 | Backend | Factory | Comportamento | Quando usar |
 |---------|---------|---------------|-------------|
-| `JVM_BYTECODE` | `armThumb(...)` | Bytecode JVM via ASM + otimizador GBA | **Padrão recomendado** |
+| `JVM_BYTECODE` | `armThumb(...)` | Tiered: tier frio interpretado + tier quente em bytecode JVM (ASM, fallback `PER_OP`, compilação em pool de threads) | **Padrão recomendado** |
 | `INTERPRETED_IR` | `interpretedArmThumb(...)` | Loop Java sobre `IrOp[]` | Debug, step-by-step, oráculo de testes |
+| (ambos) | `divergenceCheckingArmThumb(...)` | Executa cada bloco pelos dois backends e lança na primeira divergência | Diagnóstico de bugs de codegen com ROM real |
+
+Um backend Truffle/GraalVM (`TRUFFLE`) está planejado — ver [ROADMAP.md](ROADMAP.md).
 
 ### Uso recomendado
 
 ```java
-// Produção — bytecode JVM com constant fold + DCE + flag merge
+// Produção — bytecode JVM com constant fold + DCE + flag merge (ARMv4T por padrão)
 JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
+
+// Para um core ARM9E (NDS): mesmas factories com a arquitetura explícita
+JitRuntime arm9 = JitRuntimeFactory.armThumb(1024, 3, ArmArchitecture.ARMV5TE);
+
 int cycles = runtime.execute(core.programCounter(), core);
 long frameSliceCycles = core.runBlocks(runtime, 256);
 ```
+
+### Encadeamento de blocos
+
+Blocos quentes podem se encadear sem voltar ao dispatch do runtime, dentro de um
+orçamento de ciclos por chamada de `execute`:
+
+```java
+runtime.setChainCycleBudget(96); // 0 desliga (default)
+```
+
+O budget é sensível a timing entre CPUs no hospedeiro (handshakes de boot cross-CPU);
+suba com medição e validação de boot dos jogos de referência.
 
 ### Debug / oráculo
 
 ```java
 // Interpretador IR puro — útil para comparar comportamento ou depurar
 JitRuntime oracle = JitRuntimeFactory.interpretedArmThumb(1024, 3);
+```
+
+### Depuração com GDB
+
+`GdbServer` expõe o core como um stub GDB remote serial (como o do mGBA): registradores,
+memória, breakpoints em PC, watchpoints de escrita, step e continue:
+
+```java
+GdbServer.listenAndServe(3333, core, memory, () -> stepOneInstruction());
+// arm-none-eabi-gdb> target remote :3333
 ```
 
 ### Introspecção
@@ -145,8 +182,10 @@ JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
 ### Política de fallback e métricas (AsmCodeEmitter)
 
 ```java
-// PER_OP: instrucoes condicionais/Swap ficam inline no bloco compilado em vez de cair no interpretado
-AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba());
+// PER_OP: ops ainda não emitidas nativamente são despachadas ao interpretado inline
+// no bloco compilado, em vez de derrubar o bloco inteiro
+AsmCodeEmitter emitter = new AsmCodeEmitter(
+        ArmArchitecture.ARMV5TE, AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba());
 
 // Contadores de diagnóstico
 long native   = emitter.nativeBlockCount();
@@ -154,8 +193,9 @@ long fallback = emitter.fallbackBlockCount();
 long perOpOps = emitter.perOpFallbackOpCount();
 emitter.resetCounters();
 
-// Tipos de IrOp emitidos nativamente (todos exceto Swap)
+// Tipos de IrOp e opcodes ALU emitidos nativamente
 Set<Class<? extends IrOp>> supported = AsmCodeEmitter.supportedOps();
+Set<IrOpCode> supportedAlu = AsmCodeEmitter.supportedAluOpcodes();
 ```
 
 ### Testes de equivalência entre emissores
@@ -202,6 +242,11 @@ Coordenadas Maven atuais:
     <version>1.0</version>
 </dependency>
 ```
+
+## Roadmap
+
+Planos futuros (backend Truffle/GraalVM, ARMv6K/Thumb-2/ARMv7-A, AArch64, perf) estão
+em [ROADMAP.md](ROADMAP.md), divididos em fases com critérios de aceite.
 
 ## Compilação e testes
 

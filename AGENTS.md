@@ -8,5 +8,5 @@
 - O core deve ser depurável, rápido e modular.
 - Mudanças precisam incluir ou preservar testes automatizados quando houver comportamento observável.
 - Documentação de uso deve acompanhar a API pública.
-- O roadmap de codegen JVM está em `ROADMAP.md`.
+- O roadmap do projeto (backend Truffle/GraalVM, novas arquiteturas guest, perf) está em `ROADMAP.md`; planos concluídos são removidos e vivem no histórico do git.
 - Não executar comandos fora do sandbox. Quando for necessário compilar ou testar, pedir ao usuário para executar.
