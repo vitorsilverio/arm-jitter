@@ -3,6 +3,13 @@
 **Trilha:** C · **Depende de:** — · **Repo:** arm-jitter
 **Prioridade: a MAIOR da trilha C, segundo o profiling mais recente.**
 
+> **FASE DE MEDIÇÃO CONCLUÍDA (2026-07-09)** — ver [RELATORIO-C0-MEDICAO.md](RELATORIO-C0-MEDICAO.md).
+> Resultado: 96–99% dos saltos são UM loop fechado de 4 blocos (idle do NitroSDK),
+> estabilidade 100%. O desenho muda de "trace linear longo" para **loop-superbloco
+> pequeno** (a preocupação do C2/A0 não se aplica ao caso dominante; ASM serve), com
+> **idle-skip** como alternativa/complemento a decidir na spec de implementação.
+> Ferramentas prontas: `jit/ChainProfiler` + ndsemu `chainprof`/`chainbudget=`.
+
 ## Contexto (por que isto é o item nº 1)
 
 Re-profile de 2026-07-08 (MKDS em corrida, savestate, ASM, render off-thread): o custo

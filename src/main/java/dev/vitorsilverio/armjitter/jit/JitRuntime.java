@@ -105,6 +105,15 @@ public final class JitRuntime {
         this.chainCycleBudget = cycles;
     }
 
+    /// Profiler opt-in do encadeamento (medição da task C0 — superblocos). `null` = desligado
+    /// (custo: um null-check por salto de corrente). Não thread-safe: um por runtime.
+    private ChainProfiler chainProfiler;
+
+    /// Instala (ou remove, com `null`) o [ChainProfiler] deste runtime.
+    public void setChainProfiler(ChainProfiler profiler) {
+        this.chainProfiler = profiler;
+    }
+
     /// Cria um runtime JIT com seus componentes principais.
     public JitRuntime(
             BlockCache blockCache,
@@ -218,6 +227,9 @@ public final class JitRuntime {
             // Invariante: tag válida ⇒ bloco não-nulo (gravados juntos em inlineRecord).
             icHits++;
             int cycles = icBlocks[slot].execute(core);
+            int chainFromPc = pc;
+            int chainHops = 0;
+            ChainProfiler.BreakReason chainBreak = null;
             // ── Encadeamento de blocos (chain fast path) ───────────────────────
             // Loops de spin (poll de IPC/VCOUNT/flags, com ou sem `bl` para um helper) são ciclos
             // de blocos de 1-4 instruções: sem isto, CADA bloco paga o round-trip completo
@@ -240,14 +252,30 @@ public final class JitRuntime {
                 InstructionSet nextSet = instructionSet(core);
                 int nextSlot = icSlot(nextPc);
                 if (icTags[nextSlot] != inlineTag(nextPc, nextSet)) {
+                    if (chainProfiler != null) {
+                        chainProfiler.recordIcMiss(chainFromPc, nextPc);
+                        chainBreak = ChainProfiler.BreakReason.IC_MISS;
+                    }
                     break; // próximo bloco não está no IC: volta ao caminho normal
                 }
                 int step = icBlocks[nextSlot].execute(core);
                 cycles += step;
                 chainedBlocks++;
+                if (chainProfiler != null) {
+                    chainProfiler.recordHop(chainFromPc, nextPc);
+                    chainFromPc = nextPc;
+                    chainHops++;
+                }
                 if (step <= 0) {
+                    if (chainProfiler != null) {
+                        chainBreak = ChainProfiler.BreakReason.NO_PROGRESS;
+                    }
                     break;
                 }
+            }
+            if (chainProfiler != null) {
+                chainProfiler.recordRun(chainHops,
+                        chainBreak != null ? chainBreak : whileExitReason(core, cycles));
             }
             core.addCycles(cycles);
             return cycles;
@@ -273,6 +301,21 @@ public final class JitRuntime {
         }
         inlineRecord(slot, tag, block);
         return run(block, core);
+    }
+
+    /// Classifica por que o `while` do encadeamento terminou (só chamado com profiler ativo,
+    /// fora do caminho quente). Reavalia as condições na MESMA ordem do loop.
+    private ChainProfiler.BreakReason whileExitReason(ArmCore core, int cycles) {
+        if (cycles >= chainCycleBudget) {
+            return ChainProfiler.BreakReason.BUDGET;
+        }
+        if (core.sleepState() != CpuSleepState.RUNNING) {
+            return ChainProfiler.BreakReason.SLEEP;
+        }
+        if (core.interruptLine()) {
+            return ChainProfiler.BreakReason.INTERRUPT;
+        }
+        return ChainProfiler.BreakReason.GENERATION;
     }
 
     /// Caminho TIERED: integra compilações de background prontas, depois despacha o tier do
