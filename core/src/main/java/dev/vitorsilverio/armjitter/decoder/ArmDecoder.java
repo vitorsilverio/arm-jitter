@@ -108,6 +108,26 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, rs, packed, false, false, false);
         }
 
+        // Aritmética paralela ARMv6 (SIMD 8/16 bits): `cccc 0110 0ppp nnnn dddd 1111 ttt1 mmmm` —
+        // ppp = variante (001=S, 010=Q, 011=SH, 101=U, 110=UQ, 111=UH; 000/100 são buracos
+        // indefinidos), ttt = operação (000=ADD16, 001=ASX, 010=SAX, 011=SUB16, 100=ADD8,
+        // 111=SUB8; 101/110 são buracos). Precisa vir antes do bloco de single-data-transfer
+        // (01xx), que engoliria o padrão registrador+bit4 como UNIMPLEMENTED.
+        if ((raw & 0x0F80_0F10) == 0x0600_0F10 && architecture.has(ArmFeature.PARALLEL_SIMD)) {
+            int variantBits = (raw >>> 20) & 0x7;
+            int opBits = (raw >>> 5) & 0x7;
+            boolean variantValid = variantBits != 0b000 && variantBits != 0b100;
+            boolean opValid = opBits != 0b101 && opBits != 0b110;
+            if (variantValid && opValid) {
+                int rn = (raw >>> 16) & 0xF;
+                int rd = (raw >>> 12) & 0xF;
+                int rm = raw & 0xF;
+                int packed = variantBits | (opBits << 3);
+                return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.PARALLEL_ALU, rd, rn, rm, packed, false, false, false);
+            }
+        }
+
         // ARMv6 sign/zero-extend com rotação e as formas com acumulador:
         // `cccc 0110 1uff nnnn dddd rr00 0111 mmmm` — u=unsigned, ff: 00=B16, 10=B, 11=H
         // (ff=01 é indefinido), rr = rotação do operando em múltiplos de 8 bits. Rn=1111 é a

@@ -67,6 +67,20 @@ class DeadCodeEliminationPassTest {
     }
 
     @Test
+    void parallelAluOperandsStayLive() {
+        // MOV r1 é lido pela SADD16 antes de r1 ser reescrito — não pode ser eliminado
+        // (mesma classe do bug de offset shiftado da B1.2: op nova sem case em regUse).
+        IrOp.ParallelAlu sadd16 = new IrOp.ParallelAlu(
+                dev.vitorsilverio.armjitter.ir.ParallelAluOp.ADD16,
+                dev.vitorsilverio.armjitter.ir.ParallelAluVariant.SIGNED,
+                2, 1, 1, Condition.AL);
+        IrBlock block = block(mov(1, 5), sadd16, mov(1, 7));
+        IrBlock after = pass.optimize(block);
+
+        assertEquals(3, after.operations().size());
+    }
+
+    @Test
     void dst15NeverEliminated() {
         IrOp.Alu writePc = new IrOp.Alu(IrOpCode.MOV, 15, 0, -1,
                 new IrOperand.Immediate(0x100), false, Condition.AL);

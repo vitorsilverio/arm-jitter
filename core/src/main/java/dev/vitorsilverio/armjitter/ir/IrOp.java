@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -47,6 +47,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int UNDEFINED = 20;
         public static final int CYCLE = 21;
         public static final int FETCH = 22;
+        public static final int PARALLEL_ALU = 23;
     }
 
     /// Operacao ALU generica.
@@ -327,6 +328,26 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.DSP_MULTIPLY; }
+    }
+
+    /// Aritmética paralela ARMv6 em lanes de 8/16 bits (SADD16/UQSUB8/SHASX/...). A operação-base
+    /// define as lanes e o cruzamento (ASX/SAX); a variante define sinal, saturação, halving e a
+    /// escrita dos flags GE. Formas com PC em qualquer registrador são UNPREDICTABLE no hardware e
+    /// não passam pelo decoder.
+    record ParallelAlu(
+            /// Operação-base (lanes somadas/subtraídas e largura).
+            ParallelAluOp op,
+            /// Variante de prefixo (S/Q/SH/U/UQ/UH).
+            ParallelAluVariant variant,
+            /// Registrador de destino.
+            int dst,
+            /// Primeiro operando (Rn).
+            int rn,
+            /// Segundo operando (Rm).
+            int rm,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.PARALLEL_ALU; }
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).

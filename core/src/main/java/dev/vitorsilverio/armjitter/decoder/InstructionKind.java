@@ -63,6 +63,10 @@ public enum InstructionKind {
     /// Multiplicação longa unsigned ARMv6 com acumulador duplo (`UMAAL`) — mesmo layout de
     /// registradores de UMULL/UMLAL (dst=RdLo, immediate=RdHi); nunca escreve flags.
     UMAAL,
+    /// Aritmética paralela ARMv6 (SADD16/UQSUB8/...). `immediate` empacota: bits 2:0 = variante
+    /// (bits 22:20 do encoding — 001=S, 010=Q, 011=SH, 101=U, 110=UQ, 111=UH), bits 5:3 = operação
+    /// (bits 7:5 do encoding — 000=ADD16, 001=ASX, 010=SAX, 011=SUB16, 100=ADD8, 111=SUB8).
+    PARALLEL_ALU,
     /// Bit clear.
     BIC,
     /// Move NOT.

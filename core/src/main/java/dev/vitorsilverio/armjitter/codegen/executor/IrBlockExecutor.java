@@ -48,6 +48,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.LONG_MULTIPLY -> alu.executeLongMultiply(core, (IrOp.LongMultiply) op);
                 case IrOp.Kind.SATURATING -> alu.executeSaturating(core, (IrOp.Saturating) op);
                 case IrOp.Kind.DSP_MULTIPLY -> alu.executeDspMultiply(core, (IrOp.DspMultiply) op);
+                case IrOp.Kind.PARALLEL_ALU -> alu.executeParallelAlu(core, (IrOp.ParallelAlu) op);
                 case IrOp.Kind.PSR_TRANSFER -> system.executePsrTransfer(core, (IrOp.PsrTransfer) op);
                 case IrOp.Kind.LOAD -> pcChanged |= memory.executeLoad(core, (IrOp.Load) op);
                 case IrOp.Kind.STORE -> memory.executeStore(core, (IrOp.Store) op);
@@ -89,6 +90,7 @@ public final class IrBlockExecutor {
             case IrOp.LongMultiply lm -> { alu.executeLongMultiply(core, lm); yield false; }
             case IrOp.Saturating sat -> { alu.executeSaturating(core, sat); yield false; }
             case IrOp.DspMultiply dsp -> { alu.executeDspMultiply(core, dsp); yield false; }
+            case IrOp.ParallelAlu parallel -> { alu.executeParallelAlu(core, parallel); yield false; }
             case IrOp.PsrTransfer psr -> { system.executePsrTransfer(core, psr); yield false; }
             case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
             case IrOp.Load load -> memory.executeLoad(core, load);

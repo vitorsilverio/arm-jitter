@@ -108,6 +108,16 @@ public final class StandardIrBuilder implements IrBuilder {
                     true,   // acumulador duplo (RdLo + RdHi como parcelas de 32 bits)
                     false,  // UMAAL nunca escreve flags
                     instruction.condition()));
+            case PARALLEL_ALU -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.ParallelAlu(
+                        parallelAluOp((packed >>> 3) & 0x7),
+                        parallelAluVariant(packed & 0x7),
+                        instruction.destinationRegister(),
+                        instruction.sourceRegister(),
+                        instruction.secondSourceRegister(),
+                        instruction.condition()));
+            }
             case CMP -> liftAlu(IrOpCode.CMP, instruction, block);
             case CMN -> liftAlu(IrOpCode.CMN, instruction, block);
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
@@ -244,6 +254,32 @@ public final class StandardIrBuilder implements IrBuilder {
         block.add(new IrOp.Cycle(1));
         block.add(new IrOp.Fetch(instruction.address(), instructionWidth(instruction)));
         block.endPc(instruction.address() + instructionWidth(instruction));
+    }
+
+    /// Converte os bits 7:5 do encoding de aritmética paralela ARMv6 na operação-base.
+    private static ParallelAluOp parallelAluOp(int opBits) {
+        return switch (opBits) {
+            case 0b000 -> ParallelAluOp.ADD16;
+            case 0b001 -> ParallelAluOp.ASX;
+            case 0b010 -> ParallelAluOp.SAX;
+            case 0b011 -> ParallelAluOp.SUB16;
+            case 0b100 -> ParallelAluOp.ADD8;
+            case 0b111 -> ParallelAluOp.SUB8;
+            default -> throw new IllegalStateException("Operação paralela ARMv6 inválida: " + opBits);
+        };
+    }
+
+    /// Converte os bits 22:20 do encoding de aritmética paralela ARMv6 na variante de prefixo.
+    private static ParallelAluVariant parallelAluVariant(int variantBits) {
+        return switch (variantBits) {
+            case 0b001 -> ParallelAluVariant.SIGNED;
+            case 0b010 -> ParallelAluVariant.SIGNED_SATURATING;
+            case 0b011 -> ParallelAluVariant.SIGNED_HALVING;
+            case 0b101 -> ParallelAluVariant.UNSIGNED;
+            case 0b110 -> ParallelAluVariant.UNSIGNED_SATURATING;
+            case 0b111 -> ParallelAluVariant.UNSIGNED_HALVING;
+            default -> throw new IllegalStateException("Variante paralela ARMv6 inválida: " + variantBits);
+        };
     }
 
     /// Eleva SXT*/UXT* (ARMv6): o operando rotacionado vira um {@link IrOperand.ShiftedRegister}

@@ -12,6 +12,11 @@ public final class CpsrRegister {
     public static final int OVERFLOW_FLAG = 1 << 28;
     /// Bit Q do CPSR (saturação sticky das instruções DSP/saturadas ARMv5TE).
     public static final int SATURATION_FLAG = 1 << 27;
+    /// Deslocamento dos flags GE\[3:0\] do CPSR (bits 19:16, aritmética paralela ARMv6).
+    public static final int GE_FLAGS_SHIFT = 16;
+    /// Máscara dos flags GE\[3:0\] (bits 19:16), escritos pelas variantes básicas da aritmética
+    /// paralela ARMv6 (SADD16/UADD8/...) e lidos por `SEL`.
+    public static final int GE_FLAGS_MASK = 0xF << GE_FLAGS_SHIFT;
     /// Bit T do CPSR.
     public static final int THUMB_FLAG = 1 << 5;
     /// Bit I do CPSR.
@@ -98,6 +103,16 @@ public final class CpsrRegister {
     /// Retorna `true` quando V esta setado.
     public boolean overflow() {
         return (value & OVERFLOW_FLAG) != 0;
+    }
+
+    /// Retorna os flags GE\[3:0\] (bits 19:16) como um valor de 4 bits.
+    public int ge() {
+        return (value & GE_FLAGS_MASK) >>> GE_FLAGS_SHIFT;
+    }
+
+    /// Substitui os flags GE\[3:0\] pelo valor de 4 bits informado (bits altos são ignorados).
+    public void setGe(int ge) {
+        value = (value & ~GE_FLAGS_MASK) | ((ge & 0xF) << GE_FLAGS_SHIFT);
     }
 
     /// Retorna `true` quando o bit Q (saturação sticky) está setado.

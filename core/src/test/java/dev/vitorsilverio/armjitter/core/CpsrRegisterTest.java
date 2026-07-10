@@ -18,6 +18,31 @@ class CpsrRegisterTest {
     }
 
     @Test
+    void geFlagsLiveInBits19To16AndIgnoreHighBits() {
+        CpsrRegister cpsr = new CpsrRegister();
+        cpsr.setGe(0b1010);
+
+        assertEquals(0b1010, cpsr.ge());
+        assertEquals(0b1010 << CpsrRegister.GE_FLAGS_SHIFT, cpsr.get() & CpsrRegister.GE_FLAGS_MASK);
+
+        cpsr.setGe(0xF5); // bits altos além dos 4 GE são ignorados
+        assertEquals(0b0101, cpsr.ge());
+    }
+
+    @Test
+    void settingGeDoesNotDisturbOtherCpsrBits() {
+        CpsrRegister cpsr = new CpsrRegister();
+        cpsr.setMode(CpuMode.SUPERVISOR);
+        cpsr.setNzcv(true, false, true, false);
+        cpsr.setGe(0b1111);
+
+        assertEquals(CpuMode.SUPERVISOR, cpsr.mode());
+        assertTrue(cpsr.negative());
+        assertFalse(cpsr.zero());
+        assertTrue(cpsr.carry());
+    }
+
+    @Test
     void preservesModeBitsWhenChangingThumbMode() {
         CpsrRegister cpsr = new CpsrRegister();
         cpsr.setMode(CpuMode.SUPERVISOR);

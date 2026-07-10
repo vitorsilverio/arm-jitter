@@ -44,4 +44,25 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
                 "as ops ARMv6 devem ter passado pelo fallback por-op");
     }
+
+    @Test
+    void parallelSimdBlockMatchesInterpretedUnderPerOp() {
+        TestAddressSpace memory = new TestAddressSpace(64);
+        memory.put32(0, 0xE610_2F11);  // SADD16 r2, r0, r1
+        memory.put32(4, 0xE660_3FF1);  // UQSUB8 r3, r0, r1
+        memory.put32(8, 0xE650_4F31);  // UASX r4, r0, r1
+        memory.put32(12, 0xE630_5F71); // SHSUB16 r5, r0, r1
+        IrBlock block = new StandardIrBlockLifter(
+                new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 4);
+
+        assertFalse(asmEmitter.isNativeSupported(block),
+                "a aritmética paralela ARMv6 (B1.3) só ganha emissão nativa na B1.6");
+        harness.assertEquivalent(v6Reference, asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> {
+                    core.setRegister(0, 0x8000_FFFF);
+                    core.setRegister(1, 0x0001_7FFF);
+                }));
+        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
+                "as ops paralelas devem ter passado pelo fallback por-op");
+    }
 }

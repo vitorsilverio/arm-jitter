@@ -57,6 +57,8 @@ public final class AsmNativePolicy {
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
             case IrOp.DspMultiply d -> d.dst() != 15 && !(d.op2() == 2 && d.rn() == 15);
+            // Aritmética paralela ARMv6 (B1.3) ainda não é emitida nativamente (B1.6).
+            case IrOp.ParallelAlu ignored -> false;
             case IrOp.DoubleTransfer d -> d.first() + 1 <= (d.load() ? 14 : 15);
             case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
             case IrOp.Store ignored -> true;
