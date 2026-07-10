@@ -55,7 +55,7 @@ uma task [REFINAR] diretamente.
 | [A3](trilha-a-truffle/a3-cobertura-completa.md) | Cobertura completa de IrOp | A2 | ⬜ |
 | [A4](trilha-a-truffle/a4-factory-e-bench.md) | Factory pública + bench 3 JVMs | A3 | ⬜ |
 | [A5](trilha-a-truffle/a5-native-image-demo.md) | Demo native-image | A4 | ⬜ |
-| [B0](trilha-b-arquiteturas/b0-rfc-ir-64bit.md) | RFC: IR de 64 bits (para AArch64) | — | ⬜ |
+| [B0](trilha-b-arquiteturas/b0-rfc-ir-64bit.md) | RFC: IR de 64 bits (para AArch64) | — | ✅ ([RFC](../docs/RFC-IR-64BIT.md): recomenda Opção B — IR-64 paralelo + `Aarch64Core` irmão + `AddressSpace64`; **aguarda aprovação do usuário**) |
 | [B1.1](trilha-b-arquiteturas/b1.1-armv6-features-preset.md) | ArmFeatures + preset ARMV6K | — | ✅ (10 features + `ARMV6K` via `extending`; zero-diff de runtime; gbaemu/ndsemu verdes) |
 | [B1.2](trilha-b-arquiteturas/b1.2-armv6-extend-reverse.md) | SXT/UXT, REV, UMAAL | B1.1 | ⬜ |
 | [B1.3](trilha-b-arquiteturas/b1.3-armv6-simd-media.md) | SIMD paralelo, GE flags, SAT, USAD8, PKH | B1.1 | ⬜ |
