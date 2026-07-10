@@ -76,7 +76,7 @@ uma task [REFINAR] diretamente.
 | [C1](trilha-c-perf/c1-flags-nzcv-locals.md) | Flags NZCV em locals JVM (⚠️ prioridade rebaixada) | — | ⬜ |
 | [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ⬜ |
 | [C3](trilha-c-perf/c3-paged-address-space.md) | PagedAddressSpace O(1) | — | ⬜ |
-| [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ⬜ |
+| [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ✅ (ndsemu 85e4b36: config+gatilho, defaults inalterados; bench 256/64 = MKDS +6% SM64DS +7,6% JUS +11,4%; boots ×4 OK; falta gameplay GUI p/ virar default) |
 | [C5](trilha-c-perf/c5-gbaemu-chaining.md) | Chaining no gbaemu (repo gbaemu) | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída
