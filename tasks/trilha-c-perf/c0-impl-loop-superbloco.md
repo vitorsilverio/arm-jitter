@@ -124,6 +124,20 @@ ligado inalterado; suites + gbaemu verdes.
 
 ### C0.3 — Emissor + integração (o PR grande)
 
+**Aprendizados da C0.2 (obrigatórios aqui):**
+- O detector promove o MESMO ciclo em até K rotações (um head por bloco do ciclo —
+  confirmado no MKDS: o loop dominante virou 4 candidatos). Antes de construir,
+  **canonicalizar por rotação** (ex.: rotação que começa no menor PC) e construir UM
+  superbloco por ciclo; os outros heads continuam entrando pelo chain loop normal e
+  caem no superbloco pelo dispatch interno de PC? NÃO — o dispatch interno só roda
+  APÓS um segmento; heads alternativos ficam como blocos normais (aceitável: o loop
+  converge para o superbloco do head canônico em 1 iteração).
+- Candidatos de 1 bloco (self-loop, ex.: `0214D048` no MKDS) são válidos e valem
+  superbloco (viram "bloco que se repete até o budget" — o caso mais simples).
+- MKDS gerou 55 candidatos promovidos; o cap de construção deve começar conservador
+  (ex.: construir só ciclos com ≥2 promoções/rotações OU os primeiros N) e crescer
+  com dado de bench.
+
 Emissor `compileLoop(List<IrBlock> membros, SuperblockContext)` no
 `AsmBlockCompiler` (ou classe irmã `AsmLoopCompiler` reusando os `emitXxx` —
 decidir lendo o código; reuso dos emitters é obrigatório, S5). Integração:

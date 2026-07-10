@@ -70,7 +70,7 @@ uma task [REFINAR] diretamente.
 | [B6](trilha-b-arquiteturas/b6-aarch64.md) | AArch64 (épico) [REFINAR] | B0 | ⬜ |
 | [C0](trilha-c-perf/c0-superblocos-trace-jit.md) | Superblocos → loop-superbloco (alavanca nº 1) | — | 🟡 (medição ✅ + [spec de implementação](trilha-c-perf/c0-impl-loop-superbloco.md) pronta) |
 | [C0.1](trilha-c-perf/c0-impl-loop-superbloco.md) | Harness lockstep de runtime | — | ✅ |
-| [C0.2](trilha-c-perf/c0-impl-loop-superbloco.md) | Detector de ciclo + contadores | C0.1 | ⬜ |
+| [C0.2](trilha-c-perf/c0-impl-loop-superbloco.md) | Detector de ciclo + contadores | C0.1 | ✅ (acha os loops da medição nos jogos reais) |
 | [C0.3](trilha-c-perf/c0-impl-loop-superbloco.md) | Emissor do loop-superbloco + integração | C0.1, C0.2 | ⬜ |
 | [C0.4](trilha-c-perf/c0-impl-loop-superbloco.md) | Validação de jogo + A/B + default (ndsemu) | C0.3 | ⬜ |
 | [C1](trilha-c-perf/c1-flags-nzcv-locals.md) | Flags NZCV em locals JVM (⚠️ prioridade rebaixada) | — | ⬜ |

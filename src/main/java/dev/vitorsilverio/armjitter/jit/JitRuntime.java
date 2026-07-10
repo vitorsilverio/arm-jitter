@@ -114,6 +114,21 @@ public final class JitRuntime {
         this.chainProfiler = profiler;
     }
 
+    /// Detector opt-in de loops fechados para o loop-superbloco (task C0.2). `null` =
+    /// desligado (custo: um null-check por run/salto). Nesta fase só DETECTA — nenhum
+    /// superbloco é construído ainda (C0.3).
+    private LoopSuperblockDetector superblockDetector;
+
+    /// Liga/desliga a detecção de loop-superbloco (default OFF).
+    public void setLoopSuperblocks(boolean enabled) {
+        this.superblockDetector = enabled ? new LoopSuperblockDetector() : null;
+    }
+
+    /// Detector instalado, ou `null` — para relatórios e testes.
+    public LoopSuperblockDetector superblockDetector() {
+        return superblockDetector;
+    }
+
     /// Cria um runtime JIT com seus componentes principais.
     public JitRuntime(
             BlockCache blockCache,
@@ -230,6 +245,8 @@ public final class JitRuntime {
             int chainFromPc = pc;
             int chainHops = 0;
             ChainProfiler.BreakReason chainBreak = null;
+            boolean detectorSampling = superblockDetector != null
+                    && superblockDetector.startRun(pc, instructionSet);
             // ── Encadeamento de blocos (chain fast path) ───────────────────────
             // Loops de spin (poll de IPC/VCOUNT/flags, com ou sem `bl` para um helper) são ciclos
             // de blocos de 1-4 instruções: sem isto, CADA bloco paga o round-trip completo
@@ -265,6 +282,9 @@ public final class JitRuntime {
                     chainProfiler.recordHop(chainFromPc, nextPc);
                     chainFromPc = nextPc;
                     chainHops++;
+                }
+                if (detectorSampling) {
+                    detectorSampling = !superblockDetector.observeHop(nextPc, nextSet);
                 }
                 if (step <= 0) {
                     if (chainProfiler != null) {
