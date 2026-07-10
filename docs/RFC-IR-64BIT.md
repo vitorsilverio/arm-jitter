@@ -1,6 +1,9 @@
 # RFC — Generalização do IR para 64 bits (pré-requisito do AArch64 / B6)
 
-**Status:** proposta — aguardando aprovação do usuário antes de qualquer implementação.
+**Status:** **APROVADA em 2026-07-10 (Opção B — IR-64 paralelo)** pelo usuário. A fase F0 do
+plano de migração (§6) está cumprida; F1+ entram quando forem priorizadas. As decisões da §5
+("Decisões que B1–B3 devem respeitar desde já") estão em vigor a partir de agora — em
+particular, o monitor de exclusividade de B1.4 nasce com endereço `long`.
 **Task de origem:** [B0](../tasks/trilha-b-arquiteturas/b0-rfc-ir-64bit.md).
 **Escopo:** só análise/decisão de desenho. Nenhum código de produção muda com este documento.
 
