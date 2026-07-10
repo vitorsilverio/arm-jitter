@@ -30,6 +30,56 @@ class ArmArchitectureTest {
         assertFalse(ArmArchitecture.ARMV5TE.has(ArmFeature.THUMB2));
     }
 
+    private static final List<ArmFeature> ARMV6_FEATURES = List.of(
+            ArmFeature.EXTEND_ROTATE,
+            ArmFeature.BYTE_REVERSE,
+            ArmFeature.UMAAL,
+            ArmFeature.PARALLEL_SIMD,
+            ArmFeature.PACK_SATURATE,
+            ArmFeature.EXCLUSIVE_WORD,
+            ArmFeature.EXCLUSIVE_SIZED,
+            ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+            ArmFeature.SETEND_BIG_ENDIAN_DATA,
+            ArmFeature.WAIT_HINTS);
+
+    @Test
+    void armv6kHasTheArmv5teAndArmv6FeatureSetsButNotThumb2() {
+        assertTrue(ArmArchitecture.ARMV6K.has(ArmFeature.BLX));
+        assertTrue(ArmArchitecture.ARMV6K.has(ArmFeature.DSP_MULTIPLY));
+        assertTrue(ArmArchitecture.ARMV6K.has(ArmFeature.LOAD_PC_INTERWORKING));
+        for (ArmFeature feature : ARMV6_FEATURES) {
+            assertTrue(ArmArchitecture.ARMV6K.has(feature), feature + " must be on on ARMv6K");
+        }
+        assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.THUMB2), "Thumb-2 is ARMv6T2+, not ARMv6K");
+    }
+
+    @Test
+    void olderArchitecturesLackTheArmv6Features() {
+        for (ArmFeature feature : ARMV6_FEATURES) {
+            assertFalse(ArmArchitecture.ARMV4T.has(feature), feature + " must be off on ARMv4T");
+            assertFalse(ArmArchitecture.ARMV5TE.has(feature), feature + " must be off on ARMv5TE");
+        }
+    }
+
+    @Test
+    void armv6kInheritsTheArmv5teDecoderExtensions() {
+        assertEquals(ArmArchitecture.ARMV5TE.decoderExtensions().size(),
+                ArmArchitecture.ARMV6K.decoderExtensions().size());
+    }
+
+    @Test
+    void extendingComposesFeaturesAndDecoderExtensionsOnTopOfTheBase() {
+        ArmArchitecture base = ArmArchitecture.of("base", ArmFeature.CLZ).withDecoderExtensions(List.of(
+                (word, address, condition) -> null));
+        ArmArchitecture extended = ArmArchitecture.extending(base, "extended", ArmFeature.BYTE_REVERSE);
+        assertEquals("extended", extended.name());
+        assertTrue(extended.has(ArmFeature.CLZ), "feature da base deve ser herdada");
+        assertTrue(extended.has(ArmFeature.BYTE_REVERSE));
+        assertFalse(extended.has(ArmFeature.BLX));
+        assertEquals(1, extended.decoderExtensions().size(), "extensões de decoder da base devem ser herdadas");
+        assertFalse(base.has(ArmFeature.BYTE_REVERSE), "a base não pode ser mutada");
+    }
+
     @Test
     void ofBuildsArchitectureFromAFeatureSet() {
         ArmArchitecture custom = ArmArchitecture.of("custom", ArmFeature.CLZ);

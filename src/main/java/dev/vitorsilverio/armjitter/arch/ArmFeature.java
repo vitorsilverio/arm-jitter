@@ -40,5 +40,31 @@ public enum ArmFeature {
     /// `STM` com writeback e a base presente na lista sempre armazena o valor **original** da base.
     /// Em ARMv4 (ARM7TDMI) a base armazena o valor já incrementado (writeback) quando não é o
     /// primeiro registrador da lista. ARMv5+.
-    STM_BASE_IN_LIST_STORES_ORIGINAL
+    STM_BASE_IN_LIST_STORES_ORIGINAL,
+
+    // ---- Disponibilidade de instrução ARMv6/ARMv6K (gates de decoder; ainda sem decoder — B1.2–B1.5) ----
+    /// Extensão de byte/halfword com rotação: `SXTB`/`SXTH`/`SXTB16`/`UXTB`/`UXTH`/`UXTB16` e as
+    /// variantes com acumulador `SXTAB`/`SXTAH`/`SXTAB16`/`UXTAB`/`UXTAH`/`UXTAB16`. ARMv6+.
+    EXTEND_ROTATE,
+    /// Inversão de bytes: `REV`/`REV16`/`REVSH`. ARMv6+.
+    BYTE_REVERSE,
+    /// `UMAAL` (multiplicação longa sem sinal com acumulador duplo). ARMv6+.
+    UMAAL,
+    /// Aritmética paralela de 8/16 bits (`SADD8`/`SSUB16`/`UQADD8`/`SHADD16`/...), `SEL` e os
+    /// flags GE\[3:0\] do CPSR que ela produz/consome. ARMv6+.
+    PARALLEL_SIMD,
+    /// Empacotamento e saturação: `PKHBT`/`PKHTB`, `SSAT`/`USAT`/`SSAT16`/`USAT16`,
+    /// `USAD8`/`USADA8`. ARMv6+.
+    PACK_SATURATE,
+    /// Acesso exclusivo de palavra: `LDREX`/`STREX` (word) + monitor de exclusividade. ARMv6.
+    EXCLUSIVE_WORD,
+    /// Acessos exclusivos dimensionados: `LDREXB`/`LDREXH`/`LDREXD`, `STREXB`/`STREXH`/`STREXD`
+    /// e `CLREX`. ARMv6K.
+    EXCLUSIVE_SIZED,
+    /// Instruções de mudança de modo/estado do sistema: `CPS`, `SRS`, `RFE`. ARMv6+.
+    MODE_CHANGE_INSTRUCTIONS,
+    /// `SETEND` e o bit E do CPSR (endianness de dados big-endian por instrução). ARMv6+.
+    SETEND_BIG_ENDIAN_DATA,
+    /// Hints de espera como instruções dedicadas: `WFI`/`WFE`/`SEV`/`YIELD`. ARMv6K.
+    WAIT_HINTS
 }

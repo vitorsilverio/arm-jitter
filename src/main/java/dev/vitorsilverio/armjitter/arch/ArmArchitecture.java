@@ -30,6 +30,21 @@ public final class ArmArchitecture {
             ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL)
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
+    /// ARM11 (MPCore/ARM1176) — 3DS principal e Raspberry Pi 1/Zero. ARMv5TE mais o conjunto
+    /// user-level do ARMv6/v6K (sem Thumb-2, que é ARMv6T2+). As features estão declaradas mas
+    /// nenhum decoder as consome ainda — os grupos de instruções chegam nas tasks B1.2–B1.5.
+    public static final ArmArchitecture ARMV6K = extending(ARMV5TE, "ARMv6K",
+            ArmFeature.EXTEND_ROTATE,
+            ArmFeature.BYTE_REVERSE,
+            ArmFeature.UMAAL,
+            ArmFeature.PARALLEL_SIMD,
+            ArmFeature.PACK_SATURATE,
+            ArmFeature.EXCLUSIVE_WORD,
+            ArmFeature.EXCLUSIVE_SIZED,
+            ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+            ArmFeature.SETEND_BIG_ENDIAN_DATA,
+            ArmFeature.WAIT_HINTS);
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
@@ -45,6 +60,15 @@ public final class ArmArchitecture {
         EnumSet<ArmFeature> set = EnumSet.noneOf(ArmFeature.class);
         Collections.addAll(set, features);
         return new ArmArchitecture(name, set, List.of());
+    }
+
+    /// Constrói uma arquitetura que estende uma base: herda todas as features **e** as extensões
+    /// de decoder da base, acrescentando as features extras. É como versões novas compõem sobre
+    /// as anteriores (ex. ARMv6K sobre ARMv5TE) sem repetir a lista da base.
+    public static ArmArchitecture extending(ArmArchitecture base, String name, ArmFeature... extraFeatures) {
+        EnumSet<ArmFeature> set = base.features.clone();
+        Collections.addAll(set, extraFeatures);
+        return new ArmArchitecture(name, set, base.decoderExtensions);
     }
 
     public boolean has(ArmFeature feature) {
