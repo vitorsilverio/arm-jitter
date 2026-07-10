@@ -105,6 +105,12 @@ public final class JitRuntime {
         this.chainCycleBudget = cycles;
     }
 
+    /// Orçamento de ciclos atual do encadeamento (0 = desligado) — para hospedeiros que trocam
+    /// o budget em fases (ex. boot vs pós-boot) e para testes.
+    public int chainCycleBudget() {
+        return chainCycleBudget;
+    }
+
     /// Profiler opt-in do encadeamento (medição da task C0 — superblocos). `null` = desligado
     /// (custo: um null-check por salto de corrente). Não thread-safe: um por runtime.
     private ChainProfiler chainProfiler;
