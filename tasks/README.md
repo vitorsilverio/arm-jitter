@@ -74,7 +74,7 @@ uma task [REFINAR] diretamente.
 | [C0.3](trilha-c-perf/c0-impl-loop-superbloco.md) | Emissor do loop-superbloco + integração | C0.1, C0.2 | ✅ (bench: MKDS +16%, SM64DS +44%, JUS +39% — os dois últimos ACIMA de realtime) |
 | [C0.4](trilha-c-perf/c0-impl-loop-superbloco.md) | Validação de jogo + A/B + default (ndsemu) | C0.3 | ✅ (boots frios ×4 ON==OFF + gameplay validado na GUI; default ON no backend ASM — ndsemu cc65fab) |
 | [C1](trilha-c-perf/c1-flags-nzcv-locals.md) | Flags NZCV em locals JVM (⚠️ prioridade rebaixada) | — | ⬜ |
-| [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ⬜ |
+| [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ✅ (helpers `shiftedOperandCarry`/`doXxxS`; policy só rejeita dst15+S nas ALU; property test 32 combos × n=0..255 × 2 carries; asmcheck JUS 800 zero divergências; JUS bench 76,5→81,7 fps +6,8%) |
 | [C3](trilha-c-perf/c3-paged-address-space.md) | PagedAddressSpace O(1) | — | ⬜ |
 | [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ✅ FECHADA (ndsemu 85e4b36 + cf7b5c2: bench 256/64 = MKDS +6% SM64DS +7,6% JUS +11,4%; boots ×4 OK; gameplay GUI validado 2026-07-10 → 256/64 é o DEFAULT) |
 | [C5](trilha-c-perf/c5-gbaemu-chaining.md) | Chaining no gbaemu (repo gbaemu) | — | ⬜ |

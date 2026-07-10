@@ -1108,14 +1108,16 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
         emitOperand(method, alu.src2());
         method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);
+        // O carry do shifter relê os registradores do operando: calcule-o ANTES do store em dst
+        // (dst pode ser o próprio Rm/Rs do shift), como o interpretador faz.
+        emitLogicFlagsCarry(method, alu.src2());
+        method.visitVarInsn(Opcodes.ISTORE, LONG_RESULT_LOCAL);  // carry
         method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
         method.visitInsn(jvmOpcode);
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);    // result
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
         emitStoreRegister(method, alu.dst());
-        emitLogicFlagsCarry(method, alu.src2());
-        method.visitVarInsn(Opcodes.ISTORE, LONG_RESULT_LOCAL);  // carry
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, LONG_RESULT_LOCAL);
@@ -1136,6 +1138,9 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
         emitOperand(method, alu.src2());
         method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);
+        // Carry do shifter ANTES do store em dst — ver emitAluLogic.
+        emitLogicFlagsCarry(method, alu.src2());
+        method.visitVarInsn(Opcodes.ISTORE, LONG_RESULT_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
         method.visitInsn(Opcodes.ICONST_M1);
@@ -1144,8 +1149,6 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);    // result
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
         emitStoreRegister(method, alu.dst());
-        emitLogicFlagsCarry(method, alu.src2());
-        method.visitVarInsn(Opcodes.ISTORE, LONG_RESULT_LOCAL);
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, LONG_RESULT_LOCAL);
@@ -1182,12 +1185,22 @@ public final class AsmBlockCompiler {
         emitOperand(method, alu.src2());
         AsmBytecode.visitIntConst(method, 0xFF);
         method.visitInsn(Opcodes.IAND);                      // amount = right & 0xFF
-        // setFlags is rejected by policy for shifts, so never true here
+        if (!alu.setFlags()) {
+            method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+            // stack: amount, value — but doLsl(value, amount) expects (value, amount)
+            // we have [value] [amount] on stack in wrong order; swap:
+            method.visitInsn(Opcodes.SWAP);
+            AsmBytecode.invokeStatic(method, HELPERS, helperName, "(II)I");
+            emitStoreRegister(method, alu.dst());
+            return;
+        }
+        // Com S (task C2): doXxxS(core, value, amount) calcula resultado + N/Z + carry do
+        // shifter (V inalterado; amount 0 mantém o C atual) e devolve o resultado.
+        method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);   // amount
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
-        // stack: amount, value — but doLsl(value, amount) expects (value, amount)
-        // we have [value] [amount] on stack in wrong order; swap:
-        method.visitInsn(Opcodes.SWAP);
-        AsmBytecode.invokeStatic(method, HELPERS, helperName, "(II)I");
+        method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+        AsmBytecode.invokeStatic(method, HELPERS, helperName + "S", "(" + CORE_REF + "II)I");
         emitStoreRegister(method, alu.dst());
     }
 
@@ -1565,33 +1578,39 @@ public final class AsmBlockCompiler {
             case IrOperand.ShiftedRegister sr -> {
                 // shiftedOperand(core, value, shiftType, amount, regSpecified, rrx) espelha o
                 // interpretador; o VALOR e a QUANTIDADE fluem pelo register cache.
-                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
-                if (sr.valueOverride() != -1) {
-                    AsmBytecode.visitIntConst(method, sr.valueOverride());
-                } else {
-                    emitReadRegister(method, sr.index());
-                }
-                AsmBytecode.visitIntConst(method, sr.shiftType().ordinal());
-                boolean regSpecified = sr.amountRegister() >= 0;
-                if (regSpecified) {
-                    if (sr.amountValueOverride() != -1) {
-                        AsmBytecode.visitIntConst(method, sr.amountValueOverride() & 0xFF);
-                    } else {
-                        emitReadRegister(method, sr.amountRegister());
-                        AsmBytecode.visitIntConst(method, 0xFF);
-                        method.visitInsn(Opcodes.IAND);
-                    }
-                } else {
-                    AsmBytecode.visitIntConst(method, sr.amount());
-                }
-                method.visitInsn(regSpecified ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-                method.visitInsn(sr.rrx() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                emitShiftedOperandArgs(method, sr);
                 AsmBytecode.invokeStatic(method, HELPERS, "shiftedOperand", "(" + CORE_REF + "IIIZZ)I");
                 if (sr.negated()) {
                     method.visitInsn(Opcodes.INEG);
                 }
             }
         }
+    }
+
+    /// Empilha os argumentos `(core, value, shiftType, amount, regSpecified, rrx)` compartilhados
+    /// por {@code shiftedOperand} (valor) e {@code shiftedOperandCarry} (carry do shifter).
+    private void emitShiftedOperandArgs(MethodVisitor method, IrOperand.ShiftedRegister sr) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        if (sr.valueOverride() != -1) {
+            AsmBytecode.visitIntConst(method, sr.valueOverride());
+        } else {
+            emitReadRegister(method, sr.index());
+        }
+        AsmBytecode.visitIntConst(method, sr.shiftType().ordinal());
+        boolean regSpecified = sr.amountRegister() >= 0;
+        if (regSpecified) {
+            if (sr.amountValueOverride() != -1) {
+                AsmBytecode.visitIntConst(method, sr.amountValueOverride() & 0xFF);
+            } else {
+                emitReadRegister(method, sr.amountRegister());
+                AsmBytecode.visitIntConst(method, 0xFF);
+                method.visitInsn(Opcodes.IAND);
+            }
+        } else {
+            AsmBytecode.visitIntConst(method, sr.amount());
+        }
+        method.visitInsn(regSpecified ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        method.visitInsn(sr.rrx() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
     }
 
     private void emitStoreRegister(MethodVisitor method, int dst) {
@@ -1634,9 +1653,16 @@ public final class AsmBlockCompiler {
     /// Emits bytecode to push the logic carry-out for a src2 operand:
     /// - Immediate with known carry: compile-time constant
     /// - Immediate without known carry / Register: runtime cpsr().carry()
+    /// Empilha o carry (0/1) que os flags LÓGICOS devem receber para o operando `src2`:
+    /// imediato com carry conhecido = constante; shifted-register = carry-out do barrel shifter
+    /// (task C2 — deve ser emitido ANTES da escrita em dst, pois relê os registradores do shift);
+    /// registrador puro/imediato sem rotação = C atual.
     private void emitLogicFlagsCarry(MethodVisitor method, IrOperand src2) {
         if (src2 instanceof IrOperand.Immediate imm && imm.carryOutKnown()) {
             method.visitInsn(imm.carryOut() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        } else if (src2 instanceof IrOperand.ShiftedRegister sr) {
+            emitShiftedOperandArgs(method, sr);
+            AsmBytecode.invokeStatic(method, HELPERS, "shiftedOperandCarry", "(" + CORE_REF + "IIIZZ)Z");
         } else {
             emitCpsrCarryAsInt(method);
         }

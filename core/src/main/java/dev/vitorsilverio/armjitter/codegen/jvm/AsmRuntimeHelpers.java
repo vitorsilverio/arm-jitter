@@ -333,6 +333,12 @@ public final class AsmRuntimeHelpers {
 
     // ── operando shifted-register ──────────────────────────────────────────────
 
+    // Ordinais de ShiftType (LSL/LSR/ASR/ROR) — o bytecode passa `ShiftType.ordinal()`.
+    private static final int SHIFT_LSL = 0;
+    private static final int SHIFT_LSR = 1;
+    private static final int SHIFT_ASR = 2;
+    private static final int SHIFT_ROR = 3;
+
     /// Valor de um operando shifted-register (espelha IrExecutionSupport.shiftedRegisterOperand).
     /// `value` já foi lido pelo bytecode (via register cache); `shiftType` é o ordinal de
     /// ShiftType (LSL/LSR/ASR/ROR); para shift por registrador, `amount` já vem mascarado com
@@ -346,11 +352,79 @@ public final class AsmRuntimeHelpers {
             return value;
         }
         return switch (shiftType) {
-            case 0 -> amount >= 32 ? 0 : value << amount;               // LSL
-            case 1 -> amount >= 32 ? 0 : value >>> amount;              // LSR
-            case 2 -> amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount; // ASR
+            case SHIFT_LSL -> amount >= 32 ? 0 : value << amount;
+            case SHIFT_LSR -> amount >= 32 ? 0 : value >>> amount;
+            case SHIFT_ASR -> amount >= 32 ? (value < 0 ? -1 : 0) : value >> amount;
             default -> Integer.rotateRight(value, amount & 31);         // ROR
         };
+    }
+
+    /// Carry-out do barrel shifter de um operando shifted-register (espelha
+    /// IrExecutionSupport.shiftedRegisterCarryOut) — mesmos parâmetros de {@link #shiftedOperand}.
+    /// RRX devolve o bit 0 do valor; amount 0 (shift por registrador com Rs&0xFF==0) mantém o
+    /// carry atual. Deve ser chamado ANTES de o resultado ser escrito nos registradores/flags.
+    public static boolean shiftedOperandCarry(ArmCore core, int value, int shiftType, int amount,
+                                              boolean regSpecified, boolean rrx) {
+        if (rrx) {
+            return (value & 1) != 0;
+        }
+        if (amount == 0) {
+            return core.cpsr().carry();
+        }
+        return shiftCarryOut(value, shiftType, amount);
+    }
+
+    /// Carry-out de um shift efetivo (amount > 0), espelhando IrExecutionSupport.shiftCarryOut.
+    private static boolean shiftCarryOut(int value, int shiftType, int amount) {
+        if (amount <= 0) {
+            return false;
+        }
+        return switch (shiftType) {
+            case SHIFT_LSL -> amount < 32
+                    ? ((value >>> (32 - amount)) & 1) != 0
+                    : amount == 32 && (value & 1) != 0;
+            case SHIFT_LSR -> amount < 32
+                    ? ((value >>> (amount - 1)) & 1) != 0
+                    : amount == 32 && value < 0;
+            case SHIFT_ASR -> amount >= 32 ? value < 0 : ((value >>> (amount - 1)) & 1) != 0;
+            default -> { // ROR: reduz módulo 32; múltiplo exato de 32 devolve o bit 31
+                int effective = amount & 31;
+                yield effective == 0 ? value < 0 : ((value >>> (effective - 1)) & 1) != 0;
+            }
+        };
+    }
+
+    // ── shifts de opcode ALU com S (LSLS/LSRS/ASRS/RORS) ───────────────────────
+    // Espelham o caso LSL/LSR/ASR/ROR + setFlags do IrAluExecutor: N/Z do resultado, C = carry
+    // do shifter (amount 0 mantém o C atual — vale para registrador E imediato, pois o builder
+    // normaliza LSR#0/ASR#0 para #32 e ROR#0 para RRX), V inalterado. Devolvem o resultado.
+
+    public static int doLslS(ArmCore core, int value, int amount) {
+        boolean carry = amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, SHIFT_LSL, amount);
+        int result = doLsl(value, amount);
+        updateLogicFlags(core, result, carry);
+        return result;
+    }
+
+    public static int doLsrS(ArmCore core, int value, int amount) {
+        boolean carry = amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, SHIFT_LSR, amount);
+        int result = doLsr(value, amount);
+        updateLogicFlags(core, result, carry);
+        return result;
+    }
+
+    public static int doAsrS(ArmCore core, int value, int amount) {
+        boolean carry = amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, SHIFT_ASR, amount);
+        int result = doAsr(value, amount);
+        updateLogicFlags(core, result, carry);
+        return result;
+    }
+
+    public static int doRorS(ArmCore core, int value, int amount) {
+        boolean carry = amount == 0 ? core.cpsr().carry() : shiftCarryOut(value, SHIFT_ROR, amount);
+        int result = doRor(value, amount);
+        updateLogicFlags(core, result, carry);
+        return result;
     }
 
     // ── ARMv5TE (saturação / DSP) ──────────────────────────────────────────────

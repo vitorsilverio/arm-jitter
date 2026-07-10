@@ -20,16 +20,16 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
                 .lift(memory, 0, count);
     }
 
-    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (flags LÓGICOS que
-    /// dependem do carry-out do barrel shifter) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST.
-    /// (Condição ≠ AL e ShiftedRegister sem flags agora SÃO emitidos nativamente, então não servem
-    /// mais para este teste.)
-    /// 0xE3A00064 = MOV r0, #100          (AL — nativo)
-    /// 0xE1B01312 = MOVS r1, r2, LSL r3   (flags lógicos + shifter carry — não nativo)
+    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (SWP mantém
+    /// fallback) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST. (Condição ≠ AL,
+    /// ShiftedRegister sem flags e — desde a task C2 — flags lógicos com carry do shifter agora
+    /// SÃO emitidos nativamente, então não servem mais para este teste.)
+    /// 0xE3A00064 = MOV r0, #100     (AL — nativo)
+    /// 0xE1031092 = SWP r1, r2, [r3] (Swap — não nativo)
     private static TestAddressSpace buildMixedBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A00064);  // MOV r0, #100        (AL — native)
-        memory.put32(4, 0xE1B01312);  // MOVS r1, r2, LSL r3 (logic flags + shifter carry — not native)
+        memory.put32(0, 0xE3A00064);  // MOV r0, #100     (AL — native)
+        memory.put32(4, 0xE1031092);  // SWP r1, r2, [r3] (Swap — not native)
         return memory;
     }
 
@@ -105,7 +105,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
 
         emitter.emit(block);
 
-        // 1 non-native op (MOV r1, r2, LSL r3 — ShiftedRegister) must be counted
+        // 1 non-native op (SWP — Swap) must be counted
         assertTrue(emitter.perOpFallbackOpCount() >= 1,
                 "Expected at least 1 per-op fallback; got " + emitter.perOpFallbackOpCount());
         assertEquals(1, emitter.nativeBlockCount());

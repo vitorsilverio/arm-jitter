@@ -46,11 +46,11 @@ class AsmCodeEmitterEquivalenceTest extends BlockEquivalenceTest {
 
     @Test
     void fallsBackToInterpretedForUnsupportedBlocks() {
-        // 0xE1B00211 = MOVS r0, r1, LSL r2 — flags lógicos + shifter carry, não nativo.
-        // (ShiftedRegister SEM flags agora é emitido nativamente.)
+        // 0xE1020091 = SWP r0, r1, [r2] — Swap mantém fallback. (ShiftedRegister sem flags e,
+        // desde a task C2, flags lógicos com carry do shifter agora são emitidos nativamente.)
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A0_000A);
-        memory.put32(4, 0xE1B00211);
+        memory.put32(4, 0xE1020091);
         IrBlock block = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder()).lift(memory, 0, 2);
 
         assertFalse(asmEmitter.isNativeSupported(block));
