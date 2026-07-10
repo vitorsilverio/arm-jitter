@@ -16,6 +16,12 @@ public final class JvmBlockLoader {
         this(JvmBlockLoader.class.getClassLoader());
     }
 
+    /// Retorna `true` se `type` foi definida por ESTE loader — pré-condição para um
+    /// loop-superbloco referenciar a classe por `INVOKESTATIC` (mesmo class loader).
+    public boolean defined(Class<?> type) {
+        return type.getClassLoader() == classLoader;
+    }
+
     /// Define a classe (que implementa {@link CompiledBlock}) e a instancia, devolvendo um bloco
     /// executável por chamada virtual direta — sem o overhead de `MethodHandle.invokeExact`.
     public CompiledBlock load(byte[] bytecode, String internalName) {

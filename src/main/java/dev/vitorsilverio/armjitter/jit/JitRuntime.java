@@ -114,19 +114,104 @@ public final class JitRuntime {
         this.chainProfiler = profiler;
     }
 
-    /// Detector opt-in de loops fechados para o loop-superbloco (task C0.2). `null` =
-    /// desligado (custo: um null-check por run/salto). Nesta fase só DETECTA — nenhum
-    /// superbloco é construído ainda (C0.3).
+    /// Detector opt-in de loops fechados para o loop-superbloco (tasks C0.2/C0.3). `null` =
+    /// desligado (custo: um null-check por run/salto). Com o flag ligado, candidatos
+    /// promovidos são CONSTRUÍDOS como loop-superblocos quando o emissor suporta
+    /// composição (backend ASM); em emissores sem suporte fica só a detecção.
     private LoopSuperblockDetector superblockDetector;
+    /// Espelho de `superblockDetector != null` para o guard barato do chain loop.
+    private boolean superblocksEnabled;
+    /// Adaptador dos guards por-iteração dos superblocos (budget + generation).
+    private dev.vitorsilverio.armjitter.codegen.jvm.SuperblockContext superblockContext;
+    /// Heads canônicos já tentados (construídos OU recusados) — uma tentativa por ciclo.
+    private final java.util.HashSet<Integer> superblockHeads = new java.util.HashSet<>();
+    /// Envoltória máxima de endereços de um superbloco (invalidação por página marca o
+    /// intervalo inteiro; os loops medidos têm 8–10 KB).
+    private static final int MAX_SUPERBLOCK_SPAN_BYTES = 32 * 1024;
 
-    /// Liga/desliga a detecção de loop-superbloco (default OFF).
+    /// Diagnóstico: superblocos construídos e candidatos recusados (span/emissor/membros frios).
+    public long superblocksBuilt;
+    public long superblockSkips;
+
+    /// Liga/desliga a detecção+construção de loop-superbloco (default OFF).
     public void setLoopSuperblocks(boolean enabled) {
         this.superblockDetector = enabled ? new LoopSuperblockDetector() : null;
+        this.superblocksEnabled = enabled;
+        if (enabled && superblockContext == null) {
+            superblockContext = new dev.vitorsilverio.armjitter.codegen.jvm.SuperblockContext() {
+                @Override public long generation() { return blockCache.generation(); }
+                @Override public int chainCycleBudget() { return chainCycleBudget; }
+            };
+        }
     }
 
     /// Detector instalado, ou `null` — para relatórios e testes.
     public LoopSuperblockDetector superblockDetector() {
         return superblockDetector;
+    }
+
+    /// Constrói e instala o superbloco do ciclo `memberPcs` (rotacionado para o head
+    /// canônico = menor PC unsigned). Uma tentativa por ciclo; requer todos os membros
+    /// compilados no cache e emissor com suporte a composição. Roda na thread de emulação
+    /// (evento raro e classe minúscula — build síncrono deliberado; ver spec C0.3).
+    private void buildSuperblock(InstructionSet instructionSet, int[] memberPcs) {
+        int rotation = 0;
+        for (int i = 1; i < memberPcs.length; i++) {
+            if (Integer.compareUnsigned(memberPcs[i], memberPcs[rotation]) < 0) {
+                rotation = i;
+            }
+        }
+        int[] canonical = new int[memberPcs.length];
+        for (int i = 0; i < memberPcs.length; i++) {
+            canonical[i] = memberPcs[(rotation + i) % memberPcs.length];
+        }
+        if (!superblockHeads.add(canonical[0])) {
+            return; // ciclo já tentado (inclui as outras rotações promovidas pelo detector)
+        }
+        java.util.List<CompiledBlock> members = new java.util.ArrayList<>(canonical.length);
+        int coveringStart = canonical[0];
+        int coveringEnd = canonical[0];
+        for (int memberPc : canonical) {
+            BlockCache.CacheEntry entry = blockCache.entry(new BlockKey(memberPc, instructionSet));
+            if (entry == null || !entry.compiled()) {
+                superblockSkips++;
+                return; // membro frio/ausente: o ciclo continua atendido pelo chaining normal
+            }
+            members.add(entry.block());
+            if (Integer.compareUnsigned(entry.startPc(), coveringStart) < 0) {
+                coveringStart = entry.startPc();
+            }
+            if (Integer.compareUnsigned(entry.endPc(), coveringEnd) > 0) {
+                coveringEnd = entry.endPc();
+            }
+        }
+        if (Integer.compareUnsigned(coveringEnd - coveringStart, MAX_SUPERBLOCK_SPAN_BYTES) > 0) {
+            superblockSkips++;
+            return;
+        }
+        CompiledBlock superblock = emitter.emitLoopSuperblock(members, canonical, superblockContext);
+        if (superblock == null) {
+            superblockSkips++;
+            return; // emissor sem composição (interpretado) ou membro não-ASM
+        }
+        blockCache.put(new BlockKey(canonical[0], instructionSet), superblock, coveringStart, coveringEnd);
+        superblocksBuilt++;
+    }
+
+    /// Gancho de teste (C0.3): constrói o superbloco AGORA, sem esperar o detector.
+    boolean buildSuperblockNow(InstructionSet instructionSet, int... memberPcs) {
+        if (superblockContext == null) {
+            setLoopSuperblocks(true);
+        }
+        long before = superblocksBuilt;
+        buildSuperblock(instructionSet, memberPcs);
+        return superblocksBuilt > before;
+    }
+
+    /// `true` se a entrada de `pc` no cache é um loop-superbloco (asserções de teste).
+    boolean superblockInstalled(int pc, InstructionSet instructionSet) {
+        BlockCache.CacheEntry entry = blockCache.entry(new BlockKey(pc, instructionSet));
+        return entry != null && entry.block() instanceof LoopSuperblock;
     }
 
     /// Cria um runtime JIT com seus componentes principais.
@@ -275,7 +360,14 @@ public final class JitRuntime {
                     }
                     break; // próximo bloco não está no IC: volta ao caminho normal
                 }
-                int step = icBlocks[nextSlot].execute(core);
+                CompiledBlock next = icBlocks[nextSlot];
+                if (superblocksEnabled && next instanceof LoopSuperblock) {
+                    // Superbloco consome o orçamento INTEIRO internamente: encadear para
+                    // dentro dele quase dobraria a latência de interleave (S1). Ele só
+                    // entra como primeiro bloco de um execute (IC hit no topo).
+                    break;
+                }
+                int step = next.execute(core);
                 cycles += step;
                 chainedBlocks++;
                 if (chainProfiler != null) {
@@ -296,6 +388,12 @@ public final class JitRuntime {
             if (chainProfiler != null) {
                 chainProfiler.recordRun(chainHops,
                         chainBreak != null ? chainBreak : whileExitReason(core, cycles));
+            }
+            if (superblockDetector != null) {
+                LoopSuperblockDetector.Candidate promotedCandidate = superblockDetector.pollFresh();
+                if (promotedCandidate != null) {
+                    buildSuperblock(promotedCandidate.instructionSet(), promotedCandidate.memberPcs());
+                }
             }
             core.addCycles(cycles);
             return cycles;

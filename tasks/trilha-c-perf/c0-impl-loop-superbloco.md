@@ -157,6 +157,15 @@ envoltório. Validação (nesta ordem):
    executa código velho) — reusar o padrão do `JitRuntimeInlineCacheTest`.
 4. Suites arm-jitter + gbaemu + ndsemu (G5).
 
+### Resultado da C0.3 (2026-07-09)
+
+Implementada por **composição INVOKESTATIC** (o superbloco chama os `execute0`
+estáticos dos membros — S5 por construção, zero re-emissão) com build SÍNCRONO
+(evento raro, ≤64/sessão — desvio deliberado do plano de background). Lockstep
+ON×OFF verde (2 e 4 membros, budget 0/40, IRQ, SMC). **Bench A/B (savestates):
+MKDS 37,7→43,7 fps (+16%), SM64DS 47,7→68,5 (+44%, 114% realtime), JUS 49,8→69,0
+(+39%, 115% realtime).** Meta do épico (≥10%) superada em todos os cenários.
+
 ### C0.4 — Validação de jogo + A/B + default
 
 No ndsemu: ligar `setLoopSuperblocks(true)` nos DOIS runtimes (config como o chain

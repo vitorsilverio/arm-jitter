@@ -31,6 +31,15 @@ public final class AsmRuntimeHelpers {
         return core.cpsr().evalCond(CONDITIONS[ordinal]);
     }
 
+    /// Guard de iteração do loop-superbloco (task C0.3): espelha as condições de sleep e
+    /// interrupção do chain loop de `JitRuntime.execute`, NESSA ordem (invariante S1 — o
+    /// desfecho é o mesmo para ambas: sair da corrente). Budget e generation são checados
+    /// separadamente no bytecode gerado pelo {@link AsmSuperblockCompiler}.
+    public static boolean superblockKeepRunning(ArmCore core) {
+        return core.sleepState() == dev.vitorsilverio.armjitter.core.CpuSleepState.RUNNING
+                && !core.interruptLine();
+    }
+
     // Guards especializados POR CONDIÇÃO, escolhidos em tempo de compilação pelo
     // AsmBlockCompiler: eliminam o switch-por-execução de evalCond (o guard roda por op
     // condicional compilado — código ARM é denso em condições, e este era um dos leaves mais

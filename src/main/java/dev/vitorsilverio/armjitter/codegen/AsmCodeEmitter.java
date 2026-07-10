@@ -5,14 +5,18 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.codegen.jvm.AsmBlockCompiler;
 import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
+import dev.vitorsilverio.armjitter.codegen.jvm.AsmSuperblockCompiler;
 import dev.vitorsilverio.armjitter.codegen.jvm.IrOpInterop; // referenciado no Javadoc (@link)
 import dev.vitorsilverio.armjitter.codegen.jvm.JvmBlockLoader;
+import dev.vitorsilverio.armjitter.codegen.jvm.SuperblockContext;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -134,6 +138,40 @@ public final class AsmCodeEmitter implements CodeEmitter {
         String internalName = GENERATED_PACKAGE + "/AluBlock" + blockSequence.getAndIncrement();
         byte[] bytecode = compiler.get().compilePerOp(internalName, block);
         return loader.load(bytecode, internalName);
+    }
+
+    /// Compõe um loop-superbloco (task C0.3) por `INVOKESTATIC` direto nos `execute0`
+    /// dos membros — possível apenas quando TODOS os membros são classes geradas por
+    /// este emissor (mesmo class loader); senão devolve `null` e o chamador segue sem.
+    @Override
+    public CompiledBlock emitLoopSuperblock(
+            List<CompiledBlock> members, int[] memberStartPcs, SuperblockContext context) {
+        String[] memberNames = new String[members.size()];
+        for (int i = 0; i < members.size(); i++) {
+            Class<?> type = members.get(i).getClass();
+            if (!loader.defined(type) || !hasStaticExecute0(type)) {
+                return null; // membro não-ASM (ex.: fallback interpretado de bloco inteiro)
+            }
+            memberNames[i] = type.getName().replace('.', '/');
+        }
+        String internalName = GENERATED_PACKAGE + "/LoopSuperblock" + blockSequence.getAndIncrement();
+        byte[] bytecode = new AsmSuperblockCompiler().compile(internalName, memberStartPcs, memberNames);
+        CompiledBlock superblock = loader.load(bytecode, internalName);
+        try {
+            superblock.getClass().getField(AsmSuperblockCompiler.CONTEXT_FIELD).set(superblock, context);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Failed to inject superblock context", failure);
+        }
+        return superblock;
+    }
+
+    private static boolean hasStaticExecute0(Class<?> type) {
+        try {
+            return java.lang.reflect.Modifier.isStatic(
+                    type.getMethod("execute0", ArmCore.class).getModifiers());
+        } catch (NoSuchMethodException missing) {
+            return false;
+        }
     }
 
     private CompiledBlock emitFailFast(IrBlock block) {

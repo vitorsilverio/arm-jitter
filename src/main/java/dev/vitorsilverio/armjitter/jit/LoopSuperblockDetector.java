@@ -39,6 +39,8 @@ public final class LoopSuperblockDetector {
 
     private final Map<Integer, PendingCycle> pending = new HashMap<>();
     private final List<Candidate> promoted = new ArrayList<>();
+    /// Promovidos ainda não consumidos pelo construtor de superblocos (C0.3).
+    private final java.util.ArrayDeque<Candidate> fresh = new java.util.ArrayDeque<>();
 
     private long runCounter;
     private long sampledRuns;
@@ -106,9 +108,17 @@ public final class LoopSuperblockDetector {
             return;
         }
         if (++cycle.confirmations >= CONFIRMATIONS_REQUIRED) {
-            promoted.add(new Candidate(headPc, headSet, members));
+            Candidate candidate = new Candidate(headPc, headSet, members);
+            promoted.add(candidate);
+            fresh.add(candidate);
             pending.remove(headPc);
         }
+    }
+
+    /// Retira o próximo candidato promovido ainda não consumido, ou `null`.
+    /// Chamado pelo runtime uma vez por run de corrente — custo de um poll em deque vazio.
+    public Candidate pollFresh() {
+        return fresh.poll();
     }
 
     private boolean isPromoted(int pc) {
