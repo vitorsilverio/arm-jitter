@@ -134,7 +134,11 @@ envoltório. Validação (nesta ordem):
    (`setInterruptLine` no meio), por sleep (membro com SWI Halt), por PC fora do
    ciclo e por generation (invalidação no meio — escrever numa página membro).
 2. `RuntimeLockstepHarness` (C0.1): superblocos ON vs OFF, mesmo budget, programa
-   sintético — snapshots idênticos por chamada.
+   sintético — snapshots idênticos por chamada. **Aprendizado da C0.1:** o lockstep
+   exige runtimes SÍNCRONOS (clássicos — `jvmArmThumb`/`interpretedArmThumb`); como
+   a construção do superbloco é assíncrona, este teste precisa de um gancho de
+   construção SÍNCRONA (ex.: método package-private `buildSuperblockNow(headPc)`
+   usado só em teste) antes de iniciar a comparação.
 3. SMC: teste que escreve sobre um membro e prova que o superbloco morre (não
    executa código velho) — reusar o padrão do `JitRuntimeInlineCacheTest`.
 4. Suites arm-jitter + gbaemu + ndsemu (G5).
