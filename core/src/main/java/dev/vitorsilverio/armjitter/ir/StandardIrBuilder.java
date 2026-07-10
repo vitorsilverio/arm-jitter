@@ -81,6 +81,33 @@ public final class StandardIrBuilder implements IrBuilder {
                     new IrOperand.Immediate(0),
                     false,
                     instruction.condition()));
+            case EXTEND -> liftExtend(instruction, block);
+            case BYTE_REVERSE -> block.add(new IrOp.Alu(
+                    switch (instruction.immediate()) {
+                        case 0 -> IrOpCode.REV;
+                        case 1 -> IrOpCode.REV16;
+                        default -> IrOpCode.REVSH;
+                    },
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    registerValueOverride(instruction, instruction.sourceRegister()),
+                    new IrOperand.Immediate(0),
+                    false,
+                    instruction.condition()));
+            case UMAAL -> block.add(new IrOp.LongMultiply(
+                    instruction.destinationRegister(),
+                    instruction.immediate(),
+                    instruction.sourceRegister(),
+                    registerValueOverride(instruction, instruction.sourceRegister()),
+                    instruction.secondSourceRegister(),
+                    registerValueOverride(instruction, instruction.secondSourceRegister()),
+                    registerValueOverride(instruction, instruction.immediate()),
+                    registerValueOverride(instruction, instruction.destinationRegister()),
+                    false,  // unsigned
+                    false,  // sem o acumulador de par 64-bit de UMLAL/SMLAL
+                    true,   // acumulador duplo (RdLo + RdHi como parcelas de 32 bits)
+                    false,  // UMAAL nunca escreve flags
+                    instruction.condition()));
             case CMP -> liftAlu(IrOpCode.CMP, instruction, block);
             case CMN -> liftAlu(IrOpCode.CMN, instruction, block);
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
@@ -217,6 +244,37 @@ public final class StandardIrBuilder implements IrBuilder {
         block.add(new IrOp.Cycle(1));
         block.add(new IrOp.Fetch(instruction.address(), instructionWidth(instruction)));
         block.endPc(instruction.address() + instructionWidth(instruction));
+    }
+
+    /// Eleva SXT*/UXT* (ARMv6): o operando rotacionado vira um {@link IrOperand.ShiftedRegister}
+    /// com ROR imediato (rotação 0 usa {@link IrOperand.Register} — ROR #0 significaria RRX);
+    /// a forma sem acumulador usa {@code src1=-1} com {@code src1ValueOverride=0}, então o
+    /// executor soma um acumulador fixo 0 sem ler registrador algum.
+    private void liftExtend(DecodedInstruction instruction, IrBlock.Builder block) {
+        int packed = instruction.immediate();
+        int rotation = (packed & 0x3) * 8;          // bits 1:0 = rotação/8
+        int field = (packed >>> 2) & 0x3;           // 00=B16, 10=B, 11=H
+        boolean unsigned = (packed & (1 << 4)) != 0;
+        IrOpCode opcode = switch (field) {
+            case 0b00 -> unsigned ? IrOpCode.UXTB16 : IrOpCode.SXTB16;
+            case 0b10 -> unsigned ? IrOpCode.UXTB : IrOpCode.SXTB;
+            case 0b11 -> unsigned ? IrOpCode.UXTH : IrOpCode.SXTH;
+            default -> throw new IllegalStateException("Campo de extensão ARMv6 inválido: " + field);
+        };
+        int rm = instruction.secondSourceRegister();
+        IrOperand src2 = rotation == 0
+                ? new IrOperand.Register(rm, registerValueOverride(instruction, rm))
+                : new IrOperand.ShiftedRegister(rm, ShiftType.ROR, rotation, -1,
+                        registerValueOverride(instruction, rm), -1, false, false);
+        int rn = instruction.sourceRegister();
+        block.add(new IrOp.Alu(
+                opcode,
+                instruction.destinationRegister(),
+                rn,
+                rn < 0 ? 0 : registerValueOverride(instruction, rn),
+                src2,
+                false,
+                instruction.condition()));
     }
 
     private void liftAlu(IrOpCode opcode, DecodedInstruction instruction, IrBlock.Builder block) {

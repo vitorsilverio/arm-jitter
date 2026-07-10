@@ -8,6 +8,9 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 /// Decoder ARM32 inicial para o caminho interpretado frio.
 public final class ArmDecoder implements InstructionDecoder {
+    /// Rn=1111 nas encodings de extensão ARMv6 marca a forma sem acumulador (SXTB vs SXTAB).
+    private static final int EXTEND_NO_ACCUMULATOR = 0xF;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -105,6 +108,39 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, rs, packed, false, false, false);
         }
 
+        // ARMv6 sign/zero-extend com rotação e as formas com acumulador:
+        // `cccc 0110 1uff nnnn dddd rr00 0111 mmmm` — u=unsigned, ff: 00=B16, 10=B, 11=H
+        // (ff=01 é indefinido), rr = rotação do operando em múltiplos de 8 bits. Rn=1111 é a
+        // forma SEM acumulador (SXTB/UXTH/...); qualquer outro Rn acumula (SXTAB/UXTAH/...).
+        if ((raw & 0x0F80_03F0) == 0x0680_0070 && ((raw >>> 20) & 0x3) != 0b01
+                && architecture.has(ArmFeature.EXTEND_ROTATE)) {
+            boolean unsigned = (raw & (1 << 22)) != 0;
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rotate = (raw >>> 10) & 0x3;
+            int rm = raw & 0xF;
+            int packed = rotate | (((raw >>> 20) & 0x3) << 2) | (unsigned ? 1 << 4 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.EXTEND,
+                    rd, rn == EXTEND_NO_ACCUMULATOR ? -1 : rn, rm, packed, false, false, false);
+        }
+
+        // ARMv6 byte-reverse: REV `cccc 0110 1011 1111 dddd 1111 0011 mmmm`,
+        // REV16 (idem com bits 7:4 = 1011), REVSH `cccc 0110 1111 1111 dddd 1111 1011 mmmm`.
+        if (architecture.has(ArmFeature.BYTE_REVERSE)) {
+            int variant = switch (raw & 0x0FFF_0FF0) {
+                case 0x06BF_0F30 -> 0; // REV
+                case 0x06BF_0FB0 -> 1; // REV16
+                case 0x06FF_0FB0 -> 2; // REVSH
+                default -> -1;
+            };
+            if (variant >= 0) {
+                int rd = (raw >>> 12) & 0xF;
+                int rm = raw & 0xF;
+                return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.BYTE_REVERSE, rd, rm, -1, variant, false, false, false);
+            }
+        }
+
         if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {
             boolean spsr = (raw & (1 << 22)) != 0;
             int rd = (raw >>> 12) & 0xF;
@@ -135,6 +171,19 @@ public final class ArmDecoder implements InstructionDecoder {
             int rm = raw & 0xF;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SWAP,
                     rd, rn, rm, 0, false, false, false, byteAccess ? 1 : 4, false);
+        }
+
+        // UMAAL (ARMv6): `cccc 0000 0100 hhhh llll ssss 1001 mmmm` — soma RdLo e RdHi (cada um
+        // zero-estendido, como parcelas independentes) ao produto unsigned de 64 bits; sem flags.
+        // Precisa vir antes do bloco de halfword-transfer, que engoliria o padrão como
+        // UNIMPLEMENTED.
+        if ((raw & 0x0FF0_00F0) == 0x0040_0090 && architecture.has(ArmFeature.UMAAL)) {
+            int rdHigh = (raw >>> 16) & 0xF;
+            int rdLow = (raw >>> 12) & 0xF;
+            int rs = (raw >>> 8) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.UMAAL,
+                    rdLow, rm, rs, rdHigh, false, false, false);
         }
 
         if ((raw & 0x0F80_00F0) == 0x0080_0090) {

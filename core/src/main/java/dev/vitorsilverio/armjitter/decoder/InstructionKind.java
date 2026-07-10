@@ -54,6 +54,15 @@ public enum InstructionKind {
     DSP_MULTIPLY,
     /// Transferência de palavra dupla ARMv5TE (LDRD/STRD) — par de registradores Rd, Rd+1.
     DOUBLE_TRANSFER,
+    /// Extensão de byte/halfword ARMv6 (SXT*/UXT*, com rotação e acumulador opcional).
+    /// `sourceRegister` = Rn acumulador ou `-1` na forma sem acumulador; `immediate` empacota:
+    /// bits 1:0 = rotação/8, bits 3:2 = campo (00=B16, 10=B, 11=H), bit 4 = unsigned.
+    EXTEND,
+    /// Inversão de bytes ARMv6. `immediate` seleciona a variante: 0=REV, 1=REV16, 2=REVSH.
+    BYTE_REVERSE,
+    /// Multiplicação longa unsigned ARMv6 com acumulador duplo (`UMAAL`) — mesmo layout de
+    /// registradores de UMULL/UMLAL (dst=RdLo, immediate=RdHi); nunca escreve flags.
+    UMAAL,
     /// Bit clear.
     BIC,
     /// Move NOT.

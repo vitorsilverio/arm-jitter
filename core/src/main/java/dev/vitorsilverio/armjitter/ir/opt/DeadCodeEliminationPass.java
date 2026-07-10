@@ -74,7 +74,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.LongMultiply m -> {
                 int mask = m.rmValueOverride() < 0 ? (1 << m.rm()) : 0;
                 if (m.rsValueOverride() < 0) mask |= (1 << m.rs());
-                if (m.accumulate()) {
+                if (m.accumulate() || m.accumulateDouble()) {
                     if (m.dstHighValueOverride() < 0) mask |= (1 << m.dstHigh());
                     if (m.dstLowValueOverride() < 0) mask |= (1 << m.dstLow());
                 }

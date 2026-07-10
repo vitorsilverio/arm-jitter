@@ -57,7 +57,7 @@ uma task [REFINAR] diretamente.
 | [A5](trilha-a-truffle/a5-native-image-demo.md) | Demo native-image | A4 | ⬜ |
 | [B0](trilha-b-arquiteturas/b0-rfc-ir-64bit.md) | RFC: IR de 64 bits (para AArch64) | — | ✅ ([RFC](../docs/RFC-IR-64BIT.md): recomenda Opção B — IR-64 paralelo + `Aarch64Core` irmão + `AddressSpace64`; **aguarda aprovação do usuário**) |
 | [B1.1](trilha-b-arquiteturas/b1.1-armv6-features-preset.md) | ArmFeatures + preset ARMV6K | — | ✅ (10 features + `ARMV6K` via `extending`; zero-diff de runtime; gbaemu/ndsemu verdes) |
-| [B1.2](trilha-b-arquiteturas/b1.2-armv6-extend-reverse.md) | SXT/UXT, REV, UMAAL | B1.1 | ⬜ |
+| [B1.2](trilha-b-arquiteturas/b1.2-armv6-extend-reverse.md) | SXT/UXT, REV, UMAAL | B1.1 | ✅ (decoder gateado + IR + interpretador; extend via ShiftedRegister ROR, UMAAL como `LongMultiply.accumulateDouble`; ASM rejeita até B1.6 — equivalência PER_OP provada; suites arm-jitter 389 + gbaemu 215 + ndsemu 175 verdes) |
 | [B1.3](trilha-b-arquiteturas/b1.3-armv6-simd-media.md) | SIMD paralelo, GE flags, SAT, USAD8, PKH | B1.1 | ⬜ |
 | [B1.4](trilha-b-arquiteturas/b1.4-armv6-exclusive.md) | LDREX/STREX + monitor de exclusividade | B1.1 | ⬜ |
 | [B1.5](trilha-b-arquiteturas/b1.5-armv6-system.md) | CPS, SRS/RFE, SETEND, hints WFI/WFE | B1.1 | ⬜ |
@@ -76,7 +76,7 @@ uma task [REFINAR] diretamente.
 | [C1](trilha-c-perf/c1-flags-nzcv-locals.md) | Flags NZCV em locals JVM (⚠️ prioridade rebaixada) | — | ⬜ |
 | [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ⬜ |
 | [C3](trilha-c-perf/c3-paged-address-space.md) | PagedAddressSpace O(1) | — | ⬜ |
-| [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ✅ (ndsemu 85e4b36: config+gatilho, defaults inalterados; bench 256/64 = MKDS +6% SM64DS +7,6% JUS +11,4%; boots ×4 OK; falta gameplay GUI p/ virar default) |
+| [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ✅ FECHADA (ndsemu 85e4b36 + cf7b5c2: bench 256/64 = MKDS +6% SM64DS +7,6% JUS +11,4%; boots ×4 OK; gameplay GUI validado 2026-07-10 → 256/64 é o DEFAULT) |
 | [C5](trilha-c-perf/c5-gbaemu-chaining.md) | Chaining no gbaemu (repo gbaemu) | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

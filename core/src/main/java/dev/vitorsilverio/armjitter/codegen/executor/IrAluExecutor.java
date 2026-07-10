@@ -121,6 +121,39 @@ final class IrAluExecutor {
             }
             case IrOpCode.CLZ -> core.setRegister(alu.dst(), Integer.numberOfLeadingZeros(
                     support.registerValue(core, alu.src1(), alu.src1ValueOverride())));
+            // ARMv6 SXT*/UXT*: `right` já vem rotacionado pelo operando; o acumulador é src1
+            // (forma sem acumulador: src1ValueOverride=0). Nunca escrevem flags.
+            case IrOpCode.SXTB, IrOpCode.SXTH, IrOpCode.UXTB, IrOpCode.UXTH -> {
+                int accumulator = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
+                int extended = switch (alu.opcode()) {
+                    case IrOpCode.SXTB -> (byte) right;
+                    case IrOpCode.SXTH -> (short) right;
+                    case IrOpCode.UXTB -> right & 0xFF;
+                    default -> right & 0xFFFF; // UXTH
+                };
+                core.setRegister(alu.dst(), accumulator + extended);
+            }
+            // SXTB16/UXTB16 estendem os DOIS bytes pares (bits 23:16 e 7:0), cada halfword
+            // acumulada de forma independente (módulo 2^16, sem carry entre as metades).
+            case IrOpCode.SXTB16, IrOpCode.UXTB16 -> {
+                int accumulator = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
+                boolean signedExtend = alu.opcode() == IrOpCode.SXTB16;
+                int lowByte = signedExtend ? (byte) right : right & 0xFF;
+                int highByte = signedExtend ? (byte) (right >>> 16) : (right >>> 16) & 0xFF;
+                int lowHalf = (accumulator + lowByte) & 0xFFFF;
+                int highHalf = ((accumulator >>> 16) + highByte) & 0xFFFF;
+                core.setRegister(alu.dst(), (highHalf << 16) | lowHalf);
+            }
+            // ARMv6 byte-reverse. REVSH inverte apenas o halfword BAIXO e estende o sinal.
+            case IrOpCode.REV, IrOpCode.REV16, IrOpCode.REVSH -> {
+                int value = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
+                int result = switch (alu.opcode()) {
+                    case IrOpCode.REV -> Integer.reverseBytes(value);
+                    case IrOpCode.REV16 -> ((value & 0xFF00_FF00) >>> 8) | ((value & 0x00FF_00FF) << 8);
+                    default -> (short) (((value & 0xFF) << 8) | ((value >>> 8) & 0xFF)); // REVSH
+                };
+                core.setRegister(alu.dst(), result);
+            }
             case IrOpCode.LSL, IrOpCode.LSR, IrOpCode.ASR, IrOpCode.ROR -> {
                 int value = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int amount = right & 0xFF;
@@ -175,6 +208,12 @@ final class IrAluExecutor {
             long current = (Integer.toUnsignedLong(support.registerValue(core, multiply.dstHigh(), multiply.dstHighValueOverride())) << 32)
                     | Integer.toUnsignedLong(support.registerValue(core, multiply.dstLow(), multiply.dstLowValueOverride()));
             result += current;
+        }
+        if (multiply.accumulateDouble()) {
+            // UMAAL: RdLo e RdHi entram como DUAS parcelas de 32 bits sem sinal — não como um par
+            // 64-bit. O caso máximo 0xFFFFFFFF² + 2×0xFFFFFFFF = 2^64−1 nunca estoura.
+            result += Integer.toUnsignedLong(support.registerValue(core, multiply.dstLow(), multiply.dstLowValueOverride()))
+                    + Integer.toUnsignedLong(support.registerValue(core, multiply.dstHigh(), multiply.dstHighValueOverride()));
         }
         core.setRegister(multiply.dstLow(), (int) result);
         core.setRegister(multiply.dstHigh(), (int) (result >>> 32));

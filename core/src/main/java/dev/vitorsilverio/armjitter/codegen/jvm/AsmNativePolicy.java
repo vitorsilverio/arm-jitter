@@ -27,6 +27,12 @@ public final class AsmNativePolicy {
     private static final Set<IrOpCode> SHIFT_OPCODES = EnumSet.of(
             IrOpCode.LSL, IrOpCode.LSR, IrOpCode.ASR, IrOpCode.ROR);
 
+    /// Opcodes ARMv6 (B1.2) ainda sem emissão nativa — caem no interpretado até a task B1.6.
+    private static final EnumSet<IrOpCode> ARMV6_ALU_OPCODES = EnumSet.of(
+            IrOpCode.SXTB, IrOpCode.SXTH, IrOpCode.SXTB16,
+            IrOpCode.UXTB, IrOpCode.UXTH, IrOpCode.UXTB16,
+            IrOpCode.REV, IrOpCode.REV16, IrOpCode.REVSH);
+
     private AsmNativePolicy() {
     }
 
@@ -47,7 +53,8 @@ public final class AsmNativePolicy {
         return switch (op) {
             case IrOp.Alu alu -> supportsAlu(alu);
             case IrOp.Multiply ignored -> true;
-            case IrOp.LongMultiply ignored -> true;
+            // O acumulador duplo do UMAAL (ARMv6, B1.2) ainda não é emitido nativamente.
+            case IrOp.LongMultiply m -> !m.accumulateDouble();
             // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
@@ -74,6 +81,8 @@ public final class AsmNativePolicy {
     }
 
     private static boolean supportsAlu(IrOp.Alu alu) {
+        // Ops ARMv6 (extend/reverse) ficam no interpretado até B1.6.
+        if (ARMV6_ALU_OPCODES.contains(alu.opcode())) return false;
         // src2 shifted-register é nativo, EXCETO quando flags LÓGICOS precisam do carry-out do
         // barrel shifter (MOV/MVN/AND/EOR/ORR/BIC/TST/TEQ com S) — os flags aritméticos (ADD/SUB/
         // CMP/...) vêm da própria aritmética e não dependem do shifter.
@@ -96,8 +105,9 @@ public final class AsmNativePolicy {
         };
     }
 
-    /// Opcodes ALU actualmente emitidos nativamente (pode incluir todos exceto os filtrados acima).
+    /// Opcodes ALU actualmente emitidos nativamente (todos exceto os ARMv6 pendentes de B1.6 e
+    /// os filtrados acima).
     public static Set<IrOpCode> supportedAluOpcodes() {
-        return EnumSet.allOf(IrOpCode.class);
+        return EnumSet.complementOf(ARMV6_ALU_OPCODES);
     }
 }

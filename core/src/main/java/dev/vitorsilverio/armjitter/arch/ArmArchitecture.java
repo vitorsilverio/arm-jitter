@@ -31,8 +31,9 @@ public final class ArmArchitecture {
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     /// ARM11 (MPCore/ARM1176) — 3DS principal e Raspberry Pi 1/Zero. ARMv5TE mais o conjunto
-    /// user-level do ARMv6/v6K (sem Thumb-2, que é ARMv6T2+). As features estão declaradas mas
-    /// nenhum decoder as consome ainda — os grupos de instruções chegam nas tasks B1.2–B1.5.
+    /// user-level do ARMv6/v6K (sem Thumb-2, que é ARMv6T2+). Extend/reverse/UMAAL já são
+    /// decodificados e interpretados (B1.2); os demais grupos chegam nas tasks B1.3–B1.5 e a
+    /// emissão nativa ASM na B1.6.
     public static final ArmArchitecture ARMV6K = extending(ARMV5TE, "ARMv6K",
             ArmFeature.EXTEND_ROTATE,
             ArmFeature.BYTE_REVERSE,

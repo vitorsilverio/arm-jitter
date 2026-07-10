@@ -113,12 +113,23 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int dstLowValueOverride,
             /// Indica multiplicação com sinal.
             boolean signed,
-            /// Indica se o par destino deve ser somado ao produto.
+            /// Indica se o par destino (como valor único de 64 bits) deve ser somado ao produto.
             boolean accumulate,
+            /// Acumulador duplo do `UMAAL` (ARMv6): soma RdLo e RdHi ao produto como duas parcelas
+            /// de 32 bits sem sinal independentes — não como um par de 64 bits.
+            boolean accumulateDouble,
             /// Indica se NZ deve ser atualizado a partir do resultado de 64 bits.
             boolean setFlags,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
+        /// Construtor de compatibilidade (pré-ARMv6), sem o acumulador duplo do `UMAAL`.
+        public LongMultiply(int dstLow, int dstHigh, int rm, int rmValueOverride, int rs,
+                int rsValueOverride, int dstHighValueOverride, int dstLowValueOverride,
+                boolean signed, boolean accumulate, boolean setFlags, Condition condition) {
+            this(dstLow, dstHigh, rm, rmValueOverride, rs, rsValueOverride, dstHighValueOverride,
+                    dstLowValueOverride, signed, accumulate, false, setFlags, condition);
+        }
+
         @Override public int kind() { return Kind.LONG_MULTIPLY; }
     }
 
