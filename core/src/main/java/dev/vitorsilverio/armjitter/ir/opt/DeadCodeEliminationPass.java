@@ -96,6 +96,10 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Saturating sat -> (1 << sat.rm()) | (1 << sat.rn());
             case IrOp.DspMultiply dsp -> (1 << dsp.rm()) | (1 << dsp.rs()) | (1 << dsp.rn());
             case IrOp.ParallelAlu p -> (1 << p.rn()) | (1 << p.rm());
+            case IrOp.Sel sel -> (1 << sel.rn()) | (1 << sel.rm());
+            case IrOp.Saturate sat -> operandUse(sat.operand());
+            case IrOp.AbsDiffSum usad ->
+                    (1 << usad.rm()) | (1 << usad.rs()) | (usad.rn() >= 0 ? (1 << usad.rn()) : 0);
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.baseValueOverride() < 0 ? (1 << dt.base()) : 0;
                 mask |= operandUse(dt.offset());
@@ -172,6 +176,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Saturating sat -> (1 << sat.dst());
             case IrOp.DspMultiply dsp -> (1 << dsp.dst()) | (dsp.op2() == 2 ? (1 << dsp.rn()) : 0);
             case IrOp.ParallelAlu p -> (1 << p.dst());
+            case IrOp.Sel sel -> (1 << sel.dst());
+            case IrOp.Saturate sat -> (1 << sat.dst());
+            case IrOp.AbsDiffSum usad -> (1 << usad.dst());
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.load() ? (1 << dt.first()) | (1 << (dt.first() + 1)) : 0;
                 if (dt.writeback()) mask |= (1 << dt.base());

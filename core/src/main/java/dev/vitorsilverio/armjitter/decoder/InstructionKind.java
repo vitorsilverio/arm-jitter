@@ -67,6 +67,18 @@ public enum InstructionKind {
     /// (bits 22:20 do encoding — 001=S, 010=Q, 011=SH, 101=U, 110=UQ, 111=UH), bits 5:3 = operação
     /// (bits 7:5 do encoding — 000=ADD16, 001=ASX, 010=SAX, 011=SUB16, 100=ADD8, 111=SUB8).
     PARALLEL_ALU,
+    /// `SEL` (ARMv6): seleciona bytes de Rn/Rm pelos flags GE do CPSR.
+    SEL,
+    /// `PKHBT`/`PKHTB` (ARMv6). `immediate` empacota: bits 4:0 = shift imm5,
+    /// bit 5 = forma TB (1) ou BT (0).
+    PKH,
+    /// `SSAT`/`USAT`/`SSAT16`/`USAT16` (ARMv6). `immediate` empacota: bits 4:0 = sat_imm cru do
+    /// encoding, bits 9:5 = shift imm5 (formas word), bit 10 = shift ASR (0=LSL),
+    /// bit 11 = forma halfword (SSAT16/USAT16), bit 12 = sem sinal (USAT*).
+    SATURATE,
+    /// `USAD8`/`USADA8` (ARMv6): soma de diferenças absolutas de bytes. `immediate` = Rn
+    /// acumulador, ou `-1` na forma sem acumulador.
+    USAD8,
     /// Bit clear.
     BIC,
     /// Move NOT.

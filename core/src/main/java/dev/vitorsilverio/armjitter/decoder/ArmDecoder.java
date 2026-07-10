@@ -10,6 +10,8 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 public final class ArmDecoder implements InstructionDecoder {
     /// Rn=1111 nas encodings de extensão ARMv6 marca a forma sem acumulador (SXTB vs SXTAB).
     private static final int EXTEND_NO_ACCUMULATOR = 0xF;
+    /// Rn=1111 no encoding de USAD marca a forma sem acumulador (USAD8 vs USADA8).
+    private static final int USAD_NO_ACCUMULATOR = 0xF;
 
     private final ArmArchitecture architecture;
 
@@ -126,6 +128,67 @@ public final class ArmDecoder implements InstructionDecoder {
                 return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                         InstructionKind.PARALLEL_ALU, rd, rn, rm, packed, false, false, false);
             }
+        }
+
+        // SEL (ARMv6): `cccc 0110 1000 nnnn dddd 1111 1011 mmmm` — seleciona bytes por GE.
+        // Faz parte do grupo PARALLEL_SIMD (consome os GE que a aritmética paralela produz).
+        if ((raw & 0x0FF0_0FF0) == 0x0680_0FB0 && architecture.has(ArmFeature.PARALLEL_SIMD)) {
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SEL,
+                    rd, rn, rm, 0, false, false, false);
+        }
+
+        // PKHBT/PKHTB (ARMv6): `cccc 0110 1000 nnnn dddd iiii it01 mmmm` — t (bit 6) escolhe
+        // TB (1, Rm ASR imm com imm=0 → ASR #32) ou BT (0, Rm LSL imm).
+        if ((raw & 0x0FF0_0030) == 0x0680_0010 && architecture.has(ArmFeature.PACK_SATURATE)) {
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int shiftImm = (raw >>> 7) & 0x1F;
+            boolean tb = (raw & (1 << 6)) != 0;
+            int rm = raw & 0xF;
+            int packed = shiftImm | (tb ? 1 << 5 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.PKH,
+                    rd, rn, rm, packed, false, false, false);
+        }
+
+        // SSAT/USAT (ARMv6): `cccc 0110 1u1s ssss dddd iiii ir01 mmmm` — u=unsigned, sssss =
+        // sat_imm, iiiii = shift imm5, r (bit 6) = ASR (0=LSL). Vem depois de PKH (bits 5:4
+        // iguais, bits 27:20 distintos) e antes das formas 16 (bits 5:4 diferentes lá).
+        if ((raw & 0x0FA0_0030) == 0x06A0_0010 && architecture.has(ArmFeature.PACK_SATURATE)) {
+            boolean unsigned = (raw & (1 << 22)) != 0;
+            int satImm = (raw >>> 16) & 0x1F;
+            int rd = (raw >>> 12) & 0xF;
+            int shiftImm = (raw >>> 7) & 0x1F;
+            boolean asr = (raw & (1 << 6)) != 0;
+            int rm = raw & 0xF;
+            int packed = satImm | (shiftImm << 5) | (asr ? 1 << 10 : 0) | (unsigned ? 1 << 12 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SATURATE,
+                    rd, -1, rm, packed, false, false, false);
+        }
+
+        // SSAT16/USAT16 (ARMv6): `cccc 0110 1u10 ssss dddd 1111 0011 mmmm` — satura cada
+        // halfword de forma independente; sat_imm de 4 bits.
+        if ((raw & 0x0FB0_0FF0) == 0x06A0_0F30 && architecture.has(ArmFeature.PACK_SATURATE)) {
+            boolean unsigned = (raw & (1 << 22)) != 0;
+            int satImm = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            int packed = satImm | (1 << 11) | (unsigned ? 1 << 12 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SATURATE,
+                    rd, -1, rm, packed, false, false, false);
+        }
+
+        // USAD8/USADA8 (ARMv6): `cccc 0111 1000 dddd nnnn ssss 0001 mmmm` — Rd em 19:16 e o
+        // acumulador Rn em 15:12; Rn=1111 é a forma sem acumulador (USAD8).
+        if ((raw & 0x0FF0_00F0) == 0x0780_0010 && architecture.has(ArmFeature.PACK_SATURATE)) {
+            int rd = (raw >>> 16) & 0xF;
+            int rn = (raw >>> 12) & 0xF;
+            int rs = (raw >>> 8) & 0xF;
+            int rm = raw & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.USAD8,
+                    rd, rm, rs, rn == USAD_NO_ACCUMULATOR ? -1 : rn, false, false, false);
         }
 
         // ARMv6 sign/zero-extend com rotação e as formas com acumulador:

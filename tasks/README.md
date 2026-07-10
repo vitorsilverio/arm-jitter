@@ -58,7 +58,7 @@ uma task [REFINAR] diretamente.
 | [B0](trilha-b-arquiteturas/b0-rfc-ir-64bit.md) | RFC: IR de 64 bits (para AArch64) | — | ✅ ([RFC](../docs/RFC-IR-64BIT.md) **APROVADA 2026-07-10: Opção B** — IR-64 paralelo + `Aarch64Core` irmão + `AddressSpace64`; §5 em vigor p/ B1–B3, ex.: monitor LDREX/STREX de B1.4 com endereço `long`; B6/F1+ destravados quando priorizados) |
 | [B1.1](trilha-b-arquiteturas/b1.1-armv6-features-preset.md) | ArmFeatures + preset ARMV6K | — | ✅ (10 features + `ARMV6K` via `extending`; zero-diff de runtime; gbaemu/ndsemu verdes) |
 | [B1.2](trilha-b-arquiteturas/b1.2-armv6-extend-reverse.md) | SXT/UXT, REV, UMAAL | B1.1 | ✅ (decoder gateado + IR + interpretador; extend via ShiftedRegister ROR, UMAAL como `LongMultiply.accumulateDouble`; ASM rejeita até B1.6 — equivalência PER_OP provada; suites arm-jitter 389 + gbaemu 215 + ndsemu 175 verdes) |
-| [B1.3](trilha-b-arquiteturas/b1.3-armv6-simd-media.md) | SIMD paralelo, GE flags, SAT, USAD8, PKH | B1.1 | ⬜ |
+| [B1.3](trilha-b-arquiteturas/b1.3-armv6-simd-media.md) | SIMD paralelo, GE flags, SAT, USAD8, PKH | B1.1 | ✅ (2 PRs: GE\[3:0\] no CPSR + `IrOp.ParallelAlu` com enums próprios; SEL/`IrOp.Sel`, PKH via `IrOp.Alu`+ShiftedRegister, SSAT/USAT(16)/`IrOp.Saturate` com Q sticky, USAD(A)8/`IrOp.AbsDiffSum`; DCE/ConstantFold/FlagMerge atualizados; ASM rejeita até B1.6 — equivalência PER_OP provada; MSR v4T/v5TE pinado por teste; suite 441 verde) |
 | [B1.4](trilha-b-arquiteturas/b1.4-armv6-exclusive.md) | LDREX/STREX + monitor de exclusividade | B1.1 | ⬜ |
 | [B1.5](trilha-b-arquiteturas/b1.5-armv6-system.md) | CPS, SRS/RFE, SETEND, hints WFI/WFE | B1.1 | ⬜ |
 | [B1.6](trilha-b-arquiteturas/b1.6-armv6-asm-nativo.md) | Emissão nativa ASM das ops v6 | B1.2–B1.5 | ⬜ |

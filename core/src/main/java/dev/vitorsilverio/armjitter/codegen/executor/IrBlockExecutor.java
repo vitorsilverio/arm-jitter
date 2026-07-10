@@ -49,6 +49,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.SATURATING -> alu.executeSaturating(core, (IrOp.Saturating) op);
                 case IrOp.Kind.DSP_MULTIPLY -> alu.executeDspMultiply(core, (IrOp.DspMultiply) op);
                 case IrOp.Kind.PARALLEL_ALU -> alu.executeParallelAlu(core, (IrOp.ParallelAlu) op);
+                case IrOp.Kind.SEL -> alu.executeSel(core, (IrOp.Sel) op);
+                case IrOp.Kind.SATURATE -> alu.executeSaturate(core, (IrOp.Saturate) op);
+                case IrOp.Kind.ABS_DIFF_SUM -> alu.executeAbsDiffSum(core, (IrOp.AbsDiffSum) op);
                 case IrOp.Kind.PSR_TRANSFER -> system.executePsrTransfer(core, (IrOp.PsrTransfer) op);
                 case IrOp.Kind.LOAD -> pcChanged |= memory.executeLoad(core, (IrOp.Load) op);
                 case IrOp.Kind.STORE -> memory.executeStore(core, (IrOp.Store) op);
@@ -91,6 +94,9 @@ public final class IrBlockExecutor {
             case IrOp.Saturating sat -> { alu.executeSaturating(core, sat); yield false; }
             case IrOp.DspMultiply dsp -> { alu.executeDspMultiply(core, dsp); yield false; }
             case IrOp.ParallelAlu parallel -> { alu.executeParallelAlu(core, parallel); yield false; }
+            case IrOp.Sel sel -> { alu.executeSel(core, sel); yield false; }
+            case IrOp.Saturate saturate -> { alu.executeSaturate(core, saturate); yield false; }
+            case IrOp.AbsDiffSum usad -> { alu.executeAbsDiffSum(core, usad); yield false; }
             case IrOp.PsrTransfer psr -> { system.executePsrTransfer(core, psr); yield false; }
             case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
             case IrOp.Load load -> memory.executeLoad(core, load);

@@ -156,6 +156,15 @@ final class IrAluExecutor {
                 };
                 core.setRegister(alu.dst(), result);
             }
+            // PKHBT/PKHTB (ARMv6): `right` já vem shiftado pelo operando; monta o resultado com
+            // um halfword de cada fonte. Nunca escrevem flags.
+            case IrOpCode.PKHBT, IrOpCode.PKHTB -> {
+                int left = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
+                int result = alu.opcode() == IrOpCode.PKHBT
+                        ? (left & 0xFFFF) | (right & 0xFFFF_0000)
+                        : (left & 0xFFFF_0000) | (right & 0xFFFF);
+                core.setRegister(alu.dst(), result);
+            }
             case IrOpCode.LSL, IrOpCode.LSR, IrOpCode.ASR, IrOpCode.ROR -> {
                 int value = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int amount = right & 0xFF;
@@ -338,6 +347,84 @@ final class IrAluExecutor {
         if (variant.writesGe()) {
             core.cpsr().setGe(ge);
         }
+    }
+
+    /// `SEL` (ARMv6): cada byte do resultado vem de Rn quando o GE correspondente está setado,
+    /// senão de Rm. Não altera flag algum.
+    void executeSel(ArmCore core, IrOp.Sel op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int rn = core.register(op.rn());
+        int rm = core.register(op.rm());
+        int ge = core.cpsr().ge();
+        int mask = 0;
+        for (int lane = 0; lane < 4; lane++) {
+            if ((ge & (1 << lane)) != 0) {
+                mask |= 0xFF << (lane * 8);
+            }
+        }
+        core.setRegister(op.dst(), (rn & mask) | (rm & ~mask));
+    }
+
+    /// SSAT/USAT/SSAT16/USAT16 (ARMv6): satura o operando (já shiftado nas formas word) para a
+    /// largura pedida e seta o flag Q sticky quando alguma lane saturou.
+    void executeSaturate(ArmCore core, IrOp.Saturate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int value = support.operand(core, op.operand());
+        boolean[] q = {false};
+        int result;
+        if (op.halfwords()) {
+            int low = saturateTo((short) value, op.saturateBits(), op.unsignedRange(), q);
+            int high = saturateTo((short) (value >> 16), op.saturateBits(), op.unsignedRange(), q);
+            result = ((high & 0xFFFF) << 16) | (low & 0xFFFF);
+        } else {
+            result = saturateTo(value, op.saturateBits(), op.unsignedRange(), q);
+        }
+        core.setRegister(op.dst(), result);
+        if (q[0]) {
+            core.cpsr().setSaturation(true); // sticky, como QADD/QSUB
+        }
+    }
+
+    /// USAD8/USADA8 (ARMv6): soma das diferenças absolutas dos quatro bytes sem sinal, com
+    /// acumulador opcional. Não altera flag algum.
+    void executeAbsDiffSum(ArmCore core, IrOp.AbsDiffSum op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int rm = core.register(op.rm());
+        int rs = core.register(op.rs());
+        int sum = 0;
+        for (int lane = 0; lane < 4; lane++) {
+            int shift = lane * 8;
+            sum += Math.abs(((rm >> shift) & 0xFF) - ((rs >> shift) & 0xFF));
+        }
+        if (op.rn() >= 0) {
+            sum += core.register(op.rn());
+        }
+        core.setRegister(op.dst(), sum);
+    }
+
+    /// Satura `value` para `bits` bits (com ou sem sinal), marcando `q[0]` quando clampa.
+    /// Com sinal, `bits` é 1..32 (32 nunca satura); sem sinal, 0..31 (0 clampa tudo para 0).
+    private static int saturateTo(int value, int bits, boolean unsignedRange, boolean[] q) {
+        int min;
+        int max;
+        if (unsignedRange) {
+            min = 0;
+            max = (1 << bits) - 1;
+        } else {
+            min = -(1 << (bits - 1));
+            max = (1 << (bits - 1)) - 1;
+        }
+        int clamped = Math.clamp(value, min, max);
+        if (clamped != value) {
+            q[0] = true;
+        }
+        return clamped;
     }
 
     /// Valor de uma lane já deslocada para os bits baixos, estendida por sinal ou por zero.

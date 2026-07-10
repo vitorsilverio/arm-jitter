@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -48,6 +48,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int CYCLE = 21;
         public static final int FETCH = 22;
         public static final int PARALLEL_ALU = 23;
+        public static final int SEL = 24;
+        public static final int SATURATE = 25;
+        public static final int ABS_DIFF_SUM = 26;
     }
 
     /// Operacao ALU generica.
@@ -348,6 +351,59 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.PARALLEL_ALU; }
+    }
+
+    /// `SEL` (ARMv6): seleciona cada byte do resultado de Rn ou Rm conforme o flag GE
+    /// correspondente do CPSR (GE\[i\]=1 → byte de Rn; 0 → byte de Rm).
+    record Sel(
+            /// Registrador de destino.
+            int dst,
+            /// Fonte escolhida quando o GE da lane está setado.
+            int rn,
+            /// Fonte escolhida quando o GE da lane está limpo.
+            int rm,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SEL; }
+    }
+
+    /// Saturação ARMv6 (`SSAT`/`USAT`/`SSAT16`/`USAT16`): satura o operando (possivelmente
+    /// shiftado nas formas word) para `saturateBits` bits, com ou sem sinal, por word inteira
+    /// ou por halfword. Seta o flag Q sticky quando alguma lane satura.
+    record Saturate(
+            /// Registrador de destino.
+            int dst,
+            /// Largura da saturação em bits: `SSAT`/`SSAT16` usam sat_imm+1 (1..32/1..16);
+            /// `USAT`/`USAT16` usam sat_imm puro (0..31/0..15).
+            int saturateBits,
+            /// `true` para faixa sem sinal (`USAT`/`USAT16`: \[0, 2^n−1\]);
+            /// `false` para com sinal (`SSAT`/`SSAT16`: \[−2^(n−1), 2^(n−1)−1\]).
+            boolean unsignedRange,
+            /// `true` para as formas de halfword (`SSAT16`/`USAT16`), que saturam cada
+            /// halfword (estendido por sinal) de forma independente.
+            boolean halfwords,
+            /// Operando de entrada: Rm puro ou Rm shiftado (LSL imm / ASR imm; ASR #32 nas
+            /// formas word com imm=0).
+            IrOperand operand,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SATURATE; }
+    }
+
+    /// `USAD8`/`USADA8` (ARMv6): soma das diferenças absolutas dos quatro bytes (sem sinal)
+    /// de Rm e Rs, com acumulador opcional Rn.
+    record AbsDiffSum(
+            /// Registrador de destino.
+            int dst,
+            /// Primeiro operando (Rm).
+            int rm,
+            /// Segundo operando (Rs).
+            int rs,
+            /// Acumulador (Rn), ou `-1` na forma sem acumulador (`USAD8`).
+            int rn,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.ABS_DIFF_SUM; }
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).

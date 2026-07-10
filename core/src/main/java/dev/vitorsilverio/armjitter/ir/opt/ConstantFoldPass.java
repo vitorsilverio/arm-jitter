@@ -47,9 +47,9 @@ public final class ConstantFoldPass implements IrOptimizer {
             case MOV, MVN, NEG -> true;
             case ADC, SBC, RSC -> false;           // precisam do carry
             case CMP, CMN, TST, TEQ -> false;      // sem escrita em registrador
-            // ARMv6 (B1.2): sem dobra por ora — compute() não as conhece, e o REV com Rm=PC
-            // teria src1ValueOverride >= 0 e cairia no default indevidamente.
-            case SXTB, SXTH, SXTB16, UXTB, UXTH, UXTB16, REV, REV16, REVSH -> false;
+            // ARMv6 (B1.2/B1.3): sem dobra por ora — compute() não as conhece, e o REV com Rm=PC
+            // (ou PKH com Rn=PC) teria src1ValueOverride >= 0 e cairia no default indevidamente.
+            case SXTB, SXTH, SXTB16, UXTB, UXTH, UXTB16, REV, REV16, REVSH, PKHBT, PKHTB -> false;
             default -> alu.src1ValueOverride() >= 0;
         };
     }

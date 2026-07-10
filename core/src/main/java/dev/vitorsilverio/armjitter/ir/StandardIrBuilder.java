@@ -118,6 +118,19 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.secondSourceRegister(),
                         instruction.condition()));
             }
+            case SEL -> block.add(new IrOp.Sel(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case PKH -> liftPkh(instruction, block);
+            case SATURATE -> liftSaturate(instruction, block);
+            case USAD8 -> block.add(new IrOp.AbsDiffSum(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.immediate(),
+                    instruction.condition()));
             case CMP -> liftAlu(IrOpCode.CMP, instruction, block);
             case CMN -> liftAlu(IrOpCode.CMN, instruction, block);
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
@@ -280,6 +293,62 @@ public final class StandardIrBuilder implements IrBuilder {
             case 0b111 -> ParallelAluVariant.UNSIGNED_HALVING;
             default -> throw new IllegalStateException("Variante paralela ARMv6 inválida: " + variantBits);
         };
+    }
+
+    /// Eleva PKHBT/PKHTB (ARMv6): o Rm shiftado vira o operando src2 (PKHBT: LSL imm, com
+    /// imm=0 virando {@link IrOperand.Register} puro; PKHTB: ASR imm, com imm=0 significando
+    /// ASR #32, como nos shifts imediatos do ARM).
+    private void liftPkh(DecodedInstruction instruction, IrBlock.Builder block) {
+        int packed = instruction.immediate();
+        int shiftImm = packed & 0x1F;
+        boolean tb = (packed & (1 << 5)) != 0;
+        int rm = instruction.secondSourceRegister();
+        int rmOverride = registerValueOverride(instruction, rm);
+        IrOperand src2;
+        if (tb) {
+            src2 = new IrOperand.ShiftedRegister(rm, ShiftType.ASR,
+                    shiftImm == 0 ? 32 : shiftImm, -1, rmOverride, -1, false, false);
+        } else {
+            src2 = shiftImm == 0
+                    ? new IrOperand.Register(rm, rmOverride)
+                    : new IrOperand.ShiftedRegister(rm, ShiftType.LSL, shiftImm, -1,
+                            rmOverride, -1, false, false);
+        }
+        block.add(new IrOp.Alu(
+                tb ? IrOpCode.PKHTB : IrOpCode.PKHBT,
+                instruction.destinationRegister(),
+                instruction.sourceRegister(),
+                registerValueOverride(instruction, instruction.sourceRegister()),
+                src2,
+                false,
+                instruction.condition()));
+    }
+
+    /// Eleva SSAT/USAT/SSAT16/USAT16 (ARMv6). A largura de saturação é normalizada aqui:
+    /// formas com sinal usam sat_imm+1; sem sinal usam sat_imm puro.
+    private void liftSaturate(DecodedInstruction instruction, IrBlock.Builder block) {
+        int packed = instruction.immediate();
+        int satImm = packed & 0x1F;
+        int shiftImm = (packed >>> 5) & 0x1F;
+        boolean asr = (packed & (1 << 10)) != 0;
+        boolean halfwords = (packed & (1 << 11)) != 0;
+        boolean unsigned = (packed & (1 << 12)) != 0;
+        int rm = instruction.secondSourceRegister();
+        int rmOverride = registerValueOverride(instruction, rm);
+        IrOperand operand;
+        if (halfwords || (shiftImm == 0 && !asr)) {
+            operand = new IrOperand.Register(rm, rmOverride);
+        } else {
+            operand = new IrOperand.ShiftedRegister(rm, asr ? ShiftType.ASR : ShiftType.LSL,
+                    asr && shiftImm == 0 ? 32 : shiftImm, -1, rmOverride, -1, false, false);
+        }
+        block.add(new IrOp.Saturate(
+                instruction.destinationRegister(),
+                unsigned ? satImm : satImm + 1,
+                unsigned,
+                halfwords,
+                operand,
+                instruction.condition()));
     }
 
     /// Eleva SXT*/UXT* (ARMv6): o operando rotacionado vira um {@link IrOperand.ShiftedRegister}

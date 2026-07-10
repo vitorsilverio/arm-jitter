@@ -65,4 +65,27 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
                 "as ops paralelas devem ter passado pelo fallback por-op");
     }
+
+    @Test
+    void packSaturateSelBlockMatchesInterpretedUnderPerOp() {
+        TestAddressSpace memory = new TestAddressSpace(64);
+        memory.put32(0, 0xE650_3F91);  // UADD8 r3, r0, r1 (produz GE)
+        memory.put32(4, 0xE680_4FB1);  // SEL r4, r0, r1 (consome GE)
+        memory.put32(8, 0xE680_5451);  // PKHTB r5, r0, r1, ASR #8
+        memory.put32(12, 0xE6A7_6011); // SSAT r6, #8, r1
+        memory.put32(16, 0xE787_2110); // USADA8 r7, r0, r1, r2
+        IrBlock block = new StandardIrBlockLifter(
+                new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 5);
+
+        assertFalse(asmEmitter.isNativeSupported(block),
+                "SEL/PKH/SSAT/USAD (B1.3) só ganham emissão nativa na B1.6");
+        harness.assertEquivalent(v6Reference, asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> {
+                    core.setRegister(0, 0xFF80_1234);
+                    core.setRegister(1, 0x017F_4321);
+                    core.setRegister(2, 1000);
+                }));
+        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
+                "as ops de pack/saturação devem ter passado pelo fallback por-op");
+    }
 }
