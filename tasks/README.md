@@ -68,7 +68,11 @@ uma task [REFINAR] diretamente.
 | [B4.1](trilha-b-arquiteturas/b4.1-mmu-softmmu.md) | MMU/softmmu full-system [REFINAR] | B3, RFC própria | ⬜ |
 | [B5](trilha-b-arquiteturas/b5-3ds.md) | 3DS enablement (checklist) [REFINAR] | B1.6, VFPv2 de B3 | ⬜ |
 | [B6](trilha-b-arquiteturas/b6-aarch64.md) | AArch64 (épico) [REFINAR] | B0 | ⬜ |
-| [C0](trilha-c-perf/c0-superblocos-trace-jit.md) | Superblocos/trace-JIT (alavanca nº 1) [REFINAR] | — | 🟡 (medição ✅ — [relatório](trilha-c-perf/RELATORIO-C0-MEDICAO.md): alvo = loop-superbloco de 2–4 blocos; falta spec de implementação) |
+| [C0](trilha-c-perf/c0-superblocos-trace-jit.md) | Superblocos → loop-superbloco (alavanca nº 1) | — | 🟡 (medição ✅ + [spec de implementação](trilha-c-perf/c0-impl-loop-superbloco.md) pronta) |
+| [C0.1](trilha-c-perf/c0-impl-loop-superbloco.md) | Harness lockstep de runtime | — | ⬜ |
+| [C0.2](trilha-c-perf/c0-impl-loop-superbloco.md) | Detector de ciclo + contadores | C0.1 | ⬜ |
+| [C0.3](trilha-c-perf/c0-impl-loop-superbloco.md) | Emissor do loop-superbloco + integração | C0.1, C0.2 | ⬜ |
+| [C0.4](trilha-c-perf/c0-impl-loop-superbloco.md) | Validação de jogo + A/B + default (ndsemu) | C0.3 | ⬜ |
 | [C1](trilha-c-perf/c1-flags-nzcv-locals.md) | Flags NZCV em locals JVM (⚠️ prioridade rebaixada) | — | ⬜ |
 | [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ⬜ |
 | [C3](trilha-c-perf/c3-paged-address-space.md) | PagedAddressSpace O(1) | — | ⬜ |

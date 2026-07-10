@@ -9,6 +9,11 @@
 > pequeno** (a preocupação do C2/A0 não se aplica ao caso dominante; ASM serve), com
 > **idle-skip** como alternativa/complemento a decidir na spec de implementação.
 > Ferramentas prontas: `jit/ChainProfiler` + ndsemu `chainprof`/`chainbudget=`.
+>
+> **SPEC DE IMPLEMENTAÇÃO PRONTA** — [c0-impl-loop-superbloco.md](c0-impl-loop-superbloco.md)
+> (semântica normativa S1–S6, desenho de integração, detector e sub-tasks C0.1–C0.4;
+> idle-skip formalmente adiado). As questões de refinamento abaixo ficam como
+> registro histórico — as respostas estão na spec de implementação.
 
 ## Contexto (por que isto é o item nº 1)
 
