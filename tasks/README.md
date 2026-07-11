@@ -71,7 +71,9 @@ uma task [REFINAR] diretamente.
 | [B2.4](trilha-b-arquiteturas/b2.4-thumb2-branches-it.md) | Branches (B.W/BL/BLX/CBZ/CBNZ/TBB/TBH) + IT block (maior risco) | B2.1 | ⬜ |
 | [B2.5](trilha-b-arquiteturas/b2.5-thumb2-misc.md) | Misc: hints, barriers (DMB/DSB/ISB), MSR/MRS Thumb-2 | B2.1 (+ B1.5) | ⬜ |
 | [B3](trilha-b-arquiteturas/b3-armv7a-vfp.md) | ARMv7-A user-level + VFP [REFINAR] | B2 (B2.1–B2.5) | ⬜ |
-| [B4.0](trilha-b-arquiteturas/b4.0-runner-user-mode.md) | Runner Linux user-mode (estilo qemu-user) | — | ✅ (repo `armbox`: hello + busybox echo/sh; sem fork/pipes) |
+| [B4.0](trilha-b-arquiteturas/b4.0-runner-user-mode.md) | Runner Linux user-mode (estilo qemu-user) | — | ✅ (repo `armbox`: hello + busybox echo/sh; sem fork/pipes. 2026-07-11: só validado com ARMv5TE até agora, apesar do README do armbox prometer ARMv6K/Thumb-2/ARMv7 — daí B4.0.1/B4.0.2 abaixo; padrão a repetir como B4.0.3+ quando B2.3-B2.5/B3/B6 fecharem) |
+| [B4.0.1](trilha-b-arquiteturas/b4.0.1-armbox-validar-armv6k.md) | Validar ARMv6K de verdade no armbox (binário real) | B4.0, B1.1-B1.6 | ⬜ |
+| [B4.0.2](trilha-b-arquiteturas/b4.0.2-armbox-validar-thumb2.md) | Validar Thumb-2 de verdade no armbox (binário real) | B4.0.1, B2.1-B2.2 | ⬜ |
 | [B4.1](trilha-b-arquiteturas/b4.1-mmu-softmmu.md) | MMU/softmmu full-system [REFINAR] | B3, RFC própria | ⬜ |
 | [B5](trilha-b-arquiteturas/b5-3ds.md) | 3DS enablement (checklist) [REFINAR] | B1.6, VFPv2 de B3 | ⬜ |
 | [B6](trilha-b-arquiteturas/b6-aarch64.md) | AArch64 (épico) [REFINAR] | B0 | ⬜ |
