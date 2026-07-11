@@ -50,6 +50,21 @@ public final class ArmCore {
     private ArmTraceListener traceListener = ArmTraceListener.none();
     private CpuSleepState sleepState = CpuSleepState.RUNNING;
 
+    /// Sentinela de "monitor de exclusividade aberto" (nenhum LDREX pendente).
+    private static final long EXCLUSIVE_MONITOR_OPEN = -1L;
+    /// Endereço marcado pelo monitor local de exclusividade (LDREX/STREX, ARMv6), ou
+    /// {@link #EXCLUSIVE_MONITOR_OPEN}. É `long` porque o §5 da RFC IR-64 exige que estado novo
+    /// de endereçamento já nasça com largura de 64 bits (endereços de 32 bits entram sem sinal).
+    ///
+    /// Simplificação single-core: o monitor guarda o endereço exato e o tamanho do acesso; o
+    /// STREX só tem sucesso com endereço E tamanho idênticos (o hardware permite falhas
+    /// espúrias, então a granularidade exata é uma escolha válida). Gancho futuro (3DS/B5):
+    /// para multi-core o monitor precisará de uma visão global por `AddressSpace`, com um
+    /// monitor local por core mais invalidação entre cores na escrita.
+    private long exclusiveAddress = EXCLUSIVE_MONITOR_OPEN;
+    /// Tamanho em bytes marcado junto com {@link #exclusiveAddress} (1, 2, 4 ou 8).
+    private int exclusiveSizeBytes;
+
     /// Cria um core conectado a uma memória e a um dispatcher de SWI.
     ///
     /// O estado inicial segue o reset de um ARM7TDMI: modo Supervisor, ARM state,
@@ -125,6 +140,9 @@ public final class ArmCore {
         interruptLine = in.readBoolean();
         activeMode = CpuMode.values()[in.readInt()];
         sleepState = CpuSleepState.values()[in.readInt()];
+        // O monitor de exclusividade não é persistido (formato de save state inalterado):
+        // abrir o monitor ao restaurar é uma falha espúria de STREX permitida pela arquitetura.
+        clearExclusiveMonitor();
     }
 
     private static void writeInts(java.io.DataOutputStream out, int[] values) throws java.io.IOException {
@@ -543,6 +561,42 @@ public final class ArmCore {
         restoreBank(mode);
     }
 
+    /// Marca o monitor local de exclusividade para o endereço/tamanho de um `LDREX{,B,H,D}`.
+    ///
+    /// @param address endereço do acesso, sem sinal (endereços de 32 bits devem chegar via
+    ///                `Integer.toUnsignedLong`)
+    /// @param sizeBytes tamanho do acesso (1, 2, 4 ou 8)
+    public void markExclusive(long address, int sizeBytes) {
+        exclusiveAddress = address;
+        exclusiveSizeBytes = sizeBytes;
+    }
+
+    /// Consulta se o monitor de exclusividade cobre o endereço/tamanho de um `STREX{,B,H,D}`.
+    /// Exige marcação exata (mesmo endereço e mesmo tamanho) — ver a nota de simplificação
+    /// single-core em {@link #exclusiveAddress}.
+    public boolean exclusiveMonitorCovers(long address, int sizeBytes) {
+        return exclusiveAddress != EXCLUSIVE_MONITOR_OPEN
+                && exclusiveAddress == address
+                && exclusiveSizeBytes == sizeBytes;
+    }
+
+    /// Abre (limpa) o monitor de exclusividade: `CLREX`, entrada de exceção e STREX bem-sucedido.
+    public void clearExclusiveMonitor() {
+        exclusiveAddress = EXCLUSIVE_MONITOR_OPEN;
+        exclusiveSizeBytes = 0;
+    }
+
+    /// Endereço marcado no monitor de exclusividade, ou `-1` quando aberto. Exposto para o
+    /// harness de equivalência ({@code CpuSnapshot}) detectar divergência de backend.
+    public long exclusiveMonitorAddress() {
+        return exclusiveAddress;
+    }
+
+    /// Tamanho em bytes marcado no monitor de exclusividade (0 quando aberto).
+    public int exclusiveMonitorSizeBytes() {
+        return exclusiveSizeBytes;
+    }
+
     /// Exporta um snapshot imutável usado por handlers de SWI.
     public CpuState toCpuState() {
         return new CpuState(registers[0], registers[1], registers[2], registers[3],
@@ -582,6 +636,9 @@ public final class ArmCore {
     }
 
     private void enterException(ArmException exception, int returnAddress) {
+        // Qualquer entrada de exceção (SWI/IRQ/undefined/aborts) abre o monitor de
+        // exclusividade: um STREX após o retorno deve falhar e refazer o par LDREX/STREX.
+        clearExclusiveMonitor();
         CpuMode targetMode = exceptionMode(exception);
         int vector = exceptionVector(exception);
         int oldCpsr = cpsr.get();

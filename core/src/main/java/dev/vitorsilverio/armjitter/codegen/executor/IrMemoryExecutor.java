@@ -61,6 +61,63 @@ final class IrMemoryExecutor {
         }
     }
 
+    /// `LDREX{,B,H,D}`: lê a memória e marca o monitor de exclusividade do core com o
+    /// endereço (sem sinal, em `long` — §5 da RFC IR-64) e o tamanho do acesso.
+    void executeLoadExclusive(ArmCore core, IrOp.LoadExclusive load) {
+        if (!core.cpsr().evalCond(load.condition())) {
+            return;
+        }
+        int address = core.register(load.base());
+        core.markExclusive(Integer.toUnsignedLong(address), load.sizeBytes());
+        switch (load.sizeBytes()) {
+            case 1 -> core.setRegister(load.dst(), support.read8Arm7(core, address));
+            case 2 -> core.setRegister(load.dst(), support.read16Arm7(core, address, false));
+            case 4 -> core.setRegister(load.dst(), support.read32Arm7(core, address));
+            case 8 -> {
+                core.setRegister(load.dst(), support.read32Arm7(core, address));
+                core.setRegister(load.dst() + 1, support.read32Arm7(core, address + 4));
+            }
+            default -> throw new UnsupportedOperationException(
+                    "Unsupported exclusive load size: " + load.sizeBytes());
+        }
+    }
+
+    /// `STREX{,B,H,D}`: consulta o monitor ANTES de qualquer escrita — um STREX que falha não
+    /// pode ter efeito colateral de memória. Sucesso escreve, devolve 0 em `dst` e consome o
+    /// monitor; falha devolve 1 com a memória intacta.
+    void executeStoreExclusive(ArmCore core, IrOp.StoreExclusive store) {
+        if (!core.cpsr().evalCond(store.condition())) {
+            return;
+        }
+        int address = core.register(store.base());
+        if (!core.exclusiveMonitorCovers(Integer.toUnsignedLong(address), store.sizeBytes())) {
+            core.setRegister(store.dst(), 1);
+            return;
+        }
+        int value = core.register(store.src());
+        switch (store.sizeBytes()) {
+            case 1 -> support.write8Arm7(core, address, value);
+            case 2 -> support.write16Arm7(core, address, value);
+            case 4 -> support.write32Arm7(core, address, value);
+            case 8 -> {
+                support.write32Arm7(core, address, value);
+                support.write32Arm7(core, address + 4, core.register(store.src() + 1));
+            }
+            default -> throw new UnsupportedOperationException(
+                    "Unsupported exclusive store size: " + store.sizeBytes());
+        }
+        core.setRegister(store.dst(), 0);
+        core.clearExclusiveMonitor();
+    }
+
+    /// `CLREX`: abre o monitor de exclusividade.
+    void executeClearExclusive(ArmCore core, IrOp.ClearExclusive clear) {
+        if (!core.cpsr().evalCond(clear.condition())) {
+            return;
+        }
+        core.clearExclusiveMonitor();
+    }
+
     /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `first+1` sharing one address.
     /// @return {@code true} quando o PC foi alterado pela operação
     boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {

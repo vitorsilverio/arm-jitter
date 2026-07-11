@@ -100,6 +100,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Saturate sat -> operandUse(sat.operand());
             case IrOp.AbsDiffSum usad ->
                     (1 << usad.rm()) | (1 << usad.rs()) | (usad.rn() >= 0 ? (1 << usad.rn()) : 0);
+            case IrOp.LoadExclusive lex -> (1 << lex.base());
+            case IrOp.StoreExclusive sex -> (1 << sex.base()) | (1 << sex.src())
+                    | (sex.sizeBytes() == 8 ? (1 << (sex.src() + 1)) : 0);
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.baseValueOverride() < 0 ? (1 << dt.base()) : 0;
                 mask |= operandUse(dt.offset());
@@ -179,6 +182,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Sel sel -> (1 << sel.dst());
             case IrOp.Saturate sat -> (1 << sat.dst());
             case IrOp.AbsDiffSum usad -> (1 << usad.dst());
+            case IrOp.LoadExclusive lex -> (1 << lex.dst())
+                    | (lex.sizeBytes() == 8 ? (1 << (lex.dst() + 1)) : 0);
+            case IrOp.StoreExclusive sex -> (1 << sex.dst());
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.load() ? (1 << dt.first()) | (1 << (dt.first() + 1)) : 0;
                 if (dt.writeback()) mask |= (1 << dt.base());

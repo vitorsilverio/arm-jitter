@@ -55,6 +55,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.PSR_TRANSFER -> system.executePsrTransfer(core, (IrOp.PsrTransfer) op);
                 case IrOp.Kind.LOAD -> pcChanged |= memory.executeLoad(core, (IrOp.Load) op);
                 case IrOp.Kind.STORE -> memory.executeStore(core, (IrOp.Store) op);
+                case IrOp.Kind.LOAD_EXCLUSIVE -> memory.executeLoadExclusive(core, (IrOp.LoadExclusive) op);
+                case IrOp.Kind.STORE_EXCLUSIVE -> memory.executeStoreExclusive(core, (IrOp.StoreExclusive) op);
+                case IrOp.Kind.CLEAR_EXCLUSIVE -> memory.executeClearExclusive(core, (IrOp.ClearExclusive) op);
                 case IrOp.Kind.DOUBLE_TRANSFER -> pcChanged |= memory.executeDoubleTransfer(core, (IrOp.DoubleTransfer) op);
                 case IrOp.Kind.SWAP -> pcChanged |= memory.executeSwap(core, (IrOp.Swap) op);
                 case IrOp.Kind.LOAD_LITERAL -> pcChanged |= memory.executeLoadLiteral(core, (IrOp.LoadLiteral) op);
@@ -101,6 +104,9 @@ public final class IrBlockExecutor {
             case IrOp.LoadLiteral ll -> memory.executeLoadLiteral(core, ll);
             case IrOp.Load load -> memory.executeLoad(core, load);
             case IrOp.Store store -> { memory.executeStore(core, store); yield false; }
+            case IrOp.LoadExclusive lex -> { memory.executeLoadExclusive(core, lex); yield false; }
+            case IrOp.StoreExclusive sex -> { memory.executeStoreExclusive(core, sex); yield false; }
+            case IrOp.ClearExclusive clrex -> { memory.executeClearExclusive(core, clrex); yield false; }
             case IrOp.DoubleTransfer dt -> memory.executeDoubleTransfer(core, dt);
             case IrOp.Swap swap -> memory.executeSwap(core, swap);
             case IrOp.MultipleTransfer mt -> transfer.executeMultipleTransfer(core, mt);

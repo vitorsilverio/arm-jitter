@@ -79,6 +79,14 @@ public enum InstructionKind {
     /// `USAD8`/`USADA8` (ARMv6): soma de diferenças absolutas de bytes. `immediate` = Rn
     /// acumulador, ou `-1` na forma sem acumulador.
     USAD8,
+    /// `LDREX{,B,H,D}` (ARMv6/v6K): lê a memória e marca o monitor de exclusividade.
+    /// `accessSizeBytes` distingue as variantes (4, 1, 2, 8).
+    LOAD_EXCLUSIVE,
+    /// `STREX{,B,H,D}` (ARMv6/v6K): escreve a memória apenas se o monitor cobre o endereço;
+    /// `destinationRegister` recebe 0 (sucesso) ou 1 (falha).
+    STORE_EXCLUSIVE,
+    /// `CLREX` (ARMv6K): abre o monitor de exclusividade.
+    CLEAR_EXCLUSIVE,
     /// Bit clear.
     BIC,
     /// Move NOT.

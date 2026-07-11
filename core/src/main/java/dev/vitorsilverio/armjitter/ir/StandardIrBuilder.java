@@ -118,6 +118,18 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.secondSourceRegister(),
                         instruction.condition()));
             }
+            case LOAD_EXCLUSIVE -> block.add(new IrOp.LoadExclusive(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.accessSizeBytes(),
+                    instruction.condition()));
+            case STORE_EXCLUSIVE -> block.add(new IrOp.StoreExclusive(
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.sourceRegister(),
+                    instruction.accessSizeBytes(),
+                    instruction.condition()));
+            case CLEAR_EXCLUSIVE -> block.add(new IrOp.ClearExclusive(instruction.condition()));
             case SEL -> block.add(new IrOp.Sel(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),

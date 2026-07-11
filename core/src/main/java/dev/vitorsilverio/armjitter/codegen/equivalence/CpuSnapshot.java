@@ -7,14 +7,17 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /// Captura observável da CPU após executar um bloco.
-public record CpuSnapshot(int[] registers, int cpsr, long cycles, CpuMode mode) {
+public record CpuSnapshot(int[] registers, int cpsr, long cycles, CpuMode mode,
+        long exclusiveMonitorAddress, int exclusiveMonitorSizeBytes) {
     /// Fotografa o estado atual do core.
     public static CpuSnapshot capture(ArmCore core) {
         return new CpuSnapshot(
                 core.registersSnapshot(),
                 core.cpsr().get(),
                 core.cycles(),
-                core.mode());
+                core.mode(),
+                core.exclusiveMonitorAddress(),
+                core.exclusiveMonitorSizeBytes());
     }
 
     public CpuSnapshot {
@@ -51,6 +54,14 @@ public record CpuSnapshot(int[] registers, int cpsr, long cycles, CpuMode mode) 
                     "mode",
                     mode.name(),
                     other.mode.name());
+        }
+        if (exclusiveMonitorAddress != other.exclusiveMonitorAddress
+                || exclusiveMonitorSizeBytes != other.exclusiveMonitorSizeBytes) {
+            throw EquivalenceMismatchException.of(
+                    label,
+                    "exclusiveMonitor",
+                    exclusiveMonitorAddress + "/" + exclusiveMonitorSizeBytes,
+                    other.exclusiveMonitorAddress + "/" + other.exclusiveMonitorSizeBytes);
         }
     }
 }

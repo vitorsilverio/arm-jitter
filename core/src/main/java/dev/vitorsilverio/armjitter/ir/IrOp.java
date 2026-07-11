@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -51,6 +51,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int SEL = 24;
         public static final int SATURATE = 25;
         public static final int ABS_DIFF_SUM = 26;
+        public static final int LOAD_EXCLUSIVE = 27;
+        public static final int STORE_EXCLUSIVE = 28;
+        public static final int CLEAR_EXCLUSIVE = 29;
     }
 
     /// Operacao ALU generica.
@@ -202,6 +205,45 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a escrita.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.STORE; }
+    }
+
+    /// `LDREX{,B,H,D}` (ARMv6/v6K): lê a memória no endereço da base (sem offset) e marca o
+    /// monitor de exclusividade do core. A forma doubleword (`sizeBytes=8`) carrega o par
+    /// `dst`, `dst+1`. Formas com PC não passam pelo decoder (UNPREDICTABLE).
+    record LoadExclusive(
+            /// Registrador de destino (primeiro do par na forma doubleword).
+            int dst,
+            /// Registrador base do endereço (Rn, sem offset).
+            int base,
+            /// Tamanho do acesso em bytes (1, 2, 4 ou 8).
+            int sizeBytes,
+            /// Condição necessária para executar a leitura.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
+    }
+
+    /// `STREX{,B,H,D}` (ARMv6/v6K): escreve a memória APENAS se o monitor de exclusividade
+    /// cobre o endereço/tamanho; `dst` recebe 0 (sucesso, monitor consumido) ou 1 (falha, a
+    /// memória fica intacta). A forma doubleword armazena o par `src`, `src+1`.
+    record StoreExclusive(
+            /// Registrador de status (0 = sucesso, 1 = falha).
+            int dst,
+            /// Registrador com o valor armazenado (primeiro do par na forma doubleword).
+            int src,
+            /// Registrador base do endereço (Rn, sem offset).
+            int base,
+            /// Tamanho do acesso em bytes (1, 2, 4 ou 8).
+            int sizeBytes,
+            /// Condição necessária para executar a escrita.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
+    }
+
+    /// `CLREX` (ARMv6K): abre o monitor de exclusividade do core.
+    record ClearExclusive(
+            /// Condição necessária para executar (CLREX vive no espaço incondicional → AL).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.CLEAR_EXCLUSIVE; }
     }
 
     /// Transferência de palavra dupla ARMv5TE (LDRD/STRD): dois acessos de 32 bits consecutivos

@@ -63,6 +63,10 @@ public final class AsmNativePolicy {
             case IrOp.Sel ignored -> false;
             case IrOp.Saturate ignored -> false;
             case IrOp.AbsDiffSum ignored -> false;
+            // Acessos exclusivos (B1.4): interpretados — tocam o monitor de exclusividade.
+            case IrOp.LoadExclusive ignored -> false;
+            case IrOp.StoreExclusive ignored -> false;
+            case IrOp.ClearExclusive ignored -> false;
             case IrOp.DoubleTransfer d -> d.first() + 1 <= (d.load() ? 14 : 15);
             case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
             case IrOp.Store ignored -> true;

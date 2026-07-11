@@ -88,4 +88,25 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
                 "as ops de pack/saturação devem ter passado pelo fallback por-op");
     }
+
+    @Test
+    void exclusiveAccessBlockMatchesInterpretedUnderPerOp() {
+        TestAddressSpace memory = new TestAddressSpace(64);
+        memory.put32(0, 0xE190_2F9F);  // LDREX r2, [r0]
+        memory.put32(4, 0xE180_1F92);  // STREX r1, r2, [r0] (deve suceder)
+        memory.put32(8, 0xF57F_F01F);  // CLREX
+        memory.put32(12, 0xE180_3F91); // STREX r3, r1, [r0] (deve falhar: monitor aberto)
+        IrBlock block = new StandardIrBlockLifter(
+                new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 4);
+
+        assertFalse(asmEmitter.isNativeSupported(block),
+                "acessos exclusivos (B1.4) so ganham emissao nativa na B1.6");
+        harness.assertEquivalent(v6Reference, asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> {
+                    core.setRegister(0, 0x10);
+                    core.setRegister(2, 0xCAFEBABE);
+                }));
+        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
+                "os acessos exclusivos devem ter passado pelo fallback por-op");
+    }
 }

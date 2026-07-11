@@ -256,6 +256,56 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rn, rm, 0, false, false, false, byteAccess ? 1 : 4, false);
         }
 
+        // Acessos exclusivos ARMv6/v6K: `cccc 0001 1sz1 nnnn dddd 1111 1001 1111` (LDREX*) e
+        // `cccc 0001 1sz0 nnnn dddd 1111 1001 mmmm` (STREX*), com sz: 00=word, 01=doubleword,
+        // 10=byte, 11=halfword. Word é gateado por EXCLUSIVE_WORD; B/H/D por EXCLUSIVE_SIZED.
+        // Precisa vir antes do bloco de halfword-transfer (0x0000_0090), que engoliria o padrão.
+        if ((raw & 0x0F80_0FF0) == 0x0180_0F90) {
+            boolean load = (raw & (1 << 20)) != 0;
+            int sizeBits = (raw >>> 21) & 0x3;
+            int sizeBytes = switch (sizeBits) {
+                case 0b00 -> 4;
+                case 0b01 -> 8;
+                case 0b10 -> 1;
+                default -> 2;
+            };
+            ArmFeature required = sizeBytes == 4 ? ArmFeature.EXCLUSIVE_WORD : ArmFeature.EXCLUSIVE_SIZED;
+            boolean formValid = !load || (raw & 0xF) == 0xF; // LDREX* tem os bits 3:0 fixos em 1111
+            // Este padrão de bits colide com outras encodings mais abaixo no decoder (halfword
+            // transfer, etc.) — retorna UNDEFINED explicitamente quando a arquitetura não tem a
+            // feature ou a forma é inválida, em vez de cair (fall-through) num decode errado
+            // (mesmo cuidado do BLX/CLZ/Saturating acima).
+            if (!architecture.has(required) || !formValid) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            if (exclusiveRegistersValid(load, sizeBytes, rd, rn, rm)) {
+                return load
+                        ? new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                                InstructionKind.LOAD_EXCLUSIVE, rd, rn, -1, 0, false, false, false,
+                                sizeBytes, false)
+                        : new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                                InstructionKind.STORE_EXCLUSIVE, rd, rn, rm, 0, false, false, false,
+                                sizeBytes, false);
+            }
+            // Formas UNPREDICTABLE (Rd/Rn/Rm=PC, Rd sobreposto ao par do STREX, par ímpar
+            // do LDREXD/STREXD) seguem para UNDEFINED em vez de aceitar silenciosamente.
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+
+        // CLREX (ARMv6K): encoding exato 0xF57FF01F, no espaço incondicional (cond=1111). Este
+        // padrão de bits colide com o encoding de LDR/STR mais abaixo — retorna UNDEFINED
+        // explicitamente quando a feature falta, em vez de cair no decode de LDR/STR.
+        if (raw == 0xF57F_F01F) {
+            if (!architecture.has(ArmFeature.EXCLUSIVE_SIZED)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.CLEAR_EXCLUSIVE, -1, -1, -1, 0, false, false, false);
+        }
+
         // UMAAL (ARMv6): `cccc 0000 0100 hhhh llll ssss 1001 mmmm` — soma RdLo e RdHi (cada um
         // zero-estendido, como parcelas independentes) ao produto unsigned de 64 bits; sem flags.
         // Precisa vir antes do bloco de halfword-transfer, que engoliria o padrão como
@@ -432,6 +482,30 @@ public final class ArmDecoder implements InstructionDecoder {
             }
         }
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+    }
+
+    /// Restrições de registrador dos acessos exclusivos (UNPREDICTABLE no hardware → aqui
+    /// viram UNDEFINED): PC em qualquer campo; nas formas doubleword o primeiro registrador do
+    /// par deve ser par e diferente de r14; no STREX o status Rd não pode coincidir com a base
+    /// nem com o(s) registrador(es) de dado.
+    private static boolean exclusiveRegistersValid(boolean load, int sizeBytes, int rd, int rn, int rm) {
+        if (rn == 15 || rd == 15) {
+            return false;
+        }
+        boolean pair = sizeBytes == 8;
+        if (load) {
+            return !pair || (rd % 2 == 0 && rd != 14);
+        }
+        if (rm == 15) {
+            return false;
+        }
+        if (pair && (rm % 2 != 0 || rm == 14)) {
+            return false;
+        }
+        if (rd == rn || rd == rm) {
+            return false;
+        }
+        return !pair || rd != rm + 1;
     }
 
     /// Converte o nibble de condição ARM para `Condition`.
