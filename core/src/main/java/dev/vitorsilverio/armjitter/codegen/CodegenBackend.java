@@ -6,5 +6,11 @@ public enum CodegenBackend {
     INTERPRETED_IR,
 
     /// Gera bytecode JVM carregado em tempo de execução (emissores ASM).
-    JVM_BYTECODE
+    JVM_BYTECODE,
+
+    /// Gera nós Truffle (AST) compilados por partial evaluation quando o host roda sob
+    /// Graal/JVMCI. A implementação (`TruffleCodeEmitter`) vive no módulo opcional
+    /// `arm-jitter-truffle` (trilha A) — o core só declara o valor do enum, sem depender
+    /// de nenhuma API Truffle.
+    TRUFFLE
 }

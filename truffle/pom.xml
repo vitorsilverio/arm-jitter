@@ -13,13 +13,37 @@
     <artifactId>arm-jitter-truffle</artifactId>
     <packaging>jar</packaging>
     <name>arm-jitter-truffle</name>
-    <description>Backend GraalVM/Truffle opcional do arm-jitter (trilha A). Vazio até a task A2.</description>
+    <description>Backend GraalVM/Truffle opcional do arm-jitter (trilha A). TruffleCodeEmitter desde a A2.</description>
+
+    <properties>
+        <truffle.version>25.0.1</truffle.version>
+    </properties>
 
     <dependencies>
         <dependency>
             <groupId>dev.vitorsilverio</groupId>
             <artifactId>arm-jitter</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <!-- API Truffle (RootNode/CallTarget/VirtualFrame): NUNCA no core, só aqui (task A2). -->
+        <dependency>
+            <groupId>org.graalvm.truffle</groupId>
+            <artifactId>truffle-api</artifactId>
+            <version>${truffle.version}</version>
+        </dependency>
+        <!-- Runtime Truffle: sem ele o CallTarget não executa (nem interpretado). Sem os
+             flags de launcher JVMCI/module-path (ver RELATORIO-A0.md), roda em modo
+             "Interpreted" — corretude não depende de compilação real pelo Graal. -->
+        <dependency>
+            <groupId>org.graalvm.truffle</groupId>
+            <artifactId>truffle-runtime</artifactId>
+            <version>${truffle.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
