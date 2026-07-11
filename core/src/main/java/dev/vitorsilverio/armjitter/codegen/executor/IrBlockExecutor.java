@@ -79,6 +79,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.RETURN_FROM_EXCEPTION -> pcChanged |= transfer.executeReturnFromException(core, (IrOp.ReturnFromException) op);
                 case IrOp.Kind.WAIT_FOR_INTERRUPT -> system.executeWaitForInterrupt(core, (IrOp.WaitForInterrupt) op);
                 case IrOp.Kind.MOVE_TOP -> alu.executeMoveTop(core, (IrOp.MoveTop) op);
+                case IrOp.Kind.MEMORY_BARRIER -> system.executeMemoryBarrier(core, (IrOp.MemoryBarrier) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -133,6 +134,7 @@ public final class IrBlockExecutor {
             case IrOp.ReturnFromException rfe -> transfer.executeReturnFromException(core, rfe);
             case IrOp.WaitForInterrupt wfi -> { system.executeWaitForInterrupt(core, wfi); yield false; }
             case IrOp.MoveTop moveTop -> { alu.executeMoveTop(core, moveTop); yield false; }
+            case IrOp.MemoryBarrier barrier -> { system.executeMemoryBarrier(core, barrier); yield false; }
         };
     }
 }

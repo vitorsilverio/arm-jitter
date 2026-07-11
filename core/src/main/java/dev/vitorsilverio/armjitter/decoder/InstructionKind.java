@@ -151,5 +151,9 @@ public enum InstructionKind {
     ORN,
     /// `MOVT` (Thumb-2, B2.2): escreve um imediato de 16 bits em bits[31:16] de `dst`,
     /// preservando bits[15:0]. `immediate` carrega o imediato já expandido.
-    MOVE_TOP
+    MOVE_TOP,
+    /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 B2.5): barreira de memória. `immediate` carrega o campo
+    /// `option` cru (bits 3:0) só para rastreabilidade — a semântica atual ignora o valor (NOP
+    /// observável, ver {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier}).
+    MEMORY_BARRIER
 }

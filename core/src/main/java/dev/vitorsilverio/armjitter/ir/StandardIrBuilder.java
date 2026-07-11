@@ -305,6 +305,8 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
             case WAIT_FOR_INTERRUPT -> block.add(new IrOp.WaitForInterrupt(instruction.condition()));
+            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável — ver javadoc de IrOp.MemoryBarrier.
+            case MEMORY_BARRIER -> block.add(new IrOp.MemoryBarrier(instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));

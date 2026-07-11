@@ -26,6 +26,17 @@ public final class ThumbDecoder implements InstructionDecoder {
     private static final int TOP5_MASK = 0xF800;
     private static final int TOP5_SHIFT = 11;
 
+    /// `1011 1111 hint#4 mask#4` (B2.5, ARM DDI 0406C A6.2.9/A6.7): mesmo opcode de 16 bits que a
+    /// instrução `IT` (B2.4, ainda não implementada) — `mask==0000` é a forma "hint"
+    /// (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`), qualquer `mask` != 0 é `IT`. Ambas as formas só existem a
+    /// partir de ARMv6T2, então o gate desta task é {@link ArmFeature#THUMB2} (não Thumb-1).
+    private static final int HINT_OR_IT_MASK = 0xFF00;
+    private static final int HINT_OR_IT_VALUE = 0xBF00;
+    private static final int HINT_MASK_FIELD = 0xF;
+    private static final int HINT_SELECTOR_SHIFT = 4;
+    private static final int HINT_SELECTOR_MASK = 0xF;
+    private static final int HINT_WFI = 0x3;
+
     /// hw2[15:14] == 0b11 identifica a família "branch with link" (BL ou BLX imediato) no segundo
     /// halfword — ARM DDI 0308D Figure 3-9. Fixo independente de J1/J2 (bits[13] e [11], que
     /// carregam o offset estendido, não a categoria da instrução).
@@ -304,6 +315,29 @@ public final class ThumbDecoder implements InstructionDecoder {
             boolean includePc = (raw & (1 << 8)) != 0;
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.POP,
                     -1, -1, -1, mask, true, false, includePc);
+        }
+
+        // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. IT blocks (mask!=0000, mesmo
+        // opcode) ficam fora do escopo desta task (B2.4) — sem THUMB2, ou com mask!=0000, cai
+        // sem tratamento especial no UNDEFINED do fallback final deste método, inalterado.
+        if (architecture.has(ArmFeature.THUMB2) && (raw & HINT_OR_IT_MASK) == HINT_OR_IT_VALUE) {
+            int mask = raw & HINT_MASK_FIELD;
+            if (mask == 0) {
+                int hintSelector = (raw >>> HINT_SELECTOR_SHIFT) & HINT_SELECTOR_MASK;
+                if (hintSelector == HINT_WFI) {
+                    if (!architecture.has(ArmFeature.WAIT_HINTS)) {
+                        return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+                    }
+                    return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                            InstructionKind.WAIT_FOR_INTERRUPT, -1, -1, -1, 0, false, false, false);
+                }
+                // NOP/YIELD/SEV e todo seletor reservado ("comporta-se como NOP"): sem efeito
+                // observável, mesmo caminho (MSR(#imm)->CPSR com máscara vazia) usado pela forma
+                // Thumb-2 de 32 bits em Thumb2MiscDecoder — ver javadoc lá para a justificativa.
+                return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.MSR,
+                        0, -1, -1, 0, true, false, false);
+            }
+            // mask != 0: IT block (B2.4) — deliberadamente não tratado aqui ainda.
         }
 
         if ((raw & 0xF800) == 0xF000) {

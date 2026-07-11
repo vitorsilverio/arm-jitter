@@ -129,4 +129,14 @@ final class IrSystemExecutor {
         }
         core.halt();
     }
+
+    /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 — B2.5): NOP observável neste core single-thread sem
+    /// reordenação real de memória (premissa documentada em {@link IrOp.MemoryBarrier}). Ainda
+    /// checa a condição por simetria com o resto do executor, mesmo não havendo efeito algum.
+    void executeMemoryBarrier(ArmCore core, IrOp.MemoryBarrier barrier) {
+        if (!core.cpsr().evalCond(barrier.condition())) {
+            return;
+        }
+        // Intencionalmente vazio: ver justificativa em IrOp.MemoryBarrier.
+    }
 }

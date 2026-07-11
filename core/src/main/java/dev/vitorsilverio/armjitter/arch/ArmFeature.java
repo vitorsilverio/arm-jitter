@@ -66,5 +66,12 @@ public enum ArmFeature {
     /// `SETEND` e o bit E do CPSR (endianness de dados big-endian por instrução). ARMv6+.
     SETEND_BIG_ENDIAN_DATA,
     /// Hints de espera como instruções dedicadas: `WFI`/`WFE`/`SEV`/`YIELD`. ARMv6K.
-    WAIT_HINTS
+    WAIT_HINTS,
+    /// Barreiras de memória `DMB`/`DSB`/`ISB`. ARMv7. Nesta implementação (core single-thread,
+    /// sem memória especulativa/reordenação real), a semântica é NOP observável — ver
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} e
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder} para a justificativa
+    /// completa. Só o decode Thumb-2 (B2.5) consome esta feature até agora; a forma ARM
+    /// clássica de `DMB`/`DSB`/`ISB` fica para uma task futura.
+    MEMORY_BARRIERS
 }

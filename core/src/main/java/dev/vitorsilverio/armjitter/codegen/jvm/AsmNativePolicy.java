@@ -93,6 +93,10 @@ public final class AsmNativePolicy {
             // `MOVT` (Thumb-2, B2.2): interpretado até a emissão nativa de uma task futura de B2,
             // mesmo padrão de B1.2-B1.5 até B1.6.
             case IrOp.MoveTop ignored -> false;
+            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável, mas ainda assim interpretado por
+            // enquanto — mesmo padrão de toda instrução de sistema nova (CPS/SETEND/SRS/RFE/WFI/
+            // MOVT) até uma task futura de emissão nativa.
+            case IrOp.MemoryBarrier ignored -> false;
         };
     }
 
