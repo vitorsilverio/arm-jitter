@@ -113,11 +113,53 @@ O pipeline é o mesmo (cache → decode → lift → otimizar → emit); o que m
 
 | Backend | Factory | Comportamento | Quando usar |
 |---------|---------|---------------|-------------|
-| `JVM_BYTECODE` | `armThumb(...)` | Tiered: tier frio interpretado + tier quente em bytecode JVM (ASM, fallback `PER_OP`, compilação em pool de threads) | **Padrão recomendado** |
+| `JVM_BYTECODE` | `armThumb(...)` | Tiered: tier frio interpretado + tier quente em bytecode JVM (ASM, fallback `PER_OP`, compilação em pool de threads) | **Padrão recomendado** (default dos consumidores gbaemu/ndsemu) |
 | `INTERPRETED_IR` | `interpretedArmThumb(...)` | Loop Java sobre `IrOp[]` | Debug, step-by-step, oráculo de testes |
+| `TRUFFLE` | `TruffleJitRuntimeFactory.truffleArmThumb(...)` (módulo opcional `arm-jitter-truffle`) | Tiered: tier frio interpretado + tier quente em nós Truffle/AST, compilados por partial evaluation quando o host roda sob Graal/JVMCI | Blocos/traces grandes (superblocos) e `native-image` (trilha A) — **opt-in**, não é default de nenhum consumidor |
 | (ambos) | `divergenceCheckingArmThumb(...)` | Executa cada bloco pelos dois backends e lança na primeira divergência | Diagnóstico de bugs de codegen com ROM real |
 
-Um backend Truffle/GraalVM (`TRUFFLE`) está planejado — ver [ROADMAP.md](ROADMAP.md).
+### Backend Truffle/GraalVM — quando escolher (task A4)
+
+O backend Truffle vive no módulo opcional `arm-jitter-truffle` (o core não depende de
+API Truffle) e é exposto por `TruffleJitRuntimeFactory.truffleArmThumb(cacheEntries,
+hotThreshold[, architecture])`, espelhando `JitRuntimeFactory.armThumb(...)`: mesmo
+pipeline tiered (frio interpretado + quente em background) e mesmo otimizador
+`StandardIrOptimizer.gba()` (aplicado no nível do `JitRuntime`, já que
+`TruffleCodeEmitter` — ao contrário do `AsmCodeEmitter` — não recebe otimizador no
+construtor).
+
+**Bench honesto (coletado nesta task, não reaproveitado do spike A0):** compara os
+emissores de PRODUÇÃO (`AsmCodeEmitter`/`TruffleCodeEmitter`, não o protótipo
+descartável da A0) executando o mesmo bloco ALU reto (`MOV`/`ADD`/`SUB` +
+`Cycle`/`Fetch` por instrução, sem otimizador — igual à metodologia do
+`RELATORIO-A0.md`) em tamanhos crescentes, best-of-5 × 2.000.000 execuções, mesma
+máquina/sessão:
+
+| Ambiente | JVM (`java -version`) | Bloco | ASM (`JVM_BYTECODE`) | Truffle (Graal) | truffle/asm |
+|----------|------------------------|------:|----------------------:|-----------------:|------------:|
+| JBR 25 puro + Truffle **Unchained** (`-XX:+EnableJVMCI --upgrade-module-path=<compiler 25.0.1> --module-path=<truffle-api/runtime/compiler> --add-modules=org.graalvm.truffle`) | `openjdk 25.0.3` (JBR-25.0.3+9-480.61) | 20 instr | 3,93 ns | 20,36 ns | 5,17× (pior) |
+| idem | idem | 80 instr | 58,36 ns | **43,51 ns** | 0,75× (melhor) |
+| idem | idem | 320 instr | 734,62 ns | **134,62 ns** | 0,18× (5,5× melhor) |
+| GraalVM CE (standalone) | — | — | — | — | **PENDENTE** — bloqueado por instalação do GraalVM 25 LTS pelo usuário (só há GraalVM CE 17 local, velho demais para Truffle 25.0.1, que exige JDK 21+); mesmo bloqueio da task A5 |
+
+`Truffle.getRuntime().getName()` confirmado como `"GraalVM CE"` durante a coleta (prova
+de compilação real pelo Graal, não fallback interpretado). "JBR 25 puro" e "Unchained"
+são, na prática, **a mesma via hoje**: o JBR usa o JVMCI embutido para rodar o Graal
+community como compilador de Truffle sem precisar trocar de JDK (confirmado pela A0 e
+reconfirmado aqui) — não existe uma segunda via "JBR sem Unchained" que compile Truffle
+de verdade neste ambiente, então a tabela não duplica a linha.
+
+**Recomendação:** para o tamanho de bloco típico de jogo (pequeno — a maioria dos blocos
+reais em gbaemu/ndsemu tem poucas dezenas de instruções), o **ASM continua a escolha
+certa** — é 5× mais rápido que Truffle a 20 instruções e é o backend padrão dos dois
+consumidores (não muda, G3). O Truffle vale a pena quando o bloco/trace é grande o
+suficiente para o C2 degradar (a partir de ~80 instruções nesta medição, ganho crescente
+até 320) — candidato natural são os *loop-superblocos* da trilha C (`C0`) e, fora de
+performance pura, é a única opção viável sob `native-image` (ASM define classes em
+runtime, incompatível — ver A5). gbaemu/ndsemu não têm nenhuma integração com o backend
+Truffle hoje (fora de escopo desta task — factory é opt-in, sem wiring nos consumidores);
+os benches acima medem os emissores de produção diretamente dentro do arm-jitter, não
+dentro de um jogo real via ROM.
 
 ### Uso recomendado
 
