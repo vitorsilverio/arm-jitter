@@ -19,14 +19,15 @@ import java.util.Set;
 ///   <li>BLX ({@link IrOp.BranchExchange} com {@code link}, {@link IrOp.ThumbBlSuffix} com {@code exchange}).</li>
 ///   <li>Formas ARMv5TE com escrita em PC (o comum — Saturating/DspMultiply/LDRD/STRD sem PC —
 ///       é emitido nativamente).</li>
-///   <li>Acessos exclusivos (B1.4, LDREX/STREX/CLREX) — nativos só na conclusão da B1.6.</li>
 /// </ul>
 ///
 /// <p>Desde a task C2, flags lógicos com carry-out do barrel shifter (MOVS/ANDS/... com operando
 /// shifted-register) e os shifts com S (LSLS/...) também são emitidos nativamente.</p>
 ///
-/// <p>Desde a task B1.6, todas as ops ARMv6 de B1.2 (SXT*/UXT*/REV*/UMAAL) e B1.3 (paralelas,
-/// SEL, PKHBT/PKHTB, SSAT/USAT, USAD8/USADA8) também são nativas.</p>
+/// <p>Desde a task B1.6, todas as ops ARMv6 de B1.2 (SXT*/UXT*/REV*/UMAAL), B1.3 (paralelas,
+/// SEL, PKHBT/PKHTB, SSAT/USAT, USAD8/USADA8) e B1.4 (LDREX/STREX/CLREX) também são nativas — só
+/// as instruções de sistema da B1.5 (CPS/SETEND/SRS/RFE/WFI) permanecem interpretadas, por
+/// serem raras/kernel-only (ver task B1.6).</p>
 public final class AsmNativePolicy {
     private AsmNativePolicy() {
     }
@@ -59,10 +60,11 @@ public final class AsmNativePolicy {
             case IrOp.Sel ignored -> true;
             case IrOp.Saturate ignored -> true;
             case IrOp.AbsDiffSum ignored -> true;
-            // Acessos exclusivos (B1.4): interpretados — tocam o monitor de exclusividade.
-            case IrOp.LoadExclusive ignored -> false;
-            case IrOp.StoreExclusive ignored -> false;
-            case IrOp.ClearExclusive ignored -> false;
+            // Acessos exclusivos (B1.4): nativos desde a task B1.6 — o monitor de exclusividade
+            // é checado/marcado por helper em AsmRuntimeHelpers, mesma ordem do interpretador.
+            case IrOp.LoadExclusive ignored -> true;
+            case IrOp.StoreExclusive ignored -> true;
+            case IrOp.ClearExclusive ignored -> true;
             case IrOp.DoubleTransfer d -> d.first() + 1 <= (d.load() ? 14 : 15);
             case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
             case IrOp.Store ignored -> true;

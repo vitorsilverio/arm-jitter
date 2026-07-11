@@ -674,6 +674,39 @@ public final class AsmRuntimeHelpers {
         return sum;
     }
 
+    // ── ARMv6/v6K (B1.4): acessos exclusivos ────────────────────────────────────
+    // Espelham IrMemoryExecutor.executeLoadExclusive/executeStoreExclusive/executeClearExclusive.
+
+    /// LDREX{,B,H}: marca o monitor de exclusividade ANTES da leitura (mesma ordem do
+    /// interpretador) e devolve o valor lido. A forma doubleword (LDREXD) não passa por este
+    /// helper — o AsmBlockCompiler emite {@link #markExclusive} seguido de dois {@code loadWord}.
+    public static int loadExclusive(ArmCore core, int address, int sizeBytes) {
+        core.markExclusive(Integer.toUnsignedLong(address), sizeBytes);
+        return switch (sizeBytes) {
+            case 1 -> loadByte(core, address);
+            case 2 -> loadHalf(core, address);
+            default -> loadWord(core, address);
+        };
+    }
+
+    /// Marca o monitor de exclusividade sem ler (forma doubleword, LDREXD — os dois
+    /// {@code loadWord} são emitidos separadamente pelo AsmBlockCompiler).
+    public static void markExclusive(ArmCore core, int address, int sizeBytes) {
+        core.markExclusive(Integer.toUnsignedLong(address), sizeBytes);
+    }
+
+    /// STREX{,B,H,D}: {@code true} quando o monitor cobre o endereço/tamanho (sucesso — o
+    /// CHAMADOR deve então escrever a memória e consumir o monitor); {@code false} = falha,
+    /// nenhuma escrita deve ocorrer (mesma ordem do interpretador: checa ANTES de escrever).
+    public static boolean exclusiveMonitorCovers(ArmCore core, int address, int sizeBytes) {
+        return core.exclusiveMonitorCovers(Integer.toUnsignedLong(address), sizeBytes);
+    }
+
+    /// Consome o monitor de exclusividade após um STREX bem-sucedido, ou por CLREX.
+    public static void clearExclusiveMonitor(ArmCore core) {
+        core.clearExclusiveMonitor();
+    }
+
     // ── PSR ────────────────────────────────────────────────────────────────────
 
     public static void executePsrRead(ArmCore core, boolean spsr, int register) {

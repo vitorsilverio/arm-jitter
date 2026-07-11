@@ -217,6 +217,9 @@ public final class AsmBlockCompiler {
                 case IrOp.Sel sel -> emitSel(method, sel);
                 case IrOp.Saturate sat2 -> emitSaturate(method, sat2);
                 case IrOp.AbsDiffSum ads -> emitAbsDiffSum(method, ads);
+                case IrOp.LoadExclusive ldrex -> emitLoadExclusive(method, ldrex);
+                case IrOp.StoreExclusive strex -> emitStoreExclusive(method, strex);
+                case IrOp.ClearExclusive clrex -> emitClearExclusive(method, clrex);
                 case IrOp.Load load -> emitLoad(method, load);
                 case IrOp.Store store -> emitStore(method, store);
                 case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
@@ -402,6 +405,21 @@ public final class AsmBlockCompiler {
                     countRead(accesses, ads.rn());
                 }
                 countWrite(accesses, writes, ads.dst());
+            }
+            case IrOp.LoadExclusive ldrex -> {
+                countRead(accesses, ldrex.base());
+                countWrite(accesses, writes, ldrex.dst());
+                if (ldrex.sizeBytes() == 8) {
+                    countWrite(accesses, writes, ldrex.dst() + 1);
+                }
+            }
+            case IrOp.StoreExclusive strex -> {
+                countRead(accesses, strex.base());
+                countRead(accesses, strex.src());
+                if (strex.sizeBytes() == 8) {
+                    countRead(accesses, strex.src() + 1);
+                }
+                countWrite(accesses, writes, strex.dst());
             }
             case IrOp.DoubleTransfer dt -> {
                 if (dt.baseValueOverride() == -1) {
@@ -1337,6 +1355,88 @@ public final class AsmBlockCompiler {
         }
         AsmBytecode.invokeStatic(method, HELPERS, "absDiffSum", "(IIZI)I");
         emitStoreRegister(method, op.dst());
+    }
+
+    // ── ARMv6/v6K (B1.4): acessos exclusivos ──────────────────────────────────────
+
+    /// LDREX{,B,H}: helper por-valor marca o monitor e lê. LDREXD (sizeBytes=8) não cabe no
+    /// helper (dois registradores de destino) — emite `markExclusive` + dois `loadWord` inline,
+    /// espelhando `IrMemoryExecutor.executeLoadExclusive`.
+    private void emitLoadExclusive(MethodVisitor method, IrOp.LoadExclusive load) {
+        emitReadRegister(method, load.base());
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+        if (load.sizeBytes() == 8) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 8);
+            AsmBytecode.invokeStatic(method, HELPERS, "markExclusive", "(" + CORE_REF + "II)V");
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            emitStoreRegister(method, load.dst());
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            emitStoreRegister(method, load.dst() + 1);
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, load.sizeBytes());
+            AsmBytecode.invokeStatic(method, HELPERS, "loadExclusive", "(" + CORE_REF + "II)I");
+            emitStoreRegister(method, load.dst());
+        }
+    }
+
+    /// STREX{,B,H,D}: checa o monitor ANTES de qualquer escrita (mesma ordem do interpretador) —
+    /// falha não toca a memória. Sucesso escreve, zera `dst` e consome o monitor.
+    private void emitStoreExclusive(MethodVisitor method, IrOp.StoreExclusive store) {
+        emitReadRegister(method, store.base());
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+        AsmBytecode.visitIntConst(method, store.sizeBytes());
+        AsmBytecode.invokeStatic(method, HELPERS, "exclusiveMonitorCovers", "(" + CORE_REF + "II)Z");
+        Label fail = new Label();
+        Label end = new Label();
+        method.visitJumpInsn(Opcodes.IFEQ, fail);
+        if (store.sizeBytes() == 8) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            emitReadRegister(method, store.src());
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            emitReadRegister(method, store.src() + 1);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+        } else {
+            String helperName = switch (store.sizeBytes()) {
+                case 1 -> "storeByte";
+                case 2 -> "storeHalf";
+                default -> "storeWord";
+            };
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            emitReadRegister(method, store.src());
+            AsmBytecode.invokeStatic(method, HELPERS, helperName, CORE_II_TO_V);
+        }
+        AsmBytecode.visitIntConst(method, 0);
+        emitStoreRegister(method, store.dst());
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.invokeStatic(method, HELPERS, "clearExclusiveMonitor", "(" + CORE_REF + ")V");
+        method.visitJumpInsn(Opcodes.GOTO, end);
+        method.visitLabel(fail);
+        AsmBytecode.visitIntConst(method, 1);
+        emitStoreRegister(method, store.dst());
+        method.visitLabel(end);
+    }
+
+    private void emitClearExclusive(MethodVisitor method, IrOp.ClearExclusive clear) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.invokeStatic(method, HELPERS, "clearExclusiveMonitor", "(" + CORE_REF + ")V");
     }
 
     // ── multiply ────────────────────────────────────────────────────────────────

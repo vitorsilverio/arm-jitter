@@ -1,7 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -15,12 +14,13 @@ import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
-/// Prova o contrato da task B1.4 com o backend ASM: acessos exclusivos ARMv6 NÃO são emitidos
-/// nativamente (isso é a conclusão da B1.6, ainda pendente) e caem no interpretado inline do modo
-/// {@code PER_OP}, produzindo estado idêntico ao interpretador (invariante G1) sem mudança alguma
-/// no emissor. Extend/reverse/UMAAL (B1.2) e paralelas/SEL/PKH/saturação/USAD (B1.3) ganharam
-/// emissão nativa na task B1.6 — ver {@code ArmV6ExtendReverseNativeEquivalenceTest} e
-/// {@code ArmV6ParallelSaturateNativeEquivalenceTest} para a cobertura exaustiva delas.
+/// Histórico da task B1.6: prova, op-a-op, que cada grupo de ops ARMv6 (B1.2-B1.4) que caía no
+/// interpretado inline do modo {@code PER_OP} ganhou emissão nativa sem regressão de estado
+/// (invariante G1). Todas as ops aqui cobertas já são nativas — a cobertura exaustiva (14
+/// condições × 16 NZCV) de cada grupo vive em {@code ArmV6ExtendReverseNativeEquivalenceTest},
+/// {@code ArmV6ParallelSaturateNativeEquivalenceTest} e {@code ArmV6ExclusiveNativeEquivalenceTest}.
+/// As únicas ops ARMv6 que ainda passam por {@code PER_OP} são as instruções de sistema da B1.5
+/// (CPS/SETEND/SRS/RFE/WFI — raras, kernel-only, ver {@code AsmNativePolicy}).
 class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
     private final AsmCodeEmitter asmEmitter = new AsmCodeEmitter(
             ArmArchitecture.ARMV6K, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
@@ -97,7 +97,8 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
     }
 
     @Test
-    void exclusiveAccessBlockMatchesInterpretedUnderPerOp() {
+    void exclusiveAccessBlockIsNativeAndMatchesInterpreted() {
+        // B1.6: LDREX/STREX/CLREX (B1.4) agora são nativos — sem fallback por-op.
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put32(0, 0xE190_2F9F);  // LDREX r2, [r0]
         memory.put32(4, 0xE180_1F92);  // STREX r1, r2, [r0] (deve suceder)
@@ -106,14 +107,14 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 4);
 
-        assertFalse(asmEmitter.isNativeSupported(block),
-                "acessos exclusivos (B1.4) so ganham emissao nativa na B1.6");
+        assertTrue(asmEmitter.isNativeSupported(block),
+                "acessos exclusivos (B1.4) ganharam emissão nativa na task B1.6");
         harness.assertEquivalent(v6Reference, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> {
                     core.setRegister(0, 0x10);
                     core.setRegister(2, 0xCAFEBABE);
                 }));
-        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                "os acessos exclusivos devem ter passado pelo fallback por-op");
+        assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                "os acessos exclusivos não devem mais passar pelo fallback por-op");
     }
 }
