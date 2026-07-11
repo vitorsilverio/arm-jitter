@@ -6,29 +6,24 @@ import dev.vitorsilverio.armjitter.codegen.CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.CodegenBackend;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
-import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
-import dev.vitorsilverio.armjitter.ir.IrOp;
-import dev.vitorsilverio.armjitter.ir.IrOpCode;
-import dev.vitorsilverio.armjitter.ir.IrOperand;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 
-import java.util.EnumSet;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-/// Emissor Truffle mínimo (task A2): compila nativamente blocos com apenas ALU simples
-/// (MOV/ADD/SUB/AND/CMP, condição AL, operandos registrador/imediato, destino != PC),
-/// `Cycle` e `Fetch`; qualquer outra op no bloco delega o bloco INTEIRO para
-/// {@link InterpretedCodeEmitter} (fallback `WHOLE_BLOCK`, como o `AsmCodeEmitter` fazia antes
-/// do PER_OP). Cobertura completa de `IrOp` é a A3; emissão nativa de ShiftedRegister/condições
-/// != AL/memória/branches fica para tasks futuras da trilha A.
+/// Emissor Truffle (task A2 mínima + A3 cobertura completa): {@link TruffleBlockRootNode} delega
+/// CADA `IrOp` do bloco a {@link IrBlockExecutor#executeOp} — a mesma fonte de verdade usada pelo
+/// interpretador e pelo fallback PER_OP do backend ASM (invariante G1). Como `executeOp` já cobre
+/// exaustivamente todo `IrOp` (inclui condição != AL, ShiftedRegister, branches, memória,
+/// LDM/STM, PSR/SWI/coprocessador e as ops ARMv6/v6K/ARMv5TE), TODO bloco compila nativamente —
+/// {@link #fallback} e {@link InterpretedCodeEmitter} ficam retidos por compatibilidade de API
+/// (G3) mas o caminho de fallback é inatingível na prática.
+///
+/// <p>Isto NÃO especializa nós Truffle por categoria de op (isso seria emissão bytecode-like,
+/// como o `AsmBlockCompiler` faz) — é otimização de partial evaluation, fora do escopo de
+/// correção da A3; ver a task A4 (factory + bench) para medir o ganho real de JIT.</p>
 public final class TruffleCodeEmitter implements CodeEmitter {
-    /// Opcodes ALU cobertos nativamente por esta task.
-    private static final Set<IrOpCode> SUPPORTED_ALU_OPCODES =
-            EnumSet.of(IrOpCode.MOV, IrOpCode.ADD, IrOpCode.SUB, IrOpCode.AND, IrOpCode.CMP);
-
     private final IrBlockExecutor executor;
     private final CodeEmitter fallback;
     private final AtomicLong nativeBlockCount = new AtomicLong();
@@ -70,24 +65,9 @@ public final class TruffleCodeEmitter implements CodeEmitter {
         return fallbackBlockCount.get();
     }
 
+    /// Sempre `true` (task A3): {@link IrBlockExecutor#executeOp} cobre exaustivamente todo
+    /// `IrOp.Kind` — não há mais categoria que force o fallback `WHOLE_BLOCK`.
     private static boolean supports(IrBlock block) {
-        for (IrOp op : block.operations()) {
-            if (!supports(op)) {
-                return false;
-            }
-        }
         return true;
-    }
-
-    private static boolean supports(IrOp op) {
-        return switch (op) {
-            case IrOp.Cycle ignored -> true;
-            case IrOp.Fetch ignored -> true;
-            case IrOp.Alu alu -> alu.condition() == Condition.AL
-                    && alu.dst() != 15
-                    && SUPPORTED_ALU_OPCODES.contains(alu.opcode())
-                    && !(alu.src2() instanceof IrOperand.ShiftedRegister);
-            default -> false;
-        };
     }
 }
