@@ -21,8 +21,14 @@ public final class StandardIrBuilder implements IrBuilder {
             case AND -> liftAlu(IrOpCode.AND, instruction, block);
             case EOR -> liftAlu(IrOpCode.EOR, instruction, block);
             case ORR -> liftAlu(IrOpCode.ORR, instruction, block);
+            case ORN -> liftAlu(IrOpCode.ORN, instruction, block);
             case BIC -> liftAlu(IrOpCode.BIC, instruction, block);
             case MVN -> liftAlu(IrOpCode.MVN, instruction, block);
+            // MOVT (Thumb-2, B2.2): `immediate` já carrega o imediato de 16 bits expandido pelo
+            // decoder — não é um padrão Alu comum (escreve só a metade alta), por isso é um IrOp
+            // próprio em vez de reusar liftAlu.
+            case MOVE_TOP -> block.add(new IrOp.MoveTop(
+                    instruction.destinationRegister(), instruction.immediate(), instruction.condition()));
             case MRS -> block.add(new IrOp.PsrTransfer(
                     true,
                     instruction.immediate() != 0,
@@ -444,7 +450,30 @@ public final class StandardIrBuilder implements IrBuilder {
                     && (instruction.kind() == InstructionKind.LSR || instruction.kind() == InstructionKind.ASR)) {
                 return new IrOperand.Immediate(32);
             }
+            if (isThumb32(instruction) && isThumb2ModifiedImmediate(instruction)) {
+                // ThumbExpandImm_C (Thumb-2 B2.2): carry-out só é conhecido (e igual ao bit 31 do
+                // valor já expandido pelo decoder — mesmo truque do rotate-imm ARM acima) quando
+                // i:imm3[2] != 0b00, i.e. quando a instrução ROTACIONA em vez de replicar bytes.
+                // i = bit26 (hi[10]); imm3[2] = bit14 (topo do campo lo[14:12]).
+                boolean rotates = ((instruction.raw() >>> 26) & 1) != 0 || ((instruction.raw() >>> 14) & 1) != 0;
+                return new IrOperand.Immediate(instruction.immediate(), rotates, instruction.immediate() < 0);
+            }
             return new IrOperand.Immediate(instruction.immediate());
+        }
+        if (isThumb32(instruction)) {
+            // Data-processing (register) Thumb-2, forma com shift imediato: shty = lo[5:4],
+            // imm5 = lo[14:12]:lo[7:6] (imm3 alto + imm2 baixo, mesmo split de ARM classico).
+            int shiftBits = (instruction.raw() >>> 4) & 0x3;
+            int amount = (((instruction.raw() >>> 12) & 0x7) << 2) | ((instruction.raw() >>> 6) & 0x3);
+            return new IrOperand.ShiftedRegister(
+                    instruction.secondSourceRegister(),
+                    shiftType(shiftBits),
+                    normalizedShiftAmount(shiftBits, amount),
+                    -1,
+                    -1,
+                    -1,
+                    amount == 0 && shiftBits == 3,
+                    false);
         }
         if (instruction.instructionSet() == InstructionSet.ARM) {
             if ((instruction.raw() & (1 << 4)) != 0) {
@@ -592,10 +621,26 @@ public final class StandardIrBuilder implements IrBuilder {
         return (raw & 0x0C00_0000) == 0x0400_0000;
     }
 
+    /// Detecta um candidato Thumb-2 de 32 bits (B2.1+) — ver o javadoc de {@link #instructionWidth}.
+    private boolean isThumb32(DecodedInstruction instruction) {
+        return instruction.instructionSet() == InstructionSet.THUMB && instruction.raw() < 0;
+    }
+
+    /// Distingue "Data-processing (modified immediate)" de "Data processing (plain binary
+    /// immediate)"/`MOVW`/`MOVT` dentro do espaço Thumb-2 top5=0b11110: hi[9] (bit global 25) é
+    /// `0` só no primeiro grupo (ARM DDI 0406 A5.3.3 vs A5.3.4).
+    private boolean isThumb2ModifiedImmediate(DecodedInstruction instruction) {
+        return ((instruction.raw() >>> 25) & 1) == 0;
+    }
+
+    /// Largura em bytes da instrução decodificada — ver o javadoc do mesmo método em
+    /// {@link StandardIrBlockLifter} para a regra completa (inclusive o candidato Thumb-2 de 32
+    /// bits detectado por {@code raw() < 0}). Usado para `IrOp.Fetch`, `endPc` e o valor de
+    /// retorno de `BL`/`BLX`.
     private int instructionWidth(DecodedInstruction instruction) {
-        return switch (instruction.instructionSet()) {
-            case ARM -> 4;
-            case THUMB -> 2;
-        };
+        if (instruction.instructionSet() == InstructionSet.THUMB) {
+            return instruction.raw() < 0 ? 4 : 2;
+        }
+        return 4;
     }
 }

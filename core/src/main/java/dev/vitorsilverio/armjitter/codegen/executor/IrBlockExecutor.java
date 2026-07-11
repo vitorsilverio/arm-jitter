@@ -78,6 +78,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.STORE_RETURN_STATE -> pcChanged |= transfer.executeStoreReturnState(core, (IrOp.StoreReturnState) op);
                 case IrOp.Kind.RETURN_FROM_EXCEPTION -> pcChanged |= transfer.executeReturnFromException(core, (IrOp.ReturnFromException) op);
                 case IrOp.Kind.WAIT_FOR_INTERRUPT -> system.executeWaitForInterrupt(core, (IrOp.WaitForInterrupt) op);
+                case IrOp.Kind.MOVE_TOP -> alu.executeMoveTop(core, (IrOp.MoveTop) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -131,6 +132,7 @@ public final class IrBlockExecutor {
             case IrOp.StoreReturnState srs -> transfer.executeStoreReturnState(core, srs);
             case IrOp.ReturnFromException rfe -> transfer.executeReturnFromException(core, rfe);
             case IrOp.WaitForInterrupt wfi -> { system.executeWaitForInterrupt(core, wfi); yield false; }
+            case IrOp.MoveTop moveTop -> { alu.executeMoveTop(core, moveTop); yield false; }
         };
     }
 }

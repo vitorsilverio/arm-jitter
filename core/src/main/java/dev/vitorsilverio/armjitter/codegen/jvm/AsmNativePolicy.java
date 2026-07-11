@@ -90,21 +90,29 @@ public final class AsmNativePolicy {
             case IrOp.StoreReturnState ignored -> false;
             case IrOp.ReturnFromException ignored -> false;
             case IrOp.WaitForInterrupt ignored -> false;
+            // `MOVT` (Thumb-2, B2.2): interpretado até a emissão nativa de uma task futura de B2,
+            // mesmo padrão de B1.2-B1.5 até B1.6.
+            case IrOp.MoveTop ignored -> false;
         };
     }
 
     private static boolean supportsAlu(IrOp.Alu alu) {
         // Task C2: flags lógicos com carry-out do shifter (src2 shifted-register com S) e os
         // shifts com S agora são NATIVOS — helpers shiftedOperandCarry/doXxxS espelham o
-        // interpretador. Única exceção restante:
+        // interpretador. Exceções restantes:
         // dst=15 + setFlags: restores CPSR from SPSR, defer to interpreted.
-        return alu.dst() != 15 || !alu.setFlags();
+        // ORN (Thumb-2, B2.2): opcode novo, sem case no emissor ASM ainda — interpretado até uma
+        // task futura de B2, mesmo padrão de B1.2-B1.5 até B1.6.
+        return (alu.dst() != 15 || !alu.setFlags()) && alu.opcode() != IrOpCode.ORN;
     }
 
     /// Opcodes ALU atualmente emitidos nativamente. Desde a task B1.6, todos os opcodes ALU
-    /// (incl. os ARMv6 de extend/reverse/pack de B1.2-B1.3) são suportados; a única rejeição
-    /// restante é por-instância (dst=15+setFlags), não por opcode — ver {@link #supportsAlu}.
+    /// (incl. os ARMv6 de extend/reverse/pack de B1.2-B1.3) são suportados, com duas rejeições:
+    /// dst=15+setFlags (por-instância, ver {@link #supportsAlu}) e {@link IrOpCode#ORN}
+    /// (Thumb-2, B2.2 — opcode novo sem emissão nativa ainda).
     public static Set<IrOpCode> supportedAluOpcodes() {
-        return EnumSet.allOf(IrOpCode.class);
+        EnumSet<IrOpCode> supported = EnumSet.allOf(IrOpCode.class);
+        supported.remove(IrOpCode.ORN);
+        return supported;
     }
 }

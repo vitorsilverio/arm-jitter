@@ -146,5 +146,10 @@ public enum InstructionKind {
     RETURN_FROM_EXCEPTION,
     /// `WFI` (ARMv6K, hint): coloca o core em HALT até uma interrupção. Disfarçado de
     /// `MSR`(registrador) com máscara de campo vazia — ver `ArmDecoder`.
-    WAIT_FOR_INTERRUPT
+    WAIT_FOR_INTERRUPT,
+    /// `ORN` (Thumb-2, B2.2): `Rd = Rn | ~operando`. Sem equivalente ARM classico.
+    ORN,
+    /// `MOVT` (Thumb-2, B2.2): escreve um imediato de 16 bits em bits[31:16] de `dst`,
+    /// preservando bits[15:0]. `immediate` carrega o imediato já expandido.
+    MOVE_TOP
 }

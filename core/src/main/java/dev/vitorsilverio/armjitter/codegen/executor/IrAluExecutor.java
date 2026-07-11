@@ -86,13 +86,14 @@ final class IrAluExecutor {
                     }
                 }
             }
-            case IrOpCode.AND, IrOpCode.EOR, IrOpCode.ORR, IrOpCode.BIC, IrOpCode.TST, IrOpCode.TEQ -> {
+            case IrOpCode.AND, IrOpCode.EOR, IrOpCode.ORR, IrOpCode.BIC, IrOpCode.ORN, IrOpCode.TST, IrOpCode.TEQ -> {
                 int left = support.registerValue(core, alu.src1(), alu.src1ValueOverride());
                 int result = switch (alu.opcode()) {
                     case IrOpCode.AND -> left & right;
                     case IrOpCode.EOR -> left ^ right;
                     case IrOpCode.ORR -> left | right;
                     case IrOpCode.BIC -> left & ~right;
+                    case IrOpCode.ORN -> left | ~right;
                     case IrOpCode.TST -> left & right;
                     case IrOpCode.TEQ -> left ^ right;
                     default -> throw new IllegalStateException("Unexpected logic opcode: " + alu.opcode());
@@ -186,6 +187,17 @@ final class IrAluExecutor {
             default -> throw new UnsupportedOperationException("Unknown IR ALU opcode: " + alu.opcode());
         }
         return false;
+    }
+
+    /// `MOVT` (Thumb-2, B2.2): escreve `immediate16` na metade ALTA (bits 31:16) de `dst`,
+    /// preservando a metade baixa — não é um padrão `Alu` comum (nenhuma outra op ARM escreve só
+    /// metade do registrador), por isso vive em seu próprio {@link IrOp}. Nunca escreve flags.
+    void executeMoveTop(ArmCore core, IrOp.MoveTop moveTop) {
+        if (!core.cpsr().evalCond(moveTop.condition())) {
+            return;
+        }
+        int current = core.register(moveTop.dst());
+        core.setRegister(moveTop.dst(), (current & 0xFFFF) | (moveTop.immediate16() << 16));
     }
 
     void executeMultiply(ArmCore core, IrOp.Multiply multiply) {

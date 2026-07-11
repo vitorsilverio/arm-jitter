@@ -1,0 +1,272 @@
+package dev.vitorsilverio.armjitter.decoder;
+
+import dev.vitorsilverio.armjitter.arch.DecoderExtension;
+import dev.vitorsilverio.armjitter.core.Condition;
+
+/// Decodifica o grupo "Data-processing" Thumb-2 de 32 bits (B2.2): modified immediate,
+/// `MOVW`/`MOVT`, plain binary immediate (`ADD`/`SUB`/`ADR`) e a forma registrador com shift
+/// imediato. Anexado via {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#thumb32DecoderExtensions()}
+/// — só ativo quando {@link dev.vitorsilverio.armjitter.arch.ArmFeature#THUMB2} está habilitado.
+///
+/// Bits sempre nomeados a partir de `raw` = os dois halfwords combinados (`hi&lt;&lt;16 | lo`, hi =
+/// primeiro halfword nos bits altos, exatamente como {@link ThumbDecoder} entrega às extensões
+/// de 32 bits). Referência: ARM DDI 0406C, A5.3.1-A5.3.4.
+public final class Thumb2DataProcessingDecoder implements DecoderExtension {
+    /// Prefixo literal de 7 bits (`raw[31:25]`) do grupo "Data-processing (register)" com shift
+    /// imediato — ARM DDI 0406C Figure 3-8 / A5.3.1. Subconjunto de `top5 == 0b11101`.
+    private static final int REGISTER_FORM_PREFIX = 0b1110101;
+    private static final int REGISTER_FORM_PREFIX_MASK = 0x7F;
+    private static final int REGISTER_FORM_PREFIX_SHIFT = 25;
+
+    /// `raw[31:27]` do grupo "Data-processing (immediate)"/"(plain binary immediate)"/`MOVW`/
+    /// `MOVT` — todos vivem sob `top5 == 0b11110`.
+    private static final int IMMEDIATE_GROUP_TOP5 = 0b11110;
+    private static final int TOP5_MASK = 0x1F;
+    private static final int TOP5_SHIFT = 27;
+
+    /// `raw[25]` (hi bit 9): `0` = "Data-processing (modified immediate)" (A5.3.3), `1` =
+    /// "(plain binary immediate)"/`MOVW`/`MOVT` (A5.3.4).
+    private static final int MODIFIED_IMMEDIATE_MARKER_BIT = 25;
+
+    /// `raw[24:21]` do subgrupo `raw[25]==1`: distingue `ADD`/`SUB`(plain binary)/`MOVW`/`MOVT`
+    /// (os 4 únicos valores usados; qualquer outro é reservado/UNDEFINED).
+    private static final int PLAIN_GROUP_OP_SHIFT = 21;
+    private static final int PLAIN_GROUP_OP_MASK = 0xF;
+    private static final int PLAIN_OP_ADD = 0b0000;
+    private static final int PLAIN_OP_SUB = 0b0101;
+    private static final int PLAIN_OP_MOVW = 0b0010;
+    private static final int PLAIN_OP_MOVT = 0b0110;
+
+    /// `raw[24:21]` (op4) do grupo modified-immediate/register-shift-immediate — mesma tabela nos
+    /// dois grupos (ARM DDI 0406C Table A5-10 "op field"), com as formas TST/TEQ/CMN/CMP obtidas
+    /// via `Rd == PC` (registrador fixo `1111`, não um destino real).
+    private static final int OP4_SHIFT = 21;
+    private static final int OP4_MASK = 0xF;
+    private static final int OP4_AND = 0b0000;
+    private static final int OP4_BIC = 0b0001;
+    private static final int OP4_ORR = 0b0010;
+    private static final int OP4_ORN = 0b0011;
+    private static final int OP4_EOR = 0b0100;
+    private static final int OP4_ADD = 0b1000;
+    private static final int OP4_ADC = 0b1010;
+    private static final int OP4_SBC = 0b1011;
+    private static final int OP4_SUB = 0b1101;
+    private static final int OP4_RSB = 0b1110;
+
+    private static final int SET_FLAGS_BIT = 20;
+    private static final int PROGRAM_COUNTER = 15;
+    private static final int STACK_POINTER = 13;
+
+    @Override
+    public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
+        if (((raw >>> REGISTER_FORM_PREFIX_SHIFT) & REGISTER_FORM_PREFIX_MASK) == REGISTER_FORM_PREFIX) {
+            return decodeRegisterForm(raw, address, condition);
+        }
+        if (((raw >>> TOP5_SHIFT) & TOP5_MASK) != IMMEDIATE_GROUP_TOP5) {
+            return null;
+        }
+        if (((raw >>> MODIFIED_IMMEDIATE_MARKER_BIT) & 1) == 0) {
+            return decodeModifiedImmediate(raw, address, condition);
+        }
+        return decodePlainGroup(raw, address, condition);
+    }
+
+    // ── Data-processing (modified immediate) — A5.3.3 ──────────────────────────────────────
+
+    private DecodedInstruction decodeModifiedImmediate(int raw, int address, Condition condition) {
+        int op4 = (raw >>> OP4_SHIFT) & OP4_MASK;
+        boolean setFlags = ((raw >>> SET_FLAGS_BIT) & 1) != 0;
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int imm12 = modifiedImmediate12(raw);
+        int expanded = thumbExpandImm(imm12);
+
+        if (op4 == OP4_ORR && rn == PROGRAM_COUNTER) {
+            if (rd == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MOV,
+                    rd, -1, -1, expanded, true, setFlags, false);
+        }
+        if (op4 == OP4_ORN && rn == PROGRAM_COUNTER) {
+            if (rd == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MVN,
+                    rd, -1, -1, expanded, true, setFlags, false);
+        }
+
+        InstructionKind compareAlias = compareAliasFor(op4);
+        if (rd == PROGRAM_COUNTER) {
+            if (compareAlias == null || !setFlags) {
+                // UNPREDICTABLE: escreve em PC sem um alias de comparação válido.
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, compareAlias,
+                    -1, rn, -1, expanded, true, true, false);
+        }
+        if (rn == PROGRAM_COUNTER) {
+            // Só ORR/ORN (tratados acima) usam Rn=PC como alias válido (sem acumulador); todo
+            // outro op4 lendo PC como Rn é UNPREDICTABLE nesta forma de 32 bits.
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        InstructionKind kind = plainKindFor(op4);
+        if (kind == null) {
+            return null; // op4 reservado — cai no UNDEFINED controlado do ThumbDecoder (top5=11110)
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
+                rd, rn, -1, expanded, true, setFlags, false);
+    }
+
+    private int modifiedImmediate12(int raw) {
+        int i = (raw >>> 26) & 1;
+        int imm3 = (raw >>> 12) & 0x7;
+        int imm8 = raw & 0xFF;
+        return (i << 11) | (imm3 << 8) | imm8;
+    }
+
+    /// ThumbExpandImm (ARM DDI 0406C A5.3.2, sem o carry-out — recomputado separadamente por
+    /// {@code StandardIrBuilder#operand} a partir dos mesmos bits, espelhando como o rotate-imm
+    /// ARM clássico já funciona).
+    private static int thumbExpandImm(int imm12) {
+        if ((imm12 & 0xC00) == 0) { // imm12<11:10> == '00': sem rotação, replicação de byte
+            int abcdefgh = imm12 & 0xFF;
+            return switch ((imm12 >>> 8) & 0x3) {
+                case 0 -> abcdefgh;
+                case 1 -> (abcdefgh << 16) | abcdefgh;
+                case 2 -> (abcdefgh << 24) | (abcdefgh << 8);
+                default -> (abcdefgh << 24) | (abcdefgh << 16) | (abcdefgh << 8) | abcdefgh;
+            };
+        }
+        int unrotated = 0x80 | (imm12 & 0x7F);
+        int rotateAmount = (imm12 >>> 7) & 0x1F;
+        return Integer.rotateRight(unrotated, rotateAmount);
+    }
+
+    // ── Data-processing (register), shift imediato — A5.3.1 ────────────────────────────────
+
+    private DecodedInstruction decodeRegisterForm(int raw, int address, Condition condition) {
+        int op4 = (raw >>> OP4_SHIFT) & OP4_MASK;
+        boolean setFlags = ((raw >>> SET_FLAGS_BIT) & 1) != 0;
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int rm = raw & 0xF;
+        if (rm == PROGRAM_COUNTER || rm == STACK_POINTER) {
+            // Rm=SP/PC é UNPREDICTABLE nesta forma (ao contrário do ARM classico); simplificação
+            // conservadora — ver Armadilhas na task B2.2.
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+
+        if (op4 == OP4_ORR && rn == PROGRAM_COUNTER) {
+            if (rd == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MOV,
+                    rd, -1, rm, 0, false, setFlags, false);
+        }
+        if (op4 == OP4_ORN && rn == PROGRAM_COUNTER) {
+            if (rd == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MVN,
+                    rd, -1, rm, 0, false, setFlags, false);
+        }
+
+        InstructionKind compareAlias = compareAliasFor(op4);
+        if (rd == PROGRAM_COUNTER) {
+            if (compareAlias == null || !setFlags) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, compareAlias,
+                    -1, rn, rm, 0, false, true, false);
+        }
+        if (rn == PROGRAM_COUNTER) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        InstructionKind kind = plainKindFor(op4);
+        if (kind == null) {
+            return null; // op4 reservado/PKH/MVE — fora do escopo desta task (ver Armadilhas)
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
+                rd, rn, rm, 0, false, setFlags, false);
+    }
+
+    // ── Data processing (plain binary immediate) + MOVW/MOVT — A5.3.4 ──────────────────────
+
+    private DecodedInstruction decodePlainGroup(int raw, int address, Condition condition) {
+        int group = (raw >>> PLAIN_GROUP_OP_SHIFT) & PLAIN_GROUP_OP_MASK;
+        return switch (group) {
+            case PLAIN_OP_ADD -> decodeAddSubOrAdr(raw, address, condition, false);
+            case PLAIN_OP_SUB -> decodeAddSubOrAdr(raw, address, condition, true);
+            case PLAIN_OP_MOVW -> decodeMoveWide(raw, address, condition, InstructionKind.MOV);
+            case PLAIN_OP_MOVT -> decodeMoveWide(raw, address, condition, InstructionKind.MOVE_TOP);
+            default -> null; // reservado — UNDEFINED controlado do ThumbDecoder (top5=11110)
+        };
+    }
+
+    private DecodedInstruction decodeAddSubOrAdr(int raw, int address, Condition condition, boolean subtract) {
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int i = (raw >>> 26) & 1;
+        int imm3 = (raw >>> 12) & 0x7;
+        int imm8 = raw & 0xFF;
+        int imm12 = (i << 11) | (imm3 << 8) | imm8;
+        if (rn == PROGRAM_COUNTER) {
+            // ADR: Rd = Align(PC,4) +/- imm12. PC lê como address+4 mesmo para esta instrução de
+            // 32 bits (regra Thumb universal — StandardIrBuilder#registerValueOverride já aplica
+            // isso a qualquer leitura de R15 em THUMB), então o valor já pode ser resolvido aqui
+            // em tempo de decode, como o ADR THUMB1 legado já faz.
+            int literalAddress = ((address + 4) & ~3) + (subtract ? -imm12 : imm12);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MOV,
+                    rd, -1, -1, literalAddress, true, false, false);
+        }
+        if (rd == PROGRAM_COUNTER) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                subtract ? InstructionKind.SUB : InstructionKind.ADD,
+                rd, rn, -1, imm12, true, false, false);
+    }
+
+    private DecodedInstruction decodeMoveWide(int raw, int address, Condition condition, InstructionKind kind) {
+        int rd = (raw >>> 8) & 0xF;
+        if (rd == PROGRAM_COUNTER) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int imm4 = (raw >>> 16) & 0xF;
+        int i = (raw >>> 26) & 1;
+        int imm3 = (raw >>> 12) & 0x7;
+        int imm8 = raw & 0xFF;
+        int imm16 = (imm4 << 12) | (i << 11) | (imm3 << 8) | imm8;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
+                rd, -1, -1, imm16, true, false, false);
+    }
+
+    // ── Tabelas compartilhadas modified-immediate / register-shift-immediate ───────────────
+
+    private static InstructionKind compareAliasFor(int op4) {
+        return switch (op4) {
+            case OP4_AND -> InstructionKind.TST;
+            case OP4_EOR -> InstructionKind.TEQ;
+            case OP4_ADD -> InstructionKind.CMN;
+            case OP4_SUB -> InstructionKind.CMP;
+            default -> null;
+        };
+    }
+
+    private static InstructionKind plainKindFor(int op4) {
+        return switch (op4) {
+            case OP4_AND -> InstructionKind.AND;
+            case OP4_BIC -> InstructionKind.BIC;
+            case OP4_ORR -> InstructionKind.ORR;
+            case OP4_ORN -> InstructionKind.ORN;
+            case OP4_EOR -> InstructionKind.EOR;
+            case OP4_ADD -> InstructionKind.ADD;
+            case OP4_ADC -> InstructionKind.ADC;
+            case OP4_SBC -> InstructionKind.SBC;
+            case OP4_SUB -> InstructionKind.SUB;
+            case OP4_RSB -> InstructionKind.RSB;
+            default -> null;
+        };
+    }
+}

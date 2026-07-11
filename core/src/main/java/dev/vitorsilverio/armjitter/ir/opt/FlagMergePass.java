@@ -106,7 +106,7 @@ public final class FlagMergePass implements IrOptimizer {
             // Shifts: N, Z e C (carry do shifter); V inalterado.
             case LSL, LSR, ASR, ROR -> N | Z | C;
             // Lógicas/mov: N e Z; C só se houver carry do shifter (operando shiftado).
-            case MOV, MVN, AND, EOR, ORR, BIC, TST, TEQ ->
+            case MOV, MVN, AND, EOR, ORR, ORN, BIC, TST, TEQ ->
                     N | Z | (alu.src2() instanceof IrOperand.ShiftedRegister ? C : 0);
             // CLZ e as ops ARMv6 de extensão/inversão/pack não afetam flags.
             case CLZ, SXTB, SXTH, SXTB16, UXTB, UXTH, UXTB16, REV, REV16, REVSH, PKHBT, PKHTB -> 0;

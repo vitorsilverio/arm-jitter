@@ -45,7 +45,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             if (isTerminal(instruction)) {
                 break;
             }
-            pc += instructionWidth(instruction.instructionSet());
+            pc += instructionWidth(instruction);
         }
         return block.sealed();
     }
@@ -73,22 +73,29 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, POP, SWI, UNIMPLEMENTED, COPROCESSOR,
                     RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT -> true;
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,
-                    CPS, SETEND, STORE_RETURN_STATE -> false;
+                    CPS, SETEND, STORE_RETURN_STATE, ORN, MOVE_TOP -> false;
         };
     }
 
     private boolean isAluTerminal(DecodedInstruction instruction) {
         return instruction.destinationRegister() == 15
                 && switch (instruction.kind()) {
-                    case MOV, ADD, ADC, SUB, RSB, SBC, RSC, AND, EOR, ORR, LSL, LSR, ASR, ROR, BIC, MVN -> true;
+                    case MOV, ADD, ADC, SUB, RSB, SBC, RSC, AND, EOR, ORR, LSL, LSR, ASR, ROR, BIC, MVN, ORN -> true;
                     default -> false;
                 };
     }
 
-    private int instructionWidth(InstructionSet instructionSet) {
-        return switch (instructionSet) {
-            case ARM -> 4;
-            case THUMB -> 2;
-        };
+    /// Largura em bytes da instrução decodificada. ARM é sempre 4; THUMB é 2 para todo encoding
+    /// de 16 bits — INCLUSIVE os halfwords isolados de `LONG_BRANCH_PREFIX`/`SUFFIX`, cada um
+    /// avança o PC em 2 — mas 4 para um candidato Thumb-2 GENUÍNO de 32 bits (B2.1+): o decoder
+    /// empacota os dois halfwords em {@code raw()} como `(hi<<16)|lo`, e todo `hi` válido para os
+    /// três padrões de top5 de 32 bits (`0b11101/0b11110/0b11111`, ver `ThumbDecoder`) tem o bit
+    /// mais alto ligado — então `raw()` (assinado) é sempre NEGATIVO só nesse caso, nunca para um
+    /// halfword isolado (sempre mascarado a 16 bits, 0x0000-0xFFFF, não-negativo).
+    private int instructionWidth(DecodedInstruction instruction) {
+        if (instruction.instructionSet() == InstructionSet.THUMB) {
+            return instruction.raw() < 0 ? 4 : 2;
+        }
+        return 4;
     }
 }
