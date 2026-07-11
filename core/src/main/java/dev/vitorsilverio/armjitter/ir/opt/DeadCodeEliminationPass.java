@@ -106,7 +106,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.baseValueOverride() < 0 ? (1 << dt.base()) : 0;
                 mask |= operandUse(dt.offset());
-                if (!dt.load()) mask |= (1 << dt.first()) | (1 << (dt.first() + 1)); // STRD reads the pair
+                if (!dt.load()) mask |= (1 << dt.first()) | (1 << dt.second()); // STRD reads the pair
                 yield mask;
             }
             case IrOp.MultipleTransfer mt -> {
@@ -186,7 +186,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                     | (lex.sizeBytes() == 8 ? (1 << (lex.dst() + 1)) : 0);
             case IrOp.StoreExclusive sex -> (1 << sex.dst());
             case IrOp.DoubleTransfer dt -> {
-                int mask = dt.load() ? (1 << dt.first()) | (1 << (dt.first() + 1)) : 0;
+                int mask = dt.load() ? (1 << dt.first()) | (1 << dt.second()) : 0;
                 if (dt.writeback()) mask |= (1 << dt.base());
                 yield mask;
             }

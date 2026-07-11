@@ -38,7 +38,13 @@ final class IrMemoryExecutor {
         if (!core.cpsr().evalCond(load.condition())) {
             return false;
         }
-        support.writeLoadedRegister(core, load.dst(), support.read32Arm7(core, load.address()));
+        int value = switch (load.sizeBytes()) {
+            case 1 -> support.read8Arm7(core, load.address());
+            case 2 -> support.read16Arm7(core, load.address(), load.signed());
+            default -> support.read32Arm7(core, load.address());
+        };
+        value = support.signExtendIfNeeded(value, load.sizeBytes(), load.signed());
+        support.writeLoadedRegister(core, load.dst(), value);
         return load.dst() == 15;
     }
 
@@ -118,7 +124,7 @@ final class IrMemoryExecutor {
         core.clearExclusiveMonitor();
     }
 
-    /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `first+1` sharing one address.
+    /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `second` sharing one address.
     /// @return {@code true} quando o PC foi alterado pela operação
     boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {
         if (!core.cpsr().evalCond(dt.condition())) {
@@ -127,7 +133,7 @@ final class IrMemoryExecutor {
         int offset = support.operand(core, dt.offset());
         int base = dt.baseValueOverride() != -1 ? dt.baseValueOverride() : core.register(dt.base());
         int address = dt.postIndexed() ? base : base + offset;
-        int second = dt.first() + 1;
+        int second = dt.second();
         if (dt.load()) {
             int low = support.read32Arm7(core, address);
             int high = support.read32Arm7(core, address + 4);

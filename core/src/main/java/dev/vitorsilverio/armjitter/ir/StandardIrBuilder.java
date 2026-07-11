@@ -154,6 +154,8 @@ public final class StandardIrBuilder implements IrBuilder {
             case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
                     instruction.destinationRegister(),
                     instruction.immediate(),
+                    instruction.accessSizeBytes(),
+                    instruction.signedAccess(),
                     instruction.condition()));
             case LOAD -> block.add(new IrOp.Load(
                     instruction.destinationRegister(),
@@ -175,9 +177,17 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.writeback(),
                     instruction.postIndexed(),
                     instruction.condition()));
+            // ARM clássico (ARMv5TE): o encoding só tem um campo Rd, então `second` = `first + 1`
+            // sempre (`secondSourceRegister` carrega o registrador de offset Rm nessa forma, não
+            // Rt2 — ver `offset()`). Thumb-2 (B2.3) não tem forma de offset por registrador para
+            // LDRD/STRD, então `secondSourceRegister` fica livre e é reaproveitado para carregar
+            // Rt2 (par arbitrário, independente de Rt — ver `Thumb2LoadStoreDecoder`).
             case DOUBLE_TRANSFER -> block.add(new IrOp.DoubleTransfer(
                     instruction.link(), // carries LDRD (load) vs STRD (store)
                     instruction.destinationRegister(),
+                    instruction.instructionSet() == InstructionSet.THUMB
+                            ? instruction.secondSourceRegister()
+                            : instruction.destinationRegister() + 1,
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     offset(instruction),
@@ -556,10 +566,33 @@ public final class StandardIrBuilder implements IrBuilder {
                     false,
                     negated);
         }
+        // Thumb-2 (B2.3) forma T2 registrador `[Rn, Rm, LSL #imm2]`: distinta do offset por
+        // registrador Thumb-1 (`LDR Rd,[Rb,Ro]`, sem shift) só nas instruções de 32 bits — o bit
+        // mais alto de `raw` está sempre ligado num candidato Thumb-2 genuíno (nunca num halfword
+        // isolado), mesmo truque de `StandardIrBlockLifter#instructionWidth` desde B2.2.
+        if (instruction.raw() < 0) {
+            int imm2 = (instruction.raw() >>> THUMB2_REGISTER_OFFSET_SHIFT_SHIFT) & THUMB2_REGISTER_OFFSET_SHIFT_MASK;
+            if (imm2 != 0) {
+                return new IrOperand.ShiftedRegister(
+                        instruction.secondSourceRegister(),
+                        ShiftType.LSL,
+                        imm2,
+                        -1,
+                        registerValueOverride(instruction, instruction.secondSourceRegister()),
+                        -1,
+                        false,
+                        false);
+            }
+        }
         return new IrOperand.Register(
                 instruction.secondSourceRegister(),
                 registerValueOverride(instruction, instruction.secondSourceRegister()));
     }
+
+    /// `imm2` (bits 5:4) do offset de registrador Thumb-2 T2 (`[Rn, Rm, LSL #imm2]`) — ARM DDI
+    /// 0406C A5.3.1 `@ldst_rr`.
+    private static final int THUMB2_REGISTER_OFFSET_SHIFT_SHIFT = 4;
+    private static final int THUMB2_REGISTER_OFFSET_SHIFT_MASK = 0x3;
 
     private int baseValueOverride(DecodedInstruction instruction) {
         if (instruction.sourceRegister() != 15) {

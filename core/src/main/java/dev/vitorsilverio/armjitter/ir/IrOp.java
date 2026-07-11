@@ -253,13 +253,17 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.CLEAR_EXCLUSIVE; }
     }
 
-    /// Transferência de palavra dupla ARMv5TE (LDRD/STRD): dois acessos de 32 bits consecutivos
-    /// a `first` e `first+1`, com um único cálculo de endereço/writeback.
+    /// Transferência de palavra dupla (LDRD/STRD): dois acessos de 32 bits consecutivos a
+    /// `first` e `second`, com um único cálculo de endereço/writeback.
     record DoubleTransfer(
             /// `true` para LDRD (load), `false` para STRD (store).
             boolean load,
-            /// Primeiro registrador do par (Rd); o segundo é `first + 1`.
+            /// Primeiro registrador do par (Rt).
             int first,
+            /// Segundo registrador do par (Rt2). No ARM clássico (ARMv5TE) o encoding só tem um
+            /// campo Rd, então `second` é sempre `first + 1`; no Thumb-2 (B2.3) `Rt`/`Rt2` são
+            /// campos independentes no encoding e podem ser um par arbitrário (não-adjacente).
+            int second,
             /// Registrador base do endereço.
             int base,
             /// Valor fixo da base quando o registrador base é `PC`, ou `-1`.
@@ -294,14 +298,25 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.SWAP; }
     }
 
-    /// Lê uma word de endereço absoluto literal.
+    /// Lê um valor de endereço absoluto literal (pool de constantes relativo ao PC).
     record LoadLiteral(
             /// Registrador de destino.
             int dst,
-            /// Endereço absoluto a ler.
+            /// Endereço absoluto a ler (já alinhado/resolvido pelo decoder — ver `ADR`/`LDR
+            /// Rt,[PC,#imm]`).
             int address,
+            /// Tamanho do acesso em bytes (1, 2 ou 4). Thumb-1 só tinha a forma word (4); as formas
+            /// Thumb-2 `LDRB`/`LDRH`/`LDRSB`/`LDRSH` literais (B2.3) reusam este mesmo IrOp.
+            int sizeBytes,
+            /// Indica extensão com sinal (`LDRSB`/`LDRSH` literais, B2.3).
+            boolean signed,
             /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
+        /// Cria uma leitura literal de word sem sinal (forma clássica Thumb-1).
+        public LoadLiteral(int dst, int address, Condition condition) {
+            this(dst, address, 4, false, condition);
+        }
+
         @Override public int kind() { return Kind.LOAD_LITERAL; }
     }
 

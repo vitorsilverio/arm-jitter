@@ -639,7 +639,7 @@ public final class AsmBlockCompiler {
         }
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
 
-        int second = dt.first() + 1;
+        int second = dt.second();
         if (dt.load()) {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
@@ -1620,7 +1620,15 @@ public final class AsmBlockCompiler {
     private void emitLoadLiteral(MethodVisitor method, IrOp.LoadLiteral lit) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, lit.address());
-        AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+        String readHelper = switch (lit.sizeBytes()) {
+            case 1 -> "loadByte";
+            case 2 -> lit.signed() ? "loadHalfSigned" : "loadHalf";
+            default -> "loadWord";
+        };
+        AsmBytecode.invokeStatic(method, HELPERS, readHelper, CORE_I_TO_I);
+        if (lit.sizeBytes() == 1 && lit.signed()) {
+            method.visitInsn(Opcodes.I2B);
+        }
         if (lit.dst() == PC_REGISTER) {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);

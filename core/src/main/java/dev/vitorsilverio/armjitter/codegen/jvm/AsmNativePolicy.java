@@ -65,7 +65,11 @@ public final class AsmNativePolicy {
             case IrOp.LoadExclusive ignored -> true;
             case IrOp.StoreExclusive ignored -> true;
             case IrOp.ClearExclusive ignored -> true;
-            case IrOp.DoubleTransfer d -> d.first() + 1 <= (d.load() ? 14 : 15);
+            // LDRD para o par (first,second) escreve os dois via emitStoreRegister puro, sem o
+            // tratamento de interworking que emitLoad/emitLoadLiteral dão a PC — então nenhum dos
+            // dois pode ser PC num load. STRD só LÊ os registradores (sem troca de modo), então PC
+            // como origem é seguro nativamente.
+            case IrOp.DoubleTransfer d -> !d.load() || (d.first() != 15 && d.second() != 15);
             case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
             case IrOp.Store ignored -> true;
             case IrOp.LoadLiteral ignored -> true;

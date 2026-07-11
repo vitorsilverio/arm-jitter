@@ -412,6 +412,19 @@ public final class ThumbDecoder implements InstructionDecoder {
             // "extensão ausente").
             return DecodedInstruction.unimplemented(address, (hi << 16) | lo, InstructionSet.THUMB, Condition.AL);
         }
+        // `top5 == 0b11101`/`0b11111` NÃO podem receber o mesmo tratamento acima sem quebrar
+        // compatibilidade: ao contrário de `0b11110` (cuja ambiguidade com o par legado `BL`/`BLX`
+        // é resolvida olhando o SEGUNDO halfword via `BRANCH_WITH_LINK_MASK`), estes dois valores
+        // de `top5` também são o formato EXATO do halfword de SUFIXO de um `BL` (`0xF800-0xFFFF`)
+        // ou `BLX` (`0xE800-0xEFFF`) quando esse sufixo é decodificado como uma instrução própria e
+        // independente (`decode()` chamado diretamente no endereço do sufixo — é assim que o
+        // interpretador avança pelo par prefixo+sufixo, 2 bytes por vez, sem re-fetch atômico do
+        // par: ver `ThumbTwoDecoderTest#legacyBlPrefixAndSuffixDecodeIdenticallyWithThumb2Enabled`).
+        // Essa ambiguidade é real e não pode ser resolvida só com os bits deste halfword — exige
+        // contexto (o halfword anterior era mesmo um prefixo?) que este método não tem. Continua
+        // delegando ao caminho legado quando nenhuma extensão reivindica, como antes de B2.3 —
+        // rastreado como limitação conhecida em B2.2.2 (agora também alcança `top5=0b11111`, além
+        // do `0b11101` original; ver `tasks/trilha-b-arquiteturas/b2.2.2-thumb2-reserved-encoding-undefined.md`).
         return null;
     }
 
