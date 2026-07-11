@@ -158,15 +158,17 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
     @Test
     void t4UnprivilegedFormIsNotClaimedAsLoad() {
         // P=1,U=1,W=0 (STRT/LDRT) — fora do escopo desta task; o decoder devolve `null` (não
-        // reivindica). Devido à ambiguidade conhecida e já rastreada em B2.2.2 (`top5=0b11111`
-        // também é o formato exato do sufixo standalone de um `BL`, ver `ThumbDecoder`), o
-        // `ThumbDecoder` cai no caminho legado em vez de UNDEFINED explícito — o importante aqui é
-        // que NUNCA vira `LOAD`/`STORE` (nenhuma semântica de load/store incorreta é executada).
+        // reivindica esse sub-encoding). B2.2.2: como `top8` continua batendo com
+        // `SINGLE_UNSIGNED_TOP8` (`claimsEncodingSpace`), o `ThumbDecoder` agora reconhece que é
+        // estruturalmente o espaço desta classe e vira UNDEFINED explícito em vez de cair no
+        // caminho legado BL/BLX — o importante continua sendo que NUNCA vira `LOAD`/`STORE`
+        // (nenhuma semântica de load/store incorreta é executada).
         TestAddressSpace memory = new TestAddressSpace(16);
         int raw = t4(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, true, true, false, 4);
         memory.put16(0, hi(raw));
         memory.put16(2, lo(raw));
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.LOAD, instruction.kind());
         assertNotEquals(InstructionKind.STORE, instruction.kind());
     }
@@ -364,25 +366,28 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
 
     @Test
     void stmWideWithPcInListIsNotClaimedAsStoreMultiple() {
-        // STM com PC na lista é UNPREDICTABLE; o decoder devolve `null`. Mesma limitação conhecida
-        // de `t4UnprivilegedFormIsNotClaimedAsLoad` acima (B2.2.2) — o essencial é que a semântica
-        // errada de STORE_MULTIPLE nunca é executada.
+        // STM com PC na lista é UNPREDICTABLE; o decoder devolve `null`. B2.2.2: `raw` continua
+        // batendo com `EXTRA_TOP7` (`claimsEncodingSpace`), então vira UNDEFINED explícito em vez
+        // de cair no caminho legado — o essencial continua sendo que a semântica errada de
+        // STORE_MULTIPLE nunca é executada.
         TestAddressSpace memory = new TestAddressSpace(16);
         int raw = ldmStm(false, true, false, 1, (1 << 0) | (1 << 15));
         memory.put16(0, hi(raw));
         memory.put16(2, lo(raw));
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.STORE_MULTIPLE, instruction.kind());
     }
 
     @Test
     void ldmWideWithStackPointerInListIsNotClaimedAsLoadMultiple() {
-        // SP na lista é UNPREDICTABLE; mesma limitação conhecida acima.
+        // SP na lista é UNPREDICTABLE; mesma correção de B2.2.2 do teste acima.
         TestAddressSpace memory = new TestAddressSpace(16);
         int raw = ldmStm(false, true, true, 1, (1 << 0) | (1 << 13));
         memory.put16(0, hi(raw));
         memory.put16(2, lo(raw));
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.LOAD_MULTIPLE, instruction.kind());
     }
 

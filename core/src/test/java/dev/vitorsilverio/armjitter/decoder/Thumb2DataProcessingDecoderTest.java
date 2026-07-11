@@ -253,6 +253,27 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
                 "AND/MOVW/ORR de Thumb-2 (B2.2) ainda não têm emissão ASM nativa");
     }
 
+    // ── B2.2.2: op4 reservado sob o prefixo 0b1110101 vira UNDEFINED, não LONG_BRANCH_SUFFIX ──
+
+    @Test
+    void reservedOp4UnderRegisterFormPrefixIsUndefinedNotLongBranchSuffix() {
+        // op4 = 0b1100 (PKH na tabela A5-10 real, não implementado por esta classe — ver
+        // Thumb2DataProcessingDecoder#decodeRegisterForm): estruturalmente dentro do prefixo de 7
+        // bits que esta extensão reconhece (0b1110101), mas devolve `null` porque `plainKindFor`
+        // não cobre esse op4. Antes de B2.2.2, `ThumbDecoder` delegava isso ao caminho legado
+        // BL/BLX de 16 bits (LONG_BRANCH_SUFFIX) por ausência de outra alternativa.
+        ThumbDecoder decoder = new ThumbDecoder(THUMB2_ARCH);
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int reservedOp4 = 0b1100;
+        memory.put16(0, registerFormHi(reservedOp4, false, 0));
+        memory.put16(2, registerFormLo(0b000, 0, 0b00, SHIFT_LSL, 1));
+
+        DecodedInstruction instruction = decoder.decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.LONG_BRANCH_SUFFIX, instruction.kind());
+    }
+
     // ── Gating G2: sem THUMB2, o candidato cai no caminho legado (comportamento inalterado) ─
 
     @Test

@@ -59,7 +59,7 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
-        if (((raw >>> REGISTER_FORM_PREFIX_SHIFT) & REGISTER_FORM_PREFIX_MASK) == REGISTER_FORM_PREFIX) {
+        if (isRegisterFormPrefix(raw)) {
             return decodeRegisterForm(raw, address, condition);
         }
         if (((raw >>> TOP5_SHIFT) & TOP5_MASK) != IMMEDIATE_GROUP_TOP5) {
@@ -69,6 +69,21 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
             return decodeModifiedImmediate(raw, address, condition);
         }
         return decodePlainGroup(raw, address, condition);
+    }
+
+    /// B2.2.2: `raw` cai dentro do prefixo de 7 bits `REGISTER_FORM_PREFIX` — o único subconjunto
+    /// desta classe fora de `top5 == 0b11110` (que o `ThumbDecoder` já trata como UNDEFINED
+    /// incondicional quando nenhuma extensão reivindica, sem precisar desta distinção). Usado por
+    /// {@link #tryDecode} e por {@link #claimsEncodingSpace}: os `op4` reservados dentro deste
+    /// prefixo (ex. `PKH`, formas MVE) devolvem `null` em {@link #decodeRegisterForm} mas ainda
+    /// contam como "meu espaço, sub-encoding reservado" para o `ThumbDecoder`.
+    private static boolean isRegisterFormPrefix(int raw) {
+        return ((raw >>> REGISTER_FORM_PREFIX_SHIFT) & REGISTER_FORM_PREFIX_MASK) == REGISTER_FORM_PREFIX;
+    }
+
+    @Override
+    public boolean claimsEncodingSpace(int raw) {
+        return isRegisterFormPrefix(raw);
     }
 
     // ── Data-processing (modified immediate) — A5.3.3 ──────────────────────────────────────

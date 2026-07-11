@@ -101,6 +101,21 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         return decodeExtraLoadStoreOrMultiple(raw, address, condition);
     }
 
+    /// B2.2.2: `raw` cai estruturalmente no espaço "Load/store single data item" (`top8`) ou
+    /// "Load/store dual/exclusive/table branch"/"Load/store multiple" (`EXTRA_TOP7`) que esta
+    /// classe reconhece — mesmo quando o sub-encoding específico (ex. a forma unprivileged do T4,
+    /// `TBB`/`TBH`, `STM` com `PC` na lista) devolve `null` em {@link #tryDecode}. Usado pelo
+    /// `ThumbDecoder` para decidir UNDEFINED controlado em vez de delegar ao caminho legado
+    /// `BL`/`BLX` — ver {@link dev.vitorsilverio.armjitter.arch.DecoderExtension#claimsEncodingSpace}.
+    @Override
+    public boolean claimsEncodingSpace(int raw) {
+        int top8 = (raw >>> TOP8_SHIFT) & TOP8_MASK;
+        if (top8 == SINGLE_UNSIGNED_TOP8 || top8 == SINGLE_SIGNED_TOP8) {
+            return true;
+        }
+        return ((raw >>> TOP7_SHIFT) & TOP7_MASK) == EXTRA_TOP7;
+    }
+
     // ── LDR/STR/LDRB/STRB/LDRH/STRH/LDRSB/LDRSH: T2/T3/T4 + literal ────────────────────────
 
     private DecodedInstruction decodeSingleTransfer(int raw, int address, Condition condition, boolean signedGroup) {
