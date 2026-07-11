@@ -12,6 +12,32 @@ válida como SUBPRODUTO de C0 (superblocos), onde flags em locals atravessando
 fronteiras de bloco fazem sentido. **Só execute isolada com A/B bench provando ganho;
 sem ganho medido, feche com o resultado negativo registrado.**
 
+**REAVALIAÇÃO 2026-07-11 (pós-C0/superblocos, dados novos — a task tinha sido fechada
+em 2026-07-11 mais cedo citando só o profile de 2026-07-08, sem medir de novo depois de
+tudo que mudou desde então; isto corrige isso).** JFR novo (120s, `settings=profile`,
+backend `asm superblocks`, estado hoje = DEFAULT de produção) em DOIS cenários reais via
+savestate:
+- **MKDS corrida** (`roms/Mario Kart DS....ss`, 2500 chunks): 782 amostras no thread
+  principal. Folhas relacionadas a flag/condição (`AsmRuntimeHelpers.condEq`/`condNe`):
+  **3 amostras (~0,4%)**. Dominante: `JitRuntime.execute` (dispatch, ~92 amostras ≈ 12%
+  — CAIU de ~26% pré-superbloco, mas ainda o maior item isolado), bloco superbloco
+  gerado (~36), acesso a barramento ARM7/ARM9 (~89 combinado), `HashMap.merge` (~49,
+  RUÍDO do histograma de PC só do `Main`, não existe no caminho real do emulador/GUI).
+- **JUS intro Mobiclip** (`roms/JUS.ss`, 3000 chunks): 459 amostras. Folhas de
+  `CpsrRegister.evalCond` (caminho interpretado, não nem o guard ASM especializado):
+  **2 amostras (~0,4%)**. Dominante: bloco superbloco gerado (~50 ≈ 11%),
+  `JitRuntime.execute` (~63 ≈ 14%), acesso a barramento ARM7 (~55).
+
+**Conclusão: a conclusão de 2026-07-08 SE MANTÉM mesmo depois de C0 (superblocos) e de
+toda a evolução de performance desde então — flags/condição continuam ~0% das folhas
+quentes em gameplay real, em DOIS jogos com perfis de carga diferentes (dispatch-bound
+vs codegen-bound).** A hipótese de que "os superblocos mudariam o perfil o suficiente
+para valer a pena" (aventada na sessão de 2026-07-08) NÃO se confirmou com dados reais.
+Isso não é mais uma suposição herdada — foi medido de novo, hoje, no estado atual do
+código. Reabrir só se um profile futuro (jogo novo, cenário novo, ou mudança grande de
+arquitetura como C0.5/superblocos maiores) mostrar sinal diferente — trazer os números
+na hora de reabrir, não reabrir "só para ver".
+
 ## Contexto
 
 Hoje cada op ALU com `setFlags` lê/escreve os flags no objeto CPSR (campo do core) via
