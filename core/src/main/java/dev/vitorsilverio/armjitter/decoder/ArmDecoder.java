@@ -50,6 +50,49 @@ public final class ArmDecoder implements InstructionDecoder {
                     InstructionKind.BRANCH_EXCHANGE, -1, -1, -1, target | 1, false, false, true);
         }
 
+        // WFI (ARMv6K hint): `cccc 0011 0010 0000 1111 0000 0000 0011`. No hardware real,
+        // pré-v6 trataria este padrão como um MSR(registrador)-para-CPSR inofensivo (Rm=PC,
+        // máscara de campo vazia) — mas por consistência com o resto deste decoder (mesmo
+        // tratamento de LDREX/STREX/CLREX), a arquitetura sem WAIT_HINTS recebe UNDEFINED
+        // explícito em vez de cair no decode MSR abaixo.
+        if ((raw & 0x0FFF_FFFF) == 0x0320_F003) {
+            if (!architecture.has(ArmFeature.WAIT_HINTS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    InstructionKind.WAIT_FOR_INTERRUPT, -1, -1, -1, 0, false, false, false);
+        }
+
+        // SETEND (ARMv6): `1111 0001 0000 0001 0000 00 E 0 0000 0000` — espaço incondicional,
+        // compartilha o prefixo de 12 bits `1111 0001 0000` com CPS (abaixo); distingue-se pelo
+        // bit 16 (SETEND=1, CPS=0/SBZP).
+        if ((raw & 0xFFFF_FDFF) == 0xF101_0000) {
+            if (!architecture.has(ArmFeature.SETEND_BIG_ENDIAN_DATA)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int endianBit = (raw >>> 9) & 1;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.SETEND, -1, -1, -1, endianBit, false, false, false);
+        }
+
+        // CPS/CPSIE/CPSID (ARMv6): `1111 0001 0000 imod M 0 0000000 A I F 0 mode` — espaço
+        // incondicional (cond=1111, forçado AL). `imod` bits 19:18, `M` bit 17 (troca de modo
+        // válida), `A`/`I`/`F` bits 8/7/6, `mode` bits 4:0 (válido só com M=1).
+        if ((raw & 0xFFF1_FE20) == 0xF100_0000) {
+            if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int imod = (raw >>> 18) & 0x3;
+            int modeChange = (raw >>> 17) & 1;
+            int a = (raw >>> 8) & 1;
+            int i = (raw >>> 7) & 1;
+            int f = (raw >>> 6) & 1;
+            int mode = raw & 0x1F;
+            int packed = imod | (modeChange << 2) | (a << 3) | (i << 4) | (f << 5) | (mode << 6);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.CPS, -1, -1, -1, packed, false, false, false);
+        }
+
         if ((raw & 0x0E00_0000) == 0x0A00_0000) {
             boolean link = (raw & (1 << 24)) != 0;
             int offset = signExtend(raw & 0x00FF_FFFF, 24) << 2;
@@ -409,6 +452,39 @@ public final class ArmDecoder implements InstructionDecoder {
                     load ? InstructionKind.LOAD : InstructionKind.STORE,
                     rd, rn, immediateOffset ? -1 : offset, signedOffset, immediateOffset, false, false,
                     byteAccess ? 1 : 4, false, writeback || !preIndexed, !preIndexed);
+        }
+
+        // SRS (ARMv6): `1111 100 P U 1 W 0 1101 0000 0101 000 mode` — empilha LR e SPSR ATUAIS na
+        // pilha do modo alvo. Espaço incondicional; compartilha bits 27:25=100 com LDM/STM
+        // (abaixo), então precisa vir antes e virar UNDEFINED explícito sem a feature (em vez de
+        // cair no decode de LDM/STM, mesmo cuidado do LDREX/STREX/CLREX).
+        if ((raw & 0xFE5F_FFE0) == 0xF84D_0500) {
+            if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            boolean preIndexed = (raw & (1 << 24)) != 0;
+            boolean addOffset = (raw & (1 << 23)) != 0;
+            boolean writeback = (raw & (1 << 21)) != 0;
+            int mode = raw & 0x1F;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.STORE_RETURN_STATE, -1, -1, -1, mode, false, false, false,
+                    0, false, writeback, false, BlockTransferMode.fromArmBits(preIndexed, addOffset));
+        }
+
+        // RFE (ARMv6): `1111 100 P U 0 W 1 Rn 0000 1010 0000 0000` — carrega PC e CPSR da pilha
+        // apontada por Rn. Mesmo motivo de ordem/gating que SRS acima; bit 22=0 e bit 20=1
+        // (load) a distinguem de SRS (bit22=1, bit20=0/store).
+        if ((raw & 0xFE50_FFFF) == 0xF810_0A00) {
+            if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            boolean preIndexed = (raw & (1 << 24)) != 0;
+            boolean addOffset = (raw & (1 << 23)) != 0;
+            boolean writeback = (raw & (1 << 21)) != 0;
+            int rn = (raw >>> 16) & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.RETURN_FROM_EXCEPTION, -1, rn, -1, 0, false, false, false,
+                    0, false, writeback, false, BlockTransferMode.fromArmBits(preIndexed, addOffset));
         }
 
         if ((raw & 0x0E00_0000) == 0x0800_0000) {

@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -54,6 +54,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int LOAD_EXCLUSIVE = 27;
         public static final int STORE_EXCLUSIVE = 28;
         public static final int CLEAR_EXCLUSIVE = 29;
+        public static final int CHANGE_PROCESSOR_STATE = 30;
+        public static final int SET_ENDIANNESS = 31;
+        public static final int STORE_RETURN_STATE = 32;
+        public static final int RETURN_FROM_EXCEPTION = 33;
+        public static final int WAIT_FOR_INTERRUPT = 34;
     }
 
     /// Operacao ALU generica.
@@ -564,5 +569,76 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Tamanho da instrução em bytes.
             int sizeBytes) implements IrOp {
         @Override public int kind() { return Kind.FETCH; }
+    }
+
+    /// `CPS`/`CPSIE`/`CPSID` (ARMv6): altera os bits A/I/F e/ou o modo do CPSR pelo mesmo
+    /// caminho de troca de banco usado por `MSR`/entrada de exceção ({@code ArmCore#setCpsr}).
+    /// UNPREDICTABLE em modo User: tratado como NOP (ver `IrSystemExecutor`).
+    record ChangeProcessorState(
+            /// `true` quando `mode` deve substituir os 5 bits de modo do CPSR.
+            boolean changeMode,
+            /// Campo de modo cru (5 bits), válido só quando `changeMode`. Convertido para
+            /// `CpuMode` em tempo de EXECUÇÃO (não no lift) — mantém o mesmo risco de
+            /// `IllegalArgumentException` para bits de modo inválidos que `MSR` já tem hoje.
+            int mode,
+            /// `true` quando A/I/F selecionados devem ser alterados (`imod` = IE ou ID).
+            boolean changeFlags,
+            /// `true` para IE (habilita, limpa os bits selecionados); `false` para ID (desabilita, seta).
+            boolean enable,
+            /// Altera o bit A (abort imprecisa).
+            boolean changeA,
+            /// Altera o bit I (IRQ).
+            boolean changeI,
+            /// Altera o bit F (FIQ).
+            boolean changeF,
+            /// Condição necessária para executar (espaço incondicional → sempre AL).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.CHANGE_PROCESSOR_STATE; }
+    }
+
+    /// `SETEND` (ARMv6): seta o bit E (endianness de dados) do CPSR.
+    record SetEndianness(
+            /// `true` para big-endian, `false` para little-endian.
+            boolean bigEndian,
+            /// Condição necessária para executar (espaço incondicional → sempre AL).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SET_ENDIANNESS; }
+    }
+
+    /// `SRS` (ARMv6): empilha LR e SPSR ATUAIS na pilha (`R13`) de um modo alvo.
+    record StoreReturnState(
+            /// Campo de modo alvo cru (5 bits); convertido para `CpuMode` em tempo de execução.
+            int targetMode,
+            /// Modo de endereçamento (IA/IB/DA/DB).
+            BlockTransferMode addressingMode,
+            /// Indica writeback no `R13` do modo alvo.
+            boolean writeback,
+            /// PC sequencial usado como retorno se o modo atual for User/System (UNPREDICTABLE → UNDEFINED).
+            int sequentialPc,
+            /// Condição necessária para executar (espaço incondicional → sempre AL).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.STORE_RETURN_STATE; }
+    }
+
+    /// `RFE` (ARMv6): carrega PC e CPSR da pilha apontada por `base` (Rn).
+    record ReturnFromException(
+            /// Registrador base (Rn).
+            int base,
+            /// Modo de endereçamento (IA/IB/DA/DB).
+            BlockTransferMode addressingMode,
+            /// Indica writeback em `base`.
+            boolean writeback,
+            /// PC sequencial usado como retorno se o modo atual for User/System (UNPREDICTABLE → UNDEFINED).
+            int sequentialPc,
+            /// Condição necessária para executar (espaço incondicional → sempre AL).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.RETURN_FROM_EXCEPTION; }
+    }
+
+    /// `WFI` (ARMv6K hint): coloca o core em HALT até uma interrupção.
+    record WaitForInterrupt(
+            /// Condição necessária para executar (disfarçada de MSR — pode ser condicional).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.WAIT_FOR_INTERRUPT; }
     }
 }

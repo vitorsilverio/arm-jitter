@@ -73,6 +73,11 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.UNDEFINED -> pcChanged |= system.executeUndefined(core, (IrOp.Undefined) op);
                 case IrOp.Kind.CYCLE -> cycles += cycle.executeCycle((IrOp.Cycle) op);
                 case IrOp.Kind.FETCH -> cycle.executeFetch(core, (IrOp.Fetch) op);
+                case IrOp.Kind.CHANGE_PROCESSOR_STATE -> system.executeChangeProcessorState(core, (IrOp.ChangeProcessorState) op);
+                case IrOp.Kind.SET_ENDIANNESS -> system.executeSetEndianness(core, (IrOp.SetEndianness) op);
+                case IrOp.Kind.STORE_RETURN_STATE -> pcChanged |= transfer.executeStoreReturnState(core, (IrOp.StoreReturnState) op);
+                case IrOp.Kind.RETURN_FROM_EXCEPTION -> pcChanged |= transfer.executeReturnFromException(core, (IrOp.ReturnFromException) op);
+                case IrOp.Kind.WAIT_FOR_INTERRUPT -> system.executeWaitForInterrupt(core, (IrOp.WaitForInterrupt) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -121,6 +126,11 @@ public final class IrBlockExecutor {
             case IrOp.Undefined undef -> system.executeUndefined(core, undef);
             case IrOp.Cycle cycleOp -> { cycle.executeCycle(cycleOp); yield false; }
             case IrOp.Fetch fetch -> { cycle.executeFetch(core, fetch); yield false; }
+            case IrOp.ChangeProcessorState cps -> { system.executeChangeProcessorState(core, cps); yield false; }
+            case IrOp.SetEndianness setend -> { system.executeSetEndianness(core, setend); yield false; }
+            case IrOp.StoreReturnState srs -> transfer.executeStoreReturnState(core, srs);
+            case IrOp.ReturnFromException rfe -> transfer.executeReturnFromException(core, rfe);
+            case IrOp.WaitForInterrupt wfi -> { system.executeWaitForInterrupt(core, wfi); yield false; }
         };
     }
 }

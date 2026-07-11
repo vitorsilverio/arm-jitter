@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.codegen.executor;
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
+import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
@@ -87,5 +88,45 @@ final class IrSystemExecutor {
         core.setProgramCounter(undefined.sequentialPc());
         core.requestException(ArmException.UNDEFINED);
         return true;
+    }
+
+    /// `CPS`/`CPSIE`/`CPSID` (ARMv6): reusa {@link ArmCore#setCpsr} — o mesmo caminho de troca de
+    /// banco que `MSR`/entrada de exceção usam — para que a troca de modo (quando presente)
+    /// rebanque os registradores corretamente. UNPREDICTABLE em modo User: tratado como NOP.
+    void executeChangeProcessorState(ArmCore core, IrOp.ChangeProcessorState cps) {
+        if (!core.cpsr().evalCond(cps.condition())) {
+            return;
+        }
+        if (core.mode() == CpuMode.USER) {
+            return;
+        }
+        int value = core.cpsr().get();
+        if (cps.changeFlags()) {
+            int mask = (cps.changeA() ? CpsrRegister.ABORT_DISABLE_FLAG : 0)
+                    | (cps.changeI() ? CpsrRegister.IRQ_DISABLE_FLAG : 0)
+                    | (cps.changeF() ? CpsrRegister.FIQ_DISABLE_FLAG : 0);
+            value = cps.enable() ? (value & ~mask) : (value | mask);
+        }
+        if (cps.changeMode()) {
+            value = (value & ~0b11111) | cps.mode();
+        }
+        core.setCpsr(value);
+    }
+
+    /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 lançam
+    /// {@link UnsupportedOperationException} (ver {@code IrExecutionSupport}).
+    void executeSetEndianness(ArmCore core, IrOp.SetEndianness setend) {
+        if (!core.cpsr().evalCond(setend.condition())) {
+            return;
+        }
+        core.cpsr().setBigEndian(setend.bigEndian());
+    }
+
+    /// `WFI` (ARMv6K hint): coloca o core em HALT (acorda com {@code setInterruptLine(true)}).
+    void executeWaitForInterrupt(ArmCore core, IrOp.WaitForInterrupt wfi) {
+        if (!core.cpsr().evalCond(wfi.condition())) {
+            return;
+        }
+        core.halt();
     }
 }

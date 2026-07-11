@@ -93,6 +93,7 @@ final class IrExecutionSupport {
     }
 
     int read32Arm7(ArmCore core, int address) {
+        checkLittleEndianData(core);
         int aligned = address & ~3;
         int value = core.memory().read32(aligned);
         core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
@@ -100,12 +101,14 @@ final class IrExecutionSupport {
     }
 
     int read8Arm7(ArmCore core, int address) {
+        checkLittleEndianData(core);
         int value = core.memory().read8(address);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
         return value;
     }
 
     int read16Arm7(ArmCore core, int address, boolean signed) {
+        checkLittleEndianData(core);
         if (signed && (address & 1) != 0) {
             int value = core.memory().read8(address);
             core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
@@ -118,18 +121,31 @@ final class IrExecutionSupport {
     }
 
     void write16Arm7(ArmCore core, int address, int value) {
+        checkLittleEndianData(core);
         core.memory().write16(address, value);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
     }
 
     void write8Arm7(ArmCore core, int address, int value) {
+        checkLittleEndianData(core);
         core.memory().write8(address, value);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
     }
 
     void write32Arm7(ArmCore core, int address, int value) {
+        checkLittleEndianData(core);
         core.memory().write32(address, value);
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+    }
+
+    /// `SETEND` (ARMv6, B1.5 MVP): acessos de dados com CPSR.E=1 (big-endian) não são
+    /// implementados — Linux/3DS rodam little-endian e nunca ligam E; um jogo/SO que ligue
+    /// deve falhar ALTO em vez de corromper silenciosamente (ver a task B1.5).
+    private void checkLittleEndianData(ArmCore core) {
+        if (core.cpsr().isBigEndian()) {
+            throw new UnsupportedOperationException(
+                    "Acessos de dados com CPSR.E=1 (big-endian) não são suportados (B1.5 MVP)");
+        }
     }
 
     int effectiveRegisterMask(int mask, boolean emptyRegisterList) {

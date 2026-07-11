@@ -23,6 +23,14 @@ public final class CpsrRegister {
     public static final int IRQ_DISABLE_FLAG = 1 << 7;
     /// Bit F do CPSR.
     public static final int FIQ_DISABLE_FLAG = 1 << 6;
+    /// Bit A do CPSR (mascara de abort imprecisa), alterável por `CPS` (ARMv6). Nenhum
+    /// dispatcher de exceção deste emulador consome este bit hoje (sem linha de abort externa
+    /// modelada); existe para que `CPS`/`MSR` possam lê-lo/escrevê-lo corretamente.
+    public static final int ABORT_DISABLE_FLAG = 1 << 8;
+    /// Bit E do CPSR (endianness de dados), setado por `SETEND` (ARMv6). Acessos de dados com
+    /// E=1 (big-endian) não são implementados — ver os helpers `readXArm7`/`writeXArm7` em
+    /// {@code IrExecutionSupport}.
+    public static final int ENDIAN_FLAG = 1 << 9;
 
     private int value = CpuMode.SYSTEM.bits();
 
@@ -143,6 +151,26 @@ public final class CpsrRegister {
     /// Ativa ou desativa a máscara de FIQ.
     public void setFiqDisabled(boolean disabled) {
         setFlag(FIQ_DISABLE_FLAG, disabled);
+    }
+
+    /// Retorna `true` quando abort imprecisa está mascarada pelo bit A.
+    public boolean abortDisabled() {
+        return (value & ABORT_DISABLE_FLAG) != 0;
+    }
+
+    /// Ativa ou desativa a máscara de abort imprecisa.
+    public void setAbortDisabled(boolean disabled) {
+        setFlag(ABORT_DISABLE_FLAG, disabled);
+    }
+
+    /// Retorna `true` quando o bit E indica acessos de dados big-endian.
+    public boolean isBigEndian() {
+        return (value & ENDIAN_FLAG) != 0;
+    }
+
+    /// Ativa ou desativa o bit E de endianness de dados.
+    public void setBigEndian(boolean bigEndian) {
+        setFlag(ENDIAN_FLAG, bigEndian);
     }
 
     private void setFlag(int mask, boolean enabled) {

@@ -130,5 +130,21 @@ public enum InstructionKind {
     /// Software interrupt.
     SWI,
     /// Coprocessor register transfer (`MCR`/`MRC`), e.g. CP15 on the ARM9.
-    COPROCESSOR
+    COPROCESSOR,
+    /// `CPS`/`CPSIE`/`CPSID` (ARMv6): altera os bits A/I/F e/ou o modo do CPSR. `immediate`
+    /// empacota: bits 1:0 = `imod`, bit 2 = `M` (mode change), bit 3 = `A`, bit 4 = `I`,
+    /// bit 5 = `F`, bits 10:6 = campo de modo cru (5 bits, válido só quando `M`=1).
+    CPS,
+    /// `SETEND` (ARMv6): seta o bit E (endianness de dados) do CPSR. `immediate` = valor do
+    /// bit E (0=LE, 1=BE).
+    SETEND,
+    /// `SRS` (ARMv6): empilha LR e SPSR atuais na pilha de um modo alvo. `immediate` = campo de
+    /// modo alvo cru (5 bits); `writeback`/`blockTransferMode` como em `LDM`/`STM`.
+    STORE_RETURN_STATE,
+    /// `RFE` (ARMv6): carrega PC e CPSR da pilha apontada por `sourceRegister` (Rn).
+    /// `writeback`/`blockTransferMode` como em `LDM`/`STM`.
+    RETURN_FROM_EXCEPTION,
+    /// `WFI` (ARMv6K, hint): coloca o core em HALT até uma interrupção. Disfarçado de
+    /// `MSR`(registrador) com máscara de campo vazia — ver `ArmDecoder`.
+    WAIT_FOR_INTERRUPT
 }

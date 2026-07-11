@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
@@ -94,5 +95,61 @@ final class IrTransferExecutor {
         }
         core.setRegister(13, current);
         return pcChanged;
+    }
+
+    /// `SRS` (ARMv6): empilha LR e SPSR ATUAIS (do modo em que a instrução executa) na pilha
+    /// (`R13`) de um modo alvo. UNPREDICTABLE em modo User/System (sem SPSR/banco privilegiado
+    /// próprio) — tratado como UNDEFINED.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    boolean executeStoreReturnState(ArmCore core, IrOp.StoreReturnState srs) {
+        if (!core.cpsr().evalCond(srs.condition())) {
+            return false;
+        }
+        CpuMode current = core.mode();
+        if (current == CpuMode.USER || current == CpuMode.SYSTEM) {
+            core.setProgramCounter(srs.sequentialPc());
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        CpuMode target = CpuMode.fromBits(srs.targetMode());
+        int targetSp = core.bankedRegister(target, 13);
+        int address = srs.addressingMode().startAddress(targetSp, 2) & ~3;
+        int writebackAddress = srs.addressingMode().writebackAddress(targetSp, 2);
+        support.write32Arm7(core, address, core.register(14));
+        support.write32Arm7(core, address + 4, core.spsr(current));
+        if (srs.writeback()) {
+            core.setBankedRegister(target, 13, writebackAddress);
+        }
+        return false;
+    }
+
+    /// `RFE` (ARMv6): carrega PC e CPSR da pilha apontada por `base` (Rn); reusa
+    /// {@link ArmCore#setCpsr} para trocar modo/banco antes de alinhar o PC pelo bit T já
+    /// restaurado (mesma ordem de {@code IrExecutionSupport#restoreCpsrFromCurrentSpsr} +
+    /// {@code alignAndSetPc}). UNPREDICTABLE em modo User/System — tratado como UNDEFINED.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    boolean executeReturnFromException(ArmCore core, IrOp.ReturnFromException rfe) {
+        if (!core.cpsr().evalCond(rfe.condition())) {
+            return false;
+        }
+        CpuMode current = core.mode();
+        if (current == CpuMode.USER || current == CpuMode.SYSTEM) {
+            core.setProgramCounter(rfe.sequentialPc());
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        int base = core.register(rfe.base());
+        int address = rfe.addressingMode().startAddress(base, 2) & ~3;
+        int writebackAddress = rfe.addressingMode().writebackAddress(base, 2);
+        int newPc = support.read32Arm7(core, address);
+        int newCpsr = support.read32Arm7(core, address + 4);
+        if (rfe.writeback()) {
+            core.setRegister(rfe.base(), writebackAddress);
+        }
+        core.setCpsr(newCpsr);
+        support.alignAndSetPc(core, newPc);
+        return true;
     }
 }

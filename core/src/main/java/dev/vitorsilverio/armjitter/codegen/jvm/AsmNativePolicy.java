@@ -85,6 +85,13 @@ public final class AsmNativePolicy {
             case IrOp.Swap ignored -> false;
             case IrOp.Cycle ignored -> true;
             case IrOp.Fetch ignored -> true;
+            // Instruções de sistema ARMv6 da B1.5 (CPS/SETEND/SRS/RFE/WFI): interpretadas até a
+            // emissão nativa da B1.6, junto com as demais ops v6 de B1.2-B1.4.
+            case IrOp.ChangeProcessorState ignored -> false;
+            case IrOp.SetEndianness ignored -> false;
+            case IrOp.StoreReturnState ignored -> false;
+            case IrOp.ReturnFromException ignored -> false;
+            case IrOp.WaitForInterrupt ignored -> false;
         };
     }
 

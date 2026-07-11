@@ -271,6 +271,34 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
+            case CPS -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.ChangeProcessorState(
+                        ((packed >>> 2) & 1) != 0,   // changeMode (M)
+                        (packed >>> 6) & 0x1F,        // mode cru
+                        ((packed >>> 1) & 1) != 0,    // changeFlags (imod bit 1)
+                        (packed & 1) == 0,            // enable: imod bit 0 == 0 -> IE
+                        ((packed >>> 3) & 1) != 0,    // changeA
+                        ((packed >>> 4) & 1) != 0,    // changeI
+                        ((packed >>> 5) & 1) != 0,    // changeF
+                        instruction.condition()));
+            }
+            case SETEND -> block.add(new IrOp.SetEndianness(
+                    instruction.immediate() != 0,
+                    instruction.condition()));
+            case STORE_RETURN_STATE -> block.add(new IrOp.StoreReturnState(
+                    instruction.immediate(),
+                    instruction.blockTransferMode(),
+                    instruction.writeback(),
+                    instruction.address() + instructionWidth(instruction),
+                    instruction.condition()));
+            case RETURN_FROM_EXCEPTION -> block.add(new IrOp.ReturnFromException(
+                    instruction.sourceRegister(),
+                    instruction.blockTransferMode(),
+                    instruction.writeback(),
+                    instruction.address() + instructionWidth(instruction),
+                    instruction.condition()));
+            case WAIT_FOR_INTERRUPT -> block.add(new IrOp.WaitForInterrupt(instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
