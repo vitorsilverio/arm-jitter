@@ -1,6 +1,11 @@
 # A4 — Factory pública + bench em 3 ambientes
 
 **Trilha:** A · **Depende de:** A3 · **Repo:** arm-jitter (+ runs em gbaemu/ndsemu)
+**Nota (2026-07-11):** a factory + os benches em JBR 25 puro e JBR/OpenJDK+Graal
+(Unchained) podem começar já; a coluna "GraalVM CE" da tabela de resultados fica
+PENDENTE até o usuário instalar o GraalVM 25 LTS (mesmo bloqueio da A5). Não é motivo
+para adiar a task inteira — só essa parte do bench. Lembrete de escopo: isto é só
+BENCHMARK em JVM normal (gbaemu/ndsemu continuam sem suporte nativo — ver A5).
 
 ## Objetivo
 

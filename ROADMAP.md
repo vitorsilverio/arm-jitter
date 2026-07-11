@@ -69,10 +69,22 @@ compensa.** Razões:
    o caminho ASM atual não pode regredir.
 3. **Dependência pesada** — truffle-api + polyglot são grandes; o core hoje só depende
    de `org.ow2.asm`. Truffle deve ficar em módulo Maven separado e opcional.
-4. **O que Truffle compra de verdade:** JIT dentro de **native-image** (o backend ASM
-   define classes em runtime, o que native-image não suporta — hoje um emulador
-   compilado nativamente ficaria preso no `INTERPRETED_IR`), deoptimização/perfis
-   automáticos e potencial simplificação do emissor (sem escrever bytecode à mão).
+4. **O que Truffle compra de verdade — e o ÚNICO motivo real da trilha A:** JIT dentro
+   de **native-image** (o backend ASM define classes em runtime, o que native-image não
+   suporta — hoje um binário nativo ficaria preso no `INTERPRETED_IR`). Deoptimização/
+   perfis automáticos e a simplificação do emissor (sem escrever bytecode à mão) são
+   subprodutos, não a motivação — em JVM normal (sem native-image) o backend ASM
+   continua sendo a escolha, não há razão para trocar.
+
+**Alvo do native-image (A5): `armbox`, não gbaemu/ndsemu.** Decisão explícita do
+usuário (2026-07-11): sem interesse em dar suporte nativo a gbaemu/ndsemu por ora —
+`armbox` é o hospedeiro mais simples (sem GUI/Swing/áudio) e o candidato natural para a
+demo. **A4 (bench em GraalVM CE de verdade) e A5 (native-image) ficam PENDENTES até o
+usuário instalar o GraalVM 25 LTS** para testar num dos projetos — A0-A3 (spike,
+módulo, emissor, cobertura completa) já foram feitas via "Truffle Unchained" no JBR 25
+(JVMCI), que NÃO precisa de GraalVM instalado; A4/A5 são as primeiras fases que
+precisam de uma distribuição GraalVM real (bench "GraalVM CE" da tabela e o próprio
+`native-image` do A5). Não avançar A4/A5 sem isso disponível.
 
 **Desenho alvo:** `CodegenBackend.TRUFFLE` + `TruffleCodeEmitter` que converte
 `IrBlock` (o mesmo IR, pós-otimizador) em nós Truffle / Bytecode DSL, em módulo
@@ -87,7 +99,7 @@ compensa.** Razões:
 | **A2 — Emissor mínimo** | `TruffleCodeEmitter` cobrindo ALU/Cycle/Fetch com fallback interpretado (mesmo desenho da fase 4 do codegen JVM) | `BlockEquivalenceHarness` verde para os blocos suportados |
 | **A3 — Cobertura completa** | Todas as categorias de `IrOp` (reusar a ordem 5a–5f que funcionou no ASM: memória → branches → multiply → LDM/STM → PSR/SWI → resto) | Divergence-check longo com ROM real (JUS/FireRed) zero divergências |
 | **A4 — Bench honesto** | `JitRuntimeFactory.truffleArmThumb(...)`; bench nos 3 cenários: HotSpot puro, OpenJDK+Graal, GraalVM | Tabela de perf vs ASM publicada no README; decidir default por ambiente |
-| **A5 — native-image demo** | Emulador mínimo (ou gbaemu headless) compilado com native-image usando o backend Truffle | Binário nativo roda ROM de teste com JIT ativo |
+| **A5 — native-image demo** [PENDENTE de GraalVM 25 LTS instalado] | `armbox` (não gbaemu/ndsemu) compilado com native-image usando o backend Truffle | Binário nativo roda um ELF de teste com JIT ativo |
 
 **Risco principal:** Bytecode DSL ainda é relativamente novo; se instável, cair para
 AST clássica (mais verbosa, igualmente suportada). **Kill criterion do A0:** se em
