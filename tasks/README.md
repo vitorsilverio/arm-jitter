@@ -77,6 +77,6 @@ uma task [REFINAR] diretamente.
 | [C2](trilha-c-perf/c2-logic-flags-shifter-nativo.md) | Carry-out do shifter nativo em ops lógicas S | — | ✅ (helpers `shiftedOperandCarry`/`doXxxS`; policy só rejeita dst15+S nas ALU; property test 32 combos × n=0..255 × 2 carries; asmcheck JUS 800 zero divergências; JUS bench 76,5→81,7 fps +6,8%) |
 | [C3](trilha-c-perf/c3-paged-address-space.md) | PagedAddressSpace O(1) | — | ⬜ |
 | [C4](trilha-c-perf/c4-chain-budget-pos-boot.md) | Chain budget pós-boot (repo ndsemu) | — | ✅ FECHADA (ndsemu 85e4b36 + cf7b5c2: bench 256/64 = MKDS +6% SM64DS +7,6% JUS +11,4%; boots ×4 OK; gameplay GUI validado 2026-07-10 → 256/64 é o DEFAULT) |
-| [C5](trilha-c-perf/c5-gbaemu-chaining.md) | Chaining no gbaemu (repo gbaemu) | — | ⬜ |
+| [C5](trilha-c-perf/c5-gbaemu-chaining.md) | Chaining no gbaemu (repo gbaemu) | — | ✅ (gbaemu `GbaConsole.CHAIN_CYCLE_BUDGET=32`, conservador — bem abaixo de 1 scanline/1232 ciclos; aplicado nos dois backends para manter `JitInterpreterDivergenceTest` válido; bench headless 5 jogos: +9,1% a +41,0%; gba-tests + suite 216 verdes. **PENDENTE: usuário validar gameplay ~1min/jogo + áudio/raster na GUI** — o risco documentado é IRQ/DMA de HBlank atrasado pelo chaining) |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída
