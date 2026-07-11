@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
+import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
@@ -19,10 +20,33 @@ public final class ThumbDecoder implements InstructionDecoder {
         this.architecture = architecture;
     }
 
-    /// Decodifica uma instrução THUMB16 no endereço informado.
+    /// Máscara dos bits[15:11] do primeiro halfword — usada para achar `top5` e comparar com
+    /// {@link #isThumb32Candidate(int)} (candidato a instrução Thumb de 32 bits, ARM DDI 0308D
+    /// Table 3-1).
+    private static final int TOP5_MASK = 0xF800;
+    private static final int TOP5_SHIFT = 11;
+
+    /// hw2[15:14] == 0b11 identifica a família "branch with link" (BL ou BLX imediato) no segundo
+    /// halfword — ARM DDI 0308D Figure 3-9. Fixo independente de J1/J2 (bits[13] e [11], que
+    /// carregam o offset estendido, não a categoria da instrução).
+    private static final int BRANCH_WITH_LINK_MASK = 0xC000;
+
+    /// Decodifica uma instrução THUMB16 (ou, com {@link ArmFeature#THUMB2}, um candidato Thumb de
+    /// 32 bits) no endereço informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
         int raw = memory.read16(address & ~1) & 0xFFFF;
+        int top5 = (raw & TOP5_MASK) >>> TOP5_SHIFT;
+
+        if (architecture.has(ArmFeature.THUMB2) && isThumb32Candidate(top5)) {
+            DecodedInstruction thumb32 = tryDecodeThumb32(memory, address, raw, top5);
+            if (thumb32 != null) {
+                return thumb32;
+            }
+            // null == nenhuma extensão Thumb-2 reivindicou o encoding: cai no caminho legado
+            // ARMv4T/v5T de BL/BLX em dois halfwords (prefixo 0xF000 + sufixo 0xF800/0xE800)
+            // abaixo, inalterado byte a byte.
+        }
 
         if ((raw & 0xE000) == 0x0000) {
             int op = (raw >>> 11) & 0x3;
@@ -317,6 +341,55 @@ public final class ThumbDecoder implements InstructionDecoder {
         }
 
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+    }
+
+    /// `0b11101`, `0b11110`, `0b11111`: os únicos valores de hw1[15:11] usados por instruções
+    /// Thumb de 32 bits (Table 3-1). Todo resto do espaço é 16-bit.
+    private static boolean isThumb32Candidate(int top5) {
+        return top5 == 0b11101 || top5 == 0b11110 || top5 == 0b11111;
+    }
+
+    /// Tenta decodificar um candidato Thumb-2 de 32 bits. Retorna `null` quando o chamador deve
+    /// cair no caminho legado de 16 bits (prefixo/sufixo BL/BLX de dois halfwords).
+    ///
+    /// - `top5 == 0b11110` é o único caso ambíguo com o espaço legado (armadilha principal desta
+    ///   task, ver B2.1): o hardware real decide "é BL/BLX ou é Thumb-2 genuíno" pelos bits
+    ///   [15:14] do **segundo** halfword, não pelo primeiro — `BRANCH_WITH_LINK_MASK` reproduz
+    ///   essa regra (Figure 3-9). Quando bate, devolvemos `null`: o prefixo é decodificado
+    ///   exatamente como hoje (`LONG_BRANCH_PREFIX`, 2 bytes) e o sufixo em `address+2` continua
+    ///   caindo nos checks 0xF800/0xE800 já existentes mais abaixo, inalterados.
+    /// - `top5 == 0b11101` / `0b11111` hoje só existem, na prática, como o segundo halfword desse
+    ///   mesmo par legado (Load/store double+exclusive+table-branch e Load/store single+hints+
+    ///   coprocessor genuinamente Thumb-2 chegam em B2.2/B2.3) — por isso continuam delegando
+    ///   ao caminho legado sempre que nenhuma extensão reivindica o encoding.
+    private DecodedInstruction tryDecodeThumb32(AddressSpace memory, int address, int hi, int top5) {
+        int lo = memory.read16((address + 2) & ~1) & 0xFFFF;
+        if (top5 == 0b11110 && (lo & BRANCH_WITH_LINK_MASK) == BRANCH_WITH_LINK_MASK) {
+            return null;
+        }
+        DecodedInstruction decoded = dispatchThumb32Extensions(address, hi, lo);
+        if (decoded != null) {
+            return decoded;
+        }
+        if (top5 == 0b11110) {
+            // Fora do espaço BL/BLX (Data processing: immediate, ou Branches/misc que não seja
+            // "branch with link"): candidato Thumb-2 genuíno sem extensão registrada ainda —
+            // UNDEFINED controlado, buscando os dois halfwords atomicamente (G1: sem exceção de
+            // "extensão ausente").
+            return DecodedInstruction.unimplemented(address, (hi << 16) | lo, InstructionSet.THUMB, Condition.AL);
+        }
+        return null;
+    }
+
+    private DecodedInstruction dispatchThumb32Extensions(int address, int hi, int lo) {
+        int raw32 = (hi << 16) | lo;
+        for (DecoderExtension extension : architecture.thumb32DecoderExtensions()) {
+            DecodedInstruction decoded = extension.tryDecode(raw32, address, Condition.AL);
+            if (decoded != null) {
+                return decoded;
+            }
+        }
+        return null;
     }
 
     private static int signExtend(int value, int bits) {

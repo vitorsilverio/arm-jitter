@@ -49,27 +49,30 @@ public final class ArmArchitecture {
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
+    private final List<DecoderExtension> thumb32DecoderExtensions;
 
-    private ArmArchitecture(String name, EnumSet<ArmFeature> features, List<DecoderExtension> decoderExtensions) {
+    private ArmArchitecture(String name, EnumSet<ArmFeature> features, List<DecoderExtension> decoderExtensions,
+            List<DecoderExtension> thumb32DecoderExtensions) {
         this.name = Objects.requireNonNull(name, "name");
         this.features = features.clone();
         this.decoderExtensions = List.copyOf(decoderExtensions);
+        this.thumb32DecoderExtensions = List.copyOf(thumb32DecoderExtensions);
     }
 
     /// Constrói uma arquitetura a partir de um nome e das features que ela suporta.
     public static ArmArchitecture of(String name, ArmFeature... features) {
         EnumSet<ArmFeature> set = EnumSet.noneOf(ArmFeature.class);
         Collections.addAll(set, features);
-        return new ArmArchitecture(name, set, List.of());
+        return new ArmArchitecture(name, set, List.of(), List.of());
     }
 
     /// Constrói uma arquitetura que estende uma base: herda todas as features **e** as extensões
-    /// de decoder da base, acrescentando as features extras. É como versões novas compõem sobre
-    /// as anteriores (ex. ARMv6K sobre ARMv5TE) sem repetir a lista da base.
+    /// de decoder (ARM e Thumb-2) da base, acrescentando as features extras. É como versões novas
+    /// compõem sobre as anteriores (ex. ARMv6K sobre ARMv5TE) sem repetir a lista da base.
     public static ArmArchitecture extending(ArmArchitecture base, String name, ArmFeature... extraFeatures) {
         EnumSet<ArmFeature> set = base.features.clone();
         Collections.addAll(set, extraFeatures);
-        return new ArmArchitecture(name, set, base.decoderExtensions);
+        return new ArmArchitecture(name, set, base.decoderExtensions, base.thumb32DecoderExtensions);
     }
 
     public boolean has(ArmFeature feature) {
@@ -80,10 +83,24 @@ public final class ArmArchitecture {
         return decoderExtensions;
     }
 
-    /// Retorna uma cópia desta arquitetura com as extensões de decoder fornecidas, usadas para
+    /// Extensões que decodificam o segundo halfword de uma instrução Thumb de 32 bits
+    /// (`raw` recebido pela extensão é os dois halfwords combinados, primeiro halfword nos bits
+    /// altos). Vazio até B2.2 registrar a primeira categoria (data processing); até lá todo
+    /// candidato de 32 bits Thumb-2 cai em UNDEFINED controlado — ver {@link
+    /// dev.vitorsilverio.armjitter.decoder.ThumbDecoder}.
+    public List<DecoderExtension> thumb32DecoderExtensions() {
+        return thumb32DecoderExtensions;
+    }
+
+    /// Retorna uma cópia desta arquitetura com as extensões de decoder ARM fornecidas, usadas para
     /// plugar grupos de instruções que uma versão futura adiciona.
     public ArmArchitecture withDecoderExtensions(List<DecoderExtension> extensions) {
-        return new ArmArchitecture(name, features, extensions);
+        return new ArmArchitecture(name, features, extensions, thumb32DecoderExtensions);
+    }
+
+    /// Retorna uma cópia desta arquitetura com as extensões de decoder Thumb-2 (32-bit) fornecidas.
+    public ArmArchitecture withThumb32DecoderExtensions(List<DecoderExtension> extensions) {
+        return new ArmArchitecture(name, features, decoderExtensions, extensions);
     }
 
     public String name() {
