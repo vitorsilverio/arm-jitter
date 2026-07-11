@@ -5,6 +5,8 @@ import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
+import dev.vitorsilverio.armjitter.ir.ParallelAluOp;
+import dev.vitorsilverio.armjitter.ir.ParallelAluVariant;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
@@ -523,6 +525,153 @@ public final class AsmRuntimeHelpers {
     /// REVSH: inverte os bytes do halfword baixo e estende o sinal para 32 bits.
     public static int reverseSignedHalfword(int value) {
         return (short) (((value & 0xFF) << 8) | ((value >>> 8) & 0xFF));
+    }
+
+    // ── ARMv6 (B1.3): paralelas / SEL / saturação / USAD ────────────────────────
+    // Espelham IrAluExecutor.executeParallelAlu/executeSel/executeSaturate/executeAbsDiffSum.
+
+    /// Aritmética paralela ARMv6 (SADD16/UQSUB8/SHASX/...): cada lane é computada em precisão
+    /// larga (int) e finalizada pela variante — wrap (escrevendo GE), saturação ou halving. As
+    /// variantes saturadas paralelas NÃO tocam o flag Q sticky (diferente de QADD/QSUB).
+    public static int parallelAlu(ArmCore core, int rn, int rm, int opOrdinal, int variantOrdinal) {
+        ParallelAluOp op = ParallelAluOp.values()[opOrdinal];
+        ParallelAluVariant variant = ParallelAluVariant.values()[variantOrdinal];
+        int result;
+        int ge;
+        if (op.laneBits() == 8) {
+            boolean add = op == ParallelAluOp.ADD8;
+            result = 0;
+            ge = 0;
+            for (int lane = 0; lane < 4; lane++) {
+                int shift = lane * 8;
+                int a = parallelLaneValue(rn >> shift, 8, variant.unsigned());
+                int b = parallelLaneValue(rm >> shift, 8, variant.unsigned());
+                int wide = add ? a + b : a - b;
+                result |= (parallelFinishLane(wide, 8, variant) & 0xFF) << shift;
+                if (parallelLaneGe(wide, 8, add, variant.unsigned())) {
+                    ge |= 1 << lane;
+                }
+            }
+        } else {
+            // Formas halfword: ASX/SAX cruzam as lanes de Rm e misturam soma/subtração.
+            int rnLow = parallelLaneValue(rn, 16, variant.unsigned());
+            int rnHigh = parallelLaneValue(rn >> 16, 16, variant.unsigned());
+            int rmLow = parallelLaneValue(rm, 16, variant.unsigned());
+            int rmHigh = parallelLaneValue(rm >> 16, 16, variant.unsigned());
+            boolean lowAdds;
+            boolean highAdds;
+            int wideLow;
+            int wideHigh;
+            switch (op) {
+                case ADD16 -> { lowAdds = true; highAdds = true; wideLow = rnLow + rmLow; wideHigh = rnHigh + rmHigh; }
+                case SUB16 -> { lowAdds = false; highAdds = false; wideLow = rnLow - rmLow; wideHigh = rnHigh - rmHigh; }
+                case SAX -> { lowAdds = true; highAdds = false; wideLow = rnLow + rmHigh; wideHigh = rnHigh - rmLow; }
+                case ASX -> { lowAdds = false; highAdds = true; wideLow = rnLow - rmHigh; wideHigh = rnHigh + rmLow; }
+                default -> throw new IllegalStateException("Lane de 16 bits inesperada: " + op);
+            }
+            result = (parallelFinishLane(wideLow, 16, variant) & 0xFFFF)
+                    | ((parallelFinishLane(wideHigh, 16, variant) & 0xFFFF) << 16);
+            ge = (parallelLaneGe(wideLow, 16, lowAdds, variant.unsigned()) ? 0b0011 : 0)
+                    | (parallelLaneGe(wideHigh, 16, highAdds, variant.unsigned()) ? 0b1100 : 0);
+        }
+        if (variant.writesGe()) {
+            core.cpsr().setGe(ge);
+        }
+        return result;
+    }
+
+    /// Valor de uma lane já deslocada para os bits baixos, estendida por sinal ou por zero.
+    private static int parallelLaneValue(int shifted, int laneBits, boolean unsigned) {
+        if (laneBits == 8) {
+            return unsigned ? shifted & 0xFF : (byte) shifted;
+        }
+        return unsigned ? shifted & 0xFFFF : (short) shifted;
+    }
+
+    /// Finaliza a lane conforme a variante: wrap (o chamador trunca), saturação ou halving.
+    private static int parallelFinishLane(int wide, int laneBits, ParallelAluVariant variant) {
+        if (variant.saturating()) {
+            int max = variant.unsigned() ? (1 << laneBits) - 1 : (1 << (laneBits - 1)) - 1;
+            int min = variant.unsigned() ? 0 : -(1 << (laneBits - 1));
+            return Math.clamp(wide, min, max);
+        }
+        if (variant.halving()) {
+            return wide >> 1;
+        }
+        return wide;
+    }
+
+    /// Regra GE por lane (só usada pelas variantes sem prefixo): com sinal, resultado ≥ 0;
+    /// sem sinal, carry na soma (estouro da largura) e ausência de borrow na subtração.
+    private static boolean parallelLaneGe(int wide, int laneBits, boolean add, boolean unsigned) {
+        if (unsigned && add) {
+            return wide >= (1 << laneBits);
+        }
+        return wide >= 0;
+    }
+
+    /// `SEL` (ARMv6): cada byte do resultado vem de Rn quando o GE correspondente está setado,
+    /// senão de Rm. Não altera flag algum.
+    public static int sel(ArmCore core, int rn, int rm) {
+        int ge = core.cpsr().ge();
+        int mask = 0;
+        for (int lane = 0; lane < 4; lane++) {
+            if ((ge & (1 << lane)) != 0) {
+                mask |= 0xFF << (lane * 8);
+            }
+        }
+        return (rn & mask) | (rm & ~mask);
+    }
+
+    /// SSAT/USAT/SSAT16/USAT16 (ARMv6): satura o operando (já shiftado pelo chamador nas formas
+    /// word) para a largura pedida e seta o flag Q sticky quando alguma lane saturou.
+    public static int saturate(ArmCore core, int value, int saturateBits, boolean unsignedRange, boolean halfwords) {
+        boolean[] q = {false};
+        int result;
+        if (halfwords) {
+            int low = saturateTo((short) value, saturateBits, unsignedRange, q);
+            int high = saturateTo((short) (value >> 16), saturateBits, unsignedRange, q);
+            result = ((high & 0xFFFF) << 16) | (low & 0xFFFF);
+        } else {
+            result = saturateTo(value, saturateBits, unsignedRange, q);
+        }
+        if (q[0]) {
+            core.cpsr().setSaturation(true); // sticky, como QADD/QSUB
+        }
+        return result;
+    }
+
+    /// Satura `value` para `bits` bits (com ou sem sinal), marcando `q[0]` quando clampa.
+    /// Com sinal, `bits` é 1..32 (32 nunca satura); sem sinal, 0..31 (0 clampa tudo para 0).
+    private static int saturateTo(int value, int bits, boolean unsignedRange, boolean[] q) {
+        int min;
+        int max;
+        if (unsignedRange) {
+            min = 0;
+            max = (1 << bits) - 1;
+        } else {
+            min = -(1 << (bits - 1));
+            max = (1 << (bits - 1)) - 1;
+        }
+        int clamped = Math.clamp(value, min, max);
+        if (clamped != value) {
+            q[0] = true;
+        }
+        return clamped;
+    }
+
+    /// USAD8/USADA8 (ARMv6): soma das diferenças absolutas dos quatro bytes sem sinal, com
+    /// acumulador opcional. Não altera flag algum.
+    public static int absDiffSum(int rm, int rs, boolean hasAccumulator, int accumulator) {
+        int sum = 0;
+        for (int lane = 0; lane < 4; lane++) {
+            int shift = lane * 8;
+            sum += Math.abs(((rm >> shift) & 0xFF) - ((rs >> shift) & 0xFF));
+        }
+        if (hasAccumulator) {
+            sum += accumulator;
+        }
+        return sum;
     }
 
     // ── PSR ────────────────────────────────────────────────────────────────────

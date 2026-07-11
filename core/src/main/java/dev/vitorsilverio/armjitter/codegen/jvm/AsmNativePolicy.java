@@ -16,21 +16,18 @@ import java.util.Set;
 /// <ul>
 ///   <li>{@link IrOp.Swap} — raro, mantém fallback.</li>
 ///   <li>{@link IrOp.Alu} com {@code dst=15} e {@code setFlags=true} — restaura SPSR.</li>
-///   <li>PKHBT/PKHTB da task B1.3 — nativas só na B1.6 (junto com paralelas/SEL/saturação/USAD).</li>
 ///   <li>BLX ({@link IrOp.BranchExchange} com {@code link}, {@link IrOp.ThumbBlSuffix} com {@code exchange}).</li>
 ///   <li>Formas ARMv5TE com escrita em PC (o comum — Saturating/DspMultiply/LDRD/STRD sem PC —
 ///       é emitido nativamente).</li>
+///   <li>Acessos exclusivos (B1.4, LDREX/STREX/CLREX) — nativos só na conclusão da B1.6.</li>
 /// </ul>
 ///
 /// <p>Desde a task C2, flags lógicos com carry-out do barrel shifter (MOVS/ANDS/... com operando
 /// shifted-register) e os shifts com S (LSLS/...) também são emitidos nativamente.</p>
 ///
-/// <p>Desde a task B1.6 (extend/reverse/UMAAL), SXT*/UXT*/REV*/UMAAL (B1.2) também são nativos.</p>
+/// <p>Desde a task B1.6, todas as ops ARMv6 de B1.2 (SXT*/UXT*/REV*/UMAAL) e B1.3 (paralelas,
+/// SEL, PKHBT/PKHTB, SSAT/USAT, USAD8/USADA8) também são nativas.</p>
 public final class AsmNativePolicy {
-    /// PKHBT/PKHTB (B1.3) ainda sem emissão nativa — caem no interpretado até completar a B1.6.
-    private static final EnumSet<IrOpCode> ARMV6_ALU_OPCODES = EnumSet.of(
-            IrOpCode.PKHBT, IrOpCode.PKHTB);
-
     private AsmNativePolicy() {
     }
 
@@ -57,11 +54,11 @@ public final class AsmNativePolicy {
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
             case IrOp.DspMultiply d -> d.dst() != 15 && !(d.op2() == 2 && d.rn() == 15);
-            // Ops ARMv6 da B1.3 (paralelas, SEL, saturação, USAD) ainda não são nativas (B1.6).
-            case IrOp.ParallelAlu ignored -> false;
-            case IrOp.Sel ignored -> false;
-            case IrOp.Saturate ignored -> false;
-            case IrOp.AbsDiffSum ignored -> false;
+            // Ops ARMv6 da B1.3 (paralelas, SEL, saturação, USAD): nativas desde a task B1.6.
+            case IrOp.ParallelAlu ignored -> true;
+            case IrOp.Sel ignored -> true;
+            case IrOp.Saturate ignored -> true;
+            case IrOp.AbsDiffSum ignored -> true;
             // Acessos exclusivos (B1.4): interpretados — tocam o monitor de exclusividade.
             case IrOp.LoadExclusive ignored -> false;
             case IrOp.StoreExclusive ignored -> false;
@@ -95,19 +92,17 @@ public final class AsmNativePolicy {
     }
 
     private static boolean supportsAlu(IrOp.Alu alu) {
-        // PKHBT/PKHTB (B1.3) ficam no interpretado até completar a B1.6 (grupo paralelas/SEL/sat).
-        if (ARMV6_ALU_OPCODES.contains(alu.opcode())) return false;
         // Task C2: flags lógicos com carry-out do shifter (src2 shifted-register com S) e os
         // shifts com S agora são NATIVOS — helpers shiftedOperandCarry/doXxxS espelham o
         // interpretador. Única exceção restante:
         // dst=15 + setFlags: restores CPSR from SPSR, defer to interpreted.
-        if (alu.dst() == 15 && alu.setFlags()) return false;
-        return true;
+        return alu.dst() != 15 || !alu.setFlags();
     }
 
-    /// Opcodes ALU actualmente emitidos nativamente (todos exceto os ARMv6 pendentes de B1.6 e
-    /// os filtrados acima).
+    /// Opcodes ALU atualmente emitidos nativamente. Desde a task B1.6, todos os opcodes ALU
+    /// (incl. os ARMv6 de extend/reverse/pack de B1.2-B1.3) são suportados; a única rejeição
+    /// restante é por-instância (dst=15+setFlags), não por opcode — ver {@link #supportsAlu}.
     public static Set<IrOpCode> supportedAluOpcodes() {
-        return EnumSet.complementOf(ARMV6_ALU_OPCODES);
+        return EnumSet.allOf(IrOpCode.class);
     }
 }

@@ -15,11 +15,12 @@ import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
-/// Prova o contrato das tasks B1.3/B1.4 com o backend ASM: essas ops ARMv6 NÃO são emitidas
-/// nativamente (isso é B1.6, ainda pendente para elas) e caem no interpretado inline do modo
+/// Prova o contrato da task B1.4 com o backend ASM: acessos exclusivos ARMv6 NÃO são emitidos
+/// nativamente (isso é a conclusão da B1.6, ainda pendente) e caem no interpretado inline do modo
 /// {@code PER_OP}, produzindo estado idêntico ao interpretador (invariante G1) sem mudança alguma
-/// no emissor. Extend/reverse/UMAAL (B1.2) ganharam emissão nativa na task B1.6 — ver
-/// {@code AsmCodeEmitterEquivalenceTest} para a cobertura exaustiva delas.
+/// no emissor. Extend/reverse/UMAAL (B1.2) e paralelas/SEL/PKH/saturação/USAD (B1.3) ganharam
+/// emissão nativa na task B1.6 — ver {@code ArmV6ExtendReverseNativeEquivalenceTest} e
+/// {@code ArmV6ParallelSaturateNativeEquivalenceTest} para a cobertura exaustiva delas.
 class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
     private final AsmCodeEmitter asmEmitter = new AsmCodeEmitter(
             ArmArchitecture.ARMV6K, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
@@ -50,7 +51,8 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
     }
 
     @Test
-    void parallelSimdBlockMatchesInterpretedUnderPerOp() {
+    void parallelSimdBlockIsNativeAndMatchesInterpreted() {
+        // B1.6: aritmética paralela ARMv6 (B1.3) agora é nativa — sem fallback por-op.
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put32(0, 0xE610_2F11);  // SADD16 r2, r0, r1
         memory.put32(4, 0xE660_3FF1);  // UQSUB8 r3, r0, r1
@@ -59,19 +61,20 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 4);
 
-        assertFalse(asmEmitter.isNativeSupported(block),
-                "a aritmética paralela ARMv6 (B1.3) só ganha emissão nativa na B1.6");
+        assertTrue(asmEmitter.isNativeSupported(block),
+                "a aritmética paralela ARMv6 (B1.3) ganhou emissão nativa na task B1.6");
         harness.assertEquivalent(v6Reference, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> {
                     core.setRegister(0, 0x8000_FFFF);
                     core.setRegister(1, 0x0001_7FFF);
                 }));
-        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                "as ops paralelas devem ter passado pelo fallback por-op");
+        assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                "as ops paralelas não devem mais passar pelo fallback por-op");
     }
 
     @Test
-    void packSaturateSelBlockMatchesInterpretedUnderPerOp() {
+    void packSaturateSelBlockIsNativeAndMatchesInterpreted() {
+        // B1.6: SEL/PKH/SSAT/USAD (B1.3) agora são nativas — sem fallback por-op.
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put32(0, 0xE650_3F91);  // UADD8 r3, r0, r1 (produz GE)
         memory.put32(4, 0xE680_4FB1);  // SEL r4, r0, r1 (consome GE)
@@ -81,16 +84,16 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 5);
 
-        assertFalse(asmEmitter.isNativeSupported(block),
-                "SEL/PKH/SSAT/USAD (B1.3) só ganham emissão nativa na B1.6");
+        assertTrue(asmEmitter.isNativeSupported(block),
+                "SEL/PKH/SSAT/USAD (B1.3) ganharam emissão nativa na task B1.6");
         harness.assertEquivalent(v6Reference, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> {
                     core.setRegister(0, 0xFF80_1234);
                     core.setRegister(1, 0x017F_4321);
                     core.setRegister(2, 1000);
                 }));
-        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                "as ops de pack/saturação devem ter passado pelo fallback por-op");
+        assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                "as ops de pack/saturação não devem mais passar pelo fallback por-op");
     }
 
     @Test

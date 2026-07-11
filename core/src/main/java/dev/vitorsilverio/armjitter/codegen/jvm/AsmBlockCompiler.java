@@ -213,6 +213,10 @@ public final class AsmBlockCompiler {
                 case IrOp.Saturating sat -> emitSaturating(method, sat);
                 case IrOp.DspMultiply dsp -> emitDspMultiply(method, dsp);
                 case IrOp.DoubleTransfer dt -> emitDoubleTransfer(method, dt);
+                case IrOp.ParallelAlu pa -> emitParallelAlu(method, pa);
+                case IrOp.Sel sel -> emitSel(method, sel);
+                case IrOp.Saturate sat2 -> emitSaturate(method, sat2);
+                case IrOp.AbsDiffSum ads -> emitAbsDiffSum(method, ads);
                 case IrOp.Load load -> emitLoad(method, load);
                 case IrOp.Store store -> emitStore(method, store);
                 case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
@@ -376,6 +380,28 @@ public final class AsmBlockCompiler {
                     countWrite(accesses, writes, dsp.rn());
                 }
                 countWrite(accesses, writes, dsp.dst());
+            }
+            case IrOp.ParallelAlu pa -> {
+                countRead(accesses, pa.rn());
+                countRead(accesses, pa.rm());
+                countWrite(accesses, writes, pa.dst());
+            }
+            case IrOp.Sel sel -> {
+                countRead(accesses, sel.rn());
+                countRead(accesses, sel.rm());
+                countWrite(accesses, writes, sel.dst());
+            }
+            case IrOp.Saturate sat -> {
+                countOperand(accesses, sat.operand());
+                countWrite(accesses, writes, sat.dst());
+            }
+            case IrOp.AbsDiffSum ads -> {
+                countRead(accesses, ads.rm());
+                countRead(accesses, ads.rs());
+                if (ads.rn() >= 0) {
+                    countRead(accesses, ads.rn());
+                }
+                countWrite(accesses, writes, ads.dst());
             }
             case IrOp.DoubleTransfer dt -> {
                 if (dt.baseValueOverride() == -1) {
@@ -849,6 +875,7 @@ public final class AsmBlockCompiler {
             case SXTB, SXTH, UXTB, UXTH -> emitAluExtend(method, alu);
             case SXTB16, UXTB16 -> emitAluExtendByte16(method, alu);
             case REV, REV16, REVSH -> emitAluReverse(method, alu);
+            case PKHBT, PKHTB -> emitAluPack(method, alu);
             default -> throw new IllegalStateException("Unexpected ALU opcode: " + alu.opcode());
         }
     }
@@ -1248,6 +1275,68 @@ public final class AsmBlockCompiler {
             default -> AsmBytecode.invokeStatic(method, HELPERS, "reverseSignedHalfword", "(I)I"); // REVSH
         }
         emitStoreRegister(method, alu.dst());
+    }
+
+    /// PKHBT/PKHTB (ARMv6): `right` já vem shiftado pelo operando; monta o resultado com um
+    /// halfword de cada fonte. Nunca escreve flags.
+    private void emitAluPack(MethodVisitor method, IrOp.Alu alu) {
+        boolean bt = alu.opcode() == IrOpCode.PKHBT;
+        emitSrc1(method, alu.src1(), alu.src1ValueOverride());
+        AsmBytecode.visitIntConst(method, bt ? 0x0000_FFFF : 0xFFFF_0000);
+        method.visitInsn(Opcodes.IAND);
+        emitOperand(method, alu.src2());
+        AsmBytecode.visitIntConst(method, bt ? 0xFFFF_0000 : 0x0000_FFFF);
+        method.visitInsn(Opcodes.IAND);
+        method.visitInsn(Opcodes.IOR);
+        emitStoreRegister(method, alu.dst());
+    }
+
+    // ── ARMv6 (B1.3): paralelas / SEL / saturação / USAD ─────────────────────────
+
+    /// Aritmética paralela (SADD16/UQSUB8/SHASX/...) via helper por-valor; a variante decide
+    /// dentro do helper se GE é escrito no core (ver AsmRuntimeHelpers.parallelAlu).
+    private void emitParallelAlu(MethodVisitor method, IrOp.ParallelAlu op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        emitReadRegister(method, op.rn());
+        emitReadRegister(method, op.rm());
+        AsmBytecode.visitIntConst(method, op.op().ordinal());
+        AsmBytecode.visitIntConst(method, op.variant().ordinal());
+        AsmBytecode.invokeStatic(method, HELPERS, "parallelAlu", "(" + CORE_REF + "IIII)I");
+        emitStoreRegister(method, op.dst());
+    }
+
+    private void emitSel(MethodVisitor method, IrOp.Sel op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        emitReadRegister(method, op.rn());
+        emitReadRegister(method, op.rm());
+        AsmBytecode.invokeStatic(method, HELPERS, "sel", "(" + CORE_REF + "II)I");
+        emitStoreRegister(method, op.dst());
+    }
+
+    private void emitSaturate(MethodVisitor method, IrOp.Saturate op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        emitOperand(method, op.operand());
+        AsmBytecode.visitIntConst(method, op.saturateBits());
+        method.visitInsn(op.unsignedRange() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        method.visitInsn(op.halfwords() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.invokeStatic(method, HELPERS, "saturate", "(" + CORE_REF + "IIZZ)I");
+        emitStoreRegister(method, op.dst());
+    }
+
+    /// `rn=-1` (forma sem acumulador, USAD8) empilha `hasAccumulator=false` e um valor
+    /// dummy — o helper ignora o valor quando a flag é falsa.
+    private void emitAbsDiffSum(MethodVisitor method, IrOp.AbsDiffSum op) {
+        emitReadRegister(method, op.rm());
+        emitReadRegister(method, op.rs());
+        boolean hasAccumulator = op.rn() >= 0;
+        method.visitInsn(hasAccumulator ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        if (hasAccumulator) {
+            emitReadRegister(method, op.rn());
+        } else {
+            method.visitInsn(Opcodes.ICONST_0);
+        }
+        AsmBytecode.invokeStatic(method, HELPERS, "absDiffSum", "(IIZI)I");
+        emitStoreRegister(method, op.dst());
     }
 
     // ── multiply ────────────────────────────────────────────────────────────────
