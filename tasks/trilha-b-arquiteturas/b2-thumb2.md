@@ -1,7 +1,11 @@
 # B2 — Thumb-2 (decoder de 32 bits + IT blocks) **[REFINAR]**
 
 **Trilha:** B · **Depende de:** B1.6 · **Repo:** arm-jitter
-**Status de spec:** alto nível — refinar em sub-tasks (B2.1–B2.5) quando B1 concluir.
+**Status de spec:** refinado em sub-tasks executáveis — ver
+[B2.1](b2.1-thumb2-infra.md), [B2.2](b2.2-thumb2-dataproc.md),
+[B2.3](b2.3-thumb2-loadstore.md), [B2.4](b2.4-thumb2-branches-it.md),
+[B2.5](b2.5-thumb2-misc.md) (2026-07-11). Este arquivo continua valendo como visão
+geral do épico; a divisão de escopo abaixo é a mesma usada nas subs.
 
 ## Contexto
 
