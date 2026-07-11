@@ -152,8 +152,16 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
         int rd = (raw >>> 8) & 0xF;
         int rm = raw & 0xF;
         if (rm == PROGRAM_COUNTER || rm == STACK_POINTER) {
-            // Rm=SP/PC é UNPREDICTABLE nesta forma (ao contrário do ARM classico); simplificação
-            // conservadora — ver Armadilhas na task B2.2.
+            // Rm=SP/PC é UNPREDICTABLE nesta forma — verificado na task B2.2.1. ARM DDI 0406C
+            // A5.3.1: as tabelas de encoding de AND/BIC/ORR/ORN/EOR/ADC/SBC/RSB (register)
+            // Thumb T2/T3, e também ADD/SUB (register) T3, declaram uniformemente
+            // "if d IN {13,15} || n IN {13,15} || m IN {13,15} then UNPREDICTABLE" — Rm nunca é
+            // exceção, mesmo nos casos em que Rd/Rn=SP/PC têm alias dedicado (compare Rd=PC+S=1,
+            // MOV/MVN Rn=PC, ADD/SUB (SP plus register) Rn=SP). Confirmado de forma independente
+            // pelo decodetree do QEMU (`target/arm/tcg/t32.decode`): o comentário do grupo MVE que
+            // colide com este encoding registra explicitamente "Rm==13 or 15 ... UNPREDICTABLE
+            // cases for MOVS/ORRS" para a mesma forma. Ao contrário do ARM clássico (onde SP é um
+            // registrador comum em operações de dados), aqui SP é tão restrito quanto PC.
             return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
         }
 
