@@ -16,7 +16,7 @@ import java.util.Set;
 /// <ul>
 ///   <li>{@link IrOp.Swap} — raro, mantém fallback.</li>
 ///   <li>{@link IrOp.Alu} com {@code dst=15} e {@code setFlags=true} — restaura SPSR.</li>
-///   <li>Ops ARMv6 da task B1.2 (extend/reverse/UMAAL) — nativas só na B1.6.</li>
+///   <li>PKHBT/PKHTB da task B1.3 — nativas só na B1.6 (junto com paralelas/SEL/saturação/USAD).</li>
 ///   <li>BLX ({@link IrOp.BranchExchange} com {@code link}, {@link IrOp.ThumbBlSuffix} com {@code exchange}).</li>
 ///   <li>Formas ARMv5TE com escrita em PC (o comum — Saturating/DspMultiply/LDRD/STRD sem PC —
 ///       é emitido nativamente).</li>
@@ -24,12 +24,11 @@ import java.util.Set;
 ///
 /// <p>Desde a task C2, flags lógicos com carry-out do barrel shifter (MOVS/ANDS/... com operando
 /// shifted-register) e os shifts com S (LSLS/...) também são emitidos nativamente.</p>
+///
+/// <p>Desde a task B1.6 (extend/reverse/UMAAL), SXT*/UXT*/REV*/UMAAL (B1.2) também são nativos.</p>
 public final class AsmNativePolicy {
-    /// Opcodes ARMv6 (B1.2) ainda sem emissão nativa — caem no interpretado até a task B1.6.
+    /// PKHBT/PKHTB (B1.3) ainda sem emissão nativa — caem no interpretado até completar a B1.6.
     private static final EnumSet<IrOpCode> ARMV6_ALU_OPCODES = EnumSet.of(
-            IrOpCode.SXTB, IrOpCode.SXTH, IrOpCode.SXTB16,
-            IrOpCode.UXTB, IrOpCode.UXTH, IrOpCode.UXTB16,
-            IrOpCode.REV, IrOpCode.REV16, IrOpCode.REVSH,
             IrOpCode.PKHBT, IrOpCode.PKHTB);
 
     private AsmNativePolicy() {
@@ -52,8 +51,8 @@ public final class AsmNativePolicy {
         return switch (op) {
             case IrOp.Alu alu -> supportsAlu(alu);
             case IrOp.Multiply ignored -> true;
-            // O acumulador duplo do UMAAL (ARMv6, B1.2) ainda não é emitido nativamente.
-            case IrOp.LongMultiply m -> !m.accumulateDouble();
+            // UMAAL (ARMv6, B1.2): acumulador duplo agora emitido nativamente (task B1.6).
+            case IrOp.LongMultiply ignored -> true;
             // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
@@ -96,7 +95,7 @@ public final class AsmNativePolicy {
     }
 
     private static boolean supportsAlu(IrOp.Alu alu) {
-        // Ops ARMv6 (extend/reverse) ficam no interpretado até B1.6.
+        // PKHBT/PKHTB (B1.3) ficam no interpretado até completar a B1.6 (grupo paralelas/SEL/sat).
         if (ARMV6_ALU_OPCODES.contains(alu.opcode())) return false;
         // Task C2: flags lógicos com carry-out do shifter (src2 shifted-register com S) e os
         // shifts com S agora são NATIVOS — helpers shiftedOperandCarry/doXxxS espelham o

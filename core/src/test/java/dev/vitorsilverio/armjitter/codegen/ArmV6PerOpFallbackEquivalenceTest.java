@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,16 +15,19 @@ import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
-/// Prova o contrato da task B1.2 com o backend ASM: as ops ARMv6 (extend/reverse/UMAAL) NÃO são
-/// emitidas nativamente (isso é B1.6) e caem no interpretado inline do modo {@code PER_OP},
-/// produzindo estado idêntico ao interpretador (invariante G1) sem mudança alguma no emissor.
+/// Prova o contrato das tasks B1.3/B1.4 com o backend ASM: essas ops ARMv6 NÃO são emitidas
+/// nativamente (isso é B1.6, ainda pendente para elas) e caem no interpretado inline do modo
+/// {@code PER_OP}, produzindo estado idêntico ao interpretador (invariante G1) sem mudança alguma
+/// no emissor. Extend/reverse/UMAAL (B1.2) ganharam emissão nativa na task B1.6 — ver
+/// {@code AsmCodeEmitterEquivalenceTest} para a cobertura exaustiva delas.
 class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
     private final AsmCodeEmitter asmEmitter = new AsmCodeEmitter(
             ArmArchitecture.ARMV6K, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
     private final CodeEmitter v6Reference = new InterpretedCodeEmitter(ArmArchitecture.ARMV6K);
 
     @Test
-    void extendReverseUmaalBlockMatchesInterpretedUnderPerOp() {
+    void extendReverseUmaalBlockIsNativeAndMatchesInterpreted() {
+        // B1.6: SXT*/UXT*/REV*/UMAAL agora são nativos — este bloco não passa mais pelo fallback.
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put32(0, 0xE6AF_1470);  // SXTB r1, r0, ROR #8
         memory.put32(4, 0xE6BF_4F30);  // REV r4, r0
@@ -32,8 +36,8 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV6K), new StandardIrBuilder()).lift(memory, 0, 4);
 
-        assertFalse(asmEmitter.isNativeSupported(block),
-                "as ops ARMv6 só ganham emissão nativa na B1.6");
+        assertTrue(asmEmitter.isNativeSupported(block),
+                "extend/reverse/UMAAL (B1.2) ganharam emissão nativa na task B1.6");
         harness.assertEquivalent(v6Reference, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> {
                     core.setRegister(0, 0x0000FF00);
@@ -41,8 +45,8 @@ class ArmV6PerOpFallbackEquivalenceTest extends BlockEquivalenceTest {
                     core.setRegister(2, 0xFFFF0001);
                     core.setRegister(3, 0x8000FFFF);
                 }));
-        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                "as ops ARMv6 devem ter passado pelo fallback por-op");
+        assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                "extend/reverse/UMAAL não devem mais passar pelo fallback por-op");
     }
 
     @Test

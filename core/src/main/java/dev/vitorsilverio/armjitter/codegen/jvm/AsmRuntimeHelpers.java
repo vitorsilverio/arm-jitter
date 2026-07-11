@@ -501,6 +501,30 @@ public final class AsmRuntimeHelpers {
         return acc + (long) rmHalf * rsHalf;
     }
 
+    // ── ARMv6 (B1.2): extend/reverse ────────────────────────────────────────────
+    // Espelham os casos SXTB16/UXTB16/REV16/REVSH de IrAluExecutor.execute. SXTB/SXTH/UXTB/UXTH
+    // e REV são bytecode direto no AsmBlockCompiler (I2B/I2S/AND/Integer.reverseBytes).
+
+    /// SXTB16/UXTB16: estende os dois bytes pares (bits 23:16 e 7:0) do valor já rotacionado pelo
+    /// operando, cada halfword acumulada de forma independente (módulo 2^16, sem carry entre elas).
+    public static int extendByte16(int accumulator, int right, boolean signedExtend) {
+        int lowByte = signedExtend ? (byte) right : right & 0xFF;
+        int highByte = signedExtend ? (byte) (right >>> 16) : (right >>> 16) & 0xFF;
+        int lowHalf = (accumulator + lowByte) & 0xFFFF;
+        int highHalf = ((accumulator >>> 16) + highByte) & 0xFFFF;
+        return (highHalf << 16) | lowHalf;
+    }
+
+    /// REV16: troca os bytes dentro de cada halfword.
+    public static int reverseHalfwords(int value) {
+        return ((value & 0xFF00_FF00) >>> 8) | ((value & 0x00FF_00FF) << 8);
+    }
+
+    /// REVSH: inverte os bytes do halfword baixo e estende o sinal para 32 bits.
+    public static int reverseSignedHalfword(int value) {
+        return (short) (((value & 0xFF) << 8) | ((value >>> 8) & 0xFF));
+    }
+
     // ── PSR ────────────────────────────────────────────────────────────────────
 
     public static void executePsrRead(ArmCore core, boolean spsr, int register) {

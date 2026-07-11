@@ -307,7 +307,7 @@ public final class AsmBlockCompiler {
             case IrOp.LongMultiply mul -> {
                 if (mul.rmValueOverride() == -1) countRead(accesses, mul.rm());
                 if (mul.rsValueOverride() == -1) countRead(accesses, mul.rs());
-                if (mul.accumulate()) {
+                if (mul.accumulate() || mul.accumulateDouble()) {
                     if (mul.dstLowValueOverride() == -1) countRead(accesses, mul.dstLow());
                     if (mul.dstHighValueOverride() == -1) countRead(accesses, mul.dstHigh());
                 }
@@ -846,6 +846,9 @@ public final class AsmBlockCompiler {
             case LSR -> emitAluShift(method, alu, "doLsr");
             case ASR -> emitAluShift(method, alu, "doAsr");
             case ROR -> emitAluShift(method, alu, "doRor");
+            case SXTB, SXTH, UXTB, UXTH -> emitAluExtend(method, alu);
+            case SXTB16, UXTB16 -> emitAluExtendByte16(method, alu);
+            case REV, REV16, REVSH -> emitAluReverse(method, alu);
             default -> throw new IllegalStateException("Unexpected ALU opcode: " + alu.opcode());
         }
     }
@@ -1204,6 +1207,49 @@ public final class AsmBlockCompiler {
         emitStoreRegister(method, alu.dst());
     }
 
+    // ── ARMv6 (B1.2): extend/reverse ─────────────────────────────────────────────
+
+    /// SXTB/SXTH/UXTB/UXTH: `right` já vem rotacionado pelo operando (ShiftedRegister ROR, nativo
+    /// desde a task C2); soma o acumulador src1 (forma sem acumulador = src1ValueOverride 0).
+    private void emitAluExtend(MethodVisitor method, IrOp.Alu alu) {
+        emitOperand(method, alu.src2());
+        switch (alu.opcode()) {
+            case SXTB -> method.visitInsn(Opcodes.I2B);
+            case SXTH -> method.visitInsn(Opcodes.I2S);
+            case UXTB -> {
+                AsmBytecode.visitIntConst(method, 0xFF);
+                method.visitInsn(Opcodes.IAND);
+            }
+            default -> { // UXTH
+                AsmBytecode.visitIntConst(method, 0xFFFF);
+                method.visitInsn(Opcodes.IAND);
+            }
+        }
+        emitSrc1(method, alu.src1(), alu.src1ValueOverride());
+        method.visitInsn(Opcodes.IADD);
+        emitStoreRegister(method, alu.dst());
+    }
+
+    /// SXTB16/UXTB16 via helper (duas lanes independentes — ver {@code AsmRuntimeHelpers.extendByte16}).
+    private void emitAluExtendByte16(MethodVisitor method, IrOp.Alu alu) {
+        emitSrc1(method, alu.src1(), alu.src1ValueOverride());
+        emitOperand(method, alu.src2());
+        method.visitInsn(alu.opcode() == IrOpCode.SXTB16 ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.invokeStatic(method, HELPERS, "extendByte16", "(IIZ)I");
+        emitStoreRegister(method, alu.dst());
+    }
+
+    /// REV/REV16/REVSH. REV usa {@code Integer.reverseBytes} direto; as outras vão por helper.
+    private void emitAluReverse(MethodVisitor method, IrOp.Alu alu) {
+        emitSrc1(method, alu.src1(), alu.src1ValueOverride());
+        switch (alu.opcode()) {
+            case REV -> AsmBytecode.invokeStatic(method, INTEGER_CLASS, "reverseBytes", "(I)I");
+            case REV16 -> AsmBytecode.invokeStatic(method, HELPERS, "reverseHalfwords", "(I)I");
+            default -> AsmBytecode.invokeStatic(method, HELPERS, "reverseSignedHalfword", "(I)I"); // REVSH
+        }
+        emitStoreRegister(method, alu.dst());
+    }
+
     // ── multiply ────────────────────────────────────────────────────────────────
 
     private void emitMultiply(MethodVisitor method, IrOp.Multiply mul) {
@@ -1244,6 +1290,17 @@ public final class AsmBlockCompiler {
             emitSrc1(method, mul.dstLow(), mul.dstLowValueOverride());
             AsmBytecode.invokeStatic(method, INTEGER_CLASS, "toUnsignedLong", "(I)J");
             method.visitInsn(Opcodes.LOR);
+            method.visitInsn(Opcodes.LADD);
+        }
+        if (mul.accumulateDouble()) {
+            // UMAAL (ARMv6): RdLo e RdHi somam ao produto como DUAS parcelas de 32 bits sem sinal
+            // independentes — não como um par 64-bit (accumulate regular). O caso máximo
+            // 0xFFFFFFFF² + 2×0xFFFFFFFF nunca estoura 64 bits.
+            emitSrc1(method, mul.dstLow(), mul.dstLowValueOverride());
+            AsmBytecode.invokeStatic(method, INTEGER_CLASS, "toUnsignedLong", "(I)J");
+            method.visitInsn(Opcodes.LADD);
+            emitSrc1(method, mul.dstHigh(), mul.dstHighValueOverride());
+            AsmBytecode.invokeStatic(method, INTEGER_CLASS, "toUnsignedLong", "(I)J");
             method.visitInsn(Opcodes.LADD);
         }
         method.visitVarInsn(Opcodes.LSTORE, LONG_RESULT_LOCAL);  // slots 7+8
