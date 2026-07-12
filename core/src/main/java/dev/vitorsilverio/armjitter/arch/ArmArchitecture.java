@@ -46,6 +46,22 @@ public final class ArmArchitecture {
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
             ArmFeature.WAIT_HINTS);
 
+    /// Subconjunto Thumb-2 já implementado até B2.2 (infra + data-processing de 32 bits),
+    /// promovido a preset público pela task B4.0.2 — antes só existia como
+    /// `ArmArchitecture.extending(ARMV6K, "...", ArmFeature.THUMB2).withThumb32DecoderExtensions(...)`
+    /// construído manualmente dentro de cada classe de teste. Nome deliberadamente NÃO diz
+    /// "THUMB2" sozinho nem "ARMV7" — não é o ARMv7-A completo da task B3 (sem VFP, sem SDIV/UDIV,
+    /// sem os grupos de branch/IT de B2.4 nem misc de B2.5 ainda), é ARMv6K mais o Thumb-2 parcial
+    /// que já existe hoje. **Convenção para B2.3-B2.5**: ao fechar cada uma, adicionar o
+    /// `DecoderExtension` correspondente à lista abaixo (`Thumb2LoadStoreDecoder` já existe desde
+    /// B2.3, `Thum
+    /// b2MiscDecoder` desde B2.5 — ainda não incluídos aqui até B2.4/o fechamento formal
+    /// desta lista ser revisitado por uma task futura que amplie a cobertura do armbox).
+    public static final ArmArchitecture ARMV6K_THUMB2_PARTIAL = extending(ARMV6K, "ARMv6K+Thumb2(parcial: B2.1-B2.2)",
+            ArmFeature.THUMB2)
+            .withThumb32DecoderExtensions(
+                    List.of(new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
