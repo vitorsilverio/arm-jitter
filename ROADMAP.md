@@ -18,8 +18,10 @@ O pipeline `cache → decode → lift IR → otimizar → emit` está completo e
   quente compilado em pool de threads), fallback `PER_OP` inline, execução condicional
   nativa, shifted-register nativo, register cache em locals, inline cache de 32K e
   encadeamento de blocos (`setChainCycleBudget`).
-- **Arquiteturas guest:** ARMv4T (ARM7TDMI — GBA) completo e ARMv5TE (ARM9E — NDS)
-  incluindo BLX, CLZ, DSP multiplies, saturating, LDRD/STRD, tudo emitido nativamente.
+- **Arquiteturas guest:** ARMv4T (ARM7TDMI — GBA) e ARMv5TE (ARM9E — NDS) completos e em
+  produção; ARMv6K completo (decoder+IR+interp+ASM nativo, trilha B1); Thumb-2 parcial
+  (infra+data-processing+load-store+misc, falta branches/IT — trilha B2). Ver
+  [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
 - **Consumidores em produção:** gbaemu (5 jogos comerciais jogáveis, ≥2× realtime
   headless) e ndsemu (JUS ~99% realtime, MKDS 92–97%, SM64DS 72%).
 - **Debug:** `GdbServer` (stub GDB remote serial), trace listener, runtime de
@@ -121,9 +123,9 @@ prático de 64 bits é ARMv8-A/AArch64 — v9 vem de graça depois, por feature 
 | GBA | ARM7TDMI | ARMv4T | ✅ produção |
 | NDS | ARM7TDMI + ARM946E-S | ARMv4T + ARMv5TE | ✅ produção |
 | 3DS (lado DS/segurança) | ARM946E-S | ARMv5TE | ✅ já coberto |
-| 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | ⬜ B1 |
-| Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | ⬜ B1 |
-| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | ⬜ B2–B4 |
+| 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | 🟡 ARMv6K ✅ (B1.1-B1.6); falta VFPv2 (B3) |
+| Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | 🟡 ARMv6K ✅; falta VFPv2 (B3) |
+| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | 🟡 Thumb-2 parcial (B2.1-B2.3,B2.5 ✅; falta B2.4 branches+IT); VFP/NEON não iniciados (B3) |
 | Linux/Android arm64, Pi 3+ | Cortex-A5x+ | **ARMv8-A AArch64** | ⬜ B6 |
 
 ### Fases
