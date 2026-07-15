@@ -65,11 +65,31 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
         if (((raw >>> TOP5_SHIFT) & TOP5_MASK) != IMMEDIATE_GROUP_TOP5) {
             return null;
         }
+        if ((raw & SECOND_HALFWORD_TOP_BIT) != 0) {
+            // Bug de infra achado e corrigido na task B2.4: A5.3.3/A5.3.4 (ARM DDI 0406C) fixam
+            // `lo[15]==0` para TODAS as formas de "Data-processing (immediate)" deste top5 — este
+            // decoder nunca checava esse bit, então engolia silenciosamente todo o espaço
+            // `lo[15]==1` do MESMO top5=0b11110, que arquiteturalmente pertence a "Branches and
+            // miscellaneous control" (A5.3.4 do grupo de branches — `B.W`/`BL`/`BLX_i`/hints/CPS/
+            // barreiras/`MRS`/`MSR`, ver `Thumb2BranchDecoder`/`Thumb2MiscDecoder`). Sem este
+            // check, `Thumb2DataProcessingDecoder` decodia incondicionalmente (às vezes como uma
+            // ALU real, ex. op4=`AND`) qualquer `B.W` condicional cujo campo `cond` tivesse o bit
+            // mais significativo zerado (`cond<8`) — colisão real encontrada pelos testes de
+            // `Thumb2BranchesItTest`. `Thumb2MiscDecoder` nunca precisou desta correção porque seus
+            // `hi` reconhecidos (0xF3xx) sempre caem no ramo `decodePlainGroup` (`hi[9]==1`), que já
+            // rejeitava `op4` não reconhecido — mas `decodeModifiedImmediate` (`hi[9]==0`) não tinha
+            // rejeição nenhuma.
+            return null;
+        }
         if (((raw >>> MODIFIED_IMMEDIATE_MARKER_BIT) & 1) == 0) {
             return decodeModifiedImmediate(raw, address, condition);
         }
         return decodePlainGroup(raw, address, condition);
     }
+
+    /// `lo[15]` (bit 15 do segundo halfword, `raw` bit 15): sempre `0` nas formas de
+    /// "Data-processing (immediate)" — ver o comentário acima em {@link #tryDecode}.
+    private static final int SECOND_HALFWORD_TOP_BIT = 0x8000;
 
     /// B2.2.2: `raw` cai dentro do prefixo de 7 bits `REGISTER_FORM_PREFIX` — o único subconjunto
     /// desta classe fora de `top5 == 0b11110` (que o `ThumbDecoder` já trata como UNDEFINED

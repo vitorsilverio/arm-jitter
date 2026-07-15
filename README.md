@@ -35,7 +35,7 @@ Presets prontos em `ArmArchitecture` (`arch` package) — cada um liga um conjun
 | `ARMV4T` (ARM7TDMI) | GBA | ✅ produção (gbaemu) — ARM/THUMB completo, emissão ASM nativa |
 | `ARMV5TE` (ARM9E) | NDS | ✅ produção (ndsemu) — `BLX`/`CLZ`/DSP multiplies/saturating/`LDRD`/`STRD`, emissão ASM nativa |
 | `ARMV6K` | 3DS (núcleo ARM11), Raspberry Pi 1/Zero | ✅ decoder+IR+interpretador+ASM nativo completos (extend/reverse/UMAAL, SIMD paralelo, PKH/SAT/USAD8, LDREX/STREX/CLREX, CPS/SETEND/WFI); validado com binário ELF real no `armbox` |
-| `ARMV6K_THUMB2_PARTIAL` | subconjunto de ARMv7-A Thumb-2 | 🟡 parcial — infra + data-processing + load/store + misc prontos; falta branches+IT block (maior risco da trilha B, ver tasks) |
+| `ARMV6K_THUMB2` | subconjunto de ARMv7-A Thumb-2 | 🟡 parcial — infra + data-processing + load/store + misc prontos; falta branches+IT block (maior risco da trilha B, ver tasks) |
 | ARMv7-A + VFP | Linux/Android ARMv7 user-mode | ⬜ planejado |
 | MMU / full-system 32-bit | Kernel Linux ARMv6/v7 | ⬜ planejado |
 | 3DS (periféricos) | Novo emulador irmão | ⬜ planejado (depende de ARMv6K + VFP) |

@@ -154,4 +154,16 @@ public record DecodedInstruction(
         return new DecodedInstruction(address, raw, instructionSet, condition, InstructionKind.UNIMPLEMENTED,
                 -1, -1, -1, 0, false, false, false, 0, false, false, false, BlockTransferMode.IA, false);
     }
+
+    /// Cria uma cópia com a condição substituída, preservando todos os outros campos. Usado por
+    /// {@code StandardIrBlockLifter} (B2.4) para anotar a condição por-op vinda de um Thumb-2 IT
+    /// block ativo — a instrução é decodificada normalmente (com sua condição "natural", quase
+    /// sempre AL em Thumb) e o lifter sobrepõe a condição correta APÓS o decode, sem precisar
+    /// plumbing de estado IT através do decoder em si (que permanece stateless — ver D1 em
+    /// `b2.4-thumb2-branches-it.md`).
+    public DecodedInstruction withCondition(Condition newCondition) {
+        return new DecodedInstruction(address, raw, instructionSet, newCondition, kind, destinationRegister,
+                sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
+                accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList);
+    }
 }

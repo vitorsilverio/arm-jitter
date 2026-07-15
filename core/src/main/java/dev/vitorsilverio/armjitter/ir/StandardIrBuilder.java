@@ -317,6 +317,24 @@ public final class StandardIrBuilder implements IrBuilder {
             case WAIT_FOR_INTERRUPT -> block.add(new IrOp.WaitForInterrupt(instruction.condition()));
             // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável — ver javadoc de IrOp.MemoryBarrier.
             case MEMORY_BARRIER -> block.add(new IrOp.MemoryBarrier(instruction.condition()));
+            // IT (Thumb-2, B2.4): grava o ITSTATE de entrada já montado pelo decoder. A condição
+            // desta op é a da própria instrução IT (normalmente AL; ver IrOp.SetItState).
+            case IT -> block.add(new IrOp.SetItState(instruction.immediate(), instruction.condition()));
+            // TBB/TBH (Thumb-2, B2.4): ver a decisão D3 em b2.4-thumb2-branches-it.md.
+            case TABLE_BRANCH -> block.add(new IrOp.TableBranch(
+                    instruction.sourceRegister(),
+                    baseValueOverride(instruction),
+                    instruction.secondSourceRegister(),
+                    registerValueOverride(instruction, instruction.secondSourceRegister()),
+                    instruction.address() + instructionWidth(instruction),
+                    (instruction.immediate() & 1) != 0,
+                    instruction.condition()));
+            // CBZ/CBNZ (Thumb-1, B2.4): nunca afeta flags.
+            case COMPARE_BRANCH_ZERO -> block.add(new IrOp.CompareBranchZero(
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.link(),
+                    instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));

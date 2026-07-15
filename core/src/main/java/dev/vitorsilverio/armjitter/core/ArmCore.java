@@ -646,6 +646,14 @@ public final class ArmCore {
         setSpsr(targetMode, oldCpsr);
         registers[LR] = returnAddress;
         cpsr.setThumbMode(false);
+        // ITSTATE (B2.4, Thumb-2 IT block): a entrada de exceção sempre limpa o ITSTATE do CPSR
+        // NOVO (a `oldCpsr` completa, incl. o ITSTATE de origem, já foi capturada acima em
+        // `setSpsr` — só a cópia ATIVA some) — mesma regra do ARM ARM para qualquer exceção
+        // (SWI/IRQ/FIQ/aborts/UNDEFINED), independente de em qual instrução do IT block ela
+        // ocorreu. Sem isto, um `IrOp.SetItState` de avanço emitido pelo lifter LOGO DEPOIS da
+        // instrução que disparou a exceção (mesmo bloco IR, ainda vai executar) deixaria um
+        // ITSTATE não-zero "vazando" para o handler por coincidência de timing.
+        cpsr.setItState(0);
         cpsr.setIrqDisabled(true);
         if (exception == ArmException.RESET || exception == ArmException.FIQ) {
             cpsr.setFiqDisabled(true);

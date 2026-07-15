@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -61,6 +61,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int WAIT_FOR_INTERRUPT = 34;
         public static final int MOVE_TOP = 35;
         public static final int MEMORY_BARRIER = 36;
+        public static final int SET_IT_STATE = 37;
+        public static final int TABLE_BRANCH = 38;
+        public static final int COMPARE_BRANCH_ZERO = 39;
     }
 
     /// Operacao ALU generica.
@@ -683,5 +686,79 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar (espaço incondicional em Thumb-2 → sempre AL).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MEMORY_BARRIER; }
+    }
+
+    /// Grava o ITSTATE\[7:0\] do CPSR (Thumb-2 IT block, B2.4 — ver
+    /// {@link dev.vitorsilverio.armjitter.core.ItState}). Duas origens, ambas emitidas pelo
+    /// lifter (não pelo decoder isoladamente — ver `StandardIrBlockLifter`):
+    /// <ol>
+    ///   <li>A própria instrução `IT`: grava o ITSTATE de entrada (`firstcond:mask`); condição =
+    ///       a da instrução `IT` em si (normalmente AL; só difere quando o `IT` está — de forma
+    ///       CONSTRAINED UNPREDICTABLE, ver Armadilhas de B2.4 — aninhado dentro de outro IT
+    ///       block, caso em que herda a condição do bloco externo).</li>
+    ///   <li>O "avanço" (`ItState#advance`) emitido pelo lifter logo após CADA instrução coberta
+    ///       por um IT block ativo: sempre com condição {@link Condition#AL} — o avanço do
+    ///       ITSTATE é incondicional no hardware real, independente de a instrução coberta ter
+    ///       sido de fato executada (guard verdadeiro) ou pulada (guard falso).</li>
+    /// </ol>
+    record SetItState(
+            /// Novo valor ITSTATE\[7:0\] a gravar no CPSR (`0` = fora de IT block).
+            int itState,
+            /// Condição necessária para executar esta gravação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SET_IT_STATE; }
+    }
+
+    /// `TBB`/`TBH` (Thumb-2, ARMv6T2+, B2.4): lê um byte (`TBB`) ou halfword (`TBH`) sem sinal de
+    /// uma tabela em memória indexada por `rm` a partir de `rn`, e desvia para
+    /// `PC_da_instrução + 4 + 2 * valor_lido`. `IrOp` dedicado em vez de compor `Load`+`Branch`
+    /// genéricos — ver a decisão D3 registrada em `b2.4-thumb2-branches-it.md`: o valor lido da
+    /// tabela nunca é observável em nenhum `Rd` (não há registrador-escrátel arquitetural para
+    /// modelar), o destino é `PC_base + 2*tabela` (uma composição que nenhum `IrOp` de branch
+    /// existente expressa) e a instrução nunca troca de instruction-set (sempre permanece Thumb).
+    record TableBranch(
+            /// Registrador base da tabela (Rn); pode ser PC.
+            int rn,
+            /// Valor fixo para usar como base quando `rn` é PC, ou `-1`.
+            int rnValueOverride,
+            /// Registrador de índice (Rm).
+            int rm,
+            /// Valor fixo para usar como índice quando `rm` é PC, ou `-1` (PC como índice é
+            /// incomum mas não rejeitado pelo decoder — mesma convenção de override do resto do
+            /// IR).
+            int rmValueOverride,
+            /// `PC` LIDO da própria instrução `TBB`/`TBH` (endereço da instrução + 4, resolvido em
+            /// tempo de decode) — a base do DESVIO (`target = pcBase + 2*tabela`). Deliberadamente
+            /// SEPARADO de `rn`/`rnValueOverride` (a base da TABELA, usada só para o endereço de
+            /// leitura): quando `Rn≠PC` (tabela em endereço computado por `ADR` antes), a leitura e
+            /// o desvio usam bases DIFERENTES — reaproveitar `rn` para as duas coisas seria
+            /// correto só no caso comum `TBB [PC,Rm]`, mas incorreto em geral.
+            int pcBase,
+            /// `true` para `TBH` (halfword, índice em unidades de 2 bytes); `false` para `TBB`
+            /// (byte, índice em unidades de 1 byte).
+            boolean halfword,
+            /// Condição necessária para executar o desvio.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.TABLE_BRANCH; }
+    }
+
+    /// `CBZ`/`CBNZ` (Thumb-1, ARMv6T2+, B2.4): desvia para `target` (já resolvido pelo decoder)
+    /// quando `rn` (sempre R0-R7) é zero (`CBZ`) ou não-zero (`CBNZ`) — NUNCA afeta NZCV, ao
+    /// contrário de um `CMP`+`Branch` equivalente, e por isso não reaproveita `IrOp.Alu`. `rn`
+    /// nunca é PC/SP (restrito a 3 bits no encoding), então não precisa de value override.
+    record CompareBranchZero(
+            /// Registrador testado (R0-R7).
+            int rn,
+            /// Endereço absoluto de destino quando o branch é tomado.
+            int target,
+            /// `true` para `CBNZ` (desvia quando `rn≠0`); `false` para `CBZ` (desvia quando
+            /// `rn==0`).
+            boolean branchIfNonZero,
+            /// Condição necessária para executar (normalmente AL; ver Armadilhas de B2.4 — CBZ/
+            /// CBNZ dentro de um IT block é UNPREDICTABLE no ARM ARM, mas o lifter aplica o mesmo
+            /// mecanismo uniforme de override de condição usado para toda instrução dentro de um
+            /// IT block, então este campo pode carregar uma condição não-AL nesse caso raro).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.COMPARE_BRANCH_ZERO; }
     }
 }

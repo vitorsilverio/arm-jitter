@@ -80,6 +80,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.WAIT_FOR_INTERRUPT -> system.executeWaitForInterrupt(core, (IrOp.WaitForInterrupt) op);
                 case IrOp.Kind.MOVE_TOP -> alu.executeMoveTop(core, (IrOp.MoveTop) op);
                 case IrOp.Kind.MEMORY_BARRIER -> system.executeMemoryBarrier(core, (IrOp.MemoryBarrier) op);
+                case IrOp.Kind.SET_IT_STATE -> system.executeSetItState(core, (IrOp.SetItState) op);
+                case IrOp.Kind.TABLE_BRANCH -> pcChanged |= branch.executeTableBranch(core, (IrOp.TableBranch) op);
+                case IrOp.Kind.COMPARE_BRANCH_ZERO -> pcChanged |= branch.executeCompareBranchZero(core, (IrOp.CompareBranchZero) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -135,6 +138,9 @@ public final class IrBlockExecutor {
             case IrOp.WaitForInterrupt wfi -> { system.executeWaitForInterrupt(core, wfi); yield false; }
             case IrOp.MoveTop moveTop -> { alu.executeMoveTop(core, moveTop); yield false; }
             case IrOp.MemoryBarrier barrier -> { system.executeMemoryBarrier(core, barrier); yield false; }
+            case IrOp.SetItState setIt -> { system.executeSetItState(core, setIt); yield false; }
+            case IrOp.TableBranch tb -> branch.executeTableBranch(core, tb);
+            case IrOp.CompareBranchZero cbz -> branch.executeCompareBranchZero(core, cbz);
         };
     }
 }

@@ -322,13 +322,17 @@ public final class JitRuntime {
     /// {@link ArmCore#cycles()}.
     public int execute(int pc, ArmCore core) {
         InstructionSet instructionSet = instructionSet(core);
+        // ITSTATE (B2.4, D1): quase sempre 0 (fora de um Thumb-2 IT block) — só custa uma leitura
+        // de campo, e entra na chave/tag para que um mesmo `pc` lifted com ITSTATE de entrada
+        // diferentes nunca reaproveite um bloco com condições por-op erradas.
+        int itState = core.cpsr().itState();
 
         // ── Inline cache (caminho quente) ───────────────────────────────────────
         // Revalida o IC contra a geração do cache (esvazia se algo foi removido) e
         // tenta o slot direto. Hit ⇒ executa sem tocar BlockKey/HashMap/Optional.
         syncInlineCacheGeneration();
         int slot = icSlot(pc);
-        long tag = inlineTag(pc, instructionSet);
+        long tag = inlineTag(pc, instructionSet, itState);
         if (icTags[slot] == tag) {
             // Invariante: tag válida ⇒ bloco não-nulo (gravados juntos em inlineRecord).
             icHits++;
@@ -358,8 +362,9 @@ public final class JitRuntime {
                 core.mode(); // sincroniza modo/banking a partir do CPSR (como no runBlock)
                 int nextPc = core.programCounter();
                 InstructionSet nextSet = instructionSet(core);
+                int nextItState = core.cpsr().itState();
                 int nextSlot = icSlot(nextPc);
-                if (icTags[nextSlot] != inlineTag(nextPc, nextSet)) {
+                if (icTags[nextSlot] != inlineTag(nextPc, nextSet, nextItState)) {
                     if (chainProfiler != null) {
                         chainProfiler.recordIcMiss(chainFromPc, nextPc);
                         chainBreak = ChainProfiler.BreakReason.IC_MISS;
@@ -406,9 +411,9 @@ public final class JitRuntime {
         }
         icMisses++;
 
-        BlockKey key = new BlockKey(pc, instructionSet);
+        BlockKey key = new BlockKey(pc, instructionSet, itState);
         if (coldEmitter != null) {
-            return executeTiered(pc, core, instructionSet, key, slot, tag);
+            return executeTiered(pc, core, instructionSet, itState, key, slot, tag);
         }
 
         // ── Caminho clássico (sem tiering): lookup, threshold, compilação síncrona ─
@@ -419,7 +424,7 @@ public final class JitRuntime {
                 core.setProgramCounter(pc);
                 return core.stepReturningInternalCycles();
             }
-            IrBlock irBlock = lift(pc, core.memory(), instructionSet);
+            IrBlock irBlock = lift(pc, core.memory(), instructionSet, itState);
             block = emitter.emit(optimizer.optimize(irBlock));
             blockCache.put(key, block, irBlock.startPc(), irBlock.endPc());
         }
@@ -444,12 +449,12 @@ public final class JitRuntime {
 
     /// Caminho TIERED: integra compilações de background prontas, depois despacha o tier do
     /// bloco (frio interpretado / quente compilado), submetendo a compilação ao esquentar.
-    private int executeTiered(int pc, ArmCore core, InstructionSet instructionSet, BlockKey key, int slot, long tag) {
+    private int executeTiered(int pc, ArmCore core, InstructionSet instructionSet, int itState, BlockKey key, int slot, long tag) {
         integrateCompiled();
         BlockCache.CacheEntry entry = blockCache.entry(key);
         if (entry == null) {
             // Primeira visão: interpreta o bloco inteiro (frio) e cacheia. Sem classloading.
-            IrBlock irBlock = lift(pc, core.memory(), instructionSet);
+            IrBlock irBlock = lift(pc, core.memory(), instructionSet, itState);
             CompiledBlock cold = coldEmitter.emit(irBlock);
             blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
             return run(cold, core);
@@ -462,7 +467,7 @@ public final class JitRuntime {
         CompiledBlock cold = entry.block();
         int hits = blockCache.hit(key);
         if (threshold.isHot(hits) && compilingColdBlocks.add(cold)) {
-            submitCompile(key, cold, lift(pc, core.memory(), instructionSet));
+            submitCompile(key, cold, lift(pc, core.memory(), instructionSet, itState));
         }
         return run(cold, core);
     }
@@ -506,9 +511,12 @@ public final class JitRuntime {
         return ((pc >>> 1) ^ (pc >>> 16)) & IC_MASK;
     }
 
-    /// Tag do inline cache: `pc` (32 bits) + conjunto de instruções no bit 32.
-    private static long inlineTag(int pc, InstructionSet instructionSet) {
-        return (pc & 0xFFFF_FFFFL) | ((long) instructionSet.ordinal() << 32);
+    /// Tag do inline cache: `pc` (32 bits) + conjunto de instruções no bit 32 + ITSTATE\[7:0\]
+    /// (B2.4, D1) nos bits 33-40 — mesma razão de `BlockKey` incluir `itState`: sem isto, o IC
+    /// (camada front-side sobre o `BlockCache`) poderia servir um bloco com condições por-op
+    /// baked para um ITSTATE de entrada diferente do atual, mesmo com o `BlockCache` já correto.
+    private static long inlineTag(int pc, InstructionSet instructionSet, int itState) {
+        return (pc & 0xFFFF_FFFFL) | ((long) instructionSet.ordinal() << 32) | ((long) (itState & 0xFF) << 33);
     }
 
     /// Esvazia o inline cache se o {@link BlockCache} sofreu remoção desde a última
@@ -543,7 +551,7 @@ public final class JitRuntime {
 
     /// Compila um bloco iniciando em `pc` usando o conjunto de instruções informado.
     public CompiledBlock compile(int pc, AddressSpace memory, InstructionSet instructionSet) {
-        IrBlock block = lift(pc, memory, instructionSet);
+        IrBlock block = lift(pc, memory, instructionSet, 0);
         return emitter.emit(optimizer.optimize(block));
     }
 
@@ -613,8 +621,8 @@ public final class JitRuntime {
         };
     }
 
-    private IrBlock lift(int pc, AddressSpace memory, InstructionSet instructionSet) {
+    private IrBlock lift(int pc, AddressSpace memory, InstructionSet instructionSet, int itStateAtEntry) {
         IrBlockLifter lifter = new StandardIrBlockLifter(decoderFor(instructionSet), irBuilder);
-        return lifter.lift(memory, pc, maxBlockInstructions);
+        return lifter.lift(memory, pc, maxBlockInstructions, itStateAtEntry);
     }
 }

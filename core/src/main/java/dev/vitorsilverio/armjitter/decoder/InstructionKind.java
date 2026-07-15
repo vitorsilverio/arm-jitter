@@ -155,5 +155,18 @@ public enum InstructionKind {
     /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 B2.5): barreira de memória. `immediate` carrega o campo
     /// `option` cru (bits 3:0) só para rastreabilidade — a semântica atual ignora o valor (NOP
     /// observável, ver {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier}).
-    MEMORY_BARRIER
+    MEMORY_BARRIER,
+    /// `IT` (Thumb-2, ARMv6T2+, B2.4): abre um IT block. `immediate` carrega o ITSTATE\[7:0\] de
+    /// ENTRADA já montado (`firstcond:4 ++ mask:4`, com `firstcond==0b1111` já normalizado para
+    /// `0b1110`/AL pelo decoder — ver {@link dev.vitorsilverio.armjitter.core.ItState}). O lifter
+    /// (não o decoder) consome este valor para semear o estado local threaded pelas até 4
+    /// instruções seguintes — ver D1 em `b2.4-thumb2-branches-it.md`.
+    IT,
+    /// `TBB`/`TBH` (Thumb-2, ARMv6T2+, B2.4). `sourceRegister`=Rn, `secondSourceRegister`=Rm,
+    /// `immediate` bit 0 = forma halfword (`TBH`, `1`) vs byte (`TBB`, `0`).
+    TABLE_BRANCH,
+    /// `CBZ`/`CBNZ` (Thumb-1, ARMv6T2+, B2.4). `sourceRegister`=Rn (R0-R7), `immediate`=endereço
+    /// absoluto de destino já resolvido, `link`=`true` para `CBNZ` (desvia se `rn≠0`), `false`
+    /// para `CBZ` (desvia se `rn==0`). Nunca afeta NZCV.
+    COMPARE_BRANCH_ZERO
 }

@@ -88,20 +88,23 @@ class ArmArchitectureTest {
         assertFalse(custom.has(ArmFeature.BLX));
     }
 
-    /// B4.0.2: `ARMV6K_THUMB2_PARTIAL` é o subconjunto Thumb-2 promovido a preset público —
+    /// B4.0.2: `ARMV6K_THUMB2` é o subconjunto Thumb-2 promovido a preset público —
     /// herda tudo de ARMV6K, liga `THUMB2`, e planta o `Thumb2DataProcessingDecoder` de B2.2 nas
     /// extensões de 32 bits. Não é o ARMv7-A completo (sem load/store, branches/IT, misc ainda).
     @Test
     void armv6kThumb2PartialAddsThumb2AndTheDataProcessingExtensionOnTopOfArmv6k() {
-        ArmArchitecture preset = ArmArchitecture.ARMV6K_THUMB2_PARTIAL;
+        ArmArchitecture preset = ArmArchitecture.ARMV6K_THUMB2;
         assertTrue(preset.has(ArmFeature.THUMB2));
         for (ArmFeature feature : ARMV6_FEATURES) {
             assertTrue(preset.has(feature), feature + " deve ser herdada de ARMv6K");
         }
         assertEquals(ArmArchitecture.ARMV6K.decoderExtensions().size(), preset.decoderExtensions().size(),
                 "extensões de decoder ARM (32-bit clássico) herdadas sem mudança");
-        assertEquals(1, preset.thumb32DecoderExtensions().size(),
-                "só o Thumb2DataProcessingDecoder de B2.2 — B2.3/B2.4/B2.5 ficam de fora por escopo");
+        assertEquals(2, preset.thumb32DecoderExtensions().size(),
+                "Thumb2DataProcessingDecoder (B2.2) + Thumb2BranchDecoder (B2.4) — "
+                        + "Thumb2LoadStoreDecoder (B2.3) e Thumb2MiscDecoder (B2.5) ficam de fora "
+                        + "por uma colisão real com a ambiguidade de sufixo BL/BLX, ver o javadoc "
+                        + "de ARMV6K_THUMB2");
         assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.THUMB2), "a base ARMV6K não pode ser mutada");
     }
 

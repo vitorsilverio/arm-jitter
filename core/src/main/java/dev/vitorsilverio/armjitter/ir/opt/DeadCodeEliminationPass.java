@@ -137,6 +137,14 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             // SWI/Undefined disparam exceção — todos os registradores podem ser inspecionados
             case IrOp.Swi ignored -> 0xFFFF;
             case IrOp.Undefined ignored -> 0xFFFF;
+            // TBB/TBH (B2.4) leem rn/rm para calcular o endereço da tabela.
+            case IrOp.TableBranch tb -> {
+                int mask = tb.rnValueOverride() < 0 ? (1 << tb.rn()) : 0;
+                if (tb.rmValueOverride() < 0) mask |= (1 << tb.rm());
+                yield mask;
+            }
+            // CBZ/CBNZ (B2.4) lê rn (nunca tem value override — sempre R0-R7).
+            case IrOp.CompareBranchZero cbz -> (1 << cbz.rn());
             default -> 0;
         };
     }

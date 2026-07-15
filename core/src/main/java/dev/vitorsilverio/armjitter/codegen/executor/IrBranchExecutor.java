@@ -60,4 +60,44 @@ final class IrBranchExecutor {
         }
         return true;
     }
+
+    /// `TBB`/`TBH` (B2.4): lê a tabela em memória delegando ao mesmo helper de leitura de
+    /// byte/halfword que loads comuns já usam (G1 — sem duplicar cálculo de endereço/alinhamento),
+    /// e desvia para `PC_da_instrução + 4 + 2*valor`. O valor lido nunca fica visível em nenhum
+    /// registrador (ver a decisão D3 em `b2.4-thumb2-branches-it.md`).
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    boolean executeTableBranch(ArmCore core, IrOp.TableBranch tableBranch) {
+        if (!core.cpsr().evalCond(tableBranch.condition())) {
+            return false;
+        }
+        int tableBase = support.registerValue(core, tableBranch.rn(), tableBranch.rnValueOverride());
+        int index = support.registerValue(core, tableBranch.rm(), tableBranch.rmValueOverride());
+        int tableEntry;
+        if (tableBranch.halfword()) {
+            int address = tableBase + (index << 1);
+            tableEntry = support.read16Arm7(core, address, false) & 0xFFFF;
+        } else {
+            int address = tableBase + index;
+            tableEntry = support.read8Arm7(core, address) & 0xFF;
+        }
+        core.setProgramCounter(tableBranch.pcBase() + (tableEntry << 1));
+        return true;
+    }
+
+    /// `CBZ`/`CBNZ` (B2.4): desvia conforme `rn` seja zero/não-zero, sem tocar NZCV.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    boolean executeCompareBranchZero(ArmCore core, IrOp.CompareBranchZero cbz) {
+        if (!core.cpsr().evalCond(cbz.condition())) {
+            return false;
+        }
+        boolean zero = core.register(cbz.rn()) == 0;
+        boolean take = cbz.branchIfNonZero() != zero; // CBNZ: !zero; CBZ: zero
+        if (!take) {
+            return false;
+        }
+        core.setProgramCounter(cbz.target());
+        return true;
+    }
 }

@@ -31,6 +31,18 @@ public final class CpsrRegister {
     /// E=1 (big-endian) não são implementados — ver os helpers `readXArm7`/`writeXArm7` em
     /// {@code IrExecutionSupport}.
     public static final int ENDIAN_FLAG = 1 << 9;
+    /// Deslocamento da metade BAIXA do ITSTATE\[7:0\] (Thumb-2 IT block, B2.4) — CPSR\[26:25\] =
+    /// ITSTATE\[1:0\], confirmado contra o QEMU `cpu.h`/`helper.c`. Bits genuinamente livres em
+    /// todo preset existente (confirmado por grep antes da task B2.4: nenhum J-bit nem outro uso
+    /// ARMv6T2/v7 já reivindicava 26:25 ou 15:10 neste `CpsrRegister`).
+    public static final int IT_LOW_SHIFT = 25;
+    /// Máscara da metade baixa do ITSTATE (bits 26:25, 2 bits).
+    public static final int IT_LOW_MASK = 0b11 << IT_LOW_SHIFT;
+    /// Deslocamento da metade ALTA do ITSTATE\[7:0\] (bits 15:10, 6 bits) — CPSR\[15:10\] =
+    /// ITSTATE\[7:2\].
+    public static final int IT_HIGH_SHIFT = 10;
+    /// Máscara da metade alta do ITSTATE (bits 15:10, 6 bits).
+    public static final int IT_HIGH_MASK = 0x3F << IT_HIGH_SHIFT;
 
     private int value = CpuMode.SYSTEM.bits();
 
@@ -171,6 +183,25 @@ public final class CpsrRegister {
     /// Ativa ou desativa o bit E de endianness de dados.
     public void setBigEndian(boolean bigEndian) {
         setFlag(ENDIAN_FLAG, bigEndian);
+    }
+
+    /// Retorna o ITSTATE\[7:0\] cru (Thumb-2 IT block, B2.4): `0` fora de um IT block. Formato
+    /// idêntico ao byte baixo do encoding da instrução `IT` (`firstcond:4 ++ mask:4`), reconstruído
+    /// a partir dos dois pedaços não-contíguos do CPSR (bits 26:25 e 15:10) — ver
+    /// {@link #setItState}. Consumido por `MRS`/`MSR` (que NÃO devem alterar estes bits ao tocar
+    /// apenas N/Z/C/V/Q/GE) e pelo salvamento/restauração automático via SPSR na entrada/saída de
+    /// exceção (que já preserva o CPSR inteiro, então ITSTATE "anda de carona" sem código extra).
+    public int itState() {
+        int high = (value & IT_HIGH_MASK) >>> IT_HIGH_SHIFT;
+        int low = (value & IT_LOW_MASK) >>> IT_LOW_SHIFT;
+        return (high << 2) | low;
+    }
+
+    /// Grava o ITSTATE\[7:0\] cru nos dois pedaços não-contíguos do CPSR. `0` sai do IT block.
+    public void setItState(int itState) {
+        int high = (itState >>> 2) & 0x3F;
+        int low = itState & 0x3;
+        value = (value & ~IT_HIGH_MASK & ~IT_LOW_MASK) | (high << IT_HIGH_SHIFT) | (low << IT_LOW_SHIFT);
     }
 
     private void setFlag(int mask, boolean enabled) {

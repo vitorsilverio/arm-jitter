@@ -101,6 +101,11 @@ public final class AsmNativePolicy {
             // enquanto — mesmo padrão de toda instrução de sistema nova (CPS/SETEND/SRS/RFE/WFI/
             // MOVT) até uma task futura de emissão nativa.
             case IrOp.MemoryBarrier ignored -> false;
+            // IT block/branches Thumb-2 novos (B2.4): interpretados até uma task futura de emissão
+            // nativa, mesmo padrão de todo op novo B1.x/B2.x até B1.6/uma task dedicada.
+            case IrOp.SetItState ignored -> false;
+            case IrOp.TableBranch ignored -> false;
+            case IrOp.CompareBranchZero ignored -> false;
         };
     }
 

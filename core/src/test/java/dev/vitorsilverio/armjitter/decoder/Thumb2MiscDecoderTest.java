@@ -144,13 +144,14 @@ class Thumb2MiscDecoderTest {
     }
 
     @Test
-    void itBlockMaskIsLeftUndefinedByThisTask() {
-        // mask != 0000 no mesmo opcode de 16 bits: IT block, B2.4 — deliberadamente fora do
-        // escopo de B2.5 (ver Thumb2MiscDecoderTest/ThumbDecoder). Deve continuar UNDEFINED.
+    void itBlockMaskIsNowHandledByB24() {
+        // mask != 0000 no mesmo opcode de 16 bits: IT block — fora do escopo de B2.5 (ver
+        // Thumb2MiscDecoderTest/ThumbDecoder), mas implementado pela task B2.4 no mesmo
+        // ThumbDecoder (não é responsabilidade de Thumb2MiscDecoder).
         TestAddressSpace memory = new TestAddressSpace(16);
-        memory.put16(0, hint16(0x0) | 0x8); // firstcond=0000, mask=1000 (!=0) -> "IT" no real HW
+        memory.put16(0, hint16(0x0) | 0x8); // firstcond=0000, mask=1000 (!=0) -> "IT"
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
-        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertEquals(InstructionKind.IT, instruction.kind());
     }
 
     // ── DMB/DSB/ISB: nenhum efeito observável além de consumir ciclo/fetch (G4) ─────────────

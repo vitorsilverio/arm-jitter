@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.core.ItState;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 /// Decoder THUMB16 inicial para o caminho interpretado frio.
@@ -26,10 +27,10 @@ public final class ThumbDecoder implements InstructionDecoder {
     private static final int TOP5_MASK = 0xF800;
     private static final int TOP5_SHIFT = 11;
 
-    /// `1011 1111 hint#4 mask#4` (B2.5, ARM DDI 0406C A6.2.9/A6.7): mesmo opcode de 16 bits que a
-    /// instrução `IT` (B2.4, ainda não implementada) — `mask==0000` é a forma "hint"
-    /// (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`), qualquer `mask` != 0 é `IT`. Ambas as formas só existem a
-    /// partir de ARMv6T2, então o gate desta task é {@link ArmFeature#THUMB2} (não Thumb-1).
+    /// `1011 1111 hint#4 mask#4` (B2.5/B2.4, ARM DDI 0406C A6.2.9/A6.7): mesmo opcode de 16 bits
+    /// que a instrução `IT` — `mask==0000` é a forma "hint" (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`,
+    /// B2.5), qualquer `mask` != 0 é `IT` (B2.4). Ambas as formas só existem a partir de ARMv6T2,
+    /// então o gate desta task é {@link ArmFeature#THUMB2} (não Thumb-1).
     private static final int HINT_OR_IT_MASK = 0xFF00;
     private static final int HINT_OR_IT_VALUE = 0xBF00;
     private static final int HINT_MASK_FIELD = 0xF;
@@ -41,6 +42,16 @@ public final class ThumbDecoder implements InstructionDecoder {
     /// halfword — ARM DDI 0308D Figure 3-9. Fixo independente de J1/J2 (bits[13] e [11], que
     /// carregam o offset estendido, não a categoria da instrução).
     private static final int BRANCH_WITH_LINK_MASK = 0xC000;
+
+    /// `CBZ`/`CBNZ` (B2.4, ARM DDI 0406C A6.7): `1011 nz:1 0 i:1 1 imm5:5 rn:3`. Máscara/valor dos
+    /// bits fixos (15:12=`1011`, 10=`0`, 8=`1`) — `nz`(11), `i`(9), `imm5`(7:3) e `rn`(2:0) variam.
+    private static final int CBZ_FIXED_MASK = 0xF500;
+    private static final int CBZ_FIXED_VALUE = 0xB100;
+    private static final int CBZ_NZ_BIT = 11;
+    private static final int CBZ_I_BIT = 9;
+    private static final int CBZ_IMM5_SHIFT = 3;
+    private static final int CBZ_IMM5_MASK = 0x1F;
+    private static final int CBZ_RN_MASK = 0x7;
 
     /// Decodifica uma instrução THUMB16 (ou, com {@link ArmFeature#THUMB2}, um candidato Thumb de
     /// 32 bits) no endereço informado.
@@ -317,9 +328,8 @@ public final class ThumbDecoder implements InstructionDecoder {
                     -1, -1, -1, mask, true, false, includePc);
         }
 
-        // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. IT blocks (mask!=0000, mesmo
-        // opcode) ficam fora do escopo desta task (B2.4) — sem THUMB2, ou com mask!=0000, cai
-        // sem tratamento especial no UNDEFINED do fallback final deste método, inalterado.
+        // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é
+        // `IT` (B2.4).
         if (architecture.has(ArmFeature.THUMB2) && (raw & HINT_OR_IT_MASK) == HINT_OR_IT_VALUE) {
             int mask = raw & HINT_MASK_FIELD;
             if (mask == 0) {
@@ -337,7 +347,35 @@ public final class ThumbDecoder implements InstructionDecoder {
                 return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.MSR,
                         0, -1, -1, 0, true, false, false);
             }
-            // mask != 0: IT block (B2.4) — deliberadamente não tratado aqui ainda.
+            // `IT firstcond,mask` (B2.4, ARM DDI 0406C A6.7 `IT`): `firstcond` = bits[7:4],
+            // `mask` (já extraído acima) = bits[3:0]. `firstcond==0b1111` (NV) é CONSTRAINED
+            // UNPREDICTABLE, normalizado para AL (0b1110) — ver ItState#normalizeFirstCond e o
+            // item 2 dos "Fatos de referência" da spec desta task. O `immediate` carrega o
+            // ITSTATE de ENTRADA já montado (`firstcond:mask`); o LIFTER (não este decoder,
+            // stateless) consome esse valor para semear/threading o estado local das até 4
+            // instruções seguintes (D1).
+            int firstCond = (raw >>> HINT_SELECTOR_SHIFT) & HINT_SELECTOR_MASK;
+            int normalizedFirstCond = ItState.normalizeFirstCond(firstCond);
+            int itStateEntry = ItState.entryState(normalizedFirstCond, mask);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.IT,
+                    -1, -1, -1, itStateEntry, false, false, false);
+        }
+
+        // `CBZ`/`CBNZ` (Thumb-1, B2.4, ARM DDI 0406C A6.7): `1011 nz:1 0 i:1 1 imm5:5 rn:3` —
+        // `nz` (bit 11) seleciona CBNZ(1)/CBZ(0); offset = `(i<<6)|(imm5<<1)` (sempre par,
+        // 0..126); `rn` restrito a R0-R7 pelo campo de 3 bits. Checado ANTES do espaço genérico
+        // 0xF800==0xF000/0xF800/0xE800 (branches longos) e do bloco de hints/IT acima (nenhum
+        // overlap: top byte aqui é sempre 0xB1/0xB3/0xB9/0xBB, distinto de 0xB0 (`ADD SP,#imm`)
+        // e 0xB4-0xB5/0xBC-0xBD (`PUSH`/`POP`)).
+        if (architecture.has(ArmFeature.THUMB2) && (raw & CBZ_FIXED_MASK) == CBZ_FIXED_VALUE) {
+            boolean nonZero = (raw & (1 << CBZ_NZ_BIT)) != 0;
+            boolean iBit = (raw & (1 << CBZ_I_BIT)) != 0;
+            int imm5 = (raw >>> CBZ_IMM5_SHIFT) & CBZ_IMM5_MASK;
+            int rn = raw & CBZ_RN_MASK;
+            int offset = (iBit ? (1 << 6) : 0) | (imm5 << 1);
+            int target = address + 4 + offset;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.COMPARE_BRANCH_ZERO, -1, rn, -1, target, false, false, nonZero);
         }
 
         if ((raw & 0xF800) == 0xF000) {

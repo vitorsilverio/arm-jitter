@@ -139,4 +139,14 @@ final class IrSystemExecutor {
         }
         // Intencionalmente vazio: ver justificativa em IrOp.MemoryBarrier.
     }
+
+    /// Grava o ITSTATE\[7:0\] do CPSR (Thumb-2 IT block, B2.4). Ver o javadoc de
+    /// {@link IrOp.SetItState} para as duas origens (entrada do `IT`/avanço pós-instrução) e por
+    /// que o avanço é sempre emitido com condição AL pelo lifter.
+    void executeSetItState(ArmCore core, IrOp.SetItState setItState) {
+        if (!core.cpsr().evalCond(setItState.condition())) {
+            return;
+        }
+        core.cpsr().setItState(setItState.itState());
+    }
 }
