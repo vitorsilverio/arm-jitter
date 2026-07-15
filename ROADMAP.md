@@ -19,8 +19,9 @@ O pipeline `cache → decode → lift IR → otimizar → emit` está completo e
   nativa, shifted-register nativo, register cache em locals, inline cache de 32K e
   encadeamento de blocos (`setChainCycleBudget`).
 - **Arquiteturas guest:** ARMv4T (ARM7TDMI — GBA) e ARMv5TE (ARM9E — NDS) completos e em
-  produção; ARMv6K completo (decoder+IR+interp+ASM nativo, trilha B1); Thumb-2 parcial
-  (infra+data-processing+load-store+misc, falta branches/IT — trilha B2). Ver
+  produção; ARMv6K completo (decoder+IR+interp+ASM nativo, trilha B1); Thumb-2 decode
+  completo (B2.1-B2.5, incl. branches/IT — trilha B2), mas o preset público ainda
+  não pluga todas as extensões (B2.6, pendente). Ver
   [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
 - **Consumidores em produção:** gbaemu (5 jogos comerciais jogáveis, ≥2× realtime
   headless) e ndsemu (JUS ~99% realtime, MKDS 92–97%, SM64DS 72%).
@@ -125,8 +126,9 @@ prático de 64 bits é ARMv8-A/AArch64 — v9 vem de graça depois, por feature 
 | 3DS (lado DS/segurança) | ARM946E-S | ARMv5TE | ✅ já coberto |
 | 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | 🟡 ARMv6K ✅ (B1.1-B1.6); falta VFPv2 (B3) |
 | Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | 🟡 ARMv6K ✅; falta VFPv2 (B3) |
-| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | 🟡 Thumb-2 parcial (B2.1-B2.3,B2.5 ✅; falta B2.4 branches+IT); VFP/NEON não iniciados (B3) |
+| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | 🟡 Thumb-2 decode ✅ (B2.1-B2.5); preset público ainda incompleto (B2.6); VFP/NEON não iniciados (B3) |
 | Linux/Android arm64, Pi 3+ | Cortex-A5x+ | **ARMv8-A AArch64** | ⬜ B6 |
+| Microcontroladores (STM32, nRF, Arduino ARM) | Cortex-M0/M3/M4/M7 | **ARMv6-M/v7-M/v8-M** (perfil M, Thumb-only) | ⬜ B7 [REFINAR] |
 
 ### Fases
 
@@ -142,12 +144,19 @@ mesmo IR.
 - **Aceite:** harness + testes unitários por instrução; ROM de teste ARM11 (homebrew
   3DS ou bare-metal Pi) executando no interpretador.
 
-**B2 — Thumb-2 (ARMv6T2/v7)** — o maior salto de decoder do plano.
+**B2 — Thumb-2 (ARMv6T2/v7)** — o maior salto de decoder do plano. ✅ decode completo
+(B2.1-B2.5: infra, data-processing, load-store, misc, branches+IT block).
 - Encodings Thumb de 32 bits, IT blocks (predicação em Thumb), tabela de encoding nova
   no `ThumbDecoder` (hoje só 16-bit).
-- IT blocks mapeiam bem no guard condicional por-op já existente no JIT.
+- IT blocks mapeiam bem no guard condicional por-op já existente no JIT — ITSTATE
+  vive em `CpsrRegister`, entra na chave do `BlockCache`/tag do inline cache.
 - **Aceite:** suíte de decode exaustiva contra assembler de referência
   (binutils/capstone como oráculo offline); harness verde.
+- **B2.6 (pendente)**: o preset público `ARMV6K_THUMB2` ainda não pluga
+  `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` juntas — colisão real e documentada
+  com o "fantasma" de `BL`/`BLX` legado, mesmo bug que `Thumb2DataProcessingDecoder`
+  já teve corrigido (B2.2.2). Pré-requisito prático para qualquer binário Thumb-2
+  real fora de blocos sintéticos de teste.
 
 **B3 — ARMv7-A user-level + VFP** — completa o user-mode de 32 bits.
 - CP15 estendido, MOVW/MOVT, DMB/DSB/ISB, restante do v7.
@@ -187,8 +196,18 @@ Do lado do arm-jitter basta ARMv6K + VFPv2 corretos.
 - **Aceite incremental:** binários estáticos arm64 "hello world" → busybox no runner
   user-mode → kernel arm64 mínimo.
 
-**Ordem recomendada:** B1 → B2 → B3 → (B4 ∥ B5) → B6. B6.0 (RFC do IR 64-bit) pode
-ser escrita cedo, pois influencia decisões de B1–B3.
+**B7 — Perfil M / Cortex-M (ARMv6-M/v7-M/v8-M)** — família arquitetural à parte, não
+uma extensão do perfil A/R: sem modo ARM de 32 bits, Thread/Handler mode em vez de
+CPSR bancado, NVIC/vetor relocável (VTOR), `EXC_RETURN`. Cobre microcontroladores
+(STM32, nRF, a maioria das placas ARM tipo Arduino) — objetivo do projeto é cobrir
+qualquer device ARM, não só a linha de aplicação já mapeada acima. **[REFINAR]**:
+depende de B2 (✅) e B2.6; ver `tasks/trilha-b-arquiteturas/b7-m-profile.md` para o
+porquê de precisar de uma rodada de spec própria antes de virar sub-tasks executáveis
+(mesmo padrão de B3/B6).
+
+**Ordem recomendada:** B1 → B2 → B2.6 → B3 → (B4 ∥ B5) → B6. B7 é independente (só
+depende de B2/B2.6) e pode ser refinado em paralelo a qualquer uma das outras.
+B6.0 (RFC do IR 64-bit) pode ser escrita cedo, pois influencia decisões de B1–B3.
 
 ---
 
