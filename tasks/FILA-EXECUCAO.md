@@ -14,6 +14,13 @@
 5. Ao fechar: suites verdes (arm-jitter `mvn -o test` com JBR 25 + gbaemu +
    ndsemu), status atualizado no índice do `tasks/README.md`, 1 commit começando
    com o ID (`B2.6: ...`).
+6. **NUNCA duas sessões simultâneas no MESMO checkout/repo** — "paralelo" vale
+   só entre repos DIFERENTES (arm-jitter ∥ gbaemu ∥ armbox). Duas sessões no
+   mesmo working tree misturam WIP uma da outra (já aconteceu em 2026-07-16:
+   um `git add -A` de uma sessão de docs varreu os arquivos half-done da A6
+   para dentro do commit errado — desfeito, mas é exatamente o acidente que
+   esta regra evita). Pelo mesmo motivo: **commits sempre com paths explícitos
+   (`git add <arquivos da SUA task>`), nunca `git add -A`.**
 
 **Prompt de kickoff (copiar/colar, trocando o ID):**
 
