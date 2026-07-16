@@ -33,6 +33,18 @@ São **3 bugs distintos** em batalha, todos backend-independentes:
 
 ## Hipóteses fortes (uma por sintoma, independentes — verificar nesta ordem; refinamento de 2026-07-16)
 
+**Hipótese 1 ✅ CONFIRMADA E CORRIGIDA (2026-07-16).** `GbaLcdTiming.updateRegisters()`
+computava `nextHblank` só a partir de `scanlineCycles`, disparando o H-Blank em TODAS
+as 228 linhas do frame (inclusive as 68 de V-Blank) — e `GbaConsole.triggerTimedDma`
+usava essa mesma contagem para disparar o HDMA, rodando a tabela 68 entradas além do
+fim por frame. Fix: novo campo `Events.hblankStartedVisibleCount` (só linhas
+`scanline < VISIBLE_SCANLINES`), usado exclusivamente para o disparo de DMA; a flag/IRQ
+de H-Blank (`hblankStartedCount`) continua disparando em todas as 228 linhas,
+que é o comportamento correto de hardware (GBATEK). Teste de regressão:
+`GbaLcdTimingTest.hblankFiresOnAllScanlinesButVisibleCountExcludesVblank` (228 total,
+160 visível). Suíte gbaemu 232 verde. **Falta validação visual do usuário** (fade
+progressivo até embaixo em batalha real) — aceite #2 da task.
+
 1. **Fade → H-blank DMA (HDMA) fora da janela válida.** FireRed programa efeitos
    por-scanline via DMA em modo H-blank (tabela, um valor por linha). No hardware
    **HDMA só dispara nas linhas visíveis 0-159 — NUNCA no V-blank (160-227)**

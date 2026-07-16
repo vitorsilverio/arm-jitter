@@ -45,7 +45,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 4b | ~~B4.0.4.1~~ ✅ FECHADA 2026-07-16 — `CoprocessorBus.handles` fino implementado (arm-jitter + armbox); B4.0.3 segue dependendo só de B2.7/B2.8 agora | — | — | — |
 | 5 | ~~C6~~ ✅ FECHADA 2026-07-16 (`64e08c1`) — validação de gameplay A/B confirmou os 3 problemas observados como pré-existentes, não regressão | — | — | — |
 | 6 | ~~D1~~ ✅ FECHADA 2026-07-16 — protocolo S-3511A verificado contra o GBATEK real (fetch direto); `S3511aRtc`+`GbaRtcDetector`+GPIO opcional em `GbaRom`; suite gbaemu 231 verde | — | — | — |
-| 6b | **D2** — glitch de batalha do FireRed também em `INTERPRETED` | gbaemu | Achado da validação de C6; refuta hipótese "só ASM" de C5 | Diagnóstico (causa raiz desconhecida); após D1 (mesmo repo) |
+| 6b | **D2** — glitch de batalha do FireRed também em `INTERPRETED` | gbaemu | Achado da validação de C6; refuta hipótese "só ASM" de C5 | 🟡 hipótese 1 (HDMA em V-Blank) FECHADA 2026-07-16; hipóteses 2 (wrap OAM) e 3 (OBJ window) restantes, 1 sessão cada |
 | 6c | **D3** — chiado de áudio no SMW | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2 (mesmo repo) |
 | 6d | **D4** — canal de áudio baixo/acelerado no Metroid | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2/D3 (mesmo repo) |
 | 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
