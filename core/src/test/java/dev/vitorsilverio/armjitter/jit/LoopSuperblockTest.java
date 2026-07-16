@@ -172,6 +172,47 @@ class LoopSuperblockTest {
     }
 
     @Test
+    void blockCacheClearAloneLeavesSuperblockHeadPermanentlyBlocked() {
+        // Documenta o bug da C11 fase 1: `blockCache().clear()` sozinho (o caminho antigo de
+        // `loadState`) NÃO esquece heads já tentados — um restore nunca reconstrói um loop que
+        // já tinha virado superbloco antes do save.
+        JitRuntime runtime = asmRuntime(CHAIN_BUDGET);
+        ArmCore core = new ArmCore(pingPong(), SwiDispatcher.empty());
+        core.setProgramCounter(BLOCK_A);
+        for (int warm = 0; warm < 8; warm++) {
+            runtime.execute(core.programCounter(), core);
+        }
+        assertTrue(runtime.buildSuperblockNow(InstructionSet.ARM, BLOCK_A, BLOCK_B));
+
+        runtime.blockCache().clear(); // simula o `loadState` de hoje (pré-C11 fase 2)
+        core.setProgramCounter(BLOCK_A);
+        for (int warm = 0; warm < 8; warm++) {
+            runtime.execute(core.programCounter(), core);
+        }
+        assertFalse(runtime.buildSuperblockNow(InstructionSet.ARM, BLOCK_A, BLOCK_B),
+                "head já tentado antes do clear() continua bloqueado — bug confirmado");
+    }
+
+    @Test
+    void resetAllowsSuperblockHeadToBeRebuiltAfterRestore() {
+        JitRuntime runtime = asmRuntime(CHAIN_BUDGET);
+        ArmCore core = new ArmCore(pingPong(), SwiDispatcher.empty());
+        core.setProgramCounter(BLOCK_A);
+        for (int warm = 0; warm < 8; warm++) {
+            runtime.execute(core.programCounter(), core);
+        }
+        assertTrue(runtime.buildSuperblockNow(InstructionSet.ARM, BLOCK_A, BLOCK_B));
+
+        runtime.reset(); // Fix C: substitui `blockCache().clear()` no restore de save state
+        core.setProgramCounter(BLOCK_A);
+        for (int warm = 0; warm < 8; warm++) {
+            runtime.execute(core.programCounter(), core);
+        }
+        assertTrue(runtime.buildSuperblockNow(InstructionSet.ARM, BLOCK_A, BLOCK_B),
+                "reset() esquece o head — o loop pode virar superbloco de novo");
+    }
+
+    @Test
     void interpretedEmitterSkipsBuildGracefully() {
         JitRuntime runtime = JitRuntimeFactory.interpretedArmThumb(64, 1);
         runtime.setChainCycleBudget(CHAIN_BUDGET);

@@ -243,6 +243,28 @@ public final class JitRuntime {
         return entry != null && entry.block() instanceof LoopSuperblock;
     }
 
+    /// Reset completo pós-restore de save state: limpa o {@link BlockCache} (equivalente a
+    /// `blockCache().clear()`) E TAMBÉM todo o estado de detecção/construção de
+    /// loop-superbloco (task C0.2/C0.3) — {@link #superblockHeads} e o
+    /// [LoopSuperblockDetector] instalado, se houver.
+    ///
+    /// Sem isto (achado da task C11, fase 1): `blockCache().clear()` sozinho deixa o
+    /// working set frio, mas um head de loop já PROMOVIDO ou já TENTADO antes do save
+    /// nunca é reavaliado depois — `superblockHeads` só recebe `add`, nunca `clear`, e o
+    /// detector nunca esquece um candidato já promovido ({@code isPromoted}). O loop de
+    /// maior valor de uma cena fica permanentemente preso ao chaining bloco-a-bloco cru
+    /// pelo resto da sessão, mesmo com o bloco individual recompilando normalmente — o
+    /// gap de desempenho frio→quente nunca fecha.
+    ///
+    /// Use isto (não `blockCache().clear()` diretamente) em `loadState` dos hospedeiros.
+    public void reset() {
+        blockCache.clear();
+        superblockHeads.clear();
+        if (superblocksEnabled) {
+            superblockDetector = new LoopSuperblockDetector();
+        }
+    }
+
     /// Cria um runtime JIT com seus componentes principais.
     public JitRuntime(
             BlockCache blockCache,
