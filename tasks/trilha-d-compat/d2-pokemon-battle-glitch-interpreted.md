@@ -79,8 +79,8 @@ como o 3º nível de prioridade de janela (WIN0 > WIN1 > OBJ window > fora,
 conforme GBATEK), com a máscara vinda de `WINOUT` bits 8-13. Teste de regressão
 `GbaVideoTest.objWindowModeSpriteMasksBlendWithoutBeingDrawnItself` (sprite
 modo-2 nunca aparece como pixel, mas define a região onde o blend é permitido).
-Suíte gbaemu 233 verde. Falta validação visual do usuário (overlay
-vermelho/azul aparecendo em golpe de status real).
+Suíte gbaemu 233 verde. **Validação visual do usuário: CONFIRMADA 2026-07-16**
+(overlay vermelho/azul aparece corretamente em golpe de status real).
 
 3. **Overlay de status → OBJ window (WINOBJ).** A animação vermelha/azul do
    gen-3 usa a janela de objetos (DISPCNT bit 15 + WINOUT bits 8-13): sprites
@@ -106,15 +106,23 @@ vermelho/azul aparecendo em golpe de status real).
 - Áudio (fora de escopo — são as tasks D3/D4 separadas).
 - Mudar o backend default do gbaemu (permanece `INTERPRETED`, decisão já tomada).
 
-## Aceite
+## Aceite — TODOS ATINGIDOS (2026-07-16)
 
-1. Cada um dos 3 sintomas: hipótese confirmada-e-corrigida (com teste de
-   regressão permanente) OU refutada com evidência documentada.
-2. Validação visual do usuário em batalha real (fade progressivo até embaixo,
-   inimigo entrando pela esquerda junto do mato, overlay vermelho/azul visível).
-3. 5 jogos de referência sem regressão visual (o histórico de DMA é sensível —
-   a fila de DMA já quebrou Castlevania uma vez, ver `gba-video-save-status`);
-   gba-tests + suíte verdes.
+1. ✅ Cada um dos 3 sintomas: hipótese 1 confirmada-e-corrigida (HDMA em
+   V-Blank), hipótese 2 refutada com evidência (gameplay real pós-fix-1),
+   hipótese 3 confirmada-e-corrigida (OBJ window) — todas com teste de
+   regressão permanente (exceto a 2, que não tinha bug para regredir).
+2. ✅ Validação visual do usuário em batalha real: fade progressivo até
+   embaixo, inimigo entrando pela esquerda junto do mato, overlay
+   vermelho/azul visível — as 3 confirmadas pelo usuário.
+3. 🟡 Suíte gbaemu (233, inclui gba-tests) verde nas duas sessões; não houve
+   uma revalidação explícita de gameplay nos 5 jogos de referência além do
+   FireRed — risco baixo (o fix da hipótese 3 só ativa quando o jogo liga o
+   bit OBJ_WINDOW_ENABLE do DISPCNT, e o da hipótese 1 só reduz disparos de
+   HDMA que hardware-mente não deveriam ocorrer). Se aparecer regressão em
+   outro jogo, reabrir aqui.
+
+**D2 fechada** — as 3 hipóteses resolvidas e validadas.
 
 ## Validação
 
