@@ -45,7 +45,10 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 4b | **B4.0.4.1** — `handles` fino no `CoprocessorBus` (Undefined limpo p/ CP15 parcial) | arm-jitter + armbox | Gap 1 do relatório da B4.0.4; bloqueia B4.0.3 | 1 sessão, pequena; sequenciar com as demais de arm-jitter |
 | 5 | ~~C6~~ ✅ FECHADA 2026-07-16 (`64e08c1`) — validação de gameplay A/B confirmou os 3 problemas observados como pré-existentes, não regressão | — | — | — |
 | 6 | **D1** — RTC GPIO (Emerald) | gbaemu | Compat barata | Após C6 (mesmo repo) |
-| 7 | **A6** — especialização de nós Truffle | arm-jitter (módulo `truffle/`) | Destrava A7/A8 | Paralela (módulo isolado); é a mais difícil da onda — se travar, devolver |
+| 6b | **D2** — glitch de batalha do FireRed também em `INTERPRETED` | gbaemu | Achado da validação de C6; refuta hipótese "só ASM" de C5 | Diagnóstico (causa raiz desconhecida); após D1 (mesmo repo) |
+| 6c | **D3** — chiado de áudio no SMW | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2 (mesmo repo) |
+| 6d | **D4** — canal de áudio baixo/acelerado no Metroid | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2/D3 (mesmo repo) |
+| 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
 | 8 | **B5.1** — monitor exclusivo global | arm-jitter | Pequena; independente | Após B1.7 (mesmo repo, toca ArmCore) |
 | 9 | **E1** — javadocs em inglês → português (regra G7) | arm-jitter | Higiene; risco zero de código | **1 sessão POR LOTE** (4 lotes, checklist no próprio arquivo); pode intercalar entre tasks maiores; NÃO rodar em paralelo com outra task de arm-jitter (diff de comentário conflita com tudo) |
 
