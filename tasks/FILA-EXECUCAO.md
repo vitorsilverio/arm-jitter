@@ -74,6 +74,20 @@ o PR3 da B2.7 inclui o decode MCR/MRC Thumb-2 que a B4.0.4 confirmou faltar) ·
 B4.0.5 · C9 (após C7) · A8 (após A7) · B5.2 (após B3.5) · B4.1.1+ e B6.1+ quando
 priorizados.
 
+## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
+
+Backend-independentes (confirmado 2026-07-16: INTERPRETED e ASM idênticos em
+sintoma e velocidade no GBA — a atribuição antiga ao ASM está REVOGADA).
+
+| Task | O que é | Quem pode executar |
+|------|---------|--------------------|
+| **D2** — FireRed 3 bugs de batalha | Hipóteses FORTES já na spec (HDMA em vblank / wrap 9-bit OAM X / OBJWIN), 1 PR por sintoma, teste-primeiro | Agente comum PODE tentar (a spec é dirigida); se a hipótese do sintoma falhar → devolver |
+| **D4** — Metroid melodia | Diagnóstico instrumentado (PSG × FIFO DirectSound) | Agente comum faz a fase 1 (instrumentação); fix depende do achado |
+| **D3** — SMW chiado | Diagnóstico | Idem D4 |
+| **D6** — BIOS lenta/interrompida | Timing/waitstate/handoff | ⚠️ MODELO FORTE |
+| **D5** — Platinum trava (Buneary) | ndsemu; ler pistas falsas em `ndsemu-game-compat` ANTES | ⚠️ MODELO FORTE |
+| (sem task) Divergência ASM×interp no JUS | ver pendência 6 do tasks/README | ⚠️ MODELO FORTE |
+
 ## Onde o USUÁRIO entra (planejar presença)
 
 - C11 fase 1: fornecer o save state do SM64DS; C11/C6/C7/D1: validar gameplay.

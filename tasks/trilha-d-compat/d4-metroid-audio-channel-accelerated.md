@@ -17,6 +17,32 @@ corrigido, não é áudio mas foi na mesma sessão. Este é um achado NOVO, dist
 dos dois anteriores (o sintoma "baixo + acelerado" não bate com nenhum dos dois:
 melodia já toca, jogo não crasha).
 
+## Detalhe adicional do sintoma (usuário, 2026-07-16, segundo relato)
+
+O canal afetado parece ser **a MELODIA da música**: baixo, dessincronizado E
+acelerado em relação ao resto. **Intermitente**: numa ocasião a melodia nem
+veio, e depois passou a vir — isso sugere estado que se corrompe/recupera
+(buffer/FIFO), não um erro constante de frequência.
+
+## Hipótese adicional (refinamento 2026-07-16): DirectSound/FIFO, não PSG
+
+Metroid Fusion usa o driver m4a/MP2k: a MÚSICA inteira (melodia incluída) é PCM
+mixado por software nos FIFOs DirectSound A/B (DMA1/DMA2 disparados por
+Timer 0/1); os PSG fazem SFX/complemento. Se a melodia está num dos FIFOs:
+
+- **FIFO com timer errado**: se A e B usam timers distintos e a taxa de um deles
+  é derivada errado (reload/prescaler, ou taxa fixa assumida em vez do timer
+  real), um lado da mixagem corre em outra velocidade — "acelerado +
+  dessincronizado".
+- **Cadência do DMA de FIFO**: o request deve transferir 4 words quando o FIFO
+  fica com ≤ 16 bytes; cadência errada (por tick de timer em vez de por nível)
+  explica "baixo" (amostras zeradas intercaladas) e o comportamento
+  INTERMITENTE (FIFO esvazia e re-enche — a melodia "sumir e voltar" bate).
+- "Baixo" também pode ser SOUNDCNT_H (mix 50%/100% por canal DS) ignorado.
+
+A instrumentação da fase 1 decide entre PSG (hipóteses abaixo) e FIFO (acima):
+logar por-FIFO a taxa efetiva (amostras/s), underruns/s e o timer fonte por 10s.
+
 ## Inclui — Fase 1 (diagnóstico)
 
 1. Reproduzir e caracterizar: qual canal (PSG pulso/onda/ruído, ou Direct Sound

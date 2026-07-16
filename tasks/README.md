@@ -118,9 +118,11 @@ uma task [REFINAR] diretamente.
 | [C10](trilha-c-perf/c10-jit-warmstart-ndsemu.md) | Warm-start do JIT: persistir PCs quentes por ROM + pré-compilar no load (ataca a queixa "demora a esquentar") | — | ⬜ |
 | [C11](trilha-c-perf/c11-savestate-restore-jit-frio.md) | **Restore de save state deixa o JIT frio >10 min** (relato do usuário, SM64DS 2026-07-15) — diagnóstico já encaminhado no spec (`loadState` só faz `blockCache().clear()`; working set in-game re-aquece do zero); Fix A = embutir chaves quentes no `.ss` + `precompile` | — (compartilha APIs com C10) | ✅ **fase 2 concluída (2026-07-16, sessão de modelo forte)**: confirmado por leitura de fonte que `LoopSuperblockDetector.promoted`/`pending` (não só `JitRuntime.superblockHeads`) também sobrevivem ao `clear()` — `isPromoted(headPc)` bloqueia PARA SEMPRE a reconfirmação de um head já promovido antes do save, então o loop de maior valor de uma cena nunca mais vira superbloco depois de um restore, mesmo com seus blocos individuais recompilando normalmente. **Fix C implementado como fix PRIMÁRIO** (não só higiene, como a spec original supunha): `JitRuntime.reset()` novo no arm-jitter — limpa `blockCache()` + `superblockHeads` + reinstala um `LoopSuperblockDetector` fresco quando superblocos estão ligados; `NdsConsole.loadState` (ambos os runtimes) e `GbaConsole.loadState` trocam `blockCache().clear()` por `reset()` (gbaemu é no-op hoje — INTERPRETED default não liga superblocos — mantido por paridade). 2 testes novos em `LoopSuperblockTest` provando o bug (`blockCacheClearAloneLeavesSuperblockHeadPermanentlyBlocked`) e a correção (`resetAllowsSuperblockHeadToBeRebuiltAfterRestore`). **Re-medição com o `.ss` real do usuário (SM64DS, mesmo harness da fase 1)**: cenário frio (agora via `reset()`) parte de 23,7ms/frame e converge para a faixa do cenário quente (~11,6-13,2ms/frame, antes ~17-20ms/frame e o gap NUNCA fechava) já entre os frames 1200-2400 (20-40s de jogo) — dentro do critério de aceite (≤60s, perto do ideal ≤15s). **Decisão de modelo forte: Fix A/B NÃO são necessários** — Fix C sozinho fecha o gap medido; não implementados nesta sessão (documentado como decisão, não como pendência). Boot dos 4 jogos de referência (SM64DS via o bench + MKDS/JUS/Platinum headless) sem regressão. `asmcheck` de JUS mostrou uma divergência ASM×interpretador pré-existente e não relacionada (`ASM_CHECK` não liga superblocos — `reset()` se comporta identicamente a `clear()` nesse backend por construção; achado registrado, fora do escopo de C11, não investigado). Suítes arm-jitter (582+13) + ndsemu (175) + gbaemu (216) verdes |
 | [D1](trilha-d-compat/d1-gba-rtc-gpio.md) | GBA: RTC via GPIO de cartucho (Pokémon Emerald/Boktai) — trilha D nova: compat de hospedeiros | — | ⬜ |
-| [D2](trilha-d-compat/d2-pokemon-battle-glitch-interpreted.md) | gbaemu: glitch gráfico de batalha do FireRed também em `INTERPRETED` (refuta a hipótese "só ASM" de C5) — task de diagnóstico, causa raiz desconhecida | — | ⬜ criada 2026-07-16, achado da validação de gameplay de C6 |
+| [D2](trilha-d-compat/d2-pokemon-battle-glitch-interpreted.md) | gbaemu: 3 bugs visuais de batalha do FireRed, backend-independentes (fade com terço inferior preto, inimigo entrando pela direita, overlay de status ausente) — **refinada 2026-07-16 com sintomas detalhados do usuário + 3 hipóteses fortes (HDMA em vblank / wrap 9-bit do OAM X / OBJWIN), 1 PR por sintoma** | — | ⬜ |
 | [D3](trilha-d-compat/d3-smw-audio-crackle.md) | gbaemu: chiado/estática no áudio do SMW — task de diagnóstico, causa raiz desconhecida | — | ⬜ criada 2026-07-16, achado da validação de gameplay de C6 |
-| [D4](trilha-d-compat/d4-metroid-audio-channel-accelerated.md) | gbaemu: canal de áudio baixo e acelerado no Metroid Fusion — task de diagnóstico, causa raiz desconhecida | — | ⬜ criada 2026-07-16, achado da validação de gameplay de C6 |
+| [D4](trilha-d-compat/d4-metroid-audio-channel-accelerated.md) | gbaemu: canal (melodia) baixo, dessincronizado, acelerado e intermitente no Metroid Fusion — refinada 2026-07-16 (hipótese adicional: FIFO DirectSound/timer, driver m4a põe a música toda no PCM) | — | ⬜ |
+| [D5](trilha-d-compat/d5-ndsemu-platinum-trava-buneary.md) | ndsemu: Platinum trava na intro (Buneary/título→menu, ARM9 em `0x020B2688`) — formalizada 2026-07-16 (estava aberta sem task); LER as pistas falsas em `ndsemu-game-compat` antes ⚠️ MODELO FORTE | — | ⬜ |
+| [D6](trilha-d-compat/d6-gbaemu-bios-lenta.md) | gbaemu: animação da BIOS real lenta e interrompida (backend-independente) — 3 hipóteses (waitstate da região BIOS / IntrWait no caminho real / handoff prematuro) ⚠️ MODELO FORTE | — | ⬜ |
 | [E1](trilha-e-manutencao/e1-javadoc-portugues.md) | Traduzir javadocs/comentários em inglês para português (violações da regra G7; ~15 arquivos main + ~15 test no censo de 2026-07-16) — 4 lotes, **1 sessão por lote**, checklist de progresso no próprio arquivo; só diff de comentário, zero código | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída
@@ -135,14 +137,15 @@ comandos e status). Toda task que mude uma célula da matriz cita o arquivo no A
 
 Registradas para não virarem tasks vagas; um agente comum NÃO deve tentá-las:
 
-1. ~~Glitches do FireRed em batalha com ASM~~ **EXPLICADO pelo usuário (2026-07-15),
-   não é bug para caçar**: é limitação estrutural da granularidade de bloco do JIT
-   — IRQs de H-blank/V-blank/STAT precisam entrar por instrução e o bloco compilado
-   atrasa isso; para GBA o compilado tampouco dá ganho. **Decisão de produto:
-   `INTERPRETED` é o modo correto/fiel do gbaemu, não um fallback** — otimizar o
-   interpretado (C8) em vez de consertar o ASM para GBA. Não gastar sessão nisso.
-2. **Animação da BIOS + áudio lentos no gbaemu** (pré-existente, acontece também em
-   INTERPRETED; versão de origem desconhecida) — bisect + timing.
+1. ~~Glitches do FireRed = granularidade de bloco do ASM~~ **REVOGADO 2026-07-16**:
+   o usuário re-testou e os bugs de batalha acontecem IGUAIS nos dois backends
+   (e a velocidade é igual) — a atribuição ao JIT de 2026-07-15 estava errada.
+   Os bugs agora são tasks concretas com hipóteses: **D2** (3 bugs visuais de
+   batalha), **D3** (SMW chiado), **D4** (Metroid melodia), **D6** (BIOS lenta).
+   `INTERPRETED` segue default do gbaemu (decisão de produto mantida — mas pela
+   simplicidade/fidelidade estrutural, não mais por "ASM causa glitch").
+2. ~~Animação da BIOS lenta~~ → virou a task **D6** (com hipóteses; segue sendo
+   sessão de modelo forte).
 3. **Dispatch megamórfico remanescente do ndsemu** (`JitRuntime.execute` ~12-14% do
    perfil pós-superblocos, medição de 2026-07-11 em C1) — precisa de profiling novo
    e desenho; não há spec.

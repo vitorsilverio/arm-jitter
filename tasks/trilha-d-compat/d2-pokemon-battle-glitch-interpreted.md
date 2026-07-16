@@ -19,34 +19,66 @@ confirmado via A/B contra o commit pai de C6 — pré-existente, não é regress
 C6). Isso refuta a hipótese "só ASM" e é mais sério do que se pensava: o glitch
 afeta o backend PADRÃO que todo usuário usa.
 
-## Inclui — Fase 1 (diagnóstico, esta sessão)
+## Sintomas detalhados (usuário, 2026-07-16 — respondem o "qual batalha/momento")
 
-1. Reproduzir o glitch de forma determinística: identificar QUAL batalha/momento
-   dispara (o relato original não especifica — perguntar ao usuário se necessário,
-   ou usar save states pra chegar rápido numa batalha, ver `gba-desktop-gui`).
-2. Capturar frames (`--frame-count N --frame-step-cycles M --frame out.ppm
-   --debug-video`, ver `gba-game-compat`) ANTES e DURANTE o glitch, nos dois
-   backends (`INTERPRETED` e `ASM`+chaining), pra comparar visualmente e por regs
-   de vídeo (DISPCNT/BG/OBJ/paleta) no momento exato da divergência visual.
-3. Isolar a camada afetada (BG afim/tile, sprite/OBJ, paleta, scroll) a partir dos
-   dumps — não adivinhar.
-4. Se a causa for encontrada com confiança nesta sessão E for pequena/local, pode
-   virar Fase 2 (correção) na MESMA sessão — mas só se o Passo 3 apontar uma causa
-   clara; senão, PARE, documente o achado (frames, regs, hipóteses descartadas) e
-   devolva pra uma sessão de correção dedicada.
+São **3 bugs distintos** em batalha, todos backend-independentes:
+
+1. **Fade de entrada em batalha**: o terço INFERIOR da tela já começa todo preto,
+   enquanto os 2/3 superiores fazem o fade progressivo corretamente.
+2. **Intro de batalha selvagem**: o "matinho" desliza da esquerda para a direita
+   como deveria, mas o Pokémon inimigo ENTRA PELA DIREITA, dessincronizado do
+   mato — deveriam vir juntos da esquerda.
+3. **Golpes que aumentam/diminuem status**: falta a animação do overlay
+   vermelho/azul subindo/descendo sobre o Pokémon.
+
+## Hipóteses fortes (uma por sintoma, independentes — verificar nesta ordem; refinamento de 2026-07-16)
+
+1. **Fade → H-blank DMA (HDMA) fora da janela válida.** FireRed programa efeitos
+   por-scanline via DMA em modo H-blank (tabela, um valor por linha). No hardware
+   **HDMA só dispara nas linhas visíveis 0-159 — NUNCA no V-blank (160-227)**
+   (GBATEK "DMA H-Blank mode"). Se o `GbaDmaController` dispara HDMA também no
+   V-blank, o ponteiro da tabela avança 68 entradas além do fim por frame — o
+   terço inferior lê lixo/fim de tabela (preto). Teste de regressão alvo:
+   disparos de HDMA por frame == 160, não 228.
+2. **Slide-in do inimigo → wraparound de 9 bits do X do OAM.** Sprite entrando
+   pela ESQUERDA começa com X negativo, codificado no OAM como `512 − |x|`
+   (campo de 9 bits). O renderer deve interpretar X com wrap em 512 (X=500 ⇒
+   desenha em −12); se trata X alto como "à direita da tela", o sprite entra
+   pela DIREITA — o sintoma exato. Vale também para Y (wrap 256) e para affine
+   double-size.
+3. **Overlay de status → OBJ window (WINOBJ).** A animação vermelha/azul do
+   gen-3 usa a janela de objetos (DISPCNT bit 15 + WINOUT bits 8-13): sprites
+   com `mode=obj-window` não são desenhados — viram máscara onde o efeito de
+   cor (BLDCNT) se aplica. Se o renderer não implementa OBJWIN, o overlay some
+   por completo.
+
+## Inclui — Fase 1 (verificação dirigida, uma hipótese por vez)
+
+1. Para cada hipótese: PRIMEIRO um teste unitário/ROM mínima que prove o
+   comportamento atual errado (HDMA disparando em vblank; OBJ com X=500;
+   sprite obj-window), SEM depender do FireRed — se o teste passar (hipótese
+   falsa), registrar e ir para a próxima; se reproduzir, corrigir.
+2. Captura de frames do FireRed (`--frame-count N --frame-step-cycles M
+   --frame out.ppm --debug-video`, ver `gba-game-compat`) como confirmação
+   visual antes/depois de cada fix; save states para chegar rápido na batalha.
+3. Os 3 fixes são PRs independentes (1 sessão cada). Se NENHUMA hipótese se
+   confirmar para um sintoma, PARE, documente (frames, regs, hipóteses
+   descartadas) e devolva para sessão de modelo forte.
 
 ## Não inclui
 
 - Áudio (fora de escopo — são as tasks D3/D4 separadas).
 - Mudar o backend default do gbaemu (permanece `INTERPRETED`, decisão já tomada).
 
-## Aceite (fase 1)
+## Aceite
 
-1. Reprodução determinística documentada (ROM, ponto do jogo, passos).
-2. Camada de vídeo afetada identificada (BG/OBJ/paleta/scroll) com evidência
-   (frames + regs), não suposição.
-3. Confirmado se acontece IGUAL nos dois backends ou se há alguma diferença sutil
-   entre eles (mesmo que ambos glitchem, pode não ser bit-a-bit idêntico).
+1. Cada um dos 3 sintomas: hipótese confirmada-e-corrigida (com teste de
+   regressão permanente) OU refutada com evidência documentada.
+2. Validação visual do usuário em batalha real (fade progressivo até embaixo,
+   inimigo entrando pela esquerda junto do mato, overlay vermelho/azul visível).
+3. 5 jogos de referência sem regressão visual (o histórico de DMA é sensível —
+   a fila de DMA já quebrou Castlevania uma vez, ver `gba-video-save-status`);
+   gba-tests + suíte verdes.
 
 ## Validação
 
