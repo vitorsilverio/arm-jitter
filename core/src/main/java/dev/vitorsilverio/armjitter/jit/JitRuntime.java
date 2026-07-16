@@ -96,6 +96,29 @@ public final class JitRuntime {
     /// Blocos executados por encadeamento (sem round-trip pelo scheduler).
     public long chainedBlocks;
 
+    /// Liga os contadores de reaquecimento pós-restore (task C11, fase 1). Custo zero quando
+    /// desligado (guard único por chamada) — os contadores somem do caminho quente antes do PR
+    /// final da trilha; ver Armadilha do spec.
+    private boolean warmupDiagnostics;
+    /// Execuções no tier FRIO (interpretado, ou single-step sem tiering) desde o último reset.
+    public long coldTierExecutions;
+    /// Execuções no tier QUENTE (bloco compilado, via IC hit ou lookup direto).
+    public long hotTierExecutions;
+    /// Blocos promovidos frio→quente (integrados de `integrateCompiled`).
+    public long blocksCompiledTotal;
+
+    /// Liga/desliga os contadores de {@link #coldTierExecutions}/{@link #hotTierExecutions}/
+    /// {@link #blocksCompiledTotal} (task C11, fase 1 — medição de reaquecimento pós-restore).
+    public void setWarmupDiagnostics(boolean enabled) {
+        this.warmupDiagnostics = enabled;
+    }
+
+    /// Blocos com compilação em voo agora (submetidos ao pool, ainda não integrados) — proxy
+    /// barato da profundidade da fila de compilação (task C11, fase 1).
+    public int compilingBlockCount() {
+        return compilingColdBlocks.size();
+    }
+
     /// Define o orçamento de ciclos do encadeamento de blocos (0 desliga). Ver o comentário de
     /// {@link #chainCycleBudget} para as restrições de quando encadear é seguro.
     public void setChainCycleBudget(int cycles) {
@@ -336,6 +359,9 @@ public final class JitRuntime {
         if (icTags[slot] == tag) {
             // Invariante: tag válida ⇒ bloco não-nulo (gravados juntos em inlineRecord).
             icHits++;
+            if (warmupDiagnostics) {
+                hotTierExecutions++;
+            }
             int cycles = icBlocks[slot].execute(core);
             int chainFromPc = pc;
             int chainHops = 0;
@@ -454,16 +480,25 @@ public final class JitRuntime {
         BlockCache.CacheEntry entry = blockCache.entry(key);
         if (entry == null) {
             // Primeira visão: interpreta o bloco inteiro (frio) e cacheia. Sem classloading.
+            if (warmupDiagnostics) {
+                coldTierExecutions++;
+            }
             IrBlock irBlock = lift(pc, core.memory(), instructionSet, itState);
             CompiledBlock cold = coldEmitter.emit(irBlock);
             blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
             return run(cold, core);
         }
         if (entry.compiled()) {
+            if (warmupDiagnostics) {
+                hotTierExecutions++;
+            }
             inlineRecord(slot, tag, entry.block());
             return run(entry.block(), core);
         }
         // Tier frio: conta execuções; ao esquentar, submete a compilação ao background (uma vez).
+        if (warmupDiagnostics) {
+            coldTierExecutions++;
+        }
         CompiledBlock cold = entry.block();
         int hits = blockCache.hit(key);
         if (threshold.isHot(hits) && compilingColdBlocks.add(cold)) {
@@ -500,6 +535,9 @@ public final class JitRuntime {
             BlockCache.CacheEntry current = blockCache.entry(result.key());
             if (current != null && !current.compiled() && current.block() == result.coldBlock()) {
                 blockCache.put(result.key(), result.compiledBlock(), true, result.startPc(), result.endPc());
+                if (warmupDiagnostics) {
+                    blocksCompiledTotal++;
+                }
             }
         }
     }
