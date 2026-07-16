@@ -60,6 +60,29 @@ class CoprocessorTest {
         assertEquals(0x04, core.programCounter()); // undefined-instruction vector
     }
 
+    @Test
+    void finePartialCp15AllowsClaimedRegisterAndUndefinesTheRest() {
+        // MRC p15, 0, r0, c13, c0, 3 — o único registrador que este bus fake reivindica.
+        int mrcC13 = 0xEE1D0F70;
+        ArmCore core = newCore(mrcC13, new PartialCp15(0xABCDEF01));
+
+        core.step();
+
+        assertEquals(0xABCDEF01, core.register(0));
+        assertEquals(4, core.programCounter());
+    }
+
+    @Test
+    void finePartialCp15UndefinesUnclaimedRegisterWithoutLeakingJavaException() {
+        // o MESMO bus fake de handles fino, mas agora MCR_P15_R1_C9_C1_0 (c9), que ele não reivindica
+        ArmCore core = newCore(MCR_P15_R1_C9_C1_0, new PartialCp15(0));
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter()); // undefined-instruction vector
+    }
+
     private static ArmCore newCore(int instruction, CoprocessorBus cp15) {
         ArrayMemory memory = new ArrayMemory();
         memory.write32(0, instruction);
@@ -110,6 +133,40 @@ class CoprocessorTest {
             this.crm = crm;
             this.opcode2 = opcode2;
             this.value = value;
+        }
+    }
+
+    /// Um CP15 fake que atende (grosso) CP15, mas só reivindica (fino) `c13,c0,3` — usado para
+    /// provar que `IrSystemExecutor#executeCoprocessor` consulta o predicado fino, não o grosso,
+    /// e que nenhuma exceção Java escapa para um registrador que este bus não reivindica.
+    private static final class PartialCp15 implements CoprocessorBus {
+        private final int c13Value;
+
+        PartialCp15(int c13Value) {
+            this.c13Value = c13Value;
+        }
+
+        @Override
+        public boolean handles(int coprocessor) {
+            return coprocessor == 15;
+        }
+
+        @Override
+        public boolean handles(int coprocessor, int opcode1, int crn, int crm, int opcode2) {
+            return coprocessor == 15 && crn == 13 && crm == 0 && opcode2 == 3;
+        }
+
+        @Override
+        public int read(int coprocessor, int opcode1, int crn, int crm, int opcode2) {
+            if (crn == 13 && crm == 0 && opcode2 == 3) {
+                return c13Value;
+            }
+            throw new IllegalStateException("bug: executor não consultou handles fino");
+        }
+
+        @Override
+        public void write(int coprocessor, int opcode1, int crn, int crm, int opcode2, int value) {
+            throw new IllegalStateException("bug: executor não consultou handles fino");
         }
     }
 

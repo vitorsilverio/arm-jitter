@@ -42,7 +42,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 2 | ~~B2.6~~ ✅ FECHADA 2026-07-16 (`c1c2ab4`) — **B2.7, B2.8, B3.1 e B7.1 (onda 2) estão DESTRAVADAS agora** | — | — | — |
 | 3 | ~~B1.7~~ ✅ FECHADA 2026-07-16 (`8f942b2`) — `ArmFeature.UNALIGNED_ACCESS` em ARMV6K/ARMV6K_THUMB2; suítes arm-jitter 606+13, gbaemu 216, ndsemu 175, armbox 26 verdes | — | — | — |
 | 4 | ~~B4.0.4~~ ✅ FECHADA 2026-07-16 (armbox `ArmboxCp15`; 2 gaps reportados viraram B4.0.4.1 e o item MCR/MRC-Thumb do PR3 da B2.7) | — | — | — |
-| 4b | **B4.0.4.1** — `handles` fino no `CoprocessorBus` (Undefined limpo p/ CP15 parcial) | arm-jitter + armbox | Gap 1 do relatório da B4.0.4; bloqueia B4.0.3 | 1 sessão, pequena; sequenciar com as demais de arm-jitter |
+| 4b | ~~B4.0.4.1~~ ✅ FECHADA 2026-07-16 — `CoprocessorBus.handles` fino implementado (arm-jitter + armbox); B4.0.3 segue dependendo só de B2.7/B2.8 agora | — | — | — |
 | 5 | ~~C6~~ ✅ FECHADA 2026-07-16 (`64e08c1`) — validação de gameplay A/B confirmou os 3 problemas observados como pré-existentes, não regressão | — | — | — |
 | 6 | **D1** — RTC GPIO (Emerald) | gbaemu | Compat barata | Após C6 (mesmo repo) |
 | 6b | **D2** — glitch de batalha do FireRed também em `INTERPRETED` | gbaemu | Achado da validação de C6; refuta hipótese "só ASM" de C5 | Diagnóstico (causa raiz desconhecida); após D1 (mesmo repo) |

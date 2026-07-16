@@ -806,7 +806,7 @@ public final class AsmRuntimeHelpers {
             ArmCore core, boolean load, int coprocessorNum, int opcode1,
             int crn, int crm, int opcode2, int register, int sequentialPc) {
         var bus = core.coprocessorBus();
-        if (!bus.handles(coprocessorNum)) {
+        if (!bus.handles(coprocessorNum, opcode1, crn, crm, opcode2)) {
             core.setProgramCounter(sequentialPc);
             core.requestException(ArmException.UNDEFINED);
             return true;

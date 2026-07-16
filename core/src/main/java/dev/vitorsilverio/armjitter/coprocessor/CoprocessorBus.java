@@ -12,6 +12,21 @@ public interface CoprocessorBus {
     /// Se este barramento atende o número de coprocessador fornecido (15 = CP15).
     boolean handles(int coprocessor);
 
+    /// Se este barramento implementa ESTE registrador específico. O default delega ao
+    /// {@link #handles(int)} grosso — implementações existentes não mudam de comportamento.
+    /// Devolver `false` faz o core entregar uma exceção Undefined ao guest, como faria para um
+    /// coprocessador ausente; barramentos que atendem CP15 apenas parcialmente devem sobrepor
+    /// este método para os registradores que realmente implementam.
+    ///
+    /// @param coprocessor número do coprocessador (15 para CP15)
+    /// @param opcode1     código de operação primário (bits 23-21 da instrução)
+    /// @param crn         registrador de coprocessador primário (CRn)
+    /// @param crm         registrador de coprocessador secundário (CRm)
+    /// @param opcode2     código de operação secundário (bits 7-5)
+    default boolean handles(int coprocessor, int opcode1, int crn, int crm, int opcode2) {
+        return handles(coprocessor);
+    }
+
     /// `MRC`: lê um registrador de coprocessador para o core ARM.
     ///
     /// @param coprocessor número do coprocessador (15 para CP15)

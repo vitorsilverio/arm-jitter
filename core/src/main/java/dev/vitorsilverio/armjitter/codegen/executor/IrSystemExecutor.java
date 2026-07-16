@@ -60,7 +60,7 @@ public final class IrSystemExecutor {
             return false;
         }
         CoprocessorBus bus = core.coprocessorBus();
-        if (!bus.handles(cp.coprocessor())) {
+        if (!bus.handles(cp.coprocessor(), cp.opcode1(), cp.crn(), cp.crm(), cp.opcode2())) {
             core.setProgramCounter(cp.sequentialPc());
             core.requestException(ArmException.UNDEFINED);
             return true;
