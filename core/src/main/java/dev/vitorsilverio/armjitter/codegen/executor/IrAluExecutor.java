@@ -8,7 +8,12 @@ import dev.vitorsilverio.armjitter.ir.ParallelAluOp;
 import dev.vitorsilverio.armjitter.ir.ParallelAluVariant;
 
 /// Executa operações ALU e multiplicação da IR interpretada.
-final class IrAluExecutor {
+///
+/// Classe e métodos públicos (task A6) para que o módulo `truffle/` possa despachar DIRETO
+/// para cada método de categoria, sem passar pelo `switch` exaustivo de
+/// {@link IrBlockExecutor#executeOp} — ver `AluOpNode`/`MultiplyOpNode` no módulo `truffle/`.
+/// Nenhuma semântica muda aqui: só a visibilidade (G1 intacto).
+public final class IrAluExecutor {
     private final IrExecutionSupport support;
 
     IrAluExecutor(IrExecutionSupport support) {
@@ -16,7 +21,7 @@ final class IrAluExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean execute(ArmCore core, IrOp.Alu alu) {
+    public boolean execute(ArmCore core, IrOp.Alu alu) {
         if (!core.cpsr().evalCond(alu.condition())) {
             return false;
         }
@@ -192,7 +197,7 @@ final class IrAluExecutor {
     /// `MOVT` (Thumb-2, B2.2): escreve `immediate16` na metade ALTA (bits 31:16) de `dst`,
     /// preservando a metade baixa — não é um padrão `Alu` comum (nenhuma outra op ARM escreve só
     /// metade do registrador), por isso vive em seu próprio {@link IrOp}. Nunca escreve flags.
-    void executeMoveTop(ArmCore core, IrOp.MoveTop moveTop) {
+    public void executeMoveTop(ArmCore core, IrOp.MoveTop moveTop) {
         if (!core.cpsr().evalCond(moveTop.condition())) {
             return;
         }
@@ -200,7 +205,7 @@ final class IrAluExecutor {
         core.setRegister(moveTop.dst(), (current & 0xFFFF) | (moveTop.immediate16() << 16));
     }
 
-    void executeMultiply(ArmCore core, IrOp.Multiply multiply) {
+    public void executeMultiply(ArmCore core, IrOp.Multiply multiply) {
         if (!core.cpsr().evalCond(multiply.condition())) {
             return;
         }
@@ -215,7 +220,7 @@ final class IrAluExecutor {
         }
     }
 
-    void executeLongMultiply(ArmCore core, IrOp.LongMultiply multiply) {
+    public void executeLongMultiply(ArmCore core, IrOp.LongMultiply multiply) {
         if (!core.cpsr().evalCond(multiply.condition())) {
             return;
         }
@@ -247,7 +252,7 @@ final class IrAluExecutor {
 
     /// ARMv5TE saturating add/subtract (QADD/QSUB/QDADD/QDSUB), all clamped to signed 32 bits and
     /// setting the sticky Q flag on any saturation.
-    void executeSaturating(ArmCore core, IrOp.Saturating op) {
+    public void executeSaturating(ArmCore core, IrOp.Saturating op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -268,7 +273,7 @@ final class IrAluExecutor {
 
     /// ARMv5TE DSP multiplies: signed 16x16 (and 32x16 word) products with optional accumulate.
     /// SMLA/SMLAW set the sticky Q flag if the accumulate overflows; SMUL/SMULW/SMLAL do not.
-    void executeDspMultiply(ArmCore core, IrOp.DspMultiply op) {
+    public void executeDspMultiply(ArmCore core, IrOp.DspMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -310,7 +315,7 @@ final class IrAluExecutor {
     /// Aritmética paralela ARMv6 (SADD16/UQSUB8/SHASX/...): cada lane é computada em precisão
     /// larga (int) e finalizada pela variante — wrap (escrevendo GE), saturação ou halving.
     /// As variantes saturadas paralelas NÃO tocam o flag Q sticky (diferente de QADD/QSUB).
-    void executeParallelAlu(ArmCore core, IrOp.ParallelAlu op) {
+    public void executeParallelAlu(ArmCore core, IrOp.ParallelAlu op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -363,7 +368,7 @@ final class IrAluExecutor {
 
     /// `SEL` (ARMv6): cada byte do resultado vem de Rn quando o GE correspondente está setado,
     /// senão de Rm. Não altera flag algum.
-    void executeSel(ArmCore core, IrOp.Sel op) {
+    public void executeSel(ArmCore core, IrOp.Sel op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -381,7 +386,7 @@ final class IrAluExecutor {
 
     /// SSAT/USAT/SSAT16/USAT16 (ARMv6): satura o operando (já shiftado nas formas word) para a
     /// largura pedida e seta o flag Q sticky quando alguma lane saturou.
-    void executeSaturate(ArmCore core, IrOp.Saturate op) {
+    public void executeSaturate(ArmCore core, IrOp.Saturate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -403,7 +408,7 @@ final class IrAluExecutor {
 
     /// USAD8/USADA8 (ARMv6): soma das diferenças absolutas dos quatro bytes sem sinal, com
     /// acumulador opcional. Não altera flag algum.
-    void executeAbsDiffSum(ArmCore core, IrOp.AbsDiffSum op) {
+    public void executeAbsDiffSum(ArmCore core, IrOp.AbsDiffSum op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }

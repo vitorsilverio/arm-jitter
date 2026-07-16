@@ -9,14 +9,14 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
 /// Executa PSR, SWI, coprocessador e instruções indefinidas da IR interpretada.
-final class IrSystemExecutor {
+public final class IrSystemExecutor {
     private final IrExecutionSupport support;
 
     IrSystemExecutor(IrExecutionSupport support) {
         this.support = support;
     }
 
-    void executePsrTransfer(ArmCore core, IrOp.PsrTransfer transfer) {
+    public void executePsrTransfer(ArmCore core, IrOp.PsrTransfer transfer) {
         if (!core.cpsr().evalCond(transfer.condition())) {
             return;
         }
@@ -40,7 +40,7 @@ final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeSwi(ArmCore core, IrOp.Swi swi, int sequentialPc) {
+    public boolean executeSwi(ArmCore core, IrOp.Swi swi, int sequentialPc) {
         if (!core.cpsr().evalCond(swi.condition())) {
             return false;
         }
@@ -55,7 +55,7 @@ final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeCoprocessor(ArmCore core, IrOp.Coprocessor cp) {
+    public boolean executeCoprocessor(ArmCore core, IrOp.Coprocessor cp) {
         if (!core.cpsr().evalCond(cp.condition())) {
             return false;
         }
@@ -81,7 +81,7 @@ final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeUndefined(ArmCore core, IrOp.Undefined undefined) {
+    public boolean executeUndefined(ArmCore core, IrOp.Undefined undefined) {
         if (!core.cpsr().evalCond(undefined.condition())) {
             return false;
         }
@@ -93,7 +93,7 @@ final class IrSystemExecutor {
     /// `CPS`/`CPSIE`/`CPSID` (ARMv6): reusa {@link ArmCore#setCpsr} — o mesmo caminho de troca de
     /// banco que `MSR`/entrada de exceção usam — para que a troca de modo (quando presente)
     /// rebanque os registradores corretamente. UNPREDICTABLE em modo User: tratado como NOP.
-    void executeChangeProcessorState(ArmCore core, IrOp.ChangeProcessorState cps) {
+    public void executeChangeProcessorState(ArmCore core, IrOp.ChangeProcessorState cps) {
         if (!core.cpsr().evalCond(cps.condition())) {
             return;
         }
@@ -115,7 +115,7 @@ final class IrSystemExecutor {
 
     /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 lançam
     /// {@link UnsupportedOperationException} (ver {@code IrExecutionSupport}).
-    void executeSetEndianness(ArmCore core, IrOp.SetEndianness setend) {
+    public void executeSetEndianness(ArmCore core, IrOp.SetEndianness setend) {
         if (!core.cpsr().evalCond(setend.condition())) {
             return;
         }
@@ -123,7 +123,7 @@ final class IrSystemExecutor {
     }
 
     /// `WFI` (ARMv6K hint): coloca o core em HALT (acorda com {@code setInterruptLine(true)}).
-    void executeWaitForInterrupt(ArmCore core, IrOp.WaitForInterrupt wfi) {
+    public void executeWaitForInterrupt(ArmCore core, IrOp.WaitForInterrupt wfi) {
         if (!core.cpsr().evalCond(wfi.condition())) {
             return;
         }
@@ -133,7 +133,7 @@ final class IrSystemExecutor {
     /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 — B2.5): NOP observável neste core single-thread sem
     /// reordenação real de memória (premissa documentada em {@link IrOp.MemoryBarrier}). Ainda
     /// checa a condição por simetria com o resto do executor, mesmo não havendo efeito algum.
-    void executeMemoryBarrier(ArmCore core, IrOp.MemoryBarrier barrier) {
+    public void executeMemoryBarrier(ArmCore core, IrOp.MemoryBarrier barrier) {
         if (!core.cpsr().evalCond(barrier.condition())) {
             return;
         }
@@ -143,7 +143,7 @@ final class IrSystemExecutor {
     /// Grava o ITSTATE\[7:0\] do CPSR (Thumb-2 IT block, B2.4). Ver o javadoc de
     /// {@link IrOp.SetItState} para as duas origens (entrada do `IT`/avanço pós-instrução) e por
     /// que o avanço é sempre emitido com condição AL pelo lifter.
-    void executeSetItState(ArmCore core, IrOp.SetItState setItState) {
+    public void executeSetItState(ArmCore core, IrOp.SetItState setItState) {
         if (!core.cpsr().evalCond(setItState.condition())) {
             return;
         }

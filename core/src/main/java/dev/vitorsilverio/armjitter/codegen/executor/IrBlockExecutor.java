@@ -93,6 +93,38 @@ public final class IrBlockExecutor {
         return cycles;
     }
 
+    /// Executor de ALU/multiplicação (task A6): exposto para que o módulo `truffle/` possa
+    /// despachar DIRETO a cada método de categoria (ex. `IrAluExecutor#execute`), sem passar pelo
+    /// `switch` exaustivo de {@link #executeOp} — ver `AluOpNode`/`MultiplyOpNode`.
+    public IrAluExecutor aluExecutor() {
+        return alu;
+    }
+
+    /// Executor de memória (task A6): ver {@link #aluExecutor()}.
+    public IrMemoryExecutor memoryExecutor() {
+        return memory;
+    }
+
+    /// Executor de branch (task A6): ver {@link #aluExecutor()}.
+    public IrBranchExecutor branchExecutor() {
+        return branch;
+    }
+
+    /// Executor de LDM/STM/PUSH/POP/SRS/RFE (task A6): ver {@link #aluExecutor()}.
+    public IrTransferExecutor transferExecutor() {
+        return transfer;
+    }
+
+    /// Executor de PSR/SWI/coprocessador/sistema (task A6): ver {@link #aluExecutor()}.
+    public IrSystemExecutor systemExecutor() {
+        return system;
+    }
+
+    /// Executor de ciclo/fetch (task A6): ver {@link #aluExecutor()}.
+    public IrCycleExecutor cycleExecutor() {
+        return cycle;
+    }
+
     /// Executa uma única {@link IrOp} sem o ajuste final de PC, e devolve se o PC foi alterado.
     ///
     /// Usado pela infraestrutura {@link dev.vitorsilverio.armjitter.codegen.AsmFallbackPolicy#PER_OP}

@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Executa LDM/STM, PUSH e POP da IR interpretada.
-final class IrTransferExecutor {
+public final class IrTransferExecutor {
     private final IrExecutionSupport support;
 
     IrTransferExecutor(IrExecutionSupport support) {
@@ -14,7 +14,7 @@ final class IrTransferExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeMultipleTransfer(ArmCore core, IrOp.MultipleTransfer transfer) {
+    public boolean executeMultipleTransfer(ArmCore core, IrOp.MultipleTransfer transfer) {
         if (!core.cpsr().evalCond(transfer.condition())) {
             return false;
         }
@@ -55,7 +55,7 @@ final class IrTransferExecutor {
         return transfer.load() && includesPc;
     }
 
-    void executePush(ArmCore core, IrOp.Push push) {
+    public void executePush(ArmCore core, IrOp.Push push) {
         if (!core.cpsr().evalCond(push.condition())) {
             return;
         }
@@ -75,7 +75,7 @@ final class IrTransferExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executePop(ArmCore core, IrOp.Pop pop) {
+    public boolean executePop(ArmCore core, IrOp.Pop pop) {
         if (!core.cpsr().evalCond(pop.condition())) {
             return false;
         }
@@ -102,7 +102,7 @@ final class IrTransferExecutor {
     /// próprio) — tratado como UNDEFINED.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeStoreReturnState(ArmCore core, IrOp.StoreReturnState srs) {
+    public boolean executeStoreReturnState(ArmCore core, IrOp.StoreReturnState srs) {
         if (!core.cpsr().evalCond(srs.condition())) {
             return false;
         }
@@ -130,7 +130,7 @@ final class IrTransferExecutor {
     /// {@code alignAndSetPc}). UNPREDICTABLE em modo User/System — tratado como UNDEFINED.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeReturnFromException(ArmCore core, IrOp.ReturnFromException rfe) {
+    public boolean executeReturnFromException(ArmCore core, IrOp.ReturnFromException rfe) {
         if (!core.cpsr().evalCond(rfe.condition())) {
             return false;
         }

@@ -1,35 +1,41 @@
 package dev.vitorsilverio.armjitter.truffle;
 
-import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
+import com.oracle.truffle.api.nodes.Node.Children;
 import com.oracle.truffle.api.nodes.RootNode;
-import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import com.oracle.truffle.api.profiles.ConditionProfile;
 import dev.vitorsilverio.armjitter.core.ArmCore;
-import dev.vitorsilverio.armjitter.ir.IrOp;
 
-/// `RootNode` Truffle que executa um `IrBlock` fixo (array de ops `@CompilationFinal`, loop
-/// `@ExplodeLoop`) delegando a semântica de cada op para {@link IrBlockExecutor#executeOp} — a
-/// MESMA fonte de verdade usada pelo interpretador e pelo fallback PER_OP do backend ASM
-/// (invariante G1). Este nó não reimplementa NADA de ALU/flags/memória/branch: só monta a árvore
-/// que o Graal especializa por partial evaluation, análogo ao que `AsmBlockCompiler` faz emitindo
-/// bytecode — mas delegando (em vez de reimplementar) a semântica de CADA categoria de `IrOp`.
+/// `RootNode` Truffle que executa um `IrBlock` fixo (task A6): a árvore é um array
+/// `@Children` de {@link IrOpNode} — um nó ESPECIALIZADO por categoria de `IrOp` (ver a taxonomia
+/// da especificação), montado uma única vez na emissão por {@link IrOpNodeFactory}
+/// ({@link TruffleCodeEmitter#emit}) — em vez do array de DADOS `IrOp[]` que a A2/A3 percorriam
+/// com um `switch` exaustivo de 40 casos (`IrBlockExecutor#executeOp`). Este nó não reimplementa
+/// NADA de ALU/flags/memória/branch: cada `IrOpNode` delega ao mesmo executor que o interpretador
+/// usa (invariante G1) — só a FORMA da árvore mudou, para que o Graal consiga "ver através" dela
+/// em partial evaluation (causa raiz do bailout documentado em `RELATORIO-A5.md`).
 ///
-/// `IrOp.Cycle` é tratado à parte (soma direta de `count()`) porque `executeOp` descarta esse
-/// valor — o mesmo contrato do loop principal em `IrBlockExecutor#execute`, cujo `pcChanged`
-/// (task A3) este nó também reproduz: o fixup final de PC só roda quando NENHUMA op do bloco
-/// alterou o PC (branch, load→PC, SWI, etc.) — exatamente como o interpretador.
+/// `@ExplodeLoop` continua no nível do bloco (item 2 da especificação, decisão CONFIRMADA depois
+/// da mudança para nós especializados — não redundante: é o padrão canônico Truffle de "loop
+/// explodido sobre filhos homogêneos em quantidade, heterogêneos em tipo", e é exatamente o que
+/// o PE sabe podar quando cada filho já é um call-site monomórfico separado).
+///
+/// A contabilidade de `pcChanged`/ciclos por op (A3) é preservada: o fixup final de PC só roda
+/// quando NENHUM filho alterou o PC — o mesmo contrato de {@code IrBlockExecutor#execute}. O
+/// resultado (`!pcChanged`) passa por um {@link ConditionProfile} (item 4b da especificação): a
+/// maioria dos blocos executa até o fim sem branch/exceção, então este profile ajuda o Graal a
+/// especular o caminho comum sem mudar o resultado.
 final class TruffleBlockRootNode extends RootNode {
-    @CompilationFinal(dimensions = 1)
-    private final IrOp[] ops;
+    @Children
+    private final IrOpNode[] ops;
     private final int endPc;
-    private final IrBlockExecutor executor;
+    private final ConditionProfile pcUnchangedProfile = ConditionProfile.create();
 
-    TruffleBlockRootNode(IrOp[] ops, int endPc, IrBlockExecutor executor) {
+    TruffleBlockRootNode(IrOpNode[] ops, int endPc) {
         super(null);
-        this.ops = ops;
+        this.ops = insert(ops);
         this.endPc = endPc;
-        this.executor = executor;
     }
 
     @Override
@@ -42,14 +48,11 @@ final class TruffleBlockRootNode extends RootNode {
     private int executeBlock(ArmCore core) {
         int cycles = 0;
         boolean pcChanged = false;
-        for (IrOp op : ops) {
-            if (op.kind() == IrOp.Kind.CYCLE) {
-                cycles += ((IrOp.Cycle) op).count();
-            } else {
-                pcChanged |= executor.executeOp(core, op, endPc);
-            }
+        for (IrOpNode op : ops) {
+            pcChanged |= op.executeOp(core, endPc);
+            cycles += op.cycleDelta();
         }
-        if (!pcChanged) {
+        if (pcUnchangedProfile.profile(!pcChanged)) {
             core.setProgramCounter(endPc);
         }
         return cycles;

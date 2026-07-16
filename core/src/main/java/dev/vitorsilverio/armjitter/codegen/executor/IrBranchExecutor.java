@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Executa branches e interworking da IR interpretada.
-final class IrBranchExecutor {
+public final class IrBranchExecutor {
     private final IrExecutionSupport support;
 
     IrBranchExecutor(IrExecutionSupport support) {
@@ -12,7 +12,7 @@ final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeBranch(ArmCore core, IrOp.Branch branch) {
+    public boolean executeBranch(ArmCore core, IrOp.Branch branch) {
         if (!core.cpsr().evalCond(branch.condition())) {
             return false;
         }
@@ -24,7 +24,7 @@ final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeBranchExchange(ArmCore core, IrOp.BranchExchange branch) {
+    public boolean executeBranchExchange(ArmCore core, IrOp.BranchExchange branch) {
         if (!core.cpsr().evalCond(branch.condition())) {
             return false;
         }
@@ -37,7 +37,7 @@ final class IrBranchExecutor {
         return true;
     }
 
-    void executeThumbBlPrefix(ArmCore core, IrOp.ThumbBlPrefix prefix) {
+    public void executeThumbBlPrefix(ArmCore core, IrOp.ThumbBlPrefix prefix) {
         if (!core.cpsr().evalCond(prefix.condition())) {
             return;
         }
@@ -45,7 +45,7 @@ final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeThumbBlSuffix(ArmCore core, IrOp.ThumbBlSuffix suffix) {
+    public boolean executeThumbBlSuffix(ArmCore core, IrOp.ThumbBlSuffix suffix) {
         if (!core.cpsr().evalCond(suffix.condition())) {
             return false;
         }
@@ -67,7 +67,7 @@ final class IrBranchExecutor {
     /// registrador (ver a decisão D3 em `b2.4-thumb2-branches-it.md`).
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeTableBranch(ArmCore core, IrOp.TableBranch tableBranch) {
+    public boolean executeTableBranch(ArmCore core, IrOp.TableBranch tableBranch) {
         if (!core.cpsr().evalCond(tableBranch.condition())) {
             return false;
         }
@@ -88,7 +88,7 @@ final class IrBranchExecutor {
     /// `CBZ`/`CBNZ` (B2.4): desvia conforme `rn` seja zero/não-zero, sem tocar NZCV.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeCompareBranchZero(ArmCore core, IrOp.CompareBranchZero cbz) {
+    public boolean executeCompareBranchZero(ArmCore core, IrOp.CompareBranchZero cbz) {
         if (!core.cpsr().evalCond(cbz.condition())) {
             return false;
         }

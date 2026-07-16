@@ -7,22 +7,28 @@ import dev.vitorsilverio.armjitter.codegen.CodegenBackend;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
+import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
-/// Emissor Truffle (task A2 mínima + A3 cobertura completa): {@link TruffleBlockRootNode} delega
-/// CADA `IrOp` do bloco a {@link IrBlockExecutor#executeOp} — a mesma fonte de verdade usada pelo
-/// interpretador e pelo fallback PER_OP do backend ASM (invariante G1). Como `executeOp` já cobre
-/// exaustivamente todo `IrOp` (inclui condição != AL, ShiftedRegister, branches, memória,
-/// LDM/STM, PSR/SWI/coprocessador e as ops ARMv6/v6K/ARMv5TE), TODO bloco compila nativamente —
-/// {@link #fallback} e {@link InterpretedCodeEmitter} ficam retidos por compatibilidade de API
-/// (G3) mas o caminho de fallback é inatingível na prática.
+/// Emissor Truffle (task A2 mínima + A3 cobertura completa + **A6 especialização de nós**):
+/// {@link TruffleBlockRootNode} agora monta, na EMISSÃO, uma árvore `@Children` de
+/// {@link IrOpNode} — um nó especializado por CATEGORIA de `IrOp` (ver a taxonomia da
+/// especificação da A6: `AluOpNode`/`MultiplyOpNode`/`MemoryOpNode`/`TransferOpNode`/
+/// `BranchOpNode`/`SystemOpNode`/`CycleFetchOpNode`), escolhida por {@link IrOpNodeFactory}, em
+/// vez do array de DADOS `IrOp[]` percorrido pelo `switch` exaustivo de 40 casos de
+/// {@link IrBlockExecutor#executeOp} (A2/A3) — esse dispatcher único era a causa raiz do bailout
+/// de partial evaluation documentado em `RELATORIO-A5.md` (0 blocos ARM reais compilados). Cada
+/// `IrOpNode` continua delegando ao MESMO executor de categoria que o interpretador e o fallback
+/// PER_OP do ASM usam (invariante G1) — a mudança é estrutural (como o Graal enxerga a árvore),
+/// nenhuma semântica nova.
 ///
-/// <p>Isto NÃO especializa nós Truffle por categoria de op (isso seria emissão bytecode-like,
-/// como o `AsmBlockCompiler` faz) — é otimização de partial evaluation, fora do escopo de
-/// correção da A3; ver a task A4 (factory + bench) para medir o ganho real de JIT.</p>
+/// <p>{@link #fallback} e {@link InterpretedCodeEmitter} continuam retidos por compatibilidade de
+/// API (G3): {@link IrOpNodeFactory} cobre exaustivamente as mesmas 40 categorias que
+/// `executeOp` cobria, então {@link #supports} continua sempre `true` e o fallback continua
+/// inatingível na prática — igual à A3.</p>
 public final class TruffleCodeEmitter implements CodeEmitter {
     private final IrBlockExecutor executor;
     private final CodeEmitter fallback;
@@ -45,8 +51,12 @@ public final class TruffleCodeEmitter implements CodeEmitter {
             return fallback.emit(block);
         }
         nativeBlockCount.incrementAndGet();
-        RootCallTarget callTarget =
-                new TruffleBlockRootNode(block.operationsArray(), block.endPc(), executor).getCallTarget();
+        IrOp[] ops = block.operationsArray();
+        IrOpNode[] nodes = new IrOpNode[ops.length];
+        for (int i = 0; i < ops.length; i++) {
+            nodes[i] = IrOpNodeFactory.create(ops[i], executor);
+        }
+        RootCallTarget callTarget = new TruffleBlockRootNode(nodes, block.endPc()).getCallTarget();
         return core -> (int) callTarget.call(core);
     }
 
@@ -65,8 +75,8 @@ public final class TruffleCodeEmitter implements CodeEmitter {
         return fallbackBlockCount.get();
     }
 
-    /// Sempre `true` (task A3): {@link IrBlockExecutor#executeOp} cobre exaustivamente todo
-    /// `IrOp.Kind` — não há mais categoria que force o fallback `WHOLE_BLOCK`.
+    /// Sempre `true` (task A3, mantido pela A6): {@link IrOpNodeFactory} cobre exaustivamente
+    /// todo `IrOp.Kind` — não há mais categoria que force o fallback `WHOLE_BLOCK`.
     private static boolean supports(IrBlock block) {
         return true;
     }

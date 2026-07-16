@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Executa loads, stores e swap da IR interpretada.
-final class IrMemoryExecutor {
+public final class IrMemoryExecutor {
     private final IrExecutionSupport support;
 
     IrMemoryExecutor(IrExecutionSupport support) {
@@ -12,7 +12,7 @@ final class IrMemoryExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeLoad(ArmCore core, IrOp.Load load) {
+    public boolean executeLoad(ArmCore core, IrOp.Load load) {
         if (!core.cpsr().evalCond(load.condition())) {
             return false;
         }
@@ -35,7 +35,7 @@ final class IrMemoryExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeLoadLiteral(ArmCore core, IrOp.LoadLiteral load) {
+    public boolean executeLoadLiteral(ArmCore core, IrOp.LoadLiteral load) {
         if (!core.cpsr().evalCond(load.condition())) {
             return false;
         }
@@ -49,7 +49,7 @@ final class IrMemoryExecutor {
         return load.dst() == 15;
     }
 
-    void executeStore(ArmCore core, IrOp.Store store) {
+    public void executeStore(ArmCore core, IrOp.Store store) {
         if (!core.cpsr().evalCond(store.condition())) {
             return;
         }
@@ -70,7 +70,7 @@ final class IrMemoryExecutor {
 
     /// `LDREX{,B,H,D}`: lê a memória e marca o monitor de exclusividade do core com o
     /// endereço (sem sinal, em `long` — §5 da RFC IR-64) e o tamanho do acesso.
-    void executeLoadExclusive(ArmCore core, IrOp.LoadExclusive load) {
+    public void executeLoadExclusive(ArmCore core, IrOp.LoadExclusive load) {
         if (!core.cpsr().evalCond(load.condition())) {
             return;
         }
@@ -92,7 +92,7 @@ final class IrMemoryExecutor {
     /// `STREX{,B,H,D}`: consulta o monitor ANTES de qualquer escrita — um STREX que falha não
     /// pode ter efeito colateral de memória. Sucesso escreve, devolve 0 em `dst` e consome o
     /// monitor; falha devolve 1 com a memória intacta.
-    void executeStoreExclusive(ArmCore core, IrOp.StoreExclusive store) {
+    public void executeStoreExclusive(ArmCore core, IrOp.StoreExclusive store) {
         if (!core.cpsr().evalCond(store.condition())) {
             return;
         }
@@ -118,7 +118,7 @@ final class IrMemoryExecutor {
     }
 
     /// `CLREX`: abre o monitor de exclusividade.
-    void executeClearExclusive(ArmCore core, IrOp.ClearExclusive clear) {
+    public void executeClearExclusive(ArmCore core, IrOp.ClearExclusive clear) {
         if (!core.cpsr().evalCond(clear.condition())) {
             return;
         }
@@ -127,7 +127,7 @@ final class IrMemoryExecutor {
 
     /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `second` sharing one address.
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {
+    public boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {
         if (!core.cpsr().evalCond(dt.condition())) {
             return false;
         }
@@ -152,7 +152,7 @@ final class IrMemoryExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    boolean executeSwap(ArmCore core, IrOp.Swap swap) {
+    public boolean executeSwap(ArmCore core, IrOp.Swap swap) {
         if (!core.cpsr().evalCond(swap.condition())) {
             return false;
         }
