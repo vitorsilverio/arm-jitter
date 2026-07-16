@@ -34,7 +34,8 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 1 | ~~C11~~ ✅ FECHADA 2026-07-16 (Fix C `JitRuntime.reset()` bastou — estado de superbloco sobrevivia ao `clear()`; gap agora fecha em 20-40s) | — | — | — |
 | 2 | ~~B2.6~~ ✅ FECHADA 2026-07-16 (`c1c2ab4`) — **B2.7, B2.8, B3.1 e B7.1 (onda 2) estão DESTRAVADAS agora** | — | — | — |
 | 3 | ~~B1.7~~ ✅ FECHADA 2026-07-16 (`8f942b2`) — `ArmFeature.UNALIGNED_ACCESS` em ARMV6K/ARMV6K_THUMB2; suítes arm-jitter 606+13, gbaemu 216, ndsemu 175, armbox 26 verdes | — | — | — |
-| 4 | **B4.0.4** — TLS/TPIDRURO no armbox | armbox | Pequena; pré-requisito de B4.0.3 | Paralela a qualquer arm-jitter |
+| 4 | ~~B4.0.4~~ ✅ FECHADA 2026-07-16 (armbox `ArmboxCp15`; 2 gaps reportados viraram B4.0.4.1 e o item MCR/MRC-Thumb do PR3 da B2.7) | — | — | — |
+| 4b | **B4.0.4.1** — `handles` fino no `CoprocessorBus` (Undefined limpo p/ CP15 parcial) | arm-jitter + armbox | Gap 1 do relatório da B4.0.4; bloqueia B4.0.3 | 1 sessão, pequena; sequenciar com as demais de arm-jitter |
 | 5 | **C6** — PagedAddressSpace no gbaemu | gbaemu | Perf do modo default (INTERPRETED) | Paralela; validação de gameplay do usuário no fim |
 | 6 | **D1** — RTC GPIO (Emerald) | gbaemu | Compat barata | Após C6 (mesmo repo) |
 | 7 | **A6** — especialização de nós Truffle | arm-jitter (módulo `truffle/`) | Destrava A7/A8 | Paralela (módulo isolado); é a mais difícil da onda — se travar, devolver |
@@ -58,8 +59,10 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 ## Onda 3 — fechamentos
 
 B3.2 → B3.4 → B3.5 → B3.6 → B3.7 (cadeia VFP) · B7.2 → B7.3 → B7.4 → B7.5
-(cadeia Cortex-M) · **B4.0.3** (após B2.7+B1.7+B2.8+B4.0.4) · B4.0.5 · C9 (após
-C7) · A8 (após A7) · B5.2 (após B3.5) · B4.1.1+ e B6.1+ quando priorizados.
+(cadeia Cortex-M) · **B4.0.3** (após B2.7+B2.8+B4.0.4.1 — B2.6/B1.7/B4.0.4 já ✅;
+o PR3 da B2.7 inclui o decode MCR/MRC Thumb-2 que a B4.0.4 confirmou faltar) ·
+B4.0.5 · C9 (após C7) · A8 (após A7) · B5.2 (após B3.5) · B4.1.1+ e B6.1+ quando
+priorizados.
 
 ## Onde o USUÁRIO entra (planejar presença)
 
