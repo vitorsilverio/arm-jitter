@@ -116,6 +116,7 @@ uma task [REFINAR] diretamente.
 | [C8](trilha-c-perf/c8-interpretador-perf-gbaemu.md) | **Perf do INTERPRETADO** — o caminho de produção do gbaemu (INTERPRETED é default POR FIDELIDADE, decisão do usuário: IRQ de H/V-blank/STAT precisa de granularidade por instrução; JIT de bloco quebra Pokémon em batalha). Fase 1 medir, fase 2 um candidato por PR | C6 recomendada antes | ⬜ criada 2026-07-15 |
 | [C9](trilha-c-perf/c9-jit-fastmem-ndsemu.md) | Fastmem: load/store direto no array da página no bytecode JIT (ndsemu; gbaemu FORA — é interpretado) | C7 | ⬜ |
 | [C10](trilha-c-perf/c10-jit-warmstart-ndsemu.md) | Warm-start do JIT: persistir PCs quentes por ROM + pré-compilar no load (ataca a queixa "demora a esquentar") | — | ⬜ |
+| [C11](trilha-c-perf/c11-savestate-restore-jit-frio.md) | **Restore de save state deixa o JIT frio >10 min** (relato do usuário, SM64DS 2026-07-15) — diagnóstico já encaminhado no spec (`loadState` só faz `blockCache().clear()`; working set in-game re-aquece do zero); Fix A = embutir chaves quentes no `.ss` + `precompile` | — (compartilha APIs com C10) | ⬜ |
 | [D1](trilha-d-compat/d1-gba-rtc-gpio.md) | GBA: RTC via GPIO de cartucho (Pokémon Emerald/Boktai) — trilha D nova: compat de hospedeiros | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

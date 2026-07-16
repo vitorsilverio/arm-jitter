@@ -35,6 +35,14 @@ background no load, que captura ~todo o benefício com ~nada do risco.
    em background, sem bloquear o boot (o pool já é assíncrono).
 5. Guarda de identidade: gravar hash da ROM no arquivo; hash diferente → ignorar.
 
+**Nota (2026-07-15):** o caso SAVE STATE tem solução melhor que o `.hotpcs` —
+embutir as chaves quentes DENTRO do `.ss` e pré-compilar no restore; isso é o
+Fix A da [C11](c11-savestate-restore-jit-frio.md) (relato real do usuário:
+restore de SM64DS levou >10 min para re-aquecer). As DUAS tasks usam as mesmas 2
+APIs do arm-jitter (`hotBlockKeys`/`precompile`) — quem rodar primeiro as cria, a
+outra reusa; esta task fica com o caso "carregar ROM do zero" (`.hotpcs`), a C11
+com o caso restore.
+
 ## Aceite
 
 1. Medição objetiva: tempo até "fps estável" no MKDS via savestate de corrida
