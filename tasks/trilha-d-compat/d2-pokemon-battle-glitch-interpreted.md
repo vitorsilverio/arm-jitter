@@ -58,6 +58,30 @@ progressivo até embaixo em batalha real) — aceite #2 da task.
    desenha em −12); se trata X alto como "à direita da tela", o sprite entra
    pela DIREITA — o sintoma exato. Vale também para Y (wrap 256) e para affine
    double-size.
+**Hipótese 2 — REFUTADA na prática (2026-07-16).** O usuário validou em batalha
+real logo após o fix da hipótese 1 e o inimigo já entra pela esquerda junto do
+mato — o "vindo da direita" era artefato visual do bug do fade (terço inferior
+preto), não um bug de wrap de X do OAM. Nenhum código mexido para esta hipótese;
+`GbaVideoTest` de sprite com X negativo (wrap 512) já cobria o caso antes desta
+task e continua verde.
+
+**Hipótese 3 ✅ CONFIRMADA E CORRIGIDA (2026-07-16).** Sprites em `attr0`
+`mode==2` (OBJ window) eram só pulados (`gatherObjectsLine`: `disabled ||
+objectMode == 2 → continue`) — nunca desenhados E nunca usados como máscara.
+`activeWindowMaskLine` também nunca consultava OBJ window: só tratava WIN0/WIN1.
+Resultado: o overlay vermelho/azul de status (que no gen-3 é um sprite modo-2
+mascarando um blend BLDCNT sobre o Pokémon) nunca aparecia. Fix: novo array
+`objWindowCoverage[WIDTH]`, preenchido por `computeObjWindowCoverage` (reusa
+`gatherObjectLine`/`gatherAffineObjectLine` com um novo parâmetro `windowSprite`
+que troca "desenhar o pixel" por "marcar cobertura" quando o pixel não é
+transparente) ANTES de `activeWindowMaskLine` — que agora usa essa cobertura
+como o 3º nível de prioridade de janela (WIN0 > WIN1 > OBJ window > fora,
+conforme GBATEK), com a máscara vinda de `WINOUT` bits 8-13. Teste de regressão
+`GbaVideoTest.objWindowModeSpriteMasksBlendWithoutBeingDrawnItself` (sprite
+modo-2 nunca aparece como pixel, mas define a região onde o blend é permitido).
+Suíte gbaemu 233 verde. Falta validação visual do usuário (overlay
+vermelho/azul aparecendo em golpe de status real).
+
 3. **Overlay de status → OBJ window (WINOBJ).** A animação vermelha/azul do
    gen-3 usa a janela de objetos (DISPCNT bit 15 + WINOUT bits 8-13): sprites
    com `mode=obj-window` não são desenhados — viram máscara onde o efeito de
