@@ -214,8 +214,11 @@ qualquer device ARM, não só a linha de aplicação já mapeada acima. **Refina
 único + `ExceptionModel` plugável); sub-tasks executáveis B7.1–B7.5 em
 `tasks/trilha-b-arquiteturas/`.
 
-**Ordem recomendada (revisada 2026-07-15):** B2.6 primeiro (destrava Thumb-2 real,
-B3, B7 e B4.0.3). Depois, TRÊS frentes independentes que podem andar em paralelo:
+**Ordem recomendada (revisada 2026-07-15):** B2.6 → **B2.7 (paridade Thumb-2 —
+auditoria achou que MUL.W/UMULL/extend/exclusivos.W nunca foram decodificados;
+sem eles nenhum binário Thumb-2 de compilador roda)**, com B1.7 (acesso
+desalinhado v6+, corrupção silenciosa confirmada no fonte) e B2.8 (PLD/PLI) na
+mesma leva. Depois, TRÊS frentes independentes que podem andar em paralelo:
 - **B3.x** (ARMv7-A+VFP → 3DS/B5 e binários hard-float);
 - **B7.x** (Cortex-M — só precisa de B2.6; B7.4 pleno usa B3.2);
 - **B4.1.x** (MMU/Linux — **não depende mais de B3**: a RFC-SOFTMMU fixou o
@@ -241,6 +244,10 @@ Itens já identificados por profiling, em ordem de expectativa de ganho
 | Chain budgets pós-boot | ✅ C4 (256/64 default no ndsemu) | ⚠️ ARM7 ≥16 quebra boot de Platinum/SM64DS — validar boot dos 4 jogos de referência ao mexer |
 | Chaining no gbaemu | ✅ C5 (budget 32 nos 2 backends) | INTERPRETED segue default do gbaemu (decisão do usuário) |
 | Dispatch megamórfico remanescente | `JitRuntime.execute` ~12-14% pós-superblocos | SEM spec — exige sessão de modelo forte com profiling novo (ver tasks/README.md, seção "Pendências") |
+| Perf do INTERPRETADO (C8) | O caminho de produção do gbaemu nunca foi medido/otimizado | **Contexto de produto (usuário, 2026-07-15): gbaemu é INTERPRETED por FIDELIDADE, não fallback** — IRQ de H/V-blank/STAT exige granularidade por instrução; JIT de bloco quebra Pokémon em batalha e não dá ganho no GBA. Restrição da task: nenhuma otimização pode mudar a granularidade observável |
+| Fastmem no JIT (C9) | Load/store direto no array da página no bytecode (pós-C7) | ndsemu only; gbaemu fora (interpretado) |
+| Warm-start do JIT (C10) | Persistir PCs quentes por ROM + pré-compilar no load | Ataca o "demora a esquentar" do MKDS |
+| Idle-loop skip | Detectar busy-wait e avançar relógio | SEM spec — RFC própria antes (risco de timing); ver "Pendências" |
 
 ---
 
