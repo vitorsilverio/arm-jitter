@@ -1,34 +1,51 @@
-# B3 — ARMv7-A user-level + VFP **[REFINAR]**
+# B3 — ARMv7-A user-level + VFP (épico REFINADO em B3.1–B3.7)
 
-**Trilha:** B · **Depende de:** B2 · **Repo:** arm-jitter
-**Status de spec:** alto nível — refinar quando B2 estiver encaminhado.
+**Trilha:** B · **Depende de:** B2.6 · **Repo:** arm-jitter (+ armbox na B3.7)
+**Status de spec:** ✅ refinado 2026-07-15 (sessão de modelo forte). NÃO execute este
+arquivo — execute as sub-tasks, na ordem B3.1 → B3.2 → B3.3 → B3.4 → B3.5 → B3.6 → B3.7.
+Cada sub é um PR independente e mergeável.
 
 ## Contexto
 
-Completa o user-mode de 32 bits: com B1+B2+B3, binários Linux ARMv7 e o core ARM11 do
-3DS (que precisa de VFPv2) ficam cobertos. NEON fica explicitamente de FORA da primeira
-rodada — cai no fallback PER_OP interpretado se/quando decodificado.
+Completa o user-mode de 32 bits: com B1+B2+B2.6+B3, binários Linux ARMv7 hard-float e
+o core ARM11 do 3DS (VFPv2) ficam cobertos. NEON fica explicitamente FORA (fallback
+UNDEFINED documentado; se algum alvo real precisar, vira épico próprio).
 
-## Escopo previsto
+## Sub-tasks
 
-| Sub | Escopo |
-|-----|--------|
-| B3.1 | Restante ARMv7 inteiro: MOVW/MOVT (encoding ARM), DMB/DSB/ISB, MLS, SBFX/UBFX/BFI/BFC, RBIT, SDIV/UDIV (nota: div é v7-M/v7VE — gatear separado) |
-| B3.2 | Banco de registradores FP no core: 32×S / 16×D (VFPv2) sobrepostos, FPSCR (flags NZCV próprios, modos de arredondamento), acesso via CP10/CP11 e habilitação (FPEXC/CPACR ficam com o hospedeiro via `CoprocessorBus` — decidir no refinamento) |
-| B3.3 | IR de FP: novos `IrOp`s (FpAlu, FpLoad/FpStore, FpTransfer, FpCompare, FpConvert) + executores interpretados |
-| B3.4 | Decoder VFP (encodings CDP/LDC/STC/MCR/MRC de CP10/11 — o decoder de coprocessador existente é o ponto de entrada) |
-| B3.5 | Emissão nativa ASM de FP (mapear para float/double da JVM onde a semântica IEEE bater; onde não bater — flush-to-zero, default NaN — helper com semântica exata) |
+| Sub | Arquivo | Escopo | Depende de |
+|-----|---------|--------|-----------|
+| B3.1 | [b3.1-armv7-inteiro-arm.md](b3.1-armv7-inteiro-arm.md) | Inteiro v7, encodings ARM: MOVW/MOVT, MLS, SBFX/UBFX/BFI/BFC, RBIT, SDIV/UDIV, DMB/DSB/ISB | B2.6 |
+| B3.2 | [b3.2-armv7-inteiro-thumb2.md](b3.2-armv7-inteiro-thumb2.md) | Mesmo grupo em encodings Thumb-2 (bitfield, MLS, RBIT, SDIV/UDIV) | B3.1 |
+| B3.3 | [b3.3-vfp-banco-registradores.md](b3.3-vfp-banco-registradores.md) | Banco S/D + FPSCR no core, snapshot/save-state | — (paralelo a B3.1/B3.2) |
+| B3.4 | [b3.4-vfp-ir-interpretador.md](b3.4-vfp-ir-interpretador.md) | `IrOp`s de FP + `IrVfpExecutor` interpretado | B3.3 |
+| B3.5 | [b3.5-vfp-decoder.md](b3.5-vfp-decoder.md) | `VfpDecoder` (espaço CP10/11) ARM + Thumb-2 | B3.4 |
+| B3.6 | [b3.6-vfp-asm-nativo.md](b3.6-vfp-asm-nativo.md) | Emissão ASM nativa das ops de FP | B3.5 |
+| B3.7 | [b3.7-preset-armv7a-armbox.md](b3.7-preset-armv7a-armbox.md) | Preset `ARMV7A` + validação armbox com binário gcc hard-float | B3.1-B3.6 |
 
-## Decisões já tomadas (respeitar)
+## Decisões fechadas (não reavaliar nas subs)
 
-- **VFP antes de NEON.** NEON é enorme e o fallback PER_OP cobre o gap.
-- Semântica FP: modo de referência = IEEE 754 estrito com FPSCR default; os modos
-  não-IEEE do VFP (flush-to-zero etc.) são gateados e podem começar como exceção clara
-  se não usados pelos alvos (mesma filosofia do bit E em B1.5).
-- gbaemu/ndsemu não têm FP — risco de regressão baixo, mas G5 continua valendo.
+1. **VFP antes de NEON; NEON fora do épico.** Encodings NEON caem no UNDEFINED
+   controlado existente.
+2. **Alvo VFP = VFPv2 + `VMOV.F32/F64 #imm` do VFPv3-d16** (gcc emite constantes
+   assim mesmo com `-mfpu=vfp`; é 1 encoding barato). VCVT fixed-point do VFPv3 fica
+   FORA (UNDEFINED documentado).
+3. **Semântica FP = IEEE 754 do Java** (round-to-nearest-even, sem flush-to-zero).
+   Escrita em FPSCR de `RMode≠00`, `FZ=1`, `Len≠0` ou `Stride≠0` →
+   `UnsupportedOperationException` central (mesmo padrão do bit E de B1.5). Flags
+   cumulativas de exceção do FPSCR (IOC/DZC/OFC/UFC/IXC) **não são calculadas**
+   (leitura devolve 0) — limitação documentada no javadoc do FPSCR; os binários de
+   aceite não usam `fetestexcept`.
+4. **`VMRS APSR_nzcv, FPSCR` (Rt=15) é obrigatório** — é como TODO compare de float
+   compilado chega ao branch. Sem ele nenhum binário real funciona.
+5. **SDIV/UDIV entram gateados por `ArmFeature.DIVIDE`** e o preset `ARMV7A` os
+   habilita (são v7VE/v7-R no encoding ARM, mas onipresentes em userland moderno;
+   B7.4/perfil M reusa a mesma feature no encoding Thumb-2).
+6. gbaemu/ndsemu não têm FP nem v7 — risco de regressão baixo, mas G5 vale em toda sub.
 
-## Aceite (do épico)
+## Aceite do épico (fecha na B3.7)
 
-- Binário user-mode `gcc -march=armv7-a -mfpu=vfpv3 -mfloat-abi=hard` com aritmética
-  double/float roda correto no runner B4.0 (comparar stdout com execução nativa).
-- Harness de equivalência para cada IrOp de FP.
+- Binário user-mode `gcc -march=armv7-a -mfpu=vfp -mfloat-abi=hard` com aritmética
+  float/double/printf de resultado roda no armbox com stdout idêntico ao esperado,
+  nos 3 backends (JIT/`--interp`/`--check`).
+- Harness de equivalência cobre cada `IrOp` de FP (B3.6).

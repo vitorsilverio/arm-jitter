@@ -102,7 +102,10 @@ precisam de uma distribuição GraalVM real (bench "GraalVM CE" da tabela e o pr
 | **A2 — Emissor mínimo** | `TruffleCodeEmitter` cobrindo ALU/Cycle/Fetch com fallback interpretado (mesmo desenho da fase 4 do codegen JVM) | `BlockEquivalenceHarness` verde para os blocos suportados |
 | **A3 — Cobertura completa** | Todas as categorias de `IrOp` (reusar a ordem 5a–5f que funcionou no ASM: memória → branches → multiply → LDM/STM → PSR/SWI → resto) | Divergence-check longo com ROM real (JUS/FireRed) zero divergências |
 | **A4 — Bench honesto** | `JitRuntimeFactory.truffleArmThumb(...)`; bench nos 3 cenários: HotSpot puro, OpenJDK+Graal, GraalVM | Tabela de perf vs ASM publicada no README; decidir default por ambiente |
-| **A5 — native-image demo** [PENDENTE de GraalVM 25 LTS instalado] | `armbox` (não gbaemu/ndsemu) compilado com native-image usando o backend Truffle | Binário nativo roda um ELF de teste com JIT ativo |
+| **A5 — native-image demo** | `armbox` compilado com native-image usando o backend Truffle | 🟡 PARCIAL: binário roda correto, mas 0 blocos compilam (bailout de PE — causa raiz em A2/A3, ver RELATORIO-A5) |
+| **A6 — Especialização de nós Truffle** | Árvore de nós por categoria de `IrOp` (delegando aos executores, G1) para o PE conseguir podar | `opt done` em blocos reais; spec fechada em `tasks/trilha-a-truffle/a6-*.md` |
+| **A7 — Revalidação native-image** | Repetir diagnósticos de A5 pós-A6 (medição pura) | `--truffle` > `--interp` nos 2 ambientes; fecha o aceite #2 de A5 |
+| **A8 — Otimizações native-image** | PGO/-O3/GC/march, tabela startup+RSS+throughput | Variante vencedora vira default do perfil `native` do armbox |
 
 **Risco principal:** Bytecode DSL ainda é relativamente novo; se instável, cair para
 AST clássica (mais verbosa, igualmente suportada). **Kill criterion do A0:** se em
@@ -152,13 +155,16 @@ mesmo IR.
   vive em `CpsrRegister`, entra na chave do `BlockCache`/tag do inline cache.
 - **Aceite:** suíte de decode exaustiva contra assembler de referência
   (binutils/capstone como oráculo offline); harness verde.
-- **B2.6 (pendente)**: o preset público `ARMV6K_THUMB2` ainda não pluga
-  `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` juntas — colisão real e documentada
-  com o "fantasma" de `BL`/`BLX` legado, mesmo bug que `Thumb2DataProcessingDecoder`
-  já teve corrigido (B2.2.2). Pré-requisito prático para qualquer binário Thumb-2
-  real fora de blocos sintéticos de teste.
+- **B2.6 (pendente, spec fechada 2026-07-15)**: o "fantasma" de `BL`/`BLX` é
+  indecidível por bits — o fix decidido é decodificar `BL`/`BLX` como instrução
+  ÚNICA de 32 bits sob `THUMB2` (fiel ao ARMv6T2+, revoga a decisão D2 de B2.4) e
+  então plugar as 4 extensões. Pré-requisito prático para qualquer binário Thumb-2
+  real; validação de compilador na sequência em B4.0.3.
 
-**B3 — ARMv7-A user-level + VFP** — completa o user-mode de 32 bits.
+**B3 — ARMv7-A user-level + VFP** — completa o user-mode de 32 bits. **Refinado
+2026-07-15 em B3.1–B3.7 executáveis** (`tasks/trilha-b-arquiteturas/b3*.md`), com
+as decisões de FP fechadas (IEEE Java, FPSCR restrito, VMOV-imm do v3-d16, flags
+cumulativas não calculadas).
 - CP15 estendido, MOVW/MOVT, DMB/DSB/ISB, restante do v7.
 - **VFPv2/v3 primeiro, NEON depois**: VFP é pré-requisito prático de userland Linux e
   do 3DS; NEON é grande e pode ser fase própria (ou inicialmente interpretado via
@@ -166,7 +172,10 @@ mesmo IR.
 - Implica IR de FP: novos `IrOp`s de float/double + banco de registradores FP no core.
 - **Aceite:** binários user-mode compilados com gcc `-mfpu=vfp` rodando corretos.
 
-**B4 — System-level / MMU (Linux full-system 32-bit)**
+**B4 — System-level / MMU (Linux full-system 32-bit)** — decisões fechadas em
+`docs/RFC-SOFTMMU.md` (2026-07-15): wrapper de tradução, hospedeiro
+versatilepb+ARM1176 (**ARMv6K — não precisa de B3/VFP**), aborts base-restored,
+CP15 VMSA na lib, gerações no BlockCache; fases B4.1.1–B4.1.5 no épico refinado.
 - VMSA: page tables, TLB emulado, domains, aborts precisos (data/prefetch abort com
   FSR/FAR), integração da tradução no caminho de memória do JIT (softmmu — hoje o
   `AddressSpace` é físico/flat).
@@ -200,14 +209,21 @@ Do lado do arm-jitter basta ARMv6K + VFPv2 corretos.
 uma extensão do perfil A/R: sem modo ARM de 32 bits, Thread/Handler mode em vez de
 CPSR bancado, NVIC/vetor relocável (VTOR), `EXC_RETURN`. Cobre microcontroladores
 (STM32, nRF, a maioria das placas ARM tipo Arduino) — objetivo do projeto é cobrir
-qualquer device ARM, não só a linha de aplicação já mapeada acima. **[REFINAR]**:
-depende de B2 (✅) e B2.6; ver `tasks/trilha-b-arquiteturas/b7-m-profile.md` para o
-porquê de precisar de uma rodada de spec própria antes de virar sub-tasks executáveis
-(mesmo padrão de B3/B6).
+qualquer device ARM, não só a linha de aplicação já mapeada acima. **Refinado
+2026-07-15**: decisão de arquitetura fechada em `docs/RFC-M-PROFILE.md` (`ArmCore`
+único + `ExceptionModel` plugável); sub-tasks executáveis B7.1–B7.5 em
+`tasks/trilha-b-arquiteturas/`.
 
-**Ordem recomendada:** B1 → B2 → B2.6 → B3 → (B4 ∥ B5) → B6. B7 é independente (só
-depende de B2/B2.6) e pode ser refinado em paralelo a qualquer uma das outras.
-B6.0 (RFC do IR 64-bit) pode ser escrita cedo, pois influencia decisões de B1–B3.
+**Ordem recomendada (revisada 2026-07-15):** B2.6 primeiro (destrava Thumb-2 real,
+B3, B7 e B4.0.3). Depois, TRÊS frentes independentes que podem andar em paralelo:
+- **B3.x** (ARMv7-A+VFP → 3DS/B5 e binários hard-float);
+- **B7.x** (Cortex-M — só precisa de B2.6; B7.4 pleno usa B3.2);
+- **B4.1.x** (MMU/Linux — **não depende mais de B3**: a RFC-SOFTMMU fixou o
+  hospedeiro em versatilepb+ARM1176/ARMv6K, que já está pronto; kernel soft-float).
+B6 (AArch64) quando priorizado — B6.1/B6.2 já são executáveis.
+Todas as decisões de desenho pendentes foram fechadas em 2026-07-15
+(`docs/RFC-M-PROFILE.md`, `docs/RFC-SOFTMMU.md`, specs B3.x); a matriz objetiva de
+"funciona de verdade?" por arquitetura está em `docs/VALIDACAO-ARQUITETURAS.md`.
 
 ---
 
@@ -221,9 +237,10 @@ Itens já identificados por profiling, em ordem de expectativa de ganho
 | Superblocos / trace-JIT | Fundir sequências encadeadas quentes em um método compilado (N chamadas megamórficas → 1) | A alavanca grande (~26–36% do CPU em gameplay); projeto multi-sessão |
 | Flags NZCV em locals JVM | Manter flags em locals dentro do bloco em vez de ler/escrever CPSR por op | ⚠️ Rebaixado: ganho ≈0 medido em gameplay isolado; vira subproduto dos superblocos |
 | Logic-flags + shifter nativo completo | Carry-out do shifter em ops lógicas `S` sem helper | Complementa o shifted-register nativo |
-| Page-table dispatch no `AddressSpace` | Despacho de memória O(1) por página em vez de if-chain no hospedeiro | Par com softmmu de B4 |
-| Chain budgets pós-boot | Subir budget de chaining depois do boot (~+9% medido) | ⚠️ ARM7 ≥16 quebra boot de Platinum/SM64DS — validar boot dos 4 jogos de referência |
-| Chaining no gbaemu | gbaemu ainda não usa `setChainCycleBudget` | Win barato |
+| Page-table dispatch no `AddressSpace` | ✅ utilitário pronto (C3, `PagedAddressSpace`); **adoção pendente**: C6 (gbaemu) e C7 (ndsemu), specs em `tasks/trilha-c-perf/` | ~19-26% no dispatch em microbench; ganho real diluído — bench por hospedeiro decide |
+| Chain budgets pós-boot | ✅ C4 (256/64 default no ndsemu) | ⚠️ ARM7 ≥16 quebra boot de Platinum/SM64DS — validar boot dos 4 jogos de referência ao mexer |
+| Chaining no gbaemu | ✅ C5 (budget 32 nos 2 backends) | INTERPRETED segue default do gbaemu (decisão do usuário) |
+| Dispatch megamórfico remanescente | `JitRuntime.execute` ~12-14% pós-superblocos | SEM spec — exige sessão de modelo forte com profiling novo (ver tasks/README.md, seção "Pendências") |
 
 ---
 

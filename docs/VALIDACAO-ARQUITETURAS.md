@@ -1,0 +1,45 @@
+# Matriz de validação por arquitetura
+
+**Pergunta que este documento responde objetivamente: "a arquitetura X realmente
+funciona no arm-jitter?"** — com critérios binários, comandos reprodutíveis e sem
+depender de julgamento. Atualizar a tabela de status ao fechar cada task que mude
+uma célula (a task correspondente sempre cita este arquivo no Aceite).
+
+## Os 4 níveis (cada um subsume os anteriores)
+
+| Nível | O que prova | Como rodar |
+|-------|-------------|-----------|
+| **N1 — Unidades + equivalência** | Cada instrução decodifica/executa igual ao oráculo (G1) nos 2 backends | `mvn -o test` no arm-jitter (JBR 25): suíte + `BlockEquivalenceHarness` |
+| **N2 — Torture ELF handwritten** | Sequências reais auto-verificáveis, JIT×interp×check idênticos, e o harness DETECTA regressão (gêmeo `-broken`) | armbox: `ArmV6TortureTest`/`Thumb2TortureTest`/... (JUnit roda os 3 backends; exit 0 e `-broken` ≠ 0) |
+| **N3 — Binário de compilador/real** | Código que nós NÃO escrevemos (gcc/busybox/kernel/firmware) roda com stdout/exit corretos nos 3 backends | armbox `--arch=<x>` + `--interp` + `--check` com o binário do testdata |
+| **N4 — Consumidor em produção** | Um emulador/hospedeiro real usa o preset com carga de verdade | suites gbaemu/ndsemu; jogos/kernel/firmware validados pelo usuário |
+
+Regra de ouro: **uma arquitetura só é anunciada como "suportada" no README com N3
+verde.** N1/N2 = "implementada". N4 = "provada em produção".
+
+## Status (2026-07-15)
+
+| Preset | N1 | N2 | N3 | N4 | Próximo passo |
+|--------|----|----|----|----|---------------|
+| `ARMV4T` (GBA) | ✅ | — (coberto por N4) | ✅ busybox-armv5l parcial | ✅ gbaemu 5 jogos | — |
+| `ARMV5TE` (NDS ARM9) | ✅ | — | ✅ hello/busybox (B4.0) | ✅ ndsemu (JUS/MKDS/SM64DS) | — |
+| `ARMV6K` | ✅ (B1.1-B1.6) | ✅ armv6k-torture (B4.0.1) | 🟡 só hello-armv6k (sinal fraco: sem instrução v6 de compilador) | ⬜ (3DS futuro) | busybox/gcc armv6k real — entra de carona no linuxbox (B4.1.5, kernel versatile é v6) |
+| `ARMV6K_THUMB2` | ✅ (B2.1-B2.5) | 🟡 thumb2-torture só dataproc (B4.0.2) | ⬜ | ⬜ | **B2.6** (fecha preset + estende torture) → **B4.0.3** (gcc/busybox thumb2) |
+| `ARMV7A` | ⬜ | ⬜ | ⬜ | ⬜ | épico B3 (B3.7 entrega N2+N3 juntos: armv7a-torture + hello-float gcc hard-float) |
+| `ARMV6M`/`ARMV7M` (Cortex-M) | ⬜ | ⬜ | ⬜ | ⬜ | épico B7 (B7.5 entrega N2+N3: cortexm-torture m0/m3 + hello-cortexm gcc, semihosting) |
+| MMU/full-system (ARMv6 VMSA) | ⬜ | ⬜ | ⬜ | ⬜ | épico B4.1 (N3/N4 = kernel Linux versatile até shell no linuxbox) |
+| AArch64 | ⬜ | ⬜ | ⬜ | ⬜ | épico B6 (B6.2 = hello arm64; B6.3 = busybox arm64) |
+
+## Convenções dos artefatos de teste (obrigatórias para tasks novas)
+
+1. **Torture test** (`testdata/<arch>-torture.s` no armbox): auto-verificável,
+   exit-code único por checagem (identifica QUAL falhou), `.ltorg` fora do fluxo,
+   fonte + ELF versionados + entrada no `build-testdata.ps1`.
+2. **Gêmeo `-broken`**: cópia com UM valor esperado errado; o JUnit prova exit ≠ 0
+   ("teste do teste" — sem isso um harness quebrado passa em silêncio).
+3. **Binário de compilador**: fonte + comando exato de build no `build-testdata.ps1`
+   + verificação por objdump das instruções-alvo anexada no PR.
+4. **3 backends sempre**: JIT (default), `--interp`, `--check` (divergence) — o
+   `--check` é o que transforma qualquer binário em teste de equivalência gratuito.
+5. Firmware bare-metal (perfil M): saída/exit via semihosting (`BKPT 0xAB`,
+   SYS_WRITE0/SYS_EXIT) — B7.5 define o padrão.

@@ -51,39 +51,59 @@ regras de flags/UNPREDICTABLE/features por arquitetura).
   antes usados nesse bench continuam corretos, e, se fizer sentido, medir o ganho da
   especialização nos MESMOS blocos de 20/80/320 instruções para comparar com os
   números já registrados.
-- Não resolve nem re-tenta o binário nativo da A5 — depois desta task, uma sessão de
-  validação separada deveria voltar ao armbox e rodar o mesmo diagnóstico de
-  `TraceCompilation` de A5 para confirmar que os bailouts sumiram (isso pode virar uma
-  task A7 de fechamento, ou reabrir A5 — decidir quando chegar lá).
+- Não resolve nem re-tenta o binário nativo da A5 — o fechamento é a task
+  [A7](a7-native-image-revalidacao.md) (já especificada), executada em sessão
+  separada depois desta.
 
 ## Especificação
 
-1. **Desenho de nó por categoria**: um nó Truffle (`Node`/`Node` abstrato com
-   `@Specialization`) por categoria de `IrOp` (ou por grupo pequeno de categorias
-   afins — ex. `Load`/`Store`/`LoadLiteral`/`DoubleTransfer` podem compartilhar um nó
-   base de acesso à memória). Cada nó implementa um `execute(VirtualFrame, ArmCore)`
-   (ou assinatura equivalente) que chama o MESMO código de semântica já usado pelo
-   interpretador — não duplicar regras de `ArmFeature`/UNPREDICTABLE/flags (G1). Olhar
-   como `IrBlockExecutor#executeOp` despacha hoje para os executores especializados
-   (`IrAluExecutor`, `IrMemoryExecutor`, etc. — nomes exatos a confirmar no código) e
-   decidir se os nós Truffle chamam esses mesmos executores (delegação simples, menor
-   risco) ou se algum ganho real de PE exige reestruturar essas chamadas.
+1. **Desenho de nó por categoria (DECIDIDO — não reavaliar): delegação aos
+   executores existentes.** Os executores reais são, em `codegen/executor/`:
+   `IrAluExecutor`, `IrMemoryExecutor`, `IrBranchExecutor`, `IrTransferExecutor`,
+   `IrSystemExecutor`, `IrCycleExecutor` (+ `IrExecutionSupport` de apoio) — é para
+   ELES que `IrBlockExecutor#executeOp` despacha hoje. Cada nó Truffle novo guarda o
+   `IrOp` concreto como `@CompilationFinal` e chama DIRETO o método do executor
+   correspondente àquela categoria (pulando o switch de 40 casos do `executeOp` —
+   o switch é o que mata o PE; a chamada direta monomórfica é o que ele consegue
+   inlinar). NENHUMA semântica reimplementada (G1). Taxonomia de nós (1 classe por
+   linha, pacote `truffle/`):
+
+   | Nó | Records de `IrOp` cobertos |
+   |----|---------------------------|
+   | `AluOpNode` | `Alu`, `MoveTop`, `Sel`, `Saturate`, `AbsDiffSum`, `Saturating`, `BitFieldExtract`/`BitFieldInsert`/`BitReverse`/`Divide` (B3.1, se existirem) |
+   | `MultiplyOpNode` | `Multiply`, `LongMultiply`, `DspMultiply`, `ParallelAlu` |
+   | `MemoryOpNode` | `Load`, `Store`, `LoadLiteral`, `DoubleTransfer`, `Swap`, `LoadExclusive`, `StoreExclusive`, `ClearExclusive` |
+   | `TransferOpNode` | `MultipleTransfer`, `Push`, `Pop` |
+   | `BranchOpNode` | `Branch`, `BranchExchange`, `ThumbBlPrefix`, `ThumbBlSuffix`, `TableBranch`, `CompareBranchZero` |
+   | `SystemOpNode` | `PsrTransfer`, `Swi`, `Coprocessor`, `Undefined`, `ChangeProcessorState`, `SetEndianness`, `StoreReturnState`, `ReturnFromException`, `WaitForInterrupt`, `MemoryBarrier`, `SetItState` |
+   | `CycleFetchOpNode` | `Cycle`, `Fetch` |
+
+   Dentro de cada nó, o dispatch entre os poucos records do grupo é um
+   `switch` pequeno sobre o TIPO CONCRETO já conhecido em tempo de construção da
+   árvore — melhor ainda: escolher a subclasse de nó NA EMISSÃO (ex.
+   `MemoryOpNode.forLoad(op)`), de modo que em runtime não haja switch nenhum.
 2. **Montagem da árvore por bloco**: `TruffleCodeEmitter`/`TruffleBlockRootNode`
-   passam a construir, na hora da emissão (lift do `IrBlock`), uma árvore de nós
-   filhos (um por op do bloco) em vez do array `IrOp[]` percorrido por `switch`. Isso é
-   o análogo Truffle do que `AsmBlockCompiler` já faz gerando bytecode por op — a
-   árvore de nós É o "código gerado" para o Graal.
-3. **`@TruffleBoundary` disciplinado**: qualquer chamada de dentro de um nó
-   especializado para código não-parcialmente-avaliável (acesso a `AddressSpace` do
-   hospedeiro, alocação, I/O) precisa de `@TruffleBoundary` explícito — A3 já registrou
-   essa armadilha, mas A2/A3 nunca validaram isso contra PE real (só chegavam a
-   compilar os blocos sintéticos triviais que não tocavam memória/branches
-   compostos). Esperar precisar adicionar boundaries que hoje não existem.
-4. **Profiling por call-site**: usar os mecanismos Truffle padrão de especialização
-   (`@Specialization` com guards, `@Cached`, nós polimórficos) onde fizer sentido —
-   por exemplo, condição de execução (`Condition != AL`) e o guard associado são bons
-   candidatos a se beneficiar de profiling (a maioria dos blocos executa a mesma
-   condição repetidamente).
+   passam a construir, na hora da emissão (lift do `IrBlock`), um
+   `@Children IrOpNode[] ops` (um nó por op, subclasse escolhida na emissão — item 1)
+   em vez do array de dados `IrOp[]` percorrido por `switch`. Manter `@ExplodeLoop`
+   no `executeBlock` sobre o array `@Children` — este é o padrão canônico Truffle
+   (loop explodido sobre filhos homogêneos em quantidade, heterogêneos em tipo) e é
+   exatamente o que o PE sabe podar; a contabilidade de `pcChanged` por op (A3)
+   continua igual. Isso é o análogo Truffle do que `AsmBlockCompiler` já faz gerando
+   bytecode por op — a árvore de nós É o "código gerado" para o Graal.
+3. **`@TruffleBoundary` disciplinado — pontos JÁ mapeados** (colocar boundary
+   nestes escapes para o hospedeiro, e SÓ neles; adicionar outros apenas se um
+   bailout novo apontar): chamadas a `AddressSpace` (read/write — implementação é
+   do hospedeiro, opaca ao PE), `SwiDispatcher.dispatch`, `CoprocessorBus.read/write`,
+   `ArmTraceListener`, e qualquer `throw` de exceção com construção de mensagem.
+   Ops de ALU/flags/registradores NÃO levam boundary (são o que o PE precisa ver).
+   A validação de que os boundaries bastam é o próprio Aceite 1 (TraceCompilation).
+4. **Profiling por call-site — escopo mínimo fixado**: usar
+   `ConditionProfile`/`CountingConditionProfile` em exatamente 2 lugares: (a) o
+   guard de condição por-op (`Condition != AL` — a maioria dos blocos executa a
+   mesma condição sempre) e (b) o `pcChanged` do fim do bloco. NÃO usar
+   `@Specialization`/DSL nesta task (a delegação do item 1 não precisa; DSL entra
+   só se uma rodada futura medir ganho) — manter nós escritos à mão.
 
 ## Aceite
 
