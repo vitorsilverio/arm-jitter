@@ -55,3 +55,38 @@ Suíte gbaemu verde. Regressão guard novo se uma correção entrar nesta sessã
   evidência.
 - Ver a lista de bugs de áudio JÁ corrigidos em `gba-audio-status` antes de
   investigar — évitar reabrir/reimplementar um fix que já existe.
+
+## Achados da fase 1 (2026-07-16) — sem causa raiz encontrada, devolvido ao usuário
+
+`SmwAudioDiagnosticTest` novo (`src/test/.../audio/`, `-Daudio.diag=1`, precisa de
+`smw.gba` na raiz do módulo — copiado de `roms/smw.gba`, gitignored). 4 testes:
+mix completo no título (15s), cada um dos 6 canais isolado no título, mix completo
+em gameplay real (60s, auto-mash de START/A pra passar do título/file-select +
+segurar RIGHT/A ocasional pra andar e pular), e cada canal isolado em gameplay.
+
+- **Railing/clicks: zero** em toda captura (título e gameplay) — não bate com
+  nenhum padrão já corrigido (DC offset do PSG idle, DMA não recarregando,
+  pitch 2 oitavas errado). Ver `gba-audio-status` pros detalhes desses fixes.
+- **PSG (CH1-4) mudo o jogo inteiro**, título E gameplay com pulos — este port
+  de SMW (Super Mario Advance 2) parece rotear música E efeitos só por Direct
+  Sound A/B. PSG descartado como fonte do chiado.
+- **Espectro (FFT, bandas bass/mid/treble/ultra)** do mix não mostra energia
+  elevada em agudos (~2% em 4-12kHz, ~0,5% acima de 12kHz) — sem assinatura de
+  ruído branco/"hiss" clássico.
+- **Único sinal não trivial**: a fração de saltos pequenos (10-40 de amplitude
+  em 8 bits, abaixo do limiar de "click" de 100) do MIX combinado em gameplay
+  (3,64%) é maior que a SOMA dos dois canais Direct Sound isolados
+  (directA=0,46% + directB=0,63% = 1,09%). Pode ser só superposição normal de
+  duas fontes de áudio independentes (não anômalo — mixagem soma variância) ou
+  uma pista fraca de interação/aliasing entre os dois FIFOs A/B tocando em
+  timers diferentes. **Não investigado a fundo** — não virou hipótese forte o
+  bastante pra tentar um fix.
+
+**Por que devolvido em vez de tentar um fix**: nenhum dos sinais acima é "óbvio
+e pequeno" (critério de aceite #3) — não há uma assinatura clara tipo as dos
+bugs já corrigidos. Precisa de caracterização melhor do usuário antes da
+próxima sessão: quando exatamente o chiado é audível (título, in-game, um
+efeito específico como moeda/pulo)? WAVs em `target/smw-audio-*.wav` (8 no
+total) pra ouvir e comparar.
+
+Suite gbaemu verde (`mvn -o test`, sem regressão nos 5 jogos de referência).
