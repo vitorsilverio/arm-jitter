@@ -43,7 +43,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 3 | ~~B1.7~~ ✅ FECHADA 2026-07-16 (`8f942b2`) — `ArmFeature.UNALIGNED_ACCESS` em ARMV6K/ARMV6K_THUMB2; suítes arm-jitter 606+13, gbaemu 216, ndsemu 175, armbox 26 verdes | — | — | — |
 | 4 | ~~B4.0.4~~ ✅ FECHADA 2026-07-16 (armbox `ArmboxCp15`; 2 gaps reportados viraram B4.0.4.1 e o item MCR/MRC-Thumb do PR3 da B2.7) | — | — | — |
 | 4b | **B4.0.4.1** — `handles` fino no `CoprocessorBus` (Undefined limpo p/ CP15 parcial) | arm-jitter + armbox | Gap 1 do relatório da B4.0.4; bloqueia B4.0.3 | 1 sessão, pequena; sequenciar com as demais de arm-jitter |
-| 5 | **C6** — PagedAddressSpace no gbaemu | gbaemu | Perf do modo default (INTERPRETED) | Paralela; validação de gameplay do usuário no fim |
+| 5 | 🟡 **C6** — PagedAddressSpace no gbaemu — implementado (`64e08c1`), falta só a validação de gameplay do usuário | gbaemu | Perf do modo default (INTERPRETED) | Paralela; validação de gameplay do usuário no fim |
 | 6 | **D1** — RTC GPIO (Emerald) | gbaemu | Compat barata | Após C6 (mesmo repo) |
 | 7 | **A6** — especialização de nós Truffle | arm-jitter (módulo `truffle/`) | Destrava A7/A8 | Paralela (módulo isolado); é a mais difícil da onda — se travar, devolver |
 | 8 | **B5.1** — monitor exclusivo global | arm-jitter | Pequena; independente | Após B1.7 (mesmo repo, toca ArmCore) |
