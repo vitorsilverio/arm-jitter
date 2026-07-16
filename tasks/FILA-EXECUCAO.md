@@ -31,14 +31,15 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 
 | # | Task | Repo | Por quê agora | Nota de sessão |
 |---|------|------|---------------|----------------|
-| 1 | **C11** — restore de save state deixa JIT frio | ndsemu + arm-jitter | Dor real relatada (SM64DS >10min) | 2 sessões: fase 1 (medição) e fase 2 (fixes A/B/C). Fase 1 precisa de um `.ss` in-game do usuário |
-| 2 | **B2.6** — BL/BLX decode 32-bit + fechar preset | arm-jitter | Destrava B2.7/B2.8/B3/B7/B4.0.3 | 1 sessão |
+| 1 | ~~C11~~ ✅ FECHADA 2026-07-16 (Fix C `JitRuntime.reset()` bastou — estado de superbloco sobrevivia ao `clear()`; gap agora fecha em 20-40s) | — | — | — |
+| 2 | ~~B2.6~~ ✅ FECHADA 2026-07-16 (`c1c2ab4`) — **B2.7, B2.8, B3.1 e B7.1 (onda 2) estão DESTRAVADAS agora** | — | — | — |
 | 3 | **B1.7** — acesso desalinhado ARMv6+ | arm-jitter | Corrupção silenciosa confirmada | Após B2.6 (mesmo repo, evita conflito) |
 | 4 | **B4.0.4** — TLS/TPIDRURO no armbox | armbox | Pequena; pré-requisito de B4.0.3 | Paralela a qualquer arm-jitter |
 | 5 | **C6** — PagedAddressSpace no gbaemu | gbaemu | Perf do modo default (INTERPRETED) | Paralela; validação de gameplay do usuário no fim |
 | 6 | **D1** — RTC GPIO (Emerald) | gbaemu | Compat barata | Após C6 (mesmo repo) |
 | 7 | **A6** — especialização de nós Truffle | arm-jitter (módulo `truffle/`) | Destrava A7/A8 | Paralela (módulo isolado); é a mais difícil da onda — se travar, devolver |
 | 8 | **B5.1** — monitor exclusivo global | arm-jitter | Pequena; independente | Após B1.7 (mesmo repo, toca ArmCore) |
+| 9 | **E1** — javadocs em inglês → português (regra G7) | arm-jitter | Higiene; risco zero de código | **1 sessão POR LOTE** (4 lotes, checklist no próprio arquivo); pode intercalar entre tasks maiores; NÃO rodar em paralelo com outra task de arm-jitter (diff de comentário conflita com tudo) |
 
 ## Onda 2 — assim que a dependência da onda 1 fechar
 
