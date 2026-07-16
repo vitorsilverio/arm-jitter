@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.jvm;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
@@ -84,6 +85,14 @@ public final class AsmBlockCompiler {
     /// Decidido na construção (a partir da arquitetura do emissor); ARMv4T usa `false`.
     private final boolean loadPcInterworks;
 
+    /// `true` sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#UNALIGNED_ACCESS} (ARMv6+):
+    /// `LDR`/`STR`/`LDRH`/`STRH` com destino diferente do PC emitem os helpers "Crossed" de
+    /// {@link AsmRuntimeHelpers} (acesso atravessado) em vez dos legados de alinha+rotaciona.
+    /// Decidido na construção a partir da arquitetura do emissor; ARMv4T/v5TE usam `false` (G2).
+    /// LDM/STM/LDRD/STRD/LDREX/STREX/SWP nunca consultam esta flag — continuam chamando os
+    /// helpers legados incondicionalmente (task B1.7, item 4).
+    private final boolean unalignedAccess;
+
     /// Executor interpretado da arquitetura deste compilador, registrado com cada op de fallback
     /// PER_OP para que ela rode com a semântica correta (ver {@link IrOpInterop}).
     private final IrBlockExecutor perOpExecutor;
@@ -107,20 +116,30 @@ public final class AsmBlockCompiler {
         }
     }
 
-    /// Cria um compilador ARMv4T (sem interworking em load->PC).
+    /// Cria um compilador ARMv4T (sem interworking em load->PC, sem acesso desalinhado atravessado).
     public AsmBlockCompiler() {
         this(false, new IrBlockExecutor(ArmArchitecture.ARMV4T));
     }
 
     /// Cria um compilador para a arquitetura informada via flag de interworking em load->PC,
-    /// com um executor ARMv4T padrão para o fallback PER_OP.
+    /// com um executor ARMv4T padrão para o fallback PER_OP. Sem acesso desalinhado atravessado
+    /// ({@link #unalignedAccess} `false`) — use o construtor de 3 argumentos para ligá-lo.
     public AsmBlockCompiler(boolean loadPcInterworks) {
         this(loadPcInterworks, new IrBlockExecutor(ArmArchitecture.ARMV4T));
     }
 
-    /// Cria um compilador com o executor interpretado da sua arquitetura (usado no fallback PER_OP).
+    /// Cria um compilador com o executor interpretado da sua arquitetura (usado no fallback
+    /// PER_OP). Sem acesso desalinhado atravessado — use o construtor de 4 argumentos para ligá-lo.
     public AsmBlockCompiler(boolean loadPcInterworks, IrBlockExecutor perOpExecutor) {
+        this(loadPcInterworks, false, perOpExecutor);
+    }
+
+    /// Cria um compilador completo, incluindo a flag de {@link ArmFeature#UNALIGNED_ACCESS}
+    /// (task B1.7) que decide se `LDR`/`STR`/`LDRH`/`STRH` emitem os helpers "Crossed" de
+    /// {@link AsmRuntimeHelpers}.
+    public AsmBlockCompiler(boolean loadPcInterworks, boolean unalignedAccess, IrBlockExecutor perOpExecutor) {
         this.loadPcInterworks = loadPcInterworks;
+        this.unalignedAccess = unalignedAccess;
         this.perOpExecutor = perOpExecutor;
     }
 
@@ -1537,10 +1556,14 @@ public final class AsmBlockCompiler {
         // read
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+        // Acesso atravessado (UNALIGNED_ACCESS) só se aplica com destino diferente do PC —
+        // LDR/LDRH pc,... continuam exigindo o alinhamento legado (task B1.7, item 4).
+        boolean crossed = unalignedAccess && load.dst() != PC_REGISTER;
         String readHelper = switch (load.sizeBytes()) {
             case 1 -> "loadByte";
-            case 2 -> load.signed() ? "loadHalfSigned" : "loadHalf";
-            default -> "loadWord";
+            case 2 -> crossed ? (load.signed() ? "loadHalfSignedCrossed" : "loadHalfCrossed")
+                    : (load.signed() ? "loadHalfSigned" : "loadHalf");
+            default -> crossed ? "loadWordCrossed" : "loadWord";
         };
         AsmBytecode.invokeStatic(method, HELPERS, readHelper, CORE_I_TO_I);
         // sign-extend byte if needed (loadByte returns 0–255)
@@ -1603,8 +1626,8 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
         String writeHelper = switch (store.sizeBytes()) {
             case 1 -> "storeByte";
-            case 2 -> "storeHalf";
-            default -> "storeWord";
+            case 2 -> unalignedAccess ? "storeHalfCrossed" : "storeHalf";
+            default -> unalignedAccess ? "storeWordCrossed" : "storeWord";
         };
         AsmBytecode.invokeStatic(method, HELPERS, writeHelper, CORE_II_TO_V);
 

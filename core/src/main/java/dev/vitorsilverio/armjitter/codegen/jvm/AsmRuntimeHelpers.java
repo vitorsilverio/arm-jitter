@@ -211,6 +211,53 @@ public final class AsmRuntimeHelpers {
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
     }
 
+    // ── memória: acesso desalinhado atravessado (ArmFeature.UNALIGNED_ACCESS, task B1.7) ────────
+    //
+    // Espelham exatamente o fork de dev.vitorsilverio.armjitter.codegen.executor.IrExecutionSupport
+    // (readWordForLoad/readHalfwordForLoad/writeWordForStore/writeHalfwordForStore): em vez de
+    // alinhar+rotacionar (ARMv4T, loadWord/loadHalf/loadHalfSigned/storeWord/storeHalf acima), compõem
+    // o acesso de bytes independentes (cada um trivialmente "alinhado" e seguro através de fronteiras
+    // de página/região). Só emitidos pelo AsmBlockCompiler para LDR/STR/LDRH/STRH com a feature ligada
+    // e destino diferente do PC — LDM/STM/LDRD/STRD/LDREX/STREX/SWP continuam chamando os helpers
+    // legados acima incondicionalmente (ponto único de emissão, ver emitLoad/emitStore).
+
+    private static final int BITS_PER_BYTE = 8;
+    private static final int BYTE_MASK = 0xFF;
+
+    public static int loadWordCrossed(ArmCore core, int address) {
+        int value = (core.memory().read8(address) & BYTE_MASK)
+                | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE)
+                | ((core.memory().read8(address + 2) & BYTE_MASK) << (2 * BITS_PER_BYTE))
+                | ((core.memory().read8(address + 3) & BYTE_MASK) << (3 * BITS_PER_BYTE));
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_READ);
+        return value;
+    }
+
+    public static int loadHalfCrossed(ArmCore core, int address) {
+        int value = (core.memory().read8(address) & BYTE_MASK)
+                | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE);
+        core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
+        return value;
+    }
+
+    public static int loadHalfSignedCrossed(ArmCore core, int address) {
+        return (short) loadHalfCrossed(core, address);
+    }
+
+    public static void storeWordCrossed(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+        core.memory().write8(address + 2, value >>> (2 * BITS_PER_BYTE));
+        core.memory().write8(address + 3, value >>> (3 * BITS_PER_BYTE));
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+    }
+
+    public static void storeHalfCrossed(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+        core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+    }
+
     // ── branches ───────────────────────────────────────────────────────────────
 
     /// Sets thumb mode from bit 0 of target and updates PC (ARMv4T BX semantics).

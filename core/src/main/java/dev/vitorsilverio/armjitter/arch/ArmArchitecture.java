@@ -44,7 +44,8 @@ public final class ArmArchitecture {
             ArmFeature.EXCLUSIVE_SIZED,
             ArmFeature.MODE_CHANGE_INSTRUCTIONS,
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
-            ArmFeature.WAIT_HINTS);
+            ArmFeature.WAIT_HINTS,
+            ArmFeature.UNALIGNED_ACCESS);
 
     /// Preset Thumb-2 completo do épico B2 (B2.1-B2.6): as 4 extensões de decoder de 32 bits
     /// (`Thumb2DataProcessingDecoder`, `Thumb2LoadStoreDecoder`, `Thumb2BranchDecoder`,

@@ -73,13 +73,15 @@ public final class AsmCodeEmitter implements CodeEmitter {
         this.fallback = new InterpretedCodeEmitter(architecture);
         this.loader = new JvmBlockLoader();
         boolean interworks = architecture.has(ArmFeature.LOAD_PC_INTERWORKING);
+        boolean unalignedAccess = architecture.has(ArmFeature.UNALIGNED_ACCESS);
         // Bind THIS architecture's interpreter to the PER_OP fallback (registered per-op in
         // IrOpInterop). Two runtimes of different architectures (NDS ARM9 ARMv5TE + ARM7 ARMv4T) then
         // never share one executor — previously a static singleton, so whichever emitter was built
         // last won and the ARM9's ARMv5 fallback ops (BLX/CLZ/DSP/sat/LDRD) silently ran with ARMv4T
         // semantics once a block compiled in the background (warm-cache-only, non-deterministic corruption).
         IrBlockExecutor perOpExecutor = new IrBlockExecutor(architecture);
-        this.compiler = ThreadLocal.withInitial(() -> new AsmBlockCompiler(interworks, perOpExecutor));
+        this.compiler = ThreadLocal.withInitial(
+                () -> new AsmBlockCompiler(interworks, unalignedAccess, perOpExecutor));
         this.blockSequence = new AtomicInteger();
         this.policy = policy;
         this.optimizer = optimizer;

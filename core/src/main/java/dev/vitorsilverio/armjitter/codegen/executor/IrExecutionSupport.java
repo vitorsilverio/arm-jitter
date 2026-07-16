@@ -138,6 +138,108 @@ final class IrExecutionSupport {
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
     }
 
+    /// Tamanho em bytes de um acesso de word, usado para custear em ciclos os acessos
+    /// atravessados de {@link ArmFeature#UNALIGNED_ACCESS} (uma leitura/escrita larga, como o
+    /// caminho legado — ver a task B1.7).
+    private static final int WORD_ACCESS_SIZE_BYTES = 4;
+    /// Tamanho em bytes de um acesso de halfword, mesmo papel que {@link #WORD_ACCESS_SIZE_BYTES}.
+    private static final int HALFWORD_ACCESS_SIZE_BYTES = 2;
+    /// Largura de um byte em bits, usada para compor valores atravessados little-endian.
+    private static final int BITS_PER_BYTE = 8;
+    /// Máscara de um byte sem sinal, usada ao compor valores atravessados little-endian.
+    private static final int BYTE_MASK = 0xFF;
+
+    /// `LDR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS} e com destino diferente do PC, um
+    /// endereço desalinhado faz o acesso "atravessado" ARMv6+ (little-endian, byte a byte, ARM
+    /// DDI 0406C A3.2.1) em vez da rotação ARMv4T de {@link #read32Arm7}. `LDR pc,...` continua
+    /// exigindo o alinhamento legado mesmo com a feature (task B1.7, item 4) — assim como
+    /// LDM/STM, LDRD/STRD, LDREX/STREX e SWP, que chamam {@link #read32Arm7} diretamente e nunca
+    /// este método.
+    int readWordForLoad(ArmCore core, int address, boolean loadsToProgramCounter) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
+            return read32Arm7(core, address);
+        }
+        checkLittleEndianData(core);
+        int value = readCrossedWord(core, address);
+        core.addMemoryCycles(address, WORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_READ);
+        return value;
+    }
+
+    /// `LDRH`/`LDRSH` (halfword): mesmo fork de {@link #readWordForLoad}, mas para halfword. Sob
+    /// a feature o valor cru atravessado (sem sinal) é devolvido — o chamador já aplica
+    /// {@link #signExtendIfNeeded} por cima igual ao caminho legado, então o quirk ARMv4T de
+    /// `LDRSH` desalinhado (vira `LDRSB` do byte alto, preservado em {@link #read16Arm7}) não se
+    /// aplica aqui: ARMv6+ lê o halfword atravessado inteiro e sinal-estende normalmente.
+    int readHalfwordForLoad(ArmCore core, int address, boolean signed, boolean loadsToProgramCounter) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
+            return read16Arm7(core, address, signed);
+        }
+        checkLittleEndianData(core);
+        int value = readCrossedHalfword(core, address);
+        core.addMemoryCycles(address, HALFWORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_READ);
+        return value;
+    }
+
+    /// `STR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS}, escreve atravessado (little-endian,
+    /// byte a byte) em vez de delegar a {@link #write32Arm7} como o caminho legado faz — que por
+    /// sua vez depende de como o {@code AddressSpace} concreto trata um endereço desalinhado
+    /// (algumas implementações alinham para baixo, outras já compõem por byte; não é nosso papel
+    /// mudar isso no caminho legado, task B1.7 Armadilhas). Sob a feature a semântica passa a ser
+    /// explícita e independente do `AddressSpace` de baixo.
+    void writeWordForStore(ArmCore core, int address, int value) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS)) {
+            write32Arm7(core, address, value);
+            return;
+        }
+        checkLittleEndianData(core);
+        writeCrossedWord(core, address, value);
+        core.addMemoryCycles(address, WORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
+    }
+
+    /// `STRH`: mesmo fork de {@link #writeWordForStore}, mas para halfword.
+    void writeHalfwordForStore(ArmCore core, int address, int value) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS)) {
+            write16Arm7(core, address, value);
+            return;
+        }
+        checkLittleEndianData(core);
+        writeCrossedHalfword(core, address, value);
+        core.addMemoryCycles(address, HALFWORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
+    }
+
+    /// Compõe uma word atravessada a partir de 4 leituras de byte independentes (cada byte é
+    /// trivialmente "alinhado", então isto atravessa fronteiras de página/região do
+    /// `AddressSpace` corretamente, ao contrário de ler uma word larga e recortar). Ciclos NÃO
+    /// são contados aqui — o chamador cobra uma vez, como uma leitura larga (task B1.7).
+    private int readCrossedWord(ArmCore core, int address) {
+        return (core.memory().read8(address) & BYTE_MASK)
+                | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE)
+                | ((core.memory().read8(address + 2) & BYTE_MASK) << (2 * BITS_PER_BYTE))
+                | ((core.memory().read8(address + 3) & BYTE_MASK) << (3 * BITS_PER_BYTE));
+    }
+
+    /// Mesmo princípio de {@link #readCrossedWord}, para halfword (valor sem sinal).
+    private int readCrossedHalfword(ArmCore core, int address) {
+        return (core.memory().read8(address) & BYTE_MASK)
+                | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE);
+    }
+
+    /// Escreve uma word atravessada como 4 escritas de byte independentes — mesmo raciocínio de
+    /// {@link #readCrossedWord} para não depender de como o `AddressSpace` concreto trataria uma
+    /// `write32` desalinhada.
+    private void writeCrossedWord(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+        core.memory().write8(address + 2, value >>> (2 * BITS_PER_BYTE));
+        core.memory().write8(address + 3, value >>> (3 * BITS_PER_BYTE));
+    }
+
+    /// Mesmo princípio de {@link #writeCrossedWord}, para halfword.
+    private void writeCrossedHalfword(ArmCore core, int address, int value) {
+        core.memory().write8(address, value);
+        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+    }
+
     /// `SETEND` (ARMv6, B1.5 MVP): acessos de dados com CPSR.E=1 (big-endian) não são
     /// implementados — Linux/3DS rodam little-endian e nunca ligam E; um jogo/SO que ligue
     /// deve falhar ALTO em vez de corromper silenciosamente (ver a task B1.5).

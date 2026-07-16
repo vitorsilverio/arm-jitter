@@ -19,10 +19,11 @@ final class IrMemoryExecutor {
         int offset = support.operand(core, load.offset());
         int base = load.baseValueOverride() != -1 ? load.baseValueOverride() : core.register(load.base());
         int address = load.postIndexed() ? base : base + offset;
+        boolean loadsToProgramCounter = load.dst() == 15;
         int value = switch (load.sizeBytes()) {
             case 1 -> support.read8Arm7(core, address);
-            case 2 -> support.read16Arm7(core, address, load.signed());
-            case 4 -> support.read32Arm7(core, address);
+            case 2 -> support.readHalfwordForLoad(core, address, load.signed(), loadsToProgramCounter);
+            case 4 -> support.readWordForLoad(core, address, loadsToProgramCounter);
             default -> throw new UnsupportedOperationException("Unsupported IR load size: " + load.sizeBytes());
         };
         value = support.signExtendIfNeeded(value, load.sizeBytes(), load.signed());
@@ -58,8 +59,8 @@ final class IrMemoryExecutor {
         int value = support.registerValue(core, store.src(), store.srcValueOverride());
         switch (store.sizeBytes()) {
             case 1 -> support.write8Arm7(core, address, value);
-            case 2 -> support.write16Arm7(core, address, value);
-            case 4 -> support.write32Arm7(core, address, value);
+            case 2 -> support.writeHalfwordForStore(core, address, value);
+            case 4 -> support.writeWordForStore(core, address, value);
             default -> throw new UnsupportedOperationException("Unsupported IR store size: " + store.sizeBytes());
         }
         if (store.writeback()) {

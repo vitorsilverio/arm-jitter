@@ -73,5 +73,18 @@ public enum ArmFeature {
     /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder} para a justificativa
     /// completa. Só o decode Thumb-2 (B2.5) consome esta feature até agora; a forma ARM
     /// clássica de `DMB`/`DSB`/`ISB` fica para uma task futura.
-    MEMORY_BARRIERS
+    MEMORY_BARRIERS,
+    /// Acesso de dados desalinhado "atravessado" (`LDR`/`LDRH`/`STR`/`STRH` com endereço não
+    /// múltiplo do tamanho do acesso): em vez de alinhar e rotacionar (comportamento ARMv4T, ver
+    /// {@link dev.vitorsilverio.armjitter.codegen.executor.IrExecutionSupport#read32Arm7}), o
+    /// acesso é feito byte a byte, little-endian, na posição real — ARM DDI 0100I A2.8 / DDI
+    /// 0406C A3.2.1. Modela especificamente o modo `SCTLR.U=1` (o default do Linux/userland em
+    /// ARMv6+); o modo `A=1` (alignment fault, `SIGBUS`) e o `U=0` legado (que reproduz a rotação
+    /// ARMv4T mesmo em um core v6+) ficam fora de escopo — não implementados. `LDM`/`STM`,
+    /// `LDRD`/`STRD`, `LDREX`/`STREX`, `SWP` e um `LDR`/`LDRH` com destino no PC continuam
+    /// exigindo alinhamento mesmo com esta feature ligada (task B1.7, item 4) — o hardware real
+    /// trata esses casos como UNPREDICTABLE/alinhados por natureza, então não há "atravessado"
+    /// para eles aqui. ARMv6+. **Nunca** habilitar em {@code ARMV4T}/{@code ARMV5TE} (G2/G3) —
+    /// GBA/NDS dependem da rotação para jogos que fazem `LDR` desalinhado de propósito.
+    UNALIGNED_ACCESS
 }
