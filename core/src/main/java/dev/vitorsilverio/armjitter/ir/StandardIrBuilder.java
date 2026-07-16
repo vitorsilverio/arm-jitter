@@ -9,6 +9,14 @@ public final class StandardIrBuilder implements IrBuilder {
     /// Eleva uma instrução decodificada para uma ou mais operações IR.
     @Override
     public void lift(DecodedInstruction instruction, IrBlock.Builder block) {
+        // BL/BLX Thumb-2 de 32 bits (B2.6): caso especial ANTES do switch principal — emite
+        // manualmente o MESMO par Cycle+Fetch que o caminho legado de dois halfwords emitia (uma
+        // vez por halfword), não o Cycle+Fetch único da cauda comum abaixo (G4 — ver
+        // `liftThumbBl32`). `return` evita duplicar a contagem.
+        if (instruction.kind() == InstructionKind.LONG_BRANCH_32) {
+            liftThumbBl32(instruction, block);
+            return;
+        }
         switch (instruction.kind()) {
             case MOV -> liftAlu(IrOpCode.MOV, instruction, block);
             case ADD -> liftAlu(IrOpCode.ADD, instruction, block);
@@ -343,6 +351,40 @@ public final class StandardIrBuilder implements IrBuilder {
         block.add(new IrOp.Cycle(1));
         block.add(new IrOp.Fetch(instruction.address(), instructionWidth(instruction)));
         block.endPc(instruction.address() + instructionWidth(instruction));
+    }
+
+    /// Eleva `BL`/`BLX` imediato Thumb-2 de 32 bits (B2.6) para o MESMO par de `IrOp`
+    /// (`ThumbBlPrefix`+`ThumbBlSuffix`) que o caminho legado de dois halfwords já produzia — zero
+    /// semântica nova, só o decode que gerou `instruction` mudou. O offset/exchange são
+    /// recomputados diretamente de `instruction.raw()` (os dois halfwords combinados,
+    /// `(hi<<16)|lo`) com a MESMA fórmula que `ThumbDecoder#decode` usava para o prefixo/sufixo
+    /// isolados (sem o truque de extensão de alcance `I1`/`I2` — limitação pré-existente, não
+    /// introduzida aqui). `Cycle`/`Fetch` são emitidos DUAS vezes (um por halfword), reproduzindo
+    /// byte a byte o que duas iterações do lifter emitiam para o par legado (G4).
+    private void liftThumbBl32(DecodedInstruction instruction, IrBlock.Builder block) {
+        int raw32 = instruction.raw();
+        int hi = (raw32 >>> 16) & 0xFFFF;
+        int lo = raw32 & 0xFFFF;
+        int highOffset = signExtend(hi & 0x7FF, 11) << 12;
+        int lowOffset = (lo & 0x7FF) << 1;
+        boolean exchange = (lo & 0xF800) == 0xE800;
+        int prefixAddress = instruction.address();
+        int suffixAddress = prefixAddress + 2;
+
+        block.add(new IrOp.ThumbBlPrefix(highOffset, prefixAddress, instruction.condition()));
+        block.add(new IrOp.Cycle(1));
+        block.add(new IrOp.Fetch(prefixAddress, 2));
+
+        block.add(new IrOp.ThumbBlSuffix(lowOffset, suffixAddress, exchange, instruction.condition()));
+        block.add(new IrOp.Cycle(1));
+        block.add(new IrOp.Fetch(suffixAddress, 2));
+
+        block.endPc(instruction.address() + instructionWidth(instruction));
+    }
+
+    private static int signExtend(int value, int bits) {
+        int shift = Integer.SIZE - bits;
+        return (value << shift) >> shift;
     }
 
     /// Converte os bits 7:5 do encoding de aritmética paralela ARMv6 na operação-base.

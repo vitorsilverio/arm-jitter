@@ -46,28 +46,39 @@ public final class ArmArchitecture {
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
             ArmFeature.WAIT_HINTS);
 
-    /// Subconjunto Thumb-2 até B2.4 (infra, data-processing e branches/IT block de 32 bits),
-    /// promovido a preset público pela task B4.0.2. **Decisão explícita desta task (B2.4, item 7
-    /// da Especificação)**: `Thumb2BranchDecoder` (novo nesta task — B.W/TBB/TBH) entra aqui
-    /// junto de `Thumb2DataProcessingDecoder` (já presente desde B2.2); `Thumb2LoadStoreDecoder`
-    /// (B2.3) e `Thumb2MiscDecoder` (B2.5) permanecem DELIBERADAMENTE FORA — a task tentou ligar
-    /// as quatro extensões juntas e encontrou uma colisão real: `Thumb2LoadStoreDecoder`
-    /// reivindica greedily (via `top8==0xF8`, formato `STRB`/`LDRB` T3) o candidato de 32 bits
-    /// "fantasma" formado ao reler o SEGUNDO halfword de um par `BL`/`BLX` legado como se fosse um
-    /// NOVO prefixo Thumb-2 (a ambiguidade documentada em `ThumbDecoder#tryDecodeThumb32`, hoje só
-    /// resolvida corretamente quando NENHUMA extensão reivindica o "fantasma") — quebrando o
-    /// caminho legado de `BL`/`BLX` quando os bytes seguintes ao par são zero/dados quaisquer.
-    /// Investigar e corrigir esse gap (provavelmente exigindo que `Thumb2LoadStoreDecoder`/
-    /// `Thumb2MiscDecoder` também validem alguma condição adicional para não reivindicar esses
-    /// "fantasmas", espelhando o fix já aplicado a `Thumb2DataProcessingDecoder` nesta mesma task
-    /// para `lo[15]`) fica para uma task de fechamento de preset separada — registrado aqui
-    /// explicitamente, não deduzido pelo próximo agente. Nome deliberadamente NÃO diz "THUMB2"
-    /// sozinho nem "ARMV7" — ainda não é o ARMv7-A completo da task B3 (sem VFP, sem SDIV/UDIV).
-    public static final ArmArchitecture ARMV6K_THUMB2 = extending(ARMV6K, "ARMv6K+Thumb2(B2.1-B2.2+B2.4-branches)",
-            ArmFeature.THUMB2)
+    /// Preset Thumb-2 completo do épico B2 (B2.1-B2.6): as 4 extensões de decoder de 32 bits
+    /// (`Thumb2DataProcessingDecoder`, `Thumb2LoadStoreDecoder`, `Thumb2BranchDecoder`,
+    /// `Thumb2MiscDecoder`) plugadas juntas. Até B2.6 só 2 das 4 estavam plugadas: `BL`/`BLX`
+    /// imediato, decodificado como dois halfwords independentes (`LONG_BRANCH_PREFIX`+
+    /// `LONG_BRANCH_SUFFIX`), fazia `ThumbDecoder#decode` ser chamado de novo no endereço do
+    /// SEGUNDO halfword — que coincide, byte a byte, com o formato de um prefixo Thumb-2 de 32
+    /// bits genuíno (o "fantasma"); `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` reivindicavam
+    /// esse fantasma e engoliam o sufixo real. **B2.6 fecha isso pela raiz**: com
+    /// {@link ArmFeature#THUMB2} ativo, `BL`/`BLX` imediato é decodificado como instrução ÚNICA de
+    /// 32 bits (`InstructionKind#LONG_BRANCH_32`, ARM DDI 0406C A8.8.25 — fiel ao hardware real
+    /// desde ARMv6T2: a execução "meio a meio" só é arquitetural até ARMv6) — `decode()` nunca mais
+    /// é chamado no endereço de um sufixo em código são, o fantasma deixa de existir, e as 4
+    /// extensões podem reivindicar seus espaços livremente sem colisão. `MEMORY_BARRIERS` (ARMv7)
+    /// entra aqui porque `Thumb2MiscDecoder` gateia `DMB`/`DSB`/`ISB` por ela (sem a feature elas
+    /// virariam UNDEFINED — no preset "fechado" devem funcionar); `WAIT_HINTS` já vem herdado de
+    /// `ARMV6K`. Ainda NÃO é o ARMv7-A completo da task B3 (sem VFP, sem SDIV/UDIV, sem os demais
+    /// encodings de paridade v7 — ver B2.7).
+    /// Só as FEATURES de {@link #ARMV6K_THUMB2} (sem as extensões de decoder ainda) — existe
+    /// separadamente porque `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` recebem uma
+    /// `ArmArchitecture` no construtor (para gatear `LDRD_STRD`/`WAIT_HINTS`/`MEMORY_BARRIERS` em
+    /// tempo de decode) e `ARMV6K_THUMB2` ainda não existe no ponto em que essas extensões
+    /// precisam ser construídas — quebra-cabeça do ovo e da galinha resolvido construindo as
+    /// features primeiro (idêntico ao padrão já usado pelos testes de B2.3/B2.5, ex.
+    /// `Thumb2MiscDecoderTest`).
+    private static final ArmArchitecture ARMV6K_THUMB2_FEATURES = extending(ARMV6K, "ARMv6K+Thumb2",
+            ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS);
+
+    public static final ArmArchitecture ARMV6K_THUMB2 = ARMV6K_THUMB2_FEATURES
             .withThumb32DecoderExtensions(
                     List.of(new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(),
-                            new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder()));
+                            new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6K_THUMB2_FEATURES),
+                            new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                            new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES)));
 
     private final String name;
     private final EnumSet<ArmFeature> features;

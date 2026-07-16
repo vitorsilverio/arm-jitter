@@ -168,5 +168,15 @@ public enum InstructionKind {
     /// `CBZ`/`CBNZ` (Thumb-1, ARMv6T2+, B2.4). `sourceRegister`=Rn (R0-R7), `immediate`=endereço
     /// absoluto de destino já resolvido, `link`=`true` para `CBNZ` (desvia se `rn≠0`), `false`
     /// para `CBZ` (desvia se `rn==0`). Nunca afeta NZCV.
-    COMPARE_BRANCH_ZERO
+    COMPARE_BRANCH_ZERO,
+    /// `BL`/`BLX` imediato Thumb-2 (B2.6, ARM DDI 0406C A8.8.25) como instrução ÚNICA de 32
+    /// bits — só decodificada assim quando {@link dev.vitorsilverio.armjitter.arch.ArmFeature#THUMB2}
+    /// está ativo (sem a feature, o par continua decodificado como dois halfwords
+    /// independentes, {@link #LONG_BRANCH_PREFIX} + {@link #LONG_BRANCH_SUFFIX}, G2/G3). `raw`
+    /// carrega os dois halfwords combinados (`(hi<<16)|lo`), sempre negativo —
+    /// `dev.vitorsilverio.armjitter.ir.StandardIrBuilder` eleva esta instrução diretamente para o
+    /// MESMO par de `IrOp` (`ThumbBlPrefix`+`ThumbBlSuffix`) que o caminho legado produzia, sem
+    /// semântica nova; os demais campos desta instrução não são usados (recompute a partir de
+    /// `raw` no builder).
+    LONG_BRANCH_32
 }

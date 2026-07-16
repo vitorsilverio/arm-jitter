@@ -43,6 +43,19 @@ public final class ThumbDecoder implements InstructionDecoder {
     /// carregam o offset estendido, não a categoria da instrução).
     private static final int BRANCH_WITH_LINK_MASK = 0xC000;
 
+    /// `BL`/`BLX` imediato Thumb-2 de 32 bits (B2.6, ARM DDI 0406C A8.8.25): `hw2[12]` distingue
+    /// `BL` (`1`) de `BLX` imediato (`0`, gateado por {@link ArmFeature#BLX}) — o mesmo bit que já
+    /// distingue os sufixos legados `0xF800-0xFFFF` (BL, `top5=0b11111`) de `0xE800-0xEFFF` (BLX,
+    /// `top5=0b11101`): os dois `top5` só diferem no 4º bit do nibble alto, que é `bit12`.
+    /// `hw2[15:14]` já é checado por {@link #BRANCH_WITH_LINK_MASK} antes de chegar aqui.
+    /// **Nota de alcance**: assim como o caminho legado de dois halfwords que esta instrução
+    /// substitui (opção recomendada de B2.6 — "zero semântica nova, só o decode muda"), o offset é
+    /// montado só a partir de `S:imm10:imm11:'0'` (sem o truque de extensão
+    /// `I1=NOT(J1^S)`/`I2=NOT(J2^S)` do ARM ARM completo) — mesma limitação de alcance que o
+    /// código já tinha antes desta task, não introduzida por ela; ver `StandardIrBuilder` onde o
+    /// offset é de fato recomputado.
+    private static final int BL_VS_BLX_BIT = 1 << 12;
+
     /// `CBZ`/`CBNZ` (B2.4, ARM DDI 0406C A6.7): `1011 nz:1 0 i:1 1 imm5:5 rn:3`. Máscara/valor dos
     /// bits fixos (15:12=`1011`, 10=`0`, 8=`1`) — `nz`(11), `i`(9), `imm5`(7:3) e `rn`(2:0) variam.
     private static final int CBZ_FIXED_MASK = 0xF500;
@@ -378,6 +391,12 @@ public final class ThumbDecoder implements InstructionDecoder {
                     InstructionKind.COMPARE_BRANCH_ZERO, -1, rn, -1, target, false, false, nonZero);
         }
 
+        // Estes três checks (0xF000/0xF800/0xE800) só são alcançáveis sem ArmFeature#THUMB2 — com
+        // THUMB2 ativo, `decode()` acima já intercepta `top5 ∈ {0b11101, 0b11110, 0b11111}` antes
+        // de chegar aqui: o par BL/BLX vira uma instrução única de 32 bits em `tryDecodeThumb32`
+        // (B2.6), e um sufixo isolado (endereço no meio de um BL/BLX genuíno) nunca mais decodifica
+        // como `LONG_BRANCH_SUFFIX` — vira UNDEFINED controlado (indecidível sem contexto, ver o
+        // javadoc de `tryDecodeThumb32`).
         if ((raw & 0xF800) == 0xF000) {
             int highOffset = signExtend(raw & 0x7FF, 11) << 12;
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.LONG_BRANCH_PREFIX,
@@ -421,51 +440,62 @@ public final class ThumbDecoder implements InstructionDecoder {
         return top5 == 0b11101 || top5 == 0b11110 || top5 == 0b11111;
     }
 
-    /// Tenta decodificar um candidato Thumb-2 de 32 bits. Retorna `null` quando o chamador deve
-    /// cair no caminho legado de 16 bits (prefixo/sufixo BL/BLX de dois halfwords).
+    /// Tenta decodificar um candidato Thumb-2 de 32 bits. Nunca devolve `null` (B2.6): todo
+    /// candidato reconhecido por {@link #isThumb32Candidate} resolve para uma instrução concreta
+    /// ou UNDEFINED controlado, buscando os dois halfwords atomicamente.
     ///
-    /// - `top5 == 0b11110` é o único caso ambíguo com o espaço legado resolvível SÓ com os bits do
-    ///   próprio par de halfwords (armadilha principal de B2.1): o hardware real decide "é BL/BLX
-    ///   ou é Thumb-2 genuíno" pelos bits [15:14] do **segundo** halfword, não pelo primeiro —
-    ///   `BRANCH_WITH_LINK_MASK` reproduz essa regra (Figure 3-9). Quando bate, devolvemos `null`:
-    ///   o prefixo é decodificado exatamente como hoje (`LONG_BRANCH_PREFIX`, 2 bytes) e o sufixo
-    ///   em `address+2` continua caindo nos checks 0xF800/0xE800 já existentes mais abaixo,
-    ///   inalterados. Fora desse caso, `top5 == 0b11110` sem extensão que reivindique vira
-    ///   UNDEFINED incondicionalmente — não há ambiguidade remanescente para esse `top5`.
-    /// - `top5 == 0b11101` / `0b11111` (B2.2.2) coincidem, sem NENHUMA extensão registrada, com o
-    ///   formato exato do halfword de SUFIXO de um `BL` (`0xF800-0xFFFF`) ou `BLX`
-    ///   (`0xE800-0xEFFF`) quando esse sufixo é decodificado como instrução própria e independente
-    ///   (`decode()` chamado diretamente no endereço do sufixo — é assim que o interpretador avança
-    ///   pelo par prefixo+sufixo, 2 bytes por vez, sem re-fetch atômico do par: ver
-    ///   `ThumbTwoDecoderTest#legacyBlPrefixAndSuffixDecodeIdenticallyWithThumb2Enabled`). Essa
-    ///   ambiguidade é real e não pode ser resolvida só com os bits deste halfword — exige contexto
-    ///   (o halfword anterior era mesmo um prefixo?) que este método não tem, e por isso continua
-    ///   delegando ao caminho legado quando NENHUMA extensão reconhece o encoding.
-    ///
-    ///   Quando uma extensão registrada RECONHECE estruturalmente o prefixo de `raw` (ver
-    ///   {@link DecoderExtension#claimsEncodingSpace}) mas devolveu `null` — ou seja, o sub-encoding
-    ///   específico é reservado/não implementado, não "não é meu espaço" — o candidato vira
-    ///   UNDEFINED controlado em vez de delegar, igual a `top5 == 0b11110`. Isso é seguro mesmo para
-    ///   o caso ambíguo acima: quando nenhuma extensão está registrada (ex. os testes de regressão
-    ///   legados), `claimsEncodingSpace` nunca é chamada de verdade (lista vazia), então o
-    ///   comportamento do par `BL`/`BLX` de dois halfwords não muda.
+    /// - `hw2[15:14] == 0b11` (`BRANCH_WITH_LINK_MASK`) identifica `BL`/`BLX` imediato — ARM DDI
+    ///   0406C A8.8.25 — independente de `top5` (o encoding cobre os três valores de `top5`, mas na
+    ///   prática só `0b11110`/`0b11111` produzem `hw2[15:14]==0b11` com um `hw1` válido; ver
+    ///   Armadilhas de B2.6). Decodificado aqui mesmo como instrução ÚNICA de 32 bits
+    ///   (`InstructionKind.LONG_BRANCH_32`) — ANTES de consultar qualquer extensão registrada, e
+    ///   ANTES do check `top5==0b11110` que despacha às extensões. Isto é o fix de B2.6: em
+    ///   ARMv6T2+ o par `BL`/`BLX` é arquiteturalmente uma única instrução de 4 bytes (a execução
+    ///   "meio a meio" com interrupção entre os halfwords só é válida até ARMv6) — com isso,
+    ///   `decode()` nunca mais é chamado no endereço do halfword de sufixo em código são, o
+    ///   "fantasma" documentado no histórico desta classe deixa de existir, e as extensões podem
+    ///   reivindicar `0xF800-0xFFFF`/`0xE800-0xEFFF` livremente sem colisão.
+    /// - Fora do caso acima, despacha às extensões registradas normalmente.
+    /// - Quando nenhuma extensão reivindica (nem via `tryDecode` nem via
+    ///   {@link DecoderExtension#claimsEncodingSpace}), o candidato vira UNDEFINED controlado
+    ///   incondicionalmente — B2.6 revoga a delegação ao caminho legado de 16 bits que existia até
+    ///   aqui para `top5 ∈ {0b11101, 0b11111}` (ela só existia por causa do "fantasma" do sufixo,
+    ///   que não existe mais). Cair no meio de um `BL` genuíno (branch para `endereço+2`) é
+    ///   UNPREDICTABLE no hardware real; UNDEFINED aqui é uma melhoria, não regressão.
     private DecodedInstruction tryDecodeThumb32(AddressSpace memory, int address, int hi, int top5) {
         int lo = memory.read16((address + 2) & ~1) & 0xFFFF;
-        if (top5 == 0b11110 && (lo & BRANCH_WITH_LINK_MASK) == BRANCH_WITH_LINK_MASK) {
-            return null;
-        }
         int raw32 = (hi << 16) | lo;
+        // `hw1==11110...` (top5==0b11110) é o ÚNICO encoding real de hw1 para BL/BLX Thumb-2 (ARM
+        // DDI 0406C A8.8.25: `hw1 = 11110 S imm10`). O check em `lo` (BRANCH_WITH_LINK_MASK) só
+        // pode desambiguar DENTRO desse espaço — sem o guard de `top5`, ele reivindicaria
+        // erroneamente candidatos de `top5 ∈ {0b11101, 0b11111}` cujo SEGUNDO halfword também
+        // tenha bits[15:14]==0b11 por coincidência (ex. TBB/TBH, `hi=0xE8D0-0xE8DF`/
+        // `lo=0xF000-0xF01F` — `lo` bate com a máscara mas `hi` não é `0b11110`).
+        if (top5 == 0b11110 && (lo & BRANCH_WITH_LINK_MASK) == BRANCH_WITH_LINK_MASK) {
+            return decodeLongBranch32(address, hi, lo, raw32);
+        }
         DecodedInstruction decoded = dispatchThumb32Extensions(address, raw32);
         if (decoded != null) {
             return decoded;
         }
-        if (top5 == 0b11110 || anyExtensionClaims(raw32)) {
-            // Candidato Thumb-2 genuíno sem extensão que implemente esse sub-encoding específico —
-            // UNDEFINED controlado, buscando os dois halfwords atomicamente (G1: sem exceção de
-            // "extensão ausente").
+        // Candidato Thumb-2 genuíno sem extensão que implemente esse sub-encoding específico —
+        // UNDEFINED controlado (G1: sem exceção de "extensão ausente").
+        return DecodedInstruction.unimplemented(address, raw32, InstructionSet.THUMB, Condition.AL);
+    }
+
+    /// Decodifica `BL`/`BLX` imediato Thumb-2 como instrução única de 32 bits (B2.6). Os demais
+    /// campos de `DecodedInstruction` não carregam o offset/link — `StandardIrBuilder` recomputa
+    /// tudo a partir de `raw` (os dois halfwords), reproduzindo exatamente o par
+    /// `ThumbBlPrefix`+`ThumbBlSuffix` que o caminho legado de dois halfwords já produzia.
+    /// `BLX` imediato (`hw2[14]==0`) é gateado por {@link ArmFeature#BLX}, igual ao sufixo
+    /// `0xE800` legado.
+    private DecodedInstruction decodeLongBranch32(int address, int hi, int lo, int raw32) {
+        boolean isBlx = (lo & BL_VS_BLX_BIT) == 0;
+        if (isBlx && !architecture.has(ArmFeature.BLX)) {
             return DecodedInstruction.unimplemented(address, raw32, InstructionSet.THUMB, Condition.AL);
         }
-        return null;
+        return new DecodedInstruction(address, raw32, InstructionSet.THUMB, Condition.AL,
+                InstructionKind.LONG_BRANCH_32, -1, -1, -1, 0, false, false, true);
     }
 
     private DecodedInstruction dispatchThumb32Extensions(int address, int raw32) {
@@ -476,17 +506,6 @@ public final class ThumbDecoder implements InstructionDecoder {
             }
         }
         return null;
-    }
-
-    /// B2.2.2: alguma extensão registrada reconhece `raw32` como seu espaço estrutural (mesmo sem
-    /// implementar esse sub-encoding específico) — ver {@link DecoderExtension#claimsEncodingSpace}.
-    private boolean anyExtensionClaims(int raw32) {
-        for (DecoderExtension extension : architecture.thumb32DecoderExtensions()) {
-            if (extension.claimsEncodingSpace(raw32)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static int signExtend(int value, int bits) {

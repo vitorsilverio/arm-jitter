@@ -35,7 +35,11 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
     /// Exceção: o par `BL`/`BLX` legado (`LONG_BRANCH_PREFIX`+`LONG_BRANCH_SUFFIX`, dois halfwords)
     /// é UMA instrução Thumb arquitetural, mas ocupa DUAS iterações deste laço — o avanço do
     /// ITSTATE só acontece depois do SUFIXO (que consome o slot), não depois do prefixo (que
-    /// herda a mesma condição do slot e não avança nada sozinho).
+    /// herda a mesma condição do slot e não avança nada sozinho). Só se aplica sem
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#THUMB2} — com a feature ativa, `BL`/`BLX`
+    /// vira `LONG_BRANCH_32` (B2.6), decodificado como instrução única e ocupando UMA única
+    /// iteração deste laço (o avanço do ITSTATE acontece normalmente, como qualquer outra
+    /// instrução coberta).
     @Override
     public IrBlock lift(AddressSpace memory, int startPc, int maxInstructions, int itStateAtEntry) {
         if (maxInstructions <= 0) {
@@ -114,8 +118,9 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // MCR de wait-for-interrupt do CP15 acima): ambas terminam o bloco. TBB/TBH e CBZ/CBNZ
             // (B2.4) sempre trocam o PC (ou podem trocar, no caso de CBZ/CBNZ) — mesmo tratamento
             // que BRANCH já recebe, terminal independente do guard condicional.
-            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, POP, SWI, UNIMPLEMENTED, COPROCESSOR,
-                    RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT, TABLE_BRANCH, COMPARE_BRANCH_ZERO -> true;
+            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, UNIMPLEMENTED,
+                    COPROCESSOR, RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT, TABLE_BRANCH,
+                    COMPARE_BRANCH_ZERO -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,

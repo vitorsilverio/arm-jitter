@@ -372,17 +372,17 @@ class Thumb2BranchesItTest {
         assertEquals(200_000 + 4 + offset, core.programCounter());
     }
 
-    // ── D2: BL/BLX Thumb-2 reaproveita o caminho legado (regressão, sem decode novo) ────────
+    // ── D2 de B2.4 REVOGADA por B2.6 sob THUMB2: BL/BLX vira decode único de 32 bits em vez de
+    // reaproveitar o caminho legado de dois halfwords — ver b2.6-thumb2-preset-fechamento.md. ──
 
     @Test
-    void legacyBlPrefixSuffixStillDecodesCorrectlyWithThumb2Active() {
+    void blThumb2DecodesAsSingleInstructionAndProducesSameFinalStateAsLegacyPair() {
         ArmCore core = newCore();
-        // BL de +4 (prefixo highOffset=0, sufixo lowOffset=4): mesmo par de halfwords do
-        // ARMv4T/v5T, hw2[15:14]==0b11 -> desviado para o caminho legado mesmo com THUMB2 ligado.
+        // BL de +4 (prefixo highOffset=0, sufixo lowOffset=4): sob THUMB2, um ÚNICO core.step()
+        // decodifica e executa o par inteiro (B2.6) — não dois.
         put16(core, 0x00, 0xF000); // prefixo: highOffset=0
         put16(core, 0x02, 0xF802); // sufixo BL: lowOffset = 2<<1=4
-        core.step(); // prefixo
-        core.step(); // sufixo
+        core.step();
         assertEquals(0x00 + 4 + 4, core.programCounter());
         assertEquals((0x02 + 2) | 1, core.register(14)); // LR = endereço de retorno com bit0=1
     }

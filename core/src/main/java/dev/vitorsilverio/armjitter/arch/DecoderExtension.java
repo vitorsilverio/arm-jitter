@@ -18,16 +18,13 @@ public interface DecoderExtension {
     /// extensão reconhece], mas esse sub-encoding específico é reservado/não implementado"
     /// (`true`) — B2.2.2.
     ///
-    /// Existe só para o caso Thumb-2 de 32 bits (`ArmArchitecture#thumb32DecoderExtensions`):
-    /// `ThumbDecoder` usa esta distinção para decidir, quando nenhuma extensão reivindica
-    /// (`tryDecode` devolveu `null`) um candidato `top5 == 0b11101`/`0b11111`, entre UNDEFINED
-    /// controlado (alguma extensão reconhece o prefixo, mas não esse sub-encoding — o mesmo
-    /// tratamento que `top5 == 0b11110` já recebe) e delegar ao caminho legado ARMv4T/v5T de
-    /// `BL`/`BLX` em dois halfwords (nenhuma extensão reconhece nada ali — a ambiguidade real com
-    /// o sufixo `BL`/`BLX`, que não pode ser resolvida só com os bits deste halfword). Extensões
-    /// que não têm essa ambiguidade (ex. decoders ARM clássico, como {@link
-    /// dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder}) não precisam sobrepor este método —
-    /// o padrão `false` preserva o contrato anterior (um único `null` para os dois casos).
+    /// **Obsoleto para `ThumbDecoder#tryDecodeThumb32` desde B2.6**: a ambiguidade que motivou este
+    /// método (o "fantasma" formado ao reler o segundo halfword de um `BL`/`BLX` legado como se
+    /// fosse um novo prefixo Thumb-2) deixou de existir — B2.6 decodifica `BL`/`BLX` imediato como
+    /// instrução única de 32 bits, então `decode()` nunca mais chama `tryDecodeThumb32` no endereço
+    /// de um sufixo em código são. `ThumbDecoder` não chama mais este método; ele permanece na
+    /// interface por G3 (compat) e para uso futuro por outra extensão que precise da mesma
+    /// distinção "meu espaço, mas reservado" vs. "não é meu espaço".
     default boolean claimsEncodingSpace(int raw) {
         return false;
     }
