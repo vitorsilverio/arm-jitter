@@ -106,6 +106,7 @@ precisam de uma distribuição GraalVM real (bench "GraalVM CE" da tabela e o pr
 | **A6 — Especialização de nós Truffle** | Árvore de nós por categoria de `IrOp` (delegando aos executores, G1) para o PE conseguir podar | `opt done` em blocos reais; spec fechada em `tasks/trilha-a-truffle/a6-*.md` |
 | **A7 — Revalidação native-image** | Repetir diagnósticos de A5 pós-A6 (medição pura) | `--truffle` > `--interp` nos 2 ambientes; fecha o aceite #2 de A5 |
 | **A8 — Otimizações native-image** | PGO/-O3/GC/march, tabela startup+RSS+throughput | Variante vencedora vira default do perfil `native` do armbox |
+| **A9 — Biblioteca nativa (.dll/.so) com API C** | `native-image --shared` + módulo `capi/` (`@CEntryPoint aj_*`: create/map_ram/mmio-callbacks/registers/run_cycles/save-state) — arm-jitter embutível por QUALQUER linguagem com FFI | PR1: smoke test em C passa com backend interpretado; PR2 (pós-A7): backend Truffle mais rápido que interpretado dentro da lib |
 
 **Risco principal:** Bytecode DSL ainda é relativamente novo; se instável, cair para
 AST clássica (mais verbosa, igualmente suportada). **Kill criterion do A0:** se em

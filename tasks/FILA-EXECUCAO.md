@@ -69,10 +69,12 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 ## Onda 3 — fechamentos
 
 B3.2 → B3.4 → B3.5 → B3.6 → B3.7 (cadeia VFP) · B7.2 → B7.3 → B7.4 → B7.5
-(cadeia Cortex-M) · **B4.0.3** (após B2.7+B2.8+B4.0.4.1 — B2.6/B1.7/B4.0.4 já ✅;
+(cadeia Cortex-M) · **B4.0.3** (após B2.7+B2.8 — B2.6/B1.7/B4.0.4/B4.0.4.1 já ✅;
 o PR3 da B2.7 inclui o decode MCR/MRC Thumb-2 que a B4.0.4 confirmou faltar) ·
-B4.0.5 · C9 (após C7) · A8 (após A7) · B5.2 (após B3.5) · B4.1.1+ e B6.1+ quando
-priorizados.
+B4.0.5 · C9 (após C7) · A8 (após A7) · **A9 PR1** (lib nativa `.dll`/`.so` com
+API C, backend interpretado — pode rodar a qualquer momento com o usuário
+presente p/ GraalVM+MSVC; **A9 PR2** após A7) · B5.2 (após B3.5) · B4.1.1+ e
+B6.1+ quando priorizados.
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 
@@ -91,5 +93,6 @@ sintoma e velocidade no GBA — a atribuição antiga ao ASM está REVOGADA).
 ## Onde o USUÁRIO entra (planejar presença)
 
 - C11 fase 1: fornecer o save state do SM64DS; C11/C6/C7/D1: validar gameplay.
-- A7/A8: rodar na máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC.
+- A7/A8/A9: rodar na máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC
+  (A9 também usa o `cl.exe` para compilar o smoke test em C).
 - B4.0.3/B3.7: toolchain (`arm-none-eabi-gcc`) já usada nos testdata do armbox.
