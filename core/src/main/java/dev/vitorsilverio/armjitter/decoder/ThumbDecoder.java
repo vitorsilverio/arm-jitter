@@ -212,7 +212,7 @@ public final class ThumbDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, false);
         }
 
-        // BLX (register): `0100 0111 1 mmmm 000` — like Thumb BX but also links (ARMv5T+).
+        // BLX (registrador): `0100 0111 1 mmmm 000` — como Thumb BX, mas também linka (ARMv5T+).
         if ((raw & 0xFF87) == 0x4780) {
             if (!architecture.has(ArmFeature.BLX)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
@@ -409,7 +409,7 @@ public final class ThumbDecoder implements InstructionDecoder {
                     -1, -1, -1, lowOffset, true, false, true);
         }
 
-        // BLX suffix (H=01): the second half of a long branch that exchanges to ARM (ARMv5T+).
+        // Sufixo BLX (H=01): a segunda metade de um branch longo que troca para ARM (ARMv5T+).
         if ((raw & 0xF800) == 0xE800) {
             if (!architecture.has(ArmFeature.BLX)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);

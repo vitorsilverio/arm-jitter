@@ -37,8 +37,8 @@ public final class ArmDecoder implements InstructionDecoder {
                     -1, -1, -1, (raw & 0x00FF_FFFF) >> 16, true, false, false);
         }
 
-        // BLX (immediate): the cond==1111 unconditional space, `1111 101H <24-bit offset>`. Always
-        // links and always switches to Thumb; the target carries bit 0 set so the exchange picks it.
+        // BLX (imediato): o espaço incondicional cond==1111, `1111 101H <offset de 24 bits>`. Sempre
+        // linka e sempre troca para Thumb; o alvo carrega o bit 0 setado para a troca reconhecer.
         if ((raw & 0xFE00_0000) == 0xFA00_0000) {
             if (!architecture.has(ArmFeature.BLX)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
@@ -107,7 +107,7 @@ public final class ArmDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, false);
         }
 
-        // BLX (register): `cccc 0001 0010 1111 1111 1111 0011 mmmm` — like BX but also links.
+        // BLX (registrador): `cccc 0001 0010 1111 1111 1111 0011 mmmm` — como BX, mas também linka.
         if ((raw & 0x0FFF_FFF0) == 0x012F_FF30) {
             if (!architecture.has(ArmFeature.BLX)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
@@ -127,8 +127,8 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, -1, 0, false, false, false);
         }
 
-        // Saturating arithmetic (ARMv5TE): QADD/QSUB/QDADD/QDSUB. `cccc 0001 0PP0 nnnn dddd 0000 0101 mmmm`.
-        // Only intercepted when the architecture has the feature, so ARMv4T keeps its prior behaviour.
+        // Aritmética saturante (ARMv5TE): QADD/QSUB/QDADD/QDSUB. `cccc 0001 0PP0 nnnn dddd 0000 0101 mmmm`.
+        // Só interceptada quando a arquitetura tem a feature, então ARMv4T mantém o comportamento anterior.
         if ((raw & 0x0F90_0FF0) == 0x0100_0050 && architecture.has(ArmFeature.SATURATING)) {
             int op = (raw >>> 21) & 0x3;
             int rn = (raw >>> 16) & 0xF;
@@ -138,8 +138,8 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, rn, op, false, false, false);
         }
 
-        // DSP multiplies (ARMv5TE): `cccc 0001 0PP0 dddd nnnn ssss 1yx0 mmmm`. The 16-bit halves and
-        // the accumulator register are packed into the immediate for the builder to unpack.
+        // Multiplicações DSP (ARMv5TE): `cccc 0001 0PP0 dddd nnnn ssss 1yx0 mmmm`. As metades de 16 bits
+        // e o registrador acumulador são empacotados no imediato para o builder desempacotar.
         if ((raw & 0x0F90_0090) == 0x0100_0080 && architecture.has(ArmFeature.DSP_MULTIPLY)) {
             int op2 = (raw >>> 21) & 0x3;
             int rd = (raw >>> 16) & 0xF;
@@ -403,8 +403,8 @@ public final class ArmDecoder implements InstructionDecoder {
             int rn = (raw >>> 16) & 0xF;
             int rd = (raw >>> 12) & 0xF;
             int offset = immediateOffset ? ((raw >>> 4) & 0xF0) | (raw & 0xF) : raw & 0xF;
-            // LDRD/STRD (ARMv5TE): L=0 with transferKind 10 (LDRD) or 11 (STRD). Checked before the
-            // generic store rejection below; only when the architecture has the feature.
+            // LDRD/STRD (ARMv5TE): L=0 com transferKind 10 (LDRD) ou 11 (STRD). Checado antes da
+            // rejeição genérica de store abaixo; só quando a arquitetura tem a feature.
             if (!load && (transferKind == 0b10 || transferKind == 0b11) && architecture.has(ArmFeature.LDRD_STRD)) {
                 boolean isLoad = transferKind == 0b10; // 10 = LDRD, 11 = STRD
                 int signed = addOffset ? offset : -offset;
@@ -549,8 +549,8 @@ public final class ArmDecoder implements InstructionDecoder {
             };
         }
 
-        // Instruction groups a higher architecture adds (e.g. the ARMv5 BLX/DSP space)
-        // plug in here without touching the shared decoder. Empty on ARMv4T/ARMv5TE today.
+        // Grupos de instrução que uma arquitetura superior adiciona (ex.: o espaço BLX/DSP do ARMv5)
+        // se plugam aqui sem tocar o decoder compartilhado. Vazio em ARMv4T/ARMv5TE hoje.
         for (DecoderExtension extension : architecture.decoderExtensions()) {
             DecodedInstruction decoded = extension.tryDecode(raw, address, condition);
             if (decoded != null) {

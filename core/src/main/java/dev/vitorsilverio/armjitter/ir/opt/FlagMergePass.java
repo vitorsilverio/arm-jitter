@@ -44,8 +44,8 @@ public final class FlagMergePass implements IrOptimizer {
 
         for (int i = n - 1; i >= 0; i--) {
             int uses = flagUseMask(ops.get(i));
-            // Liveness kill uses the MUST-DEF set: a predicated op is not a must-def, so it cannot
-            // kill an earlier flag write (the `..EQ`/`..NE` complementary pair).
+            // A morte de vivência usa o conjunto MUST-DEF: uma op predicada não é um must-def, então
+            // não pode matar uma escrita de flag anterior (o par complementar `..EQ`/`..NE`).
             int mustDef = mustDefMask(ops.get(i));
             flagLive[i] = uses | (flagLive[i + 1] & ~mustDef);
         }
@@ -69,7 +69,7 @@ public final class FlagMergePass implements IrOptimizer {
         return changed ? new IrBlock(block.startPc(), block.endPc(), result) : block;
     }
 
-    // ── flag liveness helpers (por-flag) ────────────────────────────────────────
+    // ── auxiliares de vivência de flags (por-flag) ──────────────────────────────
 
     /// Máscara de flags que a op pode LER: os flags testados pela condição, mais o carry
     /// para ADC/SBC/RSC (que o consomem mesmo incondicionalmente).
@@ -85,7 +85,7 @@ public final class FlagMergePass implements IrOptimizer {
     }
 
     /// Flags que a op DEFINITIVAMENTE escreve (must-def), para matar vivência para trás. Uma op
-    /// predicada (condição != AL) pode não executar → must-def vazio (mirrors the DCE guard).
+    /// predicada (condição != AL) pode não executar → must-def vazio (espelha o guard da DCE).
     /// Subestimar é seguro (mantém {@code setFlags}); superestimar mataria flags vivos indevidamente.
     private static int mustDefMask(IrOp op) {
         if (op instanceof IrOp.Alu alu && alu.condition() != Condition.AL) {

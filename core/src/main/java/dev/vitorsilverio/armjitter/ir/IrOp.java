@@ -543,23 +543,23 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.SWI; }
     }
 
-    /// Coprocessor register transfer (`MCR`/`MRC`), delegated to the core's coprocessor bus.
+    /// Transferência de registrador de coprocessador (`MCR`/`MRC`), delegada ao barramento de coprocessador do core.
     record Coprocessor(
-            /// `true` for `MRC` (coprocessor -> ARM register), `false` for `MCR`.
+            /// `true` para `MRC` (coprocessador -> registrador ARM), `false` para `MCR`.
             boolean load,
-            /// Coprocessor number (15 for CP15).
+            /// Número do coprocessador (15 para CP15).
             int coprocessor,
-            /// Primary opcode (instruction bits 23-21).
+            /// Opcode primário (bits 23-21 da instrução).
             int opcode1,
-            /// Primary coprocessor register (CRn).
+            /// Registrador primário de coprocessador (CRn).
             int crn,
-            /// Secondary coprocessor register (CRm).
+            /// Registrador secundário de coprocessador (CRm).
             int crm,
-            /// Secondary opcode (instruction bits 7-5).
+            /// Opcode secundário (bits 7-5 da instrução).
             int opcode2,
-            /// ARM register (Rd) read for `MCR` or written for `MRC`.
+            /// Registrador ARM (Rd) lido para `MCR` ou escrito para `MRC`.
             int register,
-            /// Sequential PC used as the return address if the transfer is undefined.
+            /// PC sequencial usado como endereço de retorno se a transferência for indefinida.
             int sequentialPc,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {

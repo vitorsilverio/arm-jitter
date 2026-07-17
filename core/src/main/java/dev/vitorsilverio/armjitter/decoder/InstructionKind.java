@@ -26,13 +26,13 @@ public enum InstructionKind {
     EOR,
     /// Operacao ORR bit a bit.
     ORR,
-    /// Logical shift left.
+    /// Deslocamento lógico à esquerda.
     LSL,
-    /// Logical shift right.
+    /// Deslocamento lógico à direita.
     LSR,
-    /// Arithmetic shift right.
+    /// Deslocamento aritmético à direita.
     ASR,
-    /// Rotate right.
+    /// Rotação à direita.
     ROR,
     /// Multiplicacao inteira baixa.
     MUL,
@@ -127,9 +127,9 @@ public enum InstructionKind {
     PUSH,
     /// Restaura registradores da pilha.
     POP,
-    /// Software interrupt.
+    /// Interrupção de software.
     SWI,
-    /// Coprocessor register transfer (`MCR`/`MRC`), e.g. CP15 on the ARM9.
+    /// Transferência de registrador de coprocessador (`MCR`/`MRC`), ex.: CP15 no ARM9.
     COPROCESSOR,
     /// `CPS`/`CPSIE`/`CPSID` (ARMv6): altera os bits A/I/F e/ou o modo do CPSR. `immediate`
     /// empacota: bits 1:0 = `imod`, bit 2 = `M` (mode change), bit 3 = `A`, bit 4 = `I`,

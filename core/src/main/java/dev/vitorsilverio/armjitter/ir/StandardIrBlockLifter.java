@@ -109,11 +109,12 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             return true;
         }
         return switch (instruction.kind()) {
-            // COPROCESSOR ends the block: a CP15 MCR can change CPU/memory state (TCM/MMU/high
-            // vectors) and, critically, the ARM9 wait-for-interrupt (MCR p15,0,Rd,c7,c0,4) must end
-            // the block so the run loop re-checks the interrupt line while IME is still set — the
-            // libnds swiIntrWait loop toggles IME=1/halt/IME=0 within one block, so a non-terminal
-            // coprocessor op would hide the only IME=1 window and the awaited IRQ would never fire.
+            // COPROCESSOR termina o bloco: um MCR de CP15 pode mudar estado de CPU/memória (TCM/MMU/
+            // vetores altos) e, criticamente, o wait-for-interrupt do ARM9 (MCR p15,0,Rd,c7,c0,4)
+            // precisa terminar o bloco para que o run loop reconfira a linha de interrupção enquanto
+            // IME ainda está setado — o loop swiIntrWait da libnds alterna IME=1/halt/IME=0 dentro de
+            // um único bloco, então uma op de coprocessador não-terminal esconderia a única janela
+            // IME=1 e a IRQ esperada nunca dispararia.
             // RFE sempre troca o PC (como POP/LOAD com dst=PC) e WFI para a CPU (mesmo motivo do
             // MCR de wait-for-interrupt do CP15 acima): ambas terminam o bloco. TBB/TBH e CBZ/CBNZ
             // (B2.4) sempre trocam o PC (ou podem trocar, no caso de CBZ/CBNZ) — mesmo tratamento

@@ -2,13 +2,13 @@ package dev.vitorsilverio.armjitter.decoder;
 
 /// Modo de enderecamento ARM para `LDM`/`STM`.
 public enum BlockTransferMode {
-    /// Increment after.
+    /// Incrementa depois.
     IA,
-    /// Increment before.
+    /// Incrementa antes.
     IB,
-    /// Decrement after.
+    /// Decrementa depois.
     DA,
-    /// Decrement before.
+    /// Decrementa antes.
     DB;
 
     /// Calcula o primeiro endereco acessado para a quantidade de registradores.

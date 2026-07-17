@@ -191,7 +191,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // LDRD/STRD, então `secondSourceRegister` fica livre e é reaproveitado para carregar
             // Rt2 (par arbitrário, independente de Rt — ver `Thumb2LoadStoreDecoder`).
             case DOUBLE_TRANSFER -> block.add(new IrOp.DoubleTransfer(
-                    instruction.link(), // carries LDRD (load) vs STRD (store)
+                    instruction.link(), // carrega LDRD (load) vs STRD (store)
                     instruction.destinationRegister(),
                     instruction.instructionSet() == InstructionSet.THUMB
                             ? instruction.secondSourceRegister()
@@ -256,13 +256,13 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.instructionSet()));
             case BRANCH_EXCHANGE -> block.add(new IrOp.BranchExchange(
                     instruction.sourceRegister(),
-                    // BLX-immediate carries its (Thumb-forced) target in the immediate field; the
-                    // register forms (BX/BLX reg) take the destination from a register.
+                    // BLX-imediato carrega seu alvo (forçado a Thumb) no campo immediate; as formas
+                    // registrador (BX/BLX reg) pegam o destino de um registrador.
                     instruction.sourceRegister() < 0
                             ? instruction.immediate()
                             : registerValueOverride(instruction, instruction.sourceRegister()),
                     instruction.link(),
-                    // BLX from Thumb returns to Thumb, so the link address keeps bit 0 set.
+                    // BLX a partir de Thumb retorna para Thumb, então o endereço de link mantém o bit 0 setado.
                     instruction.instructionSet() == InstructionSet.THUMB
                             ? ((instruction.address() + instructionWidth(instruction)) | 1)
                             : (instruction.address() + instructionWidth(instruction)),
@@ -671,9 +671,9 @@ public final class StandardIrBuilder implements IrBuilder {
         };
     }
 
-    /// Operand-1 (Rn) PC override for a data-processing instruction. ARM7TDMI reads R15
-    /// as PC+12 when the instruction uses a register-specified shift (the extra shift
-    /// cycle advances the prefetch), otherwise as the usual PC+8.
+    /// Override de PC do operando-1 (Rn) de uma instrução data-processing. O ARM7TDMI lê R15
+    /// como PC+12 quando a instrução usa um shift especificado por registrador (o ciclo extra de
+    /// shift avança o prefetch), senão como o PC+8 usual.
     private int aluSourceValueOverride(DecodedInstruction instruction) {
         if (instruction.sourceRegister() == 15 && usesRegisterSpecifiedShift(instruction)) {
             return instruction.address() + 12;
@@ -681,7 +681,7 @@ public final class StandardIrBuilder implements IrBuilder {
         return registerValueOverride(instruction, instruction.sourceRegister());
     }
 
-    /// PC value for Rm/Rs of a register-specified-shift operand: R15 reads as PC+12.
+    /// Valor de PC para Rm/Rs de um operando com shift especificado por registrador: R15 lê como PC+12.
     private int armRegisterShiftPcValue(DecodedInstruction instruction, int register) {
         return register == 15 ? instruction.address() + 12 : -1;
     }
@@ -692,8 +692,8 @@ public final class StandardIrBuilder implements IrBuilder {
                 && (instruction.raw() & (1 << 4)) != 0;
     }
 
-    /// Stored-data PC override for a single STR. ARM7TDMI stores R15 as PC+12 (one
-    /// instruction width past the PC+8 read value); THUMB single stores cannot target PC.
+    /// Override de PC do dado gravado por um `STR` isolado. O ARM7TDMI grava R15 como PC+12 (uma
+    /// largura de instrução além do valor de leitura PC+8); stores isolados THUMB não podem ter PC como alvo.
     private int storeSourceValueOverride(DecodedInstruction instruction) {
         if (instruction.destinationRegister() == 15
                 && instruction.instructionSet() == InstructionSet.ARM) {
@@ -703,9 +703,9 @@ public final class StandardIrBuilder implements IrBuilder {
     }
 
     private int pcStoreValueOverride(DecodedInstruction instruction) {
-        // ARM7TDMI block-store PC penalty: a stored PC is one extra instruction width
-        // ahead of the read value (ARM reads addr+8/stores addr+12; THUMB reads
-        // addr+4/stores addr+6). Only relevant for the empty-rlist STM quirk in THUMB.
+        // Penalidade de PC do block-store do ARM7TDMI: um PC gravado fica uma largura de instrução
+        // extra à frente do valor de leitura (ARM lê addr+8/grava addr+12; THUMB lê
+        // addr+4/grava addr+6). Só relevante para o quirk de STM com rlist vazia em THUMB.
         return switch (instruction.instructionSet()) {
             case ARM -> instruction.address() + 12;
             case THUMB -> instruction.address() + 6;

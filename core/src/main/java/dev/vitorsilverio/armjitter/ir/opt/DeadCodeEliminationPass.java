@@ -44,7 +44,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
         return changed ? new IrBlock(block.startPc(), block.endPc(), result) : block;
     }
 
-    // ── liveness helpers ───────────────────────────────────────────────────────
+    // ── auxiliares de vivência (liveness) ──────────────────────────────────────
 
     private static boolean isDead(IrOp op, int liveOut) {
         return op instanceof IrOp.Alu alu
@@ -56,7 +56,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
     private static int regUse(IrOp op) {
         return switch (op) {
             case IrOp.Alu a -> {
-                // MOV/MVN/NEG use only src2; all others also read src1
+                // MOV/MVN/NEG usam só src2; todos os outros também leem src1
                 boolean usesSrc1 = switch (a.opcode()) {
                     case MOV, MVN, NEG -> false;
                     default -> true;
@@ -106,7 +106,7 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.DoubleTransfer dt -> {
                 int mask = dt.baseValueOverride() < 0 ? (1 << dt.base()) : 0;
                 mask |= operandUse(dt.offset());
-                if (!dt.load()) mask |= (1 << dt.first()) | (1 << dt.second()); // STRD reads the pair
+                if (!dt.load()) mask |= (1 << dt.first()) | (1 << dt.second()); // STRD lê o par
                 yield mask;
             }
             case IrOp.MultipleTransfer mt -> {
@@ -120,10 +120,10 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                 if (t.read()) yield 0;
                 int mask = 0;
                 if (!t.immediateOperand() && t.registerValueOverride() < 0) mask = (1 << t.register());
-                // Writing the control field (bit 0) of CPSR can switch CPU mode, which saves the
-                // current register bank r8-r14. Treat all r0-r14 as live so DCE does not eliminate
-                // writes to banked registers that appear dead only because the new mode's same-indexed
-                // register gets written later in the same block.
+                // Escrever o campo de controle (bit 0) do CPSR pode trocar o modo da CPU, o que salva
+                // o banco de registradores r8-r14 atual. Trata todos os r0-r14 como vivos para que a
+                // DCE não elimine escritas em registradores bancados que parecem mortas só porque o
+                // registrador de mesmo índice do novo modo é escrito depois no mesmo bloco.
                 if (!t.spsr() && (t.fieldMask() & 1) != 0) mask |= 0x7F00;
                 yield mask;
             }
@@ -169,16 +169,16 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
     }
 
     private static int regDef(IrOp op) {
-        // A predicated (conditionally-executed) op is NOT a must-def: it might not run, so it
-        // cannot kill the liveness of an earlier write to the same register (e.g. the classic
-        // `ADDEQ r,..` / `ADDNE r,..` if-then-else pair). Treat its def set as empty so backward
-        // liveness stays conservative and DCE does not delete the complementary write.
+        // Uma op predicada (executada condicionalmente) NÃO é um must-def: ela pode não rodar, então
+        // não pode matar a vivência de uma escrita anterior no mesmo registrador (ex.: o par clássico
+        // `ADDEQ r,..` / `ADDNE r,..` if-then-else). Trata seu conjunto def como vazio para que a
+        // vivência backward permaneça conservadora e a DCE não apague a escrita complementar.
         if (op.condition() != Condition.AL) {
             return 0;
         }
         return switch (op) {
             case IrOp.Alu a -> switch (a.opcode()) {
-                // Comparison ops update only CPSR — no general-purpose register written
+                // Ops de comparação só atualizam o CPSR — nenhum registrador de propósito geral escrito
                 case CMP, CMN, TST, TEQ -> 0;
                 default -> (1 << a.dst());
             };
@@ -212,9 +212,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.MultipleTransfer mt -> {
                 int mask = mt.load() ? mt.registerMask() : 0;
                 if (mt.writeback()) mask |= (1 << mt.base());
-                // User-mode LDM (^ without PC) loads into the USER/SYS bank r8-r14, not the
-                // current mode's banked r8-r14. Exclude r8-r14 from the def set so DCE does
-                // not eliminate writes to the current mode's r8-r14 that precede such an op.
+                // LDM user-mode (^ sem PC) carrega no banco USER/SYS de r8-r14, não no r8-r14
+                // bancado do modo atual. Exclui r8-r14 do conjunto def para que a DCE não elimine
+                // escritas no r8-r14 do modo atual que precedem essa op.
                 if (mt.load() && mt.userMode() && (mt.registerMask() & (1 << 15)) == 0)
                     mask &= 0xFF;
                 yield mask;

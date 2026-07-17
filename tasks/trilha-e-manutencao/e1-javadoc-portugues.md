@@ -45,7 +45,12 @@ lote, incluí-lo no lote corrente e registrar.
 
 ## Lotes (1 sessão nova por lote; marcar aqui ao concluir)
 
-- [ ] **Lote 1** — `core/src/main`: pacotes `decoder/`, `ir/`, `ir/opt/`
+- [x] **Lote 1** — `core/src/main`: pacotes `decoder/`, `ir/`, `ir/opt/` (2026-07-16) — 9 arquivos
+  tocados (`ArmDecoder`, `BlockTransferMode`, `InstructionKind`, `ThumbDecoder`, `IrOp`,
+  `StandardIrBlockLifter`, `StandardIrBuilder`, `DeadCodeEliminationPass`, `FlagMergePass`);
+  demais arquivos dos 3 pacotes já estavam 100% em português. `mvn -o test` (raiz) verde
+  614 core + 13 truffle; `javadoc:javadoc` sem erros; diff conferido linha a linha — só
+  comentários tocados.
 - [ ] **Lote 2** — `core/src/main`: pacotes `codegen/` (todos os sub), `jit/`, `debug/`, `core/`, `memory/`, `arch/`, `coprocessor/`, `swi/`
 - [ ] **Lote 3** — `core/src/test` inteiro
 - [ ] **Lote 4** — `truffle/` (main + test) + varredura final do grep devolvendo vazio
