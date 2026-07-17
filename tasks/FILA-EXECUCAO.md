@@ -47,7 +47,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 6 | ~~D1~~ ✅ FECHADA 2026-07-16 — protocolo S-3511A verificado contra o GBATEK real (fetch direto); `S3511aRtc`+`GbaRtcDetector`+GPIO opcional em `GbaRom`; suite gbaemu 231 verde | — | — | — |
 | 6b | ~~D2~~ ✅ FECHADA 2026-07-16 — hipótese 1 (HDMA em V-Blank) e hipótese 3 (OBJ window) corrigidas; hipótese 2 (wrap OAM) REFUTADA (era artefato do bug 1). Validação visual do usuário CONFIRMADA (fade, direção do inimigo, overlay de status) | — | — | — |
 | 6c | **D3** — chiado de áudio no SMW | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2 (mesmo repo) |
-| 6d | **D4** — canal de áudio baixo/acelerado no Metroid | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2/D3 (mesmo repo) |
+| 6d | ~~D4~~ 🟡 fase 1 concluída 2026-07-16 — hipótese de FIFO/timer do enunciado REFUTADA por instrumentação nova (zero underruns, zero overflow-batching em 60s de gameplay real); achado novo (PSG CH1/CH2 muito baixo vs Direct Sound) devolvido ao usuário pra confirmação auditiva dos WAVs | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2/D3 (mesmo repo) |
 | 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
 | 8 | **B5.1** — monitor exclusivo global | arm-jitter | Pequena; independente | Após B1.7 (mesmo repo, toca ArmCore) |
 | 9 | **E1** — javadocs em inglês → português (regra G7) | arm-jitter | Higiene; risco zero de código | **1 sessão POR LOTE** (4 lotes, checklist no próprio arquivo); pode intercalar entre tasks maiores; NÃO rodar em paralelo com outra task de arm-jitter (diff de comentário conflita com tudo) |

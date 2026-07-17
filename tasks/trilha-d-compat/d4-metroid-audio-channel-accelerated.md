@@ -3,6 +3,47 @@
 **Trilha:** D (compat de hospedeiros) · **Depende de:** — · **Repo:** gbaemu ·
 **Task de diagnóstico** (causa raiz desconhecida)
 
+## Status (2026-07-16) — fase 1 concluída, hipótese do enunciado REFUTADA, devolvida ao usuário
+
+Instrumentação nova e permanente em `GbaAudio` (`directSoundTimer`, `fifoUnderruns`,
+`fifoSamplesRequested`, `maxOverflowsPerCall`, `resetFifoDiagnostics`) e em
+`GbaTimerController` (`overflowPeriodCycles`) para testar a hipótese de FIFO/timer do
+enunciado. `MetroidAudioDiagnosticTest` novo (`-Daudio.diag=1`, ROM `roms/metroid.gba`,
+gitignored) roda 60s de gameplay real (auto-mash START/A pelos primeiros 30s pra passar
+de título/file-select/cutscene, depois segura RIGHT com pulo/tiro ocasional) logando por
+janela de 5s: timer fonte, Hz esperado (do reload/prescaler real do timer), Hz efetivo
+medido, fração de underrun de FIFO e o maior lote de overflows servidos numa única
+chamada. Roda também um WAV da mixagem completa e um WAV por canal isolado (mesmo padrão
+da D3).
+
+**Achados**: Direct Sound A e B usam o **mesmo timer (0)** o jogo inteiro; Hz
+esperado=10512,0 bate com o Hz efetivo medido (10218-10560, a variação é ruído de
+quantização da janela de 5s, não um desvio real) em TODAS as 12 janelas de 60s;
+**underrunFraction=0,0000 e maxOverflowsPerCall=1 o tempo inteiro** — nunca houve
+FIFO vazio nem lote de mais de 1 overflow por chamada. **Isso REFUTA as duas hipóteses
+concretas do enunciado** (FIFO com timer errado / cadência de DMA errada causando
+"baixo"+"acelerado"+intermitência) — pelo menos na janela de 60s de gameplay
+sintético capturada aqui. Mixagem completa saudável (railed=0,05%, click=0%, sem
+assinatura de nenhum bug já corrigido).
+
+**Achado novo, não previsto no enunciado**: os canais PSG CH1/CH2 pulse ficam ativos
+mas com amplitude MUITO baixa (pico 7-12 numa faixa de ~127) o jogo inteiro, contra
+~85-88 do Direct Sound A/B; CH3 wave e CH4 noise ficam mudos (min=max=0). Se a
+"melodia" relatada pelo usuário for na verdade um desses canais PSG quietos (não a
+mixagem alta do Direct Sound), isso explicaria "baixo" diretamente — mas "acelerado"/
+"dessincronizado"/intermitente precisa de confirmação auditiva por canal, que as
+métricas agregadas (railed/click/min/max) não capturam.
+
+**Devolvido ao usuário** (critério de aceite #3: causa não pequena/óbvia) com os WAVs
+em `target/metroid-audio-gameplay.wav` (mix completo) e
+`target/metroid-audio-gameplay-solo-{ch1-pulse,ch2-pulse,ch3-wave,ch4-noise,directA,
+directB}.wav` — pedir pra identificar em qual WAV o sintoma aparece (e se o auto-mash
+de 60s realmente chegou na cena/música onde o usuário ouviu o problema; se não, precisa
+de um save state mais próximo do ponto exato). Suite gbaemu 239 verde (17 skipped =
+opt-in `-Daudio.diag=1` + pré-existentes), sem regressão nos 2 bugs de áudio já
+corrigidos do Metroid (`GbaAudioTest` verde, incl.
+`pulseChannelPlaysAtGbaTunedFrequencyNotFourTimesTooHigh`).
+
 ## Contexto
 
 Achado do usuário em 2026-07-16 (validação de gameplay da task C6, ver memória
