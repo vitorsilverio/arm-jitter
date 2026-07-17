@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -68,6 +68,16 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int BIT_FIELD_INSERT = 41;
         public static final int BIT_REVERSE = 42;
         public static final int DIVIDE = 43;
+        public static final int VFP_ALU = 44;
+        public static final int VFP_MOVE_IMMEDIATE = 45;
+        public static final int VFP_COMPARE = 46;
+        public static final int VFP_CONVERT = 47;
+        public static final int VFP_LOAD = 48;
+        public static final int VFP_STORE = 49;
+        public static final int VFP_MULTIPLE_TRANSFER = 50;
+        public static final int VFP_CORE_TRANSFER = 51;
+        public static final int VFP_CORE_PAIR_TRANSFER = 52;
+        public static final int VFP_SYSTEM_TRANSFER = 53;
     }
 
     /// Operacao ALU generica.
@@ -840,5 +850,233 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.DIVIDE; }
+    }
+
+    // ── VFP (B3.4): decode fica em B3.5, ASM nativo em B3.6 — aqui só IR + interpretador. ──
+
+    /// Operação aritmética/unária VFP (`op` seleciona o comportamento; ver {@link VfpAlu}).
+    enum VfpOperation {
+        /// `VADD`: `vd = vn + vm`.
+        ADD,
+        /// `VSUB`: `vd = vn - vm`.
+        SUB,
+        /// `VMUL`: `vd = vn * vm`.
+        MUL,
+        /// `VDIV`: `vd = vn / vm`.
+        DIV,
+        /// `VMLA`: `vd = vd + (vn * vm)`, NÃO fundido (duas operações arredondadas separadamente).
+        MLA,
+        /// `VMLS`: `vd = vd - (vn * vm)`, NÃO fundido.
+        MLS,
+        /// `VNMUL`: `vd = -(vn * vm)`.
+        NMUL,
+        /// `VNEG` (unária, usa só `vm`): inverte o bit de sinal.
+        NEG,
+        /// `VABS` (unária, usa só `vm`): zera o bit de sinal.
+        ABS,
+        /// `VSQRT` (unária, usa só `vm`): raiz quadrada corretamente arredondada.
+        SQRT,
+        /// `VMOV` registrador-a-registrador (unária, usa só `vm`): cópia bit a bit.
+        COPY
+    }
+
+    /// Operação aritmética/unária VFP (`VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/
+    /// `VABS`/`VSQRT`/`VMOV` registrador). `VMLA`/`VMLS`/`VNMUL` NUNCA usam `Math.fma` — o VFP
+    /// real não funde a multiplicação com a soma/subtração (ver Armadilhas de B3.4). As formas
+    /// unárias (`NEG`/`ABS`/`SQRT`/`COPY`) usam somente `vm`; `MLA`/`MLS` também leem o `vd` atual
+    /// como acumulador.
+    record VfpAlu(
+            /// Operação a executar.
+            VfpOperation op,
+            /// `true` para precisão dupla (registradores `D`), `false` para simples (`S`).
+            boolean doublePrecision,
+            /// Registrador de destino (também acumulador de entrada para `MLA`/`MLS`).
+            int vd,
+            /// Primeiro registrador de origem (ignorado pelas formas unárias).
+            int vn,
+            /// Segundo registrador de origem (único operando das formas unárias).
+            int vm,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_ALU; }
+    }
+
+    /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já
+    /// expandido pelo decoder/lifter (decode fica em B3.5).
+    record VfpMoveImmediate(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino.
+            int vd,
+            /// Bits crus do imediato: 32 bits baixos usados quando `!doublePrecision`, os 64 bits
+            /// completos quando `doublePrecision`.
+            long immediateBits,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_MOVE_IMMEDIATE; }
+    }
+
+    /// `VCMP`/`VCMPE` (com ou sem `VCMPE`/`VCMP` `#0.0`): compara `vd` com `vm` (ou com zero) e
+    /// grava APENAS `FPSCR.NZCV` (ARM DDI 0406C A2.9.1) — nunca o CPSR; só `VMRS APSR_nzcv` (ver
+    /// {@link VfpSystemTransfer}) move o resultado para lá. Tabela exata: eq→N=0,Z=1,C=1,V=0;
+    /// lt→N=1,Z=0,C=0,V=0; gt→N=0,Z=0,C=1,V=0; unordered (algum operando é NaN)→N=0,Z=0,C=1,V=1.
+    record VfpCompare(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// `true` para as formas `VCMP(E) Vd, #0.0` (compara com zero em vez de `vm`).
+            boolean compareWithZero,
+            /// `true` para `VCMPE` (bit E: sinaliza operação inválida também para NaN silencioso,
+            /// não só sinalizador — sem efeito observável adicional neste core, que não modela
+            /// traps de exceção de ponto flutuante; mantido para fidelidade ao encoding).
+            boolean signalOnQuietNaN,
+            /// Registrador comparado.
+            int vd,
+            /// Segundo operando da comparação (ignorado quando `compareWithZero`).
+            int vm,
+            /// Condição necessária para executar a comparação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_COMPARE; }
+    }
+
+    /// Direção/tipos de uma conversão `VCVT` (forma default, arredondamento round-toward-zero para
+    /// inteiro — ver {@link VfpConvert}).
+    enum VfpConversion {
+        /// `VCVT.F64.F32`: simples → dupla (exata).
+        F32_TO_F64,
+        /// `VCVT.F32.F64`: dupla → simples (arredondada).
+        F64_TO_F32,
+        /// `VCVT.F32.S32`: inteiro com sinal → simples.
+        S32_TO_F32,
+        /// `VCVT.F64.S32`: inteiro com sinal → dupla (exata).
+        S32_TO_F64,
+        /// `VCVT.F32.U32`: inteiro sem sinal → simples.
+        U32_TO_F32,
+        /// `VCVT.F64.U32`: inteiro sem sinal → dupla (exata).
+        U32_TO_F64,
+        /// `VCVT.S32.F32`: simples → inteiro com sinal (round-toward-zero, satura, NaN→0).
+        F32_TO_S32,
+        /// `VCVT.S32.F64`: dupla → inteiro com sinal (round-toward-zero, satura, NaN→0).
+        F64_TO_S32,
+        /// `VCVT.U32.F32`: simples → inteiro sem sinal (round-toward-zero, satura em `[0, 2³²-1]`, NaN→0).
+        F32_TO_U32,
+        /// `VCVT.U32.F64`: dupla → inteiro sem sinal (round-toward-zero, satura em `[0, 2³²-1]`, NaN→0).
+        F64_TO_U32
+    }
+
+    /// `VCVT` na forma default (não `VCVTR`, que usaria `FPSCR.RMode` — fora de escopo, RMode≠RN
+    /// já é rejeitado por {@link dev.vitorsilverio.armjitter.core.FpscrRegister}). Cada membro de
+    /// {@link VfpConversion} já fixa qual banco (`S` ou `D`) origem/destino usam — não há campo
+    /// `doublePrecision` separado porque a direção da conversão determina isso sozinha.
+    record VfpConvert(
+            /// Conversão a executar.
+            VfpConversion conversion,
+            /// Registrador de destino (banco determinado por `conversion`).
+            int vd,
+            /// Registrador de origem (banco determinado por `conversion`).
+            int vm,
+            /// Condição necessária para executar a conversão.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT; }
+    }
+
+    /// `VLDR`: carrega `Vd` de `[base + offsetBytes]` (sempre `P=1,W=0` — VFP não tem writeback
+    /// em load/store simples, ao contrário de `LDR`/`LDRD`).
+    record VfpLoad(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino.
+            int vd,
+            /// Registrador base do endereço.
+            int base,
+            /// Offset em bytes (±`imm8`×4), já resolvido pelo decoder/lifter.
+            int offsetBytes,
+            /// Condição necessária para executar o load.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_LOAD; }
+    }
+
+    /// `VSTR`: grava `Vd` em `[base + offsetBytes]` (ver {@link VfpLoad}).
+    record VfpStore(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de origem.
+            int vd,
+            /// Registrador base do endereço.
+            int base,
+            /// Offset em bytes (±`imm8`×4), já resolvido pelo decoder/lifter.
+            int offsetBytes,
+            /// Condição necessária para executar o store.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_STORE; }
+    }
+
+    /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: transfere `count` registradores consecutivos
+    /// (`firstRegister`..`firstRegister+count-1`) entre memória e o banco VFP. Só as formas `IA`
+    /// e `DB` existem no VFP (ao contrário do `LDM`/`STM` ARM genérico, que também tem `IB`/`DA`);
+    /// `VPUSH`/`VPOP` são aliases de `DB`/`IA` com `writeback=true` e `base=SP` — sem `IrOp`
+    /// dedicado, testados via este record diretamente.
+    record VfpMultipleTransfer(
+            /// `true` para `VLDM` (load), `false` para `VSTM` (store).
+            boolean load,
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador base do endereço.
+            int base,
+            /// Primeiro registrador da lista.
+            int firstRegister,
+            /// Quantidade de registradores consecutivos.
+            int count,
+            /// Indica writeback no registrador base (sempre `true` para `VPUSH`/`VPOP`).
+            boolean writeback,
+            /// `true` para `DB` (decrementa antes — `VPUSH`); `false` para `IA` (`VPOP`/`VLDM`/`VSTM` padrão).
+            boolean decrementBefore,
+            /// Condição necessária para executar a transferência.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_MULTIPLE_TRANSFER; }
+    }
+
+    /// `VMOV Rt, Sn` / `VMOV Sn, Rt` (`FMRS`/`FMSR`): transfere um único registrador `S` de/para
+    /// um registrador ARM de propósito geral, bits crus (sem conversão de tipo).
+    record VfpCoreTransfer(
+            /// `true` para `Sn` → `Rt` (`FMRS`); `false` para `Rt` → `Sn` (`FMSR`).
+            boolean toArmRegister,
+            /// Registrador ARM de propósito geral envolvido.
+            int armRegister,
+            /// Registrador `S` envolvido.
+            int vn,
+            /// Condição necessária para executar a transferência.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CORE_TRANSFER; }
+    }
+
+    /// `VMOV Rt, Rt2, Dm` / `VMOV Dm, Rt, Rt2` (`FMRRD`/`FMDRR`): transfere um registrador `D`
+    /// inteiro de/para um par de registradores ARM (`armLow` = metade baixa, `armHigh` = metade
+    /// alta — mesmo layout little-endian de {@link VfpLoad}/{@link VfpStore} na memória).
+    record VfpCorePairTransfer(
+            /// `true` para `Dm` → `(armLow,armHigh)` (`FMRRD`); `false` para o sentido inverso (`FMDRR`).
+            boolean toArmRegisters,
+            /// Registrador ARM que recebe/fornece a metade BAIXA.
+            int armLow,
+            /// Registrador ARM que recebe/fornece a metade ALTA.
+            int armHigh,
+            /// Registrador `D` envolvido.
+            int vm,
+            /// Condição necessária para executar a transferência.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER; }
+    }
+
+    /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`): transfere o FPSCR completo de/para um registrador ARM.
+    /// Caso especial obrigatório (decisão nº 4 do épico B3): `VMRS APSR_nzcv, FPSCR`
+    /// (`read=true, armRegister=15`) NÃO escreve `R15` — copia só `FPSCR.NZCV` para `CPSR.NZCV`,
+    /// preservando Q/GE/IT/modo/todo o resto do CPSR.
+    record VfpSystemTransfer(
+            /// `true` para `VMRS` (FPSCR → destino); `false` para `VMSR` (origem → FPSCR).
+            boolean read,
+            /// Registrador ARM envolvido; `15` em `read=true` é o caso especial `APSR_nzcv`.
+            int armRegister,
+            /// Condição necessária para executar a transferência.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_SYSTEM_TRANSFER; }
     }
 }

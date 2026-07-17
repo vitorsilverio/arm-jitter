@@ -152,6 +152,18 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.BitFieldInsert b -> (1 << b.dst()) | (b.src() >= 0 ? (1 << b.src()) : 0);
             case IrOp.BitReverse b -> (1 << b.src());
             case IrOp.Divide d -> (1 << d.dividend()) | (1 << d.divisor());
+            // VFP (B3.4): a aritmética/comparação/conversão pura (VfpAlu/VfpMoveImmediate/
+            // VfpCompare/VfpConvert) só toca o banco S/D, fora deste bitmask de registradores
+            // ARM — opaca por padrão (`default -> 0` já é o comportamento correto para elas).
+            // As formas que TOCAM registrador ARM precisam declarar o uso explicitamente, senão
+            // a DCE poderia eliminar uma escrita ALU anterior no mesmo registrador achando-a morta.
+            case IrOp.VfpLoad l -> (1 << l.base());
+            case IrOp.VfpStore s -> (1 << s.base());
+            case IrOp.VfpMultipleTransfer mt -> (1 << mt.base());
+            case IrOp.VfpCoreTransfer t -> t.toArmRegister() ? 0 : (1 << t.armRegister());
+            case IrOp.VfpCorePairTransfer t ->
+                    t.toArmRegisters() ? 0 : (1 << t.armLow()) | (1 << t.armHigh());
+            case IrOp.VfpSystemTransfer t -> t.read() ? 0 : (1 << t.armRegister());
             default -> 0;
         };
     }
@@ -236,6 +248,15 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.BitFieldInsert b -> (1 << b.dst());
             case IrOp.BitReverse b -> (1 << b.dst());
             case IrOp.Divide d -> (1 << d.dst());
+            // VFP (B3.4): ver o comentário equivalente em regUse — só as formas que escrevem um
+            // registrador ARM (não o banco S/D, fora deste bitmask) precisam de entrada aqui.
+            case IrOp.VfpMultipleTransfer mt -> mt.writeback() ? (1 << mt.base()) : 0;
+            case IrOp.VfpCoreTransfer t -> t.toArmRegister() ? (1 << t.armRegister()) : 0;
+            case IrOp.VfpCorePairTransfer t ->
+                    t.toArmRegisters() ? (1 << t.armLow()) | (1 << t.armHigh()) : 0;
+            // VMRS Rt,FPSCR escreve Rt — exceto o caso especial APSR_nzcv (Rt=15), que escreve o
+            // CPSR.NZCV em vez de R15 (ver IrOp.VfpSystemTransfer).
+            case IrOp.VfpSystemTransfer t -> (t.read() && t.armRegister() != 15) ? (1 << t.armRegister()) : 0;
             default -> 0;
         };
     }

@@ -114,6 +114,18 @@ public final class AsmNativePolicy {
             case IrOp.BitFieldInsert ignored -> false;
             case IrOp.BitReverse ignored -> false;
             case IrOp.Divide ignored -> false;
+            // VFP (B3.4): decode ainda não existe (B3.5) e a emissão nativa é B3.6 — todo record
+            // Vfp* fica interpretado até lá.
+            case IrOp.VfpAlu ignored -> false;
+            case IrOp.VfpMoveImmediate ignored -> false;
+            case IrOp.VfpCompare ignored -> false;
+            case IrOp.VfpConvert ignored -> false;
+            case IrOp.VfpLoad ignored -> false;
+            case IrOp.VfpStore ignored -> false;
+            case IrOp.VfpMultipleTransfer ignored -> false;
+            case IrOp.VfpCoreTransfer ignored -> false;
+            case IrOp.VfpCorePairTransfer ignored -> false;
+            case IrOp.VfpSystemTransfer ignored -> false;
         };
     }
 

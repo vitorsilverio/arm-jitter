@@ -25,6 +25,14 @@ import java.util.List;
 /// Tratar todas como se redefinissem NZCV faria o backward "matar" indevidamente o carry de
 /// um shift anterior só porque um MOV intermediário tem {@code setFlags=true} — removendo o
 /// {@code setFlags} do shift e deixando o C do bloco incorreto.
+///
+/// <p>VFP (B3.4): {@code potentialWriteMask}/{@code mustDefMask} só reconhecem {@code IrOp.Alu}
+/// — {@link IrOp.VfpCompare} (escreve só `FPSCR.NZCV`, nunca o CPSR) e
+/// {@link IrOp.VfpSystemTransfer} com {@code read=true,armRegister=15} (`VMRS APSR_nzcv`, que
+/// ESCREVE o CPSR.NZCV) contam como não-definidores de flags ARM aqui, o mesmo tratamento
+/// (seguro, conservador) que {@code IrOp.PsrTransfer} já recebia antes desta task: a passagem
+/// nunca assume que eles escrevem NZCV, então nunca remove um {@code setFlags} anterior por causa
+/// deles — só deixa de otimizar um caso que passaria a existir com VFP, sem gerar bug.
 public final class FlagMergePass implements IrOptimizer {
 
     private static final int N = 1;

@@ -21,6 +21,10 @@ import java.util.List;
 ///   <li>Opcode não precisa de carry (ADC/SBC/RSC) nem é de teste puro (CMP/CMN/TST/TEQ).</li>
 ///   <li>Para opcodes que usam src1, {@code src1ValueOverride >= 0}.</li>
 /// </ul>
+///
+/// <p>VFP (B3.4): esta passagem só casa {@code instanceof IrOp.Alu} — todo record {@code Vfp*}
+/// atravessa intacto, mesma barreira de fold que {@code Coprocessor}/{@code Swi} já tinham antes
+/// (nenhuma aritmética de ponto flutuante é dobrada nesta rodada).
 public final class ConstantFoldPass implements IrOptimizer {
 
     @Override

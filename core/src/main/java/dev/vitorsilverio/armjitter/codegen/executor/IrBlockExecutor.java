@@ -17,6 +17,7 @@ public final class IrBlockExecutor {
     private final IrTransferExecutor transfer;
     private final IrSystemExecutor system;
     private final IrCycleExecutor cycle;
+    private final IrVfpExecutor vfp;
 
     /// Cria um executor para a arquitetura informada.
     public IrBlockExecutor(ArmArchitecture architecture) {
@@ -27,6 +28,7 @@ public final class IrBlockExecutor {
         this.transfer = new IrTransferExecutor(support);
         this.system = new IrSystemExecutor(support);
         this.cycle = new IrCycleExecutor();
+        this.vfp = new IrVfpExecutor(support);
     }
 
     /// Interpreta um bloco IR e devolve os ciclos internos (`IrOp.Cycle`) consumidos.
@@ -91,6 +93,16 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.BIT_FIELD_INSERT -> alu.executeBitFieldInsert(core, (IrOp.BitFieldInsert) op);
                 case IrOp.Kind.BIT_REVERSE -> alu.executeBitReverse(core, (IrOp.BitReverse) op);
                 case IrOp.Kind.DIVIDE -> alu.executeDivide(core, (IrOp.Divide) op);
+                case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
+                case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
+                case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
+                case IrOp.Kind.VFP_CONVERT -> vfp.executeVfpConvert(core, (IrOp.VfpConvert) op);
+                case IrOp.Kind.VFP_LOAD -> vfp.executeVfpLoad(core, (IrOp.VfpLoad) op);
+                case IrOp.Kind.VFP_STORE -> vfp.executeVfpStore(core, (IrOp.VfpStore) op);
+                case IrOp.Kind.VFP_MULTIPLE_TRANSFER -> vfp.executeVfpMultipleTransfer(core, (IrOp.VfpMultipleTransfer) op);
+                case IrOp.Kind.VFP_CORE_TRANSFER -> vfp.executeVfpCoreTransfer(core, (IrOp.VfpCoreTransfer) op);
+                case IrOp.Kind.VFP_CORE_PAIR_TRANSFER -> vfp.executeVfpCorePairTransfer(core, (IrOp.VfpCorePairTransfer) op);
+                case IrOp.Kind.VFP_SYSTEM_TRANSFER -> vfp.executeVfpSystemTransfer(core, (IrOp.VfpSystemTransfer) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -185,6 +197,21 @@ public final class IrBlockExecutor {
             case IrOp.BitFieldInsert bfi -> { alu.executeBitFieldInsert(core, bfi); yield false; }
             case IrOp.BitReverse rbit -> { alu.executeBitReverse(core, rbit); yield false; }
             case IrOp.Divide div -> { alu.executeDivide(core, div); yield false; }
+            case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
+            case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
+            case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }
+            case IrOp.VfpConvert vfpCvt -> { vfp.executeVfpConvert(core, vfpCvt); yield false; }
+            case IrOp.VfpLoad vfpLoad -> { vfp.executeVfpLoad(core, vfpLoad); yield false; }
+            case IrOp.VfpStore vfpStore -> { vfp.executeVfpStore(core, vfpStore); yield false; }
+            case IrOp.VfpMultipleTransfer vfpMt -> { vfp.executeVfpMultipleTransfer(core, vfpMt); yield false; }
+            case IrOp.VfpCoreTransfer vfpCore -> { vfp.executeVfpCoreTransfer(core, vfpCore); yield false; }
+            case IrOp.VfpCorePairTransfer vfpCorePair -> { vfp.executeVfpCorePairTransfer(core, vfpCorePair); yield false; }
+            case IrOp.VfpSystemTransfer vfpSys -> { vfp.executeVfpSystemTransfer(core, vfpSys); yield false; }
         };
+    }
+
+    /// Executor de VFP (task B3.4): ver {@link #aluExecutor()}.
+    public IrVfpExecutor vfpExecutor() {
+        return vfp;
     }
 }
