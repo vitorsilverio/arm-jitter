@@ -189,6 +189,35 @@ public final class BlockCache {
         return cache.size();
     }
 
+    /// Retorna as até `max` chaves de blocos COMPILADOS (tier quente) mais executados, em ordem
+    /// decrescente de contagem de acertos ({@link #hit}) — task C10 (warm-start): o hospedeiro
+    /// persiste essas chaves por ROM e as reagenda na próxima carga via {@link JitRuntime#precompile}.
+    ///
+    /// <p>Blocos ainda no tier frio (interpretado, nunca promovido) são excluídos: não há
+    /// bytecode compilado para reaproveitar neles. Quando só existe "já passou do threshold"
+    /// (contadores empatados, ex. {@code hotThreshold=1} do ndsemu), o desempate preserva a
+    /// ordem de iteração do cache interno — suficiente por especificação.</p>
+    public List<BlockKey> hotKeys(int max) {
+        if (max <= 0) {
+            return List.of();
+        }
+        List<Map.Entry<BlockKey, CacheEntry>> compiledEntries = new ArrayList<>();
+        for (Map.Entry<BlockKey, CacheEntry> entry : cache.entrySet()) {
+            if (entry.getValue().compiled()) {
+                compiledEntries.add(entry);
+            }
+        }
+        compiledEntries.sort((a, b) -> Integer.compare(
+                hitCounters.getOrDefault(b.getKey(), 0),
+                hitCounters.getOrDefault(a.getKey(), 0)));
+        int resultSize = Math.min(max, compiledEntries.size());
+        List<BlockKey> result = new ArrayList<>(resultSize);
+        for (int i = 0; i < resultSize; i++) {
+            result.add(compiledEntries.get(i).getKey());
+        }
+        return result;
+    }
+
     private void indexBlock(BlockKey key, int startPc, int endPc) {
         int firstPage = pageIndex(startPc);
         int lastPage = pageIndex(endPc - 1);

@@ -16,6 +16,8 @@ import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /// Orquestra cache, decodificação, IR, otimização e codegen.
@@ -597,6 +599,51 @@ public final class JitRuntime {
         syncInlineCacheGeneration();
         icTags[slot] = tag;
         icBlocks[slot] = block;
+    }
+
+    /// Devolve as até `max` chaves dos blocos COMPILADOS mais executados (task C10 —
+    /// warm-start): o hospedeiro persiste essas chaves por ROM e as reagenda via
+    /// {@link #precompile(Collection, AddressSpace)} na próxima carga, cortando o tier
+    /// frio inicial dos blocos que historicamente mais rodam. Delega a {@link BlockCache#hotKeys}.
+    public List<BlockKey> hotBlockKeys(int max) {
+        return blockCache.hotKeys(max);
+    }
+
+    /// Agenda a compilação adiantada das `keys` informadas (task C10 — warm-start), lendo o
+    /// código ATUAL de `memory` e reusando o MESMO caminho/pool de compilação em background do
+    /// tier quente (nunca uma thread dedicada nova) — ver {@link #submitCompile}.
+    ///
+    /// <p>Sem efeito no modo não-tiered ({@code coldEmitter == null}): não há pool de background
+    /// para agendar, e o caminho síncrono clássico não se beneficia de pré-aquecimento.</p>
+    ///
+    /// <p>Chaves cujo `pc` já está no {@link BlockCache} (frio ou quente) são ignoradas — o
+    /// caminho normal já as cobre. Chaves cujo conteúdo de memória mudou desde que foram
+    /// persistidas (ROM diferente, código automodificado) simplesmente compilam o que está lá
+    /// AGORA: a validação natural é o próprio lift, igual à compilação normal — um bloco
+    /// pré-compilado "errado" é impossível por construção (no pior caso, um bloco inútil que
+    /// nunca chega a ser chamado, removido depois pela invalidação por escrita normal). Falhas de
+    /// leitura de memória (endereço fora do espaço mapeado) são ignoradas silenciosamente,
+    /// por chave.</p>
+    public void precompile(Collection<BlockKey> keys, AddressSpace memory) {
+        if (compileExecutor == null) {
+            return;
+        }
+        for (BlockKey key : keys) {
+            if (blockCache.entry(key) != null) {
+                continue; // já presente (frio ou quente): o caminho normal já cobre
+            }
+            IrBlock irBlock;
+            try {
+                irBlock = lift(key.pc(), memory, key.instructionSet(), key.itState());
+            } catch (RuntimeException e) {
+                continue; // ROM diferente/self-modified/fora do mapa: ignora silenciosamente
+            }
+            CompiledBlock cold = coldEmitter.emit(irBlock);
+            blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
+            if (compilingColdBlocks.add(cold)) {
+                submitCompile(key, cold, irBlock);
+            }
+        }
     }
 
     /// Compila um bloco iniciando em `pc`.
