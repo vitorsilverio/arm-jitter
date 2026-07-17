@@ -18,6 +18,13 @@ public final class ArmCore {
     private static final int PC = 15;
     private static final int SP = 13;
     private static final int LR = 14;
+    /// Versão do formato de {@link #saveState}/{@link #loadState}: `1` = formato anterior à
+    /// B3.3 (sem banco VFP/FPSCR), `2` = inclui o banco VFP completo. Lida por este core, não
+    /// pelos consumidores (`GbaConsole`/`NdsConsole` têm o próprio versionamento por cima, que
+    /// já rejeita formatos incompatíveis por inteiro — esta versão interna existe para que
+    /// `ArmCore.loadState` sozinho degrade sem exceção quando alimentado por um stream antigo,
+    /// ex. em teste).
+    private static final int STATE_VERSION = 2;
     private static final int RESET_CPSR = CpuMode.SUPERVISOR.bits()
             | CpsrRegister.IRQ_DISABLE_FLAG
             | CpsrRegister.FIQ_DISABLE_FLAG;
@@ -36,6 +43,8 @@ public final class ArmCore {
     private int abortSpsr;
     private int undefinedSpsr;
     private final CpsrRegister cpsr = new CpsrRegister();
+    private final VfpRegisters vfp = new VfpRegisters();
+    private final FpscrRegister fpscr = new FpscrRegister();
     private final AddressSpace memory;
     /// Cache de {@link AddressSpace#providesAccessCycles()} do barramento (capacidade estática):
     /// quando `false`, {@link #addMemoryCycles} retorna sem a chamada virtual por acesso.
@@ -92,6 +101,7 @@ public final class ArmCore {
     /// Serializa o estado completo da CPU (todos os bancos, SPSRs, CPSR, modo e flags)
     /// para um save state. Restaurado por {@link #loadState}.
     public void saveState(java.io.DataOutputStream out) throws java.io.IOException {
+        out.writeInt(STATE_VERSION);
         writeInts(out, registers);
         writeInts(out, commonR8ToR12);
         writeInts(out, userSystemSpLr);
@@ -110,10 +120,14 @@ public final class ArmCore {
         out.writeBoolean(interruptLine);
         out.writeInt(activeMode.ordinal());
         out.writeInt(sleepState.ordinal());
+        vfp.saveState(out);
+        fpscr.saveState(out);
     }
 
-    /// Restaura o estado completo da CPU gravado por {@link #saveState}.
+    /// Restaura o estado completo da CPU gravado por {@link #saveState}. Streams de uma versão
+    /// anterior à B3.3 (sem banco VFP/FPSCR) carregam com o banco VFP zerado.
     public void loadState(java.io.DataInputStream in) throws java.io.IOException {
+        int version = in.readInt();
         readInts(in, registers);
         readInts(in, commonR8ToR12);
         readInts(in, userSystemSpLr);
@@ -135,6 +149,13 @@ public final class ArmCore {
         // O monitor de exclusividade não é persistido (formato de save state inalterado):
         // abrir o monitor ao restaurar é uma falha espúria de STREX permitida pela arquitetura.
         clearExclusiveMonitor();
+        if (version >= 2) {
+            vfp.loadState(in);
+            fpscr.loadState(in);
+        } else {
+            vfp.reset();
+            fpscr.reset();
+        }
     }
 
     private static void writeInts(java.io.DataOutputStream out, int[] values) throws java.io.IOException {
@@ -174,6 +195,18 @@ public final class ArmCore {
     /// Retorna o CPSR mutável associado ao core.
     public CpsrRegister cpsr() {
         return cpsr;
+    }
+
+    /// Retorna o banco de registradores VFP (S/D) associado ao core (B3.3 — só o estado,
+    /// nenhuma instrução usa este banco ainda).
+    public VfpRegisters vfp() {
+        return vfp;
+    }
+
+    /// Retorna o FPSCR mutável associado ao core (B3.3 — só o estado, nenhuma instrução usa
+    /// este registrador ainda).
+    public FpscrRegister fpscr() {
+        return fpscr;
     }
 
     /// Retorna o modo atual da CPU.

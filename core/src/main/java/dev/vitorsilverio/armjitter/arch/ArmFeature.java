@@ -119,5 +119,12 @@ public enum ArmFeature {
     /// `SDIV`/`UDIV` (divisão inteira com/sem sinal; divisão por zero resulta em 0, sem exceção).
     /// ARMv7-A/R (opcional; sempre presente nos perfis emulados aqui). Mesmo carve-out direto de
     /// {@link #BIT_FIELD} (mesma colisão).
-    DIVIDE
+    DIVIDE,
+
+    // ---- VFP (épico B3; B3.3 só cria o estado — banco S/D + FPSCR, ver
+    // {@link dev.vitorsilverio.armjitter.core.VfpRegisters}/{@link dev.vitorsilverio.armjitter.core.FpscrRegister}) ----
+    /// VFPv2 (banco de 32 registradores `S`/16 `D`, `FPSCR`) + `VMOV` imediato do v3-d16
+    /// (decisão do épico `b3-armv7a-vfp.md`). Nenhum preset habilita ainda (B3.7); nenhuma
+    /// instrução decodifica ainda (B3.4/B3.5).
+    VFPV2
 }
