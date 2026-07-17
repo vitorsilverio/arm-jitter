@@ -16,10 +16,14 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// este decoder passou a precisar de uma {@link ArmArchitecture} — mesmo padrão de
 /// `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` desde B2.3/B2.5.
 ///
+/// B3.2 acrescenta `SBFX`/`UBFX`/`BFI`/`BFC` ao MESMO grupo "plain binary immediate", gateados por
+/// {@link ArmFeature#BIT_FIELD} (a mesma feature do encoding ARM clássico equivalente em
+/// {@link ArmDecoder}) — zero IR nova, reusa `InstructionKind#BIT_FIELD_EXTRACT`/`BIT_FIELD_INSERT`.
+///
 /// Bits sempre nomeados a partir de `raw` = os dois halfwords combinados (`hi&lt;&lt;16 | lo`, hi =
 /// primeiro halfword nos bits altos, exatamente como {@link ThumbDecoder} entrega às extensões
 /// de 32 bits). Referência: ARM DDI 0406C, A5.3.1-A5.3.4; QEMU `target/arm/tcg/t32.decode`
-/// seção "Saturate, bitfield" para `SSAT`/`USAT`/`SSAT16`/`USAT16`.
+/// seção "Saturate, bitfield" para `SSAT`/`USAT`/`SSAT16`/`USAT16`/`SBFX`/`UBFX`/`BFI`/`BFC`.
 public final class Thumb2DataProcessingDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -62,6 +66,12 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
     private static final int PLAIN_OP_SSAT_ASR_OR_16 = 0b1001;
     private static final int PLAIN_OP_USAT_LSL = 0b1100;
     private static final int PLAIN_OP_USAT_ASR_OR_16 = 0b1101;
+    /// `raw[24:21]` (B3.2): `SBFX`/`UBFX`/`BFI`/`BFC` — mesmo grupo "plain binary immediate"
+    /// (QEMU `t32.decode` seção "Saturate, bitfield"). Valores confirmados bit a bit contra o
+    /// oráculo (ver javadoc da classe/{@link #decodeBitFieldExtractIfSupported}), não deduzidos.
+    private static final int PLAIN_OP_SBFX = 0b1010;
+    private static final int PLAIN_OP_BFI_BFC = 0b1011;
+    private static final int PLAIN_OP_UBFX = 0b1110;
 
     /// `raw[24:21]` (op4) do grupo modified-immediate/register-shift-immediate — mesma tabela nos
     /// dois grupos (ARM DDI 0406C Table A5-10 "op field"), com as formas TST/TEQ/CMN/CMP obtidas
@@ -273,8 +283,64 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
             case PLAIN_OP_SSAT_ASR_OR_16 -> decodeSaturateIfSupported(raw, address, condition, false, true);
             case PLAIN_OP_USAT_LSL -> decodeSaturateIfSupported(raw, address, condition, true, false);
             case PLAIN_OP_USAT_ASR_OR_16 -> decodeSaturateIfSupported(raw, address, condition, true, true);
+            case PLAIN_OP_SBFX -> decodeBitFieldExtractIfSupported(raw, address, condition, true);
+            case PLAIN_OP_UBFX -> decodeBitFieldExtractIfSupported(raw, address, condition, false);
+            case PLAIN_OP_BFI_BFC -> decodeBitFieldInsertIfSupported(raw, address, condition);
             default -> null; // reservado — UNDEFINED controlado do ThumbDecoder (top5=11110)
         };
+    }
+
+    // ── SBFX/UBFX/BFI/BFC (B3.2) — QEMU "Saturate, bitfield" ────────────────────────────────
+
+    /// `lsb` Thumb-2 é montado a partir de `imm3:imm2` — bits `raw[14:12]:raw[7:6]`, NÃO
+    /// contíguo no encoding (armadilha do enunciado; copiado do QEMU `%imm5_12_6`, não deduzido).
+    private static int bitFieldLsb(int raw) {
+        int imm3 = (raw >>> 12) & 0x7;
+        int imm2 = (raw >>> 6) & 0x3;
+        return (imm3 << 2) | imm2;
+    }
+
+    /// `SBFX`/`UBFX` — QEMU `t32.decode` `@bfx` (`rd`/`rn` no mesmo campo que o grupo modified-
+    /// immediate, `widthm1` em `raw[4:0]`). Mesmo empacotamento `lsb | (width &lt;&lt; 5)` e mesma
+    /// checagem UNPREDICTABLE (`Rd`/`Rn`=PC, `lsb+width&gt;32`) que {@link ArmDecoder} já usa para
+    /// o encoding ARM clássico equivalente — reuso de IR, zero semântica nova (G1).
+    private DecodedInstruction decodeBitFieldExtractIfSupported(int raw, int address, Condition condition,
+            boolean signedExtract) {
+        if (!architecture.has(ArmFeature.BIT_FIELD)) {
+            return null; // UNDEFINED controlado do ThumbDecoder (top5=11110), mesmo sem a feature
+        }
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int lsb = bitFieldLsb(raw);
+        int widthMinusOne = raw & 0x1F;
+        int width = widthMinusOne + 1;
+        if (rd == PROGRAM_COUNTER || rn == PROGRAM_COUNTER || lsb + width > 32) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int packed = lsb | (width << 5);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.BIT_FIELD_EXTRACT, rd, rn, -1, packed, false, false, false, 0, signedExtract);
+    }
+
+    /// `BFI`/`BFC` — QEMU `t32.decode` `@bfi` (mesmo layout de `@bfx`, mas o campo final é `msb`,
+    /// não `widthm1` — armadilha do enunciado, os dois formatos convivem na mesma tabela de bits
+    /// e não podem ser misturados). `Rn=1111` marca `BFC` (QEMU: "bfc is bfi w/ rn=15").
+    private DecodedInstruction decodeBitFieldInsertIfSupported(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.BIT_FIELD)) {
+            return null; // UNDEFINED controlado do ThumbDecoder (top5=11110), mesmo sem a feature
+        }
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int lsb = bitFieldLsb(raw);
+        int msb = raw & 0x1F;
+        boolean isBfc = rn == PROGRAM_COUNTER;
+        if (rd == PROGRAM_COUNTER || (!isBfc && rn == PROGRAM_COUNTER) || msb < lsb) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int width = msb - lsb + 1;
+        int packed = lsb | (width << 5);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.BIT_FIELD_INSERT, rd, isBfc ? -1 : rn, -1, packed, false, false, false);
     }
 
     private DecodedInstruction decodeSaturateIfSupported(int raw, int address, Condition condition,

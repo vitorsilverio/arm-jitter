@@ -17,8 +17,12 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// ({@link ArmDecoder}), e a elevação para IR ({@code StandardIrBuilder}) produz exatamente a
 /// mesma `DecodedInstruction`/IR que o decoder ARM produz — nenhuma semântica nova (G1).
 ///
-/// **`MLS`/`SMLAD`/`SMLSD`/`SMLALD`/`SMLSLD`/`SMMLA`/`SMMLS`/`SDIV`/`UDIV`** (ARMv7, fora do
-/// escopo desta task — ver B3.2) ficam fora de escopo aqui, mas o padrão de bits ainda é
+/// B3.2 acrescenta `MLS` (`family=0000,op=0001`, gate {@link ArmFeature#MLS_MULTIPLY}) e
+/// `SDIV`/`UDIV` (`family=1001`/`1011`, `op` fixo `1111`, gate {@link ArmFeature#DIVIDE}) — mesmas
+/// features que o encoding ARM clássico equivalente em {@link ArmDecoder} já usa, zero IR nova.
+///
+/// **`SMLAD`/`SMLSD`/`SMLALD`/`SMLSLD`/`SMMLA`/`SMMLS`** (ARMv7, ainda fora de escopo — nenhuma
+/// task os cobre ainda) ficam fora de escopo aqui, mas o padrão de bits ainda é
 /// reivindicado por {@link #claimsEncodingSpace} (todo o prefixo `0xFB`), então caem em
 /// UNDEFINED controlado em vez de UNIMPLEMENTED silencioso ambíguo (mesmo protocolo de B2.2.2).
 ///
@@ -45,14 +49,20 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
     private static final int FAMILY_SHIFT = 20; // nibble[23:20] (hi)
     private static final int OP_SHIFT = 4;       // nibble[7:4] (lo)
 
-    private static final int FAMILY_MUL_MLA = 0x0;
+    private static final int FAMILY_MUL_MLA = 0x0; // também MLS (op=0x1, B3.2)
     private static final int FAMILY_SMLA_XY = 0x1;   // SMLA<x><y>/SMUL<x><y> (16x16)
     private static final int FAMILY_SMLAW_Y = 0x3;   // SMLAW<y>/SMULW<y>
+    private static final int FAMILY_SDIV = 0x9;      // B3.2
     private static final int FAMILY_USADA8 = 0x7;
     private static final int FAMILY_SMULL = 0x8;
     private static final int FAMILY_UMULL = 0xA;
+    private static final int FAMILY_UDIV = 0xB;      // B3.2
     private static final int FAMILY_SMLAL = 0xC; // também SMLAL<x><y> (op>=0x8)
     private static final int FAMILY_UMLAL = 0xE; // também UMAAL (op=0x6)
+
+    /// `op` (nibble[7:4]) fixo `1111` em `SDIV`/`UDIV` (QEMU `@rndm`, "1111 Rd 1111 Rm") — mesmo
+    /// valor do sentinel `NO_ACCUMULATOR`, mas com significado diferente aqui (não é Ra).
+    private static final int DIVIDE_OP = 0xF;
 
     private static final int NO_ACCUMULATOR = 0xF; // Ra=1111: MUL.W/SMUL<x><y>/SMULW<y>
 
@@ -81,7 +91,11 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         int op = (raw >>> OP_SHIFT) & 0xF;
 
         return switch (family) {
-            case FAMILY_MUL_MLA -> op == 0 ? decodeMulMla(raw, address, condition) : null;
+            case FAMILY_MUL_MLA -> switch (op) {
+                case 0 -> decodeMulMla(raw, address, condition);
+                case 1 -> decodeMls(raw, address, condition);
+                default -> null;
+            };
             case FAMILY_SMLA_XY -> decodeDspMultiplySixteenBySixteen(raw, address, condition, op);
             case FAMILY_SMLAW_Y -> (op == 0 || op == 1)
                     ? decodeDspMultiplyWordBySixteen(raw, address, condition, op)
@@ -91,6 +105,8 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
                     InstructionKind.SMULL) : null;
             case FAMILY_UMULL -> op == 0 ? decodeLongMultiply(raw, address, condition,
                     InstructionKind.UMULL) : null;
+            case FAMILY_SDIV -> op == DIVIDE_OP ? decodeDivide(raw, address, condition, true) : null;
+            case FAMILY_UDIV -> op == DIVIDE_OP ? decodeDivide(raw, address, condition, false) : null;
             case FAMILY_SMLAL -> decodeSmlalFamily(raw, address, condition, op);
             case FAMILY_UMLAL -> decodeUmlalFamily(raw, address, condition, op);
             default -> null; // reservado dentro do prefixo 0xFB — UNDEFINED controlado (claimsEncodingSpace)
@@ -120,6 +136,44 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
                 accumulate ? InstructionKind.MLA : InstructionKind.MUL,
                 rd, rn, rm, ra, false, false, false);
+    }
+
+    // ── MLS (B3.2) — QEMU "Multiply and multiply accumulate" (family=0000, op=0001) ────────
+
+    private DecodedInstruction decodeMls(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.MLS_MULTIPLY)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        // Mesmo layout de registrador de MUL.W/MLA.W: Rn(19:16), Ra(15:12, sempre real — não há
+        // sentinel "sem acumulador" para MLS), Rd(11:8), Rm(3:0).
+        int rn = (raw >>> 16) & 0xF;
+        int ra = (raw >>> 12) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int rm = raw & 0xF;
+        if (isRestricted(rd) || isRestricted(rn) || isRestricted(rm) || isRestricted(ra)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MLS,
+                rd, rn, rm, ra, false, false, false);
+    }
+
+    // ── SDIV/UDIV (B3.2) — QEMU "Long multiply, long multiply accumulate, and divide" ──────
+
+    private DecodedInstruction decodeDivide(int raw, int address, Condition condition, boolean signedDivide) {
+        if (!architecture.has(ArmFeature.DIVIDE)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int rm = raw & 0xF;
+        if (isRestricted(rd) || isRestricted(rn) || isRestricted(rm)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        // Mesmo truque de `ArmDecoder`: reusa o campo `signedAccess` do construtor de 14 args para
+        // guardar `signedDivide` (accessSizeBytes=0, sem acesso de memória real) — evita um record
+        // widening só para esta instrução, mesma decisão do encoding ARM clássico equivalente.
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.DIVIDE,
+                rd, rn, rm, 0, false, false, false, 0, signedDivide);
     }
 
     // ── SMULL/UMULL/SMLAL/UMLAL — QEMU "Long multiply..." (formas planas, op=0000) ─────────

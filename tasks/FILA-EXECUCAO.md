@@ -68,7 +68,12 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 
 ## Onda 3 — fechamentos
 
-B3.2 → B3.4 → B3.5 → B3.6 → B3.7 (cadeia VFP) · B7.2 → B7.3 → B7.4 → B7.5
+~~B3.2~~ ✅ FECHADA 2026-07-17 — `SBFX`/`UBFX`/`BFI`/`BFC` (`Thumb2DataProcessingDecoder`),
+`MLS`/`SDIV`/`UDIV` (`Thumb2MultiplyDecoder`), `RBIT` (`Thumb2RegisterDataProcessingDecoder`);
+zero IR nova, layout confirmado contra o QEMU `t32.decode`; suítes arm-jitter 745+13, gbaemu 239,
+ndsemu 179 verdes (ver `tasks/README.md`)
+
+B3.4 → B3.5 → B3.6 → B3.7 (cadeia VFP) · B7.2 → B7.3 → B7.4 → B7.5
 (cadeia Cortex-M) · **B4.0.3** (após B2.7+B2.8 — B2.6/B1.7/B4.0.4/B4.0.4.1 já ✅;
 o PR3 da B2.7 inclui o decode MCR/MRC Thumb-2 que a B4.0.4 confirmou faltar) ·
 B4.0.5 · C9 (após C7) · A8 (após A7) · **A9 PR1** (lib nativa `.dll`/`.so` com

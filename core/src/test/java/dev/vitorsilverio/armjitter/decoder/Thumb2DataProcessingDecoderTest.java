@@ -69,6 +69,43 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
     private static final int SHIFT_LSL = 0;
     private static final int SHIFT_ROR = 3;
 
+    // ── B3.2: SBFX/UBFX/BFI/BFC — mesmo grupo "plain binary immediate" ─────────────────────
+
+    private static final int PLAIN_OP_SBFX = 0b1010;
+    private static final int PLAIN_OP_BFI_BFC = 0b1011;
+    private static final int PLAIN_OP_UBFX = 0b1110;
+    private static final int PROGRAM_COUNTER = 15;
+
+    private static final ArmArchitecture BITFIELD_ARCH_FEATURES = ArmArchitecture.extending(
+            ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-BitField", ArmFeature.THUMB2, ArmFeature.BIT_FIELD);
+    private static final ArmArchitecture BITFIELD_ARCH = BITFIELD_ARCH_FEATURES
+            .withThumb32DecoderExtensions(List.of(new Thumb2DataProcessingDecoder(BITFIELD_ARCH_FEATURES)));
+    /// `ArmDecoder` (encoding ARM clássico) também exige `BIT_FIELD` — `ArmArchitecture.ARMV6K`
+    /// puro NÃO tem essa feature (só chega em `ARMV7A`, B3.7), então as comparações ida-e-volta
+    /// desta seção usam esta arquitetura, não `ArmArchitecture.ARMV6K` diretamente.
+    private static final ArmArchitecture ARM_CLASSIC_BITFIELD_ARCH = ArmArchitecture.extending(
+            ArmArchitecture.ARMV6K, "ARM-TestClassic-BitField", ArmFeature.BIT_FIELD);
+
+    /// `lo` das formas de bitfield: `0 imm3 Rd imm2 0 widthOrMsb` — layout DIFERENTE de
+    /// {@link #dataProcessingLo}, não contíguo (`imm3` em `raw[14:12]`, `imm2` em `raw[7:6]`).
+    private static int bitFieldLo(int imm3, int rd, int imm2, int widthMinusOneOrMsb) {
+        return (imm3 << 12) | (rd << 8) | (imm2 << 6) | widthMinusOneOrMsb;
+    }
+
+    private static ArmCore newBitFieldCore() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), BITFIELD_ARCH);
+        core.cpsr().setThumbMode(true);
+        return core;
+    }
+
+    private static void runBitField(ArmCore core, int hi, int lo) {
+        TestAddressSpace memory = (TestAddressSpace) core.memory();
+        int base = core.programCounter();
+        memory.put16(base, hi);
+        memory.put16(base + 2, lo);
+        core.step();
+    }
+
     private static ArmCore newCore() {
         ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), THUMB2_ARCH);
         core.cpsr().setThumbMode(true);
@@ -287,5 +324,115 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
         DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV6K).decode(memory, 0);
 
         assertNotEquals(InstructionKind.AND, instruction.kind());
+    }
+
+    // ── B3.2: SBFX/UBFX — ida-e-volta contra o ARM clássico (mesmos vetores de B3.1) ────────
+
+    @Test
+    void ubfxExtractsFieldWithoutSignExtensionMatchesArmClassic() {
+        // UBFX r0, r1, #4, #8 com r1=0xABCD1234 -> r0=0x23 (mesmo exemplo de B3.1).
+        ArmCore thumb2Core = newBitFieldCore();
+        thumb2Core.setRegister(1, 0xABCD_1234);
+        runBitField(thumb2Core, plainBinaryHi(0, PLAIN_OP_UBFX, 1), bitFieldLo(0b001, 0, 0b00, 7));
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_BITFIELD_ARCH);
+        armCore.setRegister(1, 0xABCD_1234);
+        armCore.memory().write32(0, 0xE7E7_0251); // UBFX r0, r1, #4, #8
+        armCore.step();
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0x23, thumb2Core.register(0));
+    }
+
+    @Test
+    void sbfxSignExtendsTheExtractedFieldMatchesArmClassic() {
+        // SBFX r0, r1, #0, #8 com r1=0x80 -> r0=0xFFFFFF80 (com sinal); UBFX no mesmo raw base ->
+        // 0x80 (sem sinal) — mesmo exemplo de B3.1, provando a diferença entre as duas formas.
+        ArmCore signedCore = newBitFieldCore();
+        signedCore.setRegister(1, 0x80);
+        runBitField(signedCore, plainBinaryHi(0, PLAIN_OP_SBFX, 1), bitFieldLo(0b000, 0, 0b00, 7));
+        assertEquals(0xFFFF_FF80, signedCore.register(0));
+
+        ArmCore unsignedCore = newBitFieldCore();
+        unsignedCore.setRegister(1, 0x80);
+        runBitField(unsignedCore, plainBinaryHi(0, PLAIN_OP_UBFX, 1), bitFieldLo(0b000, 0, 0b00, 7));
+        assertEquals(0x80, unsignedCore.register(0));
+
+        ArmCore armSignedCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_BITFIELD_ARCH);
+        armSignedCore.setRegister(1, 0x80);
+        armSignedCore.memory().write32(0, 0xE7A7_0051); // SBFX r0, r1, #0, #8
+        armSignedCore.step();
+        assertEquals(armSignedCore.register(0), signedCore.register(0));
+    }
+
+    // ── B3.2: BFI/BFC — ida-e-volta contra o ARM clássico (mesmos vetores de B3.1) ──────────
+
+    @Test
+    void bfcClearsTheFieldLeavingTheRestUntouchedMatchesArmClassic() {
+        // BFC r0, #4, #8 com r0=0xFFFFFFFF -> limpa bits [11:4] -> 0xFFFFF00F (mesmo exemplo de B3.1).
+        ArmCore thumb2Core = newBitFieldCore();
+        thumb2Core.setRegister(0, 0xFFFF_FFFF);
+        runBitField(thumb2Core, plainBinaryHi(0, PLAIN_OP_BFI_BFC, PROGRAM_COUNTER), bitFieldLo(0b001, 0, 0b00, 11));
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_BITFIELD_ARCH);
+        armCore.setRegister(0, 0xFFFF_FFFF);
+        armCore.memory().write32(0, 0xE7CB_021F); // BFC r0, #4, #8
+        armCore.step();
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0xFFFF_F00F, thumb2Core.register(0));
+    }
+
+    @Test
+    void bfiInsertsWithoutTouchingTheRestOfDstMatchesArmClassic() {
+        // BFI r0, r1, #4, #8 com r0=0xFFFFFFFF, r1=0xAB -> insere 0xAB em [11:4], resto intacto
+        // (mesmo exemplo de B3.1).
+        ArmCore thumb2Core = newBitFieldCore();
+        thumb2Core.setRegister(0, 0xFFFF_FFFF);
+        thumb2Core.setRegister(1, 0xAB);
+        runBitField(thumb2Core, plainBinaryHi(0, PLAIN_OP_BFI_BFC, 1), bitFieldLo(0b001, 0, 0b00, 11));
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_BITFIELD_ARCH);
+        armCore.setRegister(0, 0xFFFF_FFFF);
+        armCore.setRegister(1, 0xAB);
+        armCore.memory().write32(0, 0xE7CB_0211); // BFI r0, r1, #4, #8
+        armCore.step();
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0xFFFF_FABF, thumb2Core.register(0));
+    }
+
+    // ── B3.2: gate ausente e G2 ──────────────────────────────────────────────────────────────
+
+    @Test
+    void bitFieldOpsAreUndefinedWithoutBitFieldFeature() {
+        ArmArchitecture noBitField = ArmArchitecture.extending(ArmArchitecture.ARMV6K, "NoBitField",
+                ArmFeature.THUMB2);
+        ArmArchitecture arch = noBitField.withThumb32DecoderExtensions(
+                List.of(new Thumb2DataProcessingDecoder(noBitField)));
+        int[][] encodings = {
+            {plainBinaryHi(0, PLAIN_OP_SBFX, 1), bitFieldLo(0b000, 0, 0b00, 7)},
+            {plainBinaryHi(0, PLAIN_OP_UBFX, 1), bitFieldLo(0b000, 0, 0b00, 7)},
+            {plainBinaryHi(0, PLAIN_OP_BFI_BFC, 1), bitFieldLo(0b001, 0, 0b00, 11)},
+        };
+        for (int[] encoding : encodings) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            memory.put16(0, encoding[0]);
+            memory.put16(2, encoding[1]);
+            DecodedInstruction instruction = new ThumbDecoder(arch).decode(memory, 0);
+            assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind(),
+                    "hi=" + Integer.toHexString(encoding[0]) + " deveria ser UNDEFINED sem BIT_FIELD");
+        }
+    }
+
+    @Test
+    void bitFieldOpsDoNotDecodeUnderArmv6kPlainPreset() {
+        // G2: sem THUMB2 (preset público ARMV6K), o candidato Thumb-2 de 32 bits nem chega a este
+        // decoder — cai no caminho legado de 16 bits, nunca em BIT_FIELD_EXTRACT/INSERT.
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, plainBinaryHi(0, PLAIN_OP_SBFX, 1));
+        memory.put16(2, bitFieldLo(0b000, 0, 0b00, 7));
+        DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV6K).decode(memory, 0);
+        assertNotEquals(InstructionKind.BIT_FIELD_EXTRACT, instruction.kind());
     }
 }

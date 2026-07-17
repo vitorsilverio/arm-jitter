@@ -29,7 +29,8 @@ import java.util.List;
 /// `target/arm/tcg/t32.decode` (ver `Thumb2RegisterDataProcessingDecoder` para a citação completa).
 class Thumb2RegisterDataProcessingDecoderTest {
     private static final ArmArchitecture THUMB2_FEATURES = ArmArchitecture.extending(
-            ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-RegisterDataProcessing", ArmFeature.THUMB2);
+            ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-RegisterDataProcessing", ArmFeature.THUMB2,
+            ArmFeature.BIT_REVERSE); // B3.2: RBIT
     // SSAT/USAT/SSAT16/USAT16 vivem em Thumb2DataProcessingDecoder (top5=0b11110), não em
     // Thumb2RegisterDataProcessingDecoder (0xFA) — as duas extensões plugadas juntas, mesmo
     // padrão do preset público ARMV6K_THUMB2, para que os testes de SSAT/USAT e o bloco misto
@@ -98,6 +99,10 @@ class Thumb2RegisterDataProcessingDecoderTest {
 
     private static int armRevsh(int rd, int rm) {
         return COND_AL | 0x06FF_0FB0 | (rd << 12) | rm;
+    }
+
+    private static int armRbit(int rd, int rm) {
+        return COND_AL | 0x06FF_0F30 | (rd << 12) | rm;
     }
 
     private static int armClz(int rd, int rm) {
@@ -247,6 +252,40 @@ class Thumb2RegisterDataProcessingDecoderTest {
         assertEquals(armCore.register(4), thumb2Core.register(4));
         assertEquals(armCore.register(5), thumb2Core.register(5));
         assertEquals(armCore.register(6), thumb2Core.register(6));
+    }
+
+    @Test
+    void rbitReversesAllThirtyTwoBitsMatchesArmClassic() {
+        // RBIT r0,r1 com r1=0x80000001 -> palíndromo de bits -> 0x80000001 (mesmo vetor de B3.1).
+        ArmCore thumb2Core = newThumb2Core();
+        thumb2Core.setRegister(1, 0x8000_0001);
+        runThumb2(thumb2Core, twoSourceHi(0x9, 1), twoSourceLo(0, 0xA, 1)); // RBIT r0,r1
+
+        // `ArmDecoder` também exige BIT_REVERSE — `ARMV6K` puro não tem essa feature (só chega em
+        // ARMV7A, B3.7) — usa uma arquitetura de teste dedicada, não `newArmCore()`.
+        ArmArchitecture armClassicArch = ArmArchitecture.extending(ArmArchitecture.ARMV6K,
+                "ARM-TestClassic-BitReverse", ArmFeature.BIT_REVERSE);
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), armClassicArch);
+        armCore.setRegister(1, 0x8000_0001);
+        runArm(armCore, armRbit(0, 1));
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0x8000_0001, thumb2Core.register(0));
+    }
+
+    @Test
+    void rbitIsUndefinedWithoutBitReverseFeature() {
+        // BYTE_REVERSE (REV/REV16/REVSH) presente via ARMV6K, mas BIT_REVERSE (RBIT) ausente —
+        // prova que RBIT usa um gate PRÓPRIO, distinto do resto da família REV.
+        ArmArchitecture noBitReverse = ArmArchitecture.extending(ArmArchitecture.ARMV6K, "NoBitReverse",
+                ArmFeature.THUMB2);
+        ArmArchitecture arch = noBitReverse.withThumb32DecoderExtensions(
+                List.of(new Thumb2RegisterDataProcessingDecoder(noBitReverse)));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, twoSourceHi(0x9, 1));
+        memory.put16(2, twoSourceLo(0, 0xA, 1));
+        DecodedInstruction instruction = new ThumbDecoder(arch).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test

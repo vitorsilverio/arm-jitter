@@ -18,9 +18,9 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// para IR (`StandardIrBuilder`) produz exatamente a mesma `DecodedInstruction`/IR que o decoder
 /// ARM produz, então nenhuma semântica nova foi introduzida (G1).
 ///
-/// **RBIT** (`REV`-family, `op4=1010`) e `MLS`/multiplicação (`0xFB`) e exclusivos/`MCR`/`MRC`
-/// Thumb (PR2/PR3 desta mesma task) ficam fora de escopo aqui — o padrão de bits ainda é
-/// reivindicado por {@link #claimsEncodingSpace} (todo o prefixo `0xFA`), então caem em
+/// **RBIT** (`REV`-family, `op4=1010`) foi acrescentado em B3.2, gateado por
+/// {@link ArmFeature#BIT_REVERSE} (ver {@link #decodeRbit}) — o resto do padrão de bits deste
+/// prefixo continua reivindicado por {@link #claimsEncodingSpace} (todo o `0xFA`), então caem em
 /// UNDEFINED controlado em vez de UNIMPLEMENTED silencioso ambíguo (mesmo protocolo de B2.2.2).
 ///
 /// Bits sempre nomeados a partir de `raw` = os dois halfwords combinados (`hi&lt;&lt;16 | lo`),
@@ -235,12 +235,16 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.CLZ,
                     rd, rm, -1, 0, false, false, false);
         }
-        // family=REV: 1000=REV, 1001=REV16, 1010=RBIT (fora de escopo do PR1), 1011=REVSH.
+        // family=REV: 1000=REV, 1001=REV16, 1010=RBIT (B3.2, InstructionKind diferente — ver
+        // decodeRbit), 1011=REVSH.
+        if (op == 0xA) {
+            return decodeRbit(raw, address, condition, rd, rm);
+        }
         int variant = switch (op) {
             case 0x8 -> 0;
             case 0x9 -> 1;
             case 0xB -> 2;
-            default -> -1; // 0xA = RBIT, não implementado nesta PR
+            default -> -1;
         };
         if (variant < 0) {
             return null;
@@ -253,6 +257,22 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
         }
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.BYTE_REVERSE,
                 rd, rm, -1, variant, false, false, false);
+    }
+
+    /// `RBIT` (B3.2) — reversão bit a bit dos 32 bits, `InstructionKind` PRÓPRIO
+    /// ({@link InstructionKind#BIT_REVERSE}), distinto de `REV`/`REV16`/`REVSH`
+    /// ({@link InstructionKind#BYTE_REVERSE}) — mesma distinção que {@link ArmDecoder} já faz para
+    /// o encoding ARM clássico equivalente, gateada pela MESMA feature ({@link ArmFeature#BIT_REVERSE},
+    /// não {@link ArmFeature#BYTE_REVERSE}).
+    private DecodedInstruction decodeRbit(int raw, int address, Condition condition, int rd, int rm) {
+        if (!architecture.has(ArmFeature.BIT_REVERSE)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        if (isRestricted(rd) || isRestricted(rm)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.BIT_REVERSE,
+                rd, rm, -1, 0, false, false, false);
     }
 
     private DecodedInstruction decodeSel(int raw, int address, Condition condition, int rn, int rd, int rm) {
