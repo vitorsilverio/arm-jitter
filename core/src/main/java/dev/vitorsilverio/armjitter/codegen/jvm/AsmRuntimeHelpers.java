@@ -265,20 +265,20 @@ public final class AsmRuntimeHelpers {
 
     // ── branches ───────────────────────────────────────────────────────────────
 
-    /// Sets thumb mode from bit 0 of target and updates PC (ARMv4T BX semantics).
+    /// Seta o modo Thumb a partir do bit 0 do alvo e atualiza o PC (semântica de BX no ARMv4T).
     public static void branchExchange(ArmCore core, int target) {
         core.cpsr().setThumbMode((target & 1) != 0);
         core.setProgramCounter(target & ~1);
     }
 
-    /// Loads a value into PC, aligning to 4 bytes in ARM mode or 2 in THUMB (ARMv4T — no interworking).
+    /// Carrega um valor no PC, alinhando a 4 bytes em modo ARM ou 2 em THUMB (ARMv4T — sem interworking).
     public static void loadToPcArm4(ArmCore core, int value) {
         int mask = core.cpsr().isThumbMode() ? ~1 : ~3;
         core.setProgramCounter(value & mask);
     }
 
-    /// Loads a value into PC WITH interworking (ARMv5T+): bit 0 selects THUMB/ARM state.
-    /// Used by LDR/LDM/POP to PC on ARMv5; data-processing to PC still uses {@link #loadToPcArm4}.
+    /// Carrega um valor no PC COM interworking (ARMv5T+): o bit 0 seleciona o estado THUMB/ARM.
+    /// Usado por LDR/LDM/POP para PC no ARMv5; data-processing para PC ainda usa {@link #loadToPcArm4}.
     public static void loadToPcArm5(ArmCore core, int value) {
         core.cpsr().setThumbMode((value & 1) != 0);
         core.setProgramCounter(value & ~1);
@@ -792,7 +792,7 @@ public final class AsmRuntimeHelpers {
 
     // ── SWI ────────────────────────────────────────────────────────────────────
 
-    /// Dispatches a software interrupt. Always returns {@code true} (PC always changes).
+    /// Despacha uma interrupção de software. Sempre devolve {@code true} (o PC sempre muda).
     public static boolean executeSwi(ArmCore core, int immediate, int sequentialPc) {
         core.setProgramCounter(sequentialPc);
         if (core.swiDispatcher().canDispatch(immediate)) {

@@ -51,7 +51,12 @@ lote, incluí-lo no lote corrente e registrar.
   demais arquivos dos 3 pacotes já estavam 100% em português. `mvn -o test` (raiz) verde
   614 core + 13 truffle; `javadoc:javadoc` sem erros; diff conferido linha a linha — só
   comentários tocados.
-- [ ] **Lote 2** — `core/src/main`: pacotes `codegen/` (todos os sub), `jit/`, `debug/`, `core/`, `memory/`, `arch/`, `coprocessor/`, `swi/`
+- [x] **Lote 2** — `core/src/main`: pacotes `codegen/` (todos os sub), `jit/`, `debug/`, `core/`, `memory/`, `arch/`, `coprocessor/`, `swi/` (2026-07-16) — 11 arquivos
+  tocados (`AsmCodeEmitter`, `IrAluExecutor`, `IrBranchExecutor`, `IrExecutionSupport`, `IrMemoryExecutor`,
+  `AsmBlockCompiler`, `AsmNativePolicy`, `AsmRuntimeHelpers`, `Condition`, `GdbServer`, `JitRuntime`);
+  demais arquivos dos 8 pacotes (`arch/`, `coprocessor/`, `memory/`, `swi/`, `jit/BlockCache` etc.) já
+  estavam 100% em português. `mvn -o test` (raiz, JBR 25) verde; `javadoc:javadoc` sem erros; diff
+  conferido linha a linha — só comentários tocados.
 - [ ] **Lote 3** — `core/src/test` inteiro
 - [ ] **Lote 4** — `truffle/` (main + test) + varredura final do grep devolvendo vazio
 

@@ -34,9 +34,10 @@ final class IrExecutionSupport {
     }
 
     int registerValue(ArmCore core, int register, int valueOverride) {
-        // -1 is the "no override" sentinel; a real PC override (address+8/12) is always word/half
-        // aligned and so can never be -1. Comparing against -1 (not >= 0) is essential for high
-        // addresses such as the ARM9 BIOS at 0xFFFF0000+, whose overrides are negative as ints.
+        // -1 é o sentinela de "sem override"; um override de PC real (address+8/12) é sempre
+        // alinhado a word/half e por isso nunca pode ser -1. Comparar contra -1 (não >= 0) é
+        // essencial para endereços altos como a BIOS do ARM9 em 0xFFFF0000+, cujos overrides são
+        // negativos como int.
         return valueOverride != -1 ? valueOverride : core.register(register);
     }
 
@@ -259,8 +260,8 @@ final class IrExecutionSupport {
         if (!emptyRegisterList) {
             return mask;
         }
-        // ARM7TDMI transfers R15 for an empty list; ARMv5 transfers nothing (just the ±0x40 base
-        // writeback, which still uses the count of 16).
+        // ARM7TDMI transfere R15 para lista vazia; ARMv5 não transfere nada (só o writeback de
+        // base ±0x40, que ainda usa a contagem de 16).
         return architecture.has(ArmFeature.EMPTY_RLIST_NO_TRANSFER) ? 0 : (1 << 15);
     }
 
@@ -274,10 +275,10 @@ final class IrExecutionSupport {
         }
         if (load && (mask & (1 << baseRegister)) != 0) {
             if (!architecture.has(ArmFeature.LDM_WRITEBACK_BASE_IN_LIST)) {
-                return false; // ARMv4: a base in the list always keeps the loaded value
+                return false; // ARMv4: a base na lista sempre fica com o valor carregado
             }
-            // ARMv5: writeback still happens unless the base is the highest register of a
-            // multi-register transfer, in which case the loaded value wins.
+            // ARMv5: o writeback ainda acontece, exceto quando a base é o registrador mais alto
+            // de uma transferência com múltiplos registradores — nesse caso vence o valor carregado.
             boolean baseIsHighest = (mask >>> baseRegister) == 1;
             boolean multiple = Integer.bitCount(mask) > 1;
             return !(baseIsHighest && multiple);
@@ -294,8 +295,8 @@ final class IrExecutionSupport {
         if (transfer.userMode()) {
             return core.bankedRegister(CpuMode.USER, register);
         }
-        // ARM7TDMI quirk: STM of the base register, when it is not the first in the list, stores
-        // the already-incremented (writeback) value. ARMv5 always stores the original base.
+        // Quirk do ARM7TDMI: STM do registrador base, quando ele não é o primeiro da lista,
+        // armazena o valor já incrementado (writeback). ARMv5 sempre armazena a base original.
         if (!architecture.has(ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL)
                 && transfer.writeback()
                 && register == transfer.base()

@@ -208,7 +208,7 @@ public final class GdbServer {
         for (int i = 0; i < 16 && (i + 1) * 8 <= hex.length(); i++) {
             cpu.setRegister(i, parseWordLe(hex, i * 8));
         }
-        int cpsrOffset = (16 + 8 * 3 + 1) * 8; // after r0-15, f0-7 (3 words each), fps
+        int cpsrOffset = (16 + 8 * 3 + 1) * 8; // após r0-15, f0-7 (3 words cada), fps
         if (cpsrOffset + 8 <= hex.length()) {
             cpu.setCpsr(parseWordLe(hex, cpsrOffset));
         }
@@ -273,10 +273,10 @@ public final class GdbServer {
         int address = (int) Long.parseLong(parts[1], 16);
         int length = parts.length > 2 ? Integer.parseInt(parts[2], 16) : 1;
         switch (type) {
-            case 0, 1 -> breakpoints.add(address);          // sw/hw PC breakpoint
-            case 2 -> watchpoints.add(new Watchpoint(address, length, readRegion(address, length))); // write
+            case 0, 1 -> breakpoints.add(address);          // breakpoint de PC sw/hw
+            case 2 -> watchpoints.add(new Watchpoint(address, length, readRegion(address, length))); // escrita
             default -> {
-                return ""; // read/access watchpoints not supported
+                return ""; // watchpoints de leitura/acesso não suportados
             }
         }
         return "OK";
@@ -331,7 +331,7 @@ public final class GdbServer {
             if (c == -1) {
                 return null;
             }
-        } while (c != '$'); // skip acks/junk until packet start
+        } while (c != '$'); // pula acks/lixo até o início do pacote
         StringBuilder sb = new StringBuilder();
         int checksum = 0;
         while ((c = in.read()) != '#') {
@@ -360,7 +360,7 @@ public final class GdbServer {
         String message = "$" + data + "#" + hex2(checksum);
         out.write(message.getBytes(StandardCharsets.US_ASCII));
         out.flush();
-        // The ack ('+') from the client is consumed by the next readPacket().
+        // O ack ('+') do cliente é consumido pela próxima chamada de readPacket().
     }
 
     private static int digit(int c) {

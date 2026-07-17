@@ -30,7 +30,7 @@ public final class IrBranchExecutor {
         }
         int target = support.registerValue(core, branch.sourceRegister(), branch.sourceValueOverride());
         if (branch.link()) {
-            core.setRegister(14, branch.returnAddress()); // BLX: capture return before exchanging
+            core.setRegister(14, branch.returnAddress()); // BLX: captura o retorno antes de trocar de estado
         }
         core.cpsr().setThumbMode((target & 1) != 0);
         core.setProgramCounter(target & ~1);
@@ -53,8 +53,8 @@ public final class IrBranchExecutor {
         core.setRegister(14, (suffix.address() + 2) | 1);
         int target = oldLink + suffix.lowOffset();
         if (suffix.exchange()) {
-            core.cpsr().setThumbMode(false);   // BLX: back to ARM state
-            core.setProgramCounter(target & ~3); // and word-align the destination
+            core.cpsr().setThumbMode(false);   // BLX: volta ao estado ARM
+            core.setProgramCounter(target & ~3); // e alinha o destino à palavra
         } else {
             core.setProgramCounter(target);
         }

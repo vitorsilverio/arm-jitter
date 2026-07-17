@@ -35,10 +35,10 @@ public final class AsmCodeEmitter implements CodeEmitter {
 
     private final InterpretedCodeEmitter fallback;
     private final JvmBlockLoader loader;
-    // Per-thread compiler: an AsmBlockCompiler holds per-compilation mutable state (the register
-    // cache) so it is NOT thread-safe, but the JIT compiles on a POOL of background threads — each
-    // gets its own instance here while the loader + blockSequence (unique class names) are shared and
-    // thread-safe. See JitRuntime's compile executor.
+    // Compilador por thread: um AsmBlockCompiler guarda estado mutável por compilação (o cache
+    // de registradores), então NÃO é thread-safe, mas o JIT compila num POOL de threads de
+    // background — cada uma ganha sua própria instância aqui, enquanto o loader + blockSequence
+    // (nomes de classe únicos) são compartilhados e thread-safe. Ver o executor de compilação do JitRuntime.
     private final ThreadLocal<AsmBlockCompiler> compiler;
     private final AtomicInteger blockSequence;
     private final AsmFallbackPolicy policy;
@@ -74,11 +74,12 @@ public final class AsmCodeEmitter implements CodeEmitter {
         this.loader = new JvmBlockLoader();
         boolean interworks = architecture.has(ArmFeature.LOAD_PC_INTERWORKING);
         boolean unalignedAccess = architecture.has(ArmFeature.UNALIGNED_ACCESS);
-        // Bind THIS architecture's interpreter to the PER_OP fallback (registered per-op in
-        // IrOpInterop). Two runtimes of different architectures (NDS ARM9 ARMv5TE + ARM7 ARMv4T) then
-        // never share one executor — previously a static singleton, so whichever emitter was built
-        // last won and the ARM9's ARMv5 fallback ops (BLX/CLZ/DSP/sat/LDRD) silently ran with ARMv4T
-        // semantics once a block compiled in the background (warm-cache-only, non-deterministic corruption).
+        // Vincula o interpretador DESTA arquitetura ao fallback PER_OP (registrado por op em
+        // IrOpInterop). Dois runtimes de arquiteturas diferentes (NDS ARM9 ARMv5TE + ARM7 ARMv4T) nunca
+        // compartilham um executor então — antes era um singleton estático, então o último emissor
+        // construído vencia e as ops de fallback ARMv5 do ARM9 (BLX/CLZ/DSP/sat/LDRD) rodavam
+        // silenciosamente com semântica ARMv4T assim que um bloco compilava em background (corrupção
+        // não-determinística, só com cache quente).
         IrBlockExecutor perOpExecutor = new IrBlockExecutor(architecture);
         this.compiler = ThreadLocal.withInitial(
                 () -> new AsmBlockCompiler(interworks, unalignedAccess, perOpExecutor));
@@ -105,7 +106,7 @@ public final class AsmCodeEmitter implements CodeEmitter {
             IrOptimizer optimizer) {
         this.fallback = fallback;
         this.loader = loader;
-        // Test path: a specific compiler instance is supplied and reused (tests emit single-threaded).
+        // Caminho de teste: uma instância específica de compilador é fornecida e reusada (testes emitem single-threaded).
         this.compiler = ThreadLocal.withInitial(() -> compiler);
         this.blockSequence = blockSequence;
         this.policy = policy;

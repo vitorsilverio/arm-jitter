@@ -75,9 +75,9 @@ public final class AsmNativePolicy {
             case IrOp.LoadLiteral ignored -> true;
             case IrOp.MultipleTransfer ignored -> true;
             case IrOp.Branch ignored -> true;
-            case IrOp.BranchExchange b -> !b.link(); // BLX -> interpret
+            case IrOp.BranchExchange b -> !b.link(); // BLX -> interpretado
             case IrOp.ThumbBlPrefix ignored -> true;
-            case IrOp.ThumbBlSuffix s -> !s.exchange(); // BLX -> interpret
+            case IrOp.ThumbBlSuffix s -> !s.exchange(); // BLX -> interpretado
             case IrOp.Push ignored -> true;
             case IrOp.Pop ignored -> true;
             case IrOp.PsrTransfer ignored -> true;
@@ -113,7 +113,7 @@ public final class AsmNativePolicy {
         // Task C2: flags lógicos com carry-out do shifter (src2 shifted-register com S) e os
         // shifts com S agora são NATIVOS — helpers shiftedOperandCarry/doXxxS espelham o
         // interpretador. Exceções restantes:
-        // dst=15 + setFlags: restores CPSR from SPSR, defer to interpreted.
+        // dst=15 + setFlags: restaura CPSR a partir do SPSR, delega ao interpretado.
         // ORN (Thumb-2, B2.2): opcode novo, sem case no emissor ASM ainda — interpretado até uma
         // task futura de B2, mesmo padrão de B1.2-B1.5 até B1.6.
         return (alu.dst() != 15 || !alu.setFlags()) && alu.opcode() != IrOpCode.ORN;

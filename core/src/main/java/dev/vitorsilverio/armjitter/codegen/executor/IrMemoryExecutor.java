@@ -125,7 +125,7 @@ public final class IrMemoryExecutor {
         core.clearExclusiveMonitor();
     }
 
-    /// LDRD/STRD: two consecutive 32-bit accesses to `first` and `second` sharing one address.
+    /// LDRD/STRD: dois acessos consecutivos de 32 bits a `first` e `second`, compartilhando um endereço.
     /// @return {@code true} quando o PC foi alterado pela operação
     public boolean executeDoubleTransfer(ArmCore core, IrOp.DoubleTransfer dt) {
         if (!core.cpsr().evalCond(dt.condition())) {
@@ -144,7 +144,7 @@ public final class IrMemoryExecutor {
             support.write32Arm7(core, address, core.register(dt.first()));
             support.write32Arm7(core, address + 4, core.register(second));
         }
-        // Writeback (skip when a load would clobber the base it still needs — UNPREDICTABLE).
+        // Writeback (pula quando um load sobrescreveria a base que ele ainda precisa — UNPREDICTABLE).
         if (dt.writeback() && (!dt.load() || (dt.base() != dt.first() && dt.base() != second))) {
             core.setRegister(dt.base(), base + offset);
         }

@@ -2,34 +2,34 @@ package dev.vitorsilverio.armjitter.core;
 
 /// Condicoes ARM avaliadas contra os flags NZCV do CPSR.
 public enum Condition {
-    /// Equal: Z setado.
+    /// Igual: Z setado.
     EQ,
-    /// Not equal: Z limpo.
+    /// Diferente: Z limpo.
     NE,
-    /// Carry set.
+    /// Carry setado.
     CS,
-    /// Carry clear.
+    /// Carry limpo.
     CC,
-    /// Minus/negative.
+    /// Negativo.
     MI,
-    /// Plus/non-negative.
+    /// Positivo/não-negativo.
     PL,
-    /// Overflow set.
+    /// Overflow setado.
     VS,
-    /// Overflow clear.
+    /// Overflow limpo.
     VC,
-    /// Unsigned higher.
+    /// Maior, sem sinal.
     HI,
-    /// Unsigned lower or same.
+    /// Menor ou igual, sem sinal.
     LS,
-    /// Signed greater or equal.
+    /// Maior ou igual, com sinal.
     GE,
-    /// Signed less than.
+    /// Menor que, com sinal.
     LT,
-    /// Signed greater than.
+    /// Maior que, com sinal.
     GT,
-    /// Signed less or equal.
+    /// Menor ou igual, com sinal.
     LE,
-    /// Always.
+    /// Sempre.
     AL
 }

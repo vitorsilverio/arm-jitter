@@ -73,7 +73,7 @@ public final class AsmBlockCompiler {
     /// r0..r14 são cacheáveis; r15 (o PC) nunca é — só é materializado por helpers/fixup.
     private static final int CACHEABLE_REGISTERS = 15;
 
-    // Descriptors for helpers that share the same signature
+    // Descritores para helpers que compartilham a mesma assinatura
     private static final String CORE_I_TO_I = "(" + CORE_REF + "I)I";
     private static final String CORE_II_TO_V = "(" + CORE_REF + "II)V";
     private static final String CORE_I_TO_V = "(" + CORE_REF + "I)V";
@@ -1481,10 +1481,10 @@ public final class AsmBlockCompiler {
     }
 
     private void emitLongMultiply(MethodVisitor method, IrOp.LongMultiply mul) {
-        // Load rm as long
+        // Carrega rm como long
         emitSrc1(method, mul.rm(), mul.rmValueOverride());
         emitAsLong(method, mul.signed());
-        // Load rs as long
+        // Carrega rs como long
         emitSrc1(method, mul.rs(), mul.rsValueOverride());
         emitAsLong(method, mul.signed());
         method.visitInsn(Opcodes.LMUL);
@@ -1910,7 +1910,7 @@ public final class AsmBlockCompiler {
         }
     }
 
-    /// Emits bytecode that pops a boolean result and sets PC_CHANGED_LOCAL to 1 if true.
+    /// Emite bytecode que desempilha um resultado booleano e seta PC_CHANGED_LOCAL para 1 se verdadeiro.
     private void emitConditionalSetPcChanged(MethodVisitor method) {
         Label skip = new Label();
         method.visitJumpInsn(Opcodes.IFEQ, skip);
@@ -1919,17 +1919,14 @@ public final class AsmBlockCompiler {
         method.visitLabel(skip);
     }
 
-    /// Emits bytecode to load the CPSR carry flag as int (0 or 1) onto the stack.
+    /// Emite bytecode que carrega o flag de carry do CPSR como int (0 ou 1) na pilha.
     private void emitCpsrCarryAsInt(MethodVisitor method) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.invokeVirtual(method, GuestToHostMapper.cpsr());
         AsmBytecode.invokeVirtual(method, GuestToHostMapper.cpsrCarry());
-        // carry() returns Z (boolean), which is int 0/1 in bytecode — no conversion needed
+        // carry() devolve Z (boolean), que já é int 0/1 em bytecode — sem conversão necessária
     }
 
-    /// Emits bytecode to push the logic carry-out for a src2 operand:
-    /// - Immediate with known carry: compile-time constant
-    /// - Immediate without known carry / Register: runtime cpsr().carry()
     /// Empilha o carry (0/1) que os flags LÓGICOS devem receber para o operando `src2`:
     /// imediato com carry conhecido = constante; shifted-register = carry-out do barrel shifter
     /// (task C2 — deve ser emitido ANTES da escrita em dst, pois relê os registradores do shift);
@@ -1945,7 +1942,7 @@ public final class AsmBlockCompiler {
         }
     }
 
-    /// Converts the int on top of stack to a long. Uses I2L (signed) or Integer.toUnsignedLong (unsigned).
+    /// Converte o int no topo da pilha para long. Usa I2L (com sinal) ou Integer.toUnsignedLong (sem sinal).
     private void emitAsLong(MethodVisitor method, boolean signed) {
         if (signed) {
             method.visitInsn(Opcodes.I2L);

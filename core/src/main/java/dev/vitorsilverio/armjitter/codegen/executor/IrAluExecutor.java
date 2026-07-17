@@ -250,8 +250,8 @@ public final class IrAluExecutor {
         }
     }
 
-    /// ARMv5TE saturating add/subtract (QADD/QSUB/QDADD/QDSUB), all clamped to signed 32 bits and
-    /// setting the sticky Q flag on any saturation.
+    /// Soma/subtração saturada ARMv5TE (QADD/QSUB/QDADD/QDSUB), sempre clampada para 32 bits com
+    /// sinal, setando o flag Q sticky em qualquer saturação.
     public void executeSaturating(ArmCore core, IrOp.Saturating op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
@@ -271,8 +271,8 @@ public final class IrAluExecutor {
         }
     }
 
-    /// ARMv5TE DSP multiplies: signed 16x16 (and 32x16 word) products with optional accumulate.
-    /// SMLA/SMLAW set the sticky Q flag if the accumulate overflows; SMUL/SMULW/SMLAL do not.
+    /// Multiplicações DSP ARMv5TE: produtos 16x16 (e 32x16 word) com sinal, com acumulador
+    /// opcional. SMLA/SMLAW setam o flag Q sticky se o acumulador estourar; SMUL/SMULW/SMLAL não.
     public void executeDspMultiply(ArmCore core, IrOp.DspMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
@@ -288,7 +288,7 @@ public final class IrAluExecutor {
                     core.cpsr().setSaturation(true);
                 }
             }
-            case 1 -> { // SMLAWy (x=0) / SMULWy (x=1): (Rm * Rs.y) >> 16, optionally + Rn
+            case 1 -> { // SMLAWy (x=0) / SMULWy (x=1): (Rm * Rs.y) >> 16, opcionalmente + Rn
                 int product = (int) (((long) rm * rsHalf) >> 16);
                 if (op.x() == 0) {
                     long sum = (long) product + core.register(op.rn());
@@ -300,14 +300,14 @@ public final class IrAluExecutor {
                     core.setRegister(op.dst(), product);
                 }
             }
-            case 2 -> { // SMLALxy: {RdHi:RdLo} += Rm.x * Rs.y (64-bit, no Q)
+            case 2 -> { // SMLALxy: {RdHi:RdLo} += Rm.x * Rs.y (64 bits, sem Q)
                 long acc = ((long) core.register(op.dst()) << 32)
                         | (core.register(op.rn()) & 0xFFFF_FFFFL);
                 acc += (long) half(rm, op.x()) * rsHalf;
                 core.setRegister(op.rn(), (int) acc);          // RdLo
                 core.setRegister(op.dst(), (int) (acc >>> 32)); // RdHi
             }
-            default -> // SMULxy: Rm.x * Rs.y (no accumulate, no Q)
+            default -> // SMULxy: Rm.x * Rs.y (sem acumulador, sem Q)
                     core.setRegister(op.dst(), half(rm, op.x()) * rsHalf);
         }
     }
@@ -474,7 +474,7 @@ public final class IrAluExecutor {
         return wide >= 0;
     }
 
-    /// Sign-extended 16-bit half of a register: low half when `sel`==0, high half when 1.
+    /// Metade de 16 bits de um registrador, com extensão de sinal: metade baixa quando `sel`==0, alta quando 1.
     private static int half(int value, int sel) {
         return sel == 0 ? (short) value : (short) (value >> 16);
     }

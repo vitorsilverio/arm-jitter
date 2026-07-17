@@ -348,9 +348,9 @@ public final class JitRuntime {
                 });
     }
 
-    /// Background-compile threads per runtime: a few, capped, so a scene-change block backlog drains
-    /// in parallel without oversubscribing (there are two runtimes — ARM9/ARM7 — plus the emu and
-    /// render threads; the pools idle between bursts and run at MIN_PRIORITY).
+    /// Threads de compilação em background por runtime: poucas, com teto, para que um backlog de
+    /// blocos de troca de cena drene em paralelo sem sobrecarregar (há dois runtimes — ARM9/ARM7 —
+    /// mais as threads de emu e render; os pools ficam ociosos entre rajadas e rodam em MIN_PRIORITY).
     private static int compileThreadCount() {
         return Math.max(1, Math.min(3, Runtime.getRuntime().availableProcessors() - 1));
     }
