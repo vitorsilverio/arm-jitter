@@ -132,15 +132,20 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.secondSourceRegister(),
                         instruction.condition()));
             }
+            // `instruction.immediate()` carrega o offset (`imm8×4`) só no `LDREX`/`STREX` word de
+            // 32 bits Thumb-2 (B2.7 PR3, `Thumb2LoadStoreDecoder`) — o `ArmDecoder` clássico e as
+            // formas B/H/D (ARM ou Thumb-2) sempre passam `immediate=0` aqui.
             case LOAD_EXCLUSIVE -> block.add(new IrOp.LoadExclusive(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
+                    instruction.immediate(),
                     instruction.accessSizeBytes(),
                     instruction.condition()));
             case STORE_EXCLUSIVE -> block.add(new IrOp.StoreExclusive(
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.sourceRegister(),
+                    instruction.immediate(),
                     instruction.accessSizeBytes(),
                     instruction.condition()));
             case CLEAR_EXCLUSIVE -> block.add(new IrOp.ClearExclusive(instruction.condition()));

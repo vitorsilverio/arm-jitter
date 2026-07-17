@@ -68,13 +68,15 @@ public final class IrMemoryExecutor {
         }
     }
 
-    /// `LDREX{,B,H,D}`: lê a memória e marca o monitor de exclusividade do core com o
-    /// endereço (sem sinal, em `long` — §5 da RFC IR-64) e o tamanho do acesso.
+    /// `LDREX{,B,H,D}`: lê a memória em `base+offset` e marca o monitor de exclusividade do core
+    /// com o endereço (sem sinal, em `long` — §5 da RFC IR-64) e o tamanho do acesso. `offset` só
+    /// é não-nulo para o `LDREX` word de 32 bits Thumb-2 (B2.7 PR3) — ver
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.LoadExclusive#offset}.
     public void executeLoadExclusive(ArmCore core, IrOp.LoadExclusive load) {
         if (!core.cpsr().evalCond(load.condition())) {
             return;
         }
-        int address = core.register(load.base());
+        int address = core.register(load.base()) + load.offset();
         core.markExclusive(Integer.toUnsignedLong(address), load.sizeBytes());
         switch (load.sizeBytes()) {
             case 1 -> core.setRegister(load.dst(), support.read8Arm7(core, address));
@@ -96,7 +98,7 @@ public final class IrMemoryExecutor {
         if (!core.cpsr().evalCond(store.condition())) {
             return;
         }
-        int address = core.register(store.base());
+        int address = core.register(store.base()) + store.offset();
         if (!core.exclusiveMonitorCovers(Integer.toUnsignedLong(address), store.sizeBytes())) {
             core.setRegister(store.dst(), 1);
             return;

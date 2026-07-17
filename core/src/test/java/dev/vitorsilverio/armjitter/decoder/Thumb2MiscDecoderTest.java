@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,6 +56,30 @@ class Thumb2MiscDecoderTest {
 
     private static int msrLo(int fieldMask) {
         return 0x8000 | (fieldMask << 8);
+    }
+
+    // ── CLREX de 32 bits (B2.7 PR3) — encoding fixo, mesmo hi/top-byte das barreiras ────────
+
+    private static final int CLREX_LO = 0x8F2F;
+
+    // ── CPS de 32 bits (B2.7 PR3) — mesmo hi de HINTS_HI, imod/M != 0 ───────────────────────
+
+    private static int cpsLo(int imod, boolean modeChange, boolean a, boolean i, boolean f, int mode) {
+        return 0x8000 | (imod << 9) | ((modeChange ? 1 : 0) << 8)
+                | ((a ? 1 : 0) << 7) | ((i ? 1 : 0) << 6) | ((f ? 1 : 0) << 5) | (mode & 0x1F);
+    }
+
+    /// `CPS{IE,ID} <iflags>{,#<mode>}` ARM clássico (cond=1111, forçado AL) — MESMO layout de
+    /// `ArmV6SystemInstructionsTest#cps`, usado aqui só para o "ida-e-volta" contra a forma
+    /// Thumb-2.
+    private static int armCps(int imod, boolean modeChange, boolean a, boolean i, boolean f, int mode) {
+        return 0xF100_0000
+                | (imod << 18)
+                | (modeChange ? 1 << 17 : 0)
+                | (a ? 1 << 8 : 0)
+                | (i ? 1 << 7 : 0)
+                | (f ? 1 << 6 : 0)
+                | (mode & 0x1F);
     }
 
     // ── Encoding de 16 bits (hint space, ver ThumbDecoder) ──────────────────────────────────
@@ -181,6 +206,84 @@ class Thumb2MiscDecoderTest {
         memory.put16(0, MISC_CONTROL_HI);
         memory.put16(2, barrierLo(0x5, 0xF));
         DecodedInstruction instruction = new ThumbDecoder(withoutBarriers).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    // ── CLREX de 32 bits: abre o monitor, mesmo efeito que o ARM clássico ──────────────────
+
+    @Test
+    void clrex32BitFormOpensTheMonitorSoStrexFailsAfterward() {
+        ArmCore core = newCore(THUMB2_ARCH); // ARMV6K -> EXCLUSIVE_SIZED herdado
+        core.setRegister(0, 0x40);
+        core.setRegister(2, 0xCAFEBABE);
+        core.memory().write32(0x40, 0x11111111);
+        // LDREX r1,[r0] no espaço de Thumb2LoadStoreDecoder não está plugado aqui (esta classe
+        // testa só Thumb2MiscDecoder), então marca o monitor direto via ArmCore para isolar o
+        // efeito do CLREX.
+        core.markExclusive(0x40L, 4);
+        run32(core, MISC_CONTROL_HI, CLREX_LO);
+        assertFalse(core.exclusiveMonitorCovers(0x40L, 4), "CLREX.W deve abrir o monitor");
+    }
+
+    @Test
+    void clrex32BitFormIsUndefinedWithoutExclusiveSizedFeature() {
+        ArmArchitecture withoutExclusive = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV5TE, "NoExclusiveSized", ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS)
+                .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV5TE, "NoExclusiveSized-Inner",
+                                ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, MISC_CONTROL_HI);
+        memory.put16(2, CLREX_LO);
+        DecodedInstruction instruction = new ThumbDecoder(withoutExclusive).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    // ── CPS de 32 bits: ida-e-volta comparado com o ARM clássico ────────────────────────────
+
+    @Test
+    void cpsThumb2ChangingIandFMatchesArmClassic() {
+        ArmCore thumb2Core = newCore(THUMB2_ARCH);
+        thumb2Core.cpsr().setMode(CpuMode.SYSTEM);
+        run32(thumb2Core, HINTS_HI, cpsLo(0b11 /* imod=11 -> ID (disable) */, false, false, true, true, 0));
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        armCore.cpsr().setMode(CpuMode.SYSTEM);
+        armCore.memory().write32(0, armCps(0b11, false, false, true, true, 0)); // CPSID if
+        armCore.step();
+
+        assertEquals(armCore.cpsr().get() & ~CpsrRegister.THUMB_FLAG,
+                thumb2Core.cpsr().get() & ~CpsrRegister.THUMB_FLAG);
+        assertTrue(thumb2Core.cpsr().irqDisabled());
+        assertTrue(thumb2Core.cpsr().fiqDisabled());
+    }
+
+    @Test
+    void cpsThumb2ChangingModeMatchesArmClassic() {
+        ArmCore thumb2Core = newCore(THUMB2_ARCH);
+        thumb2Core.cpsr().setMode(CpuMode.SYSTEM);
+        run32(thumb2Core, HINTS_HI, cpsLo(0, true, false, false, false, CpuMode.IRQ.bits()));
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        armCore.cpsr().setMode(CpuMode.SYSTEM);
+        armCore.memory().write32(0, armCps(0, true, false, false, false, CpuMode.IRQ.bits())); // CPS #IRQ
+        armCore.step();
+
+        assertEquals(armCore.cpsr().mode(), thumb2Core.cpsr().mode());
+        assertEquals(CpuMode.IRQ, thumb2Core.cpsr().mode());
+    }
+
+    @Test
+    void cps32BitFormIsUndefinedWithoutModeChangeInstructionsFeature() {
+        ArmArchitecture withoutModeChange = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV5TE, "NoModeChange", ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS)
+                .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV5TE, "NoModeChange-Inner",
+                                ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HINTS_HI);
+        memory.put16(2, cpsLo(0b10, false, false, true, true, 0));
+        DecodedInstruction instruction = new ThumbDecoder(withoutModeChange).decode(memory, 0);
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 

@@ -1380,9 +1380,14 @@ public final class AsmBlockCompiler {
 
     /// LDREX{,B,H}: helper por-valor marca o monitor e lê. LDREXD (sizeBytes=8) não cabe no
     /// helper (dois registradores de destino) — emite `markExclusive` + dois `loadWord` inline,
-    /// espelhando `IrMemoryExecutor.executeLoadExclusive`.
+    /// espelhando `IrMemoryExecutor.executeLoadExclusive`. `offset` só é não-nulo para o `LDREX`
+    /// word de 32 bits Thumb-2 (B2.7 PR3).
     private void emitLoadExclusive(MethodVisitor method, IrOp.LoadExclusive load) {
         emitReadRegister(method, load.base());
+        if (load.offset() != 0) {
+            AsmBytecode.visitIntConst(method, load.offset());
+            method.visitInsn(Opcodes.IADD);
+        }
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
         if (load.sizeBytes() == 8) {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -1409,9 +1414,14 @@ public final class AsmBlockCompiler {
     }
 
     /// STREX{,B,H,D}: checa o monitor ANTES de qualquer escrita (mesma ordem do interpretador) —
-    /// falha não toca a memória. Sucesso escreve, zera `dst` e consome o monitor.
+    /// falha não toca a memória. Sucesso escreve, zera `dst` e consome o monitor. `offset` só é
+    /// não-nulo para o `STREX` word de 32 bits Thumb-2 (B2.7 PR3).
     private void emitStoreExclusive(MethodVisitor method, IrOp.StoreExclusive store) {
         emitReadRegister(method, store.base());
+        if (store.offset() != 0) {
+            AsmBytecode.visitIntConst(method, store.offset());
+            method.visitInsn(Opcodes.IADD);
+        }
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);

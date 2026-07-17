@@ -23,10 +23,17 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// <p><b>Fora de escopo desta task</b> (deliberado): `LDRT`/`STRT`/`LDRBT`/`STRBT`/`LDRHT`/`STRHT`/
 /// `LDRSBT`/`LDRSHT` (acesso "unprivileged" — mesmo espaço de bits do T4, mas semântica de troca de
 /// nível de privilégio irrelevante para GBA/NDS user-mode, nunca gerada por SDKs típicos);
-/// `TBB`/`TBH` (mesmo prefixo de 7 bits desta classe para `LDRD`/`STRD`, mas são branches — ficam em
-/// B2.4, ver `b2.3-thumb2-loadstore.md`); `LDREX`/`STREX`/`CLREX` de 32 bits Thumb-2 (não pedidos no
-/// Objetivo desta task — só o ARM clássico de B1.4 está implementado). Todos caem no UNDEFINED
-/// controlado do {@link ThumbDecoder} (`null` devolvido aqui).
+/// `TBB`/`TBH` (mesmo prefixo de 7 bits desta classe para `LDRD`/`STRD`/`LDREX`/`STREX`, mas são
+/// branches — ficam em B2.4, ver `b2.3-thumb2-loadstore.md`); as formas load-acquire/store-release
+/// ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, mesmo espaço de bits de `LDREX*`/`STREX*` — fora do
+/// escopo, ARM clássico também não as implementa). Todos caem no UNDEFINED controlado do
+/// {@link ThumbDecoder} (`null` devolvido aqui).
+///
+/// <p><b>B2.7 PR3</b>: `LDREX`/`STREX`/`LDREXB/H/D`/`STREXB/H/D` de 32 bits, antes fora de escopo
+/// (ver nota histórica removida acima), agora decodificados — ver
+/// {@link #decodeExclusiveWordOrSized}. `CLREX`/`CPS.W` de 32 bits ficam em
+/// {@link Thumb2MiscDecoder} (mesmo espaço "Miscellaneous control"/"Hints, and CPS" onde já vivem
+/// `DMB`/`DSB`/`ISB`/`MRS`/`MSR`, não este).
 public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -260,10 +267,11 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         boolean w = ((raw >>> W_BIT) & 1) != 0;
         boolean ldrdMarker = ((raw >>> LDRD_MARKER_BIT) & 1) != 0;
         if (ldrdMarker) {
-            // (P=0,W=0) não aparece na tabela de LDRD/STRD (esse ponto do espaço de bits pertence
-            // a LDREX/STREX/TBB/TBH, fora do escopo desta classe — ver javadoc).
+            // (P=0,W=0) não aparece na tabela de LDRD/STRD — esse ponto do espaço de bits
+            // pertence a LDREX/STREX/TBB/TBH (B2.7 PR3, ver decodeExclusiveWordOrSized; TBB/TBH
+            // ficam fora daqui, já tratados por Thumb2BranchDecoder desde B2.4).
             if (!p && !w) {
-                return null;
+                return decodeExclusiveWordOrSized(raw, address, condition);
             }
             if (!architecture.has(ArmFeature.LDRD_STRD)) {
                 // Mesma convenção de gating explícito de WFI/LDREX/STREX/CLREX/DMB (B1.4/B1.5/B2.5):
@@ -327,5 +335,117 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         InstructionKind kind = load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
                 -1, rn, -1, mask, true, false, false, 4, false, writeback, false, mode);
+    }
+
+    // ── LDREX/STREX/LDREXB/H/D/STREXB/H/D — raw[22]=1,P=0,W=0 dentro de EXTRA_TOP7 (B2.7 PR3) ──
+
+    /// `raw[7:4]`: dentro do subgrupo `P=0,W=0` (a forma "sized", `raw[23]=1`), distingue
+    /// byte/half/doubleword de `TBB`/`TBH` (op4 `0`/`1`, tratados em {@link Thumb2BranchDecoder})
+    /// e das formas load-acquire/store-release ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, op4 `8`-`F`
+    /// — mesmo espaço de bits que o ARM clássico também não implementa, fora do escopo).
+    private static final int EXCLUSIVE_OP4_SHIFT = 4;
+    private static final int EXCLUSIVE_OP4_MASK = 0xF;
+    private static final int EXCLUSIVE_OP4_BYTE = 0b0100;
+    private static final int EXCLUSIVE_OP4_HALF = 0b0101;
+    private static final int EXCLUSIVE_OP4_DOUBLE = 0b0111;
+
+    /// Marcador fixo `1111` que ocupa o campo `Rt2`/`Rd` quando ele não é usado por uma forma
+    /// específica (`LDREXB/H`'s `Rt2`, e o `Rd` sempre ausente de `LDREX*`).
+    private static final int EXCLUSIVE_FIXED_MARKER = 0b1111;
+    private static final int EXCLUSIVE_RD_SHIFT = 0;
+    private static final int EXCLUSIVE_RD_MASK = 0xF;
+
+    /// `raw[22]=1,P=0,W=0`: espaço de `LDREX{,B,H,D}`/`STREX{,B,H,D}` de 32 bits — ARM DDI 0406C
+    /// A5.3.8/A8.8.75/A8.8.212 (e correspondentes de load), confirmado no QEMU `t32.decode` seção
+    /// "Load/Store Exclusive, Load-Acquire/Store-Release, and Table Branch" (`@strex_i`/
+    /// `@strex_0`/`@strex_d`/`@ldrex_i`/`@ldrex_0`/`@ldrex_d`). `TBB`/`TBH` (`@tbranch`, op4∈{0,1})
+    /// vivem no MESMO prefixo mas são branches, tratados por {@link Thumb2BranchDecoder} (B2.4) —
+    /// não duplicados aqui.
+    private DecodedInstruction decodeExclusiveWordOrSized(int raw, int address, Condition condition) {
+        boolean sizedForm = ((raw >>> U_OR_FIXED_BIT) & 1) != 0;
+        boolean load = ((raw >>> L_BIT) & 1) != 0;
+        if (!sizedForm) {
+            return decodeWordExclusive(raw, address, condition, load);
+        }
+        int op4 = (raw >>> EXCLUSIVE_OP4_SHIFT) & EXCLUSIVE_OP4_MASK;
+        return switch (op4) {
+            case EXCLUSIVE_OP4_BYTE -> decodeSizedExclusive(raw, address, condition, load, 1);
+            case EXCLUSIVE_OP4_HALF -> decodeSizedExclusive(raw, address, condition, load, 2);
+            case EXCLUSIVE_OP4_DOUBLE -> decodeSizedExclusive(raw, address, condition, load, 8);
+            default -> null; // TBB/TBH ou load-acquire/store-release ARMv8, fora do escopo
+        };
+    }
+
+    /// `LDREX`/`STREX` (word, sem sufixo de tamanho): ao contrário do ARM clássico (acesso exato
+    /// em `[Rn]`, sem offset), o Thumb-2 tem um imediato de 8 bits `×4` somado à base
+    /// (`%imm8x4` no QEMU — o MESMO campo/macro que `LDRD`/`STRD` já usam, sempre para cima, sem
+    /// bit `U` — a armadilha citada na task). Gate {@link ArmFeature#EXCLUSIVE_WORD}, igual ao ARM
+    /// clássico. Layout: `rn`(19:16) `rt`(15:12) `rd-ou-marcador`(11:8) `imm8`(7:0) — `Rd`(status)
+    /// só existe em `STREX`; `LDREX` tem o marcador fixo `1111` nessa posição.
+    private DecodedInstruction decodeWordExclusive(int raw, int address, Condition condition, boolean load) {
+        if (!architecture.has(ArmFeature.EXCLUSIVE_WORD)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
+        int rt = (raw >>> RT_SHIFT_LDRD) & RT_MASK_LDRD;
+        int offset = (raw & IMM8_MASK_LDRD) << IMM8X4_SHIFT;
+        if (rn == PROGRAM_COUNTER || rt == PROGRAM_COUNTER) {
+            return null; // UNPREDICTABLE
+        }
+        if (load) {
+            int marker = (raw >>> RT2_SHIFT) & RT_MASK_LDRD;
+            if (marker != EXCLUSIVE_FIXED_MARKER) {
+                return null;
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.LOAD_EXCLUSIVE, rt, rn, -1, offset, true, false, false, 4, false);
+        }
+        int rd = (raw >>> RT2_SHIFT) & RT_MASK_LDRD;
+        if (rd == PROGRAM_COUNTER || rd == rn || rd == rt) {
+            return null; // UNPREDICTABLE: Rd não pode coincidir com PC/Rn/Rt
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.STORE_EXCLUSIVE, rd, rn, rt, offset, true, false, false, 4, false);
+    }
+
+    /// `LDREXB/H/D`/`STREXB/H/D`: sem offset (`imm=0`, igual ao ARM clássico — só a forma word
+    /// acima tem offset). A forma doubleword tem `Rt2` como campo de 4 bits INDEPENDENTE no
+    /// encoding (`@strex_d`/`@ldrex_d`, ao contrário do ARM clássico que só tem um campo `Rt`), mas
+    /// permanece UNPREDICTABLE se `Rt2 != Rt+1` ou `Rt` ímpar (ARM DDI 0406C A8.8.75/A8.8.212,
+    /// "Rt2 must be Rt+1") — então, ao contrário de `LDRD`/`STRD` (B2.3), o par continua adjacente
+    /// na prática; {@code IrOp.LoadExclusive}/{@code IrOp.StoreExclusive} (B1.4) já assumem isso
+    /// (`dst`/`dst+1`), sem precisar de um campo `second` independente como
+    /// {@code IrOp.DoubleTransfer} ganhou.
+    private DecodedInstruction decodeSizedExclusive(int raw, int address, Condition condition, boolean load, int sizeBytes) {
+        if (!architecture.has(ArmFeature.EXCLUSIVE_SIZED)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
+        int rt = (raw >>> RT_SHIFT_LDRD) & RT_MASK_LDRD;
+        if (rn == PROGRAM_COUNTER || rt == PROGRAM_COUNTER) {
+            return null; // UNPREDICTABLE
+        }
+        int upperField = (raw >>> RT2_SHIFT) & RT_MASK_LDRD;
+        if (sizeBytes == 8) {
+            if ((rt & 1) != 0 || upperField != rt + 1) {
+                return null; // UNPREDICTABLE: Rt precisa ser par e Rt2==Rt+1 (ver javadoc acima)
+            }
+        } else if (upperField != EXCLUSIVE_FIXED_MARKER) {
+            return null; // campo Rt2/marcador inválido para a forma B/H
+        }
+        if (load) {
+            int marker = (raw >>> EXCLUSIVE_RD_SHIFT) & EXCLUSIVE_RD_MASK;
+            if (marker != EXCLUSIVE_FIXED_MARKER) {
+                return null;
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.LOAD_EXCLUSIVE, rt, rn, -1, 0, false, false, false, sizeBytes, false);
+        }
+        int rd = (raw >>> EXCLUSIVE_RD_SHIFT) & EXCLUSIVE_RD_MASK;
+        if (rd == PROGRAM_COUNTER || rd == rn || rd == rt || (sizeBytes == 8 && rd == upperField)) {
+            return null; // UNPREDICTABLE: Rd (status) não pode coincidir com PC/Rn/Rt/Rt2
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.STORE_EXCLUSIVE, rd, rn, rt, 0, false, false, false, sizeBytes, false);
     }
 }

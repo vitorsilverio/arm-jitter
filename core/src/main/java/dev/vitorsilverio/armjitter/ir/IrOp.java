@@ -217,14 +217,20 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.STORE; }
     }
 
-    /// `LDREX{,B,H,D}` (ARMv6/v6K): lê a memória no endereço da base (sem offset) e marca o
-    /// monitor de exclusividade do core. A forma doubleword (`sizeBytes=8`) carrega o par
-    /// `dst`, `dst+1`. Formas com PC não passam pelo decoder (UNPREDICTABLE).
+    /// `LDREX{,B,H,D}` (ARMv6/v6K) e `LDREX` de 32 bits Thumb-2 (B2.7 PR3): lê a memória no
+    /// endereço `base+offset` e marca o monitor de exclusividade do core. A forma doubleword
+    /// (`sizeBytes=8`) carrega o par `dst`, `dst+1`. Formas com PC não passam pelo decoder
+    /// (UNPREDICTABLE).
     record LoadExclusive(
             /// Registrador de destino (primeiro do par na forma doubleword).
             int dst,
-            /// Registrador base do endereço (Rn, sem offset).
+            /// Registrador base do endereço (Rn).
             int base,
+            /// Offset com sinal somado a `base`. Só o `LDREX` word de 32 bits Thumb-2 tem offset
+            /// não-nulo (`imm8×4` — ver `Thumb2LoadStoreDecoder`); ARM clássico e as formas
+            /// `B`/`H`/`D` (ARM ou Thumb-2) sempre passam `0` aqui, igual ao endereço exato `[Rn]`
+            /// que a arquitetura exige para elas.
+            int offset,
             /// Tamanho do acesso em bytes (1, 2, 4 ou 8).
             int sizeBytes,
             /// Condição necessária para executar a leitura.
@@ -232,16 +238,20 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
     }
 
-    /// `STREX{,B,H,D}` (ARMv6/v6K): escreve a memória APENAS se o monitor de exclusividade
-    /// cobre o endereço/tamanho; `dst` recebe 0 (sucesso, monitor consumido) ou 1 (falha, a
-    /// memória fica intacta). A forma doubleword armazena o par `src`, `src+1`.
+    /// `STREX{,B,H,D}` (ARMv6/v6K) e `STREX` de 32 bits Thumb-2 (B2.7 PR3): escreve a memória em
+    /// `base+offset` APENAS se o monitor de exclusividade cobre o endereço/tamanho; `dst` recebe
+    /// 0 (sucesso, monitor consumido) ou 1 (falha, a memória fica intacta). A forma doubleword
+    /// armazena o par `src`, `src+1`.
     record StoreExclusive(
             /// Registrador de status (0 = sucesso, 1 = falha).
             int dst,
             /// Registrador com o valor armazenado (primeiro do par na forma doubleword).
             int src,
-            /// Registrador base do endereço (Rn, sem offset).
+            /// Registrador base do endereço (Rn).
             int base,
+            /// Offset com sinal somado a `base`. Ver {@link LoadExclusive#offset}: só o `STREX`
+            /// word de 32 bits Thumb-2 tem offset não-nulo.
+            int offset,
             /// Tamanho do acesso em bytes (1, 2, 4 ou 8).
             int sizeBytes,
             /// Condição necessária para executar a escrita.

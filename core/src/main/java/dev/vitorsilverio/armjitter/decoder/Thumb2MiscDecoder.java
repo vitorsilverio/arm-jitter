@@ -18,19 +18,29 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// control" / `MRS_reg`/`MSR_reg`), que reproduz a ARM DDI 0406C A5.3.
 ///
 /// <p><b>Fora de escopo desta task</b> (deliberado — ver Armadilhas de b2.5-thumb2-misc.md):
-/// `CPS` de 32 bits (mesmo prefixo de hi = {@code 0xF3AF} desta classe, mas com `imod`/`M` ≠ 0 —
-/// detectado e devolvido `null` explicitamente abaixo, então cai no UNDEFINED controlado do
-/// {@code ThumbDecoder} para `top5=0b11110`), `CLREX` e `SB` (ambos vivem no mesmo espaço de
-/// "Miscellaneous control" das barreiras, mas não foram pedidos no Objetivo desta task) e as
-/// formas banked de `MRS`/`MSR` (extensão de virtualização ARMv7VE, fora do escopo do GBA/NDS).
+/// `SB` (mesmo espaço de "Miscellaneous control" das barreiras/`CLREX`, mas não pedido no
+/// Objetivo desta task) e as formas banked de `MRS`/`MSR` (extensão de virtualização ARMv7VE,
+/// fora do escopo do GBA/NDS).
+///
+/// <p><b>B2.7 PR3</b>: `CPS` de 32 bits (antes fora de escopo — mesmo prefixo de hi =
+/// {@code 0xF3AF} desta classe, distinguido de hints por `imod`/`M` ≠ 0, ver
+/// {@link #decodeHintsOrCps}) e `CLREX` de 32 bits (antes fora de escopo — mesmo espaço
+/// "Miscellaneous control" das barreiras, ver {@link #decodeMiscControl}) agora decodificados,
+/// reusando {@code IrOp.ChangeProcessorState}/{@code IrOp.ClearExclusive} de B1.4/B1.5 sem
+/// duplicar semântica — `LDREX`/`STREX` de 32 bits ficam em {@link Thumb2LoadStoreDecoder} (mesmo
+/// prefixo de 7 bits de `LDRD`/`STRD`, não este).
 public final class Thumb2MiscDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
     /// Decoder ligado à arquitetura que o registra — precisa consultar {@link ArmFeature#WAIT_HINTS}
-    /// (gate fino de `WFI`, dentro do `THUMB2` mais amplo já garantido pelo chamador) e
-    /// {@link ArmFeature#MEMORY_BARRIERS} (gate de `DMB`/`DSB`/`ISB`), então guarda a arquitetura —
-    /// mesmo padrão de {@link ArmDecoder}/{@link ThumbDecoder}, diferente de
-    /// {@link Thumb2DataProcessingDecoder} (que não precisa de gate mais fino que `THUMB2`).
+    /// (gate fino de `WFI`, dentro do `THUMB2` mais amplo já garantido pelo chamador),
+    /// {@link ArmFeature#MEMORY_BARRIERS} (gate de `DMB`/`DSB`/`ISB`),
+    /// {@link ArmFeature#EXCLUSIVE_SIZED} (gate de `CLREX`, B2.7 PR3 — MESMA feature que o
+    /// ARM clássico usa para `CLREX`/`LDREX*B/H/D`/`STREX*B/H/D`) e
+    /// {@link ArmFeature#MODE_CHANGE_INSTRUCTIONS} (gate de `CPS.W`, B2.7 PR3 — MESMA feature do
+    /// `CPS` ARM clássico), então guarda a arquitetura — mesmo padrão de
+    /// {@link ArmDecoder}/{@link ThumbDecoder}, diferente de {@link Thumb2DataProcessingDecoder}
+    /// (que não precisa de gate mais fino que `THUMB2`).
     public Thumb2MiscDecoder(ArmArchitecture architecture) {
         this.architecture = architecture;
     }
@@ -94,6 +104,32 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int PSR_SPSR_BIT = 0x10;
     private static final int PSR_FIELD_MASK_BITS = 0xF;
 
+    /// `CPS` de 32 bits (ARM DDI 0406C A5.3.5, `&cps`): dentro do subgrupo "Hints, and CPS" (mesmo
+    /// `hi` de {@link #HINTS_AND_CPS_HI}), `lo = 1000 0 imod:2 M:1 A:1 I:1 F:1 mode:5` — os campos
+    /// vivem em posições DIFERENTES de `MRS`/`MSR` (que usam `lo[15:12]`/`lo[11:8]` fixos), então
+    /// precisam de shifts próprios.
+    private static final int CPS_IMOD_SHIFT = 9;
+    private static final int CPS_IMOD_MASK = 0x3;
+    private static final int CPS_MODE_CHANGE_BIT = 8;
+    private static final int CPS_A_BIT = 7;
+    private static final int CPS_I_BIT = 6;
+    private static final int CPS_F_BIT = 5;
+    private static final int CPS_MODE_MASK = 0x1F;
+
+    /// Empacotamento de `DecodedInstruction.immediate()` para `InstructionKind.CPS` — MESMA
+    /// convenção que `ArmDecoder` usa para o `CPS` ARM clássico (`StandardIrBuilder` decodifica os
+    /// dois encodings com o mesmo código): `imod` nos 2 bits baixos, depois `M`/`A`/`I`/`F`/`mode`.
+    private static final int CPS_PACKED_MODE_CHANGE_SHIFT = 2;
+    private static final int CPS_PACKED_A_SHIFT = 3;
+    private static final int CPS_PACKED_I_SHIFT = 4;
+    private static final int CPS_PACKED_F_SHIFT = 5;
+    private static final int CPS_PACKED_MODE_SHIFT = 6;
+
+    /// `CLREX` de 32 bits (ARM DDI 0406C A8.8.30): encoding TOTALMENTE fixo (nenhum campo de
+    /// registrador) dentro do subgrupo "Miscellaneous control" — `lo = 1000 1111 0010 1111`, o
+    /// MESMO `hi` de {@link #MISC_CONTROL_HI} que as barreiras `DMB`/`DSB`/`ISB` já usam.
+    private static final int CLREX_LO = 0x8F2F;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         int hi = raw >>> 16;
@@ -118,8 +154,8 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
 
     private DecodedInstruction decodeHintsOrCps(int raw, int address, Condition condition, int lo) {
         if (((lo >>> TOP_BYTE_SHIFT) & TOP_BYTE_MASK) != HINTS_TOP_BYTE) {
-            // imod!=00 ou M=1: é CPS de 32 bits, fora do escopo desta task (ver javadoc da classe).
-            return null;
+            // imod!=00 ou M=1: é CPS de 32 bits (B2.7 PR3).
+            return decodeCps32(raw, address, condition, lo);
         }
         int selector = lo & HINT_SELECTOR_MASK;
         return switch (selector) {
@@ -146,6 +182,31 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
                 InstructionKind.WAIT_FOR_INTERRUPT, -1, -1, -1, 0, false, false, false);
     }
 
+    /// `CPS`/`CPSIE`/`CPSID` de 32 bits (B2.7 PR3): MESMO empacotamento de `immediate` que
+    /// `ArmDecoder` usa para o `CPS` ARM clássico (`imod | (M&lt;&lt;2) | (A&lt;&lt;3) |
+    /// (I&lt;&lt;4) | (F&lt;&lt;5) | (mode&lt;&lt;6)`) — `StandardIrBuilder` já sabe interpretar
+    /// esse formato para os dois encodings, sem duplicar semântica (`IrOp.ChangeProcessorState`,
+    /// B1.5). Gate {@link ArmFeature#MODE_CHANGE_INSTRUCTIONS}, igual ao ARM clássico.
+    private DecodedInstruction decodeCps32(int raw, int address, Condition condition, int lo) {
+        if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int imod = (lo >>> CPS_IMOD_SHIFT) & CPS_IMOD_MASK;
+        int modeChange = (lo >>> CPS_MODE_CHANGE_BIT) & 1;
+        int a = (lo >>> CPS_A_BIT) & 1;
+        int i = (lo >>> CPS_I_BIT) & 1;
+        int f = (lo >>> CPS_F_BIT) & 1;
+        int mode = lo & CPS_MODE_MASK;
+        int packed = imod
+                | (modeChange << CPS_PACKED_MODE_CHANGE_SHIFT)
+                | (a << CPS_PACKED_A_SHIFT)
+                | (i << CPS_PACKED_I_SHIFT)
+                | (f << CPS_PACKED_F_SHIFT)
+                | (mode << CPS_PACKED_MODE_SHIFT);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.CPS, -1, -1, -1, packed, false, false, false);
+    }
+
     private DecodedInstruction noOpHint(int raw, int address, Condition condition) {
         // MSR(imediato)->CPSR com máscara de campo vazia: nenhum campo do PSR é escrito,
         // idêntico ao caminho que NOP/YIELD/SEV já usam implicitamente em ARM clássico.
@@ -159,10 +220,13 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         if (((lo >>> TOP_BYTE_SHIFT) & TOP_BYTE_MASK) != MISC_CONTROL_TOP_BYTE) {
             return null;
         }
+        if (lo == CLREX_LO) {
+            return decodeClearExclusive(raw, address, condition);
+        }
         int barrierOp = (lo >>> BARRIER_OP_SHIFT) & BARRIER_OP_MASK;
         boolean isBarrier = barrierOp == BARRIER_OP_DSB || barrierOp == BARRIER_OP_DMB || barrierOp == BARRIER_OP_ISB;
         if (!isBarrier) {
-            // CLREX/SB (mesmo subgrupo) ou reservado: fora do escopo desta task, ver javadoc.
+            // SB (mesmo subgrupo) ou reservado: fora do escopo desta task, ver javadoc.
             return null;
         }
         if (!architecture.has(ArmFeature.MEMORY_BARRIERS)) {
@@ -173,6 +237,18 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         int option = lo & BARRIER_OPTION_MASK;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
                 InstructionKind.MEMORY_BARRIER, -1, -1, -1, option, false, false, false);
+    }
+
+    /// `CLREX` de 32 bits (B2.7 PR3): abre o monitor de exclusividade — MESMA `IrOp.ClearExclusive`
+    /// (B1.4) que o `CLREX` ARM clássico usa, sem duplicar semântica. Gate
+    /// {@link ArmFeature#EXCLUSIVE_SIZED}, igual ao ARM clássico (`LDREX*B/H/D`/`STREX*B/H/D`
+    /// compartilham a mesma feature — ver `Thumb2LoadStoreDecoder`).
+    private DecodedInstruction decodeClearExclusive(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.EXCLUSIVE_SIZED)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.CLEAR_EXCLUSIVE, -1, -1, -1, 0, false, false, false);
     }
 
     // ── MRS (forma registrador) — A5.3.5 `MRS_reg` ──────────────────────────────────────────

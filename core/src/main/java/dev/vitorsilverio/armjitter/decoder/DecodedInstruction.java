@@ -166,4 +166,14 @@ public record DecodedInstruction(
                 sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
                 accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList);
     }
+
+    /// Cria uma cópia com o conjunto de instruções substituído, preservando todos os outros
+    /// campos. Usado por decoders que delegam a um sub-decoder compartilhado entre ARM e Thumb-2
+    /// (B2.7 PR3, `Thumb2CoprocessorDecoder` delegando a `CoprocessorDecoder`, que sempre marca
+    /// {@link InstructionSet#ARM}) sem duplicar a lógica de decode inteira só para trocar essa tag.
+    public DecodedInstruction withInstructionSet(InstructionSet newInstructionSet) {
+        return new DecodedInstruction(address, raw, newInstructionSet, condition, kind, destinationRegister,
+                sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
+                accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList);
+    }
 }

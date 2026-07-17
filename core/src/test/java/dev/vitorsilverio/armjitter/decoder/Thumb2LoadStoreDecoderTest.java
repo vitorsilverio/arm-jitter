@@ -76,6 +76,279 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
                 | ((writeback ? 1 : 0) << 21) | ((load ? 1 : 0) << 20) | (rn << 16) | (mask & 0xFFFF);
     }
 
+    // ── LDREX/STREX de 32 bits (B2.7 PR3) — raw[22]=1,P=0,W=0 dentro de EXTRA_TOP7 ──────────
+
+    /// `LDREX rt,[rn,#imm8*4]` — word, com o offset que o ARM clássico NÃO tem.
+    private static int ldrexWordT(int rn, int rt, int imm8) {
+        return (0b1110100 << 25) | (1 << 22) | (0b101 << 20) | (rn << 16) | (rt << 12)
+                | (0xF << 8) | (imm8 & 0xFF);
+    }
+
+    /// `STREX rd,rt,[rn,#imm8*4]` — word, com o offset que o ARM clássico NÃO tem.
+    private static int strexWordT(int rn, int rt, int rd, int imm8) {
+        return (0b1110100 << 25) | (1 << 22) | (0b100 << 20) | (rn << 16) | (rt << 12)
+                | (rd << 8) | (imm8 & 0xFF);
+    }
+
+    private static final int EXCLUSIVE_OP_BYTE = 0b0100;
+    private static final int EXCLUSIVE_OP_HALF = 0b0101;
+    private static final int EXCLUSIVE_OP_DOUBLE = 0b0111;
+
+    /// `LDREXB/H rt,[rn]` (op4 ∈ {byte,half}).
+    private static int ldrexSizedT(int op4, int rn, int rt) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b101 << 20) | (rn << 16) | (rt << 12)
+                | (0xF << 8) | (op4 << 4) | 0xF;
+    }
+
+    /// `STREXB/H rd,rt,[rn]` (op4 ∈ {byte,half}).
+    private static int strexSizedT(int op4, int rn, int rt, int rd) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b100 << 20) | (rn << 16) | (rt << 12)
+                | (0xF << 8) | (op4 << 4) | rd;
+    }
+
+    /// `LDREXD rt,rt2,[rn]` (`Rt2` campo independente, mas `Rt2==Rt+1` continua obrigatório).
+    private static int ldrexdT(int rn, int rt, int rt2) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b101 << 20) | (rn << 16) | (rt << 12)
+                | (rt2 << 8) | (EXCLUSIVE_OP_DOUBLE << 4) | 0xF;
+    }
+
+    /// `STREXD rd,rt,rt2,[rn]`.
+    private static int strexdT(int rn, int rt, int rt2, int rd) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b100 << 20) | (rn << 16) | (rt << 12)
+                | (rt2 << 8) | (EXCLUSIVE_OP_DOUBLE << 4) | rd;
+    }
+
+    // ── Encoders ARM clássico (mesmos layouts de ArmV6ExclusiveAccessTest) ─────────────────
+
+    /// `LDREX{,B,H,D} rd, [rn]` (cond AL). `sz`: 00=word, 01=doubleword, 10=byte, 11=halfword.
+    private static int armLdrex(int sz, int rd, int rn) {
+        return 0xE190_0F9F | (sz << 21) | (rn << 16) | (rd << 12);
+    }
+
+    /// `STREX{,B,H,D} rd, rm, [rn]` (cond AL).
+    private static int armStrex(int sz, int rd, int rn, int rm) {
+        return 0xE180_0F90 | (sz << 21) | (rn << 16) | (rd << 12) | rm;
+    }
+
+    private static ArmCore newArmCore() {
+        return new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+    }
+
+    private static void runArm(ArmCore core, int word) {
+        core.memory().write32(core.programCounter(), word);
+        core.step();
+    }
+
+    @Test
+    void ldrexWordThumb2WithZeroOffsetMatchesArmClassic() {
+        ArmCore thumb2Core = newCore();
+        thumb2Core.setRegister(1, 0x10);
+        thumb2Core.memory().write32(0x10, 0x12345678);
+        int raw = ldrexWordT(1, 0, 0); // LDREX r0,[r1]
+        run(thumb2Core, hi(raw), lo(raw));
+
+        ArmCore armCore = newArmCore();
+        armCore.setRegister(1, 0x10);
+        armCore.memory().write32(0x10, 0x12345678);
+        runArm(armCore, armLdrex(0, 0, 1)); // LDREX r0,[r1]
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0x12345678, thumb2Core.register(0));
+    }
+
+    @Test
+    void strexWordThumb2WithZeroOffsetMatchesArmClassicSuccessAndFailure() {
+        // Sucesso: LDREX antes.
+        ArmCore thumb2Success = newCore();
+        thumb2Success.setRegister(1, 0x10);
+        thumb2Success.setRegister(0, 0xCAFEBABE);
+        thumb2Success.memory().write32(0x10, 0x11111111);
+        run(thumb2Success, hi(ldrexWordT(1, 2, 0)), lo(ldrexWordT(1, 2, 0)));
+        int strex = strexWordT(1, 0, 3, 0); // STREX r3,r0,[r1]
+        run(thumb2Success, hi(strex), lo(strex));
+
+        ArmCore armSuccess = newArmCore();
+        armSuccess.setRegister(1, 0x10);
+        armSuccess.setRegister(0, 0xCAFEBABE);
+        armSuccess.memory().write32(0x10, 0x11111111);
+        runArm(armSuccess, armLdrex(0, 2, 1));
+        runArm(armSuccess, armStrex(0, 3, 1, 0));
+
+        assertEquals(armSuccess.register(3), thumb2Success.register(3), "status de sucesso deve bater");
+        assertEquals(0, thumb2Success.register(3));
+        assertEquals(0xCAFEBABE, thumb2Success.memory().read32(0x10));
+
+        // Falha: sem LDREX antes.
+        ArmCore thumb2Fail = newCore();
+        thumb2Fail.setRegister(1, 0x10);
+        thumb2Fail.setRegister(0, 0xDEADBEEF);
+        thumb2Fail.memory().write32(0x10, 0x22222222);
+        run(thumb2Fail, hi(strex), lo(strex));
+
+        assertEquals(1, thumb2Fail.register(3), "sem LDREX efetivo, STREX deve falhar");
+        assertEquals(0x22222222, thumb2Fail.memory().read32(0x10), "memória intacta na falha");
+    }
+
+    @Test
+    void strexWordThumb2WithNonZeroOffsetIsTheFormThatDoesNotExistInArmClassic() {
+        // A armadilha da task: STREX.W tem offset imm8×4 (ARM clássico não tem — sempre [Rn]).
+        ArmCore core = newCore();
+        core.setRegister(1, 0x100);
+        core.setRegister(0, 0xAABBCCDD);
+        int ldrexAtOffset = ldrexWordT(1, 2, 4); // LDREX r2,[r1,#16]
+        run(core, hi(ldrexAtOffset), lo(ldrexAtOffset));
+        int strex = strexWordT(1, 0, 3, 4); // STREX r3,r0,[r1,#16]
+        run(core, hi(strex), lo(strex));
+
+        assertEquals(0, core.register(3), "sucesso: LDREX e STREX miraram o MESMO endereço via offset");
+        assertEquals(0xAABBCCDD, core.memory().read32(0x110), "escrita foi em base+offset, não em base");
+        assertEquals(0, core.memory().read32(0x100), "base sozinha (sem offset) nunca foi tocada");
+    }
+
+    @Test
+    void ldrexbHalfDoubleThumb2MatchesArmClassic() {
+        // LDREXB
+        ArmCore thumb2B = newCore();
+        thumb2B.setRegister(1, 0x10);
+        thumb2B.memory().write8(0x10, 0x7F);
+        int rawB = ldrexSizedT(EXCLUSIVE_OP_BYTE, 1, 0);
+        run(thumb2B, hi(rawB), lo(rawB));
+        ArmCore armB = newArmCore();
+        armB.setRegister(1, 0x10);
+        armB.memory().write8(0x10, 0x7F);
+        runArm(armB, armLdrex(0b10, 0, 1));
+        assertEquals(armB.register(0), thumb2B.register(0));
+
+        // LDREXH
+        ArmCore thumb2H = newCore();
+        thumb2H.setRegister(1, 0x10);
+        thumb2H.memory().write16(0x10, 0xBEEF);
+        int rawH = ldrexSizedT(EXCLUSIVE_OP_HALF, 1, 0);
+        run(thumb2H, hi(rawH), lo(rawH));
+        ArmCore armH = newArmCore();
+        armH.setRegister(1, 0x10);
+        armH.memory().write16(0x10, 0xBEEF);
+        runArm(armH, armLdrex(0b11, 0, 1));
+        assertEquals(armH.register(0), thumb2H.register(0));
+
+        // LDREXD (Rt2 independente no encoding, mas Rt2==Rt+1 continua exigido)
+        ArmCore thumb2D = newCore();
+        thumb2D.setRegister(1, 0x10);
+        thumb2D.memory().write32(0x10, 0x11111111);
+        thumb2D.memory().write32(0x14, 0x22222222);
+        int rawD = ldrexdT(1, 2, 3);
+        run(thumb2D, hi(rawD), lo(rawD));
+        ArmCore armD = newArmCore();
+        armD.setRegister(1, 0x10);
+        armD.memory().write32(0x10, 0x11111111);
+        armD.memory().write32(0x14, 0x22222222);
+        runArm(armD, armLdrex(0b01, 2, 1));
+        assertEquals(armD.register(2), thumb2D.register(2));
+        assertEquals(armD.register(3), thumb2D.register(3));
+    }
+
+    @Test
+    void strexbHalfDoubleThumb2MatchesArmClassic() {
+        // STREXB
+        ArmCore thumb2B = newCore();
+        thumb2B.setRegister(1, 0x10);
+        thumb2B.setRegister(0, 0xFF);
+        thumb2B.memory().write8(0x10, 0);
+        run(thumb2B, hi(ldrexSizedT(EXCLUSIVE_OP_BYTE, 1, 2)), lo(ldrexSizedT(EXCLUSIVE_OP_BYTE, 1, 2)));
+        int strexB = strexSizedT(EXCLUSIVE_OP_BYTE, 1, 0, 3);
+        run(thumb2B, hi(strexB), lo(strexB));
+
+        ArmCore armB = newArmCore();
+        armB.setRegister(1, 0x10);
+        armB.setRegister(0, 0xFF);
+        armB.memory().write8(0x10, 0);
+        runArm(armB, armLdrex(0b10, 2, 1));
+        runArm(armB, armStrex(0b10, 3, 1, 0));
+
+        assertEquals(armB.register(3), thumb2B.register(3));
+        assertEquals(0, thumb2B.register(3));
+        assertEquals(0xFF, thumb2B.memory().read8(0x10) & 0xFF);
+
+        // STREXD
+        ArmCore thumb2D = newCore();
+        thumb2D.setRegister(1, 0x10);
+        thumb2D.setRegister(4, 0xAAAAAAAA);
+        thumb2D.setRegister(5, 0xBBBBBBBB);
+        run(thumb2D, hi(ldrexdT(1, 2, 3)), lo(ldrexdT(1, 2, 3)));
+        int strexD = strexdT(1, 4, 5, 6);
+        run(thumb2D, hi(strexD), lo(strexD));
+
+        ArmCore armD = newArmCore();
+        armD.setRegister(1, 0x10);
+        armD.setRegister(4, 0xAAAAAAAA);
+        armD.setRegister(5, 0xBBBBBBBB);
+        runArm(armD, armLdrex(0b01, 2, 1));
+        runArm(armD, armStrex(0b01, 6, 1, 4));
+
+        assertEquals(armD.register(6), thumb2D.register(6));
+        assertEquals(0, thumb2D.register(6));
+        assertEquals(0xAAAAAAAA, thumb2D.memory().read32(0x10));
+        assertEquals(0xBBBBBBBB, thumb2D.memory().read32(0x14));
+    }
+
+    @Test
+    void exclusiveGroupsAreUndefinedWithoutTheirGates() {
+        ArmArchitecture noExclusive = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV4T, "NoExclusive", ArmFeature.THUMB2)
+                .withThumb32DecoderExtensions(List.of(new Thumb2LoadStoreDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV4T, "NoExclusive-Inner", ArmFeature.THUMB2))));
+        int[] encodings = {
+                ldrexWordT(1, 0, 0), strexWordT(1, 0, 3, 0),
+                ldrexSizedT(EXCLUSIVE_OP_BYTE, 1, 0), strexSizedT(EXCLUSIVE_OP_HALF, 1, 0, 3),
+                ldrexdT(1, 2, 3), strexdT(1, 2, 3, 6),
+        };
+        for (int raw : encodings) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            memory.put16(0, hi(raw));
+            memory.put16(2, lo(raw));
+            assertEquals(InstructionKind.UNIMPLEMENTED, new ThumbDecoder(noExclusive).decode(memory, 0).kind(),
+                    () -> "sem EXCLUSIVE_WORD/EXCLUSIVE_SIZED deve ser UNDEFINED: 0x" + Integer.toHexString(raw));
+        }
+    }
+
+    @Test
+    void wordExclusiveDecodesWithOnlyExclusiveWordFeature() {
+        // Preset só com EXCLUSIVE_WORD (sem EXCLUSIVE_SIZED) — mesma cobertura de
+        // ArmV6ExclusiveAccessTest#wordFormsDecodeOnArmv6kButSizedVariantsRequireExclusiveSized,
+        // do lado Thumb-2.
+        ArmArchitecture wordOnly = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV5TE, "WordOnlyThumb2", ArmFeature.THUMB2, ArmFeature.EXCLUSIVE_WORD)
+                .withThumb32DecoderExtensions(List.of(new Thumb2LoadStoreDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV5TE, "WordOnlyThumb2-Inner",
+                                ArmFeature.THUMB2, ArmFeature.EXCLUSIVE_WORD))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = ldrexWordT(1, 0, 0);
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+        assertEquals(InstructionKind.LOAD_EXCLUSIVE, new ThumbDecoder(wordOnly).decode(memory, 0).kind());
+
+        TestAddressSpace memoryB = new TestAddressSpace(16);
+        int rawB = ldrexSizedT(EXCLUSIVE_OP_BYTE, 1, 0);
+        memoryB.put16(0, hi(rawB));
+        memoryB.put16(2, lo(rawB));
+        assertEquals(InstructionKind.UNIMPLEMENTED, new ThumbDecoder(wordOnly).decode(memoryB, 0).kind());
+    }
+
+    @Test
+    void tbbTbhStillDecodedByBranchDecoderNotSwallowedByExclusiveSpace() {
+        // op4∈{0,1} no mesmo prefixo de 7 bits — TBB/TBH continuam responsabilidade de
+        // Thumb2BranchDecoder (B2.4); esta extensão sozinha (sem Thumb2BranchDecoder plugado) NÃO
+        // deve reivindicá-los.
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // TBB [r1, r2]: raw[22]=1,P=0,W=0,U/fixed=1,L=1,op4=0.
+        int raw = (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b101 << 20) | (1 << 16) | (0xF << 12) | 2;
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.LOAD_EXCLUSIVE, instruction.kind());
+    }
+
     private static ArmCore newCore() {
         ArmCore core = new ArmCore(new TestAddressSpace(4096), SwiDispatcher.empty(), THUMB2_ARCH);
         core.cpsr().setThumbMode(true);
