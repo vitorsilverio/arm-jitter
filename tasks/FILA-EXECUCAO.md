@@ -88,7 +88,7 @@ sintoma e velocidade no GBA — a atribuição antiga ao ASM está REVOGADA).
 
 | Task | O que é | Quem pode executar |
 |------|---------|--------------------|
-| **D2** — FireRed 3 bugs de batalha | Hipóteses FORTES já na spec (HDMA em vblank / wrap 9-bit OAM X / OBJWIN), 1 PR por sintoma, teste-primeiro | Agente comum PODE tentar (a spec é dirigida); se a hipótese do sintoma falhar → devolver |
+| ~~D2~~ ✅ FECHADA 2026-07-16 — hipótese 1 (HDMA em V-Blank) e hipótese 3 (OBJ window) corrigidas; hipótese 2 (wrap OAM) REFUTADA (era artefato do bug 1); validação visual do usuário confirmada | — | — |
 | ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
 | ~~D3~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
 | **D6** — BIOS lenta/interrompida | Timing/waitstate/handoff | ⚠️ MODELO FORTE |
