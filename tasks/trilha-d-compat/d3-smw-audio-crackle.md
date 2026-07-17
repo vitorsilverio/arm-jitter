@@ -90,3 +90,8 @@ efeito específico como moeda/pulo)? WAVs em `target/smw-audio-*.wav` (8 no
 total) pra ouvir e comparar.
 
 Suite gbaemu verde (`mvn -o test`, sem regressão nos 5 jogos de referência).
+
+## FECHADA 2026-07-16 — sem problema real
+
+Usuário ouviu os WAVs/jogou e confirmou que o áudio está aceitável — não é um
+bug que precise de correção. Nenhuma ação adicional necessária.

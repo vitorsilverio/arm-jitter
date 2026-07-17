@@ -3,6 +3,11 @@
 **Trilha:** D (compat de hospedeiros) · **Depende de:** — · **Repo:** gbaemu ·
 **Task de diagnóstico** (causa raiz desconhecida)
 
+## FECHADA 2026-07-16 — sem problema real
+
+Usuário ouviu os WAVs/jogou e confirmou que o áudio está aceitável — não é um
+bug que precise de correção. Nenhuma ação adicional necessária.
+
 ## Status (2026-07-16) — fase 1 concluída, hipótese do enunciado REFUTADA, devolvida ao usuário
 
 Instrumentação nova e permanente em `GbaAudio` (`directSoundTimer`, `fifoUnderruns`,

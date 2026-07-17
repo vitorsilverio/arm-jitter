@@ -46,8 +46,8 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 5 | ~~C6~~ ✅ FECHADA 2026-07-16 (`64e08c1`) — validação de gameplay A/B confirmou os 3 problemas observados como pré-existentes, não regressão | — | — | — |
 | 6 | ~~D1~~ ✅ FECHADA 2026-07-16 — protocolo S-3511A verificado contra o GBATEK real (fetch direto); `S3511aRtc`+`GbaRtcDetector`+GPIO opcional em `GbaRom`; suite gbaemu 231 verde | — | — | — |
 | 6b | ~~D2~~ ✅ FECHADA 2026-07-16 — hipótese 1 (HDMA em V-Blank) e hipótese 3 (OBJ window) corrigidas; hipótese 2 (wrap OAM) REFUTADA (era artefato do bug 1). Validação visual do usuário CONFIRMADA (fade, direção do inimigo, overlay de status) | — | — | — |
-| 6c | **D3** — chiado de áudio no SMW | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2 (mesmo repo) |
-| 6d | ~~D4~~ 🟡 fase 1 concluída 2026-07-16 — hipótese de FIFO/timer do enunciado REFUTADA por instrumentação nova (zero underruns, zero overflow-batching em 60s de gameplay real); achado novo (PSG CH1/CH2 muito baixo vs Direct Sound) devolvido ao usuário pra confirmação auditiva dos WAVs | gbaemu | Achado da validação de C6 | Diagnóstico; após D1/D2/D3 (mesmo repo) |
+| 6c | ~~D3~~ ✅ FECHADA 2026-07-16 — sem problema real (usuário confirmou o áudio aceitável após ouvir os WAVs/jogar) | — | — | — |
+| 6d | ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real (usuário confirmou o áudio aceitável após ouvir os WAVs/jogar; hipótese de FIFO/timer do enunciado já tinha sido REFUTADA na fase 1) | — | — | — |
 | 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
 | 8 | ~~B5.1~~ ✅ FECHADA 2026-07-16 (`f390a7a`) — `core/ExclusiveMonitor.java` compartilhável entre cores; reserva por core (`IdentityHashMap`); hook de escrita comum em todos os stores de baixo nível dos 2 backends; 4 testes novos + suites B1.4/gbaemu/ndsemu verdes | — | — |
 | 9 | **E1** — javadocs em inglês → português (regra G7) — 🟡 Lote 2/4 ✅ 2026-07-16 | arm-jitter | Higiene; risco zero de código | **1 sessão POR LOTE** (4 lotes, checklist no próprio arquivo); pode intercalar entre tasks maiores; NÃO rodar em paralelo com outra task de arm-jitter (diff de comentário conflita com tudo). Próximo: Lote 3 (`core/src/test` inteiro) |
@@ -84,8 +84,8 @@ sintoma e velocidade no GBA — a atribuição antiga ao ASM está REVOGADA).
 | Task | O que é | Quem pode executar |
 |------|---------|--------------------|
 | **D2** — FireRed 3 bugs de batalha | Hipóteses FORTES já na spec (HDMA em vblank / wrap 9-bit OAM X / OBJWIN), 1 PR por sintoma, teste-primeiro | Agente comum PODE tentar (a spec é dirigida); se a hipótese do sintoma falhar → devolver |
-| **D4** — Metroid melodia | Diagnóstico instrumentado (PSG × FIFO DirectSound) | Agente comum faz a fase 1 (instrumentação); fix depende do achado |
-| **D3** — SMW chiado | Diagnóstico | Idem D4 |
+| ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
+| ~~D3~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
 | **D6** — BIOS lenta/interrompida | Timing/waitstate/handoff | ⚠️ MODELO FORTE |
 | **D5** — Platinum trava (Buneary) | ndsemu; ler pistas falsas em `ndsemu-game-compat` ANTES | ⚠️ MODELO FORTE |
 | (sem task) Divergência ASM×interp no JUS | ver pendência 6 do tasks/README | ⚠️ MODELO FORTE |
