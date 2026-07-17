@@ -56,8 +56,8 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 
 | Task | Depois de | Nota |
 |------|-----------|------|
-| **B2.7** (paridade Thumb-2, PR1→PR2→PR3) | B2.6 | 3 sessões, uma por PR, na ordem |
-| **B2.8** (PLD/PLI) | B2.6 | 1 sessão, pequena |
+| ~~B2.7~~ ✅ FECHADA 2026-07-16/17 (PR1+PR2+PR3, ver `tasks/README.md`) | — | — |
+| ~~B2.8~~ ✅ FECHADA 2026-07-17 — `ArmFeature.PRELOAD_HINTS` novo; `PLD`/`PLDW`/`PLI` como NOP em ARM (`ArmDecoder`) e Thumb-2 (`Thumb2LoadStoreDecoder`, carve-out em `Rt=PC`); suítes arm-jitter 682+13, gbaemu 243, ndsemu 175 verdes | — | — |
 | **B3.1** (inteiro v7 ARM) | B2.6 | Pode andar em paralelo com B2.7 se PRs não tocarem os mesmos decoders (B3.1 = decoder ARM novo; B2.7 = decoders Thumb-2) |
 | **B3.3** (banco VFP) | B5.1 (mesmo repo/ArmCore) | Tecnicamente independente |
 | **B7.1** (ExceptionModel refactor) | B2.6 + B3.3 (toca ArmCore — sequenciar) | Zero-diff; bench de sanidade no fim |

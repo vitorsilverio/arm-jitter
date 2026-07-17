@@ -86,5 +86,12 @@ public enum ArmFeature {
     /// trata esses casos como UNPREDICTABLE/alinhados por natureza, então não há "atravessado"
     /// para eles aqui. ARMv6+. **Nunca** habilitar em {@code ARMV4T}/{@code ARMV5TE} (G2/G3) —
     /// GBA/NDS dependem da rotação para jogos que fazem `LDR` desalinhado de propósito.
-    UNALIGNED_ACCESS
+    UNALIGNED_ACCESS,
+    /// Hints de preload de cache `PLD`/`PLDW`/`PLI` como NOP observável (nenhum efeito além de
+    /// ciclo/fetch; o endereço nunca é acessado). `PLD` é ARMv5TE+, `PLDW` ARMv7MP+, `PLI` ARMv7+
+    /// — agrupados numa única feature porque este core não modela cache (todas viram o mesmo NOP,
+    /// ver {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder}/
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder}). Deliberadamente NÃO
+    /// adicionada a {@code ARMV5TE} (G3, menor superfície — gbaemu/ndsemu nunca precisaram).
+    PRELOAD_HINTS
 }

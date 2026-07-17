@@ -446,6 +446,90 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
         assertNotEquals(InstructionKind.STORE, instruction.kind());
     }
 
+    // ── PLD/PLDW/PLI (B2.8) — Rt=1111 no espaço de load vira hint, nunca um load real para o PC ──
+
+    @Test
+    void pldT3ImmediateHasNoObservableEffectAndDoesNotAccessTheAddress() {
+        ArmCore core = newCore();
+        core.setRegister(0, 0x1234_5678);
+        core.setRegister(1, 0x2000); // além dos 4096 bytes mapeados por newCore() -> endereço não mapeado
+        int cpsrBefore = core.cpsr().get();
+        int raw = t3(UNSIGNED_TOP8, SIZE_L_LDRB, 1, 15, 0x10); // PLD [r1,#0x10] -> 0x2010, não mapeado
+        run(core, hi(raw), lo(raw)); // não deve lançar exceção (endereço nunca é acessado)
+        assertEquals(0x1234_5678, core.register(0));
+        assertEquals(0x2000, core.register(1));
+        assertEquals(cpsrBefore, core.cpsr().get());
+    }
+
+    @Test
+    void pldT4RegisterAndPliVariantsHaveNoObservableEffect() {
+        int[] rawEncodings = {
+                t3(UNSIGNED_TOP8, SIZE_L_LDRH, 1, 15, 0x10), // PLDW [r1,#0x10] (LDRH-shaped -> PLDW)
+                t4(UNSIGNED_TOP8, SIZE_L_LDRB, 1, 15, true, false, false, 8), // PLD [r1,#-8] (T4)
+                t2Register(UNSIGNED_TOP8, SIZE_L_LDRB, 1, 15, 0, 2), // PLD [r1,r2] (T2 registrador)
+                literal(UNSIGNED_TOP8, SIZE_L_LDRB, true, 15, 0x10), // PLD literal (Rn=PC, Rt=PC)
+                t3(SIGNED_TOP8, SIZE_L_LDRSB, 1, 15, 0x10), // PLI [r1,#0x10]
+        };
+        for (int raw : rawEncodings) {
+            ArmCore core = newCore();
+            core.setRegister(0, 0xCAFEBABE);
+            core.setRegister(1, 0x100);
+            core.setRegister(2, 4);
+            int cpsrBefore = core.cpsr().get();
+            run(core, hi(raw), lo(raw));
+            assertEquals(0xCAFEBABE, core.register(0), () -> "0x" + Integer.toHexString(raw) + " não deve tocar r0");
+            assertEquals(0x100, core.register(1), () -> "0x" + Integer.toHexString(raw) + " não deve tocar a base");
+            assertEquals(cpsrBefore, core.cpsr().get(), () -> "0x" + Integer.toHexString(raw) + " não deve tocar CPSR");
+        }
+    }
+
+    @Test
+    void ordinaryLdrWithPcDestinationIsUnaffectedByThePreloadCarveOut() {
+        // LDR Rt,PC (sizeL=SIZE_L_LDR=101) continua um load real para o PC (interworking) — a
+        // armadilha da task: o carve-out só vale para sizeL LDRB/LDRH (unsigned) e LDRSB (signed).
+        ArmCore core = newCore(); // ARMV6K -> LOAD_PC_INTERWORKING presente
+        core.memory().write32(0x110, 0x201); // bit0=1 -> permanece THUMB, alvo 0x200
+        int raw = t3(UNSIGNED_TOP8, SIZE_L_LDR, 1, 15, 0x10);
+        core.setRegister(1, 0x100);
+        run(core, hi(raw), lo(raw));
+        assertEquals(0x200, core.programCounter(), "LDR Rt=PC deve continuar sendo um load real, não um hint");
+        assertTrue(core.cpsr().isThumbMode());
+    }
+
+    @Test
+    void preloadHintsAreUndefinedWithoutTheGate() {
+        ArmArchitecture noHints = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV4T, "NoPreloadHints", ArmFeature.THUMB2)
+                .withThumb32DecoderExtensions(List.of(new Thumb2LoadStoreDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV4T, "NoPreloadHints-Inner", ArmFeature.THUMB2))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = t3(UNSIGNED_TOP8, SIZE_L_LDRB, 1, 15, 0x10); // PLD
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+        assertEquals(InstructionKind.UNIMPLEMENTED, new ThumbDecoder(noHints).decode(memory, 0).kind());
+    }
+
+    @Test
+    void preloadHintBlockMatchesInterpretedReferenceThroughAsmEmitter() {
+        TestAddressSpace memory = new TestAddressSpace(64);
+        int pld = t3(UNSIGNED_TOP8, SIZE_L_LDRB, 1, 15, 0x10); // PLD [r1,#0x10]
+        int ldr = t3(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, 0x20);   // LDR r0,[r1,#0x20]
+        memory.put16(0, hi(pld));
+        memory.put16(2, lo(pld));
+        memory.put16(4, hi(ldr));
+        memory.put16(6, lo(ldr));
+        memory.write32(0x20, 0x1122_3344);
+
+        IrBlock block = new StandardIrBlockLifter(
+                new ThumbDecoder(THUMB2_ARCH), new StandardIrBuilder()).lift(memory, 0, 2);
+
+        AsmCodeEmitter asmEmitter = new AsmCodeEmitter(THUMB2_ARCH, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
+        InterpretedCodeEmitter thumb2Reference = new InterpretedCodeEmitter(THUMB2_ARCH);
+
+        harness.assertEquivalent(thumb2Reference, asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> core.setRegister(1, 0x0)));
+    }
+
     // ── T2: [Rn, Rm, LSL #imm2] — comparado byte-a-byte com o ARM clássico ─────────────────
 
     @Test

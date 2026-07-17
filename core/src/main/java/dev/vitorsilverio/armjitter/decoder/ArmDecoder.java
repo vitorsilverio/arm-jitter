@@ -13,6 +13,26 @@ public final class ArmDecoder implements InstructionDecoder {
     /// Rn=1111 no encoding de USAD marca a forma sem acumulador (USAD8 vs USADA8).
     private static final int USAD_NO_ACCUMULATOR = 0xF;
 
+    // PLD/PLDW/PLI (B2.8) — máscaras exatas do QEMU `a32-uncond.decode`, seção "Preload
+    // instructions": `PLD 1111 0101 -101 ---- 1111 ---- ---- ----` (imediato/literal, 5te),
+    // `PLDW 1111 0101 -001 ---- 1111 ---- ---- ----` (imediato/literal, 7mp),
+    // `PLI 1111 0100 -101 ---- 1111 ---- ---- ----` (imediato/literal, 7),
+    // `PLD 1111 0111 -101 ---- 1111 ----- -- 0 ----` (registrador, 5te),
+    // `PLDW 1111 0111 -001 ---- 1111 ----- -- 0 ----` (registrador, 7mp),
+    // `PLI 1111 0110 -101 ---- 1111 ----- -- 0 ----` (registrador, 7).
+    private static final int PLD_IMM_MASK = 0xFF70_F000;
+    private static final int PLD_IMM_VALUE = 0xF550_F000;
+    private static final int PLDW_IMM_MASK = 0xFF70_F000;
+    private static final int PLDW_IMM_VALUE = 0xF510_F000;
+    private static final int PLI_IMM_MASK = 0xFF70_F000;
+    private static final int PLI_IMM_VALUE = 0xF450_F000;
+    private static final int PLD_REG_MASK = 0xFF70_F010;
+    private static final int PLD_REG_VALUE = 0xF750_F000;
+    private static final int PLDW_REG_MASK = 0xFF70_F010;
+    private static final int PLDW_REG_VALUE = 0xF710_F000;
+    private static final int PLI_REG_MASK = 0xFF70_F010;
+    private static final int PLI_REG_VALUE = 0xF650_F000;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -347,6 +367,25 @@ public final class ArmDecoder implements InstructionDecoder {
             }
             return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
                     InstructionKind.CLEAR_EXCLUSIVE, -1, -1, -1, 0, false, false, false);
+        }
+
+        // PLD/PLDW/PLI (B2.8): hints de preload de cache no espaço incondicional (cond=1111) —
+        // ARM DDI 0406C A8.8.128/A8.8.129/A8.8.130, confirmado no QEMU `a32-uncond.decode`
+        // ("Preload instructions", 6 linhas: PLD/PLDW/PLI x {imediato/literal, registrador}).
+        // Nenhum efeito observável além de ciclo/fetch — nem endereço é acessado (um PLD em
+        // endereço não mapeado não falha). Reusa o mesmo truque de MSR(imediato)->CPSR com
+        // máscara de campo vazia que WFI/hints já usam (ver `noOpHint` de Thumb2MiscDecoder).
+        if ((raw & PLD_IMM_MASK) == PLD_IMM_VALUE
+                || (raw & PLDW_IMM_MASK) == PLDW_IMM_VALUE
+                || (raw & PLI_IMM_MASK) == PLI_IMM_VALUE
+                || (raw & PLD_REG_MASK) == PLD_REG_VALUE
+                || (raw & PLDW_REG_MASK) == PLDW_REG_VALUE
+                || (raw & PLI_REG_MASK) == PLI_REG_VALUE) {
+            if (!architecture.has(ArmFeature.PRELOAD_HINTS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.MSR, 0, -1, -1, 0, true, false, false);
         }
 
         // UMAAL (ARMv6): `cccc 0000 0100 hhhh llll ssss 1001 mmmm` — soma RdLo e RdHi (cada um

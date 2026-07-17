@@ -134,6 +134,19 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         int rn = (raw >>> RN_SHIFT) & RN_MASK;
         int rt = (raw >>> RT_SHIFT) & RT_MASK;
 
+        // PLD/PLDW/PLI (B2.8): Rt=1111 no espaço de load vira hint de preload em vez de "load
+        // para o PC" — QEMU `t32.decode` marca isso explicitamente (`PLD_*`/`PLI_*` sobrepostos a
+        // LDRB_ri/LDRH_ri/LDRSB_ri em blocos `{ }` de prioridade). Só as formas LDRB-shaped
+        // (sizeL=001) e LDRH-shaped (sizeL=011) do grupo unsigned viram PLD/PLDW; só a
+        // LDRSB-shaped (sizeL=001) do grupo signed vira PLI — a LDRSH-shaped (sizeL=011) signed
+        // com Rt=PC é um "reserved hint, behaves as nop" GENÉRICO no QEMU (não nomeado PLD/PLI),
+        // fora do escopo desta task (carve-out cirúrgico, não generalizar). `LDR Rt,PC` (sizeL=101,
+        // sempre unsigned) continua sendo um load real para o PC — nunca cai aqui.
+        if (kind.load && rt == PROGRAM_COUNTER
+                && (signedGroup ? sizeL == SIZE_L_LDRSB : (sizeL == SIZE_L_LDRB || sizeL == SIZE_L_LDRH))) {
+            return decodePreloadHint(raw, address, condition);
+        }
+
         // "Load, unsigned (literal) overlaps all other load encodings": Rn=PC reivindica a forma
         // literal para as 5 variantes de load, INDEPENDENTE dos bits 23/11/10/9/8 (que para
         // qualquer outro Rn selecionariam T3/T4/T2) — ARM DDI 0406C A6.3.7, nota de prioridade.
@@ -207,6 +220,17 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         int literalAddress = ((address + 4) & ~3) + (up ? imm12 : -imm12);
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.LOAD_LITERAL,
                 rt, -1, -1, literalAddress, true, false, false, kind.sizeBytes, kind.signed);
+    }
+
+    /// PLD/PLDW/PLI (B2.8): NOP observável — nenhum registrador/memória é tocado, o endereço nunca
+    /// é computado (mesmo truque de MSR(imediato)->CPSR com máscara de campo vazia que
+    /// {@link Thumb2MiscDecoder#noOpHint} já usa para os demais hints Thumb-2).
+    private DecodedInstruction decodePreloadHint(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.PRELOAD_HINTS)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MSR,
+                0, -1, -1, 0, true, false, false);
     }
 
     private record SingleTransferKind(InstructionKind instructionKind, boolean load, int sizeBytes, boolean signed) {
