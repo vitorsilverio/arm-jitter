@@ -37,12 +37,16 @@ public final class IrBlockExecutor {
         // Itera o array cacheado por índice (sem alocar Iterator nem checkIndex por op):
         // este loop roda milhões de vezes, é o frame mais quente do interpretador.
         IrOp[] ops = block.operationsArray();
+        // Discriminador pré-resolvido na construção do bloco (task C8, candidato #1): evita a
+        // chamada virtual megamórfica de `op.kind()` por op a cada execução — o bloco é imutável
+        // pós-lift, então o dispatch já é conhecido e só precisa ser indexado aqui.
+        int[] kinds = block.kindsArray();
         for (int i = 0, n = ops.length; i < n; i++) {
             // Dispatch O(1) por discriminador inteiro (tableswitch), em vez do `switch` por
             // padrão de tipo, cuja varredura linear de `instanceof` era o 2º frame mais quente.
             // O cast em cada case é garantido por IrOp.kind() (ver IrOp.Kind).
             IrOp op = ops[i];
-            switch (op.kind()) {
+            switch (kinds[i]) {
                 case IrOp.Kind.ALU -> pcChanged |= alu.execute(core, (IrOp.Alu) op);
                 case IrOp.Kind.MULTIPLY -> alu.executeMultiply(core, (IrOp.Multiply) op);
                 case IrOp.Kind.LONG_MULTIPLY -> alu.executeLongMultiply(core, (IrOp.LongMultiply) op);

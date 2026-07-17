@@ -17,6 +17,7 @@ public final class IrBlock {
     private final int endPc;
     private final List<IrOp> operations;
     private final IrOp[] operationsArray;
+    private final int[] kindsArray;
 
     /// Cria um bloco copiando a lista de operações para preservar imutabilidade.
     public IrBlock(int startPc, int endPc, List<IrOp> operations) {
@@ -24,6 +25,10 @@ public final class IrBlock {
         this.endPc = endPc;
         this.operations = List.copyOf(operations);
         this.operationsArray = this.operations.toArray(new IrOp[0]);
+        this.kindsArray = new int[this.operationsArray.length];
+        for (int i = 0; i < this.operationsArray.length; i++) {
+            this.kindsArray[i] = this.operationsArray[i].kind();
+        }
     }
 
     /// Endereço inicial (inclusivo) do bloco.
@@ -47,6 +52,15 @@ public final class IrBlock {
     /// é compartilhado, não copiado, justamente para evitar custo por execução.
     public IrOp[] operationsArray() {
         return operationsArray;
+    }
+
+    /// {@link IrOp#kind()} de cada operação, resolvido uma única vez na construção (task C8):
+    /// evita a chamada virtual megamórfica de `kind()` por op a cada execução do bloco — o loop
+    /// quente do interpretador (`IrBlockExecutor#execute`) despacha pelo inteiro já pronto.
+    ///
+    /// **Uso interno:** paralelo a {@link #operationsArray()}, mesma regra de imutabilidade.
+    public int[] kindsArray() {
+        return kindsArray;
     }
 
     /// Cria um builder mutável para montar um bloco antes de selá-lo.
