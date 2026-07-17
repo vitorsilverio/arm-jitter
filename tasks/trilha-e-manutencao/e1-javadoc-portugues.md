@@ -57,7 +57,18 @@ lote, incluí-lo no lote corrente e registrar.
   demais arquivos dos 8 pacotes (`arch/`, `coprocessor/`, `memory/`, `swi/`, `jit/BlockCache` etc.) já
   estavam 100% em português. `mvn -o test` (raiz, JBR 25) verde; `javadoc:javadoc` sem erros; diff
   conferido linha a linha — só comentários tocados.
-- [ ] **Lote 3** — `core/src/test` inteiro
+- [x] **Lote 3** — `core/src/test` inteiro (2026-07-16) — 20 arquivos tocados (heurística do
+  grep + varredura manual de todos os pacotes não cobertos pela heurística — `codegen/equivalence`,
+  `codegen/jvm`, `debug`, `memory`, `support`, `swi`, `ir` raiz, `arch` restante — a maioria já
+  estava 100% em português): `ArmArchitectureTest`, `AsmFallbackPolicyTest`,
+  `InterpretedCodeEmitterTest`, `MemoryInterpretedCodeEmitterTest`, `MultipleTransferRuntimeTest`,
+  `CoprocessorTest`, `ArmDataProcessingInterpreterTest`, `Armv5MultipleTransferTest`,
+  `HighAddressPcOperandTest`, `MemoryInterpreterTest`, `MsrModeBankingTest`,
+  `MultipleTransferInterpreterTest`, `ThumbAluExecutionTest`, `ArmDecoderTest`,
+  `ThumbTwoDecoderTest`, `ConstantFoldPassTest`, `DeadCodeEliminationPassTest`,
+  `FlagMergePassTest`, `BlockCacheRangeTest`, `TestAddressSpace`; `SaturatingArithmeticTest` já
+  estava 100% em português (só falso positivo do grep numa string de assert). `mvn -o test` (raiz,
+  JBR 25) verde 614 core + 13 truffle; diff conferido linha a linha — só comentários tocados.
 - [ ] **Lote 4** — `truffle/` (main + test) + varredura final do grep devolvendo vazio
 
 ## Validação (por lote)

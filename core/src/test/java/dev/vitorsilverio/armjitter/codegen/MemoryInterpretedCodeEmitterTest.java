@@ -144,7 +144,7 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(1, core.runBlocks(runtime, 1));
 
-        // ARMv4T (ARM7TDMI): LDR into PC does not interwork; the CPU stays in ARM.
+        // ARMv4T (ARM7TDMI): LDR para o PC não faz interworking; a CPU permanece em ARM.
         assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x100, core.programCounter());
         assertEquals(0, core.register(1));
@@ -161,7 +161,7 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(1, core.runBlocks(runtime, 1));
 
-        // ARMv4T (ARM7TDMI): literal LDR into PC does not interwork; stays in ARM.
+        // ARMv4T (ARM7TDMI): LDR literal para o PC não faz interworking; permanece em ARM.
         assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x80, core.programCounter());
         assertEquals(0, core.register(1));
@@ -195,7 +195,7 @@ class MemoryInterpretedCodeEmitterTest {
 
         assertEquals(2, core.runBlocks(runtime, 1));
 
-        // ARM7TDMI stores R15 as PC+12 (STR at address 4 -> 4 + 12 = 16).
+        // ARM7TDMI armazena R15 como PC+12 (STR no endereço 4 -> 4 + 12 = 16).
         assertEquals(16, memory.read32(16));
         assertEquals(8, core.programCounter());
     }

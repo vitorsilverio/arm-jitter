@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 /// extensão em ARMV5TE, levanta para IR, executa e entrega ao coprocessor bus do core. O CP15
 /// fake apenas registra a transferência — sem semântica real — portanto valida o encadeamento.
 class CoprocessorTest {
-    // MCR p15, 0, r1, c9, c1, 0   and   MRC p15, 0, r2, c9, c1, 0
+    // MCR p15, 0, r1, c9, c1, 0   e   MRC p15, 0, r2, c9, c1, 0
     private static final int MCR_P15_R1_C9_C1_0 = 0xEE091F11;
     private static final int MRC_P15_R2_C9_C1_0 = 0xEE192F11;
 
@@ -52,12 +52,12 @@ class CoprocessorTest {
 
     @Test
     void absentCoprocessorTakesUndefinedVector() {
-        ArmCore core = newCore(MCR_P15_R1_C9_C1_0, null); // keeps the default CoprocessorBus.none()
+        ArmCore core = newCore(MCR_P15_R1_C9_C1_0, null); // mantém o CoprocessorBus.none() padrão
 
         core.step();
 
         assertEquals(CpuMode.UNDEFINED, core.mode());
-        assertEquals(0x04, core.programCounter()); // undefined-instruction vector
+        assertEquals(0x04, core.programCounter()); // vetor de instrução indefinida
     }
 
     @Test
@@ -80,7 +80,7 @@ class CoprocessorTest {
         core.step();
 
         assertEquals(CpuMode.UNDEFINED, core.mode());
-        assertEquals(0x04, core.programCounter()); // undefined-instruction vector
+        assertEquals(0x04, core.programCounter()); // vetor de instrução indefinida
     }
 
     private static ArmCore newCore(int instruction, CoprocessorBus cp15) {

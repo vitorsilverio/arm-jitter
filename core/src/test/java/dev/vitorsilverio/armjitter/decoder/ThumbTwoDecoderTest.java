@@ -84,7 +84,7 @@ class ThumbTwoDecoderTest {
     void genuineThumb2DataProcessingImmediateCandidateIsUndefinedWithoutExtension() {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put16(0, 0xF000); // hw1[15:11] = 0b11110
-        memory.put16(2, 0x0000); // hw2[15] = 0 -> Data processing: immediate (not BL/BLX)
+        memory.put16(2, 0x0000); // hw2[15] = 0 -> Data processing: immediate (não BL/BLX)
         ThumbDecoder decoder = new ThumbDecoder(THUMB2_ARCH);
 
         DecodedInstruction instruction = decoder.decode(memory, 0);
@@ -99,7 +99,7 @@ class ThumbTwoDecoderTest {
     void genuineThumb2BranchWithoutLinkCandidateIsUndefinedWithoutExtension() {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put16(0, 0xF000); // hw1[15:11] = 0b11110
-        memory.put16(2, 0x8000); // hw2[15:14] = 0b10 -> Branches/misc, not "with link"
+        memory.put16(2, 0x8000); // hw2[15:14] = 0b10 -> Branches/misc, não "with link"
         ThumbDecoder decoder = new ThumbDecoder(THUMB2_ARCH);
 
         DecodedInstruction instruction = decoder.decode(memory, 0);
@@ -155,8 +155,8 @@ class ThumbTwoDecoderTest {
         // B2.6, o endereço 0 decodifica o par INTEIRO como uma instrução de 4 bytes — o endereço 2
         // nunca é visitado independentemente, e os halfwords de "dados" em 4/6 nunca são tocados.
         ArmCore core = newCore(ArmArchitecture.ARMV6K_THUMB2);
-        put16(core, 0, 0xF000); // prefix: highOffset=0
-        put16(core, 2, 0xF801); // suffix: BL, lowOffset=2 -- também bate com SINGLE_UNSIGNED_TOP8
+        put16(core, 0, 0xF000); // prefixo: highOffset=0
+        put16(core, 2, 0xF801); // sufixo: BL, lowOffset=2 -- também bate com SINGLE_UNSIGNED_TOP8
         put16(core, 4, 0x0000); // "dados" que seriam o resto do load fantasma
         put16(core, 6, 0x0000);
 
@@ -178,8 +178,8 @@ class ThumbTwoDecoderTest {
         // já era real no preset de produção antigo (2 extensões), só nunca exercitada por teste
         // algum -- documentado explicitamente no Contexto de b2.6-thumb2-preset-fechamento.md.
         ArmCore core = newCore(ArmArchitecture.ARMV6K_THUMB2);
-        put16(core, 0, 0xF000); // prefix: highOffset=0
-        put16(core, 2, 0xEA01); // suffix: BLX, lowOffset=2 -- também bate com REGISTER_FORM_PREFIX
+        put16(core, 0, 0xF000); // prefixo: highOffset=0
+        put16(core, 2, 0xEA01); // sufixo: BLX, lowOffset=2 -- também bate com REGISTER_FORM_PREFIX
         put16(core, 4, 0x0000);
         put16(core, 6, 0x0000);
 

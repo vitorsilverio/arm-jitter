@@ -107,7 +107,7 @@ class ConstantFoldPassTest {
 
     @Test
     void unknownSrc1PreventsConstantFold() {
-        // src1ValueOverride = -1 (unknown), opcode that needs src1
+        // src1ValueOverride = -1 (desconhecido), opcode que precisa de src1
         IrBlock block = block(new IrOp.Alu(IrOpCode.ADD, 0, 1, -1,
                 new IrOperand.Immediate(5), false, Condition.AL));
         IrBlock after = pass.optimize(block);
@@ -157,7 +157,7 @@ class ConstantFoldPassTest {
 
     @Test
     void foldedOpIsNativeSupported() {
-        // After folding, the result should be a MOV with Immediate → always native-supported
+        // Após o fold, o resultado deve ser um MOV com Immediate → sempre suportado nativamente
         IrBlock block = block(alu(IrOpCode.ADD, 0, 10, 20));
         IrBlock after = pass.optimize(block);
 

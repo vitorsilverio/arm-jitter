@@ -7,9 +7,9 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// LDM with writeback and the base register inside the list: ARMv5 still writes back unless the
-/// base is the highest register of a multi-register transfer (then the loaded value wins). ARMv4
-/// always keeps the loaded value.
+/// LDM com writeback e o registrador base dentro da lista: o ARMv5 ainda faz writeback a menos que
+/// a base seja o registrador mais alto de uma transferência multi-registrador (aí o valor carregado
+/// prevalece). O ARMv4 sempre mantém o valor carregado.
 class Armv5MultipleTransferTest {
     private static final int W0 = 0xC0FFEEAB;
     private static final int W1 = 0xDEADBEEF;

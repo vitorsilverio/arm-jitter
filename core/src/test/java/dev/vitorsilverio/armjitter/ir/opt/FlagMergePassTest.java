@@ -32,7 +32,7 @@ class FlagMergePassTest {
 
     @Test
     void singleSetFlagsAtEndIsKept() {
-        // Flags at block exit are conservatively live
+        // Flags na saída do bloco são conservadoramente vivas
         IrBlock block = block(aluF(IrOpCode.ADD, 0, 1, 1));
         IrBlock after = pass.optimize(block);
 
@@ -41,7 +41,7 @@ class FlagMergePassTest {
 
     @Test
     void twoSetFlagsInSequenceFirstDropped() {
-        // ADD setFlags, then CMP setFlags — first flags are overwritten before exit
+        // ADD setFlags, depois CMP setFlags — as primeiras flags são sobrescritas antes da saída
         IrBlock block = block(
                 aluF(IrOpCode.ADD, 0, 1, 1),
                 aluF(IrOpCode.ADD, 2, 3, 4));
@@ -69,7 +69,7 @@ class FlagMergePassTest {
 
     @Test
     void adcBetweenSetFlagsPreservesFirst() {
-        // ADD setFlags, ADC (reads carry), ADD setFlags — first flags must be kept because ADC reads carry
+        // ADD setFlags, ADC (lê carry), ADD setFlags — as primeiras flags precisam ser mantidas porque ADC lê o carry
         IrOp.Alu adc = new IrOp.Alu(IrOpCode.ADC, 2, 3, -1,
                 new IrOperand.Immediate(0), false, Condition.AL);
         IrBlock block = block(
@@ -95,7 +95,7 @@ class FlagMergePassTest {
 
     @Test
     void nonFlagOpBetweenTwoSetFlagsDoesNotPreserveFirst() {
-        // MOV (no setFlags) between two setFlags → first still dead
+        // MOV (sem setFlags) entre dois setFlags → o primeiro continua morto
         IrBlock block = block(
                 aluF(IrOpCode.ADD, 0, 1, 1),
                 alu(IrOpCode.MOV, 3, 0, 0),
@@ -108,7 +108,7 @@ class FlagMergePassTest {
 
     @Test
     void noChangeReturnsSameInstance() {
-        // Only one setFlags at the end
+        // Só um setFlags no final
         IrBlock block = block(aluF(IrOpCode.CMP, 0, 1, 0));
         assertSame(block, pass.optimize(block));
     }

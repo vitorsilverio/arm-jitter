@@ -8,25 +8,25 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// Reproduces rockwrestler's `init_stackpointers`: switch to IRQ mode via `msr cpsr_c`, set the
-/// (banked) SP there, switch back, set the System SP. The two stack pointers must end up in their
-/// own banks. A bug here parks SP_irq in the wrong place, which corrupts BIOS IRQ handling.
+/// Reproduz o `init_stackpointers` do rockwrestler: troca para o modo IRQ via `msr cpsr_c`, ajusta
+/// o SP (banked) lá, volta, ajusta o SP do System. Os dois stack pointers precisam terminar em seus
+/// próprios bancos. Um bug aqui estaciona o SP_irq no lugar errado, o que corrompe o tratamento de IRQ da BIOS.
 class MsrModeBankingTest {
 
     @Test
     void msrControlFieldBanksTheStackPointer() {
         TestAddressSpace memory = new TestAddressSpace(0x20);
-        memory.put32(0x00, 0xE121F000); // msr cpsr_c, r0   (r0 = IRQ mode)
-        memory.put32(0x04, 0xE1A0D001); // mov r13, r1       (IRQ SP)
-        memory.put32(0x08, 0xE121F002); // msr cpsr_c, r2   (r2 = System mode)
-        memory.put32(0x0C, 0xE1A0D003); // mov r13, r3       (System SP)
+        memory.put32(0x00, 0xE121F000); // msr cpsr_c, r0   (r0 = modo IRQ)
+        memory.put32(0x04, 0xE1A0D001); // mov r13, r1       (SP do IRQ)
+        memory.put32(0x08, 0xE121F002); // msr cpsr_c, r2   (r2 = modo System)
+        memory.put32(0x0C, 0xE1A0D003); // mov r13, r3       (SP do System)
 
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV5TE);
         core.configureExecutionState(0, CpuMode.SYSTEM, InstructionSet.ARM, true, true);
-        core.setRegister(0, 0x000000D2); // IRQ mode (+ I/F)
-        core.setRegister(1, 0x22220000); // intended SP_irq
-        core.setRegister(2, 0x000000DF); // System mode (+ I/F)
-        core.setRegister(3, 0x11110000); // intended SP_sys
+        core.setRegister(0, 0x000000D2); // modo IRQ (+ I/F)
+        core.setRegister(1, 0x22220000); // SP_irq pretendido
+        core.setRegister(2, 0x000000DF); // modo System (+ I/F)
+        core.setRegister(3, 0x11110000); // SP_sys pretendido
 
         core.step();
         core.step();

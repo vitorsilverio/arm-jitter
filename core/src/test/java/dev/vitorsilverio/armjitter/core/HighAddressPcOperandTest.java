@@ -8,13 +8,13 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// Reading R15 as an ALU operand must yield (instruction address + 8) even at high addresses such
-/// as the ARM9 BIOS at 0xFFFF0000+, whose PC values are negative as ints. The "no override"
-/// sentinel was once distinguished with `>= 0`, which wrongly discarded these negative overrides
-/// and read the stale block PC — exactly the bug that hung the ARM9 BIOS IRQ handler.
+/// Ler R15 como operando de ALU precisa resultar em (endereço da instrução + 8) mesmo em endereços
+/// altos como a BIOS do ARM9 em 0xFFFF0000+, cujos valores de PC são negativos como int. A sentinela
+/// de "sem override" era antes distinguida com `>= 0`, o que descartava erroneamente esses overrides
+/// negativos e lia o PC obsoleto do bloco — exatamente o bug que travava o tratador de IRQ da BIOS do ARM9.
 class HighAddressPcOperandTest {
 
-    /// RAM mapped at an arbitrary base, so we can run code at 0xFFFF0000-style addresses.
+    /// RAM mapeada numa base arbitrária, para podermos rodar código em endereços no estilo 0xFFFF0000.
     private static final class BasedMemory implements AddressSpace {
         private final int base;
         private final byte[] data;
@@ -77,8 +77,8 @@ class HighAddressPcOperandTest {
     void aluReadsPcAsAddressPlusEightAtHighAddresses() {
         int base = 0xFFFF0000;
         BasedMemory memory = new BasedMemory(base, 0x100);
-        // Two leading no-ops so the `add` is not the first instruction of the block, then
-        // `add r0, pc, #0` at 0xFFFF0008 — r0 must become 0xFFFF0010 (address + 8).
+        // Dois no-ops iniciais para que o `add` não seja a primeira instrução do bloco, depois
+        // `add r0, pc, #0` em 0xFFFF0008 — r0 precisa virar 0xFFFF0010 (endereço + 8).
         memory.put32(0xFFFF0000, 0xE1A01001); // mov r1, r1 (nop)
         memory.put32(0xFFFF0004, 0xE1A01001); // mov r1, r1 (nop)
         memory.put32(0xFFFF0008, 0xE28F0000); // add r0, pc, #0

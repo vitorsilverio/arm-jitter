@@ -39,7 +39,7 @@ class ArmDecoderTest {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE16F_1F10);
 
-        // CLZ is an ARMv5 instruction; the base ARMv4T decoder rejects it.
+        // CLZ é uma instrução ARMv5; o decoder base ARMv4T a rejeita.
         DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0);
 
         assertEquals(InstructionKind.CLZ, instruction.kind());

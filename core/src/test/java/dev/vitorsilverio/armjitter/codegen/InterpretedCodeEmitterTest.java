@@ -91,7 +91,7 @@ class InterpretedCodeEmitterTest {
         memory.put32(0, 0xE16F_1F10);
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
         core.setRegister(0, 0x0000_8000);
-        // CLZ is ARMv5-only, so the decoder must target an ARMv5 architecture.
+        // CLZ é exclusivo do ARMv5, então o decoder precisa mirar uma arquitetura ARMv5.
         IrBlock block = new StandardIrBlockLifter(new ArmDecoder(ArmArchitecture.ARMV5TE), new StandardIrBuilder())
                 .lift(memory, 0, 1);
 

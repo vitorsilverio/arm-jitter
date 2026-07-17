@@ -40,7 +40,7 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void overwrittenBeforeReadIsEliminated() {
-        // MOV r0, #1 followed by MOV r0, #2 — first write to r0 is dead
+        // MOV r0, #1 seguido de MOV r0, #2 — a primeira escrita em r0 é morta
         IrBlock before = block(mov(0, 1), mov(0, 2));
         IrBlock after = pass.optimize(before);
 
@@ -50,7 +50,7 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void readBeforeOverwritePreservesOp() {
-        // ADD r1, r0, #5 reads r0, so MOV r0 before it must be kept
+        // ADD r1, r0, #5 lê r0, então o MOV r0 antes dele precisa ser mantido
         IrBlock block = block(mov(0, 10), add(1, 0, 5));
         IrBlock after = pass.optimize(block);
 
@@ -59,7 +59,7 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void setFlagsOpNeverEliminated() {
-        // Even if dst is overwritten later, setFlags must be preserved
+        // Mesmo que dst seja sobrescrito depois, setFlags precisa ser preservado
         IrBlock block = block(movFlags(0, 1), mov(0, 2));
         IrBlock after = pass.optimize(block);
 
@@ -89,13 +89,13 @@ class DeadCodeEliminationPassTest {
         IrBlock block = block(writePc, overwrite);
         IrBlock after = pass.optimize(block);
 
-        // both PC writes must be preserved (PC = 15 → never DCE'd)
+        // as duas escritas em PC precisam ser preservadas (PC = 15 → nunca sofre DCE)
         assertEquals(2, after.operations().size());
     }
 
     @Test
     void chainOfDeadWritesEliminated() {
-        // MOV r0, #1 ; MOV r0, #2 ; MOV r0, #3 — first two are dead
+        // MOV r0, #1 ; MOV r0, #2 ; MOV r0, #3 — as duas primeiras são mortas
         IrBlock block = block(mov(0, 1), mov(0, 2), mov(0, 3));
         IrBlock after = pass.optimize(block);
 
@@ -105,7 +105,7 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void registerReadByLaterOpPreservesEarlierWrite() {
-        // r0 written, then r1 = r0 + r2 reads r0
+        // r0 escrito, depois r1 = r0 + r2 lê r0
         IrBlock block = block(mov(0, 42), addRead(1, 0, 2));
         IrBlock after = pass.optimize(block);
 
@@ -136,9 +136,9 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void deadWriteBeforeMultipleTransferIsEliminated() {
-        // Store to r1 then LDM that overwrites r1: the MOV r1 is dead only if r1 is NOT in LDM load list...
-        // Actually: if LDM loads r1, it writes r1 → earlier MOV r1 is dead
-        // Simulate: MOV r1 then LDM that defines r1 (LDM IrOp.MultipleTransfer load=true, mask bit1=1)
+        // Store em r1 seguido de LDM que sobrescreve r1: o MOV r1 só é morto se r1 NÃO estiver na lista de load do LDM...
+        // Na verdade: se o LDM carrega r1, ele escreve r1 → o MOV r1 anterior é morto
+        // Simula: MOV r1 seguido de LDM que define r1 (LDM IrOp.MultipleTransfer load=true, mask bit1=1)
         IrOp.MultipleTransfer ldm = new IrOp.MultipleTransfer(
                 true, 0, 0b10 /* r1 */, false, -1, false,
                 dev.vitorsilverio.armjitter.decoder.BlockTransferMode.IA, false, Condition.AL);

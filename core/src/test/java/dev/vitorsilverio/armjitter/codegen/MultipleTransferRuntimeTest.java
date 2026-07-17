@@ -158,7 +158,7 @@ class MultipleTransferRuntimeTest {
 
         assertEquals(12, memory.read32(64));
         assertEquals(128, core.register(0));
-        // ARMv4T (ARM7TDMI): ARM LDM into PC (no S bit) does not interwork; stays ARM.
+        // ARMv4T (ARM7TDMI): LDM ARM para o PC (sem bit S) não faz interworking; permanece ARM.
         assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x104, core.programCounter());
         assertEquals(160, core.register(1));
@@ -178,7 +178,7 @@ class MultipleTransferRuntimeTest {
 
         assertEquals(2, core.runBlocks(runtime, 1));
 
-        // ARM7TDMI stores PC as addr+6 in THUMB block stores (empty-rlist quirk).
+        // ARM7TDMI armazena o PC como addr+6 em stores de bloco THUMB (peculiaridade da lista vazia).
         assertEquals(6, memory.read32(64));
         assertEquals(128, core.register(0));
         assertTrue(core.cpsr().isThumbMode());

@@ -28,8 +28,8 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     /// 0xE1031092 = SWP r1, r2, [r3] (Swap — não nativo)
     private static TestAddressSpace buildMixedBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A00064);  // MOV r0, #100     (AL — native)
-        memory.put32(4, 0xE1031092);  // SWP r1, r2, [r3] (Swap — not native)
+        memory.put32(0, 0xE3A00064);  // MOV r0, #100     (AL — nativo)
+        memory.put32(4, 0xE1031092);  // SWP r1, r2, [r3] (Swap — não nativo)
         return memory;
     }
 
@@ -39,7 +39,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     void wholBlockNativeBlockIncrementedForSupportedBlock() {
         AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.WHOLE_BLOCK);
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 (fully native)
+        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 (totalmente nativo)
         IrBlock block = liftBlock(memory, 1);
 
         emitter.emit(block);
@@ -92,7 +92,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
         TestAddressSpace memory = buildMixedBlock();
         IrBlock block = liftBlock(memory, 2);
 
-        // Block is not "wholly native" but PER_OP can still compile it
+        // Bloco não é "totalmente nativo" mas PER_OP ainda consegue compilá-lo
         assertFalse(emitter.isNativeSupported(block));
         assertBlockEquivalent(emitter, block, EquivalenceTestSupport.independentPair(memory, c -> { }));
     }
@@ -105,7 +105,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
 
         emitter.emit(block);
 
-        // 1 non-native op (SWP — Swap) must be counted
+        // 1 op não nativa (SWP — Swap) deve ser contada
         assertTrue(emitter.perOpFallbackOpCount() >= 1,
                 "Expected at least 1 per-op fallback; got " + emitter.perOpFallbackOpCount());
         assertEquals(1, emitter.nativeBlockCount());
@@ -116,7 +116,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     void perOpFullyNativeBlockHasZeroFallbackOps() {
         AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.PER_OP);
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 — native
+        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 — nativo
         IrBlock block = liftBlock(memory, 1);
 
         emitter.emit(block);
@@ -140,7 +140,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     void failFastNativeBlockCompilesNormally() {
         AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.FAIL_FAST);
         TestAddressSpace memory = new TestAddressSpace(32);
-        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 (native)
+        memory.put32(0, 0xE3A0000A);  // MOV r0, #10 (nativo)
         IrBlock block = liftBlock(memory, 1);
 
         assertDoesNotThrow(() -> emitter.emit(block));
@@ -171,12 +171,12 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
 
     @Test
     void optimizerIsAppliedBeforeEmission() {
-        // The optimizer (gba) should constant-fold MOV r0, #10 + ADD r1, r0 (src1Override=10), #5
-        // into two MOVs; the result must still match the interpreter.
+        // O otimizador (gba) deve fazer constant-fold de MOV r0, #10 + ADD r1, r0 (src1Override=10), #5
+        // em dois MOVs; o resultado ainda deve bater com o interpretador.
         AsmCodeEmitter emitter = new AsmCodeEmitter(AsmFallbackPolicy.WHOLE_BLOCK, StandardIrOptimizer.gba());
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A0000A);  // MOV r0, #10
-        memory.put32(4, 0xE2801005);  // ADD r1, r0, #5  (interpreted r0 may not be 10 at runtime)
+        memory.put32(4, 0xE2801005);  // ADD r1, r0, #5  (r0 interpretado pode não ser 10 em tempo de execução)
         IrBlock block = liftBlock(memory, 2);
 
         assertBlockEquivalent(emitter, block, EquivalenceTestSupport.independentPair(memory, c -> { }));

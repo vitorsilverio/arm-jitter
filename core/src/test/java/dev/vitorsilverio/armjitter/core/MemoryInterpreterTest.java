@@ -149,8 +149,8 @@ class MemoryInterpreterTest {
 
         core.step();
 
-        // ARMv4T (ARM7TDMI): LDR into PC does not interwork; bit 0 is ignored and
-        // the CPU stays in ARM state. Interworking loads only exist from ARMv5T.
+        // ARMv4T (ARM7TDMI): LDR para o PC não faz interworking; o bit 0 é ignorado e
+        // a CPU permanece em estado ARM. Loads com interworking só existem a partir do ARMv5T.
         assertFalse(core.cpsr().isThumbMode());
         assertEquals(0x100, core.programCounter());
     }
@@ -187,7 +187,7 @@ class MemoryInterpreterTest {
         TestAddressSpace memory = new TestAddressSpace(96);
         memory.put32(0, 0xE190_20D1);
         memory.put32(4, 0xE190_30F1);
-        memory.put16(65, 0xFF80); // raw setup: byte 0x80 at the odd address 65
+        memory.put16(65, 0xFF80); // configuração bruta: byte 0x80 no endereço ímpar 65
         ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
         core.setRegister(0, 64);
         core.setRegister(1, 1);

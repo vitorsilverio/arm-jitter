@@ -34,7 +34,7 @@ class BlockCacheRangeTest {
         BlockKey key = new BlockKey(0x03000000, InstructionSet.ARM);
         cache.put(key, core -> 1, 0x03000000, 0x03000010);
 
-        cache.invalidate(0x06000000); // VRAM write: different page, no code there
+        cache.invalidate(0x06000000); // escrita na VRAM: página diferente, sem código lá
 
         assertTrue(cache.get(key).isPresent());
     }
@@ -43,10 +43,10 @@ class BlockCacheRangeTest {
     void invalidatesBlockThatSpansTwoPagesFromTheSecondPage() {
         BlockCache cache = new BlockCache(4);
         BlockKey key = new BlockKey(0x000003F0, InstructionSet.ARM);
-        // [0x3F0, 0x410) crosses the 1 KiB page boundary at 0x400.
+        // [0x3F0, 0x410) atravessa a fronteira de página de 1 KiB em 0x400.
         cache.put(key, core -> 1, 0x000003F0, 0x00000410);
 
-        cache.invalidate(0x00000404); // write lands in the second page
+        cache.invalidate(0x00000404); // a escrita cai na segunda página
 
         assertTrue(cache.get(key).isEmpty());
     }
@@ -56,12 +56,12 @@ class BlockCacheRangeTest {
         BlockCache cache = new BlockCache(4);
         BlockKey key = new BlockKey(0x1000, InstructionSet.ARM);
         cache.put(key, core -> 1, 0x1000, 0x1008);
-        cache.put(key, core -> 2, 0x2000, 0x2008); // recompiled elsewhere
+        cache.put(key, core -> 2, 0x2000, 0x2008); // recompilado em outro lugar
 
-        cache.invalidate(0x1004); // old range must no longer match
+        cache.invalidate(0x1004); // o intervalo antigo não deve mais bater
         assertTrue(cache.get(key).isPresent());
 
-        cache.invalidate(0x2004); // new range must match
+        cache.invalidate(0x2004); // o intervalo novo deve bater
         assertTrue(cache.get(key).isEmpty());
     }
 
@@ -71,10 +71,10 @@ class BlockCacheRangeTest {
         BlockKey first = new BlockKey(0x1000, InstructionSet.ARM);
         BlockKey second = new BlockKey(0x5000, InstructionSet.ARM);
         cache.put(first, core -> 1, 0x1000, 0x1008);
-        cache.put(second, core -> 2, 0x5000, 0x5008); // evicts `first`
+        cache.put(second, core -> 2, 0x5000, 0x5008); // remove `first` do cache
 
         assertTrue(cache.get(first).isEmpty());
-        cache.invalidate(0x1004); // must be a harmless no-op, not touch `second`
+        cache.invalidate(0x1004); // precisa ser um no-op inofensivo, sem tocar `second`
 
         assertTrue(cache.get(second).isPresent());
         assertEquals(1, cache.size());

@@ -51,7 +51,7 @@ public final class TestAddressSpace implements AddressSpace {
 
     @Override
     public void write16(int address, int value) {
-        // Models normal RAM: a halfword store forces alignment (bit 0 ignored).
+        // Modela RAM normal: um store de halfword força alinhamento (bit 0 ignorado).
         int aligned = address & ~1;
         write8(aligned, value);
         write8(aligned + 1, value >>> 8);

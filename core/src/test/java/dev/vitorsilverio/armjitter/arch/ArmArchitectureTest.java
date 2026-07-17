@@ -111,7 +111,7 @@ class ArmArchitectureTest {
 
     @Test
     void decoderExtensionHandlesEncodingsTheBaseDecoderRejects() {
-        int raw = 0xEE00_0001; // coprocessor space: UNIMPLEMENTED in the shared decoder
+        int raw = 0xEE00_0001; // espaço de coprocessador: UNIMPLEMENTED no decoder compartilhado
         TestAddressSpace memory = new TestAddressSpace(8);
         memory.put32(0, raw);
 
