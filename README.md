@@ -8,12 +8,12 @@ O projeto não possui `Main`: ele é um core auxiliar para ser embutido por um e
 
 Pacotes principais:
 
-- `core`: registradores, CPSR, modos bancados, SPSR, exceções e avaliação condicional.
-- `memory`: barramento abstrato `AddressSpace` + invalidação SMC.
+- `core`: registradores, CPSR, modos bancados, SPSR, exceções e avaliação condicional; banco VFP (`VfpRegisters` S/D + `FpscrRegister`), monitor de exclusividade compartilhável (`ExclusiveMonitor`) e modelo de exceção plugável (`ExceptionModel`, base do perfil M).
+- `memory`: barramento abstrato `AddressSpace` + invalidação SMC; `PagedAddressSpace` (dispatch O(1) por página, usado pelo gbaemu).
 - `decoder`: decodificação ARM/THUMB.
 - `arch`: `ArmArchitecture`/`ArmFeature` — presets `ARMV4T` e `ARMV5TE` e quirks por arquitetura.
 - `ir` / `ir.opt`: representação intermediária imutável + otimizador (constant fold, DCE, flag merge).
-- `jit`: runtime tiered, cache de blocos com inline cache e encadeamento de blocos.
+- `jit`: runtime tiered, cache de blocos com inline cache, encadeamento de blocos com budget de ciclos, superblocos de loop e warm-start (`hotBlockKeys`/`precompile`).
 - `codegen` / `codegen.jvm`: emissores de código (interpretado, bytecode JVM via ASM) + harness de equivalência.
 - `coprocessor`: barramento de coprocessadores (CP15 etc. ficam no hospedeiro).
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
@@ -35,11 +35,12 @@ Presets prontos em `ArmArchitecture` (`arch` package) — cada um liga um conjun
 | `ARMV4T` (ARM7TDMI) | GBA | ✅ produção (gbaemu) — ARM/THUMB completo, emissão ASM nativa |
 | `ARMV5TE` (ARM9E) | NDS | ✅ produção (ndsemu) — `BLX`/`CLZ`/DSP multiplies/saturating/`LDRD`/`STRD`, emissão ASM nativa |
 | `ARMV6K` | 3DS (núcleo ARM11), Raspberry Pi 1/Zero | ✅ decoder+IR+interpretador+ASM nativo completos (extend/reverse/UMAAL, SIMD paralelo, PKH/SAT/USAD8, LDREX/STREX/CLREX, CPS/SETEND/WFI); validado com binário ELF real no `armbox` |
-| `ARMV6K_THUMB2` | subconjunto de ARMv7-A Thumb-2 | 🟡 parcial — infra + data-processing + load/store + misc prontos; falta branches+IT block (maior risco da trilha B, ver tasks) |
-| ARMv7-A + VFP | Linux/Android ARMv7 user-mode | ⬜ planejado |
-| MMU / full-system 32-bit | Kernel Linux ARMv6/v7 | ⬜ planejado |
-| 3DS (periféricos) | Novo emulador irmão | ⬜ planejado (depende de ARMv6K + VFP) |
-| AArch64 | Linux/Android arm64 | ⬜ planejado, épico próprio (frontend novo) |
+| `ARMV6K_THUMB2` | subconjunto de ARMv7-A Thumb-2 | ✅ Thumb-2 completo (épico B2): decoder 32-bit, IT blocks, branches/TBB/TBH, paridade de multiplicação/extend/saturação, LDREX/STREX.W, PLD/PLI; validado com binário real no `armbox` |
+| ARMv7-A + VFP | Linux/Android ARMv7 user-mode | 🟡 em andamento (épico B3) — inteiro v7 pronto em ARM e Thumb-2 (MOVW/MOVT, bitfield, SDIV/UDIV, RBIT...); VFP com banco S/D + FPSCR + IR + executor interpretado prontos; faltam decoder CP10/11, emissão ASM e o preset `ARMV7A` |
+| Perfil M (Cortex-M) | Firmware ARMv6-M/v7-M | 🟡 iniciado (épico B7) — `ExceptionModel` plugável extraído; MSP/PSP/NVIC/SysTick/presets nas próximas tasks |
+| MMU / full-system 32-bit | Kernel Linux ARMv6/v7 | ⬜ planejado ([RFC-SOFTMMU](docs/RFC-SOFTMMU.md) aprovada) |
+| 3DS (periféricos) | Novo emulador irmão | 🟡 lado arm-jitter iniciado — monitor de exclusividade global (B5.1) pronto; preset MPCore pendente |
+| AArch64 | Linux/Android arm64 | ⬜ planejado, épico próprio (frontend novo; [RFC IR-64](docs/RFC-IR-64BIT.md) aprovada) |
 
 Backend Truffle/GraalVM (compilação alternativa, mesma IR — ver seção abaixo): ✅
 funcional em JVM, 🟡 native-image roda mas ainda não compila blocos reais.
@@ -145,9 +146,10 @@ ASM não funciona (`defineClass` em runtime não é suportado). Em JVM normal o 
 continua a escolha certa** para o tamanho de bloco típico de jogo (poucas dezenas de
 instruções) — o Truffle só vence em blocos/traces grandes, e o ponto de crossover é
 JVM-dependente (medido entre ~80 e 320 instruções). gbaemu/ndsemu não usam Truffle hoje
-(opt-in, sem wiring nos consumidores). O demo de native-image (`armbox`, task A5) roda
-mas ainda **não compila os blocos de verdade** (bailout de partial evaluation em blocos
-reais) — task de continuação: [A6](tasks/trilha-a-truffle/a6-especializacao-nos-truffle.md).
+(opt-in, sem wiring nos consumidores). A especialização de nós por `IrOp` (task A6)
+destravou a compilação real de blocos ARM reais **na JVM** (JBR + Unchained); sob
+**native-image** o bailout de partial evaluation persiste (pipeline SVM distinto) —
+task de continuação: [A7](tasks/trilha-a-truffle/a7-native-image-revalidacao.md).
 
 Benchmarks completos, notas sobre a distribuição GraalVM e o relatório do native-image:
 **[docs/TRUFFLE-BACKEND.md](docs/TRUFFLE-BACKEND.md)**.
@@ -283,8 +285,11 @@ em [ROADMAP.md](ROADMAP.md), divididos em fases com critérios de aceite.
 
 ## Compilação e testes
 
-Por regra do projeto, o agente não deve executar compilação/testes fora do sandbox. Execute localmente:
+Compilar e testar com **JBR 25** (a JDK do IntelliJ), não o JDK do sistema:
 
 ```bash
-mvn test
+mvn -o test
 ```
+
+Mudanças aqui exigem `mvn install` local e as suítes dos consumidores (gbaemu e
+ndsemu) verdes antes do commit (invariante G5 do `tasks/README.md`).

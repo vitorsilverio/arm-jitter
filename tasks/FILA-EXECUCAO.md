@@ -1,4 +1,4 @@
-# Fila de execução (2026-07-15) — para agentes com contexto limitado
+# Fila de execução (2026-07-15; reestruturada 2026-07-17) — para agentes com contexto limitado
 
 **Regras de sessão (obrigatórias, existem para o agente NÃO se perder):**
 
@@ -10,10 +10,10 @@
 3. Se a task mandar "PARE e pergunte/reporte", encerrar a sessão e devolver ao
    usuário — não improvisar.
 4. Nunca pegar itens da seção "Pendências que EXIGEM modelo forte" do
-   `tasks/README.md`.
+   `tasks/README.md`, nem da seção "🧑 Bloqueadas no usuário" abaixo.
 5. Ao fechar: suites verdes (arm-jitter `mvn -o test` com JBR 25 + gbaemu +
    ndsemu), status atualizado no índice do `tasks/README.md`, 1 commit começando
-   com o ID (`B2.6: ...`).
+   com o ID (`B3.5: ...`).
 6. **NUNCA duas sessões simultâneas no MESMO checkout/repo** — "paralelo" vale
    só entre repos DIFERENTES (arm-jitter ∥ gbaemu ∥ armbox). Duas sessões no
    mesmo working tree misturam WIP uma da outra (já aconteceu em 2026-07-16:
@@ -32,72 +32,58 @@
 
 ---
 
-## Onda 1 — executáveis AGORA (sem dependência pendente)
+## Histórico — ondas 1 e 2 FECHADAS (detalhes no índice do `tasks/README.md`)
 
-Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em paralelo.
+- **Onda 1 — ✅ 100%** (2026-07-16): C11 · B2.6 · B1.7 · B4.0.4 · B4.0.4.1 · C6 ·
+  D1 · D2 · D3 · D4 · A6 · B5.1 · E1.
+- **Onda 2 — ✅ tudo que um agente podia executar** (2026-07-16/17): B2.7 · B2.8 ·
+  B3.1 · B3.3 · B7.1 · C8 · C10. As 2 "restantes" (**C7** e **A7**) NÃO são
+  executáveis por agente sozinho — exigem o usuário presente (validação de
+  gameplay / máquina GraalVM+MSVC) e moram na seção "🧑 Bloqueadas no usuário".
+  **Se você é um agente procurando trabalho: a onda 2 está TERMINADA para você;
+  vá direto à tabela da onda 3.**
+- Da onda 3 já fecharam: **B3.2** ✅ e **B3.4** ✅ (2026-07-17, VFP IrOps +
+  executor interpretado).
 
-| # | Task | Repo | Por quê agora | Nota de sessão |
-|---|------|------|---------------|----------------|
-| 1 | ~~C11~~ ✅ FECHADA 2026-07-16 (Fix C `JitRuntime.reset()` bastou — estado de superbloco sobrevivia ao `clear()`; gap agora fecha em 20-40s) | — | — | — |
-| 2 | ~~B2.6~~ ✅ FECHADA 2026-07-16 (`c1c2ab4`) — **B2.7, B2.8, B3.1 e B7.1 (onda 2) estão DESTRAVADAS agora** | — | — | — |
-| 3 | ~~B1.7~~ ✅ FECHADA 2026-07-16 (`8f942b2`) — `ArmFeature.UNALIGNED_ACCESS` em ARMV6K/ARMV6K_THUMB2; suítes arm-jitter 606+13, gbaemu 216, ndsemu 175, armbox 26 verdes | — | — | — |
-| 4 | ~~B4.0.4~~ ✅ FECHADA 2026-07-16 (armbox `ArmboxCp15`; 2 gaps reportados viraram B4.0.4.1 e o item MCR/MRC-Thumb do PR3 da B2.7) | — | — | — |
-| 4b | ~~B4.0.4.1~~ ✅ FECHADA 2026-07-16 — `CoprocessorBus.handles` fino implementado (arm-jitter + armbox); B4.0.3 segue dependendo só de B2.7/B2.8 agora | — | — | — |
-| 5 | ~~C6~~ ✅ FECHADA 2026-07-16 (`64e08c1`) — validação de gameplay A/B confirmou os 3 problemas observados como pré-existentes, não regressão | — | — | — |
-| 6 | ~~D1~~ ✅ FECHADA 2026-07-16 — protocolo S-3511A verificado contra o GBATEK real (fetch direto); `S3511aRtc`+`GbaRtcDetector`+GPIO opcional em `GbaRom`; suite gbaemu 231 verde | — | — | — |
-| 6b | ~~D2~~ ✅ FECHADA 2026-07-16 — hipótese 1 (HDMA em V-Blank) e hipótese 3 (OBJ window) corrigidas; hipótese 2 (wrap OAM) REFUTADA (era artefato do bug 1). Validação visual do usuário CONFIRMADA (fade, direção do inimigo, overlay de status) | — | — | — |
-| 6c | ~~D3~~ ✅ FECHADA 2026-07-16 — sem problema real (usuário confirmou o áudio aceitável após ouvir os WAVs/jogar) | — | — | — |
-| 6d | ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real (usuário confirmou o áudio aceitável após ouvir os WAVs/jogar; hipótese de FIFO/timer do enunciado já tinha sido REFUTADA na fase 1) | — | — | — |
-| 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
-| 8 | ~~B5.1~~ ✅ FECHADA 2026-07-16 (`f390a7a`) — `core/ExclusiveMonitor.java` compartilhável entre cores; reserva por core (`IdentityHashMap`); hook de escrita comum em todos os stores de baixo nível dos 2 backends; 4 testes novos + suites B1.4/gbaemu/ndsemu verdes | — | — |
-| 9 | ~~E1~~ ✅ FECHADA 2026-07-16 — javadocs em inglês → português (regra G7), 4/4 lotes concluídos (Lote 4: `truffle/` já estava 100% português, zero diff; varredura final do grep limpa) | — | — | — |
+## Onda 3 — fila ATUAL (executar de cima para baixo)
 
-## Onda 2 — assim que a dependência da onda 1 fechar
+Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
+repo é obrigatória**; a coluna Repo mostra o que pode andar em paralelo (repos
+diferentes apenas).
 
-| Task | Depois de | Nota |
-|------|-----------|------|
-| ~~B2.7~~ ✅ FECHADA 2026-07-16/17 (PR1+PR2+PR3, ver `tasks/README.md`) | — | — |
-| ~~B2.8~~ ✅ FECHADA 2026-07-17 — `ArmFeature.PRELOAD_HINTS` novo; `PLD`/`PLDW`/`PLI` como NOP em ARM (`ArmDecoder`) e Thumb-2 (`Thumb2LoadStoreDecoder`, carve-out em `Rt=PC`); suítes arm-jitter 682+13, gbaemu 243, ndsemu 175 verdes | — | — |
-| ~~B3.1~~ ✅ FECHADA 2026-07-17 — todas as 13 instruções da tabela colidiam com dispatches genéricos do `ArmDecoder` (achado do Passo 0); viraram carve-outs diretos (não uma `DecoderExtension`), como a própria spec previa como contingência. Suítes arm-jitter 698+13, gbaemu e ndsemu verdes | — | — |
-| ~~B3.3~~ ✅ FECHADA 2026-07-17 — `VfpRegisters`+`FpscrRegister` novos, estado só (sem instrução ainda); `STATE_VERSION` interno no `ArmCore` (retrocompat de leitura) + bump de `GbaConsole`/`NdsConsole`; `CpuSnapshot` cobre VFP. Suites arm-jitter 710+13, gbaemu 239, ndsemu 175 verdes | — | — |
-| ~~B7.1~~ ✅ FECHADA 2026-07-17 — `ExceptionModel`/`AProfileExceptionModel` extraídos zero-diff; intercept plugado nos 3 caminhos de PC-vindo-de-dado nos 2 backends (achado: ASM não tinha ponto de entrada único para load-to-PC, unificado num `loadToPc` novo). Suítes arm-jitter 716+13, gbaemu, ndsemu verdes; bench JUS normal | — | — |
-| **C7** (Paged ndsemu) | C6 | Validação de gameplay do usuário |
-| ~~C8~~ ✅ FECHADA 2026-07-17 — candidato #1 (dispatch) −15,6%, candidato #2 (decode/lift) já coberto sem PR, candidato #4 (`GbaBus` owner table) +≈−6,6% extra; usuário confirmou FireRed com velocidade normal, sem regressão (ver `tasks/README.md`) | — | — |
-| ~~C10~~ ✅ FECHADA 2026-07-17 — `JitRuntime#hotBlockKeys`/`#precompile` novos (arm-jitter) + `HotBlockStore` (ndsemu, `.hotpcs` texto versionado + guarda CRC32); precompile chamado SÍNCRONO na thread de emulação (BlockCache não é thread-safe p/ chamada de outra thread). Suítes arm-jitter 724+13, ndsemu 179, gbaemu verdes. Aceite #1 (medição fps MKDS) e #2 (asmcheck JUS real) PENDENTES — sem ambiente de ROM real nesta sessão | — | — |
-| **A7** (revalidação native-image) | A6 | Precisa do ambiente GraalVM+MSVC (usuário presente) |
+| # | Task | Arquivo | Repo | Depende de | Nota de sessão |
+|---|------|---------|------|-----------|----------------|
+| 1 | **B3.5** — VFP: decoder CP10/11 ARM + Thumb-2 | `trilha-b-arquiteturas/b3.5-vfp-decoder.md` | arm-jitter | B3.4 ✅ | **PRÓXIMA do arm-jitter** |
+| 2 | **B3.6** — VFP + inteiro v7: emissão ASM nativa | `trilha-b-arquiteturas/b3.6-vfp-asm-nativo.md` | arm-jitter | B3.5 | 2 PRs — **1 sessão por PR** |
+| 3 | **B3.7** — preset `ARMV7A` + torture gcc hard-float (fecha B3) | `trilha-b-arquiteturas/b3.7-preset-armv7a-armbox.md` | arm-jitter + armbox | B3.6 | usa `arm-none-eabi-gcc` (mesma toolchain dos testdata do armbox) |
+| 4 | **B5.2** — preset MPCore (lado arm-jitter do 3DS) | `trilha-b-arquiteturas/b5-3ds.md` (seção B5.2) | arm-jitter | B3.5 | B5.1 já ✅ |
+| 5 | **B7.2** — `MProfileExceptionModel`: MSP/PSP, xPSR, stacking, EXC_RETURN | `trilha-b-arquiteturas/b7.2-mprofile-exception-model.md` | arm-jitter | B7.1 ✅ | início da cadeia Cortex-M |
+| 6 | **B7.3** — SCS/NVIC/VTOR/SysTick memory-mapped | `trilha-b-arquiteturas/b7.3-scs-nvic-systick.md` | arm-jitter | B7.2 | |
+| 7 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 | |
+| 8 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 | |
+| P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — pode rodar em paralelo com a fila do arm-jitter |
+| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
 
-## Onda 3 — fechamentos
+Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
+(softmmu/full-system, RFC-SOFTMMU) e B6.1+ (AArch64).
 
-~~B3.2~~ ✅ FECHADA 2026-07-17 — `SBFX`/`UBFX`/`BFI`/`BFC` (`Thumb2DataProcessingDecoder`),
-`MLS`/`SDIV`/`UDIV` (`Thumb2MultiplyDecoder`), `RBIT` (`Thumb2RegisterDataProcessingDecoder`);
-zero IR nova, layout confirmado contra o QEMU `t32.decode`; suítes arm-jitter 745+13, gbaemu 239,
-ndsemu 179 verdes (ver `tasks/README.md`)
+## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 
-B3.4 → B3.5 → B3.6 → B3.7 (cadeia VFP) · B7.2 → B7.3 → B7.4 → B7.5
-(cadeia Cortex-M) · **B4.0.3** (após B2.7+B2.8 — B2.6/B1.7/B4.0.4/B4.0.4.1 já ✅;
-o PR3 da B2.7 inclui o decode MCR/MRC Thumb-2 que a B4.0.4 confirmou faltar) ·
-B4.0.5 · C9 (após C7) · A8 (após A7) · **A9 PR1** (lib nativa `.dll`/`.so` com
-API C, backend interpretado — pode rodar a qualquer momento com o usuário
-presente p/ GraalVM+MSVC; **A9 PR2** após A7) · B5.2 (após B3.5) · B4.1.1+ e
-B6.1+ quando priorizados.
+| Task | Arquivo | O que precisa do usuário | Destrava depois |
+|------|---------|--------------------------|-----------------|
+| **C7** — `PagedAddressSpace` no ndsemu | `trilha-c-perf/c7-paged-address-space-ndsemu.md` | Validação de gameplay (boot dos 4 jogos de referência) | **C9** (fastmem ndsemu, `trilha-c-perf/c9-jit-fastmem-ndsemu.md`) |
+| **A7** — revalidação native-image pós-A6 | `trilha-a-truffle/a7-native-image-revalidacao.md` | Máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC (`vcvars64.bat`) | **A8** (otimizações native-image) e **A9 PR2** |
+| **A9 PR1** — lib nativa `.dll`/`.so` com API C, backend interpretado | `trilha-a-truffle/a9-native-shared-library.md` | Mesmo ambiente GraalVM+MSVC (+ `cl.exe` p/ o smoke test em C); pode rodar a qualquer momento | A9 PR2 (após A7) |
+| C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 
 Backend-independentes (confirmado 2026-07-16: INTERPRETED e ASM idênticos em
 sintoma e velocidade no GBA — a atribuição antiga ao ASM está REVOGADA).
+D2/D3/D4 já fechadas (ver índice).
 
 | Task | O que é | Quem pode executar |
 |------|---------|--------------------|
-| ~~D2~~ ✅ FECHADA 2026-07-16 — hipótese 1 (HDMA em V-Blank) e hipótese 3 (OBJ window) corrigidas; hipótese 2 (wrap OAM) REFUTADA (era artefato do bug 1); validação visual do usuário confirmada | — | — |
-| ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
-| ~~D3~~ ✅ FECHADA 2026-07-16 — sem problema real | — | — |
 | **D6** — BIOS lenta/interrompida | Timing/waitstate/handoff | ⚠️ MODELO FORTE |
 | **D5** — Platinum trava (Buneary) | ndsemu; ler pistas falsas em `ndsemu-game-compat` ANTES | ⚠️ MODELO FORTE |
 | (sem task) Divergência ASM×interp no JUS | ver pendência 6 do tasks/README | ⚠️ MODELO FORTE |
-
-## Onde o USUÁRIO entra (planejar presença)
-
-- C11 fase 1: fornecer o save state do SM64DS; C11/C6/C7/D1: validar gameplay.
-- A7/A8/A9: rodar na máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC
-  (A9 também usa o `cl.exe` para compilar o smoke test em C).
-- B4.0.3/B3.7: toolchain (`arm-none-eabi-gcc`) já usada nos testdata do armbox.
