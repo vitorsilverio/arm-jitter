@@ -62,7 +62,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | ~~B3.3~~ ✅ FECHADA 2026-07-17 — `VfpRegisters`+`FpscrRegister` novos, estado só (sem instrução ainda); `STATE_VERSION` interno no `ArmCore` (retrocompat de leitura) + bump de `GbaConsole`/`NdsConsole`; `CpuSnapshot` cobre VFP. Suites arm-jitter 710+13, gbaemu 239, ndsemu 175 verdes | — | — |
 | ~~B7.1~~ ✅ FECHADA 2026-07-17 — `ExceptionModel`/`AProfileExceptionModel` extraídos zero-diff; intercept plugado nos 3 caminhos de PC-vindo-de-dado nos 2 backends (achado: ASM não tinha ponto de entrada único para load-to-PC, unificado num `loadToPc` novo). Suítes arm-jitter 716+13, gbaemu, ndsemu verdes; bench JUS normal | — | — |
 | **C7** (Paged ndsemu) | C6 | Validação de gameplay do usuário |
-| **C8** (perf interpretador) | C6 | Fase 1 (medir) e cada candidato = sessões separadas |
+| **C8** (perf interpretador) | C6 | Fase 1 (medir) ✅ 2026-07-17 (ver `tasks/README.md`) — fase 2 candidato #1 (dispatch) é a próxima sessão |
 | ~~C10~~ ✅ FECHADA 2026-07-17 — `JitRuntime#hotBlockKeys`/`#precompile` novos (arm-jitter) + `HotBlockStore` (ndsemu, `.hotpcs` texto versionado + guarda CRC32); precompile chamado SÍNCRONO na thread de emulação (BlockCache não é thread-safe p/ chamada de outra thread). Suítes arm-jitter 724+13, ndsemu 179, gbaemu verdes. Aceite #1 (medição fps MKDS) e #2 (asmcheck JUS real) PENDENTES — sem ambiente de ROM real nesta sessão | — | — |
 | **A7** (revalidação native-image) | A6 | Precisa do ambiente GraalVM+MSVC (usuário presente) |
 
