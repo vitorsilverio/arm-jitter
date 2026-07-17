@@ -47,9 +47,11 @@ public final class ArmArchitecture {
             ArmFeature.WAIT_HINTS,
             ArmFeature.UNALIGNED_ACCESS);
 
-    /// Preset Thumb-2 completo do épico B2 (B2.1-B2.6): as 4 extensões de decoder de 32 bits
-    /// (`Thumb2DataProcessingDecoder`, `Thumb2LoadStoreDecoder`, `Thumb2BranchDecoder`,
-    /// `Thumb2MiscDecoder`) plugadas juntas. Até B2.6 só 2 das 4 estavam plugadas: `BL`/`BLX`
+    /// Preset Thumb-2 do épico B2 (B2.1-B2.6) mais a paridade de encodings de B2.7: as extensões
+    /// de decoder de 32 bits (`Thumb2DataProcessingDecoder`, `Thumb2RegisterDataProcessingDecoder`
+    /// [B2.7 PR1], `Thumb2MultiplyDecoder` [B2.7 PR2], `Thumb2LoadStoreDecoder`,
+    /// `Thumb2BranchDecoder`, `Thumb2MiscDecoder`) plugadas juntas. Até B2.6 só 2 delas estavam
+    /// plugadas: `BL`/`BLX`
     /// imediato, decodificado como dois halfwords independentes (`LONG_BRANCH_PREFIX`+
     /// `LONG_BRANCH_SUFFIX`), fazia `ThumbDecoder#decode` ser chamado de novo no endereço do
     /// SEGUNDO halfword — que coincide, byte a byte, com o formato de um prefixo Thumb-2 de 32
@@ -78,6 +80,7 @@ public final class ArmArchitecture {
             .withThumb32DecoderExtensions(
                     List.of(new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
+                            new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES)));

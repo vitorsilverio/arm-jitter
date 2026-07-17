@@ -82,8 +82,9 @@ class ArmV6kThumb2PresetIntegrationTest {
 
     @Test
     void allFourExtensionsArePluggedTogetherInThePublicPreset() {
-        // B2.7 (PR1) acrescentou Thumb2RegisterDataProcessingDecoder (espaço 0xFA) como a 5ª.
-        assertEquals(5, THUMB2_ARCH.thumb32DecoderExtensions().size());
+        // B2.7 (PR1) acrescentou Thumb2RegisterDataProcessingDecoder (espaço 0xFA) como a 5ª;
+        // B2.7 (PR2) acrescentou Thumb2MultiplyDecoder (espaço 0xFB) como a 6ª.
+        assertEquals(6, THUMB2_ARCH.thumb32DecoderExtensions().size());
     }
 
     @Test

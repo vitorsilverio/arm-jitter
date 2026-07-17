@@ -105,8 +105,9 @@ class ArmArchitectureTest {
         }
         assertEquals(ArmArchitecture.ARMV6K.decoderExtensions().size(), preset.decoderExtensions().size(),
                 "extensões de decoder ARM (32-bit clássico) herdadas sem mudança");
-        assertEquals(5, preset.thumb32DecoderExtensions().size(),
-                "as 4 extensões Thumb-2 (B2.2/B2.3/B2.4/B2.5) + Thumb2RegisterDataProcessingDecoder (B2.7 PR1)");
+        assertEquals(6, preset.thumb32DecoderExtensions().size(),
+                "as 4 extensões Thumb-2 (B2.2/B2.3/B2.4/B2.5) + Thumb2RegisterDataProcessingDecoder (B2.7 PR1)"
+                        + " + Thumb2MultiplyDecoder (B2.7 PR2)");
         assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.THUMB2), "a base ARMV6K não pode ser mutada");
     }
 
