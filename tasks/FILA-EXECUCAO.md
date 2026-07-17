@@ -60,7 +60,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | ~~B2.8~~ ✅ FECHADA 2026-07-17 — `ArmFeature.PRELOAD_HINTS` novo; `PLD`/`PLDW`/`PLI` como NOP em ARM (`ArmDecoder`) e Thumb-2 (`Thumb2LoadStoreDecoder`, carve-out em `Rt=PC`); suítes arm-jitter 682+13, gbaemu 243, ndsemu 175 verdes | — | — |
 | ~~B3.1~~ ✅ FECHADA 2026-07-17 — todas as 13 instruções da tabela colidiam com dispatches genéricos do `ArmDecoder` (achado do Passo 0); viraram carve-outs diretos (não uma `DecoderExtension`), como a própria spec previa como contingência. Suítes arm-jitter 698+13, gbaemu e ndsemu verdes | — | — |
 | ~~B3.3~~ ✅ FECHADA 2026-07-17 — `VfpRegisters`+`FpscrRegister` novos, estado só (sem instrução ainda); `STATE_VERSION` interno no `ArmCore` (retrocompat de leitura) + bump de `GbaConsole`/`NdsConsole`; `CpuSnapshot` cobre VFP. Suites arm-jitter 710+13, gbaemu 239, ndsemu 175 verdes | — | — |
-| **B7.1** (ExceptionModel refactor) | B2.6 + B3.3 (toca ArmCore — sequenciar) — **DESTRAVADA agora** | Zero-diff; bench de sanidade no fim |
+| ~~B7.1~~ ✅ FECHADA 2026-07-17 — `ExceptionModel`/`AProfileExceptionModel` extraídos zero-diff; intercept plugado nos 3 caminhos de PC-vindo-de-dado nos 2 backends (achado: ASM não tinha ponto de entrada único para load-to-PC, unificado num `loadToPc` novo). Suítes arm-jitter 716+13, gbaemu, ndsemu verdes; bench JUS normal | — | — |
 | **C7** (Paged ndsemu) | C6 | Validação de gameplay do usuário |
 | **C8** (perf interpretador) | C6 | Fase 1 (medir) e cada candidato = sessões separadas |
 | **C10** (warm-start `.hotpcs`) | C11 (reusa as APIs) | 1 sessão |

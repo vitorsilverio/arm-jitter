@@ -168,6 +168,52 @@ class ArmExceptionHandlingTest {
     }
 
     @Test
+    void defaultExceptionModelIsAProfile() {
+        ArmCore core = new ArmCore(new TestAddressSpace(32), SwiDispatcher.empty());
+
+        assertInstanceOf(AProfileExceptionModel.class, core.exceptionModel());
+    }
+
+    @Test
+    void undefinedInstructionEntersHighVectorWhenConfigured() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xEE00_0000);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setBankedRegister(CpuMode.UNDEFINED, 13, 0x5000);
+        core.setHighVectors(true);
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0xFFFF_0004, core.programCounter());
+        assertEquals(4, core.register(14));
+        assertEquals(0x5000, core.register(13));
+        assertEquals(RESET_CPSR, core.spsr(CpuMode.UNDEFINED));
+        assertTrue(core.cpsr().irqDisabled());
+        assertFalse(core.cpsr().isThumbMode());
+    }
+
+    @Test
+    void pendingIrqEntersHighIrqVectorWhenConfigured() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE3A0_0001);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setBankedRegister(CpuMode.IRQ, 13, 0x4000);
+        core.cpsr().setIrqDisabled(false);
+        core.setInterruptLine(true);
+        core.setHighVectors(true);
+
+        core.step();
+
+        assertEquals(CpuMode.IRQ, core.mode());
+        assertEquals(0xFFFF_0018, core.programCounter());
+        assertEquals(4, core.register(14));
+        assertEquals(0x4000, core.register(13));
+        assertEquals(CpuMode.SUPERVISOR.bits() | CpsrRegister.FIQ_DISABLE_FLAG, core.spsr(CpuMode.IRQ));
+        assertEquals(0, core.register(0));
+    }
+
+    @Test
     void pendingIrqEntersIrqVectorBeforeNextInstruction() {
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A0_0001);

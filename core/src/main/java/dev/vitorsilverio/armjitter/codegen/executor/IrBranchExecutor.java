@@ -32,6 +32,10 @@ public final class IrBranchExecutor {
         if (branch.link()) {
             core.setRegister(14, branch.returnAddress()); // BLX: captura o retorno antes de trocar de estado
         }
+        if (core.exceptionModel().interceptsBranch(target)) {
+            core.exceptionModel().branchIntercepted(core, target);
+            return true;
+        }
         core.cpsr().setThumbMode((target & 1) != 0);
         core.setProgramCounter(target & ~1);
         return true;

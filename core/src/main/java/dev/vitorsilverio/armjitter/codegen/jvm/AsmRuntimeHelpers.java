@@ -267,25 +267,42 @@ public final class AsmRuntimeHelpers {
 
     /// Seta o modo Thumb a partir do bit 0 do alvo e atualiza o PC (semântica de BX no ARMv4T).
     public static void branchExchange(ArmCore core, int target) {
+        if (core.exceptionModel().interceptsBranch(target)) {
+            core.exceptionModel().branchIntercepted(core, target);
+            return;
+        }
         core.cpsr().setThumbMode((target & 1) != 0);
         core.setProgramCounter(target & ~1);
     }
 
-    /// Carrega um valor no PC, alinhando a 4 bytes em modo ARM ou 2 em THUMB (ARMv4T — sem interworking).
+    /// Carrega um valor no PC, alinhando a 4 bytes em modo ARM ou 2 em THUMB (ARMv4T — sem
+    /// interworking). Chamado diretamente (sem passar pelo intercept do `ExceptionModel`, B7.1)
+    /// só pelo data-processing para PC ({@code MOV pc,...}, que nunca interworka); LDR/LDM/POP
+    /// para PC passam por {@link #loadToPc}.
     public static void loadToPcArm4(ArmCore core, int value) {
         int mask = core.cpsr().isThumbMode() ? ~1 : ~3;
         core.setProgramCounter(value & mask);
     }
 
     /// Carrega um valor no PC COM interworking (ARMv5T+): o bit 0 seleciona o estado THUMB/ARM.
-    /// Usado por LDR/LDM/POP para PC no ARMv5; data-processing para PC ainda usa {@link #loadToPcArm4}.
+    /// Usado por {@link #loadToPc} (LDR/LDM/POP para PC no ARMv5).
     public static void loadToPcArm5(ArmCore core, int value) {
         core.cpsr().setThumbMode((value & 1) != 0);
         core.setProgramCounter(value & ~1);
     }
 
-    /// Load-to-PC escolhendo interworking conforme a arquitetura (decidida no emit).
-    private static void loadToPc(ArmCore core, int value, boolean interwork) {
+    /// Load-to-PC escolhendo interworking conforme a arquitetura (decidida no emit): ponto de
+    /// entrada comum de TODO load-to-PC vindo de memória/pilha (LDR/LDR literal/POP/LDM, inline
+    /// ou via {@link #executePop}/{@link #executeMultipleTransfer}) — espelha o
+    /// {@code IrExecutionSupport#loadToPc} do interpretador (B7.1): checa
+    /// {@link ArmCore#exceptionModel()} antes de decidir o interworking. NÃO usado pelo
+    /// data-processing para PC ({@code MOV pc,...}), que nunca interworka e por isso nunca
+    /// intercepta (chama {@link #loadToPcArm4} diretamente).
+    public static void loadToPc(ArmCore core, int value, boolean interwork) {
+        if (core.exceptionModel().interceptsBranch(value)) {
+            core.exceptionModel().branchIntercepted(core, value);
+            return;
+        }
         if (interwork) {
             loadToPcArm5(core, value);
         } else {

@@ -60,6 +60,10 @@ final class IrExecutionSupport {
     }
 
     void loadToPc(ArmCore core, int value) {
+        if (core.exceptionModel().interceptsBranch(value)) {
+            core.exceptionModel().branchIntercepted(core, value);
+            return;
+        }
         if (architecture.has(ArmFeature.LOAD_PC_INTERWORKING)) {
             core.cpsr().setThumbMode((value & 1) != 0);
             core.setProgramCounter(value & ~1);

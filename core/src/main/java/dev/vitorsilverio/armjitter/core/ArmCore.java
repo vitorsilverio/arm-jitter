@@ -17,7 +17,8 @@ public final class ArmCore {
     private static final int REGISTER_COUNT = 16;
     private static final int PC = 15;
     private static final int SP = 13;
-    private static final int LR = 14;
+    /// Índice do link register (visível no pacote para {@link AProfileExceptionModel}).
+    static final int LR = 14;
     /// Versão do formato de {@link #saveState}/{@link #loadState}: `1` = formato anterior à
     /// B3.3 (sem banco VFP/FPSCR), `2` = inclui o banco VFP completo. Lida por este core, não
     /// pelos consumidores (`GbaConsole`/`NdsConsole` têm o próprio versionamento por cima, que
@@ -65,6 +66,10 @@ public final class ArmCore {
     /// memória). É `long` internamente porque o §5 da RFC IR-64 exige que estado novo de
     /// endereçamento já nasça com largura de 64 bits (endereços de 32 bits entram sem sinal).
     private ExclusiveMonitor exclusiveMonitor = new ExclusiveMonitor();
+
+    /// Modelo de entrada de exceção (B7.1). Default é o perfil A/R clássico; um perfil M
+    /// (B7.2+) troca este campo antes de começar a executar (ver {@link #setExceptionModel}).
+    private ExceptionModel exceptionModel = new AProfileExceptionModel();
 
     /// Cria um core conectado a uma memória e a um dispatcher de SWI.
     ///
@@ -496,8 +501,18 @@ public final class ArmCore {
     /// Solicita entrada numa exceção ARM usando o PC atual como base de retorno.
     public void requestException(ArmException exception) {
         Objects.requireNonNull(exception, "exception");
-        int returnAddress = exceptionReturnAddress(exception);
-        enterException(exception, returnAddress);
+        exceptionModel.enterException(this, exception);
+    }
+
+    /// Retorna o modelo de entrada de exceção instalado (perfil A/R por padrão).
+    public ExceptionModel exceptionModel() {
+        return exceptionModel;
+    }
+
+    /// Instala um modelo de entrada de exceção alternativo (B7.2+: perfil M). Deve ser chamado
+    /// antes de começar a executar — trocar o modelo em meio à execução não é suportado.
+    public void setExceptionModel(ExceptionModel exceptionModel) {
+        this.exceptionModel = Objects.requireNonNull(exceptionModel, "exceptionModel");
     }
 
     /// Lê um registrador bancado para o modo informado.
@@ -663,7 +678,7 @@ public final class ArmCore {
     private boolean servicePendingIrq() {
         if (interruptLine && !cpsr.irqDisabled()) {
             sleepState = CpuSleepState.RUNNING;
-            enterException(ArmException.IRQ, programCounter() + 4);
+            exceptionModel.enterException(this, ArmException.IRQ);
             return true;
         }
         return false;
@@ -674,64 +689,6 @@ public final class ArmCore {
         if (cpsrMode != activeMode) {
             switchMode(cpsrMode);
         }
-    }
-
-    private void enterException(ArmException exception, int returnAddress) {
-        // Qualquer entrada de exceção (SWI/IRQ/undefined/aborts) abre o monitor de
-        // exclusividade: um STREX após o retorno deve falhar e refazer o par LDREX/STREX.
-        clearExclusiveMonitor();
-        CpuMode targetMode = exceptionMode(exception);
-        int vector = exceptionVector(exception);
-        int oldCpsr = cpsr.get();
-        switchMode(targetMode);
-        setSpsr(targetMode, oldCpsr);
-        registers[LR] = returnAddress;
-        cpsr.setThumbMode(false);
-        // ITSTATE (B2.4, Thumb-2 IT block): a entrada de exceção sempre limpa o ITSTATE do CPSR
-        // NOVO (a `oldCpsr` completa, incl. o ITSTATE de origem, já foi capturada acima em
-        // `setSpsr` — só a cópia ATIVA some) — mesma regra do ARM ARM para qualquer exceção
-        // (SWI/IRQ/FIQ/aborts/UNDEFINED), independente de em qual instrução do IT block ela
-        // ocorreu. Sem isto, um `IrOp.SetItState` de avanço emitido pelo lifter LOGO DEPOIS da
-        // instrução que disparou a exceção (mesmo bloco IR, ainda vai executar) deixaria um
-        // ITSTATE não-zero "vazando" para o handler por coincidência de timing.
-        cpsr.setItState(0);
-        cpsr.setIrqDisabled(true);
-        if (exception == ArmException.RESET || exception == ArmException.FIQ) {
-            cpsr.setFiqDisabled(true);
-        }
-        setProgramCounter((highVectors ? 0xFFFF0000 : 0) + vector);
-    }
-
-    private int exceptionReturnAddress(ArmException exception) {
-        return switch (exception) {
-            case SWI, UNDEFINED -> programCounter();
-            case IRQ, FIQ -> programCounter() + 4;
-            case PREFETCH_ABORT -> programCounter() + 4;
-            case DATA_ABORT -> programCounter() + 8;
-            case RESET -> 0;
-        };
-    }
-
-    private CpuMode exceptionMode(ArmException exception) {
-        return switch (exception) {
-            case RESET, SWI -> CpuMode.SUPERVISOR;
-            case UNDEFINED -> CpuMode.UNDEFINED;
-            case PREFETCH_ABORT, DATA_ABORT -> CpuMode.ABORT;
-            case IRQ -> CpuMode.IRQ;
-            case FIQ -> CpuMode.FIQ;
-        };
-    }
-
-    private int exceptionVector(ArmException exception) {
-        return switch (exception) {
-            case RESET -> 0x00;
-            case UNDEFINED -> 0x04;
-            case SWI -> 0x08;
-            case PREFETCH_ABORT -> 0x0C;
-            case DATA_ABORT -> 0x10;
-            case IRQ -> 0x18;
-            case FIQ -> 0x1C;
-        };
     }
 
     private void saveBank(CpuMode mode) {

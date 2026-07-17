@@ -143,10 +143,15 @@ public final class AsmBlockCompiler {
         this.perOpExecutor = perOpExecutor;
     }
 
-    /// Nome do helper de load->PC para LDR/LDM/POP (interworking conforme a arquitetura).
-    /// Data-processing para PC (MOV pc, ...) usa sempre {@code loadToPcArm4} (não interworka).
-    private String loadToPcHelper() {
-        return loadPcInterworks ? "loadToPcArm5" : "loadToPcArm4";
+    /// Emite `loadPcInterworks` seguido da chamada a {@code AsmRuntimeHelpers#loadToPc(core,
+    /// value, interwork)} — pilha já deve ter `core, value` empilhados. Usado por TODO
+    /// load-to-PC vindo de memória/pilha (LDR/LDR literal/POP inline; POP/LDM em bloco chamam o
+    /// mesmo helper por dentro de `executePop`/`executeMultipleTransfer`). Passa pelo intercept
+    /// do `ExceptionModel` (B7.1) — diferente de `MOV pc,...`, que chama {@code loadToPcArm4}
+    /// diretamente e nunca intercepta.
+    private void emitLoadToPcFromMemory(MethodVisitor method) {
+        method.visitInsn(loadPcInterworks ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.invokeStatic(method, HELPERS, "loadToPc", CORE_IZ_TO_V);
     }
 
     /// Helper de guard especializado para uma condição (ver os `condXx` em AsmRuntimeHelpers).
@@ -826,7 +831,7 @@ public final class AsmBlockCompiler {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
             AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
-            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V);
+            emitLoadToPcFromMemory(method);
             method.visitIincInsn(ADDR_LOCAL, 4);
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
@@ -1586,7 +1591,7 @@ public final class AsmBlockCompiler {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
-            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V); // LDR pc: interworka em ARMv5
+            emitLoadToPcFromMemory(method); // LDR pc: interworka em ARMv5
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
         } else {
@@ -1666,7 +1671,7 @@ public final class AsmBlockCompiler {
             method.visitVarInsn(Opcodes.ISTORE, TEMP3_LOCAL);
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitVarInsn(Opcodes.ILOAD, TEMP3_LOCAL);
-            AsmBytecode.invokeStatic(method, HELPERS, loadToPcHelper(), CORE_I_TO_V); // LDR pc,=lit: interworka em ARMv5
+            emitLoadToPcFromMemory(method); // LDR pc,=lit: interworka em ARMv5
             method.visitInsn(Opcodes.ICONST_1);
             method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
         } else {
