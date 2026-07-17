@@ -50,7 +50,7 @@ Ordem dentro do mesmo repo é obrigatória; repos diferentes podem andar em para
 | 6d | ~~D4~~ ✅ FECHADA 2026-07-16 — sem problema real (usuário confirmou o áudio aceitável após ouvir os WAVs/jogar; hipótese de FIFO/timer do enunciado já tinha sido REFUTADA na fase 1) | — | — | — |
 | 7 | ~~A6~~ ✅ FECHADA 2026-07-16 (`a8090d8`) — objetivo central (compilação real no JBR) alcançado; native-image segue com o mesmo bailout de A5, herdado por A7 | — | — | — |
 | 8 | ~~B5.1~~ ✅ FECHADA 2026-07-16 (`f390a7a`) — `core/ExclusiveMonitor.java` compartilhável entre cores; reserva por core (`IdentityHashMap`); hook de escrita comum em todos os stores de baixo nível dos 2 backends; 4 testes novos + suites B1.4/gbaemu/ndsemu verdes | — | — |
-| 9 | **E1** — javadocs em inglês → português (regra G7) — 🟡 Lote 3/4 ✅ 2026-07-16 | arm-jitter | Higiene; risco zero de código | **1 sessão POR LOTE** (4 lotes, checklist no próprio arquivo); pode intercalar entre tasks maiores; NÃO rodar em paralelo com outra task de arm-jitter (diff de comentário conflita com tudo). Próximo: Lote 4 (`truffle/` main+test + varredura final do grep) |
+| 9 | ~~E1~~ ✅ FECHADA 2026-07-16 — javadocs em inglês → português (regra G7), 4/4 lotes concluídos (Lote 4: `truffle/` já estava 100% português, zero diff; varredura final do grep limpa) | — | — | — |
 
 ## Onda 2 — assim que a dependência da onda 1 fechar
 

@@ -69,7 +69,14 @@ lote, incluí-lo no lote corrente e registrar.
   `FlagMergePassTest`, `BlockCacheRangeTest`, `TestAddressSpace`; `SaturatingArithmeticTest` já
   estava 100% em português (só falso positivo do grep numa string de assert). `mvn -o test` (raiz,
   JBR 25) verde 614 core + 13 truffle; diff conferido linha a linha — só comentários tocados.
-- [ ] **Lote 4** — `truffle/` (main + test) + varredura final do grep devolvendo vazio
+- [x] **Lote 4** — `truffle/` (main + test) + varredura final do grep devolvendo vazio (2026-07-16) —
+  15 arquivos revisados manualmente (main: `AluOpNode`, `BranchOpNode`, `CycleFetchOpNode`,
+  `IrOpNode`, `IrOpNodeFactory`, `MemoryOpNode`, `MultiplyOpNode`, `SystemOpNode`, `TransferOpNode`,
+  `TruffleBlockRootNode`, `TruffleCodeEmitter`, `TruffleJitRuntimeFactory`, `package-info`; test:
+  `TruffleCodeEmitterEquivalenceTest`, `TruffleJitRuntimeFactoryTest`, `support/ByteArrayAddressSpace`)
+  — todos já 100% em português (nenhuma tradução necessária, zero diff de código). Varredura final do
+  grep da task devolveu só o falso positivo já conhecido de `SaturatingArithmeticTest` (Lote 3). **E1
+  fechada** — todos os 4 lotes concluídos. `mvn -o test` (raiz, JBR 25) verde: 614 core + 13 truffle.
 
 ## Validação (por lote)
 
