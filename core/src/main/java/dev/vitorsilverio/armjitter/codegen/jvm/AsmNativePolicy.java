@@ -48,7 +48,9 @@ public final class AsmNativePolicy {
         // ARMv6 de B1.2 (nativas só na B1.6).
         return switch (op) {
             case IrOp.Alu alu -> supportsAlu(alu);
-            case IrOp.Multiply ignored -> true;
+            // MLS (B3.1, subtractFromAccumulator=true): opcode novo sem case no emissor ASM ainda
+            // — interpretado até uma task futura de B3, mesmo padrão de ORN/B2.2 até B1.6/B3.6.
+            case IrOp.Multiply m -> !m.subtractFromAccumulator();
             // UMAAL (ARMv6, B1.2): acumulador duplo agora emitido nativamente (task B1.6).
             case IrOp.LongMultiply ignored -> true;
             // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
@@ -106,6 +108,12 @@ public final class AsmNativePolicy {
             case IrOp.SetItState ignored -> false;
             case IrOp.TableBranch ignored -> false;
             case IrOp.CompareBranchZero ignored -> false;
+            // Inteiro ARMv7 (B3.1): interpretadas até a emissão nativa da B3.6, mesmo padrão de
+            // todo op novo B1.x/B2.x até sua respectiva task de emissão nativa.
+            case IrOp.BitFieldExtract ignored -> false;
+            case IrOp.BitFieldInsert ignored -> false;
+            case IrOp.BitReverse ignored -> false;
+            case IrOp.Divide ignored -> false;
         };
     }
 

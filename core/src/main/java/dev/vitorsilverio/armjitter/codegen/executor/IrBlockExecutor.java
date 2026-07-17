@@ -83,6 +83,10 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.SET_IT_STATE -> system.executeSetItState(core, (IrOp.SetItState) op);
                 case IrOp.Kind.TABLE_BRANCH -> pcChanged |= branch.executeTableBranch(core, (IrOp.TableBranch) op);
                 case IrOp.Kind.COMPARE_BRANCH_ZERO -> pcChanged |= branch.executeCompareBranchZero(core, (IrOp.CompareBranchZero) op);
+                case IrOp.Kind.BIT_FIELD_EXTRACT -> alu.executeBitFieldExtract(core, (IrOp.BitFieldExtract) op);
+                case IrOp.Kind.BIT_FIELD_INSERT -> alu.executeBitFieldInsert(core, (IrOp.BitFieldInsert) op);
+                case IrOp.Kind.BIT_REVERSE -> alu.executeBitReverse(core, (IrOp.BitReverse) op);
+                case IrOp.Kind.DIVIDE -> alu.executeDivide(core, (IrOp.Divide) op);
                 default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
             }
         }
@@ -173,6 +177,10 @@ public final class IrBlockExecutor {
             case IrOp.SetItState setIt -> { system.executeSetItState(core, setIt); yield false; }
             case IrOp.TableBranch tb -> branch.executeTableBranch(core, tb);
             case IrOp.CompareBranchZero cbz -> branch.executeCompareBranchZero(core, cbz);
+            case IrOp.BitFieldExtract bfx -> { alu.executeBitFieldExtract(core, bfx); yield false; }
+            case IrOp.BitFieldInsert bfi -> { alu.executeBitFieldInsert(core, bfi); yield false; }
+            case IrOp.BitReverse rbit -> { alu.executeBitReverse(core, rbit); yield false; }
+            case IrOp.Divide div -> { alu.executeDivide(core, div); yield false; }
         };
     }
 }

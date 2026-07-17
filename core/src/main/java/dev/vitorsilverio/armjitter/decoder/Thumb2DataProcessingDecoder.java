@@ -267,8 +267,8 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
         return switch (group) {
             case PLAIN_OP_ADD -> decodeAddSubOrAdr(raw, address, condition, false);
             case PLAIN_OP_SUB -> decodeAddSubOrAdr(raw, address, condition, true);
-            case PLAIN_OP_MOVW -> decodeMoveWide(raw, address, condition, InstructionKind.MOV);
-            case PLAIN_OP_MOVT -> decodeMoveWide(raw, address, condition, InstructionKind.MOVE_TOP);
+            case PLAIN_OP_MOVW -> decodeMoveWideIfSupported(raw, address, condition, InstructionKind.MOV);
+            case PLAIN_OP_MOVT -> decodeMoveWideIfSupported(raw, address, condition, InstructionKind.MOVE_TOP);
             case PLAIN_OP_SSAT_LSL -> decodeSaturateIfSupported(raw, address, condition, false, false);
             case PLAIN_OP_SSAT_ASR_OR_16 -> decodeSaturateIfSupported(raw, address, condition, false, true);
             case PLAIN_OP_USAT_LSL -> decodeSaturateIfSupported(raw, address, condition, true, false);
@@ -331,6 +331,16 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
                 subtract ? InstructionKind.SUB : InstructionKind.ADD,
                 rd, rn, -1, imm12, true, false, false);
+    }
+
+    /// `MOVW`/`MOVT` Thumb-2 (B2.2) passam a exigir {@link ArmFeature#MOVW_MOVT} também (B3.1;
+    /// antes gateado só por {@link ArmFeature#THUMB2}) — mesma feature que o carve-out ARM em
+    /// {@link ArmDecoder} usa, já que é a MESMA instrução arquitetural (ARMv6T2+).
+    private DecodedInstruction decodeMoveWideIfSupported(int raw, int address, Condition condition, InstructionKind kind) {
+        if (!architecture.has(ArmFeature.MOVW_MOVT)) {
+            return null; // UNDEFINED controlado do ThumbDecoder (top5=11110), mesmo sem a feature
+        }
+        return decodeMoveWide(raw, address, condition, kind);
     }
 
     private DecodedInstruction decodeMoveWide(int raw, int address, Condition condition, InstructionKind kind) {

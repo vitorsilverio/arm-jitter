@@ -93,5 +93,31 @@ public enum ArmFeature {
     /// ver {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder}/
     /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder}). Deliberadamente NÃO
     /// adicionada a {@code ARMV5TE} (G3, menor superfície — gbaemu/ndsemu nunca precisaram).
-    PRELOAD_HINTS
+    PRELOAD_HINTS,
+
+    // ---- Disponibilidade de instrução ARMv7 (gates de decoder; B3.1) ----
+    /// `MOVW`/`MOVT` (imediato de 16 bits para os bits baixos/altos de um registrador). ARMv6T2+.
+    /// Encoding ARM (B3.1, carve-out direto em
+    /// {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder} — colide com o dispatch ALU
+    /// genérico, então não é uma {@link dev.vitorsilverio.armjitter.arch.DecoderExtension})
+    /// e Thumb-2 (já decodificado desde B2.2, mas gateado só por {@link #THUMB2} até B3.1 —
+    /// passa a exigir esta feature também, então {@code ARMV6K_THUMB2} precisa declará-la).
+    MOVW_MOVT,
+    /// `MLS` (multiplicação com subtração do acumulador: `Rd = Ra − Rn×Rm`). ARMv6T2+. Encoding
+    /// ARM (B3.1) é um carve-out direto em
+    /// {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder} — colide com o dispatch de
+    /// halfword-transfer genérico.
+    MLS_MULTIPLY,
+    /// Manipulação de campo de bits: `SBFX`/`UBFX` (extração com/sem sinal) e `BFI`/`BFC`
+    /// (inserção/limpeza). ARMv6T2+. Encoding ARM (B3.1) é um carve-out direto em
+    /// {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder} — colide com o dispatch de
+    /// LDR/STR imediato genérico.
+    BIT_FIELD,
+    /// `RBIT` (inversão da ordem dos bits de uma palavra de 32 bits). ARMv6T2+. Mesmo carve-out
+    /// direto de {@link #BIT_FIELD} (mesma colisão).
+    BIT_REVERSE,
+    /// `SDIV`/`UDIV` (divisão inteira com/sem sinal; divisão por zero resulta em 0, sem exceção).
+    /// ARMv7-A/R (opcional; sempre presente nos perfis emulados aqui). Mesmo carve-out direto de
+    /// {@link #BIT_FIELD} (mesma colisão).
+    DIVIDE
 }

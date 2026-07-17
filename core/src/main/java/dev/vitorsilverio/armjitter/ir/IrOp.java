@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -64,6 +64,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int SET_IT_STATE = 37;
         public static final int TABLE_BRANCH = 38;
         public static final int COMPARE_BRANCH_ZERO = 39;
+        public static final int BIT_FIELD_EXTRACT = 40;
+        public static final int BIT_FIELD_INSERT = 41;
+        public static final int BIT_REVERSE = 42;
+        public static final int DIVIDE = 43;
     }
 
     /// Operacao ALU generica.
@@ -103,6 +107,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int rnValueOverride,
             /// Indica se o acumulador deve ser somado.
             boolean accumulate,
+            /// `true` para `MLS` (ARMv6T2+, B3.1): `Rd = Ra − Rm×Rs` em vez de `Rd = Ra + Rm×Rs`.
+            /// Só válido quando {@code accumulate} também é `true`; `MUL`/`MLA` sempre passam `false`.
+            boolean subtractFromAccumulator,
             /// Indica se NZ deve ser atualizado.
             boolean setFlags,
             /// Condição necessária para executar a operação.
@@ -770,5 +777,68 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// IT block, então este campo pode carregar uma condição não-AL nesse caso raro).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.COMPARE_BRANCH_ZERO; }
+    }
+
+    /// `SBFX`/`UBFX` (ARM/Thumb-2, ARMv6T2+, B3.1): extrai `width` bits de `src` a partir do bit
+    /// `lsb` e estende para 32 bits (com ou sem sinal). Nunca toca flags.
+    record BitFieldExtract(
+            /// Registrador de destino.
+            int dst,
+            /// Registrador de origem (Rn).
+            int src,
+            /// Posição do bit menos significativo do campo (0..31).
+            int lsb,
+            /// Largura do campo em bits (1..32, com `lsb + width <= 32`).
+            int width,
+            /// `true` para `SBFX` (extensão com sinal); `false` para `UBFX` (com zero).
+            boolean signedExtract,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.BIT_FIELD_EXTRACT; }
+    }
+
+    /// `BFI`/`BFC` (ARM/Thumb-2, ARMv6T2+, B3.1): substitui `width` bits de `dst` a partir do bit
+    /// `lsb` pelos bits baixos de `src` (`BFI`) ou por zeros (`BFC`, quando {@code src == -1}),
+    /// preservando os demais bits de `dst`. Nunca toca flags.
+    record BitFieldInsert(
+            /// Registrador de destino (também lido, para preservar os bits fora do campo).
+            int dst,
+            /// Registrador de origem (Rn), ou `-1` para `BFC` (insere zeros).
+            int src,
+            /// Posição do bit menos significativo do campo (0..31).
+            int lsb,
+            /// Largura do campo em bits (1..32, com `lsb + width <= 32`).
+            int width,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.BIT_FIELD_INSERT; }
+    }
+
+    /// `RBIT` (ARM/Thumb-2, ARMv6T2+, B3.1): inverte a ordem dos 32 bits de `src`. Nunca toca flags.
+    record BitReverse(
+            /// Registrador de destino.
+            int dst,
+            /// Registrador de origem (Rm).
+            int src,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.BIT_REVERSE; }
+    }
+
+    /// `SDIV`/`UDIV` (ARM/Thumb-2, ARMv7, B3.1): divisão inteira truncada para zero. Divisão por
+    /// zero resulta em `0` (sem exceção); `Integer.MIN_VALUE / -1` resulta em `Integer.MIN_VALUE`
+    /// (overflow silencioso, igual ao hardware — ARM DDI 0406C A8.8.165). Nunca toca flags.
+    record Divide(
+            /// Registrador de destino.
+            int dst,
+            /// Registrador dividendo (Rn).
+            int dividend,
+            /// Registrador divisor (Rm).
+            int divisor,
+            /// `true` para `SDIV` (com sinal); `false` para `UDIV` (sem sinal).
+            boolean signedDivide,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.DIVIDE; }
     }
 }

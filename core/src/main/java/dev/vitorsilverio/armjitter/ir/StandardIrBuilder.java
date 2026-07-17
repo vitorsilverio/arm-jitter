@@ -61,17 +61,18 @@ public final class StandardIrBuilder implements IrBuilder {
             case LSR -> liftAlu(IrOpCode.LSR, instruction, block);
             case ASR -> liftAlu(IrOpCode.ASR, instruction, block);
             case ROR -> liftAlu(IrOpCode.ROR, instruction, block);
-            case MUL, MLA -> block.add(new IrOp.Multiply(
+            case MUL, MLA, MLS -> block.add(new IrOp.Multiply(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     registerValueOverride(instruction, instruction.sourceRegister()),
                     instruction.secondSourceRegister(),
                     registerValueOverride(instruction, instruction.secondSourceRegister()),
-                    instruction.kind() == InstructionKind.MLA ? instruction.immediate() : -1,
-                    instruction.kind() == InstructionKind.MLA
+                    instruction.kind() != InstructionKind.MUL ? instruction.immediate() : -1,
+                    instruction.kind() != InstructionKind.MUL
                             ? registerValueOverride(instruction, instruction.immediate())
                             : -1,
-                    instruction.kind() == InstructionKind.MLA,
+                    instruction.kind() != InstructionKind.MUL,
+                    instruction.kind() == InstructionKind.MLS,
                     instruction.setFlags(),
                     instruction.condition()));
             case UMULL, UMLAL, SMULL, SMLAL -> block.add(new IrOp.LongMultiply(
@@ -347,6 +348,41 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.link(),
+                    instruction.condition()));
+            // SBFX/UBFX (ARM/Thumb-2, B3.1): `immediate` empacota bits 4:0 = lsb, bits 9:5 = width;
+            // `signedAccess` reaproveitado como "com sinal" (mesmo campo que LOAD usa, sem IR nova).
+            case BIT_FIELD_EXTRACT -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.BitFieldExtract(
+                        instruction.destinationRegister(),
+                        instruction.sourceRegister(),
+                        packed & 0x1F,
+                        (packed >>> 5) & 0x3F,
+                        instruction.signedAccess(),
+                        instruction.condition()));
+            }
+            // BFI/BFC (ARM/Thumb-2, B3.1): mesmo empacotamento de lsb/width que BIT_FIELD_EXTRACT;
+            // `sourceRegister == -1` significa BFC (insere zeros).
+            case BIT_FIELD_INSERT -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.BitFieldInsert(
+                        instruction.destinationRegister(),
+                        instruction.sourceRegister(),
+                        packed & 0x1F,
+                        (packed >>> 5) & 0x3F,
+                        instruction.condition()));
+            }
+            // RBIT (ARM/Thumb-2, B3.1).
+            case BIT_REVERSE -> block.add(new IrOp.BitReverse(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.condition()));
+            // SDIV/UDIV (ARM/Thumb-2, B3.1): `signedAccess` reaproveitado como "com sinal".
+            case DIVIDE -> block.add(new IrOp.Divide(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.signedAccess(),
                     instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),

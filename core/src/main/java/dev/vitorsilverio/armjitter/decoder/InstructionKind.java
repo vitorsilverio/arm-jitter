@@ -178,5 +178,24 @@ public enum InstructionKind {
     /// MESMO par de `IrOp` (`ThumbBlPrefix`+`ThumbBlSuffix`) que o caminho legado produzia, sem
     /// semântica nova; os demais campos desta instrução não são usados (recompute a partir de
     /// `raw` no builder).
-    LONG_BRANCH_32
+    LONG_BRANCH_32,
+    /// `MLS` (ARM/Thumb-2, ARMv6T2+, B3.1): `Rd = Ra − Rn×Rm`. `destinationRegister`=Rd,
+    /// `sourceRegister`/`secondSourceRegister` = os dois fatores, `immediate` = Ra (acumulador),
+    /// mesmo layout de campos que `MLA` (a subtração é sinalizada só na elevação para IR).
+    MLS,
+    /// `SBFX`/`UBFX` (ARM/Thumb-2, ARMv6T2+, B3.1): extração de campo de bits com/sem sinal.
+    /// `destinationRegister`=Rd, `sourceRegister`=Rn, `immediate` empacota bits 4:0=lsb,
+    /// 9:5=width, `signedAccess`=`true` para `SBFX`.
+    BIT_FIELD_EXTRACT,
+    /// `BFI`/`BFC` (ARM/Thumb-2, ARMv6T2+, B3.1): inserção/limpeza de campo de bits.
+    /// `destinationRegister`=Rd, `sourceRegister`=Rn (`-1` para `BFC`), `immediate` empacota
+    /// bits 4:0=lsb, 9:5=width.
+    BIT_FIELD_INSERT,
+    /// `RBIT` (ARM/Thumb-2, ARMv6T2+, B3.1): inverte a ordem dos bits. `destinationRegister`=Rd,
+    /// `sourceRegister`=Rm.
+    BIT_REVERSE,
+    /// `SDIV`/`UDIV` (ARM/Thumb-2, ARMv7, B3.1): divisão inteira truncada para zero, resultado 0
+    /// em divisão por zero. `destinationRegister`=Rd, `sourceRegister`=dividendo (Rn),
+    /// `secondSourceRegister`=divisor (Rm), `signedAccess`=`true` para `SDIV`.
+    DIVIDE
 }

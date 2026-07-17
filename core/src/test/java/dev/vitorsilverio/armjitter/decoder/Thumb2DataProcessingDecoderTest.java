@@ -27,7 +27,8 @@ import java.util.List;
 /// shift imediato. Ver `Thumb2DataProcessingDecoder` para o layout de bits.
 class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
     private static final ArmArchitecture THUMB2_ARCH_FEATURES = ArmArchitecture.extending(
-                    ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-DataProcessing", ArmFeature.THUMB2);
+                    ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-DataProcessing", ArmFeature.THUMB2,
+                    ArmFeature.MOVW_MOVT);
     private static final ArmArchitecture THUMB2_ARCH = THUMB2_ARCH_FEATURES
             .withThumb32DecoderExtensions(List.of(new Thumb2DataProcessingDecoder(THUMB2_ARCH_FEATURES)));
 

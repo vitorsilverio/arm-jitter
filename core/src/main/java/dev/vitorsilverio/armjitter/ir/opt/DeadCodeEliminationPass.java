@@ -145,6 +145,13 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             }
             // CBZ/CBNZ (B2.4) lê rn (nunca tem value override — sempre R0-R7).
             case IrOp.CompareBranchZero cbz -> (1 << cbz.rn());
+            // SBFX/UBFX/RBIT/SDIV/UDIV (B3.1) leem só seus operandos-fonte, nunca o destino.
+            case IrOp.BitFieldExtract b -> (1 << b.src());
+            // BFI/BFC (B3.1) também lê `dst` para preservar os bits fora do campo; BFC (src=-1)
+            // não lê nenhum registrador-fonte.
+            case IrOp.BitFieldInsert b -> (1 << b.dst()) | (b.src() >= 0 ? (1 << b.src()) : 0);
+            case IrOp.BitReverse b -> (1 << b.src());
+            case IrOp.Divide d -> (1 << d.dividend()) | (1 << d.divisor());
             default -> 0;
         };
     }
@@ -224,6 +231,11 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.PsrTransfer t -> t.read() ? (1 << t.register()) : 0;
             case IrOp.Coprocessor c -> c.load() && c.register() != 15 ? (1 << c.register()) : 0;
             case IrOp.Swap s -> (1 << s.dst());
+            // Ops ALU puras do B3.1: definem só `dst`, nunca flags.
+            case IrOp.BitFieldExtract b -> (1 << b.dst());
+            case IrOp.BitFieldInsert b -> (1 << b.dst());
+            case IrOp.BitReverse b -> (1 << b.dst());
+            case IrOp.Divide d -> (1 << d.dst());
             default -> 0;
         };
     }

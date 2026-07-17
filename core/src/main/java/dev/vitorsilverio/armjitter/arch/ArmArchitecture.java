@@ -74,8 +74,13 @@ public final class ArmArchitecture {
     /// precisam ser construídas — quebra-cabeça do ovo e da galinha resolvido construindo as
     /// features primeiro (idêntico ao padrão já usado pelos testes de B2.3/B2.5, ex.
     /// `Thumb2MiscDecoderTest`).
+    /// `MOVW_MOVT` (B3.1) entra aqui pelo mesmo motivo de `MEMORY_BARRIERS`: `MOVW`/`MOVT` Thumb-2
+    /// já eram decodificados desde B2.2, mas só gateados por `THUMB2` — B3.1 passou a exigir
+    /// também esta feature (mesma exigida pelo encoding ARM em
+    /// {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder}, B3.1), então o
+    /// preset "fechado" precisa declará-la para continuar funcionando.
     private static final ArmArchitecture ARMV6K_THUMB2_FEATURES = extending(ARMV6K, "ARMv6K+Thumb2",
-            ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS);
+            ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS, ArmFeature.MOVW_MOVT);
 
     public static final ArmArchitecture ARMV6K_THUMB2 = ARMV6K_THUMB2_FEATURES
             .withThumb32DecoderExtensions(

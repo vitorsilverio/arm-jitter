@@ -209,10 +209,13 @@ public final class IrAluExecutor {
         if (!core.cpsr().evalCond(multiply.condition())) {
             return;
         }
-        int result = support.registerValue(core, multiply.rm(), multiply.rmValueOverride())
+        int product = support.registerValue(core, multiply.rm(), multiply.rmValueOverride())
                 * support.registerValue(core, multiply.rs(), multiply.rsValueOverride());
+        int result = product;
         if (multiply.accumulate()) {
-            result += support.registerValue(core, multiply.rn(), multiply.rnValueOverride());
+            int accumulator = support.registerValue(core, multiply.rn(), multiply.rnValueOverride());
+            // MLS (ARMv6T2+, B3.1): Rd = Ra - Rn*Rm, em vez de Rd = Ra + Rn*Rm de MUL/MLA.
+            result = multiply.subtractFromAccumulator() ? accumulator - product : accumulator + product;
         }
         core.setRegister(multiply.dst(), result);
         if (multiply.setFlags()) {
@@ -423,6 +426,62 @@ public final class IrAluExecutor {
             sum += core.register(op.rn());
         }
         core.setRegister(op.dst(), sum);
+    }
+
+    /// `SBFX`/`UBFX` (ARMv6T2+, B3.1): move o campo para os bits altos e desloca de volta com
+    /// sinal (`SBFX`) ou sem sinal (`UBFX`) — o truque padrão de extração de bit-field. Nunca
+    /// toca flags.
+    public void executeBitFieldExtract(ArmCore core, IrOp.BitFieldExtract op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int shiftLeft = 32 - op.lsb() - op.width();
+        int shiftRight = 32 - op.width();
+        int shifted = core.register(op.src()) << shiftLeft;
+        int result = op.signedExtract() ? shifted >> shiftRight : shifted >>> shiftRight;
+        core.setRegister(op.dst(), result);
+    }
+
+    /// `BFI`/`BFC` (ARMv6T2+, B3.1): substitui o campo `[lsb, lsb+width)` de `dst` pelos bits
+    /// baixos de `src` (`BFI`) ou por zeros (`BFC`, `src == -1`), preservando o resto de `dst`.
+    /// Nunca toca flags.
+    public void executeBitFieldInsert(ArmCore core, IrOp.BitFieldInsert op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int mask = op.width() == 32 ? -1 : (((1 << op.width()) - 1) << op.lsb());
+        int insertValue = op.src() < 0 ? 0 : core.register(op.src());
+        int current = core.register(op.dst());
+        core.setRegister(op.dst(), (current & ~mask) | ((insertValue << op.lsb()) & mask));
+    }
+
+    /// `RBIT` (ARMv6T2+, B3.1): inverte a ordem dos 32 bits. Nunca toca flags.
+    public void executeBitReverse(ArmCore core, IrOp.BitReverse op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        core.setRegister(op.dst(), Integer.reverse(core.register(op.src())));
+    }
+
+    /// `SDIV`/`UDIV` (ARMv7, B3.1): divisão truncada para zero; divisão por zero resulta em `0`
+    /// (sem exceção — ARM DDI 0406C A8.8.165). A divisão inteira de Java já wrapeia
+    /// `Integer.MIN_VALUE / -1` para `Integer.MIN_VALUE` sem lançar, igual ao hardware. Nunca
+    /// toca flags.
+    public void executeDivide(ArmCore core, IrOp.Divide op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int dividend = core.register(op.dividend());
+        int divisor = core.register(op.divisor());
+        int result;
+        if (divisor == 0) {
+            result = 0;
+        } else if (op.signedDivide()) {
+            result = dividend / divisor;
+        } else {
+            result = Integer.divideUnsigned(dividend, divisor);
+        }
+        core.setRegister(op.dst(), result);
     }
 
     /// Satura `value` para `bits` bits (com ou sem sinal), marcando `q[0]` quando clampa.
