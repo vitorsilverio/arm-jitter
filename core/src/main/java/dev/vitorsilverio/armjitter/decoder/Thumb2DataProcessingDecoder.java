@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 
@@ -8,10 +10,24 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// imediato. Anexado via {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#thumb32DecoderExtensions()}
 /// — só ativo quando {@link dev.vitorsilverio.armjitter.arch.ArmFeature#THUMB2} está habilitado.
 ///
+/// B2.7 (PR1) acrescenta `SSAT`/`USAT`/`SSAT16`/`USAT16` ao mesmo grupo "plain binary immediate"
+/// (`top5=0b11110`, `hi[9]==1`) — mesmo espaço arquitetural de `ADD`/`SUB`/`MOVW`/`MOVT`, gateado
+/// por {@link ArmFeature#PACK_SATURATE} (a mesma feature do ARM clássico `SSAT`/`USAT`). Por isso
+/// este decoder passou a precisar de uma {@link ArmArchitecture} — mesmo padrão de
+/// `Thumb2LoadStoreDecoder`/`Thumb2MiscDecoder` desde B2.3/B2.5.
+///
 /// Bits sempre nomeados a partir de `raw` = os dois halfwords combinados (`hi&lt;&lt;16 | lo`, hi =
 /// primeiro halfword nos bits altos, exatamente como {@link ThumbDecoder} entrega às extensões
-/// de 32 bits). Referência: ARM DDI 0406C, A5.3.1-A5.3.4.
+/// de 32 bits). Referência: ARM DDI 0406C, A5.3.1-A5.3.4; QEMU `target/arm/tcg/t32.decode`
+/// seção "Saturate, bitfield" para `SSAT`/`USAT`/`SSAT16`/`USAT16`.
 public final class Thumb2DataProcessingDecoder implements DecoderExtension {
+    private final ArmArchitecture architecture;
+
+    /// Constrói o decoder ligado à arquitetura corrente, usada para gatear `SSAT`/`USAT`/
+    /// `SSAT16`/`USAT16` por {@link ArmFeature#PACK_SATURATE} (B2.7).
+    public Thumb2DataProcessingDecoder(ArmArchitecture architecture) {
+        this.architecture = architecture;
+    }
     /// Prefixo literal de 7 bits (`raw[31:25]`) do grupo "Data-processing (register)" com shift
     /// imediato — ARM DDI 0406C Figure 3-8 / A5.3.1. Subconjunto de `top5 == 0b11101`.
     private static final int REGISTER_FORM_PREFIX = 0b1110101;
@@ -36,6 +52,16 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
     private static final int PLAIN_OP_SUB = 0b0101;
     private static final int PLAIN_OP_MOVW = 0b0010;
     private static final int PLAIN_OP_MOVT = 0b0110;
+    /// `raw[24:21]` (B2.7): `SSAT`/`USAT` com deslocamento LSL (`sh`=0) — QEMU `t32.decode`
+    /// "Saturate, bitfield" `SSAT`/`USAT`. Bit 24 (MSB deste grupo) sempre 1 aqui, distinto de
+    /// AND/BIC/ORR/.../MOVW/MOVT acima (bit 24 sempre 0 nesses).
+    private static final int PLAIN_OP_SSAT_LSL = 0b1000;
+    /// `raw[24:21]`: `SSAT`/`USAT` com deslocamento ASR (`sh`=1) — OU `SSAT16`/`USAT16` quando o
+    /// campo de shift (`imm3`/`imm2`) é totalmente zero (mesmo padrão de bits, arquiteturalmente
+    /// ambíguo por construção — resolvido em {@link #decodeSaturate}, mesma prioridade do QEMU).
+    private static final int PLAIN_OP_SSAT_ASR_OR_16 = 0b1001;
+    private static final int PLAIN_OP_USAT_LSL = 0b1100;
+    private static final int PLAIN_OP_USAT_ASR_OR_16 = 0b1101;
 
     /// `raw[24:21]` (op4) do grupo modified-immediate/register-shift-immediate — mesma tabela nos
     /// dois grupos (ARM DDI 0406C Table A5-10 "op field"), com as formas TST/TEQ/CMN/CMP obtidas
@@ -243,8 +269,44 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
             case PLAIN_OP_SUB -> decodeAddSubOrAdr(raw, address, condition, true);
             case PLAIN_OP_MOVW -> decodeMoveWide(raw, address, condition, InstructionKind.MOV);
             case PLAIN_OP_MOVT -> decodeMoveWide(raw, address, condition, InstructionKind.MOVE_TOP);
+            case PLAIN_OP_SSAT_LSL -> decodeSaturateIfSupported(raw, address, condition, false, false);
+            case PLAIN_OP_SSAT_ASR_OR_16 -> decodeSaturateIfSupported(raw, address, condition, false, true);
+            case PLAIN_OP_USAT_LSL -> decodeSaturateIfSupported(raw, address, condition, true, false);
+            case PLAIN_OP_USAT_ASR_OR_16 -> decodeSaturateIfSupported(raw, address, condition, true, true);
             default -> null; // reservado — UNDEFINED controlado do ThumbDecoder (top5=11110)
         };
+    }
+
+    private DecodedInstruction decodeSaturateIfSupported(int raw, int address, Condition condition,
+            boolean unsigned, boolean asr) {
+        if (!architecture.has(ArmFeature.PACK_SATURATE)) {
+            return null; // UNDEFINED controlado do ThumbDecoder (top5=11110), mesmo sem a feature
+        }
+        return decodeSaturate(raw, address, condition, unsigned, asr);
+    }
+
+    /// `SSAT`/`USAT` (`asr`=false ⇒ LSL, `asr`=true ⇒ ASR) — ARM DDI 0406C A5.3.11 / QEMU
+    /// `t32.decode` `@sat`. Quando `asr` E o campo de shift (`imm3`:`imm2`, 5 bits) é zero, o
+    /// bit-pattern é IDÊNTICO ao de `SSAT16`/`USAT16` (QEMU `@sat16`, mesma prioridade dada ao
+    /// caso de 16 bits) — não há ambiguidade real de hardware, é a mesma codificação reaproveitada
+    /// arquiteturalmente. Reusa o mesmo formato empacotado de {@code IrExecutorBuilder#liftSaturate}
+    /// que o `SSAT`/`USAT` ARM clássico já produz (`ArmDecoder`), sem IR nova.
+    private DecodedInstruction decodeSaturate(int raw, int address, Condition condition,
+            boolean unsigned, boolean asr) {
+        int rn = (raw >>> 16) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int imm3 = (raw >>> 12) & 0x7;
+        int imm2 = (raw >>> 6) & 0x3;
+        int shiftImm = (imm3 << 2) | imm2;
+        int satImm = raw & 0x1F;
+        if (asr && shiftImm == 0) {
+            int packed16 = (satImm & 0xF) | (1 << 11) | (unsigned ? 1 << 12 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SATURATE,
+                    rd, -1, rn, packed16, false, false, false);
+        }
+        int packed = satImm | (shiftImm << 5) | (asr ? 1 << 10 : 0) | (unsigned ? 1 << 12 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SATURATE,
+                rd, -1, rn, packed, false, false, false);
     }
 
     private DecodedInstruction decodeAddSubOrAdr(int raw, int address, Condition condition, boolean subtract) {

@@ -532,7 +532,7 @@ public final class StandardIrBuilder implements IrBuilder {
             }
             return new IrOperand.Immediate(instruction.immediate());
         }
-        if (isThumb32(instruction)) {
+        if (isThumb32(instruction) && !isRegisterControlledShiftKind(instruction.kind())) {
             // Data-processing (register) Thumb-2, forma com shift imediato: shty = lo[5:4],
             // imm5 = lo[14:12]:lo[7:6] (imm3 alto + imm2 baixo, mesmo split de ARM classico).
             int shiftBits = (instruction.raw() >>> 4) & 0x3;
@@ -719,6 +719,19 @@ public final class StandardIrBuilder implements IrBuilder {
     /// Detecta um candidato Thumb-2 de 32 bits (B2.1+) — ver o javadoc de {@link #instructionWidth}.
     private boolean isThumb32(DecodedInstruction instruction) {
         return instruction.instructionSet() == InstructionSet.THUMB && instruction.raw() < 0;
+    }
+
+    /// B2.7 (PR1): `LSL.W`/`LSR.W`/`ASR.W`/`ROR.W Rd,Rn,Rm` (`Thumb2RegisterDataProcessingDecoder`,
+    /// espaço `0xFA`) usa os MESMOS `InstructionKind` que o shift por registrador Thumb-1 (formato 4
+    /// ALU ops de `ThumbDecoder`) — `secondSourceRegister` carrega o registrador de quantidade, que
+    /// deve virar um {@link IrOperand.Register} simples (o executor de `IrOpCode.LSL/LSR/ASR/ROR`
+    /// já trata `src2` como quantidade de deslocamento, não como operando pré-deslocado). Sem este
+    /// desvio, a instrução (que É um candidato Thumb-2 de 32 bits, `raw()&lt;0`) cairia por engano no
+    /// ramo de "forma com shift imediato" logo abaixo, que assume o layout de bits do
+    /// `Thumb2DataProcessingDecoder` (B2.2) — um decoder DIFERENTE que nunca produz estes kinds.
+    private static boolean isRegisterControlledShiftKind(InstructionKind kind) {
+        return kind == InstructionKind.LSL || kind == InstructionKind.LSR
+                || kind == InstructionKind.ASR || kind == InstructionKind.ROR;
     }
 
     /// Distingue "Data-processing (modified immediate)" de "Data processing (plain binary

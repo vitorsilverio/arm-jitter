@@ -93,7 +93,8 @@ class ArmArchitectureTest {
     /// (`Thumb2DataProcessingDecoder`/B2.2, `Thumb2LoadStoreDecoder`/B2.3, `Thumb2BranchDecoder`/
     /// B2.4, `Thumb2MiscDecoder`/B2.5). O fechamento do "fantasma" BL/BLX (decode único de 32
     /// bits) elimina a colisão que antes mantinha 2 das 4 extensões de fora — ver o javadoc de
-    /// `ARMV6K_THUMB2`.
+    /// `ARMV6K_THUMB2`. B2.7 (PR1) acrescenta uma 5ª extensão (`Thumb2RegisterDataProcessingDecoder`,
+    /// espaço `0xFA`).
     @Test
     void armv6kThumb2AddsThumb2AndAllFourDecoderExtensionsOnTopOfArmv6k() {
         ArmArchitecture preset = ArmArchitecture.ARMV6K_THUMB2;
@@ -104,8 +105,8 @@ class ArmArchitectureTest {
         }
         assertEquals(ArmArchitecture.ARMV6K.decoderExtensions().size(), preset.decoderExtensions().size(),
                 "extensões de decoder ARM (32-bit clássico) herdadas sem mudança");
-        assertEquals(4, preset.thumb32DecoderExtensions().size(),
-                "as 4 extensões Thumb-2 (B2.2/B2.3/B2.4/B2.5) plugadas juntas desde B2.6");
+        assertEquals(5, preset.thumb32DecoderExtensions().size(),
+                "as 4 extensões Thumb-2 (B2.2/B2.3/B2.4/B2.5) + Thumb2RegisterDataProcessingDecoder (B2.7 PR1)");
         assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.THUMB2), "a base ARMV6K não pode ser mutada");
     }
 

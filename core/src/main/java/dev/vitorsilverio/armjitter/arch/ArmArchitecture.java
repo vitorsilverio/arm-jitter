@@ -76,7 +76,8 @@ public final class ArmArchitecture {
 
     public static final ArmArchitecture ARMV6K_THUMB2 = ARMV6K_THUMB2_FEATURES
             .withThumb32DecoderExtensions(
-                    List.of(new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(),
+                    List.of(new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
+                            new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES)));
