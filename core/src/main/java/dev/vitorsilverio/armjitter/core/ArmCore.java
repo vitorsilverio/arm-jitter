@@ -50,20 +50,12 @@ public final class ArmCore {
     private ArmTraceListener traceListener = ArmTraceListener.none();
     private CpuSleepState sleepState = CpuSleepState.RUNNING;
 
-    /// Sentinela de "monitor de exclusividade aberto" (nenhum LDREX pendente).
-    private static final long EXCLUSIVE_MONITOR_OPEN = -1L;
-    /// Endereço marcado pelo monitor local de exclusividade (LDREX/STREX, ARMv6), ou
-    /// {@link #EXCLUSIVE_MONITOR_OPEN}. É `long` porque o §5 da RFC IR-64 exige que estado novo
-    /// de endereçamento já nasça com largura de 64 bits (endereços de 32 bits entram sem sinal).
-    ///
-    /// Simplificação single-core: o monitor guarda o endereço exato e o tamanho do acesso; o
-    /// STREX só tem sucesso com endereço E tamanho idênticos (o hardware permite falhas
-    /// espúrias, então a granularidade exata é uma escolha válida). Gancho futuro (3DS/B5):
-    /// para multi-core o monitor precisará de uma visão global por `AddressSpace`, com um
-    /// monitor local por core mais invalidação entre cores na escrita.
-    private long exclusiveAddress = EXCLUSIVE_MONITOR_OPEN;
-    /// Tamanho em bytes marcado junto com {@link #exclusiveAddress} (1, 2, 4 ou 8).
-    private int exclusiveSizeBytes;
+    /// Monitor de exclusividade LDREX/STREX (ARMv6). Por padrão é próprio deste core
+    /// (comportamento single-core da B1.4); {@link #setExclusiveMonitor} instala um monitor
+    /// COMPARTILHADO entre múltiplos cores (task B5.1, 3DS: os 2 ARM11 do MPCore dividem
+    /// memória). É `long` internamente porque o §5 da RFC IR-64 exige que estado novo de
+    /// endereçamento já nasça com largura de 64 bits (endereços de 32 bits entram sem sinal).
+    private ExclusiveMonitor exclusiveMonitor = new ExclusiveMonitor();
 
     /// Cria um core conectado a uma memória e a um dispatcher de SWI.
     ///
@@ -561,40 +553,56 @@ public final class ArmCore {
         restoreBank(mode);
     }
 
-    /// Marca o monitor local de exclusividade para o endereço/tamanho de um `LDREX{,B,H,D}`.
+    /// Instala um monitor de exclusividade COMPARTILHADO entre múltiplos cores (task B5.1, 3DS:
+    /// os 2 ARM11 do MPCore sobre a mesma memória; um `STREX` de um core precisa poder derrubar
+    /// a reserva feita por outro). Default é um monitor próprio deste core, zero-diff com a B1.4.
+    public void setExclusiveMonitor(ExclusiveMonitor exclusiveMonitor) {
+        this.exclusiveMonitor = Objects.requireNonNull(exclusiveMonitor, "exclusiveMonitor");
+    }
+
+    /// Marca o monitor de exclusividade (próprio ou compartilhado) para o endereço/tamanho de um
+    /// `LDREX{,B,H,D}`, com este core como dono da reserva.
     ///
     /// @param address endereço do acesso, sem sinal (endereços de 32 bits devem chegar via
     ///                `Integer.toUnsignedLong`)
     /// @param sizeBytes tamanho do acesso (1, 2, 4 ou 8)
     public void markExclusive(long address, int sizeBytes) {
-        exclusiveAddress = address;
-        exclusiveSizeBytes = sizeBytes;
+        exclusiveMonitor.markExclusive(this, address, sizeBytes);
     }
 
-    /// Consulta se o monitor de exclusividade cobre o endereço/tamanho de um `STREX{,B,H,D}`.
-    /// Exige marcação exata (mesmo endereço e mesmo tamanho) — ver a nota de simplificação
-    /// single-core em {@link #exclusiveAddress}.
+    /// Consulta um `STREX{,B,H,D}` deste core contra o monitor de exclusividade. Exige marcação
+    /// exata (mesmo endereço e mesmo tamanho — o hardware permite falhas espúrias, então a
+    /// granularidade exata é uma escolha válida). Quando a região bate, a reserva é SEMPRE
+    /// consumida (mesmo se o dono for outro core, compartilhando o monitor via
+    /// {@link #setExclusiveMonitor} — um STREX perdedor também derruba a reserva de quem a fez);
+    /// só devolve `true` quando este core é o dono.
     public boolean exclusiveMonitorCovers(long address, int sizeBytes) {
-        return exclusiveAddress != EXCLUSIVE_MONITOR_OPEN
-                && exclusiveAddress == address
-                && exclusiveSizeBytes == sizeBytes;
+        return exclusiveMonitor.consumeIfCovered(this, address, sizeBytes);
     }
 
     /// Abre (limpa) o monitor de exclusividade: `CLREX`, entrada de exceção e STREX bem-sucedido.
     public void clearExclusiveMonitor() {
-        exclusiveAddress = EXCLUSIVE_MONITOR_OPEN;
-        exclusiveSizeBytes = 0;
+        exclusiveMonitor.clear(this);
+    }
+
+    /// Notifica o monitor de exclusividade de uma escrita comum (`STR`/`STRH`/`STRB`) deste core.
+    /// Se sobrepuser uma reserva pendente — deste core ou de outro, quando o monitor é
+    /// compartilhado (B5.1) — abre a reserva, como no hardware real.
+    public void notifyOrdinaryWrite(int address, int sizeBytes) {
+        if (exclusiveMonitor.isArmed()) {
+            exclusiveMonitor.notifyOrdinaryWrite(Integer.toUnsignedLong(address), sizeBytes);
+        }
     }
 
     /// Endereço marcado no monitor de exclusividade, ou `-1` quando aberto. Exposto para o
     /// harness de equivalência ({@code CpuSnapshot}) detectar divergência de backend.
     public long exclusiveMonitorAddress() {
-        return exclusiveAddress;
+        return exclusiveMonitor.address(this);
     }
 
     /// Tamanho em bytes marcado no monitor de exclusividade (0 quando aberto).
     public int exclusiveMonitorSizeBytes() {
-        return exclusiveSizeBytes;
+        return exclusiveMonitor.sizeBytes(this);
     }
 
     /// Exporta um snapshot imutável usado por handlers de SWI.

@@ -199,16 +199,19 @@ public final class AsmRuntimeHelpers {
     public static void storeByte(ArmCore core, int address, int value) {
         core.memory().write8(address, value);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 1);
     }
 
     public static void storeHalf(ArmCore core, int address, int value) {
         core.memory().write16(address, value);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 2);
     }
 
     public static void storeWord(ArmCore core, int address, int value) {
         core.memory().write32(address, value);
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 4);
     }
 
     // ── memória: acesso desalinhado atravessado (ArmFeature.UNALIGNED_ACCESS, task B1.7) ────────
@@ -250,12 +253,14 @@ public final class AsmRuntimeHelpers {
         core.memory().write8(address + 2, value >>> (2 * BITS_PER_BYTE));
         core.memory().write8(address + 3, value >>> (3 * BITS_PER_BYTE));
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 4);
     }
 
     public static void storeHalfCrossed(ArmCore core, int address, int value) {
         core.memory().write8(address, value);
         core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 2);
     }
 
     // ── branches ───────────────────────────────────────────────────────────────

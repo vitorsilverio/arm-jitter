@@ -124,18 +124,21 @@ final class IrExecutionSupport {
         checkLittleEndianData(core);
         core.memory().write16(address, value);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 2);
     }
 
     void write8Arm7(ArmCore core, int address, int value) {
         checkLittleEndianData(core);
         core.memory().write8(address, value);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 1);
     }
 
     void write32Arm7(ArmCore core, int address, int value) {
         checkLittleEndianData(core);
         core.memory().write32(address, value);
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+        core.notifyOrdinaryWrite(address, 4);
     }
 
     /// Tamanho em bytes de um acesso de word, usado para custear em ciclos os acessos
@@ -232,12 +235,14 @@ final class IrExecutionSupport {
         core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
         core.memory().write8(address + 2, value >>> (2 * BITS_PER_BYTE));
         core.memory().write8(address + 3, value >>> (3 * BITS_PER_BYTE));
+        core.notifyOrdinaryWrite(address, WORD_ACCESS_SIZE_BYTES);
     }
 
     /// Mesmo princípio de {@link #writeCrossedWord}, para halfword.
     private void writeCrossedHalfword(ArmCore core, int address, int value) {
         core.memory().write8(address, value);
         core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+        core.notifyOrdinaryWrite(address, HALFWORD_ACCESS_SIZE_BYTES);
     }
 
     /// `SETEND` (ARMv6, B1.5 MVP): acessos de dados com CPSR.E=1 (big-endian) não são
