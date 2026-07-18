@@ -46,24 +46,24 @@ public final class DualInvalidationAwareAddressSpace implements AddressSpace {
     @Override
     public void write8(int address, int value) {
         delegate.write8(address, value);
-        first.invalidate(address);
-        second.invalidate(address);
+        first.invalidate(address, Byte.BYTES);
+        second.invalidate(address, Byte.BYTES);
     }
 
-    /// Escreve uma halfword e invalida o endereço nos dois runtimes.
+    /// Escreve uma halfword e invalida o intervalo nos dois runtimes.
     @Override
     public void write16(int address, int value) {
         delegate.write16(address, value);
-        first.invalidate(address);
-        second.invalidate(address);
+        first.invalidate(address, Short.BYTES);
+        second.invalidate(address, Short.BYTES);
     }
 
-    /// Escreve uma word e invalida o endereço nos dois runtimes.
+    /// Escreve uma word e invalida o intervalo nos dois runtimes.
     @Override
     public void write32(int address, int value) {
         delegate.write32(address, value);
-        first.invalidate(address);
-        second.invalidate(address);
+        first.invalidate(address, Integer.BYTES);
+        second.invalidate(address, Integer.BYTES);
     }
 
     /// Repassa o cálculo de waitstates ao barramento delegado.

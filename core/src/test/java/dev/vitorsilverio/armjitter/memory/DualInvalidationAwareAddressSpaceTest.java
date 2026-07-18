@@ -27,6 +27,24 @@ class DualInvalidationAwareAddressSpaceTest {
     }
 
     @Test
+    void alignedWordCopyInvalidatesSingleThumbBlockBetweenWriteBases() {
+        // Regressão (loop da Buneary): a troca de overlay copia código em words alinhadas;
+        // um bloco THUMB de 1 instrução em [X+2, X+4) não contém NENHUM endereço-base da
+        // cópia (X e X+4) e sobrevivia — bloco do overlay antigo executava no overlay novo.
+        TestAddressSpace delegate = new TestAddressSpace(32);
+        JitRuntime first = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        JitRuntime second = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        first.blockCache().put(new dev.vitorsilverio.armjitter.jit.BlockKey(6,
+                dev.vitorsilverio.armjitter.decoder.InstructionSet.THUMB), core -> 1, 6, 8);
+        AddressSpace memory = new DualInvalidationAwareAddressSpace(delegate, first, second);
+
+        memory.write32(4, 0x46C0_46C0); // word alinhada cobrindo [4, 8)
+
+        assertEquals(0, first.blockCache().size(),
+                "o bloco de 1 instrução THUMB no meio da word deve ser invalidado");
+    }
+
+    @Test
     void writeOutsideAnyCodePageStillReachesTheDelegate() {
         TestAddressSpace delegate = new TestAddressSpace(32);
         JitRuntime first = JitRuntimeFactory.interpretedArmThumb(16, 1);

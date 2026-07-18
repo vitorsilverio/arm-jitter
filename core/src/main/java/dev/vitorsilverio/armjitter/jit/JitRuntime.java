@@ -662,9 +662,17 @@ public final class JitRuntime {
         return emitter.emit(optimizer.optimize(block));
     }
 
-    /// Invalida código compilado afetado por uma escrita de memória.
+    /// Invalida código compilado afetado por uma escrita de memória de 1 byte.
     public void invalidate(int address) {
         blockCache.invalidate(address);
+    }
+
+    /// Invalida código compilado afetado por uma escrita de `sizeBytes` a partir de `address`.
+    /// Prefira esta forma nos barramentos: o intervalo inteiro da escrita conta (ver
+    /// {@link BlockCache#invalidate(int, int)} — um bloco de uma instrução THUMB no meio de
+    /// uma word escapa da invalidação por endereço-base).
+    public void invalidate(int address, int sizeBytes) {
+        blockCache.invalidate(address, sizeBytes);
     }
 
     /// Retorna o cache de blocos usado pelo runtime.

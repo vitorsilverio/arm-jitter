@@ -139,26 +139,44 @@ public final class BlockCache {
         return hits;
     }
 
-    /// Remove blocos compilados afetados por uma escrita no endereço informado.
-    ///
-    /// Caminho comum (escrita em região sem código): apenas testa um bit -> O(1).
-    /// Caminho raro (página com código): percorre somente os blocos daquela página.
+    /// Remove blocos compilados afetados por uma escrita de 1 byte no endereço informado.
     public void invalidate(int address) {
-        int page = pageIndex(address);
-        if (!isPageOccupied(page)) {
-            return;
-        }
-        List<Located> located = blocksByPage.get(page);
-        if (located == null || located.isEmpty()) {
-            return;
-        }
+        invalidate(address, 1);
+    }
+
+    /// Remove blocos compilados afetados por uma escrita de `sizeBytes` a partir de `address`.
+    ///
+    /// O intervalo INTEIRO da escrita conta, não só o endereço-base: um bloco de uma única
+    /// instrução THUMB no meio de uma word — intervalo `[X+2, X+4)` sob uma escrita de 32 bits
+    /// em `X` — não contém `X`, mas é sobrescrito mesmo assim. Invalidar só o endereço-base
+    /// deixava exatamente esse formato de bloco sobreviver a uma cópia de código em words
+    /// (troca de overlay do NitroSDK → bloco velho executado no overlay novo — o loop da
+    /// Buneary no Pokémon Platinum).
+    ///
+    /// Caminho comum (escrita em região sem código): apenas testa um bit por página -> O(1).
+    /// Caminho raro (página com código): percorre somente os blocos daquelas páginas.
+    public void invalidate(int address, int sizeBytes) {
+        int writeEnd = address + sizeBytes; // exclusivo
+        int firstPage = pageIndex(address);
+        int lastPage = pageIndex(writeEnd - 1);
         List<Located> hits = null;
-        for (Located candidate : located) {
-            if (candidate.contains(address)) {
-                if (hits == null) {
-                    hits = new ArrayList<>();
+        for (int page = firstPage; page <= lastPage; page++) {
+            if (!isPageOccupied(page)) {
+                continue;
+            }
+            List<Located> located = blocksByPage.get(page);
+            if (located == null || located.isEmpty()) {
+                continue;
+            }
+            for (Located candidate : located) {
+                if (candidate.overlaps(address, writeEnd)) {
+                    if (hits == null) {
+                        hits = new ArrayList<>();
+                    }
+                    if (!hits.contains(candidate)) { // bloco indexado em ambas as páginas
+                        hits.add(candidate);
+                    }
                 }
-                hits.add(candidate);
             }
         }
         if (hits == null) {
@@ -268,8 +286,9 @@ public final class BlockCache {
     }
 
     private record Located(BlockKey key, int startPc, int endPc) {
-        private boolean contains(int address) {
-            return address >= startPc && address < endPc;
+        /// `true` se o intervalo do bloco intersecta a escrita `[writeStart, writeEnd)`.
+        private boolean overlaps(int writeStart, int writeEnd) {
+            return writeStart < endPc && startPc < writeEnd;
         }
     }
 }

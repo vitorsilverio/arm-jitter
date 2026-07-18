@@ -66,6 +66,47 @@ class BlockCacheRangeTest {
     }
 
     @Test
+    void wordWriteInvalidatesSingleThumbBlockInTheMiddleOfTheWord() {
+        // Regressão (loop da Buneary, Pokémon Platinum): um bloco de UMA instrução THUMB em
+        // endereço ≡ 2 (mod 4) — intervalo [X+2, X+4) — não contém o endereço-base de nenhuma
+        // escrita de word alinhada de uma cópia de código (troca de overlay). Com a invalidação
+        // por intervalo da escrita, a word em X o cobre.
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x021D218E, InstructionSet.THUMB);
+        cache.put(key, core -> 1, 0x021D218E, 0x021D2190);
+
+        cache.invalidate(0x021D218C, 4); // write32 alinhado cobrindo [0x...8C, 0x...90)
+
+        assertTrue(cache.get(key).isEmpty());
+    }
+
+    @Test
+    void byteSizedInvalidateKeepsPointSemantics() {
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x021D218E, InstructionSet.THUMB);
+        cache.put(key, core -> 1, 0x021D218E, 0x021D2190);
+
+        cache.invalidate(0x021D218C); // byte antes do bloco: não intersecta
+        assertTrue(cache.get(key).isPresent());
+
+        cache.invalidate(0x021D2190); // byte no fim EXCLUSIVO: não intersecta
+        assertTrue(cache.get(key).isPresent());
+    }
+
+    @Test
+    void rangedInvalidateCrossingPageBoundaryRemovesBlockOnlyOnce() {
+        BlockCache cache = new BlockCache(4);
+        BlockKey key = new BlockKey(0x000003F0, InstructionSet.ARM);
+        // [0x3F0, 0x410) indexado nas DUAS páginas; a escrita [0x3FE, 0x402) também cruza.
+        cache.put(key, core -> 1, 0x000003F0, 0x00000410);
+
+        cache.invalidate(0x000003FE, 4);
+
+        assertTrue(cache.get(key).isEmpty());
+        assertEquals(0, cache.size());
+    }
+
+    @Test
     void doesNotResurrectEvictedBlockOnLaterWriteToItsOldPage() {
         BlockCache cache = new BlockCache(1);
         BlockKey first = new BlockKey(0x1000, InstructionSet.ARM);

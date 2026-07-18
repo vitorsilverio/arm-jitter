@@ -37,21 +37,21 @@ public final class InvalidationAwareAddressSpace implements AddressSpace {
     @Override
     public void write8(int address, int value) {
         delegate.write8(address, value);
-        runtime.invalidate(address);
+        runtime.invalidate(address, Byte.BYTES);
     }
 
-    /// Escreve uma halfword e invalida o endereço escrito.
+    /// Escreve uma halfword e invalida o intervalo escrito.
     @Override
     public void write16(int address, int value) {
         delegate.write16(address, value);
-        runtime.invalidate(address);
+        runtime.invalidate(address, Short.BYTES);
     }
 
-    /// Escreve uma word e invalida o endereço escrito.
+    /// Escreve uma word e invalida o intervalo escrito.
     @Override
     public void write32(int address, int value) {
         delegate.write32(address, value);
-        runtime.invalidate(address);
+        runtime.invalidate(address, Integer.BYTES);
     }
 
     /// Repassa o cálculo de waitstates ao barramento delegado.
