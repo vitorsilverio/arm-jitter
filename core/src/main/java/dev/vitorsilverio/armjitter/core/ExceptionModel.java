@@ -21,4 +21,14 @@ public interface ExceptionModel {
     default void branchIntercepted(ArmCore core, int target) {
         throw new IllegalStateException("branchIntercepted chamado sem um alvo interceptado");
     }
+
+    /// O modelo despacha `SVC`/`SWI` internamente (como entrada de exceção própria) em vez do
+    /// caminho comum {@link ArmCore#swiDispatcher()}?
+    ///
+    /// Perfil A: sempre {@code false} (dispatcher de SWI de sempre). Perfil M (B7.2+):
+    /// {@code true} — `SVC` sempre vira {@link MProfileException#SVCALL}, nunca consulta o
+    /// {@code SwiDispatcher}.
+    default boolean handlesSupervisorCall() {
+        return false;
+    }
 }

@@ -815,7 +815,7 @@ public final class AsmRuntimeHelpers {
     /// Despacha uma interrupção de software. Sempre devolve {@code true} (o PC sempre muda).
     public static boolean executeSwi(ArmCore core, int immediate, int sequentialPc) {
         core.setProgramCounter(sequentialPc);
-        if (core.swiDispatcher().canDispatch(immediate)) {
+        if (!core.exceptionModel().handlesSupervisorCall() && core.swiDispatcher().canDispatch(immediate)) {
             CpuState next = core.swiDispatcher().dispatch(immediate, core.toCpuState());
             core.apply(next);
         } else {

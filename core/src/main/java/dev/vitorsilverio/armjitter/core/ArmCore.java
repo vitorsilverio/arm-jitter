@@ -16,7 +16,9 @@ import java.util.Objects;
 public final class ArmCore {
     private static final int REGISTER_COUNT = 16;
     private static final int PC = 15;
-    private static final int SP = 13;
+    /// Índice do stack pointer (visível no pacote para {@link MProfileExceptionModel}, que
+    /// mantém MSP/PSP como sombra do R13 ativo — B7.2).
+    static final int SP = 13;
     /// Índice do link register (visível no pacote para {@link AProfileExceptionModel}).
     static final int LR = 14;
     /// Versão do formato de {@link #saveState}/{@link #loadState}: `1` = formato anterior à

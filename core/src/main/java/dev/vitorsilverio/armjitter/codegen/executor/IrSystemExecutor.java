@@ -45,7 +45,7 @@ public final class IrSystemExecutor {
             return false;
         }
         core.setProgramCounter(sequentialPc);
-        if (core.swiDispatcher().canDispatch(swi.immediate())) {
+        if (!core.exceptionModel().handlesSupervisorCall() && core.swiDispatcher().canDispatch(swi.immediate())) {
             CpuState next = core.swiDispatcher().dispatch(swi.immediate(), core.toCpuState());
             core.apply(next);
             return true;

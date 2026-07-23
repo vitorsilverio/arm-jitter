@@ -126,5 +126,16 @@ public enum ArmFeature {
     /// VFPv2 (banco de 32 registradores `S`/16 `D`, `FPSCR`) + `VMOV` imediato do v3-d16
     /// (decisão do épico `b3-armv7a-vfp.md`). Nenhum preset habilita ainda (B3.7); nenhuma
     /// instrução decodifica ainda (B3.4/B3.5).
-    VFPV2
+    VFPV2,
+
+    // ---- Perfil M (épico B7; B7.2 só cria o modelo de exceção, ver
+    // {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel}) ----
+    /// Marca um core Cortex-M (perfil M): {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel}
+    /// instalado em vez de {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel}, sem
+    /// modo ARM (só Thumb/Thumb-2), MSP/PSP em vez de bancos de modo A/R. Nenhum preset habilita
+    /// ainda (B7.4, junto com `ARMV6M`/`ARMV7M`); nenhum decoder a consome ainda — o
+    /// comportamento da B7.2 (bypass do `SwiDispatcher` em `SVC`, `UNDEFINED` controlado em
+    /// `BX`/`BLX` para bit 0 = 0) é hoje inteiramente dirigido por qual {@code ExceptionModel}
+    /// está instalado no {@link dev.vitorsilverio.armjitter.core.ArmCore}, não por esta feature.
+    M_PROFILE
 }
