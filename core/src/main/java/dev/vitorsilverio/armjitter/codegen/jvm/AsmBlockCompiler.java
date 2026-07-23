@@ -269,6 +269,15 @@ public final class AsmBlockCompiler {
                 case IrOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
+                case IrOp.BitFieldExtract bfx -> emitBitFieldExtract(method, bfx);
+                case IrOp.BitFieldInsert bfi -> emitBitFieldInsert(method, bfi);
+                case IrOp.BitReverse rbit -> emitBitReverse(method, rbit);
+                case IrOp.Divide div -> emitDivide(method, div);
+                case IrOp.MoveTop movt -> emitMoveTop(method, movt);
+                case IrOp.MemoryBarrier ignored -> {
+                    // NOP observável (ver IrOp.MemoryBarrier) — nenhum bytecode além do
+                    // Cycle/Fetch já emitidos separadamente para esta instrução.
+                }
                 default -> throw new IllegalStateException("Unsupported IR op in native compile: " + op);
             }
             // Op pulado (condição falsa) cai aqui sem tocar PC_CHANGED — `emitProgramCounterFixup`
@@ -481,6 +490,30 @@ public final class AsmBlockCompiler {
                         countWrite(accesses, writes, reg);
                     }
                 }
+            }
+            case IrOp.BitFieldExtract bfx -> {
+                countRead(accesses, bfx.src());
+                countWrite(accesses, writes, bfx.dst());
+            }
+            case IrOp.BitFieldInsert bfi -> {
+                countRead(accesses, bfi.dst()); // preserva os bits fora do campo
+                if (bfi.src() >= 0) {
+                    countRead(accesses, bfi.src());
+                }
+                countWrite(accesses, writes, bfi.dst());
+            }
+            case IrOp.BitReverse rbit -> {
+                countRead(accesses, rbit.src());
+                countWrite(accesses, writes, rbit.dst());
+            }
+            case IrOp.Divide div -> {
+                countRead(accesses, div.dividend());
+                countRead(accesses, div.divisor());
+                countWrite(accesses, writes, div.dst());
+            }
+            case IrOp.MoveTop movt -> {
+                countRead(accesses, movt.dst()); // preserva a metade baixa existente
+                countWrite(accesses, writes, movt.dst());
             }
             default -> {
             }
@@ -1481,7 +1514,14 @@ public final class AsmBlockCompiler {
         method.visitInsn(Opcodes.IMUL);
         if (mul.accumulate()) {
             emitSrc1(method, mul.rn(), mul.rnValueOverride());
-            method.visitInsn(Opcodes.IADD);
+            if (mul.subtractFromAccumulator()) {
+                // MLS (B3.1): Rd = Ra - Rm*Rs. Pilha tem [produto, acumulador] — SWAP para
+                // subtrair na ordem certa (acumulador - produto).
+                method.visitInsn(Opcodes.SWAP);
+                method.visitInsn(Opcodes.ISUB);
+            } else {
+                method.visitInsn(Opcodes.IADD);
+            }
         }
         if (!mul.setFlags()) {
             emitStoreRegister(method, mul.dst());
@@ -1543,6 +1583,82 @@ public final class AsmBlockCompiler {
         method.visitInsn(Opcodes.LUSHR);
         method.visitInsn(Opcodes.L2I);
         emitStoreRegister(method, mul.dstHigh());
+    }
+
+    // ── inteiro ARMv7 (B3.1, emissão nativa B3.6/PR1) ────────────────────────────
+
+    /// SBFX/UBFX: move o campo para os bits altos com `ISHL` e desloca de volta com sinal
+    /// (`ISHR`) ou sem sinal (`IUSHR`) — mesmo truque do interpretado (`executeBitFieldExtract`).
+    private void emitBitFieldExtract(MethodVisitor method, IrOp.BitFieldExtract op) {
+        emitReadRegister(method, op.src());
+        AsmBytecode.visitIntConst(method, 32 - op.lsb() - op.width());
+        method.visitInsn(Opcodes.ISHL);
+        AsmBytecode.visitIntConst(method, 32 - op.width());
+        method.visitInsn(op.signedExtract() ? Opcodes.ISHR : Opcodes.IUSHR);
+        emitStoreRegister(method, op.dst());
+    }
+
+    /// BFI/BFC: a máscara do campo é uma constante pré-computada no emit (não em tempo de
+    /// execução). `BFC` (`src == -1`) só aplica a máscara de preservação — inserir um valor
+    /// zero via OR seria um no-op, então o passo de inserção é pulado inteiramente.
+    private void emitBitFieldInsert(MethodVisitor method, IrOp.BitFieldInsert op) {
+        int mask = op.width() == 32 ? -1 : (((1 << op.width()) - 1) << op.lsb());
+        emitReadRegister(method, op.dst());
+        AsmBytecode.visitIntConst(method, ~mask);
+        method.visitInsn(Opcodes.IAND);
+        if (op.src() >= 0) {
+            emitReadRegister(method, op.src());
+            AsmBytecode.visitIntConst(method, op.lsb());
+            method.visitInsn(Opcodes.ISHL);
+            AsmBytecode.visitIntConst(method, mask);
+            method.visitInsn(Opcodes.IAND);
+            method.visitInsn(Opcodes.IOR);
+        }
+        emitStoreRegister(method, op.dst());
+    }
+
+    /// RBIT: `Integer.reverse` (intrínseco JIT), igual ao REV/`Integer.reverseBytes` de B1.6.
+    private void emitBitReverse(MethodVisitor method, IrOp.BitReverse op) {
+        emitReadRegister(method, op.src());
+        AsmBytecode.invokeStatic(method, INTEGER_CLASS, "reverse", "(I)I");
+        emitStoreRegister(method, op.dst());
+    }
+
+    /// SDIV/UDIV: guarda o divisor 0 ANTES do `IDIV` (a ordem importa — ver Armadilhas da task
+    /// B3.6). `Integer.MIN_VALUE / -1` não precisa de guard: a divisão inteira da JVM já devolve
+    /// `MIN_VALUE` sem lançar, igual ao hardware.
+    private void emitDivide(MethodVisitor method, IrOp.Divide op) {
+        emitReadRegister(method, op.dividend());
+        emitReadRegister(method, op.divisor());
+        method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);   // divisor
+        method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // dividendo
+        Label divByZero = new Label();
+        Label done = new Label();
+        method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+        method.visitJumpInsn(Opcodes.IFEQ, divByZero);
+        method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+        method.visitVarInsn(Opcodes.ILOAD, TEMP2_LOCAL);
+        if (op.signedDivide()) {
+            method.visitInsn(Opcodes.IDIV);
+        } else {
+            AsmBytecode.invokeStatic(method, INTEGER_CLASS, "divideUnsigned", "(II)I");
+        }
+        method.visitJumpInsn(Opcodes.GOTO, done);
+        method.visitLabel(divByZero);
+        method.visitInsn(Opcodes.ICONST_0);
+        method.visitLabel(done);
+        emitStoreRegister(method, op.dst());
+    }
+
+    /// MOVT: preserva os 16 bits baixos existentes de `dst` (AND) e insere o imediato nos 16
+    /// bits altos (OR) — nunca toca flags, sem operando shiftado.
+    private void emitMoveTop(MethodVisitor method, IrOp.MoveTop op) {
+        emitReadRegister(method, op.dst());
+        AsmBytecode.visitIntConst(method, 0xFFFF);
+        method.visitInsn(Opcodes.IAND);
+        AsmBytecode.visitIntConst(method, op.immediate16() << 16);
+        method.visitInsn(Opcodes.IOR);
+        emitStoreRegister(method, op.dst());
     }
 
     // ── memory ─────────────────────────────────────────────────────────────────

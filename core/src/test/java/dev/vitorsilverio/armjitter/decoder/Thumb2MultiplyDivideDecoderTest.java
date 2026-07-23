@@ -2,7 +2,6 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
@@ -238,10 +237,10 @@ class Thumb2MultiplyDivideDecoderTest {
         assertNotEquals(InstructionKind.MLS, instruction.kind());
     }
 
-    // ── PER_OP fallback: sem divergência do interpretador (mesmo harness de B1.2-B1.5) ──────
+    // ── Emissão nativa ASM (B3.6/PR1): sem divergência do interpretador, sem fallback PER_OP ──
 
     @Test
-    void mixedBlockFallsBackToPerOpAndMatchesInterpreted() {
+    void mixedBlockCompilesNativelyAndMatchesInterpreted() {
         TestAddressSpace memory = new TestAddressSpace(64);
         memory.put16(0, hi(0, 3));             // MLS r0, r3, r2, r1
         memory.put16(2, lo(1, 0, 1, 2));
@@ -262,7 +261,7 @@ class Thumb2MultiplyDivideDecoderTest {
                     core.setRegister(2, 4);
                     core.setRegister(3, 3);
                 }));
-        assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                "MLS/SDIV/UDIV Thumb-2 (B3.2) ainda não têm emissão ASM nativa (ver B3.6)");
+        assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                "MLS/SDIV/UDIV Thumb-2 emitidos nativamente desde a task B3.6 (PR1)");
     }
 }

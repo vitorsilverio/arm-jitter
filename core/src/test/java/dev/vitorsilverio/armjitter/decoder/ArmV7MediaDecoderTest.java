@@ -1,7 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
@@ -222,7 +221,7 @@ class ArmV7MediaDecoderTest {
         }
     }
 
-    // ── Equivalência PER_OP: interpretado × ASM (sem emissão nativa até B3.6) ────────────────────
+    // ── Equivalência: interpretado × ASM nativo (B3.6/PR1) ────────────────────────────────────
 
     static class PerOpEquivalence extends BlockEquivalenceTest {
         private final AsmCodeEmitter asmEmitter =
@@ -241,8 +240,8 @@ class ArmV7MediaDecoderTest {
                     .lift(memory, 0, 5);
 
             asmEmitter.emit(block);
-            assertTrue(asmEmitter.perOpFallbackOpCount() > 0,
-                    "ops B3.1 devem cair no fallback PER_OP até a emissão nativa da B3.6");
+            assertEquals(0, asmEmitter.perOpFallbackOpCount(),
+                    "ops B3.1 emitidas nativamente desde a task B3.6 (PR1)");
             harness.assertEquivalent(b31Reference, asmEmitter, block,
                     EquivalenceTestSupport.independentPair(memory, core -> {
                         core.setRegister(1, 3);

@@ -28,6 +28,10 @@ import java.util.Set;
 /// SEL, PKHBT/PKHTB, SSAT/USAT, USAD8/USADA8) e B1.4 (LDREX/STREX/CLREX) também são nativas — só
 /// as instruções de sistema da B1.5 (CPS/SETEND/SRS/RFE/WFI) permanecem interpretadas, por
 /// serem raras/kernel-only (ver task B1.6).</p>
+///
+/// <p>Desde a task B3.6 (PR1), o inteiro ARMv7 da B3.1/B3.2 também é nativo: MOVT, DMB/DSB/ISB
+/// (NOP), SBFX/UBFX, BFI/BFC, RBIT, SDIV/UDIV e MLS (Multiply com {@code subtractFromAccumulator}).
+/// VFP (B3.4/B3.5) permanece interpretado até a B3.6/PR2.</p>
 public final class AsmNativePolicy {
     private AsmNativePolicy() {
     }
@@ -48,9 +52,9 @@ public final class AsmNativePolicy {
         // ARMv6 de B1.2 (nativas só na B1.6).
         return switch (op) {
             case IrOp.Alu alu -> supportsAlu(alu);
-            // MLS (B3.1, subtractFromAccumulator=true): opcode novo sem case no emissor ASM ainda
-            // — interpretado até uma task futura de B3, mesmo padrão de ORN/B2.2 até B1.6/B3.6.
-            case IrOp.Multiply m -> !m.subtractFromAccumulator();
+            // MLS (B3.1, subtractFromAccumulator=true): emitido nativamente desde a task B3.6
+            // (ISUB no lugar do IADD no caminho MLA já existente).
+            case IrOp.Multiply ignored -> true;
             // UMAAL (ARMv6, B1.2): acumulador duplo agora emitido nativamente (task B1.6).
             case IrOp.LongMultiply ignored -> true;
             // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
@@ -96,24 +100,23 @@ public final class AsmNativePolicy {
             case IrOp.StoreReturnState ignored -> false;
             case IrOp.ReturnFromException ignored -> false;
             case IrOp.WaitForInterrupt ignored -> false;
-            // `MOVT` (Thumb-2, B2.2): interpretado até a emissão nativa de uma task futura de B2,
-            // mesmo padrão de B1.2-B1.5 até B1.6.
-            case IrOp.MoveTop ignored -> false;
-            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável, mas ainda assim interpretado por
-            // enquanto — mesmo padrão de toda instrução de sistema nova (CPS/SETEND/SRS/RFE/WFI/
-            // MOVT) até uma task futura de emissão nativa.
-            case IrOp.MemoryBarrier ignored -> false;
+            // `MOVT` (Thumb-2, B2.2): emitido nativamente desde a task B3.6 (AND/OR direto,
+            // preservando os 16 bits baixos existentes).
+            case IrOp.MoveTop ignored -> true;
+            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável (ver IrOp.MemoryBarrier) — desde a task
+            // B3.6 não emite nenhum bytecode além do Cycle/Fetch já emitidos separadamente no bloco.
+            case IrOp.MemoryBarrier ignored -> true;
             // IT block/branches Thumb-2 novos (B2.4): interpretados até uma task futura de emissão
             // nativa, mesmo padrão de todo op novo B1.x/B2.x até B1.6/uma task dedicada.
             case IrOp.SetItState ignored -> false;
             case IrOp.TableBranch ignored -> false;
             case IrOp.CompareBranchZero ignored -> false;
-            // Inteiro ARMv7 (B3.1): interpretadas até a emissão nativa da B3.6, mesmo padrão de
-            // todo op novo B1.x/B2.x até sua respectiva task de emissão nativa.
-            case IrOp.BitFieldExtract ignored -> false;
-            case IrOp.BitFieldInsert ignored -> false;
-            case IrOp.BitReverse ignored -> false;
-            case IrOp.Divide ignored -> false;
+            // Inteiro ARMv7 (B3.1): emitidas nativamente desde a task B3.6 (PR1), bytecode direto
+            // sem helper — ver `emitBitFieldExtract`/`emitBitFieldInsert`/`emitBitReverse`/`emitDivide`.
+            case IrOp.BitFieldExtract ignored -> true;
+            case IrOp.BitFieldInsert ignored -> true;
+            case IrOp.BitReverse ignored -> true;
+            case IrOp.Divide ignored -> true;
             // VFP (B3.4): decode ainda não existe (B3.5) e a emissão nativa é B3.6 — todo record
             // Vfp* fica interpretado até lá.
             case IrOp.VfpAlu ignored -> false;
