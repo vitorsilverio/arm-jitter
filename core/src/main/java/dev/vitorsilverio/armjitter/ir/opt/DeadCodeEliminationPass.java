@@ -164,6 +164,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.VfpCorePairTransfer t ->
                     t.toArmRegisters() ? 0 : (1 << t.armLow()) | (1 << t.armHigh());
             case IrOp.VfpSystemTransfer t -> t.read() ? 0 : (1 << t.armRegister());
+            // MRS/MSR SYSm do perfil M (B7.4): `MSR` lê o registrador ARM fonte; `MRS` não lê
+            // registrador ARM algum (só o registrador especial, fora deste bitmask).
+            case IrOp.MProfileSystemRegister t -> t.read() ? 0 : (1 << t.armRegister());
             default -> 0;
         };
     }
@@ -257,6 +260,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             // VMRS Rt,FPSCR escreve Rt — exceto o caso especial APSR_nzcv (Rt=15), que escreve o
             // CPSR.NZCV em vez de R15 (ver IrOp.VfpSystemTransfer).
             case IrOp.VfpSystemTransfer t -> (t.read() && t.armRegister() != 15) ? (1 << t.armRegister()) : 0;
+            // MRS/MSR SYSm do perfil M (B7.4): `MRS` escreve o registrador ARM destino; `MSR` não
+            // escreve registrador ARM algum (só o registrador especial, fora deste bitmask).
+            case IrOp.MProfileSystemRegister t -> t.read() ? (1 << t.armRegister()) : 0;
             default -> 0;
         };
     }

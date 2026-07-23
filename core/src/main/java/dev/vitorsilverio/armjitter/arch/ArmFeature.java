@@ -137,5 +137,11 @@ public enum ArmFeature {
     /// comportamento da B7.2 (bypass do `SwiDispatcher` em `SVC`, `UNDEFINED` controlado em
     /// `BX`/`BLX` para bit 0 = 0) é hoje inteiramente dirigido por qual {@code ExceptionModel}
     /// está instalado no {@link dev.vitorsilverio.armjitter.core.ArmCore}, não por esta feature.
-    M_PROFILE
+    M_PROFILE,
+    /// Registradores de mascaramento de falha do perfil M **completo** (ARMv7-M): `BASEPRI`,
+    /// `BASEPRI_MAX` e `FAULTMASK`, acessíveis via `MRS`/`MSR` (SYSm 17/18/19) e, no caso de
+    /// `FAULTMASK`, via `CPSID f`/`CPSIE f` (B7.4). Presente só no preset `ARMV7M` — o ARMv6-M
+    /// (Cortex-M0/M0+/M1) NÃO tem esses registradores (só `PRIMASK`), então o decoder trata esses
+    /// SYSm/`CPS f` como UNDEFINED sem esta feature. Ver a task B7.4.
+    M_FAULT_MASKING
 }

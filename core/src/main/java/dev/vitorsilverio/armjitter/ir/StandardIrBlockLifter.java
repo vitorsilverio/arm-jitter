@@ -130,7 +130,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // VFP (B3.5): nenhuma toca o PC.
                     VFP_ALU, VFP_MOVE_IMMEDIATE, VFP_COMPARE, VFP_CONVERT, VFP_LOAD, VFP_STORE,
                     VFP_LOAD_MULTIPLE, VFP_STORE_MULTIPLE, VFP_CORE_TRANSFER, VFP_CORE_PAIR_TRANSFER,
-                    VFP_SYSTEM_TRANSFER -> false;
+                    VFP_SYSTEM_TRANSFER,
+                    // MRS/MSR SYSm do perfil M (B7.4): nunca tocam o PC (nem via CONTROL.SPSEL, que só
+                    // troca qual SP está ativo, não o fluxo). MSR PSP/MSP também não são terminais.
+                    MPROFILE_MRS, MPROFILE_MSR -> false;
         };
     }
 

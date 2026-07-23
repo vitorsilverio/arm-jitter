@@ -243,5 +243,18 @@ public enum InstructionKind {
     VFP_CORE_PAIR_TRANSFER,
     /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`, só o registrador FPSCR — FPSID/FPEXC fora de escopo).
     /// `destinationRegister`=registrador ARM envolvido, `link`=`true` para `VMRS` (FPSCR→destino).
-    VFP_SYSTEM_TRANSFER
+    VFP_SYSTEM_TRANSFER,
+
+    // ── Perfil M (B7.4): MRS/MSR na forma SYSm (número de registrador especial), distinta da
+    // forma A-profile CPSR/SPSR+máscara. Só produzidas quando `ArmFeature.M_PROFILE` está ativo. ──
+
+    /// `MRS Rd, <spec>` do perfil M (`MRS_v7m`): lê um registrador especial Cortex-M para um
+    /// registrador ARM. `destinationRegister`=Rd, `immediate`=campo `SYSm` (número do registrador
+    /// especial — ver `MProfileExceptionModel.readSystemRegister`).
+    MPROFILE_MRS,
+    /// `MSR <spec>, Rn` do perfil M (`MSR_v7m`): escreve um registrador especial Cortex-M a partir
+    /// de um registrador ARM. `sourceRegister`=Rn, `immediate`=campo `SYSm` (a máscara de campos do
+    /// encoding não é modelada — o próprio `SYSm` já decide o que a escrita afeta, ver
+    /// `MProfileExceptionModel.writeSystemRegister`).
+    MPROFILE_MSR
 }

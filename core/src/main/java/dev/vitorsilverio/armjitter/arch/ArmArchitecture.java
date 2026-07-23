@@ -169,6 +169,51 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARM11_MPCORE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
+    /// Cortex-M0/M0+/M1 — **ARMv6-M** (B7.4). Perfil M: {@link ArmFeature#M_PROFILE} instala o
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel} (MSP/PSP/xPSR/EXC_RETURN,
+    /// B7.2/B7.3) — quem cria o {@code ArmCore}/`JitRuntime` para este preset deve passar
+    /// {@code new MProfileExceptionModel()} (o preset não força o modelo sozinho, ver B7.2).
+    ///
+    /// **Armadilha (spec B7.4 nº1): `THUMB2` aqui é SÓ o mecanismo de fetch de 32 bits** — o
+    /// ARMv6-M **NÃO** tem o Thumb-2 largo (sem `LDR.W`, sem dataproc de 32 bits). Por isso este
+    /// preset propositalmente NÃO pluga `Thumb2DataProcessingDecoder`/`Thumb2LoadStoreDecoder`: os
+    /// únicos encodings de 32 bits do v6-M são `BL` (nativo do `ThumbDecoder` pós-B2.6), as
+    /// barreiras `DMB`/`DSB`/`ISB` e `MRS`/`MSR` (SYSm) — todos cobertos por `Thumb2MiscDecoder`.
+    /// Ninguém deve "consertar" isto plugando os decoders largos depois. `WAIT_HINTS` habilita
+    /// `WFI`/`WFE`/`SEV`; `MEMORY_BARRIERS`, as barreiras. Sem `M_FAULT_MASKING`: `BASEPRI`/
+    /// `FAULTMASK` e `CPS f` viram UNDEFINED (v6-M só tem `PRIMASK`).
+    private static final ArmArchitecture ARMV6M_FEATURES = of("ARMv6-M",
+            ArmFeature.THUMB2, ArmFeature.M_PROFILE, ArmFeature.WAIT_HINTS, ArmFeature.MEMORY_BARRIERS);
+
+    public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder()));
+
+    /// Cortex-M3/M4 — **ARMv7-M** (B7.4): Thumb-2 largo completo + divide + bitfield + os
+    /// registradores de mascaramento de falha ({@link ArmFeature#M_FAULT_MASKING}: `BASEPRI`/
+    /// `BASEPRI_MAX`/`FAULTMASK` + `CPS f`). **Sem VFP** (a extensão FP do Cortex-M4F está fora do
+    /// escopo — "Não inclui" da B7.4), por isso nenhum `Thumb2VfpDecoder`/`VFPV2` aqui. Herda o
+    /// perfil M (`M_PROFILE`/`WAIT_HINTS`/`MEMORY_BARRIERS`) de {@link #ARMV6M_FEATURES} e acrescenta
+    /// o inteiro largo. Mesmo quebra-cabeça ovo-e-galinha dos outros presets: as features primeiro
+    /// ({@code ARMV7M_FEATURES}), porque `Thumb2*Decoder` recebem a arquitetura no construtor.
+    private static final ArmArchitecture ARMV7M_FEATURES = extending(ARMV6M_FEATURES, "ARMv7-M",
+            ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE,
+            ArmFeature.EXCLUSIVE_WORD, ArmFeature.EXCLUSIVE_SIZED,
+            ArmFeature.MOVW_MOVT, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
+            ArmFeature.MLS_MULTIPLY, ArmFeature.DIVIDE, ArmFeature.SATURATING,
+            ArmFeature.M_FAULT_MASKING);
+
+    public static final ArmArchitecture ARMV7M = ARMV7M_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV7M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

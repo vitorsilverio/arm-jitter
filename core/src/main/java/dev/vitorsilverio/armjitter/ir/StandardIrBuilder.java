@@ -469,6 +469,12 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.condition()));
+            // MRS/MSR SYSm do perfil M (B7.4): `immediate` carrega o campo SYSm; o registrador ARP
+            // ARM é o destino (MRS) ou a fonte (MSR). Ver IrOp.MProfileSystemRegister.
+            case MPROFILE_MRS -> block.add(new IrOp.MProfileSystemRegister(
+                    true, instruction.destinationRegister(), instruction.immediate(), instruction.condition()));
+            case MPROFILE_MSR -> block.add(new IrOp.MProfileSystemRegister(
+                    false, instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));

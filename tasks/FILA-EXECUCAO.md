@@ -64,6 +64,11 @@
   `ExceptionModel.hasPendingException`/`enterPendingException` plugados em
   `ArmCore.servicePendingIrq` — ver índice do `tasks/README.md` para os
   detalhes, incl. o achado de bug do `SysTick.tick()` com granularidade fina).
+- **B7.4** ✅ (2026-07-23, `MRS`/`MSR` SYSm + `CPS` de 16 bits do perfil M +
+  presets `ARMV6M`/`ARMV7M`: `IrOp.MProfileSystemRegister` + tabela SYSm no
+  `MProfileExceptionModel`, feature nova `M_FAULT_MASKING` gateando
+  BASEPRI/FAULTMASK/`CPS f`, `ARMV6M` sem Thumb-2 largo e `ARMV7M` sem VFP;
+  21 testes novos — ver índice do `tasks/README.md`. G5 verde nas 3 suítes).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -73,8 +78,7 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| 3 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 ✅ | próxima da cadeia Cortex-M |
-| 4 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 | |
+| 4 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 ✅ | próxima da cadeia Cortex-M (B7.4 fechada) |
 | P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — pode rodar em paralelo com a fila do arm-jitter |
 | P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
 

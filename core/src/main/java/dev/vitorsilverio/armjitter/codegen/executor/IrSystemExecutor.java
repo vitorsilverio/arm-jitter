@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
@@ -97,6 +98,19 @@ public final class IrSystemExecutor {
         if (!core.cpsr().evalCond(cps.condition())) {
             return;
         }
+        // Perfil M (B7.4): `CPSIE i`/`CPSID i` (16-bit Thumb) tocam SÓ PRIMASK; `CPSIE f`/`CPSID f`
+        // tocam SÓ FAULTMASK (o decoder só deixa `f` chegar aqui com M_FAULT_MASKING presente). O
+        // perfil M não tem o modo User da forma A-profile, nem os bits A/mode — ignorados. Este
+        // ramo precede o resto (A-profile) e o preserva bit a bit.
+        if (core.exceptionModel() instanceof MProfileExceptionModel model) {
+            if (cps.changeI()) {
+                model.setPrimask(cps.enable() ? 0 : 1);
+            }
+            if (cps.changeF()) {
+                model.setFaultmask(cps.enable() ? 0 : 1);
+            }
+            return;
+        }
         if (core.mode() == CpuMode.USER) {
             return;
         }
@@ -111,6 +125,22 @@ public final class IrSystemExecutor {
             value = (value & ~0b11111) | cps.mode();
         }
         core.setCpsr(value);
+    }
+
+    /// `MRS`/`MSR` na forma SYSm do perfil M (B7.4): delega leitura/escrita do registrador especial
+    /// ao {@link MProfileExceptionModel} (dono de MSP/PSP/PRIMASK/BASEPRI/FAULTMASK/CONTROL). O cast
+    /// é seguro: esta op só é produzida pelo decoder sob {@code ArmFeature.M_PROFILE}, e todo core
+    /// com essa feature roda com um {@code MProfileExceptionModel} instalado.
+    public void executeMProfileSystemRegister(ArmCore core, IrOp.MProfileSystemRegister op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        MProfileExceptionModel model = (MProfileExceptionModel) core.exceptionModel();
+        if (op.read()) {
+            core.setRegister(op.armRegister(), model.readSystemRegister(core, op.sysm()));
+        } else {
+            model.writeSystemRegister(core, op.sysm(), core.register(op.armRegister()));
+        }
     }
 
     /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 lançam

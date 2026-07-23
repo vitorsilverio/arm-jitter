@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 
 /// Decodifica o grupo residual "Branches and miscellaneous control" Thumb-2 de 32 bits (B2.5)
 /// tratado por esta task: hints (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`), barreiras de memória
@@ -124,6 +125,14 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int CPS_PACKED_I_SHIFT = 4;
     private static final int CPS_PACKED_F_SHIFT = 5;
     private static final int CPS_PACKED_MODE_SHIFT = 6;
+
+    /// `MRS_v7m`/`MSR_v7m` (perfil M, B7.4): compartilham o `hi` de `MRS_reg`/`MSR_reg`, mas `lo`
+    /// muda de significado — `lo[15:12]=1000` fixo, `lo[11:8]`=Rd (MRS) ou máscara de campos (MSR,
+    /// não modelada) e `lo[7:0]`=SYSm (número do registrador especial, não precisa ser zero como no
+    /// A-profile). Só interpretado assim quando {@link ArmFeature#M_PROFILE} está ativo.
+    private static final int V7M_LO_FIXED_MASK = 0xF000;
+    private static final int V7M_LO_FIXED_VALUE = 0x8000;
+    private static final int V7M_SYSM_MASK = 0xFF;
 
     /// `CLREX` de 32 bits (ARM DDI 0406C A8.8.30): encoding TOTALMENTE fixo (nenhum campo de
     /// registrador) dentro do subgrupo "Miscellaneous control" — `lo = 1000 1111 0010 1111`, o
@@ -254,6 +263,9 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     // ── MRS (forma registrador) — A5.3.5 `MRS_reg` ──────────────────────────────────────────
 
     private DecodedInstruction decodeMrs(int raw, int address, Condition condition, int hi, int lo) {
+        if (architecture.has(ArmFeature.M_PROFILE)) {
+            return decodeMrsMProfile(raw, address, condition, lo);
+        }
         if ((lo & MRS_LO_FIXED_MASK) != MRS_LO_FIXED_VALUE) {
             return null; // MRS_bank/MRS_v7m compartilham o mesmo hi, mas lo diferente.
         }
@@ -263,9 +275,44 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
                 rd, -1, -1, spsr ? 1 : 0, true, false, false);
     }
 
+    /// `MRS Rd, <SYSm>` do perfil M (B7.4): `lo[15:12]=1000` fixo, `lo[11:8]`=Rd, `lo[7:0]`=SYSm.
+    private DecodedInstruction decodeMrsMProfile(int raw, int address, Condition condition, int lo) {
+        if ((lo & V7M_LO_FIXED_MASK) != V7M_LO_FIXED_VALUE) {
+            return null;
+        }
+        int rd = (lo >>> MRS_RD_SHIFT) & MRS_RD_MASK;
+        int sysm = lo & V7M_SYSM_MASK;
+        if (!isSupportedSysm(sysm)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.MPROFILE_MRS, rd, -1, -1, sysm, true, false, false);
+    }
+
+    /// SYSm implementados nesta task (ARMv7-M ARM B5.1.1). BASEPRI/BASEPRI_MAX/FAULTMASK exigem o
+    /// perfil M **completo** ({@link ArmFeature#M_FAULT_MASKING}, ausente no ARMv6-M) — sem ela, o
+    /// SYSm vira UNDEFINED direto no decode (mesma convenção de WFI/CLREX). Os demais SYSm (4,
+    /// 10-15, 21+) não existem → UNDEFINED.
+    private boolean isSupportedSysm(int sysm) {
+        return switch (sysm) {
+            case MProfileExceptionModel.SYSM_APSR, MProfileExceptionModel.SYSM_IAPSR,
+                 MProfileExceptionModel.SYSM_EAPSR, MProfileExceptionModel.SYSM_XPSR,
+                 MProfileExceptionModel.SYSM_IPSR, MProfileExceptionModel.SYSM_EPSR,
+                 MProfileExceptionModel.SYSM_IEPSR, MProfileExceptionModel.SYSM_MSP,
+                 MProfileExceptionModel.SYSM_PSP, MProfileExceptionModel.SYSM_PRIMASK,
+                 MProfileExceptionModel.SYSM_CONTROL -> true;
+            case MProfileExceptionModel.SYSM_BASEPRI, MProfileExceptionModel.SYSM_BASEPRI_MAX,
+                 MProfileExceptionModel.SYSM_FAULTMASK -> architecture.has(ArmFeature.M_FAULT_MASKING);
+            default -> false;
+        };
+    }
+
     // ── MSR (forma registrador) — A5.3.5 `MSR_reg` ──────────────────────────────────────────
 
     private DecodedInstruction decodeMsr(int raw, int address, Condition condition, int hi, int lo) {
+        if (architecture.has(ArmFeature.M_PROFILE)) {
+            return decodeMsrMProfile(raw, address, condition, hi, lo);
+        }
         if ((lo & MSR_LO_FIXED_MASK) != MSR_LO_FIXED_VALUE) {
             return null; // MSR_bank/MSR_v7m compartilham o mesmo hi, mas lo diferente.
         }
@@ -275,5 +322,20 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         int packed = (spsr ? PSR_SPSR_BIT : 0) | (fieldMask & PSR_FIELD_MASK_BITS);
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MSR,
                 -1, sourceRegister, -1, packed, false, false, false);
+    }
+
+    /// `MSR <SYSm>, Rn` do perfil M (B7.4): `lo[15:12]=1000` fixo, `lo[7:0]`=SYSm, `hi[3:0]`=Rn. A
+    /// máscara de campos (`lo[11:8]`) não é modelada — o próprio SYSm já decide o efeito da escrita.
+    private DecodedInstruction decodeMsrMProfile(int raw, int address, Condition condition, int hi, int lo) {
+        if ((lo & V7M_LO_FIXED_MASK) != V7M_LO_FIXED_VALUE) {
+            return null;
+        }
+        int rn = hi & MSR_RN_MASK;
+        int sysm = lo & V7M_SYSM_MASK;
+        if (!isSupportedSysm(sysm)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.MPROFILE_MSR, -1, rn, -1, sysm, false, false, false);
     }
 }

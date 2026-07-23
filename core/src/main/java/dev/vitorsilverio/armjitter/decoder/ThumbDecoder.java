@@ -66,6 +66,26 @@ public final class ThumbDecoder implements InstructionDecoder {
     private static final int CBZ_IMM5_MASK = 0x1F;
     private static final int CBZ_RN_MASK = 0x7;
 
+    /// `CPS` de 16 bits do perfil M (B7.4, ARM DDI 0403E A6.7 T1): `1011 0110 011 im 0 0 I F` —
+    /// `0xB662`=`CPSIE i`, `0xB672`=`CPSID i`. Muda SÓ PRIMASK (bit `I`) e/ou FAULTMASK (bit `F`);
+    /// não é o `CPS` A-profile de B1.5 (que mexe em A/I/F/modo do CPSR). Gate {@link
+    /// ArmFeature#M_PROFILE} — em qualquer preset A-profile este encoding continua caindo em
+    /// UNDEFINED como antes (G3). `F=1` exige ainda {@link ArmFeature#M_FAULT_MASKING} (ARMv7-M).
+    private static final int CPS16_MASK = 0xFFE0;
+    private static final int CPS16_VALUE = 0xB660;
+    private static final int CPS16_IM_BIT = 1 << 4;
+    /// Bits 3 e 2 são reservados (SBZ); qualquer valor != 0 aqui não é um `CPS` válido.
+    private static final int CPS16_RESERVED_MASK = (1 << 3) | (1 << 2);
+    private static final int CPS16_I_BIT = 1 << 1;
+    private static final int CPS16_F_BIT = 1 << 0;
+    /// Empacotamento de `immediate` para `InstructionKind.CPS` (mesma convenção do CPS ARM/Thumb-2,
+    /// interpretada por `StandardIrBuilder`): bit 1 = `changeFlags` (sempre 1 aqui), bit 0 = `imod`
+    /// baixo (1 = desabilita/ID), bit 4 = `changeI`, bit 5 = `changeF`. `changeA`/`changeMode` = 0.
+    private static final int CPS16_PACKED_CHANGE_FLAGS = 1 << 1;
+    private static final int CPS16_PACKED_DISABLE_BIT = 1 << 0;
+    private static final int CPS16_PACKED_I_SHIFT = 4;
+    private static final int CPS16_PACKED_F_SHIFT = 5;
+
     /// Decodifica uma instrução THUMB16 (ou, com {@link ArmFeature#THUMB2}, um candidato Thumb de
     /// 32 bits) no endereço informado.
     @Override
@@ -339,6 +359,27 @@ public final class ThumbDecoder implements InstructionDecoder {
             boolean includePc = (raw & (1 << 8)) != 0;
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.POP,
                     -1, -1, -1, mask, true, false, includePc);
+        }
+
+        // `CPS` de 16 bits do perfil M (B7.4): CPSIE/CPSID i/f → PRIMASK/FAULTMASK. Gate
+        // M_PROFILE — sem ele, este encoding cai no UNDEFINED final como em qualquer preset
+        // A-profile (G3). Ver StandardIrBuilder/IrSystemExecutor.executeChangeProcessorState.
+        if (architecture.has(ArmFeature.M_PROFILE) && (raw & CPS16_MASK) == CPS16_VALUE) {
+            if ((raw & CPS16_RESERVED_MASK) != 0) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            boolean disable = (raw & CPS16_IM_BIT) != 0;
+            boolean changeI = (raw & CPS16_I_BIT) != 0;
+            boolean changeF = (raw & CPS16_F_BIT) != 0;
+            if (changeF && !architecture.has(ArmFeature.M_FAULT_MASKING)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int packed = CPS16_PACKED_CHANGE_FLAGS
+                    | (disable ? CPS16_PACKED_DISABLE_BIT : 0)
+                    | (changeI ? (1 << CPS16_PACKED_I_SHIFT) : 0)
+                    | (changeF ? (1 << CPS16_PACKED_F_SHIFT) : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.CPS, -1, -1, -1, packed, false, false, false);
         }
 
         // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é

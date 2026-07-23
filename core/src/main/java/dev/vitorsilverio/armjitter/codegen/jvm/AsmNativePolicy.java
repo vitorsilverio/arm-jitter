@@ -133,6 +133,9 @@ public final class AsmNativePolicy {
             case IrOp.VfpCoreTransfer ignored -> true;
             case IrOp.VfpCorePairTransfer ignored -> true;
             case IrOp.VfpSystemTransfer ignored -> true;
+            // MRS/MSR SYSm do perfil M (B7.4): interpretado, nunca nativo — mesmo padrão de toda op
+            // de sistema nova (delega ao MProfileExceptionModel via IrSystemExecutor).
+            case IrOp.MProfileSystemRegister ignored -> false;
         };
     }
 

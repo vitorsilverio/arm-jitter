@@ -22,9 +22,49 @@ public final class MProfileExceptionModel implements ExceptionModel {
     public static final int CONTROL_SPSEL_BIT = 1 << 1;
     /// Bit nPRIV do CONTROL (privilégio de Thread mode; sem consumidor nesta task).
     private static final int CONTROL_NPRIV_BIT = 1 << 0;
-    /// Bit PRIMASK (mascaramento simples de exceções configuráveis; BASEPRI/FAULTMASK ficam
-    /// para a B7.4, que decide como expô-los).
+    /// Bit PRIMASK (mascaramento simples de exceções configuráveis).
     private static final int PRIMASK_BIT = 1 << 0;
+    /// Bit FAULTMASK (mascaramento de tudo abaixo de HardFault; só existe no ARMv7-M —
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_FAULT_MASKING} —, gateado no decoder).
+    private static final int FAULTMASK_BIT = 1 << 0;
+
+    // ── Números SYSm dos registradores especiais (B7.4, ARMv7-M ARM B5.1.1). Públicos para o
+    // decoder (Thumb2MiscDecoder) reusar o mesmo conjunto ao decidir quais SYSm são UNDEFINED. ──
+    /// SYSm 0 — `APSR`: só os flags de aplicação (NZCVQ + GE) do `xPSR`.
+    public static final int SYSM_APSR = 0;
+    /// SYSm 1 — `IAPSR`: `APSR` combinado com `IPSR`.
+    public static final int SYSM_IAPSR = 1;
+    /// SYSm 2 — `EAPSR`: `APSR` combinado com `EPSR` (modelado como 0 aqui).
+    public static final int SYSM_EAPSR = 2;
+    /// SYSm 3 — `XPSR`: `APSR` combinado com `IPSR` (e `EPSR`, 0).
+    public static final int SYSM_XPSR = 3;
+    /// SYSm 5 — `IPSR`: número da exceção ativa (bits 8:0).
+    public static final int SYSM_IPSR = 5;
+    /// SYSm 6 — `EPSR`: estado de execução (ICI/IT/T); lido como 0 nesta implementação.
+    public static final int SYSM_EPSR = 6;
+    /// SYSm 7 — `IEPSR`: `IPSR` combinado com `EPSR` (0).
+    public static final int SYSM_IEPSR = 7;
+    /// SYSm 8 — `MSP` (Main Stack Pointer).
+    public static final int SYSM_MSP = 8;
+    /// SYSm 9 — `PSP` (Process Stack Pointer).
+    public static final int SYSM_PSP = 9;
+    /// SYSm 16 — `PRIMASK`.
+    public static final int SYSM_PRIMASK = 16;
+    /// SYSm 17 — `BASEPRI` (só ARMv7-M).
+    public static final int SYSM_BASEPRI = 17;
+    /// SYSm 18 — `BASEPRI_MAX` (só ARMv7-M): leitura idêntica a `BASEPRI`, escrita só abaixa o limite.
+    public static final int SYSM_BASEPRI_MAX = 18;
+    /// SYSm 19 — `FAULTMASK` (só ARMv7-M).
+    public static final int SYSM_FAULTMASK = 19;
+    /// SYSm 20 — `CONTROL`.
+    public static final int SYSM_CONTROL = 20;
+
+    /// Bits do `APSR` (flags de aplicação: NZCV + Q + GE\[3:0\]) — subconjunto de
+    /// {@link #XPSR_PRESERVED_CPSR_BITS_MASK} SEM os bits de ITSTATE (que pertencem ao `EPSR`, não
+    /// ao `APSR`). Usado pelo `MRS`/`MSR APSR`/`XPSR`/... para ler/escrever só a parte de aplicação.
+    private static final int APSR_BITS_MASK =
+            CpsrRegister.NEGATIVE_FLAG | CpsrRegister.ZERO_FLAG | CpsrRegister.CARRY_FLAG
+                    | CpsrRegister.OVERFLOW_FLAG | CpsrRegister.SATURATION_FLAG | CpsrRegister.GE_FLAGS_MASK;
     /// Valor do IPSR/`currentException` em Thread mode (nenhuma exceção ativa).
     private static final int THREAD_MODE_IPSR = 0;
 
@@ -119,6 +159,11 @@ public final class MProfileExceptionModel implements ExceptionModel {
     private int control;
     private int currentException = THREAD_MODE_IPSR;
     private int primask;
+    /// `BASEPRI`/`FAULTMASK` (só ARMv7-M): armazenamento simples nesta fase — mesmo padrão do SHCSR
+    /// inerte da B7.3. Deliberadamente NÃO integrados a {@link #highestPriorityPendingCandidate()}
+    /// (que só consulta `primask`): a integração na preempção fica para uma task futura.
+    private int basepri;
+    private int faultmask;
     private int vectorTableOffset;
 
     /// Retorna o MSP. Quando o MSP é o SP ativo (Handler mode, ou Thread com SPSEL=0), este
@@ -191,6 +236,107 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// Ajusta o PRIMASK.
     public void setPrimask(int primask) {
         this.primask = primask & PRIMASK_BIT;
+    }
+
+    /// Retorna o BASEPRI (8 bits; só ARMv7-M — ver {@link #basepri}).
+    public int basepri() {
+        return basepri;
+    }
+
+    /// Ajusta o BASEPRI (mascarado a 8 bits).
+    public void setBasepri(int basepri) {
+        this.basepri = basepri & PRIORITY_FIELD_MASK;
+    }
+
+    /// Retorna o FAULTMASK (bit 0; só ARMv7-M — ver {@link #faultmask}).
+    public int faultmask() {
+        return faultmask;
+    }
+
+    /// Ajusta o FAULTMASK (mascarado a 1 bit).
+    public void setFaultmask(int faultmask) {
+        this.faultmask = faultmask & FAULTMASK_BIT;
+    }
+
+    /// Lê o MSP como o `MRS Rd, MSP` enxerga: quando o MSP é o SP ATIVO (Handler mode, ou Thread
+    /// com SPSEL=0), o valor corrente mora em {@code core.register(13)}; caso contrário, na sombra.
+    public int readMsp(ArmCore core) {
+        return (handlerModeActive() || !spsel()) ? core.register(ArmCore.SP) : mainStackPointer;
+    }
+
+    /// Escreve o MSP, atualizando o SP ativo quando o MSP é o ativo (ver {@link #readMsp}).
+    public void writeMsp(ArmCore core, int value) {
+        if (handlerModeActive() || !spsel()) {
+            core.setRegister(ArmCore.SP, value);
+        } else {
+            mainStackPointer = value;
+        }
+    }
+
+    /// Lê o PSP como o `MRS Rd, PSP` enxerga: o PSP é o SP ATIVO só em Thread mode com SPSEL=1.
+    public int readPsp(ArmCore core) {
+        return (!handlerModeActive() && spsel()) ? core.register(ArmCore.SP) : processStackPointer;
+    }
+
+    /// Escreve o PSP, atualizando o SP ativo quando o PSP é o ativo (ver {@link #readPsp}).
+    public void writePsp(ArmCore core, int value) {
+        if (!handlerModeActive() && spsel()) {
+            core.setRegister(ArmCore.SP, value);
+        } else {
+            processStackPointer = value;
+        }
+    }
+
+    /// Bits de `APSR` (NZCVQ + GE) lidos do CPSR corrente.
+    private int readApsrBits(ArmCore core) {
+        return core.cpsr().get() & APSR_BITS_MASK;
+    }
+
+    /// Escreve SÓ os bits de `APSR` (NZCVQ + GE) no CPSR, preservando todo o resto (nunca toca
+    /// IPSR/EPSR/modo) — semântica de `MSR APSR`/`IAPSR`/`EAPSR`/`XPSR` (B7.4, ARMv7-M ARM B5.2.3).
+    private void writeApsrBits(ArmCore core, int value) {
+        core.cpsr().set((core.cpsr().get() & ~APSR_BITS_MASK) | (value & APSR_BITS_MASK));
+    }
+
+    /// `MRS Rd, <SYSm>` (B7.4): lê o registrador especial `sysm`. SYSm fora da tabela lê 0
+    /// (o decoder já rejeita os realmente reservados como UNDEFINED antes de chegar aqui).
+    public int readSystemRegister(ArmCore core, int sysm) {
+        return switch (sysm) {
+            case SYSM_APSR, SYSM_EAPSR -> readApsrBits(core);
+            case SYSM_IAPSR, SYSM_XPSR -> readApsrBits(core) | (currentException & XPSR_IPSR_MASK);
+            case SYSM_IPSR, SYSM_IEPSR -> currentException & XPSR_IPSR_MASK;
+            case SYSM_EPSR -> 0;
+            case SYSM_MSP -> readMsp(core);
+            case SYSM_PSP -> readPsp(core);
+            case SYSM_PRIMASK -> primask;
+            case SYSM_BASEPRI, SYSM_BASEPRI_MAX -> basepri;
+            case SYSM_FAULTMASK -> faultmask;
+            case SYSM_CONTROL -> control;
+            default -> 0;
+        };
+    }
+
+    /// `MSR <SYSm>, Rn` (B7.4): escreve o registrador especial `sysm`. As formas de `xPSR` escrevem
+    /// SÓ os bits de `APSR` (nunca IPSR/EPSR); IPSR/EPSR/IEPSR e SYSm reservado são RAZ/WI.
+    /// `BASEPRI_MAX` só ABAIXA o limite (nunca aumenta). `CONTROL` reusa {@link #writeControl}.
+    public void writeSystemRegister(ArmCore core, int sysm, int value) {
+        switch (sysm) {
+            case SYSM_APSR, SYSM_IAPSR, SYSM_EAPSR, SYSM_XPSR -> writeApsrBits(core, value);
+            case SYSM_IPSR, SYSM_EPSR, SYSM_IEPSR -> { /* RAZ/WI */ }
+            case SYSM_MSP -> writeMsp(core, value);
+            case SYSM_PSP -> writePsp(core, value);
+            case SYSM_PRIMASK -> setPrimask(value);
+            case SYSM_BASEPRI -> setBasepri(value);
+            case SYSM_BASEPRI_MAX -> {
+                int candidate = value & PRIORITY_FIELD_MASK;
+                if (candidate != 0 && (basepri == 0 || candidate < basepri)) {
+                    basepri = candidate;
+                }
+            }
+            case SYSM_FAULTMASK -> setFaultmask(value);
+            case SYSM_CONTROL -> writeControl(core, value);
+            default -> { /* RAZ/WI */ }
+        }
     }
 
     /// Retorna o offset da tabela de vetores (VTOR). `0` por padrão; memory-mapped na B7.3.
