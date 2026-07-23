@@ -1,14 +1,20 @@
 package dev.vitorsilverio.armjitter.core;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 /// {@link ExceptionModel} do perfil ARM Cortex-M (B7.2): MSP/PSP, `xPSR`, empilhamento
 /// automático na entrada de exceção e `EXC_RETURN` na saída. Extraído a partir do
 /// ARMv7-M ARM (DDI 0403E) §B1.5, seguindo a ordem de operações do `v7m_push_stack`/
 /// `do_v7m_exception_exit` do QEMU (`target/arm/tcg/m_helper.c`).
 ///
-/// Sem NVIC ainda (B7.3): as exceções chegam só por chamada direta de
-/// {@link #enterException(ArmCore, MProfileException)} (testes) ou por `SVC`
-/// ({@link #handlesSupervisorCall()}, plugado em {@link ArmCore#requestException} via
-/// {@link #enterException(ArmCore, ArmException)}).
+/// B7.3 acrescenta pendência/prioridade/preempção (consultadas por
+/// {@link MProfileSystemControl}, o SCS memory-mapped que o hospedeiro pendura em `0xE000E000`):
+/// as exceções continuam podendo chegar por chamada direta de
+/// {@link #enterException(ArmCore, MProfileException)} (testes, sempre incondicional) ou por
+/// `SVC` ({@link #handlesSupervisorCall()}), mas agora também por
+/// {@link #hasPendingException()}/{@link #enterPendingException(ArmCore)} — o mesmo ponto onde
+/// {@link ArmCore} consulta a linha de IRQ do perfil A.
 public final class MProfileExceptionModel implements ExceptionModel {
     /// Bit SPSEL do CONTROL (1 = SP ativo em Thread mode é o PSP; ignorado em Handler mode, que
     /// sempre usa o MSP). Público: reusado por {@link #writeControl} e por quem monta um
@@ -72,6 +78,38 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// Bit 0 do endereço lido da tabela de vetores: deve ser 1 (Thumb). Mesmo bit de
     /// {@link #XPSR_THUMB_BIT} conceitualmente, mas em posição de ENDEREÇO, não de `xPSR`.
     private static final int VECTOR_THUMB_BIT = 1;
+
+    /// Primeiro número de exceção externa (IRQ0 do NVIC — B7.3, ARMv7-M ARM tabela B1-4).
+    static final int FIRST_EXTERNAL_EXCEPTION_NUMBER = 16;
+    /// Máximo de IRQs externas suportadas nesta fase (limite do construtor de
+    /// {@link MProfileSystemControl}, um word de ISER/ICER/ISPR/ICPR/IABR).
+    static final int MAX_EXTERNAL_IRQS = 32;
+    private static final int EXCEPTION_TABLE_SIZE = FIRST_EXTERNAL_EXCEPTION_NUMBER + MAX_EXTERNAL_IRQS;
+    /// Prioridade efetiva do Thread mode (nada ativo): mais baixa possível, qualquer exceção
+    /// habilitada e pendente preempta.
+    private static final int THREAD_MODE_PRIORITY = Integer.MAX_VALUE;
+    /// Prioridade fixa (impl-defined negativa, ARMv7-M ARM B1.5.4) da NMI — sempre preempta,
+    /// nunca mascarada por PRIMASK.
+    private static final int NMI_PRIORITY = -2;
+    /// Prioridade fixa do HardFault — preempta tudo exceto NMI, nunca mascarada por PRIMASK.
+    private static final int HARD_FAULT_PRIORITY = -1;
+    /// Máscara dos 8 bits de prioridade implementados nesta fase (armadilha da B7.3: a
+    /// arquitetura permite implementar menos bits, mas fixamos 8 e documentamos).
+    private static final int PRIORITY_FIELD_MASK = 0xFF;
+
+    /// Pendência por número de exceção (índice = {@link MProfileException#number()} para as
+    /// fixas, {@code FIRST_EXTERNAL_EXCEPTION_NUMBER + irq} para as externas do NVIC).
+    private final boolean[] pending = new boolean[EXCEPTION_TABLE_SIZE];
+    /// Prioridade configurável de cada exceção (SHPR1-3/IPR do SCS); NMI/HardFault ignoram este
+    /// array — a prioridade delas é fixa ({@link #NMI_PRIORITY}/{@link #HARD_FAULT_PRIORITY}).
+    private final int[] priority = new int[EXCEPTION_TABLE_SIZE];
+    /// Habilitação por IRQ externa (ISER/ICER do NVIC); exceções de sistema (2-15) não têm gate
+    /// de habilitação nesta fase (SHCSR é armazenamento inerte, ver "Não inclui" da B7.3).
+    private final boolean[] externalIrqEnabled = new boolean[MAX_EXTERNAL_IRQS];
+    /// Pilha de exceções ativas (número no topo = {@link #currentException}) — espelha a mesma
+    /// informação de {@link #currentException} mas preserva o histórico completo de aninhamento
+    /// para {@link #currentPriority()} (preempção) e o IABR do {@link MProfileSystemControl}.
+    private final Deque<Integer> activeExceptions = new ArrayDeque<>();
 
     /// Sombra do SP INATIVO (o ativo mora em {@code ArmCore.registers[13]}, ver
     /// {@link ArmCore#SP}) — MSP quando o ativo é o PSP, e vice-versa. Sincronizados apenas em
@@ -165,6 +203,116 @@ public final class MProfileExceptionModel implements ExceptionModel {
         this.vectorTableOffset = vectorTableOffset;
     }
 
+    /// Marca a exceção `number` como pendente (ISPR/PENDSVSET/PENDSTSET do
+    /// {@link MProfileSystemControl}, ou o hospedeiro sinalizando uma IRQ externa diretamente).
+    public void pendException(int number) {
+        pending[number] = true;
+    }
+
+    /// Limpa a pendência da exceção `number` (ICPR/PENDSVCLR/PENDSTCLR).
+    public void clearPending(int number) {
+        pending[number] = false;
+    }
+
+    /// Retorna `true` quando a exceção `number` está pendente.
+    public boolean pending(int number) {
+        return pending[number];
+    }
+
+    /// Habilita/desabilita a IRQ externa `irqIndex` (0-based, ISER/ICER do NVIC). Exceções de
+    /// sistema (2-15) não passam por aqui — sem gate de habilitação nesta fase.
+    public void setExternalIrqEnabled(int irqIndex, boolean enabled) {
+        externalIrqEnabled[irqIndex] = enabled;
+    }
+
+    /// Retorna `true` quando a IRQ externa `irqIndex` está habilitada.
+    public boolean externalIrqEnabled(int irqIndex) {
+        return externalIrqEnabled[irqIndex];
+    }
+
+    /// Ajusta a prioridade configurável (8 bits, {@link #PRIORITY_FIELD_MASK}) da exceção
+    /// `number` (SHPR1-3 para exceções de sistema, IPR para IRQs externas). Sem efeito em
+    /// NMI/HardFault — prioridade fixa, ver {@link #effectivePriority}.
+    public void setPriority(int number, int priorityValue) {
+        priority[number] = priorityValue & PRIORITY_FIELD_MASK;
+    }
+
+    /// Retorna a prioridade configurada (crua, 0 para NMI/HardFault mesmo não sendo usada).
+    public int priority(int number) {
+        return priority[number];
+    }
+
+    /// Retorna `true` quando a exceção `number` está no topo ou aninhada na pilha de exceções
+    /// ativas (IABR do NVIC — só tem sentido para número >= {@link #FIRST_EXTERNAL_EXCEPTION_NUMBER}).
+    public boolean active(int number) {
+        return activeExceptions.contains(number);
+    }
+
+    /// Prioridade efetiva (ARMv7-M ARM B1.5.4): NMI/HardFault são fixas e nunca mascaradas por
+    /// PRIMASK; as demais usam o registrador configurável.
+    private int effectivePriority(int number) {
+        if (number == MProfileException.NMI.number()) {
+            return NMI_PRIORITY;
+        }
+        if (number == MProfileException.HARD_FAULT.number()) {
+            return HARD_FAULT_PRIORITY;
+        }
+        return priority[number];
+    }
+
+    /// Prioridade efetiva da exceção ativa no topo da pilha, ou {@link #THREAD_MODE_PRIORITY}
+    /// (a mais baixa possível) quando nenhuma está ativa — qualquer pendência habilitada
+    /// preempta o Thread mode.
+    private int currentPriority() {
+        return activeExceptions.isEmpty() ? THREAD_MODE_PRIORITY : effectivePriority(activeExceptions.peek());
+    }
+
+    /// Número da exceção pendente mais urgente que pode entrar agora (habilitada, prioridade
+    /// efetiva menor — mais urgente — que {@link #currentPriority()}, não mascarada por
+    /// PRIMASK), ou `-1` se nenhuma. PRIMASK=1 mascara toda exceção de prioridade configurável
+    /// (>= 0); NMI/HardFault (negativas) nunca são mascaradas por ele.
+    private int highestPriorityPendingCandidate() {
+        int currentPriority = currentPriority();
+        int bestNumber = -1;
+        int bestPriority = Integer.MAX_VALUE;
+        for (int number = MProfileException.NMI.number(); number < pending.length; number++) {
+            if (!pending[number]) {
+                continue;
+            }
+            if (number >= FIRST_EXTERNAL_EXCEPTION_NUMBER
+                    && !externalIrqEnabled[number - FIRST_EXTERNAL_EXCEPTION_NUMBER]) {
+                continue;
+            }
+            int candidatePriority = effectivePriority(number);
+            if (primask != 0 && candidatePriority >= 0) {
+                continue;
+            }
+            if (candidatePriority >= currentPriority) {
+                continue;
+            }
+            if (candidatePriority < bestPriority) {
+                bestPriority = candidatePriority;
+                bestNumber = number;
+            }
+        }
+        return bestNumber;
+    }
+
+    @Override
+    public boolean hasPendingException() {
+        return highestPriorityPendingCandidate() != -1;
+    }
+
+    @Override
+    public void enterPendingException(ArmCore core) {
+        int number = highestPriorityPendingCandidate();
+        if (number == -1) {
+            throw new IllegalStateException("enterPendingException chamado sem candidato pendente");
+        }
+        pending[number] = false;
+        enterException(core, number);
+    }
+
     @Override
     public boolean handlesSupervisorCall() {
         return true;
@@ -183,8 +331,16 @@ public final class MProfileExceptionModel implements ExceptionModel {
 
     /// Entrada de exceção M-profile (ARMv7-M ARM B1.5.6): empilha R0-R3/R12/LR/ReturnAddress/xPSR
     /// no SP ativo (realinhando a 8 bytes se preciso), monta `EXC_RETURN` em LR, troca para
-    /// Handler mode com SP ativo = MSP, e busca o vetor.
+    /// Handler mode com SP ativo = MSP, e busca o vetor. Entrada incondicional (chamador decide
+    /// se a exceção "deveria" preemptar — testes chamam direto; {@link #enterPendingException}
+    /// já valida prioridade antes de chegar aqui).
     public void enterException(ArmCore core, MProfileException exception) {
+        enterException(core, exception.number());
+    }
+
+    /// Variante de {@link #enterException(ArmCore, MProfileException)} por número bruto — único
+    /// jeito de entrar numa IRQ externa (16+), que não tem constante em {@link MProfileException}.
+    void enterException(ArmCore core, int exceptionNumber) {
         core.clearExclusiveMonitor();
         int originalSp = core.register(ArmCore.SP);
         boolean framePtrAlign = (originalSp & STACK_ALIGN_CHECK_BIT) != 0;
@@ -215,18 +371,19 @@ public final class MProfileExceptionModel implements ExceptionModel {
             mainStackPointer = frame;
         }
         core.setRegister(ArmCore.LR, excReturn);
-        currentException = exception.number();
+        currentException = exceptionNumber;
+        activeExceptions.push(exceptionNumber);
         core.setRegister(ArmCore.SP, mainStackPointer);
         core.cpsr().setItState(0);
 
-        int vector = core.memory().read32(vectorTableOffset + VECTOR_ENTRY_SIZE_BYTES * exception.number());
+        int vector = core.memory().read32(vectorTableOffset + VECTOR_ENTRY_SIZE_BYTES * exceptionNumber);
         if ((vector & VECTOR_THUMB_BIT) == 0) {
             // ARMv7-M ARM B1.5.6: vetor com bit 0 = 0 é HardFault(INVSTATE). Modelagem completa
             // de HardFault/fault status fica para B7.3+; aqui falha alto e documentado em vez de
             // continuar com um PC errado.
             throw new IllegalStateException(
                     "Vetor de exceção M-profile com bit 0 = 0 (HardFault/INVSTATE não modelado "
-                            + "nesta fase, B7.2): número " + exception.number());
+                            + "nesta fase, B7.2): número " + exceptionNumber);
         }
         core.setProgramCounter(vector & ~VECTOR_THUMB_BIT);
     }
@@ -277,6 +434,9 @@ public final class MProfileExceptionModel implements ExceptionModel {
         int cpsr = (core.cpsr().get() & ~XPSR_PRESERVED_CPSR_BITS_MASK)
                 | (stackedXpsr & XPSR_PRESERVED_CPSR_BITS_MASK);
         core.cpsr().set(cpsr);
+        if (!activeExceptions.isEmpty()) {
+            activeExceptions.pop();
+        }
         currentException = stackedXpsr & XPSR_IPSR_MASK;
         core.setProgramCounter(returnAddress);
 

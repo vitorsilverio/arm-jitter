@@ -31,4 +31,25 @@ public interface ExceptionModel {
     default boolean handlesSupervisorCall() {
         return false;
     }
+
+    /// Há uma exceção assíncrona pendente pronta para entrar agora (habilitada, mais urgente que
+    /// a ativa, não mascarada)? Consultado no MESMO ponto quente onde hoje se consulta
+    /// {@link ArmCore#interruptLine()} ({@code ArmCore.servicePendingIrq}) — mesma técnica de
+    /// {@link #interceptsBranch}: método default {@code false}, sem estado extra no perfil A.
+    ///
+    /// Perfil A: sempre {@code false} (usa {@code interruptLine()} diretamente, inalterado).
+    /// Perfil M (B7.3+): {@code true} quando o SCS (NVIC/SysTick) tem uma exceção pendente cuja
+    /// prioridade efetiva preempta a exceção atualmente ativa (ou o Thread mode).
+    default boolean hasPendingException() {
+        return false;
+    }
+
+    /// Entra na exceção pendente reconhecida por {@link #hasPendingException}.
+    ///
+    /// Perfil A: nunca chamado. Perfil M: escolhe a exceção pendente de maior prioridade,
+    /// despende-a e entra (empilha frame, monta `EXC_RETURN`, busca o vetor — mesmo mecanismo de
+    /// {@link MProfileExceptionModel#enterException(ArmCore, MProfileException)}).
+    default void enterPendingException(ArmCore core) {
+        throw new IllegalStateException("enterPendingException chamado sem uma exceção pendente reconhecida");
+    }
 }

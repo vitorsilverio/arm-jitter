@@ -683,6 +683,14 @@ public final class ArmCore {
             exceptionModel.enterException(this, ArmException.IRQ);
             return true;
         }
+        // Perfil M (B7.3+): NVIC/SysTick em vez da linha de IRQ única do perfil A. Método
+        // default `false` no perfil A (mesma técnica de `interceptsBranch`, já no caminho quente
+        // de todo branch) — ver javadoc de `ExceptionModel#hasPendingException`.
+        if (exceptionModel.hasPendingException()) {
+            sleepState = CpuSleepState.RUNNING;
+            exceptionModel.enterPendingException(this);
+            return true;
+        }
         return false;
     }
 

@@ -59,6 +59,11 @@
   2026-07-16).
 - **B7.2** ✅ (2026-07-23, `MProfileExceptionModel`: MSP/PSP, xPSR, stacking
   automático, EXC_RETURN — ver índice do `tasks/README.md` para os detalhes).
+- **B7.3** ✅ (2026-07-23, `MProfileSystemControl`: SCS/NVIC/VTOR/SysTick
+  memory-mapped, pendência/prioridade/preempção no `MProfileExceptionModel`,
+  `ExceptionModel.hasPendingException`/`enterPendingException` plugados em
+  `ArmCore.servicePendingIrq` — ver índice do `tasks/README.md` para os
+  detalhes, incl. o achado de bug do `SysTick.tick()` com granularidade fina).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -68,8 +73,7 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| 2 | **B7.3** — SCS/NVIC/VTOR/SysTick memory-mapped | `trilha-b-arquiteturas/b7.3-scs-nvic-systick.md` | arm-jitter | B7.2 ✅ | próxima da cadeia Cortex-M |
-| 3 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 | |
+| 3 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 ✅ | próxima da cadeia Cortex-M |
 | 4 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 | |
 | P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — pode rodar em paralelo com a fila do arm-jitter |
 | P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
