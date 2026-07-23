@@ -411,22 +411,34 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.condition()));
+            // `baseValueOverride(instruction)` (mesmo helper do `LOAD`/`STORE` ARM genérico acima)
+            // é indispensável aqui: `VLDR`/`VSTR Vx, [pc, #imm]` é o idioma padrão do `gcc` para
+            // literais `double`/`float` (literal pool) — sem o override, `base`=15 seria lido AO
+            // VIVO de `core.register(15)` em `IrVfpExecutor`, que só reflete `PC+8` DEPOIS que o
+            // bloco termina (`IrBlockExecutor#execute` só grava `registers[PC]` no fim), então
+            // durante a execução do load/store ele ainda vale o endereço da instrução atual —
+            // sem viés `+8` — e o literal errado era lido (bug real encontrado via ELF ARMv7-A
+            // hard-float: duas `VLDR Dx,[pc,#imm]` consecutivas liam os literais TROCADOS entre
+            // si).
             case VFP_LOAD -> block.add(new IrOp.VfpLoad(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
+                    baseValueOverride(instruction),
                     instruction.immediate(),
                     instruction.condition()));
             case VFP_STORE -> block.add(new IrOp.VfpStore(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
+                    baseValueOverride(instruction),
                     instruction.immediate(),
                     instruction.condition()));
             case VFP_LOAD_MULTIPLE -> block.add(new IrOp.VfpMultipleTransfer(
                     true,
                     instruction.signedAccess(),
                     instruction.sourceRegister(),
+                    baseValueOverride(instruction),
                     instruction.immediate() & 0x3F,
                     instruction.immediate() >>> 6,
                     instruction.writeback(),
@@ -436,6 +448,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     false,
                     instruction.signedAccess(),
                     instruction.sourceRegister(),
+                    baseValueOverride(instruction),
                     instruction.immediate() & 0x3F,
                     instruction.immediate() >>> 6,
                     instruction.writeback(),

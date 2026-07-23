@@ -984,12 +984,16 @@ public final class AsmRuntimeHelpers {
     /// flush+reload ({@code emitSpilled}), mesmo tratamento de {@code executePsrRead}/
     /// {@code executeMultipleTransfer}.
     public static void executeVfpMultipleTransfer(
-            ArmCore core, boolean load, boolean doublePrecision, int base,
+            ArmCore core, boolean load, boolean doublePrecision, int base, int baseValueOverride,
             int firstRegister, int count, boolean writeback, boolean decrementBefore) {
         VfpRegisters vfp = core.vfp();
         int registerSizeBytes = doublePrecision ? 8 : 4;
         int totalBytes = count * registerSizeBytes;
-        int baseValue = core.register(base);
+        // `baseValueOverride` (`-1` = ausente): mesmo idioma de {@code IrOp.Load#baseValueOverride}
+        // — `VLDM`/`VSTM Rn=pc` (raro, mas legal quando `W=0`) precisa do viés `+8` do `PC`
+        // arquitetural, que `core.register(15)` NÃO reflete durante a execução deste helper (só
+        // depois que o bloco termina — ver {@code IrVfpExecutor#executeVfpMultipleTransfer}).
+        int baseValue = baseValueOverride != -1 ? baseValueOverride : core.register(base);
         int address = decrementBefore ? baseValue - totalBytes : baseValue;
         for (int i = 0; i < count; i++) {
             int reg = firstRegister + i;

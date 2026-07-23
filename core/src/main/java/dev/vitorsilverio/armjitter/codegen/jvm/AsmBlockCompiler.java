@@ -536,8 +536,12 @@ public final class AsmBlockCompiler {
             // seu(s) via helper cercado por emitSpilled (flush antes, reload depois), então não
             // contam para o register cache (mesmo motivo de PsrTransfer/Coprocessor, caem no
             // `default` abaixo).
-            case IrOp.VfpLoad vfpLoad -> countRead(accesses, vfpLoad.base());
-            case IrOp.VfpStore vfpStore -> countRead(accesses, vfpStore.base());
+            case IrOp.VfpLoad vfpLoad -> {
+                if (vfpLoad.baseValueOverride() == -1) countRead(accesses, vfpLoad.base());
+            }
+            case IrOp.VfpStore vfpStore -> {
+                if (vfpStore.baseValueOverride() == -1) countRead(accesses, vfpStore.base());
+            }
             case IrOp.VfpCoreTransfer vfpCoreT -> {
                 if (vfpCoreT.toArmRegister()) {
                     countWrite(accesses, writes, vfpCoreT.armRegister());
@@ -1845,7 +1849,14 @@ public final class AsmBlockCompiler {
     /// `VLDR`: dupla precisão lê 2 words little-endian consecutivas via {@code loadWord}
     /// (metade baixa no endereço menor); `base` é lido pelo register cache.
     private void emitVfpLoad(MethodVisitor method, IrOp.VfpLoad load) {
-        emitReadRegister(method, load.base());
+        // `baseValueOverride` (`Vd, [pc, #imm]` — literal pool de `double`/`float` do `gcc`): sem
+        // isso, `emitReadRegister` leria `R15` do register cache/core AO VIVO, que não tem o viés
+        // `+8` do `PC` arquitetural nesta janela (ver o javadoc de {@link IrOp.VfpLoad#baseValueOverride}).
+        if (load.baseValueOverride() != -1) {
+            AsmBytecode.visitIntConst(method, load.baseValueOverride());
+        } else {
+            emitReadRegister(method, load.base());
+        }
         AsmBytecode.visitIntConst(method, load.offsetBytes());
         method.visitInsn(Opcodes.IADD);
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
@@ -1881,7 +1892,12 @@ public final class AsmBlockCompiler {
 
     /// `VSTR`: ver {@link #emitVfpLoad}.
     private void emitVfpStore(MethodVisitor method, IrOp.VfpStore store) {
-        emitReadRegister(method, store.base());
+        // Ver {@link #emitVfpLoad} — mesmo tratamento de `baseValueOverride`.
+        if (store.baseValueOverride() != -1) {
+            AsmBytecode.visitIntConst(method, store.baseValueOverride());
+        } else {
+            emitReadRegister(method, store.base());
+        }
         AsmBytecode.visitIntConst(method, store.offsetBytes());
         method.visitInsn(Opcodes.IADD);
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
@@ -1926,12 +1942,13 @@ public final class AsmBlockCompiler {
         method.visitInsn(op.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, op.base());
+        AsmBytecode.visitIntConst(method, op.baseValueOverride());
         AsmBytecode.visitIntConst(method, op.firstRegister());
         AsmBytecode.visitIntConst(method, op.count());
         method.visitInsn(op.writeback() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         method.visitInsn(op.decrementBefore() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.invokeStatic(method, HELPERS, "executeVfpMultipleTransfer",
-                "(" + CORE_REF + "ZZIIIZZ)V");
+                "(" + CORE_REF + "ZZIIIIZZ)V");
     }
 
     /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bytecode direto — `armRegister` é lido/escrito

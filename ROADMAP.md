@@ -130,7 +130,7 @@ prático de 64 bits é ARMv8-A/AArch64 — v9 vem de graça depois, por feature 
 | 3DS (lado DS/segurança) | ARM946E-S | ARMv5TE | ✅ já coberto |
 | 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | 🟡 ARMv6K ✅ (B1.1-B1.6); falta VFPv2 (B3) |
 | Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | 🟡 ARMv6K ✅; falta VFPv2 (B3) |
-| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | 🟡 Thumb-2 decode ✅ (B2.1-B2.5); preset público ainda incompleto (B2.6); VFP/NEON não iniciados (B3) |
+| Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | ✅ épico B3 fechado (B3.7): preset `ARMV7A` completo — Thumb-2 (B2), inteiro v7 (B3.1/B3.2) e VFPv2 (B3.3-B3.6) juntos, validado com torture ELF + binário `gcc` hard-float real; user-level only (MMU é B4.1); NEON fora de escopo |
 | Linux/Android arm64, Pi 3+ | Cortex-A5x+ | **ARMv8-A AArch64** | ⬜ B6 |
 | Microcontroladores (STM32, nRF, Arduino ARM) | Cortex-M0/M3/M4/M7 | **ARMv6-M/v7-M/v8-M** (perfil M, Thumb-only) | ⬜ B7 [REFINAR] |
 
@@ -165,7 +165,9 @@ mesmo IR.
 **B3 — ARMv7-A user-level + VFP** — completa o user-mode de 32 bits. **Refinado
 2026-07-15 em B3.1–B3.7 executáveis** (`tasks/trilha-b-arquiteturas/b3*.md`), com
 as decisões de FP fechadas (IEEE Java, FPSCR restrito, VMOV-imm do v3-d16, flags
-cumulativas não calculadas).
+cumulativas não calculadas). **✅ ÉPICO FECHADO (B3.7)**: preset `ARMArchitecture.ARMV7A`
+público, validado com torture ELF handwritten + binário `gcc` hard-float real (série de
+Leibniz em `double`) nos 3 backends do `armbox`.
 - CP15 estendido, MOVW/MOVT, DMB/DSB/ISB, restante do v7.
 - **VFPv2/v3 primeiro, NEON depois**: VFP é pré-requisito prático de userland Linux e
   do 3DS; NEON é grande e pode ser fase própria (ou inicialmente interpretado via

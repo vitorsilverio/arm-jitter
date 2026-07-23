@@ -170,7 +170,7 @@ public final class IrVfpExecutor {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
-        int address = core.register(op.base()) + op.offsetBytes();
+        int address = support.registerValue(core, op.base(), op.baseValueOverride()) + op.offsetBytes();
         if (op.doublePrecision()) {
             int low = support.read32Arm7(core, address);
             int high = support.read32Arm7(core, address + 4);
@@ -185,7 +185,7 @@ public final class IrVfpExecutor {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
-        int address = core.register(op.base()) + op.offsetBytes();
+        int address = support.registerValue(core, op.base(), op.baseValueOverride()) + op.offsetBytes();
         if (op.doublePrecision()) {
             long bits = core.vfp().d(op.vd());
             support.write32Arm7(core, address, (int) bits);
@@ -202,7 +202,7 @@ public final class IrVfpExecutor {
         }
         int registerSizeBytes = op.doublePrecision() ? 8 : 4;
         int totalBytes = op.count() * registerSizeBytes;
-        int baseValue = core.register(op.base());
+        int baseValue = support.registerValue(core, op.base(), op.baseValueOverride());
         int address = op.decrementBefore() ? baseValue - totalBytes : baseValue;
         for (int i = 0; i < op.count(); i++) {
             int reg = op.firstRegister() + i;

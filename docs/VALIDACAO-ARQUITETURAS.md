@@ -25,7 +25,7 @@ verde.** N1/N2 = "implementada". N4 = "provada em produção".
 | `ARMV5TE` (NDS ARM9) | ✅ | — | ✅ hello/busybox (B4.0) | ✅ ndsemu (JUS/MKDS/SM64DS) | — |
 | `ARMV6K` | ✅ (B1.1-B1.6) | ✅ armv6k-torture (B4.0.1) | 🟡 só hello-armv6k (sinal fraco: sem instrução v6 de compilador) | ⬜ (3DS futuro) | busybox/gcc armv6k real — entra de carona no linuxbox (B4.1.5, kernel versatile é v6) |
 | `ARMV6K_THUMB2` | 🟡 (B2.1-B2.5; **B2.7 pendente** — sem MUL.W/UMULL/extend/exclusivos.W o N1 não é "completo") | 🟡 thumb2-torture só dataproc (B4.0.2) | ⬜ | ⬜ | **B2.6** → **B2.7** (paridade) + B1.7 (desalinhado) + B2.8 (PLD) + B4.0.4 (TLS) → **B4.0.3** (gcc/busybox thumb2) |
-| `ARMV7A` | ⬜ | ⬜ | ⬜ | ⬜ | épico B3 (B3.7 entrega N2+N3 juntos: armv7a-torture + hello-float gcc hard-float) |
+| `ARMV7A` | ✅ (B3.1-B3.6) | ✅ armv7a-torture (B3.7, 28 checagens: inteiro v7 + VFP) | ✅ hello-float.elf gcc hard-float real (série de Leibniz em `double`, B3.7) | ⬜ | épico B3 FECHADO — próximo consumidor real é o 3DS (B5, MPCore) |
 | `ARMV6M`/`ARMV7M` (Cortex-M) | ⬜ | ⬜ | ⬜ | ⬜ | épico B7 (B7.5 entrega N2+N3: cortexm-torture m0/m3 + hello-cortexm gcc, semihosting) |
 | MMU/full-system (ARMv6 VMSA) | ⬜ | ⬜ | ⬜ | ⬜ | épico B4.1 (N3/N4 = kernel Linux versatile até shell no linuxbox) |
 | AArch64 | ⬜ | ⬜ | ⬜ | ⬜ | épico B6 (B6.2 = hello arm64; B6.3 = busybox arm64) |

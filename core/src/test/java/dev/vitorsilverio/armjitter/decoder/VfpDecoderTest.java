@@ -342,21 +342,72 @@ class VfpDecoderTest {
     @Test
     void loadStoreOffsetSignAndPrecision() {
         IrOp load = liftSingleOp(decodeArm(vfpLoadStoreWord(true, true, false, 2, 5, 3)));
-        assertEquals(new IrOp.VfpLoad(false, 2, 5, 12, Condition.AL), load);
+        assertEquals(new IrOp.VfpLoad(false, 2, 5, -1, 12, Condition.AL), load);
 
         IrOp store = liftSingleOp(decodeArm(vfpLoadStoreWord(false, false, true, 2, 5, 3)));
-        assertEquals(new IrOp.VfpStore(true, 2, 5, -12, Condition.AL), store);
+        assertEquals(new IrOp.VfpStore(true, 2, 5, -1, -12, Condition.AL), store);
+    }
+
+    /// Regressão: `VLDR`/`VSTR Vd, [pc, #imm]` (idioma padrão do `gcc` para literais `double`/
+    /// `float` de literal pool) precisa do MESMO viés `PC+8` que `LDR`/`STR Rd, [pc, #imm]` já
+    /// recebem via {@code baseValueOverride} — sem ele, `IrVfpExecutor`/o bytecode ASM liam
+    /// `core.register(15)` AO VIVO, que durante a execução do próprio op ainda vale o endereço da
+    /// instrução ATUAL (o bloco só grava `registers[PC]` no fim, em
+    /// {@link dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor#execute}), não `+8`.
+    /// Bug real: duas `VLDR Dx,[pc,#imm]` consecutivas (ex. `sum=0.0`/`sign=1.0` de um laço Leibniz
+    /// compilado por `gcc -mfpu=vfp -mfloat-abi=hard`) liam os literais TROCADOS entre si.
+    @Test
+    void loadStoreWithPcBaseAppliesArmProgramCounterBias() {
+        IrOp load = liftSingleOp(decodeArm(vfpLoadStoreWord(true, true, true, 6, 15, 48)));
+        assertEquals(new IrOp.VfpLoad(true, 6, 15, 8, 192, Condition.AL), load);
+
+        IrOp store = liftSingleOp(decodeArm(vfpLoadStoreWord(false, true, true, 7, 15, 48)));
+        assertEquals(new IrOp.VfpStore(true, 7, 15, 8, 192, Condition.AL), store);
+    }
+
+    /// Mesma regressão para `VLDM`/`VSTM Rn=pc` (raro comparado a `VLDR`, mas o mesmo mecanismo de
+    /// override se aplica — ver {@link #loadStoreWithPcBaseAppliesArmProgramCounterBias}).
+    @Test
+    void multipleTransferWithPcBaseAppliesArmProgramCounterBias() {
+        IrOp ldmIa = liftSingleOp(decodeArm(vfpMultipleIaWord(true, false, false, 0, 15, 3)));
+        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 15, 8, 0, 3, false, false, Condition.AL), ldmIa);
+    }
+
+    /// Regressão end-to-end (interpretada): executa `VLDR Dx, [pc, #imm]` de fato via
+    /// {@link IrBlockExecutor} contra uma memória com o literal correto em `PC+8+offset` e ZERO no
+    /// endereço da instrução atual — se o override regredir, o load volta a ler do endereço da
+    /// instrução (`instructionAddress`, que fica com zeros) em vez de `PC+8+offset`, e o teste
+    /// falha com `d6==0` em vez do literal esperado.
+    @Test
+    void executedVldrPcRelativeReadsCorrectLiteralNotCurrentInstructionAddress() {
+        TestAddressSpace memory = new TestAddressSpace(64);
+        int instructionAddress = 0x10;
+        // `VLDR D6, [pc, #16]`: PC = instructionAddress+8 = 0x18; alvo = 0x18+16 = 0x28.
+        int word = vfpLoadStoreWord(true, true, true, 6, 15, 4);
+        memory.put32(instructionAddress, word);
+        long expected = 0x3ff0000000000000L; // 1.0
+        memory.put32(0x28, (int) expected);
+        memory.put32(0x28 + 4, (int) (expected >>> 32));
+
+        DecodedInstruction decoded = new ArmDecoder(VFP_TEST_ARCH).decode(memory, instructionAddress);
+        IrBlock.Builder block = IrBlock.builder(instructionAddress);
+        new StandardIrBuilder().lift(decoded, block);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), VFP_TEST_ARCH);
+        core.setProgramCounter(instructionAddress);
+        new IrBlockExecutor(VFP_TEST_ARCH).execute(block.sealed(), core);
+
+        assertEquals(expected, core.vfp().d(6));
     }
 
     @Test
     void multipleTransferIaAndDbWithVPushVPopAlias() {
         // VLDM Rn, {S0-S2} (IA, sem writeback).
         IrOp ldmIa = liftSingleOp(decodeArm(vfpMultipleIaWord(true, false, false, 0, 5, 3)));
-        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 5, 0, 3, false, false, Condition.AL), ldmIa);
+        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 5, -1, 0, 3, false, false, Condition.AL), ldmIa);
 
         // VPUSH {D8-D9} == VSTMDB SP!, {D8-D9}: rn=SP(13), imm8=4 (2 registros dupla).
         IrOp push = liftSingleOp(decodeArm(vfpMultipleDbWord(false, true, 8, 13, 4)));
-        assertEquals(new IrOp.VfpMultipleTransfer(false, true, 13, 8, 2, true, true, Condition.AL), push);
+        assertEquals(new IrOp.VfpMultipleTransfer(false, true, 13, -1, 8, 2, true, true, Condition.AL), push);
     }
 
     @Test

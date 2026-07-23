@@ -281,14 +281,14 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(1, 3.5);
         IrBlockExecutor executor = newExecutor();
 
-        executor.executeOp(core, new IrOp.VfpStore(true, 1, 0, 8, Condition.AL), 0);
+        executor.executeOp(core, new IrOp.VfpStore(true, 1, 0, -1, 8, Condition.AL), 0);
         // Metade baixa (bits 31:0 de 3.5) no endereço menor (16+8=24), alta em 24+4=28.
         long bits = Double.doubleToRawLongBits(3.5);
         TestAddressSpace memory = (TestAddressSpace) core.memory();
         assertEquals((int) bits, memory.read32(24));
         assertEquals((int) (bits >>> 32), memory.read32(28));
 
-        executor.executeOp(core, new IrOp.VfpLoad(true, 2, 0, 8, Condition.AL), 0);
+        executor.executeOp(core, new IrOp.VfpLoad(true, 2, 0, -1, 8, Condition.AL), 0);
         assertEquals(3.5, core.vfp().dDouble(2));
     }
 
@@ -302,7 +302,7 @@ class IrVfpExecutorTest {
         memory.put32(8, Float.floatToRawIntBits(3.0f));
 
         newExecutor().executeOp(core,
-                new IrOp.VfpMultipleTransfer(true, false, 0, 4, 3, true, false, Condition.AL), 0);
+                new IrOp.VfpMultipleTransfer(true, false, 0, -1, 4, 3, true, false, Condition.AL), 0);
 
         assertEquals(1.0f, core.vfp().sFloat(4));
         assertEquals(2.0f, core.vfp().sFloat(5));
@@ -318,7 +318,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(1, 2.0);
 
         newExecutor().executeOp(core,
-                new IrOp.VfpMultipleTransfer(false, true, 13, 0, 2, true, true, Condition.AL), 0);
+                new IrOp.VfpMultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL), 0);
 
         assertEquals(16, core.register(13)); // writeback DB: base -= 2*8 = 16
         TestAddressSpace memory = (TestAddressSpace) core.memory();

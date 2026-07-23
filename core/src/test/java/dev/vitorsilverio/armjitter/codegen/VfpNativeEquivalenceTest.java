@@ -250,14 +250,34 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
     @Test
     void loadStoreRoundTripSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpStore(false, 0, 13, 0, Condition.AL),
-                new IrOp.VfpLoad(false, 1, 13, 0, Condition.AL),
-                new IrOp.VfpStore(true, 2, 13, 8, Condition.AL),
-                new IrOp.VfpLoad(true, 4, 13, 8, Condition.AL));
+                new IrOp.VfpStore(false, 0, 13, -1, 0, Condition.AL),
+                new IrOp.VfpLoad(false, 1, 13, -1, 0, Condition.AL),
+                new IrOp.VfpStore(true, 2, 13, -1, 8, Condition.AL),
+                new IrOp.VfpLoad(true, 4, 13, -1, 8, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.setRegister(13, 0);
             core.vfp().setS(0, 0x7FC00001);
             core.vfp().setD(2, 0xFFF8_0000_0000_0001L);
+        });
+    }
+
+    /// Regressão: `VLDR`/`VSTR Vd, [pc, #imm]` (literal pool `gcc`, ver
+    /// `VfpDecoderTest#loadStoreWithPcBaseAppliesArmProgramCounterBias`) — `base=15` com
+    /// `baseValueOverride` setado. O bytecode ASM (`AsmBlockCompiler#emitVfpLoad/emitVfpStore`)
+    /// precisa emitir a CONSTANTE do override em vez de ler `R15` do register cache, senão diverge
+    /// do interpretado bit-a-bit (a divergência real que motivou esta task: JIT e interpretado
+    /// liam de endereços diferentes e ERRADOS, cada um com sua própria resposta incorreta).
+    @Test
+    void loadStorePcRelativeBaseOverrideMatchesInterpreted() {
+        IrBlock ir = block(
+                new IrOp.VfpStore(true, 0, 15, 32, 0, Condition.AL),   // [override+0] = D0
+                new IrOp.VfpLoad(true, 1, 15, 32, 0, Condition.AL),    // D1 = [override+0]
+                new IrOp.VfpStore(false, 2, 15, 48, 4, Condition.AL),  // [override+4] = S2
+                new IrOp.VfpLoad(false, 3, 15, 48, 4, Condition.AL));  // S3 = [override+4]
+        assertEquivalentVfp(ir, core -> {
+            core.setProgramCounter(0xDEAD_0000); // baseValueOverride não depende do PC ao vivo
+            core.vfp().setD(0, 0xAABBCCDD11223344L);
+            core.vfp().setS(2, 0x7FC00001);
         });
     }
 
@@ -266,10 +286,10 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
     @Test
     void multipleTransferIaAndDbSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpMultipleTransfer(false, false, 13, 0, 4, true, false, Condition.AL),  // VSTM IA!
-                new IrOp.VfpMultipleTransfer(true, false, 13, 8, 4, true, false, Condition.AL),
-                new IrOp.VfpMultipleTransfer(false, true, 13, 0, 2, true, true, Condition.AL),     // VPUSH
-                new IrOp.VfpMultipleTransfer(true, true, 13, 4, 2, true, false, Condition.AL));    // VLDM IA
+                new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 4, true, false, Condition.AL),  // VSTM IA!
+                new IrOp.VfpMultipleTransfer(true, false, 13, -1, 8, 4, true, false, Condition.AL),
+                new IrOp.VfpMultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL),     // VPUSH
+                new IrOp.VfpMultipleTransfer(true, true, 13, -1, 4, 2, true, false, Condition.AL));    // VLDM IA
         assertEquivalentVfp(ir, core -> {
             core.setRegister(13, 0); // TestAddressSpace(64) — endereços ficam em [0,32), com folga
             for (int i = 0; i < 4; i++) {
@@ -286,8 +306,8 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpMultipleTransfer(false, false, 13, 0, 3, false, false, condition),
-                    new IrOp.VfpMultipleTransfer(true, false, 13, 5, 3, false, false, condition));
+                    new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 3, false, false, condition),
+                    new IrOp.VfpMultipleTransfer(true, false, 13, -1, 5, 3, false, false, condition));
             assertEquivalentVfp(ir, core -> {
                 core.setRegister(13, 32);
                 core.vfp().setS(0, 1);
@@ -398,9 +418,9 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
                 new IrOp.VfpMoveImmediate(false, 4, 0x3F000000L, Condition.AL),
                 new IrOp.VfpCompare(false, false, false, 0, 1, Condition.AL),
                 new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 6, 0, Condition.AL),
-                new IrOp.VfpStore(false, 0, 13, 0, Condition.AL),
-                new IrOp.VfpLoad(false, 1, 13, 0, Condition.AL),
-                new IrOp.VfpMultipleTransfer(false, false, 13, 0, 2, true, false, Condition.AL),
+                new IrOp.VfpStore(false, 0, 13, -1, 0, Condition.AL),
+                new IrOp.VfpLoad(false, 1, 13, -1, 0, Condition.AL),
+                new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 2, true, false, Condition.AL),
                 new IrOp.VfpCoreTransfer(true, 0, 1, Condition.AL),
                 new IrOp.VfpCorePairTransfer(true, 0, 1, 2, Condition.AL),
                 new IrOp.VfpSystemTransfer(true, 15, Condition.AL));

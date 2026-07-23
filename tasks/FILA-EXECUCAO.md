@@ -43,7 +43,17 @@
   **Se você é um agente procurando trabalho: a onda 2 está TERMINADA para você;
   vá direto à tabela da onda 3.**
 - Da onda 3 já fecharam: **B3.2** ✅ e **B3.4** ✅ (2026-07-17, VFP IrOps +
-  executor interpretado); **B3.5** ✅ (2026-07-22, decoder VFP CP10/11 ARM+Thumb-2).
+  executor interpretado); **B3.5** ✅ (2026-07-22, decoder VFP CP10/11 ARM+Thumb-2);
+  **B3.6** ✅ (PR1 2026-07-22 + PR2 2026-07-23, emissão ASM nativa VFP+inteiro v7);
+  **B3.7** ✅ (2026-07-23, fecha o épico B3 por completo) — preset público
+  `ArmArchitecture.ARMV7A` (arm-jitter) + `--arch=armv7a`/`armv7a-torture.s`
+  (28 checagens)/`hello-float.c` (gcc hard-float real, série de Leibniz em
+  `double`, zero libc) no armbox. Achado: a validação N3 revelou um bug REAL de
+  `baseValueOverride` ausente em `VfpLoad`/`VfpStore`/`VfpMultipleTransfer`
+  (literal pool `VLDR Dx,[pc,#imm]` lia endereço errado, sem o viés `+8` do PC
+  — JIT e interpretado divergiam entre si), corrigido no arm-jitter com 3
+  testes de regressão novos. Todos os 3 backends (JIT/interp/check) idênticos
+  nos dois binários reais; suítes arm-jitter+armbox+gbaemu+ndsemu verdes.
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -53,13 +63,11 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| 1 | **B3.6** — VFP + inteiro v7: emissão ASM nativa | `trilha-b-arquiteturas/b3.6-vfp-asm-nativo.md` | arm-jitter | B3.5 ✅ | **PRÓXIMA do arm-jitter** — 2 PRs, **1 sessão por PR** |
-| 2 | **B3.7** — preset `ARMV7A` + torture gcc hard-float (fecha B3) | `trilha-b-arquiteturas/b3.7-preset-armv7a-armbox.md` | arm-jitter + armbox | B3.6 | usa `arm-none-eabi-gcc` (mesma toolchain dos testdata do armbox) |
-| 3 | **B5.2** — preset MPCore (lado arm-jitter do 3DS) | `trilha-b-arquiteturas/b5-3ds.md` (seção B5.2) | arm-jitter | B3.5 ✅ | B5.1 já ✅ |
-| 4 | **B7.2** — `MProfileExceptionModel`: MSP/PSP, xPSR, stacking, EXC_RETURN | `trilha-b-arquiteturas/b7.2-mprofile-exception-model.md` | arm-jitter | B7.1 ✅ | início da cadeia Cortex-M |
-| 5 | **B7.3** — SCS/NVIC/VTOR/SysTick memory-mapped | `trilha-b-arquiteturas/b7.3-scs-nvic-systick.md` | arm-jitter | B7.2 | |
-| 6 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 | |
-| 7 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 | |
+| 1 | **B5.2** — preset MPCore (lado arm-jitter do 3DS) | `trilha-b-arquiteturas/b5-3ds.md` (seção B5.2) | arm-jitter | B3.5 ✅ | B5.1 já ✅ |
+| 2 | **B7.2** — `MProfileExceptionModel`: MSP/PSP, xPSR, stacking, EXC_RETURN | `trilha-b-arquiteturas/b7.2-mprofile-exception-model.md` | arm-jitter | B7.1 ✅ | início da cadeia Cortex-M |
+| 3 | **B7.3** — SCS/NVIC/VTOR/SysTick memory-mapped | `trilha-b-arquiteturas/b7.3-scs-nvic-systick.md` | arm-jitter | B7.2 | |
+| 4 | **B7.4** — MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | `trilha-b-arquiteturas/b7.4-presets-armv6m-armv7m.md` | arm-jitter | B7.3 | |
+| 5 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 | |
 | P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — pode rodar em paralelo com a fila do arm-jitter |
 | P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
 

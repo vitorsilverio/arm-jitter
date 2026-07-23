@@ -988,6 +988,17 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int vd,
             /// Registrador base do endereço.
             int base,
+            /// Valor fixo para usar como base quando o registrador base é `PC` (`Vd, [pc, #imm]`,
+            /// o idioma padrão de literal pool do `gcc` para constantes `double`/`float`), ou `-1`
+            /// — mesmo mecanismo de {@link Load#baseValueOverride}. Sem ele, `base` seria lido AO
+            /// VIVO de `core.register(15)` em tempo de execução, que NÃO tem o viés `+8` do `PC`
+            /// arquitetural do ARM: o bloco só grava `registers[PC]` no fim ({@link
+            /// dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor#execute}), então
+            /// durante a execução deste op `PC` ainda vale o endereço da instrução atual, não
+            /// `+8` — sem o override, `VLDR`/`VSTR Vx, [pc, #imm]` lia do endereço errado (e
+            /// interpretado/JIT convergiam no MESMO endereço errado, G1 preservado mas ambos
+            /// incorretos).
+            int baseValueOverride,
             /// Offset em bytes (±`imm8`×4), já resolvido pelo decoder/lifter.
             int offsetBytes,
             /// Condição necessária para executar o load.
@@ -1003,6 +1014,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int vd,
             /// Registrador base do endereço.
             int base,
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1` — ver
+            /// {@link VfpLoad#baseValueOverride}.
+            int baseValueOverride,
             /// Offset em bytes (±`imm8`×4), já resolvido pelo decoder/lifter.
             int offsetBytes,
             /// Condição necessária para executar o store.
@@ -1022,6 +1036,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean doublePrecision,
             /// Registrador base do endereço.
             int base,
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1` — ver
+            /// {@link VfpLoad#baseValueOverride} (mesmo idioma de literal pool, aqui para
+            /// `VLDM`/`VSTM Rn=pc`, ainda que raro comparado a `VLDR`/`VSTR`).
+            int baseValueOverride,
             /// Primeiro registrador da lista.
             int firstRegister,
             /// Quantidade de registradores consecutivos.

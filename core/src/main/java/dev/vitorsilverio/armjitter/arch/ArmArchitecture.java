@@ -92,6 +92,64 @@ public final class ArmArchitecture {
                             new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES),
                             new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
+    /// ARMv7-A **user-level** — fecha o épico B3 (task B3.7). `MOVW_MOVT`/`MEMORY_BARRIERS`
+    /// já são herdadas de {@link #ARMV6K_THUMB2} (declaradas em
+    /// {@link #ARMV6K_THUMB2_FEATURES} desde B3.1/B2.6, repeti-las aqui seria redundante,
+    /// embora inofensivo por `EnumSet` ser idempotente) — mas `MLS_MULTIPLY`/`BIT_FIELD`/
+    /// `BIT_REVERSE`/`DIVIDE` (as demais features do "inteiro v7" de B3.1) **não** são
+    /// herdadas (só `ARMV7A` as habilita, por decisão do épico — nenhum preset anterior
+    /// precisa delas), então precisam ser declaradas aqui explicitamente, junto com
+    /// {@link ArmFeature#VFPV2}.
+    ///
+    /// **Desvio do plano original da task, documentado (mesmo padrão de honestidade de
+    /// B3.1/B3.2)**: a spec previa `.withDecoderExtensions(List.of(new VfpDecoder(), new
+    /// CoprocessorDecoder(), new ArmV7MediaDecoder()))` — mas `ArmV7MediaDecoder` NUNCA foi
+    /// criada. B3.1 descobriu que as 13 instruções "media" v7 (`MOVW`/`MOVT`/`MLS`/`SBFX`/
+    /// `UBFX`/`BFI`/`BFC`/`RBIT`/`SDIV`/`UDIV`/`DMB`/`DSB`/`ISB`) colidem com dispatches
+    /// genéricos do {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder} que retornam
+    /// ANTES do loop de extensões — viraram carve-outs diretos no próprio `ArmDecoder`,
+    /// gateados pelas features acima (mesmo padrão de `BLX`/`CLZ`/`UMAAL`). Este preset só
+    /// precisa, portanto, das features certas (já herdadas) mais {@link VfpDecoder}/
+    /// {@link dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder} como extensões de
+    /// decoder — sem nenhuma classe de "media decoder" plugável.
+    ///
+    /// `withThumb32DecoderExtensions` SUBSTITUI a lista (não soma à da base) — por isso as
+    /// 7 extensões de {@link #ARMV6K_THUMB2} são listadas de novo aqui, mais
+    /// {@link dev.vitorsilverio.armjitter.decoder.VfpDecoder} (regra da B3.5: `VfpDecoder`
+    /// deve vir ANTES de qualquer decoder de coprocessador genérico na ordem de registro,
+    /// senão `Thumb2CoprocessorDecoder` captura o encoding CP10/11 primeiro).
+    ///
+    /// **User-level only**: sem MMU/CP15-VMSA (páginas, TLB, modos privilegiados de
+    /// sistema completo — isso é a task B4.1). **Sem NEON** (fora do escopo do épico B3,
+    /// nenhum `IrOp`/decoder SIMD de 64/128 bits existe). `SDIV`/`UDIV` habilitados (nota
+    /// v7VE da decisão nº 5 do épico `b3-armv7a-vfp.md`: nem todo core ARMv7-A tem divisão
+    /// inteira em hardware — é uma extensão opcional "virtualization extensions" —, mas
+    /// este preset emula um core que a possui, como o Cortex-A15/A7).
+    /// Só as FEATURES de {@link #ARMV7A} — existe separadamente pelo mesmo quebra-cabeça do
+    /// ovo e da galinha de {@link #ARMV6K_THUMB2_FEATURES}: {@link
+    /// dev.vitorsilverio.armjitter.decoder.VfpDecoder}/{@link
+    /// dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder} recebem uma {@code
+    /// ArmArchitecture} no construtor (para gatear {@link ArmFeature#VFPV2} em tempo de
+    /// decode) e {@code ARMV7A} ainda não existe no ponto em que essas extensões
+    /// precisam ser construídas.
+    private static final ArmArchitecture ARMV7A_FEATURES = extending(ARMV6K_THUMB2, "ARMv7-A",
+            ArmFeature.MLS_MULTIPLY, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
+            ArmFeature.DIVIDE, ArmFeature.VFPV2);
+
+    public static final ArmArchitecture ARMV7A = ARMV7A_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV7A_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV7A_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
