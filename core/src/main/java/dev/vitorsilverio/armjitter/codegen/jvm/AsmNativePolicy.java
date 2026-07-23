@@ -31,7 +31,8 @@ import java.util.Set;
 ///
 /// <p>Desde a task B3.6 (PR1), o inteiro ARMv7 da B3.1/B3.2 também é nativo: MOVT, DMB/DSB/ISB
 /// (NOP), SBFX/UBFX, BFI/BFC, RBIT, SDIV/UDIV e MLS (Multiply com {@code subtractFromAccumulator}).
-/// VFP (B3.4/B3.5) permanece interpretado até a B3.6/PR2.</p>
+/// Desde a task B3.6 (PR2), o VFP da B3.4/B3.5 também é nativo — cobertura completa, sem
+/// exceção (ver os 10 casos {@code IrOp.Vfp*} abaixo).</p>
 public final class AsmNativePolicy {
     private AsmNativePolicy() {
     }
@@ -117,18 +118,21 @@ public final class AsmNativePolicy {
             case IrOp.BitFieldInsert ignored -> true;
             case IrOp.BitReverse ignored -> true;
             case IrOp.Divide ignored -> true;
-            // VFP (B3.4): decode ainda não existe (B3.5) e a emissão nativa é B3.6 — todo record
-            // Vfp* fica interpretado até lá.
-            case IrOp.VfpAlu ignored -> false;
-            case IrOp.VfpMoveImmediate ignored -> false;
-            case IrOp.VfpCompare ignored -> false;
-            case IrOp.VfpConvert ignored -> false;
-            case IrOp.VfpLoad ignored -> false;
-            case IrOp.VfpStore ignored -> false;
-            case IrOp.VfpMultipleTransfer ignored -> false;
-            case IrOp.VfpCoreTransfer ignored -> false;
-            case IrOp.VfpCorePairTransfer ignored -> false;
-            case IrOp.VfpSystemTransfer ignored -> false;
+            // VFP (B3.4/B3.5): emitidas nativamente desde a task B3.6 (PR2) — cobertura completa,
+            // sem exceção. VfpAlu/VfpMoveImmediate/VfpLoad/VfpStore/VfpCoreTransfer são bytecode
+            // direto (caminho quente); VfpCompare/VfpConvert/VfpMultipleTransfer/
+            // VfpCorePairTransfer/VfpSystemTransfer chamam um helper estático em
+            // AsmRuntimeHelpers (ver AsmBlockCompiler#emitVfpAlu e vizinhos).
+            case IrOp.VfpAlu ignored -> true;
+            case IrOp.VfpMoveImmediate ignored -> true;
+            case IrOp.VfpCompare ignored -> true;
+            case IrOp.VfpConvert ignored -> true;
+            case IrOp.VfpLoad ignored -> true;
+            case IrOp.VfpStore ignored -> true;
+            case IrOp.VfpMultipleTransfer ignored -> true;
+            case IrOp.VfpCoreTransfer ignored -> true;
+            case IrOp.VfpCorePairTransfer ignored -> true;
+            case IrOp.VfpSystemTransfer ignored -> true;
         };
     }
 

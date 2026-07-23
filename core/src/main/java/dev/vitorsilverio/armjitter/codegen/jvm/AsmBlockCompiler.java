@@ -278,6 +278,22 @@ public final class AsmBlockCompiler {
                     // NOP observável (ver IrOp.MemoryBarrier) — nenhum bytecode além do
                     // Cycle/Fetch já emitidos separadamente para esta instrução.
                 }
+                // VFP (B3.6, PR2): VfpAlu/VfpMoveImmediate/VfpLoad/VfpStore/VfpCoreTransfer são
+                // bytecode direto (caminho quente); VfpCompare/VfpConvert chamam um helper (sem
+                // tocar registrador ARM algum, sem spill); VfpMultipleTransfer/VfpCorePairTransfer/
+                // VfpSystemTransfer chamam um helper que toca registrador(es) ARM DIRETAMENTE no
+                // core (fora do register cache) — cercados por emitSpilled, mesmo tratamento de
+                // PsrTransfer/Coprocessor acima.
+                case IrOp.VfpAlu vfpAlu -> emitVfpAlu(method, vfpAlu);
+                case IrOp.VfpMoveImmediate vfpMovImm -> emitVfpMoveImmediate(method, vfpMovImm);
+                case IrOp.VfpCompare vfpCmp -> emitVfpCompare(method, vfpCmp);
+                case IrOp.VfpConvert vfpCvt -> emitVfpConvert(method, vfpCvt);
+                case IrOp.VfpLoad vfpLoad -> emitVfpLoad(method, vfpLoad);
+                case IrOp.VfpStore vfpStore -> emitVfpStore(method, vfpStore);
+                case IrOp.VfpMultipleTransfer vfpMt -> emitSpilled(method, () -> emitVfpMultipleTransfer(method, vfpMt));
+                case IrOp.VfpCoreTransfer vfpCoreT -> emitVfpCoreTransfer(method, vfpCoreT);
+                case IrOp.VfpCorePairTransfer vfpPair -> emitSpilled(method, () -> emitVfpCorePairTransfer(method, vfpPair));
+                case IrOp.VfpSystemTransfer vfpSys -> emitSpilled(method, () -> emitVfpSystemTransfer(method, vfpSys));
                 default -> throw new IllegalStateException("Unsupported IR op in native compile: " + op);
             }
             // Op pulado (condição falsa) cai aqui sem tocar PC_CHANGED — `emitProgramCounterFixup`
@@ -514,6 +530,20 @@ public final class AsmBlockCompiler {
             case IrOp.MoveTop movt -> {
                 countRead(accesses, movt.dst()); // preserva a metade baixa existente
                 countWrite(accesses, writes, movt.dst());
+            }
+            // VFP (B3.6, PR2): só as formas de bytecode direto que tocam um registrador ARM
+            // entram aqui — VfpMultipleTransfer/VfpCorePairTransfer/VfpSystemTransfer tocam o(s)
+            // seu(s) via helper cercado por emitSpilled (flush antes, reload depois), então não
+            // contam para o register cache (mesmo motivo de PsrTransfer/Coprocessor, caem no
+            // `default` abaixo).
+            case IrOp.VfpLoad vfpLoad -> countRead(accesses, vfpLoad.base());
+            case IrOp.VfpStore vfpStore -> countRead(accesses, vfpStore.base());
+            case IrOp.VfpCoreTransfer vfpCoreT -> {
+                if (vfpCoreT.toArmRegister()) {
+                    countWrite(accesses, writes, vfpCoreT.armRegister());
+                } else {
+                    countRead(accesses, vfpCoreT.armRegister());
+                }
             }
             default -> {
             }
@@ -1659,6 +1689,285 @@ public final class AsmBlockCompiler {
         AsmBytecode.visitIntConst(method, op.immediate16() << 16);
         method.visitInsn(Opcodes.IOR);
         emitStoreRegister(method, op.dst());
+    }
+
+    // ── VFP (B3.6, PR2) ──────────────────────────────────────────────────────────
+    // VfpAlu/VfpMoveImmediate/VfpLoad/VfpStore/VfpCoreTransfer são bytecode direto (caminho
+    // quente, decisão da task B3.6). VfpCompare/VfpConvert/VfpMultipleTransfer/
+    // VfpCorePairTransfer/VfpSystemTransfer chamam um helper estático em AsmRuntimeHelpers.
+
+    /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VNEG`/`VABS`/`VMOV` registrador (bytecode direto);
+    /// `VMLA`/`VMLS`/`VNMUL`/`VSQRT` (mais raras) chamam {@code AsmRuntimeHelpers#vfpAluCold}.
+    private void emitVfpAlu(MethodVisitor method, IrOp.VfpAlu op) {
+        switch (op.op()) {
+            case ADD, SUB, MUL, DIV -> emitVfpArith(method, op);
+            case NEG -> emitVfpSignBit(method, op, true);
+            case ABS -> emitVfpSignBit(method, op, false);
+            case COPY -> emitVfpCopy(method, op);
+            case MLA, MLS, NMUL, SQRT -> {
+                method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+                AsmBytecode.visitIntConst(method, op.op().ordinal());
+                method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                AsmBytecode.visitIntConst(method, op.vd());
+                AsmBytecode.visitIntConst(method, op.vn());
+                AsmBytecode.visitIntConst(method, op.vm());
+                AsmBytecode.invokeStatic(method, HELPERS, "vfpAluCold", "(" + CORE_REF + "IZIII)V");
+            }
+        }
+    }
+
+    /// `VADD`/`VSUB`/`VMUL`/`VDIV`: converte os bits crus para `float`/`double` (view de
+    /// {@code VfpRegisters}), aplica o opcode JVM nativo e grava de volta via
+    /// {@code setSFloat}/{@code setDDouble} — que já usa `floatToRawIntBits`/`doubleToRawLongBits`
+    /// por dentro (nunca a forma não-raw, que canonicalizaria NaN — Armadilha da task B3.6).
+    private void emitVfpArith(MethodVisitor method, IrOp.VfpAlu op) {
+        if (op.doublePrecision()) {
+            emitVfpRead(method, GuestToHostMapper.vfpDDouble(), op.vn());
+            emitVfpRead(method, GuestToHostMapper.vfpDDouble(), op.vm());
+            method.visitInsn(doubleArithOpcode(op.op()));
+            method.visitVarInsn(Opcodes.DSTORE, LONG_RESULT_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, op.vd());
+            method.visitVarInsn(Opcodes.DLOAD, LONG_RESULT_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetDDouble());
+        } else {
+            emitVfpRead(method, GuestToHostMapper.vfpSFloat(), op.vn());
+            emitVfpRead(method, GuestToHostMapper.vfpSFloat(), op.vm());
+            method.visitInsn(singleArithOpcode(op.op()));
+            method.visitVarInsn(Opcodes.FSTORE, TEMP1_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, op.vd());
+            method.visitVarInsn(Opcodes.FLOAD, TEMP1_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetSFloat());
+        }
+    }
+
+    /// Empilha `core.vfp().<accessor>(index)` (recebedor + índice já resolvidos).
+    private void emitVfpRead(MethodVisitor method, HostMethodBinding accessor, int index) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+        AsmBytecode.visitIntConst(method, index);
+        AsmBytecode.invokeVirtual(method, accessor);
+    }
+
+    private static int singleArithOpcode(IrOp.VfpOperation op) {
+        return switch (op) {
+            case ADD -> Opcodes.FADD;
+            case SUB -> Opcodes.FSUB;
+            case MUL -> Opcodes.FMUL;
+            case DIV -> Opcodes.FDIV;
+            default -> throw new IllegalStateException("emitVfpArith: op inesperado " + op);
+        };
+    }
+
+    private static int doubleArithOpcode(IrOp.VfpOperation op) {
+        return switch (op) {
+            case ADD -> Opcodes.DADD;
+            case SUB -> Opcodes.DSUB;
+            case MUL -> Opcodes.DMUL;
+            case DIV -> Opcodes.DDIV;
+            default -> throw new IllegalStateException("emitVfpArith: op inesperado " + op);
+        };
+    }
+
+    /// `VNEG`/`VABS`: manipula só o bit de sinal via XOR/AND com uma constante crua (NUNCA `0-x`/
+    /// `Math.abs`, que canonicalizariam NaN e quebrariam em `-0.0` — mesma armadilha de
+    /// `IrVfpExecutor`, aqui em bytecode).
+    private void emitVfpSignBit(MethodVisitor method, IrOp.VfpAlu op, boolean negate) {
+        if (op.doublePrecision()) {
+            emitVfpRead(method, GuestToHostMapper.vfpD(), op.vm());
+            method.visitLdcInsn(negate ? Long.MIN_VALUE : Long.MAX_VALUE);
+            method.visitInsn(negate ? Opcodes.LXOR : Opcodes.LAND);
+            method.visitVarInsn(Opcodes.LSTORE, LONG_RESULT_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, op.vd());
+            method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetD());
+        } else {
+            emitVfpRead(method, GuestToHostMapper.vfpS(), op.vm());
+            AsmBytecode.visitIntConst(method, negate ? Integer.MIN_VALUE : Integer.MAX_VALUE);
+            method.visitInsn(negate ? Opcodes.IXOR : Opcodes.IAND);
+            method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, op.vd());
+            method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetS());
+        }
+    }
+
+    /// `VMOV` registrador-a-registrador: cópia bit a bit crua (sem conversão de tipo).
+    private void emitVfpCopy(MethodVisitor method, IrOp.VfpAlu op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+        AsmBytecode.visitIntConst(method, op.vd());
+        emitVfpRead(method, op.doublePrecision() ? GuestToHostMapper.vfpD() : GuestToHostMapper.vfpS(), op.vm());
+        AsmBytecode.invokeVirtual(method, op.doublePrecision() ? GuestToHostMapper.vfpSetD() : GuestToHostMapper.vfpSetS());
+    }
+
+    /// `VMOV.F32`/`VMOV.F64 Vd, #imm`: grava o imediato já expandido pelo decoder/lifter.
+    private void emitVfpMoveImmediate(MethodVisitor method, IrOp.VfpMoveImmediate op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+        AsmBytecode.visitIntConst(method, op.vd());
+        if (op.doublePrecision()) {
+            method.visitLdcInsn(op.immediateBits());
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetD());
+        } else {
+            AsmBytecode.visitIntConst(method, (int) op.immediateBits());
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetS());
+        }
+    }
+
+    /// `VCMP`/`VCMPE`: sem registrador ARM envolvido (só `FPSCR`) — chamado direto, sem
+    /// {@code emitSpilled} (o register cache de r0-r14 nunca fica stale por isto).
+    private void emitVfpCompare(MethodVisitor method, IrOp.VfpCompare op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        method.visitInsn(op.compareWithZero() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.visitIntConst(method, op.vd());
+        AsmBytecode.visitIntConst(method, op.vm());
+        AsmBytecode.invokeStatic(method, HELPERS, "executeVfpCompare", "(" + CORE_REF + "ZZII)V");
+    }
+
+    /// `VCVT` (forma default): sem registrador ARM envolvido — mesma observação de {@link #emitVfpCompare}.
+    private void emitVfpConvert(MethodVisitor method, IrOp.VfpConvert op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        AsmBytecode.visitIntConst(method, op.conversion().ordinal());
+        AsmBytecode.visitIntConst(method, op.vd());
+        AsmBytecode.visitIntConst(method, op.vm());
+        AsmBytecode.invokeStatic(method, HELPERS, "executeVfpConvert", "(" + CORE_REF + "III)V");
+    }
+
+    /// `VLDR`: dupla precisão lê 2 words little-endian consecutivas via {@code loadWord}
+    /// (metade baixa no endereço menor); `base` é lido pelo register cache.
+    private void emitVfpLoad(MethodVisitor method, IrOp.VfpLoad load) {
+        emitReadRegister(method, load.base());
+        AsmBytecode.visitIntConst(method, load.offsetBytes());
+        method.visitInsn(Opcodes.IADD);
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+
+        if (load.doublePrecision()) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            AsmBytecode.invokeStatic(method, HELPERS, "packDoubleWords", "(II)J");
+            method.visitVarInsn(Opcodes.LSTORE, LONG_RESULT_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, load.vd());
+            method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetD());
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.invokeStatic(method, HELPERS, "loadWord", CORE_I_TO_I);
+            method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, load.vd());
+            method.visitVarInsn(Opcodes.ILOAD, TEMP1_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetS());
+        }
+    }
+
+    /// `VSTR`: ver {@link #emitVfpLoad}.
+    private void emitVfpStore(MethodVisitor method, IrOp.VfpStore store) {
+        emitReadRegister(method, store.base());
+        AsmBytecode.visitIntConst(method, store.offsetBytes());
+        method.visitInsn(Opcodes.IADD);
+        method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
+
+        if (store.doublePrecision()) {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, store.vd());
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpD());
+            method.visitVarInsn(Opcodes.LSTORE, LONG_RESULT_LOCAL);
+
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+            method.visitInsn(Opcodes.L2I);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            AsmBytecode.visitIntConst(method, 4);
+            method.visitInsn(Opcodes.IADD);
+            method.visitVarInsn(Opcodes.LLOAD, LONG_RESULT_LOCAL);
+            AsmBytecode.visitIntConst(method, 32);
+            method.visitInsn(Opcodes.LUSHR);
+            method.visitInsn(Opcodes.L2I);
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            method.visitVarInsn(Opcodes.ILOAD, ADDR_LOCAL);
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, store.vd());
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpS());
+            AsmBytecode.invokeStatic(method, HELPERS, "storeWord", CORE_II_TO_V);
+        }
+    }
+
+    /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: sempre via helper — cercado por {@code emitSpilled} no ponto
+    /// de despacho (toca `base` diretamente no core, fora do register cache).
+    private void emitVfpMultipleTransfer(MethodVisitor method, IrOp.VfpMultipleTransfer op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitInsn(op.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.visitIntConst(method, op.base());
+        AsmBytecode.visitIntConst(method, op.firstRegister());
+        AsmBytecode.visitIntConst(method, op.count());
+        method.visitInsn(op.writeback() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        method.visitInsn(op.decrementBefore() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.invokeStatic(method, HELPERS, "executeVfpMultipleTransfer",
+                "(" + CORE_REF + "ZZIIIZZ)V");
+    }
+
+    /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bytecode direto — `armRegister` é lido/escrito
+    /// pelo register cache via {@link #emitReadRegister}/{@link #emitStoreRegister} (um único
+    /// registrador, sem tocar o core por fora do cache, então sem necessidade de spill).
+    private void emitVfpCoreTransfer(MethodVisitor method, IrOp.VfpCoreTransfer op) {
+        if (op.toArmRegister()) {
+            emitVfpRead(method, GuestToHostMapper.vfpS(), op.vn());
+            emitStoreRegister(method, op.armRegister());
+        } else {
+            method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
+            AsmBytecode.visitIntConst(method, op.vn());
+            emitReadRegister(method, op.armRegister());
+            AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfpSetS());
+        }
+    }
+
+    /// `VMOV Rt,Rt2,Dm` / `VMOV Dm,Rt,Rt2` (`FMRRD`/`FMDRR`): sempre via helper — cercado por
+    /// {@code emitSpilled} no ponto de despacho (toca `armLow`/`armHigh` diretamente no core).
+    private void emitVfpCorePairTransfer(MethodVisitor method, IrOp.VfpCorePairTransfer op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitInsn(op.toArmRegisters() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.visitIntConst(method, op.armLow());
+        AsmBytecode.visitIntConst(method, op.armHigh());
+        AsmBytecode.visitIntConst(method, op.vm());
+        AsmBytecode.invokeStatic(method, HELPERS, "executeVfpCorePairTransfer", "(" + CORE_REF + "ZIII)V");
+    }
+
+    /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`): sempre via helper — cercado por {@code emitSpilled} no
+    /// ponto de despacho (toca `armRegister` diretamente no core, incl. o caso `APSR_nzcv`).
+    private void emitVfpSystemTransfer(MethodVisitor method, IrOp.VfpSystemTransfer op) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitInsn(op.read() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.visitIntConst(method, op.armRegister());
+        AsmBytecode.invokeStatic(method, HELPERS, "executeVfpSystemTransfer", "(" + CORE_REF + "ZI)V");
     }
 
     // ── memory ─────────────────────────────────────────────────────────────────

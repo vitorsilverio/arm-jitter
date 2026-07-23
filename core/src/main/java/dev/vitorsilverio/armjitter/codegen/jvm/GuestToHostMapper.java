@@ -16,10 +16,13 @@ public final class GuestToHostMapper {
     public static final String ADDRESS_SPACE = "dev/vitorsilverio/armjitter/memory/AddressSpace";
     public static final String MEMORY_ACCESS_TYPE = "dev/vitorsilverio/armjitter/memory/MemoryAccessType";
     public static final String CPU_MODE = "dev/vitorsilverio/armjitter/core/CpuMode";
+    /// Banco de registradores VFP (B3.3), exposto ao bytecode desde a task B3.6 (PR2).
+    public static final String VFP_REGISTERS = "dev/vitorsilverio/armjitter/core/VfpRegisters";
 
     private static final String ARM_CORE_REF = "L" + ARM_CORE + ";";
     private static final String CPSR_REF = "L" + CPSR + ";";
     private static final String ADDRESS_SPACE_REF = "L" + ADDRESS_SPACE + ";";
+    private static final String VFP_REGISTERS_REF = "L" + VFP_REGISTERS + ";";
 
     private GuestToHostMapper() {
     }
@@ -138,5 +141,55 @@ public final class GuestToHostMapper {
                 ADDRESS_SPACE,
                 "accessCycles",
                 "(IIL" + MEMORY_ACCESS_TYPE + ";)I");
+    }
+
+    // ── VFP (B3.6, PR2) ─────────────────────────────────────────────────────────
+    // Ligações usadas pelo caminho quente de bytecode direto (VfpAlu ADD/SUB/MUL/DIV/NEG/ABS/
+    // COPY, VfpLoad/VfpStore, VfpCoreTransfer, VfpMoveImmediate) — os demais Vfp* passam por um
+    // helper estático em AsmRuntimeHelpers (que chama estes mesmos acessores em Java puro).
+
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore#vfp()}
+    public static HostMethodBinding vfp() {
+        return new HostMethodBinding(ARM_CORE, "vfp", "()" + VFP_REGISTERS_REF);
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#s(int)} — bits crus de `S<index>`.
+    public static HostMethodBinding vfpS() {
+        return new HostMethodBinding(VFP_REGISTERS, "s", "(I)I");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#setS(int, int)} — bits crus de `S<index>`.
+    public static HostMethodBinding vfpSetS() {
+        return new HostMethodBinding(VFP_REGISTERS, "setS", "(II)V");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#d(int)} — bits crus de `D<index>`.
+    public static HostMethodBinding vfpD() {
+        return new HostMethodBinding(VFP_REGISTERS, "d", "(I)J");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#setD(int, long)} — bits crus de `D<index>`.
+    public static HostMethodBinding vfpSetD() {
+        return new HostMethodBinding(VFP_REGISTERS, "setD", "(IJ)V");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#sFloat(int)} — view `float`, mesmos bits.
+    public static HostMethodBinding vfpSFloat() {
+        return new HostMethodBinding(VFP_REGISTERS, "sFloat", "(I)F");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#setSFloat(int, float)} — view `float`.
+    public static HostMethodBinding vfpSetSFloat() {
+        return new HostMethodBinding(VFP_REGISTERS, "setSFloat", "(IF)V");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#dDouble(int)} — view `double`, mesmos bits.
+    public static HostMethodBinding vfpDDouble() {
+        return new HostMethodBinding(VFP_REGISTERS, "dDouble", "(I)D");
+    }
+
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#setDDouble(int, double)} — view `double`.
+    public static HostMethodBinding vfpSetDDouble() {
+        return new HostMethodBinding(VFP_REGISTERS, "setDDouble", "(ID)V");
     }
 }
