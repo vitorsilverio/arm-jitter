@@ -197,5 +197,51 @@ public enum InstructionKind {
     /// `SDIV`/`UDIV` (ARM/Thumb-2, ARMv7, B3.1): divisão inteira truncada para zero, resultado 0
     /// em divisão por zero. `destinationRegister`=Rd, `sourceRegister`=dividendo (Rn),
     /// `secondSourceRegister`=divisor (Rm), `signedAccess`=`true` para `SDIV`.
-    DIVIDE
+    DIVIDE,
+
+    // ── VFP (B3.5): decode do espaço coprocessador CP10/CP11 — ver `VfpDecoder`. Em todos os
+    // kinds abaixo `signedAccess` é reaproveitado para carregar `doublePrecision` (exceto
+    // `VFP_CONVERT`, onde a própria `IrOp.VfpConversion` já fixa a precisão de cada lado) e
+    // `link` para carregar a "direção" da transferência (ver cada kind). ──
+
+    /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/`VABS`/`VSQRT`/`VMOV` registrador
+    /// (VFPv2). `destinationRegister`=Vd, `sourceRegister`=Vn (`-1` nas formas unárias
+    /// NEG/ABS/SQRT/COPY), `secondSourceRegister`=Vm, `immediate`=ordinal de
+    /// `IrOp.VfpOperation`, `signedAccess`=precisão dupla.
+    VFP_ALU,
+    /// `VMOV.F32`/`VMOV.F64 Vd,#imm` (VFPv3-d16). `destinationRegister`=Vd, `immediate`=`imm8`
+    /// cru (0-255, ainda não expandido — `VFPExpandImm` roda no `StandardIrBuilder`),
+    /// `signedAccess`=precisão dupla.
+    VFP_MOVE_IMMEDIATE,
+    /// `VCMP`/`VCMPE` (com ou sem `#0.0`). `destinationRegister`=Vd, `secondSourceRegister`=Vm
+    /// (`-1` quando compara com zero), `immediate` bit 0 = compara com zero, bit 1 = `VCMPE`,
+    /// `signedAccess`=precisão dupla.
+    VFP_COMPARE,
+    /// `VCVT` (forma default, não `VCVTR`/fixed-point). `destinationRegister`=Vd,
+    /// `sourceRegister`=Vm, `immediate`=ordinal de `IrOp.VfpConversion` (já fixa a precisão de
+    /// cada lado, sem precisar de `signedAccess` aqui).
+    VFP_CONVERT,
+    /// `VLDR`. `destinationRegister`=Vd, `sourceRegister`=base (Rn), `immediate`=offset em bytes
+    /// já resolvido (±`imm8`×4), `signedAccess`=precisão dupla.
+    VFP_LOAD,
+    /// `VSTR` (ver {@link #VFP_LOAD}).
+    VFP_STORE,
+    /// `VLDM`/`VPOP` (alias de `VLDMIA SP!`). `sourceRegister`=base (Rn), `immediate` empacota:
+    /// bits 5:0 = primeiro registrador (Vd combinado), bits 11:6 = quantidade de registradores
+    /// consecutivos (já convertida de `imm8` para contagem real — `imm8` para dupla é o dobro da
+    /// contagem), `writeback`, `blockTransferMode` (`IA` ou `DB`, só essas duas existem no VFP),
+    /// `signedAccess`=precisão dupla.
+    VFP_LOAD_MULTIPLE,
+    /// `VSTM`/`VPUSH` (alias de `VSTMDB SP!`) (ver {@link #VFP_LOAD_MULTIPLE}).
+    VFP_STORE_MULTIPLE,
+    /// `VMOV Rt,Sn`/`VMOV Sn,Rt` (`FMRS`/`FMSR`). `destinationRegister`=Rt (registrador ARM),
+    /// `sourceRegister`=Sn, `link`=`true` para `Sn`→`Rt` (`FMRS`).
+    VFP_CORE_TRANSFER,
+    /// `VMOV Rt,Rt2,Dm`/`VMOV Dm,Rt,Rt2` (`FMRRD`/`FMDRR`). `destinationRegister`=Rt (metade
+    /// baixa), `sourceRegister`=Rt2 (metade alta), `secondSourceRegister`=Dm, `link`=`true` para
+    /// `Dm`→`(Rt,Rt2)` (`FMRRD`).
+    VFP_CORE_PAIR_TRANSFER,
+    /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`, só o registrador FPSCR — FPSID/FPEXC fora de escopo).
+    /// `destinationRegister`=registrador ARM envolvido, `link`=`true` para `VMRS` (FPSCR→destino).
+    VFP_SYSTEM_TRANSFER
 }

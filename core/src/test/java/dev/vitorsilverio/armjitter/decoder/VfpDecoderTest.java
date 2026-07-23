@@ -1,0 +1,526 @@
+package dev.vitorsilverio.armjitter.decoder;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
+import dev.vitorsilverio.armjitter.arch.DecoderExtension;
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IrBlock;
+import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.support.TestAddressSpace;
+import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/// B3.5 — decoder VFP (CP10/CP11, ARM e Thumb-2). Oráculo: QEMU `target/arm/tcg/vfp.decode`
+/// (ver `VfpDecoder`). Vetores manuais montados bit a bit a partir dos padrões do QEMU citados nos
+/// comentários de `VfpDecoder`.
+class VfpDecoderTest {
+    private static final ArmArchitecture VFP_TEST_FEATURES =
+            ArmArchitecture.extending(ArmArchitecture.ARMV6K_THUMB2, "ARMv7-TestVfp", ArmFeature.VFPV2);
+    private static final ArmArchitecture VFP_TEST_ARCH = VFP_TEST_FEATURES
+            .withDecoderExtensions(List.of(new VfpDecoder(VFP_TEST_FEATURES), new CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(thumb32ExtensionsWithVfpFirst());
+
+    private static List<DecoderExtension> thumb32ExtensionsWithVfpFirst() {
+        List<DecoderExtension> extensions = new ArrayList<>();
+        extensions.add(new Thumb2VfpDecoder(VFP_TEST_FEATURES));
+        extensions.addAll(ArmArchitecture.ARMV6K_THUMB2.thumb32DecoderExtensions());
+        return extensions;
+    }
+
+    private static final int COND_AL = 0xE;
+
+    // ── Helpers de codificação: nibble/extensão de registrador VFP (ver VfpDecoder#registerNumber) ──
+
+    private static int nibbleOf(int combined, boolean doublePrecision) {
+        return doublePrecision ? combined & 0xF : combined >>> 1;
+    }
+
+    private static int extOf(int combined, boolean doublePrecision) {
+        return doublePrecision ? (combined >>> 4) & 1 : combined & 1;
+    }
+
+    private static int size(boolean doublePrecision) {
+        return doublePrecision ? 0xB : 0xA;
+    }
+
+    /// Aritmética de 3 registradores: VMLA/VMLS/VMUL/VNMUL/VADD/VSUB/VDIV (vfp.decode, ex.
+    /// `VADD_sp ---- 1110 0.11 .... .... 1010 .0.0 ....`).
+    private static int vfpAluWord(int op1, boolean bit6, boolean doublePrecision, int vd, int vn, int vm) {
+        int word = (COND_AL << 28) | (0xE << 24);
+        word |= ((op1 >>> 2) & 1) << 23;
+        word |= extOf(vd, doublePrecision) << 22;
+        word |= ((op1 >>> 1) & 1) << 21;
+        word |= (op1 & 1) << 20;
+        word |= nibbleOf(vn, doublePrecision) << 16;
+        word |= nibbleOf(vd, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= extOf(vn, doublePrecision) << 7;
+        word |= (bit6 ? 1 : 0) << 6;
+        word |= extOf(vm, doublePrecision) << 5;
+        word |= nibbleOf(vm, doublePrecision);
+        return word;
+    }
+
+    /// Família de imediato/2-operando/compare/convert (op1=0b111): `VMOV_reg`/`VABS`/`VNEG`/
+    /// `VSQRT`/`VCVT_sp`/`VCVT_dp`/`VCVT_int`/`VCVT_*_int` (vm usado) — bit6=1, opc2 seleciona.
+    private static int vfpTwoOperandWord(int opc2, boolean bit7, boolean doublePrecision, int vd, int vm) {
+        int word = (COND_AL << 28) | (0xE << 24) | (1 << 23) | (1 << 21) | (1 << 20);
+        word |= extOf(vd, doublePrecision) << 22;
+        word |= opc2 << 16;
+        word |= nibbleOf(vd, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= (bit7 ? 1 : 0) << 7;
+        word |= 1 << 6;
+        word |= extOf(vm, doublePrecision) << 5;
+        word |= nibbleOf(vm, doublePrecision);
+        return word;
+    }
+
+    /// Família de imediato/2-operando com Vd/Vm de precisões DIFERENTES (`VCVT_sp`/`VCVT_dp`
+    /// precisão simples<->dupla, `VCVT_int` inteiro->float, `VCVT_*_int` float->inteiro) — a
+    /// versão de {@link #vfpTwoOperandWord} não serve porque ela assume a MESMA precisão nos dois
+    /// lados. `size4` é o valor cru do campo `size` (bits[11:8]).
+    private static int vfpAsymmetricTwoOperandWord(int opc2, boolean bit7, int size4,
+            int vd, boolean vdDouble, int vm, boolean vmDouble) {
+        int word = (COND_AL << 28) | (0xE << 24) | (1 << 23) | (1 << 21) | (1 << 20);
+        word |= extOf(vd, vdDouble) << 22;
+        word |= opc2 << 16;
+        word |= nibbleOf(vd, vdDouble) << 12;
+        word |= size4 << 8;
+        word |= (bit7 ? 1 : 0) << 7;
+        word |= 1 << 6;
+        word |= extOf(vm, vmDouble) << 5;
+        word |= nibbleOf(vm, vmDouble);
+        return word;
+    }
+
+    /// `VMOV.F32`/`VMOV.F64 Vd,#imm`: bit6=0, imm8 em bits[19:16]/bits[3:0].
+    private static int vfpMoveImmWord(boolean doublePrecision, int vd, int imm8) {
+        int word = (COND_AL << 28) | (0xE << 24) | (1 << 23) | (1 << 21) | (1 << 20);
+        word |= extOf(vd, doublePrecision) << 22;
+        word |= ((imm8 >>> 4) & 0xF) << 16;
+        word |= nibbleOf(vd, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= imm8 & 0xF;
+        return word;
+    }
+
+    /// `VCMP`/`VCMPE` (com ou sem `#0.0`): opc2=0b0100/0b0101, bit7=E (VCMPE).
+    private static int vfpCmpWord(boolean compareWithZero, boolean signalOnQuietNaN, boolean doublePrecision,
+            int vd, int vm) {
+        return vfpTwoOperandWord(compareWithZero ? 0x5 : 0x4, signalOnQuietNaN, doublePrecision, vd, vm);
+    }
+
+    /// `VLDR`/`VSTR`: `---- 1101 u . 0 l rn(4) vd(4) size imm(8)`.
+    private static int vfpLoadStoreWord(boolean load, boolean add, boolean doublePrecision, int vd, int rn, int imm8) {
+        int word = (COND_AL << 28) | (0xD << 24);
+        word |= (add ? 1 : 0) << 23;
+        word |= extOf(vd, doublePrecision) << 22;
+        word |= (load ? 1 : 0) << 20;
+        word |= rn << 16;
+        word |= nibbleOf(vd, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= imm8 & 0xFF;
+        return word;
+    }
+
+    /// `VLDM`/`VSTM` increment-after (P=0,U=1): `---- 1100 1 . w l rn(4) vd(4) size imm(8)`.
+    private static int vfpMultipleIaWord(boolean load, boolean writeback, boolean doublePrecision,
+            int firstRegister, int rn, int imm8) {
+        int word = (COND_AL << 28) | (0xC << 24) | (1 << 23);
+        word |= extOf(firstRegister, doublePrecision) << 22;
+        word |= (writeback ? 1 : 0) << 21;
+        word |= (load ? 1 : 0) << 20;
+        word |= rn << 16;
+        word |= nibbleOf(firstRegister, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= imm8 & 0xFF;
+        return word;
+    }
+
+    /// `VLDM`/`VSTM` decrement-before com writeback (P=1,U=0,W=1 — inclui `VPUSH`/`VPOP`):
+    /// `---- 1101 0.1 l rn(4) vd(4) size imm(8)`.
+    private static int vfpMultipleDbWord(boolean load, boolean doublePrecision, int firstRegister, int rn, int imm8) {
+        int word = (COND_AL << 28) | (0xD << 24) | (1 << 21);
+        word |= extOf(firstRegister, doublePrecision) << 22;
+        word |= (load ? 1 : 0) << 20;
+        word |= rn << 16;
+        word |= nibbleOf(firstRegister, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= imm8 & 0xFF;
+        return word;
+    }
+
+    /// `VMOV Rt,Sn`/`VMOV Sn,Rt` (FMRS/FMSR): `---- 1110 000 l vn(4) rt(4) 1010 . 001 0000`.
+    private static int vfpCoreTransferWord(boolean load, int rt, int vn) {
+        int word = (COND_AL << 28) | (0xE << 24) | (load ? 1 : 0) << 20;
+        word |= nibbleOf(vn, false) << 16;
+        word |= rt << 12;
+        word |= 0xA << 8;
+        word |= extOf(vn, false) << 7;
+        word |= 0b0010000;
+        return word;
+    }
+
+    /// `VMSR`/`VMRS FPSCR` (FMXR/FMRX): `---- 1110 111 l reg(4) rt(4) 1010 0001 0000`.
+    private static int vfpSystemTransferWord(boolean read, int rt, int reg) {
+        int word = (COND_AL << 28) | (0xE << 24) | (0x7 << 21) | (read ? 1 : 0) << 20;
+        word |= reg << 16;
+        word |= rt << 12;
+        word |= 0xA << 8;
+        word |= 0x10;
+        return word;
+    }
+
+    /// `VMOV_64_dp` (FMRRD/FMDRR): `---- 1100 010 op rt2(4) rt(4) 1011 00 . 1 vm(4)`.
+    private static int vfpCorePairTransferWord(boolean toArmRegisters, int rt, int rt2, int vm) {
+        int word = (COND_AL << 28) | (0xC << 24) | (0b010 << 21) | (toArmRegisters ? 1 : 0) << 20;
+        word |= rt2 << 16;
+        word |= rt << 12;
+        word |= 0xB << 8;
+        word |= extOf(vm, true) << 5;
+        word |= 1 << 4;
+        word |= nibbleOf(vm, true);
+        return word;
+    }
+
+    /// Genérico `MRC`: `cccc 1110 ooo1 nnnn dddd pppp ooo1 mmmm` (mesmo padrão de `CoprocessorDecoder`).
+    private static int mrcWord(int coprocessor) {
+        return (COND_AL << 28) | 0x0E10_0010 | (coprocessor << 8);
+    }
+
+    private static DecodedInstruction decodeArm(int word) {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put32(0, word);
+        return new ArmDecoder(VFP_TEST_ARCH).decode(memory, 0);
+    }
+
+    private static DecodedInstruction decodeThumb32(int word) {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put16(0, word >>> 16);
+        memory.put16(2, word & 0xFFFF);
+        return new ThumbDecoder(VFP_TEST_ARCH).decode(memory, 0);
+    }
+
+    private static IrOp liftSingleOp(DecodedInstruction instruction) {
+        IrBlock.Builder block = IrBlock.builder(instruction.address());
+        new StandardIrBuilder().lift(instruction, block);
+        List<IrOp> ops = block.sealed().operations();
+        return ops.get(0);
+    }
+
+    // ── 1. Por grupo: encode manual -> decode -> IR esperada, single E double ──────────────
+
+    @Test
+    void addSingleDecodesToVfpAlu() {
+        int word = vfpAluWord(0b011, false, false, 2, 0, 1);
+        DecodedInstruction decoded = decodeArm(word);
+        assertEquals(InstructionKind.VFP_ALU, decoded.kind());
+        IrOp op = liftSingleOp(decoded);
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), op);
+    }
+
+    @Test
+    void subDoubleDecodesToVfpAlu() {
+        int word = vfpAluWord(0b011, true, true, 3, 1, 2);
+        IrOp op = liftSingleOp(decodeArm(word));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.SUB, true, 3, 1, 2, Condition.AL), op);
+    }
+
+    @Test
+    void mulNmulSelectedByBit6() {
+        IrOp mul = liftSingleOp(decodeArm(vfpAluWord(0b010, false, false, 4, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 4, 0, 1, Condition.AL), mul);
+        IrOp nmul = liftSingleOp(decodeArm(vfpAluWord(0b010, true, false, 4, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMUL, false, 4, 0, 1, Condition.AL), nmul);
+    }
+
+    @Test
+    void mlaMlsSelectedByBit6() {
+        IrOp mla = liftSingleOp(decodeArm(vfpAluWord(0b000, false, true, 5, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MLA, true, 5, 0, 1, Condition.AL), mla);
+        IrOp mls = liftSingleOp(decodeArm(vfpAluWord(0b000, true, true, 5, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MLS, true, 5, 0, 1, Condition.AL), mls);
+    }
+
+    @Test
+    void divSingle() {
+        IrOp op = liftSingleOp(decodeArm(vfpAluWord(0b100, false, false, 6, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 6, 0, 1, Condition.AL), op);
+    }
+
+    @Test
+    void divWithBit6SetIsUndefined() {
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b100, true, false, 6, 0, 1)).kind());
+    }
+
+    @Test
+    void copyAbsNegSqrtUnaryOps() {
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.COPY, false, 1, -1, 0, Condition.AL),
+                liftSingleOp(decodeArm(vfpTwoOperandWord(0x0, false, false, 1, 0))));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ABS, false, 1, -1, 0, Condition.AL),
+                liftSingleOp(decodeArm(vfpTwoOperandWord(0x0, true, false, 1, 0))));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NEG, true, 1, -1, 0, Condition.AL),
+                liftSingleOp(decodeArm(vfpTwoOperandWord(0x1, false, true, 1, 0))));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 1, -1, 0, Condition.AL),
+                liftSingleOp(decodeArm(vfpTwoOperandWord(0x1, true, true, 1, 0))));
+    }
+
+    @Test
+    void vfpMoveImmediateSingleAndDouble() {
+        DecodedInstruction single = decodeArm(vfpMoveImmWord(false, 3, 0x70));
+        assertEquals(InstructionKind.VFP_MOVE_IMMEDIATE, single.kind());
+        assertEquals(3, single.destinationRegister());
+        assertEquals(0x70, single.immediate());
+        assertEquals(false, single.signedAccess());
+
+        DecodedInstruction dbl = decodeArm(vfpMoveImmWord(true, 4, 0x3F));
+        assertEquals(4, dbl.destinationRegister());
+        assertEquals(0x3F, dbl.immediate());
+        assertEquals(true, dbl.signedAccess());
+    }
+
+    @Test
+    void compareRegAndZeroSingleAndDouble() {
+        IrOp cmpReg = liftSingleOp(decodeArm(vfpCmpWord(false, false, false, 2, 3)));
+        assertEquals(new IrOp.VfpCompare(false, false, false, 2, 3, Condition.AL), cmpReg);
+
+        IrOp cmpZero = liftSingleOp(decodeArm(vfpCmpWord(true, false, true, 2, 0)));
+        assertEquals(new IrOp.VfpCompare(true, true, false, 2, -1, Condition.AL), cmpZero);
+
+        IrOp cmpe = liftSingleOp(decodeArm(vfpCmpWord(false, true, false, 2, 3)));
+        assertEquals(new IrOp.VfpCompare(false, false, true, 2, 3, Condition.AL), cmpe);
+    }
+
+    @Test
+    void convertPrecisionSingleDouble() {
+        // VCVT_sp (size=single=0xA): fonte simples (Vm), destino dobro (Vd) -> F32_TO_F64.
+        IrOp f32ToF64 = liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x7, true, 0xA, 1, true, 5, false)));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 1, 5, Condition.AL), f32ToF64);
+
+        // VCVT_dp (size=dobro=0xB): fonte dobro (Vm), destino simples (Vd) -> F64_TO_F32.
+        IrOp f64ToF32 = liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x7, true, 0xB, 1, false, 5, true)));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_F32, 1, 5, Condition.AL), f64ToF32);
+    }
+
+    @Test
+    void convertIntToFloatSignedUnsigned() {
+        // VCVT_int_{sp,dp}: Vm SEMPRE simples (fonte inteira de 32 bits); Vd segue `size` (destino).
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F32, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, true, 0xA, 1, false, 5, false))));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F32, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, false, 0xA, 1, false, 5, false))));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F64, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, true, 0xB, 1, true, 5, false))));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F64, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, false, 0xB, 1, true, 5, false))));
+    }
+
+    @Test
+    void convertFloatToIntSignedUnsignedRequiresRoundTowardZero() {
+        // VCVT_{sp,dp}_int: Vd SEMPRE simples (destino inteiro de 32 bits); Vm segue `size` (fonte).
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, true, 0xA, 1, false, 5, false))));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_U32, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xC, true, 0xA, 1, false, 5, false))));
+        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_S32, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, true, 0xB, 1, false, 5, true))));
+        // bit7=0 (rz=0) é VCVTR, fora de escopo: UNDEFINED.
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decodeArm(vfpAsymmetricTwoOperandWord(0xD, false, 0xA, 1, false, 5, false)).kind());
+    }
+
+    @Test
+    void loadStoreOffsetSignAndPrecision() {
+        IrOp load = liftSingleOp(decodeArm(vfpLoadStoreWord(true, true, false, 2, 5, 3)));
+        assertEquals(new IrOp.VfpLoad(false, 2, 5, 12, Condition.AL), load);
+
+        IrOp store = liftSingleOp(decodeArm(vfpLoadStoreWord(false, false, true, 2, 5, 3)));
+        assertEquals(new IrOp.VfpStore(true, 2, 5, -12, Condition.AL), store);
+    }
+
+    @Test
+    void multipleTransferIaAndDbWithVPushVPopAlias() {
+        // VLDM Rn, {S0-S2} (IA, sem writeback).
+        IrOp ldmIa = liftSingleOp(decodeArm(vfpMultipleIaWord(true, false, false, 0, 5, 3)));
+        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 5, 0, 3, false, false, Condition.AL), ldmIa);
+
+        // VPUSH {D8-D9} == VSTMDB SP!, {D8-D9}: rn=SP(13), imm8=4 (2 registros dupla).
+        IrOp push = liftSingleOp(decodeArm(vfpMultipleDbWord(false, true, 8, 13, 4)));
+        assertEquals(new IrOp.VfpMultipleTransfer(false, true, 13, 8, 2, true, true, Condition.AL), push);
+    }
+
+    @Test
+    void oddImm8InDoublePrecisionMultipleTransferIsUndefined() {
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpMultipleIaWord(true, false, true, 0, 5, 3)).kind());
+    }
+
+    @Test
+    void coreTransferSingleBothDirections() {
+        IrOp toArm = liftSingleOp(decodeArm(vfpCoreTransferWord(true, 2, 5)));
+        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, Condition.AL), toArm);
+
+        IrOp toVfp = liftSingleOp(decodeArm(vfpCoreTransferWord(false, 2, 5)));
+        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, Condition.AL), toVfp);
+    }
+
+    @Test
+    void corePairTransferDoubleBothDirections() {
+        IrOp toArm = liftSingleOp(decodeArm(vfpCorePairTransferWord(true, 1, 2, 8)));
+        assertEquals(new IrOp.VfpCorePairTransfer(true, 1, 2, 8, Condition.AL), toArm);
+
+        IrOp toVfp = liftSingleOp(decodeArm(vfpCorePairTransferWord(false, 1, 2, 8)));
+        assertEquals(new IrOp.VfpCorePairTransfer(false, 1, 2, 8, Condition.AL), toVfp);
+    }
+
+    @Test
+    void systemTransferFpscrBothDirections() {
+        IrOp vmrs = liftSingleOp(decodeArm(vfpSystemTransferWord(true, 15, 1)));
+        assertEquals(new IrOp.VfpSystemTransfer(true, 15, Condition.AL), vmrs);
+
+        IrOp vmsr = liftSingleOp(decodeArm(vfpSystemTransferWord(false, 2, 1)));
+        assertEquals(new IrOp.VfpSystemTransfer(false, 2, Condition.AL), vmsr);
+    }
+
+    @Test
+    void systemTransferNonFpscrRegisterIsUndefined() {
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpSystemTransferWord(true, 15, 0)).kind());
+    }
+
+    // ── 2. VFPExpandImm ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    void vfpMoveImmediateExpandsCanonicalVectors() {
+        assertEquals(Float.floatToRawIntBits(1.0f), (int) executeMoveImmediate(false, 0x70));
+        assertEquals(Float.floatToRawIntBits(-1.0f), (int) executeMoveImmediate(false, 0xF0));
+        assertEquals(Float.floatToRawIntBits(0.5f), (int) executeMoveImmediate(false, 0x60));
+        // O enunciado da task cita 0x4F para 31.0, mas VFPExpandImm(0x4F,32) = 0x3E780000
+        // (~0.2421875) — verificado contra vfp_expand_imm do QEMU; 0x3F é que expande para 31.0f.
+        assertEquals(Float.floatToRawIntBits(31.0f), (int) executeMoveImmediate(false, 0x3F));
+    }
+
+    private static long executeMoveImmediate(boolean doublePrecision, int imm8) {
+        ArmCore core = newCore();
+        int word = vfpMoveImmWord(doublePrecision, 0, imm8);
+        DecodedInstruction decoded = decodeArm(word);
+        IrOp op = liftSingleOp(decoded);
+        new IrBlockExecutor(VFP_TEST_ARCH).executeOp(core, op, 0);
+        return doublePrecision ? core.vfp().d(0) : core.vfp().s(0);
+    }
+
+    // ── 3. Execução ponta-a-ponta: VLDR+VADD+VCMP+VMRS APSR_nzcv+BGE ────────────────────────
+
+    @Test
+    void endToEndFloatBlockSetsApsrAndTakesBranch() {
+        ArmCore core = newCore();
+        core.setRegister(0, 0); // base para VLDR
+        core.vfp().setSFloat(1, 1.0f); // S1 = 1.0 (segundo operando de VADD)
+        core.memory().write32(0, Float.floatToRawIntBits(2.0f)); // [R0] = 2.0f, alvo do VLDR
+
+        int vldr = vfpLoadStoreWord(true, true, false, 0, 0, 0); // VLDR S0, [R0]
+        int vadd = vfpAluWord(0b011, false, false, 0, 0, 1); // VADD S0, S0, S1 (2.0+1.0=3.0)
+        int vcmp = vfpCmpWord(true, false, false, 0, 0); // VCMP S0, #0.0
+        int vmrs = vfpSystemTransferWord(true, 15, 1); // VMRS APSR_nzcv, FPSCR
+
+        IrBlockExecutor executor = new IrBlockExecutor(VFP_TEST_ARCH);
+        for (int word : new int[] {vldr, vadd, vcmp, vmrs}) {
+            IrOp op = liftSingleOp(decodeArm(word));
+            executor.executeOp(core, op, 0);
+        }
+
+        assertEquals(3.0f, core.vfp().sFloat(0));
+        // 3.0 comparado com 0.0 -> GT: N=0,Z=0,C=1,V=0 -> BGE (GE = !N==V, aqui N=0,V=0) é tomado.
+        assertTrue(core.cpsr().evalCond(Condition.GE));
+    }
+
+    private static ArmCore newCore() {
+        return new ArmCore(new TestAddressSpace(64), SwiDispatcher.empty(), VFP_TEST_ARCH);
+    }
+
+    // ── 4. Gate: sem VFPV2 continua no CoprocessorBus; com VFPV2, CP15 continua no bus ──────
+
+    private static final ArmArchitecture VFP_GATED_OFF_FEATURES =
+            ArmArchitecture.extending(ArmArchitecture.ARMV6K, "ARMv7-TestVfpGateOff");
+    private static final ArmArchitecture VFP_GATED_OFF = VFP_GATED_OFF_FEATURES
+            .withDecoderExtensions(List.of(new VfpDecoder(VFP_GATED_OFF_FEATURES), new CoprocessorDecoder()));
+
+    @Test
+    void mrcP10FallsBackToCoprocessorBusWithoutVfpv2Feature() {
+        DecodedInstruction decoded = new ArmDecoder(VFP_GATED_OFF).decode(wordAsMemory(mrcWord(0b1010)), 0);
+        assertEquals(InstructionKind.COPROCESSOR, decoded.kind());
+    }
+
+    @Test
+    void mrcP15StillGoesToCoprocessorBusWithVfpv2Enabled() {
+        DecodedInstruction decoded = new ArmDecoder(VFP_TEST_ARCH).decode(wordAsMemory(mrcWord(0b1111)), 0);
+        assertEquals(InstructionKind.COPROCESSOR, decoded.kind());
+    }
+
+    private static TestAddressSpace wordAsMemory(int word) {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put32(0, word);
+        return memory;
+    }
+
+    // ── 5. Ida-e-volta ARM x Thumb-2 ─────────────────────────────────────────────────────────
+
+    @Test
+    void vaddDoubleRoundTripsArmAndThumb2() {
+        int word = vfpAluWord(0b011, false, true, 3, 1, 2);
+        DecodedInstruction armDecoded = decodeArm(word);
+        DecodedInstruction thumbDecoded = decodeThumb32(word);
+        assertEquals(InstructionSet.ARM, armDecoded.instructionSet());
+        assertEquals(InstructionSet.THUMB, thumbDecoded.instructionSet());
+        assertEquals(liftSingleOp(armDecoded), liftSingleOp(thumbDecoded.withInstructionSet(InstructionSet.ARM)));
+    }
+
+    @Test
+    void vldrRoundTripsArmAndThumb2() {
+        int word = vfpLoadStoreWord(true, true, false, 2, 5, 3);
+        DecodedInstruction armDecoded = decodeArm(word);
+        DecodedInstruction thumbDecoded = decodeThumb32(word);
+        assertEquals(InstructionSet.ARM, armDecoded.instructionSet());
+        assertEquals(InstructionSet.THUMB, thumbDecoded.instructionSet());
+        assertEquals(liftSingleOp(armDecoded), liftSingleOp(thumbDecoded.withInstructionSet(InstructionSet.ARM)));
+    }
+
+    // ── 6. UNPREDICTABLE/fora de escopo -> UNDEFINED ────────────────────────────────────────
+
+    @Test
+    void vnmlaVnmlsGroupIsOutOfScope() {
+        // op1==0b001 (VNMLA/VNMLS): sem VfpOperation correspondente no épico (Inclui só lista
+        // ADD/SUB/MUL/DIV/MLA/MLS/NMUL/NEG/ABS/SQRT/COPY) — UNDEFINED explícito.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b001, false, false, 2, 0, 1)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b001, true, false, 2, 0, 1)).kind());
+    }
+
+    @Test
+    void vmsrOfNonFpscrRegisterIsUndefined() {
+        // FPSID/FPEXC/MVFR* (reg != 0b0001) — fora de escopo (só FPSCR).
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpSystemTransferWord(false, 2, 0)).kind());
+    }
+
+    @Test
+    void vmovImmHalfPrecisionIsOutOfVfpSpaceEntirely() {
+        // size=1001 (CP9, meia precisão) não é sequer reivindicado pelo VfpDecoder (fora do gate
+        // coproc ∈ {1010,1011}) — cai direto no UNDEFINED genérico (nenhum decoder reivindica CP9
+        // nesta arquitetura de teste).
+        int word = (COND_AL << 28) | 0x0E00_0000 | (1 << 23) | (1 << 21) | (1 << 20) | (0x9 << 8);
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(word).kind());
+    }
+
+    @Test
+    void vfpFixedPointConvertIsOutOfScope() {
+        // VCVT_fix: opc2 ocupa {0xA,0xB,0xE,0xF} dependendo de op/x — fora do "Não inclui".
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpTwoOperandWord(0xA, true, false, 1, 0)).kind());
+    }
+}

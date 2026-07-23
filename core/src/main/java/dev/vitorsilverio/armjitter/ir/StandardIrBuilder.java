@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
@@ -384,6 +385,77 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.secondSourceRegister(),
                     instruction.signedAccess(),
                     instruction.condition()));
+            // VFP (B3.5): `signedAccess` carrega `doublePrecision`, `link` carrega a direção da
+            // transferência — ver o javadoc de cada `InstructionKind` VFP_*.
+            case VFP_ALU -> block.add(new IrOp.VfpAlu(
+                    IrOp.VfpOperation.values()[instruction.immediate()],
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_MOVE_IMMEDIATE -> block.add(new IrOp.VfpMoveImmediate(
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    vfpExpandImm(instruction.immediate(), instruction.signedAccess()),
+                    instruction.condition()));
+            case VFP_COMPARE -> block.add(new IrOp.VfpCompare(
+                    instruction.signedAccess(),
+                    (instruction.immediate() & 1) != 0,
+                    (instruction.immediate() & 2) != 0,
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_CONVERT -> block.add(new IrOp.VfpConvert(
+                    IrOp.VfpConversion.values()[instruction.immediate()],
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.condition()));
+            case VFP_LOAD -> block.add(new IrOp.VfpLoad(
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.condition()));
+            case VFP_STORE -> block.add(new IrOp.VfpStore(
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.condition()));
+            case VFP_LOAD_MULTIPLE -> block.add(new IrOp.VfpMultipleTransfer(
+                    true,
+                    instruction.signedAccess(),
+                    instruction.sourceRegister(),
+                    instruction.immediate() & 0x3F,
+                    instruction.immediate() >>> 6,
+                    instruction.writeback(),
+                    instruction.blockTransferMode() == BlockTransferMode.DB,
+                    instruction.condition()));
+            case VFP_STORE_MULTIPLE -> block.add(new IrOp.VfpMultipleTransfer(
+                    false,
+                    instruction.signedAccess(),
+                    instruction.sourceRegister(),
+                    instruction.immediate() & 0x3F,
+                    instruction.immediate() >>> 6,
+                    instruction.writeback(),
+                    instruction.blockTransferMode() == BlockTransferMode.DB,
+                    instruction.condition()));
+            case VFP_CORE_TRANSFER -> block.add(new IrOp.VfpCoreTransfer(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.condition()));
+            case VFP_CORE_PAIR_TRANSFER -> block.add(new IrOp.VfpCorePairTransfer(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_SYSTEM_TRANSFER -> block.add(new IrOp.VfpSystemTransfer(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.condition()));
             case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
@@ -426,6 +498,27 @@ public final class StandardIrBuilder implements IrBuilder {
     private static int signExtend(int value, int bits) {
         int shift = Integer.SIZE - bits;
         return (value << shift) >> shift;
+    }
+
+    /// `VFPExpandImm` (ARM DDI 0406C A7.5.1): expande o `imm8` de `VMOV.F32`/`VMOV.F64 Vd,#imm`
+    /// para os bits crus do imediato. Fórmula copiada de `vfp_expand_imm` do QEMU
+    /// (`target/arm/tcg/translate-vfp.c`) — bit 7 = sinal, bit 6 replicado no topo do campo de
+    /// expoente (5 bits para single, 8 para double), bits 5:0 completam o expoente/topo da
+    /// mantissa, resto zero. **Achado ao verificar contra o QEMU**: o vetor `31.0` do enunciado
+    /// desta task lista `imm8=0x4F`, mas `VFPExpandImm(0x4F,32)` resulta em `0x3E780000`
+    /// (≈0.2421875), não `31.0f`; `VFPExpandImm(0x3F,32)` é que resulta em `0x41F80000` (31.0f) —
+    /// aparenta ser uma transposição de dígito no enunciado (`0x4F`→`0x3F`); os testes usam `0x3F`,
+    /// verificado diretamente contra a fórmula do QEMU.
+    private static long vfpExpandImm(int imm8, boolean doublePrecision) {
+        boolean sign = (imm8 & 0x80) != 0;
+        boolean notBit6 = (imm8 & 0x40) == 0;
+        int low6 = imm8 & 0x3F;
+        if (doublePrecision) {
+            long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3fc0L) | low6;
+            return high16 << 48;
+        }
+        long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
+        return (high16 << 16) & 0xFFFF_FFFFL;
     }
 
     /// Converte os bits 7:5 do encoding de aritmética paralela ARMv6 na operação-base.
