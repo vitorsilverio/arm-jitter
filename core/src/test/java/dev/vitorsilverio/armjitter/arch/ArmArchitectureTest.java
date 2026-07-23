@@ -111,6 +111,55 @@ class ArmArchitectureTest {
         assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.THUMB2), "a base ARMV6K não pode ser mutada");
     }
 
+    /// B5.2: preset do ARM11 MPCore (3DS) — ARMv6K + VFPv2, sem Thumb-2.
+    @Test
+    void arm11MpCoreHasArmv6kFeaturesPlusVfpButNotThumb2() {
+        ArmArchitecture preset = ArmArchitecture.ARM11_MPCORE;
+        assertTrue(preset.has(ArmFeature.VFPV2));
+        assertTrue(preset.has(ArmFeature.BLX));
+        assertTrue(preset.has(ArmFeature.DSP_MULTIPLY));
+        for (ArmFeature feature : ARMV6_FEATURES) {
+            assertTrue(preset.has(feature), feature + " deve ser herdada de ARMv6K");
+        }
+        assertFalse(preset.has(ArmFeature.THUMB2), "MPCore do 3DS é ARMv6K, não ARMv6T2");
+        assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.VFPV2), "a base ARMV6K não pode ser mutada");
+    }
+
+    /// VFP decodifica (VADD.F32 S2,S0,S1 — mesmo vetor manual de `VfpDecoderTest#addSingleDecodesToVfpAlu`).
+    @Test
+    void arm11MpCoreDecodesVfpInstructions() {
+        int vaddS2S0S1 = 0xEE30_1A20;
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put32(0, vaddS2S0S1);
+        DecodedInstruction decoded = new ArmDecoder(ArmArchitecture.ARM11_MPCORE).decode(memory, 0);
+        assertEquals(InstructionKind.VFP_ALU, decoded.kind());
+    }
+
+    /// Sem `THUMB2`, `BL`/`BLX` imediato Thumb continua no comportamento legado de par (B2.6 não
+    /// ativa) — mesmos halfwords de `ThumbLongBranchDecoderTest#decodesThumbBlPrefixAndSuffix`.
+    @Test
+    void arm11MpCoreDecodesThumb32BlAsLegacyPrefixSuffixPairNotAsThumb2() {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put16(0, 0xF000);
+        memory.put16(2, 0xF801);
+        dev.vitorsilverio.armjitter.decoder.ThumbDecoder decoder =
+                new dev.vitorsilverio.armjitter.decoder.ThumbDecoder(ArmArchitecture.ARM11_MPCORE);
+
+        assertEquals(InstructionKind.LONG_BRANCH_PREFIX, decoder.decode(memory, 0).kind());
+        assertEquals(InstructionKind.LONG_BRANCH_SUFFIX, decoder.decode(memory, 2).kind());
+    }
+
+    /// CP15 continua no bus do hospedeiro: nenhuma extensão de coprocessador de sistema NOVA é
+    /// plugada por este preset além do `CoprocessorDecoder` já herdado de ARMv5TE (cobre CP10/11
+    /// VFP e deixa o restante do espaço de coprocessador em UNDEFINED controlado, igual a
+    /// qualquer outro preset sem MMU) mais o `VfpDecoder` — total 2, não 1 (ARMV6K) nem 3+.
+    @Test
+    void arm11MpCoreLeavesCp15OffTheDecoder() {
+        assertEquals(ArmArchitecture.ARMV6K.decoderExtensions().size() + 1,
+                ArmArchitecture.ARM11_MPCORE.decoderExtensions().size(),
+                "VfpDecoder soma 1 à extensão de CoprocessorDecoder já herdada; nenhuma extensão de CP15 nova");
+    }
+
     @Test
     void decoderExtensionHandlesEncodingsTheBaseDecoderRejects() {
         int raw = 0xEE00_0001; // espaço de coprocessador: UNIMPLEMENTED no decoder compartilhado

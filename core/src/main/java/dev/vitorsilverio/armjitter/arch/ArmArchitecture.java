@@ -150,6 +150,25 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
+    /// ARM11 MPCore do 3DS (2 cores compartilhando memória, B5.1 cobre o monitor de exclusividade
+    /// entre eles): ARMv6K + VFPv2. **Sem Thumb-2** — o MPCore do 3DS é ARMv6K, não ARMv6T2, então
+    /// `THUMB2` fica de fora e `ThumbDecoder` mantém o comportamento legado de par
+    /// `LONG_BRANCH_PREFIX`/`LONG_BRANCH_SUFFIX` para `BL`/`BLX` imediato (sem o fechamento de
+    /// instrução única da B2.6, que só ativa com a feature). CP15 (MMU/coprocessador de sistema)
+    /// não é modelado aqui — fica no bus do hospedeiro, como em qualquer preset (ver B4.1 para MMU).
+    /// Só as FEATURES existe separadamente pelo mesmo quebra-cabeça do ovo e da galinha de {@link
+    /// #ARMV6K_THUMB2_FEATURES}/{@link #ARMV7A_FEATURES}: {@link
+    /// dev.vitorsilverio.armjitter.decoder.VfpDecoder} recebe uma {@code ArmArchitecture} no
+    /// construtor (para gatear {@link ArmFeature#VFPV2} em tempo de decode) e {@code
+    /// ARM11_MPCORE} ainda não existe no ponto em que a extensão precisa ser construída.
+    private static final ArmArchitecture ARM11_MPCORE_FEATURES = extending(ARMV6K, "ARM11-MPCore",
+            ArmFeature.VFPV2);
+
+    public static final ArmArchitecture ARM11_MPCORE = ARM11_MPCORE_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARM11_MPCORE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
