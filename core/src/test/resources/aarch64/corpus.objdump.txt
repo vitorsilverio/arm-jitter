@@ -1,0 +1,46 @@
+
+corpus.o:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000000000000 <_start>:
+   0:	10000000 	adr	x0, 0 <_start>
+   4:	10000461 	adr	x1, 90 <label1>
+   8:	90000002 	adrp	x2, 0 <_start>
+   c:	90000003 	adrp	x3, 0 <_start>
+  10:	91048ca4 	add	x4, x5, #0x123
+  14:	91448ca4 	add	x4, x5, #0x123, lsl #12
+  18:	b10000e6 	adds	x6, x7, #0x0
+  1c:	910043ff 	add	sp, sp, #0x10
+  20:	d1001d28 	sub	x8, x9, #0x7
+  24:	f100056a 	subs	x10, x11, #0x1
+  28:	d10083ff 	sub	sp, sp, #0x20
+  2c:	110015ac 	add	w12, w13, #0x5
+  30:	3103fdee 	adds	w14, w15, #0xff
+  34:	d2824680 	mov	x0, #0x1234                	// #4660
+  38:	d2a24680 	mov	x0, #0x12340000            	// #305397760
+  3c:	d2c24680 	mov	x0, #0x123400000000        	// #20014547599360
+  40:	d2e24680 	mov	x0, #0x1234000000000000    	// #1311673391471656960
+  44:	929579a1 	mov	x1, #0xffffffffffff5432    	// #-43982
+  48:	f2aacf02 	movk	x2, #0x5678, lsl #16
+  4c:	52933323 	mov	w3, #0x9999                	// #39321
+  50:	d280003f 	mov	xzr, #0x1                   	// #1
+  54:	1400000f 	b	90 <label1>
+  58:	9400000e 	bl	90 <label1>
+  5c:	540001a0 	b.eq	90 <label1>  // b.none
+  60:	54000181 	b.ne	90 <label1>  // b.any
+  64:	5400016a 	b.ge	90 <label1>  // b.tcont
+  68:	b4000140 	cbz	x0, 90 <label1>
+  6c:	b5000120 	cbnz	x0, 90 <label1>
+  70:	34000101 	cbz	w1, 90 <label1>
+  74:	362800e2 	tbz	w2, #5, 90 <label1>
+  78:	b74000c2 	tbnz	x2, #40, 90 <label1>
+  7c:	d61f0120 	br	x9
+  80:	d63f0140 	blr	x10
+  84:	d65f03c0 	ret
+  88:	d65f0160 	ret	x11
+  8c:	d4024681 	svc	#0x1234
+
+0000000000000090 <label1>:
+  90:	d503201f 	nop
