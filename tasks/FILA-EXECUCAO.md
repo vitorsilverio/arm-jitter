@@ -81,6 +81,14 @@
   SWI/Coprocessor. Suítes arm-jitter + armbox + gbaemu + ndsemu verdes. Ver índice
   do `tasks/README.md` para os detalhes.
 
+- **B4.0.3** 🟡 PARCIAL (2026-07-24): `hello-thumb2.c` (bitfields/STRD/TBB/qsort, gcc real)
+  fechado + achou e corrigiu um bug REAL no arm-jitter (`ArmArchitecture.ARMV7A` decodificava
+  `UBFX`/`SBFX`/`RBIT`/`SDIV`/`UDIV`/`MLS` como UNDEFINED em encoding **Thumb-2**, mesmo com as
+  features certas no preset — decoders construídos com o objeto de features errado). Item 3
+  (busybox Thumb-2) NÃO fechado — precisa de um toolchain `arm-linux-*` real (musl/glibc), que
+  não existe neste ambiente (Windows/MSYS2 sem WSL configurado; devkitARM é bare-metal). Ver
+  índice do `tasks/README.md` para os detalhes.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
@@ -89,8 +97,7 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — próxima da fila (B7.5 fechou; ordem dentro do armbox é obrigatória) |
-| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
+| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 (softmmu/full-system, RFC-SOFTMMU) e B6.1+ (AArch64).
@@ -103,6 +110,7 @@ Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 | **A7** — revalidação native-image pós-A6 | `trilha-a-truffle/a7-native-image-revalidacao.md` | Máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC (`vcvars64.bat`) | **A8** (otimizações native-image) e **A9 PR2** |
 | **A9 PR1** — lib nativa `.dll`/`.so` com API C, backend interpretado | `trilha-a-truffle/a9-native-shared-library.md` | Mesmo ambiente GraalVM+MSVC (+ `cl.exe` p/ o smoke test em C); pode rodar a qualquer momento | A9 PR2 (após A7) |
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
+| **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 

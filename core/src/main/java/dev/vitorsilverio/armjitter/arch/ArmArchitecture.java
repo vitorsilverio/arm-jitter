@@ -120,6 +120,21 @@ public final class ArmArchitecture {
     /// deve vir ANTES de qualquer decoder de coprocessador genérico na ordem de registro,
     /// senão `Thumb2CoprocessorDecoder` captura o encoding CP10/11 primeiro).
     ///
+    /// **Bug real corrigido (achado por B4.0.3 no armbox, gcc real `-march=armv7-a -mthumb`
+    /// gerando `UBFX`/`SBFX` de um struct com bitfields)**: as 5 extensões de decoder
+    /// reaproveitadas de {@link #ARMV6K_THUMB2} recebiam `ARMV6K_THUMB2_FEATURES` no
+    /// construtor em vez de {@link #ARMV7A_FEATURES} — cada uma guarda a `ArmArchitecture`
+    /// passada ali para gatear feature em tempo de decode, então `BIT_FIELD`/`BIT_REVERSE`/
+    /// `MLS_MULTIPLY`/`DIVIDE` (só ligadas em `ARMV7A_FEATURES`) nunca eram vistas por
+    /// `Thumb2DataProcessingDecoder`/`Thumb2RegisterDataProcessingDecoder`/
+    /// `Thumb2MultiplyDecoder`, mesmo com o preset `ARMV7A` corretamente contendo essas
+    /// features — `UBFX`/`SBFX`/`RBIT`/`SDIV`/`UDIV`/`MLS` em encoding **Thumb-2** viravam
+    /// UNDEFINED (o carve-out ARM-mode equivalente em {@link
+    /// dev.vitorsilverio.armjitter.decoder.ArmDecoder} usa a `architecture` real passada a
+    /// cada chamada, não sofria o problema). Todas as 5 agora recebem `ARMV7A_FEATURES`
+    /// (superconjunto de `ARMV6K_THUMB2_FEATURES`, então zero-diff para as instruções que já
+    /// funcionavam).
+    ///
     /// **User-level only**: sem MMU/CP15-VMSA (páginas, TLB, modos privilegiados de
     /// sistema completo — isso é a task B4.1). **Sem NEON** (fora do escopo do épico B3,
     /// nenhum `IrOp`/decoder SIMD de 64/128 bits existe). `SDIV`/`UDIV` habilitados (nota
@@ -142,13 +157,13 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV7A_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
             .withThumb32DecoderExtensions(List.of(
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV6K_THUMB2_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV6K_THUMB2_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7A_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7A_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV7A_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7A_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV7A_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6K_THUMB2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7A_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
     /// ARM11 MPCore do 3DS (2 cores compartilhando memória, B5.1 cobre o monitor de exclusividade
