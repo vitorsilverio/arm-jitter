@@ -132,11 +132,22 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
+| P1 | **B6.3.1** — AArch64: logical immediate (`DecodeBitMasks`) + ALU registrador (shifted/extended) | `trilha-b-arquiteturas/b6.3.1-aarch64-logical-imm-alu-register.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente — só o aceite #2/busybox de B6.2 fica bloqueado, não bloqueia esta task) | especificada 2026-07-24 (rodada de spec que decompôs B6.3 em 4 sub-tasks); cria o dispatch novo de classe top-level "Data Processing — Register" do qual **B6.3.2** e **B6.3.3** dependem — próxima sub-task só entra na fila depois desta fechar |
 | P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
-(softmmu/full-system, RFC-SOFTMMU) e B6.3+ (AArch64 — escopo fechado no épico,
+(softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
 mas spec própria ainda não escrita; ver `b6-aarch64.md`).
+
+**B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec)**: **B6.3.1**
+entra na fila acima como P1 (não depende de nenhuma sub-task nova, só de B6.2).
+**B6.3.2** e **B6.3.3** dependem de B6.3.1 (reaproveitam o dispatch de "Data
+Processing — Register" que ela cria) — ficam registradas mas só entram na fila
+quando B6.3.1 fechar. **B6.3.4** (LDXR/LDAXR/STXR/STLXR + monitor) só depende
+de B6.2 — pode ser adiantada antes de B6.3.2/B6.3.3 se o usuário priorizar
+(não tem dependência funcional das outras 3), mas por ora fica registrada
+abaixo de B6.3.1 na ordem natural de leitura do épico. Ver `b6-aarch64.md` e
+os 4 arquivos de sub-task para o detalhe de cada uma.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 
@@ -147,7 +158,7 @@ mas spec própria ainda não escrita; ver `b6-aarch64.md`).
 | **A9 PR1** — lib nativa `.dll`/`.so` com API C, backend interpretado | `trilha-a-truffle/a9-native-shared-library.md` | Mesmo ambiente GraalVM+MSVC (+ `cl.exe` p/ o smoke test em C); pode rodar a qualquer momento | A9 PR2 (após A7) |
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
 | **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
-| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24) |
+| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24) **e também o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64") depois que as 4 sub-tasks B6.3.1-B6.3.4 fecharem — mesmo bloqueio, um só ambiente resolve os dois |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 

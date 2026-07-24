@@ -1,4 +1,5 @@
-# B6 — AArch64 (épico refinado: B6.1/B6.2 executáveis; B6.3+ escopo fechado)
+# B6 — AArch64 (épico refinado: B6.1/B6.2 executáveis; B6.3 decomposta em
+B6.3.1-B6.3.4; B6.4-B6.6 escopo fechado)
 
 **Trilha:** B · **Depende de:** B0 ✅ (RFC aprovada 2026-07-10: **Opção B** — IR-64
 paralelo + `Aarch64Core` irmão + `AddressSpace64`; ver `docs/RFC-IR-64BIT.md`) ·
@@ -6,6 +7,22 @@ paralelo + `Aarch64Core` irmão + `AddressSpace64`; ver `docs/RFC-IR-64BIT.md`) 
 **Refinada 2026-07-15**: B6.1 e B6.2 abaixo são executáveis diretamente. B6.3–B6.6
 têm escopo FECHADO mas ganham spec própria quando B6.2 concluir (a spec depende do
 esqueleto real existir; NÃO executar sem essa rodada — regra do tasks/README).
+**Refinada de novo 2026-07-24** (rodada de spec, sem código): B6.3 era grande
+demais para uma task só (misturava categorias de risco/tamanho bem diferentes —
+ver a tabela "Escopo fechado" abaixo, linha B6.3, que agora só referencia as 4
+sub-tasks concretas). Decomposta em
+[B6.3.1](b6.3.1-aarch64-logical-imm-alu-register.md) (logical immediate
+`DecodeBitMasks` + ALU shifted/extended register — cria o dispatch novo
+"Data Processing — Register" do qual as próximas duas dependem),
+[B6.3.2](b6.3.2-aarch64-csel-bitfield.md) (CSEL family + bitfield UBFM/SBFM/BFM,
+depende de B6.3.1),
+[B6.3.3](b6.3.3-aarch64-mul-div.md) (MUL/MADD/MSUB/SDIV/UDIV, depende de B6.3.1) e
+[B6.3.4](b6.3.4-aarch64-exclusive-monitor.md) (LDXR/LDAXR/STXR/STLXR + monitor de
+exclusividade A64, só depende de B6.2 — pode ser feita em paralelo/antes das
+outras 3 se a fila priorizar). Ver `tasks/README.md` para o status individual de
+cada uma e `tasks/FILA-EXECUCAO.md` para qual está na fila agora. B6.4-B6.6
+continuam como escopo fechado sem spec própria (entram quando B6.3 completo
+fechar).
 
 Meta honesta do épico: Linux arm64 user-mode (hello → busybox) → full-system depois.
 Android fora. ARMv8-A base, sem SVE/SVE2 (features futuras).
@@ -64,7 +81,11 @@ Aplicar a Opção B da RFC, literalmente:
 
 | Sub | Escopo (fixo) | Aceite |
 |-----|---------------|--------|
-| B6.3 | Base ISA inteira restante: logical imm (decode bitmask!), shifts/extends de registrador, CSEL/CSINC/CSINV/CSNEG, bitfield UBFM/SBFM/BFM + aliases, MUL/MADD/SDIV/UDIV, LDAXR/STLXR (monitor de B5.1 com endereço long — já previsto na RFC §5) | `busybox sh -c` completo no armbox64, zero divergência vs corpus |
+| ~~B6.3~~ | **DECOMPOSTA em 2026-07-24** (era grande demais para uma task só — 5 categorias de risco/tamanho bem diferentes misturadas). Escopo original ("Base ISA inteira restante: logical imm (decode bitmask!), shifts/extends de registrador, CSEL/CSINC/CSINV/CSNEG, bitfield UBFM/SBFM/BFM + aliases, MUL/MADD/SDIV/UDIV, LDAXR/STLXR") preservado por completo, só redistribuído nas 4 sub-tasks abaixo — nenhum item foi removido ou adicionado ao que estava fechado. | (herdado pelas 4 sub-tasks — o aceite agregado "`busybox sh -c` completo no armbox64, zero divergência vs corpus" só fecha quando as 4 fecharem E o bloqueio de toolchain/busybox arm64 registrado em `tasks/FILA-EXECUCAO.md` (🧑, mesmo bloqueio do aceite #2 de B6.2) for resolvido) |
+| [B6.3.1](b6.3.1-aarch64-logical-imm-alu-register.md) | Logical immediate (`DecodeBitMasks`, `AND`/`ORR`/`EOR`/`ANDS` imediato) + ALU shifted/extended register (`ADD`/`SUB`/`ADDS`/`SUBS`, as duas formas) — cria o dispatch novo de classe top-level "Data Processing — Register" do qual B6.3.2/B6.3.3 dependem | corpus + property test do `DecodeBitMasks` passando; suíte verde |
+| [B6.3.2](b6.3.2-aarch64-csel-bitfield.md) | `CSEL`/`CSINC`/`CSINV`/`CSNEG` (+ aliases `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG`) + `UBFM`/`SBFM`/`BFM` (+ aliases `UBFX`/`SBFX`/`BFI`/`BFXIL`/`LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) | corpus cobrindo os aliases citados; suíte verde |
+| [B6.3.3](b6.3.3-aarch64-mul-div.md) | `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | corpus + testes de divisor-zero/overflow; suíte verde |
+| [B6.3.4](b6.3.4-aarch64-exclusive-monitor.md) | `LDXR`/`LDAXR`/`STXR`/`STLXR` (encoding único, as 4 mnemônicas — ver D0 da sub-task) + `Aarch64ExclusiveMonitor` novo (sibling do monitor de B1.4/B5.1, endereço `long` já previsto na RFC §5) | corpus + testes espelhando B1.4; suíte verde |
 | B6.4 | Backend ASM 64-bit: `GuestToHostMapper` com locals `long` (2 slots), cache/tiers/chaining reusados | harness de equivalência A64 (novo `BlockEquivalenceHarness64`), busybox ≥3× interpretador |
 | B6.5 | FP/SIMD escalar mínimo (FMOV/FADD/FMUL/FDIV/FCMP/FCVT — o que a libc usa) | binários musl com printf de float |
 | B6.6 | MMU v8 (VMSA64, 4KiB granule, EL0/EL1) + hospedeiro `virt64` | kernel arm64 mínimo até shell (reusar aprendizado de B4.1) |
