@@ -1,5 +1,5 @@
 
-corpus.o:     file format elf64-littleaarch64
+corpus2.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -44,3 +44,38 @@ Disassembly of section .text:
 
 0000000000000090 <label1>:
   90:	d503201f 	nop
+  94:	f94000a4 	ldr	x4, [x5]
+  98:	f94008a4 	ldr	x4, [x5, #16]
+  9c:	f90008a4 	str	x4, [x5, #16]
+  a0:	b94008a4 	ldr	w4, [x5, #8]
+  a4:	394004a4 	ldrb	w4, [x5, #1]
+  a8:	794004a4 	ldrh	w4, [x5, #2]
+  ac:	398000a4 	ldrsb	x4, [x5]
+  b0:	39c000a4 	ldrsb	w4, [x5]
+  b4:	798000a4 	ldrsh	x4, [x5]
+  b8:	79c000a4 	ldrsh	w4, [x5]
+  bc:	b98000a4 	ldrsw	x4, [x5]
+  c0:	f85f80a4 	ldur	x4, [x5, #-8]
+  c4:	f81f80a4 	stur	x4, [x5, #-8]
+  c8:	b85fc0a4 	ldur	w4, [x5, #-4]
+  cc:	f8408ca4 	ldr	x4, [x5, #8]!
+  d0:	f8008ca4 	str	x4, [x5, #8]!
+  d4:	f84084a4 	ldr	x4, [x5], #8
+  d8:	f80084a4 	str	x4, [x5], #8
+  dc:	384014a4 	ldrb	w4, [x5], #1
+  e0:	f86668a4 	ldr	x4, [x5, x6]
+  e4:	f86678a4 	ldr	x4, [x5, x6, lsl #3]
+  e8:	f866c8a4 	ldr	x4, [x5, w6, sxtw]
+  ec:	f866d8a4 	ldr	x4, [x5, w6, sxtw #3]
+  f0:	f866f8a4 	ldr	x4, [x5, x6, sxtx #3]
+  f4:	b86658a4 	ldr	w4, [x5, w6, uxtw #2]
+  f8:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+  fc:	a8c17bfd 	ldp	x29, x30, [sp], #16
+ 100:	a90107e0 	stp	x0, x1, [sp, #16]
+ 104:	294107e0 	ldp	w0, w1, [sp, #8]
+ 108:	a9c107e0 	ldp	x0, x1, [sp, #16]!
+ 10c:	a88107e0 	stp	x0, x1, [sp], #16
+ 110:	58000027 	ldr	x7, 114 <litlabel>
+
+0000000000000114 <litlabel>:
+ 114:	d503201f 	nop

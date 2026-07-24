@@ -1,9 +1,12 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -307,5 +310,268 @@ class Aarch64DecoderCorpusTest {
         // O nop no offset 0x90 (label1) é uma "hint" do grupo System instructions — fora da
         // fatia B6.1 (não é ADR/ADD/MOVZ/branch/SVC).
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x90));
+    }
+
+    // ── B6.2: loads/stores (offsets 0x94+, apêndice do mesmo corpus.s/objdump.txt) ──────────
+
+    @Test
+    void ldrXUnsignedOffset() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x94);
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertFalse(op.signExtend());
+        assertTrue(op.wide());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(0L, op.immediate());
+    }
+
+    @Test
+    void ldrXUnsignedOffsetScaledBy8() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x98);
+        assertEquals(16L, op.immediate(), "imm12=2 escalado por 8 (tamanho X)");
+    }
+
+    @Test
+    void strXUnsignedOffset() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x9c);
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertTrue(op.wide());
+        assertEquals(16L, op.immediate());
+    }
+
+    @Test
+    void ldrW32Bit() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa0);
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertFalse(op.wide());
+        assertFalse(op.signExtend());
+        assertEquals(8L, op.immediate(), "imm12=2 escalado por 4 (tamanho W)");
+    }
+
+    @Test
+    void ldrbZeroExtend() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa4);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertFalse(op.signExtend());
+        assertFalse(op.wide());
+        assertEquals(1L, op.immediate());
+    }
+
+    @Test
+    void ldrhZeroExtend() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa8);
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertFalse(op.signExtend());
+        assertEquals(2L, op.immediate());
+    }
+
+    @Test
+    void ldrsbSignExtendToX() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xac);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldrsbSignExtendToW() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb0);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertTrue(op.signExtend());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldrshSignExtendToX() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb4);
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldrshSignExtendToW() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb8);
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertTrue(op.signExtend());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldrswSignExtendToXOnly() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xbc);
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldurUnscaledNegativeOffset() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xc0);
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(-8L, op.immediate(), "LDUR/STUR: imm9 cru, sem escala");
+    }
+
+    @Test
+    void sturUnscaledNegativeOffset() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xc4);
+        assertEquals(-8L, op.immediate());
+    }
+
+    @Test
+    void ldurWordUnscaled() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xc8);
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertEquals(-4L, op.immediate());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void ldrPreIndex() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xcc);
+        assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    @Test
+    void strPreIndex() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xd0);
+        assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    @Test
+    void ldrPostIndex() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xd4);
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    @Test
+    void strPostIndex() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xd8);
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    @Test
+    void ldrbPostIndexByte() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xdc);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(1L, op.immediate());
+    }
+
+    @Test
+    void ldrRegisterOffsetPlainLsl() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe0);
+        assertEquals(Ir64AddressingMode.REGISTER_OFFSET, op.addressingMode());
+        assertEquals(6, op.rm());
+        assertEquals(Ir64ExtendType.LSL, op.extendType());
+        assertEquals(0, op.shiftAmount());
+    }
+
+    @Test
+    void ldrRegisterOffsetLsl3() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe4);
+        assertEquals(Ir64ExtendType.LSL, op.extendType());
+        assertEquals(3, op.shiftAmount());
+    }
+
+    @Test
+    void ldrRegisterOffsetSxtwNoShift() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe8);
+        assertEquals(Ir64ExtendType.SXTW, op.extendType());
+        assertEquals(0, op.shiftAmount());
+    }
+
+    @Test
+    void ldrRegisterOffsetSxtwShift3() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xec);
+        assertEquals(Ir64ExtendType.SXTW, op.extendType());
+        assertEquals(3, op.shiftAmount());
+    }
+
+    @Test
+    void ldrRegisterOffsetSxtxShift3() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xf0);
+        assertEquals(Ir64ExtendType.SXTX, op.extendType());
+        assertEquals(3, op.shiftAmount());
+    }
+
+    @Test
+    void ldrWordRegisterOffsetUxtwShift2() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xf4);
+        assertFalse(op.wide());
+        assertEquals(Ir64ExtendType.UXTW, op.extendType());
+        assertEquals(2, op.shiftAmount());
+    }
+
+    @Test
+    void stpPreIndexDoubleword() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0xf8);
+        assertFalse(op.load());
+        assertEquals(29, op.rt());
+        assertEquals(30, op.rt2());
+        assertEquals(31, op.rn());
+        assertTrue(op.wide());
+        assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
+        assertEquals(-16L, op.immediate());
+    }
+
+    @Test
+    void ldpPostIndexDoubleword() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0xfc);
+        assertTrue(op.load());
+        assertEquals(29, op.rt());
+        assertEquals(30, op.rt2());
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(16L, op.immediate());
+    }
+
+    @Test
+    void stpSignedOffset() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x100);
+        assertFalse(op.load());
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rt2());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(16L, op.immediate());
+    }
+
+    @Test
+    void ldpWordSignedOffset() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x104);
+        assertTrue(op.load());
+        assertFalse(op.wide());
+        assertEquals(8L, op.immediate(), "imm7=2 escalado por 4 (par de 32 bits)");
+    }
+
+    @Test
+    void ldpPreIndexDoubleword() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x108);
+        assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
+        assertEquals(16L, op.immediate());
+    }
+
+    @Test
+    void stpPostIndexDoubleword() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x10c);
+        assertFalse(op.load());
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(16L, op.immediate());
+    }
+
+    @Test
+    void ldrLiteralResolvesAbsoluteAddress() {
+        Ir64Op.LoadLiteral64 op = (Ir64Op.LoadLiteral64) DECODER.decode(memory, 0x110);
+        assertEquals(7, op.rt());
+        assertEquals(0x114L, op.address(), "instructionAddress(0x110) + imm19*4 -> litlabel(0x114)");
+        assertTrue(op.wide());
+        assertFalse(op.signExtend());
     }
 }

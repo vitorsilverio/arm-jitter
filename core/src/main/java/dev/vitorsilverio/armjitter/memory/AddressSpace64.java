@@ -28,6 +28,23 @@ public interface AddressSpace64 {
     /// Escreve os 32 bits de `value` no endereço informado.
     void write32(long address, int value);
 
+    /// Lê uma doubleword de 64 bits no endereço informado. Padrão: composição little-endian de
+    /// duas {@link #read32} (mesma técnica usada pelo par de words do transfer de dupla precisão
+    /// VFP no mundo de 32 bits) — nenhum implementador de {@link AddressSpace64} precisa
+    /// sobrescrever isto, mas pode fazê-lo por performance.
+    default long read64(long address) {
+        long low = Integer.toUnsignedLong(read32(address));
+        long high = Integer.toUnsignedLong(read32(address + Integer.BYTES));
+        return low | (high << Integer.SIZE);
+    }
+
+    /// Escreve uma doubleword de 64 bits no endereço informado. Padrão: composição little-endian
+    /// de duas {@link #write32} — ver {@link #read64}.
+    default void write64(long address, long value) {
+        write32(address, (int) value);
+        write32(address + Integer.BYTES, (int) (value >>> Integer.SIZE));
+    }
+
     /// Retorna ciclos extras para um acesso de memória. Padrão `0` (mesma convenção conservadora
     /// de {@link AddressSpace#accessCycles}).
     default int accessCycles(long address, int sizeBytes, MemoryAccessType type) {

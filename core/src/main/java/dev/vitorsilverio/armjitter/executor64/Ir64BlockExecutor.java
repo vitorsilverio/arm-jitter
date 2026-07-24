@@ -2,6 +2,9 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
+import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
+import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 
@@ -20,6 +23,14 @@ public final class Ir64BlockExecutor {
     private static final int CYCLES_PER_INSTRUCTION = 1;
     /// Deslocamento em bytes do registrador X30 (link register) usado por `BL`/`BLR`.
     private static final int LINK_REGISTER = 30;
+    /// Índice de encoding (`Rn`=`31`) do registrador BASE de qualquer load/store — sempre `SP`,
+    /// nunca `XZR` (convenção arquitetural do A64, resolvida aqui e não no decoder — ver
+    /// {@link Ir64Op.Load64#rn} javadoc).
+    private static final int BASE_REGISTER_SP_ENCODING = 31;
+    /// Deslocamento em bytes entre os dois slots de um `LDP`/`STP` de 64 bits.
+    private static final int PAIR_DOUBLEWORD_STRIDE_BYTES = 8;
+    /// Deslocamento em bytes entre os dois slots de um `LDP`/`STP` de 32 bits.
+    private static final int PAIR_WORD_STRIDE_BYTES = 4;
 
     private final Aarch64Decoder decoder = new Aarch64Decoder();
 
@@ -71,6 +82,10 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.BRANCH64 -> executeBranch(core, (Ir64Op.Branch64) op);
             case Ir64Op.Kind.COMPARE_BRANCH64 -> executeCompareBranch(core, (Ir64Op.CompareBranch64) op);
             case Ir64Op.Kind.SVC -> executeSvc(core, (Ir64Op.Svc) op);
+            case Ir64Op.Kind.LOAD64 -> executeLoad(core, (Ir64Op.Load64) op);
+            case Ir64Op.Kind.STORE64 -> executeStore(core, (Ir64Op.Store64) op);
+            case Ir64Op.Kind.LOAD_STORE_PAIR -> executeLoadStorePair(core, (Ir64Op.LoadStorePair) op);
+            case Ir64Op.Kind.LOAD_LITERAL64 -> executeLoadLiteral(core, (Ir64Op.LoadLiteral64) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -155,6 +170,130 @@ public final class Ir64BlockExecutor {
     private boolean executeSvc(Aarch64Core core, Ir64Op.Svc op) {
         core.svcHandler().handle(core, op.immediate());
         return false;
+    }
+
+    private boolean executeLoad(Aarch64Core core, Ir64Op.Load64 op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
+                op.rm(), op.extendType(), op.shiftAmount());
+        long raw = readMemory(core, address, op.size());
+        long value = op.signExtend() ? signExtendFromSize(raw, op.size()) : raw;
+        core.setXForWidth(op.rt(), value, op.wide());
+        writeback(core, op.rn(), op.addressingMode(), base, op.immediate());
+        return false;
+    }
+
+    private boolean executeStore(Aarch64Core core, Ir64Op.Store64 op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
+                op.rm(), op.extendType(), op.shiftAmount());
+        long value = core.xForWidth(op.rt(), op.wide());
+        writeMemory(core, address, op.size(), value);
+        writeback(core, op.rn(), op.addressingMode(), base, op.immediate());
+        return false;
+    }
+
+    private boolean executeLoadStorePair(Aarch64Core core, Ir64Op.LoadStorePair op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = op.addressingMode() == Ir64AddressingMode.POST_INDEX
+                ? base : base + op.immediate();
+        int stride = op.wide() ? PAIR_DOUBLEWORD_STRIDE_BYTES : PAIR_WORD_STRIDE_BYTES;
+        Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+        if (op.load()) {
+            long first = readMemory(core, address, size);
+            long second = readMemory(core, address + stride, size);
+            core.setXForWidth(op.rt(), first, op.wide());
+            core.setXForWidth(op.rt2(), second, op.wide());
+        } else {
+            writeMemory(core, address, size, core.xForWidth(op.rt(), op.wide()));
+            writeMemory(core, address + stride, size, core.xForWidth(op.rt2(), op.wide()));
+        }
+        if (op.addressingMode() == Ir64AddressingMode.PRE_INDEX
+                || op.addressingMode() == Ir64AddressingMode.POST_INDEX) {
+            writeBaseRegister(core, op.rn(), base + op.immediate());
+        }
+        return false;
+    }
+
+    private boolean executeLoadLiteral(Aarch64Core core, Ir64Op.LoadLiteral64 op) {
+        long value;
+        if (op.signExtend()) {
+            // LDRSW (literal): única forma com sinal — sempre lê 32 bits e estende para X.
+            value = (long) (int) Integer.toUnsignedLong(core.memory().read32(op.address()));
+        } else if (op.wide()) {
+            value = core.memory().read64(op.address());
+        } else {
+            value = Integer.toUnsignedLong(core.memory().read32(op.address()));
+        }
+        core.setX(op.rt(), value);
+        return false;
+    }
+
+    /// Lê o registrador BASE de um load/store — sempre `SP` quando o campo de encoding é `31`
+    /// (nunca `XZR`, ver {@link Ir64Op.Load64#rn}).
+    private static long readBaseRegister(Aarch64Core core, int rn) {
+        return rn == BASE_REGISTER_SP_ENCODING ? core.sp() : core.x(rn);
+    }
+
+    private static void writeBaseRegister(Aarch64Core core, int rn, long value) {
+        if (rn == BASE_REGISTER_SP_ENCODING) {
+            core.setSp(value);
+        } else {
+            core.setX(rn, value);
+        }
+    }
+
+    private static long transferAddress(Aarch64Core core, long base, Ir64AddressingMode mode,
+            long immediate, int rm, Ir64ExtendType extendType, int shiftAmount) {
+        return switch (mode) {
+            case OFFSET, PRE_INDEX -> base + immediate;
+            case POST_INDEX -> base;
+            case REGISTER_OFFSET -> base + extendRegisterOffset(core, rm, extendType, shiftAmount);
+        };
+    }
+
+    private static long extendRegisterOffset(Aarch64Core core, int rm, Ir64ExtendType extendType, int shiftAmount) {
+        long extended = switch (extendType) {
+            case UXTW -> core.xForWidth(rm, false);
+            case SXTW -> (long) (int) core.xForWidth(rm, false);
+            case LSL, SXTX -> core.x(rm);
+        };
+        return extended << shiftAmount;
+    }
+
+    private static void writeback(Aarch64Core core, int rn, Ir64AddressingMode mode, long base, long immediate) {
+        if (mode == Ir64AddressingMode.PRE_INDEX || mode == Ir64AddressingMode.POST_INDEX) {
+            writeBaseRegister(core, rn, base + immediate);
+        }
+    }
+
+    private static long readMemory(Aarch64Core core, long address, Ir64MemSize size) {
+        return switch (size) {
+            case BYTE -> Byte.toUnsignedLong((byte) core.memory().read8(address));
+            case HALF -> Short.toUnsignedLong((short) core.memory().read16(address));
+            case WORD -> Integer.toUnsignedLong(core.memory().read32(address));
+            case DOUBLEWORD -> core.memory().read64(address);
+        };
+    }
+
+    private static void writeMemory(Aarch64Core core, long address, Ir64MemSize size, long value) {
+        switch (size) {
+            case BYTE -> core.memory().write8(address, (int) value);
+            case HALF -> core.memory().write16(address, (int) value);
+            case WORD -> core.memory().write32(address, (int) value);
+            case DOUBLEWORD -> core.memory().write64(address, value);
+        }
+    }
+
+    /// Estende o sinal de um valor já lido (zero-estendido pela largura de {@code size}) para os
+    /// 64 bits completos — usado por `LDRSB`/`LDRSH`/`LDRSW`.
+    private static long signExtendFromSize(long zeroExtended, Ir64MemSize size) {
+        return switch (size) {
+            case BYTE -> (long) (byte) zeroExtended;
+            case HALF -> (long) (short) zeroExtended;
+            case WORD -> (long) (int) zeroExtended;
+            case DOUBLEWORD -> zeroExtended;
+        };
     }
 
     private void executeFetch(Aarch64Core core, Ir64Op.Fetch op) {

@@ -1,24 +1,30 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
-/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1: só os grupos
-/// `data-processing immediate` (`ADD`/`SUB` imediato, `MOVZ`/`MOVN`/`MOVK`, `ADR`/`ADRP`) e
+/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2: os grupos
+/// `data-processing immediate` (`ADD`/`SUB` imediato, `MOVZ`/`MOVN`/`MOVK`, `ADR`/`ADRP`),
 /// `branches/exception/system` (`B`/`BL`/`B.cond`/`CBZ`/`CBNZ`/`TBZ`/`TBNZ`/`BR`/`BLR`/`RET`/
-/// `SVC`) — ver `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1. Todos os campos de bit abaixo
-/// foram verificados byte a byte contra a saída real de `aarch64-none-elf-as`/`objdump`
-/// (devkitA64) — ver o corpus versionado em `src/test/resources/aarch64/corpus.s`.
+/// `SVC`) e `loads and stores` de registrador geral (`LDR`/`STR`/`LDUR`/`STUR`/`LDP`/`STP`/`LDR
+/// (literal)`, tamanhos B/H/W/X + sign-extend, pre/post-index, registrador+extend) — ver
+/// `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1/§B6.2. Todos os campos de bit abaixo foram
+/// verificados byte a byte contra a saída real de `aarch64-none-elf-as`/`objdump` (devkitA64) —
+/// ver o corpus versionado em `src/test/resources/aarch64/corpus.s`.
 ///
 /// `logical immediate`, `bitfield`, `extract` (mesma classe `Data Processing Immediate`),
-/// loads/stores, data-processing register e SIMD/FP ficam FORA desta fatia (B6.2/B6.3) — qualquer
-/// encoding fora do escopo listado lança {@link UnsupportedOperationException} em vez de tentar
-/// adivinhar semântica (nenhum oráculo real cobre o que não foi implementado).
+/// load/store exclusivo e atômico, load/store de registrador SIMD&FP (`V=1`) e data-processing
+/// register/SIMD&FP ficam FORA desta fatia (B6.3+) — qualquer encoding fora do escopo listado
+/// lança {@link UnsupportedOperationException} em vez de tentar adivinhar semântica (nenhum
+/// oráculo real cobre o que não foi implementado).
 public final class Aarch64Decoder {
     // ── Classe top-level (ARM DDI 0487 C4.1): prefixo fixo de 3 bits em bits[28:26] (o 4º bit
     // do op0 nominal do manual, bit25, é wildcard dentro da classe e tratado nos sub-decoders) ─
@@ -130,6 +136,80 @@ public final class Aarch64Decoder {
     private static final int EXCEPTION_GEN_LOW5_MASK = 0b1_1111;
     private static final int EXCEPTION_GEN_SVC_LOW5_FIXED = 0b0_0001;
 
+    // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
+    private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
+    private static final int LOAD_STORE_CLASS_BIT25_SHIFT = 25;
+    private static final int VECTOR_FORM_BIT_SHIFT = 26; // V: SIMD&FP em vez de registrador geral
+    private static final int LOAD_STORE_SUBCLASS_SHIFT = 28;
+    private static final int LOAD_STORE_SUBCLASS_MASK = 0b11;
+    private static final int SUBCLASS_EXCLUSIVE_ATOMIC = 0b00;
+    private static final int SUBCLASS_LITERAL = 0b01;
+    private static final int SUBCLASS_PAIR = 0b10;
+    private static final int SUBCLASS_SINGLE = 0b11;
+
+    // ── LDR (literal): opc(31:30) 011 V 00 imm19(23:5) Rt(4:0) ──────────────────────────────
+    private static final int LITERAL_OPC_SHIFT = 30;
+    private static final int LITERAL_OPC_MASK = 0b11;
+    private static final int LITERAL_OPC_32BIT = 0b00;
+    private static final int LITERAL_OPC_64BIT = 0b01;
+    private static final int LITERAL_OPC_LDRSW = 0b10;
+    private static final int LITERAL_IMM19_SHIFT = 5;
+    private static final int LITERAL_IMM19_BITS = 19;
+    private static final int LITERAL_BYTES_PER_UNIT = 4;
+
+    // ── LDP/STP: opc(31:30) 101 V(26) addrMode(24:23) L(22) imm7(21:15) Rt2(14:10) Rn(9:5) ───
+    // ── Rt(4:0) ──────────────────────────────────────────────────────────────────────────────
+    private static final int PAIR_OPC_SHIFT = 30;
+    private static final int PAIR_OPC_MASK = 0b11;
+    private static final int PAIR_OPC_32BIT = 0b00;
+    private static final int PAIR_OPC_64BIT = 0b10;
+    private static final int PAIR_ADDR_MODE_SHIFT = 23;
+    private static final int PAIR_ADDR_MODE_MASK = 0b11;
+    private static final int PAIR_ADDR_MODE_OFFSET = 0b10;
+    private static final int PAIR_ADDR_MODE_POST_INDEX = 0b01;
+    private static final int PAIR_ADDR_MODE_PRE_INDEX = 0b11;
+    private static final int PAIR_LOAD_BIT_SHIFT = 22;
+    private static final int PAIR_IMM7_SHIFT = 15;
+    private static final int PAIR_IMM7_BITS = 7;
+    private static final int PAIR_RT2_SHIFT = 10;
+    private static final int PAIR_WORD_SCALE_BYTES = 4;
+    private static final int PAIR_DOUBLEWORD_SCALE_BYTES = 8;
+
+    // ── LDR/STR/LDUR/STUR (registrador geral): size(31:30) 111 V 0 opc(23:22) ... ───────────
+    private static final int SINGLE_SIZE_SHIFT = 30;
+    private static final int SINGLE_SIZE_MASK = 0b11;
+    private static final int SIZE_BYTE = 0b00;
+    private static final int SIZE_HALF = 0b01;
+    private static final int SIZE_WORD = 0b10;
+    private static final int SIZE_DOUBLEWORD = 0b11;
+    private static final int SINGLE_OPC_SHIFT = 22;
+    private static final int SINGLE_OPC_MASK = 0b11;
+    private static final int OPC_STORE = 0b00;
+    private static final int OPC_LOAD_ZERO_EXTEND = 0b01;
+    private static final int OPC_LOAD_SIGN_EXTEND_TO_X = 0b10;
+    private static final int OPC_LOAD_SIGN_EXTEND_TO_W = 0b11;
+    /// Bit24 = 1 na forma "unsigned offset" (imediato de 12 bits escalado); 0 nas formas
+    /// unscaled/pre-index/post-index/registrador (distintas então por {@link #SINGLE_IDX_SHIFT}).
+    private static final int SINGLE_SCALED_OFFSET_BIT_SHIFT = 24;
+    private static final int SINGLE_IMM12_SHIFT = 10;
+    private static final int SINGLE_IMM12_MASK = 0xFFF;
+    private static final int SINGLE_IDX_SHIFT = 10;
+    private static final int SINGLE_IDX_MASK = 0b11;
+    private static final int IDX_UNSCALED = 0b00;
+    private static final int IDX_POST_INDEX = 0b01;
+    private static final int IDX_REGISTER_OFFSET = 0b10;
+    private static final int IDX_PRE_INDEX = 0b11;
+    private static final int SINGLE_IMM9_SHIFT = 12;
+    private static final int SINGLE_IMM9_BITS = 9;
+    private static final int SINGLE_RM_SHIFT = 16;
+    private static final int SINGLE_OPTION_SHIFT = 13;
+    private static final int SINGLE_OPTION_MASK = 0b111;
+    private static final int OPTION_UXTW = 0b010;
+    private static final int OPTION_LSL = 0b011;
+    private static final int OPTION_SXTW = 0b110;
+    private static final int OPTION_SXTX = 0b111;
+    private static final int SINGLE_SHIFT_FLAG_SHIFT = 12;
+
     private static final int INSTRUCTION_SIZE_BYTES = 4;
     private static final int BYTES_PER_BRANCH_UNIT = 4;
 
@@ -141,12 +221,167 @@ public final class Aarch64Decoder {
     /// @throws UnsupportedOperationException quando o encoding está fora da fatia B6.1
     public Ir64Op decode(AddressSpace64 memory, long address) {
         int word = memory.read32(address);
+        // Loads and Stores (`x1x0`): bit27 fixo=1 e bit25 fixo=0 — único jeito de distinguir
+        // esta classe do prefixo de 3 bits usado pelas outras (bit28 e bit26 são livres aqui,
+        // então não cabe no switch de 3 bits abaixo sem risco de colisão com Data Processing
+        // Register/SIMD&FP, que também têm bit27=1 mas bit25=1 — ver Aarch64Decoder javadoc).
+        if (isLoadsAndStoresClass(word)) {
+            return decodeLoadsAndStores(word, address);
+        }
         int topLevelClass = (word >>> TOP_LEVEL_CLASS_SHIFT) & TOP_LEVEL_CLASS_3BIT_MASK;
         return switch (topLevelClass) {
             case CLASS_DATA_PROCESSING_IMMEDIATE -> decodeDataProcessingImmediate(word, address);
             case CLASS_BRANCH_EXCEPTION_SYSTEM -> decodeBranchExceptionSystem(word, address);
             default -> throw unsupported(word, address);
         };
+    }
+
+    private static boolean isLoadsAndStoresClass(int word) {
+        boolean bit27Set = ((word >>> LOAD_STORE_CLASS_BIT27_SHIFT) & 1) != 0;
+        boolean bit25Clear = ((word >>> LOAD_STORE_CLASS_BIT25_SHIFT) & 1) == 0;
+        return bit27Set && bit25Clear;
+    }
+
+    private Ir64Op decodeLoadsAndStores(int word, long address) {
+        if (((word >>> VECTOR_FORM_BIT_SHIFT) & 1) != 0) {
+            // Load/store de registrador SIMD&FP (V=1): fora da fatia B6.2.
+            throw unsupported(word, address);
+        }
+        int subclass = (word >>> LOAD_STORE_SUBCLASS_SHIFT) & LOAD_STORE_SUBCLASS_MASK;
+        return switch (subclass) {
+            case SUBCLASS_LITERAL -> decodeLoadLiteral(word, address);
+            case SUBCLASS_PAIR -> decodeLoadStorePair(word, address);
+            case SUBCLASS_SINGLE -> decodeLoadStoreSingle(word, address);
+            // Load/store exclusivo e atômico (LDXR/STXR/CAS/LDAR/STLR...): fora da fatia B6.2.
+            case SUBCLASS_EXCLUSIVE_ATOMIC -> throw unsupported(word, address);
+            default -> throw new IllegalStateException("unreachable");
+        };
+    }
+
+    private Ir64Op decodeLoadLiteral(int word, long address) {
+        int opc = (word >>> LITERAL_OPC_SHIFT) & LITERAL_OPC_MASK;
+        boolean wide;
+        boolean signExtend;
+        switch (opc) {
+            case LITERAL_OPC_32BIT -> { wide = false; signExtend = false; }
+            case LITERAL_OPC_64BIT -> { wide = true; signExtend = false; }
+            case LITERAL_OPC_LDRSW -> { wide = true; signExtend = true; }
+            // PRFM (literal, opc=11): não escreve registrador, fora da fatia B6.2.
+            default -> throw unsupported(word, address);
+        }
+        long imm19 = (word >>> LITERAL_IMM19_SHIFT) & bitMask(LITERAL_IMM19_BITS);
+        long offset = signExtend(imm19, LITERAL_IMM19_BITS) * LITERAL_BYTES_PER_UNIT;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.LoadLiteral64(rt, address + offset, wide, signExtend);
+    }
+
+    private Ir64Op decodeLoadStorePair(int word, long address) {
+        int opc = (word >>> PAIR_OPC_SHIFT) & PAIR_OPC_MASK;
+        boolean wide;
+        if (opc == PAIR_OPC_64BIT) {
+            wide = true;
+        } else if (opc == PAIR_OPC_32BIT) {
+            wide = false;
+        } else {
+            // opc=01 (LDPSW, sem forma STP) e opc=11 (reservado): fora da fatia B6.2.
+            throw unsupported(word, address);
+        }
+        int addrModeField = (word >>> PAIR_ADDR_MODE_SHIFT) & PAIR_ADDR_MODE_MASK;
+        Ir64AddressingMode addressingMode = switch (addrModeField) {
+            case PAIR_ADDR_MODE_OFFSET -> Ir64AddressingMode.OFFSET;
+            case PAIR_ADDR_MODE_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case PAIR_ADDR_MODE_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw unsupported(word, address); // 00: reservado (STGP/etc., fora de escopo)
+        };
+        boolean load = ((word >>> PAIR_LOAD_BIT_SHIFT) & 1) != 0;
+        long imm7 = (word >>> PAIR_IMM7_SHIFT) & bitMask(PAIR_IMM7_BITS);
+        int scale = wide ? PAIR_DOUBLEWORD_SCALE_BYTES : PAIR_WORD_SCALE_BYTES;
+        long immediate = signExtend(imm7, PAIR_IMM7_BITS) * scale;
+        int rt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate);
+    }
+
+    private Ir64Op decodeLoadStoreSingle(int word, long address) {
+        int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
+        int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        SingleForm form = decodeSingleForm(sizeField, opcField, word, address);
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+
+        boolean scaledOffset = ((word >>> SINGLE_SCALED_OFFSET_BIT_SHIFT) & 1) != 0;
+        if (scaledOffset) {
+            int imm12 = (word >>> SINGLE_IMM12_SHIFT) & SINGLE_IMM12_MASK;
+            long immediate = (long) imm12 * form.size.bytes();
+            return buildSingle(form, rt, rn, Ir64AddressingMode.OFFSET, immediate, -1, null, 0);
+        }
+        int idx = (word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK;
+        if (idx == IDX_REGISTER_OFFSET) {
+            int rm = (word >>> SINGLE_RM_SHIFT) & REGISTER_FIELD_MASK;
+            int option = (word >>> SINGLE_OPTION_SHIFT) & SINGLE_OPTION_MASK;
+            Ir64ExtendType extendType = switch (option) {
+                case OPTION_UXTW -> Ir64ExtendType.UXTW;
+                case OPTION_LSL -> Ir64ExtendType.LSL;
+                case OPTION_SXTW -> Ir64ExtendType.SXTW;
+                case OPTION_SXTX -> Ir64ExtendType.SXTX;
+                default -> throw unsupported(word, address); // option reservado
+            };
+            boolean shiftFlag = ((word >>> SINGLE_SHIFT_FLAG_SHIFT) & 1) != 0;
+            int shiftAmount = shiftFlag ? form.size.log2Bytes() : 0;
+            return buildSingle(form, rt, rn, Ir64AddressingMode.REGISTER_OFFSET, 0, rm, extendType, shiftAmount);
+        }
+        Ir64AddressingMode addressingMode = switch (idx) {
+            case IDX_UNSCALED -> Ir64AddressingMode.OFFSET;
+            case IDX_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case IDX_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        int imm9 = (word >>> SINGLE_IMM9_SHIFT) & (int) bitMask(SINGLE_IMM9_BITS);
+        long immediate = signExtend(imm9, SINGLE_IMM9_BITS);
+        return buildSingle(form, rt, rn, addressingMode, immediate, -1, null, 0);
+    }
+
+    /// Resultado de `size`+`opc` já resolvidos em campos semânticos (`ARM DDI 0487 C4.1.3`,
+    /// tabela de `LDR`/`STR`/`LDRB`/`LDRSB`/... por `size`/`opc`) — compartilhado pelas 4 formas
+    /// de endereçamento de {@link #decodeLoadStoreSingle}.
+    private record SingleForm(Ir64MemSize size, boolean store, boolean signExtend, boolean wide) {
+    }
+
+    private SingleForm decodeSingleForm(int sizeField, int opcField, int word, long address) {
+        Ir64MemSize size = switch (sizeField) {
+            case SIZE_BYTE -> Ir64MemSize.BYTE;
+            case SIZE_HALF -> Ir64MemSize.HALF;
+            case SIZE_WORD -> Ir64MemSize.WORD;
+            case SIZE_DOUBLEWORD -> Ir64MemSize.DOUBLEWORD;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        if (sizeField == SIZE_WORD || sizeField == SIZE_DOUBLEWORD) {
+            // `WORD`: opc=11 reservado (GP) — só existe LDRSW (10), não LDRSW-para-W.
+            // `DOUBLEWORD`: opc=10/11 são a forma SIMD&FP de 128 bits, já excluída (V=0 aqui).
+            if ((sizeField == SIZE_WORD && opcField == OPC_LOAD_SIGN_EXTEND_TO_W)
+                    || (sizeField == SIZE_DOUBLEWORD
+                            && (opcField == OPC_LOAD_SIGN_EXTEND_TO_X || opcField == OPC_LOAD_SIGN_EXTEND_TO_W))) {
+                throw unsupported(word, address);
+            }
+        }
+        return switch (opcField) {
+            case OPC_STORE -> new SingleForm(size, true, false, size == Ir64MemSize.DOUBLEWORD);
+            case OPC_LOAD_ZERO_EXTEND -> new SingleForm(size, false, false, size == Ir64MemSize.DOUBLEWORD);
+            case OPC_LOAD_SIGN_EXTEND_TO_X -> new SingleForm(size, false, true, true);
+            case OPC_LOAD_SIGN_EXTEND_TO_W -> new SingleForm(size, false, true, false);
+            default -> throw new IllegalStateException("unreachable");
+        };
+    }
+
+    private Ir64Op buildSingle(SingleForm form, int rt, int rn, Ir64AddressingMode addressingMode,
+            long immediate, int rm, Ir64ExtendType extendType, int shiftAmount) {
+        if (form.store) {
+            return new Ir64Op.Store64(rt, rn, form.size, form.wide, addressingMode, immediate,
+                    rm, extendType, shiftAmount);
+        }
+        return new Ir64Op.Load64(rt, rn, form.size, form.signExtend, form.wide, addressingMode,
+                immediate, rm, extendType, shiftAmount);
     }
 
     private Ir64Op decodeDataProcessingImmediate(int word, long address) {

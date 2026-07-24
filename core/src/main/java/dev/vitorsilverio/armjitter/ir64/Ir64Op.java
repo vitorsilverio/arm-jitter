@@ -23,7 +23,8 @@ package dev.vitorsilverio.armjitter.ir64;
 /// EXECUTOR ({@code Ir64BlockExecutor}), nunca no decoder.
 public sealed interface Ir64Op permits
         Ir64Op.Alu64, Ir64Op.MoveWide, Ir64Op.PcRelative, Ir64Op.Branch64, Ir64Op.CompareBranch64,
-        Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch {
+        Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
+        Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -43,6 +44,10 @@ public sealed interface Ir64Op permits
         public static final int SVC = 5;
         public static final int CYCLE = 6;
         public static final int FETCH = 7;
+        public static final int LOAD64 = 8;
+        public static final int STORE64 = 9;
+        public static final int LOAD_STORE_PAIR = 10;
+        public static final int LOAD_LITERAL64 = 11;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -195,5 +200,118 @@ public sealed interface Ir64Op permits
             /// resto do executor).
             int sizeBytes) implements Ir64Op {
         @Override public int kind() { return Kind.FETCH; }
+    }
+
+    /// `LDR`/`LDRB`/`LDRH`/`LDRSB`/`LDRSH`/`LDRSW` de registrador geral (`ARM DDI 0487 C4.1.3`,
+    /// classe `x1x0`, `V=0`) — cobre as 4 formas de endereçamento de
+    /// {@link Ir64AddressingMode} exceto {@link Ir64AddressingMode#REGISTER_OFFSET}, que usa
+    /// {@link #rm}/{@link #extendType}/{@link #shiftAmount} em vez de {@link #immediate}. `Rn` é
+    /// SEMPRE `Rn|SP` (nunca `XZR`, indistintamente do encoding — convenção arquitetural do A64
+    /// para o registrador BASE de qualquer load/store, resolvida direto no EXECUTOR); `Rt` segue
+    /// a convenção normal (`31` = `XZR`, descarta a escrita).
+    record Load64(
+            /// Registrador de destino (índice `0`-`31`; `31` é `XZR`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`, nunca `XZR` — ver acima).
+            int rn,
+            /// Tamanho da transferência de memória (pode ser menor que o registrador de destino
+            /// nas formas com sinal).
+            Ir64MemSize size,
+            /// `true` para `LDRSB`/`LDRSH`/`LDRSW` (estende o sinal do valor lido); `false` para
+            /// `LDR`/`LDRB`/`LDRH` (zero-estende).
+            boolean signExtend,
+            /// Largura do registrador de destino: `true`=`X`, `false`=`W` (irrelevante para o
+            /// zero-extend — escrever em `W` já zera os 32 bits altos por conta própria).
+            boolean wide,
+            /// Modo de endereçamento.
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes, válido para {@link Ir64AddressingMode#OFFSET}/
+            /// {@link Ir64AddressingMode#PRE_INDEX}/{@link Ir64AddressingMode#POST_INDEX}
+            /// (já normalizado pelo decoder — escalado pelo tamanho na forma "unsigned offset",
+            /// cru nas formas `LDUR`/pre/post-index); `0` em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
+            long immediate,
+            /// Registrador de deslocamento (índice `0`-`31`; `31`=`XZR`), válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `-1` nas demais formas.
+            int rm,
+            /// Extensão aplicada a {@link #rm}, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `null` nas demais formas.
+            Ir64ExtendType extendType,
+            /// Quantidade de deslocamento aplicada após a extensão (`0` ou `size.log2Bytes()`),
+            /// válido só em {@link Ir64AddressingMode#REGISTER_OFFSET}.
+            int shiftAmount) implements Ir64Op {
+        @Override public int kind() { return Kind.LOAD64; }
+    }
+
+    /// `STR`/`STRB`/`STRH` de registrador geral — mesmo formato de {@link Load64} sem
+    /// {@link Load64#signExtend} (armazenamento nunca estende sinal).
+    record Store64(
+            /// Registrador de origem (índice `0`-`31`; `31` é `XZR`, escreve `0`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP` — ver {@link Load64#rn}).
+            int rn,
+            /// Tamanho da transferência de memória.
+            Ir64MemSize size,
+            /// Largura do registrador de origem: `true`=`X`, `false`=`W`.
+            boolean wide,
+            /// Modo de endereçamento.
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes — ver {@link Load64#immediate}.
+            long immediate,
+            /// Registrador de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `-1` nas demais formas.
+            int rm,
+            /// Extensão de {@link #rm}, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `null` nas demais formas.
+            Ir64ExtendType extendType,
+            /// Quantidade de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
+            int shiftAmount) implements Ir64Op {
+        @Override public int kind() { return Kind.STORE64; }
+    }
+
+    /// `LDP`/`STP` (`ARM DDI 0487 C6.2.126/337`) — o idioma de prólogo/epílogo de qualquer
+    /// binário A64 real (ver Armadilhas do épico). Só as 3 formas de endereçamento SEM registrador
+    /// (não existe `LDP`/`STP` com deslocamento por registrador). Ambos os registradores (`Rt`/
+    /// `Rt2`) seguem a convenção normal (`31`=`XZR`); `Rn` é SEMPRE `SP` (ver {@link Load64#rn}).
+    record LoadStorePair(
+            /// `true` para `LDP`, `false` para `STP`.
+            boolean load,
+            /// Primeiro registrador transferido (índice `0`-`31`; `31`=`XZR`).
+            int rt,
+            /// Segundo registrador transferido (índice `0`-`31`; `31`=`XZR`).
+            int rt2,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// `true` para o par de 64 bits (`X`, cada slot de memória tem 8 bytes); `false` para
+            /// o par de 32 bits (`W`, 4 bytes cada).
+            boolean wide,
+            /// Modo de endereçamento (`OFFSET`/`PRE_INDEX`/`POST_INDEX` — nunca
+            /// `REGISTER_OFFSET`).
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes, já escalado pelo decoder (`imm7` × `4` ou `× 8`
+            /// conforme {@link #wide}).
+            long immediate) implements Ir64Op {
+        @Override public int kind() { return Kind.LOAD_STORE_PAIR; }
+    }
+
+    /// `LDR (literal)`/`LDRSW (literal)` (`ARM DDI 0487 C6.2.121/134`): carrega um valor de um
+    /// endereço relativo ao PC da própria instrução — usado pelo idioma de "literal pool" que
+    /// compiladores A64 emitem para constantes grandes. O decoder já resolveu o endereço absoluto
+    /// (mesma convenção de {@link PcRelative#instructionAddress} — sem viés `+8`, o PC de uma
+    /// instrução A64 é o próprio endereço dela).
+    record LoadLiteral64(
+            /// Registrador de destino (índice `0`-`31`; `31`=`XZR`).
+            int rt,
+            /// Endereço absoluto já resolvido (`instructionAddress + signExtend(imm19) * 4`).
+            long address,
+            /// `true` para carregar 64 bits (`X`) inteiros; `false` para 32 bits (`W`,
+            /// zero-estendido). Irrelevante quando {@link #signExtend} (a única forma com sinal,
+            /// `LDRSW`, sempre lê 32 bits da memória e escreve em `X`).
+            boolean wide,
+            /// `true` só para `LDRSW (literal)` — lê uma palavra de 32 bits e estende o sinal
+            /// para os 64 bits do destino.
+            boolean signExtend) implements Ir64Op {
+        @Override public int kind() { return Kind.LOAD_LITERAL64; }
     }
 }

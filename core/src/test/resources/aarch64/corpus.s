@@ -39,3 +39,37 @@ ret x11
 svc #0x1234
 label1:
 nop
+ldr x4, [x5]
+ldr x4, [x5, #16]
+str x4, [x5, #16]
+ldr w4, [x5, #8]
+ldrb w4, [x5, #1]
+ldrh w4, [x5, #2]
+ldrsb x4, [x5]
+ldrsb w4, [x5]
+ldrsh x4, [x5]
+ldrsh w4, [x5]
+ldrsw x4, [x5]
+ldur x4, [x5, #-8]
+stur x4, [x5, #-8]
+ldur w4, [x5, #-4]
+ldr x4, [x5, #8]!
+str x4, [x5, #8]!
+ldr x4, [x5], #8
+str x4, [x5], #8
+ldrb w4, [x5], #1
+ldr x4, [x5, x6]
+ldr x4, [x5, x6, lsl #3]
+ldr x4, [x5, w6, sxtw]
+ldr x4, [x5, w6, sxtw #3]
+ldr x4, [x5, x6, sxtx #3]
+ldr w4, [x5, w6, uxtw #2]
+stp x29, x30, [sp, #-16]!
+ldp x29, x30, [sp], #16
+stp x0, x1, [sp, #16]
+ldp w0, w1, [sp, #8]
+ldp x0, x1, [sp, #16]!
+stp x0, x1, [sp], #16
+ldr x7, litlabel
+litlabel:
+nop

@@ -140,4 +140,246 @@ class Ir64BlockExecutorTest {
         new Ir64BlockExecutor().step(core);
         assertEquals(0x200L, core.pc());
     }
+
+    // ── B6.2: loads/stores ──────────────────────────────────────────────────────────────────
+
+    @Test
+    void strThenLdrDoublewordUnsignedOffsetRoundTrip() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 8); // base
+        core.setX(2, 0x1122_3344_5566_7788L);
+        putWord(core, 0, 0xf9000422); // str x2, [x1, #8]
+        putWord(core, 4, 0xf9400423); // ldr x3, [x1, #8]
+
+        new Ir64BlockExecutor().run(core, 2);
+
+        assertEquals(0x1122_3344_5566_7788L, core.x(3));
+    }
+
+    @Test
+    void ldrsbSignExtendsByteToX() {
+        Aarch64Core core = newCore(32);
+        core.setX(1, 16); // longe do endereço da própria instrução (0), evita colisão
+        core.memory().write8(16, 0xFF); // -1 como byte
+        putWord(core, 0, 0x39800020); // ldrsb x0, [x1]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(0));
+    }
+
+    @Test
+    void ldrsbSignExtendsByteToWZeroesUpperBits() {
+        Aarch64Core core = newCore(32);
+        core.setX(1, 16);
+        core.memory().write8(16, 0xFF);
+        core.setX(0, 0xFFFF_FFFF_FFFF_FFFFL);
+        putWord(core, 0, 0x39c00020); // ldrsb w0, [x1]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x0000_0000_FFFF_FFFFL, core.x(0),
+                "LDRSB para W estende sinal para 32 bits e zera os 32 altos");
+    }
+
+    @Test
+    void ldrbZeroExtendsRegardlessOfHighBits() {
+        Aarch64Core core = newCore(32);
+        core.setX(1, 16);
+        core.memory().write8(16, 0xFF);
+        core.setX(0, 0xFFFF_FFFF_FFFF_FFFFL);
+        putWord(core, 0, 0x39400020); // ldrb w0, [x1]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xFFL, core.x(0), "LDRB zero-estende, nunca estende sinal");
+    }
+
+    @Test
+    void lduExpandStureUnscaledNegativeOffset() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 32);
+        core.setX(2, 0xABCDEF0123456789L);
+        putWord(core, 0, 0xf81f8022); // stur x2, [x1, #-8]
+        putWord(core, 4, 0xf85f8023); // ldur x3, [x1, #-8]
+
+        new Ir64BlockExecutor().run(core, 2);
+
+        assertEquals(0xABCDEF0123456789L, core.x(3));
+    }
+
+    @Test
+    void ldrPreIndexWritesBackAddress() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 8);
+        core.memory().write64(16, 0x1234L);
+        putWord(core, 0, 0xf8408c20); // ldr x0, [x1, #8]!
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1234L, core.x(0));
+        assertEquals(16L, core.x(1), "pre-index escreve o endereço final de volta em Rn");
+    }
+
+    @Test
+    void ldrPostIndexUsesOldAddressThenWritesBack() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 8);
+        core.memory().write64(8, 0x5678L);
+        putWord(core, 0, 0xf8408420); // ldr x0, [x1], #8
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x5678L, core.x(0), "post-index transfere no endereço ANTIGO de Rn");
+        assertEquals(16L, core.x(1), "post-index escreve Rn+imm depois da transferência");
+    }
+
+    @Test
+    void ldrRegisterOffsetPlainNoExtend() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 8);
+        core.setX(2, 16);
+        core.memory().write64(24, 0x9999L);
+        putWord(core, 0, 0xf8626820); // ldr x0, [x1, x2]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x9999L, core.x(0));
+    }
+
+    @Test
+    void ldrRegisterOffsetLsl3Scale() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 0);
+        core.setX(2, 2); // 2 << 3 = 16
+        core.memory().write64(16, 0x7777L);
+        putWord(core, 0, 0xf8627820); // ldr x0, [x1, x2, lsl #3]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x7777L, core.x(0));
+    }
+
+    @Test
+    void ldrRegisterOffsetSxtwSignExtendsNegative32BitIndex() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 32);
+        core.setX(2, 0xFFFF_FFFF_FFFF_FFFFL); // W2 = -1 (0xFFFFFFFF), sign-extended = -1 em X
+        core.memory().write64(24, 0x4242L); // 32 + (-1*8) = 24
+        putWord(core, 0, 0xf862d820); // ldr x0, [x1, w2, sxtw #3]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x4242L, core.x(0));
+    }
+
+    @Test
+    void ldrRegisterOffsetUxtwZeroExtendsIndex() {
+        Aarch64Core core = newCore(64);
+        core.setX(1, 0);
+        core.setX(2, 0xFFFF_FFFF_0000_0002L); // W2 = 2 (altos ignorados por UXTW)
+        core.memory().write32(8, 0x99887766); // 0 + (2<<2) = 8 (tamanho W, shift=2)
+        putWord(core, 0, 0xb8625820); // ldr w0, [x1, w2, uxtw #2]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x99887766L, core.x(0));
+    }
+
+    @Test
+    void stpPreIndexPrologueIdiom() {
+        Aarch64Core core = newCore(64);
+        core.setSp(32);
+        core.setX(29, 0x1111L);
+        core.setX(30, 0x2222L);
+        putWord(core, 0, 0xa9bf7bfd); // stp x29, x30, [sp, #-16]!
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(16L, core.sp(), "pre-index escreve sp-16 de volta em SP");
+        assertEquals(0x1111L, core.memory().read64(16));
+        assertEquals(0x2222L, core.memory().read64(24));
+    }
+
+    @Test
+    void ldpPostIndexEpilogueIdiom() {
+        Aarch64Core core = newCore(64);
+        core.setSp(16);
+        core.memory().write64(16, 0x1111L);
+        core.memory().write64(24, 0x2222L);
+        putWord(core, 0, 0xa8c17bfd); // ldp x29, x30, [sp], #16
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1111L, core.x(29));
+        assertEquals(0x2222L, core.x(30));
+        assertEquals(32L, core.sp(), "post-index escreve sp+16 de volta em SP");
+    }
+
+    @Test
+    void stpOffsetNoWriteback() {
+        Aarch64Core core = newCore(64);
+        core.setX(0, 100);
+        core.setX(1, 200);
+        core.setSp(0);
+        putWord(core, 0, 0xa90107e0); // stp x0, x1, [sp, #16]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(100L, core.memory().read64(16));
+        assertEquals(200L, core.memory().read64(24));
+        assertEquals(0L, core.sp(), "endereçamento OFFSET nunca escreve de volta em Rn");
+    }
+
+    @Test
+    void ldpWordPairRoundTrip() {
+        Aarch64Core core = newCore(64);
+        core.setSp(0);
+        core.memory().write32(8, 0x1234_5678);
+        core.memory().write32(12, 0x9ABC_DEF0);
+        putWord(core, 0, 0x294107e0); // ldp w0, w1, [sp, #8]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1234_5678L, core.x(0));
+        assertEquals(0x9ABC_DEF0L, core.x(1));
+    }
+
+    @Test
+    void ldrLiteralReadsAbsoluteAddress() {
+        Aarch64Core core = newCore(0x200);
+        core.memory().write64(0x114, 0x1234_5678_9ABC_DEF0L);
+        putWord(core, 0x110, 0x58000027); // ldr x7, litlabel (litlabel = 0x114)
+        core.setProgramCounter(0x110);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1234_5678_9ABC_DEF0L, core.x(7));
+    }
+
+    @Test
+    void ldrswLiteralSignExtendsWordToX() {
+        Aarch64Core core = newCore(0x40);
+        core.memory().write32(0x10, 0xFFFF_FFFF); // -1 como word
+        // ldrsw literal: opc=10, imm19 aponta para 0x10 a partir de address=0x00 (offset 4 words)
+        int imm19 = (0x10 - 0x00) / 4;
+        int word = (0b10 << 30) | (0b011 << 27) | (imm19 << 5) | 5; // Rt=5
+        putWord(core, 0, word);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(5));
+    }
+
+    @Test
+    void ldrXzrDestinationDiscardsLoadedValue() {
+        Aarch64Core core = newCore(32);
+        core.setX(1, 0);
+        core.memory().write64(0, 0xDEAD_BEEFL);
+        putWord(core, 0, 0xf940003f); // ldr xzr, [x1]
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0L, core.x(31));
+    }
 }
