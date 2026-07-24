@@ -143,5 +143,11 @@ public enum ArmFeature {
     /// `FAULTMASK`, via `CPSID f`/`CPSIE f` (B7.4). Presente só no preset `ARMV7M` — o ARMv6-M
     /// (Cortex-M0/M0+/M1) NÃO tem esses registradores (só `PRIMASK`), então o decoder trata esses
     /// SYSm/`CPS f` como UNDEFINED sem esta feature. Ver a task B7.4.
-    M_FAULT_MASKING
+    M_FAULT_MASKING,
+
+    // ---- B7.5 (fecha o épico B7) ----
+    /// `BKPT #imm` (ARMv5T+ em todo perfil — A/R e M). Ausente do {@code ARMV4T} (o ARM7TDMI do
+    /// GBA/NDS não tem BKPT — G2), presente em todos os demais presets. Sem esta feature o
+    /// encoding cai no `UNDEFINED` controlado de sempre (comportamento pré-B7.5, preservado).
+    BREAKPOINT
 }

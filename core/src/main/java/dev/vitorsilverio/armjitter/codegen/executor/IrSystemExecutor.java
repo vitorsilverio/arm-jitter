@@ -55,6 +55,19 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
+    /// incondicional, sem campo de condição em nenhum dos dois modos)
+    public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {
+        core.setProgramCounter(sequentialPc);
+        if (core.bkptDispatcher().canDispatch(bkpt.immediate())) {
+            CpuState next = core.bkptDispatcher().dispatch(bkpt.immediate(), core.toCpuState());
+            core.apply(next);
+        } else {
+            core.requestException(ArmException.UNDEFINED);
+        }
+        return true;
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação
     public boolean executeCoprocessor(ArmCore core, IrOp.Coprocessor cp) {
         if (!core.cpsr().evalCond(cp.condition())) {

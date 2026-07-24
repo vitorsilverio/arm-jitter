@@ -121,7 +121,11 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // que BRANCH já recebe, terminal independente do guard condicional.
             case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, UNIMPLEMENTED,
                     COPROCESSOR, RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT, TABLE_BRANCH,
-                    COMPARE_BRANCH_ZERO -> true;
+                    COMPARE_BRANCH_ZERO,
+                    // BKPT (B7.5): mesmo motivo de SWI — o BkptDispatcher do host pode alterar
+                    // registradores/PC (semihosting), e sem dispatcher vira UNDEFINED (troca de PC
+                    // pelo vetor de exceção). Termina o bloco como SWI/COPROCESSOR.
+                    BREAKPOINT -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,

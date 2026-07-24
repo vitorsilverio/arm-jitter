@@ -69,6 +69,17 @@
   `MProfileExceptionModel`, feature nova `M_FAULT_MASKING` gateando
   BASEPRI/FAULTMASK/`CPS f`, `ARMV6M` sem Thumb-2 largo e `ARMV7M` sem VFP;
   21 testes novos — ver índice do `tasks/README.md`. G5 verde nas 3 suítes).
+- **B7.5** ✅ (2026-07-23, **fecha o épico B7 por completo**) — armbox
+  `--machine=cortex-m` (`CortexMMachine`: flash/RAM/SCS fixos via `PagedAddressSpace`
+  C3, boot pela tabela de vetores) + semihosting novo no arm-jitter (`IrOp.Breakpoint`
+  + `BkptDispatcher`, decode Thumb `BKPT`, gated por `ArmFeature.BREAKPOINT`) +
+  firmware torture m0/m3 + `hello-cortexm.c` (gcc real, sem CRT). Achado de bug real
+  (categoria "+ arm-jitter só se sair bug"): `DivergenceCheckingCodeEmitter`
+  (`--check`) sempre criava o core scratch com `AProfileExceptionModel` default,
+  nunca com o `MProfileExceptionModel` real — corrigido tratando todo bloco como
+  oráculo-only (sem comparação por bloco) sob perfil M, mesmo precedente do
+  SWI/Coprocessor. Suítes arm-jitter + armbox + gbaemu + ndsemu verdes. Ver índice
+  do `tasks/README.md` para os detalhes.
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -78,8 +89,7 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| 4 | **B7.5** — armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | `trilha-b-arquiteturas/b7.5-runner-bare-metal.md` | armbox | B7.4 ✅ | próxima da cadeia Cortex-M (B7.4 fechada) |
-| P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — pode rodar em paralelo com a fila do arm-jitter |
+| P1 | **B4.0.3** — armbox: Thumb-2 de compilador real (gcc/busybox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox | B2.7 ✅ + B2.8 ✅ | **LIVRE JÁ** — próxima da fila (B7.5 fechou; ordem dentro do armbox é obrigatória) |
 | P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | corpus N3 (scripts shell reais) |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+

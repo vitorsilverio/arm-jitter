@@ -256,5 +256,10 @@ public enum InstructionKind {
     /// de um registrador ARM. `sourceRegister`=Rn, `immediate`=campo `SYSm` (a máscara de campos do
     /// encoding não é modelada — o próprio `SYSm` já decide o que a escrita afeta, ver
     /// `MProfileExceptionModel.writeSystemRegister`).
-    MPROFILE_MSR
+    MPROFILE_MSR,
+
+    /// `BKPT #imm` (B7.5, ARMv5T+): `immediate`=imediato de 8 (Thumb) ou 16 (ARM, não decodificado
+    /// ainda) bits, delegado ao `BkptDispatcher` do host (semihosting) via `IrOp.Breakpoint`. Sem
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#BREAKPOINT} cai no UNDEFINED de sempre.
+    BREAKPOINT
 }

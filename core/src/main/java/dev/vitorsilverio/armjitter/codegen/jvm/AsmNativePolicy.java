@@ -136,6 +136,9 @@ public final class AsmNativePolicy {
             // MRS/MSR SYSm do perfil M (B7.4): interpretado, nunca nativo — mesmo padrão de toda op
             // de sistema nova (delega ao MProfileExceptionModel via IrSystemExecutor).
             case IrOp.MProfileSystemRegister ignored -> false;
+            // BKPT (B7.5): depende do BkptDispatcher do host (semihosting) — mesmo padrão de
+            // IrOp.Swi/IrOp.Coprocessor, mas sem emissão nativa ainda (op nova e rara).
+            case IrOp.Breakpoint ignored -> false;
         };
     }
 

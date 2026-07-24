@@ -27,7 +27,8 @@ public final class ArmArchitecture {
             ArmFeature.MUL_PRESERVES_CARRY,
             ArmFeature.LDM_WRITEBACK_BASE_IN_LIST,
             ArmFeature.EMPTY_RLIST_NO_TRANSFER,
-            ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL)
+            ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL,
+            ArmFeature.BREAKPOINT)
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     /// ARM11 (MPCore/ARM1176) — 3DS principal e Raspberry Pi 1/Zero. ARMv5TE mais o conjunto
@@ -183,7 +184,8 @@ public final class ArmArchitecture {
     /// `WFI`/`WFE`/`SEV`; `MEMORY_BARRIERS`, as barreiras. Sem `M_FAULT_MASKING`: `BASEPRI`/
     /// `FAULTMASK` e `CPS f` viram UNDEFINED (v6-M só tem `PRIMASK`).
     private static final ArmArchitecture ARMV6M_FEATURES = of("ARMv6-M",
-            ArmFeature.THUMB2, ArmFeature.M_PROFILE, ArmFeature.WAIT_HINTS, ArmFeature.MEMORY_BARRIERS);
+            ArmFeature.THUMB2, ArmFeature.M_PROFILE, ArmFeature.WAIT_HINTS, ArmFeature.MEMORY_BARRIERS,
+            ArmFeature.BREAKPOINT);
 
     public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
             .withThumb32DecoderExtensions(List.of(

@@ -322,6 +322,17 @@ public final class ThumbDecoder implements InstructionDecoder {
             return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
         }
 
+        // `BKPT #imm8` (B7.5, ARM DDI 0406C A6.7): `1011 1110 imm8`. ARMv5T+; sem a feature cai
+        // no UNDEFINED de sempre (encoding nunca foi reconhecido antes desta task).
+        if ((raw & 0xFF00) == 0xBE00) {
+            if (!architecture.has(ArmFeature.BREAKPOINT)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int immediate = raw & 0xFF;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.BREAKPOINT, -1, -1, -1, immediate, false, false, false);
+        }
+
         if ((raw & 0xF000) == 0xD000 && (raw & 0x0F00) != 0x0F00) {
             Condition condition = ArmDecoder.decodeCondition((raw >>> 8) & 0xF);
             int offset = signExtend(raw & 0xFF, 8) << 1;

@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.CodegenBackend;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
@@ -32,9 +33,10 @@ import java.util.Objects;
 /// (inclusive seus próprios stores via espelho) sem poluir o load do oráculo, que então roda
 /// no core real pristino e dirige a trajetória. Usa {@link ArmCore#saveState}/{@link ArmCore#loadState}.
 ///
-/// Blocos com {@link IrOp.Swi} ou {@link IrOp.Coprocessor} são executados só pelo oráculo
-/// (sem comparação): dependem de colaboradores do host (SWI dispatcher, CP15) que o core
-/// scratch não replica; suas emissões ASM espelham o interpretador.
+/// Blocos com {@link IrOp.Swi}, {@link IrOp.Coprocessor} ou {@link IrOp.Breakpoint} (B7.5) são
+/// executados só pelo oráculo (sem comparação): dependem de colaboradores do host (SWI
+/// dispatcher, CP15, BKPT dispatcher) que o core scratch não replica; suas emissões ASM
+/// espelham o interpretador.
 public final class DivergenceCheckingCodeEmitter implements CodeEmitter {
     private final CodeEmitter reference;
     private final CodeEmitter candidate;
@@ -56,10 +58,22 @@ public final class DivergenceCheckingCodeEmitter implements CodeEmitter {
     public CompiledBlock emit(IrBlock block) {
         CompiledBlock referenceBlock = reference.emit(block);
         CompiledBlock candidateBlock = candidate.emit(block);
-        boolean hostDependent = usesHostCollaborators(block);
+        boolean hostDependentAlways = usesHostCollaborators(block);
         return core -> {
+            // Perfil M (B7.5): o core scratch abaixo SEMPRE nasce com `AProfileExceptionModel`
+            // (default do construtor de `ArmCore`) — nunca compartilha o `MProfileExceptionModel`
+            // real, que carrega estado mutável próprio (MSP/PSP sombra, pilha de exceções ativas,
+            // PRIMASK/CONTROL...) inacessível/não-isolável pelo candidato scratch. Sem este desvio,
+            // qualquer bloco que toque esse estado (BX/POP para EXC_RETURN, MRS/MSR SYSm, CPS,
+            // WFI) diverge por definição — não é um bug do candidato, é o scratch rodando com o
+            // modelo de exceção ERRADO. Mesma ideia de "depende de colaborador do host que o
+            // scratch não replica" do SWI/Coprocessor, aplicada ao core inteiro em vez de só ops
+            // pontuais: comparação PER-BLOCO sob perfil M fica para uma task futura que ensine
+            // `ensureScratch` a clonar o `MProfileExceptionModel` (savestate próprio, ainda
+            // inexistente) em vez de descartar a granularidade inteira.
+            boolean hostDependent = hostDependentAlways || core.exceptionModel() instanceof MProfileExceptionModel;
             if (hostDependent) {
-                return referenceBlock.execute(core); // sem comparação (SWI/CP15)
+                return referenceBlock.execute(core); // sem comparação (SWI/CP15/perfil M)
             }
             ensureScratch(core);
 
@@ -113,7 +127,7 @@ public final class DivergenceCheckingCodeEmitter implements CodeEmitter {
 
     private static boolean usesHostCollaborators(IrBlock block) {
         for (IrOp op : block.operations()) {
-            if (op instanceof IrOp.Swi || op instanceof IrOp.Coprocessor) {
+            if (op instanceof IrOp.Swi || op instanceof IrOp.Coprocessor || op instanceof IrOp.Breakpoint) {
                 return true;
             }
         }

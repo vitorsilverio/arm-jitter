@@ -53,6 +53,10 @@ public final class ArmCore {
     /// quando `false`, {@link #addMemoryCycles} retorna sem a chamada virtual por acesso.
     private final boolean memoryProvidesAccessCycles;
     private final SwiDispatcher swiDispatcher;
+    /// Dispatcher de `BKPT` (B7.5, semihosting) — mesmo padrão aditivo de {@link #coprocessorBus}:
+    /// vazio por padrão ({@link BkptDispatcher#empty()}), instalado pelo host via
+    /// {@link #setBkptDispatcher} sem exigir mudança de assinatura de construtor (G3).
+    private BkptDispatcher bkptDispatcher = BkptDispatcher.empty();
     private CoprocessorBus coprocessorBus = CoprocessorBus.none();
     private boolean highVectors;
     private final ArmInterpreter interpreter;
@@ -304,6 +308,17 @@ public final class ArmCore {
     /// Retorna o dispatcher de SWI configurado para o core.
     public SwiDispatcher swiDispatcher() {
         return swiDispatcher;
+    }
+
+    /// Retorna o dispatcher de `BKPT` (B7.5, semihosting). Padrão é {@link BkptDispatcher#empty()}
+    /// (nenhum imediato tratado — `BKPT` vira `UNDEFINED`) até que {@link #setBkptDispatcher} instale um.
+    public BkptDispatcher bkptDispatcher() {
+        return bkptDispatcher;
+    }
+
+    /// Instala o dispatcher de `BKPT` usado pelo host para semihosting (ex. armbox `--machine=cortex-m`).
+    public void setBkptDispatcher(BkptDispatcher bkptDispatcher) {
+        this.bkptDispatcher = Objects.requireNonNull(bkptDispatcher, "bkptDispatcher");
     }
 
     /// Retorna o barramento do coprocessador que atende `MCR`/`MRC` (ex. CP15 do ARM9). Padrão é
