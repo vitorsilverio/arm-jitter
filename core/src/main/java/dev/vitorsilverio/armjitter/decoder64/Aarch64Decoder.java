@@ -3,9 +3,11 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
@@ -13,22 +15,22 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
-/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1: os
-/// grupos `data-processing immediate` (`ADD`/`SUB`/`AND`/`ORR`/`EOR`/`ANDS` imediato, `MOVZ`/
-/// `MOVN`/`MOVK`, `ADR`/`ADRP`), `data-processing register` (`ADD`/`SUB`/`ADDS`/`SUBS` shifted e
-/// extended register — B6.3.1), `branches/exception/system` (`B`/`BL`/`B.cond`/`CBZ`/`CBNZ`/
-/// `TBZ`/`TBNZ`/`BR`/`BLR`/`RET`/`SVC`) e `loads and stores` de registrador geral (`LDR`/`STR`/
-/// `LDUR`/`STUR`/`LDP`/`STP`/`LDR (literal)`, tamanhos B/H/W/X + sign-extend, pre/post-index,
-/// registrador+extend) — ver `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1/§B6.2/§B6.3.
-/// Todos os campos de bit abaixo foram verificados byte a byte contra a saída real de
-/// `aarch64-none-elf-as`/`objdump` (devkitA64) — ver o corpus versionado em
-/// `src/test/resources/aarch64/corpus.s`.
+/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1 + B6.3.2:
+/// os grupos `data-processing immediate` (`ADD`/`SUB`/`AND`/`ORR`/`EOR`/`ANDS` imediato, `MOVZ`/
+/// `MOVN`/`MOVK`, `ADR`/`ADRP`, `SBFM`/`BFM`/`UBFM` — B6.3.2), `data-processing register` (`ADD`/
+/// `SUB`/`ADDS`/`SUBS` shifted e extended register — B6.3.1; `CSEL`/`CSINC`/`CSINV`/`CSNEG` —
+/// B6.3.2), `branches/exception/system` (`B`/`BL`/`B.cond`/`CBZ`/`CBNZ`/`TBZ`/`TBNZ`/`BR`/`BLR`/
+/// `RET`/`SVC`) e `loads and stores` de registrador geral (`LDR`/`STR`/`LDUR`/`STUR`/`LDP`/`STP`/
+/// `LDR (literal)`, tamanhos B/H/W/X + sign-extend, pre/post-index, registrador+extend) — ver
+/// `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1/§B6.2/§B6.3. Todos os campos de bit abaixo
+/// foram verificados byte a byte contra a saída real de `aarch64-none-elf-as`/`objdump`
+/// (devkitA64) — ver o corpus versionado em `src/test/resources/aarch64/corpus.s`.
 ///
-/// `bitfield`, `extract` (mesma classe `Data Processing Immediate`), `CSEL`/`2-source`/
-/// `3-source`/`Logical (shifted register)` (mesma classe `Data Processing Register` — só
-/// `Add/subtract` shifted/extended está implementado aqui, ver B6.3.2/B6.3.3), load/store
-/// exclusivo e atômico, load/store de registrador SIMD&FP (`V=1`) e data-processing SIMD&FP
-/// ficam FORA desta fatia (B6.3.2+) — qualquer encoding fora do escopo listado lança
+/// `Extract` (`EXTR`, mesmo subgrupo de `Bitfield` dentro de `Data Processing Immediate`),
+/// `2-source`/`3-source`/`Logical (shifted register)` (mesma classe `Data Processing Register` —
+/// só `Add/subtract` shifted/extended e `CSEL`/... estão implementados aqui, ver B6.3.3), load/
+/// store exclusivo e atômico, load/store de registrador SIMD&FP (`V=1`) e data-processing SIMD&FP
+/// ficam FORA desta fatia (B6.3.3+) — qualquer encoding fora do escopo listado lança
 /// {@link UnsupportedOperationException} em vez de tentar adivinhar semântica (nenhum oráculo
 /// real cobre o que não foi implementado).
 public final class Aarch64Decoder {
@@ -46,6 +48,7 @@ public final class Aarch64Decoder {
     private static final int SUBGROUP_24_23_MASK = 0b11;
     private static final int SUBGROUP_LOGICAL_IMMEDIATE = 0b00;
     private static final int SUBGROUP_MOVE_WIDE = 0b01;
+    private static final int SUBGROUP_BITFIELD = 0b10;
 
     // ── Logical (immediate): sf(31) opc(30:29) 100100(28:23) N(22) immr(21:16) imms(15:10) ────
     // ── Rn(9:5) Rd(4:0) ──────────────────────────────────────────────────────────────────────
@@ -271,6 +274,31 @@ public final class Aarch64Decoder {
     private static final int ADDSUB_EXTENDED_AMOUNT_MASK = 0b111;
     private static final int ADDSUB_EXTENDED_MAX_SHIFT_AMOUNT = 4;
 
+    // ── Conditional select (CSEL/CSINC/CSINV/CSNEG), subgrupo de Data Processing — Register ────
+    // ── (B6.3.2): sf(31) else_inv(30) 011010100(29:21) rm(20:16) cond(15:12) 0(11) ─────────────
+    // ── else_inc(10) rn(9:5) rd(4:0) — Fatos de referência #1 da task B6.3.2. ───────────────────
+    private static final int CSEL_FIXED_SHIFT = 21;
+    private static final int CSEL_FIXED_9BIT_MASK = 0b1_1111_1111;
+    private static final int CSEL_FIXED_PATTERN = 0b0_1101_0100;
+    private static final int CSEL_RESERVED_BIT11_MASK = 1 << 11;
+    private static final int CSEL_ELSE_INV_SHIFT = 30;
+    private static final int CSEL_COND_SHIFT = 12;
+    private static final int CSEL_ELSE_INC_SHIFT = 10;
+
+    // ── Bitfield (SBFM/BFM/UBFM), subgrupo `10` de Data Processing Immediate (B6.3.2): ─────────
+    // ── sf(31) opc(30:29) 100110(28:23) N(22) immr(21:16) imms(15:10) Rn(9:5) Rd(4:0) — MESMAS ──
+    // ── posições de bit de Logical (immediate), reaproveitadas com nomes próprios (G6). ─────────
+    private static final int BITFIELD_OPC_SHIFT = 29;
+    private static final int BITFIELD_OPC_MASK = 0b11;
+    private static final int BITFIELD_OPC_SBFM = 0b00;
+    private static final int BITFIELD_OPC_BFM = 0b01;
+    private static final int BITFIELD_OPC_UBFM = 0b10;
+    private static final int BITFIELD_OPC_RESERVED_EXTR = 0b11;
+    private static final int BITFIELD_N_SHIFT = 22;
+    private static final int BITFIELD_IMMR_SHIFT = 16;
+    private static final int BITFIELD_IMMS_SHIFT = 10;
+    private static final int BITFIELD_FIELD_MASK = 0b11_1111;
+
     private static final int INSTRUCTION_SIZE_BYTES = 4;
     private static final int BYTES_PER_BRANCH_UNIT = 4;
 
@@ -468,8 +496,41 @@ public final class Aarch64Decoder {
         if (subgroup == SUBGROUP_MOVE_WIDE) {
             return decodeMoveWide(word);
         }
-        // Bitfield (10) e Extract (11): fora da fatia B6.3.1 (B6.3.2).
+        if (subgroup == SUBGROUP_BITFIELD) {
+            return decodeBitfield(word, address);
+        }
+        // Extract (11, EXTR): fora do escopo fechado do épico B6 — ver Armadilhas da task B6.3.2.
         throw unsupported(word, address);
+    }
+
+    /// `SBFM`/`BFM`/`UBFM` (D2 da task B6.3.2): produz {@link Ir64Op.Bitfield} sempre a partir dos
+    /// campos crus `immr`/`imms` — nenhum dos 11 aliases do épico (`UBFX`/`SBFX`/`BFI`/`BFXIL`/
+    /// `LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) exige reconhecimento aqui, só valores
+    /// específicos desses campos que o assembler já resolveu (Fatos de referência #2 da task).
+    private Ir64Op decodeBitfield(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int opc = (word >>> BITFIELD_OPC_SHIFT) & BITFIELD_OPC_MASK;
+        if (opc == BITFIELD_OPC_RESERVED_EXTR) {
+            // opc=11 é EXTR (mesmo subgrupo, fora de escopo) — ver Armadilhas da task B6.3.2.
+            throw unsupported(word, address);
+        }
+        int n = (word >>> BITFIELD_N_SHIFT) & 1;
+        if (n != (wide ? 1 : 0)) {
+            // N deve ser igual a sf (mesma regra de Logical (immediate), Fatos de referência #2
+            // da task B6.3.1) — combinação contrária é UNDEFINED.
+            throw unsupported(word, address);
+        }
+        Ir64BitfieldOp opcode = switch (opc) {
+            case BITFIELD_OPC_SBFM -> Ir64BitfieldOp.SBFM;
+            case BITFIELD_OPC_BFM -> Ir64BitfieldOp.BFM;
+            case BITFIELD_OPC_UBFM -> Ir64BitfieldOp.UBFM;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        int immr = (word >>> BITFIELD_IMMR_SHIFT) & BITFIELD_FIELD_MASK;
+        int imms = (word >>> BITFIELD_IMMS_SHIFT) & BITFIELD_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Bitfield(opcode, rd, rn, immr, imms, wide);
     }
 
     private Ir64Op decodeLogicalImmediate(int word, long address) {
@@ -543,11 +604,10 @@ public final class Aarch64Decoder {
         return new Ir64Op.MoveWide(opcode, rd, imm16, shift, wide);
     }
 
-    /// Sub-dispatch da classe "Data Processing — Register" (D1 da task B6.3.1): esta task só
-    /// preenche `Add/subtract (shifted/extended register)`; `CSEL` (B6.3.2) e `2-source`/
-    /// `3-source` (B6.3.3) entram como `case`s adicionais aqui, adicionados por essas tasks
-    /// subsequentes. `Logical (shifted register)` fica fora do escopo fechado do épico B6 (não
-    /// implementar — ver a task).
+    /// Sub-dispatch da classe "Data Processing — Register" (D1 da task B6.3.1, estendido por
+    /// B6.3.2 com `CSEL`/`CSINC`/`CSINV`/`CSNEG`): `2-source`/`3-source` (B6.3.3) entram como
+    /// `case`s adicionais aqui, adicionados por essa task subsequente. `Logical (shifted
+    /// register)` fica fora do escopo fechado do épico B6 (não implementar — ver a task).
     private Ir64Op decodeDataProcessingRegister(int word, long address) {
         int addSubGroup = (word >>> ADDSUB_REGISTER_GROUP_SHIFT) & ADDSUB_REGISTER_GROUP_5BIT_MASK;
         if (addSubGroup == ADDSUB_REGISTER_GROUP_PATTERN) {
@@ -556,9 +616,39 @@ public final class Aarch64Decoder {
                     ? decodeAddSubExtendedRegister(word, address)
                     : decodeAddSubShiftedRegister(word, address);
         }
-        // CSEL/CSINC/CSINV/CSNEG (B6.3.2), 2-source/3-source: MADD/MSUB/SDIV/UDIV (B6.3.3),
-        // Logical (shifted register) (fora do escopo fechado do épico): fora da fatia B6.3.1.
+        int fixed9 = (word >>> CSEL_FIXED_SHIFT) & CSEL_FIXED_9BIT_MASK;
+        boolean reservedBit11Clear = (word & CSEL_RESERVED_BIT11_MASK) == 0;
+        if (fixed9 == CSEL_FIXED_PATTERN && reservedBit11Clear) {
+            return decodeConditionalSelect(word);
+        }
+        // 2-source/3-source: MADD/MSUB/SDIV/UDIV (B6.3.3), Logical (shifted register) (fora do
+        // escopo fechado do épico): fora da fatia B6.3.1/B6.3.2.
         throw unsupported(word, address);
+    }
+
+    /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (D1 da task B6.3.2) — o opcode é resolvido só pelos bits
+    /// `else_inv`(30)/`else_inc`(10), nunca reconhecido por alias (`CSET`/`CSETM`/`CINC`/`CINV`/
+    /// `CNEG` chegam aqui como o opcode real de 4 combinações, com `src1`/`src2` já coincidentes
+    /// ou `==31` e a condição já invertida pelo PRÓPRIO assembler — ver Fatos de referência #1).
+    private Ir64Op decodeConditionalSelect(int word) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean elseInv = ((word >>> CSEL_ELSE_INV_SHIFT) & 1) != 0;
+        boolean elseInc = ((word >>> CSEL_ELSE_INC_SHIFT) & 1) != 0;
+        Ir64ConditionalSelectOp opcode;
+        if (!elseInv && !elseInc) {
+            opcode = Ir64ConditionalSelectOp.CSEL;
+        } else if (!elseInv) {
+            opcode = Ir64ConditionalSelectOp.CSINC;
+        } else if (!elseInc) {
+            opcode = Ir64ConditionalSelectOp.CSINV;
+        } else {
+            opcode = Ir64ConditionalSelectOp.CSNEG;
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        Ir64Condition condition = Ir64Condition.decode((word >>> CSEL_COND_SHIFT) & COND_FIELD_MASK);
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.ConditionalSelect(opcode, rd, rn, rm, wide, condition);
     }
 
     private Ir64Op decodeAddSubShiftedRegister(int word, long address) {

@@ -105,3 +105,36 @@ adds x2, sp, x3, uxtx
 adds xzr, x1, x2, uxtx
 subs xzr, x1, x2, uxtx
 add w0, w1, w2, uxtb #2
+
+// ── B6.3.2: CSEL/CSINC/CSINV/CSNEG (+ aliases) + SBFM/UBFM/BFM (+ aliases) ────────────────
+csel x0, x1, x2, eq
+csinc x3, x4, x5, ne
+csinv x6, x7, x8, cs
+csneg x9, x10, x11, cc
+csel w20, w21, w22, gt
+cset x12, eq
+csetm x13, ne
+cinc x14, x15, eq
+cinv x16, x17, ne
+cneg x18, x19, eq
+
+sbfm x0, x1, #4, #10
+sbfm x2, x3, #10, #4
+ubfm x4, x5, #4, #10
+ubfm x6, x7, #10, #4
+bfm x8, x9, #4, #10
+bfm x10, x11, #10, #4
+
+lsl x12, x13, #5
+lsr x14, x15, #5
+asr x16, x17, #5
+ubfx x18, x19, #8, #16
+sbfx x20, x21, #8, #16
+bfi x22, x23, #8, #16
+bfxil x24, x25, #8, #16
+uxtb w26, w27
+uxth w28, w29
+sxtb x30, w0
+sxth x1, w2
+sxtw x3, w4
+csneg x25, x26, xzr, eq

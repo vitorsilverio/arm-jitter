@@ -1,5 +1,5 @@
 
-corpus2.o:     file format elf64-littleaarch64
+corpus_new.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -107,3 +107,32 @@ Disassembly of section .text:
  17c:	ab22603f 	cmn	x1, x2, uxtx
  180:	eb22603f 	cmp	x1, x2, uxtx
  184:	0b220820 	add	w0, w1, w2, uxtb #2
+ 188:	9a820020 	csel	x0, x1, x2, eq	// eq = none
+ 18c:	9a851483 	csinc	x3, x4, x5, ne	// ne = any
+ 190:	da8820e6 	csinv	x6, x7, x8, cs	// cs = hs, nlast
+ 194:	da8b3549 	csneg	x9, x10, x11, cc	// cc = lo, ul, last
+ 198:	1a96c2b4 	csel	w20, w21, w22, gt
+ 19c:	9a9f17ec 	cset	x12, eq	// eq = none
+ 1a0:	da9f03ed 	csetm	x13, ne	// ne = any
+ 1a4:	9a8f15ee 	cinc	x14, x15, eq	// eq = none
+ 1a8:	da910230 	cinv	x16, x17, ne	// ne = any
+ 1ac:	da931672 	cneg	x18, x19, eq	// eq = none
+ 1b0:	93442820 	sbfx	x0, x1, #4, #7
+ 1b4:	934a1062 	sbfiz	x2, x3, #54, #5
+ 1b8:	d34428a4 	ubfx	x4, x5, #4, #7
+ 1bc:	d34a10e6 	ubfiz	x6, x7, #54, #5
+ 1c0:	b3442928 	bfxil	x8, x9, #4, #7
+ 1c4:	b34a116a 	bfi	x10, x11, #54, #5
+ 1c8:	d37be9ac 	lsl	x12, x13, #5
+ 1cc:	d345fdee 	lsr	x14, x15, #5
+ 1d0:	9345fe30 	asr	x16, x17, #5
+ 1d4:	d3485e72 	ubfx	x18, x19, #8, #16
+ 1d8:	93485eb4 	sbfx	x20, x21, #8, #16
+ 1dc:	b3783ef6 	bfi	x22, x23, #8, #16
+ 1e0:	b3485f38 	bfxil	x24, x25, #8, #16
+ 1e4:	53001f7a 	uxtb	w26, w27
+ 1e8:	53003fbc 	uxth	w28, w29
+ 1ec:	93401c1e 	sxtb	x30, w0
+ 1f0:	93403c41 	sxth	x1, w2
+ 1f4:	93407c83 	sxtw	x3, w4
+ 1f8:	da9f0759 	csneg	x25, x26, xzr, eq	// eq = none

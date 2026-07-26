@@ -25,7 +25,7 @@ public sealed interface Ir64Op permits
         Ir64Op.Alu64, Ir64Op.MoveWide, Ir64Op.PcRelative, Ir64Op.Branch64, Ir64Op.CompareBranch64,
         Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
-        Ir64Op.AluExtendedRegister {
+        Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -51,6 +51,8 @@ public sealed interface Ir64Op permits
         public static final int LOAD_LITERAL64 = 11;
         public static final int ALU_SHIFTED_REGISTER = 12;
         public static final int ALU_EXTENDED_REGISTER = 13;
+        public static final int CONDITIONAL_SELECT = 14;
+        public static final int BITFIELD = 15;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -387,5 +389,63 @@ public sealed interface Ir64Op permits
             /// sempre `Rd` normal/`XZR`, nunca `SP` — mesma regra de {@link Alu64#dstIsStackPointer}).
             boolean dstIsStackPointer) implements Ir64Op {
         @Override public int kind() { return Kind.ALU_EXTENDED_REGISTER; }
+    }
+
+    /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (`ARM DDI 0487 C6.2.34-37`, B6.3.2) — a única família de A64
+    /// que consome uma condição de 4 bits fora de `B.cond`. **Nunca afeta `NZCV`** (só LÊ os flags
+    /// para avaliar {@link #condition}, diferente de {@link Alu64}/{@link AluShiftedRegister}/
+    /// {@link AluExtendedRegister} com `setFlags`). `Rd`/`Rn`/`Rm` NUNCA são `SP` (`cpu_reg`, nunca
+    /// `cpu_reg_sp` no QEMU) — por isso não há campos `dstIsStackPointer`/`src1IsStackPointer`
+    /// aqui, seriam sempre `false`. Os aliases `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG` (`ARM DDI 0487
+    /// C6.2`, tabela de aliases) não têm representação própria — são o MESMO op com `src1==src2`
+    /// (ou `==XZR`) e a condição já invertida pelo assembler; nada aqui precisa saber disso (ver
+    /// Armadilhas da task: nenhum atalho de `CSET`/`CSETM` no executor).
+    record ConditionalSelect(
+            /// Sub-operação (`CSEL`/`CSINC`/`CSINV`/`CSNEG`).
+            Ir64ConditionalSelectOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Registrador copiado quando {@link #condition} é verdadeira (`Rn`, índice `0`-`31`;
+            /// `31` é sempre `XZR`).
+            int src1,
+            /// Registrador-base do "senão" (`Rm`, índice `0`-`31`; `31` é sempre `XZR`) —
+            /// transformado por {@link #opcode} (identidade/`+1`/`~`/`-`) quando {@link #condition}
+            /// é falsa.
+            int src2,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide,
+            /// Condição avaliada contra `PSTATE.{N,Z,C,V}` para escolher entre {@link #src1} e
+            /// `f(`{@link #src2}`)`.
+            Ir64Condition condition) implements Ir64Op {
+        @Override public int kind() { return Kind.CONDITIONAL_SELECT; }
+    }
+
+    /// `SBFM`/`BFM`/`UBFM` (`ARM DDI 0487 C6.2`, B6.3.2) — extração/inserção de campo de bits.
+    /// Cobre de graça os 11 aliases do épico (`UBFX`/`SBFX`/`BFI`/`BFXIL`/`LSL`/`LSR`/`ASR`/
+    /// `UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`, ver Fatos de referência #2 da task): todos são o MESMO
+    /// encoding com valores específicos de {@link #immr}/{@link #imms} — o decoder NUNCA precisa
+    /// reconhecer o alias, só produzir este record a partir dos campos crus.
+    ///
+    /// **Decisão explícita (D2 da task): {@link #immr}/{@link #imms} ficam CRUS no IR**, sem
+    /// pré-cálculo de `pos`/`len` pelo decoder — o cálculo depende de `bitsize` (32 vs 64, já
+    /// disponível via {@link #wide} no executor), e auditar o executor contra o pseudocódigo do
+    /// manual/QEMU é mais direto com os MESMOS nomes de campo que a fonte usa.
+    record Bitfield(
+            /// Sub-operação (`SBFM`/`BFM`/`UBFM`).
+            Ir64BitfieldOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR` — bitfield não tem
+            /// forma `SP`).
+            int dst,
+            /// Registrador de origem (índice `0`-`31`; `31` é sempre `XZR`).
+            int src,
+            /// Campo `immr` cru do encoding (`0`-`63`, mas só `0`-`31` é válido quando
+            /// {@code !wide}).
+            int immr,
+            /// Campo `imms` cru do encoding (`0`-`63`, mesma restrição de {@link #immr}).
+            int imms,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.BITFIELD; }
     }
 }

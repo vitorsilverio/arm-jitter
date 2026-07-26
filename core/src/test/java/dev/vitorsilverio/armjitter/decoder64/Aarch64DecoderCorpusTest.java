@@ -3,9 +3,11 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
@@ -890,6 +892,346 @@ class Aarch64DecoderCorpusTest {
         // sa > 4 é UNDEFINED (Fatos de referência #5) — campo tem 3 bits (cabe até 7), mas 5-7
         // são reservados; construído à mão, sem assembly válido correspondente.
         int word = 0x8b220020 | (5 << 10); // pega "add x0,x1,w2,uxtb" e força sa=5
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B6.3.2: CSEL/CSINC/CSINV/CSNEG (+ aliases) — offsets 0x188+ ────────────────────────────
+
+    @Test
+    void csel() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x188);
+        assertEquals(Ir64ConditionalSelectOp.CSEL, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.EQ, op.condition());
+    }
+
+    @Test
+    void csinc() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x18c);
+        assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertEquals(Ir64Condition.NE, op.condition());
+    }
+
+    @Test
+    void csinv() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x190);
+        assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
+        assertEquals(6, op.dst());
+        assertEquals(7, op.src1());
+        assertEquals(8, op.src2());
+        assertEquals(Ir64Condition.CS, op.condition());
+    }
+
+    @Test
+    void csneg() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x194);
+        assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
+        assertEquals(9, op.dst());
+        assertEquals(10, op.src1());
+        assertEquals(11, op.src2());
+        assertEquals(Ir64Condition.CC, op.condition());
+    }
+
+    @Test
+    void cselNarrowW() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x198);
+        assertFalse(op.wide());
+        assertEquals(20, op.dst());
+        assertEquals(21, op.src1());
+        assertEquals(22, op.src2());
+        assertEquals(Ir64Condition.GT, op.condition());
+    }
+
+    @Test
+    void csetAliasIsCsincWithXzrOperandsAndInvertedCondition() {
+        // cset x12, eq: alias de CSINC x12, xzr, xzr, invert(eq)=ne — o assembler já inverteu a
+        // condição e igualou src1==src2==31; o decoder não reconhece o alias, só produz o
+        // ConditionalSelect genérico com esses campos (Fatos de referência #1 da task).
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x19c);
+        assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
+        assertEquals(12, op.dst());
+        assertEquals(31, op.src1());
+        assertEquals(31, op.src2());
+        assertEquals(Ir64Condition.NE, op.condition());
+    }
+
+    @Test
+    void csetmAliasIsCsinvWithXzrOperands() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a0);
+        assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
+        assertEquals(13, op.dst());
+        assertEquals(31, op.src1());
+        assertEquals(31, op.src2());
+        assertEquals(Ir64Condition.EQ, op.condition());
+    }
+
+    @Test
+    void cincAliasIsCsincWithMatchingSrc1Src2() {
+        // cinc x14, x15, eq: alias de CSINC x14, x15, x15, invert(eq)=ne.
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a4);
+        assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
+        assertEquals(14, op.dst());
+        assertEquals(15, op.src1());
+        assertEquals(15, op.src2());
+        assertEquals(Ir64Condition.NE, op.condition());
+    }
+
+    @Test
+    void cinvAliasIsCsinvWithMatchingSrc1Src2() {
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a8);
+        assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
+        assertEquals(16, op.dst());
+        assertEquals(17, op.src1());
+        assertEquals(17, op.src2());
+        assertEquals(Ir64Condition.EQ, op.condition());
+    }
+
+    @Test
+    void cnegAliasIsCsnegWithMatchingSrc1Src2() {
+        // cneg x18, x19, eq: alias de CSNEG x18, x19, x19, invert(eq)=ne.
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1ac);
+        assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
+        assertEquals(18, op.dst());
+        assertEquals(19, op.src1());
+        assertEquals(19, op.src2());
+        assertEquals(Ir64Condition.NE, op.condition());
+    }
+
+    // ── B6.3.2: SBFM/UBFM/BFM (+ aliases) — offsets 0x1b0+ ─────────────────────────────────────
+
+    @Test
+    void sbfxAliasImmsGreaterEqualImmr() {
+        // sbfm x0, x1, #4, #10 (disassembla como "sbfx x0, x1, #4, #7"): si=10 >= ri=4.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b0);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src());
+        assertEquals(4, op.immr());
+        assertEquals(10, op.imms());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void sbfizAliasImmsLessThanImmr() {
+        // sbfm x2, x3, #10, #4 (disassembla como "sbfiz x2, x3, #54, #5"): si=4 < ri=10 — os
+        // campos crus decodificados continuam immr=10/imms=4, sem pré-cálculo (D2 da task).
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b4);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(2, op.dst());
+        assertEquals(3, op.src());
+        assertEquals(10, op.immr());
+        assertEquals(4, op.imms());
+    }
+
+    @Test
+    void ubfxAliasImmsGreaterEqualImmr() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b8);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(4, op.dst());
+        assertEquals(5, op.src());
+        assertEquals(4, op.immr());
+        assertEquals(10, op.imms());
+    }
+
+    @Test
+    void ubfizAliasImmsLessThanImmr() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1bc);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(6, op.dst());
+        assertEquals(7, op.src());
+        assertEquals(10, op.immr());
+        assertEquals(4, op.imms());
+    }
+
+    @Test
+    void bfxilAliasImmsGreaterEqualImmr() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c0);
+        assertEquals(Ir64BitfieldOp.BFM, op.opcode());
+        assertEquals(8, op.dst());
+        assertEquals(9, op.src());
+        assertEquals(4, op.immr());
+        assertEquals(10, op.imms());
+    }
+
+    @Test
+    void bfiAliasImmsLessThanImmr() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c4);
+        assertEquals(Ir64BitfieldOp.BFM, op.opcode());
+        assertEquals(10, op.dst());
+        assertEquals(11, op.src());
+        assertEquals(10, op.immr());
+        assertEquals(4, op.imms());
+    }
+
+    @Test
+    void lslAliasIsUbfmWithComplementImmr() {
+        // lsl x12, x13, #5 = UBFM x12, x13, #(-5 mod 64)=59, #(63-5)=58.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c8);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(12, op.dst());
+        assertEquals(13, op.src());
+        assertEquals(59, op.immr());
+        assertEquals(58, op.imms());
+    }
+
+    @Test
+    void lsrAliasIsUbfmWithShiftAsImmr() {
+        // lsr x14, x15, #5 = UBFM x14, x15, #5, #63.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1cc);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(14, op.dst());
+        assertEquals(15, op.src());
+        assertEquals(5, op.immr());
+        assertEquals(63, op.imms());
+    }
+
+    @Test
+    void asrAliasIsSbfmWithShiftAsImmr() {
+        // asr x16, x17, #5 = SBFM x16, x17, #5, #63.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d0);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(16, op.dst());
+        assertEquals(17, op.src());
+        assertEquals(5, op.immr());
+        assertEquals(63, op.imms());
+    }
+
+    @Test
+    void ubfxExplicitLsbWidth() {
+        // ubfx x18, x19, #8, #16 = UBFM x18, x19, #8, #(8+16-1)=23.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d4);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(18, op.dst());
+        assertEquals(19, op.src());
+        assertEquals(8, op.immr());
+        assertEquals(23, op.imms());
+    }
+
+    @Test
+    void sbfxExplicitLsbWidth() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d8);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(20, op.dst());
+        assertEquals(21, op.src());
+        assertEquals(8, op.immr());
+        assertEquals(23, op.imms());
+    }
+
+    @Test
+    void bfiExplicitLsbWidth() {
+        // bfi x22, x23, #8, #16 = BFM x22, x23, #(-8 mod 64)=56, #(16-1)=15.
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1dc);
+        assertEquals(Ir64BitfieldOp.BFM, op.opcode());
+        assertEquals(22, op.dst());
+        assertEquals(23, op.src());
+        assertEquals(56, op.immr());
+        assertEquals(15, op.imms());
+    }
+
+    @Test
+    void bfxilExplicitLsbWidth() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e0);
+        assertEquals(Ir64BitfieldOp.BFM, op.opcode());
+        assertEquals(24, op.dst());
+        assertEquals(25, op.src());
+        assertEquals(8, op.immr());
+        assertEquals(23, op.imms());
+    }
+
+    @Test
+    void uxtbAliasIsUbfmNarrowZeroToSeven() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e4);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(26, op.dst());
+        assertEquals(27, op.src());
+        assertEquals(0, op.immr());
+        assertEquals(7, op.imms());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void uxthAliasIsUbfmNarrowZeroToFifteen() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e8);
+        assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
+        assertEquals(28, op.dst());
+        assertEquals(29, op.src());
+        assertEquals(0, op.immr());
+        assertEquals(15, op.imms());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void sxtbAliasIsSbfmWideZeroToSeven() {
+        // sxtb x30, w0: destino X implica encoding sf=1 mesmo a fonte sendo "w0" na sintaxe —
+        // SXTB Xd,Wn é alias de SBFM Xd,Xn,#0,#7 (mesmo índice de registrador, visão X completa).
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1ec);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(30, op.dst());
+        assertEquals(0, op.src());
+        assertEquals(0, op.immr());
+        assertEquals(7, op.imms());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void sxthAliasIsSbfmWideZeroToFifteen() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1f0);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(1, op.dst());
+        assertEquals(2, op.src());
+        assertEquals(0, op.immr());
+        assertEquals(15, op.imms());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void sxtwAliasIsSbfmWideZeroToThirtyOne() {
+        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1f4);
+        assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src());
+        assertEquals(0, op.immr());
+        assertEquals(31, op.imms());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void csnegWithXzrAsSrc2() {
+        // csneg x25, x26, xzr, eq: vetor real (assemblado, não inventado) para exercitar CSNEG
+        // com src2=XZR na execução (ver Ir64BlockExecutorTest — CSNEG(XZR) dá 0, negação de zero).
+        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1f8);
+        assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
+        assertEquals(25, op.dst());
+        assertEquals(26, op.src1());
+        assertEquals(31, op.src2());
+        assertEquals(Ir64Condition.EQ, op.condition());
+    }
+
+    @Test
+    void bitfieldExtrOpcReservedThrows() {
+        // opc=11 (EXTR, mesmo subgrupo, fora do escopo fechado do épico — ver Armadilhas da task
+        // B6.3.2): construído à mão a partir do formato, sem assembly correspondente aqui.
+        int word = 0x93442820 | (0b11 << 29); // pega "sbfx x0,x1,#4,#7" e força opc=11
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    @Test
+    void bitfieldNReservedMismatchedWithSfThrows() {
+        // N deve ser igual a sf (mesma regra de Logical (immediate)) — N=0 com sf=1 é UNDEFINED;
+        // construído à mão a partir do formato, sem assembly válido correspondente.
+        int word = 0x93442820 & ~(1 << 22); // pega "sbfx x0,x1,#4,#7" (sf=1) e força N=0
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);

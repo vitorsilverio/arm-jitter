@@ -588,4 +588,275 @@ class Ir64BlockExecutorTest {
 
         assertEquals(0x10L + (0xFFL << 2), core.x(0));
     }
+
+    // ── B6.3.2: CSEL/CSINC/CSINV/CSNEG (+ aliases) ─────────────────────────────────────────────
+
+    @Test
+    void cselTakesSrc1WhenConditionTrue() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9a820020); // csel x0, x1, x2, eq (do corpus real)
+        core.setX(1, 0x1111L);
+        core.setX(2, 0x2222L);
+        core.pstate().setNzcv(false, true, false, false); // Z=1 -> eq verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1111L, core.x(0), "condição verdadeira: dst = src1");
+    }
+
+    @Test
+    void cselTakesSrc2WhenConditionFalse() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9a820020); // csel x0, x1, x2, eq
+        core.setX(1, 0x1111L);
+        core.setX(2, 0x2222L);
+        core.pstate().setNzcv(false, false, false, false); // Z=0 -> eq falsa
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x2222L, core.x(0), "condição falsa (CSEL): dst = f(src2) = src2 (identidade)");
+    }
+
+    @Test
+    void csincAddsOneToSrc2WhenConditionFalse() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9a851483); // csinc x3, x4, x5, ne (do corpus real)
+        core.setX(4, 100);
+        core.setX(5, 200);
+        core.pstate().setNzcv(false, true, false, false); // Z=1 -> ne falsa
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(201L, core.x(3), "CSINC: condição falsa -> dst = src2 + 1");
+    }
+
+    @Test
+    void csinvInvertsSrc2WhenConditionFalse() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xda8820e6); // csinv x6, x7, x8, cs (do corpus real)
+        core.setX(7, 100);
+        core.setX(8, 0L);
+        core.pstate().setNzcv(false, false, false, false); // C=0 -> cs falsa
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(6), "CSINV: condição falsa -> dst = ~src2, ~0 = -1");
+    }
+
+    @Test
+    void csnegNegatesSrc2WhenConditionFalse() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xda8b3549); // csneg x9, x10, x11, cc (do corpus real)
+        core.setX(10, 100);
+        core.setX(11, 5);
+        core.pstate().setNzcv(false, false, true, false); // C=1 -> cc falsa
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-5L, core.x(9), "CSNEG: condição falsa -> dst = -src2");
+    }
+
+    @Test
+    void csincWithXzrSrc2GivesOne() {
+        // cset x12, eq (alias, CSINC dst=12,src1=31,src2=31,cond=ne): condição falsa (Z=1,
+        // ne falsa) -> dst = XZR + 1 = 1 — caso especial citado nos Testes mínimos da task.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9a9f17ec);
+        core.pstate().setNzcv(false, true, false, false);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L, core.x(12));
+    }
+
+    @Test
+    void csinvWithXzrSrc2GivesAllBitsSet() {
+        // csetm x13, ne (alias, CSINV dst=13,src1=31,src2=31,cond=eq): condição falsa (Z=0,
+        // eq falsa) -> dst = ~XZR = todos os bits setados.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xda9f03ed);
+        core.pstate().setNzcv(false, false, false, false);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(13));
+    }
+
+    @Test
+    void csnegWithXzrSrc2GivesZero() {
+        // csneg x25, x26, xzr, eq (vetor real dedicado, ver Aarch64DecoderCorpusTest): condição
+        // falsa (Z=0, eq falsa) -> dst = -XZR = 0 (negação de zero) — caso especial dos Testes
+        // mínimos da task.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xda9f0759);
+        core.pstate().setNzcv(false, false, false, false);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0L, core.x(25));
+    }
+
+    @Test
+    void cselNarrowZeroesUpperBitsOfDestination() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x1a96c2b4); // csel w20, w21, w22, gt (do corpus real)
+        core.setX(20, 0xFFFF_FFFF_0000_0000L); // sentinela nos 32 bits altos
+        core.setX(21, 0x1111_1111L);
+        core.setX(22, 0xFFFF_FFFF_2222_2222L); // só os 32 bits baixos (0x22222222) devem contar
+        core.pstate().setNzcv(false, true, false, false); // GT (!Z && N==V) falsa: Z=1
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x2222_2222L, core.x(20), "W: resultado zero-estendido para os 64 bits");
+    }
+
+    @Test
+    void conditionalSelectNeverModifiesNzcv() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9a820020); // csel x0, x1, x2, eq
+        core.setX(1, 1);
+        core.setX(2, 2);
+        core.pstate().setNzcv(true, true, true, true); // NZCV = 1111 antes
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xF, core.pstate().nzcv(), "CSEL só LÊ os flags, nunca escreve");
+    }
+
+    // ── B6.3.2: SBFM/BFM/UBFM (+ aliases) ──────────────────────────────────────────────────────
+
+    @Test
+    void sbfxSignExtendsFieldWhenSignBitSet() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x93442820); // sbfx x0, x1, #4, #7 (immr=4, imms=10, si >= ri)
+        core.setX(1, 0xFFFF_FFFF_FFFF_FFF0L); // bits[4:10] todos 1 -> sinal setado
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(0), "campo todo-1 com sinal setado estende para todos os 64 bits");
+    }
+
+    @Test
+    void sbfxDoesNotSignExtendWhenSignBitClear() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x93442820); // sbfx x0, x1, #4, #7
+        core.setX(1, 0x10L); // só bit4 setado -> campo extraído = 0b0000001, sinal limpo
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L, core.x(0));
+    }
+
+    @Test
+    void ubfxNeverSignExtendsUnlikeSbfx() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xd34428a4); // ubfx x4, x5, #4, #7 (mesmos immr/imms de sbfx acima)
+        core.setX(5, 0xFFFF_FFFF_FFFF_FFF0L); // mesmo operando do teste sbfx com sinal setado
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x7FL, core.x(4), "UBFM nunca estende sinal, ao contrário de SBFM (mesmo campo)");
+    }
+
+    @Test
+    void bfxilPreservesDestinationBitsOutsideField() {
+        // bfxil x8, x9, #4, #7 (immr=4, imms=10, si >= ri -> pos=0, len=7): prova que BFM
+        // PRESERVA os bits fora do campo copiado (diferente de SBFM/UBFM, que zeram/estendem) —
+        // teste dedicado pedido nos Testes mínimos da task, Rd pré-populado com valor não-trivial.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xb3442928);
+        core.setX(8, 0xFFFF_FFFF_FFFF_FFFFL); // Rd pré-existente: todos os bits setados
+        core.setX(9, 0x10L); // campo extraído (bits[4:10]) = 0b0000001 = 1
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xFFFF_FFFF_FFFF_FF81L, core.x(8),
+                "bits[0:6] = campo (0x01), bits[7:63] preservados de Rd (todos 1)");
+    }
+
+    @Test
+    void lslAliasShiftsLeftDiscardingHighBits() {
+        // lsl x12, x13, #5 (UBFM immr=59, imms=58, si < ri -> pos=5, len=59): equivalente a um
+        // shift lógico à esquerda real, incluindo o descarte dos bits altos.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xd37be9ac);
+        core.setX(13, 0xFFFF_FFFF_FFFF_FFFFL);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xFFFF_FFFF_FFFF_FFE0L, core.x(12), "LSL x13,#5 com x13 todo 1: só os 5 bits baixos zeram");
+    }
+
+    @Test
+    void lslAliasSimpleShiftMatchesPlainLeftShift() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xd37be9ac); // lsl x12, x13, #5
+        core.setX(13, 1L);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L << 5, core.x(12));
+    }
+
+    @Test
+    void sbfizAliasSignExtendsAboveInsertedFieldAndZeroesBelow() {
+        // sbfm x2, x3, #10, #4 (disassembla "sbfiz x2, x3, #54, #5"): si < ri -> pos=54, len=5.
+        // Campo negativo (bit4 do campo de 5 bits setado) deve estender o sinal ACIMA do campo
+        // inserido; os bits ABAIXO da posição de inserção devem ser zero (diferente de LSL/LSR,
+        // que não têm sign-fill).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x934a1062);
+        core.setX(3, 0b10000L); // 5 bits baixos = 10000 (bit4 setado -> negativo)
+
+        new Ir64BlockExecutor().step(core);
+
+        long expected = (-16L) << 54;
+        assertEquals(expected, core.x(2));
+    }
+
+    @Test
+    void sbfizAliasPositiveFieldNoSignFillBelowPosition() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x934a1062); // sbfiz x2, x3, #54, #5
+        core.setX(3, 1L); // 5 bits baixos = 00001 (positivo)
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L << 54, core.x(2));
+    }
+
+    @Test
+    void uxtbAliasZeroExtendsLowByteAndZeroesUpperBitsOfDestination() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x53001f7a); // uxtb w26, w27
+        core.setX(26, 0xFFFF_FFFF_FFFF_FFFFL); // sentinela: deve ser totalmente sobrescrito
+        core.setX(27, 0x1234_5678L);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x78L, core.x(26));
+    }
+
+    @Test
+    void sxtbAliasSignExtendsNegativeByteToFull64Bits() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x93401c1e); // sxtb x30, w0
+        core.setX(0, 0xABL); // byte baixo = 0xAB (bit7 setado -> negativo como i8)
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-85L, core.x(30), "0xAB como i8 é -85, estendido para os 64 bits completos");
+    }
+
+    @Test
+    void bitfieldNeverModifiesNzcv() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x93442820); // sbfx x0, x1, #4, #7
+        core.setX(1, 0xFF);
+        core.pstate().setNzcv(true, true, true, true);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xF, core.pstate().nzcv(), "bitfield nunca toca NZCV");
+    }
 }

@@ -144,6 +144,21 @@
   — não copia o padrão do B6.1. Bug do B6.1 fica para uma task de correção futura (fora do
   "Inclui" de B6.3.1). `mvn -o test` verde (1022 testes); gbaemu/ndsemu **não revalidados**
   (aceite da própria task confirma que G5 não se aplica — nenhum arquivo 32-bit tocado).
+- **B6.3.2** ✅ (2026-07-25, segunda das 4 sub-tasks de B6.3): `CSEL`/`CSINC`/`CSINV`/`CSNEG`
+  via `case` novo em `decodeDataProcessingRegister` (fixo de 9 bits `011010100` em `[29:21]` +
+  bit11=0) — record `Ir64Op.ConditionalSelect`, executor só LÊ `PSTATE` (nunca escreve NZCV),
+  sem atalho para os aliases `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG` (caminho geral com
+  `src1==src2`/`==XZR` já basta). `SBFM`/`BFM`/`UBFM` via `case 0b10` novo em
+  `decodeDataProcessingImmediate` — record `Ir64Op.Bitfield` com `immr`/`imms` CRUS (D2, sem
+  pré-cálculo de `pos`/`len` no decoder); executor com UM cálculo de `pos`/`len` compartilhado
+  pelos 3 opcodes (só a política de preenchimento fora do campo muda: sinal/zero/preserva-Rd,
+  testado com `Rd` pré-populado no caso `BFM`). Os 11 aliases de bitfield do épico e os 5 de
+  `CSEL` cobertos de graça, sem `case` de decode dedicado. Corpus real estendido (offsets
+  `0x188`-`0x1f8`, `aarch64-none-elf-as`/`objdump` reais do devkitA64, incl. um vetor extra
+  `csneg x25,x26,xzr,eq` para exercitar `CSNEG` com `src2=XZR`). `opc==0b11` (`EXTR`, fora de
+  escopo) continua `unsupported`. `mvn -o test` verde (1074 testes); gbaemu/ndsemu **não
+  revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
+  B6.1/B6.2/B6.3.1).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -153,10 +168,9 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P1 | **B6.3.2** — AArch64: `CSEL`/`CSINC`/`CSINV`/`CSNEG` (+ aliases) + `UBFM`/`SBFM`/`BFM` (+ aliases) | `trilha-b-arquiteturas/b6.3.2-aarch64-csel-bitfield.md` | arm-jitter | B6.3.1 ✅ | destravada agora que B6.3.1 fechou (2026-07-24/25) — reaproveita o dispatch `decodeDataProcessingRegister` que B6.3.1 criou (adiciona `case`s novos, não deveria precisar tocar no dispatch em si) |
-| P2 | **B6.3.3** — AArch64: `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | `trilha-b-arquiteturas/b6.3.3-aarch64-mul-div.md` | arm-jitter | B6.3.1 ✅ | destravada junto com B6.3.2 (mesma dependência, mesmo dispatch) — as duas são independentes ENTRE SI (nenhuma depende da outra), só compartilham a dependência em B6.3.1; ordem relativa entre P1/P2 é só convenção de leitura do épico, não uma dependência real |
-| P3 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
-| P4 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
+| P1 | **B6.3.3** — AArch64: `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | `trilha-b-arquiteturas/b6.3.3-aarch64-mul-div.md` | arm-jitter | B6.3.1 ✅ | destravada desde que B6.3.1 fechou (2026-07-24/25) — reaproveita o dispatch `decodeDataProcessingRegister` (adiciona `case`s novos); independente de B6.3.2 (que já fechou 2026-07-25) |
+| P2 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
+| P3 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 (softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
@@ -164,16 +178,18 @@ mas spec própria ainda não escrita; ver `b6-aarch64.md`).
 
 **B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec)**: **B6.3.1** ✅
 fechou (2026-07-24/25) — criou o dispatch de "Data Processing — Register"
-(`isDataProcessingRegisterClass`/`decodeDataProcessingRegister`). Isso destrava
-**B6.3.2** e **B6.3.3** simultaneamente (P1/P2 acima — ambas dependem só de
-B6.3.1, nenhuma depende da outra). **B6.3.4** (P3, LDXR/LDAXR/STXR/STLXR +
-monitor) já estava elegível antes mesmo de B6.3.1 fechar — depende só de B6.2,
-é a única das 4 que introduz estado novo no core (monitor de exclusividade) e
-por isso é sozinha na sua categoria de risco. As 3 (P1/P2/P3) podem ser
-executadas em qualquer ordem entre si (mesmo repo arm-jitter, então 1 sessão
-por vez — "ordem obrigatória" aqui é só a ordem de leitura da tabela, não uma
-dependência funcional real entre elas). Ver `b6-aarch64.md` e os 4 arquivos de
-sub-task para o detalhe de cada uma.
+(`isDataProcessingRegisterClass`/`decodeDataProcessingRegister`). Isso destravou
+**B6.3.2** e **B6.3.3** simultaneamente. **B6.3.2** ✅ já fechou (2026-07-25,
+`CSEL`/`CSINC`/`CSINV`/`CSNEG` + `SBFM`/`UBFM`/`BFM`, ver o histórico acima).
+Resta **B6.3.3** (P1 acima) — independente de B6.3.2, só compartilha a
+dependência em B6.3.1. **B6.3.4** (P2, LDXR/LDAXR/STXR/STLXR + monitor) já
+estava elegível antes mesmo de B6.3.1 fechar — depende só de B6.2, é a única
+das 4 que introduz estado novo no core (monitor de exclusividade) e por isso é
+sozinha na sua categoria de risco. P1/P2 podem ser executadas em qualquer
+ordem entre si (mesmo repo arm-jitter, então 1 sessão por vez — "ordem
+obrigatória" aqui é só a ordem de leitura da tabela, não uma dependência
+funcional real entre elas). Ver `b6-aarch64.md` e os 4 arquivos de sub-task
+para o detalhe de cada uma.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 

@@ -43,6 +43,11 @@ public final class Ir64BlockExecutor {
     /// Máscara para a metade baixa de 32 bits — mesma disciplina de largura usada no resto do
     /// executor (`W` sempre zero-estende para os 64 bits altos).
     private static final long LOW_32_BITS_MASK = 0xFFFF_FFFFL;
+    /// Largura em bits de uma operação `X` (64 bits) — usada por {@link #executeBitfield} para
+    /// calcular `pos`/`len` conforme {@link Ir64Op.Bitfield#wide()} (B6.3.2).
+    private static final int BITFIELD_WIDE_BITSIZE = 64;
+    /// Largura em bits de uma operação `W` (32 bits) — ver {@link #BITFIELD_WIDE_BITSIZE}.
+    private static final int BITFIELD_NARROW_BITSIZE = 32;
 
     private final Aarch64Decoder decoder = new Aarch64Decoder();
 
@@ -102,6 +107,9 @@ public final class Ir64BlockExecutor {
                     executeAluShiftedRegister(core, (Ir64Op.AluShiftedRegister) op);
             case Ir64Op.Kind.ALU_EXTENDED_REGISTER ->
                     executeAluExtendedRegister(core, (Ir64Op.AluExtendedRegister) op);
+            case Ir64Op.Kind.CONDITIONAL_SELECT ->
+                    executeConditionalSelect(core, (Ir64Op.ConditionalSelect) op);
+            case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -216,6 +224,84 @@ public final class Ir64BlockExecutor {
             case SXTW -> (long) (int) rawRegisterValue;
             case SXTX -> rawRegisterValue;
         };
+    }
+
+    /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (B6.3.2) — só LÊ os flags via {@link
+    /// dev.vitorsilverio.armjitter.core64.PstateRegister#evalCond} para escolher entre `src1` e
+    /// `f(src2)`; NUNCA os atualiza (diferente de `executeAlu*`/`setFlags`). Sem atalho para
+    /// `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG` (Armadilhas da task) — o caminho geral com
+    /// `src1==src2==XZR` já produz o resultado correto.
+    private boolean executeConditionalSelect(Aarch64Core core, Ir64Op.ConditionalSelect op) {
+        long result;
+        if (core.pstate().evalCond(op.condition())) {
+            result = core.xForWidth(op.src1(), op.wide());
+        } else {
+            long src2 = core.xForWidth(op.src2(), op.wide());
+            result = switch (op.opcode()) {
+                case CSEL -> src2;
+                case CSINC -> src2 + 1;
+                case CSINV -> ~src2;
+                case CSNEG -> -src2;
+            };
+        }
+        core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// `SBFM`/`BFM`/`UBFM` (B6.3.2) — os 3 opcodes compartilham o MESMO cálculo de `pos`/`len`
+    /// (dois casos, `imms >= immr` e `imms < immr`, ver Fatos de referência #2 da task); só a
+    /// política de preenchimento dos bits FORA do campo copiado muda: `SBFM` estende o sinal do
+    /// bit mais alto do campo, `UBFM` zera, `BFM` preserva o `Rd` existente (Armadilhas da task —
+    /// erro mais fácil de trocar entre os três).
+    private boolean executeBitfield(Aarch64Core core, Ir64Op.Bitfield op) {
+        int bitsize = op.wide() ? BITFIELD_WIDE_BITSIZE : BITFIELD_NARROW_BITSIZE;
+        long src = core.xForWidth(op.src(), op.wide());
+        int immr = op.immr();
+        int imms = op.imms();
+        int len;
+        int pos;
+        long field;
+        if (imms >= immr) {
+            len = imms - immr + 1;
+            pos = 0;
+            field = extractBitfield(src, immr, len);
+        } else {
+            len = imms + 1;
+            pos = bitsize - immr;
+            field = extractBitfield(src, 0, len);
+        }
+        long result = switch (op.opcode()) {
+            case UBFM -> field << pos;
+            case SBFM -> signExtendBitfield(field, len) << pos;
+            case BFM -> {
+                long existing = core.xForWidth(op.dst(), op.wide());
+                long fieldMask = maskOfBitfieldWidth(len) << pos;
+                yield (existing & ~fieldMask) | (field << pos);
+            }
+        };
+        core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// Extrai `len` bits de {@code value} a partir de {@code shift}, zero-estendidos.
+    private static long extractBitfield(long value, int shift, int len) {
+        return (value >>> shift) & maskOfBitfieldWidth(len);
+    }
+
+    /// Máscara dos `bits` bits baixos — mesma disciplina de {@code Aarch64LogicalImmediate}
+    /// (shift de 64 bits é UB por wraparound em Java, `bits == 64` é caso especial).
+    private static long maskOfBitfieldWidth(int bits) {
+        return bits >= Long.SIZE ? -1L : (1L << bits) - 1L;
+    }
+
+    /// Estende o sinal de um valor de `len` bits (bit `len - 1` é o sinal) para os 64 bits
+    /// completos — usado só por `SBFM`.
+    private static long signExtendBitfield(long field, int len) {
+        if (len >= Long.SIZE) {
+            return field;
+        }
+        long signBit = 1L << (len - 1);
+        return (field ^ signBit) - signBit;
     }
 
     private boolean executeMoveWide(Aarch64Core core, Ir64Op.MoveWide op) {
