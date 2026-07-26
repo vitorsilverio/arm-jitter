@@ -71,4 +71,23 @@ public interface AddressSpace {
     default int fetch32(int address) {
         return read32(address);
     }
+
+    /// Geração de tradução MMU atual (RFC-SOFTMMU §5, B4.1.4): incrementada a cada escrita de
+    /// `TTBR0`/`CONTEXTIDR` (troca de tabela de páginas/ASID — uma "troca de processo") e a cada
+    /// `TLBIALL`, nunca em `TLBIMVA` isolado nem em mudança de `DACR`/modo privilegiado (que não
+    /// invalidam traduções já resolvidas, só a política de checagem reavaliada a cada acesso —
+    /// ver `TranslatingAddressSpace`).
+    ///
+    /// O `JitRuntime` inclui este valor no `BlockKey` de todo bloco lifted: um mesmo VA sob
+    /// mapeamentos de página DIFERENTES em duas gerações nunca reaproveita o bloco compilado da
+    /// geração anterior (miss natural no `BlockCache`, mesma técnica do tag de ITSTATE da B2.4) —
+    /// e o runtime também esvazia seu inline cache de dispatch quando o valor muda, para que um
+    /// bloco encadeado (chaining) nunca atravesse uma troca de geração no meio da corrente.
+    ///
+    /// O padrão retorna `0` (constante) para todo barramento sem MMU — zero mudança de
+    /// comportamento para os consumidores existentes (G3: gbaemu/ndsemu nunca envolvem seu
+    /// `AddressSpace` no wrapper). Só `TranslatingAddressSpace` (B4.1.1) tem estado próprio aqui.
+    default int translationGeneration() {
+        return 0;
+    }
 }

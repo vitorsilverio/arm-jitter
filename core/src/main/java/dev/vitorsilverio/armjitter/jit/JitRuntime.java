@@ -88,6 +88,12 @@ public final class JitRuntime {
     /// Geração do {@link BlockCache} para a qual o IC é válido. Inicia em -1
     /// (sentinela impossível) para forçar o flush/preenchimento no primeiro `execute`.
     private long icGeneration = -1L;
+    /// Geração de tradução MMU (RFC-SOFTMMU §5, B4.1.4, {@link dev.vitorsilverio.armjitter.memory.AddressSpace#translationGeneration()})
+    /// para a qual o IC é válido. Guardado como `long` (o valor real é `int`) para reservar um
+    /// sentinela impossível (`Long.MIN_VALUE`) fora do domínio de `int`, mesmo raciocínio de
+    /// {@link #icGeneration}: força o flush no primeiro `execute`, mesmo que a geração real
+    /// comece em `0`.
+    private long icTranslationGeneration = Long.MIN_VALUE;
 
     /// Diagnóstico (leitura externa; incrementos não-atômicos no caminho quente): acertos e
     /// faltas do inline cache e flushes por mudança de geração — para dimensionar IC/hash e
@@ -373,11 +379,18 @@ public final class JitRuntime {
         // de campo, e entra na chave/tag para que um mesmo `pc` lifted com ITSTATE de entrada
         // diferentes nunca reaproveite um bloco com condições por-op erradas.
         int itState = core.cpsr().itState();
+        // translationGeneration (RFC-SOFTMMU §5, B4.1.4): quase sempre `0` (nenhum consumidor
+        // atual envolve seu AddressSpace em TranslatingAddressSpace) — só custa uma chamada
+        // virtual que o JIT do host devirtualiza/inline num callsite monomórfico (G3/G5: sem
+        // regressão observável em gbaemu/ndsemu). Entra na chave/tag pela mesma razão do
+        // itState: um mesmo `pc` sob mapeamento de página diferente (troca de processo) nunca
+        // pode reaproveitar um bloco compilado para o mapeamento anterior.
+        int translationGeneration = core.memory().translationGeneration();
 
         // ── Inline cache (caminho quente) ───────────────────────────────────────
         // Revalida o IC contra a geração do cache (esvazia se algo foi removido) e
         // tenta o slot direto. Hit ⇒ executa sem tocar BlockKey/HashMap/Optional.
-        syncInlineCacheGeneration();
+        syncInlineCacheGeneration(translationGeneration);
         int slot = icSlot(pc);
         long tag = inlineTag(pc, instructionSet, itState);
         if (icTags[slot] == tag) {
@@ -403,12 +416,16 @@ public final class JitRuntime {
             //  - interruptLine: linha pendente volta ao runBlock, que a serve;
             //  - sleepState: um bloco pode ter dormido a CPU (SWI Halt/WFI);
             //  - generation: escrita automodificável esvazia o IC ⇒ quebra a corrente;
+            //  - translationGeneration (B4.1.4): um hop pode ter escrito TTBR0/CONTEXTIDR/TLBIALL
+            //    (troca de processo em pleno voo) — sem este guard a corrente continuaria servindo
+            //    blocos do IC compilados para o mapeamento ANTERIOR pelo resto do orçamento;
             //  - progresso: um passo sem ciclos internos aborta (nunca gira sem avançar o tempo);
             //  - `core.mode()` por passo re-sincroniza o banco de registradores como o runBlock faz.
             while (cycles < chainCycleBudget
                     && core.sleepState() == CpuSleepState.RUNNING
                     && !core.interruptLine()
-                    && blockCache.generation() == icGeneration) {
+                    && blockCache.generation() == icGeneration
+                    && core.memory().translationGeneration() == translationGeneration) {
                 core.mode(); // sincroniza modo/banking a partir do CPSR (como no runBlock)
                 int nextPc = core.programCounter();
                 InstructionSet nextSet = instructionSet(core);
@@ -461,9 +478,9 @@ public final class JitRuntime {
         }
         icMisses++;
 
-        BlockKey key = new BlockKey(pc, instructionSet, itState);
+        BlockKey key = new BlockKey(pc, instructionSet, itState, translationGeneration);
         if (coldEmitter != null) {
-            return executeTiered(pc, core, instructionSet, itState, key, slot, tag);
+            return executeTiered(pc, core, instructionSet, itState, key, slot, tag, translationGeneration);
         }
 
         // ── Caminho clássico (sem tiering): lookup, threshold, compilação síncrona ─
@@ -478,7 +495,7 @@ public final class JitRuntime {
             block = emitter.emit(optimizer.optimize(irBlock));
             blockCache.put(key, block, irBlock.startPc(), irBlock.endPc());
         }
-        inlineRecord(slot, tag, block);
+        inlineRecord(slot, tag, block, translationGeneration);
         return run(block, core);
     }
 
@@ -499,7 +516,7 @@ public final class JitRuntime {
 
     /// Caminho TIERED: integra compilações de background prontas, depois despacha o tier do
     /// bloco (frio interpretado / quente compilado), submetendo a compilação ao esquentar.
-    private int executeTiered(int pc, ArmCore core, InstructionSet instructionSet, int itState, BlockKey key, int slot, long tag) {
+    private int executeTiered(int pc, ArmCore core, InstructionSet instructionSet, int itState, BlockKey key, int slot, long tag, int translationGeneration) {
         integrateCompiled();
         BlockCache.CacheEntry entry = blockCache.entry(key);
         if (entry == null) {
@@ -516,7 +533,7 @@ public final class JitRuntime {
             if (warmupDiagnostics) {
                 hotTierExecutions++;
             }
-            inlineRecord(slot, tag, entry.block());
+            inlineRecord(slot, tag, entry.block(), translationGeneration);
             return run(entry.block(), core);
         }
         // Tier frio: conta execuções; ao esquentar, submete a compilação ao background (uma vez).
@@ -581,22 +598,29 @@ public final class JitRuntime {
         return (pc & 0xFFFF_FFFFL) | ((long) instructionSet.ordinal() << 32) | ((long) (itState & 0xFF) << 33);
     }
 
-    /// Esvazia o inline cache se o {@link BlockCache} sofreu remoção desde a última
-    /// validação, ressincronizando a geração. Chamado no início de `execute` e antes
-    /// de gravar uma entrada nova (a compilação pode ter evictado/sobrescrito blocos).
-    private void syncInlineCacheGeneration() {
+    /// Esvazia o inline cache se o {@link BlockCache} sofreu remoção desde a última validação
+    /// (ressincronizando a geração), OU se a {@link dev.vitorsilverio.armjitter.memory.AddressSpace#translationGeneration()
+    /// geração de tradução MMU} mudou desde então (RFC-SOFTMMU §5, B4.1.4) — uma troca de
+    /// processo (`TTBR0`/`CONTEXTIDR`/`TLBIALL`) não remove nenhum bloco do {@link BlockCache}
+    /// (blocos de gerações diferentes coexistem, indexados por chaves diferentes), então só o
+    /// flush completo do IC garante que um slot preenchido sob a geração anterior não sirva um
+    /// bloco stale para o mesmo `pc` na geração nova. Chamado no início de `execute` e antes de
+    /// gravar uma entrada nova (a compilação pode ter evictado/sobrescrito blocos).
+    private void syncInlineCacheGeneration(int translationGeneration) {
         long gen = blockCache.generation();
-        if (gen != icGeneration) {
+        if (gen != icGeneration || translationGeneration != icTranslationGeneration) {
             Arrays.fill(icTags, IC_EMPTY);
             icGeneration = gen;
+            icTranslationGeneration = translationGeneration;
             icFlushes++;
         }
     }
 
-    /// Grava o bloco no slot do inline cache, revalidando a geração antes (a `put` da
-    /// compilação pode tê-la incrementado) para que a entrada nova não seja descartada.
-    private void inlineRecord(int slot, long tag, CompiledBlock block) {
-        syncInlineCacheGeneration();
+    /// Grava o bloco no slot do inline cache, revalidando a geração (estrutural e de tradução)
+    /// antes (a `put` da compilação pode tê-las incrementado) para que a entrada nova não seja
+    /// descartada.
+    private void inlineRecord(int slot, long tag, CompiledBlock block, int translationGeneration) {
+        syncInlineCacheGeneration(translationGeneration);
         icTags[slot] = tag;
         icBlocks[slot] = block;
     }

@@ -33,8 +33,9 @@ import java.util.Objects;
 /// ### Fora de escopo (não fazer — ver README das tasks)
 /// CP15 (`setTtbr0`/`setDacr`/`setPrivileged`/`invalidateTlb*` são chamados diretamente pelo
 /// teste nesta fase; a B4.1.2 liga isso a `MCR`/`MRC`), captura de {@link MemoryTranslationException}
-/// pelos motores e geração de entrada de abort com `DFSR`/`DFAR` (B4.1.3), geração de tradução no
-/// `BlockKey` do `BlockCache` (B4.1.4).
+/// pelos motores e geração de entrada de abort com `DFSR`/`DFAR` (B4.1.3). {@link #translationGeneration}
+/// (B4.1.4) já é exposto aqui via {@link #translationGeneration()} — o `JitRuntime` é quem o
+/// consome no `BlockKey`/inline cache, não este wrapper.
 public final class TranslatingAddressSpace implements AddressSpace {
 
     // ── layout L1 (seção, 4096 entradas de 1MiB) ────────────────────────────────────
@@ -95,6 +96,14 @@ public final class TranslatingAddressSpace implements AddressSpace {
     private boolean privileged = true;
     private boolean mmuEnabled = true;
     private long walkCount;
+    /// Geração de tradução (RFC-SOFTMMU §5, B4.1.4) — ver {@link AddressSpace#translationGeneration()}.
+    /// Incrementada só em {@link #setTtbr0}, {@link #setAsid} e {@link #invalidateTlbAll}: as três
+    /// operações que trocam QUAL tradução um VA já resolvido antes passa a produzir (troca de
+    /// tabela de páginas, troca de ASID, ou descarte total da TLB). {@link #setDacr}/
+    /// {@link #setPrivileged}/{@link #invalidateTlbByMva} não bumpam — mudam a política de
+    /// checagem ou descartam só uma página, sem invalidar a identidade "mesmo VA, mesmo mapeamento"
+    /// que o `JitRuntime` precisa para decidir se um bloco compilado continua válido.
+    private int translationGeneration;
 
     /// @param physical barramento físico por trás da tradução — nunca alterado, continua
     ///                  utilizável diretamente por quem não quiser MMU (G3)
@@ -109,6 +118,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     /// cache de page-walk modelado nesta fase.
     public void setTtbr0(int ttbr0) {
         this.ttbr0Base = ttbr0 & TTBR0_BASE_MASK;
+        translationGeneration++;
     }
 
     /// Define o ASID (`CONTEXTIDR[7:0]`) usado para taguear novas entradas de TLB e para casar
@@ -117,6 +127,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     /// TLBs reais com suporte a múltiplos processos.
     public void setAsid(int asid) {
         this.asid = asid;
+        translationGeneration++;
     }
 
     /// Define o `DACR` (Domain Access Control Register): 16 campos de 2 bits, um por domínio
@@ -152,6 +163,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     public void invalidateTlbAll() {
         dataTlb.invalidateAll();
         instructionTlb.invalidateAll();
+        translationGeneration++;
     }
 
     /// Invalida, se presente, a entrada de TLB (instrução e dados) cuja página cobre `mva` —
@@ -167,6 +179,12 @@ public final class TranslatingAddressSpace implements AddressSpace {
     /// refaz o walk.
     public long pageWalkCount() {
         return walkCount;
+    }
+
+    /// Ver {@link AddressSpace#translationGeneration()}.
+    @Override
+    public int translationGeneration() {
+        return translationGeneration;
     }
 
     // ── fetch de instrução (TLB de instrução, separada da de dados) ────────────────
