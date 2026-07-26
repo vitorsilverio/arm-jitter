@@ -93,6 +93,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     private int dacr;
     private int asid;
     private boolean privileged = true;
+    private boolean mmuEnabled = true;
     private long walkCount;
 
     /// @param physical barramento físico por trás da tradução — nunca alterado, continua
@@ -129,6 +130,22 @@ public final class TranslatingAddressSpace implements AddressSpace {
     /// que a B4.1.2 vai sincronizar a partir do `CPSR` do core a cada troca de modo.
     public void setPrivileged(boolean privileged) {
         this.privileged = privileged;
+    }
+
+    /// Liga/desliga a tradução (`SCTLR.M`, B4.1.2). Desligada, todo acesso vira passthrough
+    /// identidade para o físico — sem walk, sem TLB, sem checagem de permissão/domínio — igual ao
+    /// comportamento real de hardware antes da MMU ser habilitada pelo software. Default `true`
+    /// (G3: o teste da B4.1.1 usa o wrapper direto, sem CP15, e espera tradução sempre ativa;
+    /// quem simula o reset real de hardware, o {@code Cp15VmsaCoprocessor}, desliga explicitamente
+    /// no construtor).
+    public void setMmuEnabled(boolean mmuEnabled) {
+        this.mmuEnabled = mmuEnabled;
+    }
+
+    /// Estado atual de {@link #setMmuEnabled}, para o `Cp15VmsaCoprocessor` reconstruir a leitura
+    /// de `SCTLR.M` sem guardar uma cópia própria do bit.
+    public boolean mmuEnabled() {
+        return mmuEnabled;
     }
 
     /// Invalida toda a micro-TLB (instrução e dados) — equivalente a `TLBIALL`.
@@ -252,11 +269,11 @@ public final class TranslatingAddressSpace implements AddressSpace {
     // ── tradução ─────────────────────────────────────────────────────────────────
 
     private int translateFetch(int va) {
-        return translate(instructionTlb, va, MemoryAccessType.INSTRUCTION_FETCH);
+        return mmuEnabled ? translate(instructionTlb, va, MemoryAccessType.INSTRUCTION_FETCH) : va;
     }
 
     private int translateData(int va, MemoryAccessType type) {
-        return translate(dataTlb, va, type);
+        return mmuEnabled ? translate(dataTlb, va, type) : va;
     }
 
     private int translate(MicroTlb tlb, int va, MemoryAccessType type) {
