@@ -159,6 +159,23 @@
   escopo) continua `unsupported`. `mvn -o test` verde (1074 testes); gbaemu/ndsemu **não
   revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
   B6.1/B6.2/B6.3.1).
+- **B6.3.3** ✅ (2026-07-25, terceira das 4 sub-tasks de B6.3): `MADD`/`MSUB` via `case` novo
+  em `decodeDataProcessingRegister` (fixo de 8 bits `11011000` em `[28:21]`, `o0`(15) seleciona
+  `MADD`/`MSUB`) — record `Ir64Op.MultiplyAccumulate`, executor faz a multiplicação/soma em
+  `long` puro (overflow silencioso já é a truncagem módulo `2^64` exigida) e lê CADA operando
+  via `xForWidth` explicitamente (D2, nunca confiando no invariante de zero-extensão do QEMU).
+  `MUL`/`MNEG` (aliases com `Ra=XZR`) cobertos de graça, sem `case`/atalho dedicado — o caminho
+  geral já produz o resultado certo com o acumulador lendo `0`. `SDIV`/`UDIV` via `case` novo
+  (fixo `11010110` em `[28:21]` + opcode `00001` em `[15:11]`, bit10 seleciona `UDIV`/`SDIV`) —
+  record `Ir64Op.Divide`, divisor `0` checado ANTES de dividir (retorna `0`, sem exceção —
+  diferente de Java puro), `UDIV` via `Long.divideUnsigned`/`Integer.divideUnsigned` (nunca `/`
+  comum), `SDIV` com overflow (`MIN_VALUE / -1`) deixado acontecer via `/` de Java (já trunca
+  sem lançar). Corpus real estendido (offsets `0x1fc`-`0x228`, `aarch64-none-elf-as`/`objdump`
+  reais do devkitA64, cobrindo `MADD`/`MSUB`/`MUL`/`MNEG` em `W`/`X` e `SDIV`/`UDIV` em `W`/`X`).
+  `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (fora do escopo fechado do épico) NÃO implementadas.
+  `mvn -o test` verde (1097 testes: 1074 anteriores + 23 novos); gbaemu/ndsemu **não
+  revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
+  B6.1/B6.2/B6.3.1/B6.3.2).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -168,9 +185,8 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P1 | **B6.3.3** — AArch64: `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | `trilha-b-arquiteturas/b6.3.3-aarch64-mul-div.md` | arm-jitter | B6.3.1 ✅ | destravada desde que B6.3.1 fechou (2026-07-24/25) — reaproveita o dispatch `decodeDataProcessingRegister` (adiciona `case`s novos); independente de B6.3.2 (que já fechou 2026-07-25) |
-| P2 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
-| P3 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
+| P1 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
+| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 (softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
@@ -181,15 +197,13 @@ fechou (2026-07-24/25) — criou o dispatch de "Data Processing — Register"
 (`isDataProcessingRegisterClass`/`decodeDataProcessingRegister`). Isso destravou
 **B6.3.2** e **B6.3.3** simultaneamente. **B6.3.2** ✅ já fechou (2026-07-25,
 `CSEL`/`CSINC`/`CSINV`/`CSNEG` + `SBFM`/`UBFM`/`BFM`, ver o histórico acima).
-Resta **B6.3.3** (P1 acima) — independente de B6.3.2, só compartilha a
-dependência em B6.3.1. **B6.3.4** (P2, LDXR/LDAXR/STXR/STLXR + monitor) já
-estava elegível antes mesmo de B6.3.1 fechar — depende só de B6.2, é a única
-das 4 que introduz estado novo no core (monitor de exclusividade) e por isso é
-sozinha na sua categoria de risco. P1/P2 podem ser executadas em qualquer
-ordem entre si (mesmo repo arm-jitter, então 1 sessão por vez — "ordem
-obrigatória" aqui é só a ordem de leitura da tabela, não uma dependência
-funcional real entre elas). Ver `b6-aarch64.md` e os 4 arquivos de sub-task
-para o detalhe de cada uma.
+**B6.3.3** ✅ também já fechou (2026-07-25, `MADD`/`MSUB`/`MUL`/`MNEG`/`SDIV`/
+`UDIV`, ver o histórico acima) — independente de B6.3.2, só compartilhava a
+dependência em B6.3.1. Resta só **B6.3.4** (P1 acima, LDXR/LDAXR/STXR/STLXR +
+monitor) — já estava elegível antes mesmo de B6.3.1 fechar (depende só de
+B6.2), é a única das 4 que introduz estado novo no core (monitor de
+exclusividade) e por isso é sozinha na sua categoria de risco. Ver
+`b6-aarch64.md` e os 4 arquivos de sub-task para o detalhe de cada uma.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 

@@ -859,4 +859,150 @@ class Ir64BlockExecutorTest {
 
         assertEquals(0xF, core.pstate().nzcv(), "bitfield nunca toca NZCV");
     }
+
+    // ── B6.3.3: MADD/MSUB (+ MUL/MNEG aliases), SDIV/UDIV ──────────────────────────────────────
+
+    @Test
+    void maddAddsProductToAccumulator() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9b020c20); // madd x0, x1, x2, x3 (do corpus real)
+        core.setX(1, 6);
+        core.setX(2, 7);
+        core.setX(3, 100);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(142L, core.x(0), "MADD: dst = Ra + Rn*Rm = 100 + 6*7");
+    }
+
+    @Test
+    void msubSubtractsProductFromAccumulator() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9b069ca4); // msub x4, x5, x6, x7 (do corpus real)
+        core.setX(5, 6);
+        core.setX(6, 7);
+        core.setX(7, 100);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(58L, core.x(4), "MSUB: dst = Ra - Rn*Rm = 100 - 6*7");
+    }
+
+    @Test
+    void mulAliasIsMaddWithXzrAccumulator() {
+        // mul x8, x9, x10 (do corpus real): mesmo encoding de MADD com Ra=31 (XZR) — sem case de
+        // decode dedicado (D2 da task); o caminho geral já produz o resultado certo porque XZR lê
+        // 0.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9b0a7d28);
+        core.setX(9, 6);
+        core.setX(10, 7);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(42L, core.x(8), "MUL: dst = 0 + Rn*Rm (acumulador XZR)");
+    }
+
+    @Test
+    void mnegAliasIsMsubWithXzrAccumulator() {
+        // mneg x11, x12, x13 (do corpus real): mesmo encoding de MSUB com Ra=31 (XZR).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9b0dfd8b);
+        core.setX(12, 6);
+        core.setX(13, 7);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-42L, core.x(11), "MNEG: dst = 0 - Rn*Rm (acumulador XZR)");
+    }
+
+    @Test
+    void maddNarrowZeroExtendsResultToUpperBitsOfDestination() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x1b1045ee); // madd w14, w15, w16, w17 (do corpus real)
+        core.setX(14, 0xFFFF_FFFF_0000_0000L); // sentinela nos 32 bits altos do destino
+        core.setX(15, 5);
+        core.setX(16, 6);
+        core.setX(17, 1000);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1030L, core.x(14), "W: resultado (5*6+1000) zero-estendido para os 64 bits");
+    }
+
+    @Test
+    void sdivDivisorZeroGivesZeroWithoutThrowing() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9ade0fbc); // sdiv x28, x29, x30 (do corpus real)
+        core.setX(29, 100);
+        core.setX(30, 0);
+
+        assertDoesNotThrow(() -> new Ir64BlockExecutor().step(core),
+                "A64 NUNCA lança exceção arquitetural para divisão por zero (ver Armadilhas da task)");
+        assertEquals(0L, core.x(28), "SDIV: divisor 0 -> resultado 0");
+    }
+
+    @Test
+    void udivDivisorZeroGivesZeroWithoutThrowing() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9ac20820); // udiv x0, x1, x2 (do corpus real)
+        core.setX(1, 100);
+        core.setX(2, 0);
+
+        assertDoesNotThrow(() -> new Ir64BlockExecutor().step(core));
+        assertEquals(0L, core.x(0), "UDIV: divisor 0 -> resultado 0");
+    }
+
+    @Test
+    void sdivWideMinValueDividedByNegativeOneTruncatesWithoutThrowing() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9ade0fbc); // sdiv x28, x29, x30
+        core.setX(29, Long.MIN_VALUE);
+        core.setX(30, -1);
+
+        assertDoesNotThrow(() -> new Ir64BlockExecutor().step(core),
+                "overflow de divisão trunca (mesma convenção de complemento-de-dois de Java), nunca lança");
+        assertEquals(Long.MIN_VALUE, core.x(28));
+    }
+
+    @Test
+    void sdivNarrowMinValueDividedByNegativeOneTruncatesWithoutThrowing() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x1ac50c83); // sdiv w3, w4, w5 (do corpus real)
+        core.setX(4, 0x8000_0000L); // Integer.MIN_VALUE como padrão de bits de 32 bits
+        core.setX(5, 0xFFFF_FFFFL); // -1 como padrão de bits de 32 bits
+
+        assertDoesNotThrow(() -> new Ir64BlockExecutor().step(core));
+        assertEquals(0x8000_0000L, core.x(3),
+                "W: Integer.MIN_VALUE truncado, zero-estendido para os 64 bits do destino");
+    }
+
+    @Test
+    void udivInterpretsOperandsAsUnsigned() {
+        // udiv w6, w7, w8 (do corpus real): w7 tem o bit mais alto setado — como valor COM sinal
+        // seria negativo, mas UDIV deve interpretar sem sinal (Long.divideUnsigned/
+        // Integer.divideUnsigned, nunca `/` comum — Armadilhas da task).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x1ac808e6);
+        core.setX(7, 0x8000_0000L);
+        core.setX(8, 2);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x4000_0000L, core.x(6), "UDIV: 0x80000000 dividido sem sinal por 2");
+    }
+
+    @Test
+    void multiplyAccumulateAndDivideNeverModifyNzcv() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x9b020c20); // madd x0, x1, x2, x3
+        core.setX(1, 2);
+        core.setX(2, 3);
+        core.setX(3, 4);
+        core.pstate().setNzcv(true, true, true, true);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xF, core.pstate().nzcv(), "MADD/MSUB/SDIV/UDIV nunca tocam NZCV");
+    }
 }

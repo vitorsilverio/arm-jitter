@@ -110,6 +110,9 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.CONDITIONAL_SELECT ->
                     executeConditionalSelect(core, (Ir64Op.ConditionalSelect) op);
             case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
+            case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
+                    executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
+            case Ir64Op.Kind.DIVIDE -> executeDivide(core, (Ir64Op.Divide) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -302,6 +305,56 @@ public final class Ir64BlockExecutor {
         }
         long signBit = 1L << (len - 1);
         return (field ^ signBit) - signBit;
+    }
+
+    /// `MADD`/`MSUB` (B6.3.3) — sem atalho para `Ra==31` (D2 da task): o caminho geral já produz o
+    /// resultado certo quando o acumulador é `XZR` (lê `0`), sem `if` especial. Cada operando-fonte
+    /// é lido explicitamente via {@link Aarch64Core#xForWidth}, nunca confiando no invariante de
+    /// zero-extensão do registrador cru (D2). A multiplicação/soma é feita em `long` puro — o
+    /// overflow silencioso de `long*long`/`long+long` de Java já é módulo `2^64`, exatamente a
+    /// truncagem exigida pela arquitetura; {@link Aarch64Core#setXForWidth} aplica a
+    /// zero-extensão final quando `!wide`.
+    private boolean executeMultiplyAccumulate(Aarch64Core core, Ir64Op.MultiplyAccumulate op) {
+        long operand1 = core.xForWidth(op.src1(), op.wide());
+        long operand2 = core.xForWidth(op.src2(), op.wide());
+        long accumulator = core.xForWidth(op.accumulator(), op.wide());
+        long product = operand1 * operand2;
+        long result = op.subtract() ? (accumulator - product) : (accumulator + product);
+        core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// `SDIV`/`UDIV` (B6.3.3) — divisor `0` produz resultado `0` SEM lançar exceção (checado ANTES
+    /// de dividir; Fatos de referência #2 da task/Armadilhas — o operador `/` de Java lançaria
+    /// `ArithmeticException`, que não existe na arquitetura). `SDIV`/`Long.MIN_VALUE / -1` (ou o
+    /// equivalente de 32 bits) truncam para o próprio `MIN_VALUE` sem lançar — mesma convenção de
+    /// complemento-de-dois que a divisão inteira de Java já produz (só lança para divisor `0`).
+    private boolean executeDivide(Aarch64Core core, Ir64Op.Divide op) {
+        long dividend = readDivideOperand(core, op.src1(), op.signed(), op.wide());
+        long divisor = readDivideOperand(core, op.src2(), op.signed(), op.wide());
+        long quotient;
+        if (divisor == 0L) {
+            quotient = 0L;
+        } else if (op.signed()) {
+            quotient = op.wide() ? (dividend / divisor) : (long) ((int) dividend / (int) divisor);
+        } else {
+            quotient = op.wide()
+                    ? Long.divideUnsigned(dividend, divisor)
+                    : (long) Integer.divideUnsigned((int) dividend, (int) divisor);
+        }
+        core.setXForWidth(op.dst(), quotient, op.wide());
+        return false;
+    }
+
+    /// Lê um operando de `SDIV`/`UDIV`: `SDIV` em `W` exige sign-extend EXPLÍCITO dos 32 bits
+    /// baixos (Fatos de referência #2 — `n = sign_extend32(Rn_low32)`); as demais combinações
+    /// (`UDIV` em `W`, e qualquer operação em `X`) já usam {@link Aarch64Core#xForWidth} normal
+    /// (`UDIV` em `W` já vem zero-estendido "de graça", invariante do core).
+    private static long readDivideOperand(Aarch64Core core, int index, boolean signed, boolean wide) {
+        if (signed && !wide) {
+            return (long) (int) core.xForWidth(index, false);
+        }
+        return core.xForWidth(index, wide);
     }
 
     private boolean executeMoveWide(Aarch64Core core, Ir64Op.MoveWide op) {

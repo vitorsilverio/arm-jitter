@@ -25,7 +25,8 @@ public sealed interface Ir64Op permits
         Ir64Op.Alu64, Ir64Op.MoveWide, Ir64Op.PcRelative, Ir64Op.Branch64, Ir64Op.CompareBranch64,
         Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
-        Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield {
+        Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
+        Ir64Op.MultiplyAccumulate, Ir64Op.Divide {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -53,6 +54,8 @@ public sealed interface Ir64Op permits
         public static final int ALU_EXTENDED_REGISTER = 13;
         public static final int CONDITIONAL_SELECT = 14;
         public static final int BITFIELD = 15;
+        public static final int MULTIPLY_ACCUMULATE = 16;
+        public static final int DIVIDE = 17;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -447,5 +450,51 @@ public sealed interface Ir64Op permits
             /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
             boolean wide) implements Ir64Op {
         @Override public int kind() { return Kind.BITFIELD; }
+    }
+
+    /// `MADD`/`MSUB` (`ARM DDI 0487 C6.2.197/226`, B6.3.3, subgrupo "Data-processing (3 source)").
+    /// Os aliases `MUL`/`MNEG` (`Ra=XZR`) não têm representação própria — o caminho geral de
+    /// execução já produz o resultado certo quando {@link #accumulator} é `XZR` (lê `0`), sem
+    /// nenhum atalho dedicado (mesmo raciocínio já registrado para `CSET`/`CSETM` em B6.3.2; ver
+    /// Fatos de referência #1 da task e a decisão D2). Nunca afeta `NZCV`; nenhum operando aceita
+    /// `SP` (todos são `cpu_reg` puro no encoding, nunca `cpu_reg_sp`).
+    record MultiplyAccumulate(
+            /// `false` para `MADD` (soma o produto ao acumulador), `true` para `MSUB` (subtrai o
+            /// produto do acumulador).
+            boolean subtract,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro registrador multiplicando (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo registrador multiplicando (`Rm`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src2,
+            /// Registrador acumulador (`Ra`, índice `0`-`31`; `31` é sempre `XZR` — é assim que
+            /// `MUL`/`MNEG` chegam aqui sem `case` de decode dedicado).
+            int accumulator,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado sempre
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.MULTIPLY_ACCUMULATE; }
+    }
+
+    /// `SDIV`/`UDIV` (`ARM DDI 0487 C6.2.375/404`, B6.3.3, subgrupo "Data-processing (2 source)").
+    /// Divisor `0` produz resultado `0` — SEM exceção arquitetural (ver Fatos de referência #2 da
+    /// task, diferente da divisão inteira de Java, que lança `ArithmeticException`). `SDIV` com
+    /// overflow (`MIN_VALUE / -1`) trunca para `MIN_VALUE`, mesma convenção de complemento-de-dois
+    /// que a divisão inteira de Java já produz sem lançar. Nenhum operando aceita `SP`; nunca
+    /// afeta `NZCV`.
+    record Divide(
+            /// `false` para `UDIV` (divisão sem sinal), `true` para `SDIV` (divisão com sinal).
+            boolean signed,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Dividendo (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Divisor (`Rm`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src2,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado sempre
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.DIVIDE; }
     }
 }

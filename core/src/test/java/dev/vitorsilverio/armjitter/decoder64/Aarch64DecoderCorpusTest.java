@@ -12,6 +12,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+// Ir64Op.MultiplyAccumulate/Ir64Op.Divide (B6.3.3) são referenciados via Ir64Op.* (mesmo padrão
+// já usado neste arquivo para os demais subtipos aninhados).
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -1236,5 +1238,146 @@ class Aarch64DecoderCorpusTest {
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B6.3.3: MADD/MSUB (+ MUL/MNEG aliases), SDIV/UDIV — offsets 0x1fc+ ─────────────────────
+
+    @Test
+    void madd() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x1fc);
+        assertFalse(op.subtract());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertEquals(3, op.accumulator());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void msub() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x200);
+        assertTrue(op.subtract());
+        assertEquals(4, op.dst());
+        assertEquals(5, op.src1());
+        assertEquals(6, op.src2());
+        assertEquals(7, op.accumulator());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void mulAliasIsMultiplyAccumulateWithXzrAccumulator() {
+        // mul x8, x9, x10: alias sem case de decode dedicado — chega como MADD com accumulator=31
+        // (XZR), ver Fatos de referência #1 da task.
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x204);
+        assertFalse(op.subtract());
+        assertEquals(8, op.dst());
+        assertEquals(9, op.src1());
+        assertEquals(10, op.src2());
+        assertEquals(31, op.accumulator());
+    }
+
+    @Test
+    void mnegAliasIsMultiplyAccumulateSubtractWithXzrAccumulator() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x208);
+        assertTrue(op.subtract());
+        assertEquals(11, op.dst());
+        assertEquals(12, op.src1());
+        assertEquals(13, op.src2());
+        assertEquals(31, op.accumulator());
+    }
+
+    @Test
+    void maddNarrowWidth() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x20c);
+        assertFalse(op.subtract());
+        assertEquals(14, op.dst());
+        assertEquals(15, op.src1());
+        assertEquals(16, op.src2());
+        assertEquals(17, op.accumulator());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void msubNarrowWidth() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x210);
+        assertTrue(op.subtract());
+        assertEquals(18, op.dst());
+        assertEquals(19, op.src1());
+        assertEquals(20, op.src2());
+        assertEquals(21, op.accumulator());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void mulAliasNarrowWidth() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x214);
+        assertEquals(22, op.dst());
+        assertEquals(23, op.src1());
+        assertEquals(24, op.src2());
+        assertEquals(31, op.accumulator());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void mnegAliasNarrowWidth() {
+        Ir64Op.MultiplyAccumulate op =
+                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x218);
+        assertTrue(op.subtract());
+        assertEquals(25, op.dst());
+        assertEquals(26, op.src1());
+        assertEquals(27, op.src2());
+        assertEquals(31, op.accumulator());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void sdivWide() {
+        Ir64Op.Divide op =
+                (Ir64Op.Divide) DECODER.decode(memory, 0x21c);
+        assertTrue(op.signed());
+        assertEquals(28, op.dst());
+        assertEquals(29, op.src1());
+        assertEquals(30, op.src2());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void udivWide() {
+        Ir64Op.Divide op =
+                (Ir64Op.Divide) DECODER.decode(memory, 0x220);
+        assertFalse(op.signed());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void sdivNarrow() {
+        Ir64Op.Divide op =
+                (Ir64Op.Divide) DECODER.decode(memory, 0x224);
+        assertTrue(op.signed());
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void udivNarrow() {
+        Ir64Op.Divide op =
+                (Ir64Op.Divide) DECODER.decode(memory, 0x228);
+        assertFalse(op.signed());
+        assertEquals(6, op.dst());
+        assertEquals(7, op.src1());
+        assertEquals(8, op.src2());
+        assertFalse(op.wide());
     }
 }

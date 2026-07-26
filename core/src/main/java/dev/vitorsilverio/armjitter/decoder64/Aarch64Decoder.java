@@ -285,6 +285,25 @@ public final class Aarch64Decoder {
     private static final int CSEL_COND_SHIFT = 12;
     private static final int CSEL_ELSE_INC_SHIFT = 10;
 
+    // ── Data-processing (3 source): MADD/MSUB (B6.3.3): sf(31) 00(30:29) 11011000(28:21) ────────
+    // ── Rm(20:16) o0(15) Ra(14:10) Rn(9:5) Rd(4:0) — Fatos de referência #1 da task. `op31`/──────
+    // ── `op0` fixos distinguem de SMADDL/SMSUBL/UMADDL/UMSUBL (fora de escopo, ver Armadilhas). ──
+    private static final int MULDIV_FIXED_SHIFT = 21;
+    private static final int MULDIV_FIXED_8BIT_MASK = 0b1111_1111;
+    private static final int MADD_MSUB_FIXED_PATTERN = 0b1101_1000;
+    private static final int MADD_MSUB_O0_SHIFT = 15;
+    private static final int MADD_MSUB_RA_SHIFT = 10;
+
+    // ── Data-processing (2 source): SDIV/UDIV (B6.3.3): sf(31) 00(30:29) 11010110(28:21) ─────────
+    // ── Rm(20:16) opcode(15:11)=00001 o1(10, 0=UDIV/1=SDIV) Rn(9:5) Rd(4:0) — Fatos de ───────────
+    // ── referência #2 da task; opcode diferente distingue de LSLV/LSRV/ASRV/RORV/CRC32* (fora ────
+    // ── de escopo, mesmo subgrupo). ────────────────────────────────────────────────────────────
+    private static final int DIVIDE_FIXED_PATTERN = 0b1101_0110;
+    private static final int DIVIDE_OPCODE_SHIFT = 11;
+    private static final int DIVIDE_OPCODE_5BIT_MASK = 0b1_1111;
+    private static final int DIVIDE_OPCODE_PATTERN = 0b0_0001;
+    private static final int DIVIDE_SIGNED_BIT_SHIFT = 10;
+
     // ── Bitfield (SBFM/BFM/UBFM), subgrupo `10` de Data Processing Immediate (B6.3.2): ─────────
     // ── sf(31) opc(30:29) 100110(28:23) N(22) immr(21:16) imms(15:10) Rn(9:5) Rd(4:0) — MESMAS ──
     // ── posições de bit de Logical (immediate), reaproveitadas com nomes próprios (G6). ─────────
@@ -621,9 +640,42 @@ public final class Aarch64Decoder {
         if (fixed9 == CSEL_FIXED_PATTERN && reservedBit11Clear) {
             return decodeConditionalSelect(word);
         }
-        // 2-source/3-source: MADD/MSUB/SDIV/UDIV (B6.3.3), Logical (shifted register) (fora do
-        // escopo fechado do épico): fora da fatia B6.3.1/B6.3.2.
+        int muldivFixed8 = (word >>> MULDIV_FIXED_SHIFT) & MULDIV_FIXED_8BIT_MASK;
+        if (muldivFixed8 == MADD_MSUB_FIXED_PATTERN) {
+            return decodeMultiplyAccumulate(word);
+        }
+        if (muldivFixed8 == DIVIDE_FIXED_PATTERN) {
+            int divideOpcode = (word >>> DIVIDE_OPCODE_SHIFT) & DIVIDE_OPCODE_5BIT_MASK;
+            if (divideOpcode == DIVIDE_OPCODE_PATTERN) {
+                return decodeDivide(word);
+            }
+            // opcode != 00001: LSLV/LSRV/ASRV/RORV/CRC32* (fora do escopo fechado do épico).
+            throw unsupported(word, address);
+        }
+        // Logical (shifted register): fora do escopo fechado do épico (ver a task B6.3.1).
         throw unsupported(word, address);
+    }
+
+    /// `MADD`/`MSUB` (B6.3.3) — `MUL`/`MNEG` (aliases com `Ra=XZR`) chegam aqui como o mesmo
+    /// opcode geral, sem `case` dedicado (Fatos de referência #1 da task).
+    private Ir64Op decodeMultiplyAccumulate(int word) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean subtract = ((word >>> MADD_MSUB_O0_SHIFT) & 1) != 0;
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.MultiplyAccumulate(subtract, rd, rn, rm, ra, wide);
+    }
+
+    /// `SDIV`/`UDIV` (B6.3.3).
+    private Ir64Op decodeDivide(int word) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean signed = ((word >>> DIVIDE_SIGNED_BIT_SHIFT) & 1) != 0;
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Divide(signed, rd, rn, rm, wide);
     }
 
     /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (D1 da task B6.3.2) — o opcode é resolvido só pelos bits

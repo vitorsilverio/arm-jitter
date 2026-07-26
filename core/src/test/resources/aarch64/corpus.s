@@ -138,3 +138,17 @@ sxtb x30, w0
 sxth x1, w2
 sxtw x3, w4
 csneg x25, x26, xzr, eq
+
+// ── B6.3.3: MADD/MSUB (+ MUL/MNEG aliases), SDIV/UDIV ──────────────────────────────────
+madd x0, x1, x2, x3
+msub x4, x5, x6, x7
+mul x8, x9, x10
+mneg x11, x12, x13
+madd w14, w15, w16, w17
+msub w18, w19, w20, w21
+mul w22, w23, w24
+mneg w25, w26, w27
+sdiv x28, x29, x30
+udiv x0, x1, x2
+sdiv w3, w4, w5
+udiv w6, w7, w8
