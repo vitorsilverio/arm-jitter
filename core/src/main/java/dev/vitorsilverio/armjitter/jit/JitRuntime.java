@@ -14,6 +14,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -75,6 +76,14 @@ public final class JitRuntime {
     private static final int IC_MASK = IC_SIZE - 1;
     /// Tag sentinela para slot vazio (nenhuma tag válida é negativa).
     private static final long IC_EMPTY = -1L;
+    /// Ciclos reportados quando o `lift()` de um bloco NUNCA-antes-visto falta na tradução
+    /// (B4.1.5, achado real): o `BlockCache` só tem a proteção de {@link MemoryTranslationException}
+    /// DEPOIS que um bloco existe (B4.1.3, `IrBlockExecutor`/`AsmBlockCompiler` cercam a EXECUÇÃO) —
+    /// a primeira busca da PRIMEIRA instrução de um bloco novo, feita pelo próprio `lift()` para
+    /// decidir onde o bloco termina, não tinha proteção nenhuma e vazava a exceção para fora do
+    /// `JitRuntime` (crash do hospedeiro). Mesmo valor de "uma instrução consumiu um ciclo" que
+    /// `ArmCore#stepReturningInternalCycles` já usa para HALT/STOP/IRQ pendente.
+    private static final int LIFT_FAULT_CYCLES = 1;
     /// Orçamento de ciclos internos do encadeamento de blocos (ver `execute`): a corrente para de
     /// seguir o PC ao atingir isto. 0 = encadeamento desligado (default seguro). Configurável por
     /// runtime ({@link #setChainCycleBudget}): handshakes de boot cross-CPU (NitroSDK IPC-sync,
@@ -491,7 +500,13 @@ public final class JitRuntime {
                 core.setProgramCounter(pc);
                 return core.stepReturningInternalCycles();
             }
-            IrBlock irBlock = lift(pc, core.memory(), instructionSet, itState);
+            IrBlock irBlock;
+            try {
+                irBlock = lift(pc, core.memory(), instructionSet, itState);
+            } catch (MemoryTranslationException fault) {
+                core.enterMemoryAbort(pc, fault);
+                return LIFT_FAULT_CYCLES;
+            }
             block = emitter.emit(optimizer.optimize(irBlock));
             blockCache.put(key, block, irBlock.startPc(), irBlock.endPc());
         }
@@ -524,7 +539,13 @@ public final class JitRuntime {
             if (warmupDiagnostics) {
                 coldTierExecutions++;
             }
-            IrBlock irBlock = lift(pc, core.memory(), instructionSet, itState);
+            IrBlock irBlock;
+            try {
+                irBlock = lift(pc, core.memory(), instructionSet, itState);
+            } catch (MemoryTranslationException fault) {
+                core.enterMemoryAbort(pc, fault);
+                return LIFT_FAULT_CYCLES;
+            }
             CompiledBlock cold = coldEmitter.emit(irBlock);
             blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
             return run(cold, core);
@@ -543,7 +564,15 @@ public final class JitRuntime {
         CompiledBlock cold = entry.block();
         int hits = blockCache.hit(key);
         if (threshold.isHot(hits) && compilingColdBlocks.add(cold)) {
-            submitCompile(key, cold, lift(pc, core.memory(), instructionSet, itState));
+            // Re-lift para promover a quente: se a tradução falhar aqui (página desmapeada/
+            // geração trocada entre a última execução e agora), desiste da promoção esta vez —
+            // `run(cold, core)` logo abaixo executa o bloco frio normalmente, que já trata o
+            // MemoryTranslationException pelo caminho estabelecido (IrBlockExecutor, B4.1.3).
+            try {
+                submitCompile(key, cold, lift(pc, core.memory(), instructionSet, itState));
+            } catch (MemoryTranslationException ignoredPromotionFault) {
+                compilingColdBlocks.remove(cold);
+            }
         }
         return run(cold, core);
     }

@@ -28,7 +28,20 @@ public final class ArmArchitecture {
             ArmFeature.LDM_WRITEBACK_BASE_IN_LIST,
             ArmFeature.EMPTY_RLIST_NO_TRANSFER,
             ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL,
-            ArmFeature.BREAKPOINT)
+            ArmFeature.BREAKPOINT,
+            // PLD/PLDW/PLI (B4.1.5, achado real): a arquitetura ARM real introduz PLD já na
+            // ARMv5TE (ARM DDI 0100I e DDI 0406C confirmam "PLD is available in ARMv5TE,
+            // ARMv5TEJ e ARMv6 em diante") — não apenas na ARMv6K, onde `PRELOAD_HINTS` estava
+            // erroneamente só presente antes desta correção. Sem isto, qualquer código ARMv5TE
+            // real usando PLD (comum em rotinas de cópia/zero de memória otimizadas do Linux,
+            // ex.: `arch/arm/lib/copy_page.S`) decodifica como instrução indefinida e faz o
+            // guest entrar (incorretamente) na exceção UNDEFINED — bug real encontrado ao
+            // rodar `testdata/vmlinuz-3.2.0-4-versatile` (kernel ARM926EJ-S/ARMv5TE) no
+            // hospedeiro `linuxbox` (B4.1.5): a instrução real `PLD [r1]` em
+            // `arch/arm/lib/copy_page.S` travava o boot. G3: aditivo — só faz MAIS raws
+            // decodificarem com sucesso (PLD/PLDW/PLI viravam UNDEFINED antes), nenhum
+            // consumidor existente depende desses encodings específicos virarem UNDEFINED.
+            ArmFeature.PRELOAD_HINTS)
             .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()));
 
     /// ARM11 (MPCore/ARM1176) — 3DS principal e Raspberry Pi 1/Zero. ARMv5TE mais o conjunto
@@ -46,8 +59,9 @@ public final class ArmArchitecture {
             ArmFeature.MODE_CHANGE_INSTRUCTIONS,
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
             ArmFeature.WAIT_HINTS,
-            ArmFeature.UNALIGNED_ACCESS,
-            ArmFeature.PRELOAD_HINTS);
+            ArmFeature.UNALIGNED_ACCESS);
+    // PRELOAD_HINTS (PLD/PLDW/PLI) agora vem herdado de ARMV5TE (correção acima) — antes desta
+    // task estava listado aqui, sugerindo (erradamente) que só ARMv6K tinha PLD.
 
     /// Preset Thumb-2 do épico B2 (B2.1-B2.6) mais a paridade de encodings de B2.7: as extensões
     /// de decoder de 32 bits (`Thumb2DataProcessingDecoder`, `Thumb2RegisterDataProcessingDecoder`
