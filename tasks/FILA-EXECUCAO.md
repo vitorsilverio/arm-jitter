@@ -254,6 +254,28 @@
   `mvn -o test` raiz verde; gbaemu + ndsemu + armbox revalidados verdes (G5 se aplica desta vez:
   `ArmCore`/`IrBlockExecutor`/`AsmBlockCompiler`/decoders são compartilhados). Próximo da ordem
   do épico: **B4.1.4** (`translationGeneration` no `BlockKey`/`JitRuntime`).
+- **B4.1.5** 🟡 PARCIAL (2026-07-26, quinta e última sub-task do épico B4.1/MMU-softmmu — repo
+  novo `linuxbox`): hospedeiro `versatilepb`-like completo (RAM 128MiB via `PagedAddressSpace`
+  C3, `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic` transcritos dos respectivos arquivos de
+  `hw/*/*.c` do QEMU, `AtagsBuilder`) sobre `TranslatingAddressSpace`+`Cp15VmsaCoprocessor`
+  (B4.1.1-B4.1.4, sem tocar). **Desvio forçado documentado** (mesmo bloqueio de toolchain
+  `arm-linux-*` de B4.0.3/B6.2): kernel REAL pré-compilado da Debian (`vmlinuz-3.2.0-4-
+  versatile`, ARM926EJ-S/ARMv5TE, ATAGs — não um `versatile_defconfig` self-built, que hoje
+  exige Device Tree) + `busybox-armv5l` real (achado que destrava o que B4.0.3/B6.2 não
+  conseguiram: variante ARM-mode existe nos binários oficiais do busybox.net, ao contrário de
+  Thumb-2/AArch64). **2 bugs reais do arm-jitter corrigidos** (commit separado): `ARMV5TE` sem
+  `ArmFeature.PRELOAD_HINTS` (PLD é ARMv5TE de verdade, não só ARMv6K — sem isso um `PLD` real
+  do kernel virava UNDEFINED) e `JitRuntime.execute`/`executeTiered` sem `try/catch` de
+  `MemoryTranslationException` ao redor de `lift(...)` (falta na busca da PRIMEIRA instrução de
+  um bloco novo, antes da proteção de B4.1.3 existir — derrubava o processo). **Aceite objetivo
+  NÃO alcançado**: sem shell interativo — kernel descomprime e salta para código pós-MMU
+  (`0xc0...`) mas trava num `PREFETCH_ABORT` recursivo ao redor da página de vetores altos
+  (`0xffff0000`), causa raiz não isolada. `VersatilePbBootTest` prova o marco alcançável hoje
+  (mensagem de descompressão do zImage, INTERPRETED e JIT) + testes de unidade por periférico.
+  `mvn -o test` verde (linuxbox + arm-jitter + gbaemu + ndsemu + armbox, G5 aplicável). **Fecha
+  o épico B4.1 apenas parcialmente** — pendência clara para retomar: isolar a causa do loop de
+  abort na página de vetores, ou obter toolchain `arm-linux-gnueabihf-*`/WSL para fechar o
+  desvio ARM1176/ARMv6K+DT da RFC por completo.
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -265,8 +287,9 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
-Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
-(softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
+Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
+abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
+real) e B6.4+ (AArch64 — escopo fechado no épico,
 mas spec própria ainda não escrita; ver `b6-aarch64.md`).
 
 **B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec) — TODAS ✅
