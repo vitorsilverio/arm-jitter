@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 
 /// Orquestra a execução interpretada de um bloco IR.
 ///
@@ -32,6 +33,14 @@ public final class IrBlockExecutor {
     }
 
     /// Interpreta um bloco IR e devolve os ciclos internos (`IrOp.Cycle`) consumidos.
+    ///
+    /// B4.1.3 (RFC-SOFTMMU §3): uma {@link MemoryTranslationException} lançada por um `AddressSpace`
+    /// traduzido (`TranslatingAddressSpace`) no meio do laço é capturada aqui — o `try` cerca o laço
+    /// inteiro sem custo no caminho quente (uma região `try` sem lançamento não paga nada na JVM; só
+    /// o `throw` em si tem custo, e faltas de tradução já são raras por natureza). No `catch`, o
+    /// endereço da instrução faltosa é o do PRÓXIMO `IrOp.Fetch` a partir do índice corrente — cada
+    /// instrução termina SEMPRE com `Cycle`+`Fetch` (G4), então o Fetch que ainda não rodou é
+    /// exatamente o desta instrução (ver {@link #ownerInstructionAddress}).
     public int execute(IrBlock block, ArmCore core) {
         int cycles = 0;
         boolean pcChanged = false;
@@ -43,12 +52,15 @@ public final class IrBlockExecutor {
         // chamada virtual megamórfica de `op.kind()` por op a cada execução — o bloco é imutável
         // pós-lift, então o dispatch já é conhecido e só precisa ser indexado aqui.
         int[] kinds = block.kindsArray();
-        for (int i = 0, n = ops.length; i < n; i++) {
-            // Dispatch O(1) por discriminador inteiro (tableswitch), em vez do `switch` por
-            // padrão de tipo, cuja varredura linear de `instanceof` era o 2º frame mais quente.
-            // O cast em cada case é garantido por IrOp.kind() (ver IrOp.Kind).
-            IrOp op = ops[i];
-            switch (kinds[i]) {
+        int n = ops.length;
+        int i = 0;
+        try {
+            for (; i < n; i++) {
+                // Dispatch O(1) por discriminador inteiro (tableswitch), em vez do `switch` por
+                // padrão de tipo, cuja varredura linear de `instanceof` era o 2º frame mais quente.
+                // O cast em cada case é garantido por IrOp.kind() (ver IrOp.Kind).
+                IrOp op = ops[i];
+                switch (kinds[i]) {
                 case IrOp.Kind.ALU -> pcChanged |= alu.execute(core, (IrOp.Alu) op);
                 case IrOp.Kind.MULTIPLY -> alu.executeMultiply(core, (IrOp.Multiply) op);
                 case IrOp.Kind.LONG_MULTIPLY -> alu.executeLongMultiply(core, (IrOp.LongMultiply) op);
@@ -105,14 +117,31 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_SYSTEM_TRANSFER -> vfp.executeVfpSystemTransfer(core, (IrOp.VfpSystemTransfer) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
-                default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
+                    default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
+                }
             }
+        } catch (MemoryTranslationException fault) {
+            core.enterMemoryAbort(ownerInstructionAddress(ops, kinds, i), fault);
+            return cycles;
         }
 
         if (!pcChanged) {
             core.setProgramCounter(block.endPc());
         }
         return cycles;
+    }
+
+    /// Endereço da instrução dona da op no índice `faultIndex` (B4.1.3): cada instrução termina
+    /// SEMPRE com `Cycle`+`Fetch` (G4, ver `StandardIrBuilder`), então o primeiro `Fetch` a partir
+    /// de `faultIndex` (inclusive) é o desta instrução — só roda no caminho raro de exceção, sem
+    /// custo no laço quente de {@link #execute}.
+    private static int ownerInstructionAddress(IrOp[] ops, int[] kinds, int faultIndex) {
+        for (int j = faultIndex; j < ops.length; j++) {
+            if (kinds[j] == IrOp.Kind.FETCH) {
+                return ((IrOp.Fetch) ops[j]).address();
+            }
+        }
+        throw new IllegalStateException("bloco sem IrOp.Fetch após o índice " + faultIndex);
     }
 
     /// Executor de ALU/multiplicação (task A6): exposto para que o módulo `truffle/` possa

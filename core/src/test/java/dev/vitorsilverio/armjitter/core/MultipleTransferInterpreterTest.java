@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
+import dev.vitorsilverio.armjitter.support.FaultingAddressSpace;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -7,6 +9,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MultipleTransferInterpreterTest {
+    /// B4.1.3 (RFC-SOFTMMU §3, semântica base-restored do ARM1176): `LDMIA r4!, {r0,r1,r2}` —
+    /// r0/r1 carregam de r4/r4+4 normalmente; r4+8 (o valor de r2) FALTA. r0/r1 devem ficar
+    /// carregados (já escritos antes da falta), mas a base r4 NÃO deve receber o writeback —
+    /// `IrTransferExecutor#executeMultipleTransfer` só escreve a base DEPOIS do laço de
+    /// registradores, então nunca roda se a falta interrompeu o laço no meio.
+    @Test
+    void ldmAbortingMidTransferRestoresBaseButKeepsAlreadyLoadedRegisters() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        physical.put32(0, 0xE8B4_0007); // LDMIA r4!, {r0,r1,r2}
+        physical.write32(64, 0x1111);
+        physical.write32(68, 0x2222);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(72, MemoryAccessType.DATA_READ);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        core.setRegister(4, 64);
+        core.setBankedRegister(CpuMode.ABORT, 13, 0x9000);
+
+        core.step();
+
+        assertEquals(CpuMode.ABORT, core.mode());
+        assertEquals(0x1111, core.register(0), "r0 já tinha sido carregado antes da falta");
+        assertEquals(0x2222, core.register(1), "r1 já tinha sido carregado antes da falta");
+        assertEquals(64, core.register(4), "base NÃO deveria ter recebido o writeback (base-restored)");
+    }
+
     @Test
     void executesArmStmiaAndLdmiaWithWriteback() {
         TestAddressSpace memory = new TestAddressSpace(64);

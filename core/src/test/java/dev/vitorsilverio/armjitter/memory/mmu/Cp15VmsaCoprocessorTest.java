@@ -87,6 +87,31 @@ class Cp15VmsaCoprocessorTest {
     }
 
     @Test
+    void onDataAbortFillsDfarDfsr() {
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+
+        cp15.onDataAbort(0x1234_5678, FaultStatus.SECTION_PERMISSION.code());
+
+        assertEquals(0x1234_5678, cp15.read(15, 0, 6, 0, 0), "DFAR");
+        assertEquals(FaultStatus.SECTION_PERMISSION.code(), cp15.read(15, 0, 5, 0, 0), "DFSR");
+    }
+
+    @Test
+    void onPrefetchAbortFillsIfarIfsrWithoutTouchingDataFaultRegisters() {
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+        cp15.onDataAbort(0x1111_1111, FaultStatus.SECTION_DOMAIN.code());
+
+        cp15.onPrefetchAbort(0x2000_0000, FaultStatus.PAGE_TRANSLATION.code());
+
+        assertEquals(0x2000_0000, cp15.read(15, 0, 6, 0, 2), "IFAR");
+        assertEquals(FaultStatus.PAGE_TRANSLATION.code(), cp15.read(15, 0, 5, 0, 1), "IFSR");
+        assertEquals(0x1111_1111, cp15.read(15, 0, 6, 0, 0), "DFAR não deveria mudar");
+        assertEquals(FaultStatus.SECTION_DOMAIN.code(), cp15.read(15, 0, 5, 0, 0), "DFSR não deveria mudar");
+    }
+
+    @Test
     void contextIdrAsidLowByteForwardedAndReadBackWhole() {
         TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
         Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());

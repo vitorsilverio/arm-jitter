@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.jit.JitRuntime;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 
@@ -58,6 +59,9 @@ public final class ArmCore {
     /// {@link #setBkptDispatcher} sem exigir mudança de assinatura de construtor (G3).
     private BkptDispatcher bkptDispatcher = BkptDispatcher.empty();
     private CoprocessorBus coprocessorBus = CoprocessorBus.none();
+    /// Gancho de preenchimento de FAR/FSR em abort (B4.1.3): vazio por padrão ({@link MemoryAbortListener#NONE}),
+    /// mesmo padrão aditivo de {@link #coprocessorBus} — ver {@link #setMemoryAbortListener}.
+    private MemoryAbortListener memoryAbortListener = MemoryAbortListener.NONE;
     private boolean highVectors;
     private final ArmInterpreter interpreter;
     private long cycles;
@@ -332,6 +336,17 @@ public final class ArmCore {
         this.coprocessorBus = Objects.requireNonNull(coprocessorBus, "coprocessorBus");
     }
 
+    /// Retorna o gancho de FAR/FSR em abort (B4.1.3). Padrão é {@link MemoryAbortListener#NONE}
+    /// até que {@link #setMemoryAbortListener} instale um (ex. `Cp15VmsaCoprocessor`).
+    public MemoryAbortListener memoryAbortListener() {
+        return memoryAbortListener;
+    }
+
+    /// Instala o gancho de FAR/FSR usado por {@link #enterMemoryAbort} (ex. CP15 VMSA do ARM9).
+    public void setMemoryAbortListener(MemoryAbortListener memoryAbortListener) {
+        this.memoryAbortListener = Objects.requireNonNull(memoryAbortListener, "memoryAbortListener");
+    }
+
     /// Define se as exceções vetorizam para a base alta `0xFFFF0000` (ARM9 com o bit V do CP15 c1
     /// ativado) em vez de `0x00000000`. O GBA e o NDS ARM7 mantêm isto desativado.
     public boolean highVectors() {
@@ -453,7 +468,18 @@ public final class ArmCore {
             traceListener.afterInstruction(this, instruction);
             return new SingleInstructionExecution(instruction, 1);
         }
-        ArmInterpreter.StepResult result = interpreter.stepWithResult(this);
+        ArmInterpreter.StepResult result;
+        try {
+            result = interpreter.stepWithResult(this);
+        } catch (MemoryTranslationException fault) {
+            // pc é o endereço da PRÓPRIA instrução (capturado antes do decode/lift/execute acima),
+            // correto tanto para uma falta na busca da instrução (decode) quanto numa falta de
+            // dados (Load/Store/MultipleTransfer executados pelo bloco IR de uma única instrução).
+            enterMemoryAbort(pc, fault);
+            DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
+            traceListener.afterInstruction(this, instruction);
+            return new SingleInstructionExecution(instruction, 1);
+        }
         traceListener.afterInstruction(this, result.instruction());
         return new SingleInstructionExecution(result.instruction(), result.internalCycles());
     }
@@ -513,6 +539,28 @@ public final class ArmCore {
     /// Processa uma exceção ARM futura.
     public void handleException(ArmException exception) {
         requestException(exception);
+    }
+
+    /// Converte uma falha de tradução de endereço (MMU) na entrada de exceção ARM correspondente
+    /// (B4.1.3, RFC-SOFTMMU §3): `PREFETCH_ABORT` para busca de instrução, `DATA_ABORT` para
+    /// leitura/escrita de dados. Preenche FAR/FSR via {@link #memoryAbortListener} ANTES de entrar
+    /// na exceção — `AProfileExceptionModel#exceptionReturnAddress` soma o deslocamento (+4/+8)
+    /// correto a partir de {@link #programCounter()}, então `instructionAddress` deve ser o
+    /// endereço da PRÓPRIA instrução faltosa (não o sequencial seguinte, ao contrário de SWI).
+    ///
+    /// @param instructionAddress endereço da instrução que causou a falta
+    /// @param fault falha capturada de {@link AddressSpace#read32}/`write32`/etc. (via
+    ///              `TranslatingAddressSpace`)
+    public void enterMemoryAbort(int instructionAddress, MemoryTranslationException fault) {
+        boolean isInstructionFetch = fault.accessType() == MemoryAccessType.INSTRUCTION_FETCH;
+        int faultStatusCode = fault.faultStatus().code();
+        if (isInstructionFetch) {
+            memoryAbortListener.onPrefetchAbort(fault.virtualAddress(), faultStatusCode);
+        } else {
+            memoryAbortListener.onDataAbort(fault.virtualAddress(), faultStatusCode);
+        }
+        setProgramCounter(instructionAddress);
+        requestException(isInstructionFetch ? ArmException.PREFETCH_ABORT : ArmException.DATA_ABORT);
     }
 
     /// Solicita entrada numa exceção ARM usando o PC atual como base de retorno.

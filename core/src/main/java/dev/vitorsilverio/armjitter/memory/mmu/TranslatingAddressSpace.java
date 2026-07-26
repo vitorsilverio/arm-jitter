@@ -172,6 +172,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     // ── fetch de instrução (TLB de instrução, separada da de dados) ────────────────
 
     /// Busca uma halfword (THUMB) traduzindo `va` pela TLB de instrução.
+    @Override
     public int fetch16(int va) {
         int offset = va & TLB_PAGE_MASK;
         if (offset + 1 < (1 << TLB_PAGE_SHIFT)) {
@@ -182,6 +183,7 @@ public final class TranslatingAddressSpace implements AddressSpace {
     }
 
     /// Busca uma word (ARM) traduzindo `va` pela TLB de instrução.
+    @Override
     public int fetch32(int va) {
         int offset = va & TLB_PAGE_MASK;
         if (offset + 3 < (1 << TLB_PAGE_SHIFT)) {

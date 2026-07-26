@@ -98,7 +98,7 @@ public final class ArmDecoder implements InstructionDecoder {
     /// Decodifica uma instrução ARM32 no endereço informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
-        int raw = memory.read32(address & ~3);
+        int raw = memory.fetch32(address & ~3);
         Condition condition = decodeCondition(raw >>> 28);
 
         if ((raw & 0x0F00_0000) == 0x0F00_0000) {

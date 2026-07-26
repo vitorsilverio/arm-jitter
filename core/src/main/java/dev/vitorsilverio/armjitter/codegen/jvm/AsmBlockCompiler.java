@@ -16,6 +16,8 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import java.util.List;
+
 /// Compila blocos IR suportados por {@link AsmNativePolicy} em bytecode JVM.
 ///
 /// Convenção de locais do método gerado:
@@ -54,6 +56,11 @@ public final class AsmBlockCompiler {
     private static final String CORE_REF = "L" + CORE + ";";
     private static final String HELPERS = "dev/vitorsilverio/armjitter/codegen/jvm/AsmRuntimeHelpers";
     private static final String INTEGER_CLASS = "java/lang/Integer";
+    /// B4.1.3 (RFC-SOFTMMU §3): exceção que `TranslatingAddressSpace` lança numa falta de tradução;
+    /// capturada pelo bloco compilado inteiro (ver {@link #compile}).
+    private static final String MEMORY_TRANSLATION_EXCEPTION = "dev/vitorsilverio/armjitter/memory/mmu/MemoryTranslationException";
+    private static final String ENTER_MEMORY_ABORT_DESCRIPTOR =
+            "(IL" + MEMORY_TRANSLATION_EXCEPTION + ";)V";
 
     // Slots
     private static final int CORE_LOCAL = 0;
@@ -72,6 +79,14 @@ public final class AsmBlockCompiler {
     private static final int PC_REGISTER = 15;
     /// r0..r14 são cacheáveis; r15 (o PC) nunca é — só é materializado por helpers/fixup.
     private static final int CACHEABLE_REGISTERS = 15;
+    /// B4.1.3: endereço da instrução dona da op corrente, atualizado a cada iteração do laço de
+    /// emissão (LDC do endereço computado em tempo de COMPILAÇÃO por {@link #computeInstructionAddresses}
+    /// + ISTORE) — lido pelo handler de {@link #MEMORY_TRANSLATION_EXCEPTION} para materializar o
+    /// PC antes de {@code core.enterMemoryAbort}. Slot fixo acima de toda a faixa dinâmica do
+    /// register cache (`CACHE_BASE_LOCAL` + até 15 registradores), nunca colide com ela.
+    private static final int FAULT_PC_LOCAL = CACHE_BASE_LOCAL + CACHEABLE_REGISTERS;
+    /// B4.1.3: referência da exceção capturada pelo handler (ASTORE), usada só ali.
+    private static final int FAULT_EXCEPTION_LOCAL = FAULT_PC_LOCAL + 1;
 
     // Descritores para helpers que compartilham a mesma assinatura
     private static final String CORE_I_TO_I = "(" + CORE_REF + "I)I";
@@ -207,7 +222,29 @@ public final class AsmBlockCompiler {
         cache = buildRegCache(block, perOpFallback);
         emitCachePrologue(method);
 
-        for (IrOp op : block.operations()) {
+        // B4.1.3 (RFC-SOFTMMU §3): o bloco inteiro é cercado por um try/catch de
+        // MemoryTranslationException — uma região `try` sem lançamento não custa nada em bytecode
+        // JVM executado (só o `throw` em si tem custo, e faltas de tradução são raras por
+        // natureza), então isto não afeta o caminho quente sem MMU. `instructionAddresses[i]`
+        // (computado em tempo de COMPILAÇÃO, não de execução) é gravado em FAULT_PC_LOCAL a cada
+        // op — 2 bytecodes (LDC+ISTORE) por op, também sem custo de chamada.
+        int[] instructionAddresses = computeInstructionAddresses(block);
+        List<IrOp> blockOps = block.operations();
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        Label abortHandler = new Label();
+        method.visitTryCatchBlock(tryStart, tryEnd, abortHandler, MEMORY_TRANSLATION_EXCEPTION);
+        // FAULT_PC_LOCAL precisa de um valor ANTES de `tryStart`: o verificador da JVM trata o
+        // handler como alcançável a partir de QUALQUER bytecode dentro do range protegido,
+        // inclusive o primeiro — sem este ISTORE aqui fora, o slot chegaria como `top` no merge
+        // do handler (mesmo a op#0 já regravando o slot logo depois de `tryStart`).
+        AsmBytecode.visitIntConst(method, block.startPc());
+        method.visitVarInsn(Opcodes.ISTORE, FAULT_PC_LOCAL);
+        method.visitLabel(tryStart);
+        for (int opIndex = 0; opIndex < blockOps.size(); opIndex++) {
+            IrOp op = blockOps.get(opIndex);
+            AsmBytecode.visitIntConst(method, instructionAddresses[opIndex]);
+            method.visitVarInsn(Opcodes.ISTORE, FAULT_PC_LOCAL);
             if (perOpFallback && !AsmNativePolicy.supports(op)) {
                 // O interpretado lê/escreve registradores no core: flush antes, reload depois.
                 emitCacheFlush(method);
@@ -305,16 +342,52 @@ public final class AsmBlockCompiler {
                 method.visitLabel(condSkip);
             }
         }
+        method.visitLabel(tryEnd);
 
         emitCacheFlush(method);
         emitProgramCounterFixup(method, block.endPc());
         method.visitVarInsn(Opcodes.ILOAD, CYCLES_LOCAL);
         method.visitInsn(Opcodes.IRETURN);
+
+        // B4.1.3: handler da falta de tradução — flush do cache (os locais de registrador
+        // sobrevivem ao unwind DENTRO do mesmo frame JVM, então registradores já escritos antes da
+        // falta, ex. no meio de um LDM desenrolado, chegam ao core: semântica base-restored do
+        // RFC §3 cai de graça, já que o writeback da base sempre é emitido DEPOIS do laço de
+        // registradores em emitMultipleTransferInline, então nunca roda se a falta interrompeu o
+        // laço) + core.enterMemoryAbort(FAULT_PC_LOCAL, exceção) + retorno com os ciclos parciais.
+        method.visitLabel(abortHandler);
+        method.visitVarInsn(Opcodes.ASTORE, FAULT_EXCEPTION_LOCAL);
+        emitCacheFlush(method);
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitVarInsn(Opcodes.ILOAD, FAULT_PC_LOCAL);
+        method.visitVarInsn(Opcodes.ALOAD, FAULT_EXCEPTION_LOCAL);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, CORE, "enterMemoryAbort", ENTER_MEMORY_ABORT_DESCRIPTOR, false);
+        method.visitVarInsn(Opcodes.ILOAD, CYCLES_LOCAL);
+        method.visitInsn(Opcodes.IRETURN);
+
         method.visitMaxs(0, 0);
         method.visitEnd();
         writer.visitEnd();
         cache = RegCache.EMPTY;
         return writer.toByteArray();
+    }
+
+    /// B4.1.3: endereço da instrução dona de cada op do bloco, indexado igual a
+    /// {@code block.operations()}. Cada instrução termina SEMPRE com {@code Cycle}+{@code Fetch}
+    /// (G4, ver `StandardIrBuilder`), então uma varredura de trás para frente propaga o endereço
+    /// do próximo `Fetch` (inclusive ele mesmo) para toda op anterior a ele — computado UMA vez
+    /// por compilação, não por execução do bloco compilado.
+    private static int[] computeInstructionAddresses(IrBlock block) {
+        List<IrOp> ops = block.operations();
+        int[] addresses = new int[ops.size()];
+        int currentAddress = block.endPc();
+        for (int i = ops.size() - 1; i >= 0; i--) {
+            if (ops.get(i) instanceof IrOp.Fetch fetch) {
+                currentAddress = fetch.address();
+            }
+            addresses[i] = currentAddress;
+        }
+        return addresses;
     }
 
     // ── register cache ─────────────────────────────────────────────────────────

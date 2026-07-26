@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.memory.mmu;
 
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.MemoryAbortListener;
 
 /// CP15 VMSA (ARM DDI 0100I, ARMv6): liga as instruções `MCR`/`MRC` que o software convencional
 /// (kernel Linux `versatile_defconfig`, RFC-SOFTMMU) usa para configurar a MMU aos controles
@@ -21,9 +22,12 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 ///   volta — o wrapper (B4.1.1) sempre faz o walk a partir de `TTBR0` (assume `TTBCR.N=0`, sem
 ///   split de tabelas), então escrevê-los não muda a tradução nesta fase.
 /// - `DACR` (`c3,c0,0`): liga em {@link TranslatingAddressSpace#setDacr}.
-/// - `DFSR`/`IFSR` (`c5,c0,{0,1}`) e `DFAR`/`IFAR` (`c6,c0,{0,2}`): só armazenamento
-///   leitura/escrita nesta fase — quem os preenche de verdade num abort real é a B4.1.3 (captura
-///   da exceção nos dois motores), fora do escopo daqui.
+/// - `DFSR`/`IFSR` (`c5,c0,{0,1}`) e `DFAR`/`IFAR` (`c6,c0,{0,2}`): leitura/escrita normal por
+///   `MCR`/`MRC` (software pode reler o que um abort real gravou) E gravados de verdade a cada
+///   abort via {@link MemoryAbortListener#onDataAbort}/{@link MemoryAbortListener#onPrefetchAbort}
+///   (B4.1.3) — o host precisa registrar `core.setMemoryAbortListener(this)` além de
+///   `core.setCoprocessorBus(this)` para que isto aconteça (dois ganchos independentes do mesmo
+///   `ArmCore`, mesmo padrão aditivo).
 /// - `c7` (manutenção de cache + barreiras `ISB`/`DSB`/`DMB`): NOP observável em toda escrita (sem
 ///   cache nem pipeline modelados) e RAZ em leitura — mesmo precedente do `IrOp.MemoryBarrier`
 ///   32 bits.
@@ -34,12 +38,11 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 /// - `CONTEXTIDR` (`c13,c0,1`): os 8 bits baixos (ASID) ligam em
 ///   {@link TranslatingAddressSpace#setAsid}; o valor completo é guardado para leitura de volta.
 ///
-/// **Fora de escopo (B4.1.3 e além, não fazer aqui)**: sincronizar
+/// **Fora de escopo (além da B4.1.3, não fazer aqui)**: sincronizar
 /// {@link TranslatingAddressSpace#setPrivileged} a partir de `CPSR`/troca de modo do `core` a cada
 /// instrução — o `ArmCore` ainda não tem um gancho de troca de modo, e o wrapper só se torna o
-/// `AddressSpace` *live* dos motores na B4.1.3; captura de {@link MemoryTranslationException} e
-/// geração de entrada de abort com `DFSR`/`DFAR` reais.
-public final class Cp15VmsaCoprocessor implements CoprocessorBus {
+/// `AddressSpace` *live* dos motores quando o host o instala (RFC-SOFTMMU, fora desta classe).
+public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortListener {
     private static final int CP15 = 15;
 
     private static final int CRN_SYSTEM_CONTROL = 1;
@@ -212,6 +215,18 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus {
             value |= SCTLR_V_BIT;
         }
         return value;
+    }
+
+    @Override
+    public void onDataAbort(int faultAddress, int faultStatus) {
+        dfar = faultAddress;
+        dfsr = faultStatus;
+    }
+
+    @Override
+    public void onPrefetchAbort(int faultAddress, int faultStatus) {
+        ifar = faultAddress;
+        ifsr = faultStatus;
     }
 
     private static IllegalStateException unsupported(int crn, int crm, int opcode2) {

@@ -90,7 +90,7 @@ public final class ThumbDecoder implements InstructionDecoder {
     /// 32 bits) no endereço informado.
     @Override
     public DecodedInstruction decode(AddressSpace memory, int address) {
-        int raw = memory.read16(address & ~1) & 0xFFFF;
+        int raw = memory.fetch16(address & ~1) & 0xFFFF;
         int top5 = (raw & TOP5_MASK) >>> TOP5_SHIFT;
 
         if (architecture.has(ArmFeature.THUMB2) && isThumb32Candidate(top5)) {
@@ -515,7 +515,7 @@ public final class ThumbDecoder implements InstructionDecoder {
     ///   que não existe mais). Cair no meio de um `BL` genuíno (branch para `endereço+2`) é
     ///   UNPREDICTABLE no hardware real; UNDEFINED aqui é uma melhoria, não regressão.
     private DecodedInstruction tryDecodeThumb32(AddressSpace memory, int address, int hi, int top5) {
-        int lo = memory.read16((address + 2) & ~1) & 0xFFFF;
+        int lo = memory.fetch16((address + 2) & ~1) & 0xFFFF;
         int raw32 = (hi << 16) | lo;
         // `hw1==11110...` (top5==0b11110) é o ÚNICO encoding real de hw1 para BL/BLX Thumb-2 (ARM
         // DDI 0406C A8.8.25: `hw1 = 11110 S imm10`). O check em `lo` (BRANCH_WITH_LINK_MASK) só

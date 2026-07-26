@@ -48,4 +48,27 @@ public interface AddressSpace {
     /// Notifica que uma escrita ocorreu, permitindo invalidação de código automodificado.
     default void notifyWrite(int address) {
     }
+
+    /// Lê uma halfword de instrução (THUMB) no endereço informado.
+    ///
+    /// O padrão delega a {@link #read16} (comportamento idêntico ao pré-B4.1.3 para todo
+    /// barramento que não distingue busca de instrução de leitura de dados). Um `AddressSpace`
+    /// com MMU (`TranslatingAddressSpace`, B4.1.1) sobrescreve para traduzir pela TLB de
+    /// INSTRUÇÃO (separada da de dados) e lançar `PREFETCH_ABORT` em vez de `DATA_ABORT` quando a
+    /// tradução falha (B4.1.3, RFC-SOFTMMU §3) — os decoders ARM/Thumb chamam este método, nunca
+    /// {@link #read16} diretamente, para que a distinção aconteça sem que eles precisem conhecer
+    /// MMU alguma.
+    ///
+    /// @param address endereço virtual da instrução
+    default int fetch16(int address) {
+        return read16(address);
+    }
+
+    /// Lê uma word de instrução (ARM) no endereço informado. Ver {@link #fetch16} — mesma regra,
+    /// delega a {@link #read32} por padrão.
+    ///
+    /// @param address endereço virtual da instrução
+    default int fetch32(int address) {
+        return read32(address);
+    }
 }

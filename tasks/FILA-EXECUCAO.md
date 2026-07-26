@@ -210,6 +210,50 @@
   `tasks/README.md` para o detalhe completo, incl. o aceite executado via `ArmCore.step()`
   real (sequência `TTBR0→DACR→SCTLR.M=1`). Próximo da ordem do épico: **B4.1.3** (aborts
   precisos — captura de `MemoryTranslationException` nos 2 motores).
+- **B4.1.3** ✅ (2026-07-26, terceira das 5 sub-tasks do épico B4.1/MMU-softmmu, "aborts
+  precisos"): `ArmCore.enterMemoryAbort` novo (converte `MemoryTranslationException` em
+  `PREFETCH_ABORT`/`DATA_ABORT`, preenchendo FAR/FSR via `MemoryAbortListener` novo — mesmo
+  padrão aditivo de `CoprocessorBus`/`BkptDispatcher` — ANTES de `setProgramCounter`+
+  `requestException`; `instructionAddress` é o endereço da PRÓPRIA instrução, não o sequencial
+  seguinte, porque `AProfileExceptionModel` já soma +4/+8) + `Cp15VmsaCoprocessor implements
+  MemoryAbortListener` (grava `DFAR`/`DFSR`/`IFAR`/`IFSR` de verdade, fechando a última
+  pendência documentada da B4.1.2). Captura nos DOIS motores: `ArmCore#executeSingleInstruction`
+  (interpretador de um passo — `pc` já capturado antes do decode/lift/execute é o endereço
+  certo, cobre fetch E dados da mesma instrução) e `IrBlockExecutor#execute` (motor único
+  compartilhado por bloco interpretado E fallback PER_OP do JIT — `try` cercando o laço quente
+  inteiro sem custo quando não lança; no `catch`, o endereço da instrução é o do próximo
+  `IrOp.Fetch` a partir do índice corrente, já que toda instrução termina SEMPRE com
+  `Cycle`+`Fetch`, G4). **JIT nativo** (`AsmBlockCompiler`): todo o laço de emissão por-op é
+  cercado por um ÚNICO `visitTryCatchBlock` de `MemoryTranslationException` (custo zero no
+  bytecode gerado quando não lança); o endereço da instrução-dona de cada op é computado em
+  TEMPO DE COMPILAÇÃO (`computeInstructionAddresses`, mesma técnica de scan-para-trás a partir
+  do próximo `Fetch`) e gravado num slot fixo (`FAULT_PC_LOCAL`, acima de toda a faixa dinâmica
+  do register cache) via `LDC`+`ISTORE` a cada op; o handler faz `emitCacheFlush` (os locais do
+  register cache SOBREVIVEM ao unwind dentro do mesmo frame JVM, então registradores já
+  escritos antes da falta — ex. no meio de um LDM desenrolado — chegam ao core) e chama
+  `core.enterMemoryAbort(...)` antes de retornar com os ciclos parciais. **Achado real corrigido
+  no meio do trabalho** (não estava no escopo original, mas sem ele nenhuma falta de BUSCA DE
+  INSTRUÇÃO seria possível): `TranslatingAddressSpace.fetch16`/`fetch32` (B4.1.1) já existiam mas
+  NINGUÉM os chamava — `ArmDecoder`/`ThumbDecoder` liam `read16`/`read32` direto, então uma
+  busca de instrução nunca passava pela TLB de INSTRUÇÃO nem podia gerar `PREFETCH_ABORT`;
+  corrigido com `AddressSpace.fetch16`/`fetch32` novos (default delega a `read16`/`read32` —
+  ZERO mudança de comportamento para todo barramento existente, G3) e os dois decoders chamando
+  `fetch16`/`fetch32` em vez de `read16`/`read32` nos 3 pontos de busca de instrução.
+  **MultipleTransfer base-restored cai de graça nos dois motores** (RFC §3): o writeback da
+  base já era emitido DEPOIS do laço de registradores em ambos (`IrTransferExecutor`,
+  `AsmBlockCompiler#emitMultipleTransferInline`), então uma falta no meio do laço simplesmente
+  nunca alcança a linha de writeback — nenhuma mudança extra precisou ser feita ali. Testes
+  novos: `ArmCoreMemoryAbortTest` (DATA_ABORT/PREFETCH_ABORT com FAR/FSR reais via
+  `Cp15VmsaCoprocessor`, `SUBS PC,LR` retomando a instrução faltosa), `Cp15VmsaCoprocessorTest`
+  (`onDataAbort`/`onPrefetchAbort`), `MultipleTransferInterpreterTest` (LDM base-restored),
+  `MemoryAbortEquivalenceTest` novo (G1: mesmo bloco lifted de uma instrução real rodando por
+  `InterpretedCodeEmitter` E `AsmCodeEmitter`, via `BlockEquivalenceHarness`/`CpuSnapshot`,
+  precisa terminar no MESMO estado após o abort — Load e LDM). `FaultingAddressSpace` novo em
+  `support/` (decorator de teste que injeta a exceção num endereço configurado, sem precisar
+  montar page tables reais — essas já são cobertas por `TranslatingAddressSpaceTest`, B4.1.1).
+  `mvn -o test` raiz verde; gbaemu + ndsemu + armbox revalidados verdes (G5 se aplica desta vez:
+  `ArmCore`/`IrBlockExecutor`/`AsmBlockCompiler`/decoders são compartilhados). Próximo da ordem
+  do épico: **B4.1.4** (`translationGeneration` no `BlockKey`/`JitRuntime`).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
