@@ -1380,4 +1380,187 @@ class Aarch64DecoderCorpusTest {
         assertEquals(8, op.src2());
         assertFalse(op.wide());
     }
+
+    // ── B6.3.4: LDXR/LDAXR/STXR/STLXR — offsets 0x22c+ ─────────────────────────────────────────
+
+    @Test
+    void ldxrWord() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x22c);
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rn());
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void ldxrDoubleword() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x230);
+        assertEquals(2, op.rt());
+        assertEquals(3, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void ldxrByte() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x234);
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rn());
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void ldxrHalf() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x238);
+        assertEquals(6, op.rt());
+        assertEquals(7, op.rn());
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void ldaxrWordSetsAcquireRelease() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x23c);
+        assertEquals(8, op.rt());
+        assertEquals(9, op.rn());
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void ldaxrDoubleword() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x240);
+        assertEquals(10, op.rt());
+        assertEquals(11, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void ldaxrByte() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x244);
+        assertEquals(12, op.rt());
+        assertEquals(13, op.rn());
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void ldaxrHalf() {
+        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x248);
+        assertEquals(14, op.rt());
+        assertEquals(15, op.rn());
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void stxrWord() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x24c);
+        assertEquals(16, op.rs());
+        assertEquals(17, op.rt());
+        assertEquals(18, op.rn());
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void stxrDoubleword() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x250);
+        assertEquals(19, op.rs());
+        assertEquals(20, op.rt());
+        assertEquals(21, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void stxrByte() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x254);
+        assertEquals(22, op.rs());
+        assertEquals(23, op.rt());
+        assertEquals(24, op.rn());
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void stxrHalf() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x258);
+        assertEquals(25, op.rs());
+        assertEquals(26, op.rt());
+        assertEquals(27, op.rn());
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void stlxrWordSetsAcquireRelease() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x25c);
+        assertEquals(28, op.rs());
+        assertEquals(29, op.rt());
+        assertEquals(30, op.rn());
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void stlxrDoubleword() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x260);
+        assertEquals(0, op.rs());
+        assertEquals(1, op.rt());
+        assertEquals(2, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void stlxrByte() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x264);
+        assertEquals(3, op.rs());
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rn());
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void stlxrHalf() {
+        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x268);
+        assertEquals(6, op.rs());
+        assertEquals(7, op.rt());
+        assertEquals(8, op.rn());
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void exclusivePairAndAtomicFormsStayUnsupported() {
+        // LDXP/STXP/CAS/LDAR/STLR (mesmo subgrupo SUBCLASS_EXCLUSIVE_ATOMIC, valores diferentes
+        // do campo `form` bits[23:21]) NÃO estão no escopo desta task (ver Armadilhas da
+        // b6.3.4-aarch64-exclusive-monitor.md) — regressão negativa confirmando que o `case` novo
+        // não "vazou" para essas formas. Vetores construídos à mão a partir do formato (mesmo
+        // precedente de outros testes de reservado neste arquivo), pois não fazem parte do escopo
+        // do corpus real.
+        // Base real do corpus (ldxr w0, [x1]) com o campo `form` (bits[23:21]) ZERADO antes de
+        // fixar cada valor fora de escopo — a base já tem form=010 (LDXR), então um OR simples
+        // sem limpar antes produziria combinações erradas.
+        int ldxrWordFormCleared = 0x885f7c20 & ~(0b111 << 21);
+        int[] otherForms = {
+                ldxrWordFormCleared | (0b001 << 21), // STXP (form=001)
+                ldxrWordFormCleared | (0b011 << 21), // LDXP (form=011)
+                ldxrWordFormCleared | (0b100 << 21), // STLR (form=100)
+                ldxrWordFormCleared | (0b101 << 21), // CAS-ish/reservado (form=101)
+                ldxrWordFormCleared | (0b110 << 21), // LDAR (form=110)
+                ldxrWordFormCleared | (0b111 << 21), // reservado (form=111)
+        };
+        for (int encoding : otherForms) {
+            TestAddressSpace raw = new TestAddressSpace(4);
+            raw.put32(0, encoding);
+            AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+            assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0),
+                    () -> "form fora de escopo deveria ser unsupported: 0x" + Integer.toHexString(encoding));
+        }
+    }
 }

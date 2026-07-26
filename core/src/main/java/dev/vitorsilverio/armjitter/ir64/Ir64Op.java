@@ -26,7 +26,7 @@ public sealed interface Ir64Op permits
         Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
-        Ir64Op.MultiplyAccumulate, Ir64Op.Divide {
+        Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -56,6 +56,8 @@ public sealed interface Ir64Op permits
         public static final int BITFIELD = 15;
         public static final int MULTIPLY_ACCUMULATE = 16;
         public static final int DIVIDE = 17;
+        public static final int LOAD_EXCLUSIVE = 18;
+        public static final int STORE_EXCLUSIVE = 19;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -496,5 +498,45 @@ public sealed interface Ir64Op permits
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements Ir64Op {
         @Override public int kind() { return Kind.DIVIDE; }
+    }
+
+    /// `LDXR`/`LDAXR` (`ARM DDI 0487 C6.2.145/141`, B6.3.4) — carrega a memória em `rn`+0 (SEM
+    /// deslocamento, ao contrário de {@link Load64}: a forma exclusiva não tem imediato nem
+    /// endereçamento indexado) e marca o monitor de exclusividade com `(endereço, size.bytes())`.
+    /// `acquireRelease` (`LDAXR`=`true`/`LDXR`=`false`) é NOP observável no interpretador — mesma
+    /// convenção de {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} no IR de 32 bits —
+    /// carregado no IR só para um futuro emissor nativo poder emitir a barreira de host real, se
+    /// algum dia importar (single-thread por construção nesta fatia).
+    record LoadExclusive(
+            /// Registrador de destino (índice `0`-`31`; `31` é `XZR`, descarta a escrita).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP` — mesma convenção de
+            /// {@link Load64#rn}).
+            int rn,
+            /// Tamanho da transferência de memória e da marcação do monitor.
+            Ir64MemSize size,
+            /// `true` para `LDAXR` (bit `lasr`=1); `false` para `LDXR`.
+            boolean acquireRelease) implements Ir64Op {
+        @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
+    }
+
+    /// `STXR`/`STLXR` (`ARM DDI 0487 C6.2.363/360`, B6.3.4) — consulta o monitor de exclusividade
+    /// ANTES de qualquer escrita (armadilha crítica espelhada de `STREX`, B1.4): se a reserva do
+    /// core bater exatamente `(endereço, size.bytes())`, escreve `rt` na memória e grava `0` em
+    /// `rs`; senão NÃO escreve (memória intacta) e grava `1` em `rs`. `acquireRelease`
+    /// (`STLXR`=`true`/`STXR`=`false`) é NOP observável — mesma convenção de {@link LoadExclusive}.
+    record StoreExclusive(
+            /// Registrador de STATUS (`0`=sucesso, `1`=falha) — mesmo papel de `Rd` em `STREX`
+            /// (32-bit, B1.4). Índice `0`-`31`; `31` é `XZR`, descarta a escrita do status.
+            int rs,
+            /// Registrador de origem do valor armazenado (índice `0`-`31`; `31` é `XZR`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP` — ver {@link Load64#rn}).
+            int rn,
+            /// Tamanho da transferência de memória e da checagem do monitor.
+            Ir64MemSize size,
+            /// `true` para `STLXR` (bit `lasr`=1); `false` para `STXR`.
+            boolean acquireRelease) implements Ir64Op {
+        @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
     }
 }

@@ -15,24 +15,24 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
-/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1 + B6.3.2:
-/// os grupos `data-processing immediate` (`ADD`/`SUB`/`AND`/`ORR`/`EOR`/`ANDS` imediato, `MOVZ`/
-/// `MOVN`/`MOVK`, `ADR`/`ADRP`, `SBFM`/`BFM`/`UBFM` — B6.3.2), `data-processing register` (`ADD`/
-/// `SUB`/`ADDS`/`SUBS` shifted e extended register — B6.3.1; `CSEL`/`CSINC`/`CSINV`/`CSNEG` —
-/// B6.3.2), `branches/exception/system` (`B`/`BL`/`B.cond`/`CBZ`/`CBNZ`/`TBZ`/`TBNZ`/`BR`/`BLR`/
-/// `RET`/`SVC`) e `loads and stores` de registrador geral (`LDR`/`STR`/`LDUR`/`STUR`/`LDP`/`STP`/
-/// `LDR (literal)`, tamanhos B/H/W/X + sign-extend, pre/post-index, registrador+extend) — ver
-/// `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1/§B6.2/§B6.3. Todos os campos de bit abaixo
+/// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1 + B6.3.2 +
+/// B6.3.3 + B6.3.4: os grupos `data-processing immediate` (`ADD`/`SUB`/`AND`/`ORR`/`EOR`/`ANDS`
+/// imediato, `MOVZ`/`MOVN`/`MOVK`, `ADR`/`ADRP`, `SBFM`/`BFM`/`UBFM` — B6.3.2), `data-processing
+/// register` (`ADD`/`SUB`/`ADDS`/`SUBS` shifted e extended register — B6.3.1; `CSEL`/`CSINC`/
+/// `CSINV`/`CSNEG` — B6.3.2; `MADD`/`MSUB`/`SDIV`/`UDIV` — B6.3.3), `branches/exception/system`
+/// (`B`/`BL`/`B.cond`/`CBZ`/`CBNZ`/`TBZ`/`TBNZ`/`BR`/`BLR`/`RET`/`SVC`) e `loads and stores` de
+/// registrador geral (`LDR`/`STR`/`LDUR`/`STUR`/`LDP`/`STP`/`LDR (literal)`, tamanhos B/H/W/X +
+/// sign-extend, pre/post-index, registrador+extend — B6.2; `LDXR`/`LDAXR`/`STXR`/`STLXR` — B6.3.4)
+/// — ver `tasks/trilha-b-arquiteturas/b6-aarch64.md` §B6.1-§B6.3. Todos os campos de bit abaixo
 /// foram verificados byte a byte contra a saída real de `aarch64-none-elf-as`/`objdump`
 /// (devkitA64) — ver o corpus versionado em `src/test/resources/aarch64/corpus.s`.
 ///
 /// `Extract` (`EXTR`, mesmo subgrupo de `Bitfield` dentro de `Data Processing Immediate`),
-/// `2-source`/`3-source`/`Logical (shifted register)` (mesma classe `Data Processing Register` —
-/// só `Add/subtract` shifted/extended e `CSEL`/... estão implementados aqui, ver B6.3.3), load/
-/// store exclusivo e atômico, load/store de registrador SIMD&FP (`V=1`) e data-processing SIMD&FP
-/// ficam FORA desta fatia (B6.3.3+) — qualquer encoding fora do escopo listado lança
-/// {@link UnsupportedOperationException} em vez de tentar adivinhar semântica (nenhum oráculo
-/// real cobre o que não foi implementado).
+/// `Logical (shifted register)` (mesma classe `Data Processing Register`), `LDXP`/`STXP`/`CAS`/
+/// `LDAR`/`STLR` (mesmo subgrupo de exclusivo/atômico de `LDXR`/`STXR`, ver B6.3.4), load/store de
+/// registrador SIMD&FP (`V=1`) e data-processing SIMD&FP ficam FORA do escopo fechado do épico B6
+/// — qualquer encoding fora do escopo listado lança {@link UnsupportedOperationException} em vez
+/// de tentar adivinhar semântica (nenhum oráculo real cobre o que não foi implementado).
 public final class Aarch64Decoder {
     // ── Classe top-level (ARM DDI 0487 C4.1): prefixo fixo de 3 bits em bits[28:26] (o 4º bit
     // do op0 nominal do manual, bit25, é wildcard dentro da classe e tratado nos sub-decoders) ─
@@ -169,6 +169,17 @@ public final class Aarch64Decoder {
     private static final int SUBCLASS_LITERAL = 0b01;
     private static final int SUBCLASS_PAIR = 0b10;
     private static final int SUBCLASS_SINGLE = 0b11;
+
+    // ── LDXR/LDAXR/STXR/STLXR (`@stxr`, B6.3.4): sz(31:30) 001000(29:24) form(23:21) rs(20:16) ──
+    // ── lasr(15) rt2(14:10, fixo 11111 nesta forma não-par) rn(9:5) rt(4:0) — Fatos de ─────────
+    // ── referência #1 da task b6.3.4-aarch64-exclusive-monitor.md. `sz` reaproveita a MESMA ─────
+    // ── codificação/posição de bit de `SINGLE_SIZE_SHIFT`/`SIZE_BYTE`/... (LDR/STR normal). ─────
+    private static final int EXCLUSIVE_FORM_SHIFT = 21;
+    private static final int EXCLUSIVE_FORM_MASK = 0b111;
+    private static final int EXCLUSIVE_FORM_STXR = 0b000; // inclui STLXR (lasr=1)
+    private static final int EXCLUSIVE_FORM_LDXR = 0b010; // inclui LDAXR (lasr=1)
+    private static final int EXCLUSIVE_RS_SHIFT = 16;
+    private static final int EXCLUSIVE_LASR_SHIFT = 15;
 
     // ── LDR (literal): opc(31:30) 011 V 00 imm19(23:5) Rt(4:0) ──────────────────────────────
     private static final int LITERAL_OPC_SHIFT = 30;
@@ -372,10 +383,46 @@ public final class Aarch64Decoder {
             case SUBCLASS_LITERAL -> decodeLoadLiteral(word, address);
             case SUBCLASS_PAIR -> decodeLoadStorePair(word, address);
             case SUBCLASS_SINGLE -> decodeLoadStoreSingle(word, address);
-            // Load/store exclusivo e atômico (LDXR/STXR/CAS/LDAR/STLR...): fora da fatia B6.2.
-            case SUBCLASS_EXCLUSIVE_ATOMIC -> throw unsupported(word, address);
+            // Load/store exclusivo e atômico: só LDXR/LDAXR/STXR/STLXR (B6.3.4) — LDXP/STXP/CAS/
+            // LDAR/STLR ficam unsupported dentro de decodeExclusive (ver Armadilhas da task).
+            case SUBCLASS_EXCLUSIVE_ATOMIC -> decodeExclusive(word, address);
             default -> throw new IllegalStateException("unreachable");
         };
+    }
+
+    /// `LDXR`/`LDAXR`/`STXR`/`STLXR` (D0/D2 da task b6.3.4-aarch64-exclusive-monitor.md): as 4
+    /// mnemônicas compartilham o MESMO encoding (`@stxr` do QEMU), diferindo só pelo bit `lasr`
+    /// (acquire/release) — decodificar `LDAXR`/`STLXR` sem `LDXR`/`STXR` decodificaria só METADE
+    /// dos valores desse bit, o que não é uma opção coerente. `LDXP`/`STXP`/`CAS`/`LDAR`/`STLR`
+    /// vivem no MESMO subgrupo de encoding (valores diferentes de `form`) mas ficam fora do
+    /// escopo fechado do épico — ver Armadilhas da task.
+    private Ir64Op decodeExclusive(int word, long address) {
+        int form = (word >>> EXCLUSIVE_FORM_SHIFT) & EXCLUSIVE_FORM_MASK;
+        boolean store;
+        if (form == EXCLUSIVE_FORM_STXR) {
+            store = true;
+        } else if (form == EXCLUSIVE_FORM_LDXR) {
+            store = false;
+        } else {
+            // LDXP/STXP/CAS/LDAR/STLR (mesmo subgrupo, valores diferentes de `form`): fora do
+            // escopo fechado do épico B6 (ver Armadilhas da task b6.3.4).
+            throw unsupported(word, address);
+        }
+        Ir64MemSize size = switch ((word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK) {
+            case SIZE_BYTE -> Ir64MemSize.BYTE;
+            case SIZE_HALF -> Ir64MemSize.HALF;
+            case SIZE_WORD -> Ir64MemSize.WORD;
+            case SIZE_DOUBLEWORD -> Ir64MemSize.DOUBLEWORD;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        boolean acquireRelease = ((word >>> EXCLUSIVE_LASR_SHIFT) & 1) != 0;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        if (store) {
+            int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
+            return new Ir64Op.StoreExclusive(rs, rt, rn, size, acquireRelease);
+        }
+        return new Ir64Op.LoadExclusive(rt, rn, size, acquireRelease);
     }
 
     private Ir64Op decodeLoadLiteral(int word, long address) {

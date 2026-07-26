@@ -113,6 +113,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
                     executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
             case Ir64Op.Kind.DIVIDE -> executeDivide(core, (Ir64Op.Divide) op);
+            case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (Ir64Op.LoadExclusive) op);
+            case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (Ir64Op.StoreExclusive) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -433,7 +435,40 @@ public final class Ir64BlockExecutor {
                 op.rm(), op.extendType(), op.shiftAmount());
         long value = core.xForWidth(op.rt(), op.wide());
         writeMemory(core, address, op.size(), value);
+        // B6.3.4: escrita comum que sobrepõe uma reserva pendente de LDXR/LDAXR abre o monitor
+        // (mesma disciplina de STR/STRH/STRB de 32 bits em ArmCore — auditoria explícita da
+        // Especificação #2 da task, sem esta chamada o teste de notifyOrdinaryWrite falha).
+        core.notifyOrdinaryWrite(address, op.size().bytes());
         writeback(core, op.rn(), op.addressingMode(), base, op.immediate());
+        return false;
+    }
+
+    /// `LDXR`/`LDAXR` (B6.3.4): lê a memória em `rn`+0 (sem deslocamento — a forma exclusiva não
+    /// tem imediato) e marca o monitor de exclusividade com `(endereço, size.bytes())`.
+    /// `acquireRelease` é NOP observável no interpretador (ver {@link Ir64Op.LoadExclusive}
+    /// javadoc) — carregado no IR só para um futuro emissor nativo.
+    private boolean executeLoadExclusive(Aarch64Core core, Ir64Op.LoadExclusive op) {
+        long address = readBaseRegister(core, op.rn());
+        long value = readMemory(core, address, op.size());
+        core.markExclusiveMonitor(address, op.size().bytes());
+        core.setXForWidth(op.rt(), value, op.size() == Ir64MemSize.DOUBLEWORD);
+        return false;
+    }
+
+    /// `STXR`/`STLXR` (B6.3.4): consulta o monitor ANTES de qualquer escrita — armadilha crítica
+    /// espelhada de `STREX` (B1.4): um `STXR`/`STLXR` que falha NÃO pode ter efeito colateral de
+    /// memória. Sucesso escreve `rt`, grava `0` em `rs` e consome a reserva; falha grava `1` em
+    /// `rs` com a memória intacta. `acquireRelease` é NOP observável (ver
+    /// {@link Ir64Op.StoreExclusive} javadoc).
+    private boolean executeStoreExclusive(Aarch64Core core, Ir64Op.StoreExclusive op) {
+        long address = readBaseRegister(core, op.rn());
+        if (!core.exclusiveMonitorCovers(address, op.size().bytes())) {
+            core.setXForWidth(op.rs(), 1L, false);
+            return false;
+        }
+        long value = core.xForWidth(op.rt(), op.size() == Ir64MemSize.DOUBLEWORD);
+        writeMemory(core, address, op.size(), value);
+        core.setXForWidth(op.rs(), 0L, false);
         return false;
     }
 
@@ -451,6 +486,9 @@ public final class Ir64BlockExecutor {
         } else {
             writeMemory(core, address, size, core.xForWidth(op.rt(), op.wide()));
             writeMemory(core, address + stride, size, core.xForWidth(op.rt2(), op.wide()));
+            // B6.3.4: STP também é escrita comum — mesma auditoria de executeStore.
+            core.notifyOrdinaryWrite(address, size.bytes());
+            core.notifyOrdinaryWrite(address + stride, size.bytes());
         }
         if (op.addressingMode() == Ir64AddressingMode.PRE_INDEX
                 || op.addressingMode() == Ir64AddressingMode.POST_INDEX) {

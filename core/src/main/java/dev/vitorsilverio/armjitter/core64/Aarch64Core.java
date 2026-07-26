@@ -32,6 +32,11 @@ public final class Aarch64Core {
     private final AddressSpace64 memory;
     private long cycles;
     private Aarch64SvcHandler svcHandler = Aarch64SvcHandler.none();
+    /// Monitor de exclusividade `LDXR`/`LDAXR`/`STXR`/`STLXR` (B6.3.4) — próprio deste core por
+    /// padrão (comportamento single-core), substituível por {@link #setExclusiveMonitor} caso este
+    /// core algum dia precise compartilhar reservas com outro (mesma disciplina de
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore}, B5.1).
+    private Aarch64ExclusiveMonitor exclusiveMonitor = new Aarch64ExclusiveMonitor();
 
     /// Cria um core conectado a uma memória de 64 bits. Estado inicial: todos os registradores
     /// zerados, `PC = 0`, `PSTATE` zerado.
@@ -139,6 +144,56 @@ public final class Aarch64Core {
     /// Retorna o total de ciclos acumulados.
     public long cycles() {
         return cycles;
+    }
+
+    /// Instala um monitor de exclusividade COMPARTILHADO (mesmo papel de
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore#setExclusiveMonitor} no mundo de 32 bits).
+    /// Default é um monitor próprio deste core.
+    public void setExclusiveMonitor(Aarch64ExclusiveMonitor exclusiveMonitor) {
+        this.exclusiveMonitor = Objects.requireNonNull(exclusiveMonitor, "exclusiveMonitor");
+    }
+
+    /// Marca o monitor de exclusividade (próprio ou compartilhado) para o endereço/tamanho de um
+    /// `LDXR`/`LDAXR`, com este core como dono da reserva.
+    ///
+    /// @param address endereço do acesso, sem sinal
+    /// @param sizeBytes tamanho do acesso (1, 2, 4 ou 8)
+    public void markExclusiveMonitor(long address, int sizeBytes) {
+        exclusiveMonitor.markExclusive(this, address, sizeBytes);
+    }
+
+    /// Consulta um `STXR`/`STLXR` deste core contra o monitor de exclusividade. Exige marcação
+    /// exata (mesmo endereço e mesmo tamanho); a reserva é SEMPRE consumida quando a região bate
+    /// (mesmo se o dono for outro core, quando o monitor é compartilhado), mas só devolve `true`
+    /// quando este core é o dono.
+    public boolean exclusiveMonitorCovers(long address, int sizeBytes) {
+        return exclusiveMonitor.consumeIfCovered(this, address, sizeBytes);
+    }
+
+    /// Abre (limpa) o monitor de exclusividade deste core. Sem consumidor de entrada de exceção
+    /// nesta fatia (B6.3.4) — `Aarch64Core` ainda não tem modelo de exceção síncrona/assíncrona
+    /// (EL0-only, B6.1); pendência explícita para quando esse gancho existir.
+    public void clearExclusiveMonitor() {
+        exclusiveMonitor.clear(this);
+    }
+
+    /// Notifica o monitor de exclusividade de uma escrita comum (`STR`/`STP`, não-exclusiva) deste
+    /// core. Se sobrepuser uma reserva pendente, abre a reserva, como no hardware real.
+    public void notifyOrdinaryWrite(long address, int sizeBytes) {
+        if (exclusiveMonitor.isArmed()) {
+            exclusiveMonitor.notifyOrdinaryWrite(address, sizeBytes);
+        }
+    }
+
+    /// Endereço marcado no monitor de exclusividade, ou `-1` quando aberto. Exposto para o harness
+    /// de equivalência (`CpuSnapshot`) futuro detectar divergência de backend.
+    public long exclusiveMonitorAddress() {
+        return exclusiveMonitor.address(this);
+    }
+
+    /// Tamanho em bytes marcado no monitor de exclusividade (0 quando aberto).
+    public int exclusiveMonitorSizeBytes() {
+        return exclusiveMonitor.sizeBytes(this);
     }
 
     private static void checkRegisterIndex(int index) {

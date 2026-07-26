@@ -176,6 +176,32 @@
   `mvn -o test` verde (1097 testes: 1074 anteriores + 23 novos); gbaemu/ndsemu **não
   revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
   B6.1/B6.2/B6.3.1/B6.3.2).
+- **B6.3.4** ✅ (2026-07-26, quarta e ÚLTIMA das 4 sub-tasks de B6.3 — **B6.3 fecha 100%**):
+  `LDXR`/`LDAXR`/`STXR`/`STLXR` via `decodeExclusive` novo em `Aarch64Decoder` (`case
+  SUBCLASS_EXCLUSIVE_ATOMIC`, antes só `unsupported`) — as 4 mnemônicas compartilham o MESMO
+  encoding `@stxr` (D0, só o bit `lasr` difere: `LDAXR`/`STLXR` sem decodificar `LDXR`/`STXR`
+  decodificaria só metade dos valores do bit, não é opção coerente); `sz` reaproveita a mesma
+  codificação de `Ir64MemSize`/`SINGLE_SIZE_*` já usada por `LDR`/`STR` (B6.2). Records novos
+  `Ir64Op.LoadExclusive`/`StoreExclusive` (D2), `acquireRelease` como NOP observável (mesma
+  convenção de `IrOp.MemoryBarrier` de 32 bits). `Aarch64ExclusiveMonitor` novo em `core64/`
+  (D1 — sibling ESTRUTURAL de `core.ExclusiveMonitor`, não generalização, mesmos nomes de
+  método, `IdentityHashMap<Aarch64Core, Reservation>`, sem comparação de valor); `Aarch64Core`
+  ganha a API pública espelhando `ArmCore` 1:1 nos nomes
+  (`markExclusiveMonitor`/`exclusiveMonitorCovers`/`clearExclusiveMonitor`/
+  `notifyOrdinaryWrite`/etc.). Executores `executeLoadExclusive`/`executeStoreExclusive`
+  (checa o monitor ANTES de escrever — mesma armadilha crítica de `STREX`/B1.4). **Achado
+  real**: `executeStore`/`executeLoadStorePair` (B6.2) não chamavam `notifyOrdinaryWrite`
+  nenhuma — auditoria da Especificação #2 da task pegou e corrigiu (sem a chamada, o teste de
+  escrita comum abrindo o monitor falhava). `LDXP`/`STXP`/`CAS`/`LDAR`/`STLR` (mesmo subgrupo,
+  fora de escopo) continuam `unsupported`, confirmado por regressão negativa. Corpus real
+  estendido (offsets `0x22c`-`0x268`, `aarch64-none-elf-as`/`objdump` reais do devkitA64,
+  4 mnemônicas × 4 tamanhos B/H/W/X). Teste novo `Aarch64ExclusiveAccessTest` espelha
+  `ArmV6ExclusiveAccessTest` (precedente B1.4). `mvn -o test` verde; gbaemu/ndsemu **não
+  revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado, `core.ExclusiveMonitor`
+  intocado — mesmo precedente de B6.1/B6.2/B6.3.1-3). Limpeza do monitor em entrada de exceção
+  fica pendência explícita (A64 ainda sem modelo de exceção síncrona/assíncrona). Próximo passo
+  natural do épico B6 maior: **B6.4** (backend ASM 64-bit) ou **B6.5**/**B6.6** — nenhuma spec
+  nova escrita/executada, fica para o usuário priorizar depois.
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -185,25 +211,33 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P1 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
-| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
+| P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 (softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
 mas spec própria ainda não escrita; ver `b6-aarch64.md`).
 
-**B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec)**: **B6.3.1** ✅
-fechou (2026-07-24/25) — criou o dispatch de "Data Processing — Register"
+**B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec) — TODAS ✅
+FECHADAS (2026-07-26)**: **B6.3.1** ✅ fechou (2026-07-24/25) — criou o
+dispatch de "Data Processing — Register"
 (`isDataProcessingRegisterClass`/`decodeDataProcessingRegister`). Isso destravou
 **B6.3.2** e **B6.3.3** simultaneamente. **B6.3.2** ✅ já fechou (2026-07-25,
 `CSEL`/`CSINC`/`CSINV`/`CSNEG` + `SBFM`/`UBFM`/`BFM`, ver o histórico acima).
 **B6.3.3** ✅ também já fechou (2026-07-25, `MADD`/`MSUB`/`MUL`/`MNEG`/`SDIV`/
 `UDIV`, ver o histórico acima) — independente de B6.3.2, só compartilhava a
-dependência em B6.3.1. Resta só **B6.3.4** (P1 acima, LDXR/LDAXR/STXR/STLXR +
-monitor) — já estava elegível antes mesmo de B6.3.1 fechar (depende só de
-B6.2), é a única das 4 que introduz estado novo no core (monitor de
-exclusividade) e por isso é sozinha na sua categoria de risco. Ver
-`b6-aarch64.md` e os 4 arquivos de sub-task para o detalhe de cada uma.
+dependência em B6.3.1. **B6.3.4** ✅ fechou por último (2026-07-26,
+`LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` novo em `core64/`,
+ver o índice principal em `tasks/README.md` para o detalhe completo) — já
+estava elegível antes mesmo de B6.3.1 fechar (dependia só de B6.2), era a
+única das 4 que introduzia estado novo no core (monitor de exclusividade) e
+por isso ficou sozinha na sua categoria de risco. Com isso, **a categoria
+"Base ISA inteira restante" (B6.3) está 100% fechada**. Ver `b6-aarch64.md` e
+os 4 arquivos de sub-task para o detalhe de cada uma. Próximo passo natural
+do épico B6 maior seria **B6.4** (backend ASM 64-bit) ou **B6.5**/**B6.6**,
+mas nenhuma spec nova foi escrita nem executada — fica para o usuário
+priorizar. O aceite agregado do épico ("`busybox sh -c` completo no
+armbox64") segue bloqueado no usuário (ver 🧑 abaixo, mesmo bloqueio de B6.2
+aceite #2) mesmo com as 4 sub-tasks fechadas.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 

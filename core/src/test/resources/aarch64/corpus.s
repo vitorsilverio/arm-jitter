@@ -152,3 +152,21 @@ sdiv x28, x29, x30
 udiv x0, x1, x2
 sdiv w3, w4, w5
 udiv w6, w7, w8
+
+// ── B6.3.4: LDXR/LDAXR/STXR/STLXR (byte/half/word/doubleword) ──────────────────────────
+ldxr w0, [x1]
+ldxr x2, [x3]
+ldxrb w4, [x5]
+ldxrh w6, [x7]
+ldaxr w8, [x9]
+ldaxr x10, [x11]
+ldaxrb w12, [x13]
+ldaxrh w14, [x15]
+stxr w16, w17, [x18]
+stxr w19, x20, [x21]
+stxrb w22, w23, [x24]
+stxrh w25, w26, [x27]
+stlxr w28, w29, [x30]
+stlxr w0, x1, [x2]
+stlxrb w3, w4, [x5]
+stlxrh w6, w7, [x8]

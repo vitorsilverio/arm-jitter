@@ -148,3 +148,19 @@ Disassembly of section .text:
  220:	9ac20820 	udiv	x0, x1, x2
  224:	1ac50c83 	sdiv	w3, w4, w5
  228:	1ac808e6 	udiv	w6, w7, w8
+ 22c:	885f7c20 	ldxr	w0, [x1]
+ 230:	c85f7c62 	ldxr	x2, [x3]
+ 234:	085f7ca4 	ldxrb	w4, [x5]
+ 238:	485f7ce6 	ldxrh	w6, [x7]
+ 23c:	885ffd28 	ldaxr	w8, [x9]
+ 240:	c85ffd6a 	ldaxr	x10, [x11]
+ 244:	085ffdac 	ldaxrb	w12, [x13]
+ 248:	485ffdee 	ldaxrh	w14, [x15]
+ 24c:	88107e51 	stxr	w16, w17, [x18]
+ 250:	c8137eb4 	stxr	w19, x20, [x21]
+ 254:	08167f17 	stxrb	w22, w23, [x24]
+ 258:	48197f7a 	stxrh	w25, w26, [x27]
+ 25c:	881cffdd 	stlxr	w28, w29, [x30]
+ 260:	c800fc41 	stlxr	w0, x1, [x2]
+ 264:	0803fca4 	stlxrb	w3, w4, [x5]
+ 268:	4806fd07 	stlxrh	w6, w7, [x8]
