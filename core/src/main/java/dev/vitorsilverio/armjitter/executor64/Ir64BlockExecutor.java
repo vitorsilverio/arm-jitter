@@ -3,9 +3,12 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
+import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 
 /// Interpretador mínimo para AArch64 — fatia B6.1: SEM cache de blocos, SEM JIT, um `step()`/
@@ -31,6 +34,15 @@ public final class Ir64BlockExecutor {
     private static final int PAIR_DOUBLEWORD_STRIDE_BYTES = 8;
     /// Deslocamento em bytes entre os dois slots de um `LDP`/`STP` de 32 bits.
     private static final int PAIR_WORD_STRIDE_BYTES = 4;
+    /// Índice de encoding (`31`) que designa `SP` em {@link Ir64Op.AluExtendedRegister} — mesmo
+    /// valor de {@link #BASE_REGISTER_SP_ENCODING}, nomeado separadamente porque aparece num
+    /// contexto de ALU (não endereçamento de memória). A resolução SEMPRE checa o índice (`==
+    /// 31`), nunca só a flag booleira do op (ver {@link #executeAluExtendedRegister} e a
+    /// diferença deliberada com {@link #executeAlu}, documentada na task B6.3.1).
+    private static final int ALU_STACK_POINTER_ENCODING = 31;
+    /// Máscara para a metade baixa de 32 bits — mesma disciplina de largura usada no resto do
+    /// executor (`W` sempre zero-estende para os 64 bits altos).
+    private static final long LOW_32_BITS_MASK = 0xFFFF_FFFFL;
 
     private final Aarch64Decoder decoder = new Aarch64Decoder();
 
@@ -86,6 +98,10 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.STORE64 -> executeStore(core, (Ir64Op.Store64) op);
             case Ir64Op.Kind.LOAD_STORE_PAIR -> executeLoadStorePair(core, (Ir64Op.LoadStorePair) op);
             case Ir64Op.Kind.LOAD_LITERAL64 -> executeLoadLiteral(core, (Ir64Op.LoadLiteral64) op);
+            case Ir64Op.Kind.ALU_SHIFTED_REGISTER ->
+                    executeAluShiftedRegister(core, (Ir64Op.AluShiftedRegister) op);
+            case Ir64Op.Kind.ALU_EXTENDED_REGISTER ->
+                    executeAluExtendedRegister(core, (Ir64Op.AluExtendedRegister) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -111,6 +127,95 @@ public final class Ir64BlockExecutor {
             core.setXForWidth(op.dst(), result.value, op.wide());
         }
         return false;
+    }
+
+    /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "shifted register" (B6.3.1) — `Rd`/`Rn`/`Rm` nunca são
+    /// `SP` nesta forma (índice `31` é sempre `XZR`, resolvido normalmente por
+    /// {@link Aarch64Core#xForWidth}/{@link Aarch64Core#setXForWidth}, sem nenhuma checagem de
+    /// `SP` — ao contrário de {@link #executeAluExtendedRegister}).
+    private boolean executeAluShiftedRegister(Aarch64Core core, Ir64Op.AluShiftedRegister op) {
+        long operand1 = core.xForWidth(op.src1(), op.wide());
+        long rawOperand2 = core.xForWidth(op.src2(), op.wide());
+        long operand2 = applyShift(rawOperand2, op.shiftType(), op.shiftAmount(), op.wide());
+        AluResult result = op.opcode() == Ir64AluOp.SUB
+                ? subWithFlags(operand1, operand2, op.wide())
+                : addWithFlags(operand1, operand2, op.wide());
+        if (op.setFlags()) {
+            core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
+        }
+        core.setXForWidth(op.dst(), result.value, op.wide());
+        return false;
+    }
+
+    /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "extended register" (B6.3.1) — `Rn` é SEMPRE `Rn|SP`
+    /// (`ARM DDI 0487` pseudocódigo de `ADD (extended register)`: `operand1 = if n == 31 then
+    /// SP[] else X[n]`); `Rd` é `Rd|SP` só quando `!setFlags` (mesmo pseudocódigo: `if d == 31 &&
+    /// !setflags then SP[] = result else X[d] = result`). **A resolução SEMPRE checa o índice
+    /// contra `31`, nunca só a flag** — diferente de {@link #executeAlu} (forma imediata,
+    /// B6.1), que resolve incondicionalmente pela flag; esta é a mesma disciplina já usada por
+    /// {@link #readBaseRegister}/{@link #writeBaseRegister} (load/store) neste mesmo arquivo.
+    /// `Rm` nunca é `SP` (sempre lido por índice normal antes de estender).
+    private boolean executeAluExtendedRegister(Aarch64Core core, Ir64Op.AluExtendedRegister op) {
+        long operand1 = readAluOperandOrStackPointer(core, op.src1(), op.wide());
+        long extended = extendAluOperand(core.x(op.src2()), op.extendType());
+        long operand2 = extended << op.shiftAmount();
+        AluResult result = op.opcode() == Ir64AluOp.SUB
+                ? subWithFlags(operand1, operand2, op.wide())
+                : addWithFlags(operand1, operand2, op.wide());
+        if (op.setFlags()) {
+            core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
+        }
+        if (op.dstIsStackPointer() && op.dst() == ALU_STACK_POINTER_ENCODING) {
+            core.setSp(op.wide() ? result.value : (result.value & LOW_32_BITS_MASK));
+        } else {
+            core.setXForWidth(op.dst(), result.value, op.wide());
+        }
+        return false;
+    }
+
+    /// Lê `Rn|SP`: `SP` (na largura pedida) quando o índice é `31`, senão o registrador normal.
+    private static long readAluOperandOrStackPointer(Aarch64Core core, int index, boolean wide) {
+        if (index == ALU_STACK_POINTER_ENCODING) {
+            long sp = core.sp();
+            return wide ? sp : (sp & LOW_32_BITS_MASK);
+        }
+        return core.xForWidth(index, wide);
+    }
+
+    /// Aplica o deslocamento de {@link Ir64Op.AluShiftedRegister} respeitando a largura da
+    /// operação — `LSR`/`ASR` em `W` operam sobre os 32 bits baixos (não os 64 completos), por
+    /// isso o cálculo é feito em `int` quando `!wide`, não só mascarado depois.
+    private static long applyShift(long value, Ir64ShiftType shiftType, int amount, boolean wide) {
+        if (wide) {
+            return switch (shiftType) {
+                case LSL -> value << amount;
+                case LSR -> value >>> amount;
+                case ASR -> value >> amount;
+            };
+        }
+        int narrow = (int) value;
+        int shifted = switch (shiftType) {
+            case LSL -> narrow << amount;
+            case LSR -> narrow >>> amount;
+            case ASR -> narrow >> amount;
+        };
+        return shifted & LOW_32_BITS_MASK;
+    }
+
+    /// Estende `Rm` (fatia de tamanho/sinal dados por {@code extendType}) para 64 bits, ANTES do
+    /// deslocamento de {@link Ir64Op.AluExtendedRegister#shiftAmount()} — mesmo helper conceitual
+    /// de `ext_and_shift_reg` (`translate-a64.c`), citado nos Fatos de referência #5 da task.
+    private static long extendAluOperand(long rawRegisterValue, Ir64AluExtendType extendType) {
+        return switch (extendType) {
+            case UXTB -> rawRegisterValue & 0xFFL;
+            case UXTH -> rawRegisterValue & 0xFFFFL;
+            case UXTW -> rawRegisterValue & LOW_32_BITS_MASK;
+            case UXTX -> rawRegisterValue;
+            case SXTB -> (long) (byte) rawRegisterValue;
+            case SXTH -> (long) (short) rawRegisterValue;
+            case SXTW -> (long) (int) rawRegisterValue;
+            case SXTX -> rawRegisterValue;
+        };
     }
 
     private boolean executeMoveWide(Aarch64Core core, Ir64Op.MoveWide op) {

@@ -123,6 +123,27 @@
   real ou um toolchain `aarch64-linux-*` (musl/glibc), fica pendente para sessão com esse
   ambiente disponível. Suítes arm-jitter (core+truffle) + armbox + gbaemu + ndsemu revalidadas
   verdes (G5). Ver índice do `tasks/README.md` para os detalhes.
+- **B6.3.1** ✅ (2026-07-24/25, primeira das 4 sub-tasks de B6.3): `logical (immediate)`
+  (`AND`/`ORR`/`EOR`/`ANDS`) via `DecodeBitMasks` (transcrito de
+  `translate-a64.c:5224-5286`, validado por property test EXAUSTIVO — `2×64×64=8192`
+  combinações — contra uma SEGUNDA implementação independente por array de bits/rotação por
+  índice, não a mesma fórmula de shift-e-OR) + ALU por registrador (`ADD`/`SUB`/`ADDS`/`SUBS`
+  shifted register e extended register, records novos `Ir64Op.AluShiftedRegister`/
+  `AluExtendedRegister`, enums novos `Ir64ShiftType`/`Ir64AluExtendType`) + dispatch novo de
+  classe top-level "Data Processing — Register" (`isDataProcessingRegisterClass`/
+  `decodeDataProcessingRegister`, do qual **B6.3.2**/**B6.3.3** dependem). Corpus real
+  estendido (apêndice do mesmo `corpus.s`/`.bin`/`.objdump.txt` de B6.1/B6.2, offsets
+  `0x118`-`0x184`, `aarch64-none-elf-as`/`objdump` reais). **Achado real reportado, NÃO
+  corrigido (fora do escopo desta task)**: `Ir64BlockExecutor#executeAlu` (B6.1,
+  `Ir64Op.Alu64`/ADD-SUB imediato) resolve `Rd|SP`/`Rn|SP` checando SÓ a flag booleira
+  (`dstIsStackPointer`/`src1IsStackPointer`), nunca o ÍNDICE do registrador (`==31`) — o
+  pseudocódigo real do manual e o próprio `readBaseRegister`/`writeBaseRegister` (load/store,
+  mesmo arquivo) checam o índice; confirmado com um teste descartável que `add x4, x5,
+  #0x123` grava em `SP` em vez de `X4`. O código NOVO desta task (`AluExtendedRegister`)
+  implementa a checagem CORRETA (por índice, espelhando `readBaseRegister`/`writeBaseRegister`)
+  — não copia o padrão do B6.1. Bug do B6.1 fica para uma task de correção futura (fora do
+  "Inclui" de B6.3.1). `mvn -o test` verde (1022 testes); gbaemu/ndsemu **não revalidados**
+  (aceite da própria task confirma que G5 não se aplica — nenhum arquivo 32-bit tocado).
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
@@ -132,22 +153,27 @@ diferentes apenas).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P1 | **B6.3.1** — AArch64: logical immediate (`DecodeBitMasks`) + ALU registrador (shifted/extended) | `trilha-b-arquiteturas/b6.3.1-aarch64-logical-imm-alu-register.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente — só o aceite #2/busybox de B6.2 fica bloqueado, não bloqueia esta task) | especificada 2026-07-24 (rodada de spec que decompôs B6.3 em 4 sub-tasks); cria o dispatch novo de classe top-level "Data Processing — Register" do qual **B6.3.2** e **B6.3.3** dependem — próxima sub-task só entra na fila depois desta fechar |
-| P2 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
+| P1 | **B6.3.2** — AArch64: `CSEL`/`CSINC`/`CSINV`/`CSNEG` (+ aliases) + `UBFM`/`SBFM`/`BFM` (+ aliases) | `trilha-b-arquiteturas/b6.3.2-aarch64-csel-bitfield.md` | arm-jitter | B6.3.1 ✅ | destravada agora que B6.3.1 fechou (2026-07-24/25) — reaproveita o dispatch `decodeDataProcessingRegister` que B6.3.1 criou (adiciona `case`s novos, não deveria precisar tocar no dispatch em si) |
+| P2 | **B6.3.3** — AArch64: `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | `trilha-b-arquiteturas/b6.3.3-aarch64-mul-div.md` | arm-jitter | B6.3.1 ✅ | destravada junto com B6.3.2 (mesma dependência, mesmo dispatch) — as duas são independentes ENTRE SI (nenhuma depende da outra), só compartilham a dependência em B6.3.1; ordem relativa entre P1/P2 é só convenção de leitura do épico, não uma dependência real |
+| P3 | **B6.3.4** — AArch64: `LDXR`/`LDAXR`/`STXR`/`STLXR` + `Aarch64ExclusiveMonitor` | `trilha-b-arquiteturas/b6.3.4-aarch64-exclusive-monitor.md` | arm-jitter | B6.2 🟡 (parcial já é suficiente) | **independente de B6.3.1/B6.3.2/B6.3.3** (só precisa de B6.2 — loads/stores 64-bit — não do dispatch novo de "Data Processing — Register"); já estava elegível mesmo antes de B6.3.1 fechar, registrada aqui por último só pela ordem natural de leitura do épico, não por dependência real |
+| P4 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.1+
 (softmmu/full-system, RFC-SOFTMMU) e B6.4+ (AArch64 — escopo fechado no épico,
 mas spec própria ainda não escrita; ver `b6-aarch64.md`).
 
-**B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec)**: **B6.3.1**
-entra na fila acima como P1 (não depende de nenhuma sub-task nova, só de B6.2).
-**B6.3.2** e **B6.3.3** dependem de B6.3.1 (reaproveitam o dispatch de "Data
-Processing — Register" que ela cria) — ficam registradas mas só entram na fila
-quando B6.3.1 fechar. **B6.3.4** (LDXR/LDAXR/STXR/STLXR + monitor) só depende
-de B6.2 — pode ser adiantada antes de B6.3.2/B6.3.3 se o usuário priorizar
-(não tem dependência funcional das outras 3), mas por ora fica registrada
-abaixo de B6.3.1 na ordem natural de leitura do épico. Ver `b6-aarch64.md` e
-os 4 arquivos de sub-task para o detalhe de cada uma.
+**B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec)**: **B6.3.1** ✅
+fechou (2026-07-24/25) — criou o dispatch de "Data Processing — Register"
+(`isDataProcessingRegisterClass`/`decodeDataProcessingRegister`). Isso destrava
+**B6.3.2** e **B6.3.3** simultaneamente (P1/P2 acima — ambas dependem só de
+B6.3.1, nenhuma depende da outra). **B6.3.4** (P3, LDXR/LDAXR/STXR/STLXR +
+monitor) já estava elegível antes mesmo de B6.3.1 fechar — depende só de B6.2,
+é a única das 4 que introduz estado novo no core (monitor de exclusividade) e
+por isso é sozinha na sua categoria de risco. As 3 (P1/P2/P3) podem ser
+executadas em qualquer ordem entre si (mesmo repo arm-jitter, então 1 sessão
+por vez — "ordem obrigatória" aqui é só a ordem de leitura da tabela, não uma
+dependência funcional real entre elas). Ver `b6-aarch64.md` e os 4 arquivos de
+sub-task para o detalhe de cada uma.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 

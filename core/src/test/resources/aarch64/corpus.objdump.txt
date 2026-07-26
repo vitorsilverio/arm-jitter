@@ -79,3 +79,31 @@ Disassembly of section .text:
 
 0000000000000114 <litlabel>:
  114:	d503201f 	nop
+ 118:	92400020 	and	x0, x1, #0x1
+ 11c:	b200f062 	orr	x2, x3, #0x5555555555555555
+ 120:	d200e0a4 	eor	x4, x5, #0x1111111111111111
+ 124:	f27ff8e6 	ands	x6, x7, #0xfffffffffffffffe
+ 128:	1201f128 	and	w8, w9, #0xaaaaaaaa
+ 12c:	7201056a 	ands	w10, w11, #0x80000001
+ 130:	8b020020 	add	x0, x1, x2
+ 134:	8b021020 	add	x0, x1, x2, lsl #4
+ 138:	cb451883 	sub	x3, x4, x5, lsr #6
+ 13c:	eb8820e6 	subs	x6, x7, x8, asr #8
+ 140:	2b0b0149 	adds	w9, w10, w11
+ 144:	0b4e0dac 	add	w12, w13, w14, lsr #3
+ 148:	4b911e0f 	sub	w15, w16, w17, asr #7
+ 14c:	8b220020 	add	x0, x1, w2, uxtb
+ 150:	8b222020 	add	x0, x1, w2, uxth
+ 154:	8b224020 	add	x0, x1, w2, uxtw
+ 158:	8b226020 	add	x0, x1, x2, uxtx
+ 15c:	8b228020 	add	x0, x1, w2, sxtb
+ 160:	8b22a020 	add	x0, x1, w2, sxth
+ 164:	8b22c020 	add	x0, x1, w2, sxtw
+ 168:	8b22e020 	add	x0, x1, x2, sxtx
+ 16c:	8b2163ff 	add	sp, sp, x1
+ 170:	8b216fff 	add	sp, sp, x1, lsl #3
+ 174:	8b25609f 	add	sp, x4, x5
+ 178:	ab2363e2 	adds	x2, sp, x3
+ 17c:	ab22603f 	cmn	x1, x2, uxtx
+ 180:	eb22603f 	cmp	x1, x2, uxtx
+ 184:	0b220820 	add	w0, w1, w2, uxtb #2

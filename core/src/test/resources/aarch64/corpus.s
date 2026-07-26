@@ -73,3 +73,35 @@ stp x0, x1, [sp], #16
 ldr x7, litlabel
 litlabel:
 nop
+
+// ── B6.3.1: logical (immediate) + ALU registrador (shifted/extended) ─────────────────────
+and x0, x1, #0x1
+orr x2, x3, #0x5555555555555555
+eor x4, x5, #0x1111111111111111
+ands x6, x7, #0xfffffffffffffffe
+and w8, w9, #0xaaaaaaaa
+ands w10, w11, #0x80000001
+
+add x0, x1, x2
+add x0, x1, x2, lsl #4
+sub x3, x4, x5, lsr #6
+subs x6, x7, x8, asr #8
+adds w9, w10, w11
+add w12, w13, w14, lsr #3
+sub w15, w16, w17, asr #7
+
+add x0, x1, x2, uxtb
+add x0, x1, x2, uxth
+add x0, x1, x2, uxtw
+add x0, x1, x2, uxtx
+add x0, x1, x2, sxtb
+add x0, x1, x2, sxth
+add x0, x1, x2, sxtw
+add x0, x1, x2, sxtx
+add sp, sp, x1, uxtx
+add sp, sp, x1, uxtx #3
+add sp, x4, x5, uxtx
+adds x2, sp, x3, uxtx
+adds xzr, x1, x2, uxtx
+subs xzr, x1, x2, uxtx
+add w0, w1, w2, uxtb #2

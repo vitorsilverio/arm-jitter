@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
+import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
@@ -9,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.BeforeAll;
@@ -573,5 +575,324 @@ class Aarch64DecoderCorpusTest {
         assertEquals(0x114L, op.address(), "instructionAddress(0x110) + imm19*4 -> litlabel(0x114)");
         assertTrue(op.wide());
         assertFalse(op.signExtend());
+    }
+
+    // ── B6.3.1: logical (immediate) — apêndice do mesmo corpus.s/objdump.txt, offsets 0x118+ ──
+
+    @Test
+    void andImmediateSingleBitElement64() {
+        // and x0, x1, #0x1: elemento de 64 bits (N=1), um único bit setado.
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x118);
+        assertEquals(Ir64AluOp.AND, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(0x1L, op.immediate());
+        assertTrue(op.wide());
+        assertFalse(op.setFlags());
+        assertFalse(op.dstIsStackPointer(), "AND (imediato) nunca tem forma SP");
+        assertFalse(op.src1IsStackPointer());
+    }
+
+    @Test
+    void orrImmediateReplicatedPattern() {
+        // orr x2, x3, #0x5555555555555555: elemento de 2 bits (01), replicado.
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x11c);
+        assertEquals(Ir64AluOp.ORR, op.opcode());
+        assertEquals(2, op.dst());
+        assertEquals(3, op.src1());
+        assertEquals(0x5555555555555555L, op.immediate());
+    }
+
+    @Test
+    void eorImmediateElement4Bits() {
+        // eor x4, x5, #0x1111111111111111: elemento de 4 bits (0001), replicado.
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x120);
+        assertEquals(Ir64AluOp.EOR, op.opcode());
+        assertEquals(4, op.dst());
+        assertEquals(5, op.src1());
+        assertEquals(0x1111111111111111L, op.immediate());
+    }
+
+    @Test
+    void andsImmediateSetsFlagsAndNonTrivialRotation() {
+        // ands x6, x7, #0xfffffffffffffffe: corrida de 63 uns rotacionada por 1 (immr != 0).
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x124);
+        assertEquals(Ir64AluOp.AND, op.opcode());
+        assertEquals(6, op.dst());
+        assertEquals(7, op.src1());
+        assertEquals(0xffff_ffff_ffff_fffeL, op.immediate());
+        assertTrue(op.setFlags());
+    }
+
+    @Test
+    void andImmediate32BitSmallElement() {
+        // and w8, w9, #0xaaaaaaaa: elemento de 2 bits (10), forma W. O decoder produz o padrão
+        // replicado até os 64 bits (mesma convenção do "wmask" do manual/QEMU, não truncado por
+        // largura aqui) — o EXECUTOR (logicalWithFlags) é quem aplica a máscara de 32 bits no
+        // resultado final; os 32 bits baixos de `immediate()` já são o valor 0xaaaaaaaa esperado.
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x128);
+        assertEquals(8, op.dst());
+        assertEquals(9, op.src1());
+        assertEquals(0xaaaa_aaaa_aaaa_aaaaL, op.immediate());
+        assertEquals(0xaaaa_aaaaL, op.immediate() & 0xFFFF_FFFFL, "baixos 32 bits = imediato W esperado");
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void andsImmediate32BitNonTrivialRotation() {
+        // ands w10, w11, #0x80000001: corrida de 2 uns (bits 31 e 0) rotacionada dentro de 32 bits.
+        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x12c);
+        assertEquals(10, op.dst());
+        assertEquals(11, op.src1());
+        assertEquals(0x8000_0001_8000_0001L, op.immediate());
+        assertEquals(0x8000_0001L, op.immediate() & 0xFFFF_FFFFL, "baixos 32 bits = imediato W esperado");
+        assertFalse(op.wide());
+        assertTrue(op.setFlags());
+    }
+
+    @Test
+    void logicalImmediateNReservedWithNarrowWidthThrows() {
+        // N=1 com sf=0: UNDEFINED (Fatos de referência #2 da task B6.3.1) — não existe assembly
+        // válido para isso (o assembler real nunca emite essa combinação), então o vetor é
+        // construído à mão a partir do formato, mesmo precedente de outros testes de reservado
+        // neste projeto (ex. Ir64BlockExecutorTest#cbzNarrowIgnoresHighBits).
+        int word = (0 << 31) /* sf=0 */ | (0b00 << 29) /* opc=AND */ | (0b100100 << 23)
+                | (1 << 22) /* N=1 */ | (0 << 16) /* immr */ | (0 << 10) /* imms */
+                | (1 << 5) /* Rn */ | 0 /* Rd */;
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B6.3.1: ALU shifted register — offsets 0x130+ ──────────────────────────────────────
+
+    @Test
+    void addShiftedRegisterLslZero() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x130);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertEquals(Ir64ShiftType.LSL, op.shiftType());
+        assertEquals(0, op.shiftAmount());
+        assertTrue(op.wide());
+        assertFalse(op.setFlags());
+    }
+
+    @Test
+    void addShiftedRegisterLslNonZero() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x134);
+        assertEquals(Ir64ShiftType.LSL, op.shiftType());
+        assertEquals(4, op.shiftAmount());
+    }
+
+    @Test
+    void subShiftedRegisterLsr() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x138);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertEquals(Ir64ShiftType.LSR, op.shiftType());
+        assertEquals(6, op.shiftAmount());
+        assertFalse(op.setFlags());
+    }
+
+    @Test
+    void subsShiftedRegisterAsrSetsFlags() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x13c);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(Ir64ShiftType.ASR, op.shiftType());
+        assertEquals(8, op.shiftAmount());
+        assertTrue(op.setFlags());
+    }
+
+    @Test
+    void addsShiftedRegister32BitLslZero() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x140);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertFalse(op.wide());
+        assertTrue(op.setFlags());
+        assertEquals(9, op.dst());
+        assertEquals(10, op.src1());
+        assertEquals(11, op.src2());
+    }
+
+    @Test
+    void addShiftedRegister32BitLsr() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x144);
+        assertFalse(op.wide());
+        assertEquals(Ir64ShiftType.LSR, op.shiftType());
+        assertEquals(3, op.shiftAmount());
+    }
+
+    @Test
+    void subShiftedRegister32BitAsr() {
+        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x148);
+        assertFalse(op.wide());
+        assertEquals(Ir64ShiftType.ASR, op.shiftType());
+        assertEquals(7, op.shiftAmount());
+    }
+
+    @Test
+    void addShiftedRegisterRorReservedThrows() {
+        // st=11 (ROR) é reservado para ADD/SUB (Fatos de referência #4) — construído à mão, sem
+        // assembly válido correspondente.
+        int word = 0x8b020020 | (0b11 << 22); // pega "add x0,x1,x2" e força st=11
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    @Test
+    void addShiftedRegisterNarrowWidthAmountBit5SetThrows() {
+        // sf=0 com quantidade >= 32 (bit5 do imm6 setado) é UNDEFINED (Fatos de referência #4).
+        int word = 0x0b4e0dac | (1 << 15); // pega "add w12,w13,w14,lsr#3" e seta o bit5 do imm6
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B6.3.1: ALU extended register — offsets 0x14c+ ─────────────────────────────────────
+
+    @Test
+    void addExtendedRegisterUxtb() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x14c);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertEquals(Ir64AluExtendType.UXTB, op.extendType());
+        assertEquals(0, op.shiftAmount());
+        assertTrue(op.wide());
+        assertFalse(op.setFlags());
+        assertTrue(op.dstIsStackPointer(), "ADD sem S: Rd|SP (checado por índice no executor)");
+    }
+
+    @Test
+    void addExtendedRegisterUxth() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x150);
+        assertEquals(Ir64AluExtendType.UXTH, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterUxtw() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x154);
+        assertEquals(Ir64AluExtendType.UXTW, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterUxtx() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x158);
+        assertEquals(Ir64AluExtendType.UXTX, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterSxtb() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x15c);
+        assertEquals(Ir64AluExtendType.SXTB, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterSxth() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x160);
+        assertEquals(Ir64AluExtendType.SXTH, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterSxtw() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x164);
+        assertEquals(Ir64AluExtendType.SXTW, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterSxtx() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x168);
+        assertEquals(Ir64AluExtendType.SXTX, op.extendType());
+    }
+
+    @Test
+    void addExtendedRegisterSpAsRnAndRdNoShift() {
+        // add sp, sp, x1: Rn=31 (SP) e Rd=31 (SP, permitido pois é ADD sem S).
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x16c);
+        assertEquals(31, op.dst());
+        assertEquals(31, op.src1());
+        assertEquals(1, op.src2());
+        assertEquals(0, op.shiftAmount());
+        assertTrue(op.dstIsStackPointer());
+    }
+
+    @Test
+    void addExtendedRegisterSpWithShiftAmount() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x170);
+        assertEquals(31, op.dst());
+        assertEquals(31, op.src1());
+        assertEquals(3, op.shiftAmount());
+    }
+
+    @Test
+    void addExtendedRegisterSpAsRnOnly() {
+        // add sp, x4, x5: Rd=31 (SP), Rn=4 (normal) — prova que dstIsStackPointer não implica
+        // src1 também é SP (são checados de forma independente pelo executor).
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x174);
+        assertEquals(31, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertTrue(op.dstIsStackPointer());
+    }
+
+    @Test
+    void addsExtendedRegisterSpAsRnDstNeverStackPointer() {
+        // adds x2, sp, x3: Rn=31 (SP), mas dstIsStackPointer é false (ADDS sempre tem destino
+        // normal, nunca SP, mesmo se o índice fosse 31).
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x178);
+        assertEquals(2, op.dst());
+        assertEquals(31, op.src1());
+        assertEquals(3, op.src2());
+        assertTrue(op.setFlags());
+        assertFalse(op.dstIsStackPointer());
+    }
+
+    @Test
+    void addsExtendedRegisterXzrDestinationIsNormalNotStackPointer() {
+        // adds xzr, x1, x2, uxtx (disassembla como "cmn"): Rd=31, mas é XZR normal (setFlags=true
+        // implica dstIsStackPointer=false) — o resultado é descartado, não vai para SP.
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x17c);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertEquals(31, op.dst());
+        assertTrue(op.setFlags());
+        assertFalse(op.dstIsStackPointer());
+    }
+
+    @Test
+    void subsExtendedRegisterXzrDestination() {
+        // subs xzr, x1, x2, uxtx (disassembla como "cmp").
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x180);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(31, op.dst());
+        assertTrue(op.setFlags());
+        assertFalse(op.dstIsStackPointer());
+    }
+
+    @Test
+    void addExtendedRegister32BitWithShiftAmount() {
+        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x184);
+        assertFalse(op.wide());
+        assertEquals(Ir64AluExtendType.UXTB, op.extendType());
+        assertEquals(2, op.shiftAmount());
+    }
+
+    @Test
+    void addExtendedRegisterShiftAmountAboveMaxThrows() {
+        // sa > 4 é UNDEFINED (Fatos de referência #5) — campo tem 3 bits (cabe até 7), mas 5-7
+        // são reservados; construído à mão, sem assembly válido correspondente.
+        int word = 0x8b220020 | (5 << 10); // pega "add x0,x1,w2,uxtb" e força sa=5
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
 }

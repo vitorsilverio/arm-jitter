@@ -382,4 +382,210 @@ class Ir64BlockExecutorTest {
 
         assertEquals(0L, core.x(31));
     }
+
+    // ── B6.3.1: logical (immediate) ─────────────────────────────────────────────────────────
+
+    @Test
+    void andsImmediateNeverSetsCarryOrOverflow() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xf27ff8e6); // ands x6, x7, #0xfffffffffffffffe (do corpus real)
+        core.setX(7, 0xFFFF_FFFF_FFFF_FFFFL); // qualquer operando, C/V nunca vêm de aritmética aqui
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0xFFFF_FFFF_FFFF_FFFEL, core.x(6));
+        assertFalse(core.pstate().carry(), "AND/ORR/EOR (imediato) nunca setam C");
+        assertFalse(core.pstate().overflow(), "AND/ORR/EOR (imediato) nunca setam V");
+    }
+
+    @Test
+    void andImmediateNeverTouchesStackPointer() {
+        Aarch64Core core = newCore(16);
+        core.setSp(0x7FFF_0000L);
+        putWord(core, 0, 0x92400020); // and x0, x1, #0x1
+        core.setX(1, 0x3);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L, core.x(0));
+        assertEquals(0x7FFF_0000L, core.sp(), "AND (imediato) nunca toca SP");
+    }
+
+    // ── B6.3.1: ALU shifted register ────────────────────────────────────────────────────────
+
+    @Test
+    void addShiftedRegisterLslNonZeroShiftsSecondOperand() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x8b021020); // add x0, x1, x2, lsl #4 (do corpus real)
+        core.setX(1, 1);
+        core.setX(2, 1);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1L + (1L << 4), core.x(0));
+    }
+
+    @Test
+    void subShiftedRegisterLsr() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xcb451883); // sub x3, x4, x5, lsr #6 (do corpus real)
+        core.setX(4, 1000);
+        core.setX(5, 640);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(1000L - (640L >>> 6), core.x(3));
+    }
+
+    @Test
+    void subsShiftedRegisterAsrSetsFlags() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xeb8820e6); // subs x6, x7, x8, asr #8 (do corpus real)
+        core.setX(7, 0);
+        core.setX(8, 0x100);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(-1L, core.x(6));
+        assertTrue(core.pstate().negative());
+        assertFalse(core.pstate().zero());
+    }
+
+    @Test
+    void addsShiftedRegister32BitZeroFlag() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x2b0b0149); // adds w9, w10, w11 (do corpus real)
+        core.setX(10, 5);
+        core.setX(11, 0xFFFF_FFFBL); // -5 como W
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0L, core.x(9));
+        assertTrue(core.pstate().zero());
+    }
+
+    @Test
+    void subShiftedRegister32BitAsrIsArithmeticNotLogical() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x4b911e0f); // sub w15, w16, w17, asr #7 (do corpus real)
+        core.setX(16, 0);
+        core.setX(17, 0x8000_0000L); // INT_MIN como W: ASR deve preservar o sinal
+
+        new Ir64BlockExecutor().step(core);
+
+        int expected = 0 - (0x8000_0000 >> 7); // >> em int já é aritmético em Java
+        assertEquals(expected & 0xFFFF_FFFFL, core.x(15));
+    }
+
+    // ── B6.3.1: ALU extended register ──────────────────────────────────────────────────────
+
+    @Test
+    void addExtendedRegisterUxtbReadsOnlyLowByteOfRm() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x8b220020); // add x0, x1, w2, uxtb (do corpus real)
+        core.setX(1, 0x100);
+        core.setX(2, 0x1234_5678L); // só o byte baixo (0x78) deve contar
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x100L + 0x78L, core.x(0));
+    }
+
+    @Test
+    void addExtendedRegisterSpAsBothRnAndRd() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x8b2163ff); // add sp, sp, x1 (do corpus real)
+        core.setSp(0x1000);
+        core.setX(1, 0x10);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1010L, core.sp());
+    }
+
+    @Test
+    void addExtendedRegisterSpAsDstOnlyReadsNormalRn() {
+        // add sp, x4, x5: Rn=x4 é um registrador NORMAL (não SP) — prova que dstIsStackPointer
+        // não implica src1 também ser SP (são resolvidos de forma independente pelo executor,
+        // cada um checando o próprio índice contra 31).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x8b25609f); // add sp, x4, x5 (do corpus real)
+        core.setSp(0xDEAD);
+        core.setX(4, 0x2000);
+        core.setX(5, 0x30);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x2030L, core.sp());
+        assertEquals(0x2000L, core.x(4), "Rn (x4) não deveria ser afetado");
+    }
+
+    @Test
+    void addExtendedRegisterNonSpDestinationNeverWritesStackPointer() {
+        // add x0, x1, x2, uxtx: dstIsStackPointer é true (ADD sem S), mas dst=0 (não 31) —
+        // deve escrever em X0, nunca em SP (a checagem correta é por ÍNDICE, não só pela flag;
+        // ver a diferença deliberada com o executor de B6.1/Alu64 documentada no código).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x8b226020); // add x0, x1, x2, uxtx (do corpus real)
+        core.setSp(0x9999);
+        core.setX(1, 100);
+        core.setX(2, 23);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(123L, core.x(0));
+        assertEquals(0x9999L, core.sp(), "SP não deveria ser tocado quando dst != 31");
+    }
+
+    @Test
+    void addsExtendedRegisterSpAsRnReadsStackPointerCorrectly() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xab2363e2); // adds x2, sp, x3 (do corpus real)
+        core.setSp(100);
+        core.setX(3, 23);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(123L, core.x(2));
+        assertFalse(core.pstate().zero());
+    }
+
+    @Test
+    void addsExtendedRegisterXzrDestinationDiscardsResultButKeepsFlags() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xab22603f); // adds xzr, x1, x2, uxtx ("cmn", do corpus real)
+        core.setX(1, 5);
+        core.setX(2, -5L);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0L, core.x(31));
+        assertTrue(core.pstate().zero(), "flags devem refletir 5 + (-5) mesmo com resultado descartado");
+    }
+
+    @Test
+    void subsExtendedRegisterXzrDestinationComparesWithoutWriting() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xeb22603f); // subs xzr, x1, x2, uxtx ("cmp", do corpus real)
+        core.setX(1, 5);
+        core.setX(2, 5);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0L, core.x(31));
+        assertTrue(core.pstate().zero());
+    }
+
+    @Test
+    void addExtendedRegister32BitWithShiftZeroesUpperBits() {
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x0b220820); // add w0, w1, w2, uxtb #2 (do corpus real)
+        core.setX(0, 0xFFFF_FFFF_0000_0000L);
+        core.setX(1, 0x10);
+        core.setX(2, 0xAABB_CCFFL); // só o byte baixo (0xFF) deve contar, deslocado 2
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x10L + (0xFFL << 2), core.x(0));
+    }
 }

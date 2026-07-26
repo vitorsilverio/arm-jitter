@@ -24,7 +24,8 @@ package dev.vitorsilverio.armjitter.ir64;
 public sealed interface Ir64Op permits
         Ir64Op.Alu64, Ir64Op.MoveWide, Ir64Op.PcRelative, Ir64Op.Branch64, Ir64Op.CompareBranch64,
         Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
-        Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64 {
+        Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
+        Ir64Op.AluExtendedRegister {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -48,6 +49,8 @@ public sealed interface Ir64Op permits
         public static final int STORE64 = 9;
         public static final int LOAD_STORE_PAIR = 10;
         public static final int LOAD_LITERAL64 = 11;
+        public static final int ALU_SHIFTED_REGISTER = 12;
+        public static final int ALU_EXTENDED_REGISTER = 13;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -313,5 +316,76 @@ public sealed interface Ir64Op permits
             /// para os 64 bits do destino.
             boolean signExtend) implements Ir64Op {
         @Override public int kind() { return Kind.LOAD_LITERAL64; }
+    }
+
+    /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "shifted register" (`ARM DDI 0487 C6.2.4`/`C6.2.339`
+    /// variante registrador, B6.3.1) — segundo operando é `Rm` inteiro deslocado por
+    /// {@link #shiftType}/{@link #shiftAmount} antes da soma/subtração. `Rd`/`Rn` NUNCA são `SP`
+    /// nesta forma (diferente de {@link Alu64} e de {@link AluExtendedRegister}) — por isso não
+    /// há campos `dstIsStackPointer`/`src1IsStackPointer` aqui, o valor seria sempre `false`
+    /// (índice `31` em {@link #dst}/{@link #src1} é sempre `XZR`).
+    record AluShiftedRegister(
+            /// Operação (só `ADD`/`SUB` — `ADDS`/`SUBS` são o mesmo opcode com
+            /// {@link #setFlags}).
+            Ir64AluOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro registrador de origem (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo registrador de origem (`Rm`, índice `0`-`31`; `31` é sempre `XZR`),
+            /// deslocado por {@link #shiftType}/{@link #shiftAmount} antes de operar.
+            int src2,
+            /// Tipo de deslocamento (`LSL`/`LSR`/`ASR` — `ROR` é reservado nesta forma, ver
+            /// {@link Ir64ShiftType}).
+            Ir64ShiftType shiftType,
+            /// Quantidade de deslocamento, já validada pelo decoder: `0`-`63` quando
+            /// {@link #wide}, `0`-`31` quando não (`sf=0` com bit5 setado é UNDEFINED — ver a
+            /// task B6.3.1).
+            int shiftAmount,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide,
+            /// Indica se `NZCV` deve ser atualizado (`ADDS`/`SUBS` vs `ADD`/`SUB`).
+            boolean setFlags) implements Ir64Op {
+        @Override public int kind() { return Kind.ALU_SHIFTED_REGISTER; }
+    }
+
+    /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "extended register" (`ARM DDI 0487 C6.2.4`/`C6.2.339`
+    /// variante estendida, B6.3.1) — segundo operando é uma FATIA de `Rm` (tamanho e sinal
+    /// dados por {@link #extendType}) estendida para a largura da operação e então deslocada por
+    /// {@link #shiftAmount} (`0`-`4`). Modo de operando genuinamente diferente de
+    /// {@link AluShiftedRegister} — não a mesma operação com um parâmetro a mais (ver B6.3.1
+    /// Fatos de referência #5).
+    record AluExtendedRegister(
+            /// Operação (só `ADD`/`SUB` — `ADDS`/`SUBS` são o mesmo opcode com
+            /// {@link #setFlags}).
+            Ir64AluOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é `XZR` ou `SP` conforme
+            /// {@link #dstIsStackPointer} — resolvido pelo EXECUTOR checando o índice, nunca
+            /// incondicionalmente).
+            int dst,
+            /// Primeiro registrador de origem (`Rn`, índice `0`-`31`). **Sempre** `Rn|SP` nesta
+            /// forma — `31` é sempre `SP`, nunca `XZR` (arquitetural, sem exceção; por isso não
+            /// há um campo `src1IsStackPointer` aqui, ao contrário de {@link Alu64}: o valor
+            /// seria sempre `true`).
+            int src1,
+            /// Segundo registrador de origem (`Rm`, índice `0`-`31`; `31` é sempre `XZR` — `Rm`
+            /// NUNCA é `SP` nesta forma), fatiado/estendido por {@link #extendType} e deslocado
+            /// por {@link #shiftAmount} antes de operar.
+            int src2,
+            /// Extensão aplicada a {@link #src2} (8 combinações tamanho×sinal — ver
+            /// {@link Ir64AluExtendType}).
+            Ir64AluExtendType extendType,
+            /// Quantidade de deslocamento aplicada APÓS a extensão, já validada pelo decoder:
+            /// `0`-`4` (`5`-`7` são UNDEFINED, ver a task B6.3.1).
+            int shiftAmount,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide,
+            /// Indica se `NZCV` deve ser atualizado (`ADDS`/`SUBS` vs `ADD`/`SUB`).
+            boolean setFlags,
+            /// `true` quando o índice `31` em {@link #dst} significa `SP` (não `XZR`) — vale só
+            /// para `ADD`/`SUB` (sem `S`); `ADDS`/`SUBS` sempre têm isto `false` (destino é
+            /// sempre `Rd` normal/`XZR`, nunca `SP` — mesma regra de {@link Alu64#dstIsStackPointer}).
+            boolean dstIsStackPointer) implements Ir64Op {
+        @Override public int kind() { return Kind.ALU_EXTENDED_REGISTER; }
     }
 }

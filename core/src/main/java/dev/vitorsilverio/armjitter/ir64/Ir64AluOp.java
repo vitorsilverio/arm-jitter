@@ -1,21 +1,25 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação selecionada por {@link Ir64Op.Alu64}.
+/// Operação selecionada por {@link Ir64Op.Alu64} (forma imediata) e por
+/// {@link Ir64Op.AluShiftedRegister}/{@link Ir64Op.AluExtendedRegister} (formas registrador,
+/// só `ADD`/`SUB` — não há `AND`/`ORR`/`EOR` por registrador nesta ISA sem um SEGUNDO registrador
+/// de operando, que é `Logical (shifted register)`, fora do escopo fechado do épico B6, ver a
+/// task B6.3.1).
 ///
-/// `AND`/`ORR`/`EOR` fazem parte do formato desde já (o registro precisa expressá-las), mas o
-/// decode da forma imediata ("logical immediate", `N:immr:imms` → bitmask) fica FORA da fatia
-/// B6.1 — ver a task: é o encoding mais traiçoeiro do A64 e entra só em B6.3, transcrito do
-/// pseudocódigo `DecodeBitMasks` do manual. {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder}
-/// só produz {@link #ADD}/{@link #SUB} nesta task.
+/// `AND`/`ORR`/`EOR` (imediato) — decode do campo `dbm` (`N:immr:imms` → bitmask via
+/// `DecodeBitMasks`) chegou em B6.3.1. `ANDS` (imediato) reaproveita {@link #AND} com
+/// `Ir64Op.Alu64#setFlags() setFlags=true` (D2 da task B6.3.1) — não há uma constante `ANDS`
+/// dedicada: os flags `C=0,V=0` sempre, para as 3 operações lógicas, já são resolvidos pelo
+/// EXECUTOR (`Ir64BlockExecutor#logicalWithFlags`), não pelo opcode.
 public enum Ir64AluOp {
-    /// `ADD (immediate)`.
+    /// `ADD` (imediato, shifted register, extended register).
     ADD,
-    /// `SUB (immediate)`.
+    /// `SUB` (imediato, shifted register, extended register).
     SUB,
-    /// `AND (immediate)` — decode fora da fatia B6.1 (ver acima).
+    /// `AND`/`ANDS` (imediato) — `ANDS` é este mesmo valor com `setFlags=true` (D2).
     AND,
-    /// `ORR (immediate)` — decode fora da fatia B6.1 (ver acima).
+    /// `ORR` (imediato).
     ORR,
-    /// `EOR (immediate)` — decode fora da fatia B6.1 (ver acima).
+    /// `EOR` (imediato).
     EOR
 }
