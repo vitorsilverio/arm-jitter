@@ -37,6 +37,11 @@ public final class Aarch64Core {
     /// core algum dia precise compartilhar reservas com outro (mesma disciplina de
     /// {@link dev.vitorsilverio.armjitter.core.ArmCore}, B5.1).
     private Aarch64ExclusiveMonitor exclusiveMonitor = new Aarch64ExclusiveMonitor();
+    /// Banco de registradores FP escalar `V0`-`V31` (B6.5.1) — sempre alocado, mesmo padrão de
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters} em
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore} (sem flag de presença; quem gateia é o
+    /// decoder por feature quando B6.5.3 chegar).
+    private final Aarch64FpRegisters fp = new Aarch64FpRegisters();
 
     /// Cria um core conectado a uma memória de 64 bits. Estado inicial: todos os registradores
     /// zerados, `PC = 0`, `PSTATE` zerado.
@@ -116,6 +121,11 @@ public final class Aarch64Core {
     /// Retorna o `PSTATE` mutável associado ao core (só `N`/`Z`/`C`/`V` nesta task).
     public PstateRegister pstate() {
         return pstate;
+    }
+
+    /// Retorna o banco de registradores FP escalar (`V0`-`V31`, B6.5.1).
+    public Aarch64FpRegisters fp() {
+        return fp;
     }
 
     /// Retorna o barramento de memória conectado ao core.

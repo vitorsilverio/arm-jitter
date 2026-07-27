@@ -17,7 +17,10 @@ public record Aarch64CpuSnapshot(
         int nzcv,
         long cycles,
         long exclusiveMonitorAddress,
-        int exclusiveMonitorSizeBytes) {
+        int exclusiveMonitorSizeBytes,
+        /// Banco `V0`-`V31` completo (bits 63:0 de cada, B6.5.1) — necessário para o harness de
+        /// equivalência de B6.5.4 (ASM nativo) detectar divergência de FP.
+        long[] vRegisters) {
     /// Fotografa o estado atual do core.
     public static Aarch64CpuSnapshot capture(Aarch64Core core) {
         long[] registers = new long[31];
@@ -31,11 +34,13 @@ public record Aarch64CpuSnapshot(
                 core.pstate().nzcv(),
                 core.cycles(),
                 core.exclusiveMonitorAddress(),
-                core.exclusiveMonitorSizeBytes());
+                core.exclusiveMonitorSizeBytes(),
+                core.fp().snapshot());
     }
 
     public Aarch64CpuSnapshot {
         registers = Arrays.copyOf(registers, registers.length);
+        vRegisters = Arrays.copyOf(vRegisters, vRegisters.length);
     }
 
     /// Compara com outro snapshot e lança {@link EquivalenceMismatchException} se divergir.
@@ -65,6 +70,10 @@ public record Aarch64CpuSnapshot(
                     "exclusiveMonitor",
                     exclusiveMonitorAddress + "/" + exclusiveMonitorSizeBytes,
                     other.exclusiveMonitorAddress + "/" + other.exclusiveMonitorSizeBytes);
+        }
+        if (!Arrays.equals(vRegisters, other.vRegisters)) {
+            throw EquivalenceMismatchException.of(
+                    label, "vRegisters", Arrays.toString(vRegisters), Arrays.toString(other.vRegisters));
         }
     }
 }
