@@ -204,6 +204,13 @@ public final class Ir64BlockExecutor {
                     executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
             case Ir64Op.Kind.EXCEPTION_RETURN ->
                     executeExceptionReturn(core, (Ir64Op.ExceptionReturn) op);
+            case Ir64Op.Kind.FP64_ALU -> Ir64FpExecutor.executeFpAlu(core, (Ir64Op.Fp64Alu) op);
+            case Ir64Op.Kind.FP64_MOVE_IMMEDIATE ->
+                    Ir64FpExecutor.executeFpMoveImmediate(core, (Ir64Op.Fp64MoveImmediate) op);
+            case Ir64Op.Kind.FP64_COMPARE ->
+                    Ir64FpExecutor.executeFpCompare(core, (Ir64Op.Fp64Compare) op);
+            case Ir64Op.Kind.FP64_CONVERT ->
+                    Ir64FpExecutor.executeFpConvert(core, (Ir64Op.Fp64Convert) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

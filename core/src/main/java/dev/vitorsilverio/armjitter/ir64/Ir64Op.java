@@ -27,7 +27,8 @@ public sealed interface Ir64Op permits
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
-        Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn {
+        Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
+        Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -62,6 +63,13 @@ public sealed interface Ir64Op permits
         public static final int SYSTEM_REGISTER = 20;
         public static final int SYSTEM_INSTRUCTION = 21;
         public static final int EXCEPTION_RETURN = 22;
+        /// B6.5.2: contíguo a partir de `23` — os `Kind`s `0`-`22` já estavam ocupados quando esta
+        /// task foi escrita (a spec original previa `20`, desatualizada pelas tasks B6.6.1-B6.6.4
+        /// intermediárias, que já tinham reivindicado `20`-`22`).
+        public static final int FP64_ALU = 23;
+        public static final int FP64_MOVE_IMMEDIATE = 24;
+        public static final int FP64_COMPARE = 25;
+        public static final int FP64_CONVERT = 26;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -581,5 +589,89 @@ public sealed interface Ir64Op permits
     /// encoding fixa `Rn=31` (não lido, `ARM DDI 0487` pseudocódigo de `ERET`).
     record ExceptionReturn() implements Ir64Op {
         @Override public int kind() { return Kind.EXCEPTION_RETURN; }
+    }
+
+    /// Sub-operação de {@link Fp64Alu} — leitura literal do épico B6.5 ("FMOV/FADD/FMUL/FDIV/
+    /// FCMP/FCVT", task B6.5.2): `SQRT`/`MLA`/`MLS`/`NMUL` (existentes no precedente VFP32,
+    /// {@code IrOp.VfpOperation}) ficam FORA de propósito — não citados nesta leitura, ver
+    /// Armadilhas da task. `MOV` é a forma registrador↔registrador de `FMOV` (cópia de bits, sem
+    /// aritmética) — não confundir com {@link Fp64MoveImmediate} (`FMOV` imediato).
+    enum Fp64Operation {
+        ADD, SUB, MUL, DIV, NEG, ABS, MOV
+    }
+
+    /// `FADD`/`FSUB`/`FMUL`/`FDIV`/`FNEG`/`FABS`/`FMOV` registrador↔registrador (`ARM DDI 0487
+    /// C6.2` — seção exata a confirmar em B6.5.3, ver Armadilhas da task B6.5.2). Sem campo de
+    /// condição (D1 da task: nenhum `Ir64Op` de dado carrega condição, só {@link Branch64}).
+    record Fp64Alu(
+            /// Operação a executar.
+            Fp64Operation op,
+            /// `true` para precisão dupla (`D<n>`), `false` para simples (`S<n>`).
+            boolean doublePrecision,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Primeiro operando (`Vn`) — ignorado nas unárias (`NEG`/`ABS`/`MOV`, que usam só
+            /// {@link #vm}).
+            int vn,
+            /// Segundo operando (`Vm`), ou único operando nas unárias.
+            int vm) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_ALU; }
+    }
+
+    /// `FMOV Sd, #imm`/`FMOV Dd, #imm` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3): grava
+    /// um imediato de ponto flutuante já expandido (`VFPExpandImm`-equivalente, decodificado pelo
+    /// DECODER — B6.5.3, não aqui) no registrador de destino.
+    record Fp64MoveImmediate(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Bits crus já expandidos pelo decoder: 32 bits válidos quando `!doublePrecision`
+            /// (bits altos ignorados), 64 bits completos quando `doublePrecision`.
+            long immediateBits) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_MOVE_IMMEDIATE; }
+    }
+
+    /// `FCMP`/`FCMPE` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3), com ou sem comparação
+    /// com zero. **Escreve `PSTATE.NZCV` diretamente** (diferente de {@code IrOp.VfpCompare} no
+    /// mundo de 32 bits, que escreve um `FpscrRegister.NZCV` separado, exigindo um segundo passo
+    /// `VMRS APSR_nzcv` para chegar aos flags que os branches condicionais leem — em A64 não há
+    /// registro de flags de FP separado do `PSTATE`, ver Fatos de referência #1 da task).
+    record Fp64Compare(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// `true` para as formas `FCMP(E) Vn, #0.0` (compara com zero em vez de `vm`).
+            boolean compareWithZero,
+            /// `true` para `FCMPE` (bit E do encoding: sinaliza operação inválida também para NaN
+            /// silencioso). Sem efeito observável adicional neste core — que não modela traps de
+            /// exceção de ponto flutuante, mesmo precedente de {@code IrOp.VfpCompare} no mundo de
+            /// 32 bits — carregado só para fidelidade ao encoding.
+            boolean signalOnQuietNaN,
+            /// Primeiro operando comparado (`Vn`, não `vd`: esta instrução nunca escreve um
+            /// registrador FP).
+            int vn,
+            /// Segundo operando da comparação (`Vm`), ignorado quando {@link #compareWithZero}.
+            int vm) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_COMPARE; }
+    }
+
+    /// Sub-operação de {@link Fp64Convert} — leitura literal de "FCVT": só conversão float↔float
+    /// de precisão. `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` (conversão inteiro↔float) são mnemônicos
+    /// DIFERENTES, fora do escopo desta task (ver Armadilhas da task B6.5.2).
+    enum Fp64Conversion {
+        F32_TO_F64, F64_TO_F32
+    }
+
+    /// `FCVT` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3): conversão de precisão
+    /// float↔float, sem mudança de valor além do arredondamento IEEE 754 (widening exato
+    /// F32→F64; narrowing corretamente arredondado F64→F32).
+    record Fp64Convert(
+            /// Direção da conversão.
+            Fp64Conversion conversion,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Registrador de origem (índice `0`-`31`, `V<n>`).
+            int vm) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_CONVERT; }
     }
 }

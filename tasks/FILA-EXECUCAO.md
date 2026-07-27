@@ -287,6 +287,22 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
+- **B6.5.2** ✅ (2026-07-27, 2ª das 4 sub-tasks de B6.5, priorizada pelo usuário depois que a fila
+  automática ficou vazia): 4 records novos em `Ir64Op` (`Fp64Alu`/`Fp64MoveImmediate`/
+  `Fp64Compare`/`Fp64Convert`, enums `Fp64Operation`/`Fp64Conversion`) + `executor64/
+  Ir64FpExecutor.java` novo (estático, sem estado — nenhuma op desta fatia toca memória, D3: sem
+  load/store/multiple-transfer de FP). **Achado**: a spec previa `Kind` contíguo a partir de `20`,
+  mas B6.6.1-B6.6.4 (intermediárias entre a rodada de spec e a execução) já tinham reivindicado
+  `20`-`22` — usados `23`-`26`. `Fp64Compare` escreve `PSTATE.NZCV` DIRETO (sem o segundo passo
+  `VMRS APSR_nzcv` que o VFP32 precisa); `NEG`/`ABS` via bit de sinal (nunca `-x`/`Math.abs`);
+  `FCVT` via cast direto do Java. `signalOnQuietNaN` auditado contra `IrVfpExecutor` (confirmado:
+  sem efeito observável nos dois mundos). `mvn -o test` verde (core 1274 = 1254 + 20 novos;
+  truffle 13). G5 não se aplica (nenhum arquivo 32-bit tocado). Ver índice do `tasks/README.md`
+  para o detalhe completo. **Não inclui** (gaps registrados, podem bloquear o aceite agregado do
+  épico "musl printf de float"): `Fp64Load`/`Store`/`MultipleTransfer`, `SQRT`/`MLA`/`MLS`/`NMUL`,
+  conversão inteiro↔float (`SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU`), `FMOV Rt,Sn` core↔FP. **Próximo
+  passo**: B6.5.3 (decoder) fica elegível.
+
 - **B6.6.5** ✅ (2026-07-27, 5ª das 6 sub-tasks de B6.6 — PENÚLTIMA, só falta B6.6.6 bloqueada no
   usuário): `translationGeneration` em `jit64/BlockKey64`/`JitRuntime64`, espelho direto de
   B4.1.4 (32-bit) mas menor em escopo — `jit64/` não tem inline cache nem encadeamento de blocos
@@ -385,8 +401,10 @@ real). B6.4 (backend ASM 64-bit) fechou os 3 PRs (ver histórico abaixo) — só
 como pendência EXPLÍCITA fora do escopo de qualquer PR (registrador-cache sem consumidor A64
 medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a seção 🧑 abaixo.
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
-(2026-07-26, ver histórico abaixo)**; B6.5.2 (IR+interpretador) fica elegível para a fila assim
-que o usuário priorizar (independente de B6.6.1/B6.6.2, só depende de B6.5.1). B6.6 (MMU v8 +
+(2026-07-26, ver histórico abaixo)**; **B6.5.2 ✅ fechada (2026-07-27, priorizada pelo usuário,
+ver histórico abaixo)** — `Ir64Op`s de FP + executor interpretado. B6.5.3 (decoder da classe
+"Data Processing — Scalar FP") fica elegível para a fila assim que o usuário priorizar (depende só
+de B6.5.2). B6.6 (MMU v8 +
 hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.5 já fecharam (ver
 histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que já nasce
 bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para o detalhe completo de cada
