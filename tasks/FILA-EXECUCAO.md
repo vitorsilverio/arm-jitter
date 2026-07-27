@@ -287,6 +287,25 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
+- **B6.5.4** ✅ (2026-07-27, 4ª e última sub-task de B6.5 — **fecha o épico B6.5 por completo**,
+  executada logo depois de B6.5.3 fechar): `Ir64NativePolicy.supports` ganha os 4 `case`s
+  (`FP64_ALU`/`FP64_MOVE_IMMEDIATE`/`FP64_COMPARE`/`FP64_CONVERT`); `Ir64BlockCompiler` ganha
+  `constructFp64Alu`/`constructFp64MoveImmediate`/`constructFp64Compare`/`constructFp64Convert`,
+  mesmo padrão D-ASM de reconstrução-de-record dos `construct*` de B6.4 (decisão D1 da spec:
+  consistência com o resto do compilador, sem inlinar `FADD`/`DADD` da JVM). D2 confirmada:
+  nenhum binding novo em `Aarch64GuestToHostMapper` foi necessário — `fp()` já está acessível
+  dentro de `Ir64AsmRuntimeHelpers.executeOp` via o `Aarch64Core` inteiro. 8 testes novos
+  (`Ir64NativePolicyTest` + `BlockEquivalenceHarness64Test`: ALU 4 ops single/double, NEG/ABS/MOV
+  com payload de NaN, `FMOV` imediato 4 vetores canônicos, `FCMP`/`FCMPE` 4 quadrantes NZCV,
+  `FCVT` 2 direções, property test 50 rodadas seed fixa) provando equivalência byte-a-byte
+  interpretado×ASM (banco `V` completo via `Aarch64CpuSnapshot`). `mvn -o test` verde (core
+  1322 = 1314 + 8; truffle 13); `mvn -o install` verde. G5 não se aplica. Sem meta de
+  performance (D1, mesma disciplina de B6.4) — bench "busybox ≥3× interpretador" segue
+  bloqueado no usuário (🧑 abaixo). Ver índice do `tasks/README.md` para o detalhe completo.
+  **Próximo passo**: nenhuma sub-task nova de B6.5/B6.6 elegível sem o usuário priorizar — só
+  B6.6.6 resta em B6.6 e já nasce bloqueada no usuário (🧑 abaixo); fila automática vazia de
+  novo.
+
 - **B6.5.3** ✅ (2026-07-27, 3ª das 4 sub-tasks de B6.5, executada logo depois de B6.5.2 fechar):
   dispatch novo em `Aarch64Decoder.decodeDataProcessingRegister` — `if (bit26set) return
   decodeDataProcessingScalarFpSimd(word, address);` logo no topo, antes de toda a lógica
@@ -450,9 +469,10 @@ medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a 
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
 (2026-07-26, ver histórico abaixo)**; **B6.5.2 ✅ fechada (2026-07-27, priorizada pelo usuário,
 ver histórico abaixo)** — `Ir64Op`s de FP + executor interpretado; **B6.5.3 ✅ fechada (2026-07-27,
-ver histórico acima)** — decoder da classe "Data Processing — Scalar FP" (`bit26=1`). B6.5.4
-(emissão ASM nativa de FP) fica elegível para a fila assim que o usuário priorizar (depende de
-B6.5.3 ✅ e B6.4 ✅, ambas fechadas). B6.6 (MMU v8 +
+ver histórico acima)** — decoder da classe "Data Processing — Scalar FP" (`bit26=1`); **B6.5.4 ✅
+fechada (2026-07-27, ver histórico acima) — fecha o épico B6.5 por completo** (emissão ASM
+nativa de FP, `Ir64NativePolicy`/`Ir64BlockCompiler` estendidos, sem meta de performance por
+decisão D1). B6.6 (MMU v8 +
 hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.5 já fecharam (ver
 histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que já nasce
 bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para o detalhe completo de cada

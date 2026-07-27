@@ -58,4 +58,16 @@ class Ir64NativePolicyTest {
         assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadExclusive(0, 31, Ir64MemSize.WORD, false)));
         assertTrue(Ir64NativePolicy.supports(new Ir64Op.StoreExclusive(0, 1, 31, Ir64MemSize.WORD, false)));
     }
+
+    @Test
+    void supportsB654FpOpSet() {
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ADD, true, 0, 1, 2)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64MoveImmediate(false, 0, 0x3F800000L)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64Compare(true, false, false, 0, 1)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, 0, 1)));
+    }
 }

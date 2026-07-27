@@ -166,6 +166,10 @@ public final class Ir64BlockCompiler {
             case Ir64Op.Divide divide -> constructDivide(mv, divide);
             case Ir64Op.LoadExclusive loadExclusive -> constructLoadExclusive(mv, loadExclusive);
             case Ir64Op.StoreExclusive storeExclusive -> constructStoreExclusive(mv, storeExclusive);
+            case Ir64Op.Fp64Alu fp64Alu -> constructFp64Alu(mv, fp64Alu);
+            case Ir64Op.Fp64MoveImmediate fp64MoveImmediate -> constructFp64MoveImmediate(mv, fp64MoveImmediate);
+            case Ir64Op.Fp64Compare fp64Compare -> constructFp64Compare(mv, fp64Compare);
+            case Ir64Op.Fp64Convert fp64Convert -> constructFp64Convert(mv, fp64Convert);
             default -> throw new IllegalStateException(
                     "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
@@ -187,6 +191,8 @@ public final class Ir64BlockCompiler {
     private static final String IR64_CONDITIONAL_SELECT_OP =
             "dev/vitorsilverio/armjitter/ir64/Ir64ConditionalSelectOp";
     private static final String IR64_BITFIELD_OP = "dev/vitorsilverio/armjitter/ir64/Ir64BitfieldOp";
+    private static final String IR64_FP64_OPERATION = IR64_OP + "$Fp64Operation";
+    private static final String IR64_FP64_CONVERSION = IR64_OP + "$Fp64Conversion";
 
     private void constructAlu64(MethodVisitor mv, Ir64Op.Alu64 op) {
         String type = IR64_OP + "$Alu64";
@@ -442,6 +448,52 @@ public final class Ir64BlockCompiler {
         emitBoolean(mv, op.acquireRelease());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
                 "(IIIL" + IR64_MEM_SIZE + ";Z)V", false);
+    }
+
+    private void constructFp64Alu(MethodVisitor mv, Ir64Op.Fp64Alu op) {
+        String type = IR64_OP + "$Fp64Alu";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_FP64_OPERATION, op.op().name());
+        emitBoolean(mv, op.doublePrecision());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.vn());
+        mv.visitLdcInsn(op.vm());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_FP64_OPERATION + ";ZIII)V", false);
+    }
+
+    private void constructFp64MoveImmediate(MethodVisitor mv, Ir64Op.Fp64MoveImmediate op) {
+        String type = IR64_OP + "$Fp64MoveImmediate";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.doublePrecision());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.immediateBits());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIJ)V", false);
+    }
+
+    private void constructFp64Compare(MethodVisitor mv, Ir64Op.Fp64Compare op) {
+        String type = IR64_OP + "$Fp64Compare";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.doublePrecision());
+        emitBoolean(mv, op.compareWithZero());
+        emitBoolean(mv, op.signalOnQuietNaN());
+        mv.visitLdcInsn(op.vn());
+        mv.visitLdcInsn(op.vm());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZZII)V", false);
+    }
+
+    private void constructFp64Convert(MethodVisitor mv, Ir64Op.Fp64Convert op) {
+        String type = IR64_OP + "$Fp64Convert";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_FP64_CONVERSION, op.conversion().name());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.vm());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_FP64_CONVERSION + ";II)V", false);
     }
 
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {

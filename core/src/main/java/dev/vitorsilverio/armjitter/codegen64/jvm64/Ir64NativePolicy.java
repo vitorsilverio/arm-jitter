@@ -18,7 +18,10 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// {@link Ir64Op.Kind#ALU_SHIFTED_REGISTER}/{@link Ir64Op.Kind#ALU_EXTENDED_REGISTER}/
 /// {@link Ir64Op.Kind#CONDITIONAL_SELECT}/{@link Ir64Op.Kind#BITFIELD}/
 /// {@link Ir64Op.Kind#MULTIPLY_ACCUMULATE}/{@link Ir64Op.Kind#DIVIDE}/
-/// {@link Ir64Op.Kind#LOAD_EXCLUSIVE}/{@link Ir64Op.Kind#STORE_EXCLUSIVE} — com isso, TODO
+/// {@link Ir64Op.Kind#LOAD_EXCLUSIVE}/{@link Ir64Op.Kind#STORE_EXCLUSIVE}. B6.5.4 acrescenta o
+/// conjunto de FP escalar de B6.5.2/B6.5.3: {@link Ir64Op.Kind#FP64_ALU}/
+/// {@link Ir64Op.Kind#FP64_MOVE_IMMEDIATE}/{@link Ir64Op.Kind#FP64_COMPARE}/
+/// {@link Ir64Op.Kind#FP64_CONVERT} — com isso, TODO
 /// {@link Ir64Op.Kind} existente hoje é suportado nativamente; um bloco só cai no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter} (política
 /// `WHOLE_BLOCK`, único modo desta task — sem `PER_OP`/`FAIL_FAST` ainda) se um `Ir64Op.Kind`
@@ -59,7 +62,11 @@ public final class Ir64NativePolicy {
                  Ir64Op.Kind.MULTIPLY_ACCUMULATE,
                  Ir64Op.Kind.DIVIDE,
                  Ir64Op.Kind.LOAD_EXCLUSIVE,
-                 Ir64Op.Kind.STORE_EXCLUSIVE -> true;
+                 Ir64Op.Kind.STORE_EXCLUSIVE,
+                 Ir64Op.Kind.FP64_ALU,
+                 Ir64Op.Kind.FP64_MOVE_IMMEDIATE,
+                 Ir64Op.Kind.FP64_COMPARE,
+                 Ir64Op.Kind.FP64_CONVERT -> true;
             default -> false;
         };
     }

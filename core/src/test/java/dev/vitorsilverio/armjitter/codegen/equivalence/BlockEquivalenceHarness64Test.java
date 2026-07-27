@@ -24,6 +24,7 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -459,5 +460,180 @@ class BlockEquivalenceHarness64Test {
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0x1111, 0, true),
                 new Ir64Op.StoreExclusive(2, 3, 0, Ir64MemSize.WORD, false));
         harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    // ---- B6.5.4: Fp64Alu/Fp64MoveImmediate/Fp64Compare/Fp64Convert ----
+
+    /// Aplica `setup` a dois cores novos idênticos — mesmo padrão dos pares customizados acima,
+    /// mas para os registros de FP ({@code core.fp()}, banco `V`, B6.5.1) em vez de `X`/`SP`.
+    private static EquivalencePairFactory64 fpPair(java.util.function.Consumer<Aarch64Core> setup) {
+        return () -> {
+            Aarch64Core reference = newCore();
+            setup.accept(reference);
+            Aarch64Core candidate = newCore();
+            setup.accept(candidate);
+            return new EquivalencePair64(reference, candidate);
+        };
+    }
+
+    @Test
+    void listOfB654FpKindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ADD, true, 0, 1, 2),
+                new Ir64Op.Fp64MoveImmediate(false, 0, 0x3F800000L),
+                new Ir64Op.Fp64Compare(true, false, false, 0, 1),
+                new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, 0, 1));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    @Test
+    void fp64AluAddSubMulDivSingleAndDouble() {
+        Ir64Block single = blockOf(0xA100,
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ADD, false, 2, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.SUB, false, 3, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MUL, false, 4, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.DIV, false, 5, 0, 1));
+        harness.assertEquivalent(interpreted, asm, single, fpPair(core -> {
+            core.fp().setSFloat(0, 0.1f);
+            core.fp().setSFloat(1, 0.2f);
+        }));
+
+        Ir64Block dbl = blockOf(0xA200,
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ADD, true, 2, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.SUB, true, 3, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MUL, true, 4, 0, 1),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.DIV, true, 5, 0, 1));
+        harness.assertEquivalent(interpreted, asm, dbl, fpPair(core -> {
+            core.fp().setDDouble(0, 5.0);
+            core.fp().setDDouble(1, 2.0);
+        }));
+    }
+
+    /// `NEG`/`ABS`/`MOV` preservam payload de NaN via manipulação crua de bits (Ir64FpExecutorTest)
+    /// — aqui só prova que o backend ASM concorda bit-a-bit com o interpretado para o mesmo caso.
+    @Test
+    void fp64AluNegAbsMovPreserveNanPayloadSingleAndDouble() {
+        int nanWithPayloadSingle = 0x7FC0BEEF;
+        Ir64Block single = blockOf(0xA300,
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.NEG, false, 1, 0, 0),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ABS, false, 2, 0, 0),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MOV, false, 3, 0, 0));
+        harness.assertEquivalent(interpreted, asm, single, fpPair(core -> core.fp().setS(0, nanWithPayloadSingle)));
+
+        long nanWithPayloadDouble = 0xFFF8_0000_0000_BEEFL;
+        Ir64Block dbl = blockOf(0xA400,
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.NEG, true, 1, 0, 0),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ABS, true, 2, 0, 0),
+                new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MOV, true, 3, 0, 0));
+        harness.assertEquivalent(interpreted, asm, dbl, fpPair(core -> core.fp().setD(0, nanWithPayloadDouble)));
+    }
+
+    /// `FMOV #imm`: os 4 vetores canônicos citados na task (`0.0`/`1.0`/`-1.0`/`2.0`), single e
+    /// double — bits já expandidos, o compilador ASM só reconstrói o record `Fp64MoveImmediate`.
+    @Test
+    void fp64MoveImmediateFourCanonicalVectorsSingleAndDouble() {
+        long[] singleBits = {
+                Float.floatToRawIntBits(0.0f) & 0xFFFF_FFFFL,
+                Float.floatToRawIntBits(1.0f) & 0xFFFF_FFFFL,
+                Float.floatToRawIntBits(-1.0f) & 0xFFFF_FFFFL,
+                Float.floatToRawIntBits(2.0f) & 0xFFFF_FFFFL};
+        Ir64Op[] singleOps = new Ir64Op[singleBits.length];
+        for (int i = 0; i < singleBits.length; i++) {
+            singleOps[i] = new Ir64Op.Fp64MoveImmediate(false, i, singleBits[i]);
+        }
+        harness.assertEquivalent(interpreted, asm, blockOf(0xA500, singleOps), pair());
+
+        long[] doubleBits = {
+                Double.doubleToRawLongBits(0.0),
+                Double.doubleToRawLongBits(1.0),
+                Double.doubleToRawLongBits(-1.0),
+                Double.doubleToRawLongBits(2.0)};
+        Ir64Op[] doubleOps = new Ir64Op[doubleBits.length];
+        for (int i = 0; i < doubleBits.length; i++) {
+            doubleOps[i] = new Ir64Op.Fp64MoveImmediate(true, i, doubleBits[i]);
+        }
+        harness.assertEquivalent(interpreted, asm, blockOf(0xA600, doubleOps), pair());
+    }
+
+    /// `FCMP`: os 4 quadrantes de NZCV (igual/menor/maior/desordenado-NaN), incl. `compareWithZero`
+    /// e `FCMPE` (`signalOnQuietNaN`).
+    @Test
+    void fp64CompareFourQuadrantsNzcv() {
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xA700, new Ir64Op.Fp64Compare(false, false, false, 0, 1)),
+                fpPair(core -> {
+                    core.fp().setSFloat(0, 1.0f);
+                    core.fp().setSFloat(1, 1.0f);
+                }));
+
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xA800, new Ir64Op.Fp64Compare(false, false, false, 0, 1)),
+                fpPair(core -> {
+                    core.fp().setSFloat(0, 1.0f);
+                    core.fp().setSFloat(1, 2.0f);
+                }));
+
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xA900, new Ir64Op.Fp64Compare(false, false, false, 0, 1)),
+                fpPair(core -> {
+                    core.fp().setSFloat(0, 2.0f);
+                    core.fp().setSFloat(1, 1.0f);
+                }));
+
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xAA00, new Ir64Op.Fp64Compare(false, false, true, 0, 1)),
+                fpPair(core -> {
+                    core.fp().setSFloat(0, Float.NaN);
+                    core.fp().setSFloat(1, 1.0f);
+                }));
+
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xAB00, new Ir64Op.Fp64Compare(true, true, false, 0, -1)),
+                fpPair(core -> core.fp().setDDouble(0, -1.0)));
+    }
+
+    /// `FCVT` nas duas direções, incl. narrowing com perda de precisão (`0.1` double->float) e
+    /// widening exato.
+    @Test
+    void fp64ConvertBothDirectionsIncludingPrecisionLoss() {
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xAC00, new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, 1, 0)),
+                fpPair(core -> core.fp().setSFloat(0, 1.5f)));
+
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xAD00, new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F64_TO_F32, 1, 0)),
+                fpPair(core -> core.fp().setDDouble(0, 0.1)));
+    }
+
+    /// Property test (mesmo espírito de `b3.6-vfp-asm-nativo.md` item 2): N valores aleatórios com
+    /// seed fixa x as 4 operações de `Fp64Alu` x single/double — bits idênticos interpretado x ASM.
+    @Test
+    void fp64AluPropertyTestRandomValuesFixedSeed() {
+        Random random = new Random(0x6_5_4L);
+        Ir64Op.Fp64Operation[] operations = {
+                Ir64Op.Fp64Operation.ADD, Ir64Op.Fp64Operation.SUB,
+                Ir64Op.Fp64Operation.MUL, Ir64Op.Fp64Operation.DIV};
+        long pc = 0xB000;
+        for (int i = 0; i < 50; i++) {
+            boolean doublePrecision = random.nextBoolean();
+            Ir64Op.Fp64Operation op = operations[random.nextInt(operations.length)];
+            long a = doublePrecision ? Double.doubleToRawLongBits(random.nextDouble() * 1000 - 500)
+                    : Float.floatToRawIntBits(random.nextFloat() * 1000 - 500) & 0xFFFF_FFFFL;
+            long b = doublePrecision ? Double.doubleToRawLongBits(random.nextDouble() * 1000 - 500)
+                    : Float.floatToRawIntBits(random.nextFloat() * 1000 - 500) & 0xFFFF_FFFFL;
+            Ir64Block block = blockOf(pc, new Ir64Op.Fp64Alu(op, doublePrecision, 2, 0, 1));
+            harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+                if (doublePrecision) {
+                    core.fp().setD(0, a);
+                    core.fp().setD(1, b);
+                } else {
+                    core.fp().setS(0, (int) a);
+                    core.fp().setS(1, (int) b);
+                }
+            }));
+            pc += 0x100;
+        }
     }
 }
