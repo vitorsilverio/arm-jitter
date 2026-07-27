@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
@@ -12,6 +13,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
 /// Interpretador mínimo para AArch64 — fatia B6.1: SEM cache de blocos, SEM JIT, um `step()`/
 /// `run()` direto sobre {@link Aarch64Core}. O pipeline tiered/compilado chega em B6.4 (ver
@@ -56,23 +58,39 @@ public final class Ir64BlockExecutor {
     /// Executa uma única instrução no PC atual do core e avança o PC (a menos que a própria
     /// instrução já tenha alterado o PC — um desvio tomado).
     ///
+    /// B6.6.4 (espelho de `IrBlockExecutor#execute`, 32-bit): uma
+    /// {@link MemoryTranslationException64} pode ser lançada tanto pelo PRÓPRIO
+    /// {@link #executeFetch} (`AddressSpace64#accessCycles` de um `TranslatingAddressSpace64` já
+    /// traduz — e pode faltar — o endereço de busca ANTES do decode em si tocar a memória) quanto
+    /// pelo `decode`/execução de load-store — por isso o `try` cerca Fetch+Cycle+decode+execução
+    /// inteiros (G4 continua satisfeito: nada aqui é condicionado à condição da PRÓPRIA
+    /// instrução — Fetch/Cycle continuam incondicionais mesmo dentro do `try`, que só existe para
+    /// capturar uma falta de HARDWARE, não para pular trabalho). Sem custo no caminho quente
+    /// (faltas de tradução são raras por natureza). No `catch`, `pc` já É o endereço da instrução
+    /// faltosa (fetch ou execução, sempre a MESMA instrução que `step` está processando).
+    ///
     /// @param core core a executar
     /// @return ciclos internos consumidos (mesma convenção de
     ///         {@link dev.vitorsilverio.armjitter.core.ArmCore#stepReturningInternalCycles})
     public int step(Aarch64Core core) {
         long pc = core.pc();
-        // G4: Fetch/Cycle nunca ganham guard condicional — são contabilizados incondicionalmente
-        // antes de decodificar a semântica da instrução.
-        Ir64Op.Fetch fetch = new Ir64Op.Fetch(pc, Aarch64Decoder.instructionSizeBytes());
-        executeFetch(core, fetch);
-        Ir64Op.Cycle cycle = new Ir64Op.Cycle(CYCLES_PER_INSTRUCTION);
-        int cycles = executeCycle(cycle);
-        core.addCycles(cycles);
+        int cycles = 0;
+        try {
+            // G4: Fetch/Cycle nunca ganham guard condicional — são contabilizados
+            // incondicionalmente antes de decodificar a semântica da instrução.
+            Ir64Op.Fetch fetch = new Ir64Op.Fetch(pc, Aarch64Decoder.instructionSizeBytes());
+            executeFetch(core, fetch);
+            Ir64Op.Cycle cycle = new Ir64Op.Cycle(CYCLES_PER_INSTRUCTION);
+            cycles = executeCycle(cycle);
+            core.addCycles(cycles);
 
-        Ir64Op op = decoder.decode(core.memory(), pc);
-        boolean pcChanged = execute(core, op);
-        if (!pcChanged) {
-            core.setProgramCounter(pc + Aarch64Decoder.instructionSizeBytes());
+            Ir64Op op = decoder.decode(core.memory(), pc);
+            boolean pcChanged = execute(core, op);
+            if (!pcChanged) {
+                core.setProgramCounter(pc + Aarch64Decoder.instructionSizeBytes());
+            }
+        } catch (MemoryTranslationException64 fault) {
+            core.enterMemoryAbort(pc, fault);
         }
         return cycles;
     }
@@ -121,28 +139,38 @@ public final class Ir64BlockExecutor {
     /// @param core core a executar
     /// @param block bloco lifted por {@link dev.vitorsilverio.armjitter.ir64.Ir64BlockLifter}
     /// @return total de ciclos internos (soma de {@link Ir64Op.Cycle#count()}) consumidos pelo bloco
+    ///
+    /// B6.6.4: uma {@link MemoryTranslationException64} lançada no meio do laço é capturada aqui
+    /// (mesmo padrão de {@link #step}/`IrBlockExecutor#execute`, 32-bit) — `lastFetchAddress` já é
+    /// o endereço da instrução dona da op que lançou (G4: cada instrução aparece sempre como
+    /// `[Fetch, Cycle, op]` na ordem do PC linear, então o `Fetch` mais recente antes de QUALQUER
+    /// índice é sempre o desta instrução).
     public int executeBlock(Aarch64Core core, Ir64Block block) {
         Ir64Op[] ops = block.operationsArray();
         int[] kinds = block.kindsArray();
         int cycles = 0;
         long lastFetchAddress = -1L;
         int lastFetchSizeBytes = 0;
-        for (int i = 0; i < ops.length; i++) {
-            switch (kinds[i]) {
-                case Ir64Op.Kind.FETCH -> {
-                    Ir64Op.Fetch fetch = (Ir64Op.Fetch) ops[i];
-                    executeFetch(core, fetch);
-                    lastFetchAddress = fetch.address();
-                    lastFetchSizeBytes = fetch.sizeBytes();
-                }
-                case Ir64Op.Kind.CYCLE -> cycles += executeCycle((Ir64Op.Cycle) ops[i]);
-                default -> {
-                    boolean pcChanged = executeOp(core, ops[i]);
-                    if (!pcChanged) {
-                        core.setProgramCounter(lastFetchAddress + lastFetchSizeBytes);
+        try {
+            for (int i = 0; i < ops.length; i++) {
+                switch (kinds[i]) {
+                    case Ir64Op.Kind.FETCH -> {
+                        Ir64Op.Fetch fetch = (Ir64Op.Fetch) ops[i];
+                        executeFetch(core, fetch);
+                        lastFetchAddress = fetch.address();
+                        lastFetchSizeBytes = fetch.sizeBytes();
+                    }
+                    case Ir64Op.Kind.CYCLE -> cycles += executeCycle((Ir64Op.Cycle) ops[i]);
+                    default -> {
+                        boolean pcChanged = executeOp(core, ops[i]);
+                        if (!pcChanged) {
+                            core.setProgramCounter(lastFetchAddress + lastFetchSizeBytes);
+                        }
                     }
                 }
             }
+        } catch (MemoryTranslationException64 fault) {
+            core.enterMemoryAbort(lastFetchAddress, fault);
         }
         return cycles;
     }
@@ -174,6 +202,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
                     executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
+            case Ir64Op.Kind.EXCEPTION_RETURN ->
+                    executeExceptionReturn(core, (Ir64Op.ExceptionReturn) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -564,6 +594,19 @@ public final class Ir64BlockExecutor {
             case BARRIER -> { /* NOP observável — sem cache/pipeline modelados. */ }
         }
         return false;
+    }
+
+    /// `ERET` (B6.6.4): `PC←ELR_EL1`, `PSTATE.{N,Z,C,V}←SPSR_EL1`, sai de EL1 — mesma ordem do
+    /// precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático aqui: A64 não precisa de
+    /// subtração porque `ELR_EL1` já é o endereço exato de retomada, sem o viés `+4`/`+8` do LR
+    /// bancado do ARM32).
+    private boolean executeExceptionReturn(Aarch64Core core, Ir64Op.ExceptionReturn op) {
+        Aarch64ExceptionState exceptionState = core.exceptionState();
+        long returnAddress = exceptionState.elr1();
+        core.pstate().setFromSpsrFormat(exceptionState.spsr1());
+        exceptionState.setInEl1(false);
+        core.setProgramCounter(returnAddress);
+        return true;
     }
 
     private boolean executeLoadStorePair(Aarch64Core core, Ir64Op.LoadStorePair op) {

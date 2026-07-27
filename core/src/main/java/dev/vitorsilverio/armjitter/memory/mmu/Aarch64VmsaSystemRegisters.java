@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.memory.mmu;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 
@@ -15,9 +16,13 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 /// EL1 cobertos por B6.6.1): `SCTLR_EL1` (só o bit `M`, habilita a MMU — A64 não tem bit `V`/
 /// vetores-altos, o vetor de exceção é sempre `VBAR_EL1`), `TTBR0_EL1`, `TCR_EL1`, `MAIR_EL1`
 /// ligam em {@link TranslatingAddressSpace64}; `ESR_EL1`/`FAR_EL1`/`VBAR_EL1`/`ELR_EL1`/
-/// `SPSR_EL1` são só armazenamento nesta task (preenchimento real de `ESR`/`FAR` em abort, e o
-/// modelo de exceção EL0→EL1 que consome `VBAR`/`ELR`/`SPSR`, ficam para B6.6.4 — mesmo padrão
-/// exato de `DFSR`/`DFAR` no precedente 32-bit).
+/// `SPSR_EL1` (B6.6.4) delegam DIRETAMENTE para {@link Aarch64ExceptionState} (via
+/// {@link Aarch64Core#exceptionState()}) — SEM cópia própria: antes de B6.6.4 este barramento
+/// tinha campos próprios só de armazenamento; agora {@code core} (antes reservado só "para
+/// simetria" com o precedente 32-bit) é a ÚNICA fonte de verdade, já que
+/// {@link Aarch64Core#enterMemoryAbort} também lê/escreve esses mesmos registradores para
+/// realmente entrar/sair de EL1 — duas cópias divergiriam assim que o guest lesse `ESR_EL1` via
+/// `MRS` depois de um abort real.
 ///
 /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (D1 da task — achado real: `TLBI` é `SYS`, não `MRS`/`MSR`)
 /// chega via {@link #invalidateTlbAll()}, repassado a {@link TranslatingAddressSpace64#invalidateTlbAll}
@@ -27,22 +32,19 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private static final long SCTLR_M_BIT = 1;
 
     private final TranslatingAddressSpace64 mmu;
+    private final Aarch64ExceptionState exceptionState;
 
     private long ttbr0;
     private long tcr;
     private long mair;
-    private long esr;
-    private long far;
-    private long vbar;
-    private long elr;
-    private long spsr;
 
     /// @param mmu  wrapper (B6.6.2) que este barramento controla
-    /// @param core reservado para simetria com o precedente 32-bit ({@link Cp15VmsaCoprocessor});
-    ///             A64 ainda não sincroniza nenhum estado de {@code core} a partir daqui (sem bit
-    ///             `V`, sem modelo de exceção nesta task)
+    /// @param core core cujo {@link Aarch64Core#exceptionState()} guarda `ESR_EL1`/`FAR_EL1`/
+    ///             `VBAR_EL1`/`ELR_EL1`/`SPSR_EL1` (B6.6.4) — único consumidor real do parâmetro
+    ///             {@code core}, antes reservado só por simetria com o precedente 32-bit
     public Aarch64VmsaSystemRegisters(TranslatingAddressSpace64 mmu, Aarch64Core core) {
         this.mmu = mmu;
+        this.exceptionState = core.exceptionState();
         // Reset real de hardware: MMU desligada (SCTLR_EL1.M=0) até o software habilitar.
         mmu.setMmuEnabled(false);
     }
@@ -59,11 +61,11 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case TTBR0_EL1 -> ttbr0;
             case TCR_EL1 -> tcr;
             case MAIR_EL1 -> mair;
-            case ESR_EL1 -> esr;
-            case FAR_EL1 -> far;
-            case VBAR_EL1 -> vbar;
-            case ELR_EL1 -> elr;
-            case SPSR_EL1 -> spsr;
+            case ESR_EL1 -> exceptionState.esr1();
+            case FAR_EL1 -> exceptionState.far1();
+            case VBAR_EL1 -> exceptionState.vbar1();
+            case ELR_EL1 -> exceptionState.elr1();
+            case SPSR_EL1 -> exceptionState.spsr1();
         };
     }
 
@@ -83,11 +85,11 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
                 mair = value;
                 mmu.setMair(value);
             }
-            case ESR_EL1 -> esr = value;
-            case FAR_EL1 -> far = value;
-            case VBAR_EL1 -> vbar = value;
-            case ELR_EL1 -> elr = value;
-            case SPSR_EL1 -> spsr = value;
+            case ESR_EL1 -> exceptionState.setEsr1(value);
+            case FAR_EL1 -> exceptionState.setFar1(value);
+            case VBAR_EL1 -> exceptionState.setVbar1(value);
+            case ELR_EL1 -> exceptionState.setElr1(value);
+            case SPSR_EL1 -> exceptionState.setSpsr1((int) value);
         }
     }
 

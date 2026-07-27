@@ -142,6 +142,10 @@ public final class Aarch64Decoder {
     private static final int BRANCH_REGISTER_OPC_BR = 0b0000;
     private static final int BRANCH_REGISTER_OPC_BLR = 0b0001;
     private static final int BRANCH_REGISTER_OPC_RET = 0b0010;
+    /// `ERET` (`ARM DDI 0487 C6.2.111`, task B6.6.4) — mesmo formato fixo de `op2`/`op3`/`op4` de
+    /// `BR`/`BLR`/`RET`, mas com `Rn` (bits 9:5) TAMBÉM fixo em `11111` (não um registrador
+    /// variável — CONFERIDO via `aarch64-none-elf-as`: `eret` monta para `0xD69F03E0`).
+    private static final int BRANCH_REGISTER_OPC_ERET = 0b0100;
     private static final int BRANCH_REGISTER_OP2_SHIFT = 16;
     private static final int BRANCH_REGISTER_OP2_MASK = 0b1_1111;
     private static final int BRANCH_REGISTER_OP2_FIXED = 0b1_1111;
@@ -982,10 +986,14 @@ public final class Aarch64Decoder {
         int op4 = word & BRANCH_REGISTER_OP4_MASK;
         if (op2 != BRANCH_REGISTER_OP2_FIXED || op3 != BRANCH_REGISTER_OP3_FIXED
                 || op4 != BRANCH_REGISTER_OP4_FIXED) {
-            // ERET/DRPS ou combinação reservada: fora da fatia B6.1.
+            // DRPS ou combinação reservada: fora da fatia B6.1/B6.6.4.
             throw unsupported(word, address);
         }
         int opc = (word >>> BRANCH_REGISTER_OPC_SHIFT) & BRANCH_REGISTER_OPC_MASK;
+        if (opc == BRANCH_REGISTER_OPC_ERET) {
+            // ERET (B6.6.4): Rn (bits 9:5) é fixo em `11111`, não um registrador — ignorado.
+            return new Ir64Op.ExceptionReturn();
+        }
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         boolean link = switch (opc) {
             case BRANCH_REGISTER_OPC_BR, BRANCH_REGISTER_OPC_RET -> false;

@@ -64,9 +64,9 @@ public final class Aarch64ExclusiveMonitor {
         reservations.values().removeIf(reservation -> reservation.overlaps(address, sizeBytes));
     }
 
-    /// Abre a reserva de `owner`. Sem consumidor de `CLREX`/entrada de exceção nesta fatia (B6.3.4
-    /// não tem modelo de exceção síncrona/assíncrona para A64 ainda, ver a task) — exposto para uso
-    /// futuro quando esse gancho existir.
+    /// Abre a reserva de `owner`. Chamado por {@link Aarch64Core#clearExclusiveMonitor()}, por sua
+    /// vez chamado por {@link Aarch64Core#enterMemoryAbort} (B6.6.4, fecha a pendência registrada
+    /// em B6.3.4) — sem consumidor de `CLREX` ainda (fora de escopo, não decodificado).
     void clear(Aarch64Core owner) {
         reservations.remove(owner);
     }

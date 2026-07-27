@@ -286,7 +286,32 @@ diferentes apenas).
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
-| P5 | **B6.6.4** — AArch64 modelo mínimo de exceção EL0→EL1 + aborts precisos | `trilha-b-arquiteturas/b6.6.4-aarch64-precise-aborts-el1.md` | arm-jitter | B6.6.3 ✅ | executável agora — B6.6.3 fechou; task grande (introduz o PRIMEIRO modelo de exceção síncrona de A64, `Aarch64Core` era EL0-only até aqui), reservar sessão maior |
+
+- **B6.6.4** ✅ (2026-07-27, 4ª das 6 sub-tasks de B6.6, PRIMEIRO estado de EL1 real de A64):
+  `core64/Aarch64ExceptionState` novo (`sp1`/`elr1`/`spsr1`/`esr1`/`far1`/`vbar1`/`inEl1`) —
+  ÚNICA fonte de verdade em `Aarch64Core#exceptionState()`; `Aarch64VmsaSystemRegisters` (B6.6.3)
+  refatorado para delegar `ESR_EL1`/`FAR_EL1`/`VBAR_EL1`/`ELR_EL1`/`SPSR_EL1` para lá em vez de
+  campos próprios (evita duas cópias divergindo quando o guest lê via `MRS` depois de um abort
+  real — o parâmetro `core`, antes só "reservado por simetria", virou consumidor real).
+  `sp()`/`setSp()` resolvem `SP_EL0`/`SP_EL1` automaticamente por `inEl1`, sem mudar nenhum
+  chamador existente. `Aarch64Core.enterMemoryAbort` (espelho de `ArmCore.enterMemoryAbort`)
+  preenche `ESR_EL1`/`FAR_EL1`/`ELR_EL1`/`SPSR_EL1` e salta para `VBAR_EL1 + 0x400` (única
+  entrada usada da tabela de 16×0x80 bytes do `ARM DDI 0487 D1.10`), abrindo o monitor de
+  exclusividade (fecha a pendência de B6.3.4). **Achado real confirmado contra `ARM DDI 0487
+  D17.2.30`**: `ESR_EL1.EC` de instruction abort vindo de EL inferior é `0x20`, NÃO `0x21` como a
+  task citava (`0x21` é "sem troca de EL", categoria errada para EL0→EL1) — `0x24` (data abort)
+  estava correto. `ERET` decodificado (`Ir64Op.ExceptionReturn` novo, `Kind=22`, record dedicado
+  — não reaproveita `SystemInstruction`: muda PC/PSTATE como um desvio tomado, diferente de
+  TLBI/barreira; encoding `opc=0b0100` no mesmo formato fixo de `BR`/`BLR`/`RET`, CONFERIDO via
+  `aarch64-none-elf-as`/`objdump` reais: `eret`→`0xD69F03E0`). `PstateRegister` ganhou
+  `toSpsrFormat()`/`setFromSpsrFormat(long)` (NZCV em `[31:28]`, mesma posição do CPSR ARM32).
+  Captura de `MemoryTranslationException64` em `Ir64BlockExecutor.step`/`executeBlock` (só
+  interpretador — ASM/`jit64` fica pendência explícita). `Aarch64MemoryAbortTest` novo (3 casos):
+  data abort real via `TranslatingAddressSpace64` → EL1 → `ERET` → continuação bem-sucedida;
+  instruction abort com `EC` distinto; `SP_EL1` separado de `SP_EL0`. `mvn -o test` verde (1265
+  testes, core+truffle, 0 falhas); gbaemu/ndsemu não revalidados (G5 não se aplica — `ArmCore`/
+  32-bit não referencia `core64`, confirmado por grep). Ver índice do `tasks/README.md` para o
+  detalhe completo. **Próximo passo**: B6.6.5 (`translationGeneration` em `jit64`) fica elegível.
 
 - **B6.6.3** ✅ (2026-07-27, 3ª das 6 sub-tasks de B6.6, ponte registrador-de-sistema↔MMU):
   `memory/mmu/Aarch64VmsaSystemRegisters` (espelho de `Cp15VmsaCoprocessor`) liga `SCTLR_EL1`
@@ -338,8 +363,8 @@ medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a 
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
 (2026-07-26, ver histórico abaixo)**; B6.5.2 (IR+interpretador) fica elegível para a fila assim
 que o usuário priorizar (independente de B6.6.1/B6.6.2, só depende de B6.5.1). B6.6 (MMU v8 +
-hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1/B6.6.2 já estão na tabela
-executável acima (P2/P3); B6.6.3-B6.6.5 entram conforme dependências fecharem; B6.6.6
+hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.4 já fecharam (ver
+histórico acima); B6.6.5 (`translationGeneration` em `jit64`) fica elegível para a fila; B6.6.6
 (hospedeiro `virt64`) já nasce bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para
 o detalhe completo de cada sub-task.
 

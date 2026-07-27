@@ -27,7 +27,7 @@ public sealed interface Ir64Op permits
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
-        Ir64Op.SystemRegister, Ir64Op.SystemInstruction {
+        Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -61,6 +61,7 @@ public sealed interface Ir64Op permits
         public static final int STORE_EXCLUSIVE = 19;
         public static final int SYSTEM_REGISTER = 20;
         public static final int SYSTEM_INSTRUCTION = 21;
+        public static final int EXCEPTION_RETURN = 22;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -569,5 +570,16 @@ public sealed interface Ir64Op permits
             /// Sub-operação identificada pelo decoder.
             Ir64SystemInstructionOp opcode) implements Ir64Op {
         @Override public int kind() { return Kind.SYSTEM_INSTRUCTION; }
+    }
+
+    /// `ERET` (`ARM DDI 0487 C6.2.111`, task B6.6.4) — retorna de EL1 para EL0:
+    /// `PC←ELR_EL1`, `PSTATE.{N,Z,C,V}←SPSR_EL1`, sai de EL1. Record dedicado (não reaproveita
+    /// {@link SystemInstruction}, decisão registrada na task): a semântica muda `PC` e `PSTATE`
+    /// como um desvio tomado, MUITO diferente de `TLBI`/barreira (NOPs observáveis do ponto de
+    /// vista do fluxo de controle) — misturar os dois no mesmo tipo confundiria o executor (teria
+    /// que devolver `true`/`false` de `boolean` dependendo do sub-opcode). Sem operandos: o
+    /// encoding fixa `Rn=31` (não lido, `ARM DDI 0487` pseudocódigo de `ERET`).
+    record ExceptionReturn() implements Ir64Op {
+        @Override public int kind() { return Kind.EXCEPTION_RETURN; }
     }
 }

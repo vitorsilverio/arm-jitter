@@ -21,6 +21,11 @@ public final class PstateRegister {
     public static final int CARRY_FLAG = 1 << 1;
     /// Bit V (overflow) dentro do valor bruto de 4 bits.
     public static final int OVERFLOW_FLAG = 1;
+    /// Deslocamento de `N`/`Z`/`C`/`V` dentro do formato real de armazenamento de `SPSR_ELx`
+    /// (`ARM DDI 0487 C5.2.19`, bits `[31:28]`) — MESMA posição do CPSR do ARM32. Usado por
+    /// {@link #toSpsrFormat()}/{@link #setFromSpsrFormat(long)} (task B6.6.4, `ERET`/entrada de
+    /// exceção EL0→EL1).
+    private static final int SPSR_NZCV_SHIFT = 28;
 
     private int nzcv;
 
@@ -60,6 +65,21 @@ public final class PstateRegister {
     /// Retorna `true` quando V está setado.
     public boolean overflow() {
         return (nzcv & OVERFLOW_FLAG) != 0;
+    }
+
+    /// Codifica os 4 flags atuais no formato real de armazenamento de `SPSR_ELx` (`ARM DDI 0487
+    /// C5.2.19`, bits `[31:28]`) — usado por {@link Aarch64Core#enterMemoryAbort} para preencher
+    /// `Aarch64ExceptionState#spsr1()` (B6.6.4). Os demais bits (`DAIF`/`SPSel`/`EL`...) ficam `0`
+    /// — não modelados ainda (ver javadoc da classe).
+    public long toSpsrFormat() {
+        return ((long) nzcv) << SPSR_NZCV_SHIFT;
+    }
+
+    /// Decodifica um valor de `SPSR_ELx` (ex. {@code Aarch64ExceptionState#spsr1()} num `ERET`,
+    /// B6.6.4), restaurando só os 4 flags (bits `[31:28]`) — os demais bits são ignorados (ainda
+    /// não modelados).
+    public void setFromSpsrFormat(long spsrValue) {
+        setNzcv((int) ((spsrValue >>> SPSR_NZCV_SHIFT) & 0xF));
     }
 
     /// Avalia uma {@link Ir64Condition} contra os flags atuais (`ARM DDI 0487 C1.2.4`,
