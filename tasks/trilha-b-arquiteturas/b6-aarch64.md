@@ -1,5 +1,6 @@
 # B6 — AArch64 (épico refinado: B6.1/B6.2 executáveis; B6.3 decomposta em
-B6.3.1-B6.3.4; B6.4-B6.6 escopo fechado)
+B6.3.1-B6.3.4; B6.4 spec própria em 3 PRs, fechada; B6.5 decomposta em
+B6.5.1-B6.5.4; B6.6 decomposta em B6.6.1-B6.6.6)
 
 **Trilha:** B · **Depende de:** B0 ✅ (RFC aprovada 2026-07-10: **Opção B** — IR-64
 paralelo + `Aarch64Core` irmão + `AddressSpace64`; ver `docs/RFC-IR-64BIT.md`) ·
@@ -20,9 +21,25 @@ depende de B6.3.1),
 [B6.3.4](b6.3.4-aarch64-exclusive-monitor.md) (LDXR/LDAXR/STXR/STLXR + monitor de
 exclusividade A64, só depende de B6.2 — pode ser feita em paralelo/antes das
 outras 3 se a fila priorizar). Ver `tasks/README.md` para o status individual de
-cada uma e `tasks/FILA-EXECUCAO.md` para qual está na fila agora. B6.4-B6.6
-continuam como escopo fechado sem spec própria (entram quando B6.3 completo
-fechar).
+cada uma e `tasks/FILA-EXECUCAO.md` para qual está na fila agora.
+
+**Refinada de novo 2026-07-26** (rodada de spec, sem código, B6.3 100% fechada
+e B6.4 já fechada — o gatilho "spec própria quando B6.2 concluir" da nota
+2026-07-15 finalmente cumprido para B6.5/B6.6): B6.4 ganhou spec própria em
+3 PRs (`b6.4-aarch64-asm-backend.md`) e fechou por completo no mesmo dia.
+B6.5 decomposta em 4 sub-tasks
+([B6.5.1](b6.5.1-aarch64-fp-register-bank.md)-[B6.5.4](b6.5.4-aarch64-fp-asm-nativo.md)),
+espelhando a decomposição B3.3-B3.6 do precedente VFP32 (banco de
+registradores → IR+interpretador → decoder → ASM nativo). B6.6 decomposta em
+6 sub-tasks
+([B6.6.1](b6.6.1-aarch64-system-register-access.md)-[B6.6.6](b6.6.6-aarch64-virt64-host.md)),
+uma a mais que o precedente B4.1.1-B4.1.5 (32-bit) porque a pesquisa desta
+rodada achou um pré-requisito estrutural sem equivalente 32-bit: A64 não tem
+`MCR`/`MRC`, então o acesso a registrador de sistema (`MRS`/`MSR`) precisa
+ser construído do zero (B6.6.1) antes de qualquer registrador de controle da
+MMU poder ser programado por código guest — ver a tabela "Escopo fechado"
+abaixo para o detalhe de cada sub-task e `tasks/README.md`/
+`tasks/FILA-EXECUCAO.md` para status/fila atual.
 
 Meta honesta do épico: Linux arm64 user-mode (hello → busybox) → full-system depois.
 Android fora. ARMv8-A base, sem SVE/SVE2 (features futuras).
@@ -86,9 +103,19 @@ Aplicar a Opção B da RFC, literalmente:
 | [B6.3.2](b6.3.2-aarch64-csel-bitfield.md) | `CSEL`/`CSINC`/`CSINV`/`CSNEG` (+ aliases `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG`) + `UBFM`/`SBFM`/`BFM` (+ aliases `UBFX`/`SBFX`/`BFI`/`BFXIL`/`LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) | corpus cobrindo os aliases citados; suíte verde |
 | [B6.3.3](b6.3.3-aarch64-mul-div.md) | `MADD`/`MSUB` (+ aliases `MUL`/`MNEG`), `SDIV`/`UDIV` | corpus + testes de divisor-zero/overflow; suíte verde |
 | [B6.3.4](b6.3.4-aarch64-exclusive-monitor.md) | `LDXR`/`LDAXR`/`STXR`/`STLXR` (encoding único, as 4 mnemônicas — ver D0 da sub-task) + `Aarch64ExclusiveMonitor` novo (sibling do monitor de B1.4/B5.1, endereço `long` já previsto na RFC §5) | corpus + testes espelhando B1.4; suíte verde |
-| B6.4 | Backend ASM 64-bit: `GuestToHostMapper` com locals `long` (2 slots), cache/tiers/chaining reusados | harness de equivalência A64 (novo `BlockEquivalenceHarness64`), busybox ≥3× interpretador |
-| B6.5 | FP/SIMD escalar mínimo (FMOV/FADD/FMUL/FDIV/FCMP/FCVT — o que a libc usa) | binários musl com printf de float |
-| B6.6 | MMU v8 (VMSA64, 4KiB granule, EL0/EL1) + hospedeiro `virt64` | kernel arm64 mínimo até shell (reusar aprendizado de B4.1) |
+| B6.4 | Backend ASM 64-bit: `GuestToHostMapper` com locals `long` (2 slots), cache/tiers/chaining reusados | harness de equivalência A64 (novo `BlockEquivalenceHarness64`), busybox ≥3× interpretador — **spec própria escrita 2026-07-26** ([b6.4-aarch64-asm-backend.md](b6.4-aarch64-asm-backend.md), 3 PRs) — **FECHADA** (PR1/PR2/PR3 ✅, mesma data) |
+| ~~B6.5~~ | **DECOMPOSTA em 2026-07-26** (rodada de spec — mesmo padrão de B6.3: 4 categorias de risco/tamanho distintas, espelhando a decomposição B3.3-B3.6 do precedente VFP32). Escopo original ("FP/SIMD escalar mínimo — FMOV/FADD/FMUL/FDIV/FCMP/FCVT — o que a libc usa") preservado por completo, só redistribuído nas 4 sub-tasks abaixo — nenhum item foi removido ou adicionado ao que estava fechado (achados de gap real registrados nas sub-tasks: leitura literal de "FCVT" exclui `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU`; nenhum record de load/store FP entra nesta leitura — ver `b6.5.2-aarch64-fp-ir-interpretador.md` Armadilhas). | (herdado pelas 4 sub-tasks — o aceite agregado "binários musl com printf de float" só fecha quando as 4 fecharem E os gaps de `SCVTF`/`UCVTF`/load-store FP registrados em B6.5.2 forem resolvidos por uma sub-task futura) |
+| [B6.5.1](b6.5.1-aarch64-fp-register-bank.md) | Banco de registradores FP escalar (`Aarch64FpRegisters`, V0-V31 só bits 63:0, sem FPCR/FPSR) | testes de banco + `Aarch64CpuSnapshot` estendido; suíte verde |
+| [B6.5.2](b6.5.2-aarch64-fp-ir-interpretador.md) | `Ir64Op`s de FP (`Fp64Alu`/`Fp64MoveImmediate`/`Fp64Compare`/`Fp64Convert`) + executor interpretado | testes de executor por vetor concreto; suíte verde |
+| [B6.5.3](b6.5.3-aarch64-fp-decoder.md) | Decoder da classe "Data Processing — Scalar FP" (`bit26=1`, ramo novo em `decodeDataProcessingRegister`) | corpus real + regressão negativa (SIMD vetorial fora de escopo); suíte verde |
+| [B6.5.4](b6.5.4-aarch64-fp-asm-nativo.md) | Emissão ASM nativa de FP (extensão de `Ir64NativePolicy`/`Ir64BlockCompiler`, B6.4) | `BlockEquivalenceHarness64` cobrindo os 4 `Kind`s de FP; suíte verde |
+| ~~B6.6~~ | **DECOMPOSTA em 2026-07-26** (rodada de spec — 6 sub-tasks em vez das 5 do precedente B4.1/MMU 32-bit, porque a pesquisa desta rodada achou um PRÉ-REQUISITO ESTRUTURAL sem equivalente 32-bit: A64 não tem `MCR`/`MRC`, então o acesso a registrador de sistema — `MRS`/`MSR` — precisa ser construído do zero antes de qualquer coisa de MMU poder ser programada por código guest; ver B6.6.1). Escopo original ("MMU v8 [VMSA64, 4KiB granule, EL0/EL1] + hospedeiro `virt64`") preservado por completo, só redistribuído — nenhum item removido ou adicionado (2 achados de pré-requisito adicional registrados nas sub-tasks, além do de B6.6.1: `TLBI`/`ERET` também não são `MRS`/`MSR` e precisam de decode próprio — ver B6.6.3/B6.6.4). | (herdado pelas 6 sub-tasks — o aceite agregado "kernel arm64 mínimo até shell" só fecha quando as 6 fecharem E o mesmo bloqueio de toolchain/kernel real de B6.2/B4.1.5 for resolvido, registrado em `tasks/FILA-EXECUCAO.md` 🧑 para a sub-task final B6.6.6) |
+| [B6.6.1](b6.6.1-aarch64-system-register-access.md) | Acesso a registrador de sistema (`MRS`/`MSR (register)`) — pré-requisito descoberto nesta rodada, sem equivalente no mundo 32-bit (`MCR`/`MRC` já existia desde B1.x) | corpus real (`SCTLR_EL1`/`TTBR0_EL1`/`VBAR_EL1` etc.); suíte verde |
+| [B6.6.2](b6.6.2-aarch64-translating-address-space.md) | `TranslatingAddressSpace64`: page-walk VMSA64 (4KiB granule, VA 48 bits, 4 níveis L0-L3) + micro-TLB, independente de B6.6.1 | testes unitários contra tabelas de página montadas à mão; suíte verde |
+| [B6.6.3](b6.6.3-aarch64-system-register-mmu-bridge.md) | `Aarch64VmsaSystemRegisters` ligando B6.6.1↔B6.6.2 + decode mínimo de `TLBI VMALLE1` (achado: `TLBI` não é `MRS`/`MSR`, encoding `SYS`/`SYS(L)` próprio) | sequência real `TTBR0_EL1→TCR_EL1→SCTLR_EL1.M=1` mudando a tradução; suíte verde |
+| [B6.6.4](b6.6.4-aarch64-precise-aborts-el1.md) | Modelo mínimo de exceção EL0→EL1 (`Aarch64ExceptionState`) + `ERET` (achado: não decodificado ainda) + aborts precisos capturados no interpretador | abort→handler-EL1→`ERET`→continuação funcionando ponta-a-ponta; suíte verde |
+| [B6.6.5](b6.6.5-aarch64-translation-generation.md) | `translationGeneration` em `jit64/BlockKey64`/`JitRuntime64` (RFC-IR-64BIT.md §5 item 3: tag própria do runtime A64, não empacotamento de 32 bits) | troca de "processo" executando código diferente sem servir bloco stale; suíte verde |
+| [B6.6.6](b6.6.6-aarch64-virt64-host.md) | Hospedeiro `virt64` (repo novo): kernel arm64 mínimo até shell — **🧑 bloqueada no usuário** (mesmo bloqueio de toolchain/kernel real de B6.2/B4.1.5) | kernel mainline arm64 até shell busybox interativo, INTERPRETED e ASM |
 
 ## Armadilhas do épico
 
