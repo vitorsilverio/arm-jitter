@@ -61,6 +61,15 @@ public interface AddressSpace64 {
     default void notifyWrite(long address) {
     }
 
+    /// Geração de tradução MMU atual — espelha {@link AddressSpace#translationGeneration()}
+    /// (B4.1.4, 32-bit) para o mundo A64 (B6.6.2, `TranslatingAddressSpace64`). O padrão retorna
+    /// `0` (constante) para todo barramento sem MMU — zero mudança de comportamento para os
+    /// consumidores A64 existentes (G3: armbox `Aarch64LinuxMachine`, B6.2, nunca envolve seu
+    /// `AddressSpace64` no wrapper). Só `TranslatingAddressSpace64` tem estado próprio aqui.
+    default int translationGeneration() {
+        return 0;
+    }
+
     /// Envolve um {@link AddressSpace} de 32 bits existente, truncando endereços `long` para
     /// `int` — reuso de RAMs de teste simples (`TestAddressSpace` e afins) sem duplicar
     /// implementação. Endereços fora da faixa `int` (fora dos 4 GiB baixos) NÃO são suportados

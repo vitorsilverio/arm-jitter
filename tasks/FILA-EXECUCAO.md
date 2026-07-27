@@ -286,7 +286,18 @@ diferentes apenas).
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
-| P3 | **B6.6.2** — AArch64 `TranslatingAddressSpace64` (page-walk VMSA64) | `trilha-b-arquiteturas/b6.6.2-aarch64-translating-address-space.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.1 (✅, ver histórico abaixo) — só depende de `AddressSpace64`/B6.1 |
+| P4 | **B6.6.3** — AArch64 `Aarch64VmsaSystemRegisters` (ponte registrador-de-sistema↔MMU) | `trilha-b-arquiteturas/b6.6.3-aarch64-system-register-mmu-bridge.md` | arm-jitter | B6.6.1 ✅, B6.6.2 ✅ | executável agora — ambas dependências fechadas; task já embute um achado de escopo (D1: `TLBI` é `SYS`/`SYS(L)`, não `MRS`/`MSR` — precisa de decode adicional dentro do escopo desta task) |
+
+- **B6.6.2** ✅ (2026-07-27, 2ª das 6 sub-tasks de B6.6, independente de B6.6.1): `memory/mmu/
+  TranslatingAddressSpace64` — page-walk VMSA64 completo (L0-L3, bloco L1/L2, página L3), `AP`+
+  `PXN`/`UXN`, micro-TLB 256 entradas, `translationGeneration`. `FaultStatus64`/
+  `MemoryTranslationException64` novos. `AddressSpace64.translationGeneration()` ganhou default.
+  **Achado real**: em VMSA64 o bit de somente-leitura do `AP` é UNIVERSAL (afeta EL1 e EL0 por
+  igual) — diferente do ARMv6 `AP=0b10` (RW privilegiado + RO usuário); não existe modo "RW
+  privilegiado + RO usuário" em AArch64. `mvn -o test` verde (13 testes novos); gbaemu/ndsemu não
+  revalidados (G5 não se aplica, pacote aditivo, nenhum arquivo 32-bit tocado). Ver índice do
+  `tasks/README.md` para o detalhe completo. **Próximo passo**: B6.6.3 (`Aarch64VmsaSystemRegisters`
+  ligando B6.6.1↔B6.6.2) fica elegível agora que as duas fecharam.
 
 - **B6.6.1** ✅ (2026-07-27, 1ª das 6 sub-tasks de B6.6, pré-requisito estrutural da MMU v8 —
   A64 não tem `MCR`/`MRC`): `Ir64Op.SystemRegister` (`Kind=20`) + `Aarch64SystemRegisterId` (9
