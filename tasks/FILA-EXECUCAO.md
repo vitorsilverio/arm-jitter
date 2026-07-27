@@ -289,8 +289,31 @@ diferentes apenas).
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
 abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
-real) e B6.4+ (AArch64 — escopo fechado no épico,
-mas spec própria ainda não escrita; ver `b6-aarch64.md`).
+real), B6.4 PR2/PR3 (AArch64 backend ASM — spec própria já escrita 2026-07-26,
+`trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md`; PR1 do esqueleto FECHADO na mesma sessão,
+ver histórico abaixo; PR2 = loads/stores/SVC nativos, PR3 = B6.3.1-B6.3.4 nativos + bench) e
+B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não escrita; ver
+`b6-aarch64.md`).
+
+- **B6.4 PR1** 🟡 (2026-07-26, rodada de spec + PR1 do esqueleto do backend ASM 64-bit):
+  spec `trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md` escrita e commitada separadamente
+  (decisão D0: `JitRuntime`/`BlockCache`/`BlockKey` 32-bit não são reusáveis — amarrados a
+  `ArmCore`/`InstructionSet`/`itState`/MMU 32-bit — `jit64/` nasce como pacote-irmão
+  deliberadamente mais simples, sem IC/chaining/tiering/invalidação; decisão D-ASM: o bytecode
+  do PR1 delega ao MESMO despacho do `Ir64BlockExecutor` compartilhado, sem cache de
+  registrador ainda — pipeline+equivalência, não performance). PR1 implementado na mesma
+  sessão: `ir64/Ir64Block`+lifter (faltava desde B6.1), `jit64/`
+  (`CompiledBlock64`/`BlockKey64`/`BlockCache64`/`JitRuntime64`), `codegen64/`
+  (`Ir64CodeEmitter`/`InterpretedIr64CodeEmitter`/`Asm64CodeEmitter`,
+  `Ir64NativePolicy`/`Aarch64GuestToHostMapper`/`Ir64AsmRuntimeHelpers`/`Ir64BlockCompiler` em
+  `jvm64/`), `codegen/equivalence/BlockEquivalenceHarness64`+`Aarch64CpuSnapshot`. Cobre só o
+  conjunto de ops da B6.1 (`Alu64`/`MoveWide`/`PcRelative`/`Branch64`/`CompareBranch64`/
+  `Cycle`/`Fetch`). `mvn -o test` verde (1182 core + 13 truffle, 25 testes novos); gbaemu/ndsemu
+  **não revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
+  B6.1-B6.3.4). **Próximo passo**: PR2 (loads/stores/SVC nativos) e PR3 (B6.3.1-B6.3.4 nativos +
+  registrador-cache de verdade + bench busybox-aarch64, este último bloqueado no usuário —
+  mesma pendência 🧑 de B6.2/B6.3 abaixo) ficam para sessões futuras, ver o arquivo da spec para
+  o detalhe de escopo de cada PR.
 
 **B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec) — TODAS ✅
 FECHADAS (2026-07-26)**: **B6.3.1** ✅ fechou (2026-07-24/25) — criou o

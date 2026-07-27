@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -89,6 +90,60 @@ public final class Ir64BlockExecutor {
             total += step(core);
         }
         return total;
+    }
+
+    /// Executa uma única operação já decodificada, sem repetir fetch/cycle — ponto de entrada
+    /// PÚBLICO usado pelo backend ASM (B6.4, `Ir64AsmRuntimeHelpers`) para despachar através do
+    /// MESMO caminho de execução do interpretador: garante G1 (interpretador é o oráculo) POR
+    /// CONSTRUÇÃO, já que o bytecode gerado chama esta mesma implementação em vez de reescrevê-la
+    /// — nenhuma lógica de {@code executeAlu}/{@code executeBranch}/etc. é duplicada.
+    ///
+    /// `Cycle`/`Fetch` não são aceitos aqui (contabilizados separadamente, ver {@link
+    /// #executeBlock} e G4 — nunca ganham guard condicional).
+    ///
+    /// @param core core a executar
+    /// @param op operação a executar (nunca `Cycle`/`Fetch`)
+    /// @return `true` se a própria operação já alterou o PC (desvio tomado)
+    public boolean executeOp(Aarch64Core core, Ir64Op op) {
+        return execute(core, op);
+    }
+
+    /// Executa um {@link Ir64Block} inteiro — oráculo de bloco usado pelo backend interpretado
+    /// (B6.4, `InterpretedIr64CodeEmitter`) e pelo harness de equivalência A64. `Fetch`/`Cycle`
+    /// são tratados inline (G4: incondicionais); as demais ops são despachadas via
+    /// {@link #executeOp}. Instruções não-terminais (que não alteraram o PC) avançam o PC para
+    /// `fetch.address() + tamanhoDaInstrução` — a mesma informação de "próximo PC" que o
+    /// {@code Ir64BlockCompiler} (backend ASM) grava como CONSTANTE de compilação, já que ambos
+    /// derivam da mesma garantia estrutural do lifter: ops aparecem em grupos `[Fetch, Cycle, op]`
+    /// na ordem do PC linear.
+    ///
+    /// @param core core a executar
+    /// @param block bloco lifted por {@link dev.vitorsilverio.armjitter.ir64.Ir64BlockLifter}
+    /// @return total de ciclos internos (soma de {@link Ir64Op.Cycle#count()}) consumidos pelo bloco
+    public int executeBlock(Aarch64Core core, Ir64Block block) {
+        Ir64Op[] ops = block.operationsArray();
+        int[] kinds = block.kindsArray();
+        int cycles = 0;
+        long lastFetchAddress = -1L;
+        int lastFetchSizeBytes = 0;
+        for (int i = 0; i < ops.length; i++) {
+            switch (kinds[i]) {
+                case Ir64Op.Kind.FETCH -> {
+                    Ir64Op.Fetch fetch = (Ir64Op.Fetch) ops[i];
+                    executeFetch(core, fetch);
+                    lastFetchAddress = fetch.address();
+                    lastFetchSizeBytes = fetch.sizeBytes();
+                }
+                case Ir64Op.Kind.CYCLE -> cycles += executeCycle((Ir64Op.Cycle) ops[i]);
+                default -> {
+                    boolean pcChanged = executeOp(core, ops[i]);
+                    if (!pcChanged) {
+                        core.setProgramCounter(lastFetchAddress + lastFetchSizeBytes);
+                    }
+                }
+            }
+        }
+        return cycles;
     }
 
     private boolean execute(Aarch64Core core, Ir64Op op) {
