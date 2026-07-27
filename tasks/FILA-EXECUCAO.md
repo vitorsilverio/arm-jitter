@@ -287,6 +287,29 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
+- **B6.6.5** ✅ (2026-07-27, 5ª das 6 sub-tasks de B6.6 — PENÚLTIMA, só falta B6.6.6 bloqueada no
+  usuário): `translationGeneration` em `jit64/BlockKey64`/`JitRuntime64`, espelho direto de
+  B4.1.4 (32-bit) mas menor em escopo — `jit64/` não tem inline cache nem encadeamento de blocos
+  ainda (B6.4 D0), então só UM dos três pontos de uso do precedente 32-bit se aplica hoje (o
+  lookup/lift de `JitRuntime64.execute`). `BlockKey64` ganhou 2º campo `int translationGeneration`
+  com construtor de compatibilidade `BlockKey64(long pc)` preservando `translationGeneration=0`
+  (G3 — todo chamador existente de B6.4, incl. `JitRuntime64Test`, continua compilando sem
+  mudança). `JitRuntime64.execute` passou a ler `core.memory().translationGeneration()` uma vez
+  por chamada e usar no `BlockKey64` do lookup/lift — troca de `TTBR0_EL1` vira MISS natural no
+  `BlockCache64`, nunca servindo um bloco compilado sob mapeamento antigo. Javadoc de pendência
+  (D3) registrado em ambos os arquivos: se uma PR futura adicionar IC ou encadeamento a `jit64/`,
+  precisa lembrar de checar `translationGeneration` nesses pontos novos também (mesmo achado que
+  B4.1.4 documentou para o precedente 32-bit). `JitRuntime64TranslationGenerationTest` novo
+  (espelho de `JitRuntimeTranslationGenerationTest`): duas tabelas de página L0-L3 completas (4
+  níveis reais do page-walk VMSA64, não um atalho de bloco) mapeando o MESMO VA para código físico
+  diferente, troca via `TranslatingAddressSpace64.setTtbr0`+`invalidateTlbAll`, cada troca executa
+  o `MOVZ` certo — nunca o bloco stale da geração anterior; + teste do construtor de
+  compatibilidade. `mvn -o test` verde (core 1254 + truffle 13); `mvn -o install` verde. G5 não se
+  aplica — confirmado por grep, nenhum arquivo 32-bit referencia `BlockKey64`/`JitRuntime64`/
+  `AddressSpace64` (infra A64 isolada, diferente do precedente 32-bit onde B4.1.4 TINHA que
+  revalidar gbaemu/ndsemu). **Épico B6.6 quase fechado**: só falta **B6.6.6** (hospedeiro `virt64`),
+  que já nasce bloqueada no usuário (toolchain/kernel real) — ver seção 🧑 abaixo.
+
 - **B6.6.4** ✅ (2026-07-27, 4ª das 6 sub-tasks de B6.6, PRIMEIRO estado de EL1 real de A64):
   `core64/Aarch64ExceptionState` novo (`sp1`/`elr1`/`spsr1`/`esr1`/`far1`/`vbar1`/`inEl1`) —
   ÚNICA fonte de verdade em `Aarch64Core#exceptionState()`; `Aarch64VmsaSystemRegisters` (B6.6.3)
@@ -311,7 +334,8 @@ diferentes apenas).
   instruction abort com `EC` distinto; `SP_EL1` separado de `SP_EL0`. `mvn -o test` verde (1265
   testes, core+truffle, 0 falhas); gbaemu/ndsemu não revalidados (G5 não se aplica — `ArmCore`/
   32-bit não referencia `core64`, confirmado por grep). Ver índice do `tasks/README.md` para o
-  detalhe completo. **Próximo passo**: B6.6.5 (`translationGeneration` em `jit64`) fica elegível.
+  detalhe completo. **Próximo passo**: B6.6.5 (`translationGeneration` em `jit64`) ficou elegível
+  e já fechou — ver bullet acima.
 
 - **B6.6.3** ✅ (2026-07-27, 3ª das 6 sub-tasks de B6.6, ponte registrador-de-sistema↔MMU):
   `memory/mmu/Aarch64VmsaSystemRegisters` (espelho de `Cp15VmsaCoprocessor`) liga `SCTLR_EL1`
@@ -363,10 +387,10 @@ medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a 
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
 (2026-07-26, ver histórico abaixo)**; B6.5.2 (IR+interpretador) fica elegível para a fila assim
 que o usuário priorizar (independente de B6.6.1/B6.6.2, só depende de B6.5.1). B6.6 (MMU v8 +
-hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.4 já fecharam (ver
-histórico acima); B6.6.5 (`translationGeneration` em `jit64`) fica elegível para a fila; B6.6.6
-(hospedeiro `virt64`) já nasce bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para
-o detalhe completo de cada sub-task.
+hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.5 já fecharam (ver
+histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que já nasce
+bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para o detalhe completo de cada
+sub-task.
 
 - **B6.5.1** ✅ (2026-07-26, 1ª das 4 sub-tasks de B6.5): `core64/Aarch64FpRegisters.java` novo —
   banco `long[32]` (`V0`-`V31`, só bits 63:0). **Achado que muda a forma em relação ao

@@ -55,12 +55,22 @@ public final class JitRuntime64 {
     /// {@link BlockKey64}). Sem inline cache/encadeamento (ver Javadoc da classe) — cada chamada
     /// faz no máximo um lookup de `HashMap`.
     ///
+    /// `translationGeneration` (B6.6.5, espelho de `JitRuntime#execute` do precedente 32-bit,
+    /// B4.1.4): lê {@code core.memory().translationGeneration()} uma vez por chamada e usa no
+    /// {@link BlockKey64} do lookup/lift — uma troca de tabela de páginas (`TTBR0_EL1`) vira MISS
+    /// natural no {@link BlockCache64}, nunca reaproveitando um bloco compilado sob mapeamento
+    /// antigo. **Pendência (D3)**: hoje este é o ÚNICO ponto de consumo, porque `jit64/` não tem
+    /// inline cache nem encadeamento (B6.4 D0) — se uma PR futura adicionar qualquer um dos dois,
+    /// ela precisa LEMBRAR de checar `translationGeneration` nesses pontos novos também (mesmos
+    /// dois pontos extras que o precedente 32-bit já consome).
+    ///
     /// @param pc endereço a executar
     /// @param core core a executar
     /// @return ciclos internos consumidos (mesma convenção do mundo 32-bit: só `Ir64Op.Cycle`;
     ///         fetch/waitstates vão direto para {@link Aarch64Core#cycles()})
     public int execute(long pc, Aarch64Core core) {
-        BlockKey64 key = new BlockKey64(pc);
+        int translationGeneration = core.memory().translationGeneration();
+        BlockKey64 key = new BlockKey64(pc, translationGeneration);
         CompiledBlock64 block = blockCache.getOrNull(key);
         if (block == null) {
             int hits = blockCache.hit(key);
