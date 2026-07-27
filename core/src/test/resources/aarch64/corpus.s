@@ -185,3 +185,37 @@ tlbi vmalle1is
 dsb sy
 isb
 dmb sy
+
+// ── B6.5.3: FADD/FSUB/FMUL/FDIV/FNEG/FABS/FMOV(reg)/FMOV(imm)/FCMP/FCMPE/FCVT ───────────
+fadd s0, s1, s2
+fadd d0, d1, d2
+fsub s3, s4, s5
+fsub d3, d4, d5
+fmul s6, s7, s8
+fmul d6, d7, d8
+fdiv s9, s10, s11
+fdiv d9, d10, d11
+fneg s12, s13
+fneg d12, d13
+fabs s14, s15
+fabs d14, d15
+fmov s16, s17
+fmov d16, d17
+fmov s18, #1.0
+fmov s19, #2.0
+fmov s20, #-1.0
+fmov s21, #0.125
+fmov d18, #1.0
+fmov d19, #2.0
+fmov d20, #-1.0
+fmov d21, #0.125
+fcmp s22, s23
+fcmp d22, d23
+fcmp s24, #0.0
+fcmp d24, #0.0
+fcmpe s25, s26
+fcmpe d25, d26
+fcmpe s27, #0.0
+fcmpe d27, #0.0
+fcvt d28, s28
+fcvt s29, d29

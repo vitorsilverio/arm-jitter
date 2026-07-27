@@ -287,6 +287,53 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
+- **B6.5.3** ✅ (2026-07-27, 3ª das 4 sub-tasks de B6.5, executada logo depois de B6.5.2 fechar):
+  dispatch novo em `Aarch64Decoder.decodeDataProcessingRegister` — `if (bit26set) return
+  decodeDataProcessingScalarFpSimd(word, address);` logo no topo, antes de toda a lógica
+  existente que já assumia implicitamente `bit26=0` (nenhuma mudança de assinatura/nome, mesmo
+  `isDataProcessingRegisterClass` de sempre). **Rodada anterior era spec-only (sem código) e
+  avisava explicitamente para não confiar no esqueleto de bits sem conferir contra o assembler
+  real — isso foi feito PRIMEIRO, antes de qualquer linha de decoder**: montei ~40 vetores com
+  `aarch64-none-elf-as`/`objdump` reais (devkitA64) — `FADD`/`FSUB`/`FMUL`/`FDIV` (single+double),
+  `FNEG`/`FABS`/`FMOV`(reg), `FMOV`(imediato, 4 vetores canônicos), `FCMP`/`FCMPE` (com/sem
+  zero), `FCVT` (as duas direções) — e também os VIZINHOS fora de escopo (`fadd v0.4s,...`
+  vetorial, `fmov s0,w0`, `scvtf`/`fcvtzs`, `fsqrt`, `fmadd`, `fccmp`, `fcsel`, `frintn`) para
+  confirmar empiricamente que nenhum deles colide com os 4 padrões fixos usados aqui. **Achados
+  reais que DIVERGEM do esqueleto da spec anterior**: (1) o prefixo fixo real é
+  `bits[28:24]="11110"` + `bit21=1` (a spec citava só "bit26=1" como gate, sem mencionar que
+  Advanced SIMD vetorial TAMBÉM tem bit26=1 mas prefixo(28:24) diferente — `01110` — e que
+  3-source usa prefixo `11111`, não `11110`; ambos precisam ser excluídos ANTES de tentar
+  qualquer sub-padrão, senão vazariam); (2) `type` (bits[23:22]) está de fato na MESMA posição
+  nos 4 subgrupos (2-source/1-source/imediato/compare) — a spec pedia para não presumir isso sem
+  conferir, e a conferência confirmou que é seguro assumir; (3) `FMOV`-imediato em A64 tem o
+  `imm8` CONTÍGUO em bits[20:13] (bem mais simples que o VFP32, que espalha em dois pedaços de 4
+  bits) — o algoritmo `VFPExpandImm` (sinal + expoente replicado + mantissa) é idêntico ao
+  precedente `StandardIrBuilder#vfpExpandImm`, só duplicado com a extração de campo diferente
+  (mundos 32/64 não compartilham decoder, G2/G3); (4) `FCMP`/`FCMPE` tem `Rm` fixo em `00000` na
+  forma "compara com zero" — CONFIRMADO que não é coincidência do assembler, é parte do encoding
+  fixo (testado com `Rn` variando e `Rm` sempre zero); (5) `FCVT` F32↔F64: opcode=5 (bits[20:15]
+  do grupo 1-source) exige `type=00` (fonte single, destino double), opcode=4 exige `type=01`
+  (fonte double, destino single) — a combinação oposta em cada `case` lança `unsupported`
+  (mistura errada de opcode/type não é uma instrução válida, mesmo padrão de "UNDEFINED real" já
+  usado em B6.3.x). 5 métodos novos (`decodeDataProcessingScalarFpSimd` + um por subgrupo:
+  `decodeFpTwoSource`/`decodeFpOneSource`/`decodeFpMoveImmediate`/`decodeFpCompare`) + helper
+  `decodeFpDoublePrecision` (type→boolean, `10`/`11` lançam `UnsupportedOperationException` como
+  UNDEFINED real) + `expandFpImmediate` (VFPExpandImm-equivalente). Corpus real estendido
+  (offsets `0x298`-`0x314`, 32 instruções novas — `corpus.s`/`corpus.bin`/`corpus.objdump.txt`
+  todos regenerados a partir do assembler real, nenhum byte editado à mão). 38 testes novos em
+  `Aarch64DecoderCorpusTest` (um por vetor do corpus + `type=10`/`type=11` reservado +
+  regressão negativa confirmando que Advanced SIMD vetorial/`scvtf`/`fcsel`/`fsqrt` continuam
+  `unsupported` + resanity de um vetor pré-existente de `decodeDataProcessingRegister` para
+  provar que o `if` novo de bit26 não mudou nada de `bit26=0`) + 1 teste ponta-a-ponta novo em
+  `Ir64BlockExecutorTest` (`fmovFaddFcmpBCondMinimalFloatBlock`: `FMOV s0,#1.0` → `FADD s0,s0,s0`
+  → `FCMP s0,#0.0` → `B.gt` — o "hello float" mínimo de A64 citado na task, sem o passo `VMRS`
+  intermediário que A64 não precisa). `mvn -o test` verde (core 1314 = 1275 + 39 novos). G5 não
+  se aplica (nenhum arquivo 32-bit tocado, confirmado por grep). **Não inclui** (herdado de
+  B6.5.2, reafirmado aqui): Advanced SIMD vetorial, `type=10` (meia-precisão), `SCVTF`/`UCVTF`/
+  `FCVTZS`/`FCVTZU`, `FMOV` core↔FP, `FSQRT`, `FCCMP`/`FCSEL`, nenhum feature-gating novo (D2 da
+  task, mesmo raciocínio "sem consumidor real" de B6.4 D0). **Próximo passo**: B6.5.4 (emissão
+  ASM nativa de FP) fica elegível — última das 4 sub-tasks de B6.5, depende também de B6.4 ✅.
+
 - **B6.5.2** ✅ (2026-07-27, 2ª das 4 sub-tasks de B6.5, priorizada pelo usuário depois que a fila
   automática ficou vazia): 4 records novos em `Ir64Op` (`Fp64Alu`/`Fp64MoveImmediate`/
   `Fp64Compare`/`Fp64Convert`, enums `Fp64Operation`/`Fp64Conversion`) + `executor64/
@@ -402,9 +449,10 @@ como pendência EXPLÍCITA fora do escopo de qualquer PR (registrador-cache sem 
 medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a seção 🧑 abaixo.
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
 (2026-07-26, ver histórico abaixo)**; **B6.5.2 ✅ fechada (2026-07-27, priorizada pelo usuário,
-ver histórico abaixo)** — `Ir64Op`s de FP + executor interpretado. B6.5.3 (decoder da classe
-"Data Processing — Scalar FP") fica elegível para a fila assim que o usuário priorizar (depende só
-de B6.5.2). B6.6 (MMU v8 +
+ver histórico abaixo)** — `Ir64Op`s de FP + executor interpretado; **B6.5.3 ✅ fechada (2026-07-27,
+ver histórico acima)** — decoder da classe "Data Processing — Scalar FP" (`bit26=1`). B6.5.4
+(emissão ASM nativa de FP) fica elegível para a fila assim que o usuário priorizar (depende de
+B6.5.3 ✅ e B6.4 ✅, ambas fechadas). B6.6 (MMU v8 +
 hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.5 já fecharam (ver
 histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que já nasce
 bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para o detalhe completo de cada

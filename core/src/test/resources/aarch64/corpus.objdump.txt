@@ -175,3 +175,35 @@ Disassembly of section .text:
  28c:	d5033f9f 	dsb	sy
  290:	d5033fdf 	isb
  294:	d5033fbf 	dmb	sy
+ 298:	1e222820 	fadd	s0, s1, s2
+ 29c:	1e622820 	fadd	d0, d1, d2
+ 2a0:	1e253883 	fsub	s3, s4, s5
+ 2a4:	1e653883 	fsub	d3, d4, d5
+ 2a8:	1e2808e6 	fmul	s6, s7, s8
+ 2ac:	1e6808e6 	fmul	d6, d7, d8
+ 2b0:	1e2b1949 	fdiv	s9, s10, s11
+ 2b4:	1e6b1949 	fdiv	d9, d10, d11
+ 2b8:	1e2141ac 	fneg	s12, s13
+ 2bc:	1e6141ac 	fneg	d12, d13
+ 2c0:	1e20c1ee 	fabs	s14, s15
+ 2c4:	1e60c1ee 	fabs	d14, d15
+ 2c8:	1e204230 	fmov	s16, s17
+ 2cc:	1e604230 	fmov	d16, d17
+ 2d0:	1e2e1012 	fmov	s18, #1.000000000000000000e+00
+ 2d4:	1e201013 	fmov	s19, #2.000000000000000000e+00
+ 2d8:	1e3e1014 	fmov	s20, #-1.000000000000000000e+00
+ 2dc:	1e281015 	fmov	s21, #1.250000000000000000e-01
+ 2e0:	1e6e1012 	fmov	d18, #1.000000000000000000e+00
+ 2e4:	1e601013 	fmov	d19, #2.000000000000000000e+00
+ 2e8:	1e7e1014 	fmov	d20, #-1.000000000000000000e+00
+ 2ec:	1e681015 	fmov	d21, #1.250000000000000000e-01
+ 2f0:	1e3722c0 	fcmp	s22, s23
+ 2f4:	1e7722c0 	fcmp	d22, d23
+ 2f8:	1e202308 	fcmp	s24, #0.0
+ 2fc:	1e602308 	fcmp	d24, #0.0
+ 300:	1e3a2330 	fcmpe	s25, s26
+ 304:	1e7a2330 	fcmpe	d25, d26
+ 308:	1e202378 	fcmpe	s27, #0.0
+ 30c:	1e602378 	fcmpe	d27, #0.0
+ 310:	1e22c39c 	fcvt	d28, s28
+ 314:	1e6243bd 	fcvt	s29, d29

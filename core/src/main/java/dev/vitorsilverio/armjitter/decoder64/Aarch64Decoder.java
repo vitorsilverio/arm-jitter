@@ -331,6 +331,86 @@ public final class Aarch64Decoder {
     private static final int DP_REGISTER_CLASS_BIT27_SHIFT = 27;
     private static final int DP_REGISTER_CLASS_BIT25_SHIFT = 25;
 
+    // ── Data Processing — Scalar Floating-Point (B6.5.3): classe IRMÃ de "Data Processing — ────
+    // ── Register" dentro do mesmo prefixo bit27=1/bit25=1, distinguida por bit26=1 (Fatos de ────
+    // ── referência #1 da task). Verificado byte a byte contra `aarch64-none-elf-as`/`objdump` ────
+    // ── reais (devkitA64) — ver o apêndice B6.5.3 do corpus versionado. Todos os subgrupos ───────
+    // ── decodificados aqui (2-source/1-source/imediato/compare) compartilham prefixo fixo ────────
+    // ── bits[28:24]="11110" e bit21=1 — Advanced SIMD vetorial (mesmo bit26=1, prefixo(28:24) ────
+    // ── DIFERENTE, ex. "01110") e Data-processing (3-source, prefixo(28:24)="11111") ficam fora ───
+    // ── só por não bater esse prefixo; FCCMP/FCSEL/conversões FP<->inteiro (mesmo prefixo+bit21) ──
+    // ── ficam fora por não bater nenhum dos 4 padrões de sub-grupo específicos abaixo — ───────────
+    // ── CONFERIDO empiricamente montando vizinhos (fmadd/fccmp/fcsel/frintn/scvtf/fcvtzs/fmov ─────
+    // ── core<->FP) e comparando os bits reais, não só por leitura do manual.
+    private static final int FP_SIMD_CLASS_BIT26_SHIFT = 26;
+    private static final int SCALAR_FP_FIXED_PREFIX_SHIFT = 24;
+    private static final int SCALAR_FP_FIXED_PREFIX_MASK = 0b1_1111;
+    private static final int SCALAR_FP_FIXED_PREFIX_PATTERN = 0b1_1110;
+    private static final int SCALAR_FP_BIT21_SHIFT = 21;
+
+    // ── `type` (2 bits, bits[23:22]): MESMA posição nos 4 subgrupos decodificados aqui (2-source/
+    // ── 1-source/imediato/compare) — conferido campo a campo contra o assembler real em todos os
+    // ── 4, ao contrário do aviso da task de "não presumir a mesma posição sem checar" (Fatos de
+    // ── referência #4). `10`/`11` são meia-precisão/reservado, fora de escopo.
+    private static final int FP_TYPE_SHIFT = 22;
+    private static final int FP_TYPE_MASK = 0b11;
+    private static final int FP_TYPE_SINGLE = 0b00;
+    private static final int FP_TYPE_DOUBLE = 0b01;
+
+    // ── Floating-point data-processing (2 source) — FADD/FSUB/FMUL/FDIV: bits[11:10] fixo="10",
+    // ── opcode(15:12) 4 bits, Rm(20:16), Rn(9:5), Rd(4:0).
+    private static final int FP_TWO_SOURCE_FIXED_SHIFT = 10;
+    private static final int FP_TWO_SOURCE_FIXED_MASK = 0b11;
+    private static final int FP_TWO_SOURCE_FIXED_PATTERN = 0b10;
+    private static final int FP_TWO_SOURCE_OPCODE_SHIFT = 12;
+    private static final int FP_TWO_SOURCE_OPCODE_MASK = 0b1111;
+    private static final int FP_TWO_SOURCE_OPCODE_FMUL = 0b0000;
+    private static final int FP_TWO_SOURCE_OPCODE_FDIV = 0b0001;
+    private static final int FP_TWO_SOURCE_OPCODE_FADD = 0b0010;
+    private static final int FP_TWO_SOURCE_OPCODE_FSUB = 0b0011;
+    // FMAX/FMIN/FMAXNM/FMINNM (0100-0111) e FNMUL (1000): fora de escopo, ver decodeFpTwoSource.
+    private static final int FP_RM_SHIFT = 16;
+
+    // ── Floating-point data-processing (1 source) — FMOV/FABS/FNEG/FCVT(F32<->F64): bits[14:10]
+    // ── fixo="10000", opcode(20:15) 6 bits, Rn(9:5, fonte única), Rd(4:0).
+    private static final int FP_ONE_SOURCE_FIXED_SHIFT = 10;
+    private static final int FP_ONE_SOURCE_FIXED_MASK = 0b1_1111;
+    private static final int FP_ONE_SOURCE_FIXED_PATTERN = 0b1_0000;
+    private static final int FP_ONE_SOURCE_OPCODE_SHIFT = 15;
+    private static final int FP_ONE_SOURCE_OPCODE_MASK = 0b11_1111;
+    private static final int FP_ONE_SOURCE_OPCODE_FMOV = 0b00_0000;
+    private static final int FP_ONE_SOURCE_OPCODE_FABS = 0b00_0001;
+    private static final int FP_ONE_SOURCE_OPCODE_FNEG = 0b00_0010;
+    /// `FCVT` fonte double (`type`=01) para destino single — opcode=4, CONFERIDO via
+    /// `aarch64-none-elf-as` (`fcvt s29, d29` monta com esse opcode).
+    private static final int FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE = 0b00_0100;
+    /// `FCVT` fonte single (`type`=00) para destino double — opcode=5, CONFERIDO via
+    /// `aarch64-none-elf-as` (`fcvt d28, s28` monta com esse opcode).
+    private static final int FP_ONE_SOURCE_OPCODE_FCVT_TO_DOUBLE = 0b00_0101;
+    // FSQRT (3), FCVT de/para meia-precisão (6/7), FRINTx (8+): fora de escopo, ver decodeFpOneSource.
+
+    // ── Floating-point immediate — `FMOV Sd,#imm`/`FMOV Dd,#imm`: bits[12:5] fixo="10000000",
+    // ── imm8(20:13) — CONFERIDO: campo contíguo em A64 (diferente do VFP32, que espalha imm8 em
+    // ── dois pedaços de 4 bits — b3.5-vfp-decoder.md); o algoritmo de expansão (VFPExpandImm) é
+    // ── o MESMO conceito IEEE, só a posição do campo muda (Fatos de referência #3/Armadilhas).
+    private static final int FP_IMMEDIATE_FIXED_SHIFT = 5;
+    private static final int FP_IMMEDIATE_FIXED_MASK = 0xFF;
+    private static final int FP_IMMEDIATE_FIXED_PATTERN = 0b1000_0000;
+    private static final int FP_IMMEDIATE_IMM8_SHIFT = 13;
+    private static final int FP_IMMEDIATE_IMM8_MASK = 0xFF;
+
+    // ── Floating-point compare — FCMP/FCMPE (com/sem comparação-com-zero): bit15 fixo=0, ────────
+    // ── bits[14:10] fixo="01000", bits[2:0] fixo="000", Rm(20:16, fixo=00000 na forma zero — ─────
+    // ── CONFERIDO: não é coincidência, é parte do encoding fixo), bit4=E (FCMPE), bit3=zero, ──────
+    // ── Rn(9:5).
+    private static final int FP_COMPARE_BIT15_SHIFT = 15;
+    private static final int FP_COMPARE_FIXED_SHIFT = 10;
+    private static final int FP_COMPARE_FIXED_MASK = 0b1_1111;
+    private static final int FP_COMPARE_FIXED_PATTERN = 0b0_1000;
+    private static final int FP_COMPARE_LOW3_MASK = 0b111;
+    private static final int FP_COMPARE_E_BIT_SHIFT = 4;
+    private static final int FP_COMPARE_ZERO_BIT_SHIFT = 3;
+
     // ── Add/subtract (shifted/extended register), subgrupo de Data Processing — Register: ─────
     // ── bits[28:24] fixo=01011 nas duas formas; bit21 distingue shifted(0)/extended(1, com ────
     // ── bits[23:22]=00 fixo também) — Fatos de referência #4/#5 da task B6.3.1. ────────────────
@@ -754,7 +834,15 @@ public final class Aarch64Decoder {
     /// B6.3.2 com `CSEL`/`CSINC`/`CSINV`/`CSNEG`): `2-source`/`3-source` (B6.3.3) entram como
     /// `case`s adicionais aqui, adicionados por essa task subsequente. `Logical (shifted
     /// register)` fica fora do escopo fechado do épico B6 (não implementar — ver a task).
+    ///
+    /// `bit26=1` (B6.5.3, D1 da task): a MESMA checagem de entrada (bit27=1 && bit25=1) também
+    /// aceita a classe irmã "Data Processing — Scalar Floating-Point and Advanced SIMD" — só
+    /// falta ramificar por `bit26` logo no topo, antes de qualquer lógica que já assume
+    /// implicitamente `bit26=0` (Fatos de referência #1 da task).
     private Ir64Op decodeDataProcessingRegister(int word, long address) {
+        if (((word >>> FP_SIMD_CLASS_BIT26_SHIFT) & 1) != 0) {
+            return decodeDataProcessingScalarFpSimd(word, address);
+        }
         int addSubGroup = (word >>> ADDSUB_REGISTER_GROUP_SHIFT) & ADDSUB_REGISTER_GROUP_5BIT_MASK;
         if (addSubGroup == ADDSUB_REGISTER_GROUP_PATTERN) {
             boolean extendedForm = ((word >>> ADDSUB_REGISTER_EXTENDED_BIT_SHIFT) & 1) != 0;
@@ -896,6 +984,152 @@ public final class Aarch64Decoder {
         return new Ir64Op.AluExtendedRegister(
                 isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, rm, extendType, shiftAmount, wide,
                 setFlags, dstIsStackPointer);
+    }
+
+    /// Sub-dispatch da classe "Data Processing — Scalar Floating-Point and Advanced SIMD"
+    /// (`bit26=1`, D1 da task B6.5.3): só o subconjunto ESCALAR herdado de B6.5.2
+    /// (`FADD`/`FSUB`/`FMUL`/`FDIV`/`FNEG`/`FABS`/`FMOV` registrador/imediato/`FCMP`/`FCMPE`/
+    /// `FCVT` F32↔F64) — Advanced SIMD vetorial, `FCCMP`/`FCSEL`, conversões FP↔inteiro e
+    /// data-processing (3-source) ficam fora (Não inclui da task), reconhecidos aqui só pela
+    /// AUSÊNCIA de qualquer um dos 4 padrões fixos abaixo (nunca por um `case` próprio que
+    /// tentaria decodificá-los).
+    private Ir64Op decodeDataProcessingScalarFpSimd(int word, long address) {
+        int fixedPrefix = (word >>> SCALAR_FP_FIXED_PREFIX_SHIFT) & SCALAR_FP_FIXED_PREFIX_MASK;
+        boolean bit21Set = ((word >>> SCALAR_FP_BIT21_SHIFT) & 1) != 0;
+        if (fixedPrefix != SCALAR_FP_FIXED_PREFIX_PATTERN || !bit21Set) {
+            // Advanced SIMD vetorial (prefixo(28:24) diferente, ex. "01110"), data-processing
+            // (3-source, prefixo="11111") ou conversões FP<->fixed-point (bit21=0 na forma com
+            // shift): fora do escopo fechado desta task.
+            throw unsupported(word, address);
+        }
+        int immediateFixed = (word >>> FP_IMMEDIATE_FIXED_SHIFT) & FP_IMMEDIATE_FIXED_MASK;
+        if (immediateFixed == FP_IMMEDIATE_FIXED_PATTERN) {
+            return decodeFpMoveImmediate(word, address);
+        }
+        boolean compareBit15Clear = ((word >>> FP_COMPARE_BIT15_SHIFT) & 1) == 0;
+        int compareFixed = (word >>> FP_COMPARE_FIXED_SHIFT) & FP_COMPARE_FIXED_MASK;
+        boolean compareLow3Clear = (word & FP_COMPARE_LOW3_MASK) == 0;
+        if (compareBit15Clear && compareFixed == FP_COMPARE_FIXED_PATTERN && compareLow3Clear) {
+            return decodeFpCompare(word, address);
+        }
+        int oneSourceFixed = (word >>> FP_ONE_SOURCE_FIXED_SHIFT) & FP_ONE_SOURCE_FIXED_MASK;
+        if (oneSourceFixed == FP_ONE_SOURCE_FIXED_PATTERN) {
+            return decodeFpOneSource(word, address);
+        }
+        int twoSourceFixed = (word >>> FP_TWO_SOURCE_FIXED_SHIFT) & FP_TWO_SOURCE_FIXED_MASK;
+        if (twoSourceFixed == FP_TWO_SOURCE_FIXED_PATTERN) {
+            return decodeFpTwoSource(word, address);
+        }
+        // FCCMP/FCSEL (conditional compare/select) e conversões FP<->inteiro (SCVTF/UCVTF/
+        // FCVTZS/FCVTZU): mesmo prefixo(28:24)/bit21, discriminados por outros campos — fora do
+        // escopo fechado desta task (herdado de B6.5.2, ver Não inclui).
+        throw unsupported(word, address);
+    }
+
+    /// `type` (bits[23:22], Fatos de referência #4): posição idêntica nos 4 subgrupos escalares
+    /// decodificados por esta task — `10`/`11` (meia-precisão/reservado) são UNDEFINED reais
+    /// aqui, não "não implementado" (mesmo padrão de outros campos reservados do arquivo).
+    private boolean decodeFpDoublePrecision(int word, long address) {
+        int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+        return switch (type) {
+            case FP_TYPE_SINGLE -> false;
+            case FP_TYPE_DOUBLE -> true;
+            default -> throw unsupported(word, address);
+        };
+    }
+
+    /// `FADD`/`FSUB`/`FMUL`/`FDIV` (Floating-point data-processing, 2 source).
+    private Ir64Op decodeFpTwoSource(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int opcode = (word >>> FP_TWO_SOURCE_OPCODE_SHIFT) & FP_TWO_SOURCE_OPCODE_MASK;
+        Ir64Op.Fp64Operation op = switch (opcode) {
+            case FP_TWO_SOURCE_OPCODE_FMUL -> Ir64Op.Fp64Operation.MUL;
+            case FP_TWO_SOURCE_OPCODE_FDIV -> Ir64Op.Fp64Operation.DIV;
+            case FP_TWO_SOURCE_OPCODE_FADD -> Ir64Op.Fp64Operation.ADD;
+            case FP_TWO_SOURCE_OPCODE_FSUB -> Ir64Op.Fp64Operation.SUB;
+            // FMAX/FMIN/FMAXNM/FMINNM/FNMUL: fora de escopo, herdado de B6.5.2.
+            default -> throw unsupported(word, address);
+        };
+        int vm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Fp64Alu(op, doublePrecision, vd, vn, vm);
+    }
+
+    /// `FMOV`/`FABS`/`FNEG` (unárias) e `FCVT` F32↔F64 (Floating-point data-processing,
+    /// 1 source) — opcode(20:15) distingue as 5 formas cobertas; demais valores (`FSQRT`,
+    /// `FCVT` de/para meia-precisão, `FRINTx`) ficam fora do escopo fechado desta task.
+    private Ir64Op decodeFpOneSource(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int opcode = (word >>> FP_ONE_SOURCE_OPCODE_SHIFT) & FP_ONE_SOURCE_OPCODE_MASK;
+        int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vd = word & REGISTER_FIELD_MASK;
+        return switch (opcode) {
+            case FP_ONE_SOURCE_OPCODE_FMOV ->
+                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MOV, doublePrecision, vd, 0, vn);
+            case FP_ONE_SOURCE_OPCODE_FABS ->
+                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ABS, doublePrecision, vd, 0, vn);
+            case FP_ONE_SOURCE_OPCODE_FNEG ->
+                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.NEG, doublePrecision, vd, 0, vn);
+            case FP_ONE_SOURCE_OPCODE_FCVT_TO_DOUBLE -> {
+                if (doublePrecision) {
+                    // opcode=5 (FCVT-para-double) exige type=00 (fonte single) — a combinação
+                    // contrária (type=01) é outra instrução (FCVT-para-half a partir de double),
+                    // fora de escopo.
+                    throw unsupported(word, address);
+                }
+                yield new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, vd, vn);
+            }
+            case FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE -> {
+                if (!doublePrecision) {
+                    // opcode=4 (FCVT-para-single) exige type=01 (fonte double) — a combinação
+                    // contrária é outra instrução, fora de escopo (mesma simetria do case acima).
+                    throw unsupported(word, address);
+                }
+                yield new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F64_TO_F32, vd, vn);
+            }
+            default -> throw unsupported(word, address);
+        };
+    }
+
+    /// `FMOV Sd,#imm`/`FMOV Dd,#imm` (Floating-point immediate) — o imediato de 8 bits é expandido
+    /// AQUI (VFPExpandImm-equivalente, {@link #expandFpImmediate}), nunca no executor.
+    private Ir64Op decodeFpMoveImmediate(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int imm8 = (word >>> FP_IMMEDIATE_IMM8_SHIFT) & FP_IMMEDIATE_IMM8_MASK;
+        long immediateBits = expandFpImmediate(imm8, doublePrecision);
+        int vd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Fp64MoveImmediate(doublePrecision, vd, immediateBits);
+    }
+
+    /// `FCMP`/`FCMPE`, com ou sem comparação-com-zero (`Rm` é fixo em `00000` na forma zero —
+    /// ignorado aqui, nunca lido, já que o valor não importaria de qualquer forma).
+    private Ir64Op decodeFpCompare(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        boolean signalOnQuietNaN = ((word >>> FP_COMPARE_E_BIT_SHIFT) & 1) != 0;
+        boolean compareWithZero = ((word >>> FP_COMPARE_ZERO_BIT_SHIFT) & 1) != 0;
+        int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vm = compareWithZero ? 0 : (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
+        return new Ir64Op.Fp64Compare(doublePrecision, compareWithZero, signalOnQuietNaN, vn, vm);
+    }
+
+    /// `VFPExpandImm`-equivalente de A64 (Armadilhas da task B6.5.3): MESMO algoritmo conceitual
+    /// do precedente VFP32 (`StandardIrBuilder#vfpExpandImm`, `vfp_expand_imm` do QEMU) — sinal
+    /// (bit7) + expoente replicado (bit6 invertido, {@code notBit6}) + mantissa (bits5:0) — mas
+    /// duplicado aqui (não reaproveitado por chamada direta) porque o campo `imm8` de origem já
+    /// chega CONTÍGUO do encoding A64 (bits[20:13], ver {@link #decodeFpMoveImmediate}), diferente
+    /// do VFP32 que precisa remontar `imm8` a partir de dois pedaços de 4 bits antes de expandir —
+    /// os dois mundos não compartilham decoder (G2/G3), e a assinatura já recebe o valor pronto.
+    private static long expandFpImmediate(int imm8, boolean doublePrecision) {
+        boolean sign = (imm8 & 0x80) != 0;
+        boolean notBit6 = (imm8 & 0x40) == 0;
+        int low6 = imm8 & 0x3F;
+        if (doublePrecision) {
+            long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3fc0L) | low6;
+            return high16 << 48;
+        }
+        long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
+        return (high16 << 16) & 0xFFFF_FFFFL;
     }
 
     private Ir64Op decodeBranchExceptionSystem(int word, long address) {

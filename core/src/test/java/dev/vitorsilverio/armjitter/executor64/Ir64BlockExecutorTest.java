@@ -1005,4 +1005,40 @@ class Ir64BlockExecutorTest {
 
         assertEquals(0xF, core.pstate().nzcv(), "MADD/MSUB/SDIV/UDIV nunca tocam NZCV");
     }
+
+    @Test
+    void fmovFaddFcmpBCondMinimalFloatBlock() {
+        // "hello float" mínimo de A64 (B6.5.3, mesmo espírito do teste 3 de
+        // b3.5-vfp-decoder.md, mas sem o passo VMRS intermediário: FCMP já escreve PSTATE.NZCV
+        // diretamente, ver Ir64Op.Fp64Compare javadoc): FMOV s0,#1.0; FADD s0,s0,s0 (-> 2.0);
+        // FCMP s0,#0.0 (2.0 > 0.0); B.gt salta por cima do FMOV s1,#2.0. Palavras reais
+        // assembladas via aarch64-none-elf-as/objdump (devkitA64), não inventadas à mão.
+        Aarch64Core core = newCore(32);
+        putWord(core, 0x00, 0x1e2e1000); // fmov s0, #1.0
+        putWord(core, 0x04, 0x1e202800); // fadd s0, s0, s0
+        putWord(core, 0x08, 0x1e202008); // fcmp s0, #0.0
+        putWord(core, 0x0c, 0x5400004c); // b.gt target (target = 0x14)
+        putWord(core, 0x10, 0x1e201001); // fmov s1, #2.0 (NÃO deveria executar, pulado pelo B.gt)
+        putWord(core, 0x14, 0x1e221002); // fmov s2, #4.0 (target)
+
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+        executor.step(core); // fmov s0, #1.0
+        assertEquals(1.0f, core.fp().sFloat(0));
+
+        executor.step(core); // fadd s0, s0, s0
+        assertEquals(2.0f, core.fp().sFloat(0));
+
+        executor.step(core); // fcmp s0, #0.0
+        assertFalse(core.pstate().negative(), "2.0 > 0.0: N=0");
+        assertFalse(core.pstate().zero(), "2.0 != 0.0: Z=0");
+        assertTrue(core.pstate().carry(), "sem underflow/NaN: C=1 (mesma tabela de FCMP maior-que)");
+        assertFalse(core.pstate().overflow());
+
+        executor.step(core); // b.gt target
+        assertEquals(0x14L, core.pc(), "B.gt deveria ser tomado (2.0 > 0.0)");
+
+        executor.step(core); // fmov s2, #4.0 (no target, s1 nunca é tocado)
+        assertEquals(4.0f, core.fp().sFloat(2));
+        assertEquals(0.0f, core.fp().sFloat(1), "fmov s1,#2.0 foi pulado pelo B.gt");
+    }
 }
