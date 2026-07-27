@@ -178,3 +178,10 @@ mrs x2, ttbr0_el1
 msr ttbr0_el1, x3
 mrs x4, vbar_el1
 msr vbar_el1, x5
+
+// ── B6.6.3: SYS/SYS(L) — TLBI VMALLE1(IS) + barreiras DSB/ISB/DMB ───────────────────────
+tlbi vmalle1
+tlbi vmalle1is
+dsb sy
+isb
+dmb sy

@@ -16,6 +16,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 // Ir64Op.MultiplyAccumulate/Ir64Op.Divide (B6.3.3) são referenciados via Ir64Op.* (mesmo padrão
 // já usado neste arquivo para os demais subtipos aninhados).
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
+import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.BeforeAll;
@@ -1613,6 +1614,60 @@ class Aarch64DecoderCorpusTest {
         assertFalse(op.read());
         assertEquals(Aarch64SystemRegisterId.VBAR_EL1, op.register());
         assertEquals(5, op.rt());
+    }
+
+    // ── B6.6.3: SYS/SYS(L) — TLBI VMALLE1(IS) + barreiras DSB/ISB/DMB — offsets 0x284+ ─────────
+
+    @Test
+    void tlbiVmalle1() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x284);
+        assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
+    }
+
+    @Test
+    void tlbiVmalle1Is() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x288);
+        assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
+    }
+
+    @Test
+    void dsbSy() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x28c);
+        assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
+    }
+
+    @Test
+    void isb() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x290);
+        assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
+    }
+
+    @Test
+    void dmbSy() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x294);
+        assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
+    }
+
+    @Test
+    void tlbiVae1PerVaFormThrows() {
+        // `tlbi vae1, x0` (achado real da task: per-VA fora do escopo, mesma simplificação
+        // "sem per-ASID/per-VA" do precedente 32-bit) — encoding real via aarch64-none-elf-as.
+        int word = 0xd5088720;
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    @Test
+    void syslFormThrows() {
+        // `sysl x0, #0, c8, c7, #0` (`L=1`, mesmos CRn/CRm/op2 do TLBI VMALLE1) — fora do escopo,
+        // esta task só reconhece a forma `SYS` (`L=0`) — encoding real via aarch64-none-elf-as.
+        int word = 0xd5288700;
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
 
     @Test

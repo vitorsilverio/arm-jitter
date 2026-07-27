@@ -286,7 +286,22 @@ diferentes apenas).
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
-| P4 | **B6.6.3** — AArch64 `Aarch64VmsaSystemRegisters` (ponte registrador-de-sistema↔MMU) | `trilha-b-arquiteturas/b6.6.3-aarch64-system-register-mmu-bridge.md` | arm-jitter | B6.6.1 ✅, B6.6.2 ✅ | executável agora — ambas dependências fechadas; task já embute um achado de escopo (D1: `TLBI` é `SYS`/`SYS(L)`, não `MRS`/`MSR` — precisa de decode adicional dentro do escopo desta task) |
+| P5 | **B6.6.4** — AArch64 modelo mínimo de exceção EL0→EL1 + aborts precisos | `trilha-b-arquiteturas/b6.6.4-aarch64-precise-aborts-el1.md` | arm-jitter | B6.6.3 ✅ | executável agora — B6.6.3 fechou; task grande (introduz o PRIMEIRO modelo de exceção síncrona de A64, `Aarch64Core` era EL0-only até aqui), reservar sessão maior |
+
+- **B6.6.3** ✅ (2026-07-27, 3ª das 6 sub-tasks de B6.6, ponte registrador-de-sistema↔MMU):
+  `memory/mmu/Aarch64VmsaSystemRegisters` (espelho de `Cp15VmsaCoprocessor`) liga `SCTLR_EL1`
+  (só bit `M`)/`TTBR0_EL1`/`TCR_EL1`/`MAIR_EL1` a `TranslatingAddressSpace64` (B6.6.2);
+  `ESR`/`FAR`/`VBAR`/`ELR`/`SPSR` só armazenamento (B6.6.4 os consome). **Achado real D1
+  confirmado com `aarch64-none-elf-as`/`objdump` reais**: `TLBI VMALLE1`/`VMALLE1IS` são `SYS`
+  (`op0=1`), NÃO `MRS`/`MSR` — `Ir64Op.SystemInstruction` novo (`Kind=21`) +
+  `Ir64SystemInstructionOp{TLBI_ALL,BARRIER}`; `DSB`/`ISB`/`DMB` (`op0=0`) também decodificadas
+  como NOP. `Aarch64SystemRegisterBus` ganhou `invalidateTlbAll()` default NOP (mesmo barramento
+  único instalado no core, já que `TLBI` não é leitura/escrita de registrador mas ainda é uma
+  ação de sistema). `TLBI` per-VA (`VAE1`)/`SYSL` continuam fora de escopo (regressão negativa
+  testada). Corpus real estendido (offsets `0x284`-`0x294`). `mvn -o test` verde (core 1249 +
+  truffle 13); gbaemu/ndsemu não revalidados (G5 não se aplica, nenhum arquivo 32-bit tocado). Ver
+  índice do `tasks/README.md` para o detalhe completo. **Próximo passo**: B6.6.4 (modelo de
+  exceção EL0→EL1 + aborts precisos) fica elegível agora.
 
 - **B6.6.2** ✅ (2026-07-27, 2ª das 6 sub-tasks de B6.6, independente de B6.6.1): `memory/mmu/
   TranslatingAddressSpace64` — page-walk VMSA64 completo (L0-L3, bloco L1/L2, página L3), `AP`+

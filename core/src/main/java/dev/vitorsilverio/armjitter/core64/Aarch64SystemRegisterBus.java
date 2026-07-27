@@ -23,6 +23,14 @@ public interface Aarch64SystemRegisterBus {
     /// `MSR`: escreve um valor de 64 bits no registrador de sistema.
     void write(Aarch64SystemRegisterId register, long value);
 
+    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `Ir64Op.SystemInstruction`) — não é `MRS`/`MSR`
+    /// (achado real de B6.6.3, `SYS` é um subgrupo de encoding diferente), mas vive no MESMO
+    /// barramento porque é o único gancho que o hospedeiro instala em {@link Aarch64Core} para
+    /// ações de nível de sistema. Default NOP — barramentos sem MMU instalada (ex.
+    /// {@link #none()}) não têm TLB para invalidar.
+    default void invalidateTlbAll() {
+    }
+
     /// Um barramento sem registradores instalados — {@link #handles} sempre `false`. Padrão até
     /// que um hospedeiro real (B6.6.3) instale um via {@link Aarch64Core#setSystemRegisterBus}.
     static Aarch64SystemRegisterBus none() {

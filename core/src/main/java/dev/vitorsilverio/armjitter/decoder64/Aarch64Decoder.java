@@ -14,6 +14,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
+import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
 /// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1 + B6.3.2 +
@@ -160,10 +161,12 @@ public final class Aarch64Decoder {
     private static final int EXCEPTION_GEN_LOW5_MASK = 0b1_1111;
     private static final int EXCEPTION_GEN_SVC_LOW5_FIXED = 0b0_0001;
 
-    // ── MRS/MSR (register) — `SYS` family (B6.6.1, ARM DDI 0487 C5.2.3 / QEMU a64.decode `SYS`):
-    // ── prefixo fixo(31:22)=1101010100 L(21) op0(20:19) op1(18:16) CRn(15:12) CRm(11:8) op2(7:5)
-    // ── Rt(4:0). `op0=0b00` é outro subgrupo (hint/barreira/MSR-imediato), fora do escopo desta
-    // ── task — só `op0 != 0` (`SYS`/`SYSL`/`MRS`/`MSR`) é reconhecido aqui.
+    // ── MRS/MSR (register)/SYS family (B6.6.1 + B6.6.3, ARM DDI 0487 C5.2.3 / QEMU a64.decode
+    // ── `SYS`): prefixo fixo(31:22)=1101010100 L(21) op0(20:19) op1(18:16) CRn(15:12) CRm(11:8)
+    // ── op2(7:5) Rt(4:0). `op0` distingue 3 subgrupos: `0b00` = barreiras/hints/MSR-imediato
+    // ── (B6.6.3 só decodifica `DSB`/`ISB`/`DMB`, resto fora de escopo), `0b01` = `SYS`/`SYSL`
+    // ── (B6.6.3 só decodifica `TLBI VMALLE1`/`VMALLE1IS`), `0b10`/`0b11` = `MRS`/`MSR` (B6.6.1,
+    // ── ver decodeSystemRegisterId).
     private static final int SYSTEM_REGISTER_FIXED_SHIFT = 22;
     private static final int SYSTEM_REGISTER_FIXED_10BIT_MASK = 0b11_1111_1111;
     private static final int SYSTEM_REGISTER_FIXED_PATTERN = 0b11_0101_0100;
@@ -211,6 +214,26 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_SPSR = 4;
     private static final int SYSREG_CRM_SPSR = 0;
     private static final int SYSREG_OP2_SPSR = 0;
+
+    // ── `op0` do grupo System (B6.6.3): valores fixos que selecionam o subgrupo (op0=2/3 são
+    // ── MRS/MSR, tratados por SYSREG_OP0_EL1 acima).
+    private static final int SYSTEM_INSTRUCTION_OP0_BARRIER = 0;
+    private static final int SYSTEM_INSTRUCTION_OP0_SYS = 1;
+
+    // ── Barreiras (`op0=0`, CRn=0b0011 fixo — "Barriers" no grupo hint/barreira/CLREX/PSTATE-imm)
+    // ── valores conferidos contra `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
+    private static final int SYSTEM_INSTRUCTION_BARRIER_CRN = 0b0011;
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DSB = 0b100;
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DMB = 0b101;
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_ISB = 0b110;
+
+    // ── `TLBI VMALLE1`/`TLBI VMALLE1IS` (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral",
+    // ── CRn=0b1000 fixo (grupo TLB maintenance), CRm distingue IS/não-IS, op2=0 (ALL, sem VA).
+    private static final int SYSTEM_INSTRUCTION_TLBI_OP1_EL1 = 0b000;
+    private static final int SYSTEM_INSTRUCTION_TLBI_CRN = 0b1000;
+    private static final int SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1 = 0b0111;
+    private static final int SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1IS = 0b0011;
+    private static final int SYSTEM_INSTRUCTION_TLBI_OP2_ALL = 0b000;
 
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
@@ -898,12 +921,17 @@ public final class Aarch64Decoder {
             return decodeExceptionGenerating(word, address);
         }
         int systemRegisterFixed = (word >>> SYSTEM_REGISTER_FIXED_SHIFT) & SYSTEM_REGISTER_FIXED_10BIT_MASK;
-        int systemRegisterOp0 = (word >>> SYSTEM_REGISTER_OP0_SHIFT) & SYSTEM_REGISTER_OP0_MASK;
-        if (systemRegisterFixed == SYSTEM_REGISTER_FIXED_PATTERN && systemRegisterOp0 != 0) {
+        if (systemRegisterFixed == SYSTEM_REGISTER_FIXED_PATTERN) {
+            int systemRegisterOp0 = (word >>> SYSTEM_REGISTER_OP0_SHIFT) & SYSTEM_REGISTER_OP0_MASK;
+            if (systemRegisterOp0 == SYSTEM_INSTRUCTION_OP0_BARRIER) {
+                return decodeSystemInstructionBarrier(word, address);
+            }
+            if (systemRegisterOp0 == SYSTEM_INSTRUCTION_OP0_SYS) {
+                return decodeSystemInstructionSys(word, address);
+            }
             return decodeSystemRegister(word, address);
         }
-        // Demais formas do grupo Branch/Exception/System (hints, barreiras, MSR-imediato,
-        // ERET/DRPS, SYS/SYSL com op0=1): fora da fatia B6.1/B6.6.1.
+        // Demais formas do grupo Branch/Exception/System (ERET/DRPS): fora da fatia B6.1/B6.6.x.
         throw unsupported(word, address);
     }
 
@@ -977,6 +1005,42 @@ public final class Aarch64Decoder {
         }
         int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
         return new Ir64Op.Svc(imm16);
+    }
+
+    /// `DSB`/`ISB`/`DMB` (B6.6.3, `op0=0`) — NOP observável, mesmo precedente de
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit. Demais formas do subgrupo
+    /// `op0=0` (hints como `NOP`/`WFE`/`WFI`, `CLREX`, `MSR (immediate, PSTATE)`, `SB`): fora do
+    /// escopo desta task — a opção da barreira (campo `CRm`, ex. `sy`/`ish`) também não é
+    /// distinguida, já que todas viram o mesmo NOP.
+    private Ir64Op decodeSystemInstructionBarrier(int word, long address) {
+        int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        if (crn == SYSTEM_INSTRUCTION_BARRIER_CRN
+                && (op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_DSB
+                        || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_DMB
+                        || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_ISB)) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
+        }
+        throw unsupported(word, address);
+    }
+
+    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `op0=1`, `SYS` — achado real da rodada de
+    /// pesquisa: `TLBI` NÃO é `MRS`/`MSR`, é uma forma de `SYS` com o mesmo formato de campos).
+    /// Demais formas de `SYS`/`SYSL` (`TLBI` per-VA como `VAE1`, `DC`/`IC`/`AT`, `SYSL`
+    /// propriamente dito com `L=1`): fora do escopo desta task, mesma simplificação
+    /// "sem per-ASID/per-VA" do precedente 32-bit (`Cp15VmsaCoprocessor`, `TLBIALL`).
+    private Ir64Op decodeSystemInstructionSys(int word, long address) {
+        boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
+        int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
+        int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
+        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        if (!isSysl && op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 && crn == SYSTEM_INSTRUCTION_TLBI_CRN
+                && (crm == SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1 || crm == SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1IS)
+                && op2 == SYSTEM_INSTRUCTION_TLBI_OP2_ALL) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
+        }
+        throw unsupported(word, address);
     }
 
     /// `MRS`/`MSR (register)` (B6.6.1) — resolve a 5-upla `op0:op1:CRn:CRm:op2` crua para um

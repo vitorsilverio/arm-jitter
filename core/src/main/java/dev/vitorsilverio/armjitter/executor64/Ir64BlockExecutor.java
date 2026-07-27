@@ -172,6 +172,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (Ir64Op.LoadExclusive) op);
             case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (Ir64Op.StoreExclusive) op);
             case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
+            case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
+                    executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -547,6 +549,19 @@ public final class Ir64BlockExecutor {
             core.setX(op.rt(), bus.read(op.register()));
         } else {
             bus.write(op.register(), core.x(op.rt()));
+        }
+        return false;
+    }
+
+    /// `TLBI VMALLE1`/`TLBI VMALLE1IS`/`DSB`/`ISB`/`DMB` (B6.6.3): a barreira é sempre NOP; `TLBI`
+    /// delega em {@link Aarch64SystemRegisterBus#invalidateTlbAll()} — sem checar
+    /// {@link Aarch64SystemRegisterBus#handles} (diferente de {@link #executeSystemRegister}),
+    /// já que o método tem default NOP no barramento vazio (mesma disciplina "sem hospedeiro =
+    /// sem TLB para invalidar", não uma falta arquitetural).
+    private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
+        switch (op.opcode()) {
+            case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
+            case BARRIER -> { /* NOP observável — sem cache/pipeline modelados. */ }
         }
         return false;
     }

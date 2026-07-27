@@ -170,3 +170,8 @@ Disassembly of section .text:
  278:	d5182003 	msr	ttbr0_el1, x3
  27c:	d538c004 	mrs	x4, vbar_el1
  280:	d518c005 	msr	vbar_el1, x5
+ 284:	d508871f 	tlbi	vmalle1
+ 288:	d508831f 	tlbi	vmalle1is
+ 28c:	d5033f9f 	dsb	sy
+ 290:	d5033fdf 	isb
+ 294:	d5033fbf 	dmb	sy

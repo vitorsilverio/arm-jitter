@@ -27,7 +27,7 @@ public sealed interface Ir64Op permits
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
-        Ir64Op.SystemRegister {
+        Ir64Op.SystemRegister, Ir64Op.SystemInstruction {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -60,6 +60,7 @@ public sealed interface Ir64Op permits
         public static final int LOAD_EXCLUSIVE = 18;
         public static final int STORE_EXCLUSIVE = 19;
         public static final int SYSTEM_REGISTER = 20;
+        public static final int SYSTEM_INSTRUCTION = 21;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -557,5 +558,16 @@ public sealed interface Ir64Op permits
             /// `31` é `XZR`).
             int rt) implements Ir64Op {
         @Override public int kind() { return Kind.SYSTEM_REGISTER; }
+    }
+
+    /// `SYS`/`SYS(L)` (`ARM DDI 0487 C5.2.3`, task B6.6.3) — subconjunto mínimo reconhecido:
+    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` e as barreiras `DSB`/`ISB`/`DMB`. Diferente de
+    /// {@link SystemRegister}: não carrega registrador geral nenhum (`TLBI VMALLE1`/barreiras não
+    /// leem/escrevem `Rt` — o campo existe no encoding só porque compartilha o formato de `SYS`,
+    /// mas o decoder não precisou dele para o subconjunto coberto aqui).
+    record SystemInstruction(
+            /// Sub-operação identificada pelo decoder.
+            Ir64SystemInstructionOp opcode) implements Ir64Op {
+        @Override public int kind() { return Kind.SYSTEM_INSTRUCTION; }
     }
 }
