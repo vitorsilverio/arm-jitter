@@ -1,5 +1,12 @@
 # RELATÓRIO A5 — Demo native-image (2026-07-11/12)
 
+> **Atualização A7 (2026-07-27):** ver seção "A7 (data): resultado pós-A6" no fim
+> deste relatório. A6 fechou o Aceite #2 no ambiente JBR+Unchained (1812 `opt done`,
+> 0 `opt failed`), mas o binário native-image reproduz EXATAMENTE o mesmo bailout
+> `FrameWithoutBoxing` da A5 (0 `opt done`, 903 `opt failed`) e `--truffle` continua
+> mais lento que `--interp` nos dois ambientes — status da A5 permanece 🟡 (nenhum dos
+> dois critérios de aceite da A7 fechou nos dois ambientes simultaneamente).
+
 **Status: 🟡 PARCIAL.** O binário nativo existe, executa ELFs reais com resultado
 IDÊNTICO à JVM (aceite #1 ✅) e o backend ASM é recusado cedo com mensagem clara sob
 native-image (armadilha da task ✅). **Aceite #2 (log de `TraceCompilation` provando
@@ -188,3 +195,109 @@ target\armbox.exe -Dpolyglot.engine.CompilationFailureAction=Print ^
 
 `mvn -o test` (JAVA_HOME=JBR 25) verde em `arm-jitter` (raiz, `core`+`truffle`) e em
 `armbox` — inclui os testes novos de `Backend.TRUFFLE`.
+
+## A7 (data): resultado pós-A6 (2026-07-27)
+
+Revalidação formal da A5 depois da A6 (especialização de nós Truffle por `IrOp`,
+`arm-jitter-truffle-1.0.jar` com `AluOpNode`/`MemoryOpNode`/`BranchOpNode`/etc.
+substituindo o dispatcher único `IrBlockExecutor#executeOp`). Passos executados
+LITERALMENTE conforme a receita acima: `mvn -o install` do arm-jitter root (JBR 25,
+A6 mergeada) → rebuild `armbox.exe` (`vcvars64.bat` + `JAVA_HOME=GraalVM 25.0.3` +
+`mvn -Pnative -DskipTests package`, ~3min37s de build) → mesmos diagnósticos/medições
+da A5, mesmo workload de referência (`busybox sh -c 'i=0; while [ $i -lt 2000 ]; do
+i=$((i+1)); done; echo done $i'`), mesma máquina/sessão.
+
+### Aceite #1 (corretude) — ✅ mantido, sem regressão
+
+`hello.elf` e `busybox-armv5l sh -c "echo a; echo b"` produzem stdout/exit idênticos
+à JVM nos dois ambientes e nos dois backends (`--truffle`/`--interp`):
+
+```
+armbox.exe --truffle testdata\hello.elf            → "hello from a real ELF", exit 42
+armbox.exe --interp  testdata\hello.elf             → "hello from a real ELF", exit 42
+armbox.exe --truffle testdata\busybox-armv5l ...    → "a\nb\n", exit 0
+armbox.exe --interp  testdata\busybox-armv5l ...    → "a\nb\n", exit 0
+armbox.exe testdata\hello.elf (backend padrão ASM)  → UnsupportedOperationException clara, exit 1
+```
+
+Idêntico via JBR 25 + Truffle Unchained (mesmos flags de launcher da A0/A5). Zero
+regressão de corretude introduzida pela A6.
+
+### Aceite #2 (TraceCompilation) — resultado misto: JBR ✅, native-image 🔴 AINDA falha
+
+| Ambiente | `opt done` | `opt failed` | Motivo do bailout (quando houver) |
+|---|---:|---:|---|
+| **A5 (antes da A6)** — JBR 25 + Unchained | 0 | (bailout em 100%) | `PermanentBailoutException`/`PEGraphDecoder.tooDeepInlining` |
+| **A5 (antes da A6)** — native-image | 0 | (bailout em 100%) | `FrameWithoutBoxing should not be materialized` |
+| **A7 (pós-A6)** — JBR 25 + Unchained | **1812** | **0** | — (nenhum bailout) |
+| **A7 (pós-A6)** — native-image (`armbox.exe`) | **0** | **903** | `SourceStackTraceBailoutException`: `Object of type Lcom/oracle/truffle/api/impl/FrameWithoutBoxing; should not be materialized (must not pass virtual object into an invoke that cannot be inlined)` — MESMA mensagem exata da A5, byte a byte |
+
+A6 fechou o bailout no pipeline JVMCI/HotSpot (JBR): a especialização de nós por
+`IrOp` (delegação direta e monomórfica a `IrAluExecutor`/`IrMemoryExecutor`/etc., em
+vez do switch de 40 casos de `executeOp`) deu ao PE algo que ele consegue podar —
+1812 blocos REALMENTE compilados, 0 falhas, saída do programa (`done 2000`) correta
+sob compilação real. **Confirmado formalmente aqui**: não foi um artefato pontual da
+sessão da A6 (137 opt done lá vs 1812 aqui — a diferença de contagem é esperada, vem
+de thresholds/timing de warmup entre sessões, não muda o resultado qualitativo: 0
+`opt failed`, nenhum bailout de PE).
+
+O binário native-image, em contraste, **reproduz o EXATO MESMO bailout da A5** —
+mesma classe de exceção, mesma mensagem, 0 `opt done` em 903 tentativas. A
+especialização de nós de A6 não teve NENHUM efeito sobre o pipeline SVM/Enterprise
+Truffle Compiler do native-image: o problema sob SVM é estrutural e distinto do
+problema que existia sob JVMCI — os dois pipelines de compilação Truffle (JVMCI-em-JVM
+vs SVM-em-imagem-nativa) reagem de formas diferentes à MESMA árvore de nós, e a causa
+raiz sob SVM permanece sem diagnóstico. **Aceite #2 da A5: ainda NÃO fechado sob
+native-image** — só fechado no ambiente JVM (JBR+Unchained).
+
+### Aceite (ganho de tempo) — 🔴 falha nos DOIS ambientes
+
+Loop de referência de 2000 iterações, `--truffle` vs `--interp`, best-of-5, mesma
+sessão:
+
+| Ambiente | Backend | Tempos das 5 execuções (ms) | Best-of-5 |
+|---|---|---|---:|
+| **native-image** | `--truffle` | 3307, 3476, 3333, 3331, 3364 | **3307 ms** |
+| **native-image** | `--interp` | 2562, 2389, 2164, 2326, 2378 | **2164 ms** |
+| **JBR 25 + Unchained** | `--truffle` | 6974, 4609, 8885, 3713, 7204 | **3713 ms** |
+| **JBR 25 + Unchained** | `--interp` | 2663, 2508, 2515, 2606, 2576 | **2508 ms** |
+
+- **native-image**: `--truffle` (3307 ms) continua mais lento que `--interp`
+  (2164 ms) — esperado, já que ali a compilação real nunca acontece (0 `opt done`,
+  ver acima); mesma conclusão da A5 (2,76s vs 1,77s lá, mesma ordem de grandeza).
+- **JBR + Unchained**: apesar de 1812 blocos REALMENTE compilados (Aceite #2 ✅),
+  `--truffle` (3713 ms) segue mais lento que `--interp` (2508 ms) em wall-time de
+  processo. Isso replica o achado já registrado no índice da A6: a medição de
+  processo curto via Unchained é dominada pelo custo fixo de carregar os módulos
+  Truffle/Graal via `--module-path`/`--upgrade-module-path` (visível na variância alta
+  entre execuções: 3713–8885 ms, vs a variância baixa do `--interp`, 2508–2663 ms —
+  esse ruído é o próprio custo de bootstrap do engine, não do loop em si) — não é
+  comparável 1:1 à medição de processo único que justificaria o ganho estrutural da
+  compilação. A hipótese de ganho em blocos/traces maiores e de vida mais longa
+  (ver A4, onde Truffle vence o ASM a partir de 80-320 instruções em bench de
+  microbenchmark dentro do mesmo processo) segue não invalidada, só não demonstrada
+  neste workload de processo curto.
+
+### Veredito dos critérios de aceite da A7
+
+| Critério (task A7) | JBR+Unchained | native-image |
+|---|---|---|
+| `opt done > 0`, `opt failed` por bailout de PE = 0 | ✅ (1812/0) | 🔴 (0/903, mesmo bailout da A5) |
+| `--truffle` mais rápido que `--interp` no loop de referência | 🔴 (3713 vs 2508 ms) | 🔴 (3307 vs 2164 ms) |
+
+**Nenhum dos dois critérios de aceite da A7 fecha nos dois ambientes simultaneamente**
+— por isso a A5 permanece 🟡 no índice de `tasks/README.md` (NÃO promovida a ✅; a nota
+de promoção condicional do enunciado da A7 só se aplica se ambos os critérios
+passarem). Conforme a instrução da própria task A7 ("se algum aceite FALHAR: registrar
+números + TraceCompilation completo e parar — a análise é sessão de modelo forte"):
+esta seção registra os números acima; os logs completos de `TraceCompilation`
+(1841 linhas JBR, 908 linhas native-image) estão preservados nesta sessão de trabalho
+e podem ser regerados literalmente com os comandos do "Passos de build reproduzíveis"
++ o diagnóstico da seção "Aceite #2" acima. **Não foi tentada nenhuma correção do
+bailout SVM nem do custo de bootstrap do Unchained** — ambos ficam para uma sessão de
+modelo forte dedicada (fora do escopo de medição desta task), com duas frentes
+distintas já identificadas: (1) causa raiz do bailout `FrameWithoutBoxing` específico
+do pipeline SVM/Enterprise Truffle Compiler do native-image (sobrevive à especialização
+de nós que já resolveu o pipeline JVMCI), e (2) custo de bootstrap do Truffle Unchained
+em processo curto via `--module-path`, que hoje mascara qualquer ganho de compilação
+real medido em wall-time de processo único.
