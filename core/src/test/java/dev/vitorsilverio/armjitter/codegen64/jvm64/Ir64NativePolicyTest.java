@@ -43,9 +43,19 @@ class Ir64NativePolicyTest {
     }
 
     @Test
-    void rejectsOpsOutsidePr2Scope() {
-        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Bitfield(
+    void supportsPr3OpSet() {
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.AluShiftedRegister(
+                Ir64AluOp.ADD, 0, 1, 2, dev.vitorsilverio.armjitter.ir64.Ir64ShiftType.LSL, 0, true, false)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.AluExtendedRegister(
+                Ir64AluOp.ADD, 0, 31, 2, dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType.UXTX, 0,
+                true, false, false)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.ConditionalSelect(
+                dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp.CSEL, 0, 1, 2, true, Ir64Condition.EQ)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Bitfield(
                 dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp.UBFM, 0, 1, 0, 7, true)));
-        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Divide(true, 0, 1, 2, true)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.MultiplyAccumulate(false, 0, 1, 2, 3, true)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Divide(true, 0, 1, 2, true)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadExclusive(0, 31, Ir64MemSize.WORD, false)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.StoreExclusive(0, 1, 31, Ir64MemSize.WORD, false)));
     }
 }

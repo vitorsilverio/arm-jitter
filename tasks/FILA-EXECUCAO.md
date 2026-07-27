@@ -289,11 +289,25 @@ diferentes apenas).
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
 abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
-real), B6.4 PR3 (AArch64 backend ASM — spec própria já escrita 2026-07-26,
-`trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md`; PR1 do esqueleto e PR2 de loads/stores/SVC
-FECHADOS, ver histórico abaixo; PR3 = B6.3.1-B6.3.4 nativos + registrador-cache de verdade +
-bench busybox-aarch64) e B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não
-escrita; ver `b6-aarch64.md`).
+real) e B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não escrita; ver
+`b6-aarch64.md`). B6.4 (backend ASM 64-bit) fechou os 3 PRs (ver histórico abaixo) — só resta,
+como pendência EXPLÍCITA fora do escopo de qualquer PR (registrador-cache sem consumidor A64
+medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a seção 🧑 abaixo.
+
+- **B6.4 PR3** ✅ (2026-07-26, terceira e última PR do backend ASM 64-bit — fecha o épico B6.4
+  do lado de codegen): estende `Ir64NativePolicy`/`Ir64BlockCompiler` para o conjunto
+  B6.3.1-B6.3.4 (`AluShiftedRegister`/`AluExtendedRegister`/`ConditionalSelect`/`Bitfield`/
+  `MultiplyAccumulate`/`Divide`/`LoadExclusive`/`StoreExclusive`) — mesmo padrão D-ASM dos PRs
+  1/2 (reconstrói o record `Ir64Op` exato e delega a `Ir64AsmRuntimeHelpers.executeOp`, que já
+  despachava esses `case`s desde B6.3.1-B6.3.4; nenhum arquivo de execução mudou). Com isso
+  TODO `Ir64Op.Kind` existente é suportado nativamente — nenhum bloco A64 cai mais no
+  interpretado por falta de `case`. `mvn -o test` verde (core 1197 + truffle 13); `mvn -o
+  install` verde. gbaemu/ndsemu não revalidados (G5 não se aplica, mesmo precedente dos PRs
+  1/2). **Próximo passo** (fora do escopo de qualquer PR, ver `b6.4-aarch64-asm-backend.md`):
+  registrador-cache de verdade (ganho de performance real, sem consumidor A64 medido para
+  justificar ainda) e o bench "busybox ≥3× interpretador" do aceite agregado do épico, que
+  segue bloqueado no mesmo ambiente da seção 🧑 abaixo (busybox aarch64 real ou toolchain
+  `aarch64-linux-*`).
 
 - **B6.4 PR2** 🟡 (2026-07-26, mesma leva de sessões do PR1: loads/stores/SVC nativos):
   estende `Ir64NativePolicy.supports` para `LOAD64`/`STORE64`/`LOAD_STORE_PAIR`/
@@ -369,7 +383,7 @@ aceite #2) mesmo com as 4 sub-tasks fechadas.
 | **A9 PR1** — lib nativa `.dll`/`.so` com API C, backend interpretado | `trilha-a-truffle/a9-native-shared-library.md` | Mesmo ambiente GraalVM+MSVC (+ `cl.exe` p/ o smoke test em C); pode rodar a qualquer momento | A9 PR2 (após A7) |
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
 | **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
-| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24) **e também o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64") depois que as 4 sub-tasks B6.3.1-B6.3.4 fecharem — mesmo bloqueio, um só ambiente resolve os dois |
+| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24), **o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64", já com as 4 sub-tasks B6.3.1-B6.3.4 fechadas) **e o bench "busybox ≥3× interpretador" do PR3 de B6.4** (codegen fechado 2026-07-26, só falta medir) — mesmo bloqueio, um só ambiente resolve os três |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 

@@ -6,15 +6,19 @@ import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64SvcHandler;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
+import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -334,5 +338,126 @@ class BlockEquivalenceHarness64Test {
             candidate.setSvcHandler(handler);
             return new EquivalencePair64(reference, candidate);
         });
+    }
+
+    // ---- PR3: AluShiftedRegister/AluExtendedRegister/ConditionalSelect/Bitfield/
+    // MultiplyAccumulate/Divide/LoadExclusive/StoreExclusive ----
+
+    @Test
+    void listOfPr3KindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.AluShiftedRegister(Ir64AluOp.ADD, 0, 1, 2, Ir64ShiftType.LSL, 0, true, false),
+                new Ir64Op.AluExtendedRegister(
+                        Ir64AluOp.ADD, 0, 31, 2, Ir64AluExtendType.UXTX, 0, true, false, false),
+                new Ir64Op.ConditionalSelect(Ir64ConditionalSelectOp.CSEL, 0, 1, 2, true, Ir64Condition.EQ),
+                new Ir64Op.Bitfield(Ir64BitfieldOp.UBFM, 0, 1, 0, 7, true),
+                new Ir64Op.MultiplyAccumulate(false, 0, 1, 2, 3, true),
+                new Ir64Op.Divide(true, 0, 1, 2, true),
+                new Ir64Op.LoadExclusive(0, 31, Ir64MemSize.WORD, false),
+                new Ir64Op.StoreExclusive(0, 1, 31, Ir64MemSize.WORD, false));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    @Test
+    void aluShiftedRegisterAddWithFlagsAndLsl() {
+        Ir64Block block = blockOf(0x9100,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x10, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x1, 0, true),
+                new Ir64Op.AluShiftedRegister(Ir64AluOp.ADD, 2, 0, 1, Ir64ShiftType.LSL, 4, true, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `AluExtendedRegister` com `Rn|SP`: cobre a resolução POR ÍNDICE (não pela flag) descrita em
+    /// {@code Ir64BlockExecutor#executeAluExtendedRegister} — `src1=31` sempre lê `SP`.
+    @Test
+    void aluExtendedRegisterReadsAndWritesStackPointer() {
+        Ir64Block block = blockOf(0x9200,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x20, 0, true),
+                new Ir64Op.AluExtendedRegister(
+                        Ir64AluOp.ADD, 31, 31, 2, Ir64AluExtendType.UXTX, 0, true, false, true));
+        harness.assertEquivalent(interpreted, asm, block, () -> {
+            Aarch64Core reference = newCore();
+            reference.setSp(0x1000L);
+            Aarch64Core candidate = newCore();
+            candidate.setSp(0x1000L);
+            return new EquivalencePair64(reference, candidate);
+        });
+    }
+
+    @Test
+    void conditionalSelectAllFourOpcodes() {
+        Ir64Block block = blockOf(0x9300,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x11, 0, true), // condição EQ falsa (Z=0)
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 5, 0, 0, true, true, false, false),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x7, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x9, 0, true),
+                new Ir64Op.ConditionalSelect(Ir64ConditionalSelectOp.CSEL, 10, 1, 2, true, Ir64Condition.EQ),
+                new Ir64Op.ConditionalSelect(Ir64ConditionalSelectOp.CSINC, 11, 1, 2, true, Ir64Condition.EQ),
+                new Ir64Op.ConditionalSelect(Ir64ConditionalSelectOp.CSINV, 12, 1, 2, true, Ir64Condition.EQ),
+                new Ir64Op.ConditionalSelect(Ir64ConditionalSelectOp.CSNEG, 13, 1, 2, true, Ir64Condition.EQ));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    @Test
+    void bitfieldUbfmSbfmBfm() {
+        Ir64Block block = blockOf(0x9400,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xFFFF, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVK, 1, 0x1234, 0, true),
+                new Ir64Op.Bitfield(Ir64BitfieldOp.UBFM, 2, 0, 4, 11, true),
+                new Ir64Op.Bitfield(Ir64BitfieldOp.SBFM, 3, 0, 4, 11, true),
+                new Ir64Op.Bitfield(Ir64BitfieldOp.BFM, 1, 0, 4, 11, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    @Test
+    void multiplyAccumulateMaddAndMsub() {
+        Ir64Block block = blockOf(0x9500,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 6, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 7, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 100, 0, true),
+                new Ir64Op.MultiplyAccumulate(false, 3, 0, 1, 2, true),
+                new Ir64Op.MultiplyAccumulate(true, 4, 0, 1, 2, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `SDIV`/`UDIV`, incluindo divisor `0` (resultado `0` SEM lançar — Fatos de referência #2 de
+    /// B6.3.3) e a leitura assinada explícita em `W` (`SDIV` narrow).
+    @Test
+    void divideSignedUnsignedAndByZero() {
+        Ir64Block block = blockOf(0x9600,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 100, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 7, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0, 0, true),
+                new Ir64Op.Divide(false, 3, 0, 1, true),
+                new Ir64Op.Divide(true, 4, 0, 1, false),
+                new Ir64Op.Divide(true, 5, 0, 2, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LDXR`/`STXR` round-trip: carrega com exclusividade em `[X0]`, depois grava de volta —
+    /// prova que o monitor de exclusividade (marcado por `LoadExclusive`, checado por
+    /// `StoreExclusive` ANTES da escrita) produz o MESMO `rs`/memória/`Aarch64CpuSnapshot` nos
+    /// dois backends.
+    @Test
+    void loadExclusiveThenStoreExclusiveSucceeds() {
+        Ir64Block block = blockOf(0x9700,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x400, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0xABCD, 0, true),
+                new Ir64Op.LoadExclusive(1, 0, Ir64MemSize.WORD, false),
+                new Ir64Op.StoreExclusive(2, 3, 0, Ir64MemSize.WORD, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `STXR` sem `LDXR` antes: monitor nunca foi marcado, então a escrita falha (`rs`=1, memória
+    /// intacta) — prova que os dois backends concordam também no caminho de FALHA.
+    @Test
+    void storeExclusiveWithoutReservationFails() {
+        Ir64Block block = blockOf(0x9800,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x500, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0x1111, 0, true),
+                new Ir64Op.StoreExclusive(2, 3, 0, Ir64MemSize.WORD, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
     }
 }

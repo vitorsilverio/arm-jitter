@@ -14,16 +14,18 @@ import org.objectweb.asm.Opcodes;
 ///
 /// **Decisão D-ASM (ver `b6.4-aarch64-asm-backend.md`)**: para cada operação real do bloco
 /// (`Alu64`/`MoveWide`/`PcRelative`/`Branch64`/`CompareBranch64` do PR1; `Load64`/`Store64`/
-/// `LoadStorePair`/`LoadLiteral64`/`Svc` do PR2), o bytecode gerado RECONSTRÓI o record exato
+/// `LoadStorePair`/`LoadLiteral64`/`Svc` do PR2; `AluShiftedRegister`/`AluExtendedRegister`/
+/// `ConditionalSelect`/`Bitfield`/`MultiplyAccumulate`/`Divide`/`LoadExclusive`/`StoreExclusive`
+/// do PR3, fechando `Ir64Op.Kind` por completo), o bytecode gerado RECONSTRÓI o record exato
 /// (campos conhecidos em tempo de compilação) e chama {@link Ir64AsmRuntimeHelpers#executeOp} —
 /// o MESMO despacho usado pelo interpretador. Loads/stores/`Svc` não precisam de nenhum binding
 /// novo de `Aarch64GuestToHostMapper`: o acesso à memória e ao {@code Aarch64SvcHandler}
 /// acontece inteiramente DENTRO de {@code Ir64BlockExecutor#execute} (o mesmo caminho que o
 /// interpretador chama), então reconstruir o record e delegar já é suficiente — nenhuma
-/// instrução de memória nova é emitida por este compilador (PR2). `Cycle`
-/// é somado em tempo de COMPILAÇÃO (constante — nenhuma instrução do conjunto do PR1 pula seu
-/// próprio `Cycle`/`Fetch`, G4) e devolvido direto por `IRETURN`; `Fetch` emite uma chamada real
-/// (o custo de acesso à memória é dinâmico). Isto NÃO inlina aritmética em locais de
+/// instrução de memória nova é emitida por este compilador. `Cycle`
+/// é somado em tempo de COMPILAÇÃO (constante — nenhuma instrução dos conjuntos do PR1/PR2/PR3
+/// pula seu próprio `Cycle`/`Fetch`, G4) e devolvido direto por `IRETURN`; `Fetch` emite uma
+/// chamada real (o custo de acesso à memória é dinâmico). Isto NÃO inlina aritmética em locais de
 /// registrador — ver a Armadilha "não confundir backend ASM funcionando com backend ASM rápido"
 /// na spec: o ganho de performance de verdade fica para uma PR futura de registrador-cache.
 public final class Ir64BlockCompiler {
@@ -156,8 +158,16 @@ public final class Ir64BlockCompiler {
             case Ir64Op.LoadStorePair pair -> constructLoadStorePair(mv, pair);
             case Ir64Op.LoadLiteral64 loadLiteral -> constructLoadLiteral64(mv, loadLiteral);
             case Ir64Op.Svc svc -> constructSvc(mv, svc);
+            case Ir64Op.AluShiftedRegister aluShifted -> constructAluShiftedRegister(mv, aluShifted);
+            case Ir64Op.AluExtendedRegister aluExtended -> constructAluExtendedRegister(mv, aluExtended);
+            case Ir64Op.ConditionalSelect conditionalSelect -> constructConditionalSelect(mv, conditionalSelect);
+            case Ir64Op.Bitfield bitfield -> constructBitfield(mv, bitfield);
+            case Ir64Op.MultiplyAccumulate multiplyAccumulate -> constructMultiplyAccumulate(mv, multiplyAccumulate);
+            case Ir64Op.Divide divide -> constructDivide(mv, divide);
+            case Ir64Op.LoadExclusive loadExclusive -> constructLoadExclusive(mv, loadExclusive);
+            case Ir64Op.StoreExclusive storeExclusive -> constructStoreExclusive(mv, storeExclusive);
             default -> throw new IllegalStateException(
-                    "Ir64BlockCompiler (PR1/PR2) não suporta " + op.getClass().getSimpleName()
+                    "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
         }
     }
@@ -172,6 +182,11 @@ public final class Ir64BlockCompiler {
     private static final String IR64_ADDRESSING_MODE =
             "dev/vitorsilverio/armjitter/ir64/Ir64AddressingMode";
     private static final String IR64_EXTEND_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64ExtendType";
+    private static final String IR64_SHIFT_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64ShiftType";
+    private static final String IR64_ALU_EXTEND_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64AluExtendType";
+    private static final String IR64_CONDITIONAL_SELECT_OP =
+            "dev/vitorsilverio/armjitter/ir64/Ir64ConditionalSelectOp";
+    private static final String IR64_BITFIELD_OP = "dev/vitorsilverio/armjitter/ir64/Ir64BitfieldOp";
 
     private void constructAlu64(MethodVisitor mv, Ir64Op.Alu64 op) {
         String type = IR64_OP + "$Alu64";
@@ -316,6 +331,117 @@ public final class Ir64BlockCompiler {
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.immediate());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(I)V", false);
+    }
+
+    private void constructAluShiftedRegister(MethodVisitor mv, Ir64Op.AluShiftedRegister op) {
+        String type = IR64_OP + "$AluShiftedRegister";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitEnumConstant(mv, IR64_SHIFT_TYPE, op.shiftType().name());
+        mv.visitLdcInsn(op.shiftAmount());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.setFlags());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_ALU_OP + ";IIIL" + IR64_SHIFT_TYPE + ";IZZ)V", false);
+    }
+
+    private void constructAluExtendedRegister(MethodVisitor mv, Ir64Op.AluExtendedRegister op) {
+        String type = IR64_OP + "$AluExtendedRegister";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitEnumConstant(mv, IR64_ALU_EXTEND_TYPE, op.extendType().name());
+        mv.visitLdcInsn(op.shiftAmount());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.setFlags());
+        emitBoolean(mv, op.dstIsStackPointer());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_ALU_OP + ";IIIL" + IR64_ALU_EXTEND_TYPE + ";IZZZ)V", false);
+    }
+
+    private void constructConditionalSelect(MethodVisitor mv, Ir64Op.ConditionalSelect op) {
+        String type = IR64_OP + "$ConditionalSelect";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_CONDITIONAL_SELECT_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitBoolean(mv, op.wide());
+        emitEnumConstant(mv, IR64_CONDITION, op.condition().name());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_CONDITIONAL_SELECT_OP + ";IIIZL" + IR64_CONDITION + ";)V", false);
+    }
+
+    private void constructBitfield(MethodVisitor mv, Ir64Op.Bitfield op) {
+        String type = IR64_OP + "$Bitfield";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_BITFIELD_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src());
+        mv.visitLdcInsn(op.immr());
+        mv.visitLdcInsn(op.imms());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_BITFIELD_OP + ";IIIIZ)V", false);
+    }
+
+    private void constructMultiplyAccumulate(MethodVisitor mv, Ir64Op.MultiplyAccumulate op) {
+        String type = IR64_OP + "$MultiplyAccumulate";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.subtract());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        mv.visitLdcInsn(op.accumulator());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIIZ)V", false);
+    }
+
+    private void constructDivide(MethodVisitor mv, Ir64Op.Divide op) {
+        String type = IR64_OP + "$Divide";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.signed());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZ)V", false);
+    }
+
+    private void constructLoadExclusive(MethodVisitor mv, Ir64Op.LoadExclusive op) {
+        String type = IR64_OP + "$LoadExclusive";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        emitBoolean(mv, op.acquireRelease());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIL" + IR64_MEM_SIZE + ";Z)V", false);
+    }
+
+    private void constructStoreExclusive(MethodVisitor mv, Ir64Op.StoreExclusive op) {
+        String type = IR64_OP + "$StoreExclusive";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rs());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        emitBoolean(mv, op.acquireRelease());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIIL" + IR64_MEM_SIZE + ";Z)V", false);
     }
 
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {
