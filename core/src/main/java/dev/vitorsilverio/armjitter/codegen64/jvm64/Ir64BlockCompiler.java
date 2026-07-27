@@ -13,9 +13,14 @@ import org.objectweb.asm.Opcodes;
 /// B6.4 (PR1).
 ///
 /// **Decisão D-ASM (ver `b6.4-aarch64-asm-backend.md`)**: para cada operação real do bloco
-/// (`Alu64`/`MoveWide`/`PcRelative`/`Branch64`/`CompareBranch64`), o bytecode gerado RECONSTRÓI o
-/// record exato (campos conhecidos em tempo de compilação) e chama
-/// {@link Ir64AsmRuntimeHelpers#executeOp} — o MESMO despacho usado pelo interpretador. `Cycle`
+/// (`Alu64`/`MoveWide`/`PcRelative`/`Branch64`/`CompareBranch64` do PR1; `Load64`/`Store64`/
+/// `LoadStorePair`/`LoadLiteral64`/`Svc` do PR2), o bytecode gerado RECONSTRÓI o record exato
+/// (campos conhecidos em tempo de compilação) e chama {@link Ir64AsmRuntimeHelpers#executeOp} —
+/// o MESMO despacho usado pelo interpretador. Loads/stores/`Svc` não precisam de nenhum binding
+/// novo de `Aarch64GuestToHostMapper`: o acesso à memória e ao {@code Aarch64SvcHandler}
+/// acontece inteiramente DENTRO de {@code Ir64BlockExecutor#execute} (o mesmo caminho que o
+/// interpretador chama), então reconstruir o record e delegar já é suficiente — nenhuma
+/// instrução de memória nova é emitida por este compilador (PR2). `Cycle`
 /// é somado em tempo de COMPILAÇÃO (constante — nenhuma instrução do conjunto do PR1 pula seu
 /// próprio `Cycle`/`Fetch`, G4) e devolvido direto por `IRETURN`; `Fetch` emite uma chamada real
 /// (o custo de acesso à memória é dinâmico). Isto NÃO inlina aritmética em locais de
@@ -146,8 +151,13 @@ public final class Ir64BlockCompiler {
             case Ir64Op.PcRelative pcRelative -> constructPcRelative(mv, pcRelative);
             case Ir64Op.Branch64 branch -> constructBranch64(mv, branch);
             case Ir64Op.CompareBranch64 compareBranch -> constructCompareBranch64(mv, compareBranch);
+            case Ir64Op.Load64 load -> constructLoad64(mv, load);
+            case Ir64Op.Store64 store -> constructStore64(mv, store);
+            case Ir64Op.LoadStorePair pair -> constructLoadStorePair(mv, pair);
+            case Ir64Op.LoadLiteral64 loadLiteral -> constructLoadLiteral64(mv, loadLiteral);
+            case Ir64Op.Svc svc -> constructSvc(mv, svc);
             default -> throw new IllegalStateException(
-                    "Ir64BlockCompiler (PR1) não suporta " + op.getClass().getSimpleName()
+                    "Ir64BlockCompiler (PR1/PR2) não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
         }
     }
@@ -158,6 +168,10 @@ public final class Ir64BlockCompiler {
     private static final String IR64_CONDITION = "dev/vitorsilverio/armjitter/ir64/Ir64Condition";
     private static final String IR64_COMPARE_BRANCH_FORM =
             "dev/vitorsilverio/armjitter/ir64/Ir64CompareBranchForm";
+    private static final String IR64_MEM_SIZE = "dev/vitorsilverio/armjitter/ir64/Ir64MemSize";
+    private static final String IR64_ADDRESSING_MODE =
+            "dev/vitorsilverio/armjitter/ir64/Ir64AddressingMode";
+    private static final String IR64_EXTEND_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64ExtendType";
 
     private void constructAlu64(MethodVisitor mv, Ir64Op.Alu64 op) {
         String type = IR64_OP + "$Alu64";
@@ -227,8 +241,96 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_COMPARE_BRANCH_FORM + ";IZIZJ)V", false);
     }
 
+    /// `Load64`/`Store64` (`Ir64AddressingMode#REGISTER_OFFSET`) — `rn` é `SP`, `rm`/`extendType`
+    /// só têm sentido quando o modo é `REGISTER_OFFSET`; nos demais modos {@link Ir64ExtendType}
+    /// é `null` (ver o javadoc de {@link Ir64Op.Load64#extendType}), tratado por
+    /// {@link #emitEnumConstantOrNull}.
+    private void constructLoad64(MethodVisitor mv, Ir64Op.Load64 op) {
+        String type = IR64_OP + "$Load64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        emitBoolean(mv, op.signExtend());
+        emitBoolean(mv, op.wide());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitLdcInsn(op.rm());
+        emitEnumConstantOrNull(mv, IR64_EXTEND_TYPE, op.extendType());
+        mv.visitLdcInsn(op.shiftAmount());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIL" + IR64_MEM_SIZE + ";ZZL" + IR64_ADDRESSING_MODE + ";JIL" + IR64_EXTEND_TYPE + ";I)V",
+                false);
+    }
+
+    private void constructStore64(MethodVisitor mv, Ir64Op.Store64 op) {
+        String type = IR64_OP + "$Store64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        emitBoolean(mv, op.wide());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitLdcInsn(op.rm());
+        emitEnumConstantOrNull(mv, IR64_EXTEND_TYPE, op.extendType());
+        mv.visitLdcInsn(op.shiftAmount());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIL" + IR64_MEM_SIZE + ";ZL" + IR64_ADDRESSING_MODE + ";JIL" + IR64_EXTEND_TYPE + ";I)V",
+                false);
+    }
+
+    /// `LDP`/`STP` — nunca tem forma `REGISTER_OFFSET` (ver javadoc de
+    /// {@link Ir64Op.LoadStorePair}), então não carrega `rm`/`extendType`/`shiftAmount`.
+    private void constructLoadStorePair(MethodVisitor mv, Ir64Op.LoadStorePair op) {
+        String type = IR64_OP + "$LoadStorePair";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.load());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rt2());
+        mv.visitLdcInsn(op.rn());
+        emitBoolean(mv, op.wide());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(ZIIIZL" + IR64_ADDRESSING_MODE + ";J)V", false);
+    }
+
+    private void constructLoadLiteral64(MethodVisitor mv, Ir64Op.LoadLiteral64 op) {
+        String type = IR64_OP + "$LoadLiteral64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.address());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.signExtend());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IJZZ)V", false);
+    }
+
+    private void constructSvc(MethodVisitor mv, Ir64Op.Svc op) {
+        String type = IR64_OP + "$Svc";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.immediate());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(I)V", false);
+    }
+
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {
         mv.visitFieldInsn(Opcodes.GETSTATIC, enumInternalName, constantName, "L" + enumInternalName + ";");
+    }
+
+    /// Igual a {@link #emitEnumConstant}, mas aceita `enumConstant == null` (caso de
+    /// {@link Ir64Op.Load64#extendType()}/{@link Ir64Op.Store64#extendType()} fora do modo de
+    /// endereçamento {@code REGISTER_OFFSET}) — empilha `ACONST_NULL` nesse caso.
+    private void emitEnumConstantOrNull(MethodVisitor mv, String enumInternalName, Enum<?> enumConstant) {
+        if (enumConstant == null) {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        } else {
+            emitEnumConstant(mv, enumInternalName, enumConstant.name());
+        }
     }
 
     private void emitBoolean(MethodVisitor mv, boolean value) {

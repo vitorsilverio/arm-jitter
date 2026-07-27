@@ -289,11 +289,34 @@ diferentes apenas).
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
 abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
-real), B6.4 PR2/PR3 (AArch64 backend ASM — spec própria já escrita 2026-07-26,
-`trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md`; PR1 do esqueleto FECHADO na mesma sessão,
-ver histórico abaixo; PR2 = loads/stores/SVC nativos, PR3 = B6.3.1-B6.3.4 nativos + bench) e
-B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não escrita; ver
-`b6-aarch64.md`).
+real), B6.4 PR3 (AArch64 backend ASM — spec própria já escrita 2026-07-26,
+`trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md`; PR1 do esqueleto e PR2 de loads/stores/SVC
+FECHADOS, ver histórico abaixo; PR3 = B6.3.1-B6.3.4 nativos + registrador-cache de verdade +
+bench busybox-aarch64) e B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não
+escrita; ver `b6-aarch64.md`).
+
+- **B6.4 PR2** 🟡 (2026-07-26, mesma leva de sessões do PR1: loads/stores/SVC nativos):
+  estende `Ir64NativePolicy.supports` para `LOAD64`/`STORE64`/`LOAD_STORE_PAIR`/
+  `LOAD_LITERAL64`/`SVC`; `Ir64BlockCompiler` ganha `constructLoad64`/`constructStore64`/
+  `constructLoadStorePair`/`constructLoadLiteral64`/`constructSvc` — mesmo padrão D-ASM do PR1
+  (reconstrói o record `Ir64Op` exato, campo a campo, e delega a
+  `Ir64AsmRuntimeHelpers.executeOp`, o MESMO despacho do interpretador). **Achado que
+  simplificou o escopo em relação ao que a spec cogitava**: como o acesso à memória e ao
+  `Aarch64SvcHandler` já acontece inteiramente DENTRO de `Ir64BlockExecutor#execute` (mesmo
+  caminho pros dois backends), PR2 não precisou de NENHUM binding novo em
+  `Aarch64GuestToHostMapper` — não emite nenhuma instrução de acesso a memória, só reconstrói o
+  record e despacha. Único detalhe de bytecode novo: `Load64`/`Store64.extendType()` é `null`
+  fora de `REGISTER_OFFSET` — `emitEnumConstantOrNull` (`ACONST_NULL` vs `GETSTATIC` do enum)
+  cobre isso. Testes novos: `Ir64NativePolicyTest.supportsPr2OpSet`/`rejectsOpsOutsidePr2Scope`;
+  `BlockEquivalenceHarness64Test` ganha 7 testes novos cobrindo round-trip STR/LDR offset,
+  LDRSB sign-extend, writeback pre/post-index, endereçamento `REGISTER_OFFSET` (única forma que
+  carrega `rm`/`extendType`, exercita o `emitEnumConstantOrNull`), STP/LDP 64-bit round-trip,
+  `LDR (literal)`, e `SVC` (mesmo `Aarch64SvcHandler` instalado nos dois cores do par, prova que
+  o despacho reconstruído chega ao mesmo handler). `mvn -o test` verde (JBR 25, core 1188 +
+  truffle 13). gbaemu/ndsemu **não revalidados** (G5 não se aplica — nenhum arquivo 32-bit
+  tocado, mesmo precedente do PR1). **Próximo passo**: PR3 (B6.3.1-B6.3.4 nativos +
+  registrador-cache de verdade + bench busybox-aarch64, este último bloqueado no usuário —
+  mesma pendência 🧑 de B6.2/B6.3 abaixo) fica para sessão futura.
 
 - **B6.4 PR1** 🟡 (2026-07-26, rodada de spec + PR1 do esqueleto do backend ASM 64-bit):
   spec `trilha-b-arquiteturas/b6.4-aarch64-asm-backend.md` escrita e commitada separadamente
@@ -310,10 +333,10 @@ B6.5/B6.6 (AArch64 — escopo fechado no épico, spec própria ainda não escrit
   conjunto de ops da B6.1 (`Alu64`/`MoveWide`/`PcRelative`/`Branch64`/`CompareBranch64`/
   `Cycle`/`Fetch`). `mvn -o test` verde (1182 core + 13 truffle, 25 testes novos); gbaemu/ndsemu
   **não revalidados** (G5 não se aplica, nenhum arquivo 32-bit tocado — mesmo precedente de
-  B6.1-B6.3.4). **Próximo passo**: PR2 (loads/stores/SVC nativos) e PR3 (B6.3.1-B6.3.4 nativos +
-  registrador-cache de verdade + bench busybox-aarch64, este último bloqueado no usuário —
-  mesma pendência 🧑 de B6.2/B6.3 abaixo) ficam para sessões futuras, ver o arquivo da spec para
-  o detalhe de escopo de cada PR.
+  B6.1-B6.3.4). **Próximo passo** (na época): PR2 (loads/stores/SVC nativos) e PR3
+  (B6.3.1-B6.3.4 nativos + registrador-cache de verdade + bench busybox-aarch64) ficariam para
+  sessões futuras — **PR2 já fechou**, ver o bullet acima; PR3 segue pendente, ver o arquivo da
+  spec para o detalhe de escopo.
 
 **B6.3 decomposta em 4 sub-tasks (2026-07-24, rodada de spec) — TODAS ✅
 FECHADAS (2026-07-26)**: **B6.3.1** ✅ fechou (2026-07-24/25) — criou o

@@ -8,12 +8,16 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// {@link dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy} (32 bits), introduzido na task
 /// B6.4 (PR1).
 ///
-/// PR1 cobre só o conjunto de ops da B6.1 (reta + desvios):
+/// PR1 cobriu o conjunto de ops da B6.1 (reta + desvios):
 /// {@link Ir64Op.Kind#ALU64}/{@link Ir64Op.Kind#MOVE_WIDE}/{@link Ir64Op.Kind#PC_RELATIVE}/
 /// {@link Ir64Op.Kind#BRANCH64}/{@link Ir64Op.Kind#COMPARE_BRANCH64}/
-/// {@link Ir64Op.Kind#CYCLE}/{@link Ir64Op.Kind#FETCH}. Todo o resto (`Svc`, loads/stores da
-/// B6.2, o conjunto B6.3.1-B6.3.4) permanece fora até PR2/PR3 (ver
-/// `b6.4-aarch64-asm-backend.md`) — um bloco com qualquer op fora dessa lista cai inteiro no
+/// {@link Ir64Op.Kind#CYCLE}/{@link Ir64Op.Kind#FETCH}. PR2 acrescenta o conjunto da B6.2
+/// (loads/stores) + `Svc`: {@link Ir64Op.Kind#LOAD64}/{@link Ir64Op.Kind#STORE64}/
+/// {@link Ir64Op.Kind#LOAD_STORE_PAIR}/{@link Ir64Op.Kind#LOAD_LITERAL64}/
+/// {@link Ir64Op.Kind#SVC}. O conjunto B6.3.1-B6.3.4 (`AluShiftedRegister`/
+/// `AluExtendedRegister`/`ConditionalSelect`/`Bitfield`/`MultiplyAccumulate`/`Divide`/
+/// `LoadExclusive`/`StoreExclusive`) permanece fora até PR3 (ver `b6.4-aarch64-asm-backend.md`)
+/// — um bloco com qualquer op fora dessa lista cai inteiro no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter} (política
 /// `WHOLE_BLOCK`, único modo desta task — sem `PER_OP`/`FAIL_FAST` ainda).
 public final class Ir64NativePolicy {
@@ -39,7 +43,12 @@ public final class Ir64NativePolicy {
                  Ir64Op.Kind.BRANCH64,
                  Ir64Op.Kind.COMPARE_BRANCH64,
                  Ir64Op.Kind.CYCLE,
-                 Ir64Op.Kind.FETCH -> true;
+                 Ir64Op.Kind.FETCH,
+                 Ir64Op.Kind.LOAD64,
+                 Ir64Op.Kind.STORE64,
+                 Ir64Op.Kind.LOAD_STORE_PAIR,
+                 Ir64Op.Kind.LOAD_LITERAL64,
+                 Ir64Op.Kind.SVC -> true;
             default -> false;
         };
     }

@@ -28,10 +28,24 @@ class Ir64NativePolicyTest {
     }
 
     @Test
-    void rejectsOpsOutsidePr1Scope() {
-        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Svc(0)));
-        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Load64(
+    void supportsPr2OpSet() {
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Svc(0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Load64(
                 0, 31, Ir64MemSize.DOUBLEWORD, false, true,
                 dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, -1, null, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Store64(
+                0, 31, Ir64MemSize.WORD, true,
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, -1, null, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadStorePair(
+                true, 0, 1, 31, true,
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadLiteral64(0, 0x1000L, true, false)));
+    }
+
+    @Test
+    void rejectsOpsOutsidePr2Scope() {
+        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Bitfield(
+                dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp.UBFM, 0, 1, 0, 7, true)));
+        assertFalse(Ir64NativePolicy.supports(new Ir64Op.Divide(true, 0, 1, 2, true)));
     }
 }

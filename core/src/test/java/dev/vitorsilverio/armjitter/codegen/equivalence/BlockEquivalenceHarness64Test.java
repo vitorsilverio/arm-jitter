@@ -4,11 +4,15 @@ import dev.vitorsilverio.armjitter.codegen64.Asm64CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64SvcHandler;
+import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -202,5 +206,133 @@ class BlockEquivalenceHarness64Test {
         for (Ir64Op op : ops) {
             assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
         }
+    }
+
+    // ---- PR2: Load64/Store64/LoadStorePair/LoadLiteral64/Svc ----
+
+    @Test
+    void listOfPr2KindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.Svc(0),
+                new Ir64Op.Load64(0, 1, Ir64MemSize.WORD, false, true,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.Store64(0, 1, Ir64MemSize.WORD, true,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.LoadStorePair(true, 0, 1, 2, true, Ir64AddressingMode.OFFSET, 0),
+                new Ir64Op.LoadLiteral64(0, 0x1000L, true, false));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    /// `STR`/`LDR` (offset imediato) round-trip: escreve `X1` em `[X0]` e relê em `X2` — cobre a
+    /// forma de endereçamento mais comum ({@link Ir64AddressingMode#OFFSET}, sem writeback).
+    @Test
+    void storeThenLoadOffsetRoundTrip() {
+        Ir64Block block = blockOf(0x1000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x100, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0xABCD, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.Load64(2, 0, Ir64MemSize.WORD, false, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LDRSB` (sign-extend): escreve um byte `0xFF` e relê estendendo o sinal para `X` completo
+    /// (`-1` em complemento de dois) — prova que {@link Ir64Op.Load64#signExtend} é respeitado
+    /// identicamente pelos dois backends.
+    @Test
+    void loadSignedByteSignExtends() {
+        Ir64Block block = blockOf(0x2000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x110, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0xFF, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.BYTE, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.Load64(2, 0, Ir64MemSize.BYTE, true, true,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// Pré-índice e pós-índice: prova que o writeback de `Rn|SP` (mesmo valor final em ambos os
+    /// backends) acontece igual — armadilha clássica de load/store indexado (G4 não aplica aqui,
+    /// mas o writeback em si é um efeito colateral fácil de esquecer replicar).
+    @Test
+    void storePreAndPostIndexWriteback() {
+        Ir64Block preIndex = blockOf(0x3000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x120, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x55, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.PRE_INDEX, 8, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, preIndex, pair());
+
+        Ir64Block postIndex = blockOf(0x4000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x130, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x66, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.POST_INDEX, 8, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, postIndex, pair());
+    }
+
+    /// {@link Ir64AddressingMode#REGISTER_OFFSET}: endereço = `Rn + extend(Rm)` — a única forma
+    /// que carrega {@link Ir64Op.Load64#rm}/{@link Ir64Op.Load64#extendType} (campos `null`/`-1`
+    /// nos demais testes acima; este cobre o caminho onde o compilador ASM precisa reconstruir um
+    /// enum possivelmente-`null` corretamente, ver {@code Ir64BlockCompiler#emitEnumConstantOrNull}).
+    @Test
+    void loadStoreRegisterOffsetAddressing() {
+        Ir64Block block = blockOf(0x5000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x140, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0x8, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x77, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.REGISTER_OFFSET, 0, 3, Ir64ExtendType.LSL, 0),
+                new Ir64Op.Load64(2, 0, Ir64MemSize.WORD, false, false,
+                        Ir64AddressingMode.REGISTER_OFFSET, 0, 3, Ir64ExtendType.LSL, 0));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `STP`/`LDP` round-trip de 64 bits — idioma de prólogo/epílogo mais comum de binários A64
+    /// reais.
+    @Test
+    void loadStorePairRoundTrip() {
+        Ir64Block block = blockOf(0x6000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x200, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x11, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x22, 0, true),
+                new Ir64Op.LoadStorePair(false, 1, 2, 0, true, Ir64AddressingMode.OFFSET, 0),
+                new Ir64Op.LoadStorePair(true, 3, 4, 0, true, Ir64AddressingMode.OFFSET, 0));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LDR (literal)`: lê um endereço absoluto pré-preenchido por um `STR` anterior no mesmo
+    /// bloco — prova {@link Ir64Op.LoadLiteral64} sem depender de um decoder real montando o
+    /// deslocamento relativo ao PC (fora do escopo aqui, já coberto pelos corpus tests do
+    /// decoder).
+    @Test
+    void loadLiteralReadsAbsoluteAddress() {
+        Ir64Block block = blockOf(0x7000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x300, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x1234, 0, true),
+                new Ir64Op.Store64(1, 0, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.LoadLiteral64(2, 0x300L, false, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `SVC`: despacha para o {@link Aarch64SvcHandler} instalado no core — instala o MESMO
+    /// handler (grava o imediato em `X0`) nos dois cores do par para provar que o dispatch do
+    /// backend ASM (reconstrução do record `Svc` + `Ir64BlockExecutor#executeOp`) chega ao mesmo
+    /// handler que o interpretado.
+    @Test
+    void svcDispatchesToInstalledHandler() {
+        Ir64Block block = blockOf(0x8000, new Ir64Op.Svc(0x42));
+        harness.assertEquivalent(interpreted, asm, block, () -> {
+            Aarch64SvcHandler handler = (core, immediate) -> core.setX(0, immediate);
+            Aarch64Core reference = newCore();
+            reference.setSvcHandler(handler);
+            Aarch64Core candidate = newCore();
+            candidate.setSvcHandler(handler);
+            return new EquivalencePair64(reference, candidate);
+        });
     }
 }
