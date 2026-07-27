@@ -170,3 +170,11 @@ stlxr w28, w29, [x30]
 stlxr w0, x1, [x2]
 stlxrb w3, w4, [x5]
 stlxrh w6, w7, [x8]
+
+// ── B6.6.1: MRS/MSR (register) — registradores de sistema EL1 ──────────────────────────
+mrs x0, sctlr_el1
+msr sctlr_el1, x1
+mrs x2, ttbr0_el1
+msr ttbr0_el1, x3
+mrs x4, vbar_el1
+msr vbar_el1, x5

@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
@@ -158,6 +159,58 @@ public final class Aarch64Decoder {
     private static final int EXCEPTION_GEN_OPC_SVC = 0b000;
     private static final int EXCEPTION_GEN_LOW5_MASK = 0b1_1111;
     private static final int EXCEPTION_GEN_SVC_LOW5_FIXED = 0b0_0001;
+
+    // ── MRS/MSR (register) — `SYS` family (B6.6.1, ARM DDI 0487 C5.2.3 / QEMU a64.decode `SYS`):
+    // ── prefixo fixo(31:22)=1101010100 L(21) op0(20:19) op1(18:16) CRn(15:12) CRm(11:8) op2(7:5)
+    // ── Rt(4:0). `op0=0b00` é outro subgrupo (hint/barreira/MSR-imediato), fora do escopo desta
+    // ── task — só `op0 != 0` (`SYS`/`SYSL`/`MRS`/`MSR`) é reconhecido aqui.
+    private static final int SYSTEM_REGISTER_FIXED_SHIFT = 22;
+    private static final int SYSTEM_REGISTER_FIXED_10BIT_MASK = 0b11_1111_1111;
+    private static final int SYSTEM_REGISTER_FIXED_PATTERN = 0b11_0101_0100;
+    private static final int SYSTEM_REGISTER_L_SHIFT = 21;
+    private static final int SYSTEM_REGISTER_OP0_SHIFT = 19;
+    private static final int SYSTEM_REGISTER_OP0_MASK = 0b11;
+    private static final int SYSTEM_REGISTER_OP1_SHIFT = 16;
+    private static final int SYSTEM_REGISTER_OP1_MASK = 0b111;
+    private static final int SYSTEM_REGISTER_CRN_SHIFT = 12;
+    private static final int SYSTEM_REGISTER_CRN_MASK = 0b1111;
+    private static final int SYSTEM_REGISTER_CRM_SHIFT = 8;
+    private static final int SYSTEM_REGISTER_CRM_MASK = 0b1111;
+    private static final int SYSTEM_REGISTER_OP2_SHIFT = 5;
+    private static final int SYSTEM_REGISTER_OP2_MASK = 0b111;
+
+    // ── Registradores de sistema cobertos (Fatos de referência #2 da task B6.6.1): todos
+    // ── `op0=3`/`op1=0` (registradores "gerais" de EL1) — valores conferidos contra
+    // ── `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
+    private static final int SYSREG_OP0_EL1 = 3;
+    private static final int SYSREG_OP1_EL1 = 0;
+    private static final int SYSREG_CRN_SCTLR = 1;
+    private static final int SYSREG_CRM_SCTLR = 0;
+    private static final int SYSREG_OP2_SCTLR = 0;
+    private static final int SYSREG_CRN_TTBR0 = 2;
+    private static final int SYSREG_CRM_TTBR0 = 0;
+    private static final int SYSREG_OP2_TTBR0 = 0;
+    private static final int SYSREG_CRN_TCR = 2;
+    private static final int SYSREG_CRM_TCR = 0;
+    private static final int SYSREG_OP2_TCR = 2;
+    private static final int SYSREG_CRN_MAIR = 10;
+    private static final int SYSREG_CRM_MAIR = 2;
+    private static final int SYSREG_OP2_MAIR = 0;
+    private static final int SYSREG_CRN_ESR = 5;
+    private static final int SYSREG_CRM_ESR = 2;
+    private static final int SYSREG_OP2_ESR = 0;
+    private static final int SYSREG_CRN_FAR = 6;
+    private static final int SYSREG_CRM_FAR = 0;
+    private static final int SYSREG_OP2_FAR = 0;
+    private static final int SYSREG_CRN_VBAR = 12;
+    private static final int SYSREG_CRM_VBAR = 0;
+    private static final int SYSREG_OP2_VBAR = 0;
+    private static final int SYSREG_CRN_ELR = 4;
+    private static final int SYSREG_CRM_ELR = 0;
+    private static final int SYSREG_OP2_ELR = 1;
+    private static final int SYSREG_CRN_SPSR = 4;
+    private static final int SYSREG_CRM_SPSR = 0;
+    private static final int SYSREG_OP2_SPSR = 0;
 
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
@@ -844,8 +897,13 @@ public final class Aarch64Decoder {
         if (exceptionGenFixed == EXCEPTION_GEN_FIXED_PATTERN) {
             return decodeExceptionGenerating(word, address);
         }
-        // System instructions (barreiras, hints, MSR/MRS...) e demais formas do grupo Branch/
-        // Exception/System: fora da fatia B6.1.
+        int systemRegisterFixed = (word >>> SYSTEM_REGISTER_FIXED_SHIFT) & SYSTEM_REGISTER_FIXED_10BIT_MASK;
+        int systemRegisterOp0 = (word >>> SYSTEM_REGISTER_OP0_SHIFT) & SYSTEM_REGISTER_OP0_MASK;
+        if (systemRegisterFixed == SYSTEM_REGISTER_FIXED_PATTERN && systemRegisterOp0 != 0) {
+            return decodeSystemRegister(word, address);
+        }
+        // Demais formas do grupo Branch/Exception/System (hints, barreiras, MSR-imediato,
+        // ERET/DRPS, SYS/SYSL com op0=1): fora da fatia B6.1/B6.6.1.
         throw unsupported(word, address);
     }
 
@@ -919,6 +977,65 @@ public final class Aarch64Decoder {
         }
         int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
         return new Ir64Op.Svc(imm16);
+    }
+
+    /// `MRS`/`MSR (register)` (B6.6.1) — resolve a 5-upla `op0:op1:CRn:CRm:op2` crua para um
+    /// {@link Aarch64SystemRegisterId} AQUI (decisão D1 da task: resolução única no decoder,
+    /// nunca no executor a partir dos bits crus). Não existe forma `W`: o bit mais alto da
+    /// instrução é parte do prefixo fixo (não um `sf`), então `Rt` é sempre `X`.
+    private Ir64Op decodeSystemRegister(int word, long address) {
+        boolean read = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
+        int op0 = (word >>> SYSTEM_REGISTER_OP0_SHIFT) & SYSTEM_REGISTER_OP0_MASK;
+        int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
+        int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
+        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        Aarch64SystemRegisterId register = decodeSystemRegisterId(op0, op1, crn, crm, op2);
+        if (register == null) {
+            // Combinação op0:op1:CRn:CRm:op2 válida arquiteturalmente, mas fora do subconjunto
+            // desta task (não é UNDEFINED real — ver Armadilhas da task B6.6.1).
+            throw unsupported(word, address);
+        }
+        return new Ir64Op.SystemRegister(read, register, rt);
+    }
+
+    /// Tabela de registradores de sistema cobertos (Fatos de referência #2 da task B6.6.1) — só
+    /// `op0=3`/`op1=0` (EL1 "geral"); qualquer outra combinação devolve `null` (não implementada
+    /// ainda, tratado pelo chamador como {@link UnsupportedOperationException}).
+    private static Aarch64SystemRegisterId decodeSystemRegisterId(
+            int op0, int op1, int crn, int crm, int op2) {
+        if (op0 != SYSREG_OP0_EL1 || op1 != SYSREG_OP1_EL1) {
+            return null;
+        }
+        if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_SCTLR) {
+            return Aarch64SystemRegisterId.SCTLR_EL1;
+        }
+        if (crn == SYSREG_CRN_TTBR0 && crm == SYSREG_CRM_TTBR0 && op2 == SYSREG_OP2_TTBR0) {
+            return Aarch64SystemRegisterId.TTBR0_EL1;
+        }
+        if (crn == SYSREG_CRN_TCR && crm == SYSREG_CRM_TCR && op2 == SYSREG_OP2_TCR) {
+            return Aarch64SystemRegisterId.TCR_EL1;
+        }
+        if (crn == SYSREG_CRN_MAIR && crm == SYSREG_CRM_MAIR && op2 == SYSREG_OP2_MAIR) {
+            return Aarch64SystemRegisterId.MAIR_EL1;
+        }
+        if (crn == SYSREG_CRN_ESR && crm == SYSREG_CRM_ESR && op2 == SYSREG_OP2_ESR) {
+            return Aarch64SystemRegisterId.ESR_EL1;
+        }
+        if (crn == SYSREG_CRN_FAR && crm == SYSREG_CRM_FAR && op2 == SYSREG_OP2_FAR) {
+            return Aarch64SystemRegisterId.FAR_EL1;
+        }
+        if (crn == SYSREG_CRN_VBAR && crm == SYSREG_CRM_VBAR && op2 == SYSREG_OP2_VBAR) {
+            return Aarch64SystemRegisterId.VBAR_EL1;
+        }
+        if (crn == SYSREG_CRN_ELR && crm == SYSREG_CRM_ELR && op2 == SYSREG_OP2_ELR) {
+            return Aarch64SystemRegisterId.ELR_EL1;
+        }
+        if (crn == SYSREG_CRN_SPSR && crm == SYSREG_CRM_SPSR && op2 == SYSREG_OP2_SPSR) {
+            return Aarch64SystemRegisterId.SPSR_EL1;
+        }
+        return null;
     }
 
     private static long signExtend(long value, int bits) {

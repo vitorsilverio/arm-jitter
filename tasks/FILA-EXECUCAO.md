@@ -286,8 +286,23 @@ diferentes apenas).
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
-| P2 | **B6.6.1** — AArch64 acesso a registrador de sistema (MRS/MSR) | `trilha-b-arquiteturas/b6.6.1-aarch64-system-register-access.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.2 (repos diferentes de sessão, mesmo repo arm-jitter — não rodar em paralelo com B6.6.2 na MESMA sessão, regra 6 acima); pré-requisito da MMU sem equivalente 32-bit; também é o prerequisito de FPCR/FPSR que B6.5.1 (fechada) deixou como pendência explícita |
-| P3 | **B6.6.2** — AArch64 `TranslatingAddressSpace64` (page-walk VMSA64) | `trilha-b-arquiteturas/b6.6.2-aarch64-translating-address-space.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.1 (só depende de `AddressSpace64`/B6.1) — mesma ressalva de sessão única por repo da linha acima |
+| P3 | **B6.6.2** — AArch64 `TranslatingAddressSpace64` (page-walk VMSA64) | `trilha-b-arquiteturas/b6.6.2-aarch64-translating-address-space.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.1 (✅, ver histórico abaixo) — só depende de `AddressSpace64`/B6.1 |
+
+- **B6.6.1** ✅ (2026-07-27, 1ª das 6 sub-tasks de B6.6, pré-requisito estrutural da MMU v8 —
+  A64 não tem `MCR`/`MRC`): `Ir64Op.SystemRegister` (`Kind=20`) + `Aarch64SystemRegisterId` (9
+  registradores EL1 — `SCTLR`/`TTBR0`/`TCR`/`MAIR`/`ESR`/`FAR`/`VBAR`/`ELR`/`SPSR`, `FPCR`/`FPSR`
+  fora por decisão de fronteira de épico) + `Aarch64SystemRegisterBus` novo em `core64/`
+  (sibling de `CoprocessorBus` 32-bit) + decoder `MRS`/`MSR (register)` (encoding `SYS`
+  verificado contra `aarch64-none-elf-as`/`objdump` real antes de codificar) resolvendo a
+  5-upla `op0:op1:CRn:CRm:op2` para o enum NO DECODER (não no executor). Registrador sem
+  hospedeiro instalado lança `UnsupportedOperationException` do próprio executor (`Aarch64Core`
+  ainda não tem modelo de exceção síncrona para Undefined-ao-guest como o mundo 32-bit).
+  Corpus real estendido (offsets `0x26c`-`0x280`). `mvn -o test` verde (core 1221 + truffle
+  13); gbaemu/ndsemu não revalidados (G5 não se aplica, nenhum arquivo 32-bit tocado). Mecanismo
+  pronto para B6.6.3 instalar um bus real de MMU sem tocar decoder/IR/executor de novo. Ver
+  índice do `tasks/README.md` para o detalhe completo. **Próximo passo**: B6.6.2
+  (`TranslatingAddressSpace64`, independente) segue na tabela executável acima; B6.6.3
+  (`Aarch64VmsaSystemRegisters` ligando os dois) só fica elegível quando ambas fecharem.
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
 abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain

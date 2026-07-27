@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
@@ -1562,5 +1563,89 @@ class Aarch64DecoderCorpusTest {
             assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0),
                     () -> "form fora de escopo deveria ser unsupported: 0x" + Integer.toHexString(encoding));
         }
+    }
+
+    // ── B6.6.1: MRS/MSR (register) — offsets 0x26c+ ────────────────────────────────────────────
+
+    @Test
+    void mrsSctlrEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x26c);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.SCTLR_EL1, op.register());
+        assertEquals(0, op.rt());
+    }
+
+    @Test
+    void msrSctlrEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x270);
+        assertFalse(op.read());
+        assertEquals(Aarch64SystemRegisterId.SCTLR_EL1, op.register());
+        assertEquals(1, op.rt());
+    }
+
+    @Test
+    void mrsTtbr0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x274);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.TTBR0_EL1, op.register());
+        assertEquals(2, op.rt());
+    }
+
+    @Test
+    void msrTtbr0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x278);
+        assertFalse(op.read());
+        assertEquals(Aarch64SystemRegisterId.TTBR0_EL1, op.register());
+        assertEquals(3, op.rt());
+    }
+
+    @Test
+    void mrsVbarEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x27c);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.VBAR_EL1, op.register());
+        assertEquals(4, op.rt());
+    }
+
+    @Test
+    void msrVbarEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x280);
+        assertFalse(op.read());
+        assertEquals(Aarch64SystemRegisterId.VBAR_EL1, op.register());
+        assertEquals(5, op.rt());
+    }
+
+    @Test
+    void systemRegisterCombinationOutsideCoveredListThrows() {
+        // mrs x0, sctlr_el1 (offset 0x26c) com CRn forçado para 3 (op1=0/CRm=0/op2=0): nenhum
+        // registrador da lista coberta usa essa combinação — não implementado ainda, não é
+        // UNDEFINED real (Fatos de referência #2/Armadilhas da task).
+        int word = 0xd5381000 | (3 << 12); // CRn=1 -> CRn=3 (nenhum registrador coberto usa CRn=3)
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    @Test
+    void systemRegisterOp0ZeroIsOutOfScope() {
+        // op0=0b00 (bits20:19) é o subgrupo hint/barreira/MSR-imediato, não SYS/MRS/MSR — mesmo
+        // prefixo fixo(31:22), mas fora do escopo desta task (Fatos de referência #1/#3).
+        int word = 0xd5381000 & ~(0b11 << 19); // zera op0
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    @Test
+    void systemRegisterOp0OneSysFormIsOutOfScope() {
+        // op0=1 (SYS/SYSL — TLBI/IC/DC/AT) é uma família de instruções diferente de MRS/MSR de
+        // registrador nomeado; fora do escopo desta task (Fatos de referência #2).
+        int word = (0xd5381000 & ~(0b11 << 19)) | (0b01 << 19);
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
 }

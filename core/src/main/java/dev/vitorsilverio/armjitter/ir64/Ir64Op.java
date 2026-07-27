@@ -26,7 +26,8 @@ public sealed interface Ir64Op permits
         Ir64Op.Svc, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.Load64, Ir64Op.Store64,
         Ir64Op.LoadStorePair, Ir64Op.LoadLiteral64, Ir64Op.AluShiftedRegister,
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
-        Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive {
+        Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
+        Ir64Op.SystemRegister {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -58,6 +59,7 @@ public sealed interface Ir64Op permits
         public static final int DIVIDE = 17;
         public static final int LOAD_EXCLUSIVE = 18;
         public static final int STORE_EXCLUSIVE = 19;
+        public static final int SYSTEM_REGISTER = 20;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -538,5 +540,22 @@ public sealed interface Ir64Op permits
             /// `true` para `STLXR` (bit `lasr`=1); `false` para `STXR`.
             boolean acquireRelease) implements Ir64Op {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
+    }
+
+    /// `MRS`/`MSR (register)` (`ARM DDI 0487 C5.2.3`, B6.6.1) — leitura/escrita de um registrador
+    /// de sistema nomeado. O registrador é identificado pela 5-upla `op0:op1:CRn:CRm:op2` do
+    /// encoding, já resolvida pelo DECODER em {@link Aarch64SystemRegisterId} (nunca pelo
+    /// executor a partir dos bits crus). Não existe forma `W`: o bit mais alto da instrução é
+    /// parte do prefixo fixo do encoding (não um `sf`), então `Rt` é sempre o registrador `X`
+    /// completo — `31` em {@link #rt} é `XZR` (`MRS` descarta a escrita; `MSR` lê `0`).
+    record SystemRegister(
+            /// `true` para `MRS` (leitura, `L=1`); `false` para `MSR` (escrita, `L=0`).
+            boolean read,
+            /// Registrador de sistema identificado pelo decoder.
+            Aarch64SystemRegisterId register,
+            /// Registrador geral envolvido: destino em `MRS`, origem em `MSR` (índice `0`-`31`;
+            /// `31` é `XZR`).
+            int rt) implements Ir64Op {
+        @Override public int kind() { return Kind.SYSTEM_REGISTER; }
     }
 }

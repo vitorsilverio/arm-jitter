@@ -42,6 +42,9 @@ public final class Aarch64Core {
     /// {@link dev.vitorsilverio.armjitter.core.ArmCore} (sem flag de presença; quem gateia é o
     /// decoder por feature quando B6.5.3 chegar).
     private final Aarch64FpRegisters fp = new Aarch64FpRegisters();
+    /// Barramento de registrador de sistema `MRS`/`MSR` (B6.6.1) — sem hospedeiro por padrão (ver
+    /// {@link Aarch64SystemRegisterBus#none()}); B6.6.3 instala um real de MMU.
+    private Aarch64SystemRegisterBus systemRegisterBus = Aarch64SystemRegisterBus.none();
 
     /// Cria um core conectado a uma memória de 64 bits. Estado inicial: todos os registradores
     /// zerados, `PC = 0`, `PSTATE` zerado.
@@ -204,6 +207,17 @@ public final class Aarch64Core {
     /// Tamanho em bytes marcado no monitor de exclusividade (0 quando aberto).
     public int exclusiveMonitorSizeBytes() {
         return exclusiveMonitor.sizeBytes(this);
+    }
+
+    /// Retorna o barramento de registrador de sistema instalado (padrão:
+    /// {@link Aarch64SystemRegisterBus#none()}).
+    public Aarch64SystemRegisterBus systemRegisterBus() {
+        return systemRegisterBus;
+    }
+
+    /// Instala o barramento de registrador de sistema usado pelo host (ex. MMU v8, B6.6.3).
+    public void setSystemRegisterBus(Aarch64SystemRegisterBus systemRegisterBus) {
+        this.systemRegisterBus = Objects.requireNonNull(systemRegisterBus, "systemRegisterBus");
     }
 
     private static void checkRegisterIndex(int index) {

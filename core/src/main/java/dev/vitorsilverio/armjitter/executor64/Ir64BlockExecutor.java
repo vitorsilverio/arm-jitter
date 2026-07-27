@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
@@ -170,6 +171,7 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.DIVIDE -> executeDivide(core, (Ir64Op.Divide) op);
             case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (Ir64Op.LoadExclusive) op);
             case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (Ir64Op.StoreExclusive) op);
+            case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -524,6 +526,28 @@ public final class Ir64BlockExecutor {
         long value = core.xForWidth(op.rt(), op.size() == Ir64MemSize.DOUBLEWORD);
         writeMemory(core, address, op.size(), value);
         core.setXForWidth(op.rs(), 0L, false);
+        return false;
+    }
+
+    /// `MRS`/`MSR (register)` (B6.6.1) — delega ao {@link Aarch64SystemRegisterBus} instalado
+    /// (D2 da task); registrador sem hospedeiro que o {@link Aarch64SystemRegisterBus#handles}
+    /// devolve `false` lança {@link UnsupportedOperationException} aqui mesmo (mesmo padrão de
+    /// "sem hospedeiro" de {@link Aarch64SystemRegisterBus#none()} — checado explicitamente antes
+    /// de chamar `read`/`write`, não só confiando na exceção default deles). Não existe forma
+    /// `W` (ver {@link Ir64Op.SystemRegister} javadoc): `MRS` sempre grava `X` completo via
+    /// {@link Aarch64Core#setX}; `MSR` sempre lê `X` completo via {@link Aarch64Core#x} (que já
+    /// devolve `0` para `rt == 31`, `XZR`).
+    private boolean executeSystemRegister(Aarch64Core core, Ir64Op.SystemRegister op) {
+        Aarch64SystemRegisterBus bus = core.systemRegisterBus();
+        if (!bus.handles(op.register())) {
+            throw new UnsupportedOperationException(
+                    "AArch64: registrador de sistema sem hospedeiro instalado: " + op.register());
+        }
+        if (op.read()) {
+            core.setX(op.rt(), bus.read(op.register()));
+        } else {
+            bus.write(op.register(), core.x(op.rt()));
+        }
         return false;
     }
 

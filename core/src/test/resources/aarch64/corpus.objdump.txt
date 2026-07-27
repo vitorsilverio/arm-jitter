@@ -164,3 +164,9 @@ Disassembly of section .text:
  260:	c800fc41 	stlxr	w0, x1, [x2]
  264:	0803fca4 	stlxrb	w3, w4, [x5]
  268:	4806fd07 	stlxrh	w6, w7, [x8]
+ 26c:	d5381000 	mrs	x0, sctlr_el1
+ 270:	d5181001 	msr	sctlr_el1, x1
+ 274:	d5382002 	mrs	x2, ttbr0_el1
+ 278:	d5182003 	msr	ttbr0_el1, x3
+ 27c:	d538c004 	mrs	x4, vbar_el1
+ 280:	d518c005 	msr	vbar_el1, x5
