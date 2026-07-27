@@ -286,21 +286,34 @@ diferentes apenas).
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
-| P2 | **B6.5.1** — AArch64 banco de registradores FP escalar | `trilha-b-arquiteturas/b6.5.1-aarch64-fp-register-bank.md` | arm-jitter | B6.1 ✅ | executável agora — só estado (`Aarch64FpRegisters`), zero risco de decode; 1ª das 4 sub-tasks de B6.5 (rodada de spec 2026-07-26) |
-| P3 | **B6.6.1** — AArch64 acesso a registrador de sistema (MRS/MSR) | `trilha-b-arquiteturas/b6.6.1-aarch64-system-register-access.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.5.1/B6.6.2 (repos diferentes de sessão, mesmo repo arm-jitter — não rodar em paralelo com B6.5.1/B6.6.2 na MESMA sessão, regra 6 acima); pré-requisito da MMU sem equivalente 32-bit |
-| P4 | **B6.6.2** — AArch64 `TranslatingAddressSpace64` (page-walk VMSA64) | `trilha-b-arquiteturas/b6.6.2-aarch64-translating-address-space.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.1 (só depende de `AddressSpace64`/B6.1) — mesma ressalva de sessão única por repo da linha acima |
+| P2 | **B6.6.1** — AArch64 acesso a registrador de sistema (MRS/MSR) | `trilha-b-arquiteturas/b6.6.1-aarch64-system-register-access.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.2 (repos diferentes de sessão, mesmo repo arm-jitter — não rodar em paralelo com B6.6.2 na MESMA sessão, regra 6 acima); pré-requisito da MMU sem equivalente 32-bit; também é o prerequisito de FPCR/FPSR que B6.5.1 (fechada) deixou como pendência explícita |
+| P3 | **B6.6.2** — AArch64 `TranslatingAddressSpace64` (page-walk VMSA64) | `trilha-b-arquiteturas/b6.6.2-aarch64-translating-address-space.md` | arm-jitter | B6.1 ✅ | executável agora, independente de B6.6.1 (só depende de `AddressSpace64`/B6.1) — mesma ressalva de sessão única por repo da linha acima |
 
 Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
 abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
 real). B6.4 (backend ASM 64-bit) fechou os 3 PRs (ver histórico abaixo) — só resta,
 como pendência EXPLÍCITA fora do escopo de qualquer PR (registrador-cache sem consumidor A64
 medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a seção 🧑 abaixo.
-B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — B6.5.1 já está na tabela
-executável acima (P2); B6.5.2-B6.5.4 entram na fila conforme suas dependências fecharem. B6.6
-(MMU v8 + hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1/B6.6.2 já estão
-na tabela executável acima (P3/P4); B6.6.3-B6.6.5 entram conforme dependências fecharem; B6.6.6
+B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada
+(2026-07-26, ver histórico abaixo)**; B6.5.2 (IR+interpretador) fica elegível para a fila assim
+que o usuário priorizar (independente de B6.6.1/B6.6.2, só depende de B6.5.1). B6.6 (MMU v8 +
+hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1/B6.6.2 já estão na tabela
+executável acima (P2/P3); B6.6.3-B6.6.5 entram conforme dependências fecharem; B6.6.6
 (hospedeiro `virt64`) já nasce bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para
 o detalhe completo de cada sub-task.
+
+- **B6.5.1** ✅ (2026-07-26, 1ª das 4 sub-tasks de B6.5): `core64/Aarch64FpRegisters.java` novo —
+  banco `long[32]` (`V0`-`V31`, só bits 63:0). **Achado que muda a forma em relação ao
+  precedente VFP32**: em A64 `Sn`/`Dn` são a MESMA célula de armazenamento (não um par de
+  índices independentes como `VfpRegisters`), e escrever `Sn` ZERA os 32 bits altos da célula
+  ("SIMD&FP destructive write" — o oposto do comportamento VFP32). `FPCR`/`FPSR` deliberadamente
+  fora de escopo (dependem do mecanismo `MRS`/`MSR` que só B6.6.1 introduz) — modo de
+  arredondamento fixo em round-to-nearest, sem flush-to-zero. `Aarch64Core` ganha `fp()` (sempre
+  alocado); `Aarch64CpuSnapshot` estendido com o banco `V` completo para o harness de
+  equivalência de B6.5.4 pegar divergência de FP. `mvn -o test` verde (JBR 25, core 1206 +
+  truffle 13). G5 não se aplica (pacote aditivo, nenhum arquivo 32-bit tocado). **Próximo
+  passo**: B6.5.2 (IR+interpretador escalar FMOV/FADD/FMUL/FDIV/FCMP/FCVT) fica para sessão
+  futura.
 
 - **B6.4 PR3** ✅ (2026-07-26, terceira e última PR do backend ASM 64-bit — fecha o épico B6.4
   do lado de codegen): estende `Ir64NativePolicy`/`Ir64BlockCompiler` para o conjunto
