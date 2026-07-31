@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.vitorsilverio</groupId>
+        <artifactId>arm-jitter-parent</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>arm-jitter-capi</artifactId>
+    <packaging>jar</packaging>
+    <name>arm-jitter-capi</name>
+    <description>Biblioteca nativa (.dll/.so) do arm-jitter com API C (task A9, PR1: backend
+        interpretado), via GraalVM native-image --shared. Módulo inerte no build padrão: o
+        `mvn test` normal não exige GraalVM instalado, só o perfil `native-lib`.</description>
+
+    <properties>
+        <graal.sdk.version>25.0.3</graal.sdk.version>
+        <native.maven.plugin.version>0.11.1</native.maven.plugin.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.vitorsilverio</groupId>
+            <artifactId>arm-jitter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- @CEntryPoint/IsolateThread/CCharPointer etc.: biblioteca leve, compila com
+             qualquer JDK (não exige GraalVM) — só o perfil `native-lib` (native-image de
+             verdade) exige o JDK GraalVM, mesmo padrão do armbox (A5). -->
+        <dependency>
+            <groupId>org.graalvm.sdk</groupId>
+            <artifactId>nativeimage</artifactId>
+            <version>${graal.sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!-- Task A9 PR1: `mvn -Pnative-lib -DskipTests package` com JAVA_HOME apontando para
+             o GraalVM 25 + ambiente MSVC carregado (`vcvars64.bat`) — mesma receita da A5/A7
+             do armbox (ver RELATORIO-A5.md). Gera `target/arm_jitter.dll` + header C. -->
+        <profile>
+            <id>native-lib</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>${native.maven.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <imageName>arm_jitter</imageName>
+                            <sharedLibrary>true</sharedLibrary>
+                            <buildArgs>
+                                <buildArg>-H:+UnlockExperimentalVMOptions</buildArg>
+                            </buildArgs>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>build-native-lib</id>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>
