@@ -37,10 +37,10 @@ Presets prontos em `ArmArchitecture` (`arch` package) — cada um liga um conjun
 | `ARMV6K` | 3DS (núcleo ARM11), Raspberry Pi 1/Zero | ✅ decoder+IR+interpretador+ASM nativo completos (extend/reverse/UMAAL, SIMD paralelo, PKH/SAT/USAD8, LDREX/STREX/CLREX, CPS/SETEND/WFI); validado com binário ELF real no `armbox` |
 | `ARMV6K_THUMB2` | subconjunto de ARMv7-A Thumb-2 | ✅ Thumb-2 completo (épico B2): decoder 32-bit, IT blocks, branches/TBB/TBH, paridade de multiplicação/extend/saturação, LDREX/STREX.W, PLD/PLI; validado com binário real no `armbox` |
 | `ARMV7A` | Linux/Android ARMv7 user-mode | ✅ produção (épico B3 fechado) — inteiro v7 (MOVW/MOVT, bitfield, SDIV/UDIV, RBIT, MLS, barreiras) + VFPv2 (banco S/D, FPSCR, decoder CP10/11 ARM+Thumb-2, executor interpretado, emissão ASM nativa) completos; user-level only (sem MMU/CP15-VMSA, sem NEON); validado com torture ELF handwritten E binário `gcc` hard-float real (série de Leibniz em `double`) no `armbox`, os 3 backends (JIT/interpretado/divergence-check) idênticos |
-| Perfil M (Cortex-M) | Firmware ARMv6-M/v7-M | 🟡 iniciado (épico B7) — `ExceptionModel` plugável extraído; MSP/PSP/NVIC/SysTick/presets nas próximas tasks |
-| MMU / full-system 32-bit | Kernel Linux ARMv6/v7 | ⬜ planejado ([RFC-SOFTMMU](docs/RFC-SOFTMMU.md) aprovada) |
-| 3DS (periféricos) | Novo emulador irmão | 🟡 lado arm-jitter iniciado — monitor de exclusividade global (B5.1) pronto; preset MPCore pendente |
-| AArch64 | Linux/Android arm64 | ⬜ planejado, épico próprio (frontend novo; [RFC IR-64](docs/RFC-IR-64BIT.md) aprovada) |
+| Perfil M (Cortex-M) | Firmware ARMv6-M/v7-M | ✅ produção (épico B7 fechado, B7.1-B7.5) — `ExceptionModel` plugável, MSP/PSP/xPSR/stacking/EXC_RETURN, NVIC/VTOR/SysTick, `MRS`/`MSR` SYSm + `CPS`, presets `ARMV6M`/`ARMV7M`; validado no `armbox --machine=cortex-m` com firmware torture m0/m3 + `hello-cortexm.c` (gcc real, sem CRT) e semihosting (`BKPT`) |
+| MMU / full-system 32-bit | Kernel Linux ARMv6/v7 | 🟡 épico B4.1 quase completo (B4.1.1-B4.1.4 ✅: `TranslatingAddressSpace`/`Cp15VmsaCoprocessor`/aborts precisos com FAR/FSR nos 3 motores) — `linuxbox` (B4.1.5 🟡 parcial) roda hospedeiro versatilepb com kernel Debian real + busybox-armv5l até a descompressão do zImage, mas trava num `PREFETCH_ABORT` recursivo perto da página de vetores altos antes de alcançar shell; ver [RFC-SOFTMMU](docs/RFC-SOFTMMU.md) |
+| 3DS (periféricos) | Novo emulador irmão | ✅ lado arm-jitter completo — ARMv6K (B1) + VFPv2 (B3) + monitor de exclusividade global (B5.1) + preset `ArmArchitecture.ARM11_MPCORE` (B5.2, ARMv6K+VFPv2 sem Thumb-2); falta só o emulador hospedeiro (periféricos/timing MPCore/segundo core) |
+| AArch64 | Linux/Android arm64 | 🟡 épico B6 quase completo (B6.1-B6.6.5 ✅) — decoder A64 (base ISA inteira, FP/SIMD escalar, exclusivos), `Aarch64Core`/EL0-EL1/aborts, MMU v8 (`TranslatingAddressSpace64`), backend ASM nativo (`jit64`) cobrindo todo `Ir64Op.Kind`; falta só **B6.6.6** (hospedeiro `virt64` até shell, bloqueado em kernel/toolchain `aarch64-linux-*` reais) |
 
 Backend Truffle/GraalVM (compilação alternativa, mesma IR — ver seção abaixo): ✅
 funcional em JVM, 🟡 native-image roda mas ainda não compila blocos reais.
@@ -147,9 +147,15 @@ continua a escolha certa** para o tamanho de bloco típico de jogo (poucas dezen
 instruções) — o Truffle só vence em blocos/traces grandes, e o ponto de crossover é
 JVM-dependente (medido entre ~80 e 320 instruções). gbaemu/ndsemu não usam Truffle hoje
 (opt-in, sem wiring nos consumidores). A especialização de nós por `IrOp` (task A6)
-destravou a compilação real de blocos ARM reais **na JVM** (JBR + Unchained); sob
-**native-image** o bailout de partial evaluation persiste (pipeline SVM distinto) —
-task de continuação: [A7](tasks/trilha-a-truffle/a7-native-image-revalidacao.md).
+destravou a compilação real de blocos ARM reais **na JVM** (JBR + Unchained: 1812
+`opt done`, 0 `opt failed`); sob **native-image** o bailout de partial evaluation
+persiste byte a byte (mesmo `FrameWithoutBoxing should not be materialized` da A5,
+0 `opt done`) — medido de novo pós-A6 em [A7](tasks/trilha-a-truffle/a7-native-image-revalidacao.md),
+que fechou como resultado misto (corretude ok, ganho de tempo falha nos dois
+ambientes): o pipeline JVMCI foi resolvido, mas o pipeline SVM/Enterprise Truffle
+Compiler tem causa raiz própria, ainda sem diagnóstico — fica para sessão de modelo
+forte dedicada. `native-image` (perfil `native` do armbox) roda hoje só com o backend
+`INTERPRETED_IR`, com PGO+`-O3` como default (task A8).
 
 Benchmarks completos, notas sobre a distribuição GraalVM e o relatório do native-image:
 **[docs/TRUFFLE-BACKEND.md](docs/TRUFFLE-BACKEND.md)**.

@@ -9,24 +9,41 @@ deste roadmap tem uma spec autocontida com escopo, aceite e armadilhas.
 
 ---
 
-## Onde estamos (2026-07)
+## Onde estamos (2026-07-31)
 
 O pipeline `cache → decode → lift IR → otimizar → emit` está completo e em produção:
 
 - **Backends:** `INTERPRETED_IR` (oráculo/debug) e `JVM_BYTECODE` (ASM, default via
   `JitRuntimeFactory.armThumb`), com tiered compilation (tier frio interpretado, tier
   quente compilado em pool de threads), fallback `PER_OP` inline, execução condicional
-  nativa, shifted-register nativo, register cache em locals, inline cache de 32K e
-  encadeamento de blocos (`setChainCycleBudget`).
-- **Arquiteturas guest:** ARMv4T (ARM7TDMI — GBA) e ARMv5TE (ARM9E — NDS) completos e em
-  produção; ARMv6K completo (decoder+IR+interp+ASM nativo, trilha B1); Thumb-2 decode
-  completo (B2.1-B2.5, incl. branches/IT — trilha B2), mas o preset público ainda
-  não pluga todas as extensões (B2.6, pendente). Ver
-  [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
-- **Consumidores em produção:** gbaemu (5 jogos comerciais jogáveis, ≥2× realtime
-  headless) e ndsemu (JUS ~99% realtime, MKDS 92–97%, SM64DS 72%).
+  nativa, shifted-register nativo, register cache em locals, inline cache de 32K,
+  encadeamento de blocos (`setChainCycleBudget`) e superblocos de loop (C0, ndsemu).
+  Backend `TRUFFLE` opcional (módulo `arm-jitter-truffle`) compila de verdade em JVM
+  (JBR+Unchained); sob `native-image` o backend ASM não roda e o Truffle ainda tem
+  bailout de PE sob SVM (ver trilha A).
+- **Arquiteturas guest 32-bit:** ARMv4T (GBA) e ARMv5TE (NDS) em produção; ARMv6K,
+  Thumb-2 e ARMv7-A+VFPv2 (épicos B1/B2/B3) completos e validados com binários reais
+  no `armbox`; perfil M/Cortex-M (épico B7) completo (MSP/PSP/NVIC/SysTick/semihosting);
+  MMU/softmmu 32-bit (épico B4.1) com page-walk+aborts precisos prontos na lib, host
+  `linuxbox` ainda não alcança shell (trava num abort perto da página de vetores).
+  Ver [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
+- **AArch64 (épico B6):** decoder A64 completo (base ISA inteira + FP/SIMD escalar +
+  exclusivos), `Aarch64Core` com EL0/EL1 e aborts precisos, MMU v8, backend ASM nativo
+  (`jit64`) sem lacunas de `Ir64Op.Kind` — falta só o hospedeiro `virt64` até shell
+  (B6.6.6, bloqueado em kernel/toolchain `aarch64-linux-*` reais).
+  `armbox --arch=aarch64` roda "hello world" bare-metal hoje.
+- **native-image / biblioteca nativa (trilha A):** `armbox` compila e roda sob
+  GraalVM native-image (perfil `native`, PGO+`-O3` como default, task A8); biblioteca
+  compartilhada `arm_jitter.dll`/`.so` com API C (`capi/`, task A9 PR1) embutível por
+  qualquer linguagem com FFI, backend `INTERPRETED_IR`. Backend Truffle sob
+  native-image segue com bailout de PE sem causa raiz diagnosticada (A7); A9 PR2
+  (Truffle na lib nativa) fica bloqueada até isso fechar.
+- **Consumidores em produção:** gbaemu (5 jogos comerciais jogáveis, INTERPRETED
+  default por fidelidade, ≥2× realtime headless) e ndsemu (JUS ~99% realtime com
+  superblocos, MKDS 92–97%, SM64DS in-game 72%).
 - **Debug:** `GdbServer` (stub GDB remote serial), trace listener, runtime de
-  divergência (`divergenceCheckingArmThumb`) e harness de equivalência entre emissores.
+  divergência (`divergenceCheckingArmThumb`) e harness de equivalência entre emissores
+  (32 e 64 bits).
 
 ### Planos concluídos (removidos deste repositório)
 
@@ -103,10 +120,10 @@ precisam de uma distribuição GraalVM real (bench "GraalVM CE" da tabela e o pr
 | **A3 — Cobertura completa** | Todas as categorias de `IrOp` (reusar a ordem 5a–5f que funcionou no ASM: memória → branches → multiply → LDM/STM → PSR/SWI → resto) | Divergence-check longo com ROM real (JUS/FireRed) zero divergências |
 | **A4 — Bench honesto** | `JitRuntimeFactory.truffleArmThumb(...)`; bench nos 3 cenários: HotSpot puro, OpenJDK+Graal, GraalVM | Tabela de perf vs ASM publicada no README; decidir default por ambiente |
 | **A5 — native-image demo** | `armbox` compilado com native-image usando o backend Truffle | 🟡 PARCIAL: binário roda correto, mas 0 blocos compilam (bailout de PE — causa raiz em A2/A3, ver RELATORIO-A5) |
-| **A6 — Especialização de nós Truffle** | Árvore de nós por categoria de `IrOp` (delegando aos executores, G1) para o PE conseguir podar | `opt done` em blocos reais; spec fechada em `tasks/trilha-a-truffle/a6-*.md` |
-| **A7 — Revalidação native-image** | Repetir diagnósticos de A5 pós-A6 (medição pura) | `--truffle` > `--interp` nos 2 ambientes; fecha o aceite #2 de A5 |
-| **A8 — Otimizações native-image** | PGO/-O3/GC/march, tabela startup+RSS+throughput | Variante vencedora vira default do perfil `native` do armbox |
-| **A9 — Biblioteca nativa (.dll/.so) com API C** | `native-image --shared` + módulo `capi/` (`@CEntryPoint aj_*`: create/map_ram/mmio-callbacks/registers/run_cycles/save-state) — arm-jitter embutível por QUALQUER linguagem com FFI | PR1: smoke test em C passa com backend interpretado; PR2 (pós-A7): backend Truffle mais rápido que interpretado dentro da lib |
+| **A6 — Especialização de nós Truffle** | Árvore de nós por categoria de `IrOp` (delegando aos executores, G1) para o PE conseguir podar | ✅ (2026-07-23) — `opt done` em blocos reais na JVM (JBR+Unchained); spec em `tasks/trilha-a-truffle/a6-*.md` |
+| **A7 — Revalidação native-image** | Repetir diagnósticos de A5 pós-A6 (medição pura) | 🔴 medida (2026-07-27) — resultado MISTO: JBR+Unchained agora compila de verdade (1812 `opt done`), mas native-image reproduz o MESMO bailout de PE da A5 byte a byte (0 `opt done`); nenhum ambiente bate `--truffle` > `--interp` em wall-time. A5 permanece 🟡, causa raiz do bailout SVM fica para sessão de modelo forte dedicada |
+| **A8 — Otimizações native-image** | PGO/-O3/GC/march, tabela startup+RSS+throughput | ✅ (2026-07-31) — PGO+`-O3` venceu as 4 métricas (startup/throughput truffle/throughput interp/RSS) e virou default do perfil `native` do armbox |
+| **A9 — Biblioteca nativa (.dll/.so) com API C** | `native-image --shared` + módulo `capi/` (`@CEntryPoint aj_*`: create/map_ram/mmio-callbacks/registers/run_cycles/save-state) — arm-jitter embutível por QUALQUER linguagem com FFI | PR1 ✅ (2026-07-31) — smoke test em C (19 checagens) passa com backend interpretado; PR2 (Truffle na lib) segue bloqueada em A7 (bailout SVM não fechou) |
 
 **Risco principal:** Bytecode DSL ainda é relativamente novo; se instável, cair para
 AST clássica (mais verbosa, igualmente suportada). **Kill criterion do A0:** se em
@@ -128,11 +145,11 @@ prático de 64 bits é ARMv8-A/AArch64 — v9 vem de graça depois, por feature 
 | GBA | ARM7TDMI | ARMv4T | ✅ produção |
 | NDS | ARM7TDMI + ARM946E-S | ARMv4T + ARMv5TE | ✅ produção |
 | 3DS (lado DS/segurança) | ARM946E-S | ARMv5TE | ✅ já coberto |
-| 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | 🟡 ARMv6K ✅ (B1.1-B1.6); falta VFPv2 (B3) |
-| Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | 🟡 ARMv6K ✅; falta VFPv2 (B3) |
+| 3DS (principal) | ARM11 MPCore | **ARMv6K** + VFPv2 | ✅ preset `ArmArchitecture.ARM11_MPCORE` fechado (B5.2, 2026-07-23) — ARMv6K (B1) + VFPv2 (B3), sem Thumb-2; falta só o emulador hospedeiro (periféricos/segundo core, fora do arm-jitter) |
+| Raspberry Pi 1 / Zero | ARM1176JZF-S | ARMv6 + VFPv2 | ✅ ARMv6K (B1) + VFPv2 (B3) completos, mesmo preset-base do 3DS acima |
 | Raspberry Pi 2, smartphones ARMv7 | Cortex-A7/A9 | **ARMv7-A** (Thumb-2, NEON) | ✅ épico B3 fechado (B3.7): preset `ARMV7A` completo — Thumb-2 (B2), inteiro v7 (B3.1/B3.2) e VFPv2 (B3.3-B3.6) juntos, validado com torture ELF + binário `gcc` hard-float real; user-level only (MMU é B4.1); NEON fora de escopo |
-| Linux/Android arm64, Pi 3+ | Cortex-A5x+ | **ARMv8-A AArch64** | ⬜ B6 |
-| Microcontroladores (STM32, nRF, Arduino ARM) | Cortex-M0/M3/M4/M7 | **ARMv6-M/v7-M/v8-M** (perfil M, Thumb-only) | ⬜ B7 [REFINAR] |
+| Linux/Android arm64, Pi 3+ | Cortex-A5x+ | **ARMv8-A AArch64** | 🟡 épico B6 quase completo (B6.1-B6.6.5 ✅, 2026-07-24/27) — decoder+core+MMU v8+backend ASM prontos; falta só B6.6.6 (hospedeiro `virt64`, bloqueado em toolchain/kernel real) |
+| Microcontroladores (STM32, nRF, Arduino ARM) | Cortex-M0/M3/M4/M7 | **ARMv6-M/v7-M/v8-M** (perfil M, Thumb-only) | ✅ épico B7 fechado (B7.1-B7.5, 2026-07-23) — `ExceptionModel` plugável, NVIC/SysTick, presets `ARMV6M`/`ARMV7M`, `armbox --machine=cortex-m` validado com firmware real |
 
 ### Fases
 
@@ -179,57 +196,91 @@ Leibniz em `double`) nos 3 backends do `armbox`.
 `docs/RFC-SOFTMMU.md` (2026-07-15): wrapper de tradução, hospedeiro
 versatilepb+ARM1176 (**ARMv6K — não precisa de B3/VFP**), aborts base-restored,
 CP15 VMSA na lib, gerações no BlockCache; fases B4.1.1–B4.1.5 no épico refinado.
-- VMSA: page tables, TLB emulado, domains, aborts precisos (data/prefetch abort com
-  FSR/FAR), integração da tradução no caminho de memória do JIT (softmmu — hoje o
-  `AddressSpace` é físico/flat).
-- `BlockCache` ciente de ASID/contexto (chave de bloco por espaço de endereçamento).
-- Interrupt controller/timers/UART ficam no emulador hospedeiro; arm-jitter entrega os
-  hooks (linha IRQ/FIQ já existe).
-- **Aceite:** kernel Linux ARMv6/v7 mínimo bootando até shell em um hospedeiro de
-  referência (novo repositório consumidor, ex. `armbox`).
-- **Atalho recomendado antes do full-system:** um runner **user-mode estilo qemu-user**
-  (ELF loader + tradução de syscalls via `SwiDispatcher`, memória flat) — valida B1–B3
-  com binários Linux reais sem custar MMU, e é útil por si só.
+**B4.1.1-B4.1.4 ✅ fechadas (2026-07-26)**: `TranslatingAddressSpace` (page-walk VMSA
+completo, AP/domains, micro-TLB), `Cp15VmsaCoprocessor` (`MCR`/`MRC` ligados ao
+wrapper), aborts precisos (`ArmCore.enterMemoryAbort`, FAR/FSR reais) nos 3 motores
+(interpretador, `IrBlockExecutor` e JIT ASM nativo via `visitTryCatchBlock`),
+`translationGeneration` no `BlockKey`/`JitRuntime` (troca de `TTBR0` vira miss natural
+no cache de blocos). **B4.1.5 🟡 parcial (2026-07-26)**: repositório novo `linuxbox`
+(hospedeiro versatilepb-like com `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic`) roda um
+kernel Debian real (`vmlinuz-3.2.0-4-versatile`) + `busybox-armv5l` até a
+descompressão do zImage, mas trava num `PREFETCH_ABORT` recursivo perto da página de
+vetores altos (`0xffff0000`) antes de alcançar shell — causa raiz não isolada, fica
+para retomar (ver `tasks/trilha-b-arquiteturas/`) ou para fechar com um toolchain
+`arm-linux-gnueabihf-*`/WSL real e buildar o kernel do zero.
+- VMSA: page tables, TLB emulado, domains, aborts precisos — ✅ feito acima.
+- `BlockCache` ciente de geração de tradução — ✅ feito acima (não é ASID pleno, mas
+  cobre o caso prático de troca de mapeamento).
+- Interrupt controller/timers/UART ficam no emulador hospedeiro (`linuxbox`); arm-jitter
+  entrega os hooks (linha IRQ/FIQ já existe).
+- **Aceite pendente:** kernel Linux ARMv6/v7 mínimo bootando até shell no `linuxbox`.
 
-**B5 — 3DS enablement** — na prática B1 + VFPv2 (de B3); periféricos, timing MPCore e
-o segundo core ficam no emulador hospedeiro (novo projeto irmão, como gbaemu/ndsemu).
-Do lado do arm-jitter basta ARMv6K + VFPv2 corretos.
+**B5 — 3DS enablement** — ✅ lado arm-jitter completo: B1 (ARMv6K) + B3 (VFPv2) + B5.1
+(monitor de exclusividade global) + **B5.2 ✅ (2026-07-23)** — preset
+`ArmArchitecture.ARM11_MPCORE` público. Falta só o emulador hospedeiro (periféricos,
+timing MPCore, segundo core — novo projeto irmão, como gbaemu/ndsemu).
 
 **B6 — AArch64 (épico separado)** — não é uma extensão, é um segundo frontend.
-- **B6.0 — generalizar o IR para 64 bits primeiro**: hoje valores/registradores são
-  `int` de ponta a ponta (IR, executores, `GuestToHostMapper`). Decisão de desenho a
-  tomar em RFC própria: IR parametrizado por largura vs IR-64 paralelo. Sem isso não
-  há AArch64.
-- B6.1 decoder A64 (encoding totalmente novo, 31×X-regs + SP/ZR, sem predicação, sem
-  LDM/STM), B6.2 core (EL0/EL1, novo modelo de exceções), B6.3 interpretador,
-  B6.4 backend ASM (`long` locals), B6.5 MMU v8 + user-mode runner arm64.
+**Decisão B6.0 tomada: IR-64 paralelo** (`ir64/Ir64Op`, não parametrização do IR
+existente) — espelho estrutural do `IrOp` 32-bit mas sem `condition()` universal (A64
+não tem predicação geral); zero mudança no pipeline 32-bit (G2/G3 preservados em toda
+sub-task). **Progresso (2026-07-24 a 27, 21 sub-tasks fechadas — épico quase 100%)**:
+- **B6.1 ✅** — esqueleto: `Ir64Op`, `Aarch64Core`/`PstateRegister`, `AddressSpace64`,
+  `Aarch64Decoder` (ADR/ADRP, ADD/SUB imm, MOVZ/MOVN/MOVK, branches/CBZ/CBNZ/TBZ/TBNZ),
+  `Ir64BlockExecutor` interpretado.
+- **B6.2 🟡 parcial** — loads/stores completos (`LDP`/`STP`, todos os modos de
+  endereçamento) + `armbox --arch=aarch64`; aceite #1 (`hello-aarch64.elf` bare-metal)
+  ✅, aceite #2 (busybox aarch64 real) bloqueado em toolchain/binário (ver 🧑 na fila).
+- **B6.3 ✅ (4 sub-tasks)** — base ISA inteira restante: lógica/ALU por registrador
+  (B6.3.1), `CSEL`/bitfield (B6.3.2), `MADD`/`MSUB`/`SDIV`/`UDIV` (B6.3.3),
+  `LDXR`/`STXR`+`Aarch64ExclusiveMonitor` (B6.3.4).
+- **B6.4 ✅ (3 PRs)** — backend ASM nativo (`jit64/`, `JitRuntime64`/`BlockCache64`,
+  sem IC/chaining/tiering ainda por decisão de escopo) cobrindo TODO `Ir64Op.Kind`
+  existente; bench "busybox ≥3× interpretador" segue bloqueado no mesmo toolchain
+  de B6.2.
+- **B6.5 ✅ (4 sub-tasks)** — FP/SIMD escalar: registradores `V0`-`V31` (B6.5.1),
+  `Ir64Op`s de FP + executor interpretado (B6.5.2), decoder "Data Processing — Scalar
+  FP" (B6.5.3), emissão ASM nativa de FP (B6.5.4).
+- **B6.6 🟡 (5/6 sub-tasks)** — MMU v8: `Aarch64SystemRegisterBus`+`MRS`/`MSR` (B6.6.1),
+  `TranslatingAddressSpace64` (B6.6.2), `Aarch64VmsaSystemRegisters` (B6.6.3), modelo de
+  exceção EL0→EL1 + aborts precisos + `ERET` (B6.6.4), `translationGeneration` em
+  `jit64` (B6.6.5). Falta só **B6.6.6** (hospedeiro `virt64` até shell — kernel arm64
+  real + GICv2/v3/PSCI/DTB, bloqueado em toolchain, ver 🧑 na fila).
 - Android real exige muito mais que CPU (binder, GPU, HALs) — o objetivo honesto do
-  B6 é **Linux arm64 user-mode → full-system**; Android fica como norte distante.
-- **Aceite incremental:** binários estáticos arm64 "hello world" → busybox no runner
-  user-mode → kernel arm64 mínimo.
+  B6 continua sendo **Linux arm64 user-mode → full-system**; Android fica como norte
+  distante.
+- Ver `tasks/trilha-b-arquiteturas/b6-aarch64.md` e `tasks/FILA-EXECUCAO.md` para o
+  detalhe de cada sub-task.
 
-**B7 — Perfil M / Cortex-M (ARMv6-M/v7-M/v8-M)** — família arquitetural à parte, não
-uma extensão do perfil A/R: sem modo ARM de 32 bits, Thread/Handler mode em vez de
-CPSR bancado, NVIC/vetor relocável (VTOR), `EXC_RETURN`. Cobre microcontroladores
-(STM32, nRF, a maioria das placas ARM tipo Arduino) — objetivo do projeto é cobrir
-qualquer device ARM, não só a linha de aplicação já mapeada acima. **Refinado
-2026-07-15**: decisão de arquitetura fechada em `docs/RFC-M-PROFILE.md` (`ArmCore`
-único + `ExceptionModel` plugável); sub-tasks executáveis B7.1–B7.5 em
-`tasks/trilha-b-arquiteturas/`.
+**B7 — Perfil M / Cortex-M (ARMv6-M/v7-M/v8-M)** — ✅ **ÉPICO FECHADO (B7.1-B7.5,
+2026-07-23)**. Família arquitetural à parte, não uma extensão do perfil A/R: sem modo
+ARM de 32 bits, Thread/Handler mode em vez de CPSR bancado, NVIC/vetor relocável
+(VTOR), `EXC_RETURN`. Decisão de arquitetura em `docs/RFC-M-PROFILE.md` (`ArmCore`
+único + `ExceptionModel` plugável). Entregue: `MProfileExceptionModel` (MSP/PSP/xPSR/
+stacking/EXC_RETURN), `MProfileSystemControl` (SCS/NVIC/VTOR/SysTick memory-mapped,
+prioridade/preempção), `MRS`/`MSR` SYSm + `CPS` de 16 bits, presets `ARMV6M`/`ARMV7M`
+(feature `M_FAULT_MASKING`), `armbox --machine=cortex-m` + semihosting (`BKPT`)
+validado com firmware torture m0/m3 + `hello-cortexm.c` (gcc real, sem CRT).
 
-**Ordem recomendada (revisada 2026-07-15):** B2.6 → **B2.7 (paridade Thumb-2 —
-auditoria achou que MUL.W/UMULL/extend/exclusivos.W nunca foram decodificados;
-sem eles nenhum binário Thumb-2 de compilador roda)**, com B1.7 (acesso
-desalinhado v6+, corrupção silenciosa confirmada no fonte) e B2.8 (PLD/PLI) na
-mesma leva. Depois, TRÊS frentes independentes que podem andar em paralelo:
-- **B3.x** (ARMv7-A+VFP → 3DS/B5 e binários hard-float);
-- **B7.x** (Cortex-M — só precisa de B2.6; B7.4 pleno usa B3.2);
-- **B4.1.x** (MMU/Linux — **não depende mais de B3**: a RFC-SOFTMMU fixou o
-  hospedeiro em versatilepb+ARM1176/ARMv6K, que já está pronto; kernel soft-float).
-B6 (AArch64) quando priorizado — B6.1/B6.2 já são executáveis.
+**Status da ordem recomendada de 2026-07-15**: as três frentes (B3 VFP/ARMv7-A, B7
+Cortex-M, B4.1 MMU/Linux) rodaram e B3/B7 **fecharam por completo**; B4.1 fechou a
+lib (B4.1.1-4) e ficou parcial no hospedeiro (B4.1.5, `linuxbox`). B5 (3DS) e B6.1-6.5
+(AArch64) também fecharam depois disso. **O que resta hoje é, em cada caso, o
+ÚLTIMO degrau de cada épico — não mais decoder/IR/executor, mas um hospedeiro
+batendo em kernel/toolchain real** — e os quatro compartilham o mesmo tipo de
+bloqueio (toolchain `arm-linux-*`/`aarch64-linux-*` ou kernel/binário real
+indisponível neste ambiente Windows/MSYS2 sem WSL configurado):
+- **B4.0.3 item 3 / B4.0.5** (armbox: busybox estático Thumb-2, depois fork/pipes)
+- **B6.2 aceite #2 / B6.4 bench** (armbox: busybox estático aarch64 real)
+- **B6.6.6** (hospedeiro `virt64`: kernel arm64 real + GICv2/v3/PSCI/DTB)
+- **B4.1.5** (retomar o loop de abort do `linuxbox`, ou fechar com toolchain
+  `arm-linux-gnueabihf-*`/WSL real e um kernel buildado do zero)
+
 Todas as decisões de desenho pendentes foram fechadas em 2026-07-15
 (`docs/RFC-M-PROFILE.md`, `docs/RFC-SOFTMMU.md`, specs B3.x); a matriz objetiva de
-"funciona de verdade?" por arquitetura está em `docs/VALIDACAO-ARQUITETURAS.md`.
+"funciona de verdade?" por arquitetura está em `docs/VALIDACAO-ARQUITETURAS.md`. Ver
+`tasks/FILA-EXECUCAO.md`, seção "🧑 Bloqueadas no usuário", para o que cada um
+precisa especificamente.
 
 ---
 
@@ -240,16 +291,16 @@ Itens já identificados por profiling, em ordem de expectativa de ganho
 
 | Item | Ideia | Nota |
 |------|-------|------|
-| Superblocos / trace-JIT | Fundir sequências encadeadas quentes em um método compilado (N chamadas megamórficas → 1) | A alavanca grande (~26–36% do CPU em gameplay); projeto multi-sessão |
-| Flags NZCV em locals JVM | Manter flags em locals dentro do bloco em vez de ler/escrever CPSR por op | ⚠️ Rebaixado: ganho ≈0 medido em gameplay isolado; vira subproduto dos superblocos |
-| Logic-flags + shifter nativo completo | Carry-out do shifter em ops lógicas `S` sem helper | Complementa o shifted-register nativo |
-| Page-table dispatch no `AddressSpace` | ✅ utilitário pronto (C3, `PagedAddressSpace`); **adoção pendente**: C6 (gbaemu) e C7 (ndsemu), specs em `tasks/trilha-c-perf/` | ~19-26% no dispatch em microbench; ganho real diluído — bench por hospedeiro decide |
+| Superblocos / trace-JIT | Fundir sequências encadeadas quentes em um método compilado (N chamadas megamórficas → 1) | ✅ C0 (2026-07-11, épico C0.1-C0.4) — bench MKDS +16%, SM64DS +44%, JUS +39% (2 últimos acima de realtime); default ON no backend ASM do ndsemu, validado na GUI |
+| Flags NZCV em locals JVM | Manter flags em locals dentro do bloco em vez de ler/escrever CPSR por op | ❌ C1 fechada sem implementar (2026-07-11) — reavaliada com JFR pós-superblocos: folhas de flag/condição ficam em ~0,4% das amostras, sem sinal suficiente para o risco de corretude; reabrir só com profile novo mostrando cenário diferente |
+| Logic-flags + shifter nativo completo | Carry-out do shifter em ops lógicas `S` sem helper | ✅ C2 — JUS 76,5→81,7 fps (+6,8%) |
+| Page-table dispatch no `AddressSpace` | Utilitário `PagedAddressSpace` (C3 ✅) + adoção por hospedeiro | ✅ C3 (utilitário, ~19-26% mais rápido que if-chain realista em microbench) + ✅ **C6** (gbaemu, `GbaBus` sobre `PagedAddressSpace`, bench -8% a -29% nos 5 jogos headless, gameplay validado) + ⬜ **C7** (ndsemu) bloqueada em validação de gameplay do usuário (boot dos 4 jogos de referência) |
 | Chain budgets pós-boot | ✅ C4 (256/64 default no ndsemu) | ⚠️ ARM7 ≥16 quebra boot de Platinum/SM64DS — validar boot dos 4 jogos de referência ao mexer |
-| Chaining no gbaemu | ✅ C5 (budget 32 nos 2 backends) | INTERPRETED segue default do gbaemu (decisão do usuário) |
+| Chaining no gbaemu | ✅ C5 (budget 32 nos 2 backends) | INTERPRETED segue default do gbaemu (decisão do usuário); achado registrado sem investigação: glitch de batalha do Pokémon (FireRed) — ver trilha D |
 | Dispatch megamórfico remanescente | `JitRuntime.execute` ~12-14% pós-superblocos | SEM spec — exige sessão de modelo forte com profiling novo (ver tasks/README.md, seção "Pendências") |
-| Perf do INTERPRETADO (C8) | O caminho de produção do gbaemu nunca foi medido/otimizado | **Contexto de produto: gbaemu é INTERPRETED default** (decisão do usuário; ASM não dá ganho no GBA — velocidade igual medida). ⚠️ CORREÇÃO 2026-07-16: a alegação de 2026-07-15 de que "JIT de bloco quebra Pokémon em batalha" caiu — os bugs visuais são backend-independentes (tasks D2/D3/D4/D6). Restrição da task permanece: nenhuma otimização pode mudar a granularidade observável de IRQ/ciclo |
-| Fastmem no JIT (C9) | Load/store direto no array da página no bytecode (pós-C7) | ndsemu only; gbaemu fora (interpretado) |
-| Warm-start do JIT (C10) | Persistir PCs quentes por ROM + pré-compilar no load | Ataca o "demora a esquentar" do MKDS |
+| Perf do INTERPRETADO (C8) | O caminho de produção do gbaemu nunca foi medido/otimizado | ✅ **FECHADA (2026-07-17)** — dispatch por `int[] kindsArray` em vez de `IrOp.kind()` virtual (−15,6% agregado) + tabela endereço→dono pré-computada no `GbaBus` de I/O (−6,6%); meta ≥15% batida. Usuário validou: FireRed sem regressão de velocidade/fidelidade. **Contexto de produto: gbaemu continua INTERPRETED default** (ASM não dá ganho no GBA, decisão do usuário) |
+| Fastmem no JIT (C9) | Load/store direto no array da página no bytecode (pós-C7) | ⬜ ndsemu only; gbaemu fora (interpretado); bloqueada em C7 |
+| Warm-start do JIT (C10) | Persistir PCs quentes por ROM + pré-compilar no load | 🟡 implementado (2026-07-17) — `BlockCache#hotKeys`/`JitRuntime#precompile` (arm-jitter) + `HotBlockStore` (ndsemu, `.hotpcs` versionado com hash CRC32); **aceites #1 (fps MKDS antes/depois) e #2 (asmcheck JUS + boot dos 4 jogos)** pendentes de medição do usuário com ROM real |
 | Idle-loop skip | Detectar busy-wait e avançar relógio | SEM spec — RFC própria antes (risco de timing); ver "Pendências" |
 
 ---
