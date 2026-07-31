@@ -292,13 +292,20 @@ diferentes apenas).
   disponíveis — o mesmo ambiente que várias tasks desta fila estavam
   bloqueadas esperando. **A9 PR1** (lib nativa `.dll` com API C, backend
   interpretado) foi executada e fechou ✅ nesta sessão (ver índice do
-  `tasks/README.md`) — movida para fora da tabela 🧑 abaixo. As DEMAIS tasks
-  🧑 (C7, A9 PR2, C10, B4.0.3 item 3, B6.2 aceite #2, B6.6.6) continuam
-  bloqueadas por motivos DIFERENTES do ambiente GraalVM+MSVC (validação de
-  gameplay, o bailout SVM do Truffle em si — não falta de ambiente —, medição
-  com ROM real, toolchains `arm-linux-*`/`aarch64-linux-*`/kernel real) — não
-  presumir que esta nota as destrava, conferir a coluna "O que precisa do
-  usuário" de cada uma antes de pegar.
+  `tasks/README.md`) — movida para fora da tabela 🧑 abaixo. **A8**
+  (otimizações native-image: PGO/-O3/-march=native/G1, tabela startup/RSS)
+  também foi executada e fechou ✅ na MESMA sessão (dependia só de A7, que já
+  tinha fechado — a entrada "A7" na tabela 🧑 abaixo estava desatualizada,
+  A7 não bloqueia mais nada além de A9 PR2): PGO+`-O3` venceu as 4 métricas e
+  virou default do perfil `native` do armbox — ver índice do `tasks/README.md`
+  e o README do armbox para a tabela completa. As DEMAIS tasks 🧑 (C7, A9 PR2,
+  C10, B4.0.3 item 3, B6.2 aceite #2, B6.6.6) continuam bloqueadas por motivos
+  DIFERENTES do ambiente GraalVM+MSVC (validação de gameplay, o bailout SVM do
+  Truffle em si — não falta de ambiente —, medição com ROM real, toolchains
+  `arm-linux-*`/`aarch64-linux-*`/kernel real) — não presumir que esta nota as
+  destrava, conferir a coluna "O que precisa do usuário" de cada uma antes de
+  pegar. **Fila automática volta a ficar vazia após A8/A9 PR1** — nenhuma task
+  elegível sem prioridade do usuário.
 
 - **B6.5.4** ✅ (2026-07-27, 4ª e última sub-task de B6.5 — **fecha o épico B6.5 por completo**,
   executada logo depois de B6.5.3 fechar): `Ir64NativePolicy.supports` ganha os 4 `case`s
@@ -589,8 +596,9 @@ aceite #2) mesmo com as 4 sub-tasks fechadas.
 | Task | Arquivo | O que precisa do usuário | Destrava depois |
 |------|---------|--------------------------|-----------------|
 | **C7** — `PagedAddressSpace` no ndsemu | `trilha-c-perf/c7-paged-address-space-ndsemu.md` | Validação de gameplay (boot dos 4 jogos de referência) | **C9** (fastmem ndsemu, `trilha-c-perf/c9-jit-fastmem-ndsemu.md`) |
-| **A7** — revalidação native-image pós-A6 | `trilha-a-truffle/a7-native-image-revalidacao.md` | Máquina com GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC (`vcvars64.bat`) | **A8** (otimizações native-image) e **A9 PR2** |
+| ~~A7~~ ✅ fechada 2026-07-27 (medição concluída, resultado misto — ver índice do `tasks/README.md`); entrada mantida só para registrar que **A9 PR2** segue bloqueada pelo PRÓPRIO resultado da A7 (bailout SVM não fechou), não por falta de ambiente | `trilha-a-truffle/a7-native-image-revalidacao.md` | — (fechada; causa raiz do bailout SVM precisa de sessão de modelo forte dedicada) | **A9 PR2** só quando o bailout SVM for corrigido |
 | ~~A9 PR1~~ ✅ fechada 2026-07-31 (ambiente GraalVM+MSVC ficou disponível nesta máquina — ver nota abaixo) | `trilha-a-truffle/a9-native-shared-library.md` | — | A9 PR2 segue bloqueada em A7 (bailout SVM do Truffle não fechou) |
+| ~~A8~~ ✅ fechada 2026-07-31 (mesma sessão desta nota de ambiente — task mecânica de build+medição, não precisava de validação humana além do ambiente GraalVM+MSVC já confirmado disponível) | `trilha-a-truffle/a8-native-image-otimizacoes.md` | — | PGO+`-O3` promovido a default do perfil `native` do armbox — ver índice do `tasks/README.md` |
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
 | **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
 | **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24), **o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64", já com as 4 sub-tasks B6.3.1-B6.3.4 fechadas) **e o bench "busybox ≥3× interpretador" do PR3 de B6.4** (codegen fechado 2026-07-26, só falta medir) — mesmo bloqueio, um só ambiente resolve os três |
