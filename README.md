@@ -360,3 +360,7 @@ mvn -o test
 
 Mudanças aqui exigem `mvn install` local e as suítes dos consumidores (gbaemu e
 ndsemu) verdes antes do commit (invariante G5 do `tasks/README.md`).
+
+## Licença
+
+BSD 3-Clause — ver [LICENSE](LICENSE).

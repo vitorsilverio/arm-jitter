@@ -11,6 +11,14 @@
     <name>arm-jitter-parent</name>
     <description>Parent do arm-jitter: core (biblioteca JIT ARM/THUMB) + módulos opcionais.</description>
 
+    <licenses>
+        <license>
+            <name>BSD-3-Clause</name>
+            <url>https://opensource.org/license/bsd-3-clause</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <modules>
         <module>core</module>
         <module>truffle</module>
