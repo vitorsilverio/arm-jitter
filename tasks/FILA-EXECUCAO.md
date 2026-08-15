@@ -386,8 +386,8 @@ padrão do armbox — sem agrupamento definido ainda).
 | ~~P8~~ | ~~**F7**~~ ✅ fechada 2026-08-15 — consumidores no Central, sem `asm` declarado | `trilha-f-infra/f7-consumidores-central.md` | 4 consumidores | F5 | 4 POMs em `1.0.0`, `org.ow2.asm` removido de gbaemu/ndsemu (transitivo, confirmado); `mvn test` com `~/.m2/repository/dev/vitorsilverio` renomeada passou nos 4 (gbaemu 240/ndsemu 183/armbox 41/virtual-arm-box 23); docs corrigidas; commit por repo. Fecha a janela aberta pela F4/F6 |
 | ~~P9~~ | ~~**F6**~~ ✅ fechada 2026-08-15 — CI verde nos 4 repos + release.yml escrito | `trilha-f-infra/f6-github-actions-pipeline.md` | 4 repos | F5 | 5 testes do gbaemu sem guarda (falhariam, não pulariam) ganharam `assumeTrue`; ndsemu/armbox não precisaram de nada; 4 execuções reais observadas verdes na primeira tentativa; `release.yml` escrito mas não testado ponta a ponta (decisão da spec — sem release vazia só pra provar); usuário ainda precisa cadastrar os 4 segredos; ver índice do `tasks/README.md` para o detalhe |
 | ~~P10~~ | ~~**G1**~~ ✅ fechada 2026-08-15 — `n3dsemu`: esqueleto + loader `.3dsx` + primeira `svc` | `trilha-g-3ds/g1-esqueleto-n3dsemu.md` | n3dsemu (novo) | F7 | repo novo criado e commitado localmente; loader+memória+CP15/c13+SvcTable+`ARM11_MPCORE`; achado real documentado (convenção de imediato de `SVC` GBA/NDS vs. Horizon, sem tocar no decoder compartilhado); `n3dsemu testdata/application.3dsx --trace-svc` chega a `0x21 svcCreateAddressArbiter` idêntico nos 3 backends; `mvn -o test` verde (15); ver índice do `tasks/README.md` para o detalhe completo; destrava G2 |
-| P11 | **G2** — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | grande; 2 PRs se precisar |
-| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo |
+| ~~P11~~ | ~~**G2**~~ 🟡 PARCIAL (2026-08-15, PR1+PR2) — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | PR2 fechou threads/sincronização/`AddressArbiter`/começo de IPC (ver índice do `tasks/README.md`); aceite objetivo "roda até `svcExitProcess`" **NÃO alcançável** — achado real: `templates/application` esbarra numa decisão de OUTRO épico do arm-jitter (`FpscrRegister`, só IEEE round-to-nearest); **G3 herda esse bloqueio** (ver nota abaixo) |
+| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; ⚠️ **bloqueada de fato** até alguém decidir o que fazer com o achado FPSCR da G2 (ver nota abaixo) — sem isso nenhum `.3dsx` real chega perto de `srv:` |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
 | P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
@@ -396,6 +396,24 @@ padrão do armbox — sem agrupamento definido ainda).
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
+
+**Bloqueio novo descoberto na G2 (2026-08-15, sessão PR2) — precisa decisão do usuário antes de
+pegar G3**: com `svcCreateAddressArbiter` implementado, `n3dsemu testdata/application.3dsx`
+progride além da primeira `svc` e trava no `crt0`/newlib configurando a VFP com um FPSCR que
+`arm-jitter` rejeita de propósito (`FpscrRegister`, decisão nº 3 do épico B3: só IEEE
+round-to-nearest, sem `RMode`/`FZ`/`LEN`/`STRIDE`). Isso não é um bug da G2 nem do esqueleto do
+n3dsemu — é uma decisão de OUTRO épico do arm-jitter que qualquer `.3dsx` real parece bater
+logo no arranque (newlib configura VFP antes de `main()`). **G3 (IPC+serviços) não tem como
+progredir de verdade em nenhum binário real enquanto isso não for resolvido** — mesmo que a G3
+seja "só" implementar os handlers de serviço, o `.3dsx` de teste nunca vai chegar a chamá-los.
+Três caminhos possíveis (não decididos ainda, PARE e pergunte ao usuário antes de escolher um):
+(1) revisitar a decisão nº 3 do B3 no arm-jitter (suportar `LEN`/`STRIDE`/`FZ`/`RMode` de
+verdade — trabalho de arquitetura, fora do escopo de uma task de kernel HLE); (2) uma task
+pequena e cirúrgica no arm-jitter só para ACEITAR (ignorar) esses bits em vez de lançar, já que
+nenhum código real parece USAR aritmética vetorial VFPv2 de propósito hoje em dia — só grava o
+FPSCR "por costume" de binários antigos; (3) investigar se é possível fazer o `crt0` do
+libctru/newlib não gravar esses bits (não é uma opção real — o binário já está compilado, não
+dá para mudar sem recompilar com outro toolchain).
 
 **Armazenamento (decidido 2026-08-15):** o `virtual-arm-box` usa **disco virtual em formato
 padrão, compatível com outras VMs** — `raw` e **QCOW2**, ambos com leitura e escrita; VDI,
