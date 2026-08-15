@@ -352,6 +352,57 @@ diferentes apenas).
 |---|------|---------|------|-----------|----------------|
 | P1 | **B4.0.5** — armbox fase 3: fork/execve/pipes/wait | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox | B4.0.3 | ainda bloqueada — B4.0.3 fechou parcial, falta o busybox thumb2 (ver 🧑 abaixo) que essa task precisa como corpus |
 
+## Onda 4 — priorizada pelo usuário em 2026-08-15 (executar de cima para baixo)
+
+Cinco frentes pedidas pelo usuário: rename do `linuxbox`, emulador de 3DS, licença BSD,
+issues no GitHub, e o 1.0 do arm-jitter no Maven. **Ordem escolhida pelo usuário:
+infra primeiro, n3dsemu depois** — o n3dsemu é a única frente multi-sessão longa, e começar
+por ela deixaria o resto parado.
+
+Decisões já tomadas (**não reabrir**): BSD **3-Clause** · Maven **Central** mantendo o
+`groupId` `dev.vitorsilverio` (domínio `vitorsilverio.dev` é do usuário, verificação por DNS
+TXT) · gráficos do n3dsemu em **Vulkan/LWJGL 3 com janela GLFW própria**, sem backend de
+software · `armbox` e `virtual-arm-box` seguem **repos separados** · `virtual-arm-box`
+**sem repositório no GitHub** por enquanto · n3dsemu começa por **`.3dsx` homebrew**, ROM
+comercial é [REFINAR].
+
+| # | Task | Arquivo | Repo | Depende de | Nota de sessão |
+|---|------|---------|------|-----------|----------------|
+| P2 | **F1** — licença BSD 3-Clause nos 5 repos | `trilha-f-infra/f1-licenca-bsd.md` | todos | — | trivial, 1 sessão; destrava a F5 (o Central exige `<licenses>`) |
+| P3 | **F8** — labels/milestones/templates + fronteira issues×`tasks/` | `trilha-f-infra/f8-github-issues-setup.md` | 4 repos | — | independente de tudo; pode andar em paralelo com F1 (repos diferentes) |
+| P4 | **F9** — postar as 20 issues do backlog | `trilha-f-infra/f9-github-issues-criacao.md` | 4 repos | F8 | mecânica — os corpos já estão escritos em `tasks/issues/` |
+| P5 | **F2** — rename `linuxbox` → `virtual-arm-box` + abstração `Machine` | `trilha-f-infra/f2-rename-virtual-arm-box.md` | virtual-arm-box | F1 | também mexe na documentação do arm-jitter |
+| P6 | **F4** — preparar o arm-jitter 1.0.0 | `trilha-f-infra/f4-arm-jitter-1.0.0-escopo.md` | arm-jitter | F1 | ⚠️ **a partir daqui os consumidores ficam quebrados até a F7** — agende as duas juntas |
+| P7 | **F5** — publicar no Maven Central | `trilha-f-infra/f5-maven-central-publicacao.md` | arm-jitter | F4 | 🧑 passos 1-3 (conta Central, DNS TXT, chave GPG) são do usuário |
+| P8 | **F7** — consumidores no Central, sem `asm` declarado | `trilha-f-infra/f7-consumidores-central.md` | 4 consumidores | F5 | fecha a janela aberta pela F6; **este é o G5 completo da onda** |
+| P9 | **F6** — GitHub Actions (CI + release por tag) | `trilha-f-infra/f6-github-actions-pipeline.md` | 4 repos | F5 | o trabalho real é fazer os testes que dependem de asset local serem *skipped* |
+| P10 | **G1** — `n3dsemu`: esqueleto + loader `.3dsx` + primeira `svc` | `trilha-g-3ds/g1-esqueleto-n3dsemu.md` | n3dsemu (novo) | F7 | **leia `trilha-g-3ds/RFC-N3DSEMU.md` inteira antes** |
+| P11 | **G2** — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | grande; 2 PRs se precisar |
+| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo |
+| P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
+| P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
+| P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
+
+**Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
+`P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
+`P15` (virtual-arm-box).
+
+**Armazenamento (decidido 2026-08-15):** o `virtual-arm-box` usa **disco virtual em formato
+padrão, compatível com outras VMs** — `raw` e **QCOW2**, ambos com leitura e escrita; VDI,
+VMDK e VHD/VHDX são atendidos por `qemu-img convert`, sem código nosso. Primeiro controlador:
+**PL181 MMCI (SD/MMC)** no `versatilepb`. Task **F10** (P16).
+
+**Achado de ambiente 2026-08-15 — o QEMU 8.0.0 está instalado** (`C:\Program Files\qemu\`,
+só binários, sem fonte): `qemu-img` (incl. **`check`**), `qemu-io` e `qemu-system-arm`. É
+oráculo externo direto para a F10 (validar imagem QCOW2 que nós escrevemos) e para a F3
+(bootar a mesma placa/kernel e comparar log serial). O **código-fonte** do QEMU continua
+ausente — quem for transcrever periférico precisa buscá-lo no repositório público.
+
+**[REFINAR] desta onda** (não executar; viram spec nova quando a dependência fechar):
+**G6** (ROMs comerciais `.cia`/`.3ds`, bloqueada em dump de `boot9.bin`) e **G7** (trazer o
+núcleo Vulkan para o ndsemu — condicional a a G5 dar certo).
+
 - **Nota de ambiente (2026-07-31)**: esta máquina passou a ter GraalVM 25
   (`E:\graalvm-jdk-25.0.3+9.1`) + Visual Studio 2022 com MSVC (`vcvars64.bat`)
   disponíveis — o mesmo ambiente que várias tasks desta fila estavam
