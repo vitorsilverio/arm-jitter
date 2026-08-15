@@ -361,6 +361,22 @@ mvn -o test
 Mudanças aqui exigem `mvn install` local e as suítes dos consumidores (gbaemu e
 ndsemu) verdes antes do commit (invariante G5 do `tasks/README.md`).
 
+## Desenvolvendo a lib junto com um consumidor
+
+Desde a publicação no Maven Central (`dev.vitorsilverio:arm-jitter:1.0.0`, task F5), nenhum
+consumidor (gbaemu, ndsemu, armbox, virtual-arm-box, n3dsemu) precisa de `mvn install` local
+para compilar — a dependência resolve direto do Central.
+
+Enquanto uma mudança da lib não está publicada, o consumidor precisa da versão local:
+
+1. No arm-jitter: `<version>1.0.1-SNAPSHOT</version>` + `mvn -o install`.
+2. No consumidor: apontar a dependência para `1.0.1-SNAPSHOT` **sem commitar**.
+3. Ao publicar (tag `v1.0.1`, ver `docs/PUBLICAR.md`), voltar os dois para a versão final e
+   aí sim commitar.
+
+Nunca commite um consumidor apontando para um `-SNAPSHOT`: o CI não resolve SNAPSHOT do
+Central e o build quebra para todo mundo.
+
 ## Versionamento
 
 [Versionamento Semântico](https://semver.org). O que conta como **API pública** (e portanto
