@@ -9,7 +9,7 @@ deste roadmap tem uma spec autocontida com escopo, aceite e armadilhas.
 
 ---
 
-## Onde estamos (2026-07-31)
+## Onde estamos (2026-08-15)
 
 O pipeline `cache → decode → lift IR → otimizar → emit` está completo e em produção:
 
@@ -24,8 +24,8 @@ O pipeline `cache → decode → lift IR → otimizar → emit` está completo e
 - **Arquiteturas guest 32-bit:** ARMv4T (GBA) e ARMv5TE (NDS) em produção; ARMv6K,
   Thumb-2 e ARMv7-A+VFPv2 (épicos B1/B2/B3) completos e validados com binários reais
   no `armbox`; perfil M/Cortex-M (épico B7) completo (MSP/PSP/NVIC/SysTick/semihosting);
-  MMU/softmmu 32-bit (épico B4.1) com page-walk+aborts precisos prontos na lib, host
-  `virtual-arm-box` ainda não alcança shell (trava num abort perto da página de vetores).
+  MMU/softmmu 32-bit (épico B4.1) ✅ completo (2026-08-14): page-walk+aborts precisos
+  na lib, host `virtual-arm-box` chega a um shell `busybox` interativo.
   Ver [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
 - **AArch64 (épico B6):** decoder A64 completo (base ISA inteira + FP/SIMD escalar +
   exclusivos), `Aarch64Core` com EL0/EL1 e aborts precisos, MMU v8, backend ASM nativo
@@ -196,24 +196,30 @@ Leibniz em `double`) nos 3 backends do `armbox`.
 `docs/RFC-SOFTMMU.md` (2026-07-15): wrapper de tradução, hospedeiro
 versatilepb+ARM1176 (**ARMv6K — não precisa de B3/VFP**), aborts base-restored,
 CP15 VMSA na lib, gerações no BlockCache; fases B4.1.1–B4.1.5 no épico refinado.
-**B4.1.1-B4.1.4 ✅ fechadas (2026-07-26)**: `TranslatingAddressSpace` (page-walk VMSA
+**✅ ÉPICO FECHADO (B4.1.1-B4.1.5, 2026-08-14)**: `TranslatingAddressSpace` (page-walk VMSA
 completo, AP/domains, micro-TLB), `Cp15VmsaCoprocessor` (`MCR`/`MRC` ligados ao
 wrapper), aborts precisos (`ArmCore.enterMemoryAbort`, FAR/FSR reais) nos 3 motores
 (interpretador, `IrBlockExecutor` e JIT ASM nativo via `visitTryCatchBlock`),
 `translationGeneration` no `BlockKey`/`JitRuntime` (troca de `TTBR0` vira miss natural
-no cache de blocos). **B4.1.5 🟡 parcial (2026-07-26)**: repositório novo `virtual-arm-box`
-(hospedeiro versatilepb-like com `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic`) roda um
-kernel Debian real (`vmlinuz-3.2.0-4-versatile`) + `busybox-armv5l` até a
-descompressão do zImage, mas trava num `PREFETCH_ABORT` recursivo perto da página de
-vetores altos (`0xffff0000`) antes de alcançar shell — causa raiz não isolada, fica
-para retomar (ver `tasks/trilha-b-arquiteturas/`) ou para fechar com um toolchain
-`arm-linux-gnueabihf-*`/WSL real e buildar o kernel do zero.
+no cache de blocos) — tudo isso em B4.1.1-B4.1.4 (2026-07-26). **B4.1.5 (2026-08-14,
+2 sessões)**: repositório novo `virtual-arm-box` (hospedeiro versatilepb-like com
+`Pl011Uart`/`Sp804DualTimer`/`Pl190Vic`) roda um kernel Debian real
+(`vmlinuz-3.2.0-4-versatile`) + `busybox-armv5l` até um shell `busybox` interativo,
+nos backends INTERPRETED e JIT — 4 causas raiz corrigidas na 2ª sessão (TLBs de
+instrução/dados separadas do ARMv5, sincronização de privilégio USER/PRIV com o modo
+do core para o copy-on-write do `fork()` funcionar, propagação de falta de tradução no
+lift adiantado de bloco, e VFPv2 opcional no core para o busybox hard-float não
+travar em `VPUSH`). Ver [tasks/README.md](tasks/README.md) para o detalhe completo.
 - VMSA: page tables, TLB emulado, domains, aborts precisos — ✅ feito acima.
 - `BlockCache` ciente de geração de tradução — ✅ feito acima (não é ASID pleno, mas
   cobre o caso prático de troca de mapeamento).
 - Interrupt controller/timers/UART ficam no emulador hospedeiro (`virtual-arm-box`); arm-jitter
   entrega os hooks (linha IRQ/FIQ já existe).
-- **Aceite pendente:** kernel Linux ARMv6/v7 mínimo bootando até shell no `virtual-arm-box`.
+- **Aceite:** kernel Linux ARMv5TE bootando até shell `busybox` interativo no
+  `virtual-arm-box` — ✅ alcançado (desvio documentado: kernel Debian pré-compilado +
+  ATAGs em vez de `versatile_defconfig` mainline com Device Tree, e ARM926EJ-S/ARMv5TE
+  em vez do ARM1176/ARMv6K original da RFC — falta de toolchain `arm-linux-gnueabihf-*`
+  nesta máquina, mesmo bloqueio de B4.0.3/B6.2/B6.6.6).
 
 **B5 — 3DS enablement** — ✅ lado arm-jitter completo: B1 (ARMv6K) + B3 (VFPv2) + B5.1
 (monitor de exclusividade global) + **B5.2 ✅ (2026-07-23)** — preset
@@ -263,18 +269,16 @@ prioridade/preempção), `MRS`/`MSR` SYSm + `CPS` de 16 bits, presets `ARMV6M`/`
 validado com firmware torture m0/m3 + `hello-cortexm.c` (gcc real, sem CRT).
 
 **Status da ordem recomendada de 2026-07-15**: as três frentes (B3 VFP/ARMv7-A, B7
-Cortex-M, B4.1 MMU/Linux) rodaram e B3/B7 **fecharam por completo**; B4.1 fechou a
-lib (B4.1.1-4) e ficou parcial no hospedeiro (B4.1.5, `virtual-arm-box`). B5 (3DS) e B6.1-6.5
-(AArch64) também fecharam depois disso. **O que resta hoje é, em cada caso, o
-ÚLTIMO degrau de cada épico — não mais decoder/IR/executor, mas um hospedeiro
-batendo em kernel/toolchain real** — e os quatro compartilham o mesmo tipo de
-bloqueio (toolchain `arm-linux-*`/`aarch64-linux-*` ou kernel/binário real
+Cortex-M, B4.1 MMU/Linux) rodaram e as três **fecharam por completo** (B4.1 por
+último, em 2026-08-14, com o épico inteiro incluindo o hospedeiro `virtual-arm-box`).
+B5 (3DS) e B6.1-6.5 (AArch64) também fecharam depois disso. **O que resta hoje é, em
+cada caso, o ÚLTIMO degrau de um épico ainda aberto — não mais decoder/IR/executor,
+mas um hospedeiro batendo em kernel/toolchain real** — e os três compartilham o mesmo
+tipo de bloqueio (toolchain `arm-linux-*`/`aarch64-linux-*` ou kernel/binário real
 indisponível neste ambiente Windows/MSYS2 sem WSL configurado):
 - **B4.0.3 item 3 / B4.0.5** (armbox: busybox estático Thumb-2, depois fork/pipes)
 - **B6.2 aceite #2 / B6.4 bench** (armbox: busybox estático aarch64 real)
 - **B6.6.6** (hospedeiro `virt64`: kernel arm64 real + GICv2/v3/PSCI/DTB)
-- **B4.1.5** (retomar o loop de abort do `virtual-arm-box`, ou fechar com toolchain
-  `arm-linux-gnueabihf-*`/WSL real e um kernel buildado do zero)
 
 Todas as decisões de desenho pendentes foram fechadas em 2026-07-15
 (`docs/RFC-M-PROFILE.md`, `docs/RFC-SOFTMMU.md`, specs B3.x); a matriz objetiva de
