@@ -2,7 +2,9 @@ package dev.vitorsilverio.armjitter.memory.mmu;
 
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.core.MemoryAbortListener;
+import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 
 /// CP15 VMSA (ARM DDI 0100I, ARMv6): liga as instruções `MCR`/`MRC` que o software convencional
 /// (kernel Linux `versatile_defconfig`, RFC-SOFTMMU) usa para configurar a MMU aos controles
@@ -31,18 +33,24 @@ import dev.vitorsilverio.armjitter.core.MemoryAbortListener;
 /// - `c7` (manutenção de cache + barreiras `ISB`/`DSB`/`DMB`): NOP observável em toda escrita (sem
 ///   cache nem pipeline modelados) e RAZ em leitura — mesmo precedente do `IrOp.MemoryBarrier`
 ///   32 bits.
-/// - `c8,c7,{0,1}` (TLB unificada): `TLBIALL`/`TLBIMVA`, repassados a
-///   {@link TranslatingAddressSpace#invalidateTlbAll}/{@link TranslatingAddressSpace#invalidateTlbByMva}.
-///   TLB de instrução/dados separadas (`c8,c5,*`/`c8,c6,*`) fora do escopo — o wrapper só expõe
-///   invalidação unificada.
+/// - `c8,c{5,6,7},{0,1,2}` (TLB de instrução / de dados / unificada): `TLBIALL`/`TLBIMVA`/
+///   `TLBIASID`, repassados às faces correspondentes da micro-TLB do wrapper
+///   ({@link TranslatingAddressSpace#invalidateInstructionTlbAll} e irmãs). As formas separadas
+///   `c8,c5,*`/`c8,c6,*` NÃO são opcionais na prática: um core com TLBs separadas (ARM926EJ-S /
+///   ARMv5, o `v4wbi_*` do Linux) nunca emite a forma unificada — sem elas todo `flush_tlb_*` do
+///   kernel vira exceção UNDEFINED (achado real do boot do linuxbox, B4.1.5).
 /// - `CONTEXTIDR` (`c13,c0,1`): os 8 bits baixos (ASID) ligam em
 ///   {@link TranslatingAddressSpace#setAsid}; o valor completo é guardado para leitura de volta.
 ///
-/// **Fora de escopo (além da B4.1.3, não fazer aqui)**: sincronizar
-/// {@link TranslatingAddressSpace#setPrivileged} a partir de `CPSR`/troca de modo do `core` a cada
-/// instrução — o `ArmCore` ainda não tem um gancho de troca de modo, e o wrapper só se torna o
-/// `AddressSpace` *live* dos motores quando o host o instala (RFC-SOFTMMU, fora desta classe).
-public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortListener {
+/// - **Modo privilegiado vs. usuário** (B4.1.5): esta classe também implementa
+///   {@link ModeChangeListener} e repassa cada troca de modo do core para
+///   {@link TranslatingAddressSpace#setPrivileged}, porque os bits `AP` da tabela de páginas
+///   tratam os dois casos de forma diferente. O host precisa registrar
+///   `core.setModeChangeListener(this)` (terceiro gancho independente do mesmo `ArmCore`, junto
+///   de `setCoprocessorBus`/`setMemoryAbortListener`) — sem ele todo acesso é privilegiado e o
+///   *copy-on-write* do `fork()` do Linux nunca falta, corrompendo pai e filho (ver
+///   {@link ModeChangeListener}).
+public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortListener, ModeChangeListener {
     private static final int CP15 = 15;
 
     private static final int CRN_SYSTEM_CONTROL = 1;
@@ -72,9 +80,19 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     /// diferente em `c6` vs `c5`).
     private static final int OPCODE2_IFAR = 2;
 
+    /// `c8,c5,*` — TLB de INSTRUÇÃO (cores com TLBs separadas: ARM926EJ-S/ARMv5, usado pelo
+    /// `v4wbi_*` do Linux).
+    private static final int CRM_TLB_INSTRUCTION = 5;
+    /// `c8,c6,*` — TLB de DADOS (idem).
+    private static final int CRM_TLB_DATA = 6;
+    /// `c8,c7,*` — TLB unificada.
     private static final int CRM_TLB_UNIFIED = 7;
     private static final int OPCODE2_TLB_INVALIDATE_ALL = 0;
     private static final int OPCODE2_TLB_INVALIDATE_BY_MVA = 1;
+    /// `TLBIASID` (`opcode2=2`, ARMv6): invalidar por ASID. Sem tag de ASID por entrada capaz de
+    /// varredura seletiva na micro-TLB direto-mapeada, é atendido invalidando tudo — invalidar
+    /// mais do que o pedido é sempre arquiteturalmente legal.
+    private static final int OPCODE2_TLB_INVALIDATE_BY_ASID = 2;
 
     private static final int OPCODE2_CONTEXTIDR = 1;
 
@@ -122,8 +140,11 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
             case CRN_FAULT_STATUS -> crm == CRM_PRIMARY && (opcode2 == OPCODE2_DFSR || opcode2 == OPCODE2_IFSR);
             case CRN_FAULT_ADDRESS -> crm == CRM_PRIMARY && (opcode2 == OPCODE2_DFAR || opcode2 == OPCODE2_IFAR);
             case CRN_CACHE_MAINTENANCE -> true;
-            case CRN_TLB_MAINTENANCE -> crm == CRM_TLB_UNIFIED
-                    && (opcode2 == OPCODE2_TLB_INVALIDATE_ALL || opcode2 == OPCODE2_TLB_INVALIDATE_BY_MVA);
+            case CRN_TLB_MAINTENANCE ->
+                    (crm == CRM_TLB_UNIFIED || crm == CRM_TLB_INSTRUCTION || crm == CRM_TLB_DATA)
+                            && (opcode2 == OPCODE2_TLB_INVALIDATE_ALL
+                            || opcode2 == OPCODE2_TLB_INVALIDATE_BY_MVA
+                            || opcode2 == OPCODE2_TLB_INVALIDATE_BY_ASID);
             case CRN_CONTEXT -> crm == CRM_PRIMARY && opcode2 == OPCODE2_CONTEXTIDR;
             default -> false;
         };
@@ -175,18 +196,41 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
                 // NOP observável: sem cache nem pipeline modelados, toda manutenção de cache e
                 // toda barreira (ISB/DSB/DMB, mesmo subgrupo c7) já é satisfeita por não fazer nada.
             }
-            case CRN_TLB_MAINTENANCE -> {
-                if (opcode2 == OPCODE2_TLB_INVALIDATE_ALL) {
-                    mmu.invalidateTlbAll();
-                } else {
-                    mmu.invalidateTlbByMva(value);
-                }
-            }
+            case CRN_TLB_MAINTENANCE -> invalidateTlb(crm, opcode2, value);
             case CRN_CONTEXT -> {
                 contextIdr = value;
                 mmu.setAsid(value & CONTEXTIDR_ASID_MASK);
             }
             default -> throw unsupported(crn, crm, opcode2);
+        }
+    }
+
+    /// Despacha `c8,c{5,6,7},{0,1,2}` para a face certa da micro-TLB do wrapper. `TLBIMVA`
+    /// (`opcode2=1`) recebe a MVA em `value`; `TLBIALL`/`TLBIASID` ignoram o valor escrito.
+    private void invalidateTlb(int crm, int opcode2, int value) {
+        boolean byMva = opcode2 == OPCODE2_TLB_INVALIDATE_BY_MVA;
+        switch (crm) {
+            case CRM_TLB_INSTRUCTION -> {
+                if (byMva) {
+                    mmu.invalidateInstructionTlbByMva(value);
+                } else {
+                    mmu.invalidateInstructionTlbAll();
+                }
+            }
+            case CRM_TLB_DATA -> {
+                if (byMva) {
+                    mmu.invalidateDataTlbByMva(value);
+                } else {
+                    mmu.invalidateDataTlbAll();
+                }
+            }
+            default -> {
+                if (byMva) {
+                    mmu.invalidateTlbByMva(value);
+                } else {
+                    mmu.invalidateTlbAll();
+                }
+            }
         }
     }
 
@@ -215,6 +259,11 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
             value |= SCTLR_V_BIT;
         }
         return value;
+    }
+
+    @Override
+    public void onModeChanged(CpuMode mode) {
+        mmu.setPrivileged(mode != CpuMode.USER);
     }
 
     @Override

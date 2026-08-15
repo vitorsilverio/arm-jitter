@@ -196,6 +196,38 @@ class TranslatingAddressSpaceTest {
         assertEquals(afterFirst + 1, mmu.pageWalkCount(), "invalidateTlbAll deve forçar novo walk");
     }
 
+    /// B4.1.5: cores ARMv5 com TLBs separadas invalidam instrução e dados por instruções
+    /// distintas (`c8,c5,*` e `c8,c6,*`) — as duas faces precisam ser independentes de verdade, e
+    /// só a de INSTRUÇÃO bumpa a geração de tradução (mapeamento de dados não invalida bloco
+    /// compilado; RFC-SOFTMMU §5).
+    @Test
+    void facesDeInstrucaoEDadosDaTlbSaoIndependentes() {
+        TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
+        TranslatingAddressSpace mmu = newMmu(physical);
+
+        mmu.read32(0x0010_0000);
+        mmu.fetch32(0x0010_0000);
+        long afterBoth = mmu.pageWalkCount();
+        int generationAfterBoth = mmu.translationGeneration();
+
+        mmu.invalidateDataTlbAll();
+        mmu.fetch32(0x0010_0000);
+        assertEquals(afterBoth, mmu.pageWalkCount(), "invalidar dados não pode invalidar instrução");
+        assertEquals(generationAfterBoth, mmu.translationGeneration(),
+                "TLB de dados não muda a tradução de CÓDIGO: sem bump de geração");
+        mmu.read32(0x0010_0000);
+        assertEquals(afterBoth + 1, mmu.pageWalkCount(), "a face de dados foi invalidada");
+
+        long afterDataRefill = mmu.pageWalkCount();
+        mmu.invalidateInstructionTlbAll();
+        assertEquals(generationAfterBoth + 1, mmu.translationGeneration(),
+                "invalidar a TLB de instrução bumpa a geração de tradução");
+        mmu.read32(0x0010_0000);
+        assertEquals(afterDataRefill, mmu.pageWalkCount(), "invalidar instrução não pode invalidar dados");
+        mmu.fetch32(0x0010_0000);
+        assertEquals(afterDataRefill + 1, mmu.pageWalkCount(), "a face de instrução foi invalidada");
+    }
+
     @Test
     void invalidateTlbByMvaSoAfetaAPaginaAlvo() {
         TestAddressSpace physical = new TestAddressSpace(0x0100_0000);

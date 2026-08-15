@@ -1,6 +1,9 @@
 package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
+import dev.vitorsilverio.armjitter.support.FaultingAddressSpace;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +31,40 @@ class StandardIrBlockLifterTest {
         assertInstanceOf(IrOp.Branch.class, block.operations().get(6));
         assertInstanceOf(IrOp.Cycle.class, block.operations().get(7));
         assertFetch(block.operations().get(8), 8, 4);
+    }
+
+    /// B4.1.5 (achado real do boot do Linux no `linuxbox`): a leitura ADIANTADA do lifter pode
+    /// tocar uma página não mapeada que a CPU talvez nunca execute. Nesse caso o bloco só TERMINA
+    /// — mesmo tratamento que `IndexOutOfBoundsException` (barramento sem MMU) sempre teve. Sem
+    /// isto o host recebe um PREFETCH_ABORT no PC de INÍCIO do bloco, "conserta" o endereço errado
+    /// e volta para o mesmo lugar: o boot do kernel travava aí, e só no runtime tiered (o caminho
+    /// não-tiered interpreta instrução a instrução e nunca lê adiante).
+    @Test
+    void endsBlockWhenReadAheadFaultsInTranslation() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE3A0_0001); // MOV r0,#1
+        memory.put32(4, 0xE280_0002); // ADD r0,r0,#2
+        FaultingAddressSpace faulting = new FaultingAddressSpace(memory);
+        faulting.faultOn(8, MemoryAccessType.INSTRUCTION_FETCH);
+        StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder());
+
+        IrBlock block = lifter.lift(faulting, 0, 8);
+
+        assertEquals(8, block.endPc(), "o bloco termina onde a tradução falhou");
+        assertEquals(6, block.operations().size());
+    }
+
+    /// A contrapartida: se a falta é da PRIMEIRA instrução (bloco ainda vazio), ela É a instrução
+    /// que a CPU vai executar agora — propagar é o correto, para virar o abort real.
+    @Test
+    void propagatesTranslationFaultOfFirstInstruction() {
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE3A0_0001);
+        FaultingAddressSpace faulting = new FaultingAddressSpace(memory);
+        faulting.faultOn(0, MemoryAccessType.INSTRUCTION_FETCH);
+        StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder());
+
+        assertThrows(MemoryTranslationException.class, () -> lifter.lift(faulting, 0, 8));
     }
 
     @Test

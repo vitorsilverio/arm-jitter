@@ -254,7 +254,72 @@
   `mvn -o test` raiz verde; gbaemu + ndsemu + armbox revalidados verdes (G5 se aplica desta vez:
   `ArmCore`/`IrBlockExecutor`/`AsmBlockCompiler`/decoders são compartilhados). Próximo da ordem
   do épico: **B4.1.4** (`translationGeneration` no `BlockKey`/`JitRuntime`).
-- **B4.1.5** 🟡 PARCIAL (2026-07-26, quinta e última sub-task do épico B4.1/MMU-softmmu — repo
+- **B4.1.5** ✅ FECHADA (2026-08-14, segunda sessão — **fecha o épico B4.1/MMU-softmmu por
+  completo**). O aceite objetivo foi alcançado: o kernel Linux REAL de `testdata/` boota até um
+  **shell `busybox` interativo** (`/ #`) nos backends INTERPRETED e JIT, e o shell RESPONDE a um
+  comando digitado pelo UART0 (`VersatilePbBootTest` faz os dois: espera o prompt, digita
+  `echo LINUX"BOX-SHELL-OK"`, exige a saída sem as aspas — o eco do tty sozinho não passa no
+  teste). Boot completo em ~18s interpretado, ~12s no JIT. Foram **4 causas raiz** — nenhuma delas na página de vetores, que era só o sintoma final:
+  **(1) A pendência da sessão anterior — o loop de `PREFETCH_ABORT` na página de vetores**:
+  `Cp15VmsaCoprocessor` (B4.1.2) só
+  atendia a TLB **unificada** (`c8,c7,*`), e o ARM926EJ-S/ARMv5 tem TLBs de instrução e dados
+  SEPARADAS: todo `flush_tlb_*` do kernel usa `c8,c6,*` (dados) e `c8,c5,*` (instrução), que caíam
+  em UNDEFINED. A exceção de instrução indefinida acontecia ANTES de `early_trap_init` copiar os
+  vetores para `0xffff0000`, então o vetor UNDEF continha zeros (`andeq r0,r0,r0` = NOP), a
+  execução "escorregava" a página inteira de NOPs e caía em `0xffff1000` (não mapeada) → o abort
+  recursivo observado. Corrigido no arm-jitter: `TranslatingAddressSpace` ganhou as 4 operações
+  por face (`invalidateInstruction/DataTlbAll`/`...ByMva`; só a de INSTRUÇÃO bumpa
+  `translationGeneration`, RFC §5 — mapeamento de dados não invalida bloco compilado) e o
+  `Cp15VmsaCoprocessor` passou a atender `c8,c{5,6,7},{0,1,2}` (inclui `TLBIASID`).
+  **(2) Segundo bug real, encontrado logo depois** (o kernel passou a bootar inteiro e morrer em
+  `Kernel panic: Attempted to kill init!`): `TranslatingAddressSpace.setPrivileged` NUNCA era
+  sincronizado com o modo do core (estava documentado como "fora de escopo" desde a B4.1.2), ou
+  seja **todo** acesso era privilegiado. Consequência: uma escrita de USUÁRIO numa página
+  somente-leitura passava em vez de faltar — o *copy-on-write* do `fork()` do Linux nunca
+  disparava, pai e filho seguiam compartilhando fisicamente a mesma pilha e se corrompiam (todo
+  processo filho do shell morria com SIGSEGV saltando para um endereço lixo). Corrigido com
+  `ModeChangeListener` novo no `ArmCore` (mesmo padrão aditivo de `MemoryAbortListener`, G3),
+  disparado nos 2 pontos de troca de modo (`setCpsr` e `switchMode`); `Cp15VmsaCoprocessor`
+  implementa a interface e repassa `mode != USER` para o wrapper. O host registra o gancho com
+  `core.setModeChangeListener(cp15)`.
+  **(3) Terceiro bug real (só o backend JIT/tiered)**: com os dois anteriores corrigidos o
+  INTERPRETED chegava ao shell mas o JIT travava logo depois de `Freeing init memory`, com o
+  kernel imprimindo `INFO: task kworker/0:0 blocked for more than 120 seconds`. Bisecção: com
+  `hotThreshold` gigante (nenhum bytecode ASM emitido) o JIT travava IGUAL — logo não era emissão
+  ASM, era o `JitRuntime` **tiered**, cuja única diferença é executar BLOCOS desde a primeira
+  visita (o caminho não-tiered interpreta instrução a instrução até o bloco esquentar). Causa:
+  `StandardIrBlockLifter` já terminava o bloco quando a leitura ADIANTADA estourava o barramento
+  (`IndexOutOfBoundsException`), mas deixava escapar `MemoryTranslationException` — ou seja, o
+  lift de um bloco que apenas ENCOSTA na página seguinte (que a CPU talvez nunca execute)
+  entregava ao host um `PREFETCH_ABORT` no PC de INÍCIO do bloco (o único que o `JitRuntime`
+  conhece), o kernel "consertava" o endereço errado e retornava para o mesmo lugar. Corrigido
+  tratando as duas exceções igual: bloco não-vazio → termina o bloco; bloco vazio → propaga (aí a
+  falta é da instrução que a CPU vai executar agora, e vira o abort real). Depois disso o JIT
+  boota em ~12s, mais rápido que o interpretado. Testes novos em `StandardIrBlockLifterTest`
+  (leitura adiantada faltando termina o bloco; falta na PRIMEIRA instrução propaga).
+  **(4) Quarto achado, do lado do `linuxbox`**: o `busybox-armv5l` de `testdata/` é um binário
+  **hard-float** (`e_flags` traz `EF_ARM_ABI_FLOAT_HARD`) e usa prólogos VFP reais
+  (`VPUSH {d8-d14}`) não gateados por `HWCAP_VFP` — sem VFP o PID 1 tomava SIGILL. O hospedeiro
+  passou a montar o core com `ARMV5TE + ArmFeature.VFPV2` (+ `VfpDecoder`), que é o **ARM926EJ-S
+  com a VFP9-S opcional**, exatamente o que o `-cpu arm926` do QEMU modela. Só mudança de
+  `linuxbox`, nenhum preset novo no arm-jitter. (O kernel segue imprimindo `VFP support: not
+  present` porque a sondagem lê `FPSID` via `MRC p10,7,...` e o `VfpDecoder` só decodifica
+  `FPSCR` — sem consequência prática aqui, num ARMv5 não há `CPACR` gateando CP10/CP11.)
+  **Armadilha registrada** (custou uma rodada de teste): o FIFO de recepção do PL011 tem 16
+  posições e descarta o excedente como hardware real — digitar uma linha inteira de uma vez faz o
+  guest receber só os 16 primeiros bytes, sem o `\n`. O teste digita um byte por lote de fatias.
+  Testes novos no arm-jitter: `StandardIrBlockLifterTest` (2, acima), `Cp15VmsaCoprocessorTest` (faces de TLB separadas encaminhadas e
+  independentes; `ModeChangeListener` sincronizando privilégio — escrita de usuário em página
+  `AP=01` falta com `SECTION_PERMISSION` e não chega à memória) e `TranslatingAddressSpaceTest`
+  (independência real das duas faces + só a de instrução bumpa a geração). `Main` do `linuxbox`
+  ganhou drenagem não bloqueante de `stdin` para o UART0 (shell realmente usável na linha de
+  comando). `mvn -o test` verde em arm-jitter (1327 core + 13 truffle), linuxbox, gbaemu (244),
+  ndsemu (183) e armbox (41) — G5 se aplica (`ArmCore`/CP15/MMU/lifter são compartilhados).
+  **Desvios que PERMANECEM** (não são bugs, são falta de toolchain — ver `testdata/README.md`):
+  kernel Debian 3.2 pré-compilado + ATAGs em vez de `versatile_defconfig` mainline + DTB, e
+  ARM926EJ-S/ARMv5TE em vez do ARM1176/ARMv6K da RFC decisão 2. Fechar isso exige um
+  `arm-linux-gnueabihf-*` real ou WSL — mesmo bloqueio de B4.0.3/B6.2/B6.6.6.
+- **B4.1.5 (sessão 1)** 🟡 PARCIAL (2026-07-26, quinta e última sub-task do épico B4.1/MMU-softmmu — repo
   novo `linuxbox`): hospedeiro `versatilepb`-like completo (RAM 128MiB via `PagedAddressSpace`
   C3, `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic` transcritos dos respectivos arquivos de
   `hw/*/*.c` do QEMU, `AtagsBuilder`) sobre `TranslatingAddressSpace`+`Cp15VmsaCoprocessor`
@@ -481,9 +546,7 @@ diferentes apenas).
   (`TranslatingAddressSpace64`, independente) segue na tabela executável acima; B6.6.3
   (`Aarch64VmsaSystemRegisters` ligando os dois) só fica elegível quando ambas fecharem.
 
-Backlog sem prioridade definida (não pegar sem o usuário priorizar): B4.1.5 (retomar o loop de
-abort na página de vetores do linuxbox, ou fechar o desvio ARM1176/ARMv6K+DT com toolchain
-real). B6.4 (backend ASM 64-bit) fechou os 3 PRs (ver histórico abaixo) — só resta,
+Backlog sem prioridade definida (não pegar sem o usuário priorizar): B6.4 (backend ASM 64-bit) fechou os 3 PRs (ver histórico abaixo) — só resta,
 como pendência EXPLÍCITA fora do escopo de qualquer PR (registrador-cache sem consumidor A64
 medido ainda, D0/D-ASM) ou bloqueada no ambiente (bench busybox-aarch64), ver a seção 🧑 abaixo.
 B6.5 (FP/SIMD escalar) decomposta em B6.5.1-B6.5.4 (2026-07-26) — **B6.5.1 ✅ fechada

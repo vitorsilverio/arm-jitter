@@ -86,6 +86,79 @@ class Cp15VmsaCoprocessorTest {
         assertEquals(afterMva + 1, mmu.pageWalkCount(), "TLBIALL deve forçar novo walk");
     }
 
+    /// B4.1.5 (achado real do boot do Linux no `linuxbox`): um core com TLBs de instrução e dados
+    /// SEPARADAS (ARM926EJ-S/ARMv5, o `v4wbi_*` do Linux) nunca emite a forma unificada `c8,c7,*` —
+    /// só `c8,c5,*` (instrução) e `c8,c6,*` (dados). Sem elas todo `flush_tlb_*` do kernel virava
+    /// UNDEFINED.
+    @Test
+    void separateInstructionAndDataTlbOpsAreHandledAndForwarded() {
+        TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
+        physical.put32(0, sectionDescriptor(0, 0));
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(physical);
+        mmu.setDacr(1);
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+        mmu.setMmuEnabled(true);
+
+        assertTrue(cp15.handles(15, 0, 8, 5, 0), "ITLBIALL (c8,c5,0)");
+        assertTrue(cp15.handles(15, 0, 8, 5, 1), "ITLBIMVA (c8,c5,1)");
+        assertTrue(cp15.handles(15, 0, 8, 6, 0), "DTLBIALL (c8,c6,0)");
+        assertTrue(cp15.handles(15, 0, 8, 6, 1), "DTLBIMVA (c8,c6,1)");
+        assertTrue(cp15.handles(15, 0, 8, 7, 2), "TLBIASID (c8,c7,2)");
+
+        mmu.read32(0);
+        long afterFirstWalk = mmu.pageWalkCount();
+        mmu.read32(0);
+        assertEquals(afterFirstWalk, mmu.pageWalkCount(), "HIT de dados antes de invalidar");
+
+        cp15.write(15, 0, 8, 5, 0, 0); // ITLBIALL: não pode mexer na TLB de DADOS
+        mmu.read32(0);
+        assertEquals(afterFirstWalk, mmu.pageWalkCount(), "ITLBIALL não invalida a TLB de dados");
+
+        cp15.write(15, 0, 8, 6, 0, 0); // DTLBIALL
+        mmu.read32(0);
+        assertEquals(afterFirstWalk + 1, mmu.pageWalkCount(), "DTLBIALL deve forçar novo walk de dados");
+
+        long afterAll = mmu.pageWalkCount();
+        mmu.read32(0);
+        assertEquals(afterAll, mmu.pageWalkCount());
+        cp15.write(15, 0, 8, 6, 1, 0); // DTLBIMVA(0)
+        mmu.read32(0);
+        assertEquals(afterAll + 1, mmu.pageWalkCount(), "DTLBIMVA deve forçar novo walk de dados");
+    }
+
+    /// B4.1.5 (achado real): sem sincronizar o modo do core com {@link
+    /// TranslatingAddressSpace#setPrivileged}, TODO acesso é privilegiado — uma escrita de USUÁRIO
+    /// numa página `AP=01` (privilegiado-apenas) passa em vez de faltar, e o *copy-on-write* do
+    /// `fork()` do Linux nunca dispara.
+    @Test
+    void modeChangeListenerSyncsPrivilegedIntoMmu() {
+        TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
+        int apPrivilegedOnly = 0b01;
+        physical.put32(0, (apPrivilegedOnly << 10) | (0 << 5) | 0b10); // seção identidade, priv-only
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(physical);
+        mmu.setDacr(1); // domínio 0 = CLIENT (AP é consultado)
+        mmu.setMmuEnabled(true);
+        ArmCore core = coreWithoutCode();
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, core);
+        mmu.setMmuEnabled(true); // construtor simula reset (M=0)
+        core.setModeChangeListener(cp15);
+
+        core.switchMode(CpuMode.SUPERVISOR);
+        mmu.write32(0, 0x1234_5678); // privilegiado: permitido
+        assertEquals(0x1234_5678, physical.read32(0));
+
+        core.switchMode(CpuMode.USER);
+        MemoryTranslationException fault = org.junit.jupiter.api.Assertions.assertThrows(
+                MemoryTranslationException.class, () -> mmu.write32(0, 0xDEAD_BEEF),
+                "escrita de usuário em página privilegiada deve faltar");
+        assertEquals(FaultStatus.SECTION_PERMISSION, fault.faultStatus());
+        assertEquals(0x1234_5678, physical.read32(0), "a escrita não pode ter acontecido");
+
+        core.switchMode(CpuMode.SUPERVISOR);
+        mmu.write32(0, 0x0BADF00D);
+        assertEquals(0x0BADF00D, physical.read32(0), "volta a privilegiado: permitido de novo");
+    }
+
     @Test
     void onDataAbortFillsDfarDfsr() {
         TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));

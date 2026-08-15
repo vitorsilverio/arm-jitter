@@ -159,19 +159,44 @@ public final class TranslatingAddressSpace implements AddressSpace {
         return mmuEnabled;
     }
 
-    /// Invalida toda a micro-TLB (instrução e dados) — equivalente a `TLBIALL`.
+    /// Invalida toda a micro-TLB (instrução e dados) — equivalente a `TLBIALL` (TLB unificada).
     public void invalidateTlbAll() {
-        dataTlb.invalidateAll();
+        invalidateDataTlbAll();
+        invalidateInstructionTlbAll();
+    }
+
+    /// Invalida, se presente, a entrada de TLB (instrução e dados) cuja página cobre `mva` —
+    /// equivalente a `TLBIMVA` (TLB unificada).
+    public void invalidateTlbByMva(int mva) {
+        invalidateDataTlbByMva(mva);
+        invalidateInstructionTlbByMva(mva);
+    }
+
+    /// Invalida toda a micro-TLB de INSTRUÇÃO — equivalente a `ITLBIALL` (`c8,c5,0`). Cores com
+    /// TLBs separadas (ARM926EJ-S/ARMv5, `v4wbi_*` do Linux) invalidam I e D em instruções
+    /// distintas, e é a face de instrução que muda o mapeamento VA→PA de CÓDIGO — por isso é
+    /// esta (e não {@link #invalidateDataTlbAll}) que bumpa {@link #translationGeneration()},
+    /// invalidando blocos já compilados (RFC-SOFTMMU §5).
+    public void invalidateInstructionTlbAll() {
         instructionTlb.invalidateAll();
         translationGeneration++;
     }
 
-    /// Invalida, se presente, a entrada de TLB (instrução e dados) cuja página cobre `mva` —
-    /// equivalente a `TLBIMVA`.
-    public void invalidateTlbByMva(int mva) {
-        int vpn = mva >>> TLB_PAGE_SHIFT;
-        dataTlb.invalidateEntry(vpn);
-        instructionTlb.invalidateEntry(vpn);
+    /// Invalida toda a micro-TLB de DADOS — equivalente a `DTLBIALL` (`c8,c6,0`). Não bumpa a
+    /// geração de tradução: mapeamento de dados não muda a identidade "mesmo VA de código, mesmo
+    /// bloco compilado" (ver {@link #invalidateInstructionTlbAll}).
+    public void invalidateDataTlbAll() {
+        dataTlb.invalidateAll();
+    }
+
+    /// Invalida a entrada da micro-TLB de INSTRUÇÃO que cobre `mva` — `ITLBIMVA` (`c8,c5,1`).
+    public void invalidateInstructionTlbByMva(int mva) {
+        instructionTlb.invalidateEntry(mva >>> TLB_PAGE_SHIFT);
+    }
+
+    /// Invalida a entrada da micro-TLB de DADOS que cobre `mva` — `DTLBIMVA` (`c8,c6,1`).
+    public void invalidateDataTlbByMva(int mva) {
+        dataTlb.invalidateEntry(mva >>> TLB_PAGE_SHIFT);
     }
 
     /// Quantidade de page-walks (leituras de tabela L1/L2) executados desde a criação —

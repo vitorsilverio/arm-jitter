@@ -62,6 +62,9 @@ public final class ArmCore {
     /// Gancho de preenchimento de FAR/FSR em abort (B4.1.3): vazio por padrão ({@link MemoryAbortListener#NONE}),
     /// mesmo padrão aditivo de {@link #coprocessorBus} — ver {@link #setMemoryAbortListener}.
     private MemoryAbortListener memoryAbortListener = MemoryAbortListener.NONE;
+    /// Gancho de troca de modo (B4.1.5): vazio por padrão ({@link ModeChangeListener#NONE}),
+    /// mesmo padrão aditivo de {@link #memoryAbortListener} — ver {@link #setModeChangeListener}.
+    private ModeChangeListener modeChangeListener = ModeChangeListener.NONE;
     private boolean highVectors;
     private final ArmInterpreter interpreter;
     private long cycles;
@@ -243,6 +246,7 @@ public final class ArmCore {
             activeMode = nextMode;
             cpsr.set(value);
             restoreBank(nextMode);
+            modeChangeListener.onModeChanged(nextMode);
             return;
         }
         cpsr.set(value);
@@ -664,6 +668,14 @@ public final class ArmCore {
         activeMode = mode;
         cpsr.setMode(mode);
         restoreBank(mode);
+        modeChangeListener.onModeChanged(mode);
+    }
+
+    /// Instala o gancho de troca de modo (B4.1.5). Ver {@link ModeChangeListener} para por que um
+    /// hospedeiro com MMU precisa dele.
+    public void setModeChangeListener(ModeChangeListener modeChangeListener) {
+        this.modeChangeListener = Objects.requireNonNull(modeChangeListener, "modeChangeListener");
+        modeChangeListener.onModeChanged(activeMode);
     }
 
     /// Instala um monitor de exclusividade COMPARTILHADO entre múltiplos cores (task B5.1, 3DS:
