@@ -297,12 +297,12 @@
   falta é da instrução que a CPU vai executar agora, e vira o abort real). Depois disso o JIT
   boota em ~12s, mais rápido que o interpretado. Testes novos em `StandardIrBlockLifterTest`
   (leitura adiantada faltando termina o bloco; falta na PRIMEIRA instrução propaga).
-  **(4) Quarto achado, do lado do `linuxbox`**: o `busybox-armv5l` de `testdata/` é um binário
+  **(4) Quarto achado, do lado do `virtual-arm-box` (ex-`linuxbox`)**: o `busybox-armv5l` de `testdata/` é um binário
   **hard-float** (`e_flags` traz `EF_ARM_ABI_FLOAT_HARD`) e usa prólogos VFP reais
   (`VPUSH {d8-d14}`) não gateados por `HWCAP_VFP` — sem VFP o PID 1 tomava SIGILL. O hospedeiro
   passou a montar o core com `ARMV5TE + ArmFeature.VFPV2` (+ `VfpDecoder`), que é o **ARM926EJ-S
   com a VFP9-S opcional**, exatamente o que o `-cpu arm926` do QEMU modela. Só mudança de
-  `linuxbox`, nenhum preset novo no arm-jitter. (O kernel segue imprimindo `VFP support: not
+  `virtual-arm-box`, nenhum preset novo no arm-jitter. (O kernel segue imprimindo `VFP support: not
   present` porque a sondagem lê `FPSID` via `MRC p10,7,...` e o `VfpDecoder` só decodifica
   `FPSCR` — sem consequência prática aqui, num ARMv5 não há `CPACR` gateando CP10/CP11.)
   **Armadilha registrada** (custou uma rodada de teste): o FIFO de recepção do PL011 tem 16
@@ -311,16 +311,16 @@
   Testes novos no arm-jitter: `StandardIrBlockLifterTest` (2, acima), `Cp15VmsaCoprocessorTest` (faces de TLB separadas encaminhadas e
   independentes; `ModeChangeListener` sincronizando privilégio — escrita de usuário em página
   `AP=01` falta com `SECTION_PERMISSION` e não chega à memória) e `TranslatingAddressSpaceTest`
-  (independência real das duas faces + só a de instrução bumpa a geração). `Main` do `linuxbox`
+  (independência real das duas faces + só a de instrução bumpa a geração). `Main` do `virtual-arm-box`
   ganhou drenagem não bloqueante de `stdin` para o UART0 (shell realmente usável na linha de
-  comando). `mvn -o test` verde em arm-jitter (1327 core + 13 truffle), linuxbox, gbaemu (244),
+  comando). `mvn -o test` verde em arm-jitter (1327 core + 13 truffle), virtual-arm-box, gbaemu (244),
   ndsemu (183) e armbox (41) — G5 se aplica (`ArmCore`/CP15/MMU/lifter são compartilhados).
   **Desvios que PERMANECEM** (não são bugs, são falta de toolchain — ver `testdata/README.md`):
   kernel Debian 3.2 pré-compilado + ATAGs em vez de `versatile_defconfig` mainline + DTB, e
   ARM926EJ-S/ARMv5TE em vez do ARM1176/ARMv6K da RFC decisão 2. Fechar isso exige um
   `arm-linux-gnueabihf-*` real ou WSL — mesmo bloqueio de B4.0.3/B6.2/B6.6.6.
 - **B4.1.5 (sessão 1)** 🟡 PARCIAL (2026-07-26, quinta e última sub-task do épico B4.1/MMU-softmmu — repo
-  novo `linuxbox`): hospedeiro `versatilepb`-like completo (RAM 128MiB via `PagedAddressSpace`
+  novo `virtual-arm-box`): hospedeiro `versatilepb`-like completo (RAM 128MiB via `PagedAddressSpace`
   C3, `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic` transcritos dos respectivos arquivos de
   `hw/*/*.c` do QEMU, `AtagsBuilder`) sobre `TranslatingAddressSpace`+`Cp15VmsaCoprocessor`
   (B4.1.1-B4.1.4, sem tocar). **Desvio forçado documentado** (mesmo bloqueio de toolchain
@@ -337,7 +337,7 @@
   (`0xc0...`) mas trava num `PREFETCH_ABORT` recursivo ao redor da página de vetores altos
   (`0xffff0000`), causa raiz não isolada. `VersatilePbBootTest` prova o marco alcançável hoje
   (mensagem de descompressão do zImage, INTERPRETED e JIT) + testes de unidade por periférico.
-  `mvn -o test` verde (linuxbox + arm-jitter + gbaemu + ndsemu + armbox, G5 aplicável). **Fecha
+  `mvn -o test` verde (virtual-arm-box + arm-jitter + gbaemu + ndsemu + armbox, G5 aplicável). **Fecha
   o épico B4.1 apenas parcialmente** — pendência clara para retomar: isolar a causa do loop de
   abort na página de vetores, ou obter toolchain `arm-linux-gnueabihf-*`/WSL para fechar o
   desvio ARM1176/ARMv6K+DT da RFC por completo.
@@ -354,7 +354,7 @@ diferentes apenas).
 
 ## Onda 4 — priorizada pelo usuário em 2026-08-15 (executar de cima para baixo)
 
-Cinco frentes pedidas pelo usuário: rename do `linuxbox`, emulador de 3DS, licença BSD,
+Cinco frentes pedidas pelo usuário: rename do `virtual-arm-box` (ex-`linuxbox`), emulador de 3DS, licença BSD,
 issues no GitHub, e o 1.0 do arm-jitter no Maven. **Ordem escolhida pelo usuário:
 infra primeiro, n3dsemu depois** — o n3dsemu é a única frente multi-sessão longa, e começar
 por ela deixaria o resto parado.
@@ -367,8 +367,8 @@ software · `armbox` e `virtual-arm-box` seguem **repos separados** · n3dsemu c
 
 **Atualização 2026-08-15 (tarde)**: `virtual-arm-box` **agora TEM repositório no GitHub**
 (decisão anterior revertida a pedido do usuário) — `https://github.com/vitorsilverio/virtual-arm-box`,
-público, criado e vinculado como `origin` do checkout local `linuxbox/` (ainda não renomeado
-localmente, o diretório físico e o histórico git continuam como `linuxbox` até a F2 rodar), push
+público, criado e vinculado como `origin` do checkout local `linuxbox/` (na época; renomeado
+localmente para `virtual-arm-box/` pela F2, histórico git preservado via `git mv`), push
 inicial feito (5 commits, incl. `F1: licença BSD 3-Clause`). **F8 e F9 retroativamente
 completadas para este repo** (mesma sessão): 11 labels + `.github/ISSUE_TEMPLATE/{bug,feature,config}.yml`
 (commit `3215f29` no `virtual-arm-box`, `criar-labels.sh` do arm-jitter estendido com o 5º repo),
@@ -380,7 +380,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | ~~P2~~ | ~~**F1**~~ ✅ fechada 2026-08-15 — licença BSD 3-Clause nos 5 repos | `trilha-f-infra/f1-licenca-bsd.md` | todos | — | `LICENSE`+`<licenses>`+README nos 5 repos, `mvn -o validate` verde, 1 commit por repo; destravou a F5 |
 | ~~P3~~ | ~~**F8**~~ ✅ fechada 2026-08-15 — labels/milestones/templates + fronteira issues×`tasks/` | `trilha-f-infra/f8-github-issues-setup.md` | 4 repos | — | seção no `tasks/README.md`, 11 labels × 4 repos (`tasks/issues/criar-labels.sh`), 3 milestones (arm-jitter 1.1, gbaemu Fidelidade, ndsemu Compatibilidade), templates `bug.yml`/`feature.yml`/`config.yml` nos 4 repos; destrava a F9 |
 | ~~P4~~ | ~~**F9**~~ ✅ fechada 2026-08-15 — 20 issues postadas | `trilha-f-infra/f9-github-issues-criacao.md` | 4 repos | F8 | gbaemu#1-5, ndsemu#1-7, arm-jitter#1-5, armbox#1-3; manifesto preenchido, placeholders `#TBD-*` resolvidos, `Fecha:` nas 8 tasks relacionadas; `virtual-arm-box/01` pendente (sem remote); destrava P5 |
-| P5 | **F2** — rename `linuxbox` → `virtual-arm-box` + abstração `Machine` | `trilha-f-infra/f2-rename-virtual-arm-box.md` | virtual-arm-box | F1 | também mexe na documentação do arm-jitter |
+| ~~P5~~ | ~~**F2**~~ ✅ fechada 2026-08-15 — rename `linuxbox` → `virtual-arm-box` + abstração `Machine` | `trilha-f-infra/f2-rename-virtual-arm-box.md` | virtual-arm-box | F1 | diretório+pacote+artefato renomeados, `Machine`/`--machine=versatilepb` novo, `README.md`/`ROADMAP.md` novos, docs do arm-jitter atualizadas; `mvn -o test` verde (23 testes); destrava P15/P16 |
 | P6 | **F4** — preparar o arm-jitter 1.0.0 | `trilha-f-infra/f4-arm-jitter-1.0.0-escopo.md` | arm-jitter | F1 | ⚠️ **a partir daqui os consumidores ficam quebrados até a F7** — agende as duas juntas |
 | P7 | **F5** — publicar no Maven Central | `trilha-f-infra/f5-maven-central-publicacao.md` | arm-jitter | F4 | 🧑 passos 1-3 (conta Central, DNS TXT, chave GPG) são do usuário |
 | P8 | **F7** — consumidores no Central, sem `asm` declarado | `trilha-f-infra/f7-consumidores-central.md` | 4 consumidores | F5 | fecha a janela aberta pela F6; **este é o G5 completo da onda** |

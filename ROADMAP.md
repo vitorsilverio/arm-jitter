@@ -25,7 +25,7 @@ O pipeline `cache → decode → lift IR → otimizar → emit` está completo e
   Thumb-2 e ARMv7-A+VFPv2 (épicos B1/B2/B3) completos e validados com binários reais
   no `armbox`; perfil M/Cortex-M (épico B7) completo (MSP/PSP/NVIC/SysTick/semihosting);
   MMU/softmmu 32-bit (épico B4.1) com page-walk+aborts precisos prontos na lib, host
-  `linuxbox` ainda não alcança shell (trava num abort perto da página de vetores).
+  `virtual-arm-box` ainda não alcança shell (trava num abort perto da página de vetores).
   Ver [Arquiteturas e features](README.md#arquiteturas-e-features) para a tabela atual.
 - **AArch64 (épico B6):** decoder A64 completo (base ISA inteira + FP/SIMD escalar +
   exclusivos), `Aarch64Core` com EL0/EL1 e aborts precisos, MMU v8, backend ASM nativo
@@ -201,7 +201,7 @@ completo, AP/domains, micro-TLB), `Cp15VmsaCoprocessor` (`MCR`/`MRC` ligados ao
 wrapper), aborts precisos (`ArmCore.enterMemoryAbort`, FAR/FSR reais) nos 3 motores
 (interpretador, `IrBlockExecutor` e JIT ASM nativo via `visitTryCatchBlock`),
 `translationGeneration` no `BlockKey`/`JitRuntime` (troca de `TTBR0` vira miss natural
-no cache de blocos). **B4.1.5 🟡 parcial (2026-07-26)**: repositório novo `linuxbox`
+no cache de blocos). **B4.1.5 🟡 parcial (2026-07-26)**: repositório novo `virtual-arm-box`
 (hospedeiro versatilepb-like com `Pl011Uart`/`Sp804DualTimer`/`Pl190Vic`) roda um
 kernel Debian real (`vmlinuz-3.2.0-4-versatile`) + `busybox-armv5l` até a
 descompressão do zImage, mas trava num `PREFETCH_ABORT` recursivo perto da página de
@@ -211,9 +211,9 @@ para retomar (ver `tasks/trilha-b-arquiteturas/`) ou para fechar com um toolchai
 - VMSA: page tables, TLB emulado, domains, aborts precisos — ✅ feito acima.
 - `BlockCache` ciente de geração de tradução — ✅ feito acima (não é ASID pleno, mas
   cobre o caso prático de troca de mapeamento).
-- Interrupt controller/timers/UART ficam no emulador hospedeiro (`linuxbox`); arm-jitter
+- Interrupt controller/timers/UART ficam no emulador hospedeiro (`virtual-arm-box`); arm-jitter
   entrega os hooks (linha IRQ/FIQ já existe).
-- **Aceite pendente:** kernel Linux ARMv6/v7 mínimo bootando até shell no `linuxbox`.
+- **Aceite pendente:** kernel Linux ARMv6/v7 mínimo bootando até shell no `virtual-arm-box`.
 
 **B5 — 3DS enablement** — ✅ lado arm-jitter completo: B1 (ARMv6K) + B3 (VFPv2) + B5.1
 (monitor de exclusividade global) + **B5.2 ✅ (2026-07-23)** — preset
@@ -264,7 +264,7 @@ validado com firmware torture m0/m3 + `hello-cortexm.c` (gcc real, sem CRT).
 
 **Status da ordem recomendada de 2026-07-15**: as três frentes (B3 VFP/ARMv7-A, B7
 Cortex-M, B4.1 MMU/Linux) rodaram e B3/B7 **fecharam por completo**; B4.1 fechou a
-lib (B4.1.1-4) e ficou parcial no hospedeiro (B4.1.5, `linuxbox`). B5 (3DS) e B6.1-6.5
+lib (B4.1.1-4) e ficou parcial no hospedeiro (B4.1.5, `virtual-arm-box`). B5 (3DS) e B6.1-6.5
 (AArch64) também fecharam depois disso. **O que resta hoje é, em cada caso, o
 ÚLTIMO degrau de cada épico — não mais decoder/IR/executor, mas um hospedeiro
 batendo em kernel/toolchain real** — e os quatro compartilham o mesmo tipo de
@@ -273,7 +273,7 @@ indisponível neste ambiente Windows/MSYS2 sem WSL configurado):
 - **B4.0.3 item 3 / B4.0.5** (armbox: busybox estático Thumb-2, depois fork/pipes)
 - **B6.2 aceite #2 / B6.4 bench** (armbox: busybox estático aarch64 real)
 - **B6.6.6** (hospedeiro `virt64`: kernel arm64 real + GICv2/v3/PSCI/DTB)
-- **B4.1.5** (retomar o loop de abort do `linuxbox`, ou fechar com toolchain
+- **B4.1.5** (retomar o loop de abort do `virtual-arm-box`, ou fechar com toolchain
   `arm-linux-gnueabihf-*`/WSL real e um kernel buildado do zero)
 
 Todas as decisões de desenho pendentes foram fechadas em 2026-07-15

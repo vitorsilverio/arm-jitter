@@ -13,7 +13,7 @@ todo acesso chega com VA, resolve PA via micro-TLB em software (array direto de
 Inline-TLB no bytecode do JIT fica explicitamente adiado: só reabrir com profiling
 de kernel real mostrando o wrapper como topo (>15% do CPU).
 
-### 2. Hospedeiro de referência: **versatilepb + ARM1176 (ARMv6K)** — repo novo `linuxbox`
+### 2. Hospedeiro de referência: **versatilepb + ARM1176 (ARMv6K)** — repo novo `virtual-arm-box`
 
 A dupla clássica do QEMU (`-M versatilepb -cpu arm1176`): periféricos simples e
 todos documentados (UART PL011, timer SP804, VIC PL190), kernel mainline com
@@ -56,11 +56,11 @@ como otimização futura medida.
 
 ### 6. Interrupções/timers/UART
 
-100% no hospedeiro `linuxbox` (a linha IRQ/FIQ do core já existe). O PL190 agrega
+100% no hospedeiro `virtual-arm-box` (a linha IRQ/FIQ do core já existe). O PL190 agrega
 e aciona `setInterruptLine`.
 
 ## Fases (tasks B4.1.1–B4.1.5 em `tasks/trilha-b-arquiteturas/`)
 
 B4.1.1 wrapper+TLB+walk → B4.1.2 CP15 → B4.1.3 aborts precisos → B4.1.4 gerações
-no BlockCache → B4.1.5 linuxbox (kernel até shell). Aceite final: versatile zImage
+no BlockCache → B4.1.5 virtual-arm-box (kernel até shell). Aceite final: versatile zImage
 mainline + initramfs busybox até `#` interativo.
