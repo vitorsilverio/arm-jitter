@@ -19,6 +19,23 @@
         </license>
     </licenses>
 
+    <url>https://github.com/vitorsilverio/arm-jitter</url>
+
+    <developers>
+        <developer>
+            <id>vitorsilverio</id>
+            <name>Vitor Silverio Rodrigues</name>
+            <email>vitor.silverio.rodrigues@gmail.com</email>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/vitorsilverio/arm-jitter.git</connection>
+        <developerConnection>scm:git:git@github.com:vitorsilverio/arm-jitter.git</developerConnection>
+        <url>https://github.com/vitorsilverio/arm-jitter</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <modules>
         <module>core</module>
         <module>truffle</module>
@@ -99,5 +116,67 @@
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <!-- Task F5: só ativado para publicar no Central (`mvn -Prelease clean deploy`). Não
+             pesa o `mvn test`/`mvn install` do dia a dia (source/javadoc de `core` já rodam
+             sempre, ver core/pom.xml; aqui só GPG e o publishing-plugin, que sim exigiriam
+             credencial se ativados por default). -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.7.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
