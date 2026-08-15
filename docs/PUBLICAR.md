@@ -94,3 +94,24 @@ Aparece em `https://repo1.maven.org/maven2/dev/vitorsilverio/arm-jitter/` em ~15
 Numa pasta temporária, um projeto Maven mínimo com só a dependência
 `dev.vitorsilverio:arm-jitter:<versão>` e **sem** `~/.m2/repository/dev/` (renomear a pasta
 temporariamente) deve resolver via `mvn dependency:resolve` sem `mvn install` local nenhum.
+
+## 7. Release automatizado (F6): segredos do repositório GitHub
+
+Desde a F6, `git tag v<versão> && git push --tags` dispara `.github/workflows/release.yml`, que
+repete os passos 4-5 acima sem intervenção manual (o `autoPublish` do profile `release` virou
+`true` no `pom.xml` depois de confirmar o `1.0.0` no ar — sem isso o *deployment* sobe mas fica
+esperando alguém clicar **Publish** no portal, o que anula a automação).
+
+Quem cadastra os segredos é o **usuário**, em
+`https://github.com/vitorsilverio/arm-jitter/settings/secrets/actions`:
+
+| Segredo | Como obter |
+|---------|-----------|
+| `MAVEN_CENTRAL_USERNAME` | *Generate User Token* no Central Portal (passo 1.5 acima) — a parte usuário do token |
+| `MAVEN_CENTRAL_PASSWORD` | idem — a parte senha do token |
+| `GPG_PRIVATE_KEY` | `gpg --armor --export-secret-keys <KEYID>` (passo 2) — o bloco ASCII **inteiro**, incluindo as linhas `-----BEGIN PGP PRIVATE KEY BLOCK-----`/`-----END...-----` |
+| `MAVEN_GPG_PASSPHRASE` | a passphrase escolhida ao gerar a chave (passo 2) |
+
+**Armadilha**: não fazer push da tag antes de `release.yml` já estar no branch — a Action é lida
+da ref da própria tag, então uma tag criada antes do arquivo existir no histórico não dispara
+nada e a versão fica queimada (o Central não permite republicar a mesma versão).

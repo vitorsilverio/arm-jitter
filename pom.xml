@@ -178,7 +178,9 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
-                            <autoPublish>false</autoPublish>
+                            <!-- true desde a F6: o 1.0.0 já está confirmado no repo1.maven.org
+                                 (F5/F7), então release.yml (tag v*) publica sem clique manual. -->
+                            <autoPublish>true</autoPublish>
                         </configuration>
                     </plugin>
                 </plugins>

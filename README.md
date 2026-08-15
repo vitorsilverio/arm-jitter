@@ -1,5 +1,8 @@
 # arm-jitter
 
+[![CI](https://github.com/vitorsilverio/arm-jitter/actions/workflows/ci.yml/badge.svg)](https://github.com/vitorsilverio/arm-jitter/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.vitorsilverio/arm-jitter)](https://central.sonatype.com/artifact/dev.vitorsilverio/arm-jitter)
+
 Biblioteca Java 25 para executar, depurar e compilar (JIT) blocos ARM/THUMB em emuladores de Game Boy Advance, Nintendo DS e outros dispositivos ARM.
 
 O projeto não possui `Main`: ele é um core auxiliar para ser embutido por um emulador hospedeiro. É usado em produção pelo gbaemu e pelo ndsemu.
