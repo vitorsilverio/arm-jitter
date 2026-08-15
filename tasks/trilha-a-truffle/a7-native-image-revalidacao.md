@@ -4,6 +4,7 @@
 **Pré-requisito de ambiente:** GraalVM 25 (`E:\graalvm-jdk-25.0.3+9.1`) + MSVC
 (`vcvars64.bat`) — receita de build completa e já validada em
 `tasks/trilha-a-truffle/RELATORIO-A5.md`.
+**Fecha:** arm-jitter#3
 
 ## Contexto
 

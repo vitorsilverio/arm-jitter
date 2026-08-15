@@ -77,6 +77,8 @@ Aplicar a Opção B da RFC, literalmente:
 
 ## B6.2 — Loads/stores + ELF64 + syscalls no armbox (`--arch=aarch64`) [EXECUTÁVEL]
 
+**Fecha:** armbox#2 (aceite #2, corpus busybox aarch64 — aceite #1 já fechado)
+
 1. IR/decoder/executor: `Load64`/`Store64` (unsigned imm scaled, unscaled/`LDUR`,
    pre/post-index, registrador+extend), `LoadStorePair` (LDP/STP, o idioma de
    prólogo/epílogo — sem ele nenhum binário real roda), `LoadLiteral64`.

@@ -12,7 +12,7 @@ Não investigado a fundo. Não é o mesmo defeito do offset DC de canal PSG ocio
 corrigido (áudio bruto digital + filtro passa-alta) e resolvia o "railing" geral. Este é
 específico deste jogo.
 
-Backend-independente (mesma classe de achado de #TBD-firered-battle-glitches).
+Backend-independente (mesma classe de achado de #1).
 
 ## Referências
 

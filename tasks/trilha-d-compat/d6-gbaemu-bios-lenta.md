@@ -2,6 +2,7 @@
 
 **Trilha:** D · **Depende de:** — · **Repo:** gbaemu · **NÃO passar a agente comum**
 (investigação de timing; esta spec dá o protocolo e as hipóteses, não a receita)
+**Fecha:** gbaemu#4
 
 ## Sintoma (usuário, confirmado 2026-07-16)
 

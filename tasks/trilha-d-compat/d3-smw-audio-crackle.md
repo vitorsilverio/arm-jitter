@@ -1,7 +1,7 @@
 # D3 — Super Mario World (Advance 2): chiado/estática no áudio
 
 **Trilha:** D (compat de hospedeiros) · **Depende de:** — · **Repo:** gbaemu ·
-**Task de diagnóstico** (causa raiz desconhecida)
+**Task de diagnóstico** (causa raiz desconhecida) · **Fecha:** gbaemu#2
 
 ## Contexto
 

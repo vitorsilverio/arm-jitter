@@ -1,7 +1,7 @@
 # D4 — Metroid Fusion: canal de áudio baixo e acelerado
 
 **Trilha:** D (compat de hospedeiros) · **Depende de:** — · **Repo:** gbaemu ·
-**Task de diagnóstico** (causa raiz desconhecida)
+**Task de diagnóstico** (causa raiz desconhecida) · **Fecha:** gbaemu#3
 
 ## FECHADA 2026-07-16 — sem problema real
 

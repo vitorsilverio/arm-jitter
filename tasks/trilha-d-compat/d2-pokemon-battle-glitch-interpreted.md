@@ -2,7 +2,7 @@
 
 **Trilha:** D (compat de hospedeiros) · **Depende de:** — · **Repo:** gbaemu ·
 **Task de diagnóstico** (causa raiz desconhecida — fase 1 é medir/isolar, fase 2 é
-corrigir depois de entender a causa)
+corrigir depois de entender a causa) · **Fecha:** gbaemu#1
 
 ## Contexto
 

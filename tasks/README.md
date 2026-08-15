@@ -176,8 +176,8 @@ outra por link.
 | [F5](trilha-f-infra/f5-maven-central-publicacao.md) | Publicar no Maven Central (`dev.vitorsilverio` verificado por DNS TXT; GPG; profile `release`) | F1, F4 | ⬜ 🧑 passos 1-3 são do usuário (conta, DNS, chave GPG) |
 | [F6](trilha-f-infra/f6-github-actions-pipeline.md) | GitHub Actions: `ci.yml` nos 4 repos + `release.yml` por tag no arm-jitter | F5 | ⬜ |
 | [F7](trilha-f-infra/f7-consumidores-central.md) | Consumidores passam a `arm-jitter:1.0.0` do Central e largam a declaração de `org.ow2.asm` | F5 | ⬜ |
-| [F8](trilha-f-infra/f8-github-issues-setup.md) | Fronteira issues×`tasks/`, labels, milestones e templates de issue nos 4 repos | — | ⬜ |
-| [F9](trilha-f-infra/f9-github-issues-criacao.md) | Postar as 20 issues do backlog conhecido (corpos prontos em `tasks/issues/`) | F8 | ⬜ |
+| [F8](trilha-f-infra/f8-github-issues-setup.md) | Fronteira issues×`tasks/`, labels, milestones e templates de issue nos 4 repos | — | ✅ fechada 2026-08-15 (seção no `tasks/README.md`, 11 labels × 4 repos, 3 milestones, templates `bug.yml`/`feature.yml`/`config.yml`) |
+| [F9](trilha-f-infra/f9-github-issues-criacao.md) | Postar as 20 issues do backlog conhecido (corpos prontos em `tasks/issues/`) | F8 | ✅ fechada 2026-08-15 — 20 issues postadas (gbaemu#1-5, ndsemu#1-7, arm-jitter#1-5, armbox#1-3), manifesto preenchido, os 2 placeholders `#TBD-*` resolvidos, `Fecha:` adicionado nas 8 tasks correspondentes. `virtual-arm-box/01` fica pendente por decisão (repo sem remote) |
 | [F10](trilha-f-infra/f10-disco-virtual-raw-qcow2.md) | Disco virtual no `virtual-arm-box`: `raw` + **QCOW2** (leitura e escrita, compatível com outras VMs) + PL181 MMCI/SD no `versatilepb` — LONGA, 3 PRs | F2 | ⬜ |
 | [RFC-3DS](trilha-g-3ds/RFC-N3DSEMU.md) | RFC do `n3dsemu` — decisões D1-D8 (só ARM11, HLE, `.3dsx`, Vulkan/LWJGL, vertex shader interpretado, TEV→SPIR-V) | — | ✅ escrita 2026-08-15 |
 | [G1](trilha-g-3ds/g1-esqueleto-n3dsemu.md) | `n3dsemu`: repo novo, memória, loader `.3dsx`, `ARM11_MPCORE`, primeira `svc` (M1) | F7 | ⬜ |

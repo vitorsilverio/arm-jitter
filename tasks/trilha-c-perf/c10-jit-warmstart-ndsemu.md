@@ -1,6 +1,7 @@
 # C10 — Warm-start do JIT: pré-compilar PCs quentes persistidos por ROM (ndsemu)
 
-**Trilha:** C · **Depende de:** — · **Repos:** arm-jitter (API) + ndsemu (persistência/GUI)
+**Trilha:** C · **Depende de:** — · **Repos:** arm-jitter (API) + ndsemu (persistência/GUI) ·
+**Fecha:** ndsemu#7
 
 ## Contexto
 

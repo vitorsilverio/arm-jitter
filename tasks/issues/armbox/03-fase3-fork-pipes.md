@@ -7,7 +7,7 @@ Hoje ele roda **um** binário, sem criar processos.
 
 Spec pronta: `arm-jitter/tasks/trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md`.
 
-**Bloqueada** em #TBD-corpus-busybox-thumb2 — a task precisa do corpus busybox Thumb-2 para
+**Bloqueada** em #1 — a task precisa do corpus busybox Thumb-2 para
 validar, e ele não existe nesta máquina.
 
 ## O que já funciona
