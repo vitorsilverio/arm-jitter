@@ -27,6 +27,22 @@
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
+    <build>
+        <plugins>
+            <!-- central-publishing-maven-plugin não respeita maven.deploy.skip (é um plugin
+                 diferente do maven-deploy-plugin) — sem isso o jar comum deste módulo (não o
+                 .dll nativo) entraria no bundle publicado no Central junto de arm-jitter/
+                 arm-jitter-truffle, o que a task F5 explicitamente proíbe. -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <configuration>
+                    <skipPublishing>true</skipPublishing>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>dev.vitorsilverio</groupId>

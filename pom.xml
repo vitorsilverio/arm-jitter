@@ -113,6 +113,14 @@
                         </execution>
                     </executions>
                 </plugin>
+                <!-- Só a versão gerenciada aqui (unconditional) para o `capi/pom.xml` conseguir
+                     resolver o plugin em QUALQUER build, mesmo sem `-Prelease` ativo (config real
+                     e binding de execução ficam só no profile `release`, abaixo). -->
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>0.11.0</version>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
@@ -167,7 +175,6 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.7.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>

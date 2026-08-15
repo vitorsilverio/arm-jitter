@@ -71,6 +71,15 @@ mvn -Prelease clean deploy
 
 (Sem `-o` — o deploy precisa de rede. Continua exigindo JBR 25 no `JAVA_HOME`.)
 
+**Armadilha real encontrada (2026-08-15)**: o `central-publishing-maven-plugin` **não** respeita
+`maven.deploy.skip` (é um plugin diferente do `maven-deploy-plugin`) — sem `<skipPublishing>true`
+explícito no `capi/pom.xml`, o jar comum do `arm-jitter-capi` (que não serve como dependência,
+só o `.dll`/`.so` nativo importa) entra no bundle publicado. Além disso a versão `0.7.0` do
+plugin quebra (`UnrecognizedPropertyException: "warnings"`) ao consultar o status de um
+*deployment* na API atual do Central — usar `0.11.0` (ou mais nova) resolve. A versão do plugin
+precisa estar em `<pluginManagement>` (não só dentro do profile `release`), senão `capi/pom.xml`
+não consegue resolvê-la num `mvn test` comum (que não ativa o profile).
+
 Depois, em <https://central.sonatype.com/publishing/deployments>: o *deployment* deve ficar
 *VALIDATED*. Conferir a lista de artefatos (jar/sources/javadoc/asc de `arm-jitter` e
 `arm-jitter-truffle`, **sem** `arm-jitter-capi`) e só então clicar **Publish** — o
