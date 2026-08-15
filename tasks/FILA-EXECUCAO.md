@@ -362,9 +362,18 @@ por ela deixaria o resto parado.
 Decisões já tomadas (**não reabrir**): BSD **3-Clause** · Maven **Central** mantendo o
 `groupId` `dev.vitorsilverio` (domínio `vitorsilverio.dev` é do usuário, verificação por DNS
 TXT) · gráficos do n3dsemu em **Vulkan/LWJGL 3 com janela GLFW própria**, sem backend de
-software · `armbox` e `virtual-arm-box` seguem **repos separados** · `virtual-arm-box`
-**sem repositório no GitHub** por enquanto · n3dsemu começa por **`.3dsx` homebrew**, ROM
-comercial é [REFINAR].
+software · `armbox` e `virtual-arm-box` seguem **repos separados** · n3dsemu começa por
+**`.3dsx` homebrew**, ROM comercial é [REFINAR].
+
+**Atualização 2026-08-15 (tarde)**: `virtual-arm-box` **agora TEM repositório no GitHub**
+(decisão anterior revertida a pedido do usuário) — `https://github.com/vitorsilverio/virtual-arm-box`,
+público, criado e vinculado como `origin` do checkout local `linuxbox/` (ainda não renomeado
+localmente, o diretório físico e o histórico git continuam como `linuxbox` até a F2 rodar), push
+inicial feito (5 commits, incl. `F1: licença BSD 3-Clause`). **F8 e F9 retroativamente
+completadas para este repo** (mesma sessão): 11 labels + `.github/ISSUE_TEMPLATE/{bug,feature,config}.yml`
+(commit `3215f29` no `virtual-arm-box`, `criar-labels.sh` do arm-jitter estendido com o 5º repo),
+issue `virtual-arm-box#1` postada (manifesto e `Fecha:` de F3 atualizados). Sem milestone (mesmo
+padrão do armbox — sem agrupamento definido ainda).
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|

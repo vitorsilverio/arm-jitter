@@ -46,7 +46,7 @@ acrescente `C:\Program Files\GitHub CLI` ao PATH antes.
 | 18 | armbox | `armbox/01-corpus-busybox-thumb2.md` | Falta corpus busybox Thumb-2 (toolchain `arm-linux-*`) | `blocked:asset`, `infra` | — | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | armbox#1 |
 | 19 | armbox | `armbox/02-corpus-busybox-aarch64.md` | Falta corpus busybox AArch64 | `blocked:asset`, `infra` | — | `trilha-b-arquiteturas/b6.2-*` | armbox#2 |
 | 20 | armbox | `armbox/03-fase3-fork-pipes.md` | Fase 3: `fork`/`execve`/`pipe`/`wait` | `feature`, `blocked:asset` | — | `trilha-b-arquiteturas/b4.0.5-armbox-fork-pipes.md` | armbox#3 |
-| 21 | virtual-arm-box | `virtual-arm-box/01-desvio-arm926-vs-arm1176-dt.md` | **NÃO POSTAR** — repo sem remote no GitHub (decisão do usuário) | `infra`, `blocked:asset` | — | `trilha-f-infra/f3-raspi1-machine.md` | pendente |
+| 21 | virtual-arm-box | `virtual-arm-box/01-desvio-arm926-vs-arm1176-dt.md` | Desvio: ARM926/ARMv5TE + ATAGs em vez de ARM1176/ARMv6K + Device Tree | `infra`, `blocked:asset` | — | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box#1 |
 
 ## Referências cruzadas (resolvidas)
 

@@ -1,6 +1,6 @@
 # F3 — `virtual-arm-box --machine=raspi1`: Raspberry Pi 1 / Zero (BCM2835, ARMv6K)
 
-**Trilha:** F (infra) · **Depende de:** F2 · **Repo:** virtual-arm-box
+**Trilha:** F (infra) · **Depende de:** F2 · **Repo:** virtual-arm-box · **Fecha:** virtual-arm-box#1
 **Task LONGA (2–3 sessões).** Fatie pelos marcos M1/M2/M3 do Aceite: **um marco por
 sessão/PR**, commitando o que funcionar. Se um marco não fechar, commite o anterior, escreva
 o que foi descoberto no README e **PARE** — não improvise periférico não especificado aqui.

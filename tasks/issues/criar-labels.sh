@@ -7,7 +7,7 @@ set -euo pipefail
 
 GH="${GH:-gh}"
 OWNER="vitorsilverio"
-REPOS=(arm-jitter armbox gbaemu ndsemu)
+REPOS=(arm-jitter armbox gbaemu ndsemu virtual-arm-box)
 
 declare -A LABELS=(
   [bug]="d73a4a|comportamento errado observável"

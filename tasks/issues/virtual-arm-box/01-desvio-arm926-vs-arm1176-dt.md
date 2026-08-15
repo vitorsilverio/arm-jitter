@@ -1,6 +1,3 @@
-> **Nota:** o `virtual-arm-box` ainda **não tem repositório no GitHub** (decisão do usuário,
-> 2026-08-15). Esta issue fica versionada aqui até haver onde postá-la.
-
 ## Resumo
 
 A máquina `versatilepb` boota Linux até shell, mas com dois desvios conscientes em relação ao
