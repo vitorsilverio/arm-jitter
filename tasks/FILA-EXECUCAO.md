@@ -368,7 +368,7 @@ comercial é [REFINAR].
 
 | # | Task | Arquivo | Repo | Depende de | Nota de sessão |
 |---|------|---------|------|-----------|----------------|
-| P2 | **F1** — licença BSD 3-Clause nos 5 repos | `trilha-f-infra/f1-licenca-bsd.md` | todos | — | trivial, 1 sessão; destrava a F5 (o Central exige `<licenses>`) |
+| ~~P2~~ | ~~**F1**~~ ✅ fechada 2026-08-15 — licença BSD 3-Clause nos 5 repos | `trilha-f-infra/f1-licenca-bsd.md` | todos | — | `LICENSE`+`<licenses>`+README nos 5 repos, `mvn -o validate` verde, 1 commit por repo; destravou a F5 |
 | P3 | **F8** — labels/milestones/templates + fronteira issues×`tasks/` | `trilha-f-infra/f8-github-issues-setup.md` | 4 repos | — | independente de tudo; pode andar em paralelo com F1 (repos diferentes) |
 | P4 | **F9** — postar as 20 issues do backlog | `trilha-f-infra/f9-github-issues-criacao.md` | 4 repos | F8 | mecânica — os corpos já estão escritos em `tasks/issues/` |
 | P5 | **F2** — rename `linuxbox` → `virtual-arm-box` + abstração `Machine` | `trilha-f-infra/f2-rename-virtual-arm-box.md` | virtual-arm-box | F1 | também mexe na documentação do arm-jitter |
