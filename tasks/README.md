@@ -45,6 +45,35 @@ Tasks marcadas com **[REFINAR]** são especificações de alto nível que devem 
 detalhadas (nova rodada de spec) quando suas dependências concluírem — não execute
 uma task [REFINAR] diretamente.
 
+## Issues do GitHub × `tasks/`
+
+Os dois coexistem e não competem:
+
+- **Issue** = um **problema ou pedido observável**, do ponto de vista de quem usa. "O
+  Pokémon FireRed tem 3 glitches visuais na batalha." "O ndsemu não boota em INTERPRETED."
+  "Queria ROMs recentes no menu." Uma issue descreve **sintoma, repro e evidência**; ela não
+  diz como consertar e não tem prazo.
+- **Task** (`tasks/*.md`) = uma **especificação executável**, do ponto de vista de quem
+  implementa: escopo fechado, `Inclui`/`Não inclui`, passos, aceite, armadilhas. Uma task
+  existe porque alguém já decidiu **como** atacar o problema.
+
+Fluxo normal: issue nasce primeiro → quando vira prioridade, uma **sessão de modelo forte**
+escreve a task correspondente → a task cita `Fecha: <repo>#<n>` no cabeçalho → o commit que
+fecha a task usa `Closes <repo>#<n>` (ou, entre repos diferentes,
+`Closes vitorsilverio/<repo>#<n>`).
+
+Casos que **não** viram issue:
+- Itens puramente internos de refactor sem sintoma externo.
+- Sub-tasks de um épico já especificado (B6.3.1, B6.3.2, ...) — são decomposição de
+  implementação, vivem só em `tasks/`.
+
+Casos que **não** viram task (ainda):
+- Tudo que está em "Pendências que EXIGEM sessão de modelo forte" — vira **issue** com a
+  label `needs-design`, e só vira task depois que alguém desenhar a solução.
+
+**Nunca duplique o corpo.** A issue é o sintoma; a task é a solução; cada uma referencia a
+outra por link.
+
 ## Índice e dependências
 
 | Task | Título | Depende de | Status |
