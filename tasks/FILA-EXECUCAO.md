@@ -660,6 +660,33 @@ evidência concreta**:
    `mvn -o test` verde na `virtual-arm-box`; M2/M3 continuam `@Disabled` com motivo atualizado. F3
    permanece 🟡 na fila "ATUAL" (M2 ainda não fechou, F10 continua bloqueada).
 
+**F3 — sessão de continuação do M2 (2026-08-16, segunda rodada) — causa raiz REFINADA (1 bug real
+corrigido), M2 ainda NÃO fecha (bloqueio novo e diferente revelado pelo fix)**:
+
+1. **Bug real corrigido**: decodificando o `.dtb` real desta task byte a byte, o nó
+   `timer@7e003000` declara `interrupts = <1 0>,<1 1>,<1 2>,<1 3>;` com
+   `compatible = "brcm,bcm2835-system-timer"` — exatamente o binding do driver mainline
+   `drivers/clocksource/bcm2835_timer.c`, cujo `DEFAULT_TIMER` é o comparador **3** (0/1 são
+   reservados ao firmware VideoCore). `Bcm2835Machine#runSlice()` só encaminhava o comparador
+   **0** do `Bcm2835SystemTimer` para o `Bcm2835Ic` — o clockevent periódico que o kernel arma no
+   comparador 3 nunca era entregue. Corrigido: os 4 comparadores agora são encaminhados 1:1 para
+   as fontes GPU 0-3 (mesma fiação do `hw/timer/bcm2835_systmr.c` do QEMU).
+2. **O fix acima é necessário mas NÃO suficiente — revelou uma TEMPESTADE de IRQ, não mais
+   silêncio**: instrumentação temporária (removida antes do commit) provou, por leitura direta
+   dos registradores a cada 1M fatias em JIT: `COMPARE3` congelado em `0x27f4` por >250s reais
+   (o contador livre passa de `0x10767060` para `0xc64beb0a` no mesmo intervalo), bit 3 de
+   `REG_CTRL_STATUS` permanentemente pendente (nunca acked), bit 3 de `IRQ_ENABLE_1` nunca
+   mascarado — e mesmo assim a CPU reentra em `CpuMode.IRQ` continuamente (~60.600 vezes por 1M
+   fatias, contador de bordas medido diretamente). O handler do kernel para o timer nunca chega a
+   fazer `ack`/rearme; o nível fica preso "pendente" e a CPU reentra assim que `CPSR.I` é
+   reabilitado no retorno da IRQ anterior. Causa raiz exata NÃO isolada (handler nunca despachado
+   vs. escrita do handler não chegando ao dispositivo) — próximo passo recomendado no Javadoc de
+   `Raspi1BootTest`: trace instrução-a-instrução via `ArmCore#step()` (não `runBlocks`, já que
+   `ArmTraceListener#beforeInstruction` só dispara sob `step()`) logo após a primeira entrada em
+   `CpuMode.IRQ`.
+   `mvn -o test` verde na `virtual-arm-box` (92 testes, 4 skipped); M2/M3 continuam `@Disabled`
+   com motivo atualizado. F3 permanece 🟡 na fila "ATUAL".
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
