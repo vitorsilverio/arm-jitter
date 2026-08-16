@@ -156,8 +156,9 @@ public final class IrSystemExecutor {
         }
     }
 
-    /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 lançam
-    /// {@link UnsupportedOperationException} (ver {@code IrExecutionSupport}).
+    /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 passam a
+    /// usar BE8 (task B1.8, ver {@code IrExecutionSupport#applyDataEndiannessWord}); a busca de
+    /// instrução nunca é afetada.
     public void executeSetEndianness(ArmCore core, IrOp.SetEndianness setend) {
         if (!core.cpsr().evalCond(setend.condition())) {
             return;

@@ -178,27 +178,33 @@ public final class AsmRuntimeHelpers {
         int aligned = address & ~1;
         int value = core.memory().read16(aligned);
         core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
-        return (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
+        int rotated = (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
+        return applyDataEndiannessHalfword(core, rotated);
     }
 
     public static int loadHalfSigned(ArmCore core, int address) {
         if ((address & 1) != 0) {
+            // Quirk ARMv4T de LDRSH desalinhado: vira leitura de BYTE — invariante a endianness
+            // (ver o comentário de classe da seção BE8 abaixo).
             int value = core.memory().read8(address);
             core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
             return (byte) value;
         }
         int value = core.memory().read16(address);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
-        return (short) value;
+        return (short) applyDataEndiannessHalfword(core, value);
     }
 
     public static int loadWord(ArmCore core, int address) {
         int aligned = address & ~3;
         int value = core.memory().read32(aligned);
         core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
-        return Integer.rotateRight(value, (address & 3) * 8);
+        int rotated = Integer.rotateRight(value, (address & 3) * 8);
+        return applyDataEndiannessWord(core, rotated);
     }
 
+    /// `LDRB`/`STRB` (byte único): invariante a `CPSR.E` por definição (BE8 é "byte-invariant" —
+    /// ver a seção BE8 abaixo) — nunca aplicar troca de bytes aqui.
     public static void storeByte(ArmCore core, int address, int value) {
         core.memory().write8(address, value);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
@@ -206,13 +212,13 @@ public final class AsmRuntimeHelpers {
     }
 
     public static void storeHalf(ArmCore core, int address, int value) {
-        core.memory().write16(address, value);
+        core.memory().write16(address, applyDataEndiannessHalfword(core, value));
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 2);
     }
 
     public static void storeWord(ArmCore core, int address, int value) {
-        core.memory().write32(address, value);
+        core.memory().write32(address, applyDataEndiannessWord(core, value));
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 4);
     }
@@ -236,14 +242,14 @@ public final class AsmRuntimeHelpers {
                 | ((core.memory().read8(address + 2) & BYTE_MASK) << (2 * BITS_PER_BYTE))
                 | ((core.memory().read8(address + 3) & BYTE_MASK) << (3 * BITS_PER_BYTE));
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_READ);
-        return value;
+        return applyDataEndiannessWord(core, value);
     }
 
     public static int loadHalfCrossed(ArmCore core, int address) {
         int value = (core.memory().read8(address) & BYTE_MASK)
                 | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
-        return value;
+        return applyDataEndiannessHalfword(core, value);
     }
 
     public static int loadHalfSignedCrossed(ArmCore core, int address) {
@@ -251,19 +257,44 @@ public final class AsmRuntimeHelpers {
     }
 
     public static void storeWordCrossed(ArmCore core, int address, int value) {
-        core.memory().write8(address, value);
-        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
-        core.memory().write8(address + 2, value >>> (2 * BITS_PER_BYTE));
-        core.memory().write8(address + 3, value >>> (3 * BITS_PER_BYTE));
+        int stored = applyDataEndiannessWord(core, value);
+        core.memory().write8(address, stored);
+        core.memory().write8(address + 1, stored >>> BITS_PER_BYTE);
+        core.memory().write8(address + 2, stored >>> (2 * BITS_PER_BYTE));
+        core.memory().write8(address + 3, stored >>> (3 * BITS_PER_BYTE));
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 4);
     }
 
     public static void storeHalfCrossed(ArmCore core, int address, int value) {
-        core.memory().write8(address, value);
-        core.memory().write8(address + 1, value >>> BITS_PER_BYTE);
+        int stored = applyDataEndiannessHalfword(core, value);
+        core.memory().write8(address, stored);
+        core.memory().write8(address + 1, stored >>> BITS_PER_BYTE);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 2);
+    }
+
+    // ── memória: endianness de dados BE8 (`CPSR.E`, task B1.8) ───────────────────────────────
+    //
+    // Espelham exatamente dev.vitorsilverio.armjitter.codegen.executor.IrExecutionSupport
+    // (applyDataEndiannessWord/applyDataEndiannessHalfword — invariante G1, provado pelo
+    // BlockEquivalenceHarness): BE8 ("byte-invariant big-endian", ARM DDI 0406C A2.9) troca a
+    // ordem em que os bytes de um acesso de dados WORD/HALFWORD são combinados/decompostos
+    // quando CPSR.E=1. A busca de instrução nunca é afetada; byte único (loadByte/storeByte)
+    // é invariante por definição e nunca chama estes métodos. Com E=0 (default de todo preset)
+    // isto é sempre a identidade — G3.
+
+    private static int applyDataEndiannessWord(ArmCore core, int littleEndianValue) {
+        return core.cpsr().isBigEndian() ? Integer.reverseBytes(littleEndianValue) : littleEndianValue;
+    }
+
+    private static int applyDataEndiannessHalfword(ArmCore core, int littleEndianValue) {
+        if (!core.cpsr().isBigEndian()) {
+            return littleEndianValue;
+        }
+        int low = littleEndianValue & BYTE_MASK;
+        int high = (littleEndianValue >>> BITS_PER_BYTE) & BYTE_MASK;
+        return (low << BITS_PER_BYTE) | high;
     }
 
     // ── branches ───────────────────────────────────────────────────────────────

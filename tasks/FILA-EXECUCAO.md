@@ -493,6 +493,20 @@ usuário sobre priorizar uma task dedicada de suporte a BE8 no `arm-jitter` ante
 fechar de verdade — sem isso, esta task fica travada no mesmo lugar architeturalmente (não é
 mais um problema de desempenho nem de CP15 faltante, é um recurso de CPU não implementado).
 
+**BLOQUEIO FECHADO 2026-08-15 pela task `B1.8` do `arm-jitter`** (sessão dedicada, repo
+`arm-jitter` — ver o índice de `arm-jitter/tasks/README.md`): suporte real a BE8
+implementado (`CPSR.E=1` troca a ordem de bytes de acessos de dados multi-byte via
+`Integer.reverseBytes`/troca de halfword nos primitivos compartilhados de
+`IrExecutionSupport`/`AsmRuntimeHelpers`; fetch de instrução continua sempre little-endian;
+byte único invariante; achado extra: o caminho ASM nativo rodava com `E=1` sem NENHUMA
+checagem antes desta task — produzia valor little-endian errado silenciosamente, também
+corrigido). `mvn -o test` verde (1367 testes core+truffle) + `mvn -o install` OK; G5
+revalidado — gbaemu verde, ndsemu verde, armbox 40/41 (a 1 falha, `Armv7TortureTest`, é a
+MESMA pré-existente já documentada acima, subsistema VFP não tocado). **Esta task NÃO tocou
+`virtual-arm-box`** (fora do escopo, conforme instrução) — a sessão seguinte de F3 deve
+consumir o `arm-jitter` novo via o `.m2` local (já publicado) e destravar `Raspi1BootTest`/
+M1/M2/M3 a partir daqui.
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).

@@ -27,9 +27,10 @@ public final class CpsrRegister {
     /// dispatcher de exceção deste emulador consome este bit hoje (sem linha de abort externa
     /// modelada); existe para que `CPS`/`MSR` possam lê-lo/escrevê-lo corretamente.
     public static final int ABORT_DISABLE_FLAG = 1 << 8;
-    /// Bit E do CPSR (endianness de dados), setado por `SETEND` (ARMv6). Acessos de dados com
-    /// E=1 (big-endian) não são implementados — ver os helpers `readXArm7`/`writeXArm7` em
-    /// {@code IrExecutionSupport}.
+    /// Bit E do CPSR (endianness de dados), setado por `SETEND` (ARMv6). Com E=1, acessos de
+    /// dados usam BE8 ("byte-invariant big-endian", ARM DDI 0406C A2.9) — busca de instrução
+    /// permanece sempre little-endian (task B1.8); ver os helpers `readXArm7`/`writeXArm7`
+    /// em {@code IrExecutionSupport} e os espelhos em `AsmRuntimeHelpers`.
     public static final int ENDIAN_FLAG = 1 << 9;
     /// Deslocamento da metade BAIXA do ITSTATE\[7:0\] (Thumb-2 IT block, B2.4) — CPSR\[26:25\] =
     /// ITSTATE\[1:0\], confirmado contra o QEMU `cpu.h`/`helper.c`. Bits genuinamente livres em

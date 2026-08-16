@@ -2,7 +2,6 @@ package dev.vitorsilverio.armjitter.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -14,8 +13,9 @@ import org.junit.jupiter.api.Test;
 
 /// CPS, SRS, RFE, SETEND e os hints WAIT_HINTS (WFI) da task B1.5: troca de modo/A-I-F via CPS,
 /// ida-e-volta de SRS/RFE nos 4 modos de endereçamento (com/sem writeback), RFE trocando para
-/// THUMB, WFI colocando o core em HALT, SETEND expondo o bit E e bloqueando acesso de dados com
-/// E=1, e o gating UNDEFINED em ARMv4T/v5TE (G2).
+/// THUMB, WFI colocando o core em HALT, SETEND expondo o bit E do CPSR, e o gating UNDEFINED em
+/// ARMv4T/v5TE (G2). O suporte real a acesso de dados com E=1 (BE8) é da task B1.8 — ver
+/// {@code ArmV6Be8DataEndiannessTest}.
 class ArmV6SystemInstructionsTest {
     private static ArmCore newCore() {
         return new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
@@ -120,14 +120,18 @@ class ArmV6SystemInstructionsTest {
     }
 
     @Test
-    void dataAccessWithBigEndianThrowsClearly() {
+    void dataAccessWithBigEndianNoLongerThrowsSinceB18() {
+        // A B1.5 lançava UnsupportedOperationException aqui (decisão de escopo MVP); a B1.8
+        // implementa BE8 de verdade — ver ArmV6Be8DataEndiannessTest para a cobertura completa
+        // de valor trocado. Este teste só prova que a exceção não volta por acidente.
         ArmCore core = newCore();
         core.setRegister(0, 0x10);
         run(core, setend(true));
         int ldr = 0xE590_1000; // LDR r1, [r0]
         TestAddressSpace memory = (TestAddressSpace) core.memory();
         memory.put32(core.programCounter(), ldr);
-        assertThrows(UnsupportedOperationException.class, core::step);
+        core.step();
+        assertEquals(0, core.register(1), "sem valor gravado em 0x10, o load só não deve lançar");
     }
 
     // ── WFI ──────────────────────────────────────────────────────────────────────

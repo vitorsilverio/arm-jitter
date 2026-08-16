@@ -98,23 +98,25 @@ final class IrExecutionSupport {
     }
 
     int read32Arm7(ArmCore core, int address) {
-        checkLittleEndianData(core);
         int aligned = address & ~3;
         int value = core.memory().read32(aligned);
         core.addMemoryCycles(aligned, 4, MemoryAccessType.DATA_READ);
-        return Integer.rotateRight(value, (address & 3) * 8);
+        int rotated = Integer.rotateRight(value, (address & 3) * 8);
+        return applyDataEndiannessWord(core, rotated);
     }
 
+    /// `LDRB`/`STRB` (byte único): invariante a `CPSR.E` por definição (BE8 é "byte-invariant" —
+    /// ver a task B1.8) — nunca aplicar troca de bytes aqui.
     int read8Arm7(ArmCore core, int address) {
-        checkLittleEndianData(core);
         int value = core.memory().read8(address);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
         return value;
     }
 
     int read16Arm7(ArmCore core, int address, boolean signed) {
-        checkLittleEndianData(core);
         if (signed && (address & 1) != 0) {
+            // Quirk ARMv4T de LDRSH desalinhado: vira leitura de BYTE (sign-extend do byte no
+            // endereço ímpar) — acesso de byte disfarçado, sem troca de endianness (ver acima).
             int value = core.memory().read8(address);
             core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
             return (byte) value;
@@ -122,26 +124,25 @@ final class IrExecutionSupport {
         int aligned = address & ~1;
         int value = core.memory().read16(aligned);
         core.addMemoryCycles(aligned, 2, MemoryAccessType.DATA_READ);
-        return (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
+        int rotated = (address & 1) == 0 ? value : Integer.rotateRight(value, 8);
+        return applyDataEndiannessHalfword(core, rotated);
     }
 
     void write16Arm7(ArmCore core, int address, int value) {
-        checkLittleEndianData(core);
-        core.memory().write16(address, value);
+        core.memory().write16(address, applyDataEndiannessHalfword(core, value));
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 2);
     }
 
+    /// `LDRB`/`STRB`: ver {@link #read8Arm7}.
     void write8Arm7(ArmCore core, int address, int value) {
-        checkLittleEndianData(core);
         core.memory().write8(address, value);
         core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 1);
     }
 
     void write32Arm7(ArmCore core, int address, int value) {
-        checkLittleEndianData(core);
-        core.memory().write32(address, value);
+        core.memory().write32(address, applyDataEndiannessWord(core, value));
         core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
         core.notifyOrdinaryWrite(address, 4);
     }
@@ -167,10 +168,9 @@ final class IrExecutionSupport {
         if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
             return read32Arm7(core, address);
         }
-        checkLittleEndianData(core);
         int value = readCrossedWord(core, address);
         core.addMemoryCycles(address, WORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_READ);
-        return value;
+        return applyDataEndiannessWord(core, value);
     }
 
     /// `LDRH`/`LDRSH` (halfword): mesmo fork de {@link #readWordForLoad}, mas para halfword. Sob
@@ -182,10 +182,9 @@ final class IrExecutionSupport {
         if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
             return read16Arm7(core, address, signed);
         }
-        checkLittleEndianData(core);
         int value = readCrossedHalfword(core, address);
         core.addMemoryCycles(address, HALFWORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_READ);
-        return value;
+        return applyDataEndiannessHalfword(core, value);
     }
 
     /// `STR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS}, escreve atravessado (little-endian,
@@ -199,8 +198,7 @@ final class IrExecutionSupport {
             write32Arm7(core, address, value);
             return;
         }
-        checkLittleEndianData(core);
-        writeCrossedWord(core, address, value);
+        writeCrossedWord(core, address, applyDataEndiannessWord(core, value));
         core.addMemoryCycles(address, WORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
     }
 
@@ -210,8 +208,7 @@ final class IrExecutionSupport {
             write16Arm7(core, address, value);
             return;
         }
-        checkLittleEndianData(core);
-        writeCrossedHalfword(core, address, value);
+        writeCrossedHalfword(core, address, applyDataEndiannessHalfword(core, value));
         core.addMemoryCycles(address, HALFWORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
     }
 
@@ -250,14 +247,26 @@ final class IrExecutionSupport {
         core.notifyOrdinaryWrite(address, HALFWORD_ACCESS_SIZE_BYTES);
     }
 
-    /// `SETEND` (ARMv6, B1.5 MVP): acessos de dados com CPSR.E=1 (big-endian) não são
-    /// implementados — Linux/3DS rodam little-endian e nunca ligam E; um jogo/SO que ligue
-    /// deve falhar ALTO em vez de corromper silenciosamente (ver a task B1.5).
-    private void checkLittleEndianData(ArmCore core) {
-        if (core.cpsr().isBigEndian()) {
-            throw new UnsupportedOperationException(
-                    "Acessos de dados com CPSR.E=1 (big-endian) não são suportados (B1.5 MVP)");
+    /// `SETEND`/`CPSR.E` (ARMv6, task B1.8): BE8 ("byte-invariant big-endian", ARM DDI 0406C
+    /// A2.9) troca a ordem em que os bytes de um acesso de dados WORD são combinados/
+    /// decompostos quando `CPSR.E=1`. A busca de instrução NUNCA é afetada (sempre
+    /// little-endian) — só os pontos de acesso de DADO chamam este método, nunca o fetch.
+    /// Byte único (`LDRB`/`STRB`) é invariante por definição e nunca chama isto (ver
+    /// {@link #read8Arm7}/{@link #write8Arm7}). Com `E=0` (default de todo preset, inclusive
+    /// os que têm a feature) isto é sempre a identidade — G3.
+    private int applyDataEndiannessWord(ArmCore core, int littleEndianValue) {
+        return core.cpsr().isBigEndian() ? Integer.reverseBytes(littleEndianValue) : littleEndianValue;
+    }
+
+    /// Mesmo princípio de {@link #applyDataEndiannessWord}, para um acesso de dados HALFWORD:
+    /// troca os 2 bytes baixos do valor (os únicos relevantes para um halfword).
+    private int applyDataEndiannessHalfword(ArmCore core, int littleEndianValue) {
+        if (!core.cpsr().isBigEndian()) {
+            return littleEndianValue;
         }
+        int low = littleEndianValue & BYTE_MASK;
+        int high = (littleEndianValue >>> BITS_PER_BYTE) & BYTE_MASK;
+        return (low << BITS_PER_BYTE) | high;
     }
 
     int effectiveRegisterMask(int mask, boolean emptyRegisterList) {
