@@ -41,6 +41,16 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 ///   kernel vira exceção UNDEFINED (achado real do boot do linuxbox, B4.1.5).
 /// - `CONTEXTIDR` (`c13,c0,1`): os 8 bits baixos (ASID) ligam em
 ///   {@link TranslatingAddressSpace#setAsid}; o valor completo é guardado para leitura de volta.
+/// - `FCSEIDR`/`TPIDRURW`/`TPIDRURO`/`TPIDRPRW` (`c13,c0,{0,2,3,4}`, ARMv6+ "Process ID/Thread ID
+///   registers"): puro armazenamento, sem efeito colateral (nenhum modela FCSE real nem TLS de
+///   verdade nesta fase) — apenas para não lançar UNDEFINED. **Achado real da F3/sessão 2**: o
+///   `MCR p15,0,Rt,c13,c0,3` (`TPIDRURO`, escrita do ponteiro de TLS da thread) é uma das
+///   PRIMEIRAS instruções que o kernel Linux ARMv6K real executa (bem antes de `setup_arch()`,
+///   com os vetores de exceção ainda não copiados por `early_trap_init()`) — sem este suporte,
+///   `raspi1` (F3, primeira validação de sistema real do `ARM11_MPCORE`/ARMv6K) trava num laço
+///   infinito de PREFETCH_ABORT: UNDEFINED por `c13,c0,3` não implementado → entra no vetor
+///   UNDEF → busca da PRÓPRIA rotina de vetor falha (ainda não copiada) → PREFETCH_ABORT
+///   recorrente no mesmo endereço, indefinidamente.
 ///
 /// - **Modo privilegiado vs. usuário** (B4.1.5): esta classe também implementa
 ///   {@link ModeChangeListener} e repassa cada troca de modo do core para
@@ -94,7 +104,14 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     /// mais do que o pedido é sempre arquiteturalmente legal.
     private static final int OPCODE2_TLB_INVALIDATE_BY_ASID = 2;
 
+    private static final int OPCODE2_FCSEIDR = 0;
     private static final int OPCODE2_CONTEXTIDR = 1;
+    /// `TPIDRURW` — Thread ID register, leitura/escrita em modo usuário (ARM DDI 0100I §B4.1.157).
+    private static final int OPCODE2_TPIDRURW = 2;
+    /// `TPIDRURO` — Thread ID register, só leitura em modo usuário (escrita só privilegiada).
+    private static final int OPCODE2_TPIDRURO = 3;
+    /// `TPIDRPRW` — Thread ID register, acessível só em modo privilegiado (PL1).
+    private static final int OPCODE2_TPIDRPRW = 4;
 
     private static final int SCTLR_M_BIT = 1;
     private static final int SCTLR_V_BIT = 1 << 13;
@@ -112,6 +129,10 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     private int dfar;
     private int ifar;
     private int contextIdr;
+    private int fcseidr;
+    private int tpidrurw;
+    private int tpidruro;
+    private int tpidrprw;
 
     /// @param mmu  wrapper (B4.1.1) que este coprocessador controla
     /// @param core core cujo `SCTLR.V` (vetores altos) este coprocessador sincroniza
@@ -145,7 +166,10 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
                             && (opcode2 == OPCODE2_TLB_INVALIDATE_ALL
                             || opcode2 == OPCODE2_TLB_INVALIDATE_BY_MVA
                             || opcode2 == OPCODE2_TLB_INVALIDATE_BY_ASID);
-            case CRN_CONTEXT -> crm == CRM_PRIMARY && opcode2 == OPCODE2_CONTEXTIDR;
+            case CRN_CONTEXT -> crm == CRM_PRIMARY
+                    && (opcode2 == OPCODE2_FCSEIDR || opcode2 == OPCODE2_CONTEXTIDR
+                    || opcode2 == OPCODE2_TPIDRURW || opcode2 == OPCODE2_TPIDRURO
+                    || opcode2 == OPCODE2_TPIDRPRW);
             default -> false;
         };
     }
@@ -164,7 +188,13 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
             case CRN_FAULT_ADDRESS -> opcode2 == OPCODE2_DFAR ? dfar : ifar;
             case CRN_CACHE_MAINTENANCE -> 0; // RAZ: manutenção de cache/barreira não tem estado legível.
             case CRN_TLB_MAINTENANCE -> 0; // RAZ: operações de TLB são write-only em hardware real.
-            case CRN_CONTEXT -> contextIdr;
+            case CRN_CONTEXT -> switch (opcode2) {
+                case OPCODE2_FCSEIDR -> fcseidr;
+                case OPCODE2_TPIDRURW -> tpidrurw;
+                case OPCODE2_TPIDRURO -> tpidruro;
+                case OPCODE2_TPIDRPRW -> tpidrprw;
+                default -> contextIdr;
+            };
             default -> throw unsupported(crn, crm, opcode2);
         };
     }
@@ -198,8 +228,16 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
             }
             case CRN_TLB_MAINTENANCE -> invalidateTlb(crm, opcode2, value);
             case CRN_CONTEXT -> {
-                contextIdr = value;
-                mmu.setAsid(value & CONTEXTIDR_ASID_MASK);
+                switch (opcode2) {
+                    case OPCODE2_FCSEIDR -> fcseidr = value;
+                    case OPCODE2_TPIDRURW -> tpidrurw = value;
+                    case OPCODE2_TPIDRURO -> tpidruro = value;
+                    case OPCODE2_TPIDRPRW -> tpidrprw = value;
+                    default -> {
+                        contextIdr = value;
+                        mmu.setAsid(value & CONTEXTIDR_ASID_MASK);
+                    }
+                }
             }
             default -> throw unsupported(crn, crm, opcode2);
         }

@@ -195,6 +195,33 @@ class Cp15VmsaCoprocessorTest {
     }
 
     @Test
+    void threadIdRegistersAreStoredAndReadBackIndependently() {
+        // F3/sessão 2 (raspi1/ARMv6K): `MCR p15,0,Rt,c13,c0,3` (TPIDRURO) é uma das primeiras
+        // instruções que o kernel Linux ARMv6K real executa, bem antes de `setup_arch()` — sem
+        // este suporte ela é UNDEFINED, e como os vetores de exceção ainda não foram copiados
+        // pelo `early_trap_init()` nesse ponto do boot, a exceção cascateia num laço infinito de
+        // PREFETCH_ABORT (achado real, ver Javadoc da classe). Regressão: os 4 registradores
+        // `c13,c0,{0,2,3,4}` são aceitos e cada um guarda seu próprio valor, sem se confundir com
+        // `CONTEXTIDR` (`c13,c0,1`, já coberto pelo teste acima).
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+
+        cp15.write(15, 0, 13, 0, 0, 0x1111_0000); // FCSEIDR
+        cp15.write(15, 0, 13, 0, 2, 0x2222_0000); // TPIDRURW
+        cp15.write(15, 0, 13, 0, 3, 0x3333_0000); // TPIDRURO
+        cp15.write(15, 0, 13, 0, 4, 0x4444_0000); // TPIDRPRW
+
+        assertTrue(cp15.handles(15, 0, 13, 0, 0));
+        assertTrue(cp15.handles(15, 0, 13, 0, 2));
+        assertTrue(cp15.handles(15, 0, 13, 0, 3));
+        assertTrue(cp15.handles(15, 0, 13, 0, 4));
+        assertEquals(0x1111_0000, cp15.read(15, 0, 13, 0, 0));
+        assertEquals(0x2222_0000, cp15.read(15, 0, 13, 0, 2));
+        assertEquals(0x3333_0000, cp15.read(15, 0, 13, 0, 3));
+        assertEquals(0x4444_0000, cp15.read(15, 0, 13, 0, 4));
+    }
+
+    @Test
     void cacheMaintenanceIsNoopAndReadsAsZero() {
         TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
         Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
