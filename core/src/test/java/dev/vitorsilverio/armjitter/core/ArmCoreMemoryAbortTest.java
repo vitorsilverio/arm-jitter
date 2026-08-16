@@ -1,13 +1,19 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.jit.JitRuntime;
+import dev.vitorsilverio.armjitter.jit.JitRuntimeFactory;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.Cp15VmsaCoprocessor;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.memory.mmu.TranslatingAddressSpace;
 import dev.vitorsilverio.armjitter.support.FaultingAddressSpace;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -97,5 +103,91 @@ class ArmCoreMemoryAbortTest {
         core.setProgramCounter(lr - 8);
 
         assertEquals(0x40, core.programCounter(), "deveria retomar exatamente na instrução faltosa");
+    }
+
+    /// Regressão da lacuna de observabilidade achada na F3 (`virtual-arm-box`): sob
+    /// `ArmCore#runBlocks`/`JitRuntime#execute`, nenhum evento `beforeInstruction`/
+    /// `afterInstruction` dispara (blocos são executados atomicamente por desenho), o que
+    /// impedia identificar o PC exato da instrução que causou uma falta de memória real dentro de
+    /// um bloco — só o texto já impresso pelo guest denunciava o Oops, sem correlação com a
+    /// instrução culpada. `ArmTraceListener#onMemoryAbort` fecha essa lacuna reportando o PC exato
+    /// nos TRÊS caminhos (`step()`, bloco interpretado, bloco compilado/JIT), pois
+    /// `ArmCore#enterMemoryAbort` é o único ponto de convergência dos três.
+    @Test
+    void onMemoryAbortFiresWithExactFaultingPcUnderStep() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        physical.put32(0x40, LDR_R0_R1);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(0x1000, MemoryAccessType.DATA_READ, FaultStatus.SECTION_PERMISSION);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        attachCp15(core);
+        core.setProgramCounter(0x40);
+        core.setRegister(1, 0x1000);
+        List<Integer> abortedAddresses = new ArrayList<>();
+        core.setTraceListener(new ArmTraceListener() {
+            @Override
+            public void onMemoryAbort(ArmCore tracedCore, int instructionAddress, MemoryTranslationException fault) {
+                abortedAddresses.add(instructionAddress);
+            }
+        });
+
+        core.step();
+
+        assertEquals(List.of(0x40), abortedAddresses);
+    }
+
+    @Test
+    void onMemoryAbortFiresWithExactFaultingPcUnderInterpretedBlock() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        // Precede a instrução faltosa com uma que não falta, para provar que o PC reportado é o
+        // da instrução culpada dentro do bloco (não o início do bloco).
+        physical.put32(0x40, 0xE3A0_0001); // MOV r0, #1
+        physical.put32(0x44, LDR_R0_R1);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(0x1000, MemoryAccessType.DATA_READ, FaultStatus.SECTION_PERMISSION);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        attachCp15(core);
+        core.setProgramCounter(0x40);
+        core.setRegister(1, 0x1000);
+        List<Integer> abortedAddresses = new ArrayList<>();
+        core.setTraceListener(new ArmTraceListener() {
+            @Override
+            public void onMemoryAbort(ArmCore tracedCore, int instructionAddress, MemoryTranslationException fault) {
+                abortedAddresses.add(instructionAddress);
+            }
+        });
+        JitRuntime interpreted = JitRuntimeFactory.interpretedArmThumb(16, 1);
+
+        core.runBlock(interpreted);
+
+        assertEquals(List.of(0x44), abortedAddresses);
+    }
+
+    @Test
+    void onMemoryAbortFiresWithExactFaultingPcUnderCompiledJitBlock() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        physical.put32(0x40, 0xE3A0_0001); // MOV r0, #1
+        physical.put32(0x44, LDR_R0_R1);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(0x1000, MemoryAccessType.DATA_READ, FaultStatus.SECTION_PERMISSION);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        attachCp15(core);
+        core.setProgramCounter(0x40);
+        core.setRegister(1, 0x1000);
+        List<Integer> abortedAddresses = new ArrayList<>();
+        core.setTraceListener(new ArmTraceListener() {
+            @Override
+            public void onMemoryAbort(ArmCore tracedCore, int instructionAddress, MemoryTranslationException fault) {
+                abortedAddresses.add(instructionAddress);
+            }
+        });
+        // hotThreshold=1: compila de forma síncrona já na primeira execução deste bloco (caminho
+        // clássico sem tiering) — garante que o bloco realmente rode via AsmBlockCompiler/bytecode,
+        // não pelo fallback frio interpretado do JitRuntime.
+        JitRuntime compiled = JitRuntimeFactory.armThumb(16, 1);
+
+        core.runBlock(compiled);
+
+        assertEquals(List.of(0x44), abortedAddresses);
     }
 }

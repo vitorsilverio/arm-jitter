@@ -390,7 +390,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; **bloqueio FPSCR RESOLVIDO 2026-08-15 pela B3.8 do arm-jitter** (ver nota abaixo) — `FpscrRegister` agora aceita `RMode`/`FZ`/`LEN`/`STRIDE` sem lançar, com semântica real de arredondamento/flush-to-zero; sessão do n3dsemu ainda precisa CONFIRMAR (não testado aqui, fora do escopo desta sessão — arm-jitter) que `templates/application` progride além do `crt0` com o novo `arm-jitter` instalado localmente (`mvn -o install`) |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 3/3 = ÚLTIMA, ver detalhe abaixo) — **M1 FECHOU**; M2/M3 bloqueados por bug NOVO, causa raiz não isolada — precisa de sessão extra fora do orçamento de 3 sessões original; LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão EXTRA além das 3 originais, ver detalhe abaixo) — **M1 FECHOU**; M2/M3 ainda bloqueados — lacuna de observabilidade fechada (`E2` no `arm-jitter`) e 2 hipóteses de causa raiz descartadas com evidência concreta (TLB/MMU staleness, tamanho de RAM), mas causa raiz ainda não isolada — hipótese nova e mais específica documentada, fica para outra sessão; LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 **F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
@@ -569,6 +569,51 @@ funcional — pode ser só uma lacuna de instrumentação — mas sem resolver i
 consertar o sintoma errado). A `F10` (mesmo repo, regra 6: nunca em paralelo com a F3) fica
 BLOQUEADA até a F3 fechar de vez — decisão do usuário se quer abrir uma sessão extra dedicada
 a M2 antes de seguir para F10.
+
+**F3 — sessão EXTRA (2026-08-16), além das 3 do orçamento original — M2 continua NÃO fechado,
+mas a lacuna de observabilidade foi fechada e duas hipóteses de causa raiz foram descartadas com
+evidência concreta**:
+
+1. **`E2` (novo, `arm-jitter`, `trilha-e-manutencao`) — lacuna de observabilidade fechada**:
+   `ArmTraceListener` ganhou `onMemoryAbort(ArmCore, int instructionAddress,
+   MemoryTranslationException)`, chamado por `ArmCore#enterMemoryAbort` — o único ponto de
+   convergência dos 3 caminhos de execução (`step()`, bloco interpretado via `IrBlockExecutor`,
+   bloco compilado via `AsmBlockCompiler`/JIT), todos convertendo `MemoryTranslationException` em
+   `PREFETCH_ABORT`/`DATA_ABORT` pelo mesmo método, com o PC exato já calculado internamente
+   (`IrBlockExecutor#ownerInstructionAddress`) mas sem forma de observar de fora. Aditivo (G3),
+   `default` vazio, custo zero quando nenhum listener está instalado. 3 testes novos em
+   `ArmCoreMemoryAbortTest` provam paridade do PC exato nos 3 caminhos. `mvn -o test` verde (core)
+   + `mvn -o install`; G5 revalidado nesta sessão: gbaemu verde, ndsemu verde, armbox 40/41 (a 1
+   falha é a MESMA pré-existente do `Armv7TortureTest`/VFP já documentada, não-regressão).
+2. Com o gancho instalado (harness temporário na `virtual-arm-box`, removido antes do commit
+   final), o PRIMEIRO fault do loop de Oops da F3 reporta `pc=0xc0a69088` — **bate byte-a-byte**
+   com o que o próprio kernel imprime (`PC is at fdt_next_tag+0xec/0x154`). Confirma que o
+   interpretador está consistente com o console; a lacuna de antes era só de instrumentação, não
+   uma divergência real de execução.
+3. **Hipótese (a) da sessão 3/3 (staleness de TLB/PTE da `TranslatingAddressSpace`) DESCARTADA**
+   por leitura do código-fonte: `walk()` sempre re-lê `physical.read32(ttbr0Base + l1Index*4)` sem
+   cache de L1 para decidir o TIPO do descritor — o valor visto na tradução É o mesmo que o
+   diagnóstico do kernel lê. O conteúdo físico real da RAM do guest naquele slot de PGD
+   genuinamente é um descritor de SEÇÃO, não é uma questão de visibilidade/cache.
+4. **Hipótese (b) da sessão 3/3 (RAM 256MiB vs. ~448MiB do QEMU) TESTADA e DESCARTADA**:
+   `RAM_SIZE_BYTES` elevado temporariamente para 512MiB (experimento revertido, não é mudança
+   permanente) produz o MESMO fault, mesmo PC, mesmo endereço virtual, mesmo conteúdo de PGD — só
+   a reserva de CMA mudou de endereço físico proporcionalmente, como esperado. RAM não é a causa.
+5. **Hipótese nova e mais específica, NÃO confirmada (melhor pista disponível)**: os registradores
+   do Oops mostram `r5=0xff8ac000` (provável base da janela `fixmap` do FDT) e o endereço que
+   falta é exatamente `r5 + 0x2000` — consistente com `fdt_next_tag()` andando sequencialmente
+   pela estrutura do FDT e ultrapassando o fim de uma janela `fixmap` mapeada com MENOS páginas do
+   que o `totalsize` real do `.dtb` patcheado por `FdtPatcher` exige (não corrupção do `.dtb` em
+   si — `FdtPatcherTest` cobre round-trip — mas um possível descompasso entre o `totalsize` que
+   `fixmap_remap_fdt()` usa para DECIDIR quantas páginas mapear e o tamanho real após os patches de
+   `/memory@0/reg`/`/chosen/bootargs`, que podem crescer o blob). Próximo passo recomendado,
+   concreto: monitorar o slot de PGD em `ttbr0Base + 4088*4` (`0xff8ae000 >>> 20`, `ttbr0Base`
+   deduzido de `Table: 00004008` do próprio Oops) a cada `slice` via leitura FÍSICA direta (sem
+   passar pela MMU) para determinar se ele é escrito alguma vez antes do fault, e comparar o
+   `totalsize` do cabeçalho FDT antes/depois do patch contra o tamanho real do array de bytes,
+   byte a byte. Detalhe completo no Javadoc de `Raspi1BootTest`. `mvn -o test` verde na
+   `virtual-arm-box` (mesmos 62 testes, 4 skipped); M2/M3 continuam `@Disabled`, F3 permanece 🟡 na
+   fila "ATUAL" (não movida para o histórico).
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥

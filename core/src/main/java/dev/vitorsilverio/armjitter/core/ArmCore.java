@@ -556,6 +556,7 @@ public final class ArmCore {
     /// @param fault falha capturada de {@link AddressSpace#read32}/`write32`/etc. (via
     ///              `TranslatingAddressSpace`)
     public void enterMemoryAbort(int instructionAddress, MemoryTranslationException fault) {
+        traceListener.onMemoryAbort(this, instructionAddress, fault);
         boolean isInstructionFetch = fault.accessType() == MemoryAccessType.INSTRUCTION_FETCH;
         int faultStatusCode = fault.faultStatus().code();
         if (isInstructionFetch) {
