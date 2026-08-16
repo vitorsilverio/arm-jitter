@@ -390,8 +390,58 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; ⚠️ **bloqueada de fato** até alguém decidir o que fazer com o achado FPSCR da G2 (ver nota abaixo) — sem isso nenhum `.3dsx` real chega perto de `srv:` |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 1/3, ver detalhe abaixo) — LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
+
+**F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
+não de correção)**: `virtual-arm-box/device/bcm2835/` novo — `Bcm2835SystemTimer` (contador
+livre 1MHz + 4 comparadores com IRQ, `hw/timer/bcm2835_systmr.c`), `Bcm2835Ic` (64 IRQs GPU + 8
+ARM, `hw/intc/bcm2835_ic.c` — achado real ao testar: nem a linha `nIRQ` nem os registradores
+`IRQ_PENDING_*` excluem a fonte selecionada para FIQ, só `fiqAsserted()` filtra por `fiqSelect`,
+diferente do que a intuição sugeriria), `Bcm2835Mailbox` (registradores MAIL0/MAIL1 +
+canal 8 de propriedades processado SINCRONAMENTE — simplificação deliberada frente ao QEMU real,
+que usa um barramento privado assíncrono — toda tag responde zerada com bit de sucesso, exatamente
+o que a spec pedia), `Bcm2835ArmControlBlock` (achado real: IC em `+0x200`/mailboxes em `+0x800`
+do bloco `ARM_OFFSET=0xB000` NÃO caem em limites de página de 4KiB cada — diferente do
+`versatilepb`, onde cada periférico já nascia alinhado — teve que nascer um dispatcher de janela
+único mapeado na página inteira), `Bcm2835Cp15Extras` (mesmo padrão de `VersatileCp15Extras`:
+`MIDR`/`CTR` reais do ARM1176JZF-S de `target/arm/tcg/cpu32.c: arm1176_initfn` do QEMU + idioma
+`c7`/`Rt=PC` de manutenção de cache). `boot/FdtPatcher` novo — reescreve `/chosen/bootargs` e
+`/memory@0/reg` num `.dtb` real sem `dtc`/`libfdt` (achado real ao inspecionar bytes do `.dtb`
+oficial do `raspberrypi/firmware`: `reg` vem zerado, `<0x0 0x0>` — quem preenche isso em hardware
+real é o `start.elf` proprietário que este repo não tem, então o próprio `FdtPatcher` precisa
+fazer essa reescrita, não só a de `bootargs`). `Bcm2835Machine implements Machine`
+(`ArmArchitecture.ARM11_MPCORE`, protocolo de boot direto do QEMU — `KERNEL_LOAD_ADDR=0x10000`,
+**não** os `0x8000` do bootloader real, que este repo explicitamente não tem — confirmado
+testando o `.dtb`/`kernel.img` reais no `qemu-system-arm -M raspi1ap` instalado nesta máquina como
+oráculo), registrado `--machine=raspi1` no `Main`. `testdata/raspi1/` (`kernel.img`+
+`bcm2708-rpi-b.dtb` reais, `raspberrypi/firmware` commit `12eeaa12865869b07db760f4bbb7507ec6f1976c`,
+`initramfs.cpio.gz` reaproveitado do `versatilepb` — `busybox-armv5l` roda em ARMv6K por
+compatibilidade retroativa, confirmado) com README de proveniência/sha256.
+
+**M1 redefinido, e mesmo assim NÃO fechado**: a mensagem literal do enunciado
+("Uncompressing Linux... done, booting the kernel.") não existe neste `kernel.img` OFICIAL —
+confirmado batendo o mesmo binário no `qemu-system-arm -M raspi1ap` como oráculo: o build do
+Raspberry Pi Foundation não tem `CONFIG_DEBUG_LL` no estágio de descompressão do zImage. O
+marcador equivalente adotado foi `Booting Linux on physical CPU` via `earlycon` (poke direto de
+MMIO a partir do `stdout-path` do Device Tree, sem depender do driver `amba`/`pl011` real).
+**Mesmo assim, M1 não fecha**: um rastreamento instrução-a-instrução (`ArmCore#step()`, não só
+amostragem por fatia — a 1ª tentativa de diagnóstico por amostragem grossa a cada 5000 fatias
+LEVOU A UMA CONCLUSÃO ERRADA de "loop travado reiniciando do zero", corrigida só ao rastrear
+instrução a instrução) confirma que o boot está CORRETO: `head.S` roda normalmente (NOPs de
+alinhamento, `MRS`/`TST`/`MSR` do `safe_svcmode_maskall`, sem UNDEFINED/abort) e entra de fato no
+`inflate()` real do zlib (padrão `LOAD_MULTIPLE`/`STORE_MULTIPLE`/`BRANCH_EXCHANGE` do decodificador
+Huffman). O problema é de DESEMPENHO: descomprimir os ~7,7MB deste `kernel.img` byte a byte custa
+tantas instruções ARM (medido: ~750 milhões de ciclos por 1,28M blocos no backend JIT) que o boot
+completo não termina num orçamento de sessão/CI razoável (extrapolação da taxa medida: dezenas de
+minutos só na descompressão). **Próximo passo recomendado para a sessão 2/3**: descomprimir o
+`kernel.img` no HOST (o payload é um stream gzip padrão embutido no zImage, localizável pelo magic
+`1f 8b 08` — a mesma técnica do `scripts/extract-vmlinux` do próprio kernel Linux) e carregar a
+imagem JÁ DESCOMPRIMIDA direto no endereço de link esperado, pulando o `inflate()` caro do guest
+inteiramente — o resto do protocolo de entrada (r0/r1/r2) não muda. `Raspi1BootTest` tem um smoke
+test rápido (prova a infra sem exceção, ~1s) + o teste de M1 real como `@Disabled` documentando o
+achado. `mvn -o test` verde no virtual-arm-box (51 testes, 1 skipped=o `@Disabled`);
+`VersatilePbBootTest` continua verde (G5 não se aplica — nenhum arquivo de arm-jitter tocado).
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
