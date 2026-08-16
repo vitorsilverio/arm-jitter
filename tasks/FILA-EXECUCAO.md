@@ -390,7 +390,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; **bloqueio FPSCR RESOLVIDO 2026-08-15 pela B3.8 do arm-jitter** (ver nota abaixo) — `FpscrRegister` agora aceita `RMode`/`FZ`/`LEN`/`STRIDE` sem lançar, com semântica real de arredondamento/flush-to-zero; sessão do n3dsemu ainda precisa CONFIRMAR (não testado aqui, fora do escopo desta sessão — arm-jitter) que `templates/application` progride além do `crt0` com o novo `arm-jitter` instalado localmente (`mvn -o install`) |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 2/3, ver detalhe abaixo) — LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 3/3 = ÚLTIMA, ver detalhe abaixo) — **M1 FECHOU**; M2/M3 bloqueados por bug NOVO, causa raiz não isolada — precisa de sessão extra fora do orçamento de 3 sessões original; LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 **F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
@@ -506,6 +506,69 @@ MESMA pré-existente já documentada acima, subsistema VFP não tocado). **Esta 
 `virtual-arm-box`** (fora do escopo, conforme instrução) — a sessão seguinte de F3 deve
 consumir o `arm-jitter` novo via o `.m2` local (já publicado) e destravar `Raspi1BootTest`/
 M1/M2/M3 a partir daqui.
+
+**F3 — sessão 3/3 (2026-08-15) — ÚLTIMA sessão do orçamento original, M1 FECHOU, M2/M3
+continuam bloqueados por um achado NOVO (não BE8, não CP15, não desempenho)**: confirmado
+primeiro que `mvn -o test` no `virtual-arm-box` já pegava o `.m2` local atualizado pela `B1.8`
+(jar com timestamp da sessão da B1.8, `dependency` fixa em `1.0.0` no `pom.xml`, sem
+necessidade de purgar cache). Reativados os testes `reachesEarlyconBannerAcceiteM1Interpreted`/
+`...M1Jit` (estavam `@Disabled` desde a sessão 2/3): **ambos passam, cada um em menos de 1
+segundo** — o banner `Booting Linux on physical CPU` aparece muito cedo no log, nenhum bug novo
+do `arm-jitter` apareceu. **M1 fechado de verdade, nos dois backends.**
+
+Reativado em seguida `reachesFreeingKernelMemoryAcceiteM2Interpreted`: o boot avança bem além do
+`earlycon` (scan físico inicial do FDT funciona — "Machine model: Raspberry Pi Model B",
+"Reserved memory: created CMA memory pool..." aparecem certinhos) mas entra num LAÇO DE `Oops`
+do próprio kernel (`Unable to handle kernel paging request`, `8<--- cut here ---` repetido) já
+em `unflatten_device_tree()`/`fdt_next_tag` — a fase que remapeia o FDT por endereço VIRTUAL via
+`fixmap`, logo depois do scan físico inicial. Isso acontece a poucas dezenas de milhares de
+instruções do banner do M1, MUITO antes de `Freeing unused kernel memory`.
+
+**Confirmado como divergência REAL via o oráculo QEMU 8.0.0** (`qemu-system-arm -M raspi1ap`,
+EXATAMENTE o mesmo `kernel.img`+`bcm2708-rpi-b.dtb`+`initramfs.cpio.gz`+cmdline desta task): o
+QEMU boota limpo até enumerar USB (`dwc_otg`/`smsc95xx`) e montar o initramfs (`Trying to unpack
+rootfs image as initramfs...`/`Freeing initrd memory`), MUITO além de `Freeing unused kernel
+memory` — sem nenhum Oops. Isto não é uma feature faltando (como o BE8 era): é uma divergência de
+comportamento observável entre este emulador e uma referência de hardware real para a MESMA
+entrada — ou seja, um bug real em algum lugar (`arm-jitter` ou `virtual-arm-box`), mas a causa
+raiz NÃO foi isolada nesta sessão.
+
+Investigação com `ArmTraceListener` temporário (removido antes do commit, não faz parte do
+código entregue): o texto do PRIMEIRO `Oops` (`PC is at fdt_next_tag+0xec/0x154`, falha de
+leitura em `ff8ae000`, `*pgd=0800000e(bad)` — um descritor de SEÇÃO onde o kernel esperava uma
+tabela de 2º nível) já aparece no console ANTES de QUALQUER instrução observada pelo listener
+atingir o vetor de abort (`0xffff0010`/`0x00000010`); a primeira entrada de vetor que o listener
+de fato observa corresponde a um Oops LATER (`kmem_dump_obj+0xa8`, código de diagnóstico que o
+próprio kernel roda ao IMPRIMIR o primeiro Oops — uma falha em cascata, não a causa raiz). Achado
+colateral: `ArmCore#runBlocks` (o caminho que `Bcm2835Machine#runSlice()` usa, via
+`JitRuntime#execute`) entrega pelo menos o PRIMEIRO abort desta sessão sem passar pelo mesmo
+`afterInstruction`/`enterMemoryAbort` que `ArmCore#step()` usa — o texto do console é genuíno
+(o guest realmente imprimiu aquilo), mas a ferramenta de rastreamento por instrução tem uma
+lacuna de cobertura nesse caminho que impediu identificar QUAL instrução exata disparou o
+primeiro abort real. Hipóteses de causa raiz NÃO eliminadas (nenhuma confirmada): (a) a PTE nova
+que `fixmap_remap_fdt()` cria para mapear o FDT por virtual não fica visível para um walk de
+página subsequente (a `TranslatingAddressSpace`/micro-TLB do `arm-jitter` foi inspecionada nesta
+sessão e parece correta — miss sempre re-anda a tabela, `invalidateEntry` confere a tag antes de
+invalidar — mas isso não foi provado sob o caminho de bloco real); (b) o tamanho/layout fixo de
+RAM desta task (256MiB) vs. os ~448MiB que o QEMU sintetiza para `raspi1ap` desloca onde o
+fixmap cai o suficiente pra expor um bug de borda; (c) o `.dtb` patcheado pelo `FdtPatcher` está
+correto no round-trip (`FdtPatcherTest`), mas não foi validado byte-a-byte contra o que
+`fixmap_remap_fdt()` espera do `totalsize` do cabeçalho.
+
+`Raspi1BootTest` documenta o achado completo no Javadoc da classe; M2/M3 voltaram para
+`@Disabled` (M1 fica permanentemente ativo e verde). `mvn -o test` verde no `virtual-arm-box`
+(62 testes, 4 skipped = M2×2 + M3×2); `VersatilePbBootTest` continua verde. Nenhum arquivo do
+`arm-jitter` foi tocado nesta sessão (G5 não se aplica — a investigação usou só um listener
+temporário, nunca commitado).
+
+**F3 NÃO fecha por completo** — ficou fora do orçamento original de 3 sessões (M1 fechou, M2/M3
+não). Não movida para o histórico; segue na tabela "fila ATUAL" com o status acima. **Próximo
+passo recomendado, antes de tentar M2 de novo**: investigar a lacuna de observabilidade do
+`ArmTraceListener` sob `ArmCore#runBlocks`/`JitRuntime#execute` (não necessariamente um bug
+funcional — pode ser só uma lacuna de instrumentação — mas sem resolver isso primeiro é fácil
+consertar o sintoma errado). A `F10` (mesmo repo, regra 6: nunca em paralelo com a F3) fica
+BLOQUEADA até a F3 fechar de vez — decisão do usuário se quer abrir uma sessão extra dedicada
+a M2 antes de seguir para F10.
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
