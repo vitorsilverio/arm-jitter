@@ -615,6 +615,51 @@ evidência concreta**:
    `virtual-arm-box` (mesmos 62 testes, 4 skipped); M2/M3 continuam `@Disabled`, F3 permanece 🟡 na
    fila "ATUAL" (não movida para o histórico).
 
+**F3 — sessão de fechamento do M2 (2026-08-16) — causa raiz do laço de Oops ISOLADA E CORRIGIDA
+(2 bugs reais), M2 ainda NÃO fecha (bloqueio novo e diferente encontrado logo depois)**:
+
+1. **Causa raiz do laço de Oops confirmada via comparação byte a byte contra o oráculo QEMU 8.0.0**
+   (monitor HMP `xp` lendo a RAM física do guest real durante um boot limpo, mesmo
+   `kernel.img`+`bcm2708-rpi-b.dtb`+`initramfs.cpio.gz`+cmdline): no mesmo slot de L1
+   (`swapper_pg_dir`, físico `0x7fe0`, cobre a janela `0xff800000`-`0xff8fffff` onde o kernel
+   mapeia o `.dtb` como `MT_MEMORY_RO`), o QEMU produz `0x0800841e` (`AP=01`,`APX=1`, só leitura
+   privilegiada) e o nosso produzia `0x0800000e` (`AP=00`,`APX=0`, SEM ACESSO ALGUM — daí o
+   `DATA_ABORT` na primeira leitura de `fdt_next_tag()`). Diferença de 2 bits exatos:
+   `build_mem_type_table()` (`arch/arm/mm/mmu.c`) só adiciona `APX|AP_WRITE` a `MT_MEMORY_RO`
+   quando `cpu_arch >= CPU_ARCH_ARMv6 && (cr & CR_XP)` — `cr` é o próprio `SCTLR` relido via
+   `get_cr()`. Log real: `cr=00c5387d` (bit 23/`CR_XP` ligado) vs. nosso `cr=00002001` (desligado),
+   **apesar do kernel ter escrito um `SCTLR` com o bit 23 ligado**. Causa: `Cp15VmsaCoprocessor.
+   sctlrValue()` reconstruía a leitura só a partir de `M`/`V` (RAZ pro resto) — `CR_XP` "sumia" na
+   releitura. **Corrigido no arm-jitter** (`Cp15VmsaCoprocessor`, commit `bd4cfe7`): o valor de 32
+   bits escrito agora é armazenado e devolvido por inteiro; só `M`/`V` continuam recomputados a
+   partir do estado autoritativo. Aditivo/G3, teste de regressão
+   (`sctlrUnmodeledBitsRoundTripOnRead`). G5 revalidado: arm-jitter+gbaemu+ndsemu verdes; armbox
+   tem a MESMA falha pré-existente/não relacionada de `Armv7TortureTest`/`VfpRegisters` já
+   documentada na entrada da `E2` acima (confirmada via `git stash` que reproduz idêntica sem o fix
+   — não é regressão desta sessão).
+2. **Segundo bug real, encontrado imediatamente depois do fix acima** (`virtual-arm-box`, commit
+   `12159f1`): com o laço de Oops resolvido, um NOVO `Kernel panic - not syncing: Attempted to kill
+   the idle task!` aparece em `init_hw_breakpoint()`→`get_debug_arch()`, que lê `DBGDIDR` via
+   `MRC p14,0,Rd,c0,c0,0` — nenhum `CoprocessorBus` deste host reivindicava CP14 (depuração) →
+   `UNDEFINED` → panic. Oráculo QEMU: `hw-breakpoint: debug architecture 0x0 unsupported.` (o
+   `arm1176_initfn` do QEMU não seta `dbgdidr`, fica `0`/RAZ). Corrigido com
+   `Bcm2835Cp14Extras` novo, reivindicando CP14 inteiro com RAZ/WI (mesmo precedente de
+   `Bcm2835Cp15Extras` para `c7`), encadeado em `Bcm2835Machine#create`.
+3. **M2 continua NÃO fechado**: com os dois bugs acima corrigidos, `total faults=0` pelo resto do
+   boot testado (INTERPRETED e JIT) — nenhum novo Oops/panic — mas o console para de avançar logo
+   depois de `Console: colour dummy device 80x30`, exatamente onde `calibrate_delay()` roda no
+   kernel real. **Evidência concreta**: `ModeChangeListener` temporário contando entradas em
+   `CpuMode.IRQ` mostrou só UMA IRQ de timer entregue em ~4,8 milhões de fatias/~100s reais (mesmo
+   resultado em INTERPRETED e JIT), enquanto o contador livre do `Bcm2835SystemTimer` seguia
+   avançando normalmente (~15 minutos de tempo simulado). A emulação de registrador do timer
+   (ack/re-armamento) foi relida e está correta. Aponta para o handler de IRQ do kernel nunca
+   completar/re-armar, ou para `CPSR.I` ficar mascarado após a primeira entrega e nunca ser
+   restaurado no retorno — causa raiz exata NÃO isolada nesta sessão (possível bug real do
+   `arm-jitter` no caminho de retorno de exceção IRQ, nunca testado em sistema real com timer
+   periódico antes desta task; próximo passo recomendado no Javadoc de `Raspi1BootTest`).
+   `mvn -o test` verde na `virtual-arm-box`; M2/M3 continuam `@Disabled` com motivo atualizado. F3
+   permanece 🟡 na fila "ATUAL" (M2 ainda não fechou, F10 continua bloqueada).
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
