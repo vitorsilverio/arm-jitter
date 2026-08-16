@@ -159,13 +159,33 @@ final class IrExecutionSupport {
     private static final int BYTE_MASK = 0xFF;
 
     /// `LDR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS} e com destino diferente do PC, um
-    /// endereço desalinhado faz o acesso "atravessado" ARMv6+ (little-endian, byte a byte, ARM
-    /// DDI 0406C A3.2.1) em vez da rotação ARMv4T de {@link #read32Arm7}. `LDR pc,...` continua
-    /// exigindo o alinhamento legado mesmo com a feature (task B1.7, item 4) — assim como
-    /// LDM/STM, LDRD/STRD, LDREX/STREX e SWP, que chamam {@link #read32Arm7} diretamente e nunca
-    /// este método.
+    /// endereço GENUINAMENTE desalinhado (`address % 4 != 0`) faz o acesso "atravessado" ARMv6+
+    /// (little-endian, byte a byte, ARM DDI 0406C A3.2.1) em vez da rotação ARMv4T de
+    /// {@link #read32Arm7}. `LDR pc,...` continua exigindo o alinhamento legado mesmo com a
+    /// feature (task B1.7, item 4) — assim como LDM/STM, LDRD/STRD, LDREX/STREX e SWP, que chamam
+    /// {@link #read32Arm7} diretamente e nunca este método.
+    ///
+    /// **Achado real (task F3/`virtual-arm-box`, ARMv6K/ARM11 rodando um kernel Linux de
+    /// sistema)**: um endereço JÁ ALINHADO nunca precisa do caminho atravessado — hardware ARMv6+
+    /// real faz uma ÚNICA transação de barramento de 32 bits para um `LDR` alinhado, igual ao
+    /// ARMv4T/v5TE (é só o caso desalinhado que a arquitetura trata diferente). Antes desta
+    /// correção, QUALQUER `LDR` não-PC sob a feature (mesmo já alinhado) passava por
+    /// {@link #readCrossedWord}, que compõe o valor a partir de 4 chamadas independentes de
+    /// {@link dev.vitorsilverio.armjitter.memory.AddressSpace#read8} em `address`, `address+1`,
+    /// `address+2`, `address+3` — corretíssimo para RAM (onde `read8` é byte-endereçável de
+    /// verdade), mas silenciosamente ERRADO para um periférico MMIO cujo `read8`/`read16` não
+    /// reimplementam "byte N da word alinhada" (a maioria não faz, incluindo os do próprio
+    /// `virtual-arm-box`): os 3 bytes altos caem no `default` do periférico (offset desconhecido)
+    /// em vez de extrair do valor real de 32 bits, truncando SILENCIOSAMENTE todo registrador MMIO
+    /// lido por `LDR` alinhado ao byte baixo. Esse foi o bug real que impedia o driver de IRQ do
+    /// BCM2835 (`irq-bcm2835.c`, `get_next_armctrl_hwirq`/`armctrl_translate_bank`) de nunca ver
+    /// `IRQ_PENDING_BASIC`/`IRQ_PENDING_1` diferente de zero, mesmo com o bit correto armado no
+    /// periférico — o handler de IRQ nunca despachava, causando reentrada perpétua em
+    /// `CpuMode.IRQ` (ver `Raspi1BootTest`, task F3). Nunca foi pego antes porque nenhum consumidor
+    /// prévio rodava um sistema MMIO real sob um preset com `UNALIGNED_ACCESS` (só o `armbox`
+    /// user-mode, sem periféricos MMIO com layout de registrador esparso).
     int readWordForLoad(ArmCore core, int address, boolean loadsToProgramCounter) {
-        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter || isWordAligned(address)) {
             return read32Arm7(core, address);
         }
         int value = readCrossedWord(core, address);
@@ -173,13 +193,16 @@ final class IrExecutionSupport {
         return applyDataEndiannessWord(core, value);
     }
 
-    /// `LDRH`/`LDRSH` (halfword): mesmo fork de {@link #readWordForLoad}, mas para halfword. Sob
-    /// a feature o valor cru atravessado (sem sinal) é devolvido — o chamador já aplica
-    /// {@link #signExtendIfNeeded} por cima igual ao caminho legado, então o quirk ARMv4T de
-    /// `LDRSH` desalinhado (vira `LDRSB` do byte alto, preservado em {@link #read16Arm7}) não se
-    /// aplica aqui: ARMv6+ lê o halfword atravessado inteiro e sinal-estende normalmente.
+    /// `LDRH`/`LDRSH` (halfword): mesmo fork de {@link #readWordForLoad}, mas para halfword,
+    /// incluindo a mesma correção de só atravessar quando `address` é GENUINAMENTE desalinhado
+    /// (`address % 2 != 0`) — ver Javadoc de {@link #readWordForLoad} para o achado real. Sob a
+    /// feature, num endereço desalinhado, o valor cru atravessado (sem sinal) é devolvido — o
+    /// chamador já aplica {@link #signExtendIfNeeded} por cima igual ao caminho legado, então o
+    /// quirk ARMv4T de `LDRSH` desalinhado (vira `LDRSB` do byte alto, preservado em
+    /// {@link #read16Arm7}) não se aplica aqui: ARMv6+ lê o halfword atravessado inteiro e
+    /// sinal-estende normalmente.
     int readHalfwordForLoad(ArmCore core, int address, boolean signed, boolean loadsToProgramCounter) {
-        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || loadsToProgramCounter || isHalfwordAligned(address)) {
             return read16Arm7(core, address, signed);
         }
         int value = readCrossedHalfword(core, address);
@@ -187,14 +210,21 @@ final class IrExecutionSupport {
         return applyDataEndiannessHalfword(core, value);
     }
 
-    /// `STR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS}, escreve atravessado (little-endian,
-    /// byte a byte) em vez de delegar a {@link #write32Arm7} como o caminho legado faz — que por
-    /// sua vez depende de como o {@code AddressSpace} concreto trata um endereço desalinhado
-    /// (algumas implementações alinham para baixo, outras já compõem por byte; não é nosso papel
-    /// mudar isso no caminho legado, task B1.7 Armadilhas). Sob a feature a semântica passa a ser
-    /// explícita e independente do `AddressSpace` de baixo.
+    /// `STR` (word): sob {@link ArmFeature#UNALIGNED_ACCESS} e com `address` GENUINAMENTE
+    /// desalinhado, escreve atravessado (little-endian, byte a byte) em vez de delegar a
+    /// {@link #write32Arm7} como o caminho legado faz — que por sua vez depende de como o
+    /// {@code AddressSpace} concreto trata um endereço desalinhado (algumas implementações
+    /// alinham para baixo, outras já compõem por byte; não é nosso papel mudar isso no caminho
+    /// legado, task B1.7 Armadilhas). Sob a feature, num endereço desalinhado, a semântica passa a
+    /// ser explícita e independente do `AddressSpace` de baixo. Um endereço JÁ ALINHADO usa
+    /// {@link #write32Arm7} mesmo sob a feature — mesma correção e mesmo motivo de
+    /// {@link #readWordForLoad} (ver Javadoc de lá): hardware real faz uma única transação de
+    /// barramento para um `STR` alinhado, e decompor em 4 `write8` mesmo assim é seguro só por
+    /// coincidência para a maioria dos periféricos MMIO (word único, offset alto sem efeito
+    /// colateral) — não é uma garantia arquitetural, e quebra qualquer periférico com registrador
+    /// vizinho de verdade no byte adjacente.
     void writeWordForStore(ArmCore core, int address, int value) {
-        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS)) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || isWordAligned(address)) {
             write32Arm7(core, address, value);
             return;
         }
@@ -202,14 +232,33 @@ final class IrExecutionSupport {
         core.addMemoryCycles(address, WORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
     }
 
-    /// `STRH`: mesmo fork de {@link #writeWordForStore}, mas para halfword.
+    /// `STRH`: mesmo fork de {@link #writeWordForStore}, mas para halfword — mesma correção de só
+    /// atravessar quando `address` é GENUINAMENTE desalinhado (`address % 2 != 0`).
     void writeHalfwordForStore(ArmCore core, int address, int value) {
-        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS)) {
+        if (!architecture.has(ArmFeature.UNALIGNED_ACCESS) || isHalfwordAligned(address)) {
             write16Arm7(core, address, value);
             return;
         }
         writeCrossedHalfword(core, address, applyDataEndiannessHalfword(core, value));
         core.addMemoryCycles(address, HALFWORD_ACCESS_SIZE_BYTES, MemoryAccessType.DATA_WRITE);
+    }
+
+    /// Máscara para testar alinhamento de word (4 bytes) — nomeada por G6.
+    private static final int WORD_ALIGNMENT_MASK = 0x3;
+    /// Máscara para testar alinhamento de halfword (2 bytes) — nomeada por G6.
+    private static final int HALFWORD_ALIGNMENT_MASK = 0x1;
+
+    /// `true` quando `address` já cai num múltiplo de 4 — usado por {@link #readWordForLoad}/
+    /// {@link #writeWordForStore} para decidir se o acesso "atravessado" byte a byte da
+    /// {@link ArmFeature#UNALIGNED_ACCESS} é necessário (só quando desalinhado de verdade).
+    private static boolean isWordAligned(int address) {
+        return (address & WORD_ALIGNMENT_MASK) == 0;
+    }
+
+    /// `true` quando `address` já cai num múltiplo de 2 — mesmo papel de {@link #isWordAligned}
+    /// para {@link #readHalfwordForLoad}/{@link #writeHalfwordForStore}.
+    private static boolean isHalfwordAligned(int address) {
+        return (address & HALFWORD_ALIGNMENT_MASK) == 0;
     }
 
     /// Compõe uma word atravessada a partir de 4 leituras de byte independentes (cada byte é

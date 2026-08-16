@@ -236,7 +236,26 @@ public final class AsmRuntimeHelpers {
     private static final int BITS_PER_BYTE = 8;
     private static final int BYTE_MASK = 0xFF;
 
+    /// Máscara para testar alinhamento de word (4 bytes) — nomeada por G6, espelha
+    /// `IrExecutionSupport#isWordAligned`.
+    private static final int WORD_ALIGNMENT_MASK = 0x3;
+    /// Máscara para testar alinhamento de halfword (2 bytes) — nomeada por G6.
+    private static final int HALFWORD_ALIGNMENT_MASK = 0x1;
+
+    /// **Achado real (task F3/`virtual-arm-box`, ver Javadoc de
+    /// `IrExecutionSupport#readWordForLoad` para a história completa)**: `address` GENUINAMENTE
+    /// desalinhado é o único caso que precisa da composição byte a byte — um endereço já alinhado
+    /// deve continuar valendo {@link #loadWord} (a mesma transação de barramento único que
+    /// hardware real faz), senão qualquer periférico MMIO cujo `read8` não reimplemente "byte N
+    /// da word alinhada" tem o valor lido silenciosamente truncado ao byte baixo. O
+    /// `AsmBlockCompiler` emite uma chamada única para este helper (não decide alinhamento em
+    /// tempo de compilação, já que o endereço costuma vir de um registrador) — a checagem de
+    /// alinhamento acontece aqui, em tempo de execução, espelhando exatamente
+    /// `IrExecutionSupport#readWordForLoad`.
     public static int loadWordCrossed(ArmCore core, int address) {
+        if ((address & WORD_ALIGNMENT_MASK) == 0) {
+            return loadWord(core, address);
+        }
         int value = (core.memory().read8(address) & BYTE_MASK)
                 | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE)
                 | ((core.memory().read8(address + 2) & BYTE_MASK) << (2 * BITS_PER_BYTE))
@@ -245,7 +264,11 @@ public final class AsmRuntimeHelpers {
         return applyDataEndiannessWord(core, value);
     }
 
+    /// Ver Javadoc de {@link #loadWordCrossed} — mesma correção para halfword.
     public static int loadHalfCrossed(ArmCore core, int address) {
+        if ((address & HALFWORD_ALIGNMENT_MASK) == 0) {
+            return loadHalf(core, address);
+        }
         int value = (core.memory().read8(address) & BYTE_MASK)
                 | ((core.memory().read8(address + 1) & BYTE_MASK) << BITS_PER_BYTE);
         core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
@@ -253,10 +276,18 @@ public final class AsmRuntimeHelpers {
     }
 
     public static int loadHalfSignedCrossed(ArmCore core, int address) {
+        if ((address & HALFWORD_ALIGNMENT_MASK) == 0) {
+            return loadHalfSigned(core, address);
+        }
         return (short) loadHalfCrossed(core, address);
     }
 
+    /// Ver Javadoc de {@link #loadWordCrossed} — mesma correção para `STR`.
     public static void storeWordCrossed(ArmCore core, int address, int value) {
+        if ((address & WORD_ALIGNMENT_MASK) == 0) {
+            storeWord(core, address, value);
+            return;
+        }
         int stored = applyDataEndiannessWord(core, value);
         core.memory().write8(address, stored);
         core.memory().write8(address + 1, stored >>> BITS_PER_BYTE);
@@ -266,7 +297,12 @@ public final class AsmRuntimeHelpers {
         core.notifyOrdinaryWrite(address, 4);
     }
 
+    /// Ver Javadoc de {@link #loadWordCrossed} — mesma correção para `STRH`.
     public static void storeHalfCrossed(ArmCore core, int address, int value) {
+        if ((address & HALFWORD_ALIGNMENT_MASK) == 0) {
+            storeHalf(core, address, value);
+            return;
+        }
         int stored = applyDataEndiannessHalfword(core, value);
         core.memory().write8(address, stored);
         core.memory().write8(address + 1, stored >>> BITS_PER_BYTE);

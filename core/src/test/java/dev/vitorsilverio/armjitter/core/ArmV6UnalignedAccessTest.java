@@ -290,4 +290,116 @@ class ArmV6UnalignedAccessTest {
             memory.write8(base + i, bytes[i]);
         }
     }
+
+    // ── Achado real (task F3/virtual-arm-box): endereço JÁ ALINHADO NUNCA deve atravessar ──────
+
+    /// `TestAddressSpace` (RAM de verdade, usada para o código buscado pelo core) mas com um
+    /// único endereço "registrador MMIO simulado" onde os 3 bytes vizinhos do word alinhado
+    /// (offsets +1/+2/+3) SEMPRE leem `0`/ignoram escrita — o padrão real de `default -> 0`/
+    /// `default -> {}` de {@code Bcm2835Ic} e companhia (só o offset 0 do registrador "existe";
+    /// os vizinhos são "desconhecidos"). Um acesso "atravessado" byte a byte a este endereço NUNCA
+    /// recompõe o valor real do registrador (só o byte 0 bate, os outros 3 leem 0 em vez do
+    /// conteúdo real), enquanto um `read32`/`write32` direto sempre acerta — exatamente a
+    /// distinção que
+    /// {@link dev.vitorsilverio.armjitter.codegen.executor.IrExecutionSupport#readWordForLoad}
+    /// precisa fazer. Modela a causa raiz real do bloqueio de M2 da task F3 (`IRQ_PENDING_BASIC`
+    /// do `Bcm2835Ic` lido como `0` mesmo com o bit certo armado, porque o driver do kernel usa
+    /// `LDR` alinhado).
+    private static final class SparseRegisterAddressSpace implements dev.vitorsilverio.armjitter.memory.AddressSpace {
+        /// Backing de RAM comum, usado só para o código buscado pelo core (`put32` das
+        /// instruções) — fora do endereço do "registrador MMIO simulado" este barramento se
+        /// comporta como {@link TestAddressSpace}.
+        private final byte[] code;
+        private final int registerAddress;
+        /// Valor AUTORITATIVO do registrador — só `read32`/`write32` diretos o tocam, exatamente
+        /// como {@code Bcm2835Ic#read32}/`write32` fazem por cima do estado real do periférico,
+        /// desacoplado do que `read8` (byte a byte) consegue enxergar nos offsets vizinhos.
+        private int registerValue;
+
+        SparseRegisterAddressSpace(int size, int registerAddress) {
+            this.code = new byte[size];
+            this.registerAddress = registerAddress;
+        }
+
+        void put32(int address, int value) {
+            code[address] = (byte) value;
+            code[address + 1] = (byte) (value >>> 8);
+            code[address + 2] = (byte) (value >>> 16);
+            code[address + 3] = (byte) (value >>> 24);
+        }
+
+        @Override
+        public int read8(int address) {
+            if (address == registerAddress) {
+                return registerValue & 0xFF;
+            }
+            if (address > registerAddress && address <= registerAddress + 3) {
+                return 0; // offset "desconhecido" do periférico simulado.
+            }
+            return code[address] & 0xFF;
+        }
+
+        @Override
+        public int read16(int address) {
+            return read8(address) | (read8(address + 1) << 8);
+        }
+
+        @Override
+        public int read32(int address) {
+            return address == registerAddress ? registerValue : (read16(address) | (read16(address + 2) << 16));
+        }
+
+        @Override
+        public void write8(int address, int value) {
+            code[address] = (byte) value;
+        }
+
+        @Override
+        public void write16(int address, int value) {
+            int aligned = address & ~1;
+            write8(aligned, value);
+            write8(aligned + 1, value >>> 8);
+        }
+
+        @Override
+        public void write32(int address, int value) {
+            if (address == registerAddress) {
+                registerValue = value;
+                return;
+            }
+            write16(address, value);
+            write16(address + 2, value >>> 16);
+        }
+    }
+
+    @Test
+    void alignedWordLoadReadsTheFullMmioRegisterInsteadOfCrossingWithTheFeature() {
+        SparseRegisterAddressSpace memory = new SparseRegisterAddressSpace(64, 32);
+        memory.write32(32, 0x0000_0100); // valor real do achado F3: IRQ_PENDING_BASIC, bit 8 armado
+        memory.put32(16, ldr(0, 1)); // LDR r1,[r0]
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        core.setRegister(0, 32); // endereço JÁ ALINHADO
+        core.setProgramCounter(16);
+
+        core.step();
+
+        assertEquals(0x0000_0100, core.register(1),
+                "acesso alinhado sob UNALIGNED_ACCESS deve ler a word inteira via read32, não "
+                        + "atravessar byte a byte (regressão do bug real da F3)");
+    }
+
+    @Test
+    void alignedWordStoreWritesTheFullMmioRegisterInsteadOfCrossingWithTheFeature() {
+        SparseRegisterAddressSpace memory = new SparseRegisterAddressSpace(64, 32);
+        memory.put32(16, str(0, 1)); // STR r1,[r0]
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        core.setRegister(0, 32); // endereço JÁ ALINHADO
+        core.setRegister(1, 0xAABB_CCDD);
+        core.setProgramCounter(16);
+
+        core.step();
+
+        assertEquals(0xAABB_CCDD, memory.read32(32),
+                "escrita alinhada sob UNALIGNED_ACCESS deve escrever a word inteira via write32");
+    }
 }

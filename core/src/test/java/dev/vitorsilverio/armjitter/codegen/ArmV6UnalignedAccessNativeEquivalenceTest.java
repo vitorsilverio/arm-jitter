@@ -118,6 +118,36 @@ class ArmV6UnalignedAccessNativeEquivalenceTest extends BlockEquivalenceTest {
         }
     }
 
+    /// Achado real (task F3/`virtual-arm-box`): um `LDR`/`STR` com endereço JÁ ALINHADO sob a
+    /// feature nunca deve atravessar byte a byte (ver Javadoc de
+    /// {@code IrExecutionSupport#readWordForLoad}) — prova de paridade entre o interpretado e o
+    /// `AsmBlockCompiler` (invariante G1) usando um endereço múltiplo de 4, que antes da correção
+    /// já divergia silenciosamente de qualquer periférico MMIO real (ambos os backends, porém,
+    /// concordavam entre si sobre RAM comum — daí este bug nunca ter sido pego por um teste de
+    /// equivalência puro contra RAM; o valor em si é coberto pelo teste dedicado no interpretador,
+    /// `ArmV6UnalignedAccessTest`, este aqui só garante que o `AsmBlockCompiler` não regride para
+    /// um caminho diferente do interpretado no caso alinhado).
+    @Test
+    void conditionalAlignedWordLoadStoreMatchInterpretedAcrossAllCodesAndFlags() {
+        for (int cond = FIRST_COND; cond <= LAST_COND; cond++) {
+            // LDR<cond> r1,[r0] ; STR<cond> r1,[r2]
+            TestAddressSpace memory = new TestAddressSpace(64);
+            memory.put32(0, ldr(cond, 0, 1));
+            memory.put32(4, str(cond, 2, 1));
+            IrBlock block = liftV6(memory, 2);
+            assertTrue(asmEmitter.isNativeSupported(block), "LDR/STR<cond> must be native: cond=" + cond);
+            for (int nzcv = 0; nzcv < 16; nzcv++) {
+                int flags = nzcv;
+                harness.assertEquivalent(v6Reference, asmEmitter, block,
+                        EquivalenceTestSupport.independentPair(memory, core -> {
+                            core.setRegister(0, 8);  // endereço JÁ ALINHADO para leitura
+                            core.setRegister(2, 32); // endereço JÁ ALINHADO para escrita
+                            applyFlags(core, flags);
+                        }));
+            }
+        }
+    }
+
     @Test
     void syntheticUnalignedAccessBlockHasZeroPerOpFallback() {
         AsmCodeEmitter perOpEmitter = new AsmCodeEmitter(
