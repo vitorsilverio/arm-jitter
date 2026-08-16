@@ -386,8 +386,8 @@ padrão do armbox — sem agrupamento definido ainda).
 | ~~P8~~ | ~~**F7**~~ ✅ fechada 2026-08-15 — consumidores no Central, sem `asm` declarado | `trilha-f-infra/f7-consumidores-central.md` | 4 consumidores | F5 | 4 POMs em `1.0.0`, `org.ow2.asm` removido de gbaemu/ndsemu (transitivo, confirmado); `mvn test` com `~/.m2/repository/dev/vitorsilverio` renomeada passou nos 4 (gbaemu 240/ndsemu 183/armbox 41/virtual-arm-box 23); docs corrigidas; commit por repo. Fecha a janela aberta pela F4/F6 |
 | ~~P9~~ | ~~**F6**~~ ✅ fechada 2026-08-15 — CI verde nos 4 repos + release.yml escrito | `trilha-f-infra/f6-github-actions-pipeline.md` | 4 repos | F5 | 5 testes do gbaemu sem guarda (falhariam, não pulariam) ganharam `assumeTrue`; ndsemu/armbox não precisaram de nada; 4 execuções reais observadas verdes na primeira tentativa; `release.yml` escrito mas não testado ponta a ponta (decisão da spec — sem release vazia só pra provar); usuário ainda precisa cadastrar os 4 segredos; ver índice do `tasks/README.md` para o detalhe |
 | ~~P10~~ | ~~**G1**~~ ✅ fechada 2026-08-15 — `n3dsemu`: esqueleto + loader `.3dsx` + primeira `svc` | `trilha-g-3ds/g1-esqueleto-n3dsemu.md` | n3dsemu (novo) | F7 | repo novo criado e commitado localmente; loader+memória+CP15/c13+SvcTable+`ARM11_MPCORE`; achado real documentado (convenção de imediato de `SVC` GBA/NDS vs. Horizon, sem tocar no decoder compartilhado); `n3dsemu testdata/application.3dsx --trace-svc` chega a `0x21 svcCreateAddressArbiter` idêntico nos 3 backends; `mvn -o test` verde (15); ver índice do `tasks/README.md` para o detalhe completo; destrava G2 |
-| ~~P11~~ | ~~**G2**~~ 🟡 PARCIAL (2026-08-15, PR1+PR2) — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | PR2 fechou threads/sincronização/`AddressArbiter`/começo de IPC (ver índice do `tasks/README.md`); aceite objetivo "roda até `svcExitProcess`" **NÃO alcançável** — achado real: `templates/application` esbarra numa decisão de OUTRO épico do arm-jitter (`FpscrRegister`, só IEEE round-to-nearest); **G3 herda esse bloqueio** (ver nota abaixo) |
-| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; **bloqueio FPSCR RESOLVIDO 2026-08-15 pela B3.8 do arm-jitter** (ver nota abaixo) — `FpscrRegister` agora aceita `RMode`/`FZ`/`LEN`/`STRIDE` sem lançar, com semântica real de arredondamento/flush-to-zero; sessão do n3dsemu ainda precisa CONFIRMAR (não testado aqui, fora do escopo desta sessão — arm-jitter) que `templates/application` progride além do `crt0` com o novo `arm-jitter` instalado localmente (`mvn -o install`) |
+| ~~P11~~ | ~~**G2**~~ 🟡 PARCIAL (2026-08-15, PR1+PR2; investigação 2026-08-16 confirmou desbloqueio + achou/corrigiu 1 bug novo) — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | PR2 fechou threads/sincronização/`AddressArbiter`/começo de IPC (ver índice do `tasks/README.md`); aceite objetivo "roda até `svcExitProcess`" ainda **NÃO alcançado**, mas o bloqueio original (FPSCR) está resolvido — ver nota abaixo, "Investigação 2026-08-16" |
+| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **AINDA NÃO PRONTA PARA EXECUTAR** — G2 tem pelo menos 2 gaps novos achados nessa mesma investigação (handle pseudo-reservada trocada, JÁ CORRIGIDO; SVC `0x39` faltante e uma falha de `svcControlMemory(ALLOC)` ainda em aberto) que bloqueiam o boot ANTES de qualquer `svcConnectToPort`/serviço de verdade ser exercitado — uma sessão de continuação de G2 (ou um G2.1) deveria fechar esses gaps antes de começar G3 de fato |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
 | P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão EXTRA além das 3 originais, ver detalhe abaixo) — **M1 FECHOU**; M2/M3 ainda bloqueados — lacuna de observabilidade fechada (`E2` no `arm-jitter`) e 2 hipóteses de causa raiz descartadas com evidência concreta (TLB/MMU staleness, tamanho de RAM), mas causa raiz ainda não isolada — hipótese nova e mais específica documentada, fica para outra sessão; LONGA, 3 marcos |
@@ -637,6 +637,38 @@ três caminhos possíveis haviam sido levantados — (1) revisitar a decisão n�
 suportando `LEN`/`STRIDE`/`FZ`/`RMode` de verdade — **ESCOLHIDO**; (2) task cirúrgica só para
 ACEITAR (ignorar) esses bits sem lançar; (3) mudar o `crt0` do libctru/newlib para não gravar
 esses bits — descartado, binário já compilado.
+
+**Investigação 2026-08-16 (sessão n3dsemu, só reconhecimento — não implementou G3):**
+confirmado com `mvn -o test`/execução direta de `n3dsemu testdata/application.3dsx
+--trace-svc` (arm-jitter `1.0.0` local pós-B3.8, `mvn -o install` já refletido no `.m2`) que o
+bloqueio de FPSCR está de fato resolvido — o boot passa inteiro pelo `crt0`/newlib configurando
+a VFP sem lançar. **Achou e corrigiu 1 bug real do n3dsemu, não do arm-jitter**: as constantes
+`HandleTable.CURRENT_PROCESS_HANDLE`/`CURRENT_THREAD_HANDLE` estavam com os valores
+`0xFFFF8000`/`0xFFFF8001` TROCADOS em relação ao header real (`libctru/include/3ds/svc.h`:
+`CUR_PROCESS_HANDLE=0xFFFF8001`, `CUR_THREAD_HANDLE=0xFFFF8000`), confirmado também por
+`arm-none-eabi-objdump` no `.3dsx` real (`__system_allocateHeaps` passa literalmente
+`0xFFFF8001` para `svcGetResourceLimit`, que só aceita handle de processo). Sem a correção,
+isso fazia `svcGetResourceLimit` devolver `INVALID_HANDLE` e o guest reagia com
+`svcBreak(PANIC)` sozinho, logo após passar da VFP — o que por um instante pareceu "o fix do
+B3.8 não bastou", mas na verdade era um bug independente e pré-existente, só exposto porque a
+execução finalmente chegou lá. Corrigido em `HandleTable.java` (commit `c939549`), `mvn -o test`
+verde (84 testes), `Application3dsxTest` reescrito para documentar a cadeia completa.
+
+**Novo limite real encontrado (NÃO corrigido — fora do escopo de uma sessão de investigação)**:
+com o bug de handle corrigido, o boot avança até `svc 0x39` (`svcGetResourceLimitLimitValues`),
+que **não está na lista de SVCs da própria task G2** (só lista `0x38`/`0x3A`) — mesmo padrão já
+visto com `svcCreateAddressArbiter` na PR2 (um SVC vizinho que o crt0 usa e a spec original não
+previu). O `Main` real finge sucesso e segue (convenção já estabelecida), então o guest continua
+até um `svcControlMemory(MEMOP_ALLOC, addr=0x08000000, ...)` de verdade que hoje devolve falha
+para os parâmetros que o crt0 usa — motivo ainda não isolado (não investigado a fundo, decisão
+consciente de não expandir escopo) — e o guest chama `svcBreak(PANIC)` de novo. **Recomendação
+para a próxima sessão**: tratar isso como G2.1 (ou dobrar no início de uma G3 mais cuidadosa)
+antes de atacar `srv:`/`APT`/etc. — implementar `svcGetResourceLimitLimitValues` com valores de
+`COMMIT` plausíveis (grandes o bastante para não estourar o teto que `__system_allocateHeaps`
+calcula a partir de `LIMIT - CURRENT`) e depurar por que o `ALLOC` linear falha. Também achado:
+`C:\devkitPro\libctru` só tem `include/`+`lib/*.a` instalados localmente — **sem o código-fonte**
+que a spec da G3 presume disponível como oráculo; 3dbrew + desmontagem do `.3dsx` seguem
+funcionando como substituto, mas vale avisar quem for executar G3.
 
 **Armazenamento (decidido 2026-08-15):** o `virtual-arm-box` usa **disco virtual em formato
 padrão, compatível com outras VMs** — `raw` e **QCOW2**, ambos com leitura e escrita; VDI,
