@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpsrRegister;
+import dev.vitorsilverio.armjitter.core.FpRoundingMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
@@ -391,5 +392,76 @@ class IrVfpExecutorTest {
         assertEquals(FpscrRegister.ZERO_FLAG, core.fpscr().value()); // FPSCR intacto
         assertEquals(3, cycles); // Cycle consumido mesmo com a op pulada
         assertEquals(4, core.programCounter()); // Fetch/avanço de PC ocorreram normalmente
+    }
+
+    // ── 10. RMode (task B3.8) — FPSCR.RMODE afeta o resultado de VDIV ──────────
+
+    @Test
+    void divSingleRespectsRoundTowardMinusInfinity() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 1.0f);
+        core.vfp().setSFloat(1, 3.0f);
+        core.fpscr().setValue(0b10 << FpscrRegister.ROUNDING_MODE_SHIFT); // RM
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
+        // 1.0f/3.0f round-to-nearest = 0x3eaaaaab; o exato fica abaixo -> RM tem que arredondar
+        // para baixo (vizinho de baixo), diferente do default (ver DirectedFpRoundingTest).
+        assertEquals(0x3eaaaaaa, core.vfp().s(2));
+    }
+
+    @Test
+    void divSingleWithDefaultRoundingModeIsUnchangedFromBeforeB38() {
+        // G3: comportamento default (RMode=round-to-nearest) não muda.
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 1.0f);
+        core.vfp().setSFloat(1, 3.0f);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
+        assertEquals(Float.floatToRawIntBits(1.0f / 3.0f), core.vfp().s(2));
+    }
+
+    @Test
+    void systemTransferNoLongerThrowsForNonDefaultFpscrBits() {
+        // A escrita direta de VMSR com RMode/FZ/LEN/STRIDE não-default não lança mais
+        // UnsupportedOperationException (decisão nº 3 do B3 revisitada pela B3.8).
+        ArmCore core = newCore();
+        core.setRegister(0, FpscrRegister.ROUNDING_MODE_MASK | FpscrRegister.FLUSH_TO_ZERO_FLAG
+                | FpscrRegister.LEN_MASK | FpscrRegister.STRIDE_MASK);
+        newExecutor().executeOp(core, new IrOp.VfpSystemTransfer(false, 0, Condition.AL), 0);
+        assertEquals(FpRoundingMode.ROUND_TOWARD_ZERO, core.fpscr().roundingMode());
+        assertTrue(core.fpscr().flushToZero());
+    }
+
+    // ── 11. FZ (flush-to-zero, task B3.8) ───────────────────────────────────────
+
+    @Test
+    void flushToZeroFlushesSubnormalResultToSignedZero() {
+        ArmCore core = newCore();
+        core.fpscr().setValue(FpscrRegister.FLUSH_TO_ZERO_FLAG);
+        core.vfp().setSFloat(0, Float.MIN_VALUE); // subnormal
+        core.vfp().setSFloat(1, -2.0f);
+        // MIN_VALUE * -2 continua subnormal (magnitude só dobra) -> resultado exato != 0, mas FZ
+        // ainda assim reduz para zero com o sinal do resultado matemático (negativo).
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
+        assertEquals(-0.0f, core.vfp().sFloat(2));
+        assertTrue(1 / core.vfp().sFloat(2) < 0, "zero deveria ter sinal negativo (flush preserva o sinal)");
+    }
+
+    @Test
+    void flushToZeroFlushesSubnormalInputBeforeComparing() {
+        ArmCore core = newCore();
+        core.fpscr().setValue(FpscrRegister.FLUSH_TO_ZERO_FLAG);
+        core.vfp().setSFloat(0, Float.MIN_VALUE); // subnormal, seria >0 sem FZ
+        IrOp.VfpCompare cmp = new IrOp.VfpCompare(false, true, false, 0, 0, Condition.AL); // VCMP Vd, #0
+        newExecutor().executeOp(core, cmp, 0);
+        assertTrue(core.fpscr().z(), "entrada subnormal deveria ser tratada como zero (denormal-as-zero)");
+    }
+
+    @Test
+    void withoutFlushToZeroSubnormalResultIsPreservedAsBeforeB38() {
+        // G3: comportamento default (FZ=0) não muda — subnormal sobrevive intacto.
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, Float.MIN_VALUE);
+        core.vfp().setSFloat(1, 1.0f);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
+        assertEquals(Float.MIN_VALUE, core.vfp().sFloat(2));
     }
 }

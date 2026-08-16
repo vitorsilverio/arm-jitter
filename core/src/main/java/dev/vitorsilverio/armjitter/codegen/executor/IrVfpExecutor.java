@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.FpRoundingMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrOp;
@@ -33,52 +34,118 @@ public final class IrVfpExecutor {
             return;
         }
         VfpRegisters vfp = core.vfp();
+        FpscrRegister fpscr = core.fpscr();
         if (op.doublePrecision()) {
-            vfp.setDDouble(op.vd(), computeDouble(vfp, op));
+            vfp.setDDouble(op.vd(), computeDouble(vfp, op, fpscr.roundingMode(), fpscr.flushToZero()));
         } else {
-            vfp.setSFloat(op.vd(), computeSingle(vfp, op));
+            vfp.setSFloat(op.vd(), computeSingle(vfp, op, fpscr.roundingMode(), fpscr.flushToZero()));
         }
     }
 
-    private static float computeSingle(VfpRegisters vfp, IrOp.VfpAlu op) {
-        float vm = vfp.sFloat(op.vm());
+    /// Bit de sinal de um `float` em forma de bits crus (ARM DDI 0406C A2.9: `VNEG`/`VABS`
+    /// manipulam esse bit diretamente, nunca `0-x`/`Math.abs`, que canonicalizam NaN e quebram
+    /// `-0.0` — armadilha documentada na task B3.4).
+    private static final int SINGLE_SIGN_BIT = Integer.MIN_VALUE;
+    /// @see #SINGLE_SIGN_BIT
+    private static final long DOUBLE_SIGN_BIT = Long.MIN_VALUE;
+
+    private static float computeSingle(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode, boolean flushToZero) {
         return switch (op.op()) {
-            case ADD -> vfp.sFloat(op.vn()) + vm;
-            case SUB -> vfp.sFloat(op.vn()) - vm;
-            case MUL -> vfp.sFloat(op.vn()) * vm;
-            case DIV -> vfp.sFloat(op.vn()) / vm;
-            // VMLA/VMLS NÃO fundidos: o produto é arredondado primeiro (uma operação `float`),
-            // depois somado/subtraído (outra operação `float`) — NUNCA Math.fma, que arredondaria
-            // uma única vez e divergiria do VFP real (armadilha da task B3.4).
-            case MLA -> vfp.sFloat(op.vd()) + (vfp.sFloat(op.vn()) * vm);
-            case MLS -> vfp.sFloat(op.vd()) - (vfp.sFloat(op.vn()) * vm);
-            case NMUL -> -(vfp.sFloat(op.vn()) * vm);
-            // NEG/ABS manipulam o bit de sinal diretamente (ARM DDI 0406C A2.9), nunca `0-x`/
-            // `Math.abs` — que canonicalizam NaN e quebram no caso `-0.0` (armadilha da task).
-            case NEG -> Float.intBitsToFloat(Float.floatToRawIntBits(vm) ^ Integer.MIN_VALUE);
-            case ABS -> Float.intBitsToFloat(Float.floatToRawIntBits(vm) & Integer.MAX_VALUE);
-            // (float) Math.sqrt((double) x) é corretamente arredondado (IEEE 754) mesmo após o
-            // narrowing final para float — ver Inclui da task B3.4.
-            case SQRT -> (float) Math.sqrt((double) vm);
-            case COPY -> vm;
+            // NEG/ABS/COPY são manipulação de bits, não aritmética — RMode/FZ não se aplicam
+            // (ARM DDI 0406C A2.7.2: FZ só afeta instruções de processamento de dados aritmético).
+            case NEG -> Float.intBitsToFloat(Float.floatToRawIntBits(vfp.sFloat(op.vm())) ^ SINGLE_SIGN_BIT);
+            case ABS -> Float.intBitsToFloat(Float.floatToRawIntBits(vfp.sFloat(op.vm())) & ~SINGLE_SIGN_BIT);
+            case COPY -> vfp.sFloat(op.vm());
+            default -> computeSingleArithmetic(vfp, op, mode, flushToZero);
         };
     }
 
-    private static double computeDouble(VfpRegisters vfp, IrOp.VfpAlu op) {
-        double vm = vfp.dDouble(op.vm());
-        return switch (op.op()) {
-            case ADD -> vfp.dDouble(op.vn()) + vm;
-            case SUB -> vfp.dDouble(op.vn()) - vm;
-            case MUL -> vfp.dDouble(op.vn()) * vm;
-            case DIV -> vfp.dDouble(op.vn()) / vm;
-            case MLA -> vfp.dDouble(op.vd()) + (vfp.dDouble(op.vn()) * vm);
-            case MLS -> vfp.dDouble(op.vd()) - (vfp.dDouble(op.vn()) * vm);
-            case NMUL -> -(vfp.dDouble(op.vn()) * vm);
-            case NEG -> Double.longBitsToDouble(Double.doubleToRawLongBits(vm) ^ Long.MIN_VALUE);
-            case ABS -> Double.longBitsToDouble(Double.doubleToRawLongBits(vm) & Long.MAX_VALUE);
-            case SQRT -> Math.sqrt(vm);
-            case COPY -> vm;
+    private static float computeSingleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
+            boolean flushToZero) {
+        float vn = flushSingle(vfp.sFloat(op.vn()), flushToZero);
+        float vm = flushSingle(vfp.sFloat(op.vm()), flushToZero);
+        // "Exato" de ADD/SUB/MUL de float cabe sem perda em double (ver DirectedFpRounding);
+        // DIV/SQRT usam double como aproximação de altíssima precisão (idem).
+        float result = switch (op.op()) {
+            case ADD -> DirectedFpRounding.roundFloat(vn + vm, (double) vn + (double) vm, mode);
+            case SUB -> DirectedFpRounding.roundFloat(vn - vm, (double) vn - (double) vm, mode);
+            case MUL -> DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
+            case DIV -> DirectedFpRounding.roundFloat(vn / vm, (double) vn / (double) vm, mode);
+            // VMLA/VMLS NÃO fundidos: o produto é arredondado primeiro (uma operação `float`),
+            // depois somado/subtraído (outra operação `float`) — NUNCA Math.fma, que arredondaria
+            // uma única vez e divergiria do VFP real (armadilha da task B3.4). Cada um dos dois
+            // passos passa pelo arredondamento dirigido de RMode independentemente.
+            case MLA -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                float product = DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
+                yield DirectedFpRounding.roundFloat(vd + product, (double) vd + (double) product, mode);
+            }
+            case MLS -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                float product = DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
+                yield DirectedFpRounding.roundFloat(vd - product, (double) vd - (double) product, mode);
+            }
+            case NMUL -> DirectedFpRounding.roundFloat(-(vn * vm), -((double) vn * (double) vm), mode);
+            // (float) Math.sqrt((double) x) é corretamente arredondado (IEEE 754) mesmo após o
+            // narrowing final para float — ver Inclui da task B3.4; Math.sqrt(double) já é o
+            // "exato" de altíssima precisão para o arredondamento dirigido.
+            case SQRT -> DirectedFpRounding.roundFloat((float) Math.sqrt((double) vm), Math.sqrt((double) vm), mode);
+            case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeSingle");
         };
+        return flushSingle(result, flushToZero);
+    }
+
+    private static double computeDouble(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode, boolean flushToZero) {
+        return switch (op.op()) {
+            case NEG -> Double.longBitsToDouble(Double.doubleToRawLongBits(vfp.dDouble(op.vm())) ^ DOUBLE_SIGN_BIT);
+            case ABS -> Double.longBitsToDouble(Double.doubleToRawLongBits(vfp.dDouble(op.vm())) & ~DOUBLE_SIGN_BIT);
+            case COPY -> vfp.dDouble(op.vm());
+            default -> computeDoubleArithmetic(vfp, op, mode, flushToZero);
+        };
+    }
+
+    private static double computeDoubleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
+            boolean flushToZero) {
+        double vn = flushDouble(vfp.dDouble(op.vn()), flushToZero);
+        double vm = flushDouble(vfp.dDouble(op.vm()), flushToZero);
+        double result = switch (op.op()) {
+            case ADD -> DirectedFpRounding.roundDouble(vn + vm, DirectedFpRounding.exactAdd(vn, vm), mode);
+            case SUB -> DirectedFpRounding.roundDouble(vn - vm, DirectedFpRounding.exactSub(vn, vm), mode);
+            case MUL -> DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
+            case DIV -> DirectedFpRounding.roundDouble(vn / vm, DirectedFpRounding.approxDiv(vn, vm), mode);
+            case MLA -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                double product = DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
+                yield DirectedFpRounding.roundDouble(vd + product, DirectedFpRounding.exactAdd(vd, product), mode);
+            }
+            case MLS -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                double product = DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
+                yield DirectedFpRounding.roundDouble(vd - product, DirectedFpRounding.exactSub(vd, product), mode);
+            }
+            case NMUL -> DirectedFpRounding.roundDouble(-(vn * vm), DirectedFpRounding.exactMul(vn, vm).negate(), mode);
+            case SQRT -> DirectedFpRounding.roundDouble(Math.sqrt(vm), DirectedFpRounding.approxSqrt(vm), mode);
+            case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeDouble");
+        };
+        return flushDouble(result, flushToZero);
+    }
+
+    /// Flush-to-zero (VFPv2, `FZ`=1): valores subnormais não-zero viram zero com o mesmo sinal.
+    /// Aplicado às entradas (denormal-as-zero) e ao resultado das operações aritméticas — nunca
+    /// a `NEG`/`ABS`/`COPY`, que são manipulação de bits, não aritmética.
+    private static float flushSingle(float value, boolean flushToZero) {
+        if (flushToZero && value != 0f && Math.abs(value) < Float.MIN_NORMAL) {
+            return Math.copySign(0f, value);
+        }
+        return value;
+    }
+
+    /// @see #flushSingle(float, boolean)
+    private static double flushDouble(double value, boolean flushToZero) {
+        if (flushToZero && value != 0.0 && Math.abs(value) < Double.MIN_NORMAL) {
+            return Math.copySign(0.0, value);
+        }
+        return value;
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm`.
@@ -99,18 +166,19 @@ public final class IrVfpExecutor {
             return;
         }
         VfpRegisters vfp = core.vfp();
+        boolean flushToZero = core.fpscr().flushToZero();
         boolean unordered;
         boolean equal;
         boolean less;
         if (op.doublePrecision()) {
-            double a = vfp.dDouble(op.vd());
-            double b = op.compareWithZero() ? 0.0 : vfp.dDouble(op.vm());
+            double a = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+            double b = op.compareWithZero() ? 0.0 : flushDouble(vfp.dDouble(op.vm()), flushToZero);
             unordered = Double.isNaN(a) || Double.isNaN(b);
             equal = !unordered && a == b;
             less = !unordered && a < b;
         } else {
-            float a = vfp.sFloat(op.vd());
-            float b = op.compareWithZero() ? 0f : vfp.sFloat(op.vm());
+            float a = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+            float b = op.compareWithZero() ? 0f : flushSingle(vfp.sFloat(op.vm()), flushToZero);
             unordered = Float.isNaN(a) || Float.isNaN(b);
             equal = !unordered && a == b;
             less = !unordered && a < b;

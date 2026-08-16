@@ -1,11 +1,16 @@
 package dev.vitorsilverio.armjitter.core;
 
 /// Representa o FPSCR (VFP Floating-Point Status and Control Register, ARM DDI 0406C A2.7.2).
-/// Só o modo IEEE round-to-nearest é suportado (decisão nº 3 do épico B3): escrever qualquer
-/// valor que peça `RMODE`≠round-to-nearest, `FZ`=1 (flush-to-zero) ou `LEN`/`STRIDE`≠0
-/// (aritmética vetorial VFPv2) lança {@link UnsupportedOperationException} com uma mensagem
-/// clara, mesmo padrão central de bit único inválido que {@link CpsrRegister} usa para o
-/// bit E (`SETEND`, ARMv6).
+///
+/// **Decisão nº 3 do épico B3 REVISITADA pela task B3.8 (2026-08-15):** `RMODE` (os 4 modos de
+/// arredondamento IEEE 754) e `FZ` (flush-to-zero) agora são suportados de verdade — ver
+/// {@link #roundingMode()}/{@link #flushToZero()} e os executores VFP em
+/// `codegen/executor/IrVfpExecutor`, que consultam esses valores. `LEN`/`STRIDE` (aritmética
+/// vetorial VFPv2, "short vector") continuam **aceitos e armazenados, mas sem semântica de
+/// vetor executada** — nenhum consumidor real conhecido (newlib/libctru do 3DS, gbaemu, ndsemu)
+/// executa em modo vetor de propósito; binários antigos gravam esses campos "por costume" com
+/// `LEN=1`/`STRIDE=0` (o caso escalar, já correto). Implementar o modo vetor de verdade é uma
+/// sub-task futura (decomposição explícita da B3.8) caso apareça um binário real que precise.
 public final class FpscrRegister {
     /// Bit N do FPSCR (resultado de comparação: menor que).
     public static final int NEGATIVE_FLAG = 1 << 31;
@@ -19,20 +24,20 @@ public final class FpscrRegister {
     /// a semântica de NaN deste core já é a do Java (payload propagado bit a bit), documentado
     /// aqui em vez de implementado como um modo à parte.
     public static final int DEFAULT_NAN_FLAG = 1 << 25;
-    /// Bit FZ do FPSCR (flush-to-zero). Escrever `1` não é suportado (ver a classe).
+    /// Bit FZ do FPSCR (flush-to-zero, VFPv2/A2.7.2): entradas e resultados subnormais são
+    /// tratados como zero (com o sinal preservado) pelos executores VFP aritméticos.
     public static final int FLUSH_TO_ZERO_FLAG = 1 << 24;
-    /// Deslocamento do campo RMODE\[1:0\] (modo de arredondamento). Escrever qualquer valor
-    /// diferente de `00` (round-to-nearest) não é suportado (ver a classe).
+    /// Deslocamento do campo RMODE\[1:0\] (modo de arredondamento, ver {@link FpRoundingMode}).
     public static final int ROUNDING_MODE_SHIFT = 22;
     /// Máscara do campo RMODE\[1:0\].
     public static final int ROUNDING_MODE_MASK = 0b11 << ROUNDING_MODE_SHIFT;
-    /// Deslocamento do campo STRIDE\[1:0\] (aritmética vetorial VFPv2). Escrever qualquer valor
-    /// diferente de `0` não é suportado (ver a classe).
+    /// Deslocamento do campo STRIDE\[1:0\] (aritmética vetorial VFPv2 "short vector"). Aceito e
+    /// armazenado, mas sem semântica de vetor executada (ver javadoc da classe).
     public static final int STRIDE_SHIFT = 20;
     /// Máscara do campo STRIDE\[1:0\].
     public static final int STRIDE_MASK = 0b11 << STRIDE_SHIFT;
-    /// Deslocamento do campo LEN\[2:0\] (aritmética vetorial VFPv2). Escrever qualquer valor
-    /// diferente de `0` não é suportado (ver a classe).
+    /// Deslocamento do campo LEN\[2:0\] (aritmética vetorial VFPv2 "short vector"). Aceito e
+    /// armazenado, mas sem semântica de vetor executada (ver javadoc da classe).
     public static final int LEN_SHIFT = 16;
     /// Máscara do campo LEN\[2:0\].
     public static final int LEN_MASK = 0b111 << LEN_SHIFT;
@@ -56,19 +61,23 @@ public final class FpscrRegister {
         return value;
     }
 
-    /// Substitui o valor bruto do FPSCR.
-    ///
-    /// @throws UnsupportedOperationException se o valor pedir `RMODE`≠round-to-nearest,
-    ///         `FZ`=1 ou `LEN`/`STRIDE`≠0 — únicos modos suportados por este core
+    /// Substitui o valor bruto do FPSCR. Todos os 32 bits são aceitos (task B3.8) — `RMODE`/`FZ`
+    /// têm semântica real nos executores VFP; `LEN`/`STRIDE` são armazenados mas não executam
+    /// modo vetor (ver javadoc da classe).
     public void setValue(int value) {
-        if ((value & ROUNDING_MODE_MASK) != 0
-                || (value & FLUSH_TO_ZERO_FLAG) != 0
-                || (value & LEN_MASK) != 0
-                || (value & STRIDE_MASK) != 0) {
-            throw new UnsupportedOperationException(
-                    "FPSCR RMode/FZ/Len/Stride não suportados — modo IEEE round-to-nearest apenas");
-        }
         this.value = value;
+    }
+
+    /// Modo de arredondamento corrente (campo `RMODE`), consultado pelos executores VFP
+    /// aritméticos em vez do arredondamento nativo do Java quando ≠ {@link FpRoundingMode#ROUND_TO_NEAREST}.
+    public FpRoundingMode roundingMode() {
+        return FpRoundingMode.fromFieldValue((value & ROUNDING_MODE_MASK) >>> ROUNDING_MODE_SHIFT);
+    }
+
+    /// `true` quando `FZ`=1 (flush-to-zero): entradas/resultados subnormais das operações
+    /// aritméticas VFP tornam-se zero com sinal preservado.
+    public boolean flushToZero() {
+        return (value & FLUSH_TO_ZERO_FLAG) != 0;
     }
 
     /// Retorna `true` quando N esta setado.
