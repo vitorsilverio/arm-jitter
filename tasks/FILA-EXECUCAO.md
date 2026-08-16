@@ -687,6 +687,25 @@ corrigido), M2 ainda NÃO fecha (bloqueio novo e diferente revelado pelo fix)**:
    `mvn -o test` verde na `virtual-arm-box` (92 testes, 4 skipped); M2/M3 continuam `@Disabled`
    com motivo atualizado. F3 permanece 🟡 na fila "ATUAL".
 
+**F3 — sessão de reconhecimento (2026-08-16, só diagnóstico de periférico, sem trace de
+instrução) — achado que restringe a hipótese**: harness temporário (removido antes do commit)
+amostrou `Bcm2835SystemTimer`/`Bcm2835Ic` DIRETO via `read32` (sem passar pela CPU) a cada 5.000
+fatias por 2.000.000 de fatias INTERPRETED. `COMPARE3`/`CTRL_STATUS`/`IRQ_ENABLE_1` mudam
+**exatamente uma vez** (~75.000 fatias: comparador armado + IRQ desmascarada no controlador —
+`request_irq`/`irq_unmask` do driver `bcm2835-armctrl-ic` SUCEDERAM de verdade) e depois ficam
+CONGELADOS pelas 1.925.000 fatias seguintes, apesar da CPU reentrar em `CpuMode.IRQ`
+continuamente (achado da sessão anterior). Ou seja: não é "o handler parou de rodar depois de um
+tempo" — é o corpo do handler nunca rodar nem uma ÚNICA vez. Isso torna a hipótese (a) do
+bloqueio anterior (dispatcher de nível superior `bcm2835_handle_irq`/`asm_do_IRQ` nunca alcança o
+ISR do timer) a mais provável, e enfraquece a (b) (efeito de escrita não chegando ao dispositivo
+— não há evidência de nenhuma escrita, nem errada). Próximo passo recomendado: o trace
+instrução-a-instrução via `ArmCore#step()` (backend INTERPRETED) já recomendado antes, mas agora
+mirando especificamente em confirmar se o PC, ao reentrar em `CpuMode.IRQ`, chega a alcançar o
+corpo de `bcm2835_handle_irq`/`generic_handle_irq` do driver `irq-bcm2835.c`, ou retorna antes
+disso. Detalhe completo no Javadoc de `Raspi1BootTest`. `mvn -o test` verde no `virtual-arm-box`;
+M1/M2/M3 no mesmo estado das sessões anteriores. Nenhum arquivo de produção tocado (só
+Javadoc/documentação desta sessão).
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
