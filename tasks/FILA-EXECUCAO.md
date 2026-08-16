@@ -387,7 +387,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | ~~P9~~ | ~~**F6**~~ ✅ fechada 2026-08-15 — CI verde nos 4 repos + release.yml escrito | `trilha-f-infra/f6-github-actions-pipeline.md` | 4 repos | F5 | 5 testes do gbaemu sem guarda (falhariam, não pulariam) ganharam `assumeTrue`; ndsemu/armbox não precisaram de nada; 4 execuções reais observadas verdes na primeira tentativa; `release.yml` escrito mas não testado ponta a ponta (decisão da spec — sem release vazia só pra provar); usuário ainda precisa cadastrar os 4 segredos; ver índice do `tasks/README.md` para o detalhe |
 | ~~P10~~ | ~~**G1**~~ ✅ fechada 2026-08-15 — `n3dsemu`: esqueleto + loader `.3dsx` + primeira `svc` | `trilha-g-3ds/g1-esqueleto-n3dsemu.md` | n3dsemu (novo) | F7 | repo novo criado e commitado localmente; loader+memória+CP15/c13+SvcTable+`ARM11_MPCORE`; achado real documentado (convenção de imediato de `SVC` GBA/NDS vs. Horizon, sem tocar no decoder compartilhado); `n3dsemu testdata/application.3dsx --trace-svc` chega a `0x21 svcCreateAddressArbiter` idêntico nos 3 backends; `mvn -o test` verde (15); ver índice do `tasks/README.md` para o detalhe completo; destrava G2 |
 | ~~P11~~ | ~~**G2**~~ 🟡 PARCIAL (2026-08-15, PR1+PR2; investigação 2026-08-16 confirmou desbloqueio + achou/corrigiu 1 bug novo) — kernel Horizon em HLE | `trilha-g-3ds/g2-kernel-hle-svc.md` | n3dsemu | G1 | PR2 fechou threads/sincronização/`AddressArbiter`/começo de IPC (ver índice do `tasks/README.md`); aceite objetivo "roda até `svcExitProcess`" ainda **NÃO alcançado**, mas o bloqueio original (FPSCR) está resolvido — ver nota abaixo, "Investigação 2026-08-16" |
-| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **AINDA NÃO PRONTA PARA EXECUTAR** — G2 tem pelo menos 2 gaps novos achados nessa mesma investigação (handle pseudo-reservada trocada, JÁ CORRIGIDO; SVC `0x39` faltante e uma falha de `svcControlMemory(ALLOC)` ainda em aberto) que bloqueiam o boot ANTES de qualquer `svcConnectToPort`/serviço de verdade ser exercitado — uma sessão de continuação de G2 (ou um G2.1) deveria fechar esses gaps antes de começar G3 de fato |
+| P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
 | P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão EXTRA além das 3 originais, ver detalhe abaixo) — **M1 FECHOU**; M2/M3 ainda bloqueados — lacuna de observabilidade fechada (`E2` no `arm-jitter`) e 2 hipóteses de causa raiz descartadas com evidência concreta (TLB/MMU staleness, tamanho de RAM), mas causa raiz ainda não isolada — hipótese nova e mais específica documentada, fica para outra sessão; LONGA, 3 marcos |
@@ -726,21 +726,25 @@ B3.8 não bastou", mas na verdade era um bug independente e pré-existente, só 
 execução finalmente chegou lá. Corrigido em `HandleTable.java` (commit `c939549`), `mvn -o test`
 verde (84 testes), `Application3dsxTest` reescrito para documentar a cadeia completa.
 
-**Novo limite real encontrado (NÃO corrigido — fora do escopo de uma sessão de investigação)**:
-com o bug de handle corrigido, o boot avança até `svc 0x39` (`svcGetResourceLimitLimitValues`),
-que **não está na lista de SVCs da própria task G2** (só lista `0x38`/`0x3A`) — mesmo padrão já
-visto com `svcCreateAddressArbiter` na PR2 (um SVC vizinho que o crt0 usa e a spec original não
-previu). O `Main` real finge sucesso e segue (convenção já estabelecida), então o guest continua
-até um `svcControlMemory(MEMOP_ALLOC, addr=0x08000000, ...)` de verdade que hoje devolve falha
-para os parâmetros que o crt0 usa — motivo ainda não isolado (não investigado a fundo, decisão
-consciente de não expandir escopo) — e o guest chama `svcBreak(PANIC)` de novo. **Recomendação
-para a próxima sessão**: tratar isso como G2.1 (ou dobrar no início de uma G3 mais cuidadosa)
-antes de atacar `srv:`/`APT`/etc. — implementar `svcGetResourceLimitLimitValues` com valores de
-`COMMIT` plausíveis (grandes o bastante para não estourar o teto que `__system_allocateHeaps`
-calcula a partir de `LIMIT - CURRENT`) e depurar por que o `ALLOC` linear falha. Também achado:
-`C:\devkitPro\libctru` só tem `include/`+`lib/*.a` instalados localmente — **sem o código-fonte**
-que a spec da G3 presume disponível como oráculo; 3dbrew + desmontagem do `.3dsx` seguem
-funcionando como substituto, mas vale avisar quem for executar G3.
+**Novo limite real encontrado nesta investigação — FECHADO na sessão de continuação de G2 do
+mesmo dia (2026-08-16)**: com o bug de handle corrigido, o boot avançava até `svc 0x39`
+(`svcGetResourceLimitLimitValues`), que **não está na lista de SVCs da própria task G2** (só
+lista `0x38`/`0x3A`) — mesmo padrão já visto com `svcCreateAddressArbiter` na PR2 (um SVC vizinho
+que o crt0 usa e a spec original não previu). O `Main` real finge sucesso e segue (convenção já
+estabelecida), então o guest continuava até um `svcControlMemory(MEMOP_ALLOC, addr=0x08000000,
+...)` de verdade que devolvia falha para os parâmetros que o crt0 usa — e o guest chamava
+`svcBreak(PANIC)` de novo. **Os dois foram corrigidos na sessão de continuação**: (1)
+`svcGetResourceLimitLimitValues` implementado com valores de `COMMIT` plausíveis; (2) a causa
+raiz real do `ALLOC` falhando não era o teto (embora zero também bastasse) — era um bug
+arquitetural preexistente: `MemoryMap.LINEAR_HEAP_BASE`/`NEW_HEAP_BASE` deste projeto tinham os
+endereços `0x08000000`/`0x14000000` TROCADOS em relação ao 3dbrew real (`Memory_layout`: o heap
+GERAL, sem a flag `LINEAR`, é `0x08000000`; o heap LINEAR de verdade é `0x14000000`), confirmado
+via `WebFetch` na wiki antes de corrigir. `n3dsemu testdata/application.3dsx` não panica mais.
+Ver índice do `tasks/README.md` (linha G2) para o detalhe completo, incl. o blocker NOVO
+encontrado depois (laço de `svcCreateAddressArbiter`). Também achado: `C:\devkitPro\libctru` só
+tem `include/`+`lib/*.a` instalados localmente — **sem o código-fonte** que a spec da G3 presume
+disponível como oráculo; 3dbrew + desmontagem do `.3dsx` seguem funcionando como substituto, mas
+vale avisar quem for executar G3.
 
 **Armazenamento (decidido 2026-08-15):** o `virtual-arm-box` usa **disco virtual em formato
 padrão, compatível com outras VMs** — `raw` e **QCOW2**, ambos com leitura e escrita; VDI,
