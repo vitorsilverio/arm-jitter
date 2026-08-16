@@ -390,7 +390,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` tem o fonte do cliente — é o oráculo; **bloqueio FPSCR RESOLVIDO 2026-08-15 pela B3.8 do arm-jitter** (ver nota abaixo) — `FpscrRegister` agora aceita `RMode`/`FZ`/`LEN`/`STRIDE` sem lançar, com semântica real de arredondamento/flush-to-zero; sessão do n3dsemu ainda precisa CONFIRMAR (não testado aqui, fora do escopo desta sessão — arm-jitter) que `templates/application` progride além do `crt0` com o novo `arm-jitter` instalado localmente (`mvn -o install`) |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 1/3, ver detalhe abaixo) — LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-15, sessão 2/3, ver detalhe abaixo) — LONGA, 3 marcos; **pode andar em paralelo** com P10-P14 (repo diferente) |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 **F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
@@ -442,6 +442,56 @@ inteiramente — o resto do protocolo de entrada (r0/r1/r2) não muda. `Raspi1Bo
 test rápido (prova a infra sem exceção, ~1s) + o teste de M1 real como `@Disabled` documentando o
 achado. `mvn -o test` verde no virtual-arm-box (51 testes, 1 skipped=o `@Disabled`);
 `VersatilePbBootTest` continua verde (G5 não se aplica — nenhum arquivo de arm-jitter tocado).
+
+**F3 — sessão 2/3 (2026-08-15) — PARCIAL, M1 ainda NÃO fecha, mas 2 bugs reais de CP15
+corrigidos no `arm-jitter` e o gargalo de desempenho da sessão 1 foi ELIMINADO**: seguiu o
+"próximo passo recomendado" da sessão 1 — `boot.ZImageDecompressor` (novo, `virtual-arm-box`)
+localiza o payload gzip padrão embutido no `zImage` (magic `1F 8B 08`, mesma técnica do
+`scripts/extract-vmlinux` do kernel Linux) e descomprime com `java.util.zip` NO HOST;
+`Bcm2835Machine` carrega a imagem já pronta em `0x8000` (`TEXT_OFFSET`/`AUTO_ZRELADDR` — o
+stub real calcularia esse mesmo endereço em tempo de execução para um zImage carregado bem
+abaixo de 128MiB, confirmado testando um stub sintético e o real) com o PC apontando direto
+para o `stext`, pulando o `inflate()` caro do guest inteiramente. Isso destravou o boot para
+avançar MUITO mais fundo no kernel real (de ~90 mil ciclos travado num loop de abort para
+centenas de milhares de ciclos, dezenas de funções de kernel distintas visitadas, confirmado
+por rastreamento instrução-a-instrução via `ArmTraceListener` temporário) — e revelou 2 bugs
+reais e arquiteturais no `arm-jitter`, a primeira validação de sistema real do
+`ARM11_MPCORE`/ARMv6K no projeto (user-mode/armbox já validava ARMv6K; nunca um kernel com MMU):
+**(1)** `MCR p15,0,Rt,c13,c0,3` (`TPIDRURO`, ponteiro de TLS) não era reconhecido por
+`Cp15VmsaCoprocessor` (só `CONTEXTIDR`, `c13,c0,1`) — UNDEFINED tão cedo no boot que os vetores
+de exceção ainda não tinham sido copiados por `early_trap_init()`, cascateando num laço
+infinito de `PREFETCH_ABORT` (a busca da PRÓPRIA rotina de vetor também falhava, por vetores
+ainda não mapeados — mesma FAMÍLIA de bug do "NOP-sled" da B4.1.5, mas a causa raiz aqui é
+diferente: registrador CP15 faltante, não TLB de face errada). Corrigido: `c13,c0,{0,2,3,4}`
+(FCSEIDR/TPIDRURW/TPIDRURO/TPIDRPRW) viraram armazenamento simples, sem efeito colateral, no
+`arm-jitter` (commit separado, `Cp15VmsaCoprocessorTest` ganhou regressão, G5 completo
+revalidado: arm-jitter 1341+13, gbaemu 240, ndsemu 183, virtual-arm-box 62 verdes; armbox 38/39
+— o 1 que falha, `Armv7TortureTest`, foi confirmado PRÉ-EXISTENTE via `git stash`/rerun no
+baseline, `ArrayIndexOutOfBoundsException` em `VfpRegisters`, subsistema não tocado por este
+fix, não é regressão desta sessão). **(2)** logo depois, `MRC p15,0,Rt,c0,c1,4` (`ID_MMFR0`,
+lido por `build_mem_type_table()` bem cedo em `paging_init()`) e um sub-registrador `c0,c3,4`
+sem nome nesta revisão da arquitetura — mesma cascata de `PREFETCH_ABORT`. Corrigido em
+`Bcm2835Cp15Extras` (`virtual-arm-box`, board-specific) de forma arquiteturalmente correta, não
+um palpite: a ARM GARANTE que ler um sub-registrador de ID não alocado/reservado devolve
+UNKNOWN (aqui `0`), NUNCA lança UNDEFINED (mecanismo de compatibilidade futura do próprio
+esquema CPUID) — em vez de continuar listando `CRm` um a um à medida que aparecessem, a classe
+passou a reivindicar `c0`/`opcode1=0` inteiro; `ID_PFR0..ID_MMFR3`/`ID_ISAR0..5` usam os
+valores REAIS do ARM1176JZF-S (QEMU `target/arm/tcg/cpu32.c: arm1176_initfn`, obtidos via
+`WebFetch` do repositório público). **M1 AINDA não fecha**: depois dos dois fixes, o boot
+esbarra num LIMITE DELIBERADO e JÁ DOCUMENTADO do `arm-jitter` — `CPSR.E=1`/acesso a dado
+big-endian (`SETEND BE`, ARMv6) lança `UnsupportedOperationException` de propósito
+(`IrExecutionSupport.checkLittleEndianData`, task `B1.5` do `arm-jitter`, decisão de escopo MVP
+"só little-endian", "falhar ALTO em vez de corromper silenciosamente"). O kernel ARMv6K real
+toca isso bem cedo no boot (antes de `setup_arch()`/`early_trap_init()`, console `earlycon`
+ainda vazio quando isso acontece) — **não é um bug desta task, é funcionalidade nova
+(suporte a acesso de dados big-endian) fora do escopo cirúrgico "bug real, commit separado"**
+que F3 permite. `Raspi1BootTest` documenta o achado completo no Javadoc da classe;
+`smokeTestBootsWithoutException` (60 fatias, antes do limite BE8) prova que a infra desta task
+está correta hoje; M1/M2/M3 seguem `@Disabled`. `mvn -o test` verde no virtual-arm-box (62
+testes, 6 skipped); `VersatilePbBootTest` continua verde. **Para a sessão 3/3**: decisão do
+usuário sobre priorizar uma task dedicada de suporte a BE8 no `arm-jitter` antes de M1 poder
+fechar de verdade — sem isso, esta task fica travada no mesmo lugar architeturalmente (não é
+mais um problema de desempenho nem de CP15 faltante, é um recurso de CPU não implementado).
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
