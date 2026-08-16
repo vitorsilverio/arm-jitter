@@ -16,9 +16,25 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 ///
 /// Registradores atendidos (todos `opcode1=0`, únicos válidos para VMSA):
 /// - `SCTLR` (`c1,c0,0`): só os bits `M` (bit 0, habilita a MMU) e `V` (bit 13, vetores altos) têm
-///   efeito — sincronizados com {@link TranslatingAddressSpace#setMmuEnabled} e
-///   {@link ArmCore#setHighVectors}; qualquer outro bit é RAZ/WI (não modelado nesta fase: cache,
-///   alinhamento, etc.), como a RFC documenta.
+///   EFEITO COLATERAL — sincronizados com {@link TranslatingAddressSpace#setMmuEnabled} e
+///   {@link ArmCore#setHighVectors}; nenhum outro bit modela comportamento real (cache,
+///   alinhamento, etc.), como a RFC documenta. **Porém, desde o achado real da task F3
+///   (`virtual-arm-box`, sessão de fechamento do M2)**, o valor de 32 bits escrito é armazenado
+///   e devolvido por inteiro na leitura (só `M`/`V` são recalculados a partir do estado
+///   autoritativo na leitura, o resto é round-trip fiel do último `MCR`) — **não é mais
+///   RAZ/WI para os bits sem efeito modelado**. Motivo: o kernel Linux ARMv6 real
+///   (`arch/arm/mm/mmu.c: build_mem_type_table()`) RELÊ o próprio `SCTLR` que escreveu (`get_cr()`)
+///   para decidir, entre outras coisas, se o bit `CR_XP` (`1<<23`) está ligado antes de compor os
+///   bits `APX`/`AP_WRITE` da permissão de seção `MT_MEMORY_RO` (usada para mapear o FDT recém-
+///   carregado, `unflatten_device_tree()`/`fdt_next_tag()`). Com a versão antiga (RAZ para bits
+///   não modelados), o kernel via `CR_XP=0` mesmo tendo acabado de escrevê-lo como `1`, compunha a
+///   seção do FDT como "sem nenhum acesso" (`AP=00`,`APX=0`) em vez de "só leitura privilegiada"
+///   (`AP=01`,`APX=1`), e a própria leitura seguinte de `fdt_next_tag()` sofria
+///   `DATA_ABORT`/`SECTION_PERMISSION` — confirmado bit a bit comparando o conteúdo físico do PGD
+///   do guest contra o mesmo boot (mesmo kernel+DTB+initramfs+cmdline) rodando no QEMU 8.0.0 como
+///   oráculo: `0x0800000e` (nosso, sem `APX`/`AP_WRITE`) vs. `0x0800841e` (QEMU, com ambos) no
+///   MESMO slot de L1. G3 preservado: aditivo — nenhum comportamento de MMU/vetores mudou, só a
+///   fidelidade de leitura dos bits não modelados.
 /// - `TTBR0`/`TTBR1`/`TTBCR` (`c2,c0,{0,1,2}`): `TTBR0` liga em
 ///   {@link TranslatingAddressSpace#setTtbr0}; `TTBR1`/`TTBCR` só armazenados para leitura de
 ///   volta — o wrapper (B4.1.1) sempre faz o walk a partir de `TTBR0` (assume `TTBCR.N=0`, sem
@@ -120,6 +136,7 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     private final TranslatingAddressSpace mmu;
     private final ArmCore core;
 
+    private int sctlr;
     private int ttbr0;
     private int ttbr1;
     private int ttbcr;
@@ -284,18 +301,17 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     }
 
     private void applySctlr(int value) {
+        sctlr = value;
         mmu.setMmuEnabled((value & SCTLR_M_BIT) != 0);
         core.setHighVectors((value & SCTLR_V_BIT) != 0);
     }
 
     private int sctlrValue() {
-        int value = 0;
-        if (mmu.mmuEnabled()) {
-            value |= SCTLR_M_BIT;
-        }
-        if (core.highVectors()) {
-            value |= SCTLR_V_BIT;
-        }
+        int value = sctlr;
+        // M/V continuam autoritativos a partir do estado real da MMU/core (podem ter sido
+        // alterados por outra via, ex. reset do host) — ver Javadoc da classe sobre o achado F3.
+        value = (mmu.mmuEnabled()) ? (value | SCTLR_M_BIT) : (value & ~SCTLR_M_BIT);
+        value = (core.highVectors()) ? (value | SCTLR_V_BIT) : (value & ~SCTLR_V_BIT);
         return value;
     }
 

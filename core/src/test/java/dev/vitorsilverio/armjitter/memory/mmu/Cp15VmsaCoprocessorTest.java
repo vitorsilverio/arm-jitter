@@ -58,6 +58,33 @@ class Cp15VmsaCoprocessorTest {
         assertEquals(1 << 13, cp15.read(15, 0, 1, 0, 0));
     }
 
+    /// Regressão do achado real da task F3 (`virtual-arm-box`, sessão de fechamento do M2): antes,
+    /// `read(SCTLR)` reconstruía o valor só a partir de `M`/`V` (RAZ para todo o resto), então o
+    /// kernel Linux ARMv6 real (que relê o próprio `SCTLR` em `build_mem_type_table()` para testar
+    /// `CR_XP`, bit 23) via `CR_XP=0` mesmo depois de escrevê-lo como `1` no boot — causa raiz
+    /// confirmada bit a bit contra o QEMU 8.0.0 como oráculo (mesmo kernel+DTB): a seção do FDT
+    /// virava `AP=00`/`APX=0` (sem acesso algum) em vez de `AP=01`/`APX=1` (só leitura privilegiada,
+    /// o que o QEMU produz), e a leitura seguinte de `fdt_next_tag()` sofria `DATA_ABORT`. Este
+    /// teste prova que bits sem efeito colateral modelado (aqui, `CR_XP`) agora sobrevivem ao
+    /// round-trip escrita→leitura, sem alterar o comportamento de `M`/`V`.
+    @Test
+    void sctlrUnmodeledBitsRoundTripOnRead() {
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+
+        int crXp = 1 << 23; // SCTLR.XP (ARMv6): bit sem efeito colateral modelado nesta fase.
+        int mBit = 1;
+        cp15.write(15, 0, 1, 0, 0, crXp | mBit); // SCTLR.M=1, SCTLR.XP=1
+
+        assertEquals(crXp | mBit, cp15.read(15, 0, 1, 0, 0),
+                "bits não modelados (ex. CR_XP) devem sobreviver ao round-trip, não RAZ");
+        assertTrue(mmu.mmuEnabled(), "M continua com efeito colateral real");
+
+        cp15.write(15, 0, 1, 0, 0, crXp); // SCTLR.M=0, mantém XP=1
+        assertEquals(crXp, cp15.read(15, 0, 1, 0, 0));
+        assertFalse(mmu.mmuEnabled());
+    }
+
     @Test
     void tlbOpsForwardedToMmu() {
         TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
