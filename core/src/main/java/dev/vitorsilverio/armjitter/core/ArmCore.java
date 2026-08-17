@@ -65,6 +65,10 @@ public final class ArmCore {
     /// Gancho de troca de modo (B4.1.5): vazio por padrão ({@link ModeChangeListener#NONE}),
     /// mesmo padrão aditivo de {@link #memoryAbortListener} — ver {@link #setModeChangeListener}.
     private ModeChangeListener modeChangeListener = ModeChangeListener.NONE;
+    /// Gancho de `CPSR.E` na entrada de exceção (task F3): vazio por padrão
+    /// ({@link ExceptionEndiannessPolicy#NONE}), mesmo padrão aditivo de {@link #modeChangeListener}
+    /// — ver {@link #setExceptionEndiannessPolicy}.
+    private ExceptionEndiannessPolicy exceptionEndiannessPolicy = ExceptionEndiannessPolicy.NONE;
     private boolean highVectors;
     private final ArmInterpreter interpreter;
     private long cycles;
@@ -677,6 +681,20 @@ public final class ArmCore {
     public void setModeChangeListener(ModeChangeListener modeChangeListener) {
         this.modeChangeListener = Objects.requireNonNull(modeChangeListener, "modeChangeListener");
         modeChangeListener.onModeChanged(activeMode);
+    }
+
+    /// Instala o gancho de `CPSR.E` na entrada de exceção (task F3). Ver
+    /// {@link ExceptionEndiannessPolicy} para por que um hospedeiro com CP15/`SCTLR.EE` precisa
+    /// dele.
+    public void setExceptionEndiannessPolicy(ExceptionEndiannessPolicy exceptionEndiannessPolicy) {
+        this.exceptionEndiannessPolicy =
+                Objects.requireNonNull(exceptionEndiannessPolicy, "exceptionEndiannessPolicy");
+    }
+
+    /// Chamado por {@link AProfileExceptionModel#enterException} para aplicar o gancho de
+    /// `CPSR.E` instalado (ou nada, sob {@link ExceptionEndiannessPolicy#NONE}).
+    void applyExceptionEndiannessPolicy() {
+        exceptionEndiannessPolicy.applyOnExceptionEntry(cpsr);
     }
 
     /// Instala um monitor de exclusividade COMPARTILHADO entre múltiplos cores (task B5.1, 3DS:

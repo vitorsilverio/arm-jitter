@@ -27,6 +27,12 @@ public final class AProfileExceptionModel implements ExceptionModel {
         // instrução que disparou a exceção (mesmo bloco IR, ainda vai executar) deixaria um
         // ITSTATE não-zero "vazando" para o handler por coincidência de timing.
         core.cpsr().setItState(0);
+        // CPSR.E na entrada de exceção (task F3, achado real): hardware real reprograma E para
+        // SCTLR.EE aqui, independente do que o código interrompido tinha configurado via SETEND
+        // — sem isto, um handler de exceção (ex. o vector_stub de IRQ) pode herdar E=1 de um
+        // trecho interrompido em plena SETEND BE e ler sua própria tabela de branch invertida em
+        // bytes. NONE por padrão (nenhuma mudança de comportamento em cores sem CP15/SCTLR.EE).
+        core.applyExceptionEndiannessPolicy();
         core.cpsr().setIrqDisabled(true);
         if (exception == ArmException.RESET || exception == ArmException.FIQ) {
             core.cpsr().setFiqDisabled(true);

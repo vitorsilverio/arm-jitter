@@ -1002,6 +1002,72 @@ NARROWED a um achado concreto e específico (uma instrução exata, não mais "a
    arm-jitter (fetch/translationGeneration), virtual-arm-box (Javadoc/anotação de
    `Raspi1BootTest`). F3 permanece 🟡 na fila "ATUAL".
 
+**F3 — sessão de fechamento do CPSR.E (2026-08-17) — causa raiz ISOLADA E CORRIGIDA (bug real do
+`arm-jitter`), abort storm 100% RESOLVIDO, M2 ainda NÃO fecha (bloqueio novo, bem mais tardio no
+boot, já com causa raiz identificada)**:
+
+1. Seguiu o próximo passo recomendado da sessão anterior: harness temporário
+   (`Raspi1DiagTempTest`, removido antes do commit) com trace por-bloco (`ArmTraceListener
+   .afterBlock`) primeiro para localizar aproximadamente onde `CPSR.E` oscila, depois trace
+   instrução-a-instrução completo via `ArmCore#step()` DESDE O BOOT (só ~320 mil instruções até o
+   primeiro flip — muito mais cedo do que a suspeita "perto do fault" da sessão anterior sugeria).
+2. **Achado**: `CPSR.E` vira `true` numa instrução `SETEND BE` real (`0xf1010200`) em `0xc0a65c84`,
+   e volta a `false` ~60 instruções depois numa `SETEND LE` (`0xf1010000`) em `0xc0a6616c`/
+   `0xc0a66228` — **o próprio kernel Linux real executa este par deliberadamente**, numa rotina
+   perto do laço ocioso (identificada por dump direto de RAM/objdump manual dos opcodes, sem
+   precisar de símbolos do kernel). Não é bug de decodificação do `SETEND` (que está correto nos
+   dois casos) — é a IRQ do timer chegando NO MEIO dessa janela.
+3. **Causa raiz real, arquitetural**: o ARM ARM (DDI 0406C B1.8.3) exige que hardware real
+   reprograme `CPSR.E` para `SCTLR.EE` em TODA entrada de exceção, independente do `SETEND` do
+   código interrompido — garante que todo handler rode numa endianness conhecida mesmo
+   interrompendo um trecho legitimamente em `SETEND BE`. `AProfileExceptionModel#enterException`
+   nunca fazia isso (herdava `CPSR.E` do contexto interrompido) — quando a IRQ do timer chegava
+   dentro da janela `SETEND BE`, o `vector_stub` herdava `E=1` e o próprio `LDR LR,[PC,LR,LSL#2]`
+   (busca do alvo de salto na tabela de branch, um acesso de DADOS comum) lia os 4 bytes
+   invertidos — o `0xc0008d20`→`0x208d00c0` já identificado na sessão anterior.
+4. **Corrigido no `arm-jitter`**: `ExceptionEndiannessPolicy` novo (`core/`, mesmo padrão aditivo
+   de `ModeChangeListener`/`MemoryAbortListener` — vazio por padrão, G3), chamado por
+   `AProfileExceptionModel#enterException` logo depois do `CPSR` antigo já estar salvo em `SPSR`
+   (preserva o `E` real do contexto interrompido) mas antes do PC saltar para o vetor.
+   `Cp15VmsaCoprocessor` implementa a interface, forçando `CPSR.E = SCTLR.EE` (bit 25 — o `sctlr`
+   já round-tripa o word inteiro desde a B4.1.5, então o bit sobrevive sem mudança adicional).
+   `Bcm2835Machine#create`/`VersatilePbMachine#create` registram `core.setExceptionEndiannessPolicy
+   (cp15)` (quarto gancho independente do mesmo CP15). 3 testes novos
+   (`ExceptionEndiannessPolicyTest` no `core/`, `Cp15VmsaCoprocessorTest
+   .applyOnExceptionEntryForcesCpsrEFromSctlrEeBit`). `mvn -o test` verde no arm-jitter (1370
+   core + 13 truffle) + `mvn -o install`; G5 revalidado: gbaemu verde, ndsemu verde, armbox 40/41
+   (mesma falha pré-existente de `Armv7TortureTest`/`VfpRegisters`, não é regressão),
+   `virtual-arm-box` verde (incl. `VersatilePbBootTest`).
+5. **Efeito no boot, confirmado ao vivo (re-executando o teste M2 JIT antes `@Disabled`)**: o abort
+   storm em `0x208d00c0` desaparece por completo — 27,5 milhões de reaborts idênticos da sessão
+   anterior viram ZERO. O boot avança MUITO além do ponto anterior: mailbox/`raspberrypi-firmware`,
+   `mmc0`, enumeração USB inicializam, até tentar montar a raiz de verdade. **M2 ainda NÃO fecha**:
+   um bloqueio NOVO e bem mais tardio aparece — `Kernel panic - not syncing: VFS: Unable to mount
+   root fs on "/dev/ram" or unknown-block(1,0)`, em `prepare_namespace()`. Como esse panic acontece
+   DENTRO de `kernel_init_freeable()` (chamada ANTES de `free_initmem()` na sequência real do
+   `kernel_init()` do Linux), a mensagem `Freeing unused kernel memory` nunca é alcançada —
+   consistente com o comportamento real do kernel, não um sintoma de regressão do fix.
+6. **Causa raiz do bloqueio novo já identificada (não corrigida nesta sessão, fora do orçamento)**:
+   o `FdtPatcher` (`virtual-arm-box`) escreve `/chosen/bootargs`/`/memory@0/reg` mas NUNCA
+   `/chosen/linux,initrd-start`/`linux,initrd-end` — as duas propriedades que um kernel com Device
+   Tree (ao contrário do protocolo ATAGs do `versatilepb`, que usa `ATAG_INITRD2`) precisa para
+   descobrir onde o `initramfs.cpio.gz` carregado na RAM está. Sem elas, o kernel ignora o blob
+   inteiro e, como a cmdline pede `root=/dev/ram`, tenta montar `/dev/ram` como um dispositivo de
+   bloco formatado (que não é) — daí o panic. **Próximo passo recomendado, concreto**: estender
+   `FdtPatcher` (hoje só sobrescreve o VALOR de propriedades já existentes, documentado no próprio
+   Javadoc da classe) para CRIAR propriedades novas dentro de um nó já existente (`/chosen` já
+   existe no `.dtb` real, só faltam as 2 propriedades), escrever `linux,initrd-start`/
+   `linux,initrd-end` com o endereço físico onde `initramfs.cpio.gz` foi carregado
+   (`INITRD_LOAD_ADDR`/`INITRD_LOAD_ADDR + initramfs.length` de `Bcm2835Machine`), e então tentar
+   de novo os testes `@Disabled` do M2 (o INTERPRETED nem chegou a ser re-executado nesta sessão
+   por orçamento, mas deve se beneficiar do mesmo fix de `CPSR.E` — a causa raiz é comum aos dois
+   motores, `ArmCore`/`AProfileExceptionModel`).
+7. `mvn -o test` verde no `virtual-arm-box` (66 testes, mesmos 4 skipped = M2×2+M3×2, Javadoc/
+   `@Disabled` atualizados com o achado desta sessão); harness temporário `Raspi1DiagTempTest`
+   removido por completo antes do commit. Commits: arm-jitter (`ExceptionEndiannessPolicy` +
+   registro nos 2 hosts + testes), virtual-arm-box (Javadoc/`@Disabled` de `Raspi1BootTest`). F3
+   permanece 🟡 na fila "ATUAL" — muito mais perto de M2 do que em qualquer sessão anterior.
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).

@@ -107,6 +107,30 @@ class Cp15VmsaCoprocessorTest {
         assertEquals(cpaccFullCp10 | cpaccFullCp11, cp15.read(15, 0, 1, 0, 2));
     }
 
+    /// Regressão do achado real da F3 (sessão de trace instrução-a-instrução do abort storm): o
+    /// kernel Linux real usa `SETEND BE`/`SETEND LE` em pares ao redor de uma rotina perto do laço
+    /// ocioso, e uma IRQ que chega bem no meio interrompe o código com `CPSR.E=1` — sem forçar
+    /// `SCTLR.EE` na entrada de exceção, o `vector_stub` de IRQ herdava esse `E=1` e lia sua
+    /// própria tabela de branch com os bytes invertidos. `applyOnExceptionEntry` é o método que
+    /// `ArmCore#setExceptionEndiannessPolicy` invoca a cada entrada de exceção.
+    @Test
+    void applyOnExceptionEntryForcesCpsrEFromSctlrEeBit() {
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+        dev.vitorsilverio.armjitter.core.CpsrRegister cpsr = new dev.vitorsilverio.armjitter.core.CpsrRegister();
+        cpsr.setBigEndian(true); // código interrompido em plena SETEND BE
+
+        int sctlrEeBit = 1 << 25;
+        cp15.write(15, 0, 1, 0, 0, sctlrEeBit); // SCTLR.EE=1, mesmo bit do kernel BE8 hipotético
+        cp15.applyOnExceptionEntry(cpsr);
+        assertTrue(cpsr.isBigEndian(), "SCTLR.EE=1 deve forçar CPSR.E=1, mesmo já sendo true");
+
+        cp15.write(15, 0, 1, 0, 0, 0); // SCTLR.EE=0 (o caso real: kernel LE)
+        cpsr.setBigEndian(true); // simula outra interrupção em plena SETEND BE
+        cp15.applyOnExceptionEntry(cpsr);
+        assertFalse(cpsr.isBigEndian(), "SCTLR.EE=0 deve forçar CPSR.E=0, mesmo o contexto interrompido tendo E=1");
+    }
+
     @Test
     void tlbOpsForwardedToMmu() {
         TestAddressSpace physical = new TestAddressSpace(0x0100_0000);

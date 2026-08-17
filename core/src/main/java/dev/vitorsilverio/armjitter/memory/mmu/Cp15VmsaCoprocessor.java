@@ -2,7 +2,9 @@ package dev.vitorsilverio.armjitter.memory.mmu;
 
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.core.ExceptionEndiannessPolicy;
 import dev.vitorsilverio.armjitter.core.MemoryAbortListener;
 import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 
@@ -89,7 +91,21 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 ///   de `setCoprocessorBus`/`setMemoryAbortListener`) — sem ele todo acesso é privilegiado e o
 ///   *copy-on-write* do `fork()` do Linux nunca falta, corrompendo pai e filho (ver
 ///   {@link ModeChangeListener}).
-public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortListener, ModeChangeListener {
+///
+/// - **`CPSR.E` na entrada de exceção** (task F3, sessão de trace instrução-a-instrução do abort
+///   storm): esta classe também implementa {@link ExceptionEndiannessPolicy}, forçando `CPSR.E`
+///   para `SCTLR.EE` (bit 25) a cada entrada de exceção. **Achado real**: o kernel Linux real
+///   executa `SETEND BE`/`SETEND LE` em pares ao redor de uma rotina perto do laço ocioso — uma
+///   IRQ de timer que chega bem no meio interrompe o código com `CPSR.E=1`. Sem este gancho, o
+///   `ArmCore` deixava `CPSR.E` como estava (herdado do contexto interrompido) na entrada de
+///   qualquer exceção, então o próprio `vector_stub` de IRQ (`LDR LR,[PC,LR,LSL#2]`, um acesso de
+///   DADOS comum à sua tabela de branch) lia o endereço de destino com os 4 bytes invertidos e
+///   pulava para lixo, travando o boot num laço de `SECTION_TRANSLATION`/`INSTRUCTION_FETCH`. O
+///   ARM ARM (DDI 0406C B1.8.3) exige exatamente este comportamento em hardware real. O host
+///   precisa registrar `core.setExceptionEndiannessPolicy(this)` (quarto gancho independente do
+///   mesmo `ArmCore`) para que isto aconteça.
+public final class Cp15VmsaCoprocessor
+        implements CoprocessorBus, MemoryAbortListener, ModeChangeListener, ExceptionEndiannessPolicy {
     private static final int CP15 = 15;
 
     private static final int CRN_SYSTEM_CONTROL = 1;
@@ -147,6 +163,10 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
 
     private static final int SCTLR_M_BIT = 1;
     private static final int SCTLR_V_BIT = 1 << 13;
+    /// `SCTLR.EE` (bit 25, ARM DDI 0406C B4.1.130): endianness que TODA entrada de exceção força
+    /// em `CPSR.E`, independente do `SETEND` do código interrompido (ARM DDI 0406C B1.8.3) — ver
+    /// {@link #applyOnExceptionEntry} e o achado real documentado no Javadoc da classe.
+    private static final int SCTLR_EE_BIT = 1 << 25;
     private static final int CONTEXTIDR_ASID_MASK = 0xFF;
 
     private final TranslatingAddressSpace mmu;
@@ -353,6 +373,11 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     public void onPrefetchAbort(int faultAddress, int faultStatus) {
         ifar = faultAddress;
         ifsr = faultStatus;
+    }
+
+    @Override
+    public void applyOnExceptionEntry(CpsrRegister cpsr) {
+        cpsr.setBigEndian((sctlr & SCTLR_EE_BIT) != 0);
     }
 
     private static IllegalStateException unsupported(int crn, int crm, int opcode2) {
