@@ -85,4 +85,28 @@ public final class DualInvalidationAwareAddressSpace implements AddressSpace {
         first.invalidate(address);
         second.invalidate(address);
     }
+
+    /// Repassa a busca de instrução THUMB ao barramento delegado — mesmo bug real corrigido em
+    /// {@link InvalidationAwareAddressSpace#fetch16}, mesma lacuna (decorador não encaminhava um
+    /// método `default` de {@link AddressSpace} com efeito colateral MMU-específico: sem isto, a
+    /// busca de instrução cairia no caminho de DADOS do delegado quando este envolver uma
+    /// `TranslatingAddressSpace`, produzindo `DATA_ABORT` em vez de `PREFETCH_ABORT` numa falha de
+    /// busca real).
+    @Override
+    public int fetch16(int address) {
+        return delegate.fetch16(address);
+    }
+
+    /// Repassa a busca de instrução ARM ao barramento delegado. Ver Javadoc de {@link #fetch16}.
+    @Override
+    public int fetch32(int address) {
+        return delegate.fetch32(address);
+    }
+
+    /// Repassa a geração de tradução MMU ao barramento delegado. Ver Javadoc de
+    /// {@link InvalidationAwareAddressSpace#translationGeneration}.
+    @Override
+    public int translationGeneration() {
+        return delegate.translationGeneration();
+    }
 }

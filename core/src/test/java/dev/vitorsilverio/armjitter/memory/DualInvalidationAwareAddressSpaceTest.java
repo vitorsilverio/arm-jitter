@@ -57,4 +57,65 @@ class DualInvalidationAwareAddressSpaceTest {
         assertEquals(0x1234, memory.read16(4));
         assertEquals(0x56, memory.read8(6));
     }
+
+    /// Mesmo bug real corrigido em `InvalidationAwareAddressSpaceTest
+    /// #delegatesInstructionFetchToTheFetchPathNotTheReadPath` -- ver Javadoc daquele teste.
+    @Test
+    void delegatesInstructionFetchToTheFetchPathNotTheReadPath() {
+        AddressSpace delegate = new AddressSpace() {
+            @Override
+            public int read8(int address) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public int read16(int address) {
+                return 0xDEAD;
+            }
+
+            @Override
+            public int read32(int address) {
+                return 0xDEAD_DEAD;
+            }
+
+            @Override
+            public void write8(int address, int value) {
+            }
+
+            @Override
+            public void write16(int address, int value) {
+            }
+
+            @Override
+            public void write32(int address, int value) {
+            }
+
+            @Override
+            public int fetch16(int address) {
+                return 0xF00D;
+            }
+
+            @Override
+            public int fetch32(int address) {
+                return 0xF00D_F00D;
+            }
+        };
+        JitRuntime first = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        JitRuntime second = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        AddressSpace memory = new DualInvalidationAwareAddressSpace(delegate, first, second);
+
+        assertEquals(0xF00D, memory.fetch16(0));
+        assertEquals(0xF00D_F00D, memory.fetch32(0));
+    }
+
+    /// Mesmo bug real corrigido em `InvalidationAwareAddressSpaceTest#delegatesTranslationGeneration`.
+    @Test
+    void delegatesTranslationGeneration() {
+        TestAddressSpace delegate = new TestAddressSpace(32);
+        JitRuntime first = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        JitRuntime second = JitRuntimeFactory.interpretedArmThumb(16, 1);
+        AddressSpace memory = new DualInvalidationAwareAddressSpace(delegate, first, second);
+
+        assertEquals(delegate.translationGeneration(), memory.translationGeneration());
+    }
 }

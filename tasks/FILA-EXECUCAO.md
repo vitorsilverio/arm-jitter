@@ -390,7 +390,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão de investigação do Oops em `vfp_enable`, ver detalhe abaixo) — **M1 continua fechado**; **causa raiz do Oops em `vfp_enable` ISOLADA E CORRIGIDA** (bug real: `CPACR`/`c1,c0,2` não implementado no `Cp15VmsaCoprocessor` do `arm-jitter`) — boot em JIT confirmado ao vivo avançando bem além do ponto anterior (mailbox, `raspberrypi-firmware`, `kprobes`), mas **M2 ainda NÃO fecha**: bloqueio novo e MAIS TARDIO (console para de crescer por completo logo depois de `kprobes:`, sem Oops/panic) aparece em seguida; LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16/17, sessão de trace instrução-a-instrução, ver detalhe abaixo) — **M1 continua fechado**; **1 bug real do `arm-jitter` isolado/corrigido/validado** (`InvalidationAwareAddressSpace`/`DualInvalidationAwareAddressSpace` não encaminhavam `fetch16`/`fetch32`/`translationGeneration` ao delegado — busca de instrução sob MMU virava `DATA_ABORT` em vez de `PREFETCH_ABORT`); **M2 ainda NÃO fecha, mas a causa raiz do abort storm foi NARROWED a uma instrução exata**: `LDR LR,[PC,LR,LSL#2]` do `vector_stub` de IRQ lê a tabela de branch em big-endian (`CPSR.E` oscilando para `true` perto do laço ocioso), invertendo os bytes do alvo de salto (`0xc0008d20`→`0x208d00c0`); origem exata de `CPSR.E=true` ainda não isolada; LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 **F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
@@ -933,6 +933,74 @@ causa raiz do bloqueio principal da F3 ainda NÃO isolada**:
    `Raspi1BootTest`); `VersatilePbBootTest` continua verde. Nenhum arquivo do `arm-jitter` tocado
    nesta sessão (G5 não se aplica — `git status` confirmado limpo no `arm-jitter` antes do commit).
    F3 permanece 🟡 na fila "ATUAL".
+
+**F3 — sessão de trace instrução-a-instrução (2026-08-16/17) — 1 bug real do `arm-jitter`
+ISOLADO/CORRIGIDO/VALIDADO (G5 completo), M2 ainda NÃO fecha mas a causa raiz do abort storm foi
+NARROWED a um achado concreto e específico (uma instrução exata, não mais "algum lugar")**:
+
+1. **Seguiu o próximo passo recomendado**: trace via `ArmCore#step()` a partir de ~77 mil fatias,
+   usando a técnica de duas fases (fast-forward via JIT até a fatia exata do primeiro fault,
+   detectada com `onMemoryAbort` fazendo o loop lançar uma sentinela — depois troca para `step()`
+   instrução a instrução só no trecho final, evitando rodar `step()` do zero). Harness temporário
+   `Raspi1DiagTempTest` (7 fases, removido por completo antes do commit).
+2. **Bug real corrigido no `arm-jitter`**: o primeiro fault reportava `DATA_READ` em vez de
+   `INSTRUCTION_FETCH` — errado, já que a falha acontece na BUSCA da instrução em `0x208d00c0`.
+   Causa: `InvalidationAwareAddressSpace` (decorador adotado na sessão anterior para resolver
+   SMC/kprobes) nunca sobrescrevia `fetch16`/`fetch32` — caíam no `default` de `AddressSpace`, que
+   delega à PRÓPRIA `read32` do decorador (caminho de DADOS do delegado), não a `fetch32` dele
+   (caminho de INSTRUÇÃO, TLB separada). Toda busca de instrução sob este decorador perdia a TLB de
+   instrução e o tipo `INSTRUCTION_FETCH` — uma falha de busca virava `DATA_ABORT` em vez de
+   `PREFETCH_ABORT` (vetor errado, correção de PC errada, -4 em vez de -8). Mesma lacuna em
+   `DualInvalidationAwareAddressSpace` (usado pelo ndsemu) e em `translationGeneration()` (também
+   não encaminhado — quebraria invalidação de bloco JIT após troca de `TTBR0`/`CONTEXTIDR` para
+   qualquer futuro consumidor MMU deste decorador). **Corrigido**: as duas classes agora
+   sobrescrevem `fetch16`/`fetch32`/`translationGeneration` encaminhando ao delegado — aditivo/G3,
+   4 testes de regressão novos (delegado de teste com valores DIFERENTES em `fetchNN` vs. `readNN`
+   prova que o caminho certo é chamado; sanidade confirmada via `git stash`, testes falham
+   exatamente como esperado sem o fix). `mvn -o test` verde no `arm-jitter` (1368 core+truffle) +
+   `mvn -o install`; G5 revalidado: gbaemu verde, ndsemu verde, armbox 40/41 (mesma falha
+   pré-existente de `Armv7TortureTest`/`VfpRegisters` documentada em toda sessão anterior da F3, não
+   é regressão).
+3. **O fix não fecha M2 sozinho**: com o tipo corrigido, o MESMO endereço (`0x208d00c0`) continua
+   faltando (`SECTION_TRANSLATION`), agora como `INSTRUCTION_FETCH` corretamente. Deixar a execução
+   CONTINUAR além do primeiro fault (em vez de parar nele) mostra 27,5 MILHÕES de reaborts idênticos
+   em 400 mil fatias, console sem crescer 1 byte — confirma que era um bug real e correto de se
+   corrigir, mas não a causa raiz do travamento.
+4. **Causa raiz NOVA e concreta identificada** (a instrução exata, não mais "algum lugar"): trace
+   registrador-a-registrador mostra que `0x208d00c0` vem do `LDR LR,[PC,LR,LSL#2]` (`0xe79fe10e`)
+   do `vector_stub` de IRQ do kernel real (`arch/arm/kernel/entry-armv.S`, o idioma clássico de
+   despacho por tabela de branch), em `0xffff1044`, com `Rd==Rm==r14`. Dump direto da RAM confirma
+   que a TABELA está perfeita: `0xffff1058` (índice 3, modo SVC interrompido) contém `0xc0008d20`
+   (endereço de `.text` plausível, `__irq_svc`). O `LDR` LÊ E DEVOLVE `0x208d00c0` — que é
+   EXATAMENTE `0xc0008d20` com os 4 bytes invertidos. Ou seja: uma leitura de dados de 32 bits sendo
+   devolvida em BIG-ENDIAN quando deveria ser little-endian. Rastreando `cpsr().isBigEndian()`
+   (`CPSR.E`, bit 9) instrução a instrução: **`CPSR.E` está `true` bem antes deste `LDR`**. Uma
+   sonda mais ampla (`cpsr.E` amostrado a cada fatia desde o início do boot) mostra que o bit NÃO
+   fica preso permanentemente — ele OSCILA entre `true`/`false` repetidamente, sempre em modo
+   `SUPERVISOR`, concentrado num punhado de PCs perto do FIM do `.text` do kernel
+   (`0xc0a6xxxx`-`0xc0a9xxxx`, plausivelmente a região do laço ocioso/`WFI`/`arch_cpu_idle`, dado
+   que o kernel tem ~10,8MB de código). A última virada antes do fault acontece na MESMA fatia
+   (`77273`), no MESMO PC (`0xc0a6603c`) onde `servicePendingIrq()` intercepta a CPU e desvia para o
+   vetor de IRQ. `spsr(IRQ)`/`spsr(SUPERVISOR)`/`spsr(ABORT)` amostrados ao final NÃO mostram `E=1`
+   armazenado (bit 9 = 0 nos três) — a hipótese simples "um SPSR poluído uma vez propaga `E=1` para
+   sempre via `MOVS PC,LR`" não está confirmada. O mecanismo exato de COMO/ONDE `CPSR.E` vira `true`
+   momentos antes deste `LDR` específico NÃO foi isolado nesta sessão.
+5. **Próximo passo recomendado, concreto**: (a) localizar a PRIMEIRA instrução (não só a primeira
+   fatia) que escreve `CPSR.E=1` — trace via `step()` cobrindo a região `0xc0a6xxxx`-`0xc0a9xxxx`
+   perto do laço ocioso, correlacionando cada `MSR`/`MOVS PC,Rn`/`RFE` com o valor de E antes/depois;
+   (b) cross-referenciar contra `arch/arm/kernel/entry-armv.S`/`arch/arm/kernel/process.S` do
+   `raspberrypi/linux` (árvore documentada em `testdata/raspi1/README.md`) para essa faixa de
+   endereço — plausivelmente `cpu_v6_do_idle`/`arch_cpu_idle`/`default_idle` ou o próprio
+   `vector_stub`/`ret_from_intr`, mas NÃO confirmado ainda; (c) considerar se isto é causado por um
+   bug real do `arm-jitter` na banked-register/SPSR machinery do interpretador/JIT nativo (ex.:
+   leitura de SPSR de um banco errado, ou um `MSR` mal decodificado que seta bit 9 por engano) em vez
+   de comportamento genuíno do kernel — um kernel LE normal não deveria precisar de `SETEND` nesta
+   fase do boot.
+6. `mvn -o test` verde no `virtual-arm-box` (66 testes, 4 skipped = M2×2+M3×2, motivo do `@Disabled`
+   atualizado); `VersatilePbBootTest` continua verde. Harness temporário `Raspi1DiagTempTest`
+   REMOVIDO por completo antes do commit (`git status` confirmado limpo além do Javadoc). Commits:
+   arm-jitter (fetch/translationGeneration), virtual-arm-box (Javadoc/anotação de
+   `Raspi1BootTest`). F3 permanece 🟡 na fila "ATUAL".
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥

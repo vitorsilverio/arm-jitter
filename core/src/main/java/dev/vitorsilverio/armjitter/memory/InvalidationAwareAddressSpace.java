@@ -78,4 +78,46 @@ public final class InvalidationAwareAddressSpace implements AddressSpace {
         delegate.notifyWrite(address);
         runtime.invalidate(address);
     }
+
+    /// Repassa a busca de instrução THUMB ao barramento delegado.
+    ///
+    /// **Achado real (F3/`virtual-arm-box`, sessão de trace instrução-a-instrução)**: antes desta
+    /// correção, este decorador não sobrescrevia {@link #fetch16}/{@link #fetch32} — caíam no
+    /// padrão de {@link AddressSpace} (`fetch32(addr) -> read32(addr)`), que delega à SUA PRÓPRIA
+    /// {@link #read32}, ou seja, ao caminho de DADOS do delegado, não ao de busca de instrução. Sob
+    /// um delegado sem MMU isso é inofensivo (`read32`/`fetch32` já são idênticos ali), mas ao
+    /// envolver uma {@link dev.vitorsilverio.armjitter.memory.mmu.TranslatingAddressSpace} (como
+    /// `Bcm2835Machine` passou a fazer para resolver invalidação de SMC) a busca de instrução
+    /// silenciosamente parava de usar a TLB de INSTRUÇÃO e o tipo de acesso
+    /// `MemoryAccessType.INSTRUCTION_FETCH` — uma falha de tradução na busca virava
+    /// `MemoryAccessType.DATA_READ`, e `ArmCore#enterMemoryAbort` decide `PREFETCH_ABORT` vs.
+    /// `DATA_ABORT` A PARTIR desse tipo (ver Javadoc de {@link #fetch32}) — todo abort de busca sob
+    /// este decorador virava incorretamente `DATA_ABORT` (vetor, FAR/FSR e correção de PC errados
+    /// para uma falta que era, na verdade, de instrução).
+    ///
+    /// @param address endereço virtual da instrução THUMB
+    @Override
+    public int fetch16(int address) {
+        return delegate.fetch16(address);
+    }
+
+    /// Repassa a busca de instrução ARM ao barramento delegado. Ver Javadoc de {@link #fetch16}
+    /// para o bug real que esta sobrescrita corrige.
+    ///
+    /// @param address endereço virtual da instrução ARM
+    @Override
+    public int fetch32(int address) {
+        return delegate.fetch32(address);
+    }
+
+    /// Repassa a geração de tradução MMU ao barramento delegado — sem esta sobrescrita, o padrão
+    /// de {@link AddressSpace#translationGeneration()} (constante `0`) faria o `JitRuntime`
+    /// nunca invalidar blocos compilados sob uma tabela de páginas antiga após uma troca de
+    /// `TTBR0`/`CONTEXTIDR` (RFC-SOFTMMU §5, B4.1.4) — mesma família de lacuna do
+    /// {@link #fetch16}/{@link #fetch32} acima: um método com efeito colateral MMU-específico que
+    /// este decorador esquecia de encaminhar.
+    @Override
+    public int translationGeneration() {
+        return delegate.translationGeneration();
+    }
 }
