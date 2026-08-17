@@ -167,10 +167,19 @@ ferramenta de diagnóstico mais barata desta task — use antes de depurar às c
       memory"`, ver Javadoc de `Raspi1BootTest`.
 - [ ] **M3** — shell `busybox` interativo: o teste espera o prompt, digita
       `echo RASPI"1-SHELL-OK"` e exige a saída **sem as aspas** (o eco do tty sozinho não
-      passa — mesma técnica do `VersatilePbBootTest`).
-- [ ] `mvn -o test` verde no virtual-arm-box; `VersatilePbBootTest` **continua verde**.
-- [ ] `testdata/raspi1/README.md` documenta URL + tag + sha256 de cada asset.
-- [ ] Índice do `tasks/README.md` atualizado (F3, com o marco alcançado se for parcial).
+      passa — mesma técnica do `VersatilePbBootTest`). **Sessão do CPRMAN (2026-08-17)**:
+      `Bcm2835Cprman` mínimo corrige o `ETIMEDOUT`/*deferred probe* que atrasava o registro real
+      de `ttyAMA0` (bug real, confirmado por trace de boot) — mas M3 continua NÃO fechado: um
+      bloqueio novo e diferente (retry infinito de `mmc0`/`sdhost`, fora do escopo desta task,
+      inundando o console bem mais rápido que o tempo real por causa da compressão de tempo do
+      `Bcm2835SystemTimer`) impede confirmar se/quando o prompt aparece dentro de um orçamento de
+      teste prático. Ver Javadoc de `Bcm2835Machine`/`Raspi1BootTest` para o achado completo e o
+      próximo passo recomendado (estender `FdtPatcher` para desabilitar o nó `mmc@7e202000`).
+- [x] `mvn -o test` verde no virtual-arm-box; `VersatilePbBootTest` **continua verde** (76
+      testes, 2 skipped = M3×2).
+- [x] `testdata/raspi1/README.md` documenta URL + tag + sha256 de cada asset.
+- [ ] Índice do `tasks/README.md` atualizado (F3, com o marco alcançado se for parcial) — fora do
+      escopo desta sessão (ver `tasks/FILA-EXECUCAO.md` para o relato desta sessão).
 
 ## Validação
 

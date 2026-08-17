@@ -246,6 +246,49 @@ não era bug, era texto de marcador desatualizado)**:
    virtual-arm-box pendente ao final desta sessão. **F3 segue 🟡** — só M3 falta (shell
    interativo via CPRMAN mínimo, ver Javadoc de `Bcm2835Machine`).
 
+**F3 — sessão do CPRMAN (2026-08-17) — bug real corrigido (ETIMEDOUT/deferred-probe do
+`ttyAMA0`), M3 ainda NÃO fecha (bloqueio novo e diferente, fora do escopo desta task)**:
+
+1. Reconhecimento por trace de boot (antes de escrever código, achado real em vez de suposição):
+   sem NENHUM periférico de clock, `bcm2835-clk 20101000.cprman: plld: couldn't lock PLL` →
+   `error -ETIMEDOUT: failed to register clk 'plld'` → o driver cai em *deferred probe* — o
+   `ttyAMA0` real só termina de registrar (`"is a PL011 rev2"`) bem depois, numa `workqueue`
+   assíncrona, tarde demais para o PID 1 (`/init`) que já abriu `/dev/console` preso no
+   `earlycon` antigo. **A hipótese herdada ("GPIO/pinctrl também bloqueiam o probe") era
+   PARCIALMENTE errada** — o driver PL011 já registrava mesmo sem GPIO nenhum; nenhum stub de
+   GPIO foi implementado (checado antes de assumir, como a task pedia).
+2. `dev.vitorsilverio.virtualarmbox.device.bcm2835.Bcm2835Cprman` novo, deliberadamente mínimo
+   (transcrito de `hw/misc/bcm2835_cprman.c`/`bcm2835_cprman_internals.h` do QEMU só para os
+   offsets/constantes): `CM_LOCK` (`0x114`) sempre reporta "todos os PLLs travados" (nenhuma
+   matemática de PLL real), resto do espaço é armazenamento simples round-trip, `CM_UARTCTL`/
+   `CM_UARTDIV` pré-semeados com os valores de reset do QEMU (achado colateral: evita o
+   "Division by zero" já documentado em `pl011_set_termios`). Confirmado ao vivo:
+   `ETIMEDOUT`/`couldn't lock PLL` desaparecem do log. 5 testes de unidade novos
+   (`Bcm2835CprmanTest`).
+3. **M3 continua NÃO fechando — bloqueio novo, descoberto DEPOIS do fix acima**: poucos segundos
+   de tempo simulado após `Run /init as init process`, o console é dominado por um retry
+   aparentemente infinito de `sdhost-bcm2835`/`mmc0` (`"Card stuck being busy"`/`"no support for
+   card's volts"`/`"error -22"`) — comportamento ESPERADO em hardware real (`mmc_rescan` procura
+   hot-plug pra sempre sem cartão; SD/MMC real está deliberadamente fora do "Inclui" desta task),
+   mas que aqui nunca cede espaço porque `Bcm2835SystemTimer` comprime tempo-de-CPU-emulado em
+   microssegundos numa proporção fixa desacoplada do relógio real — o tempo simulado do kernel
+   corre muito à frente do tempo real. Harness de diagnóstico temporário (removido antes do
+   commit) confirmou: console cresce linear e estável (~27 mil caracteres/milhão de fatias, sem
+   desacelerar), mas nem o banner do próprio `/init` (`echo` simples, zero dependência de
+   hardware) nem o prompt `"/ #"` apareceram em 20 milhões de fatias (~8 minutos reais de JIT) —
+   extrapolação sugere 60-90 minutos reais para os 200 milhões de fatias do orçamento atual de
+   `Raspi1BootTest`, muito além do que esta sessão validou.
+4. **Próximo passo recomendado**: desabilitar o nó `mmc@7e202000` (`sdhost`) no `.dtb` via
+   `status = "disabled"` (a propriedade já existe em outros nós do `.dtb` real) — mas isso exige
+   estender `FdtPatcher` para SUBSTITUIR uma propriedade existente por um valor de TAMANHO
+   DIFERENTE (`"okay\0"`=5 bytes, `"disabled\0"`=9 bytes; os métodos atuais só sobrescrevem em
+   tamanho fixo ou criam propriedades novas). Não implementado nesta sessão — decisão explícita
+   de não improvisar algo fora do "Inclui" da task sem checar com o usuário primeiro. Alternativa
+   mais arriscada (não recomendada sem medir): revisitar `HOST_CYCLES_PER_MICROSECOND`.
+5. `mvn -o test` verde no `virtual-arm-box` (76 testes, 2 skipped = só M3×2). Nenhum arquivo do
+   `arm-jitter` tocado (G5 completo não necessário). **F3 segue 🟡** — M3 ainda falta, causa raiz
+   do novo bloqueio já identificada e documentada para a próxima sessão.
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
