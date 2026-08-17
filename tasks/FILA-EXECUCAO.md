@@ -390,7 +390,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão de correção da tempestade de IRQ, ver detalhe abaixo) — **M1 continua fechado**; **causa raiz real da tempestade de IRQ ISOLADA E CORRIGIDA** (bug real de acesso MMIO alinhado sob `ArmFeature.UNALIGNED_ACCESS` no `arm-jitter`) — boot em JIT avança muito além do ponto anterior, mas **M2 ainda NÃO fecha**: bloqueio novo e diferente (Oops UNDEFINED em `vfp_enable()`) aparece logo depois; LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-16, sessão de investigação do Oops em `vfp_enable`, ver detalhe abaixo) — **M1 continua fechado**; **causa raiz do Oops em `vfp_enable` ISOLADA E CORRIGIDA** (bug real: `CPACR`/`c1,c0,2` não implementado no `Cp15VmsaCoprocessor` do `arm-jitter`) — boot em JIT confirmado ao vivo avançando bem além do ponto anterior (mailbox, `raspberrypi-firmware`, `kprobes`), mas **M2 ainda NÃO fecha**: bloqueio novo e MAIS TARDIO (console para de crescer por completo logo depois de `kprobes:`, sem Oops/panic) aparece em seguida; LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 **F3 — sessão 1/3 (2026-08-15) — PARCIAL, infra completa, M1 não fechado (achado de desempenho,
@@ -788,6 +788,85 @@ real do `arm-jitter`), M2 ainda NÃO fecha (bloqueio novo e diferente revelado l
    8.0.0 (`-M raspi1ap`) para confirmar se é falta de suporte do coprocessador CP10/CP11 (VFP)
    nesse ponto do boot ou uma feature de VFPv2/ARM11 genuinamente não modelada. Detalhe completo no
    Javadoc de `Raspi1BootTest`. F3 permanece 🟡 na fila "ATUAL".
+
+**F3 — sessão de investigação do Oops em `vfp_enable` (2026-08-16) — causa raiz ISOLADA E
+CORRIGIDA (bug real do `arm-jitter`, hipótese da sessão anterior estava ERRADA), M2 ainda NÃO
+fecha (bloqueio novo e MAIS TARDIO revelado logo depois)**:
+
+1. **A hipótese recomendada pela sessão anterior estava errada**: o palpite era que `vfp_enable()`
+   executasse `VMSR FPEXC,Rt` ou uma leitura de `FPEXC`/`FPSID` via `VMRS` (registradores VFP,
+   CP10/CP11). Lendo o fonte real do kernel (`arch/arm/vfp/vfpmodule.c`, `raspberrypi/linux`
+   `rpi-6.18.y`, a MESMA árvore do `kernel.img` desta task, versão confirmada no `testdata/raspi1/
+   README.md`): `vfp_init()` chama `on_each_cpu(vfp_enable, NULL, 1)` INCONDICIONALMENTE em
+   `cpu_arch >= CPU_ARCH_ARMv6`, ANTES de sondar `FPSID` (a sonda de `FPSID`, protegida por
+   `register_undef_hook(&vfp_detect_hook)`/`unregister_undef_hook`, só acontece DEPOIS). O corpo de
+   `vfp_enable()` em si:
+   ```c
+   static void vfp_enable(void *unused) {
+       u32 access = get_copro_access();
+       set_copro_access(access | CPACC_FULL(10) | CPACC_FULL(11));
+   }
+   ```
+   não toca em NENHUM registrador VFP — `get_copro_access()`/`set_copro_access()` são
+   `MRC`/`MCR p15,0,Rt,c1,c0,2`, o **`CPACR`** (Coprocessor Access Control Register, um registrador
+   **CP15**, não CP10/CP11), concedendo acesso pleno (`CPACC_FULL`, `0b11`) aos coprocessadores
+   10/11 antes de qualquer instrução VFP genuína rodar.
+2. **Causa raiz real**: {@code Cp15VmsaCoprocessor} (`arm-jitter`) nunca reivindicava `c1,c0,2` —
+   só `c1,c0,0` (`SCTLR`) sob o mesmo `CRn=1`. A leitura de `CPACR` em `vfp_enable+0x8` caía em
+   `unsupported()` (`IllegalStateException`/UNDEFINED), exatamente o `Oops - undefined instruction`
+   observado, matando o `init`.
+3. **Corrigido no `arm-jitter`** (`Cp15VmsaCoprocessor.java`): `CPACR` agora é um campo de
+   armazenamento simples (round-trip fiel escrita→leitura), sem enforcement de trap de acesso —
+   mesma decisão de escopo já usada para `c7` (manutenção de cache): este host já decodifica VFP
+   incondicionalmente a partir de `ArmFeature.VFPV2` do preset, nunca a partir do valor de `CPACR`,
+   então simular o "gate" de acesso não teria efeito observável nenhum nesta fase. `CPACR` está no
+   MESMO `CRn=1`/`CRm=0` do `SCTLR` (só o `opcode2` difere, `0` vs `2`) — os métodos
+   `handles`/`read`/`write` foram ajustados dentro do `case CRN_SYSTEM_CONTROL` existente, não um
+   `case` novo (evitando "duplicate case label", erro de compilação cometido e corrigido na hora
+   nesta mesma sessão). Aditivo/G3, sem mudança de assinatura pública. 1 teste de regressão novo
+   (`cpacrIsStoredAndReadBackWithoutTrapEnforcement`, prova o round-trip com os bits reais que o
+   kernel escreve, `CPACC_FULL(10)|CPACC_FULL(11)` = `0b11<<20 | 0b11<<22`).
+4. **`mvn -o test` verde no `arm-jitter`** (1364 core+truffle, incl. o novo) + `mvn -o install`.
+   **G5 revalidado**: gbaemu verde, ndsemu verde, armbox verde (as 3 suítes revalidadas de forma
+   síncrona nesta sessão, em paralelo enquanto o boot do raspi1 rodava em background).
+5. **Confirmado ao vivo via harness diagnóstico temporário** (`Raspi1DiagTempTest`, classe de teste
+   temporária criada só para esta sessão — loop de fatias em lotes de 100 mil com impressão do
+   console a cada mudança, mesmo precedente de instrumentação temporária "removida antes do
+   commit" já usado em sessões anteriores da F3; DE FATO removida, não faz parte deste commit): com
+   o fix, `VFP support v0.3: not present` aparece **limpo, sem Oops**, e o boot continua bem além do
+   ponto anterior — em menos de 4 segundos REAIS (100 mil fatias) o log já mostra `Setting up
+   static identity map`, `Memory: 174968K/262144K available`, `devtmpfs: initialized`, `VFP support
+   v0.3: not present`, `pinctrl core: initialized`, `NET: Registered PF_NETLINK/PF_ROUTE`, `DMA:
+   preallocated 256 KiB pool`, `hw-breakpoint: debug architecture 0x0 unsupported` (o mesmo RAZ de
+   `Bcm2835Cp14Extras` de uma sessão anterior, ainda correto), `Serial: AMBA PL011 UART driver`,
+   `bcm2835-mbox 2000b880.mailbox: mailbox enabled`, e **3 requisições `raspberrypi-firmware`
+   respondidas com sucesso** (`Request 0x00000001`/`0x00000003`/`0x00030046`, todas `status
+   0x00000000`), terminando em `kprobes: kprobe jump-optimization is enabled` — tudo isso em MENOS
+   DE 4 SEGUNDOS de tempo simulado do próprio kernel (`kernel time=3.465s` no timestamp do log).
+6. **M2 ainda NÃO fecha — bloqueio NOVO e MUITO mais tardio no boot que qualquer um dos anteriores**:
+   depois de `kprobes: kprobe jump-optimization is enabled`, o console **para de crescer por
+   completo** — 27,9 milhões de fatias seguintes (~18 minutos reais, harness diagnóstico com
+   orçamento de tempo, não de fatias) sem NENHUM byte novo. Diferente de todos os bloqueios
+   anteriores da F3 (laço de Oops do FDT, tempestade de IRQ, Oops de `vfp_enable`), este **não
+   produz nenhuma mensagem observável** — não é um crash, é ausência total de progresso (mesma
+   assinatura qualitativa da "tempestade de IRQ" antiga: CPU presa em algum lugar sem sinalizar
+   erro — mas agora depois de MUITO mais boot bem-sucedido, e sem a evidência de reentrada
+   constante em `CpuMode.IRQ` que caracterizava aquele bug). Causa raiz NÃO investigada nesta sessão
+   (orçamento esgotado depois do fix do CPACR + validação G5 + confirmação ao vivo). **Próximo passo
+   recomendado**: (a) comparar contra o oráculo QEMU 8.0.0 (mesmo kernel+DTB+initramfs+cmdline) para
+   ver que linhas de log aparecem logo depois de `kprobes:` no boot real — é o jeito mais barato de
+   restringir o espaço de causa raiz antes de qualquer trace; (b) se a comparação não bastar, repetir
+   a técnica de trace instrução-a-instrução (`ArmCore#step()` ou o gancho `ArmTraceListener#
+   onMemoryAbort` da task `E2`) a partir do ponto exato onde o console para, com atenção a duas
+   hipóteses concretas: um `WFI` sem IRQ chegando (suspeita nº1, dado o precedente da tempestade de
+   IRQ já corrigida — mas desta vez por FALTA de entrega, não excesso) e uma resposta de mailbox/
+   `raspberrypi-firmware` que nunca chega para uma tag ainda não implementada (só 3 tags foram
+   respondidas antes de travar; pode haver uma 4ª que o kernel espera e o `Bcm2835Mailbox` deste
+   host ignora sem sinalizar erro nem responder, deixando o driver preso num `wait_for_completion`).
+7. **`mvn -o test` verde no `virtual-arm-box`** (66 testes, 4 skipped = M2×2+M3×2, motivo do
+   `@Disabled` atualizado no Javadoc/anotação de `Raspi1BootTest` para refletir o achado desta
+   sessão); `VersatilePbBootTest` continua verde. Commits: arm-jitter `caac7af`, virtual-arm-box
+   `c8c3e9e`. F3 permanece 🟡 na fila "ATUAL".
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
