@@ -303,6 +303,7 @@ public final class AsmBlockCompiler {
                 case IrOp.PsrTransfer psr -> emitSpilled(method, () -> emitPsrTransfer(method, psr));
                 case IrOp.Swi swi -> emitSpilled(method, () -> emitSwi(method, swi, block.endPc()));
                 case IrOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
+                case IrOp.CoprocessorDouble cp -> emitSpilled(method, () -> emitCoprocessorDouble(method, cp));
                 case IrOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
@@ -2334,6 +2335,20 @@ public final class AsmBlockCompiler {
         AsmBytecode.visitIntConst(method, cp.sequentialPc());
         AsmBytecode.invokeStatic(method, HELPERS, "executeCoprocessor",
                 "(" + CORE_REF + "ZIIIIIII)Z");
+        emitConditionalSetPcChanged(method);
+    }
+
+    private void emitCoprocessorDouble(MethodVisitor method, IrOp.CoprocessorDouble cp) {
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitInsn(cp.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        AsmBytecode.visitIntConst(method, cp.coprocessor());
+        AsmBytecode.visitIntConst(method, cp.opcode1());
+        AsmBytecode.visitIntConst(method, cp.crm());
+        AsmBytecode.visitIntConst(method, cp.rt());
+        AsmBytecode.visitIntConst(method, cp.rt2());
+        AsmBytecode.visitIntConst(method, cp.sequentialPc());
+        AsmBytecode.invokeStatic(method, HELPERS, "executeCoprocessorDouble",
+                "(" + CORE_REF + "ZIIIIII)Z");
         emitConditionalSetPcChanged(method);
     }
 

@@ -920,6 +920,26 @@ public final class AsmRuntimeHelpers {
         return false;
     }
 
+    /// @return {@code true} when PC was changed (undefined exception triggered)
+    public static boolean executeCoprocessorDouble(
+            ArmCore core, boolean load, int coprocessorNum, int opcode1,
+            int crm, int rt, int rt2, int sequentialPc) {
+        var bus = core.coprocessorBus();
+        if (!bus.handlesDouble(coprocessorNum, opcode1, crm)) {
+            core.setProgramCounter(sequentialPc);
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        if (load) {
+            long value = bus.readDouble(coprocessorNum, opcode1, crm);
+            core.setRegister(rt, (int) value);
+            core.setRegister(rt2, (int) (value >>> 32));
+        } else {
+            bus.writeDouble(coprocessorNum, opcode1, crm, core.register(rt), core.register(rt2));
+        }
+        return false;
+    }
+
     // ── undefined ──────────────────────────────────────────────────────────────
 
     public static void executeUndefined(ArmCore core, int sequentialPc) {

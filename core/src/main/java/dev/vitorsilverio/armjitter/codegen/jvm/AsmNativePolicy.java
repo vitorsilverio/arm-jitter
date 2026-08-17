@@ -90,6 +90,7 @@ public final class AsmNativePolicy {
             case IrOp.PsrTransfer ignored -> true;
             case IrOp.Swi ignored -> true;
             case IrOp.Coprocessor ignored -> true;
+            case IrOp.CoprocessorDouble ignored -> true;
             case IrOp.Undefined ignored -> true;
             case IrOp.Swap ignored -> false;
             case IrOp.Cycle ignored -> true;

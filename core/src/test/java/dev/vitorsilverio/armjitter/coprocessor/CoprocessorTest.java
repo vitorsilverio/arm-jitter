@@ -83,6 +83,67 @@ class CoprocessorTest {
         assertEquals(0x04, core.programCounter()); // vetor de instrução indefinida
     }
 
+    // MCRR p15, 0, r1, r2, c6   e   MRRC p15, 0, r1, r2, c6 (F3 — transferência DUPLA)
+    private static final int MCRR_P15_R1_R2_C6 = 0xEC421F06;
+    private static final int MRRC_P15_R1_R2_C6 = 0xEC521F06;
+
+    @Test
+    void mcrrForwardsBothRegisterValuesToCoprocessor() {
+        CapturingDoubleCp15 cp15 = new CapturingDoubleCp15(0);
+        ArmCore core = newCore(MCRR_P15_R1_R2_C6, cp15);
+        core.setRegister(1, 0x1111_1111);
+        core.setRegister(2, 0x2222_2222);
+
+        core.step();
+
+        assertTrue(cp15.wrote);
+        assertEquals(15, cp15.coprocessor);
+        assertEquals(0, cp15.opcode1);
+        assertEquals(6, cp15.crm);
+        assertEquals(0x1111_1111, cp15.rt);
+        assertEquals(0x2222_2222, cp15.rt2);
+        assertEquals(4, core.programCounter());
+    }
+
+    @Test
+    void mrrcLoadsCoprocessorValueIntoBothRegisters() {
+        // rt (baixo) = 0x600DF00D, rt2 (alto) = 0xCAFEBABE
+        long packed = 0x600D_F00DL | (0xCAFE_BABEL << 32);
+        CapturingDoubleCp15 cp15 = new CapturingDoubleCp15(packed);
+        ArmCore core = newCore(MRRC_P15_R1_R2_C6, cp15);
+
+        core.step();
+
+        assertEquals(0x600D_F00D, core.register(1));
+        assertEquals(0xCAFE_BABE, core.register(2));
+        assertEquals(6, cp15.crm);
+        assertEquals(4, core.programCounter());
+    }
+
+    @Test
+    void absentCoprocessorDoubleTakesUndefinedVector() {
+        ArmCore core = newCore(MCRR_P15_R1_R2_C6, null); // mantém o CoprocessorBus.none() padrão
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+    }
+
+    @Test
+    void handlesDoubleDefaultsToFalseEvenWhenCoarseHandlesIsTrue() {
+        // Regressão (achado real desta sessão): um CoprocessorBus que só implementa MCR/MRC
+        // (handles(int)=true grosso para reivindicar o coprocessador inteiro, padrão de TODAS as
+        // implementações pré-F3 deste código-base) NÃO deve reivindicar MCRR/MRRC por acidente —
+        // handlesDouble tem que devolver false por padrão, não delegar ao grosso.
+        ArmCore core = newCore(MCRR_P15_R1_R2_C6, new CapturingCp15(0)); // só implementa MCR/MRC
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+    }
+
     private static ArmCore newCore(int instruction, CoprocessorBus cp15) {
         ArrayMemory memory = new ArrayMemory();
         memory.write32(0, instruction);
@@ -133,6 +194,61 @@ class CoprocessorTest {
             this.crm = crm;
             this.opcode2 = opcode2;
             this.value = value;
+        }
+    }
+
+    /// Um CP15 substituto que registra a última transferência DUPLA (`MCRR`/`MRRC`, F3) e retorna
+    /// um valor de 64 bits fixo nas leituras (empacotado com `Rt` nos bits baixos, `Rt2` nos altos
+    /// — mesma convenção de {@link CoprocessorBus#readDouble}).
+    private static final class CapturingDoubleCp15 implements CoprocessorBus {
+        private final long readValue;
+        private boolean wrote;
+        private int coprocessor;
+        private int opcode1;
+        private int crm;
+        private int rt;
+        private int rt2;
+
+        CapturingDoubleCp15(long readValue) {
+            this.readValue = readValue;
+        }
+
+        @Override
+        public boolean handles(int coprocessor) {
+            return coprocessor == 15;
+        }
+
+        @Override
+        public boolean handlesDouble(int coprocessor, int opcode1, int crm) {
+            return coprocessor == 15;
+        }
+
+        @Override
+        public int read(int coprocessor, int opcode1, int crn, int crm, int opcode2) {
+            throw new IllegalStateException("bug: teste só exercita a forma DUPLA");
+        }
+
+        @Override
+        public void write(int coprocessor, int opcode1, int crn, int crm, int opcode2, int value) {
+            throw new IllegalStateException("bug: teste só exercita a forma DUPLA");
+        }
+
+        @Override
+        public long readDouble(int coprocessor, int opcode1, int crm) {
+            this.coprocessor = coprocessor;
+            this.opcode1 = opcode1;
+            this.crm = crm;
+            return readValue;
+        }
+
+        @Override
+        public void writeDouble(int coprocessor, int opcode1, int crm, int rt, int rt2) {
+            this.wrote = true;
+            this.coprocessor = coprocessor;
+            this.opcode1 = opcode1;
+            this.crm = crm;
+            this.rt = rt;
+            this.rt2 = rt2;
         }
     }
 

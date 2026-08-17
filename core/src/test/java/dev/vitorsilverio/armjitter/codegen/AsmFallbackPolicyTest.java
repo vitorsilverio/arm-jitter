@@ -163,8 +163,10 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     }
 
     @Test
-    void supportedOpsHas19Types() {
-        assertEquals(19, AsmCodeEmitter.supportedOps().size());
+    void supportedOpsHas20Types() {
+        // F3: IrOp.CoprocessorDouble (MCRR/MRRC) somado à lista, mesmo padrão nativo de
+        // IrOp.Coprocessor (helper estático, sem bytecode especializado).
+        assertEquals(20, AsmCodeEmitter.supportedOps().size());
     }
 
     // ── IrOptimizer wiring ────────────────────────────────────────────────────

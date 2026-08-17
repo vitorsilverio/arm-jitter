@@ -51,6 +51,15 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 /// - `c7` (manutenção de cache + barreiras `ISB`/`DSB`/`DMB`): NOP observável em toda escrita (sem
 ///   cache nem pipeline modelados) e RAZ em leitura — mesmo precedente do `IrOp.MemoryBarrier`
 ///   32 bits.
+/// - `MCRR p15,0,Rt,Rt2,{c6,c14}` (F3, `virtual-arm-box`, sessão de decode `MCRR`/`MRRC`):
+///   "invalidar" (`c6`) ou "limpar E invalidar" (`c14`) D-cache pela faixa `[Rt,Rt2]` (extensões
+///   ARM1136/ARM1176) — NOP/RAZ nos dois, mesmo precedente do `c7` acima. Achados reais, MESMA
+///   sessão: `discard_old_kernel_data` (`arch/arm/mm/copypage-v6.c`) usa `c6` em
+///   `v6_clear_user_highpage_aliasing`, chamada por `handle_mm_fault`; `flush_pfn_alias`
+///   (`arch/arm/mm/flush.c`) usa `c14`, chamada por `__flush_anon_page`/`__get_user_pages` — as
+///   DUAS aparecem no primeiro `execve("/init")` do boot, uma logo depois da outra. Sem decode de
+///   `MCRR`/`MRRC` no `arm-jitter` (lacuna corrigida nesta mesma sessão em `CoprocessorDecoder`),
+///   a instrução caía em UNDEFINED e matava `init`.
 /// - `c8,c{5,6,7},{0,1,2}` (TLB de instrução / de dados / unificada): `TLBIALL`/`TLBIMVA`/
 ///   `TLBIASID`, repassados às faces correspondentes da micro-TLB do wrapper
 ///   ({@link TranslatingAddressSpace#invalidateInstructionTlbAll} e irmãs). As formas separadas
@@ -145,6 +154,31 @@ public final class Cp15VmsaCoprocessor
     private static final int CRM_TLB_DATA = 6;
     /// `c8,c7,*` — TLB unificada.
     private static final int CRM_TLB_UNIFIED = 7;
+    /// `MCRR p15,0,Rt,Rt2,c6` (`CRm=6` — namespace de `MCRR`/`MRRC`, NÃO relacionado ao `CRn=6`
+    /// de {@link #CRN_FAULT_ADDRESS} usado por `MCR`/`MRC`): "invalidar D-cache pela faixa
+    /// `[Rt,Rt2]`" no ARM1136/ARM1176 (extensão específica destes cores, não presente no ARMv7
+    /// genérico, que só tem a forma por-linha via `MCR`). Confirmado contra o kernel Linux real
+    /// (F3, `virtual-arm-box`): `discard_old_kernel_data` em `arch/arm/mm/copypage-v6.c` emite
+    /// literalmente `mcrr p15, 0, %1, %0, c6` para invalidar a faixa `[kto, kto+PAGE_SIZE-1]`
+    /// antes de popular uma página nova. Tratado como NOP — mesmo precedente de {@link
+    /// #CRN_CACHE_MAINTENANCE} (`c7`): sem cache modelado, "invalidar" uma faixa não tem efeito
+    /// observável no simulador (nenhuma escrita de memória subsequente pode ficar presa atrás de
+    /// uma linha de cache "suja" que não existe).
+    private static final int CRM_CACHE_RANGE_DATA = 6;
+    /// `MCRR p15,0,Rt,Rt2,c14` — "limpar E invalidar D-cache pela faixa `[Rt,Rt2]`" (variante
+    /// clean+invalidate do mesmo idioma de `CRM_CACHE_RANGE_DATA`/`c6` acima, ARM1136/ARM1176).
+    /// **Achado real da F3 (`virtual-arm-box`, mesma sessão de decode `MCRR`/`MRRC`)**: com só
+    /// `c6` implementado, o boot avançava além de `discard_old_kernel_data` mas travava de novo
+    /// no MESMO opcode-family — desta vez em `flush_pfn_alias` (`arch/arm/mm/flush.c`, chamada
+    /// por `__flush_anon_page`/`__get_user_pages` no `execve()` de `/init`), que emite
+    /// literalmente `mcrr p15, 0, %1, %0, c14` seguido de `mcr p15, 0, %2, c7, c10, 4` (DSB, já
+    /// coberto por {@link #CRN_CACHE_MAINTENANCE} sem mudança nenhuma). Confirmado contra o fonte
+    /// real do kernel, não um palpite. Mesmo tratamento NOP/RAZ de `c6` — sem cache modelado, a
+    /// diferença "invalidar" vs. "limpar+invalidar" não tem efeito observável no simulador.
+    private static final int CRM_CACHE_RANGE_CLEAN_AND_INVALIDATE_DATA = 14;
+    /// Único `opcode1` válido de `MCRR`/`MRRC` para os registradores VMSA atendidos aqui.
+    private static final int OPCODE1_MCRR_MRRC = 0;
+
     private static final int OPCODE2_TLB_INVALIDATE_ALL = 0;
     private static final int OPCODE2_TLB_INVALIDATE_BY_MVA = 1;
     /// `TLBIASID` (`opcode2=2`, ARMv6): invalidar por ASID. Sem tag de ASID por entrada capaz de
@@ -301,6 +335,25 @@ public final class Cp15VmsaCoprocessor
             }
             default -> throw unsupported(crn, crm, opcode2);
         }
+    }
+
+    @Override
+    public boolean handlesDouble(int coprocessor, int opcode1, int crm) {
+        return coprocessor == CP15 && opcode1 == OPCODE1_MCRR_MRRC
+                && (crm == CRM_CACHE_RANGE_DATA || crm == CRM_CACHE_RANGE_CLEAN_AND_INVALIDATE_DATA);
+    }
+
+    @Override
+    public long readDouble(int coprocessor, int opcode1, int crm) {
+        // MRRC deste registrador não é definido pelo ARM ARM para esta operação (só a forma MCRR
+        // é usada por manutenção de cache) — RAZ/0 pelo mesmo precedente de CRN_CACHE_MAINTENANCE
+        // acima (sem estado real de cache para ler de volta).
+        return 0L;
+    }
+
+    @Override
+    public void writeDouble(int coprocessor, int opcode1, int crm, int rt, int rt2) {
+        // NOP observável — ver Javadoc de CRM_CACHE_RANGE_DATA.
     }
 
     /// Despacha `c8,c{5,6,7},{0,1,2}` para a face certa da micro-TLB do wrapper. `TLBIMVA`

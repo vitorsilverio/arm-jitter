@@ -128,6 +128,8 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                 yield mask;
             }
             case IrOp.Coprocessor c -> !c.load() ? (1 << c.register()) : 0;
+            // MCRR (F3): lê os dois registradores ARM (Rt/Rt2); MRRC não lê nenhum.
+            case IrOp.CoprocessorDouble c -> !c.load() ? (1 << c.rt()) | (1 << c.rt2()) : 0;
             case IrOp.Swap s -> {
                 int mask = s.baseValueOverride() < 0 ? (1 << s.base()) : 0;
                 if (s.srcValueOverride() < 0) mask |= (1 << s.src());
@@ -245,6 +247,8 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.Pop p -> p.registerMask() | (1 << 13) | (p.includePc() ? (1 << 15) : 0);
             case IrOp.PsrTransfer t -> t.read() ? (1 << t.register()) : 0;
             case IrOp.Coprocessor c -> c.load() && c.register() != 15 ? (1 << c.register()) : 0;
+            // MRRC (F3): escreve os dois registradores ARM (Rt/Rt2); MCRR não escreve nenhum.
+            case IrOp.CoprocessorDouble c -> c.load() ? (1 << c.rt()) | (1 << c.rt2()) : 0;
             case IrOp.Swap s -> (1 << s.dst());
             // Ops ALU puras do B3.1: definem só `dst`, nunca flags.
             case IrOp.BitFieldExtract b -> (1 << b.dst());

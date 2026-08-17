@@ -134,7 +134,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // (B2.4) sempre trocam o PC (ou podem trocar, no caso de CBZ/CBNZ) — mesmo tratamento
             // que BRANCH já recebe, terminal independente do guard condicional.
             case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, UNIMPLEMENTED,
-                    COPROCESSOR, RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT, TABLE_BRANCH,
+                    // COPROCESSOR_DOUBLE (MCRR/MRRC, F3): mesmo motivo de COPROCESSOR acima — hoje só
+                    // implementado como NOP de manutenção de cache (Cp15VmsaCoprocessor), mas o
+                    // barramento é um gancho do host arbitrário, então terminal por precaução.
+                    COPROCESSOR, COPROCESSOR_DOUBLE, RETURN_FROM_EXCEPTION, WAIT_FOR_INTERRUPT, TABLE_BRANCH,
                     COMPARE_BRANCH_ZERO,
                     // BKPT (B7.5): mesmo motivo de SWI — o BkptDispatcher do host pode alterar
                     // registradores/PC (semihosting), e sem dispatcher vira UNDEFINED (troca de PC

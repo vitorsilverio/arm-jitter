@@ -307,6 +307,62 @@ class Cp15VmsaCoprocessorTest {
     }
 
     @Test
+    void mcrrCacheRangeInvalidateIsNoopAndReadsAsZero() {
+        // F3: MCRR p15,0,Rt,Rt2,c6 — "invalidar D-cache pela faixa [Rt,Rt2]" (ARM1136/ARM1176,
+        // usado por discard_old_kernel_data no boot real do raspi1). Sem cache modelado, NOP —
+        // mesmo precedente de c7.
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(
+                new TranslatingAddressSpace(new TestAddressSpace(0x1000)), coreWithoutCode());
+
+        assertTrue(cp15.handlesDouble(15, 0, 6));
+        cp15.writeDouble(15, 0, 6, 0x1000, 0x1FFF); // não deve lançar
+        assertEquals(0, cp15.readDouble(15, 0, 6));
+    }
+
+    @Test
+    void mcrrCleanAndInvalidateCacheRangeIsNoopAndReadsAsZero() {
+        // F3 (rodada 2 da sessão de decode): MCRR p15,0,Rt,Rt2,c14 — "limpar E invalidar D-cache
+        // pela faixa [Rt,Rt2]", usada por flush_pfn_alias (arch/arm/mm/flush.c) no primeiro
+        // execve("/init") do boot real, logo depois de c6/discard_old_kernel_data. Mesmo
+        // tratamento NOP/RAZ.
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(
+                new TranslatingAddressSpace(new TestAddressSpace(0x1000)), coreWithoutCode());
+
+        assertTrue(cp15.handlesDouble(15, 0, 14));
+        cp15.writeDouble(15, 0, 14, 0x2000, 0x2FFF); // não deve lançar
+        assertEquals(0, cp15.readDouble(15, 0, 14));
+    }
+
+    @Test
+    void mcrrOutsideCacheRangeCrmIsNotHandled() {
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(
+                new TranslatingAddressSpace(new TestAddressSpace(0x100)), coreWithoutCode());
+
+        assertFalse(cp15.handlesDouble(15, 0, 15)); // c15 (outra faixa DMA) fora do escopo desta task
+        assertFalse(cp15.handlesDouble(15, 1, 6));  // opcode1≠0 não é válido para VMSA
+    }
+
+    @Test
+    void mcrrRealBootInstructionDecodesAndExecutesAsNoop() {
+        // Mesmo opcode literal decodificado do dump `Code:` do Oops real de F3 (sessão de decode
+        // MCRR/MRRC): 0xEC432F06 = MCRR p15,0,r2,r3,c6 (cond=AL,Rt2=r3,Rt=r2,coproc=15,opc1=0,
+        // CRm=6) — prova de ponta a ponta: decoder A32 -> IR -> executor -> Cp15VmsaCoprocessor.
+        TestAddressSpace codeMemory = new TestAddressSpace(0x100);
+        codeMemory.put32(0x00, 0xEC43_2F06);
+        ArmCore core = new ArmCore(codeMemory, SwiDispatcher.empty(), ArmArchitecture.ARM11_MPCORE);
+        core.configureExecutionState(0, CpuMode.SYSTEM, InstructionSet.ARM, false, false);
+        core.setCoprocessorBus(new Cp15VmsaCoprocessor(
+                new TranslatingAddressSpace(new TestAddressSpace(0x1000)), core));
+        core.setRegister(2, 0x1000);
+        core.setRegister(3, 0x1FFF);
+
+        core.step();
+
+        assertEquals(4, core.programCounter());
+        assertEquals(CpuMode.SYSTEM, core.mode()); // não entrou em UNDEFINED
+    }
+
+    @Test
     void unclaimedRegisterIsNotHandledByFinePredicate() {
         Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(
                 new TranslatingAddressSpace(new TestAddressSpace(0x100)), coreWithoutCode());

@@ -303,6 +303,15 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
+            case COPROCESSOR_DOUBLE -> block.add(new IrOp.CoprocessorDouble(
+                    instruction.link(),
+                    instruction.immediate() & 0xF,
+                    (instruction.immediate() >>> 4) & 0xF,
+                    (instruction.immediate() >>> 8) & 0xF,
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.address() + instructionWidth(instruction),
+                    instruction.condition()));
             case CPS -> {
                 int packed = instruction.immediate();
                 block.add(new IrOp.ChangeProcessorState(

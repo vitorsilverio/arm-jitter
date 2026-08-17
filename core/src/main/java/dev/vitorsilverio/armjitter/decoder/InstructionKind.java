@@ -261,5 +261,12 @@ public enum InstructionKind {
     /// `BKPT #imm` (B7.5, ARMv5T+): `immediate`=imediato de 8 (Thumb) ou 16 (ARM, não decodificado
     /// ainda) bits, delegado ao `BkptDispatcher` do host (semihosting) via `IrOp.Breakpoint`. Sem
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#BREAKPOINT} cai no UNDEFINED de sempre.
-    BREAKPOINT
+    BREAKPOINT,
+    /// `MCRR`/`MRRC` (ARMv5TE+, F3): transferência DUPLA de registrador de/para coprocessador —
+    /// diferente de {@link #COPROCESSOR} (`MCR`/`MRC`, um só registrador ARM + `CRn`/`opcode2`),
+    /// esta forma não tem `CRn` nem `opcode2`; em troca `opcode1` tem 4 bits (não 3) e dois
+    /// registradores ARM (`Rt`/`Rt2`) são transferidos de uma vez. `destinationRegister`=Rt,
+    /// `sourceRegister`=Rt2, `immediate` empacota: bits 3:0=coprocessor, bits 7:4=opcode1,
+    /// bits 11:8=CRm; `link`=`true` para `MRRC` (coprocessador→registradores), `false` para `MCRR`.
+    COPROCESSOR_DOUBLE
 }

@@ -95,6 +95,27 @@ public final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeCoprocessorDouble(ArmCore core, IrOp.CoprocessorDouble cp) {
+        if (!core.cpsr().evalCond(cp.condition())) {
+            return false;
+        }
+        CoprocessorBus bus = core.coprocessorBus();
+        if (!bus.handlesDouble(cp.coprocessor(), cp.opcode1(), cp.crm())) {
+            core.setProgramCounter(cp.sequentialPc());
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        if (cp.load()) {
+            long value = bus.readDouble(cp.coprocessor(), cp.opcode1(), cp.crm());
+            core.setRegister(cp.rt(), (int) value);
+            core.setRegister(cp.rt2(), (int) (value >>> 32));
+        } else {
+            bus.writeDouble(cp.coprocessor(), cp.opcode1(), cp.crm(), core.register(cp.rt()), core.register(cp.rt2()));
+        }
+        return false;
+    }
+
+    /// @return {@code true} quando o PC foi alterado pela operação
     public boolean executeUndefined(ArmCore core, IrOp.Undefined undefined) {
         if (!core.cpsr().evalCond(undefined.condition())) {
             return false;

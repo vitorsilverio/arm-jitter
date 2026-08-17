@@ -241,7 +241,7 @@ public final class AsmCodeEmitter implements CodeEmitter {
                 IrOp.MultipleTransfer.class, IrOp.Branch.class, IrOp.BranchExchange.class,
                 IrOp.ThumbBlPrefix.class, IrOp.ThumbBlSuffix.class,
                 IrOp.Push.class, IrOp.Pop.class, IrOp.PsrTransfer.class,
-                IrOp.Swi.class, IrOp.Coprocessor.class, IrOp.Undefined.class,
+                IrOp.Swi.class, IrOp.Coprocessor.class, IrOp.CoprocessorDouble.class, IrOp.Undefined.class,
                 IrOp.Cycle.class, IrOp.Fetch.class
         );
     }

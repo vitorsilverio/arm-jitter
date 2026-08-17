@@ -88,6 +88,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.POP -> pcChanged |= transfer.executePop(core, (IrOp.Pop) op);
                 case IrOp.Kind.SWI -> pcChanged |= system.executeSwi(core, (IrOp.Swi) op, block.endPc());
                 case IrOp.Kind.COPROCESSOR -> pcChanged |= system.executeCoprocessor(core, (IrOp.Coprocessor) op);
+                case IrOp.Kind.COPROCESSOR_DOUBLE -> pcChanged |= system.executeCoprocessorDouble(core, (IrOp.CoprocessorDouble) op);
                 case IrOp.Kind.UNDEFINED -> pcChanged |= system.executeUndefined(core, (IrOp.Undefined) op);
                 case IrOp.Kind.CYCLE -> cycles += cycle.executeCycle((IrOp.Cycle) op);
                 case IrOp.Kind.FETCH -> cycle.executeFetch(core, (IrOp.Fetch) op);
@@ -211,6 +212,7 @@ public final class IrBlockExecutor {
             case IrOp.Pop pop -> transfer.executePop(core, pop);
             case IrOp.Swi swi -> system.executeSwi(core, swi, blockEndPc);
             case IrOp.Coprocessor cp -> system.executeCoprocessor(core, cp);
+            case IrOp.CoprocessorDouble cp -> system.executeCoprocessorDouble(core, cp);
             case IrOp.Undefined undef -> system.executeUndefined(core, undef);
             case IrOp.Cycle cycleOp -> { cycle.executeCycle(cycleOp); yield false; }
             case IrOp.Fetch fetch -> { cycle.executeFetch(core, fetch); yield false; }
