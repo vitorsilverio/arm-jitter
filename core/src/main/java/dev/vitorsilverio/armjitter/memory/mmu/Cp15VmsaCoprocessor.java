@@ -55,6 +55,19 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 ///   `c8,c5,*`/`c8,c6,*` NÃO são opcionais na prática: um core com TLBs separadas (ARM926EJ-S /
 ///   ARMv5, o `v4wbi_*` do Linux) nunca emite a forma unificada — sem elas todo `flush_tlb_*` do
 ///   kernel vira exceção UNDEFINED (achado real do boot do linuxbox, B4.1.5).
+/// - `CPACR` (`c1,c0,2`, Coprocessor Access Control Register, ARMv6+): puro armazenamento
+///   (round-trip fiel), sem enforcement de trap — este host já decodifica VFP incondicionalmente
+///   a partir de {@link dev.vitorsilverio.armjitter.arch.ArmFeature#VFPV2} do preset, nunca a
+///   partir do valor de `CPACR` (mesma decisão de escopo do `c7`: sem trap de acesso modelado).
+///   **Achado real da F3 (`virtual-arm-box`, sessão de investigação do Oops em `vfp_enable`)**:
+///   `vfp_init()` do kernel Linux real chama incondicionalmente `on_each_cpu(vfp_enable, ...)`
+///   ANTES de sondar `FPSID` — `vfp_enable()` (`arch/arm/vfp/vfpmodule.c`) não toca no
+///   coprocessador VFP (CP10/CP11) em si; ele lê/escreve `CPACR` via `get_copro_access()`/
+///   `set_copro_access()` (`MRC`/`MCR p15,0,Rt,c1,c0,2`) para conceder acesso pleno a CP10/CP11
+///   antes de qualquer instrução VFP rodar. Sem este registrador, a leitura de `CPACR` caía em
+///   `unsupported()` (UNDEFINED) — `Oops - undefined instruction` em `vfp_enable+0x8`, matando o
+///   processo `init` (`on_each_cpu_cond_mask`&larr;`vfp_init`&larr;`do_one_initcall`). Confirmado
+///   contra o fonte real do kernel (`raspberrypi/linux`, `vfp_enable`/`vfp_init`), não um palpite.
 /// - `CONTEXTIDR` (`c13,c0,1`): os 8 bits baixos (ASID) ligam em
 ///   {@link TranslatingAddressSpace#setAsid}; o valor completo é guardado para leitura de volta.
 /// - `FCSEIDR`/`TPIDRURW`/`TPIDRURO`/`TPIDRPRW` (`c13,c0,{0,2,3,4}`, ARMv6+ "Process ID/Thread ID
@@ -91,6 +104,9 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     private static final int CRM_PRIMARY = 0;
 
     private static final int OPCODE2_SCTLR = 0;
+    /// `CPACR` (`c1,c0,2`, ARMv6+, MESMO `CRn` do `SCTLR`) — ver Javadoc da classe (achado
+    /// F3/`vfp_enable`).
+    private static final int OPCODE2_CPACR = 2;
 
     private static final int OPCODE2_TTBR0 = 0;
     private static final int OPCODE2_TTBR1 = 1;
@@ -137,6 +153,7 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     private final ArmCore core;
 
     private int sctlr;
+    private int cpacr;
     private int ttbr0;
     private int ttbr1;
     private int ttbcr;
@@ -171,7 +188,7 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
             return false;
         }
         return switch (crn) {
-            case CRN_SYSTEM_CONTROL -> crm == CRM_PRIMARY && opcode2 == OPCODE2_SCTLR;
+            case CRN_SYSTEM_CONTROL -> crm == CRM_PRIMARY && (opcode2 == OPCODE2_SCTLR || opcode2 == OPCODE2_CPACR);
             case CRN_TRANSLATION_TABLE -> crm == CRM_PRIMARY
                     && (opcode2 == OPCODE2_TTBR0 || opcode2 == OPCODE2_TTBR1 || opcode2 == OPCODE2_TTBCR);
             case CRN_DOMAIN_ACCESS_CONTROL -> crm == CRM_PRIMARY && opcode2 == OPCODE2_DACR;
@@ -194,7 +211,7 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     @Override
     public int read(int coprocessor, int opcode1, int crn, int crm, int opcode2) {
         return switch (crn) {
-            case CRN_SYSTEM_CONTROL -> sctlrValue();
+            case CRN_SYSTEM_CONTROL -> opcode2 == OPCODE2_CPACR ? cpacr : sctlrValue();
             case CRN_TRANSLATION_TABLE -> switch (opcode2) {
                 case OPCODE2_TTBR0 -> ttbr0;
                 case OPCODE2_TTBR1 -> ttbr1;
@@ -219,7 +236,13 @@ public final class Cp15VmsaCoprocessor implements CoprocessorBus, MemoryAbortLis
     @Override
     public void write(int coprocessor, int opcode1, int crn, int crm, int opcode2, int value) {
         switch (crn) {
-            case CRN_SYSTEM_CONTROL -> applySctlr(value);
+            case CRN_SYSTEM_CONTROL -> {
+                if (opcode2 == OPCODE2_CPACR) {
+                    cpacr = value;
+                } else {
+                    applySctlr(value);
+                }
+            }
             case CRN_TRANSLATION_TABLE -> writeTranslationTable(opcode2, value);
             case CRN_DOMAIN_ACCESS_CONTROL -> {
                 dacr = value;

@@ -85,6 +85,28 @@ class Cp15VmsaCoprocessorTest {
         assertFalse(mmu.mmuEnabled());
     }
 
+    /// Regressão do achado real da F3 (`virtual-arm-box`, sessão de investigação do Oops em
+    /// `vfp_enable`): `vfp_init()` do kernel Linux real chama `vfp_enable()` incondicionalmente em
+    /// ARMv6+, ANTES de sondar `FPSID` — e `vfp_enable()` não toca no coprocessador VFP, ele
+    /// lê/escreve `CPACR` (`c1,c0,2`) para conceder acesso a CP10/CP11. Sem este registrador, a
+    /// leitura de `CPACR` caía em `unsupported()` (UNDEFINED) — `Oops - undefined instruction` em
+    /// `vfp_enable+0x8`, matando o processo `init`. Este teste prova o round-trip simples
+    /// (armazenamento puro, sem enforcement de trap — mesma decisão de escopo do `c7`).
+    @Test
+    void cpacrIsStoredAndReadBackWithoutTrapEnforcement() {
+        TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(0x1000));
+        Cp15VmsaCoprocessor cp15 = new Cp15VmsaCoprocessor(mmu, coreWithoutCode());
+
+        assertTrue(cp15.handles(15, 0, 1, 0, 2), "CPACR (c1,c0,2)");
+        assertEquals(0, cp15.read(15, 0, 1, 0, 2), "reset real: nenhum acesso concedido ainda");
+
+        int cpaccFullCp10 = 0b11 << 20;
+        int cpaccFullCp11 = 0b11 << 22;
+        cp15.write(15, 0, 1, 0, 2, cpaccFullCp10 | cpaccFullCp11);
+
+        assertEquals(cpaccFullCp10 | cpaccFullCp11, cp15.read(15, 0, 1, 0, 2));
+    }
+
     @Test
     void tlbOpsForwardedToMmu() {
         TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
