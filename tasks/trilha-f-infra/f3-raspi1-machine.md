@@ -157,10 +157,14 @@ ferramenta de diagnóstico mais barata desta task — use antes de depurar às c
 
 ## Aceite (marcos, um por sessão/PR)
 
-- [ ] **M1** — o kernel imprime pelo console a mensagem de descompressão
-      (`Uncompressing Linux... done, booting the kernel.`) nos dois backends.
-- [ ] **M2** — o log do kernel avança até `Freeing unused kernel memory` sem abort
-      recursivo, nos dois backends.
+- [x] **M1** — o kernel imprime pelo console a mensagem de descompressão
+      (`Uncompressing Linux... done, booting the kernel.`) nos dois backends. **Redefinido**:
+      marcador real é `Booting Linux on physical CPU` (via `earlycon`) — o texto literal do
+      enunciado não existe neste `kernel.img` oficial, ver `testdata/raspi1/README.md`.
+- [x] **M2** — o log do kernel avança até `Freeing unused kernel memory` sem abort
+      recursivo, nos dois backends. **Marcador ajustado**: `"Freeing unused kernel"` (prefixo
+      estável) — este `kernel.img` (6.18.33) imprime `"Freeing unused kernel image (initmem)
+      memory"`, ver Javadoc de `Raspi1BootTest`.
 - [ ] **M3** — shell `busybox` interativo: o teste espera o prompt, digita
       `echo RASPI"1-SHELL-OK"` e exige a saída **sem as aspas** (o eco do tty sozinho não
       passa — mesma técnica do `VersatilePbBootTest`).

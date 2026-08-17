@@ -107,7 +107,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-17, sessão de decode MCRR/MRRC, ver detalhe abaixo) — **M1 continua fechado**; o Oops de `v6_clear_user_highpage_aliasing` (`MCRR p15,0,r2,r3,c6` caindo em UNDEFINED) foi CORRIGIDO (decode novo no `arm-jitter` + repasse `handlesDouble`/`readDouble`/`writeDouble` pela cadeia de decorators CP15/CP14, que faltava e mascarava o fix); **M2 segue com status DESCONHECIDO** — a re-execução do teste JIT não concluiu em ~40min nesta sessão (abortada manualmente, `@Timeout` do JUnit não preempte laço apertado) — pode ter fechado, pode ter achado bloqueio novo, pode só ser lento aqui; próxima sessão precisa repetir com harness de progresso observável em vez do `@Test` cru; LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-17, sessão de correção do marcador de M2, ver detalhe abaixo) — **M1 e M2 FECHADOS** (JIT e INTERPRETED); só falta M3 (shell interativo, precisa CPRMAN mínimo — clock do UART real — ver Javadoc de `Bcm2835Machine`); LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 ## F3 (`virtual-arm-box --machine=raspi1`) — histórico condensado
@@ -216,6 +216,35 @@ virtual-arm-box), M2 re-teste INCONCLUSIVO (sessão interrompida por rate-limit 
    se perdeu.
 7. Commits: arm-jitter (`bc4baf8`, decode MCRR/MRRC), virtual-arm-box (`fca8a38`, decorators +
    `@Disabled` do M2 atualizado). F3 permanece 🟡 na fila "ATUAL".
+
+**F3 — sessão de correção do marcador de M2 (2026-08-17) — M2 FECHADO nos dois backends (achado:
+não era bug, era texto de marcador desatualizado)**:
+
+1. Seguindo o próximo passo recomendado pela sessão anterior, um harness temporário
+   (`Raspi1DiagTempTest`, removido antes do commit) rodou o boot JIT com progresso periódico
+   impresso (PC/fatia/cauda do console a cada 200 mil fatias) em vez do `@Test` cru sem
+   visibilidade. Resultado: o boot chega a `Run /init as init process` em ~40s reais (2,4 milhões
+   de fatias) e **nunca trava/aborta** — o fix de MCRR/MRRC da sessão anterior funcionou de
+   verdade.
+2. **Causa raiz do "M2 inconclusivo" identificada**: o marcador literal do enunciado
+   (`"Freeing unused kernel memory"`) nunca aparece neste `kernel.img` real (6.18.33) — não por
+   bug, por REDAÇÃO. `mark_readonly()` (que só roda DEPOIS de `free_initmem()` em
+   `kernel_init()`) já tinha impresso sua mensagem quando "Run /init" apareceu, ou seja
+   `free_initmem()` já tinha rodado com outro texto: `"Freeing unused kernel image (initmem)
+   memory: 500K"` (kernels modernos unificaram a mensagem de memória do `initmem` com a de imagem
+   do kernel). Mesmo precedente exato da redefinição de M1. Corrigido o marcador para o prefixo
+   estável `"Freeing unused kernel"` em `Raspi1BootTest`.
+3. Reativados os dois testes de M2 (removido `@Disabled`): **JIT passa em 38,7s, INTERPRETED passa
+   em 50,2s** — muito mais rápido que o temido pelas sessões anteriores, porque o marcador correto
+   ocorre bem mais cedo no boot que o ponto (retry indefinido de `mmc0`/`sdhost-bcm2835`, "sem
+   suporte de tensão do cartão") onde o harness de diagnóstico continuou observando sem crash.
+4. **Achado colateral para M3**: depois do prompt do shell (fora do escopo desta sessão), o
+   console pode ficar dominado pelo retry infinito de `mmc0`/SD — esperado, já que SD/MMC real é
+   deliberadamente fora do "Inclui" da spec, não é um bug.
+5. `mvn -o test` verde no `virtual-arm-box` (70 testes, 2 skipped = só M3×2 agora).
+   Nenhum arquivo do `arm-jitter` tocado nesta sessão (G5 completo não necessário). Commit
+   virtual-arm-box pendente ao final desta sessão. **F3 segue 🟡** — só M3 falta (shell
+   interativo via CPRMAN mínimo, ver Javadoc de `Bcm2835Machine`).
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
