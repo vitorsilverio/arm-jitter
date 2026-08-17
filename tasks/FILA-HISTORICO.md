@@ -1276,4 +1276,238 @@ boot, já com causa raiz identificada)**:
    registro nos 2 hosts + testes), virtual-arm-box (Javadoc/`@Disabled` de `Raspi1BootTest`). F3
    permanece 🟡 na fila "ATUAL" — muito mais perto de M2 do que em qualquer sessão anterior.
 
+## F3 (`virtual-arm-box --machine=raspi1`) — histórico condensado movido de FILA-EXECUCAO.md (2026-08-17)
+
+M1 (banner de boot) FECHADO. Sessões 1/3 até a sessão de fechamento do CPSR.E
+(10 sessões, 2026-08-15/16/17) corrigiram, em sequência: TLB de instrução/dados separada do
+ARMv6K + sincronização de privilégio user/priv (CP15), 2 lacunas de decode/gating de CP15
+(CR_XP no SCTLR, CPACR), IRQ do timer roteada para o comparador certo, um bug real de
+alinhamento em UNALIGNED_ACCESS (leitura/escrita alinhada sendo decomposta byte a byte sem
+necessidade — corrompia MMIO), fetch16/32/translationGeneration não encaminhados pelos
+decoradores de invalidação, e o achado raiz do "abort storm": CPSR.E não era reprogramado para
+SCTLR.EE na entrada de exceção (ARM ARM B1.8.3), causando leitura big-endian de uma tabela de
+branch quando uma IRQ interrompia um SETEND BE legítimo do kernel. Detalhe completo dessas 10
+sessões: mais acima neste mesmo arquivo.
+
+**F3 — sessão de extensão do FdtPatcher (2026-08-17) — linux,initrd-start/linux,initrd-end
+IMPLEMENTADOS, M2 ainda NAO fecha (bloqueio novo, bem mais tardio no boot, causa raiz NARROWED a
+um opcode especifico)**:
+
+1. Seguiu o proximo passo recomendado pela sessao anterior: FdtPatcher (virtual-arm-box) ganhou
+   withInitrdRange/withNewProperty — diferente de withBootargs/withMemorySize (que so sobrescrevem
+   propriedades JA existentes), o metodo novo CRIA /chosen/linux,initrd-start/linux,initrd-end
+   (ausentes no .dtb cru), reaproveitando o nome no bloco de strings se ja ocorrer la ou anexando
+   um novo. Bcm2835Machine#create aplica o patch com INITRD_LOAD_ADDR/INITRD_LOAD_ADDR +
+   initramfs.length. 2 testes novos em FdtPatcherTest.
+2. Efeito confirmado no boot JIT: o Kernel panic - VFS: Unable to mount root fs da sessao anterior
+   desaparece por completo — o kernel monta o initramfs e chega a executar /init de verdade
+   (Run /init as init process no console, ~8min reais) — o mais longe que este repositorio ja
+   chegou no boot do raspi1.
+3. M2 ainda NAO fecha — bloqueio NOVO, mais tardio que qualquer sessao anterior: logo depois de
+   Run /init as init process, Internal error: Oops - undefined instruction em
+   v6_clear_user_highpage_aliasing+0x58/0x104 (chamado por handle_mm_fault tratando uma falta de
+   pagina do execve() do /init) mata o processo init (Attempted to kill init!). Opcode decodificado
+   a partir do dump Code: do Oops (ec432f06): MCRR p15,0,r2,r3,c6 (encoding A1 padrao de
+   MCRR/MRRC, cond=AL, L=0->MCRR, Rt2=r3, Rt=r2, coproc=p15, opc1=0, CRm=c6) — uma transferencia
+   DUPLA de registrador para coprocessador, diferente do MCR/MRC de registrador unico que
+   Cp15VmsaCoprocessor/Bcm2835Cp15Extras ja tratam. Provavel lacuna de DECODE no arm-jitter A32
+   (nao so de despacho do CoprocessorBus) — nem gbaemu (ARMv4T), nem ndsemu (ARMv5TE), nem armbox
+   (user-mode) jamais exercitaram MCRR/MRRC. Nao investigado alem da decodificacao do opcode (fora
+   do orcamento desta sessao).
+4. Achado colateral, nao fatal: duas ocorrencias de Division by zero in kernel em
+   pl011_set_termios (div64_u64) ao abrir /dev/console, bem antes do Oops de init — o kernel trata
+   como excecao nao fatal e o boot segue normalmente logo depois. Possivel causa: um campo de
+   clock/baud que Pl011Uart/mailbox devolve como 0 onde o driver espera um divisor nao-zero — so
+   observado, nao investigado.
+5. Proximo passo recomendado: (a) confirmar no decoder A32 do arm-jitter se MCRR/MRRC tem case
+   proprio ou caem em UNDEFINED por ausencia de decode (mais provavel); se for lacuna de decode, e
+   uma task nova do arm-jitter (mesmo precedente de escopo do BE8/B1.8); (b) so depois de MCRR/MRRC
+   decodificarem, repetir o boot e ver se execve("/init") conclui; (c) investigar a divisao por
+   zero do PL011 se voltar a aparecer de forma fatal. Backend INTERPRETED nao foi re-executado
+   nesta sessao (orcamento).
+6. mvn -o test verde no virtual-arm-box (68 testes, 4 skipped = M2x2+M3x2, motivo do @Disabled
+   atualizado); VersatilePbBootTest continua verde. Nenhum arquivo do arm-jitter tocado nesta
+   sessao.
+
+**F3 — sessao de decode MCRR/MRRC (2026-08-17) — bug real CORRIGIDO (2 commits, arm-jitter +
+virtual-arm-box), M2 re-teste INCONCLUSIVO (sessao interrompida por rate-limit + custo)**:
+
+1. Confirmado o palpite da sessao anterior: CoprocessorDecoder (arm-jitter) nao tinha case para
+   MCRR/MRRC (bits[27:21]=1100010, espaco distinto de MCR/MRC) — caia direto em UNDEFINED por
+   ausencia de decode, nao por rejeicao deliberada. Decodificado com IrOp/
+   InstructionKind.COPROCESSOR_DOUBLE novos, seguindo o padrao de MCR/MRC ja existente (Rt/Rt2
+   empacotados, L seleciona MCRR(0)/MRRC(1)). Registrador c6 (o que
+   discard_old_kernel_data/copypage-v6.c usa via MCRR p15,0,Rt,Rt2,c6 para invalidar D-cache por
+   faixa [Rt,Rt2] antes do execve() popular uma pagina) tratado em Cp15VmsaCoprocessor como
+   RAZ/WI, mesmo precedente de c7.
+2. Segundo bug real achado ao integrar (nao estava na spec, mas sem ele o fix #1 nao teria efeito
+   nenhum no boot real): a cadeia de decorators CoprocessorBus do virtual-arm-box
+   (Bcm2835Cp14Extras -> Bcm2835Cp15Extras -> Cp15VmsaCoprocessor, mesmo padrao em
+   VersatileCp15Extras do versatilepb) nao repassava handlesDouble/readDouble/writeDouble — o
+   default de CoprocessorBus#handlesDouble e false e NAO delega automaticamente (decisao
+   deliberada da propria interface, evita que um bus que so implementa MCR/MRC reivindique
+   MCRR/MRRC por acidente) — entao uma chamada de MCRR real nunca alcancava o fim da cadeia onde
+   o fix #1 vive, mesmo com os testes de unidade de Cp15VmsaCoprocessor isolado passando.
+   Corrigido nos 3 decorators (2 do BCM2835 + o do versatilepb, por simetria, mesmo sem uso real
+   hoje).
+3. mvn -o test verde no arm-jitter (1378 testes) + mvn -o install; G5 completo revalidado (sessao
+   atual, nao a anterior): gbaemu verde, ndsemu verde, armbox 40/41 (mesma falha pre-existente
+   Armv7TortureTest/VfpRegisters documentada em toda sessao anterior da F3, nao e regressao),
+   virtual-arm-box verde (68 testes, mesmos 4 skipped).
+4. M2 JIT re-testado, resultado INCONCLUSIVO: reachesFreeingKernelMemoryAcceiteM2Jit foi
+   reativado e rodado de forma bloqueante — passou de ~40 minutos sem concluir (heap da JVM ainda
+   crescendo lentamente, nao travado num laco obvio) e foi abortado manualmente. Isso NAO e uma
+   falha confirmada nem um sucesso confirmado — e desconhecido se o fix fecha M2, se ha um
+   bloqueio novo mais tardio, ou se o boot real deste ponto em diante e so mais lento que 40min
+   (o historico da F3 ja viu boots de dezenas de minutos antes). Teste voltou a @Disabled com o
+   achado documentado no Javadoc da classe.
+5. Causa da interrupcao, registrada para a disciplina de custo: a sessao original que fez #1/#2
+   rodou em um agente de background que bateu o limite de sessao da conta (rate limit) no meio da
+   tentativa de reexecutar o teste M2 — 3 rodadas de resume foram gastas so tentando esperar um
+   processo de shell em background "acordar" o agente (nao funciona; so filhos da ferramenta Agent
+   notificam). Depois disso a continuacao foi feita diretamente nesta sessao (sem subagente), que
+   por sua vez tambem nao conseguiu um resultado definitivo de M2 dentro de um orcamento razoavel
+   — dai a nova secao "Disciplina de custo" no topo de FILA-EXECUCAO.md.
+6. Proximo passo recomendado, concreto: NAO repetir o @Test cru de novo as cegas. Escrever um
+   harness temporario (mesmo padrao Raspi1DiagTempTest de sessoes anteriores, removido antes do
+   commit) que imprime progresso periodico (PC, contagem de fatias, trecho do console) a cada N
+   fatias, para ter visibilidade de "ainda progredindo" vs. "travado" sem esperar o teste inteiro
+   terminar as cegas — so entao decidir se vale a pena deixar rodar ate o fim ou se ha um bloqueio
+   novo para investigar. Este e o real motivo de custo desta sessao: um teste opaco de longa
+   duracao sem visibilidade intermediaria e caro de esperar E caro de interromper sem saber o que
+   se perdeu.
+7. Commits: arm-jitter (bc4baf8, decode MCRR/MRRC), virtual-arm-box (fca8a38, decorators +
+   @Disabled do M2 atualizado).
+
+**F3 — sessao de correcao do marcador de M2 (2026-08-17) — M2 FECHADO nos dois backends (achado:
+nao era bug, era texto de marcador desatualizado)**:
+
+1. Seguindo o proximo passo recomendado pela sessao anterior, um harness temporario
+   (Raspi1DiagTempTest, removido antes do commit) rodou o boot JIT com progresso periodico
+   impresso (PC/fatia/cauda do console a cada 200 mil fatias) em vez do @Test cru sem visibilidade.
+   Resultado: o boot chega a Run /init as init process em ~40s reais (2,4 milhoes de fatias) e
+   NUNCA trava/aborta — o fix de MCRR/MRRC da sessao anterior funcionou de verdade.
+2. Causa raiz do "M2 inconclusivo" identificada: o marcador literal do enunciado ("Freeing unused
+   kernel memory") nunca aparece neste kernel.img real (6.18.33) — nao por bug, por REDACAO.
+   mark_readonly() (que so roda DEPOIS de free_initmem() em kernel_init()) ja tinha impresso sua
+   mensagem quando "Run /init" apareceu, ou seja free_initmem() ja tinha rodado com outro texto:
+   "Freeing unused kernel image (initmem) memory: 500K" (kernels modernos unificaram a mensagem
+   de memoria do initmem com a de imagem do kernel). Mesmo precedente exato da redefinicao de M1.
+   Corrigido o marcador para o prefixo estavel "Freeing unused kernel" em Raspi1BootTest.
+3. Reativados os dois testes de M2 (removido @Disabled): JIT passa em 38,7s, INTERPRETED passa em
+   50,2s — muito mais rapido que o temido pelas sessoes anteriores, porque o marcador correto
+   ocorre bem mais cedo no boot que o ponto (retry indefinido de mmc0/sdhost-bcm2835, "sem suporte
+   de tensao do cartao") onde o harness de diagnostico continuou observando sem crash.
+4. Achado colateral para M3: depois do prompt do shell (fora do escopo desta sessao), o console
+   pode ficar dominado pelo retry infinito de mmc0/SD — esperado, ja que SD/MMC real e
+   deliberadamente fora do "Inclui" da spec, nao e um bug.
+5. mvn -o test verde no virtual-arm-box (70 testes, 2 skipped = so M3x2 agora). Nenhum arquivo do
+   arm-jitter tocado nesta sessao (G5 completo nao necessario).
+
+**F3 — sessao do CPRMAN (2026-08-17) — bug real corrigido (ETIMEDOUT/deferred-probe do ttyAMA0),
+M3 ainda NAO fecha (bloqueio novo e diferente, fora do escopo desta task)**:
+
+1. Reconhecimento por trace de boot (antes de escrever codigo, achado real em vez de suposicao):
+   sem NENHUM periferico de clock, bcm2835-clk 20101000.cprman: plld: couldn't lock PLL -> error
+   -ETIMEDOUT: failed to register clk 'plld' -> o driver cai em deferred probe — o ttyAMA0 real so
+   termina de registrar ("is a PL011 rev2") bem depois, numa workqueue assincrona, tarde demais
+   para o PID 1 (/init) que ja abriu /dev/console preso no earlycon antigo. A hipotese herdada
+   ("GPIO/pinctrl tambem bloqueiam o probe") era PARCIALMENTE errada — o driver PL011 ja
+   registrava mesmo sem GPIO nenhum; nenhum stub de GPIO foi implementado (checado antes de
+   assumir, como a task pedia).
+2. dev.vitorsilverio.virtualarmbox.device.bcm2835.Bcm2835Cprman novo, deliberadamente minimo
+   (transcrito de hw/misc/bcm2835_cprman.c/bcm2835_cprman_internals.h do QEMU so para os
+   offsets/constantes): CM_LOCK (0x114) sempre reporta "todos os PLLs travados" (nenhuma
+   matematica de PLL real), resto do espaco e armazenamento simples round-trip, CM_UARTCTL/
+   CM_UARTDIV pre-semeados com os valores de reset do QEMU (achado colateral: evita o "Division by
+   zero" ja documentado em pl011_set_termios). Confirmado ao vivo: ETIMEDOUT/couldn't lock PLL
+   desaparecem do log. 5 testes de unidade novos (Bcm2835CprmanTest).
+3. M3 continua NAO fechando — bloqueio novo, descoberto DEPOIS do fix acima: poucos segundos de
+   tempo simulado apos Run /init as init process, o console e dominado por um retry aparentemente
+   infinito de sdhost-bcm2835/mmc0 ("Card stuck being busy"/"no support for card's volts"/"error
+   -22") — comportamento ESPERADO em hardware real (mmc_rescan procura hot-plug pra sempre sem
+   cartao; SD/MMC real esta deliberadamente fora do "Inclui" desta task), mas que aqui nunca cede
+   espaco porque Bcm2835SystemTimer comprime tempo-de-CPU-emulado em microssegundos numa proporcao
+   fixa desacoplada do relogio real — o tempo simulado do kernel corre muito a frente do tempo
+   real. Harness de diagnostico temporario (removido antes do commit) confirmou: console cresce
+   linear e estavel (~27 mil caracteres/milhao de fatias, sem desacelerar), mas nem o banner do
+   proprio /init (echo simples, zero dependencia de hardware) nem o prompt "/ #" apareceram em 20
+   milhoes de fatias (~8 minutos reais de JIT) — extrapolacao sugere 60-90 minutos reais para os
+   200 milhoes de fatias do orcamento atual de Raspi1BootTest, muito alem do que esta sessao
+   validou.
+4. Proximo passo recomendado: desabilitar o no mmc@7e202000 (sdhost) no .dtb via
+   status = "disabled" (a propriedade ja existe em outros nos do .dtb real) — mas isso exige
+   estender FdtPatcher para SUBSTITUIR uma propriedade existente por um valor de TAMANHO DIFERENTE
+   ("okay\0"=5 bytes, "disabled\0"=9 bytes; os metodos atuais so sobrescrevem em tamanho fixo ou
+   criam propriedades novas). Nao implementado nesta sessao — decisao explicita de nao improvisar
+   algo fora do "Inclui" da task sem checar com o usuario primeiro. Alternativa mais arriscada
+   (nao recomendada sem medir): revisitar HOST_CYCLES_PER_MICROSECOND.
+5. mvn -o test verde no virtual-arm-box (76 testes, 2 skipped = so M3x2). Nenhum arquivo do
+   arm-jitter tocado (G5 completo nao necessario).
+
+**F3 — sessao FdtPatcher#withNodeDisabled (2026-08-17) — DOIS bloqueios reais fechados
+(mmc0/sdhost E usb/dwc_otg), M3 ainda NAO fecha (TERCEIRO bloqueio novo revelado logo depois,
+causa raiz NAO isolada)**:
+
+1. Seguiu o proximo passo recomendado pela sessao anterior: FdtPatcher.withNodeDisabled(dtb,
+   nodeName) novo, em virtual-arm-box. Achado: ao contrario do que a sessao anterior presumiu, NAO
+   foi necessaria nenhuma extensao estrutural nova — o withProperty privado (usado por
+   withBootargs) ja calcula delta = newPaddedLen - oldPaddedLen genericamente e desliza o resto do
+   blob de estrutura, entao ja suportava trocar "okay\0" (5 bytes) por "disabled\0" (9 bytes) sem
+   modificacao nenhuma — so faltava expor um metodo publico para o caso de uso. O metodo tenta
+   primeiro SOBRESCRITA (withProperty, caso comum — todo no de dispositivo real ja tem
+   status = "okay") e cai para CRIACAO (withNewProperty, reaproveitado do padrao de
+   withInitrdRange) se a propriedade status nao existir (ausencia == "okay" por definicao do
+   Device Tree). withProperty teve visibilidade rebaixada de private para pacote-privado (static)
+   para o teste de round-trip poder reaproveita-lo sem duplicar logica. 3 testes novos em
+   FdtPatcherTest (sobrescrita crescendo o blob, round-trip de volta a okay, criacao num no sem
+   status).
+2. Bcm2835Machine#create passou a desabilitar mmc@7e202000 (sdhost) — efeito confirmado via
+   harness de diagnostico temporario (Raspi1DiagTempTest, removido antes do commit, mesmo
+   precedente de sessoes anteriores): o retry de mmc0 REALMENTE desaparece (mmc0count=0 do inicio
+   ao fim de uma corrida de 72,6 milhoes de fatias, ~30min reais) — mas o console fica preso, agora
+   SILENCIOSAMENTE (sem spam), num tamanho ESTAVEL (consoleLen=32869) a partir de ~12,6 milhoes de
+   fatias, com a ultima linha sendo "state() pending due to 20980000.usb".
+3. Segundo bloqueio real isolado e corrigido, mesma sessao: 20980000.usb e o no usb@7e980000
+   (compatible = "brcm,bcm2708-usb", o dwc_otg) — deliberadamente fora do "Inclui" da spec (servido
+   por OpenBus), mas ao contrario de mmc0 (retry ruidoso para sempre), o driver USB real fica preso
+   numa espera SINCRONA e SILENCIOSA (state() pending, plausivelmente
+   device_pm_wait_for_dev/dpm_prepare esperando um probe() que nunca conclui sob OpenBus) — sem
+   printk periodico, entao o sintoma e ausencia TOTAL de crescimento do console, nao inundacao.
+   Como este no NAO tem propriedade status no .dtb cru, withNodeDisabled exercita o caminho de
+   CRIACAO. Bcm2835Machine#create passou a desabilitar usb@7e980000 tambem.
+4. Efeito confirmado ao vivo, os dois nos desabilitados juntos: mmc0count continua 0 E o console
+   avanca MUITO alem do ponto anterior — "Run /init as init process" reaparece (consoleLen sobe de
+   32869 para 34036) — mas M3 ainda NAO fecha: um TERCEIRO bloqueio, novo e diferente dos dois
+   anteriores, aparece imediatamente depois — o console fica ESTAVEL em consoleLen=34036 por pelo
+   menos 24 milhoes de fatias adicionais (~10 minutos reais observados nesta sessao, harness
+   interrompido por orcamento, nao por timeout do teste) sem NENHUMA linha nova — nem o banner do
+   proprio /init deste repositorio (um echo simples, sem dependencia de hardware nenhuma, que a
+   sessao do CPRMAN ja registrou como o primeiro sinal esperado depois de /init rodar), nem o
+   prompt do shell. Categoricamente diferente dos dois anteriores: nao ha NENHUMA pista textual do
+   que esta travando (nem retry ruidoso, nem mensagem de espera por nome de dispositivo).
+5. Causa raiz do terceiro bloqueio NAO isolada nesta sessao (orcamento de investigacao aberta
+   esgotado depois dos dois fixes de DTB). Proximo passo recomendado, concreto: trace
+   instrucao-a-instrucao (ArmCore#step(), backend INTERPRETED, mesma tecnica das sessoes de
+   CPSR.E/tempestade de IRQ) a partir do ponto exato onde "Run /init as init process" e impresso,
+   para descobrir se a CPU esta presa em WFI sem IRQ chegando (suspeita no1, dado o precedente da
+   tempestade de IRQ ja corrigida — mas agora a suspeita seria falta de entrega, nao excesso), num
+   laco de espera de alguma outra chamada de sistema que execve("/init")/do_execve faz cedo
+   (leitura de mais paginas do initramfs, alocacao de pilha do processo), ou algo no proprio script
+   de init/inittab do busybox reagindo a ausencia dos dois dispositivos desabilitados (nao lido
+   ainda). Reproduzir com o .dtb PATCHEADO no QEMU 8.0.0 (oraculo ja instalado) tambem ajudaria a
+   isolar se e especifico deste emulador.
+6. Nota operacional sobre custo desta sessao: a primeira tentativa de rodar o harness de
+   diagnostico via Bash run_in_background + | tail -300 produziu um arquivo de saida VAZIO por
+   quase 20 minutos reais — o tail sem -f so imprime depois que recebe EOF do pipe, entao nenhuma
+   linha aparecia ate o processo inteiro terminar (o oposto do que se pretendia com um harness de
+   progresso periodico). A ferramenta Monitor (que faz tail -f de verdade no arquivo de saida do
+   processo em background) contornou isso e entregou os eventos em tempo real. Licao para sessoes
+   futuras: nunca canalizar (|) a saida de um comando de longa duracao atraves de tail sem -f ao
+   rodar em background — usar Monitor ou redirecionamento direto (>) com leitura incremental.
+7. mvn -o test verde no virtual-arm-box (78 testes, 2 skipped = so M3x2; FdtPatcherTest foi de 10
+   para 13 testes). Nenhum arquivo do arm-jitter tocado (G5 completo nao necessario, so o G5 "leve"
+   deste repo). M3 volta a @Disabled com o achado atualizado no Javadoc de
+   Raspi1BootTest/Bcm2835Machine.
+
 

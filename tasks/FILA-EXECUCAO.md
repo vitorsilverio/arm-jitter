@@ -107,187 +107,29 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-17, sessão de correção do marcador de M2, ver detalhe abaixo) — **M1 e M2 FECHADOS** (JIT e INTERPRETED); só falta M3 (shell interativo, precisa CPRMAN mínimo — clock do UART real — ver Javadoc de `Bcm2835Machine`); LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-17, sessão `FdtPatcher#withNodeDisabled`, ver detalhe abaixo) — **M1 e M2 FECHADOS** (JIT e INTERPRETED); M3 fechou mmc0/sdhost E usb/dwc_otg (dois bloqueios reais), mas achou um TERCEIRO bloqueio silencioso logo após `Run /init as init process` (sem causa raiz isolada); LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
-## F3 (`virtual-arm-box --machine=raspi1`) — histórico condensado
+## F3 (`virtual-arm-box --machine=raspi1`) — resumo (histórico minucioso movido para `tasks/FILA-HISTORICO.md`)
 
-M1 (banner de boot) ✅ fechado. Sessões 1/3 até a sessão de fechamento do CPSR.E
-(10 sessões, 2026-08-15/16/17) corrigiram, em sequência: TLB de instrução/dados separada do
-ARMv6K + sincronização de privilégio user/priv (CP15), 2 lacunas de decode/gating de CP15
-(`CR_XP` no SCTLR, `CPACR`), IRQ do timer roteada para o comparador certo, um bug real de
-alinhamento em `UNALIGNED_ACCESS` (leitura/escrita alinhada sendo decomposta byte a byte
-sem necessidade — corrompia MMIO), `fetch16/32`/`translationGeneration` não encaminhados
-pelos decoradores de invalidação, e o achado raiz do "abort storm": `CPSR.E`
-não era reprogramado para `SCTLR.EE` na entrada de exceção (ARM ARM B1.8.3), causando leitura
-big-endian de uma tabela de branch quando uma IRQ interrompia um `SETEND BE` legítimo do
-kernel. **Detalhe completo de cada uma dessas 10 sessões: `tasks/FILA-HISTORICO.md`.**
+M1 e M2 ✅ fechados (JIT e INTERPRETED). M3 (shell interativo): a sessão de
+`FdtPatcher#withNodeDisabled` (2026-08-17) fechou DOIS bloqueios reais — retry infinito de
+`mmc0`/`sdhost` e uma espera síncrona silenciosa de `usb`/`dwc_otg` — desabilitando os nós
+`mmc@7e202000`/`usb@7e980000` no `.dtb` via `status = "disabled"`. Com os dois fechados, o boot
+chega de novo a `"Run /init as init process"`, mas revelou um TERCEIRO bloqueio, novo e
+diferente: o console fica com tamanho ESTÁVEL logo depois, sem nenhuma linha nova (nem o `echo`
+do próprio `/init`, que não depende de hardware) por dezenas de milhões de fatias — sem nenhuma
+pista textual (ao contrário dos dois anteriores). Causa raiz NÃO isolada. Próximo passo
+recomendado: trace instrução-a-instrução (`ArmCore#step()`) a partir do ponto onde `"Run /init as
+init process"` é impresso, para descobrir se é `WFI` sem IRQ, outra espera síncrona, ou algo no
+script `init`/`inittab` do busybox reagindo à ausência dos dois dispositivos desabilitados. Ver
+Javadoc de `Raspi1BootTest`/`Bcm2835Machine` (`virtual-arm-box`) para o achado completo. `mvn -o
+test` verde no `virtual-arm-box` (78 testes, 2 skipped = M3×2); nenhum arquivo do `arm-jitter`
+tocado. F3 segue 🟡 na fila "ATUAL".
 
-As 2 sessões mais recentes (que fecharam o decode de `MCRR`/`MRRC` e avançaram até `/init`
-rodar) ficam abaixo, na íntegra, por serem o contexto mais provável de ser necessário na
-próxima sessão.
-
-**F3 — sessão de extensão do `FdtPatcher` (2026-08-17) — `linux,initrd-start`/`linux,initrd-end`
-IMPLEMENTADOS, M2 ainda NÃO fecha (bloqueio novo, bem mais tardio no boot, causa raiz NARROWED a
-um opcode específico)**:
-
-1. Seguiu o próximo passo recomendado pela sessão anterior: `FdtPatcher` (`virtual-arm-box`) ganhou
-   `withInitrdRange`/`withNewProperty` — diferente de `withBootargs`/`withMemorySize` (que só
-   sobrescrevem propriedades JÁ existentes), o método novo CRIA `/chosen/linux,initrd-start`/
-   `linux,initrd-end` (ausentes no `.dtb` cru), reaproveitando o nome no bloco de strings se já
-   ocorrer lá ou anexando um novo. `Bcm2835Machine#create` aplica o patch com
-   `INITRD_LOAD_ADDR`/`INITRD_LOAD_ADDR + initramfs.length`. 2 testes novos em `FdtPatcherTest`.
-2. **Efeito confirmado no boot JIT**: o `Kernel panic - VFS: Unable to mount root fs` da sessão
-   anterior desaparece por completo — o kernel monta o initramfs e chega a executar `/init` de
-   verdade (`Run /init as init process` no console, ~8min reais) — o mais longe que este
-   repositório já chegou no boot do raspi1.
-3. **M2 ainda NÃO fecha — bloqueio NOVO, mais tardio que qualquer sessão anterior**: logo depois de
-   `Run /init as init process`, `Internal error: Oops - undefined instruction` em
-   `v6_clear_user_highpage_aliasing+0x58/0x104` (chamado por `handle_mm_fault` tratando uma falta
-   de página do `execve()` do `/init`) mata o processo `init` (`Attempted to kill init!`). Opcode
-   decodificado a partir do dump `Code:` do Oops (`ec432f06`): `MCRR p15,0,r2,r3,c6` (encoding A1
-   padrão de `MCRR`/`MRRC`, cond=AL, L=0→MCRR, Rt2=r3, Rt=r2, coproc=p15, opc1=0, CRm=c6) — uma
-   transferência DUPLA de registrador para coprocessador, diferente do `MCR`/`MRC` de registrador
-   único que `Cp15VmsaCoprocessor`/`Bcm2835Cp15Extras` já tratam. Provável lacuna de DECODE no
-   `arm-jitter` A32 (não só de despacho do `CoprocessorBus`) — nem gbaemu (ARMv4T), nem ndsemu
-   (ARMv5TE), nem armbox (user-mode) jamais exercitaram `MCRR`/`MRRC`. Não investigado além da
-   decodificação do opcode (fora do orçamento desta sessão).
-4. **Achado colateral, não fatal**: duas ocorrências de `Division by zero in kernel` em
-   `pl011_set_termios` (`div64_u64`) ao abrir `/dev/console`, bem antes do Oops de `init` — o
-   kernel trata como exceção não fatal e o boot segue normalmente logo depois. Possível causa: um
-   campo de clock/baud que `Pl011Uart`/mailbox devolve como `0` onde o driver espera um divisor
-   não-zero — só observado, não investigado.
-5. **Próximo passo recomendado**: (a) confirmar no decoder A32 do `arm-jitter` se `MCRR`/`MRRC` têm
-   `case` próprio ou caem em UNDEFINED por ausência de decode (mais provável); se for lacuna de
-   decode, é uma task nova do `arm-jitter` (mesmo precedente de escopo do BE8/B1.8); (b) só depois
-   de `MCRR`/`MRRC` decodificarem, repetir o boot e ver se `execve("/init")` conclui; (c)
-   investigar a divisão por zero do PL011 se voltar a aparecer de forma fatal. Backend INTERPRETED
-   não foi re-executado nesta sessão (orçamento).
-6. `mvn -o test` verde no `virtual-arm-box` (68 testes, 4 skipped = M2×2+M3×2, motivo do
-   `@Disabled` atualizado); `VersatilePbBootTest` continua verde. Nenhum arquivo do `arm-jitter`
-   tocado nesta sessão. F3 permanece 🟡 na fila "ATUAL".
-
-**F3 — sessão de decode MCRR/MRRC (2026-08-17) — bug real CORRIGIDO (2 commits, arm-jitter +
-virtual-arm-box), M2 re-teste INCONCLUSIVO (sessão interrompida por rate-limit + custo)**:
-
-1. Confirmado o palpite da sessão anterior: `CoprocessorDecoder` (`arm-jitter`) não tinha `case`
-   para `MCRR`/`MRRC` (bits[27:21]=`1100010`, espaço distinto de `MCR`/`MRC`) — caía direto em
-   UNDEFINED por ausência de decode, não por rejeição deliberada. Decodificado com `IrOp`/
-   `InstructionKind.COPROCESSOR_DOUBLE` novos, seguindo o padrão de `MCR`/`MRC` já existente
-   (`Rt`/`Rt2` empacotados, `L` seleciona `MCRR`(0)/`MRRC`(1)). Registrador `c6` (o que
-   `discard_old_kernel_data`/`copypage-v6.c` usa via `MCRR p15,0,Rt,Rt2,c6` para invalidar D-cache
-   por faixa `[Rt,Rt2]` antes do `execve()` popular uma página) tratado em `Cp15VmsaCoprocessor`
-   como RAZ/WI, mesmo precedente de `c7`.
-2. **Segundo bug real achado ao integrar** (não estava na spec, mas sem ele o fix #1 não teria
-   efeito nenhum no boot real): a cadeia de decorators `CoprocessorBus` do `virtual-arm-box`
-   (`Bcm2835Cp14Extras` → `Bcm2835Cp15Extras` → `Cp15VmsaCoprocessor`, mesmo padrão em
-   `VersatileCp15Extras` do versatilepb) não repassava `handlesDouble`/`readDouble`/`writeDouble`
-   — o default de `CoprocessorBus#handlesDouble` é `false` e **não** delega automaticamente
-   (decisão deliberada da própria interface, evita que um bus que só implementa `MCR`/`MRC`
-   reivindique `MCRR`/`MRRC` por acidente) — então uma chamada de `MCRR` real nunca alcançava o
-   fim da cadeia onde o fix #1 vive, mesmo com os testes de unidade de `Cp15VmsaCoprocessor`
-   isolado passando. Corrigido nos 3 decorators (2 do BCM2835 + o do versatilepb, por simetria,
-   mesmo sem uso real hoje).
-3. `mvn -o test` verde no arm-jitter (1378 testes) + `mvn -o install`; G5 completo revalidado
-   (sessão atual, não a anterior): gbaemu verde, ndsemu verde, armbox 40/41 (mesma falha
-   pré-existente `Armv7TortureTest`/`VfpRegisters` documentada em toda sessão anterior da F3, não
-   é regressão), `virtual-arm-box` verde (68 testes, mesmos 4 skipped).
-4. **M2 JIT re-testado, resultado INCONCLUSIVO**: `reachesFreeingKernelMemoryAcceiteM2Jit` foi
-   reativado e rodado de forma bloqueante — passou de ~40 minutos sem concluir (heap da JVM ainda
-   crescendo lentamente, não travado num laço óbvio) e foi abortado manualmente. Isso NÃO é uma
-   falha confirmada nem um sucesso confirmado — é desconhecido se o fix fecha M2, se há um
-   bloqueio novo mais tardio, ou se o boot real deste ponto em diante é só mais lento que 40min
-   (o histórico da F3 já viu boots de dezenas de minutos antes). Teste voltou a `@Disabled` com o
-   achado documentado no Javadoc da classe.
-5. **Causa da interrupção, registrada para a disciplina de custo**: a sessão original que fez #1/#2
-   rodou em um agente de background que bateu o limite de sessão da conta (rate limit) no meio da
-   tentativa de reexecutar o teste M2 — 3 rodadas de resume foram gastas só tentando esperar um
-   processo de shell em background "acordar" o agente (não funciona; só filhos da ferramenta
-   `Agent` notificam). Depois disso a continuação foi feita diretamente nesta sessão (sem
-   subagente), que por sua vez também não conseguiu um resultado definitivo de M2 dentro de um
-   orçamento razoável — daí a nova seção "Disciplina de custo" no topo deste arquivo.
-6. **Próximo passo recomendado, concreto**: NÃO repetir o `@Test` cru de novo às cegas. Escrever
-   um harness temporário (mesmo padrão `Raspi1DiagTempTest` de sessões anteriores, removido antes
-   do commit) que imprime progresso periódico (PC, contagem de fatias, trecho do console) a cada
-   N fatias, para ter visibilidade de "ainda progredindo" vs. "travado" sem esperar o teste inteiro
-   terminar às cegas — só então decidir se vale a pena deixar rodar até o fim ou se há um bloqueio
-   novo para investigar. Este é o real motivo de custo desta sessão: um teste opaco de longa
-   duração sem visibilidade intermediária é caro de esperar E caro de interromper sem saber o que
-   se perdeu.
-7. Commits: arm-jitter (`bc4baf8`, decode MCRR/MRRC), virtual-arm-box (`fca8a38`, decorators +
-   `@Disabled` do M2 atualizado). F3 permanece 🟡 na fila "ATUAL".
-
-**F3 — sessão de correção do marcador de M2 (2026-08-17) — M2 FECHADO nos dois backends (achado:
-não era bug, era texto de marcador desatualizado)**:
-
-1. Seguindo o próximo passo recomendado pela sessão anterior, um harness temporário
-   (`Raspi1DiagTempTest`, removido antes do commit) rodou o boot JIT com progresso periódico
-   impresso (PC/fatia/cauda do console a cada 200 mil fatias) em vez do `@Test` cru sem
-   visibilidade. Resultado: o boot chega a `Run /init as init process` em ~40s reais (2,4 milhões
-   de fatias) e **nunca trava/aborta** — o fix de MCRR/MRRC da sessão anterior funcionou de
-   verdade.
-2. **Causa raiz do "M2 inconclusivo" identificada**: o marcador literal do enunciado
-   (`"Freeing unused kernel memory"`) nunca aparece neste `kernel.img` real (6.18.33) — não por
-   bug, por REDAÇÃO. `mark_readonly()` (que só roda DEPOIS de `free_initmem()` em
-   `kernel_init()`) já tinha impresso sua mensagem quando "Run /init" apareceu, ou seja
-   `free_initmem()` já tinha rodado com outro texto: `"Freeing unused kernel image (initmem)
-   memory: 500K"` (kernels modernos unificaram a mensagem de memória do `initmem` com a de imagem
-   do kernel). Mesmo precedente exato da redefinição de M1. Corrigido o marcador para o prefixo
-   estável `"Freeing unused kernel"` em `Raspi1BootTest`.
-3. Reativados os dois testes de M2 (removido `@Disabled`): **JIT passa em 38,7s, INTERPRETED passa
-   em 50,2s** — muito mais rápido que o temido pelas sessões anteriores, porque o marcador correto
-   ocorre bem mais cedo no boot que o ponto (retry indefinido de `mmc0`/`sdhost-bcm2835`, "sem
-   suporte de tensão do cartão") onde o harness de diagnóstico continuou observando sem crash.
-4. **Achado colateral para M3**: depois do prompt do shell (fora do escopo desta sessão), o
-   console pode ficar dominado pelo retry infinito de `mmc0`/SD — esperado, já que SD/MMC real é
-   deliberadamente fora do "Inclui" da spec, não é um bug.
-5. `mvn -o test` verde no `virtual-arm-box` (70 testes, 2 skipped = só M3×2 agora).
-   Nenhum arquivo do `arm-jitter` tocado nesta sessão (G5 completo não necessário). Commit
-   virtual-arm-box pendente ao final desta sessão. **F3 segue 🟡** — só M3 falta (shell
-   interativo via CPRMAN mínimo, ver Javadoc de `Bcm2835Machine`).
-
-**F3 — sessão do CPRMAN (2026-08-17) — bug real corrigido (ETIMEDOUT/deferred-probe do
-`ttyAMA0`), M3 ainda NÃO fecha (bloqueio novo e diferente, fora do escopo desta task)**:
-
-1. Reconhecimento por trace de boot (antes de escrever código, achado real em vez de suposição):
-   sem NENHUM periférico de clock, `bcm2835-clk 20101000.cprman: plld: couldn't lock PLL` →
-   `error -ETIMEDOUT: failed to register clk 'plld'` → o driver cai em *deferred probe* — o
-   `ttyAMA0` real só termina de registrar (`"is a PL011 rev2"`) bem depois, numa `workqueue`
-   assíncrona, tarde demais para o PID 1 (`/init`) que já abriu `/dev/console` preso no
-   `earlycon` antigo. **A hipótese herdada ("GPIO/pinctrl também bloqueiam o probe") era
-   PARCIALMENTE errada** — o driver PL011 já registrava mesmo sem GPIO nenhum; nenhum stub de
-   GPIO foi implementado (checado antes de assumir, como a task pedia).
-2. `dev.vitorsilverio.virtualarmbox.device.bcm2835.Bcm2835Cprman` novo, deliberadamente mínimo
-   (transcrito de `hw/misc/bcm2835_cprman.c`/`bcm2835_cprman_internals.h` do QEMU só para os
-   offsets/constantes): `CM_LOCK` (`0x114`) sempre reporta "todos os PLLs travados" (nenhuma
-   matemática de PLL real), resto do espaço é armazenamento simples round-trip, `CM_UARTCTL`/
-   `CM_UARTDIV` pré-semeados com os valores de reset do QEMU (achado colateral: evita o
-   "Division by zero" já documentado em `pl011_set_termios`). Confirmado ao vivo:
-   `ETIMEDOUT`/`couldn't lock PLL` desaparecem do log. 5 testes de unidade novos
-   (`Bcm2835CprmanTest`).
-3. **M3 continua NÃO fechando — bloqueio novo, descoberto DEPOIS do fix acima**: poucos segundos
-   de tempo simulado após `Run /init as init process`, o console é dominado por um retry
-   aparentemente infinito de `sdhost-bcm2835`/`mmc0` (`"Card stuck being busy"`/`"no support for
-   card's volts"`/`"error -22"`) — comportamento ESPERADO em hardware real (`mmc_rescan` procura
-   hot-plug pra sempre sem cartão; SD/MMC real está deliberadamente fora do "Inclui" desta task),
-   mas que aqui nunca cede espaço porque `Bcm2835SystemTimer` comprime tempo-de-CPU-emulado em
-   microssegundos numa proporção fixa desacoplada do relógio real — o tempo simulado do kernel
-   corre muito à frente do tempo real. Harness de diagnóstico temporário (removido antes do
-   commit) confirmou: console cresce linear e estável (~27 mil caracteres/milhão de fatias, sem
-   desacelerar), mas nem o banner do próprio `/init` (`echo` simples, zero dependência de
-   hardware) nem o prompt `"/ #"` apareceram em 20 milhões de fatias (~8 minutos reais de JIT) —
-   extrapolação sugere 60-90 minutos reais para os 200 milhões de fatias do orçamento atual de
-   `Raspi1BootTest`, muito além do que esta sessão validou.
-4. **Próximo passo recomendado**: desabilitar o nó `mmc@7e202000` (`sdhost`) no `.dtb` via
-   `status = "disabled"` (a propriedade já existe em outros nós do `.dtb` real) — mas isso exige
-   estender `FdtPatcher` para SUBSTITUIR uma propriedade existente por um valor de TAMANHO
-   DIFERENTE (`"okay\0"`=5 bytes, `"disabled\0"`=9 bytes; os métodos atuais só sobrescrevem em
-   tamanho fixo ou criam propriedades novas). Não implementado nesta sessão — decisão explícita
-   de não improvisar algo fora do "Inclui" da task sem checar com o usuário primeiro. Alternativa
-   mais arriscada (não recomendada sem medir): revisitar `HOST_CYCLES_PER_MICROSECOND`.
-5. `mvn -o test` verde no `virtual-arm-box` (76 testes, 2 skipped = só M3×2). Nenhum arquivo do
-   `arm-jitter` tocado (G5 completo não necessário). **F3 segue 🟡** — M3 ainda falta, causa raiz
-   do novo bloqueio já identificada e documentada para a próxima sessão.
+<!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
+     está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
+     FILA-EXECUCAO.md". -->
 
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
