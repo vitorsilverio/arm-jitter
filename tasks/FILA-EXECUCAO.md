@@ -868,6 +868,72 @@ fecha (bloqueio novo e MAIS TARDIO revelado logo depois)**:
    sessão); `VersatilePbBootTest` continua verde. Commits: arm-jitter `caac7af`, virtual-arm-box
    `c8c3e9e`. F3 permanece 🟡 na fila "ATUAL".
 
+**F3 — sessão de investigação do silêncio pós-`kprobes:` (2026-08-16) — hipótese de WFI/mailbox
+DESCARTADA com evidência direta, achado real e independente CORRIGIDO (`virtual-arm-box`, SMC/JIT),
+causa raiz do bloqueio principal da F3 ainda NÃO isolada**:
+
+1. **Reviveu o padrão de instrumentação temporária** (`Raspi1DiagTempTest`, removida antes do
+   commit, mesmo precedente de sessões anteriores) usando `ArmCore#setTraceListener` com um
+   `onMemoryAbort` (gancho da task `E2`, dispara sob `runBlocks`/JIT) para amostrar `sleepState()`/
+   `mode()`/`cpsr().irqDisabled()`/estado do `Bcm2835Ic`/`Bcm2835Mailbox` a cada 2M fatias depois de
+   `kprobes:`. **As duas hipóteses recomendadas pela sessão anterior estavam erradas**: `sleepState()`
+   nunca é `HALTED` (não é um `WFI` sem IRQ) e nenhuma requisição `raspberrypi-firmware` nova
+   aparece nem é esperada (não é mailbox travado numa tag não implementada) — o log real mostra só
+   3 tags respondidas e nenhuma 4ª sendo aguardada.
+2. **Causa real do silêncio**: a CPU está presa num LAÇO DE ABORTOS (`SECTION_TRANSLATION`,
+   `MemoryTranslationException`) que nunca produz saída observável porque nenhum handler de kernel
+   chega a rodar `printk`/`die()` antes de reabortar — silencioso por natureza, diferente de todos
+   os bloqueios anteriores da F3. Confirmado via `onMemoryAbort`: primeiro abort em
+   `instructionAddress=0x208d00c0` (`SECTION_TRANSLATION`, inicialmente `INSTRUCTION_FETCH`),
+   seguido por dezenas de reaborts consecutivos na MESMA fatia num segundo endereço fixo
+   (`0x608e00c0` numa rodada) — o retorno da exceção reencontra a mesma falta, infinitamente, sem
+   IRQ nem `printk` para interromper o laço.
+3. **Achado real e independente, CORRIGIDO** (`virtual-arm-box`, não `arm-jitter`):
+   `Bcm2835Machine#create` nunca envolvia o barramento do `ArmCore` em
+   `InvalidationAwareAddressSpace` (`arm-jitter`) — o MESMO decorador que `GbaConsole`/`Armbox` já
+   usam há muito tempo (bug histórico idêntico documentado em `gba-game-compat.md`: jogos que
+   constroem código na pilha/IWRAM crashavam por escritas não invalidarem blocos JIT em cache).
+   `kprobes: kprobe jump-optimization` é a PRIMEIRA vez que este repositório exercita código de
+   guest automodificável (o self-test de kprobes arma um breakpoint otimizado logo depois dessa
+   mensagem) — sem o decorador, uma escrita do guest numa página com bloco JIT já compilado nunca
+   invalidava o cache, e o core continuava executando bytecode compilado a partir do código ANTIGO.
+   Corrigido envolvendo `mmu` (não `physical`) em `InvalidationAwareAddressSpace` antes de passar
+   ao `ArmCore` — blocos JIT são indexados pelo PC VIRTUAL que o core busca, o mesmo espaço de
+   endereço que `TranslatingAddressSpace#write32` recebe. `VersatilePbMachine` tem a MESMA lacuna,
+   nunca exercitada porque userspace busybox não se automodifica — **não corrigida nesta sessão**
+   (fora do escopo da F3, achado registrado para referência futura).
+4. **O fix acima NÃO fecha M2 sozinho**: repetindo a mesma medição antes/depois do fix, o MESMO
+   endereço-raiz de abort (`0x208d00c0`, agora capturado como `SECTION_TRANSLATION`/`DATA_READ`)
+   reaparece IDENTICO nos dois casos — só a fatia exata muda (~86460 sem o fix, ~77273 com o fix,
+   diferença esperada: o fix altera o timing de recompilação JIT, não a lógica). Isso indica
+   fortemente a MESMA causa raiz pré-existente nos dois casos, não uma regressão introduzida pelo
+   fix — mantido porque é um bug real e de baixo risco por si só (G3, aditivo).
+5. **Registros de CPU no momento do primeiro abort** (capturados para a próxima sessão):
+   `pc=lr` região — `r14`/LR = `0xc0337b50` (endereço de `.text` do kernel plausível, a instrução
+   CHAMADORA é código real); `r0=0xc10611c0`→`0xc10611d0` (incrementa +0x10 entre a 1ª e a 2ª
+   tentativa — sugere fixup/retry de algum handler); `r1-r10` todos em faixas plausíveis de
+   `.data`/heap do kernel (`0xc0xxxxxx`/`0xc1xxxxxx`); `r11=r12=0`; `r13`/SP=`0xd0821ecc` (fora da
+   faixa típica de pilha de boot inicial, possivelmente já vmalloc). O valor lido/desreferenciado
+   (`0x208d00c0`) NÃO bate com nenhum registrador `r0-r13` capturado — não é cópia direta de
+   registrador, precisa vir de um deslocamento/tabela ainda não identificado. O SEGUNDO endereço
+   (para onde a exceção tenta reler, ficando presa) MUDA entre execuções — sugere que a fixup do
+   abort depende de algo que varia por execução (ex.: o contador livre do `Bcm2835SystemTimer`),
+   não é puramente determinístico, ao contrário do primeiro endereço.
+6. **Próximo passo recomendado**: trace instrução-a-instrução (`Bcm2835Machine.Backend.INTERPRETED`
+   + `ArmCore#step()`, não `runBlocks`) a partir de ~70 mil instruções depois do boot para capturar
+   a instrução EXATA (opcode, não só PC) que produz `0x208d00c0` a partir de `LR=0xc0337b50` —
+   provavelmente um `LDR` com deslocamento/indexado a partir de uma tabela ou lista cujo conteúdo
+   está corrompido (fonte ainda desconhecida: pode ser um bug real de decodificação/execução do
+   `arm-jitter` em alguma instrução ainda não exercitada por gbaemu/ndsemu, já que este é o
+   primeiro kernel Linux de sistema real sob `ARM11_MPCORE`). Comparar contra o oráculo QEMU 8.0.0
+   (registrador a registrador via monitor HMP, mesma técnica já usada para o bug de `SCTLR`/`CR_XP`)
+   no mesmo ponto do boot é o próximo passo mais barato antes de instrumentar mais.
+7. **`mvn -o test` verde no `virtual-arm-box`** (66 testes, 4 skipped = M2×2+M3×2, motivo do
+   `@Disabled` de `reachesFreeingKernelMemoryAcceiteM2Jit` atualizado no Javadoc/anotação de
+   `Raspi1BootTest`); `VersatilePbBootTest` continua verde. Nenhum arquivo do `arm-jitter` tocado
+   nesta sessão (G5 não se aplica — `git status` confirmado limpo no `arm-jitter` antes do commit).
+   F3 permanece 🟡 na fila "ATUAL".
+
 **Paralelismo permitido nesta onda** (regra 6: repos diferentes, nunca o mesmo checkout):
 `P3/P4` (GitHub) ∥ `P2/P5` no começo; depois de P8, `P9` (4 repos) ∥ `P10+` (n3dsemu) ∥
 `P15` (virtual-arm-box).
