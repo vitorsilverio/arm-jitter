@@ -25,6 +25,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class ArmCoreMemoryAbortTest {
     /// `LDR r0, [r1]` (ARM): lê a memória apontada por r1 — usado para faltas de DADOS.
     private static final int LDR_R0_R1 = 0xE591_0000;
+    /// `STR r0, [r1]` (ARM): escreve a memória apontada por r1 — usado para provar `DFSR[11]`
+    /// (`WnR`) sob falta de escrita.
+    private static final int STR_R0_R1 = 0xE581_0000;
+    /// `DFSR[11]` (`WnR`, ARM DDI 0406C B3.13.4) — espelha a constante de {@link ArmCore}.
+    private static final int DFSR_WNR_BIT = 1 << 11;
 
     private static Cp15VmsaCoprocessor attachCp15(ArmCore core) {
         TranslatingAddressSpace mmu = new TranslatingAddressSpace(new TestAddressSpace(4));
@@ -56,6 +61,48 @@ class ArmCoreMemoryAbortTest {
 
         assertEquals(0x1000, cp15.read(15, 0, 6, 0, 0), "DFAR deveria ter o endereço faltoso");
         assertEquals(FaultStatus.SECTION_PERMISSION.code(), cp15.read(15, 0, 5, 0, 0), "DFSR deveria ter o FS[3:0]");
+    }
+
+    /// Achado real da F3 (`virtual-arm-box`): antes deste fix, `DFSR[11]` (`WnR`) nunca era
+    /// preenchido — toda falta de escrita chegava ao guest indistinguível de uma leitura. Um
+    /// kernel Linux real (`do_page_fault`) usa esse bit para decidir `FAULT_FLAG_WRITE`; sem ele,
+    /// uma falta de ESCRITA corrigida pelo handler nunca marca a PTE como `dirty`/gravável, e o
+    /// laço de `pin_page_for_write()` nunca sai (ver Javadoc de `Raspi1BootTest` no
+    /// `virtual-arm-box` para o achado completo que motivou este fix).
+    @Test
+    void dataAbortOnStoreSetsWnrBitInDfsr() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        physical.put32(0, STR_R0_R1);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(0x1000, MemoryAccessType.DATA_WRITE, FaultStatus.PAGE_PERMISSION);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        Cp15VmsaCoprocessor cp15 = attachCp15(core);
+        core.setBankedRegister(CpuMode.ABORT, 13, 0x9000);
+        core.setRegister(1, 0x1000);
+
+        core.step();
+
+        assertEquals(CpuMode.ABORT, core.mode());
+        int dfsr = cp15.read(15, 0, 5, 0, 0);
+        assertEquals(FaultStatus.PAGE_PERMISSION.code(), dfsr & ~DFSR_WNR_BIT, "FS[3:0] deveria continuar intacto");
+        assertNotEquals(0, dfsr & DFSR_WNR_BIT, "WnR deveria estar ligado numa falta de ESCRITA");
+    }
+
+    @Test
+    void dataAbortOnLoadLeavesWnrBitClearInDfsr() {
+        TestAddressSpace physical = new TestAddressSpace(128);
+        physical.put32(0, LDR_R0_R1);
+        FaultingAddressSpace memory = new FaultingAddressSpace(physical);
+        memory.faultOn(0x1000, MemoryAccessType.DATA_READ, FaultStatus.PAGE_PERMISSION);
+        ArmCore core = new ArmCore(memory, SwiDispatcher.empty());
+        Cp15VmsaCoprocessor cp15 = attachCp15(core);
+        core.setBankedRegister(CpuMode.ABORT, 13, 0x9000);
+        core.setRegister(1, 0x1000);
+
+        core.step();
+
+        int dfsr = cp15.read(15, 0, 5, 0, 0);
+        assertEquals(0, dfsr & DFSR_WNR_BIT, "WnR deveria continuar desligado numa falta de LEITURA");
     }
 
     @Test

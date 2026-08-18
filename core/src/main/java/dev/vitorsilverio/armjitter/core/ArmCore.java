@@ -32,6 +32,16 @@ public final class ArmCore {
     private static final int RESET_CPSR = CpuMode.SUPERVISOR.bits()
             | CpsrRegister.IRQ_DISABLE_FLAG
             | CpsrRegister.FIQ_DISABLE_FLAG;
+    /// `DFSR[11]` (`WnR`, ARM DDI 0406C B3.13.4): `1` se o Data Abort foi causado por uma
+    /// instrução de escrita, `0` se foi leitura. Achado real da F3 (`virtual-arm-box`):
+    /// {@link #enterMemoryAbort} nunca preenchia este bit (só o `FS[3:0]` de
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.FaultStatus#code()} chegava ao `DFSR`),
+    /// mesmo com {@link MemoryTranslationException#accessType()} já disponível ali — o guest
+    /// (Linux `do_page_fault`, que lê este bit para decidir `FAULT_FLAG_WRITE`) sempre via `WnR=0`
+    /// e tratava toda falta de escrita como leitura, deixando de marcar a PTE como `dirty`/gravável
+    /// mesmo depois de corrigir o `AP` de hardware — confirmado por dump de PTE real
+    /// (`pin_page_for_write()` do kernel preso para sempre com `DIRTY=0`/`RDONLY=1`).
+    private static final int DFSR_WNR_BIT = 1 << 11;
 
     private final int[] registers = new int[REGISTER_COUNT];
     private final int[] commonR8ToR12 = new int[5];
@@ -566,7 +576,9 @@ public final class ArmCore {
         if (isInstructionFetch) {
             memoryAbortListener.onPrefetchAbort(fault.virtualAddress(), faultStatusCode);
         } else {
-            memoryAbortListener.onDataAbort(fault.virtualAddress(), faultStatusCode);
+            boolean isWrite = fault.accessType() == MemoryAccessType.DATA_WRITE;
+            int dataFaultStatus = isWrite ? (faultStatusCode | DFSR_WNR_BIT) : faultStatusCode;
+            memoryAbortListener.onDataAbort(fault.virtualAddress(), dataFaultStatus);
         }
         setProgramCounter(instructionAddress);
         requestException(isInstructionFetch ? ArmException.PREFETCH_ABORT : ArmException.DATA_ABORT);
