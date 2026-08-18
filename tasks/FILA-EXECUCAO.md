@@ -155,6 +155,21 @@ subrotina chamada em si. Próximo passo recomendado: ler `thread_info->flags`/`p
 harness temporário não commitado; nenhum arquivo do `arm-jitter` tocado. F3 segue 🟡 na fila
 "ATUAL".
 
+**Sessão de diagnóstico 4 (2026-08-18, `0a745ff`)**: rotina IDENTIFICADA por correspondência
+byte-a-byte contra o fonte real do kernel (`arch/arm/lib/uaccess_with_memcpy.c`, baixado via `curl`
+direto ao GitHub — `WebFetch`/Bootlin não serve fonte cru) — o loop de 157 passos é
+`__copy_to_user_memcpy()`/`pin_page_for_write()`, chamado por `arm_copy_to_user()` durante
+`execve("/init")` copiando `argv`/`envp`. Instrumentação de `onMemoryAbort` durante ~5,1M fatias
+mostrou **exatamente 1 abort em todo o boot**, no `strb` esperado (`0xc05b189c`) e no endereço
+esperado (`0x0014622d`) — prova que o `AP`/DACR do `arm-jitter` FUNCIONA (falta entregue, corrigida,
+escrita nunca mais falta), mas `pin_page_for_write()` continua falhando para sempre porque os bits
+de contabilidade SOFTWARE da PTE (`pte_young`/`pte_dirty`/`pte_write`) nunca refletem o conserto —
+descarta de vez a hipótese de bug genérico de permissão/DACR (3 sessões já tinham testado isso).
+Próximo passo: dump da palavra de PTE de `0x0014622d` antes/depois do abort, comparado bit a bit
+contra `arch/arm/include/asm/pgtable-2level.h` (mesma técnica de `curl` desta sessão). Ver Javadoc de
+`Raspi1BootTest` para o detalhe completo. `mvn -o test` verde (78, 2 skipped); nenhum arquivo do
+`arm-jitter` tocado. F3 segue 🟡 na fila "ATUAL".
+
 <!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
      está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
      FILA-EXECUCAO.md". -->
