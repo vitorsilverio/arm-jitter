@@ -170,6 +170,20 @@ contra `arch/arm/include/asm/pgtable-2level.h` (mesma técnica de `curl` desta s
 `Raspi1BootTest` para o detalhe completo. `mvn -o test` verde (78, 2 skipped); nenhum arquivo do
 `arm-jitter` tocado.
 
+**Sessão de diagnóstico 6 (2026-08-18) — tentativa de oráculo QEMU, sem sucesso (achado
+negativo)**: antes de partir para a arqueologia de `mm_struct`/maple-tree recomendada pela sessão
+5, tentou-se o atalho mais barato: bootar os MESMOS `kernel.img`/`bcm2708-rpi-b.dtb`/
+`initramfs.cpio.gz` desta task no `qemu-system-arm -M raspi1ap` (QEMU 8.0.0 instalado) para
+comparar. **Não deu para comparar**: o próprio QEMU trava aos 2,5s de tempo de kernel — bem antes
+do bloqueio desta task (que só acontece no `execve("/init")`, depois de `mmc`/`usb`) — com um
+`external abort on non-linefetch` real dentro do `bcm2835_power_probe` (driver de clock/power),
+lacuna própria do modelo `raspi1ap` do QEMU para este kernel 6.18.33, não um travamento do Linux.
+Achado negativo registrado (ver Javadoc de `Raspi1BootTest`) para não repetir essa tentativa.
+Próximo passo segue sendo o da sessão 5 (dump de VMA via `TPIDRURO`=`current`, confirmado como o
+mecanismo certo pelo fonte real do kernel), com uma heurística nova sugerida (procurar
+`vm_flags`≈`0x875` por padrão de busca perto do `mm_struct`, em vez de reconstruir a struct campo
+a campo sem `vmlinux`/BTF). `mvn -o test` verde; nenhum arquivo do `arm-jitter` tocado.
+
 **Sessão de diagnóstico 5 (2026-08-18, `7355868` arm-jitter + `3ba61f0` virtual-arm-box) — BUG REAL
 ISOLADO E CORRIGIDO no `arm-jitter`, M3 ainda NÃO fecha (bloqueio mais estreito revelado logo
 depois)**: dump direto da palavra de PTE (`TranslatingAddressSpace#setMmuEnabled(false)`+`read32` =
