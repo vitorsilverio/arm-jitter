@@ -138,7 +138,22 @@ identificada) e inspecionar CONTEÚDO DE MEMÓRIA (não só registradores) — a
 depende de nenhum registrador de propósito geral observado. Ver Javadoc de `Raspi1BootTest`
 (`virtual-arm-box`) para o achado completo. `mvn -o test` verde no `virtual-arm-box`; nenhum
 arquivo do `arm-jitter` tocado (hipótese de bug real ali agora descartada, não só não confirmada).
-F3 segue 🟡 na fila "ATUAL".
+
+**Sessão de diagnóstico 3 (2026-08-18)**: seguiu o passo (b) — inspeção de CONTEÚDO DE MEMÓRIA, não
+só registradores, em `[0x0014622d]` (alvo do `strb` de prova) e `[0xc1558c2c]` (contagem do
+`rw_semaphore`). Rodando com um orçamento de estagnação maior, o console progrediu MAIS do que
+qualquer sessão anterior tinha visto (`thermal thermal_zone0: ...` em kernel time 699s, muito além
+do "silêncio" pós-`Run /init` documentado antes em 482s) antes de travar de vez no mesmo loop de 157
+instruções. Nos 12 períodos observados (1805 passos), as DUAS memórias vigiadas ficaram **bit-a-bit
+estáticas** (`0x00002d00`/`0x00000100`) — fecha a lacuna da sessão anterior: não há progresso
+invisível em memória nesses dois pontos. `rw_semaphore` travado com exatamente 1 leitor
+(`0x100` = `RWSEM_READER_BIAS`), nunca liberado. Hipótese refinada: o bug provavelmente está no
+CHAMADOR do loop (que deveria avançar um contador/endereço entre chamadas e não avança), não na
+subrotina chamada em si. Próximo passo recomendado: ler `thread_info->flags`/`preempt_count` (via
+`lr = *(TPIDRURO+0x520)`) para checar `TIF_NEED_RESCHED`, ou tracear o PRIMEIRO período (não os
+últimos) para ver o valor inicial do "laço externo". `mvn -o test` verde no `virtual-arm-box`;
+harness temporário não commitado; nenhum arquivo do `arm-jitter` tocado. F3 segue 🟡 na fila
+"ATUAL".
 
 <!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
      está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
