@@ -51,7 +51,17 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
 
     @Override
     public boolean handles(Aarch64SystemRegisterId register) {
-        return true;
+        // B6.6.7: as identidades da CPU (CurrentEL/MPIDR_EL1/.../TPIDR_EL1) NUNCA chegam aqui de
+        // qualquer forma (o executor as resolve intrinsecamente antes de consultar este barramento
+        // — ver `Aarch64Core#handlesSystemRegisterIntrinsically`); o timer genérico
+        // (`CNTFRQ_EL0`/`CNTPCT_EL0`/`CNTP_*`) segue SEM hospedeiro aqui — este barramento é só de
+        // MMU/exceção, um consumidor real (F11/B6.6.6) precisa instalar/compor um bus de timer
+        // separado quando existir.
+        return switch (register) {
+            case SCTLR_EL1, TTBR0_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1, VBAR_EL1, ELR_EL1,
+                 SPSR_EL1 -> true;
+            default -> false;
+        };
     }
 
     @Override
@@ -66,6 +76,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL1 -> exceptionState.vbar1();
             case ELR_EL1 -> exceptionState.elr1();
             case SPSR_EL1 -> exceptionState.spsr1();
+            default -> throw new UnsupportedOperationException(
+                    "Aarch64VmsaSystemRegisters não atende: " + register);
         };
     }
 
@@ -90,6 +102,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL1 -> exceptionState.setVbar1(value);
             case ELR_EL1 -> exceptionState.setElr1(value);
             case SPSR_EL1 -> exceptionState.setSpsr1((int) value);
+            default -> throw new UnsupportedOperationException(
+                    "Aarch64VmsaSystemRegisters não atende: " + register);
         }
     }
 

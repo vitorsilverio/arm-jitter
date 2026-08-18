@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
@@ -73,6 +74,17 @@ public final class Ir64BlockExecutor {
     /// @return ciclos internos consumidos (mesma convenção de
     ///         {@link dev.vitorsilverio.armjitter.core.ArmCore#stepReturningInternalCycles})
     public int step(Aarch64Core core) {
+        // B6.6.7 (espelho de `ArmCore#servicePendingIrq`, 32-bit): checado ANTES de qualquer
+        // fetch/decode desta rodada — uma IRQ entregue já redirecionou PC/PSTATE, e o core parado
+        // em WFI (sem IRQ pendente ainda) não avança PC nenhum enquanto dorme.
+        if (core.servicePendingIrq()) {
+            core.addCycles(CYCLES_PER_INSTRUCTION);
+            return CYCLES_PER_INSTRUCTION;
+        }
+        if (core.sleepState() != CpuSleepState.RUNNING) {
+            core.addCycles(CYCLES_PER_INSTRUCTION);
+            return CYCLES_PER_INSTRUCTION;
+        }
         long pc = core.pc();
         int cycles = 0;
         try {
@@ -146,6 +158,13 @@ public final class Ir64BlockExecutor {
     /// `[Fetch, Cycle, op]` na ordem do PC linear, então o `Fetch` mais recente antes de QUALQUER
     /// índice é sempre o desta instrução).
     public int executeBlock(Aarch64Core core, Ir64Block block) {
+        // B6.6.7: mesmo ponto de verificação de IRQ/WFI de `step()` — checado no LIMITE do bloco,
+        // nunca no meio (um bloco lifted é atômico do ponto de vista do JIT/tiering futuro, mesma
+        // disciplina do precedente 32-bit `ArmCore#runBlock`).
+        if (core.servicePendingIrq() || core.sleepState() != CpuSleepState.RUNNING) {
+            core.addCycles(CYCLES_PER_INSTRUCTION);
+            return CYCLES_PER_INSTRUCTION;
+        }
         Ir64Op[] ops = block.operationsArray();
         int[] kinds = block.kindsArray();
         int cycles = 0;
@@ -211,6 +230,8 @@ public final class Ir64BlockExecutor {
                     Ir64FpExecutor.executeFpCompare(core, (Ir64Op.Fp64Compare) op);
             case Ir64Op.Kind.FP64_CONVERT ->
                     Ir64FpExecutor.executeFpConvert(core, (Ir64Op.Fp64Convert) op);
+            case Ir64Op.Kind.PRIVILEGED_CALL ->
+                    executePrivilegedCall(core, (Ir64Op.PrivilegedCall) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -577,6 +598,18 @@ public final class Ir64BlockExecutor {
     /// {@link Aarch64Core#setX}; `MSR` sempre lê `X` completo via {@link Aarch64Core#x} (que já
     /// devolve `0` para `rt == 31`, `XZR`).
     private boolean executeSystemRegister(Aarch64Core core, Ir64Op.SystemRegister op) {
+        // B6.6.7: identidades da CPU (CurrentEL/MPIDR_EL1/MIDR_EL1/ID_AA64*/TPIDR_EL1) são
+        // resolvidas DIRETO pelo core, sem passar pelo `Aarch64SystemRegisterBus` — checado
+        // primeiro, mesmo quando um hospedeiro real está instalado (essas identidades nunca são
+        // responsabilidade do hospedeiro, ver javadoc de `Aarch64SystemRegisterId`).
+        if (core.handlesSystemRegisterIntrinsically(op.register())) {
+            if (op.read()) {
+                core.setX(op.rt(), core.readIntrinsicSystemRegister(op.register()));
+            } else {
+                core.writeIntrinsicSystemRegister(op.register(), core.x(op.rt()));
+            }
+            return false;
+        }
         Aarch64SystemRegisterBus bus = core.systemRegisterBus();
         if (!bus.handles(op.register())) {
             throw new UnsupportedOperationException(
@@ -598,15 +631,29 @@ public final class Ir64BlockExecutor {
     private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
         switch (op.opcode()) {
             case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
-            case BARRIER -> { /* NOP observável — sem cache/pipeline modelados. */ }
+            case BARRIER, NOP_HINT -> { /* NOP observável — sem cache/pipeline/event-stream. */ }
+            case WFI -> core.setSleepState(CpuSleepState.HALTED);
         }
         return false;
     }
 
-    /// `ERET` (B6.6.4): `PC←ELR_EL1`, `PSTATE.{N,Z,C,V}←SPSR_EL1`, sai de EL1 — mesma ordem do
-    /// precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático aqui: A64 não precisa de
-    /// subtração porque `ELR_EL1` já é o endereço exato de retomada, sem o viés `+4`/`+8` do LR
-    /// bancado do ARM32).
+    /// `HVC`/`SMC` (B6.6.7) — sem EL2/EL3 modelados, sempre devolve `PSCI_RET_NOT_SUPPORTED`
+    /// (`-1`) em `X0` (ver javadoc de {@link Ir64Op.PrivilegedCall}). `setXForWidth(..., false)`
+    /// (não `setX`) porque o valor de retorno real de uma chamada PSCI de 32 bits (`SMC32`/`HVC32`,
+    /// a convenção mais comum) é lido pelo guest via `W0` — zero-estender os 32 bits altos evita
+    /// que um `CMP W0, #0` do guest veja lixo ali (mesmo cuidado de qualquer escrita `W` no resto
+    /// do executor).
+    private boolean executePrivilegedCall(Aarch64Core core, Ir64Op.PrivilegedCall op) {
+        final int returnRegister = 0;
+        final long pscretNotSupported = 0xFFFF_FFFFL;
+        core.setXForWidth(returnRegister, pscretNotSupported, false);
+        return false;
+    }
+
+    /// `ERET` (B6.6.4, e B6.6.7 para o bit `I`): `PC←ELR_EL1`, `PSTATE.{N,Z,C,V,I}←SPSR_EL1`, sai
+    /// de EL1 — mesma ordem do precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático
+    /// aqui: A64 não precisa de subtração porque `ELR_EL1` já é o endereço exato de retomada, sem
+    /// o viés `+4`/`+8` do LR bancado do ARM32).
     private boolean executeExceptionReturn(Aarch64Core core, Ir64Op.ExceptionReturn op) {
         Aarch64ExceptionState exceptionState = core.exceptionState();
         long returnAddress = exceptionState.elr1();

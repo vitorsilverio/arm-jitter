@@ -219,3 +219,32 @@ fcmpe s27, #0.0
 fcmpe d27, #0.0
 fcvt d28, s28
 fcvt s29, d29
+
+// ── B6.6.7: identidade da CPU, timer genérico, HVC/SMC, WFI/hints ──────────
+mrs x0, CurrentEL
+mrs x1, MPIDR_EL1
+mrs x2, MIDR_EL1
+mrs x3, ID_AA64PFR0_EL1
+mrs x4, ID_AA64ISAR0_EL1
+mrs x5, ID_AA64MMFR0_EL1
+mrs x6, ID_AA64DFR0_EL1
+mrs x7, TPIDR_EL1
+msr TPIDR_EL1, x8
+mrs x9, CNTFRQ_EL0
+mrs x10, CNTPCT_EL0
+mrs x11, CNTP_TVAL_EL0
+msr CNTP_TVAL_EL0, x12
+mrs x13, CNTP_CTL_EL0
+msr CNTP_CTL_EL0, x14
+mrs x15, CNTP_CVAL_EL0
+msr CNTP_CVAL_EL0, x16
+hvc #0
+smc #0
+wfi
+wfe
+nop
+yield
+sev
+sevl
+clrex
+brk #0

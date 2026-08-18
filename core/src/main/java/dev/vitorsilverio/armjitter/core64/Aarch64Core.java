@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.core64;
 
+import dev.vitorsilverio.armjitter.core.CpuSleepState;
+import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -56,6 +58,38 @@ public final class Aarch64Core {
     /// Máscara do campo `ISS[5:0]` (`DFSC`/`IFSC`) usado por esta task — mesmo código de
     /// {@link FaultStatus64#code()}, sem os demais bits de `ISS` (`WnR`/`FnV`/... fora de escopo).
     private static final long ESR_ISS_FAULT_STATUS_MASK = 0x3FL;
+    /// Deslocamento em bytes, dentro da tabela de vetores apontada por `VBAR_EL1`, da entrada
+    /// "IRQ, exceção de um nível INFERIOR usando AArch64" (`ARM DDI 0487 D1.10`, B6.6.7) — mesma
+    /// tabela de 16 entradas de {@link #VECTOR_TABLE_ENTRY_SIZE_BYTES} de
+    /// {@link #SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET}, próxima entrada do mesmo grupo de
+    /// origem (sync=`0x400`, IRQ=`0x480`, FIQ=`0x500`, SError=`0x580` — só IRQ tem consumidor
+    /// nesta task).
+    private static final long IRQ_LOWER_EL_AARCH64_VECTOR_OFFSET = 0x480L;
+
+    // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
+    // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
+    /// `CurrentEL` quando em EL0 (`[3:2]=0b00`, ver {@link Aarch64SystemRegisterId#CURRENT_EL}).
+    private static final long CURRENT_EL_VALUE_EL0 = 0L;
+    /// `CurrentEL` quando em EL1 (`[3:2]=0b01`).
+    private static final long CURRENT_EL_VALUE_EL1 = 0b01L << 2;
+    /// `MPIDR_EL1` constante: `RES1`(31) + `U`(30, uniprocessador) setados, `Aff0`-`Aff3=0` (core
+    /// único emulado, `ARM DDI 0487 D19.2.87`).
+    private static final long MPIDR_EL1_VALUE = 0x8000_0000L | (1L << 30);
+    /// `MIDR_EL1` constante: Cortex-A53 real do Raspberry Pi 3 (`Implementer=0x41`, `Variant=0`,
+    /// `Architecture=0xF`, `PartNum=0xD03`, `Revision=4` — valor de referência publicado, alvo
+    /// primário desta task via a F11 do `virtual-arm-box`).
+    private static final long MIDR_EL1_VALUE = 0x410F_D034L;
+    /// `ID_AA64PFR0_EL1` constante mínima: `EL0`/`EL1=0b0001` (só AArch64), demais campos `0`
+    /// (ver javadoc de {@link Aarch64SystemRegisterId#ID_AA64PFR0_EL1}).
+    private static final long ID_AA64PFR0_EL1_VALUE = 0x11L;
+    /// `ID_AA64ISAR0_EL1` constante: `0` (nenhuma extensão opcional implementada).
+    private static final long ID_AA64ISAR0_EL1_VALUE = 0L;
+    /// `ID_AA64MMFR0_EL1` constante: `PARange[3:0]=0b0101` (48 bits, casando com
+    /// `TranslatingAddressSpace64`), `TGran4[31:28]=0b0000` (4KiB suportado).
+    private static final long ID_AA64MMFR0_EL1_VALUE = 0x5L;
+    /// `ID_AA64DFR0_EL1` constante: `DebugVer[3:0]=0b0110` (ARMv8, valor de referência — nenhum
+    /// registrador de debug implementado, só o campo de versão).
+    private static final long ID_AA64DFR0_EL1_VALUE = 0x6L;
 
     private final long[] x = new long[GENERAL_REGISTER_COUNT];
     /// `SP_EL0` — pilha de EL0. Só usada por {@link #sp()}/{@link #setSp(long)} quando
@@ -86,6 +120,19 @@ public final class Aarch64Core {
     /// instalada). Única fonte de verdade de `ELR_EL1`/`SPSR_EL1`/`ESR_EL1`/`FAR_EL1`/`VBAR_EL1`
     /// — ver javadoc de {@link Aarch64ExceptionState}.
     private final Aarch64ExceptionState exceptionState = new Aarch64ExceptionState();
+    /// `TPIDR_EL1` (B6.6.7) — escaninho de 64 bits do guest (ponteiro de dados de thread do
+    /// kernel), armazenamento puro sem host plugável (ver javadoc de
+    /// {@link Aarch64SystemRegisterId#TPIDR_EL1}).
+    private long tpidrEl1;
+    /// Linha de IRQ nível-sensível controlada pelo hospedeiro (mesmo papel de
+    /// {@code ArmCore#interruptLine}, 32-bit) — B6.6.7. `true` = interrupção pendente até o
+    /// hospedeiro desassertar; sem GIC modelado, cabe ao hospedeiro decidir quando assertar/
+    /// desassertar (ver a task, "Não inclui").
+    private boolean interruptLine;
+    /// Estado de espera do core (`WFI`, B6.6.7) — reaproveita {@link CpuSleepState} diretamente
+    /// (genérico o bastante, mesma disciplina de `ExecutionThreshold` em B6.4 PR1); só
+    /// {@code RUNNING}/{@code HALTED} têm consumidor aqui (sem "parada profunda" modelada).
+    private CpuSleepState sleepState = CpuSleepState.RUNNING;
 
     /// Cria um core conectado a uma memória de 64 bits. Estado inicial: todos os registradores
     /// zerados, `PC = 0`, `PSTATE` zerado.
@@ -270,6 +317,106 @@ public final class Aarch64Core {
         this.systemRegisterBus = Objects.requireNonNull(systemRegisterBus, "systemRegisterBus");
     }
 
+    /// `true` quando {@code register} é uma identidade da CPU resolvida DIRETO por este core
+    /// (B6.6.7) — ver javadoc de {@link Aarch64SystemRegisterId}. `false` para qualquer outro
+    /// registrador (inclui o timer genérico, que continua indo para
+    /// {@link #systemRegisterBus()}), delegado ao executor decidir a rota.
+    public boolean handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId register) {
+        return switch (register) {
+            case CURRENT_EL, MPIDR_EL1, MIDR_EL1, ID_AA64PFR0_EL1, ID_AA64ISAR0_EL1,
+                 ID_AA64MMFR0_EL1, ID_AA64DFR0_EL1, TPIDR_EL1 -> true;
+            default -> false;
+        };
+    }
+
+    /// `MRS` de uma identidade da CPU (B6.6.7, {@link #handlesSystemRegisterIntrinsically} deve
+    /// ser checado antes pelo chamador). `CurrentEL` é o único campo dinâmico (reflete
+    /// {@link Aarch64ExceptionState#inEl1()}); os demais são constantes fixas deste core.
+    public long readIntrinsicSystemRegister(Aarch64SystemRegisterId register) {
+        return switch (register) {
+            case CURRENT_EL -> exceptionState.inEl1() ? CURRENT_EL_VALUE_EL1 : CURRENT_EL_VALUE_EL0;
+            case MPIDR_EL1 -> MPIDR_EL1_VALUE;
+            case MIDR_EL1 -> MIDR_EL1_VALUE;
+            case ID_AA64PFR0_EL1 -> ID_AA64PFR0_EL1_VALUE;
+            case ID_AA64ISAR0_EL1 -> ID_AA64ISAR0_EL1_VALUE;
+            case ID_AA64MMFR0_EL1 -> ID_AA64MMFR0_EL1_VALUE;
+            case ID_AA64DFR0_EL1 -> ID_AA64DFR0_EL1_VALUE;
+            case TPIDR_EL1 -> tpidrEl1;
+            default -> throw new IllegalArgumentException(
+                    "Não é uma identidade intrínseca: " + register);
+        };
+    }
+
+    /// `MSR` de uma identidade da CPU (B6.6.7). Só {@link Aarch64SystemRegisterId#TPIDR_EL1} é
+    /// realmente gravável pelo guest (escaninho de thread); os demais são `RO`/`WI` de hardware —
+    /// escrita lança (nenhuma instrução real gerada por um compilador visa `MSR` para eles, `WI`
+    /// silencioso esconderia um bug de decodificação/uso incorreto em vez de sinalizar).
+    public void writeIntrinsicSystemRegister(Aarch64SystemRegisterId register, long value) {
+        if (register == Aarch64SystemRegisterId.TPIDR_EL1) {
+            tpidrEl1 = value;
+            return;
+        }
+        throw new UnsupportedOperationException(
+                "AArch64: registrador de identidade é somente leitura: " + register);
+    }
+
+    /// Linha de IRQ nível-sensível (B6.6.7) — ver javadoc do campo {@link #interruptLine}.
+    public boolean interruptLine() {
+        return interruptLine;
+    }
+
+    /// Assert/desassert da linha de IRQ pelo hospedeiro.
+    public void setInterruptLine(boolean interruptLine) {
+        this.interruptLine = interruptLine;
+    }
+
+    /// Estado de espera do core (B6.6.7, `WFI`).
+    public CpuSleepState sleepState() {
+        return sleepState;
+    }
+
+    /// Força o estado de espera do core — usado pelo executor (`WFI`) e por
+    /// {@link #enterIrq}/{@link #enterMemoryAbort} (uma exceção sempre acorda o core).
+    public void setSleepState(CpuSleepState sleepState) {
+        this.sleepState = Objects.requireNonNull(sleepState, "sleepState");
+    }
+
+    /// Checa e, se pendente e não mascarada, entrega uma IRQ — chamado pelo executor ANTES de
+    /// buscar/decodificar a próxima instrução (mesmo ponto de verificação de
+    /// {@code ArmCore#servicePendingIrq}, 32-bit). Também acorda o core de `WFI` mesmo quando a
+    /// IRQ está mascarada (`ARM DDI 0487` pseudocódigo de `WFI`: uma interrupção pendente acorda o
+    /// core mesmo mascarada — ela só não é ENTREGUE enquanto mascarada, mas a execução retoma).
+    ///
+    /// @return `true` quando uma IRQ foi entregue nesta chamada (o chamador não deve prosseguir
+    ///         para fetch/decode desta rodada — o PC já foi redirecionado para o handler)
+    public boolean servicePendingIrq() {
+        if (!interruptLine) {
+            return false;
+        }
+        if (sleepState != CpuSleepState.RUNNING) {
+            sleepState = CpuSleepState.RUNNING;
+        }
+        if (pstate.irqDisabled()) {
+            return false;
+        }
+        enterIrq();
+        return true;
+    }
+
+    /// Entrada de exceção EL0→EL1 por IRQ (B6.6.7) — espelho de {@link #enterMemoryAbort}, mas SEM
+    /// tocar `ESR_EL1`/`FAR_EL1` (uma IRQ não tem síndrome de falta associada; o hardware real
+    /// deixa esses registradores com o valor anterior). `ELR_EL1` recebe o PC ATUAL (endereço da
+    /// PRÓXIMA instrução que executaria — IRQ é assíncrona, ao contrário de um abort síncrono, que
+    /// salva o endereço da instrução FALTOSA). `PSTATE.I` é forçado a `1` na entrada (mascara IRQ
+    /// aninhada dentro do handler — `ERET` restaura o valor salvo em `SPSR_EL1`).
+    public void enterIrq() {
+        exceptionState.setElr1(pc);
+        exceptionState.setSpsr1(pstate.toSpsrFormat());
+        exceptionState.setInEl1(true);
+        pstate.setIrqDisabled(true);
+        setProgramCounter(exceptionState.vbar1() + IRQ_LOWER_EL_AARCH64_VECTOR_OFFSET);
+    }
+
     /// Retorna o estado de exceção EL0→EL1 (B6.6.4) — `ELR_EL1`/`SPSR_EL1`/`ESR_EL1`/`FAR_EL1`/
     /// `VBAR_EL1`/`SP_EL1`/nível atual. Exposto para o host configurar `VBAR_EL1` diretamente
     /// (setup de teste sem MMU) e para
@@ -307,6 +454,11 @@ public final class Aarch64Core {
         exceptionState.setSpsr1(pstate.toSpsrFormat());
         clearExclusiveMonitor();
         exceptionState.setInEl1(true);
+        // B6.6.7: qualquer entrada de exceção mascara IRQ (`ARM DDI 0487` pseudocódigo
+        // `AArch64.TakeException` seta `PSTATE.{D,A,I,F}=1`) — `spsr1` acima já capturou o valor
+        // ANTIGO da máscara (o que `ERET` deve restaurar), então esta linha só afeta o `PSTATE`
+        // ATIVO durante o handler em si.
+        pstate.setIrqDisabled(true);
         setProgramCounter(exceptionState.vbar1() + SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET);
     }
 

@@ -314,10 +314,28 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
+    void nopHintAtLabel1() {
+        // B6.6.7: o nop no offset 0x90 (label1) é uma "hint" do grupo System instructions —
+        // antes de B6.6.7, hints inteiros eram fora de escopo (este teste chamava isso de
+        // `unsupportedEncodingThrows`); agora `NOP`/`YIELD`/`WFE`/`SEV`/`SEVL` decodificam como
+        // NOP puro (ver {@link #nopHintYieldWfeSevSevl}, apêndice do corpus).
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x90);
+        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+    }
+
+    @Test
     void unsupportedEncodingThrows() {
-        // O nop no offset 0x90 (label1) é uma "hint" do grupo System instructions — fora da
-        // fatia B6.1 (não é ADR/ADD/MOVZ/branch/SVC).
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x90));
+        // CLREX (apêndice B6.6.7, offset 0x37c) — mesmo subgrupo de encoding de barreiras/hints,
+        // mas fora do subconjunto coberto (nenhum monitor de exclusividade compartilhado modelado
+        // aqui além de LDXR/STXR).
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x37c));
+    }
+
+    @Test
+    void brkUnsupportedEncodingThrows() {
+        // BRK (apêndice B6.6.7, offset 0x380) — grupo "Exception generating", mas `opc!=000`
+        // (fora da fatia SVC/HVC/SMC).
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x380));
     }
 
     // ── B6.2: loads/stores (offsets 0x94+, apêndice do mesmo corpus.s/objdump.txt) ──────────
@@ -2060,4 +2078,105 @@ class Aarch64DecoderCorpusTest {
 
     private static final int FP_TYPE_SHIFT = 22;
     private static final int FP_TYPE_MASK = 0b11;
+
+    // ── B6.6.7: identidade da CPU, timer genérico, HVC/SMC, WFI/hints (apêndice do mesmo
+    // ── corpus.s/.bin/.objdump.txt, offsets 0x318-0x380) ────────────────────────────────────
+
+    @Test
+    void systemRegisterCurrentEl() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x318);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.CURRENT_EL, op.register());
+        assertEquals(0, op.rt());
+    }
+
+    @Test
+    void systemRegisterMpidrEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x31c);
+        assertEquals(Aarch64SystemRegisterId.MPIDR_EL1, op.register());
+        assertEquals(1, op.rt());
+    }
+
+    @Test
+    void systemRegisterMidrEl1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x320);
+        assertEquals(Aarch64SystemRegisterId.MIDR_EL1, op.register());
+        assertEquals(2, op.rt());
+    }
+
+    @Test
+    void systemRegisterIdAa64Pfr0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x324);
+        assertEquals(Aarch64SystemRegisterId.ID_AA64PFR0_EL1, op.register());
+    }
+
+    @Test
+    void systemRegisterIdAa64Isar0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x328);
+        assertEquals(Aarch64SystemRegisterId.ID_AA64ISAR0_EL1, op.register());
+    }
+
+    @Test
+    void systemRegisterIdAa64Mmfr0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x32c);
+        assertEquals(Aarch64SystemRegisterId.ID_AA64MMFR0_EL1, op.register());
+    }
+
+    @Test
+    void systemRegisterIdAa64Dfr0El1() {
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x330);
+        assertEquals(Aarch64SystemRegisterId.ID_AA64DFR0_EL1, op.register());
+    }
+
+    @Test
+    void systemRegisterTpidrEl1ReadAndWrite() {
+        Ir64Op.SystemRegister read = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x334);
+        assertTrue(read.read());
+        assertEquals(Aarch64SystemRegisterId.TPIDR_EL1, read.register());
+        assertEquals(7, read.rt());
+        Ir64Op.SystemRegister write = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x338);
+        assertFalse(write.read());
+        assertEquals(Aarch64SystemRegisterId.TPIDR_EL1, write.register());
+        assertEquals(8, write.rt());
+    }
+
+    @Test
+    void systemRegisterGenericTimer() {
+        assertEquals(Aarch64SystemRegisterId.CNTFRQ_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x33c)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTPCT_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x340)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_TVAL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x344)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_TVAL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x348)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_CTL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x34c)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_CTL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x350)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_CVAL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x354)).register());
+        assertEquals(Aarch64SystemRegisterId.CNTP_CVAL_EL0,
+                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x358)).register());
+    }
+
+    @Test
+    void hvcAndSmc() {
+        assertInstanceOf(Ir64Op.PrivilegedCall.class, DECODER.decode(memory, 0x35c));
+        assertInstanceOf(Ir64Op.PrivilegedCall.class, DECODER.decode(memory, 0x360));
+    }
+
+    @Test
+    void wfiDecodesAsSystemInstruction() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x364);
+        assertEquals(Ir64SystemInstructionOp.WFI, op.opcode());
+    }
+
+    @Test
+    void nopHintYieldWfeSevSevl() {
+        for (long offset : new long[] {0x368, 0x36c, 0x370, 0x374, 0x378}) {
+            Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+            assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+        }
+    }
 }

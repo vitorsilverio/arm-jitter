@@ -1,5 +1,5 @@
 
-corpus.o:     file format elf64-littleaarch64
+corpus_new.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -207,3 +207,30 @@ Disassembly of section .text:
  30c:	1e602378 	fcmpe	d27, #0.0
  310:	1e22c39c 	fcvt	d28, s28
  314:	1e6243bd 	fcvt	s29, d29
+ 318:	d5384240 	mrs	x0, currentel
+ 31c:	d53800a1 	mrs	x1, mpidr_el1
+ 320:	d5380002 	mrs	x2, midr_el1
+ 324:	d5380403 	mrs	x3, id_aa64pfr0_el1
+ 328:	d5380604 	mrs	x4, id_aa64isar0_el1
+ 32c:	d5380705 	mrs	x5, id_aa64mmfr0_el1
+ 330:	d5380506 	mrs	x6, id_aa64dfr0_el1
+ 334:	d538d087 	mrs	x7, tpidr_el1
+ 338:	d518d088 	msr	tpidr_el1, x8
+ 33c:	d53be009 	mrs	x9, cntfrq_el0
+ 340:	d53be02a 	mrs	x10, cntpct_el0
+ 344:	d53be20b 	mrs	x11, cntp_tval_el0
+ 348:	d51be20c 	msr	cntp_tval_el0, x12
+ 34c:	d53be22d 	mrs	x13, cntp_ctl_el0
+ 350:	d51be22e 	msr	cntp_ctl_el0, x14
+ 354:	d53be24f 	mrs	x15, cntp_cval_el0
+ 358:	d51be250 	msr	cntp_cval_el0, x16
+ 35c:	d4000002 	hvc	#0x0
+ 360:	d4000003 	smc	#0x0
+ 364:	d503207f 	wfi
+ 368:	d503205f 	wfe
+ 36c:	d503201f 	nop
+ 370:	d503203f 	yield
+ 374:	d503209f 	sev
+ 378:	d50320bf 	sevl
+ 37c:	d5033f5f 	clrex
+ 380:	d4200000 	brk	#0x0

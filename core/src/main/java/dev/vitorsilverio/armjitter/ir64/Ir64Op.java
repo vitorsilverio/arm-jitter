@@ -28,7 +28,8 @@ public sealed interface Ir64Op permits
         Ir64Op.AluExtendedRegister, Ir64Op.ConditionalSelect, Ir64Op.Bitfield,
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
         Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
-        Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert {
+        Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
+        Ir64Op.PrivilegedCall {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -70,6 +71,8 @@ public sealed interface Ir64Op permits
         public static final int FP64_MOVE_IMMEDIATE = 24;
         public static final int FP64_COMPARE = 25;
         public static final int FP64_CONVERT = 26;
+        /// B6.6.7: `HVC`/`SMC` — ver {@link PrivilegedCall}.
+        public static final int PRIVILEGED_CALL = 27;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -589,6 +592,17 @@ public sealed interface Ir64Op permits
     /// encoding fixa `Rn=31` (não lido, `ARM DDI 0487` pseudocódigo de `ERET`).
     record ExceptionReturn() implements Ir64Op {
         @Override public int kind() { return Kind.EXCEPTION_RETURN; }
+    }
+
+    /// `HVC`/`SMC` (`ARM DDI 0487 C6.2.148/C6.2.294`, task B6.6.7) — sem EL2/EL3 modelados (fora
+    /// de escopo do épico B6, ver `b6-aarch64.md`), tratadas como uma chamada inerte que sempre
+    /// devolve `PSCI_RET_NOT_SUPPORTED` em `X0` (mesmo espírito de "fingir sucesso/falha plausível
+    /// e seguir" já usado para SVCs desconhecidas no n3dsemu — aqui é uma falha PLAUSÍVEL, não um
+    /// sucesso falso, já que o emulador de fato não tem PSCI). Sem campo de imediato: o `imm16` do
+    /// encoding só teria sentido para um handler em EL2/EL3, que não existe aqui (ver Armadilhas
+    /// da task).
+    record PrivilegedCall() implements Ir64Op {
+        @Override public int kind() { return Kind.PRIVILEGED_CALL; }
     }
 
     /// Sub-operação de {@link Fp64Alu} — leitura literal do épico B6.5 ("FMOV/FADD/FMUL/FDIV/

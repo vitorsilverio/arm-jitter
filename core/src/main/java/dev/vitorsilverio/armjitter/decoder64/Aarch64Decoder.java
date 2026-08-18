@@ -164,6 +164,12 @@ public final class Aarch64Decoder {
     private static final int EXCEPTION_GEN_OPC_SVC = 0b000;
     private static final int EXCEPTION_GEN_LOW5_MASK = 0b1_1111;
     private static final int EXCEPTION_GEN_SVC_LOW5_FIXED = 0b0_0001;
+    /// `HVC` (B6.6.7): mesmo `opc=000` de `SVC`/`SMC`, `LL(1:0)=10` — `opc2(4:2)=000` fixo, então
+    /// `low5 = (opc2<<2)|LL = 0b00010` (CONFERIDO via `aarch64-none-elf-as`: `hvc #0`).
+    private static final int EXCEPTION_GEN_HVC_LOW5_FIXED = 0b0_0010;
+    /// `SMC` (B6.6.7): `LL(1:0)=11`, mesmo raciocínio de {@link #EXCEPTION_GEN_HVC_LOW5_FIXED}
+    /// (CONFERIDO via `aarch64-none-elf-as`: `smc #0`).
+    private static final int EXCEPTION_GEN_SMC_LOW5_FIXED = 0b0_0011;
 
     // ── MRS/MSR (register)/SYS family (B6.6.1 + B6.6.3, ARM DDI 0487 C5.2.3 / QEMU a64.decode
     // ── `SYS`): prefixo fixo(31:22)=1101010100 L(21) op0(20:19) op1(18:16) CRn(15:12) CRm(11:8)
@@ -219,6 +225,46 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_SPSR = 0;
     private static final int SYSREG_OP2_SPSR = 0;
 
+    // ── B6.6.7: identidade da CPU, ainda `op0=3`/`op1=0` (mesma tabela EL1 "geral" acima) —
+    // ── valores conferidos contra `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
+    private static final int SYSREG_CRN_CURRENT_EL = 4;
+    private static final int SYSREG_CRM_CURRENT_EL = 2;
+    private static final int SYSREG_OP2_CURRENT_EL = 2;
+    private static final int SYSREG_CRN_MPIDR = 0;
+    private static final int SYSREG_CRM_MPIDR = 0;
+    private static final int SYSREG_OP2_MPIDR = 5;
+    private static final int SYSREG_CRN_MIDR = 0;
+    private static final int SYSREG_CRM_MIDR = 0;
+    private static final int SYSREG_OP2_MIDR = 0;
+    private static final int SYSREG_CRN_ID_AA64PFR0 = 0;
+    private static final int SYSREG_CRM_ID_AA64PFR0 = 4;
+    private static final int SYSREG_OP2_ID_AA64PFR0 = 0;
+    private static final int SYSREG_CRN_ID_AA64ISAR0 = 0;
+    private static final int SYSREG_CRM_ID_AA64ISAR0 = 6;
+    private static final int SYSREG_OP2_ID_AA64ISAR0 = 0;
+    private static final int SYSREG_CRN_ID_AA64MMFR0 = 0;
+    private static final int SYSREG_CRM_ID_AA64MMFR0 = 7;
+    private static final int SYSREG_OP2_ID_AA64MMFR0 = 0;
+    private static final int SYSREG_CRN_ID_AA64DFR0 = 0;
+    private static final int SYSREG_CRM_ID_AA64DFR0 = 5;
+    private static final int SYSREG_OP2_ID_AA64DFR0 = 0;
+    private static final int SYSREG_CRN_TPIDR_EL1 = 13;
+    private static final int SYSREG_CRM_TPIDR_EL1 = 0;
+    private static final int SYSREG_OP2_TPIDR_EL1 = 4;
+
+    // ── B6.6.7: timer genérico, `op0=3`/`op1=3` (registradores acessíveis de EL0, "CNT*_EL0" —
+    // ── diferente do resto da tabela, que é toda `op1=0`), CRn=0b1110 fixo (grupo Generic Timer).
+    private static final int SYSREG_OP1_EL0_TIMER = 3;
+    private static final int SYSREG_CRN_TIMER = 14;
+    private static final int SYSREG_CRM_CNTFRQ = 0;
+    private static final int SYSREG_OP2_CNTFRQ = 0;
+    private static final int SYSREG_CRM_CNTPCT = 0;
+    private static final int SYSREG_OP2_CNTPCT = 1;
+    private static final int SYSREG_CRM_CNTP = 2;
+    private static final int SYSREG_OP2_CNTP_TVAL = 0;
+    private static final int SYSREG_OP2_CNTP_CTL = 1;
+    private static final int SYSREG_OP2_CNTP_CVAL = 2;
+
     // ── `op0` do grupo System (B6.6.3): valores fixos que selecionam o subgrupo (op0=2/3 são
     // ── MRS/MSR, tratados por SYSREG_OP0_EL1 acima).
     private static final int SYSTEM_INSTRUCTION_OP0_BARRIER = 0;
@@ -230,6 +276,14 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DSB = 0b100;
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DMB = 0b101;
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_ISB = 0b110;
+
+    // ── B6.6.7: "Hints" (`op0=0`, CRn=0b0010 fixo — mesmo subgrupo de encoding das barreiras
+    // ── acima, `CRm`(11:8) reservado/`RES0` na forma canônica de cada hint, não checado aqui,
+    // ── mesma simplificação já aplicada às barreiras) — `NOP`/`YIELD`/`SEV`/`SEVL` viram NOP puro
+    // ── (mesmo tratamento das barreiras); `WFE` também NOP nesta task (sem event-stream modelado,
+    // ── ver a task B6.6.7 "Não inclui"); só `WFI` tem semântica própria (durma até IRQ).
+    private static final int SYSTEM_INSTRUCTION_HINT_CRN = 0b0010;
+    private static final int SYSTEM_INSTRUCTION_HINT_OP2_WFI = 0b011;
 
     // ── `TLBI VMALLE1`/`TLBI VMALLE1IS` (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral",
     // ── CRn=0b1000 fixo (grupo TLB maintenance), CRm distingue IS/não-IS, op2=0 (ALL, sem VA).
@@ -1241,19 +1295,31 @@ public final class Aarch64Decoder {
     private Ir64Op decodeExceptionGenerating(int word, long address) {
         int opc = (word >>> EXCEPTION_GEN_OPC_SHIFT) & EXCEPTION_GEN_OPC_MASK;
         int low5 = word & EXCEPTION_GEN_LOW5_MASK;
-        if (opc != EXCEPTION_GEN_OPC_SVC || low5 != EXCEPTION_GEN_SVC_LOW5_FIXED) {
-            // HVC/SMC/BRK/HLT/DCPS*: fora da fatia B6.1.
-            throw unsupported(word, address);
-        }
         int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
-        return new Ir64Op.Svc(imm16);
+        if (opc == EXCEPTION_GEN_OPC_SVC && low5 == EXCEPTION_GEN_SVC_LOW5_FIXED) {
+            return new Ir64Op.Svc(imm16);
+        }
+        if (opc == EXCEPTION_GEN_OPC_SVC
+                && (low5 == EXCEPTION_GEN_HVC_LOW5_FIXED || low5 == EXCEPTION_GEN_SMC_LOW5_FIXED)) {
+            // HVC/SMC (B6.6.7): sem EL2/EL3 modelados (fora de escopo do épico B6) — tratadas como
+            // um "host call" inerte que sempre devolve PSCI_RET_NOT_SUPPORTED em X0 (ver
+            // Ir64BlockExecutor#executePrivilegedCall e a task, "Não inclui"). O `imm16` é ignorado
+            // pela semântica (mesmo padrão real de hardware: o imediato de HVC/SMC só importa para
+            // o handler em EL2/EL3, que este emulador não tem).
+            return new Ir64Op.PrivilegedCall();
+        }
+        // BRK/HLT/DCPS*: fora da fatia B6.1/B6.6.7.
+        throw unsupported(word, address);
     }
 
-    /// `DSB`/`ISB`/`DMB` (B6.6.3, `op0=0`) — NOP observável, mesmo precedente de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit. Demais formas do subgrupo
-    /// `op0=0` (hints como `NOP`/`WFE`/`WFI`, `CLREX`, `MSR (immediate, PSTATE)`, `SB`): fora do
-    /// escopo desta task — a opção da barreira (campo `CRm`, ex. `sy`/`ish`) também não é
-    /// distinguida, já que todas viram o mesmo NOP.
+    /// `DSB`/`ISB`/`DMB` (B6.6.3) e os "Hints" `NOP`/`YIELD`/`WFE`/`WFI`/`SEV`/`SEVL` (B6.6.7) —
+    /// mesmo subgrupo de encoding `op0=0` (`CRn` distingue barreira de hint). Barreiras e a maior
+    /// parte dos hints viram NOP observável, mesmo precedente de
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit; só `WFI` tem semântica
+    /// própria (ver {@link Ir64SystemInstructionOp#WFI}). Demais formas do subgrupo `op0=0`
+    /// (`CLREX`, `MSR (immediate, PSTATE)` incl. `DAIFSet`/`DAIFClr`, `SB`): fora do escopo desta
+    /// task (ver a task B6.6.7, "Não inclui" — `DAIFSet`/`DAIFClr` ficam para uma sub-task futura
+    /// se um consumidor real precisar mascarar IRQ explicitamente por software).
     private Ir64Op decodeSystemInstructionBarrier(int word, long address) {
         int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
         int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
@@ -1262,6 +1328,16 @@ public final class Aarch64Decoder {
                         || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_DMB
                         || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_ISB)) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
+        }
+        if (crn == SYSTEM_INSTRUCTION_HINT_CRN) {
+            if (op2 == SYSTEM_INSTRUCTION_HINT_OP2_WFI) {
+                return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.WFI);
+            }
+            // NOP/YIELD/WFE/SEV/SEVL (e qualquer combinação reservada de CRm/op2 dentro do
+            // subgrupo "Hints" — RES NOP por definição arquitetural, `ARM DDI 0487 C6.2.132`):
+            // NOP puro, mesmo tratamento das barreiras (D2 da task B6.6.7 — sem event-stream
+            // modelado, `WFE`/`SEV`/`SEVL` não têm efeito observável neste emulador).
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
         }
         throw unsupported(word, address);
     }
@@ -1306,13 +1382,45 @@ public final class Aarch64Decoder {
         return new Ir64Op.SystemRegister(read, register, rt);
     }
 
-    /// Tabela de registradores de sistema cobertos (Fatos de referência #2 da task B6.6.1) — só
-    /// `op0=3`/`op1=0` (EL1 "geral"); qualquer outra combinação devolve `null` (não implementada
-    /// ainda, tratado pelo chamador como {@link UnsupportedOperationException}).
+    /// Tabela de registradores de sistema cobertos (Fatos de referência #2 da task B6.6.1,
+    /// estendida por B6.6.7): `op0=3`/`op1=0` (EL1 "geral", incl. os novos registradores de
+    /// identidade da CPU) OU `op0=3`/`op1=3` (timer genérico, acessível de EL0 — B6.6.7); qualquer
+    /// outra combinação devolve `null` (não implementada ainda, tratado pelo chamador como
+    /// {@link UnsupportedOperationException}).
     private static Aarch64SystemRegisterId decodeSystemRegisterId(
             int op0, int op1, int crn, int crm, int op2) {
-        if (op0 != SYSREG_OP0_EL1 || op1 != SYSREG_OP1_EL1) {
+        if (op0 != SYSREG_OP0_EL1) {
             return null;
+        }
+        if (op1 == SYSREG_OP1_EL0_TIMER) {
+            return decodeGenericTimerRegisterId(crn, crm, op2);
+        }
+        if (op1 != SYSREG_OP1_EL1) {
+            return null;
+        }
+        if (crn == SYSREG_CRN_CURRENT_EL && crm == SYSREG_CRM_CURRENT_EL && op2 == SYSREG_OP2_CURRENT_EL) {
+            return Aarch64SystemRegisterId.CURRENT_EL;
+        }
+        if (crn == SYSREG_CRN_MPIDR && crm == SYSREG_CRM_MPIDR && op2 == SYSREG_OP2_MPIDR) {
+            return Aarch64SystemRegisterId.MPIDR_EL1;
+        }
+        if (crn == SYSREG_CRN_MIDR && crm == SYSREG_CRM_MIDR && op2 == SYSREG_OP2_MIDR) {
+            return Aarch64SystemRegisterId.MIDR_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64PFR0 && crm == SYSREG_CRM_ID_AA64PFR0 && op2 == SYSREG_OP2_ID_AA64PFR0) {
+            return Aarch64SystemRegisterId.ID_AA64PFR0_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64ISAR0 && crm == SYSREG_CRM_ID_AA64ISAR0 && op2 == SYSREG_OP2_ID_AA64ISAR0) {
+            return Aarch64SystemRegisterId.ID_AA64ISAR0_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64MMFR0 && crm == SYSREG_CRM_ID_AA64MMFR0 && op2 == SYSREG_OP2_ID_AA64MMFR0) {
+            return Aarch64SystemRegisterId.ID_AA64MMFR0_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64DFR0 && crm == SYSREG_CRM_ID_AA64DFR0 && op2 == SYSREG_OP2_ID_AA64DFR0) {
+            return Aarch64SystemRegisterId.ID_AA64DFR0_EL1;
+        }
+        if (crn == SYSREG_CRN_TPIDR_EL1 && crm == SYSREG_CRM_TPIDR_EL1 && op2 == SYSREG_OP2_TPIDR_EL1) {
+            return Aarch64SystemRegisterId.TPIDR_EL1;
         }
         if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_SCTLR) {
             return Aarch64SystemRegisterId.SCTLR_EL1;
@@ -1340,6 +1448,33 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_SPSR && crm == SYSREG_CRM_SPSR && op2 == SYSREG_OP2_SPSR) {
             return Aarch64SystemRegisterId.SPSR_EL1;
+        }
+        return null;
+    }
+
+    /// Subconjunto do timer genérico coberto por B6.6.7 (`op0=3,op1=3,CRn=0b1110` fixo) — só o
+    /// comparador FÍSICO (`CNTP_*`), não o virtual (`CNTV_*`, sem consumidor real conhecido ainda,
+    /// nem `CNTKCTL_EL1`/`CNTHCTL_EL2`). Roteados para o {@link
+    /// dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus} do hospedeiro (ver javadoc de
+    /// {@link Aarch64SystemRegisterId}), diferente das identidades resolvidas acima.
+    private static Aarch64SystemRegisterId decodeGenericTimerRegisterId(int crn, int crm, int op2) {
+        if (crn != SYSREG_CRN_TIMER) {
+            return null;
+        }
+        if (crm == SYSREG_CRM_CNTFRQ && op2 == SYSREG_OP2_CNTFRQ) {
+            return Aarch64SystemRegisterId.CNTFRQ_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTPCT && op2 == SYSREG_OP2_CNTPCT) {
+            return Aarch64SystemRegisterId.CNTPCT_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_TVAL) {
+            return Aarch64SystemRegisterId.CNTP_TVAL_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_CTL) {
+            return Aarch64SystemRegisterId.CNTP_CTL_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_CVAL) {
+            return Aarch64SystemRegisterId.CNTP_CVAL_EL0;
         }
         return null;
     }

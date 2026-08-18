@@ -13,5 +13,17 @@ public enum Ir64SystemInstructionOp {
     /// `DSB`/`ISB`/`DMB` (qualquer opção de barreira): NOP observável, mesmo precedente de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} (32-bit) — sem cache nem
     /// pipeline modelados.
-    BARRIER
+    BARRIER,
+    /// `NOP`/`YIELD`/`WFE`/`SEV`/`SEVL` (B6.6.7, subgrupo "Hints") — NOP observável, mesmo
+    /// tratamento de {@link #BARRIER} (sem event-stream modelado: `WFE` não dorme, `SEV`/`SEVL`
+    /// não têm receptor). Registrado como sub-operação separada de {@link #BARRIER} só para deixar
+    /// explícito, no código, que a origem do encoding é o subgrupo "Hints" (`CRn=0b0010`), não
+    /// "Barriers" (`CRn=0b0011`) — a semântica executada é idêntica.
+    NOP_HINT,
+    /// `WFI` (B6.6.7, `ARM DDI 0487 C6.2.394`): põe o core para dormir até uma interrupção. Único
+    /// hint desta task com semântica própria — ver
+    /// {@link dev.vitorsilverio.armjitter.core.CpuSleepState} (reaproveitado diretamente de
+    /// `Aarch64Core`, genérico o bastante — mesma disciplina de `ExecutionThreshold` em B6.4 PR1)
+    /// e `Aarch64Core#interruptLine`.
+    WFI
 }
