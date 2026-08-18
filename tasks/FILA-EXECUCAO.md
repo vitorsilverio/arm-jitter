@@ -168,7 +168,26 @@ descarta de vez a hipótese de bug genérico de permissão/DACR (3 sessões já 
 Próximo passo: dump da palavra de PTE de `0x0014622d` antes/depois do abort, comparado bit a bit
 contra `arch/arm/include/asm/pgtable-2level.h` (mesma técnica de `curl` desta sessão). Ver Javadoc de
 `Raspi1BootTest` para o detalhe completo. `mvn -o test` verde (78, 2 skipped); nenhum arquivo do
-`arm-jitter` tocado. F3 segue 🟡 na fila "ATUAL".
+`arm-jitter` tocado.
+
+**Sessão de diagnóstico 5 (2026-08-18, `7355868` arm-jitter + `3ba61f0` virtual-arm-box) — BUG REAL
+ISOLADO E CORRIGIDO no `arm-jitter`, M3 ainda NÃO fecha (bloqueio mais estreito revelado logo
+depois)**: dump direto da palavra de PTE (`TranslatingAddressSpace#setMmuEnabled(false)`+`read32` =
+leitura física crua, walk manual de L1/L2 a partir de `TTBR0`) confirmou `DIRTY=0`/`RDONLY=1` no
+endereço travado — bate com a checagem de `pin_page_for_write()`. **Causa raiz**:
+`ArmCore#enterMemoryAbort` nunca preenchia `DFSR[11]` (`WnR`, ARM DDI 0406C B3.13.4) — toda falta de
+DADOS chegava ao guest indistinguível de uma leitura, mesmo com `accessType()` já disponível no
+ponto de chamada. O Linux real usa esse bit para decidir `FAULT_FLAG_WRITE`; sem ele, a falta de
+ESCRITA que causou o único abort do boot era tratada como leitura, corrigindo o `AP` de hardware mas
+nunca marcando a PTE como `dirty`. **Corrigido** (`ArmCore.java`, aditivo/G3, 2 testes de regressão
+novos); `mvn -o test` verde (1369 core+truffle) + `mvn -o install`; G5 revalidado (gbaemu verde,
+ndsemu verde, armbox 40/41 — a 1 falha é a mesma pré-existente `Armv7TortureTest`/`VfpRegisters`, não
+relacionada). **Efeito medido**: a mesma PTE relida após o fix mostra `DIRTY=1` (fix funcionou) mas
+`RDONLY` continua `1` — `pin_page_for_write()` ainda falha, por um motivo mais estreito e ainda não
+isolado (candidatos: outro bug real, ou o kernel corretamente recusando escrita numa VMA que ele não
+considera `VM_WRITE`, apontando para um problema no setup da pilha do `execve()` em vez do
+`arm-jitter`). Ver Javadoc de `Raspi1BootTest` para o próximo passo recomendado (dump da VMA
+correspondente). F3 segue 🟡 na fila "ATUAL".
 
 <!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
      está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
