@@ -107,7 +107,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P12 | **G3** — IPC + serviços (`srv:`/`APT`/`hid`/`fs`/`gsp` mínimo) | `trilha-g-3ds/g3-servicos-srv-apt-hid-fs.md` | n3dsemu | G2 | `C:\devkitPro\libctru` só tem os headers instalados localmente, **NÃO o código-fonte** (achado da investigação 2026-08-16 — `find`/`ls` em `C:\devkitPro\libctru` mostra só `include/`+`lib/*.a`, sem `source/`; a task G3 presume fonte disponível, revisar antes de executar) — 3dbrew + o próprio `.3dsx` desmontado (`arm-none-eabi-objdump`) seguem como oráculo; **bloqueio FPSCR CONFIRMADO RESOLVIDO 2026-08-16** pela B3.8 (ver nota abaixo); **os 2 gaps de G2 achados na investigação 2026-08-16 foram FECHADOS numa sessão de continuação de G2 no mesmo dia** (SVC `0x39`/`svcGetResourceLimitLimitValues` implementado + bug real de endereços do heap geral/linear trocados corrigido — `n3dsemu testdata/application.3dsx` não panica mais, ver índice do `tasks/README.md`); **AINDA NÃO PRONTA PARA EXECUTAR** — a mesma sessão achou um blocker NOVO e diferente: com os dois heaps commitados, o backend JIT entra num laço indefinido chamando `svcCreateAddressArbiter` (`0x21`) sempre no mesmo PC (confirmado até 200 mil fatias sem sair sozinho) — nenhum `svcConnectToPort`/serviço de verdade é alcançado por trás desse laço. Provavelmente precisa de sincronização/escalonador cooperativo reagindo de verdade a esse padrão (possível G2.2) antes de G3 fazer sentido; INTERPRETED/CHECK progridem bem mais devagar por fatia que o JIT dentro do mesmo orçamento, então o aceite "JIT e `--interp` idênticos" da G2 também não foi revalidado ponta a ponta |
 | P13 | **G4** — janela Vulkan apresentando os framebuffers | `trilha-g-3ds/g4-vulkan-apresentacao.md` | n3dsemu | G3 | primeira imagem na tela |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
-| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-17, sessão `FdtPatcher#withNodeDisabled`, ver detalhe abaixo) — **M1 e M2 FECHADOS** (JIT e INTERPRETED); M3 fechou mmc0/sdhost E usb/dwc_otg (dois bloqueios reais), mas achou um TERCEIRO bloqueio silencioso logo após `Run /init as init process` (sem causa raiz isolada); LONGA, 3 marcos |
+| P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | 🟡 PARCIAL (2026-08-18, sessão de trace instrução-a-instrução, ver detalhe abaixo) — **M1 e M2 FECHADOS** (JIT e INTERPRETED); M3 fechou mmc0/sdhost E usb/dwc_otg, e o TERCEIRO bloqueio (loop após `Run /init`) teve a hipótese de bug de `LDREX`/`STREX`/DACR no `arm-jitter` DESCARTADA por trace dinâmico — causa raiz exata ainda não isolada; LONGA, 3 marcos |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | LONGA, 3 PRs; **mesmo repo que P15 — serializar com a F3**, nunca em paralelo (regra 6) |
 
 ## F3 (`virtual-arm-box --machine=raspi1`) — resumo (histórico minucioso movido para `tasks/FILA-HISTORICO.md`)
@@ -118,22 +118,27 @@ M1 e M2 ✅ fechados (JIT e INTERPRETED). M3 (shell interativo): a sessão de
 `mmc@7e202000`/`usb@7e980000` no `.dtb` via `status = "disabled"`. Com os dois fechados, o boot
 chega de novo a `"Run /init as init process"`, mas revelou um TERCEIRO bloqueio.
 
-**Sessão de diagnóstico (2026-08-18)**: amostragem barata (sem trace completo) descartou `WFI`
+**Sessão de diagnóstico 1/2 (2026-08-18)**: amostragem barata (sem trace completo) descartou `WFI`
 sem IRQ e tempestade de IRQ — a CPU fica `RUNNING`/`SUPERVISOR` o tempo todo. Histograma de PC
-(≈187 mil amostras em 8min reais) mostrou o console parando de crescer bem cedo (amostra
-6964/187633) enquanto a CPU segue ativa para sempre presa em ~20 PCs estáveis — assinatura de
-loop sem saída, não de trabalho legítimo diverso. Desmontando essa região (kernel descomprimido,
-sem símbolos): um `rw_semaphore` fast-path (`LDREX`/`STREX`) chamado de dentro de um loop de
-fault-in de página via DACR/`CONFIG_CPU_SW_DOMAIN_PAN` (mesma família do `MCRR`/`MRRC` já
-corrigido nesta task), plausivelmente `fault_in_pages_writeable`/`copy_strings` do `execve()` de
-`/init` copiando `argv`/`envp` — cujo contador de bytes restantes nunca chega a zero. **Hipótese
-concreta, NÃO confirmada**: bug real de `LDREX`/`STREX`/DACR do `arm-jitter` sob essa combinação
-inédita (monitor exclusivo real + PAN por domínio + fault-in de página, nunca exercitados juntos
-antes desta task). Próximo passo recomendado: trace instrução-a-instrução focado só nesse loop
-pequeno (`0xc05b1750`-`0xc05b1980`), registrando `r7`/`r9`/resultado do `strb` de prova a cada
-iteração. Ver Javadoc de `Raspi1BootTest` (`virtual-arm-box`) para o achado completo. `mvn -o
-test` verde no `virtual-arm-box`; nenhum arquivo do `arm-jitter` tocado. F3 segue 🟡 na fila
-"ATUAL".
+mostrou o console parando de crescer bem cedo enquanto a CPU segue ativa presa em ~20 PCs
+estáveis. Desmontagem estática levantou a hipótese (NÃO confirmada) de bug de `LDREX`/`STREX`/DACR
+no `arm-jitter`.
+
+**Sessão de diagnóstico 2/2 (2026-08-18)**: trace instrução-a-instrução (fast-forward JIT +
+`ArmCore#step()`) **DESCARTOU** essa hipótese com evidência dinâmica: o loop real é um corpo
+determinístico de 157 instruções em `0xc05b1750`-`0xc05b18c4` (não o código hipotetizado por
+disassembly estático) onde TODOS os registradores amostrados (`r0`-`r4`/`r6`/`r9`/`r13`/`r14`)
+voltam bit-a-bit idênticos a cada período (20+ repetições); DACR faz round-trip correto
+(`0x55`→`0x55`) e `LDREX`/`STREX` sucedem de primeira em 2 call-sites distintos, sem retry — não é
+bug de `arm-jitter`. Timer ainda entrega IRQ nesta janela (27 em 100k `runSlice`). Achado colateral:
+o "Division by zero" já documentado (`pl011_set_termios`) acontece 2x ao abrir `/dev/console`,
+não-fatal; o travamento real é logo depois, dentro do `execve("/init")`, antes de qualquer saída do
+PID 1. Próximo passo: identificar a 3ª sub-rotina chamada pelo loop (`0xc02529b4`, ainda não
+identificada) e inspecionar CONTEÚDO DE MEMÓRIA (não só registradores) — a condição de saída não
+depende de nenhum registrador de propósito geral observado. Ver Javadoc de `Raspi1BootTest`
+(`virtual-arm-box`) para o achado completo. `mvn -o test` verde no `virtual-arm-box`; nenhum
+arquivo do `arm-jitter` tocado (hipótese de bug real ali agora descartada, não só não confirmada).
+F3 segue 🟡 na fila "ATUAL".
 
 <!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
      está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
