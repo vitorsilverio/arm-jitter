@@ -110,6 +110,7 @@ padrão do armbox — sem agrupamento definido ainda).
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4 | LONGA, 3 PRs; aceite é **só** o `simple_tri` |
 | P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | ⏸️ **PAUSADA a pedido do usuário em 2026-08-18** — 6 sessões de diagnóstico sem fechar M3 (ver resumo abaixo); a sessão 6 tentou usar `qemu-system-arm -M raspi1ap` como oráculo e o PRÓPRIO QEMU travou aos 2,5s com este kernel/DTB (lacuna do modelo `raspi1ap`, não bug nosso) — sinal de que este `kernel.img` real (6.18.33) pode estar puxando periféricos/caminhos de código bem além do que emuladores minimalistas cobrem sem esforço desproporcional. **Não pegar automaticamente** — só retomar se o usuário priorizar de novo, possivelmente reavaliando o kernel/DTB alvo em vez de insistir no mesmo |
 | P16 | **F10** — disco virtual `raw`+QCOW2 (r/w) + PL181 MMCI/SD | `trilha-f-infra/f10-disco-virtual-raw-qcow2.md` | virtual-arm-box | F2 | ⏸️ **PAUSADA junto com F3** (mesmo repo, regra 6 de serialização — sem sentido priorizar isolada enquanto F3 está parada) |
+| P17 | **F11** — `virtual-arm-box --machine=raspi3-64` (AArch64, `kernel8.img`) | `trilha-f-infra/f11-raspi3-aarch64-machine.md` | virtual-arm-box | F3 (só M1/M2, não M3) | **NOVA, priorizada pelo usuário 2026-08-18** — rota alternativa e mais barata para o degrau aarch64 do ROADMAP, no lugar de B6.6.6 (ver nota logo acima desta tabela); **mesmo repo que P15/P16 — regra 6 de serialização também se aplica**, mas como P15/P16 estão pausadas, a F11 pode andar sozinha nesse repo |
 
 ## F3 (`virtual-arm-box --machine=raspi1`) — resumo (histórico minucioso movido para `tasks/FILA-HISTORICO.md`)
 
@@ -319,9 +320,14 @@ fechada (2026-07-27, ver histórico acima) — fecha o épico B6.5 por completo*
 nativa de FP, `Ir64NativePolicy`/`Ir64BlockCompiler` estendidos, sem meta de performance por
 decisão D1). B6.6 (MMU v8 +
 hospedeiro `virt64`) decomposta em B6.6.1-B6.6.6 (2026-07-26) — B6.6.1-B6.6.5 já fecharam (ver
-histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que já nasce
-bloqueada no usuário, ver seção 🧑 abaixo. Ver `b6-aarch64.md` para o detalhe completo de cada
-sub-task.
+histórico acima), **épico quase 100%**; só falta B6.6.6 (hospedeiro `virt64`), que nasceu
+bloqueada no usuário (kernel/toolchain `aarch64-linux-*`). **Atualização 2026-08-18 (a pedido do
+usuário)**: esse bloqueio de ambiente tem uma rota alternativa mais barata — o repositório
+`raspberrypi/firmware` (o mesmo que já deu os assets da F3) publica `kernel8.img`, um kernel
+AArch64 pré-compilado real, sem precisar de toolchain nem de GIC/PSCI (o Pi 3 real não usa GIC).
+Nova task **F11** (`trilha-f-infra/f11-raspi3-aarch64-machine.md`, repo virtual-arm-box) ataca o
+degrau aarch64 por essa rota; **B6.6.6 fica formalmente em espera** (não cancelada) enquanto a
+F11 não se esgotar — ver seção 🧑 abaixo (entrada ajustada) e a tabela de Onda 4 para F11.
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 
 | Task | Arquivo | O que precisa do usuário | Destrava depois |
@@ -333,7 +339,7 @@ sub-task.
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
 | **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
 | **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24), **o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64", já com as 4 sub-tasks B6.3.1-B6.3.4 fechadas) **e o bench "busybox ≥3× interpretador" do PR3 de B6.4** (codegen fechado 2026-07-26, só falta medir) — mesmo bloqueio, um só ambiente resolve os três |
-| **B6.6.6** — hospedeiro `virt64` (kernel arm64 mínimo até shell) | `trilha-b-arquiteturas/b6.6.6-aarch64-virt64-host.md` | Kernel arm64 mainline real (pré-compilado ou toolchain para buildar) + idealmente um initramfs busybox aarch64 real — mesmo bloqueio de toolchain/binário de B6.2 aceite #2/B4.0.3 item 3, um só ambiente resolve os três; adicionalmente, GICv2/GICv3/PSCI/DTB são substancialmente mais complexos que os periféricos versatilepb do precedente B4.1.5, reservar tempo de sessão maior | fecha o épico B6.6 por completo (depende de B6.6.1-B6.6.5, rodada de spec 2026-07-26, ver `b6-aarch64.md`) |
+| ~~B6.6.6~~ **EM ESPERA** (não cancelada) desde 2026-08-18 — hospedeiro `virt64` (kernel arm64 mínimo até shell) | `trilha-b-arquiteturas/b6.6.6-aarch64-virt64-host.md` | Kernel arm64 mainline real (pré-compilado ou toolchain para buildar) + idealmente um initramfs busybox aarch64 real — mesmo bloqueio de toolchain/binário de B6.2 aceite #2/B4.0.3 item 3, um só ambiente resolve os três; adicionalmente, GICv2/GICv3/PSCI/DTB são substancialmente mais complexos que os periféricos versatilepb do precedente B4.1.5, reservar tempo de sessão maior. **Rota alternativa mais barata criada nesta data: task F11** (`trilha-f-infra/f11-raspi3-aarch64-machine.md`, virtual-arm-box) — kernel AArch64 pré-compilado do `raspberrypi/firmware` (mesmo repo da F3), sem GIC/PSCI/toolchain. Retomar B6.6.6 só se a F11 esbarrar em algo que só a máquina `virt` evitaria, ou se o usuário priorizar Windows on ARM (que exige UEFI/`virt`) diretamente | fecha o épico B6.6 por completo (depende de B6.6.1-B6.6.5, rodada de spec 2026-07-26, ver `b6-aarch64.md`) — **mas o objetivo prático "Linux arm64 até shell" agora tem uma rota não-bloqueada via F11** |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 
