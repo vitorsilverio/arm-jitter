@@ -116,16 +116,24 @@ M1 e M2 ✅ fechados (JIT e INTERPRETED). M3 (shell interativo): a sessão de
 `FdtPatcher#withNodeDisabled` (2026-08-17) fechou DOIS bloqueios reais — retry infinito de
 `mmc0`/`sdhost` e uma espera síncrona silenciosa de `usb`/`dwc_otg` — desabilitando os nós
 `mmc@7e202000`/`usb@7e980000` no `.dtb` via `status = "disabled"`. Com os dois fechados, o boot
-chega de novo a `"Run /init as init process"`, mas revelou um TERCEIRO bloqueio, novo e
-diferente: o console fica com tamanho ESTÁVEL logo depois, sem nenhuma linha nova (nem o `echo`
-do próprio `/init`, que não depende de hardware) por dezenas de milhões de fatias — sem nenhuma
-pista textual (ao contrário dos dois anteriores). Causa raiz NÃO isolada. Próximo passo
-recomendado: trace instrução-a-instrução (`ArmCore#step()`) a partir do ponto onde `"Run /init as
-init process"` é impresso, para descobrir se é `WFI` sem IRQ, outra espera síncrona, ou algo no
-script `init`/`inittab` do busybox reagindo à ausência dos dois dispositivos desabilitados. Ver
-Javadoc de `Raspi1BootTest`/`Bcm2835Machine` (`virtual-arm-box`) para o achado completo. `mvn -o
-test` verde no `virtual-arm-box` (78 testes, 2 skipped = M3×2); nenhum arquivo do `arm-jitter`
-tocado. F3 segue 🟡 na fila "ATUAL".
+chega de novo a `"Run /init as init process"`, mas revelou um TERCEIRO bloqueio.
+
+**Sessão de diagnóstico (2026-08-18)**: amostragem barata (sem trace completo) descartou `WFI`
+sem IRQ e tempestade de IRQ — a CPU fica `RUNNING`/`SUPERVISOR` o tempo todo. Histograma de PC
+(≈187 mil amostras em 8min reais) mostrou o console parando de crescer bem cedo (amostra
+6964/187633) enquanto a CPU segue ativa para sempre presa em ~20 PCs estáveis — assinatura de
+loop sem saída, não de trabalho legítimo diverso. Desmontando essa região (kernel descomprimido,
+sem símbolos): um `rw_semaphore` fast-path (`LDREX`/`STREX`) chamado de dentro de um loop de
+fault-in de página via DACR/`CONFIG_CPU_SW_DOMAIN_PAN` (mesma família do `MCRR`/`MRRC` já
+corrigido nesta task), plausivelmente `fault_in_pages_writeable`/`copy_strings` do `execve()` de
+`/init` copiando `argv`/`envp` — cujo contador de bytes restantes nunca chega a zero. **Hipótese
+concreta, NÃO confirmada**: bug real de `LDREX`/`STREX`/DACR do `arm-jitter` sob essa combinação
+inédita (monitor exclusivo real + PAN por domínio + fault-in de página, nunca exercitados juntos
+antes desta task). Próximo passo recomendado: trace instrução-a-instrução focado só nesse loop
+pequeno (`0xc05b1750`-`0xc05b1980`), registrando `r7`/`r9`/resultado do `strb` de prova a cada
+iteração. Ver Javadoc de `Raspi1BootTest` (`virtual-arm-box`) para o achado completo. `mvn -o
+test` verde no `virtual-arm-box`; nenhum arquivo do `arm-jitter` tocado. F3 segue 🟡 na fila
+"ATUAL".
 
 <!-- Histórico minucioso completo da F3 (todas as sessões, começando com o abort storm ARMv6K)
      está em tasks/FILA-HISTORICO.md, seção "F3 (...) — histórico condensado movido de
