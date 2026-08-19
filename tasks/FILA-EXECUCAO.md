@@ -127,7 +127,32 @@ divergência real ASM×interpretador em `StoreExclusive` (STREX), padrão de spi
 `ARM11_MPCORE`. Virou task **E3** no `arm-jitter`. `mvn -o test` do n3dsemu: 2 falhas (a
 divergência STREX), não corrigidas nesta sessão — commit feito mesmo assim a pedido do usuário
 (os 2 fixes são corretos e uma melhoria real, mesmo sem fechar a suíte). |
-| P13.5 | **G4.1** — `APT:GetSharedFont` (fonte do sistema para o console) | `trilha-g-3ds/g4.1-apt-shared-font.md` | n3dsemu | G4 | achado ao tentar validar visualmente a G4 (ver nota abaixo, sessão 2026-08-19): sem fonte mapeada, o console nunca desenha glyph nenhum — tela fica preta mesmo com framebuffer trocando certo. **Decisão do usuário 2026-08-19**: usar fonte open-source via toolset `JayFoxRox/3ds-font` (GPLv2+, gera `.bcfnt` a partir de uma TTF de origem à parte — escolher TTF de licença permissiva, não GPL) em vez de dump real de `shared_font.bin` |
+| P13.5 | **G4.1** — `APT:GetSharedFont` (fonte do sistema para o console) | `trilha-g-3ds/g4.1-apt-shared-font.md` | n3dsemu | G4 | ⏸️ **PARADA (sessão 2026-08-19, passo "Inclui" 1 — confirmar a hipótese): HIPÓTESE REFUTADA por evidência, não implementado.** Ver nota abaixo ("Sessão 2026-08-19 (G4.1) — hipótese de GetSharedFont refutada") — devolvida ao usuário para decidir o próximo passo, não é a causa da tela preta |
+**Sessão 2026-08-19 (G4.1) — hipótese de `GetSharedFont` REFUTADA (passo 1 do "Inclui": "confirmar a
+hipótese... não presumir")**: a task pedia confirmar, com trace, que `APT:GetSharedFont` era chamado
+e falhava antes de implementar o fix. Rodando `n3dsemu testdata/hello-world.3dsx --headless
+--trace-svc` com orçamento de fatias bem maior que o da sessão anterior (200→3000, chega a executar
+o laço principal do app em regime estacionário por milhares de iterações, log completo capturado, não
+só as últimas 32 chamadas do ring buffer) o comando `0x0044` (`GetSharedFont`, confirmado via
+`WebFetch` na 3dbrew: `NS_and_APT_Services`, cabeçalho `0x00440000`) **nunca aparece nem uma vez** —
+nenhum log `[APT:U] comando desconhecido 0x0044`. Cruzando com o fonte real do libctru
+(`libctru/source/console.c` via `WebFetch` no GitHub `devkitPro/libctru`): `consoleInit`/
+`consoleDrawChar` usam uma fonte **embutida no próprio binário** (`default_font_bin`, bitmap 8×8
+compilado estaticamente), *não* a fonte do sistema via `APT_GetSharedFont` — essa API só é usada
+pelo módulo de fontes do `citro2d`/`citro3d` (texto TTF-like), que o `hello-world` (baseado em
+`console.c` puro) não usa. **Confirmado também no fonte do próprio exemplo**
+(`C:\devkitPro\examples\3ds\graphics\printing\hello-world\source\main.c`): `printf` roda antes do
+laço principal; nenhuma chamada relacionada a fonte aparece em lugar nenhum. Conclusão: a tela preta
+**não tem relação com fonte nenhuma** — a causa real está em algum outro lugar do caminho
+`consoleInit`→`printf`(escreve direto no framebuffer via ponteiro de `gfxGetFramebuffer`)→
+`gfxSwapBuffers`→`GspGpuService`/`FrameBufferState`→`Main#presentFrame`. **Não implementado**
+(rodar o toolset `JayFoxRox/3ds-font` teria sido trabalho desperdiçado sobre uma hipótese falsa) —
+devolvida ao usuário: precisa de uma sessão nova de investigação (candidata a task **G4.2**) para
+achar a causa real, provavelmente rastreando byte a byte o que `consoleDrawChar` escreve no
+framebuffer do guest vs. o que `GuestFrameBufferReader`/`presentFrame` de fato lê (mesma técnica de
+dump de memória já usada em outras investigações desta fila). `mvn -o test` não rodado nesta sessão
+(nenhum código tocado). Nenhum commit desta sessão além da atualização deste arquivo.
+
 | P13.6 | **E3** — `StoreExclusive`: divergência real ASM×interpretador | `trilha-e-manutencao/e3-strex-asm-interp-divergence.md` | arm-jitter | — | bug PRÉ-EXISTENTE, revelado (não introduzido) pelos fixes de G4 — `mvn -o test` do n3dsemu tem 2 falhas até isto fechar; pode rodar em paralelo (repo diferente) |
 | P14 | **G5** — PICA200 (command list + shader + TEV) | `trilha-g-3ds/g5-pica200-render.md` | n3dsemu | G4.1 | LONGA, 3 PRs; aceite é **só** o `simple_tri`; dependência ajustada de G4→G4.1 (sem fonte, nenhum HUD/texto de debug do PICA200 apareceria também) |
 | P15 | **F3** — `virtual-arm-box --machine=raspi1` | `trilha-f-infra/f3-raspi1-machine.md` | virtual-arm-box | F2 | ⏸️ **PAUSADA a pedido do usuário em 2026-08-18** — 6 sessões de diagnóstico sem fechar M3 (ver resumo abaixo); a sessão 6 tentou usar `qemu-system-arm -M raspi1ap` como oráculo e o PRÓPRIO QEMU travou aos 2,5s com este kernel/DTB (lacuna do modelo `raspi1ap`, não bug nosso) — sinal de que este `kernel.img` real (6.18.33) pode estar puxando periféricos/caminhos de código bem além do que emuladores minimalistas cobrem sem esforço desproporcional. **Não pegar automaticamente** — só retomar se o usuário priorizar de novo, possivelmente reavaliando o kernel/DTB alvo em vez de insistir no mesmo |
