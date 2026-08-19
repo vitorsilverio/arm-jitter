@@ -81,6 +81,16 @@ public final class DivergenceCheckingCodeEmitter implements CodeEmitter {
             byte[] before = saveState(core);
             scratchMemory.resetTaint();
             restoreState(scratchCore, before);
+            // ArmCore#loadState limpa o monitor de exclusividade DE PROPÓSITO (falha espúria de
+            // STREX permitida pela arquitetura num save-state real). Aqui não é um save-state:
+            // é isolamento por bloco, e um STREX num bloco seguinte a um LDREX de bloco anterior
+            // (padrão real de spinlock/retry — os dois nunca dividem bloco quando há um branch de
+            // retry entre eles) precisa ver a MESMA reserva que o core real tem, senão o
+            // candidato falha espuriamente todo STREX cross-block (E3).
+            long monitorAddress = core.exclusiveMonitorAddress();
+            if (monitorAddress != -1) {
+                scratchCore.markExclusive(monitorAddress, core.exclusiveMonitorSizeBytes());
+            }
             int candidateCycles;
             CpuSnapshot candidateSnapshot;
             try {
