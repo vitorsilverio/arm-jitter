@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -30,8 +31,8 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 /// (devkitA64) — ver o corpus versionado em `src/test/resources/aarch64/corpus.s`.
 ///
 /// `Extract` (`EXTR`, mesmo subgrupo de `Bitfield` dentro de `Data Processing Immediate`),
-/// `Logical (shifted register)` (mesma classe `Data Processing Register`), `LDXP`/`STXP`/`CAS`/
-/// `LDAR`/`STLR` (mesmo subgrupo de exclusivo/atômico de `LDXR`/`STXR`, ver B6.3.4), load/store de
+/// `LDXP`/`STXP`/`CAS`/`LDAR`/`STLR` (mesmo subgrupo de exclusivo/atômico de `LDXR`/`STXR`, ver
+/// B6.3.4), load/store de
 /// registrador SIMD&FP (`V=1`) e data-processing SIMD&FP ficam FORA do escopo fechado do épico B6
 /// — qualquer encoding fora do escopo listado lança {@link UnsupportedOperationException} em vez
 /// de tentar adivinhar semântica (nenhum oráculo real cobre o que não foi implementado).
@@ -474,6 +475,15 @@ public final class Aarch64Decoder {
     private static final int ADDSUB_REGISTER_EXTENDED_BIT_SHIFT = 21;
     private static final int ADDSUB_REGISTER_RM_SHIFT = 16;
 
+    // ── Logical (shifted register), B6.9: mesmo grupo de 5 bits em bits[28:24] que Add/subtract
+    // ── (shifted/extended register) acima, mas com padrão `01010` em vez de `01011` — só esse
+    // ── bit (bit24) distingue as duas famílias dentro de "Data Processing — Register". Reaproveita
+    // ── ADDSUB_SHIFTED_TYPE_SHIFT (campo `st`), ADDSUB_REGISTER_EXTENDED_BIT_SHIFT (aqui é o bit
+    // ── de inversão `n`, mesma posição bit21), ADDSUB_REGISTER_RM_SHIFT e ADDSUB_SHIFTED_AMOUNT_*
+    // ── (campo `sa`) já declarados acima — ver B6.9 Fatos de referência #1. ──────────────────────
+    private static final int LOGICAL_SHIFTED_REGISTER_GROUP_PATTERN = 0b01010;
+    private static final int LOGICAL_SHIFTED_REGISTER_INVERT_BIT_SHIFT = ADDSUB_REGISTER_EXTENDED_BIT_SHIFT;
+
     // ── Add/subtract (shifted register): shift(23:22) 0(21) Rm(20:16) imm6(15:10) Rn(9:5) ─────
     // ── Rd(4:0) ──────────────────────────────────────────────────────────────────────────────
     private static final int ADDSUB_SHIFTED_TYPE_SHIFT = 22;
@@ -899,9 +909,9 @@ public final class Aarch64Decoder {
     }
 
     /// Sub-dispatch da classe "Data Processing — Register" (D1 da task B6.3.1, estendido por
-    /// B6.3.2 com `CSEL`/`CSINC`/`CSINV`/`CSNEG`): `2-source`/`3-source` (B6.3.3) entram como
-    /// `case`s adicionais aqui, adicionados por essa task subsequente. `Logical (shifted
-    /// register)` fica fora do escopo fechado do épico B6 (não implementar — ver a task).
+    /// B6.3.2 com `CSEL`/`CSINC`/`CSINV`/`CSNEG`, por B6.9 com `Logical (shifted register)`):
+    /// `2-source`/`3-source` (B6.3.3) entram como `case`s adicionais aqui, adicionados por essa
+    /// task subsequente.
     ///
     /// `bit26=1` (B6.5.3, D1 da task): a MESMA checagem de entrada (bit27=1 && bit25=1) também
     /// aceita a classe irmã "Data Processing — Scalar Floating-Point and Advanced SIMD" — só
@@ -917,6 +927,9 @@ public final class Aarch64Decoder {
             return extendedForm
                     ? decodeAddSubExtendedRegister(word, address)
                     : decodeAddSubShiftedRegister(word, address);
+        }
+        if (addSubGroup == LOGICAL_SHIFTED_REGISTER_GROUP_PATTERN) {
+            return decodeLogicalShiftedRegister(word, address);
         }
         int fixed9 = (word >>> CSEL_FIXED_SHIFT) & CSEL_FIXED_9BIT_MASK;
         boolean reservedBit11Clear = (word & CSEL_RESERVED_BIT11_MASK) == 0;
@@ -939,7 +952,6 @@ public final class Aarch64Decoder {
             // opcode != 00001: LSLV/LSRV/ASRV/RORV/CRC32* (fora do escopo fechado do épico).
             throw unsupported(word, address);
         }
-        // Logical (shifted register): fora do escopo fechado do épico (ver a task B6.3.1).
         throw unsupported(word, address);
     }
 
@@ -1033,6 +1045,45 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.AluShiftedRegister(
                 isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, rm, shiftType, shiftAmount, wide, setFlags);
+    }
+
+    /// `AND`/`ORR`/`EOR`/`ANDS` (`n=0`) e `BIC`/`ORN`/`EON`/`BICS` (`n=1`), forma "shifted
+    /// register" (B6.9). Reaproveita o mesmo mapeamento de `opc` já usado por
+    /// {@link #decodeLogicalImmediate} (`LOGICAL_IMM_OPC_*`: `00`=`AND`,`01`=`ORR`,`10`=`EOR`,
+    /// `11`=`ANDS`) e os mesmos deslocamentos de bit de {@link #decodeAddSubShiftedRegister}
+    /// (`st`/`sa`/`Rm`/`Rn`/`Rd` caem nas MESMAS posições — só o padrão de grupo em bits[28:24]
+    /// muda). Ao contrário daquele método, `st=11` (`ROR`) é VÁLIDO aqui (Fatos de referência #2
+    /// da task — não portar a checagem de reservado). `MOV`/`MVN` (registrador) não têm `case`
+    /// próprio (D3 da task) — o caminho geral com `Rn=31` já produz o resultado correto.
+    private Ir64Op decodeLogicalShiftedRegister(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int shiftAmount = (word >>> ADDSUB_SHIFTED_AMOUNT_SHIFT) & ADDSUB_SHIFTED_AMOUNT_MASK;
+        if (!wide && (shiftAmount & ADDSUB_SHIFTED_AMOUNT_BIT5) != 0) {
+            // sf=0 (W) só aceita quantidade 0-31 — bit5 setado significa >= 32, UNDEFINED.
+            throw unsupported(word, address);
+        }
+        int shiftTypeField = (word >>> ADDSUB_SHIFTED_TYPE_SHIFT) & ADDSUB_SHIFTED_TYPE_MASK;
+        Ir64LogicalShiftType shiftType = switch (shiftTypeField) {
+            case ADDSUB_SHIFTED_TYPE_LSL -> Ir64LogicalShiftType.LSL;
+            case ADDSUB_SHIFTED_TYPE_LSR -> Ir64LogicalShiftType.LSR;
+            case ADDSUB_SHIFTED_TYPE_ASR -> Ir64LogicalShiftType.ASR;
+            case ADDSUB_SHIFTED_TYPE_RESERVED_ROR -> Ir64LogicalShiftType.ROR;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        boolean invert = ((word >>> LOGICAL_SHIFTED_REGISTER_INVERT_BIT_SHIFT) & 1) != 0;
+        int opc = (word >>> LOGICAL_IMM_OPC_SHIFT) & LOGICAL_IMM_OPC_MASK;
+        Ir64AluOp opcode = switch (opc) {
+            case LOGICAL_IMM_OPC_AND, LOGICAL_IMM_OPC_ANDS -> Ir64AluOp.AND;
+            case LOGICAL_IMM_OPC_ORR -> Ir64AluOp.ORR;
+            case LOGICAL_IMM_OPC_EOR -> Ir64AluOp.EOR;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        boolean setFlags = opc == LOGICAL_IMM_OPC_ANDS;
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.LogicalShiftedRegister(
+                opcode, rd, rn, rm, shiftType, shiftAmount, invert, wide, setFlags);
     }
 
     private Ir64Op decodeAddSubExtendedRegister(int word, long address) {

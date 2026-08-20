@@ -259,3 +259,45 @@ ccmn w9, w10, #12, pl
 ccmn x11, #31, #15, vs
 ccmn w12, #0, #0, vc
 ccmp x18, #0, #0xd, pl
+
+// -- B6.9: Logical (shifted register), AND/ORR/EOR/ANDS + BIC/ORN/EON/BICS, gap achado pela F11 --
+and x1, x2, x3, lsl #4
+and x1, x2, x3, lsr #4
+and x1, x2, x3, asr #4
+and x1, x2, x3, ror #4
+orr x4, x5, x6, lsl #8
+orr x4, x5, x6, lsr #8
+orr x4, x5, x6, asr #8
+orr x4, x5, x6, ror #8
+eor x7, x8, x9, lsl #12
+eor x7, x8, x9, lsr #12
+eor x7, x8, x9, asr #12
+eor x7, x8, x9, ror #12
+ands x10, x11, x12, lsl #16
+ands x10, x11, x12, lsr #16
+ands x10, x11, x12, asr #16
+ands x10, x11, x12, ror #16
+bic x13, x14, x15, lsl #4
+bic x13, x14, x15, lsr #4
+bic x13, x14, x15, asr #4
+bic x13, x14, x15, ror #4
+orn x16, x17, x18, lsl #8
+orn x16, x17, x18, lsr #8
+orn x16, x17, x18, asr #8
+orn x16, x17, x18, ror #8
+eon x19, x20, x21, lsl #12
+eon x19, x20, x21, lsr #12
+eon x19, x20, x21, asr #12
+eon x19, x20, x21, ror #12
+bics x22, x23, x24, lsl #16
+bics x22, x23, x24, lsr #16
+bics x22, x23, x24, asr #16
+bics x22, x23, x24, ror #16
+and w1, w2, w3, lsl #4
+orr w4, w5, w6, lsr #8
+eor w7, w8, w9, asr #12
+ands w10, w11, w12, ror #16
+mov x21, x0
+mvn x22, x1
+mov w23, w2
+mvn w24, w3

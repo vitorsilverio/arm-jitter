@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
@@ -214,6 +215,8 @@ public final class Ir64BlockExecutor {
                     executeConditionalSelect(core, (Ir64Op.ConditionalSelect) op);
             case Ir64Op.Kind.CONDITIONAL_COMPARE ->
                     executeConditionalCompare(core, (Ir64Op.ConditionalCompare) op);
+            case Ir64Op.Kind.LOGICAL_SHIFTED_REGISTER ->
+                    executeLogicalShiftedRegister(core, (Ir64Op.LogicalShiftedRegister) op);
             case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
                     executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
@@ -330,6 +333,55 @@ public final class Ir64BlockExecutor {
             case LSL -> narrow << amount;
             case LSR -> narrow >>> amount;
             case ASR -> narrow >> amount;
+        };
+        return shifted & LOW_32_BITS_MASK;
+    }
+
+    /// `AND`/`ORR`/`EOR`/`ANDS`/`BIC`/`ORN`/`EON`/`BICS` na forma "shifted register" (B6.9) —
+    /// `Rm` é deslocado (`shiftType`/`shiftAmount`, os 4 tipos incl. `ROR`), depois OPCIONALMENTE
+    /// invertido bit a bit ({@link Ir64Op.LogicalShiftedRegister#invert}) ANTES de combinar com
+    /// `Rn` (inversão sempre acontece antes da operação lógica, nunca depois — `bic rd,rn,rm` =
+    /// `rn AND (NOT rm)`, não `NOT(rn AND rm)`). Flags reaproveitam {@link #logicalWithFlags}
+    /// (mesmo padrão de {@link #executeAlu}, D2 da task B6.3.1: `C=0,V=0` sempre).
+    private boolean executeLogicalShiftedRegister(Aarch64Core core, Ir64Op.LogicalShiftedRegister op) {
+        long operand1 = core.xForWidth(op.src1(), op.wide());
+        long rawOperand2 = core.xForWidth(op.src2(), op.wide());
+        long shifted = applyLogicalShift(rawOperand2, op.shiftType(), op.shiftAmount(), op.wide());
+        long operand2 = op.invert() ? ~shifted : shifted;
+        long combined = switch (op.opcode()) {
+            case AND -> operand1 & operand2;
+            case ORR -> operand1 | operand2;
+            case EOR -> operand1 ^ operand2;
+            case ADD, SUB -> throw new IllegalStateException(
+                    "LogicalShiftedRegister nunca carrega ADD/SUB: " + op.opcode());
+        };
+        AluResult result = logicalWithFlags(combined, op.wide());
+        if (op.setFlags()) {
+            core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
+        }
+        core.setXForWidth(op.dst(), result.value, op.wide());
+        return false;
+    }
+
+    /// Aplica o deslocamento de {@link Ir64Op.LogicalShiftedRegister}, incluindo `ROR` (válido
+    /// só aqui — `AluShiftedRegister`/{@link #applyShift} não tem esse caso, ver
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType}).
+    private static long applyLogicalShift(
+            long value, Ir64LogicalShiftType shiftType, int amount, boolean wide) {
+        if (wide) {
+            return switch (shiftType) {
+                case LSL -> value << amount;
+                case LSR -> value >>> amount;
+                case ASR -> value >> amount;
+                case ROR -> amount == 0 ? value : (value >>> amount) | (value << (Long.SIZE - amount));
+            };
+        }
+        int narrow = (int) value;
+        int shifted = switch (shiftType) {
+            case LSL -> narrow << amount;
+            case LSR -> narrow >>> amount;
+            case ASR -> narrow >> amount;
+            case ROR -> amount == 0 ? narrow : (narrow >>> amount) | (narrow << (Integer.SIZE - amount));
         };
         return shifted & LOW_32_BITS_MASK;
     }

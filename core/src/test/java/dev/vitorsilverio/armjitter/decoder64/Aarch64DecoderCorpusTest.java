@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -2299,5 +2300,324 @@ class Aarch64DecoderCorpusTest {
         assertTrue(op.wide());
         assertEquals(Ir64Condition.PL, op.condition());
         assertEquals(0xd, op.nzcv());
+    }
+
+    // ── B6.9: Logical (shifted register) — apêndice do mesmo corpus.s/.bin/.objdump.txt, offsets
+    // ── 0x3a8-0x444, incl. o vetor literal `mov x21, x0` (0xaa0003f5) que motivou a task ─────────
+
+    private static void assertLogical(
+            Ir64Op.LogicalShiftedRegister op, Ir64AluOp opcode, int dst, int src1, int src2,
+            Ir64LogicalShiftType shiftType, int shiftAmount, boolean invert, boolean wide,
+            boolean setFlags) {
+        assertEquals(opcode, op.opcode());
+        assertEquals(dst, op.dst());
+        assertEquals(src1, op.src1());
+        assertEquals(src2, op.src2());
+        assertEquals(shiftType, op.shiftType());
+        assertEquals(shiftAmount, op.shiftAmount());
+        assertEquals(invert, op.invert());
+        assertEquals(wide, op.wide());
+        assertEquals(setFlags, op.setFlags());
+    }
+
+    @Test
+    void andShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3a8);
+        assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSL, 4, false, true, false);
+    }
+
+    @Test
+    void andShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3ac);
+        assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSR, 4, false, true, false);
+    }
+
+    @Test
+    void andShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b0);
+        assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.ASR, 4, false, true, false);
+    }
+
+    @Test
+    void andShiftedRor() {
+        // and x1, x2, x3, ror #4 — ROR só existe nesta forma (RESERVADO em AluShiftedRegister).
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b4);
+        assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.ROR, 4, false, true, false);
+    }
+
+    @Test
+    void orrShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b8);
+        assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSL, 8, false, true, false);
+    }
+
+    @Test
+    void orrShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3bc);
+        assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSR, 8, false, true, false);
+    }
+
+    @Test
+    void orrShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c0);
+        assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.ASR, 8, false, true, false);
+    }
+
+    @Test
+    void orrShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c4);
+        assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.ROR, 8, false, true, false);
+    }
+
+    @Test
+    void eorShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c8);
+        assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.LSL, 12, false, true, false);
+    }
+
+    @Test
+    void eorShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3cc);
+        assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.LSR, 12, false, true, false);
+    }
+
+    @Test
+    void eorShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d0);
+        assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ASR, 12, false, true, false);
+    }
+
+    @Test
+    void eorShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d4);
+        assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ROR, 12, false, true, false);
+    }
+
+    @Test
+    void andsShiftedLsl() {
+        // ands: opc=11 -> Ir64AluOp.AND com setFlags=true (D2, mesma decisão de B6.3.1 imediato).
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d8);
+        assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.LSL, 16, false, true, true);
+    }
+
+    @Test
+    void andsShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3dc);
+        assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.LSR, 16, false, true, true);
+    }
+
+    @Test
+    void andsShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e0);
+        assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ASR, 16, false, true, true);
+    }
+
+    @Test
+    void andsShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e4);
+        assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ROR, 16, false, true, true);
+    }
+
+    @Test
+    void bicShiftedLsl() {
+        // bic: mesmo opcode AND, invert=true (bit n=1) — Rm invertido ANTES de combinar.
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e8);
+        assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.LSL, 4, true, true, false);
+    }
+
+    @Test
+    void bicShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3ec);
+        assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.LSR, 4, true, true, false);
+    }
+
+    @Test
+    void bicShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f0);
+        assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.ASR, 4, true, true, false);
+    }
+
+    @Test
+    void bicShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f4);
+        assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.ROR, 4, true, true, false);
+    }
+
+    @Test
+    void ornShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f8);
+        assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.LSL, 8, true, true, false);
+    }
+
+    @Test
+    void ornShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3fc);
+        assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.LSR, 8, true, true, false);
+    }
+
+    @Test
+    void ornShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x400);
+        assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.ASR, 8, true, true, false);
+    }
+
+    @Test
+    void ornShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x404);
+        assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.ROR, 8, true, true, false);
+    }
+
+    @Test
+    void eonShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x408);
+        assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.LSL, 12, true, true, false);
+    }
+
+    @Test
+    void eonShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x40c);
+        assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.LSR, 12, true, true, false);
+    }
+
+    @Test
+    void eonShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x410);
+        assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.ASR, 12, true, true, false);
+    }
+
+    @Test
+    void eonShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x414);
+        assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.ROR, 12, true, true, false);
+    }
+
+    @Test
+    void bicsShiftedLsl() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x418);
+        assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.LSL, 16, true, true, true);
+    }
+
+    @Test
+    void bicsShiftedLsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x41c);
+        assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.LSR, 16, true, true, true);
+    }
+
+    @Test
+    void bicsShiftedAsr() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x420);
+        assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.ASR, 16, true, true, true);
+    }
+
+    @Test
+    void bicsShiftedRor() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x424);
+        assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.ROR, 16, true, true, true);
+    }
+
+    @Test
+    void andShiftedNarrow() {
+        // and w1, w2, w3, lsl #4 (!wide) — mesma regra de zero-extensão de AluShiftedRegister.
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x428);
+        assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSL, 4, false, false, false);
+    }
+
+    @Test
+    void orrShiftedNarrow() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x42c);
+        assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSR, 8, false, false, false);
+    }
+
+    @Test
+    void eorShiftedNarrow() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x430);
+        assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ASR, 12, false, false, false);
+    }
+
+    @Test
+    void andsShiftedNarrow() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x434);
+        assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ROR, 16, false, false, true);
+    }
+
+    @Test
+    void movRegisterAliasIsOrrWithXzr() {
+        // mov x21, x0 (0xaa0003f5) — vetor LITERAL da F11 (0x13ba9e8 do kernel8.img real).
+        // D3/D4: nenhum case dedicado, o caminho geral de ORR com Rn=XZR já é correto.
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x438);
+        assertLogical(op, Ir64AluOp.ORR, 21, 31, 0, Ir64LogicalShiftType.LSL, 0, false, true, false);
+    }
+
+    @Test
+    void mvnRegisterAliasIsOrnWithXzr() {
+        // mvn x22, x1 (== orn x22, xzr, x1) — mesmo alias, com invert=true.
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x43c);
+        assertLogical(op, Ir64AluOp.ORR, 22, 31, 1, Ir64LogicalShiftType.LSL, 0, true, true, false);
+    }
+
+    @Test
+    void movRegisterAliasNarrow() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x440);
+        assertLogical(op, Ir64AluOp.ORR, 23, 31, 2, Ir64LogicalShiftType.LSL, 0, false, false, false);
+    }
+
+    @Test
+    void mvnRegisterAliasNarrow() {
+        Ir64Op.LogicalShiftedRegister op =
+                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x444);
+        assertLogical(op, Ir64AluOp.ORR, 24, 31, 3, Ir64LogicalShiftType.LSL, 0, true, false, false);
+    }
+
+    @Test
+    void logicalShiftedRegisterUndefinedNarrowShiftAmountBit5() {
+        // sf=0 com quantidade de shift >= 32 (bit5 setado) é UNDEFINED — mesma regra de
+        // AluShiftedRegister (B6.3.1), não representável pelo assembler (rejeitaria o operando),
+        // então testado com uma palavra construída à mão a partir do encoding real de
+        // `and w1, w2, w3, lsl #4` (0x0a031041) só com o campo `sa` forçado para `100000` (32) —
+        // mesmo precedente de `logicalImmediateNReservedWithNarrowWidthThrows` acima.
+        int word = 0x0a031041 | (1 << 15); // bit5 do campo sa (shift 10) é o bit 15 da palavra.
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
 }

@@ -243,3 +243,43 @@ Disassembly of section .text:
  39c:	ba5f696f 	ccmn	x11, #0x1f, #0xf, vs
  3a0:	3a407980 	ccmn	w12, #0x0, #0x0, vc
  3a4:	fa405a4d 	ccmp	x18, #0x0, #0xd, pl	// pl = nfrst
+ 3a8:	8a031041 	and	x1, x2, x3, lsl #4
+ 3ac:	8a431041 	and	x1, x2, x3, lsr #4
+ 3b0:	8a831041 	and	x1, x2, x3, asr #4
+ 3b4:	8ac31041 	and	x1, x2, x3, ror #4
+ 3b8:	aa0620a4 	orr	x4, x5, x6, lsl #8
+ 3bc:	aa4620a4 	orr	x4, x5, x6, lsr #8
+ 3c0:	aa8620a4 	orr	x4, x5, x6, asr #8
+ 3c4:	aac620a4 	orr	x4, x5, x6, ror #8
+ 3c8:	ca093107 	eor	x7, x8, x9, lsl #12
+ 3cc:	ca493107 	eor	x7, x8, x9, lsr #12
+ 3d0:	ca893107 	eor	x7, x8, x9, asr #12
+ 3d4:	cac93107 	eor	x7, x8, x9, ror #12
+ 3d8:	ea0c416a 	ands	x10, x11, x12, lsl #16
+ 3dc:	ea4c416a 	ands	x10, x11, x12, lsr #16
+ 3e0:	ea8c416a 	ands	x10, x11, x12, asr #16
+ 3e4:	eacc416a 	ands	x10, x11, x12, ror #16
+ 3e8:	8a2f11cd 	bic	x13, x14, x15, lsl #4
+ 3ec:	8a6f11cd 	bic	x13, x14, x15, lsr #4
+ 3f0:	8aaf11cd 	bic	x13, x14, x15, asr #4
+ 3f4:	8aef11cd 	bic	x13, x14, x15, ror #4
+ 3f8:	aa322230 	orn	x16, x17, x18, lsl #8
+ 3fc:	aa722230 	orn	x16, x17, x18, lsr #8
+ 400:	aab22230 	orn	x16, x17, x18, asr #8
+ 404:	aaf22230 	orn	x16, x17, x18, ror #8
+ 408:	ca353293 	eon	x19, x20, x21, lsl #12
+ 40c:	ca753293 	eon	x19, x20, x21, lsr #12
+ 410:	cab53293 	eon	x19, x20, x21, asr #12
+ 414:	caf53293 	eon	x19, x20, x21, ror #12
+ 418:	ea3842f6 	bics	x22, x23, x24, lsl #16
+ 41c:	ea7842f6 	bics	x22, x23, x24, lsr #16
+ 420:	eab842f6 	bics	x22, x23, x24, asr #16
+ 424:	eaf842f6 	bics	x22, x23, x24, ror #16
+ 428:	0a031041 	and	w1, w2, w3, lsl #4
+ 42c:	2a4620a4 	orr	w4, w5, w6, lsr #8
+ 430:	4a893107 	eor	w7, w8, w9, asr #12
+ 434:	6acc416a 	ands	w10, w11, w12, ror #16
+ 438:	aa0003f5 	mov	x21, x0
+ 43c:	aa2103f6 	mvn	x22, x1
+ 440:	2a0203f7 	mov	w23, w2
+ 444:	2a2303f8 	mvn	w24, w3

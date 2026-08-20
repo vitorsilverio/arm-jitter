@@ -29,7 +29,7 @@ public sealed interface Ir64Op permits
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
         Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
         Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
-        Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare {
+        Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare, Ir64Op.LogicalShiftedRegister {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -75,6 +75,9 @@ public sealed interface Ir64Op permits
         public static final int PRIVILEGED_CALL = 27;
         /// B6.8: `CCMP`/`CCMN` — ver {@link ConditionalCompare}.
         public static final int CONDITIONAL_COMPARE = 28;
+        /// B6.9: `AND`/`ORR`/`EOR`/`ANDS`/`BIC`/`ORN`/`EON`/`BICS` (registrador deslocado) — ver
+        /// {@link LogicalShiftedRegister}.
+        public static final int LOGICAL_SHIFTED_REGISTER = 29;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -411,6 +414,53 @@ public sealed interface Ir64Op permits
             /// sempre `Rd` normal/`XZR`, nunca `SP` — mesma regra de {@link Alu64#dstIsStackPointer}).
             boolean dstIsStackPointer) implements Ir64Op {
         @Override public int kind() { return Kind.ALU_EXTENDED_REGISTER; }
+    }
+
+    /// `AND`/`ORR`/`EOR`/`ANDS` e `BIC`/`ORN`/`EON`/`BICS` (`ARM DDI 0487 C6.2.9`/`C6.2.13`/
+    /// `C6.2.53`/`C6.2.220`/`C6.2.234`/`C6.2.226`, variante "shifted register", B6.9) — segundo
+    /// operando é `Rm` deslocado por {@link #shiftType}/{@link #shiftAmount} e OPCIONALMENTE
+    /// invertido bit a bit ({@link #invert}, o bit `n` do encoding) ANTES de combinar com `Rn`
+    /// pela operação lógica: `invert=false` produz `AND`/`ORR`/`EOR`, `invert=true` produz
+    /// `BIC`/`ORN`/`EON` (o mesmo {@link #opcode}, só o operando muda). `ANDS`/`BICS` são
+    /// {@link Ir64AluOp#AND} com {@link #setFlags}`=true` — mesma decisão de {@link Alu64} (D2
+    /// da task B6.3.1): não há um opcode `ANDS` dedicado, os flags (`C=0,V=0` sempre) são
+    /// resolvidos pelo executor (`logicalWithFlags`), não pelo opcode. Diferente de
+    /// {@link AluShiftedRegister}: usa {@link Ir64LogicalShiftType} (4 valores, `ROR` válido
+    /// aqui — RESERVADO na forma `ADD`/`SUB`), não {@link Ir64ShiftType}. `Rd`/`Rn`/`Rm` NUNCA
+    /// são `SP` (`cpu_reg`/`read_cpu_reg` no QEMU, nunca a variante `_sp`) — sem campos
+    /// `dstIsStackPointer`/`src1IsStackPointer`, seriam sempre `false`. `MOV`/`MVN`
+    /// (registrador) são um alias de disassembly puro (`ORR`/`ORN` com `Rn=XZR`,`sa=0`,
+    /// `st=LSL`) — não têm representação própria aqui, o caminho geral já produz o resultado
+    /// correto (ver B6.9 Fatos de referência #4/Decisão D3).
+    record LogicalShiftedRegister(
+            /// Operação (`AND`, `ORR` ou `EOR` — nunca `SUB`/`ADD`; `ANDS`/`BICS` são `AND` com
+            /// {@link #setFlags}).
+            Ir64AluOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro registrador de origem (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo registrador de origem (`Rm`, índice `0`-`31`; `31` é sempre `XZR`),
+            /// deslocado por {@link #shiftType}/{@link #shiftAmount} e depois opcionalmente
+            /// invertido ({@link #invert}) antes de operar.
+            int src2,
+            /// Tipo de deslocamento — as 4 combinações são válidas aqui (ver
+            /// {@link Ir64LogicalShiftType}).
+            Ir64LogicalShiftType shiftType,
+            /// Quantidade de deslocamento, já validada pelo decoder: `0`-`63` quando
+            /// {@link #wide}, `0`-`31` quando não (`sf=0` com bit5 setado é UNDEFINED — mesma
+            /// regra de {@link AluShiftedRegister}).
+            int shiftAmount,
+            /// `true` quando o operando deslocado deve ser invertido bit a bit ANTES de operar
+            /// (bit `n` do encoding) — produz `BIC`/`ORN`/`EON`/`BICS` em vez de
+            /// `AND`/`ORR`/`EOR`/`ANDS`.
+            boolean invert,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide,
+            /// Indica se `NZCV` deve ser atualizado (`ANDS`/`BICS` vs formas sem `S`) — `C=0,V=0`
+            /// sempre quando `true` (nunca há cálculo de carry/overflow em operação lógica).
+            boolean setFlags) implements Ir64Op {
+        @Override public int kind() { return Kind.LOGICAL_SHIFTED_REGISTER; }
     }
 
     /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (`ARM DDI 0487 C6.2.34-37`, B6.3.2) — a única família de A64
