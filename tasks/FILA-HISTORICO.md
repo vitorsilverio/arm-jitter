@@ -1608,4 +1608,74 @@ causa raiz NAO isolada)**:
     `--trace-svc` em busca de uma `svc` não implementada ANTES do primeiro `TriggerCmdReqQueue`, ou
     o modo float24 de uniform não suportado — lança exceção visível no console).
 
+## F11 (`virtual-arm-box --machine=raspi3-64`) — sessão 2 (2026-08-18), relato minucioso
+
+Itens 1-2 do "Inclui" (assets versionados + `FdtPatcher.withNodeRemoved`) fecharam numa sessão
+anterior (parte 1: `testdata/raspi3-64/kernel8.img`+`bcm2710-rpi-3-b.dtb` do mesmo commit já
+fixado por `testdata/raspi1/README.md`, sha256 documentados, achado do `gunzip` manual necessário
+no download via `raw.githubusercontent.com`; parte 2: `FdtPatcher.withNodeRemoved` removendo de
+verdade `FDT_BEGIN_NODE`/subárvore/`FDT_END_NODE`, distinto de `withNodeDisabled`).
+
+Itens 3-5 fecharam nesta sessão: `Raspi364Machine implements Machine64` (interface nova —
+`Machine` existente é ligada a `ArmCore`/`JitRuntime` 32-bit, incompatível com `Aarch64Core`;
+`RunnableMachine` extraído como supertipo comum de `runSlice()`/`typeByte()`, mudança aditiva,
+`VersatilePbMachine`/`Bcm2835Machine` inalterados). Mapa físico BCM2837 (`0x3F00_0000`) montado
+reaproveitando a MESMA `PagedAddressSpace`/periféricos MMIO 32-bit de `device/bcm2835/`
+(UART/IC/mailbox/CPRMAN), envolvida como `AddressSpace64` via `AddressSpace64.wrapping()` (RFC-
+IR-64BIT §3.2). `device/bcm2836/` novo: `Bcm2836GenericTimer` (`Aarch64SystemRegisterBus` para
+`CNTFRQ_EL0`/`CNTPCT_EL0`/`CNTP_TVAL_EL0`/`CNTP_CTL_EL0`/`CNTP_CVAL_EL0`) + `Bcm2836LocalIntc`
+(MMIO, `brcm,bcm2836-l1-intc`, janela física separada `0x4000_0000`, roteia a PPI do timer +
+passthrough do `Bcm2835Ic` legado). `boot/CompositeSystemRegisterBus` novo (delega ao primeiro bus
+que atende — `Aarch64VmsaSystemRegisters` e `Bcm2836GenericTimer` cobrem subconjuntos disjuntos de
+`Aarch64SystemRegisterId`). DTB real inspecionado por `strings`: `cpu@1..3` removidos (D1, sem
+SMP/PSCI), `mmc@7e202000`/`mmc@7e300000` (Pi 3 tem DOIS nós MMC)/`usb@7e980000` desabilitados.
+Achado D2 (decisão de escopo): `Aarch64Core` só modela EL0→EL1 transiente, não um "EL1
+persistente"; a máquina contorna forçando `exceptionState().setInEl1(true)` no boot — pendência
+explícita: `enterIrq`/`enterMemoryAbort` sempre saltam para os offsets "lower EL AArch64"
+(`+0x400`/`+0x480`), corretos só para EL0→EL1; um kernel já "em EL1" tomando sua PRÓPRIA exceção
+esperaria `+0x200`/`+0x280` — resolver exigiria estender `Aarch64Core`, fora do "Inclui".
+
+**Bloqueio real desta sessão**: máquina/DTB/carga provados byte-a-byte corretos (`PC=0`/`X0`=
+endereço do DTB batendo com `text_offset=0` real), mas a PRIMEIRA instrução do kernel8.img real
+(`ccmp x18, #0x0, #0xd, pl`, offset `0x0`, truque polyglot EFI "MZ") lança
+`UnsupportedOperationException`: `CCMP`/`CCMN` nunca foram implementados em nenhuma sub-task do
+épico B6.3. Gap de FEATURE real, fora do "Inclui" da task. `Raspi364BootTest#smokeTestBootsWithoutException`
+pina o achado como regressão; os 3 testes de marco textual ficam `@Disabled`. Achado menor: sem
+busybox `aarch64` estático real disponível, `testdata/raspi3-64/initramfs.cpio.gz` é SINTÉTICO (só
+`TRAILER!!!`), suficiente porque os marcos de boot acontecem antes da montagem. `mvn -o test`
+verde no virtual-arm-box; G5 não se aplica (nenhum arquivo arm-jitter tocado).
+
+## F11 — sessão 3 (2026-08-20), relato minucioso
+
+Retomada após **B6.8** (CCMP/CCMN fechado no arm-jitter, `mvn -o install` local já feito antes
+desta sessão começar). Rodando `Raspi364BootTest#smokeTestBootsWithoutException` (backend
+INTERPRETED) sem alterar nenhum código de produção: a primeira instrução já não lança mais — o
+boot avança de `0x0` até `0x13ba9e8`, onde bate num **SEGUNDO** gap de decode real:
+`0xaa0003f5` = `ORR X21, XZR, X0` (`LSL #0`), ou seja, o alias `MOV X21, X0` da classe "Logical
+(shifted register)" (`AND`/`ORR`/`EOR`/`ANDS`/`BIC`/`ORN`/`EON`/`BICS` com operando registrador).
+Confirmado por leitura direta de `Aarch64Decoder#decodeDataProcessingRegister`
+(`arm-jitter/core/.../decoder64/Aarch64Decoder.java`, linha ~942): comentário explícito "Logical
+(shifted register): fora do escopo fechado do épico (ver a task B6.3.1)" — gap documentado desde
+B6.3.1, nunca coberto por nenhuma sub-task de B6 (B6.3.1-B6.3.4 cobriram ALU shifted/extended
+register, `CSEL`/aliases, bitfield, mul/div, exclusive access; B6.8 cobriu só `CCMP`/`CCMN`).
+
+Mesma categoria de decisão da sessão 2 (não é bug, é feature ausente, fora do "Inclui"/"Não
+inclui" desta task) — **não implementado nesta sessão**. Diferença relevante para priorização: o
+alias `MOV` de registrador via `ORR` é onipresente em qualquer prólogo/epílogo de função A64 real
+(muito mais comum que `CCMP`), então é provável que seja o PRÓXIMO obstáculo dominante para
+qualquer kernel real, não uma curiosidade isolada como o polyglot EFI do `CCMP`.
+
+Trabalho desta sessão: `Raspi364BootTest` atualizado — `smokeTestBootsWithoutException` agora
+espera o novo endereço/encoding (`0x13ba9e8`/`0xaa0003f5`) em vez do antigo `CCMP`; Javadoc da
+classe e razões dos 3 `@Disabled` reescritos para descrever o achado novo (continuam desabilitados
+— nenhum marco textual foi alcançado). Nenhum arquivo do arm-jitter tocado (G5 não se aplica,
+mesmo precedente da sessão 2). `mvn -o test` verde no virtual-arm-box (87 testes, 5 skipped —
+mesmos 3 `@Disabled` da F11 + 2 pré-existentes do `Raspi1BootTest`), sem regressão em
+`Raspi1BootTest`/`VersatilePbBootTest`. Sugestão para o usuário: uma sub-task nova no arm-jitter
+(ex. `B6.9`) cobrindo "Logical (shifted register)" teria o mesmo formato/rigor de corpus real de
+B6.8, e destravaria a continuação da F11 de novo (com a expectativa real de que ainda pode haver
+um terceiro/quarto gap depois deste — instruções tão básicas como `MOV`/`AND`/`ORR` de registrador
+faltando sugere que a superfície "comum" da classe "Data Processing — Register" pode ter mais
+buracos do que os já mapeados).
+
 
