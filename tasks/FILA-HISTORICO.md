@@ -1510,4 +1510,102 @@ causa raiz NAO isolada)**:
    deste repo). M3 volta a @Disabled com o achado atualizado no Javadoc de
    Raspi1BootTest/Bcm2835Machine.
 
+## Task G5 (trilha-g-3ds, n3dsemu) — PICA200: command list + shader + TEV — detalhe completo
+
+- **PR1** (`bae9813`): `gpu/CommandListParser` + `gpu/PicaRegisters` (banco bruto de registradores
+  internos `0x0000`-`0x0FFF`, escrita mascarada por byte, contadores de `DrawArrays`/
+  `DrawElements`/`Finalize`).
+- **PR2** (2026-08-19): `gpu/shader/ShaderBinary` (parser DVLB/DVLP/DVLE) + `VertexShaderInterpreter`
+  (ISA formatos 1/1u, ~17 opcodes) + `gpu/VertexAttributeLoader` (algoritmo de `Pica::VertexLoader`
+  do Citra real) + `gpu/VertexPipeline` + `PicaRenderer#drawTriangles`/`ShadedVertex`, implementados
+  em `RecordingRenderer` e `VulkanRenderer` (*render pass*/pipeline de geometria novo, desenha na
+  `ScreenTexture` já existente da G4). Tudo cross-validado campo a campo contra um `.shbin` REAL
+  compilado pelo `picasso.exe` a partir do `.v.pica` de origem do `simple_tri`
+  (`testdata/shaders/simple_tri.shbin`) — achou a base de registrador de constantes da ISA (32) ser
+  diferente da base das tabelas de metadados do DVLE (16). Escopo cortado conscientemente: CMP/MAD/
+  controle de fluxo NÃO implementados (lançam `UnsupportedOperationException`), nenhum exemplo do M5
+  usa. `mvn -o test` verde (163, +17); `VulkanRendererSmokeTest` estendido roda o pipeline de
+  geometria contra o driver Vulkan REAL desta máquina com validation layers.
+- **PR3** (2026-08-19, mesma onda): texturas + TEV + **integração real ao boot** (o item que faltava
+  para `simple_tri` desenhar de verdade, não só ter as classes prontas sem uso).
+  - `gpu/tev/TevConfig` (decodifica os 6 estágios TEV dos registradores `GPUREG_TEXENV0`-`5`,
+    offsets confirmados via `WebFetch` da tabela real do 3dbrew — `GPU/Internal_Registers`) +
+    `gpu/tev/TevGlslGenerator` (função pura `TevConfig → GLSL`, testada por comparação de string
+    contra 2-3 configs conhecidas, incl. a do `simple_tri` = passagem direta de `PRIMARY_COLOR`).
+    **Não integrado ao pipeline Vulkan nesta PR** (decisão consciente, ver Armadilhas abaixo) — a
+    infraestrutura existe e está testada, mas `VulkanRenderer` continua usando o
+    `shaders/triangle.frag` estático do PR2 (comportamento idêntico ao caso `simple_tri`, já que o
+    TEV dele reduz a passagem direta da cor interpolada — zero mudança observável).
+  - `gpu/Texture`: decodifica os formatos não-comprimidos (`RGBA8`/`RGB8`/`RGBA5551`/`RGB565`/
+    `RGBA4`/`IA8`/`RG8`/`I8`/`A8`/`IA4`/`I4`/`A4`) com deswizzle Morton 8×8 (a "armadilha grande" da
+    task) — rotina `MortonInterleave`/`GetMortonOffset` amplamente documentada para PICA200,
+    transcrita e testada com bytes conhecidos por posição. **Não usado pelo `Vulkan` ainda**
+    (`simple_tri` não usa textura nenhuma — a própria task permite adiar a integração de sampler
+    Vulkan para PR4: "se o PR3 ficar grande, texturas podem virar PR4").
+  - **Integração real ao boot** (o núcleo desta PR): até aqui `GSPGPU_TriggerCmdReqQueue` só
+    CONTAVA o disparo (RFC G3: "descarta tudo") — nenhuma lista de comandos PICA200 chegava a ser
+    interpretada de verdade, então `simple_tri` nunca desenhava nada mesmo com PR1/PR2 prontos.
+    Layout da fila GX real (`gxCmdQueue_s`) confirmado via `WebFetch` de `GSP_Shared_Memory`
+    (3dbrew): cabeçalho de 8 bytes em `sharedMemBase+0x800` (cliente 0) + até 15 entradas de 32
+    bytes. `gpu/GxCommandQueue` decodifica/processa (`ProcessCommandList` lê a lista real da
+    memória do guest e chama `CommandListParser`; `MemoryFill`/`DisplayTransfer`/`TextureCopy`/
+    `RequestDma` são completados IMEDIATAMENTE sem efeito real — `simple_tri` desenha DIRETO na
+    textura de apresentação, ver Javadoc de `VulkanRenderer`, então o `DisplayTransfer` que o
+    hardware real precisaria não tem efeito observável aqui — mas o evento correspondente PRECISA
+    ser sinalizado, senão `gxCmdQueueWait`/`gspWaitForEvent` do guest trava para sempre, mesma
+    classe de bug já documentada para VBlank). `gpu/shader/ShaderUpload` (novo) captura o upload de
+    vertex shader por REGISTRADOR-FIFO (o caminho real do hardware — código/`opdescs`/uniforms
+    float chegam um-a-um via `GPUREG_VS_CODETRANSFER_*`/`OPDESCS_*`/`FLOATUNIFORM_*`, offsets
+    confirmados via `WebFetch`), diferente do `.shbin`-arquivo que PR1/PR2 usavam nos testes.
+    `CommandListParser.parse` ganhou uma sobrecarga com `RegisterWriteListener` (aditiva, G3) para
+    que esses registradores-FIFO sejam observados escrita a escrita (o valor final em
+    `PicaRegisters` não basta — perde a sequência da rajada). `GspGpuService` agora tem
+    `PicaRegisters`/`ShaderUpload` persistentes + um `PicaRenderer` real opcional (novo construtor,
+    o antigo delega com `renderer=null` — comportamento herdado no `--headless`); ao detectar um
+    `DrawArrays`/`DrawElements` de verdade dentro de uma lista processada, monta o
+    `ShaderBinary.Executable` a partir do que `ShaderUpload` capturou e chama `VertexPipeline` de
+    verdade. `Main`/`N3dsMachine` ganharam uma sobrecarga de `create(...)` com `PicaRenderer`
+    opcional — o modo janela agora cria o `VulkanRenderer` ANTES da máquina e injeta ele no
+    `gsp::Gpu`, fechando o caminho ponta a ponta.
+  - **Simplificações documentadas conscientemente** (Javadoc de `ShaderUpload`, não são bugs):
+    (1) mapeamento saída→semântica (`GPUREG_SH_OUTMAP_O0`-`O6`) NÃO decodificado — segue a
+    convenção universal do `picasso`/`citro3d` (`o0`=posição,`o1`=cor), a mesma que PR1/PR2 já
+    assumiam implicitamente; (2) só o modo **float32** do upload de uniforms é suportado (4 palavras
+    IEEE754/constante) — o modo float24 empacotado (3 palavras cruzando fronteira de bits) não pôde
+    ser validado sem GPU real disponível nesta sessão e lança `UnsupportedOperationException` em vez
+    de arriscar decodificar errado; (3) desenho sempre em `Screen.TOP` (única tela composta por todo
+    o HLE, RFC D6); (4) múltiplos `DrawArrays`/`DrawElements` dentro da MESMA lista leem o estado
+    FINAL dos registradores, não um snapshot por disparo (suficiente para `simple_tri`, que desenha
+    uma vez).
+  - **Teste-alvo da PR** (`GspGpuServiceTest#triggerCmdReqQueueProcessaListaDeComandosRealEDesenhaTrianguloDeVerdade`):
+    monta a fila GX real na memória compartilhada com um `ProcessCommandList` apontando pra uma
+    lista PICA200 completa (upload de shader por FIFO + formato de vértice + `DrawArrays`),
+    dispara `TriggerCmdReqQueue` por IPC (o MESMO caminho que `gspSubmitGxCommand` usa de verdade)
+    e afirma que o `RecordingRenderer` recebeu os 3 vértices certos (posição/cor) — SEM `.shbin`-
+    arquivo, sem GPU. É o primeiro teste da G5 que exercita o caminho ponta a ponta real (fila →
+    registradores → shader → `VertexPipeline` → renderer), não só uma camada isolada.
+  - **Fumaça manual**: `n3dsemu --headless --slices=200 testdata/hello-world.3dsx` e
+    `.../simple_tri.3dsx` (`C:\devkitPro\examples\3ds\graphics\gpu\simple_tri\simple_tri.3dsx`) —
+    os dois terminam no MESMO padrão de loop estacionário (`svcArbitrateAddress`/
+    `svcWaitSynchronization`/`svcClearEvent`, espera de VBlank normal, já existente antes desta PR)
+    sem exceção nova nem trava adicional — não é validação visual (isso cabe ao usuário, RFC D4),
+    só confirma que a integração não quebrou o boot nem lançou nada.
+  - `mvn -o test` verde: **180 testes** (17 novos: `TevConfigTest`+`TevGlslGeneratorTest` (6),
+    `TextureTest` (5), `ShaderUploadTest` (6), mais o teste de integração real acima), incl.
+    `VulkanRendererSmokeTest` (3, contra o driver real desta máquina, inalterado). G5-invariante não
+    se aplica (nenhum arquivo arm-jitter tocado).
+  - **Pendências reais para PR4** (não são bugs desta PR, escopo conscientemente adiado):
+    integração do sampler Vulkan de textura (descriptor set/binding real por *draw*), wiring do
+    `TevGlslGenerator` na criação do pipeline Vulkan (hoje só testado como string pura), modo
+    float24 do upload de uniforms, decodificação granular de `SH_OUTMAP` (para shaders que não
+    seguem a convenção `o0`=posição/`o1`=cor), `ETC1`/`ETC1A4`. **Nenhuma delas bloqueia o aceite
+    do M5** (`simple_tri` não usa textura, não usa TEV além de passagem direta, não foge da
+    convenção de saída).
+  - **Pendente do usuário**: rodar `n3dsemu <caminho>/simple_tri.3dsx` (modo janela, default) e
+    confirmar visualmente o triângulo colorido na tela de cima — RFC D4, nenhuma task da trilha G
+    fecha sozinha por inspeção de log/framebuffer. Se aparecer errado ("embaralhado em
+    quadradinhos" = deswizzle; cor errada = TEV/operand descriptor; nada aparece = revisar o
+    `--trace-svc` em busca de uma `svc` não implementada ANTES do primeiro `TriggerCmdReqQueue`, ou
+    o modo float24 de uniform não suportado — lança exceção visível no console).
+
 
