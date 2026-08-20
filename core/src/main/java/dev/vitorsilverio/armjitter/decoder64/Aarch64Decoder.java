@@ -303,6 +303,31 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1IS = 0b0011;
     private static final int SYSTEM_INSTRUCTION_TLBI_OP2_ALL = 0b000;
 
+    // ── Cache maintenance (B6.12, `op0=1`, `SYS`, `L=0`, CRn=0b0111 fixo — "Instruction/Data
+    // ── Cache maintenance operations", ARM DDI 0487 C5.4.11/C5.4.12): cada linha é
+    // ── `{op1, crm, op2}` de UMA operação real (nome no comentário à direita); todas viram NOP
+    // ── porque este emulador não modela caches — conferido contra `helper.c` real do QEMU
+    // ── (`v8_cp_reginfo`): as MESMAS 10 operações estão marcadas `ARM_CP_NOP` lá, com o
+    // ── comentário do próprio QEMU "Cache ops: all NOPs since we don't emulate caches".
+    // ── `DC ZVA` (CRm=0b0100,op2=1) é DELIBERADAMENTE EXCLUÍDA desta tabela: tem efeito
+    // ── observável real (zera memória) e já é anunciada como indisponível via
+    // ── `DCZID_EL0.DZP=1` (B6.10) — se algum guest ignorar isso e emitir `DC ZVA` mesmo assim,
+    // ── deve cair no `throw unsupported` (não presumir NOP silencioso). `AT`/`TLBI` per-VA
+    // ── (formas fora da `TLBI VMALLE1(IS)` já tratada acima) também ficam fora desta task.
+    private static final int SYSTEM_INSTRUCTION_CACHE_CRN = 0b0111;
+    private static final int[][] SYSTEM_INSTRUCTION_CACHE_OPS = {
+            {0b000, 0b0001, 0b000}, // IC IALLUIS
+            {0b000, 0b0101, 0b000}, // IC IALLU
+            {0b011, 0b0101, 0b001}, // IC IVAU
+            {0b000, 0b0110, 0b001}, // DC IVAC
+            {0b000, 0b0110, 0b010}, // DC ISW
+            {0b011, 0b1010, 0b001}, // DC CVAC
+            {0b000, 0b1010, 0b010}, // DC CSW
+            {0b011, 0b1011, 0b001}, // DC CVAU
+            {0b011, 0b1110, 0b001}, // DC CIVAC
+            {0b000, 0b1110, 0b010}, // DC CISW
+    };
+
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
     private static final int LOAD_STORE_CLASS_BIT25_SHIFT = 25;
@@ -1466,10 +1491,13 @@ public final class Aarch64Decoder {
     }
 
     /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `op0=1`, `SYS` — achado real da rodada de
-    /// pesquisa: `TLBI` NÃO é `MRS`/`MSR`, é uma forma de `SYS` com o mesmo formato de campos).
-    /// Demais formas de `SYS`/`SYSL` (`TLBI` per-VA como `VAE1`, `DC`/`IC`/`AT`, `SYSL`
-    /// propriamente dito com `L=1`): fora do escopo desta task, mesma simplificação
-    /// "sem per-ASID/per-VA" do precedente 32-bit (`Cp15VmsaCoprocessor`, `TLBIALL`).
+    /// pesquisa: `TLBI` NÃO é `MRS`/`MSR`, é uma forma de `SYS` com o mesmo formato de campos) e
+    /// as 10 operações de manutenção de cache `IC`/`DC` (B6.12, ver
+    /// {@link #SYSTEM_INSTRUCTION_CACHE_OPS} — achado real da rodada de pesquisa: o próprio QEMU
+    /// trata TODAS como NOP por não emular caches, mesma decisão adotada aqui). Demais formas de
+    /// `SYS`/`SYSL` (`TLBI` per-VA como `VAE1`, `AT`, `DC ZVA`, `SYSL` propriamente dito com
+    /// `L=1`): fora do escopo, mesma simplificação "sem per-ASID/per-VA" do precedente 32-bit
+    /// (`Cp15VmsaCoprocessor`, `TLBIALL`).
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
@@ -1481,7 +1509,20 @@ public final class Aarch64Decoder {
                 && op2 == SYSTEM_INSTRUCTION_TLBI_OP2_ALL) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
+        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isCacheMaintenanceOp(op1, crm, op2)) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
+        }
         throw unsupported(word, address);
+    }
+
+    /// Confere se `{op1, crm, op2}` bate com alguma linha de {@link #SYSTEM_INSTRUCTION_CACHE_OPS}.
+    private static boolean isCacheMaintenanceOp(int op1, int crm, int op2) {
+        for (int[] row : SYSTEM_INSTRUCTION_CACHE_OPS) {
+            if (row[0] == op1 && row[1] == crm && row[2] == op2) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// `MRS`/`MSR (register)` (B6.6.1) — resolve a 5-upla `op0:op1:CRn:CRm:op2` crua para um

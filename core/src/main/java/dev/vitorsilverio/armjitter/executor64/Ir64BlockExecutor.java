@@ -721,7 +721,9 @@ public final class Ir64BlockExecutor {
     private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
         switch (op.opcode()) {
             case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
-            case BARRIER, NOP_HINT -> { /* NOP observável — sem cache/pipeline/event-stream. */ }
+            case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP -> {
+                /* NOP observável — sem cache/pipeline/event-stream. */
+            }
             case WFI -> core.setSleepState(CpuSleepState.HALTED);
         }
         return false;

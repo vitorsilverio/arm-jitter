@@ -25,5 +25,12 @@ public enum Ir64SystemInstructionOp {
     /// {@link dev.vitorsilverio.armjitter.core.CpuSleepState} (reaproveitado diretamente de
     /// `Aarch64Core`, genérico o bastante — mesma disciplina de `ExecutionThreshold` em B6.4 PR1)
     /// e `Aarch64Core#interruptLine`.
-    WFI
+    WFI,
+    /// As 10 operações de manutenção de cache `IC`/`DC` decodificadas em
+    /// `Aarch64Decoder#SYSTEM_INSTRUCTION_CACHE_OPS` (B6.12): NOP observável, mesmo precedente de
+    /// {@link #BARRIER}/{@link #NOP_HINT} — este emulador não modela caches, achado confirmado
+    /// contra `helper.c` real do QEMU (`v8_cp_reginfo`, todas marcadas `ARM_CP_NOP` lá pelo mesmo
+    /// motivo). `DC ZVA` fica FORA deste grupo (tem efeito observável real, já anunciada como
+    /// indisponível via `DCZID_EL0.DZP=1`, B6.10).
+    CACHE_MAINTENANCE_NOP
 }

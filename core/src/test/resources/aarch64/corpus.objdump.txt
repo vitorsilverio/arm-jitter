@@ -294,3 +294,13 @@ Disassembly of section .text:
  468:	1ad52a93 	asr	w19, w20, w21
  46c:	1ad82ef6 	ror	w22, w23, w24
  470:	9ac32042 	lsl	x2, x2, x3
+ 474:	d508711f 	ic	ialluis
+ 478:	d508751f 	ic	iallu
+ 47c:	d50b7520 	ic	ivau, x0
+ 480:	d5087621 	dc	ivac, x1
+ 484:	d5087642 	dc	isw, x2
+ 488:	d50b7a23 	dc	cvac, x3
+ 48c:	d5087a44 	dc	csw, x4
+ 490:	d50b7b25 	dc	cvau, x5
+ 494:	d50b7e26 	dc	civac, x6
+ 498:	d5087e47 	dc	cisw, x7

@@ -316,3 +316,15 @@ lsrv w16, w17, w18
 asrv w19, w20, w21
 rorv w22, w23, w24
 lsl x2, x2, x3
+
+// -- B6.12: manutencao de cache IC/DC (NOP, sem cache emulado), gap achado pela F11 --
+ic ialluis
+ic iallu
+ic ivau, x0
+dc ivac, x1
+dc isw, x2
+dc cvac, x3
+dc csw, x4
+dc cvau, x5
+dc civac, x6
+dc cisw, x7

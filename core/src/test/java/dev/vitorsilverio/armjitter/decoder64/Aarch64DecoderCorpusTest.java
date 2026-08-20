@@ -2710,4 +2710,80 @@ class Aarch64DecoderCorpusTest {
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
+
+    // ── B6.12: manutenção de cache IC/DC (NOP, sem cache emulado) — apêndice do mesmo
+    // ── corpus.s/.bin/.objdump.txt, offsets 0x474-0x498, QUINTO gap achado pela F11 (incl. o
+    // ── vetor literal `dc ivac, x0` = 0xd5087620 achado em 0x39000 do kernel8.img real) ─────────
+
+    private static void assertCacheMaintenanceNoop(long offset) {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
+    }
+
+    @Test
+    void icIalluis() {
+        assertCacheMaintenanceNoop(0x474);
+    }
+
+    @Test
+    void icIallu() {
+        assertCacheMaintenanceNoop(0x478);
+    }
+
+    @Test
+    void icIvau() {
+        assertCacheMaintenanceNoop(0x47c);
+    }
+
+    @Test
+    void dcIvacLiteralVectorFromF11Kernel() {
+        // dc ivac, x0 (0xd5087620 com rt=1 no corpus real) — a instrução que travou o boot da F11
+        // em 0x39000 do kernel8.img real (0xd5087620 exato, rt=x0), motivou esta task.
+        assertCacheMaintenanceNoop(0x480);
+    }
+
+    @Test
+    void dcIsw() {
+        assertCacheMaintenanceNoop(0x484);
+    }
+
+    @Test
+    void dcCvac() {
+        assertCacheMaintenanceNoop(0x488);
+    }
+
+    @Test
+    void dcCsw() {
+        assertCacheMaintenanceNoop(0x48c);
+    }
+
+    @Test
+    void dcCvau() {
+        assertCacheMaintenanceNoop(0x490);
+    }
+
+    @Test
+    void dcCivac() {
+        assertCacheMaintenanceNoop(0x494);
+    }
+
+    @Test
+    void dcCisw() {
+        assertCacheMaintenanceNoop(0x498);
+    }
+
+    @Test
+    void dcZvaStaysUnsupported() {
+        // dc zva, x0 (0xd50b7420, CRm=0b0100/op2=1 — DELIBERADAMENTE fora de
+        // SYSTEM_INSTRUCTION_CACHE_OPS, ver Aarch64Decoder#decodeSystemInstructionSys):
+        // tem efeito observável real (zera memória) e já é anunciada como indisponível via
+        // DCZID_EL0.DZP=1 (B6.10); um guest que a emita mesmo assim deve lançar, não virar NOP
+        // silencioso. Não representável pelo corpus (`.s`/`.objdump.txt`) porque nunca é gerada
+        // por este emulador — construída à mão a partir do encoding real (ARM DDI 0487 C5.4.11).
+        int word = 0xd50b7420;
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
 }
