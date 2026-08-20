@@ -234,3 +234,12 @@ Disassembly of section .text:
  378:	d50320bf 	sevl
  37c:	d5033f5f 	clrex
  380:	d4200000 	brk	#0x0
+ 384:	fa420023 	ccmp	x1, x2, #0x3, eq	// eq = none
+ 388:	7a441065 	ccmp	w3, w4, #0x5, ne	// ne = any
+ 38c:	fa4a28a7 	ccmp	x5, #0xa, #0x7, cs	// cs = hs, nlast
+ 390:	7a5538c2 	ccmp	w6, #0x15, #0x2, cc	// cc = lo, ul, last
+ 394:	ba4840e1 	ccmn	x7, x8, #0x1, mi	// mi = first
+ 398:	3a4a512c 	ccmn	w9, w10, #0xc, pl	// pl = nfrst
+ 39c:	ba5f696f 	ccmn	x11, #0x1f, #0xf, vs
+ 3a0:	3a407980 	ccmn	w12, #0x0, #0x0, vc
+ 3a4:	fa405a4d 	ccmp	x18, #0x0, #0xd, pl	// pl = nfrst

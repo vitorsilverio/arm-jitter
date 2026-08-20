@@ -2179,4 +2179,125 @@ class Aarch64DecoderCorpusTest {
             assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
         }
     }
+
+    // ── B6.8: CCMP/CCMN (registrador e imediato) — apêndice do mesmo corpus.s/.bin/.objdump.txt,
+    // ── offsets 0x384-0x3a4, incl. o vetor literal `ccmp x18,#0,#0xd,pl` da F11 ─────────────────
+
+    @Test
+    void ccmpRegisterWide() {
+        // ccmp x1, x2, #3, eq (offset 0x384).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x384);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(1, op.rn());
+        assertFalse(op.immediateForm());
+        assertEquals(2, op.rm());
+        assertEquals(-1, op.immediate());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.EQ, op.condition());
+        assertEquals(0x3, op.nzcv());
+    }
+
+    @Test
+    void ccmpRegisterNarrow() {
+        // ccmp w3, w4, #5, ne (offset 0x388).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x388);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertFalse(op.wide());
+        assertEquals(3, op.rn());
+        assertEquals(4, op.rm());
+        assertEquals(Ir64Condition.NE, op.condition());
+        assertEquals(0x5, op.nzcv());
+    }
+
+    @Test
+    void ccmpImmediateWide() {
+        // ccmp x5, #10, #7, cs (offset 0x38c).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x38c);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(5, op.rn());
+        assertTrue(op.immediateForm());
+        assertEquals(10, op.immediate());
+        assertEquals(-1, op.rm());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.CS, op.condition());
+        assertEquals(0x7, op.nzcv());
+    }
+
+    @Test
+    void ccmpImmediateNarrow() {
+        // ccmp w6, #21, #2, cc (offset 0x390).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x390);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertFalse(op.wide());
+        assertEquals(6, op.rn());
+        assertTrue(op.immediateForm());
+        assertEquals(21, op.immediate());
+        assertEquals(Ir64Condition.CC, op.condition());
+        assertEquals(0x2, op.nzcv());
+    }
+
+    @Test
+    void ccmnRegisterWide() {
+        // ccmn x7, x8, #1, mi (offset 0x394).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x394);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertEquals(7, op.rn());
+        assertFalse(op.immediateForm());
+        assertEquals(8, op.rm());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.MI, op.condition());
+        assertEquals(0x1, op.nzcv());
+    }
+
+    @Test
+    void ccmnRegisterNarrow() {
+        // ccmn w9, w10, #12, pl (offset 0x398).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x398);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertFalse(op.wide());
+        assertEquals(9, op.rn());
+        assertEquals(10, op.rm());
+        assertEquals(Ir64Condition.PL, op.condition());
+        assertEquals(0xc, op.nzcv());
+    }
+
+    @Test
+    void ccmnImmediateWide() {
+        // ccmn x11, #31, #15, vs (offset 0x39c).
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x39c);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertEquals(11, op.rn());
+        assertTrue(op.immediateForm());
+        assertEquals(31, op.immediate());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.VS, op.condition());
+        assertEquals(0xf, op.nzcv());
+    }
+
+    @Test
+    void ccmnImmediateNarrowAllZero() {
+        // ccmn w12, #0, #0, vc (offset 0x3a0) — vetor de canto: imediato e nzcv ambos zero.
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x3a0);
+        assertEquals(Ir64AluOp.ADD, op.opcode());
+        assertFalse(op.wide());
+        assertEquals(12, op.rn());
+        assertTrue(op.immediateForm());
+        assertEquals(0, op.immediate());
+        assertEquals(Ir64Condition.VC, op.condition());
+        assertEquals(0x0, op.nzcv());
+    }
+
+    @Test
+    void ccmpLiteralVectorFromF11PolyglotKernelHeader() {
+        // ccmp x18, #0, #0xd, pl (offset 0x3a4) — a PRIMEIRA instrução real de praticamente todo
+        // `kernel8.img` distribuído (truque polyglot EFI "MZ"), o achado que abriu a task B6.8.
+        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x3a4);
+        assertEquals(Ir64AluOp.SUB, op.opcode());
+        assertEquals(18, op.rn());
+        assertTrue(op.immediateForm());
+        assertEquals(0, op.immediate());
+        assertTrue(op.wide());
+        assertEquals(Ir64Condition.PL, op.condition());
+        assertEquals(0xd, op.nzcv());
+    }
 }

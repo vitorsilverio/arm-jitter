@@ -212,6 +212,8 @@ public final class Ir64BlockExecutor {
                     executeAluExtendedRegister(core, (Ir64Op.AluExtendedRegister) op);
             case Ir64Op.Kind.CONDITIONAL_SELECT ->
                     executeConditionalSelect(core, (Ir64Op.ConditionalSelect) op);
+            case Ir64Op.Kind.CONDITIONAL_COMPARE ->
+                    executeConditionalCompare(core, (Ir64Op.ConditionalCompare) op);
             case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
                     executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
@@ -367,6 +369,27 @@ public final class Ir64BlockExecutor {
             };
         }
         core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// `CCMP`/`CCMN` (B6.8) — D2 da task: reaproveita {@link #addWithFlags}/{@link
+    /// #subWithFlags}, o MESMO cálculo já usado por {@link #executeAluShiftedRegister}, em vez de
+    /// duplicar a lógica de carry/overflow. Quando {@link Ir64Op.ConditionalCompare#condition} é
+    /// falsa, `NZCV` recebe os 4 bits CRUS do encoding (`core.pstate().setNzcv(int)`) e {@link
+    /// Ir64Op.ConditionalCompare#rn}/{@link Ir64Op.ConditionalCompare#rm} NUNCA são lidos — prova
+    /// de que a implementação de fato ramifica em vez de sempre calcular e descartar (Armadilhas
+    /// da task, Testes mínimos #2). Nunca escreve registrador (só `NZCV`, ver Javadoc do record).
+    private boolean executeConditionalCompare(Aarch64Core core, Ir64Op.ConditionalCompare op) {
+        if (core.pstate().evalCond(op.condition())) {
+            long operand1 = core.xForWidth(op.rn(), op.wide());
+            long operand2 = op.immediateForm() ? op.immediate() : core.xForWidth(op.rm(), op.wide());
+            AluResult result = op.opcode() == Ir64AluOp.SUB
+                    ? subWithFlags(operand1, operand2, op.wide())
+                    : addWithFlags(operand1, operand2, op.wide());
+            core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
+        } else {
+            core.pstate().setNzcv(op.nzcv());
+        }
         return false;
     }
 

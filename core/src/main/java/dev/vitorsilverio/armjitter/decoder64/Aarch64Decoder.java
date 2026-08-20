@@ -527,6 +527,20 @@ public final class Aarch64Decoder {
     private static final int DIVIDE_OPCODE_SHIFT = 11;
     private static final int DIVIDE_OPCODE_5BIT_MASK = 0b1_1111;
     private static final int DIVIDE_OPCODE_PATTERN = 0b0_0001;
+
+    // ── Conditional compare (CCMP/CCMN), subgrupo de Data Processing — Register (B6.8): ─────────
+    // ── sf(31) op(30) 1(29,"S") 11010010(28:21) y(20:16) cond(15:12) imm(11) 0(10) rn(9:5) ───────
+    // ── 0(4) nzcv(3:0) — CONFERIDO contra `a64.decode`/`translate-a64.c` do QEMU (Fatos de ────────
+    // ── referência da task, ver o Javadoc de `Ir64Op.ConditionalCompare`). `S`(bit29) faz parte ──
+    // ── do prefixo fixo de 9 bits (não é um campo): com `S=0` este mesmo prefixo de 8 bits não ───
+    // ── casa com NENHUMA outra instrução no `a64.decode` real — cai no `unsupported` genérico. ───
+    private static final int CCMP_FIXED_SHIFT = 21;
+    private static final int CCMP_FIXED_9BIT_MASK = 0b1_1111_1111;
+    private static final int CCMP_FIXED_PATTERN = 0b1_1101_0010;
+    private static final int CCMP_IMM_FORM_BIT_SHIFT = 11;
+    private static final int CCMP_IMM5_MASK = 0b1_1111;
+    private static final int CCMP_COND_SHIFT = 12;
+    private static final int CCMP_NZCV_MASK = 0xF;
     private static final int DIVIDE_SIGNED_BIT_SHIFT = 10;
 
     // ── Bitfield (SBFM/BFM/UBFM), subgrupo `10` de Data Processing Immediate (B6.3.2): ─────────
@@ -909,6 +923,10 @@ public final class Aarch64Decoder {
         if (fixed9 == CSEL_FIXED_PATTERN && reservedBit11Clear) {
             return decodeConditionalSelect(word);
         }
+        int ccmpFixed9 = (word >>> CCMP_FIXED_SHIFT) & CCMP_FIXED_9BIT_MASK;
+        if (ccmpFixed9 == CCMP_FIXED_PATTERN) {
+            return decodeConditionalCompare(word);
+        }
         int muldivFixed8 = (word >>> MULDIV_FIXED_SHIFT) & MULDIV_FIXED_8BIT_MASK;
         if (muldivFixed8 == MADD_MSUB_FIXED_PATTERN) {
             return decodeMultiplyAccumulate(word);
@@ -970,6 +988,23 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.ConditionalSelect(opcode, rd, rn, rm, wide, condition);
+    }
+
+    /// `CCMP`/`CCMN`, forma registrador E forma imediato (B6.8) — `op`(bit30) `0`=`CCMN`
+    /// (`Ir64AluOp.ADD`), `1`=`CCMP` (`Ir64AluOp.SUB`), mesma semântica de bit de
+    /// {@link #decodeAddSubShiftedRegister}. Sem campo `Rd` (bits `[4:0]` são fixos em `0`, não
+    /// decodificados — ver Armadilhas da task B6.8).
+    private Ir64Op decodeConditionalCompare(int word) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean isSub = ((word >>> ADD_SUB_OP_SHIFT) & 1) != 0;
+        Ir64AluOp opcode = isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD;
+        boolean immediateForm = ((word >>> CCMP_IMM_FORM_BIT_SHIFT) & 1) != 0;
+        int rm = immediateForm ? -1 : (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int immediate = immediateForm ? (word >>> ADDSUB_REGISTER_RM_SHIFT) & CCMP_IMM5_MASK : -1;
+        Ir64Condition condition = Ir64Condition.decode((word >>> CCMP_COND_SHIFT) & COND_FIELD_MASK);
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int nzcv = word & CCMP_NZCV_MASK;
+        return new Ir64Op.ConditionalCompare(opcode, rn, immediateForm, rm, immediate, wide, condition, nzcv);
     }
 
     private Ir64Op decodeAddSubShiftedRegister(int word, long address) {

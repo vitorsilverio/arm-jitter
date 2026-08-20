@@ -1041,4 +1041,131 @@ class Ir64BlockExecutorTest {
         assertEquals(4.0f, core.fp().sFloat(2));
         assertEquals(0.0f, core.fp().sFloat(1), "fmov s1,#2.0 foi pulado pelo B.gt");
     }
+
+    // ── B6.8: CCMP/CCMN (registrador e imediato) — palavras do mesmo corpus real de
+    // ── Aarch64DecoderCorpusTest (aarch64-none-elf-as/objdump, devkitA64), mesmos offsets. ─────
+
+    @Test
+    void ccmpRegisterConditionTrueMatchesSubs() {
+        // ccmp x1, x2, #3, eq: condição verdadeira -> NZCV = flags(x1 - x2), mesmo cálculo de
+        // SUBS (Testes mínimos #1 da task).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xfa420023);
+        core.setX(1, 10);
+        core.setX(2, 3);
+        core.pstate().setNzcv(false, true, false, false); // Z=1 -> eq verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertFalse(core.pstate().negative());
+        assertFalse(core.pstate().zero(), "10-3=7 != 0");
+        assertTrue(core.pstate().carry(), "10 >= 3: sem borrow");
+        assertFalse(core.pstate().overflow());
+    }
+
+    @Test
+    void ccmpConditionFalseUsesRawNzcvWithoutReadingOperands() {
+        // ccmp x1, x2, #3, eq (mesma palavra): condição falsa -> NZCV = os 4 bits crus do
+        // imediato (0b0011), NUNCA o cálculo de x1-x2 — x1/x2 são escolhidos IGUAIS de propósito
+        // (5-5=0 daria N=0,Z=1,C=1,V=0, DIFERENTE do raw 0b0011=N=0,Z=0,C=1,V=1), prova de que a
+        // implementação realmente ramifica em vez de sempre calcular e descartar (Armadilhas da
+        // task, Testes mínimos #2).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xfa420023);
+        core.setX(1, 5);
+        core.setX(2, 5);
+        core.pstate().setNzcv(false, false, false, false); // Z=0 -> eq falsa
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x3, core.pstate().nzcv(), "NZCV = imediato cru do encoding, não o cálculo");
+    }
+
+    @Test
+    void ccmpImmediateFormConditionTrueMatchesSubs() {
+        // ccmp x5, #10, #7, cs: forma imediato, condição verdadeira -> NZCV = flags(x5 - #10)
+        // (Testes mínimos #3).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xfa4a28a7);
+        core.setX(5, 15);
+        core.pstate().setNzcv(false, false, true, false); // C=1 -> cs verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertFalse(core.pstate().negative());
+        assertFalse(core.pstate().zero(), "15-10=5 != 0");
+        assertTrue(core.pstate().carry());
+        assertFalse(core.pstate().overflow());
+    }
+
+    @Test
+    void ccmpRegisterNarrowConditionTrueMatchesSubs32Bit() {
+        // ccmp w3, w4, #5, ne: forma W -> cálculo de flags em 32 bits (Testes mínimos #4).
+        // w3=3, w4=5 -> 3-5=-2 em complemento-de-dois de 32 bits (0xFFFFFFFE): N=1, sem overflow,
+        // com borrow (carry=false, convenção ARM: C=0 quando HÁ borrow).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0x7a441065);
+        core.setX(3, 3);
+        core.setX(4, 5);
+        core.pstate().setNzcv(false, false, false, false); // Z=0 -> ne verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertTrue(core.pstate().negative(), "3-5=-2: bit alto do resultado de 32 bits setado");
+        assertFalse(core.pstate().zero());
+        assertFalse(core.pstate().carry(), "3 < 5: houve borrow");
+        assertFalse(core.pstate().overflow());
+    }
+
+    @Test
+    void ccmnRegisterConditionTrueMatchesAdds() {
+        // ccmn x7, x8, #1, mi: CCMN -> NZCV = flags(x7 + x8), mesmo cálculo de ADDS.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xba4840e1);
+        core.setX(7, 1);
+        core.setX(8, 2);
+        core.pstate().setNzcv(true, false, false, false); // N=1 -> mi verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertFalse(core.pstate().negative(), "1+2=3: bit de sinal não setado");
+        assertFalse(core.pstate().zero());
+        assertFalse(core.pstate().carry());
+        assertFalse(core.pstate().overflow());
+    }
+
+    @Test
+    void ccmpDoesNotWriteAnyRegister() {
+        // ccmp x1, x2, #3, eq: CCMP/CCMN nunca escrevem Rd (só flags) — Armadilhas da task.
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xfa420023);
+        core.setX(1, 10);
+        core.setX(2, 3);
+        core.pstate().setNzcv(false, true, false, false);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(10L, core.x(1), "CCMP não escreve Rn");
+        assertEquals(3L, core.x(2), "CCMP não escreve Rm");
+    }
+
+    @Test
+    void ccmpLiteralVectorFromF11PolyglotKernelHeader() {
+        // ccmp x18, #0, #0xd, pl: a PRIMEIRA instrução real de praticamente todo `kernel8.img`
+        // distribuído (truque polyglot EFI "MZ"), o achado que abriu a task B6.8 (F11,
+        // virtual-arm-box) — prova ponta-a-ponta de que o fix resolve o caso real, não só um caso
+        // sintético (Testes mínimos #5).
+        Aarch64Core core = newCore(16);
+        putWord(core, 0, 0xfa405a4d);
+        core.setX(18, 5);
+        core.pstate().setNzcv(false, false, false, false); // N=0 -> pl verdadeira
+
+        new Ir64BlockExecutor().step(core);
+
+        assertFalse(core.pstate().negative(), "5-0=5: bit de sinal não setado");
+        assertFalse(core.pstate().zero());
+        assertTrue(core.pstate().carry(), "5 >= 0: sem borrow");
+        assertFalse(core.pstate().overflow());
+        assertEquals(4L, core.pc(), "CCMP avança o PC normalmente (não é branch)");
+    }
 }

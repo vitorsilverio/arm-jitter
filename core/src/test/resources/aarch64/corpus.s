@@ -248,3 +248,14 @@ sev
 sevl
 clrex
 brk #0
+
+// ── B6.8: CCMP/CCMN (registrador e imediato), gap achado pela F11 ──────────
+ccmp x1, x2, #3, eq
+ccmp w3, w4, #5, ne
+ccmp x5, #10, #7, cs
+ccmp w6, #21, #2, cc
+ccmn x7, x8, #1, mi
+ccmn w9, w10, #12, pl
+ccmn x11, #31, #15, vs
+ccmn w12, #0, #0, vc
+ccmp x18, #0, #0xd, pl

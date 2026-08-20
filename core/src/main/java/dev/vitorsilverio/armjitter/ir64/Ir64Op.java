@@ -29,7 +29,7 @@ public sealed interface Ir64Op permits
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
         Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
         Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
-        Ir64Op.PrivilegedCall {
+        Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -73,6 +73,8 @@ public sealed interface Ir64Op permits
         public static final int FP64_CONVERT = 26;
         /// B6.6.7: `HVC`/`SMC` — ver {@link PrivilegedCall}.
         public static final int PRIVILEGED_CALL = 27;
+        /// B6.8: `CCMP`/`CCMN` — ver {@link ConditionalCompare}.
+        public static final int CONDITIONAL_COMPARE = 28;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -687,5 +689,52 @@ public sealed interface Ir64Op permits
             /// Registrador de origem (índice `0`-`31`, `V<n>`).
             int vm) implements Ir64Op {
         @Override public int kind() { return Kind.FP64_CONVERT; }
+    }
+
+    /// `CCMP`/`CCMN` (`ARM DDI 0487 C6.2.25/24`, B6.8) — gap achado por uma sessão de F11
+    /// (`virtual-arm-box`): a PRIMEIRA instrução de praticamente todo `kernel8.img` real
+    /// (`ccmp x18, #0, #0xd, pl`, truque polyglot EFI "MZ" do cabeçalho `Image` do Linux) usa esta
+    /// família, nunca implementada em nenhuma sub-task de B6.3. Encoding confirmado contra o
+    /// `a64.decode` do QEMU (`target/arm/tcg/a64.decode`, linha `CCMP sf:1 op:1 1 11010010 y:5
+    /// cond:4 imm:1 0 rn:5 0 nzcv:4`) e `translate-a64.c#trans_CCMP` — `S`(bit29) é sempre `1`
+    /// neste encoding (não um campo, parte do prefixo fixo); `op`(bit30) `0`=`CCMN`(soma),
+    /// `1`=`CCMP`(subtração), MESMO bit/semântica de {@link Ir64AluOp#ADD}/{@link Ir64AluOp#SUB}
+    /// em {@link AluShiftedRegister}. Um único record cobre as DUAS formas (registrador e
+    /// imediato, D1 da task) — mesmo padrão de {@link Load64}/{@link Store64}: um campo
+    /// {@link #immediateForm} escolhe entre {@link #rm} (registrador, `-1` na forma imediato) e
+    /// {@link #immediate} (`0`-`31` cru do encoding, `-1` na forma registrador).
+    ///
+    /// **Nunca escreve registrador** (só {@link #rn} é lido, comparado contra {@link #rm}/
+    /// {@link #immediate}) — diferente de `SUBS`/`ADDS`, que também setam `NZCV` mas têm `Rd`;
+    /// os bits baixos do encoding real (`[4:0]`) são fixos em `0`, não um campo `Rd` (Armadilhas
+    /// da task). `Rn` é `cpu_reg` puro no QEMU (nunca `cpu_reg_sp`) — `31` é sempre `XZR`, NUNCA
+    /// `SP` (diferente de {@link AluExtendedRegister#src1}), confirmado em `trans_CCMP`.
+    record ConditionalCompare(
+            /// `ADD`=`CCMN`, `SUB`=`CCMP` (`op`, bit30 do encoding — mesma semântica de
+            /// {@link AluShiftedRegister#opcode}).
+            Ir64AluOp opcode,
+            /// Primeiro operando da comparação (`Rn`, índice `0`-`31`; `31` é sempre `XZR`, nunca
+            /// `SP` — ver acima).
+            int rn,
+            /// `true` para a forma imediato (`imm5` no lugar de `Rm`), `false` para a forma
+            /// registrador.
+            boolean immediateForm,
+            /// Segundo operando na forma REGISTRADOR (`Rm`, índice `0`-`31`; `31` é sempre
+            /// `XZR`); `-1` quando {@link #immediateForm}.
+            int rm,
+            /// Segundo operando na forma IMEDIATO (`0`-`31`, unsigned, cru do encoding — NÃO um
+            /// índice de registrador); `-1` quando `!`{@link #immediateForm}.
+            int immediate,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide,
+            /// Condição avaliada contra `PSTATE.{N,Z,C,V}` — quando verdadeira, `NZCV` é
+            /// recalculado a partir da comparação; quando falsa, {@link #nzcv} substitui `NZCV`
+            /// diretamente, SEM ler {@link #rn}/{@link #rm} (Armadilhas da task).
+            Ir64Condition condition,
+            /// Os 4 bits crus `N:Z:C:V` do encoding (mesma ordem/formato de
+            /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#setNzcv(int)}), usados
+            /// como `NZCV` quando {@link #condition} é falsa.
+            int nzcv) implements Ir64Op {
+        @Override public int kind() { return Kind.CONDITIONAL_COMPARE; }
     }
 }
