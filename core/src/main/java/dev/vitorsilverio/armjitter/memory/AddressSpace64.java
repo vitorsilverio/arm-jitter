@@ -91,39 +91,55 @@ public interface AddressSpace64 {
             this.inner = inner;
         }
 
+        /// `address` cabe nos "4 GiB baixos" (`[0, 0xFFFFFFFF]`, faixa documentada em
+        /// {@link #wrapping}) quando visto como `long` **sem sinal** — `Math.toIntExact` rejeitaria
+        /// incorretamente metade dessa faixa (`[0x8000_0000, 0xFFFF_FFFF]`, que cabe em 32 bits sem
+        /// sinal mas excede {@link Integer#MAX_VALUE} como `long` assinado). Achado real da task
+        /// F11 (`Raspi364Machine`, kernel real lendo/escrevendo perto do topo dos 4 GiB baixos):
+        /// truncar com `(int)` preserva o padrão de bits, exatamente como o resto da API de 32 bits
+        /// já trata endereços (`AddressSpace` usa `int` sem sinal em todo lugar, G3).
+        private static int narrow(long address) {
+            if (address < 0 || address > 0xFFFFFFFFL) {
+                throw new ArithmeticException(
+                        "endereço fora dos 4 GiB baixos suportados por AddressSpace64.wrapping: 0x"
+                                + Long.toHexString(address));
+            }
+            return (int) address;
+        }
+
         @Override
         public int read8(long address) {
-            return inner.read8(Math.toIntExact(address));
+            return inner.read8(narrow(address));
         }
 
         @Override
         public int read16(long address) {
-            return inner.read16(Math.toIntExact(address));
+            return inner.read16(narrow(address));
         }
 
         @Override
         public int read32(long address) {
-            return inner.read32(Math.toIntExact(address));
+            return inner.read32(narrow(address));
         }
 
         @Override
         public void write8(long address, int value) {
-            inner.write8(Math.toIntExact(address), value);
+            inner.write8(narrow(address), value);
         }
 
         @Override
         public void write16(long address, int value) {
-            inner.write16(Math.toIntExact(address), value);
+            inner.write16(narrow(address), value);
         }
 
         @Override
         public void write32(long address, int value) {
-            inner.write32(Math.toIntExact(address), value);
+            inner.write32(narrow(address), value);
         }
 
         @Override
         public int accessCycles(long address, int sizeBytes, MemoryAccessType type) {
-            return inner.accessCycles(Math.toIntExact(address), sizeBytes, type);
+            return inner.accessCycles(narrow(address), sizeBytes, type);
         }
 
         @Override
@@ -133,7 +149,7 @@ public interface AddressSpace64 {
 
         @Override
         public void notifyWrite(long address) {
-            inner.notifyWrite(Math.toIntExact(address));
+            inner.notifyWrite(narrow(address));
         }
     }
 }
