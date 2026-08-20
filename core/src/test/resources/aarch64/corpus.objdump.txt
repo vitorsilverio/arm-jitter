@@ -1,5 +1,5 @@
 
-corpus_new.o:     file format elf64-littleaarch64
+corpus.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -283,3 +283,5 @@ Disassembly of section .text:
  43c:	aa2103f6 	mvn	x22, x1
  440:	2a0203f7 	mov	w23, w2
  444:	2a2303f8 	mvn	w24, w3
+ 448:	d53b0023 	mrs	x3, ctr_el0
+ 44c:	d53b00e4 	mrs	x4, dczid_el0

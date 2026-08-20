@@ -2181,6 +2181,27 @@ class Aarch64DecoderCorpusTest {
         }
     }
 
+    // ── B6.10: CTR_EL0/DCZID_EL0 (identidade de cache) — apêndice do mesmo corpus.s/.bin/
+    // ── .objdump.txt, offsets 0x448-0x44c, terceiro gap achado pela F11 ────────────────────────
+
+    @Test
+    void systemRegisterCtrEl0() {
+        // mrs x3, CTR_EL0 (offset 0x448).
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x448);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.CTR_EL0, op.register());
+        assertEquals(3, op.rt());
+    }
+
+    @Test
+    void systemRegisterDczidEl0() {
+        // mrs x4, DCZID_EL0 (offset 0x44c).
+        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x44c);
+        assertTrue(op.read());
+        assertEquals(Aarch64SystemRegisterId.DCZID_EL0, op.register());
+        assertEquals(4, op.rt());
+    }
+
     // ── B6.8: CCMP/CCMN (registrador e imediato) — apêndice do mesmo corpus.s/.bin/.objdump.txt,
     // ── offsets 0x384-0x3a4, incl. o vetor literal `ccmp x18,#0,#0xd,pl` da F11 ─────────────────
 

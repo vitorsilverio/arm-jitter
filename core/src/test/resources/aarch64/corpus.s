@@ -301,3 +301,7 @@ mov x21, x0
 mvn x22, x1
 mov w23, w2
 mvn w24, w3
+
+// -- B6.10: CTR_EL0/DCZID_EL0 (identidade de cache), gap achado pela F11 --
+mrs x3, CTR_EL0
+mrs x4, DCZID_EL0

@@ -257,6 +257,15 @@ public final class Aarch64Decoder {
     // ── diferente do resto da tabela, que é toda `op1=0`), CRn=0b1110 fixo (grupo Generic Timer).
     private static final int SYSREG_OP1_EL0_TIMER = 3;
     private static final int SYSREG_CRN_TIMER = 14;
+
+    // ── B6.10: identidade de cache, MESMO `op0=3`/`op1=3` do timer acima, mas CRn=0 (grupo de
+    // ── identificação EL0, distinto do grupo timer por CRn) — valores conferidos contra
+    // ── `target/arm/helper.c` real do QEMU (`id_cp_reginfo`/`DCZID_EL0`), ver a task.
+    private static final int SYSREG_CRN_CACHE_IDENTITY = 0;
+    private static final int SYSREG_CRM_CTR = 0;
+    private static final int SYSREG_OP2_CTR_EL0 = 1;
+    private static final int SYSREG_CRM_DCZID = 0;
+    private static final int SYSREG_OP2_DCZID_EL0 = 7;
     private static final int SYSREG_CRM_CNTFRQ = 0;
     private static final int SYSREG_OP2_CNTFRQ = 0;
     private static final int SYSREG_CRM_CNTPCT = 0;
@@ -1479,6 +1488,9 @@ public final class Aarch64Decoder {
             return null;
         }
         if (op1 == SYSREG_OP1_EL0_TIMER) {
+            if (crn == SYSREG_CRN_CACHE_IDENTITY) {
+                return decodeCacheIdentityRegisterId(crm, op2);
+            }
             return decodeGenericTimerRegisterId(crn, crm, op2);
         }
         if (op1 != SYSREG_OP1_EL1) {
@@ -1561,6 +1573,21 @@ public final class Aarch64Decoder {
         }
         if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_CVAL) {
             return Aarch64SystemRegisterId.CNTP_CVAL_EL0;
+        }
+        return null;
+    }
+
+    /// `CTR_EL0`/`DCZID_EL0` (B6.10, `op0=3,op1=3,CRn=0`) — identidade de cache CONSTANTE da CPU,
+    /// resolvida DIRETO pelo {@link dev.vitorsilverio.armjitter.core64.Aarch64Core} (mesma
+    /// disciplina de {@link Aarch64SystemRegisterId#MIDR_EL1}, não passa pelo
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus} do hospedeiro como o
+    /// timer genérico vizinho — ver javadoc da classe).
+    private static Aarch64SystemRegisterId decodeCacheIdentityRegisterId(int crm, int op2) {
+        if (crm == SYSREG_CRM_CTR && op2 == SYSREG_OP2_CTR_EL0) {
+            return Aarch64SystemRegisterId.CTR_EL0;
+        }
+        if (crm == SYSREG_CRM_DCZID && op2 == SYSREG_OP2_DCZID_EL0) {
+            return Aarch64SystemRegisterId.DCZID_EL0;
         }
         return null;
     }

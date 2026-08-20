@@ -80,6 +80,30 @@ class Aarch64IrqAndCpuIdentityTest {
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msr));
     }
 
+    // ── B6.10: CTR_EL0/DCZID_EL0 (identidade de cache), terceiro gap achado pela F11 ───────────
+
+    @Test
+    void ctrEl0AndDczidEl0AreConstant() {
+        Aarch64Core core = newCore();
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CTR_EL0, 3));
+        assertEquals(0x8444_8004L, core.x(3), "Cache Type Register real do Cortex-A53 (mesmo que MIDR_EL1)");
+        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.DCZID_EL0, 4));
+        assertEquals(0x10L, core.x(4), "só DZP(4) setado — DC ZVA não implementado, anunciado como desabilitado");
+    }
+
+    @Test
+    void ctrEl0AndDczidEl0AreIntrinsicAndReadOnly() {
+        Aarch64Core core = newCore();
+        assertTrue(core.handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId.CTR_EL0));
+        assertTrue(core.handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId.DCZID_EL0));
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+        Ir64Op.SystemRegister msrCtr = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.CTR_EL0, 0);
+        assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msrCtr));
+        Ir64Op.SystemRegister msrDczid = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.DCZID_EL0, 0);
+        assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msrDczid));
+    }
+
     @Test
     void genericTimerRegisterStillRoutesThroughHostBusNotIntrinsic() {
         Aarch64Core core = newCore();

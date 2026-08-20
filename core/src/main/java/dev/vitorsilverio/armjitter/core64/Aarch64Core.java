@@ -90,6 +90,13 @@ public final class Aarch64Core {
     /// `ID_AA64DFR0_EL1` constante: `DebugVer[3:0]=0b0110` (ARMv8, valor de referência — nenhum
     /// registrador de debug implementado, só o campo de versão).
     private static final long ID_AA64DFR0_EL1_VALUE = 0x6L;
+    /// `CTR_EL0` constante (B6.10): Cache Type Register real do Cortex-A53 (`0x84448004`, mesmo
+    /// alvo de {@link #MIDR_EL1_VALUE}, valor de referência publicado pelo QEMU).
+    private static final long CTR_EL0_VALUE = 0x8444_8004L;
+    /// `DCZID_EL0` constante (B6.10): só o bit `DZP`(4) setado — este emulador não implementa
+    /// `DC ZVA`, então anunciar o acesso como desabilitado é o valor correto (ver javadoc de
+    /// {@link Aarch64SystemRegisterId#DCZID_EL0}).
+    private static final long DCZID_EL0_VALUE = 0x10L;
 
     private final long[] x = new long[GENERAL_REGISTER_COUNT];
     /// `SP_EL0` — pilha de EL0. Só usada por {@link #sp()}/{@link #setSp(long)} quando
@@ -324,7 +331,7 @@ public final class Aarch64Core {
     public boolean handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId register) {
         return switch (register) {
             case CURRENT_EL, MPIDR_EL1, MIDR_EL1, ID_AA64PFR0_EL1, ID_AA64ISAR0_EL1,
-                 ID_AA64MMFR0_EL1, ID_AA64DFR0_EL1, TPIDR_EL1 -> true;
+                 ID_AA64MMFR0_EL1, ID_AA64DFR0_EL1, TPIDR_EL1, CTR_EL0, DCZID_EL0 -> true;
             default -> false;
         };
     }
@@ -342,6 +349,8 @@ public final class Aarch64Core {
             case ID_AA64MMFR0_EL1 -> ID_AA64MMFR0_EL1_VALUE;
             case ID_AA64DFR0_EL1 -> ID_AA64DFR0_EL1_VALUE;
             case TPIDR_EL1 -> tpidrEl1;
+            case CTR_EL0 -> CTR_EL0_VALUE;
+            case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
                     "Não é uma identidade intrínseca: " + register);
         };

@@ -84,6 +84,19 @@ public enum Aarch64SystemRegisterId {
     /// contrário dos registradores de identidade acima, este É mutável, mas ainda não precisa de
     /// hospedeiro plugável (é só um escaninho de 64 bits, guardado direto no `Aarch64Core`).
     TPIDR_EL1,
+    /// `CTR_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=1`) — Cache Type Register, somente leitura
+    /// (`PL0_R` no hardware real). Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3
+    /// (`0x84448004`, mesmo alvo de {@link #MIDR_EL1}, task B6.10) — apesar de viver no mesmo
+    /// grupo de bits `op1=3` do timer genérico (ver javadoc da classe), é identidade CONSTANTE da
+    /// CPU, não algo dependente do relógio do hospedeiro — resolvida DIRETO pelo `Aarch64Core`,
+    /// mesma disciplina de `MIDR_EL1`/`ID_AA64*`.
+    CTR_EL0,
+    /// `DCZID_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=7`) — Data Cache Zero ID, somente leitura.
+    /// Constante `0x10` (só o bit `DZP`, "DC ZVA desabilitado") — este emulador não implementa a
+    /// instrução `DC ZVA`, então anunciar `DZP=1` é o valor correto (task B6.10), evitando que o
+    /// guest tente usá-la e bata num `UnsupportedOperationException` de decode em vez de
+    /// simplesmente não usar o caminho otimizado.
+    DCZID_EL0,
 
     // ── B6.6.7: timer genérico, EL0-acessível (`op0=3,op1=3`) — via `Aarch64SystemRegisterBus` ──
 
