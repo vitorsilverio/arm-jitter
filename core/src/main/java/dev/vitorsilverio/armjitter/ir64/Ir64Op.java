@@ -29,7 +29,8 @@ public sealed interface Ir64Op permits
         Ir64Op.MultiplyAccumulate, Ir64Op.Divide, Ir64Op.LoadExclusive, Ir64Op.StoreExclusive,
         Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
         Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
-        Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare, Ir64Op.LogicalShiftedRegister {
+        Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare, Ir64Op.LogicalShiftedRegister,
+        Ir64Op.ShiftVariable {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -78,6 +79,9 @@ public sealed interface Ir64Op permits
         /// B6.9: `AND`/`ORR`/`EOR`/`ANDS`/`BIC`/`ORN`/`EON`/`BICS` (registrador deslocado) — ver
         /// {@link LogicalShiftedRegister}.
         public static final int LOGICAL_SHIFTED_REGISTER = 29;
+        /// B6.11: `LSLV`/`LSRV`/`ASRV`/`RORV` (deslocamento variável, quantidade em `Rm`) — ver
+        /// {@link ShiftVariable}.
+        public static final int SHIFT_VARIABLE = 30;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -461,6 +465,30 @@ public sealed interface Ir64Op permits
             /// sempre quando `true` (nunca há cálculo de carry/overflow em operação lógica).
             boolean setFlags) implements Ir64Op {
         @Override public int kind() { return Kind.LOGICAL_SHIFTED_REGISTER; }
+    }
+
+    /// `LSLV`/`LSRV`/`ASRV`/`RORV` (`ARM DDI 0487 C6.2.221/223/26/300`, "Data-processing (2
+    /// source)", B6.11) — deslocamento de {@link #src1} por uma quantidade tomada em TEMPO DE
+    /// EXECUÇÃO de {@link #src2} (`Rm mod regsize`, nunca um imediato do encoding — ao contrário
+    /// de {@link LogicalShiftedRegister}, cujo `shiftAmount` já vem resolvido pelo decoder).
+    /// `Rd`/`Rn`/`Rm` NUNCA são `SP` (mesmo subgrupo de {@link Divide}/{@link
+    /// MultiplyAccumulate}). Reaproveita {@link Ir64LogicalShiftType} (4 valores, `ROR` incluso)
+    /// em vez de um enum próprio — os bits `[11:10]` do encoding já caem na mesma ordem
+    /// `LSL/LSR/ASR/ROR` do enum (Fatos de referência da task B6.11). Nunca afeta `NZCV`.
+    record ShiftVariable(
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Registrador deslocado (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Registrador cujo valor (mod largura) é a quantidade de deslocamento (`Rm`, índice
+            /// `0`-`31`; `31` é sempre `XZR`, ou seja, deslocamento por `0`).
+            int src2,
+            /// Tipo de deslocamento (as 4 combinações são válidas).
+            Ir64LogicalShiftType shiftType,
+            /// `true` para operação de 64 bits (`X`, quantidade `mod 64`); `false` para 32 bits
+            /// (`W`, quantidade `mod 32`, resultado zero-estendido para os 64 bits altos).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.SHIFT_VARIABLE; }
     }
 
     /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (`ARM DDI 0487 C6.2.34-37`, B6.3.2) — a única família de A64

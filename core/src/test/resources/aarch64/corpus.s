@@ -305,3 +305,14 @@ mvn w24, w3
 // -- B6.10: CTR_EL0/DCZID_EL0 (identidade de cache), gap achado pela F11 --
 mrs x3, CTR_EL0
 mrs x4, DCZID_EL0
+
+// -- B6.11: LSLV/LSRV/ASRV/RORV (deslocamento variavel), gap achado pela F11 --
+lslv x1, x2, x3
+lsrv x4, x5, x6
+asrv x7, x8, x9
+rorv x10, x11, x12
+lslv w13, w14, w15
+lsrv w16, w17, w18
+asrv w19, w20, w21
+rorv w22, w23, w24
+lsl x2, x2, x3

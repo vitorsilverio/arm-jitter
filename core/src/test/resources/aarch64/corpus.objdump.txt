@@ -285,3 +285,12 @@ Disassembly of section .text:
  444:	2a2303f8 	mvn	w24, w3
  448:	d53b0023 	mrs	x3, ctr_el0
  44c:	d53b00e4 	mrs	x4, dczid_el0
+ 450:	9ac32041 	lsl	x1, x2, x3
+ 454:	9ac624a4 	lsr	x4, x5, x6
+ 458:	9ac92907 	asr	x7, x8, x9
+ 45c:	9acc2d6a 	ror	x10, x11, x12
+ 460:	1acf21cd 	lsl	w13, w14, w15
+ 464:	1ad22630 	lsr	w16, w17, w18
+ 468:	1ad52a93 	asr	w19, w20, w21
+ 46c:	1ad82ef6 	ror	w22, w23, w24
+ 470:	9ac32042 	lsl	x2, x2, x3

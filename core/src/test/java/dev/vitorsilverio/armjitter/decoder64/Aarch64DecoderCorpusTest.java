@@ -2202,6 +2202,75 @@ class Aarch64DecoderCorpusTest {
         assertEquals(4, op.rt());
     }
 
+    // ── B6.11: LSLV/LSRV/ASRV/RORV (deslocamento variável) — apêndice do mesmo corpus.s/.bin/
+    // ── .objdump.txt, offsets 0x450-0x470, QUARTO gap achado pela F11 (incl. o vetor literal ─────
+    // ── `lsl x2, x2, x3` = 0x9ac32042, achado em 0x38fd4 do kernel8.img real) ───────────────────
+
+    private static void assertShiftVariable(
+            Ir64Op.ShiftVariable op, int dst, int src1, int src2,
+            Ir64LogicalShiftType shiftType, boolean wide) {
+        assertEquals(dst, op.dst());
+        assertEquals(src1, op.src1());
+        assertEquals(src2, op.src2());
+        assertEquals(shiftType, op.shiftType());
+        assertEquals(wide, op.wide());
+    }
+
+    @Test
+    void lslvWide() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x450);
+        assertShiftVariable(op, 1, 2, 3, Ir64LogicalShiftType.LSL, true);
+    }
+
+    @Test
+    void lsrvWide() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x454);
+        assertShiftVariable(op, 4, 5, 6, Ir64LogicalShiftType.LSR, true);
+    }
+
+    @Test
+    void asrvWide() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x458);
+        assertShiftVariable(op, 7, 8, 9, Ir64LogicalShiftType.ASR, true);
+    }
+
+    @Test
+    void rorvWide() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x45c);
+        assertShiftVariable(op, 10, 11, 12, Ir64LogicalShiftType.ROR, true);
+    }
+
+    @Test
+    void lslvNarrow() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x460);
+        assertShiftVariable(op, 13, 14, 15, Ir64LogicalShiftType.LSL, false);
+    }
+
+    @Test
+    void lsrvNarrow() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x464);
+        assertShiftVariable(op, 16, 17, 18, Ir64LogicalShiftType.LSR, false);
+    }
+
+    @Test
+    void asrvNarrow() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x468);
+        assertShiftVariable(op, 19, 20, 21, Ir64LogicalShiftType.ASR, false);
+    }
+
+    @Test
+    void rorvNarrow() {
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x46c);
+        assertShiftVariable(op, 22, 23, 24, Ir64LogicalShiftType.ROR, false);
+    }
+
+    @Test
+    void lslvLiteralVectorFromKernel8Img() {
+        // lsl x2, x2, x3 (0x9ac32042) — vetor LITERAL da F11 (0x38fd4 do kernel8.img real).
+        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x470);
+        assertShiftVariable(op, 2, 2, 3, Ir64LogicalShiftType.LSL, true);
+    }
+
     // ── B6.8: CCMP/CCMN (registrador e imediato) — apêndice do mesmo corpus.s/.bin/.objdump.txt,
     // ── offsets 0x384-0x3a4, incl. o vetor literal `ccmp x18,#0,#0xd,pl` da F11 ─────────────────
 

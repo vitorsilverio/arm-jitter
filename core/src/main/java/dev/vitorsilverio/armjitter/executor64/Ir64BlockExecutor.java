@@ -217,6 +217,8 @@ public final class Ir64BlockExecutor {
                     executeConditionalCompare(core, (Ir64Op.ConditionalCompare) op);
             case Ir64Op.Kind.LOGICAL_SHIFTED_REGISTER ->
                     executeLogicalShiftedRegister(core, (Ir64Op.LogicalShiftedRegister) op);
+            case Ir64Op.Kind.SHIFT_VARIABLE ->
+                    executeShiftVariable(core, (Ir64Op.ShiftVariable) op);
             case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
                     executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
@@ -360,6 +362,19 @@ public final class Ir64BlockExecutor {
             core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
         }
         core.setXForWidth(op.dst(), result.value, op.wide());
+        return false;
+    }
+
+    /// `LSLV`/`LSRV`/`ASRV`/`RORV` (B6.11) — mesma tabela de deslocamento de
+    /// {@link #executeLogicalShiftedRegister} ({@link #applyLogicalShift}), mas a quantidade vem
+    /// de {@link Ir64Op.ShiftVariable#src2} EM TEMPO DE EXECUÇÃO (`mod` largura), não de um campo
+    /// já resolvido pelo decoder. Nunca afeta `NZCV`.
+    private boolean executeShiftVariable(Aarch64Core core, Ir64Op.ShiftVariable op) {
+        long operand = core.xForWidth(op.src1(), op.wide());
+        long rawAmount = core.xForWidth(op.src2(), op.wide());
+        int amount = (int) (rawAmount & (op.wide() ? 63L : 31L));
+        long result = applyLogicalShift(operand, op.shiftType(), amount, op.wide());
+        core.setXForWidth(op.dst(), result, op.wide());
         return false;
     }
 

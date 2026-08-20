@@ -547,6 +547,18 @@ public final class Aarch64Decoder {
     private static final int DIVIDE_OPCODE_5BIT_MASK = 0b1_1111;
     private static final int DIVIDE_OPCODE_PATTERN = 0b0_0001;
 
+    // ── LSLV/LSRV/ASRV/RORV, mesmo subgrupo "Data-processing (2 source)" de SDIV/UDIV (B6.11): ───
+    // ── opcode(15:11)=00100(LSLV/LSRV) ou 00101(ASRV/RORV), bit10 distingue dentro do par ─────────
+    // ── (0=esquerda/aritmético,1=direita/rotação) — CONFERIDO contra `a64.decode` real do QEMU ────
+    // ── (Fatos de referência da task B6.11): os bits[11:10] tomados como par batem exatamente com ─
+    // ── a ordem de Ir64LogicalShiftType (LSL=00,LSR=01,ASR=10,ROR=11), reaproveitado em vez de um ─
+    // ── enum próprio (mesma decisão de reuso já validada por B6.9 para a MESMA tabela de 4 tipos). ─
+    private static final int SHIFT_VARIABLE_OPCODE_SHIFT = 12;
+    private static final int SHIFT_VARIABLE_OPCODE_4BIT_MASK = 0b1111;
+    private static final int SHIFT_VARIABLE_OPCODE_PATTERN = 0b0010;
+    private static final int SHIFT_VARIABLE_TYPE_SHIFT = 10;
+    private static final int SHIFT_VARIABLE_TYPE_2BIT_MASK = 0b11;
+
     // ── Conditional compare (CCMP/CCMN), subgrupo de Data Processing — Register (B6.8): ─────────
     // ── sf(31) op(30) 1(29,"S") 11010010(28:21) y(20:16) cond(15:12) imm(11) 0(10) rn(9:5) ───────
     // ── 0(4) nzcv(3:0) — CONFERIDO contra `a64.decode`/`translate-a64.c` do QEMU (Fatos de ────────
@@ -958,10 +970,26 @@ public final class Aarch64Decoder {
             if (divideOpcode == DIVIDE_OPCODE_PATTERN) {
                 return decodeDivide(word);
             }
-            // opcode != 00001: LSLV/LSRV/ASRV/RORV/CRC32* (fora do escopo fechado do épico).
+            int shiftOpcode4 = (word >>> SHIFT_VARIABLE_OPCODE_SHIFT) & SHIFT_VARIABLE_OPCODE_4BIT_MASK;
+            if (shiftOpcode4 == SHIFT_VARIABLE_OPCODE_PATTERN) {
+                return decodeShiftVariable(word);
+            }
+            // opcode != 00001/0010x: CRC32* (fora do escopo fechado do épico, B6.11).
             throw unsupported(word, address);
         }
         throw unsupported(word, address);
+    }
+
+    /// `LSLV`/`LSRV`/`ASRV`/`RORV` (B6.11) — deslocamento variável, quantidade tomada de `Rm`
+    /// (não um imediato do encoding, ao contrário de {@link #decodeLogicalShiftedRegister}).
+    private Ir64Op decodeShiftVariable(int word) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int shiftTypeOrdinal = (word >>> SHIFT_VARIABLE_TYPE_SHIFT) & SHIFT_VARIABLE_TYPE_2BIT_MASK;
+        Ir64LogicalShiftType shiftType = Ir64LogicalShiftType.values()[shiftTypeOrdinal];
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.ShiftVariable(rd, rn, rm, shiftType, wide);
     }
 
     /// `MADD`/`MSUB` (B6.3.3) — `MUL`/`MNEG` (aliases com `Ra=XZR`) chegam aqui como o mesmo
