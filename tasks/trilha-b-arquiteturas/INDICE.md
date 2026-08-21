@@ -72,5 +72,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [B7.3](b7.3-scs-nvic-systick.md) | SCS/NVIC/VTOR/SysTick memory-mapped na lib | B7.2 | ✅ (2026-07-23) — ver **Resultado** na task |
 | [B7.4](b7.4-presets-armv6m-armv7m.md) | MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | B7.2 (pleno c/ B3.2) | ✅ (2026-07-23) — ver **Resultado** na task |
 | [B7.5](b7.5-runner-bare-metal.md) | armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | B7.3 ✅, B7.4 ✅ | ✅ (2026-07-23) — ver **Resultado** na task |
+| [B8.1](b8.1-a64-load-store-escalar.md) | A64: load/store escalar restantes (`STNP`/`LDNP`, `LDPSW`, `PRFM`, `LDTR`/`STTR`, `LDXP`/`STXP`, `LDAR`/`STLR`, `CAS`/`CASP`) — frente de cobertura de ISA, `b7-plano-cobertura-isa.md` | E6 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

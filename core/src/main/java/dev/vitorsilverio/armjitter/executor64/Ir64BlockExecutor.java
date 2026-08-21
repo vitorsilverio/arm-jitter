@@ -225,6 +225,14 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.DIVIDE -> executeDivide(core, (Ir64Op.Divide) op);
             case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (Ir64Op.LoadExclusive) op);
             case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (Ir64Op.StoreExclusive) op);
+            case Ir64Op.Kind.LOAD_EXCLUSIVE_PAIR ->
+                    executeLoadExclusivePair(core, (Ir64Op.LoadExclusivePair) op);
+            case Ir64Op.Kind.STORE_EXCLUSIVE_PAIR ->
+                    executeStoreExclusivePair(core, (Ir64Op.StoreExclusivePair) op);
+            case Ir64Op.Kind.COMPARE_AND_SWAP ->
+                    executeCompareAndSwap(core, (Ir64Op.CompareAndSwap) op);
+            case Ir64Op.Kind.COMPARE_AND_SWAP_PAIR ->
+                    executeCompareAndSwapPair(core, (Ir64Op.CompareAndSwapPair) op);
             case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
                     executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
@@ -679,6 +687,79 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
+    /// `LDXP`/`LDAXP` (B8.1): mesmo espírito de {@link #executeLoadExclusive}, mas marca o
+    /// monitor cobrindo os DOIS slots (`2 × size.bytes()`, `size` = `WORD`/`DOUBLEWORD` conforme
+    /// {@link Ir64Op.LoadExclusivePair#wide}).
+    private boolean executeLoadExclusivePair(Aarch64Core core, Ir64Op.LoadExclusivePair op) {
+        long address = readBaseRegister(core, op.rn());
+        Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+        int stride = size.bytes();
+        long first = readMemory(core, address, size);
+        long second = readMemory(core, address + stride, size);
+        core.markExclusiveMonitor(address, stride * 2);
+        core.setXForWidth(op.rt(), first, op.wide());
+        core.setXForWidth(op.rt2(), second, op.wide());
+        return false;
+    }
+
+    /// `STXP`/`STLXP` (B8.1): consulta o monitor ANTES de qualquer escrita — mesma armadilha
+    /// crítica de {@link #executeStoreExclusive}, aplicada aos DOIS slots do par.
+    private boolean executeStoreExclusivePair(Aarch64Core core, Ir64Op.StoreExclusivePair op) {
+        long address = readBaseRegister(core, op.rn());
+        Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+        int stride = size.bytes();
+        if (!core.exclusiveMonitorCovers(address, stride * 2)) {
+            core.setXForWidth(op.rs(), 1L, false);
+            return false;
+        }
+        writeMemory(core, address, size, core.xForWidth(op.rt(), op.wide()));
+        writeMemory(core, address + stride, size, core.xForWidth(op.rt2(), op.wide()));
+        core.setXForWidth(op.rs(), 0L, false);
+        return false;
+    }
+
+    /// `CAS`/`CASA`/`CASL`/`CASAL` (B8.1) — semântica de `CMPXCHG`: lê `[Rn]`, compara com `Rs`
+    /// (truncado para {@code size}); se igual, escreve `Rt`; SEMPRE grava o valor antigo lido em
+    /// `Rs` (zero-estendido). Interpretador single-thread por construção — não precisa de CAS
+    /// real de host (ver javadoc de {@link Ir64Op.CompareAndSwap}).
+    private boolean executeCompareAndSwap(Aarch64Core core, Ir64Op.CompareAndSwap op) {
+        long address = readBaseRegister(core, op.rn());
+        boolean wide = op.size() == Ir64MemSize.DOUBLEWORD;
+        long current = readMemory(core, address, op.size());
+        long expected = zeroTruncateToSize(core.xForWidth(op.rs(), wide), op.size());
+        if (current == expected) {
+            writeMemory(core, address, op.size(), core.xForWidth(op.rt(), wide));
+            core.notifyOrdinaryWrite(address, op.size().bytes());
+        }
+        core.setXForWidth(op.rs(), current, wide);
+        return false;
+    }
+
+    /// `CASP`/`CASPA`/`CASPL`/`CASPAL` (B8.1) — versão em par de {@link #executeCompareAndSwap}:
+    /// compara `(Rs,Rs+1)` contra `[Rn]`/`[Rn+size]`; se AMBOS baterem, escreve `(Rt,Rt+1)`;
+    /// sempre grava o par antigo lido em `(Rs,Rs+1)`. O companheiro é `rs|1`/`rt|1` (não `+1` —
+    /// ver javadoc de {@link Ir64Op.CompareAndSwapPair}).
+    private boolean executeCompareAndSwapPair(Aarch64Core core, Ir64Op.CompareAndSwapPair op) {
+        long address = readBaseRegister(core, op.rn());
+        Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+        int stride = size.bytes();
+        int rs2 = op.rs() | 1;
+        int rt2 = op.rt() | 1;
+        long currentLow = readMemory(core, address, size);
+        long currentHigh = readMemory(core, address + stride, size);
+        long expectedLow = core.xForWidth(op.rs(), op.wide());
+        long expectedHigh = core.xForWidth(rs2, op.wide());
+        if (currentLow == expectedLow && currentHigh == expectedHigh) {
+            writeMemory(core, address, size, core.xForWidth(op.rt(), op.wide()));
+            writeMemory(core, address + stride, size, core.xForWidth(rt2, op.wide()));
+            core.notifyOrdinaryWrite(address, stride);
+            core.notifyOrdinaryWrite(address + stride, stride);
+        }
+        core.setXForWidth(op.rs(), currentLow, op.wide());
+        core.setXForWidth(rs2, currentHigh, op.wide());
+        return false;
+    }
+
     /// `MRS`/`MSR (register)` (B6.6.1) — delega ao {@link Aarch64SystemRegisterBus} instalado
     /// (D2 da task); registrador sem hospedeiro que o {@link Aarch64SystemRegisterBus#handles}
     /// devolve `false` lança {@link UnsupportedOperationException} aqui mesmo (mesmo padrão de
@@ -759,13 +840,22 @@ public final class Ir64BlockExecutor {
         long base = readBaseRegister(core, op.rn());
         long address = op.addressingMode() == Ir64AddressingMode.POST_INDEX
                 ? base : base + op.immediate();
-        int stride = op.wide() ? PAIR_DOUBLEWORD_STRIDE_BYTES : PAIR_WORD_STRIDE_BYTES;
-        Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+        // LDPSW (B8.1): sempre transfere pares de WORD, mesmo escrevendo em X — ver javadoc de
+        // Ir64Op.LoadStorePair#signExtend.
+        int stride = (op.wide() && !op.signExtend()) ? PAIR_DOUBLEWORD_STRIDE_BYTES : PAIR_WORD_STRIDE_BYTES;
+        Ir64MemSize size = (op.wide() && !op.signExtend()) ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
         if (op.load()) {
             long first = readMemory(core, address, size);
             long second = readMemory(core, address + stride, size);
-            core.setXForWidth(op.rt(), first, op.wide());
-            core.setXForWidth(op.rt2(), second, op.wide());
+            if (op.signExtend()) {
+                first = signExtendFromSize(first, size);
+                second = signExtendFromSize(second, size);
+                core.setX(op.rt(), first);
+                core.setX(op.rt2(), second);
+            } else {
+                core.setXForWidth(op.rt(), first, op.wide());
+                core.setXForWidth(op.rt2(), second, op.wide());
+            }
         } else {
             writeMemory(core, address, size, core.xForWidth(op.rt(), op.wide()));
             writeMemory(core, address + stride, size, core.xForWidth(op.rt2(), op.wide()));
@@ -858,6 +948,17 @@ public final class Ir64BlockExecutor {
             case HALF -> (long) (short) zeroExtended;
             case WORD -> (long) (int) zeroExtended;
             case DOUBLEWORD -> zeroExtended;
+        };
+    }
+
+    /// Trunca um registrador para a largura de `size`, zero-estendido — usado por `CAS` (B8.1)
+    /// para comparar `Rs` contra um valor de memória já zero-estendido por {@link #readMemory}.
+    private static long zeroTruncateToSize(long value, Ir64MemSize size) {
+        return switch (size) {
+            case BYTE -> value & 0xFFL;
+            case HALF -> value & 0xFFFFL;
+            case WORD -> value & 0xFFFF_FFFFL;
+            case DOUBLEWORD -> value;
         };
     }
 

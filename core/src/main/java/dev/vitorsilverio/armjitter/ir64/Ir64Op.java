@@ -30,7 +30,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SystemRegister, Ir64Op.SystemInstruction, Ir64Op.ExceptionReturn,
         Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
         Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare, Ir64Op.LogicalShiftedRegister,
-        Ir64Op.ShiftVariable {
+        Ir64Op.ShiftVariable, Ir64Op.LoadExclusivePair, Ir64Op.StoreExclusivePair,
+        Ir64Op.CompareAndSwap, Ir64Op.CompareAndSwapPair {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -82,6 +83,14 @@ public sealed interface Ir64Op permits
         /// B6.11: `LSLV`/`LSRV`/`ASRV`/`RORV` (deslocamento variável, quantidade em `Rm`) — ver
         /// {@link ShiftVariable}.
         public static final int SHIFT_VARIABLE = 30;
+        /// B8.1: `LDXP`/`LDAXP` — ver {@link LoadExclusivePair}.
+        public static final int LOAD_EXCLUSIVE_PAIR = 31;
+        /// B8.1: `STXP`/`STLXP` — ver {@link StoreExclusivePair}.
+        public static final int STORE_EXCLUSIVE_PAIR = 32;
+        /// B8.1: `CAS`/`CASA`/`CASL`/`CASAL` — ver {@link CompareAndSwap}.
+        public static final int COMPARE_AND_SWAP = 33;
+        /// B8.1: `CASP`/`CASPA`/`CASPL`/`CASPAL` — ver {@link CompareAndSwapPair}.
+        public static final int COMPARE_AND_SWAP_PAIR = 34;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -304,12 +313,13 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.STORE64; }
     }
 
-    /// `LDP`/`STP` (`ARM DDI 0487 C6.2.126/337`) — o idioma de prólogo/epílogo de qualquer
-    /// binário A64 real (ver Armadilhas do épico). Só as 3 formas de endereçamento SEM registrador
-    /// (não existe `LDP`/`STP` com deslocamento por registrador). Ambos os registradores (`Rt`/
-    /// `Rt2`) seguem a convenção normal (`31`=`XZR`); `Rn` é SEMPRE `SP` (ver {@link Load64#rn}).
+    /// `LDP`/`STP`/`LDPSW` (`ARM DDI 0487 C6.2.126/337/125`, B8.1) — o idioma de prólogo/epílogo de
+    /// qualquer binário A64 real (ver Armadilhas do épico). Só as 3 formas de endereçamento SEM
+    /// registrador (não existe `LDP`/`STP` com deslocamento por registrador). Ambos os
+    /// registradores (`Rt`/`Rt2`) seguem a convenção normal (`31`=`XZR`); `Rn` é SEMPRE `SP` (ver
+    /// {@link Load64#rn}).
     record LoadStorePair(
-            /// `true` para `LDP`, `false` para `STP`.
+            /// `true` para `LDP`/`LDPSW`, `false` para `STP`.
             boolean load,
             /// Primeiro registrador transferido (índice `0`-`31`; `31`=`XZR`).
             int rt,
@@ -318,14 +328,19 @@ public sealed interface Ir64Op permits
             /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
             int rn,
             /// `true` para o par de 64 bits (`X`, cada slot de memória tem 8 bytes); `false` para
-            /// o par de 32 bits (`W`, 4 bytes cada).
+            /// o par de 32 bits (`W`/`LDPSW`, 4 bytes cada). Irrelevante quando {@link #signExtend}
+            /// (`LDPSW` sempre transfere pares de 32 bits, mesmo escrevendo em `X`).
             boolean wide,
             /// Modo de endereçamento (`OFFSET`/`PRE_INDEX`/`POST_INDEX` — nunca
             /// `REGISTER_OFFSET`).
             Ir64AddressingMode addressingMode,
             /// Deslocamento imediato em bytes, já escalado pelo decoder (`imm7` × `4` ou `× 8`
-            /// conforme {@link #wide}).
-            long immediate) implements Ir64Op {
+            /// conforme {@link #wide}, sempre `× 4` quando {@link #signExtend}).
+            long immediate,
+            /// `true` só para `LDPSW` (`opc=01`, única forma com sinal — não existe `STP` com
+            /// sinal): lê dois valores de 32 bits e estende o sinal de cada um para o `X`
+            /// correspondente, ignorando {@link #wide}.
+            boolean signExtend) implements Ir64Op {
         @Override public int kind() { return Kind.LOAD_STORE_PAIR; }
     }
 
@@ -633,6 +648,85 @@ public sealed interface Ir64Op permits
             /// `true` para `STLXR` (bit `lasr`=1); `false` para `STXR`.
             boolean acquireRelease) implements Ir64Op {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
+    }
+
+    /// `LDXP`/`LDAXP` (`ARM DDI 0487 C6.2.144/140`, B8.1) — mesmo espírito de {@link LoadExclusive}
+    /// mas para um PAR de registradores, sem deslocamento (`Rn`+`0`); marca o monitor cobrindo os
+    /// DOIS slots (`2 × size.bytes()`). `Rn` é SEMPRE `SP` (ver {@link Load64#rn}); `size` é sempre
+    /// `WORD` ou `DOUBLEWORD` (não existe forma byte/half de par).
+    record LoadExclusivePair(
+            /// Primeiro registrador de destino (índice `0`-`31`; `31`=`XZR`).
+            int rt,
+            /// Segundo registrador de destino (índice `0`-`31`; `31`=`XZR`).
+            int rt2,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// `true` para o par de 64 bits (`X`); `false` para o par de 32 bits (`W`).
+            boolean wide,
+            /// `true` para `LDAXP` (bit `lasr`=1); `false` para `LDXP` — NOP observável, mesma
+            /// convenção de {@link LoadExclusive#acquireRelease}.
+            boolean acquireRelease) implements Ir64Op {
+        @Override public int kind() { return Kind.LOAD_EXCLUSIVE_PAIR; }
+    }
+
+    /// `STXP`/`STLXP` (`ARM DDI 0487 C6.2.364/361`, B8.1) — mesmo espírito de {@link StoreExclusive}
+    /// mas para um par: consulta o monitor cobrindo `2 × size.bytes()` ANTES de qualquer escrita
+    /// (mesma armadilha crítica de {@link StoreExclusive}).
+    record StoreExclusivePair(
+            /// Registrador de STATUS (`0`=sucesso, `1`=falha). Índice `0`-`31`; `31`=`XZR`.
+            int rs,
+            /// Primeiro registrador de origem (índice `0`-`31`; `31`=`XZR`).
+            int rt,
+            /// Segundo registrador de origem (índice `0`-`31`; `31`=`XZR`).
+            int rt2,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// `true` para o par de 64 bits (`X`); `false` para o par de 32 bits (`W`).
+            boolean wide,
+            /// `true` para `STLXP` (bit `lasr`=1); `false` para `STXP` — NOP observável.
+            boolean acquireRelease) implements Ir64Op {
+        @Override public int kind() { return Kind.STORE_EXCLUSIVE_PAIR; }
+    }
+
+    /// `CAS`/`CASA`/`CASL`/`CASAL` (`ARM DDI 0487 C6.2.31`, B8.1, extensão LSE ARMv8.1 — decisão
+    /// explícita do plano `b7-plano-cobertura-isa.md`: implementar mesmo sendo opcional, diferente
+    /// de `LDADD`/`LDCLR`/... que ficam de fora desta task). Semântica de `CMPXCHG`: lê a memória
+    /// em `[Rn]`, compara com `Rs`; se igual, escreve `Rt`; **sempre** grava o valor antigo lido em
+    /// `Rs` (comparação e substituição são atômicas do ponto de vista do guest — o interpretador,
+    /// single-thread por construção, não precisa de CAS real de host). As variantes de
+    /// acquire/release (`L`/`o0` no encoding) não são distinguidas — NOP observável, mesmo espírito
+    /// de {@link LoadExclusive#acquireRelease}.
+    record CompareAndSwap(
+            /// Registrador de comparação/valor antigo (índice `0`-`31`; `31`=`XZR`).
+            int rs,
+            /// Registrador com o novo valor a escrever se a comparação bater.
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Tamanho da transferência de memória e da comparação (byte/half/word/doubleword —
+            /// diferente de {@link CompareAndSwapPair}, `CAS` aceita as 4 larguras).
+            Ir64MemSize size) implements Ir64Op {
+        @Override public int kind() { return Kind.COMPARE_AND_SWAP; }
+    }
+
+    /// `CASP`/`CASPA`/`CASPL`/`CASPAL` (`ARM DDI 0487 C6.2.32`, B8.1, mesma extensão LSE de
+    /// {@link CompareAndSwap}) — versão em PAR: compara `(Rs,Rs+1)` contra `[Rn]`/`[Rn+size]`; se
+    /// ambos baterem, escreve `(Rt,Rt+1)`; sempre grava o par antigo lido em `(Rs,Rs+1)`. O manual
+    /// exige `Rs`/`Rt` PARES (bit 0 do índice ignorado no encoding real), mas o decoder não
+    /// verifica isso — copia o campo cru, mesma disciplina de nunca resolver convenção de
+    /// registrador fora do executor; o EXECUTOR deriva o companheiro como `rs|1`/`rt|1` (nunca
+    /// `+1` — preserva o comportamento definido mesmo se um binário malformado passar um índice
+    /// ímpar). `size` só `WORD` ou `DOUBLEWORD` (não existe par de byte/half).
+    record CompareAndSwapPair(
+            /// Primeiro registrador de comparação/valor antigo (índice `0`-`31`; `31`=`XZR`).
+            int rs,
+            /// Primeiro registrador com o novo valor.
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// `true` para o par de 64 bits (`X`); `false` para o par de 32 bits (`W`).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.COMPARE_AND_SWAP_PAIR; }
     }
 
     /// `MRS`/`MSR (register)` (`ARM DDI 0487 C5.2.3`, B6.6.1) — leitura/escrita de um registrador

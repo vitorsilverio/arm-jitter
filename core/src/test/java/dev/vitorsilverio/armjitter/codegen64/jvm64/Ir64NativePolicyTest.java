@@ -38,7 +38,7 @@ class Ir64NativePolicyTest {
                 dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, -1, null, 0)));
         assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadStorePair(
                 true, 0, 1, 31, true,
-                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0)));
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, false)));
         assertTrue(Ir64NativePolicy.supports(new Ir64Op.LoadLiteral64(0, 0x1000L, true, false)));
     }
 

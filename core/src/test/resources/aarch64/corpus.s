@@ -328,3 +328,53 @@ dc csw, x4
 dc cvau, x5
 dc civac, x6
 dc cisw, x7
+
+// -- B8.1: LDP/STP restantes (STNP/LDNP "sem indice", LDPSW com sinal) --
+stnp x0, x1, [x2]
+ldnp x3, x4, [x5]
+stnp w6, w7, [x8]
+ldnp w9, w10, [x11]
+ldpsw x0, x1, [x2]
+ldpsw x0, x1, [x2, #8]!
+ldpsw x0, x1, [x2], #8
+
+// -- B8.1: PRFM (hint puro, NOP neste emulador) --
+prfm pldl1keep, [x0, #16]
+prfum pldl1keep, [x0, #-8]
+prfm pldl1keep, [x0, x1]
+
+// -- B8.1: LDTR/STTR (unprivileged, mesmo endereco funcional de LDUR/STUR aqui) --
+ldtr x0, [x1]
+sttr x2, [x3]
+ldtr w4, [x5]
+sttr w6, [x7]
+ldtrsb x8, [x9]
+ldtrsh x10, [x11]
+ldtrsw x12, [x13]
+
+// -- B8.1: LDXP/STXP/LDAXP/STLXP (exclusivo em par) --
+ldxp x0, x1, [x2]
+stxp w3, x4, x5, [x6]
+ldaxp x7, x8, [x9]
+stlxp w10, x11, x12, [x13]
+ldxp w14, w15, [x16]
+stxp w17, w18, w19, [x20]
+
+// -- B8.1: LDAR/STLR (ordenado, sem monitor de exclusividade) --
+ldar x0, [x1]
+stlr x2, [x3]
+ldar w4, [x5]
+stlr w6, [x7]
+ldarb w8, [x9]
+stlrb w10, [x11]
+ldarh w12, [x13]
+stlrh w14, [x15]
+
+// -- B8.1: CAS/CASP (extensao LSE, decisao explicita do plano de cobertura) --
+.arch_extension lse
+cas w0, w1, [x2]
+cas x3, x4, [x5]
+casb w6, w7, [x8]
+cash w9, w10, [x11]
+casp w12, w13, w14, w15, [x16]
+caspa x18, x19, x20, x21, [x22]

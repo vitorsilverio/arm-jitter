@@ -316,8 +316,9 @@ public final class Ir64BlockCompiler {
         emitBoolean(mv, op.wide());
         emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
         mv.visitLdcInsn(op.immediate());
+        emitBoolean(mv, op.signExtend());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
-                "(ZIIIZL" + IR64_ADDRESSING_MODE + ";J)V", false);
+                "(ZIIIZL" + IR64_ADDRESSING_MODE + ";JZ)V", false);
     }
 
     private void constructLoadLiteral64(MethodVisitor mv, Ir64Op.LoadLiteral64 op) {

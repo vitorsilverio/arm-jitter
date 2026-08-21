@@ -223,7 +223,7 @@ class BlockEquivalenceHarness64Test {
                         Ir64AddressingMode.OFFSET, 0, -1, null, 0),
                 new Ir64Op.Store64(0, 1, Ir64MemSize.WORD, true,
                         Ir64AddressingMode.OFFSET, 0, -1, null, 0),
-                new Ir64Op.LoadStorePair(true, 0, 1, 2, true, Ir64AddressingMode.OFFSET, 0),
+                new Ir64Op.LoadStorePair(true, 0, 1, 2, true, Ir64AddressingMode.OFFSET, 0, false),
                 new Ir64Op.LoadLiteral64(0, 0x1000L, true, false));
         for (Ir64Op op : ops) {
             assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
@@ -304,8 +304,22 @@ class BlockEquivalenceHarness64Test {
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x200, 0, true),
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x11, 0, true),
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x22, 0, true),
-                new Ir64Op.LoadStorePair(false, 1, 2, 0, true, Ir64AddressingMode.OFFSET, 0),
-                new Ir64Op.LoadStorePair(true, 3, 4, 0, true, Ir64AddressingMode.OFFSET, 0));
+                new Ir64Op.LoadStorePair(false, 1, 2, 0, true, Ir64AddressingMode.OFFSET, 0, false),
+                new Ir64Op.LoadStorePair(true, 3, 4, 0, true, Ir64AddressingMode.OFFSET, 0, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LDPSW` (B8.1): par de 32 bits com sinal escrito em `X` completo — prova que
+    /// {@link Ir64Op.LoadStorePair#signExtend} é respeitado identicamente pelos dois backends
+    /// (mesmo cuidado de {@link #loadSignedByteSignExtends} para o par).
+    @Test
+    void loadStorePairSignedWordSignExtends() {
+        Ir64Block block = blockOf(0x6100,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x210, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 1, 0, 0, false),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 2, 0, 0, false),
+                new Ir64Op.LoadStorePair(false, 1, 2, 0, false, Ir64AddressingMode.OFFSET, 0, false),
+                new Ir64Op.LoadStorePair(true, 3, 4, 0, false, Ir64AddressingMode.OFFSET, 0, true));
         harness.assertEquivalent(interpreted, asm, block, pair());
     }
 

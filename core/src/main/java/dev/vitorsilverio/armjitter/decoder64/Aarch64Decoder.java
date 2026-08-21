@@ -347,8 +347,35 @@ public final class Aarch64Decoder {
     private static final int EXCLUSIVE_FORM_MASK = 0b111;
     private static final int EXCLUSIVE_FORM_STXR = 0b000; // inclui STLXR (lasr=1)
     private static final int EXCLUSIVE_FORM_LDXR = 0b010; // inclui LDAXR (lasr=1)
+    private static final int EXCLUSIVE_FORM_STLR = 0b100; // inclui STLLR
+    private static final int EXCLUSIVE_FORM_LDAR = 0b110; // inclui LDLAR
+    /// Bit22 (bit central de {@link #EXCLUSIVE_FORM_SHIFT}) dentro do grupo par
+    /// `STXP`/`LDXP` (B8.1): `0`=`STXP`, `1`=`LDXP` — mesma posição relativa de
+    /// {@link #EXCLUSIVE_FORM_LDXR} vs. {@link #EXCLUSIVE_FORM_STXR}.
+    private static final int EXCLUSIVE_FORM_PAIR_LOAD_BIT = 0b010;
+    /// Máscara que ignora bit22 (o bit `L`/acquire de `CASP`/`CAS`, não distinguido nesta
+    /// implementação — ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CompareAndSwap}):
+    /// isola bit23+bit21 para reconhecer o GRUPO (`STXP`/`LDXP`/`CASP` vs. `CAS`) antes de
+    /// desambiguar por {@link #EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT}.
+    private static final int EXCLUSIVE_FORM_MASK_IGNORE_L = 0b101;
+    /// `STXP`/`LDXP`/`CASP` compartilham bit23=0,bit21=1 (`form & MASK_IGNORE_L == 0b001`);
+    /// distinguidos entre si só por bit31 (fixo `1` em `STXP`/`LDXP`, fixo `0` em `CASP` — ver
+    /// {@link #EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT}).
+    private static final int EXCLUSIVE_FORM_PAIR_OR_CASP = 0b001;
+    /// `CAS` tem bit23=1,bit21=1 (`form & MASK_IGNORE_L == 0b101`) — sem restrição de bit31 (o
+    /// `sz` de `CAS` usa as 2 bits completos, byte/half/word/doubleword).
+    private static final int EXCLUSIVE_FORM_CAS = 0b101;
+    /// Bit31: fixo `1` em `STXP`/`LDXP` (restringe `sz` efetivo a `WORD`/`DOUBLEWORD`, já que o
+    /// campo de tamanho reaproveita {@link #SINGLE_SIZE_SHIFT}), fixo `0` em `CASP` — único jeito
+    /// de desambiguar as duas famílias quando `form & MASK_IGNORE_L == PAIR_OR_CASP` (fatos
+    /// conferidos contra `a64.decode` real do QEMU, task B8.1).
+    private static final int EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT = 31;
     private static final int EXCLUSIVE_RS_SHIFT = 16;
     private static final int EXCLUSIVE_LASR_SHIFT = 15;
+    /// Posição de `Rt2` nas formas de PAR (`STXP`/`LDXP`, B8.1) — mesmo deslocamento de
+    /// {@link #PAIR_RT2_SHIFT} (coincidência de layout, não reaproveitado por serem campos de
+    /// classes de encoding diferentes).
+    private static final int EXCLUSIVE_RT2_SHIFT = 10;
 
     // ── LDR (literal): opc(31:30) 011 V 00 imm19(23:5) Rt(4:0) ──────────────────────────────
     private static final int LITERAL_OPC_SHIFT = 30;
@@ -365,9 +392,16 @@ public final class Aarch64Decoder {
     private static final int PAIR_OPC_SHIFT = 30;
     private static final int PAIR_OPC_MASK = 0b11;
     private static final int PAIR_OPC_32BIT = 0b00;
+    /// `opc=01`: `LDPSW` quando `L=1` (par de 32 bits com sinal, único par com sinal — não existe
+    /// `STP` correspondente); `STGP` quando `L=0` (ARMv8.5 MTE, fora do Cortex-A53 alvo — B8.1).
+    private static final int PAIR_OPC_32BIT_SIGNED = 0b01;
     private static final int PAIR_OPC_64BIT = 0b10;
     private static final int PAIR_ADDR_MODE_SHIFT = 23;
     private static final int PAIR_ADDR_MODE_MASK = 0b11;
+    /// "Sem índice" (`STNP`/`LDNP` no manual — dica de não-alocação em cache): mesmo
+    /// endereçamento funcional de {@link #PAIR_ADDR_MODE_OFFSET} (sem writeback), já que este
+    /// emulador não modela cache/hints (B8.1).
+    private static final int PAIR_ADDR_MODE_NO_ALLOC_HINT = 0b00;
     private static final int PAIR_ADDR_MODE_OFFSET = 0b10;
     private static final int PAIR_ADDR_MODE_POST_INDEX = 0b01;
     private static final int PAIR_ADDR_MODE_PRE_INDEX = 0b11;
@@ -402,6 +436,14 @@ public final class Aarch64Decoder {
     private static final int IDX_POST_INDEX = 0b01;
     private static final int IDX_REGISTER_OFFSET = 0b10;
     private static final int IDX_PRE_INDEX = 0b11;
+    /// Bit21: literal fixo `1` na forma REGISTER_OFFSET (junto de `idx=10`) e fixo `0` na forma
+    /// "unprivileged" `LDTR`/`STTR` (também `idx=10`) — sem checar este bit, `idx=10` sozinho é
+    /// AMBÍGUO entre as duas (bug real corrigido pela B8.1: antes deste bit ser lido, `LDTR`/
+    /// `STTR` eram silenciosamente decodificadas como se fossem `LDR`/`STR` de registrador,
+    /// interpretando o `imm9` como `Rm`/`option`/`S`). Também distingue `idx=00`
+    /// (`LDUR`/`STUR`, bit21=0) das operações atômicas `LDADD`/`LDCLR`/.../`SWP` (bit21=1,
+    /// extensão LSE fora do escopo da B8.1).
+    private static final int SINGLE_BIT21_SHIFT = 21;
     private static final int SINGLE_IMM9_SHIFT = 12;
     private static final int SINGLE_IMM9_BITS = 9;
     private static final int SINGLE_RM_SHIFT = 16;
@@ -674,31 +716,46 @@ public final class Aarch64Decoder {
         };
     }
 
-    /// `LDXR`/`LDAXR`/`STXR`/`STLXR` (D0/D2 da task b6.3.4-aarch64-exclusive-monitor.md): as 4
-    /// mnemônicas compartilham o MESMO encoding (`@stxr` do QEMU), diferindo só pelo bit `lasr`
-    /// (acquire/release) — decodificar `LDAXR`/`STLXR` sem `LDXR`/`STXR` decodificaria só METADE
-    /// dos valores desse bit, o que não é uma opção coerente. `LDXP`/`STXP`/`CAS`/`LDAR`/`STLR`
-    /// vivem no MESMO subgrupo de encoding (valores diferentes de `form`) mas ficam fora do
-    /// escopo fechado do épico — ver Armadilhas da task.
+    /// `LDXR`/`LDAXR`/`STXR`/`STLXR`/`LDXP`/`LDAXP`/`STXP`/`STLXP`/`LDAR`/`LDLAR`/`STLR`/`STLLR`/
+    /// `CAS*`/`CASP*` (B6.3.4 + B8.1): todas compartilham o subgrupo `Load/store exclusive and
+    /// atomic` (`SUBCLASS_EXCLUSIVE_ATOMIC`), diferindo pelo campo `form` de 3 bits — ver as
+    /// constantes `EXCLUSIVE_FORM_*` para a tabela completa e a desambiguação bit31 entre
+    /// `STXP`/`LDXP` e `CASP` (mesmo `form` mascarado). `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/
+    /// `LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (extensão LSE opcional, `op0=1`+`opc` de operação
+    /// aritmética no mesmo espaço de `CAS`) ficam FORA do escopo da B8.1 (decisão explícita do
+    /// plano `b7-plano-cobertura-isa.md`: só `CAS`/`CASP` foram pedidos, apesar de todos serem da
+    /// mesma extensão) — não alcançáveis por este método porque `form`+bit31 já esgotam o espaço
+    /// de `CAS`/`CASP`/`STXR`/`LDXR`/`STXP`/`LDXP`/`STLR`/`LDAR` nas 8 combinações do campo.
     private Ir64Op decodeExclusive(int word, long address) {
         int form = (word >>> EXCLUSIVE_FORM_SHIFT) & EXCLUSIVE_FORM_MASK;
-        boolean store;
         if (form == EXCLUSIVE_FORM_STXR) {
-            store = true;
-        } else if (form == EXCLUSIVE_FORM_LDXR) {
-            store = false;
-        } else {
-            // LDXP/STXP/CAS/LDAR/STLR (mesmo subgrupo, valores diferentes de `form`): fora do
-            // escopo fechado do épico B6 (ver Armadilhas da task b6.3.4).
-            throw unsupported(word, address);
+            return decodeExclusiveSingle(word, true);
         }
-        Ir64MemSize size = switch ((word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK) {
-            case SIZE_BYTE -> Ir64MemSize.BYTE;
-            case SIZE_HALF -> Ir64MemSize.HALF;
-            case SIZE_WORD -> Ir64MemSize.WORD;
-            case SIZE_DOUBLEWORD -> Ir64MemSize.DOUBLEWORD;
-            default -> throw new IllegalStateException("unreachable");
-        };
+        if (form == EXCLUSIVE_FORM_LDXR) {
+            return decodeExclusiveSingle(word, false);
+        }
+        if (form == EXCLUSIVE_FORM_STLR) {
+            return decodeOrderedSingle(word, true);
+        }
+        if (form == EXCLUSIVE_FORM_LDAR) {
+            return decodeOrderedSingle(word, false);
+        }
+        int formIgnoringL = form & EXCLUSIVE_FORM_MASK_IGNORE_L;
+        if (formIgnoringL == EXCLUSIVE_FORM_PAIR_OR_CASP) {
+            boolean bit31 = ((word >>> EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT) & 1) != 0;
+            if (bit31) {
+                boolean pairLoad = (form & EXCLUSIVE_FORM_PAIR_LOAD_BIT) != 0;
+                return decodeExclusivePair(word, pairLoad);
+            }
+            return decodeCompareAndSwapPair(word);
+        }
+        // formIgnoringL == EXCLUSIVE_FORM_CAS: as 8 combinações do campo de 3 bits já foram
+        // esgotadas pelos ramos acima (000/010/100/110/001/011), só resta 101/111 = CAS.
+        return decodeCompareAndSwap(word);
+    }
+
+    private Ir64Op decodeExclusiveSingle(int word, boolean store) {
+        Ir64MemSize size = decodeExclusiveSize(word);
         boolean acquireRelease = ((word >>> EXCLUSIVE_LASR_SHIFT) & 1) != 0;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
@@ -707,6 +764,61 @@ public final class Aarch64Decoder {
             return new Ir64Op.StoreExclusive(rs, rt, rn, size, acquireRelease);
         }
         return new Ir64Op.LoadExclusive(rt, rn, size, acquireRelease);
+    }
+
+    /// `LDAR`/`STLR` (B8.1): mesma semântica de {@link Ir64Op.Load64}/{@link Ir64Op.Store64} com
+    /// endereçamento `[Rn]` (sem deslocamento) — o monitor de exclusividade NÃO se aplica aqui
+    /// (diferente de `LDXR`/`STXR`), e a ordenação `acquire`/`release` é NOP observável neste
+    /// interpretador (single-thread por construção), então reaproveitar os records comuns de
+    /// load/store evita um `Kind` novo só para isso.
+    private Ir64Op decodeOrderedSingle(int word, boolean store) {
+        Ir64MemSize size = decodeExclusiveSize(word);
+        boolean wide = size == Ir64MemSize.DOUBLEWORD;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        if (store) {
+            return new Ir64Op.Store64(rt, rn, size, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+        }
+        return new Ir64Op.Load64(rt, rn, size, false, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+    }
+
+    private Ir64Op decodeExclusivePair(int word, boolean load) {
+        boolean wide = ((word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK) == SIZE_DOUBLEWORD;
+        boolean acquireRelease = ((word >>> EXCLUSIVE_LASR_SHIFT) & 1) != 0;
+        int rt2 = (word >>> EXCLUSIVE_RT2_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        if (load) {
+            return new Ir64Op.LoadExclusivePair(rt, rt2, rn, wide, acquireRelease);
+        }
+        int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
+        return new Ir64Op.StoreExclusivePair(rs, rt, rt2, rn, wide, acquireRelease);
+    }
+
+    private Ir64Op decodeCompareAndSwapPair(int word) {
+        boolean wide = ((word >>> PAIR_OPC_SHIFT) & 1) != 0; // bit30; bit31 fixo=0 em CASP
+        int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.CompareAndSwapPair(rs, rt, rn, wide);
+    }
+
+    private Ir64Op decodeCompareAndSwap(int word) {
+        Ir64MemSize size = decodeExclusiveSize(word);
+        int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.CompareAndSwap(rs, rt, rn, size);
+    }
+
+    private static Ir64MemSize decodeExclusiveSize(int word) {
+        return switch ((word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK) {
+            case SIZE_BYTE -> Ir64MemSize.BYTE;
+            case SIZE_HALF -> Ir64MemSize.HALF;
+            case SIZE_WORD -> Ir64MemSize.WORD;
+            case SIZE_DOUBLEWORD -> Ir64MemSize.DOUBLEWORD;
+            default -> throw new IllegalStateException("unreachable");
+        };
     }
 
     private Ir64Op decodeLoadLiteral(int word, long address) {
@@ -728,35 +840,47 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeLoadStorePair(int word, long address) {
         int opc = (word >>> PAIR_OPC_SHIFT) & PAIR_OPC_MASK;
+        boolean load = ((word >>> PAIR_LOAD_BIT_SHIFT) & 1) != 0;
         boolean wide;
+        boolean ldpsw = false;
         if (opc == PAIR_OPC_64BIT) {
             wide = true;
         } else if (opc == PAIR_OPC_32BIT) {
             wide = false;
+        } else if (opc == PAIR_OPC_32BIT_SIGNED && load) {
+            wide = false;
+            ldpsw = true;
         } else {
-            // opc=01 (LDPSW, sem forma STP) e opc=11 (reservado): fora da fatia B6.2.
+            // opc=01 com load=false é STGP (ver PAIR_OPC_32BIT_SIGNED); opc=11 é reservado.
             throw unsupported(word, address);
         }
         int addrModeField = (word >>> PAIR_ADDR_MODE_SHIFT) & PAIR_ADDR_MODE_MASK;
         Ir64AddressingMode addressingMode = switch (addrModeField) {
-            case PAIR_ADDR_MODE_OFFSET -> Ir64AddressingMode.OFFSET;
+            case PAIR_ADDR_MODE_NO_ALLOC_HINT, PAIR_ADDR_MODE_OFFSET -> Ir64AddressingMode.OFFSET;
             case PAIR_ADDR_MODE_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
             case PAIR_ADDR_MODE_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
-            default -> throw unsupported(word, address); // 00: reservado (STGP/etc., fora de escopo)
+            default -> throw new IllegalStateException("unreachable");
         };
-        boolean load = ((word >>> PAIR_LOAD_BIT_SHIFT) & 1) != 0;
         long imm7 = (word >>> PAIR_IMM7_SHIFT) & bitMask(PAIR_IMM7_BITS);
         int scale = wide ? PAIR_DOUBLEWORD_SCALE_BYTES : PAIR_WORD_SCALE_BYTES;
         long immediate = signExtend(imm7, PAIR_IMM7_BITS) * scale;
         int rt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate);
+        return new Ir64Op.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate, ldpsw);
     }
 
     private Ir64Op decodeLoadStoreSingle(int word, long address) {
         int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
         int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        if (sizeField == SIZE_DOUBLEWORD && opcField == OPC_LOAD_SIGN_EXTEND_TO_X) {
+            // PRFM (B8.1, as 3 formas de endereçamento): hint puro, `Rt` codifica um `prfop` em
+            // vez de um registrador real — NOP observável, este emulador não modela cache. Tinha
+            // que ser interceptado ANTES de chamar decodeSingleForm/decodeSingleForm, cujo guard
+            // presumia (errado) que esta combinação era só a forma SIMD&FP de 128 bits — essa
+            // exige V=1, já filtrado bem antes em decodeLoadsAndStores.
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+        }
         SingleForm form = decodeSingleForm(sizeField, opcField, word, address);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
@@ -768,7 +892,8 @@ public final class Aarch64Decoder {
             return buildSingle(form, rt, rn, Ir64AddressingMode.OFFSET, immediate, -1, null, 0);
         }
         int idx = (word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK;
-        if (idx == IDX_REGISTER_OFFSET) {
+        boolean bit21 = ((word >>> SINGLE_BIT21_SHIFT) & 1) != 0;
+        if (idx == IDX_REGISTER_OFFSET && bit21) {
             int rm = (word >>> SINGLE_RM_SHIFT) & REGISTER_FIELD_MASK;
             int option = (word >>> SINGLE_OPTION_SHIFT) & SINGLE_OPTION_MASK;
             Ir64ExtendType extendType = switch (option) {
@@ -782,8 +907,22 @@ public final class Aarch64Decoder {
             int shiftAmount = shiftFlag ? form.size.log2Bytes() : 0;
             return buildSingle(form, rt, rn, Ir64AddressingMode.REGISTER_OFFSET, 0, rm, extendType, shiftAmount);
         }
+        if (idx == IDX_UNSCALED && bit21) {
+            // Atomic memory operations (LDADD/LDCLR/LDEOR/LDSET/LDSMAX/LDSMIN/LDUMAX/LDUMIN/SWP,
+            // extensão LSE ARMv8.1): fora do escopo da B8.1 (mesma decisão de decodeExclusive
+            // para CAS/CASP) — G8: recusar explicitamente em vez de cair no ramo LDUR/STUR
+            // abaixo, que ATÉ esta task ignorava bit21 (bug real: qualquer atomic memory op era
+            // silenciosamente decodificada como LDUR/STUR de um `Rs` que na verdade é o opcode
+            // atômico).
+            throw unsupported(word, address);
+        }
         Ir64AddressingMode addressingMode = switch (idx) {
-            case IDX_UNSCALED -> Ir64AddressingMode.OFFSET;
+            // bit21=1 já foi tratado acima para os dois casos em que existe; aqui só sobra
+            // bit21=0: idx=00 é LDUR/STUR, idx=10 é a forma "unprivileged" LDTR/STTR — mesmo
+            // endereçamento funcional de LDUR/STUR (este emulador não modela EL0/EL1 de um jeito
+            // que distinga o modo de acesso, mesma simplificação documentada para LDAR/STLR em
+            // decodeOrderedSingle).
+            case IDX_UNSCALED, IDX_REGISTER_OFFSET -> Ir64AddressingMode.OFFSET;
             case IDX_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
             case IDX_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
             default -> throw new IllegalStateException("unreachable");

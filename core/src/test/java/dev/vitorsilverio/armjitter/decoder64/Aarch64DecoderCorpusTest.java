@@ -1557,31 +1557,32 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void exclusivePairAndAtomicFormsStayUnsupported() {
-        // LDXP/STXP/CAS/LDAR/STLR (mesmo subgrupo SUBCLASS_EXCLUSIVE_ATOMIC, valores diferentes
-        // do campo `form` bits[23:21]) NÃO estão no escopo desta task (ver Armadilhas da
-        // b6.3.4-aarch64-exclusive-monitor.md) — regressão negativa confirmando que o `case` novo
-        // não "vazou" para essas formas. Vetores construídos à mão a partir do formato (mesmo
-        // precedente de outros testes de reservado neste arquivo), pois não fazem parte do escopo
-        // do corpus real.
-        // Base real do corpus (ldxr w0, [x1]) com o campo `form` (bits[23:21]) ZERADO antes de
-        // fixar cada valor fora de escopo — a base já tem form=010 (LDXR), então um OR simples
-        // sem limpar antes produziria combinações erradas.
+    void exclusiveAtomicFormSpaceFullyDecodedByB81() {
+        // Retirado pela B8.1: este teste fixava LDXP/STXP/CAS/CASP/LDAR/STLR como "fora de
+        // escopo" (b6.3.4-aarch64-exclusive-monitor.md) — exatamente o espaço que a B8.1
+        // implementou (ver Aarch64Decoder#decodeExclusive). Substituído por uma regressão
+        // POSITIVA: as 8 combinações do campo `form` (bits[23:21]), cruzadas com bit31 onde ele
+        // desambigua (STXP/LDXP vs. CASP), decodificam sem lançar — nenhuma sobra sem tratamento
+        // no subgrupo SUBCLASS_EXCLUSIVE_ATOMIC.
         int ldxrWordFormCleared = 0x885f7c20 & ~(0b111 << 21);
-        int[] otherForms = {
-                ldxrWordFormCleared | (0b001 << 21), // STXP (form=001)
-                ldxrWordFormCleared | (0b011 << 21), // LDXP (form=011)
-                ldxrWordFormCleared | (0b100 << 21), // STLR (form=100)
-                ldxrWordFormCleared | (0b101 << 21), // CAS-ish/reservado (form=101)
-                ldxrWordFormCleared | (0b110 << 21), // LDAR (form=110)
-                ldxrWordFormCleared | (0b111 << 21), // reservado (form=111)
+        int[] allForms = {
+                ldxrWordFormCleared | (0b000 << 21), // STXR
+                ldxrWordFormCleared | (0b001 << 21), // CASP (bit31=0 na base)
+                ldxrWordFormCleared | (0b010 << 21), // LDXR
+                ldxrWordFormCleared | (0b011 << 21), // CASP (bit31=0 na base)
+                ldxrWordFormCleared | (0b100 << 21), // STLR
+                ldxrWordFormCleared | (0b101 << 21), // CAS
+                ldxrWordFormCleared | (0b110 << 21), // LDAR
+                ldxrWordFormCleared | (0b111 << 21), // CAS
+                ldxrWordFormCleared | (1 << 31) | (0b001 << 21), // STXP (bit31=1)
+                ldxrWordFormCleared | (1 << 31) | (0b011 << 21), // LDXP (bit31=1)
         };
-        for (int encoding : otherForms) {
+        for (int encoding : allForms) {
             TestAddressSpace raw = new TestAddressSpace(4);
             raw.put32(0, encoding);
             AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-            assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0),
-                    () -> "form fora de escopo deveria ser unsupported: 0x" + Integer.toHexString(encoding));
+            assertDoesNotThrow(() -> DECODER.decode(scratch, 0),
+                    () -> "0x" + Integer.toHexString(encoding) + " deveria decodificar (B8.1)");
         }
     }
 
@@ -2785,5 +2786,322 @@ class Aarch64DecoderCorpusTest {
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B8.1: LDR/STR/LDP/STP restantes, LDXP/STXP, CAS/CASP, LDAR/STLR — apêndice do mesmo
+    // ── corpus.s/.bin/.objdump.txt, offsets 0x49c-0x52c ─────────────────────────────────────────
+
+    @Test
+    void stnpNoAllocHintDoubleword() {
+        // stnp x0, x1, [x2]: mesmo endereçamento funcional de STP offset (sem writeback) —
+        // este emulador não modela cache/hints.
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x49c);
+        assertFalse(op.load());
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rt2());
+        assertEquals(2, op.rn());
+        assertTrue(op.wide());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(0L, op.immediate());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void ldnpNoAllocHintDoubleword() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a0);
+        assertTrue(op.load());
+        assertEquals(3, op.rt());
+        assertEquals(4, op.rt2());
+        assertEquals(5, op.rn());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void stnpNoAllocHintWord() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a4);
+        assertFalse(op.load());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldnpNoAllocHintWord() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a8);
+        assertTrue(op.load());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldpswOffset() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4ac);
+        assertTrue(op.load());
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rt2());
+        assertEquals(2, op.rn());
+        assertTrue(op.signExtend());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(0L, op.immediate());
+    }
+
+    @Test
+    void ldpswPreIndex() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4b0);
+        assertTrue(op.signExtend());
+        assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    @Test
+    void ldpswPostIndex() {
+        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4b4);
+        assertTrue(op.signExtend());
+        assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
+        assertEquals(8L, op.immediate());
+    }
+
+    private static void assertPrfmNoop(long offset) {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+    }
+
+    @Test
+    void prfmScaledUimm() {
+        assertPrfmNoop(0x4b8);
+    }
+
+    @Test
+    void prfumUnscaled() {
+        assertPrfmNoop(0x4bc);
+    }
+
+    @Test
+    void prfmRegisterOffset() {
+        assertPrfmNoop(0x4c0);
+    }
+
+    @Test
+    void ldtrUnprivilegedDoubleword() {
+        // ldtr x0, [x1]: mesmo endereçamento funcional de LDUR (bug real corrigido pela B8.1 —
+        // antes deste fix, idx=10+bit21=0 caía no ramo REGISTER_OFFSET, tratando o imm9 como
+        // Rm/option/S).
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4c4);
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rn());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(0L, op.immediate());
+        assertTrue(op.wide());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void sttrUnprivilegedDoubleword() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4c8);
+        assertEquals(2, op.rt());
+        assertEquals(3, op.rn());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+    }
+
+    @Test
+    void ldtrUnprivilegedWord() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4cc);
+        assertFalse(op.wide());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void sttrUnprivilegedWord() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4d0);
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldtrsbSignExtendToX() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4d4);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldtrshSignExtendToX() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4d8);
+        assertEquals(Ir64MemSize.HALF, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldtrswSignExtendToX() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4dc);
+        assertEquals(Ir64MemSize.WORD, op.size());
+        assertTrue(op.signExtend());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldxpDoubleword() {
+        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4e0);
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rt2());
+        assertEquals(2, op.rn());
+        assertTrue(op.wide());
+        assertFalse(op.acquireRelease());
+    }
+
+    @Test
+    void stxpDoublewordPair() {
+        // stxp w3, x4, x5, [x6]: Rs=status É SEMPRE W (w3), independente da largura do par
+        // (x4/x5 aqui) — o decoder deriva `wide` só de `sz` (doubleword, sz=3).
+        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4e4);
+        assertEquals(3, op.rs());
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rt2());
+        assertEquals(6, op.rn());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldaxpDoubleword() {
+        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4e8);
+        assertEquals(7, op.rt());
+        assertEquals(8, op.rt2());
+        assertEquals(9, op.rn());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void stlxpDoubleword() {
+        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4ec);
+        assertEquals(10, op.rs());
+        assertEquals(11, op.rt());
+        assertEquals(12, op.rt2());
+        assertEquals(13, op.rn());
+        assertTrue(op.acquireRelease());
+    }
+
+    @Test
+    void ldxpWord() {
+        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4f0);
+        assertEquals(14, op.rt());
+        assertEquals(15, op.rt2());
+        assertEquals(16, op.rn());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void stxpWord() {
+        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4f4);
+        assertEquals(17, op.rs());
+        assertEquals(18, op.rt());
+        assertEquals(19, op.rt2());
+        assertEquals(20, op.rn());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void ldarDoubleword() {
+        // ldar x0, [x1]: reaproveita Load64 diretamente (sem monitor de exclusividade) — ver
+        // Aarch64Decoder#decodeOrderedSingle.
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4f8);
+        assertEquals(0, op.rt());
+        assertEquals(1, op.rn());
+        assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
+        assertEquals(0L, op.immediate());
+        assertTrue(op.wide());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void stlrDoubleword() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4fc);
+        assertEquals(2, op.rt());
+        assertEquals(3, op.rn());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void ldarWord() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x500);
+        assertFalse(op.wide());
+        assertEquals(Ir64MemSize.WORD, op.size());
+    }
+
+    @Test
+    void stlrWord() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x504);
+        assertFalse(op.wide());
+        assertEquals(Ir64MemSize.WORD, op.size());
+    }
+
+    @Test
+    void ldarbByte() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x508);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+        assertFalse(op.signExtend());
+    }
+
+    @Test
+    void stlrbByte() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x50c);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+    }
+
+    @Test
+    void ldarhHalf() {
+        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x510);
+        assertEquals(Ir64MemSize.HALF, op.size());
+    }
+
+    @Test
+    void stlrhHalf() {
+        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x514);
+        assertEquals(Ir64MemSize.HALF, op.size());
+    }
+
+    @Test
+    void casWord() {
+        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x518);
+        assertEquals(0, op.rs());
+        assertEquals(1, op.rt());
+        assertEquals(2, op.rn());
+        assertEquals(Ir64MemSize.WORD, op.size());
+    }
+
+    @Test
+    void casDoubleword() {
+        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x51c);
+        assertEquals(3, op.rs());
+        assertEquals(4, op.rt());
+        assertEquals(5, op.rn());
+        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+    }
+
+    @Test
+    void casbByte() {
+        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x520);
+        assertEquals(Ir64MemSize.BYTE, op.size());
+    }
+
+    @Test
+    void cashHalf() {
+        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x524);
+        assertEquals(Ir64MemSize.HALF, op.size());
+    }
+
+    @Test
+    void caspWordPair() {
+        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) DECODER.decode(memory, 0x528);
+        assertEquals(12, op.rs());
+        assertEquals(14, op.rt());
+        assertEquals(16, op.rn());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void caspaDoublewordPair() {
+        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) DECODER.decode(memory, 0x52c);
+        assertEquals(18, op.rs());
+        assertEquals(20, op.rt());
+        assertEquals(22, op.rn());
+        assertTrue(op.wide());
     }
 }

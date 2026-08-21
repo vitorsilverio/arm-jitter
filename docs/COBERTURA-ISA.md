@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **53%** — 2142 de 4001 células aplicáveis decodificam.
+> **53%** — 2158 de 4001 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **83%** (579/690) |
 | v6-M | **22%** (88/385) |
 | v7-M | **54%** (210/385) |
-| A64 | **18%** (217/1152) |
+| A64 | **20%** (233/1152) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 18% (217/1152) |
+| A64 — AArch64 | 1161 | A64 20% (233/1152) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1723,12 +1723,12 @@ Inventário: `a64.decode` · 1161 instruções.
 | `HLT` | ❌ |
 | `STXR` | ✅ |
 | `LDXR` | ✅ |
-| `STLR` | ❌ |
-| `LDAR` | ❌ |
-| `STXP` | ❌ |
-| `LDXP` | ❌ |
-| `CASP` | ❌ |
-| `CAS` | ❌ |
+| `STLR` | ✅ |
+| `LDAR` | ✅ |
+| `STXP` | ✅ |
+| `LDXP` | ✅ |
+| `CASP` | ✅ |
+| `CAS` | ✅ |
 | `LD_lit` | ✅ |
 | `LD_lit` | ✅ |
 | `LD_lit` | ✅ |
@@ -1736,19 +1736,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LD_lit_v` | ❌ |
 | `LD_lit_v` | ❌ |
 | `NOP` | ❌ |
-| `STP` | ❌ |
-| `LDP` | ❌ |
-| `STP` | ❌ |
-| `LDP` | ❌ |
-| `STP_v` | ❌ |
-| `LDP_v` | ❌ |
-| `STP_v` | ❌ |
-| `LDP_v` | ❌ |
-| `STP_v` | ❌ |
-| `LDP_v` | ❌ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
-| `LDP` | ❌ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
 | `STP_v` | ❌ |
@@ -1759,7 +1748,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDP_v` | ❌ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
-| `LDP` | ❌ |
+| `LDP` | ✅ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
 | `STP_v` | ❌ |
@@ -1770,7 +1759,18 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDP_v` | ❌ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
-| `LDP` | ❌ |
+| `LDP` | ✅ |
+| `STP` | ✅ |
+| `LDP` | ✅ |
+| `STP_v` | ❌ |
+| `LDP_v` | ❌ |
+| `STP_v` | ❌ |
+| `LDP_v` | ❌ |
+| `STP_v` | ❌ |
+| `LDP_v` | ❌ |
+| `STP` | ✅ |
+| `LDP` | ✅ |
+| `LDP` | ✅ |
 | `STP` | ✅ |
 | `LDP` | ✅ |
 | `STP_v` | ❌ |
@@ -1802,16 +1802,6 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
-| `STR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
-| `LDR_i` | ❌ |
 | `STR_i` | ✅ |
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
@@ -1822,7 +1812,17 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
-| `NOP` | ❌ |
+| `STR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `LDR_i` | ✅ |
+| `NOP` | ✅ |
 | `STR_v_i` | ❌ |
 | `STR_v_i` | ❌ |
 | `LDR_v_i` | ❌ |
@@ -1845,7 +1845,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
-| `NOP` | ❌ |
+| `NOP` | ✅ |
 | `STR_v_i` | ❌ |
 | `STR_v_i` | ❌ |
 | `LDR_v_i` | ❌ |
@@ -1860,21 +1860,21 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDR` | ✅ |
 | `LDR` | ✅ |
 | `LDR` | ✅ |
-| `NOP` | ❌ |
+| `NOP` | ✅ |
 | `STR_v` | ❌ |
 | `STR_v` | ❌ |
 | `LDR_v` | ❌ |
 | `LDR_v` | ❌ |
-| `LDADD` | ✅ |
-| `LDCLR` | ✅ |
-| `LDEOR` | ✅ |
-| `LDSET` | ✅ |
-| `LDSMAX` | ✅ |
-| `LDSMIN` | ✅ |
-| `LDUMAX` | ✅ |
-| `LDUMIN` | ✅ |
-| `SWP` | ✅ |
-| `LDAPR` | ✅ |
+| `LDADD` | ❌ |
+| `LDCLR` | ❌ |
+| `LDEOR` | ❌ |
+| `LDSET` | ❌ |
+| `LDSMAX` | ❌ |
+| `LDSMIN` | ❌ |
+| `LDUMAX` | ❌ |
+| `LDUMIN` | ❌ |
+| `SWP` | ❌ |
+| `LDAPR` | ❌ |
 | `LDCLRP` | ✅ |
 | `LDSETP` | ✅ |
 | `SWPP` | ✅ |
