@@ -389,6 +389,21 @@ public final class ArmCore {
         return cycles;
     }
 
+    /// Sobrescreve o total de ciclos acumulados diretamente, sem a checagem "só soma" de
+    /// {@link #addCycles} — para hospedeiros que precisam reafirmar o relógio virtual
+    /// COMPARTILHADO depois de {@link #loadState}, que restaura {@code cycles} como parte do
+    /// snapshot de UM contexto (correto para save-state real de CPU única; errado quando este
+    /// `ArmCore` é multiplexado entre vários contextos cooperativos que devem enxergar o MESMO
+    /// relógio — ver o consumidor real em `n3dsemu Scheduler#switchTo`, onde restaurar o
+    /// snapshot antigo de uma thread sem isto faz o relógio virtual andar para trás a cada troca
+    /// de contexto).
+    public void setCycles(long cycles) {
+        if (cycles < 0) {
+            throw new IllegalArgumentException("cycles must be non-negative");
+        }
+        this.cycles = cycles;
+    }
+
     /// Soma os ciclos extras informados pelo barramento para um acesso de memória.
     ///
     /// @param address endereço acessado
