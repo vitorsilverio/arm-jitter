@@ -1,5 +1,5 @@
 
-corpus.o:     file format elf64-littleaarch64
+C:/Users/user/AppData/Local/Temp/corpus_new.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -374,3 +374,24 @@ Disassembly of section .text:
  5a8:	d500401f 	cfinv
  5ac:	d500403f 	xaflag
  5b0:	d500405f 	axflag
+ 5b4:	d5031000 	wfet	x0
+ 5b8:	d5031021 	wfit	x1
+ 5bc:	d5033f5f 	clrex
+ 5c0:	d50330ff 	sb
+ 5c4:	d4224680 	brk	#0x1234
+ 5c8:	d44acf00 	hlt	#0x5678
+ 5cc:	d500417f 	msr	uao, #0x1
+ 5d0:	d500419f 	msr	pan, #0x1
+ 5d4:	d50041bf 	msr	spsel, #0x1
+ 5d8:	d503413f 	msr	ssbs, #0x1
+ 5dc:	d503419f 	msr	tco, #0x1
+ 5e0:	d503415f 	msr	dit, #0x1
+ 5e4:	d501411f 	msr	allint, #0x1
+ 5e8:	d5034fdf 	msr	daifset, #0xf
+ 5ec:	d5034fff 	msr	daifclr, #0xf
+ 5f0:	d5088720 	tlbi	vae1, x0
+ 5f4:	d71f0801 	braa	x0, x1
+ 5f8:	d73f0843 	blraa	x2, x3
+ 5fc:	d65f0bff 	retaa
+ 600:	d69f0bff 	eretaa
+ 604:	f4010000 	cbgt	x0, x1, 604 <litlabel+0x4f0>

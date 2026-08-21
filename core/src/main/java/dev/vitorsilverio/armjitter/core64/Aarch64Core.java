@@ -58,6 +58,15 @@ public final class Aarch64Core {
     /// Máscara do campo `ISS[5:0]` (`DFSC`/`IFSC`) usado por esta task — mesmo código de
     /// {@link FaultStatus64#code()}, sem os demais bits de `ISS` (`WnR`/`FnV`/... fora de escopo).
     private static final long ESR_ISS_FAULT_STATUS_MASK = 0x3FL;
+    /// `EC` (`ESR_EL1[31:26]`) de `BRK` (`ARM DDI 0487 D17.2.30`, B8.3) — mesma classe usada pelo
+    /// Linux (`do_debug_exception`/`brk_handler`) e por GDB para reconhecer um breakpoint software.
+    private static final long ESR_EC_BREAKPOINT = 0x3CL;
+    /// `EC` de "Unknown reason" (`ARM DDI 0487 D17.2.30`, B8.3) — usado por `HLT` sem estado de
+    /// debug (ver {@link #enterUndefinedInstructionException}).
+    private static final long ESR_EC_UNKNOWN_REASON = 0x00L;
+    /// Máscara do imediato de 16 bits de `BRK`, que vira `ESR_EL1.ISS[15:0]` por inteiro (ao
+    /// contrário do `ISS` de abort de memória, que só usa os 6 bits baixos).
+    private static final long ESR_ISS_BRK_IMMEDIATE_MASK = 0xFFFFL;
     /// Deslocamento em bytes, dentro da tabela de vetores apontada por `VBAR_EL1`, da entrada
     /// "IRQ, exceção de um nível INFERIOR usando AArch64" (`ARM DDI 0487 D1.10`, B6.6.7) — mesma
     /// tabela de 16 entradas de {@link #VECTOR_TABLE_ENTRY_SIZE_BYTES} de
@@ -456,9 +465,45 @@ public final class Aarch64Core {
         long ec = isInstructionFetch ? ESR_EC_INSTRUCTION_ABORT_LOWER_EL : ESR_EC_DATA_ABORT_LOWER_EL;
         long faultStatusCode = fault.faultStatus().code() & ESR_ISS_FAULT_STATUS_MASK;
         long esr = (ec << ESR_EC_SHIFT) | ESR_IL_BIT | faultStatusCode;
-
-        exceptionState.setEsr1(esr);
         exceptionState.setFar1(fault.virtualAddress());
+        enterSynchronousException(instructionAddress, esr);
+    }
+
+    /// `BRK` (`ARM DDI 0487 C6.2.29`, B8.3) — mesma entrada de exceção síncrona EL0→EL1 de
+    /// {@link #enterMemoryAbort}, mas SEM tocar `FAR_EL1` (`BRK` não tem endereço de falta —
+    /// `ARM DDI 0487` deixa o registrador com o valor anterior, mesma disciplina já aplicada a
+    /// {@link #enterIrq}). `ESR_EL1.ISS[15:0]` recebe o imediato de 16 bits da própria instrução
+    /// (convenção do Linux/GDB para identificar o motivo do trap sem reler a instrução).
+    ///
+    /// @param instructionAddress endereço da própria instrução `BRK` (ELR_EL1)
+    /// @param immediate imediato de 16 bits do encoding
+    public void enterBreakpointException(long instructionAddress, int immediate) {
+        long esr = (ESR_EC_BREAKPOINT << ESR_EC_SHIFT) | ESR_IL_BIT
+                | (immediate & ESR_ISS_BRK_IMMEDIATE_MASK);
+        enterSynchronousException(instructionAddress, esr);
+    }
+
+    /// `HLT` sem estado de debug externo modelado (B8.3) — pseudocódigo real do manual cai no
+    /// caminho `UNDEFINED` (`Halting_instruction`), mesma classe (`EC=0x00`, "Unknown reason") de
+    /// qualquer encoding reservado que um `Aarch64Decoder` real rejeitasse. Mesmo contrato de
+    /// {@link #enterBreakpointException}, sem imediato (`ISS=0`, "Unknown reason" não carrega
+    /// síndrome).
+    ///
+    /// @param instructionAddress endereço da própria instrução `HLT` (ELR_EL1)
+    public void enterUndefinedInstructionException(long instructionAddress) {
+        long esr = (ESR_EC_UNKNOWN_REASON << ESR_EC_SHIFT) | ESR_IL_BIT;
+        enterSynchronousException(instructionAddress, esr);
+    }
+
+    /// Núcleo comum de toda exceção síncrona EL0→EL1 (`ARM DDI 0487` pseudocódigo
+    /// `AArch64.TakeException`, extraído de {@link #enterMemoryAbort} nesta task para ser
+    /// reaproveitado por {@link #enterBreakpointException}/{@link #enterUndefinedInstructionException}
+    /// — as três compartilham `ELR_EL1←instructionAddress`, `SPSR_EL1←PSTATE` atual, fecham o
+    /// monitor de exclusividade, entram em EL1 e saltam para o MESMO vetor "Synchronous, exceção
+    /// de nível inferior" — só `ESR_EL1`/`FAR_EL1` mudam por tipo de falta, e `FAR_EL1` é
+    /// preenchido pelo CHAMADOR antes de vir aqui quando aplicável).
+    private void enterSynchronousException(long instructionAddress, long esr) {
+        exceptionState.setEsr1(esr);
         exceptionState.setElr1(instructionAddress);
         exceptionState.setSpsr1(pstate.toSpsrFormat());
         clearExclusiveMonitor();

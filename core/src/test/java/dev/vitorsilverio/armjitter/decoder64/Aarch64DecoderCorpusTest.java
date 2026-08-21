@@ -327,18 +327,18 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void unsupportedEncodingThrows() {
-        // CLREX (apêndice B6.6.7, offset 0x37c) — mesmo subgrupo de encoding de barreiras/hints,
-        // mas fora do subconjunto coberto (nenhum monitor de exclusividade compartilhado modelado
-        // aqui além de LDXR/STXR).
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x37c));
+    void clrexDecodesNow() {
+        // clrex (offset 0x37c) — B8.3: antes desta task ficava fora do subconjunto coberto (ver
+        // histórico), agora fecha o monitor de exclusividade.
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x37c);
+        assertEquals(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE, op.opcode());
     }
 
     @Test
-    void brkUnsupportedEncodingThrows() {
-        // BRK (apêndice B6.6.7, offset 0x380) — grupo "Exception generating", mas `opc!=000`
-        // (fora da fatia SVC/HVC/SMC).
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x380));
+    void brkDecodesNow() {
+        // brk #0x0 (offset 0x380) — B8.3: `opc=001` (grupo "Exception generating") agora reconhecido.
+        Ir64Op.Breakpoint op = (Ir64Op.Breakpoint) DECODER.decode(memory, 0x380);
+        assertEquals(0, op.immediate());
     }
 
     // ── B6.2: loads/stores (offsets 0x94+, apêndice do mesmo corpus.s/objdump.txt) ──────────
@@ -1671,14 +1671,16 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void tlbiVae1PerVaFormThrows() {
-        // `tlbi vae1, x0` (achado real da task: per-VA fora do escopo, mesma simplificação
-        // "sem per-ASID/per-VA" do precedente 32-bit) — encoding real via aarch64-none-elf-as.
+    void tlbiVae1PerVaFormDecodesNow() {
+        // `tlbi vae1, x0` (B8.3: sem TLB modelada, QUALQUER TLBI do regime EL1 vira "invalidar
+        // tudo" — mesma simplificação "sem per-ASID/per-VA" do precedente 32-bit, só que agora
+        // aceita o encoding real em vez de rejeitá-lo) — encoding real via aarch64-none-elf-as.
         int word = 0xd5088720;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
     @Test
@@ -1705,14 +1707,17 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void systemRegisterOp0ZeroIsOutOfScope() {
-        // op0=0b00 (bits20:19) é o subgrupo hint/barreira/MSR-imediato, não SYS/MRS/MSR — mesmo
-        // prefixo fixo(31:22), mas fora do escopo desta task (Fatos de referência #1/#3).
+    void systemRegisterOp0ZeroIsWfet() {
+        // op0=0b00 (bits20:19) é o subgrupo hint/barreira/"wait with timeout"/MSR-imediato, não
+        // SYS/MRS/MSR — mesmo prefixo fixo(31:22). Zerar op0 do encoding de `mrs x0,sctlr_el1`
+        // cai em CRn=0b0001/op2=0b000 (`WFET`, B8.3) — antes desta task, `op0=0` inteiro era fora
+        // de escopo; agora só combinações realmente reservadas dentro dele continuam UNDEFINED.
         int word = 0xd5381000 & ~(0b11 << 19); // zera op0
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
     }
 
     @Test
@@ -3388,5 +3393,135 @@ class Aarch64DecoderCorpusTest {
     void axflag() {
         Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5b0);
         assertEquals(Ir64FlagConversionOp.ARM_TO_EXTERNAL, op.opcode());
+    }
+
+    // ── B8.3: WFET/WFIT/CLREX/SB/BRK/HLT/MSR(immediate)/TLBI per-VA (offsets 0x5b4+) ──────────
+
+    @Test
+    void wfet() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5b4);
+        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+    }
+
+    @Test
+    void wfit() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5b8);
+        assertEquals(Ir64SystemInstructionOp.WFI, op.opcode());
+    }
+
+    @Test
+    void clrex() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5bc);
+        assertEquals(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE, op.opcode());
+    }
+
+    @Test
+    void sb() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5c0);
+        assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
+    }
+
+    @Test
+    void brk() {
+        Ir64Op.Breakpoint op = (Ir64Op.Breakpoint) DECODER.decode(memory, 0x5c4);
+        assertEquals(0x1234, op.immediate());
+    }
+
+    @Test
+    void hlt() {
+        assertInstanceOf(Ir64Op.UndefinedInstructionTrap.class, DECODER.decode(memory, 0x5c8));
+    }
+
+    @Test
+    void msrUao() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5cc);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrPan() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d0);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrSpsel() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d4);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrSsbs() {
+        // "ssbs" é o mnemônico real do assembler para o campo que o QEMU (e este decoder) chama
+        // internamente de SBSS.
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d8);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrTco() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5dc);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrDit() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5e0);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrAllint() {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5e4);
+        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+    }
+
+    @Test
+    void msrDaifSet() {
+        Ir64Op.InterruptMask op = (Ir64Op.InterruptMask) DECODER.decode(memory, 0x5e8);
+        assertTrue(op.set());
+        assertEquals(0xF, op.mask());
+    }
+
+    @Test
+    void msrDaifClear() {
+        Ir64Op.InterruptMask op = (Ir64Op.InterruptMask) DECODER.decode(memory, 0x5ec);
+        assertFalse(op.set());
+        assertEquals(0xF, op.mask());
+    }
+
+    @Test
+    void tlbiVaePerVaFormDecodesAsInvalidateAll() {
+        // tlbi vae1, x0 — B8.3 amplia TLBI para "qualquer forma do regime EL1", ver
+        // decodeSystemInstructionSys.
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5f0);
+        assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
+    }
+
+    // ── B8.3: fora de escopo (docs/isa-nao-aplicavel.tsv) — continuam UNIMPLEMENTED de verdade ──
+
+    @Test
+    void braaPauthBranchUnsupported() {
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5f4));
+    }
+
+    @Test
+    void blraaPauthBranchUnsupported() {
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5f8));
+    }
+
+    @Test
+    void retaaPauthBranchUnsupported() {
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5fc));
+    }
+
+    @Test
+    void eretaaPauthBranchUnsupported() {
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x600));
+    }
+
+    @Test
+    void cbccCompareBranchUnsupported() {
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x604));
     }
 }

@@ -1,9 +1,11 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
+import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
+import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
@@ -34,6 +36,11 @@ public final class Ir64BlockExecutor {
     private static final int CYCLES_PER_INSTRUCTION = 1;
     /// Deslocamento em bytes do registrador X30 (link register) usado por `BL`/`BLR`.
     private static final int LINK_REGISTER = 30;
+    /// Bit `I` dentro do `imm4` de `DAIFSet`/`DAIFClr` (`ARM DDI 0487`, ordem `D:A:I:F` — `I` é a
+    /// posição `1`, MESMA convenção de `PstateRegister#irqDisabled` para máscara de IRQ). Único
+    /// bit deste grupo com efeito observável neste emulador (B8.3, ver
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.InterruptMask}).
+    private static final int DAIF_MASK_BIT_I = 1 << 1;
     /// Índice de encoding (`Rn`=`31`) do registrador BASE de qualquer load/store — sempre `SP`,
     /// nunca `XZR` (convenção arquitetural do A64, resolvida aqui e não no decoder — ver
     /// {@link Ir64Op.Load64#rn} javadoc).
@@ -120,6 +127,10 @@ public final class Ir64BlockExecutor {
             }
         } catch (MemoryTranslationException64 fault) {
             core.enterMemoryAbort(pc, fault);
+        } catch (Aarch64BreakpointException brk) {
+            core.enterBreakpointException(pc, brk.immediate());
+        } catch (Aarch64UndefinedInstructionException undefined) {
+            core.enterUndefinedInstructionException(pc);
         }
         return cycles;
     }
@@ -207,6 +218,10 @@ public final class Ir64BlockExecutor {
             }
         } catch (MemoryTranslationException64 fault) {
             core.enterMemoryAbort(lastFetchAddress, fault);
+        } catch (Aarch64BreakpointException brk) {
+            core.enterBreakpointException(lastFetchAddress, brk.immediate());
+        } catch (Aarch64UndefinedInstructionException undefined) {
+            core.enterUndefinedInstructionException(lastFetchAddress);
         }
         return cycles;
     }
@@ -275,6 +290,9 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.ROTATE_INTO_FLAGS ->
                     executeRotateIntoFlags(core, (Ir64Op.RotateIntoFlags) op);
             case Ir64Op.Kind.CONVERT_FLAGS -> executeConvertFlags(core, (Ir64Op.ConvertFlags) op);
+            case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (Ir64Op.InterruptMask) op);
+            case Ir64Op.Kind.BREAKPOINT -> executeBreakpoint((Ir64Op.Breakpoint) op);
+            case Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> executeUndefinedInstructionTrap();
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -1017,12 +1035,33 @@ public final class Ir64BlockExecutor {
     private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
         switch (op.opcode()) {
             case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
-            case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP -> {
-                /* NOP observável — sem cache/pipeline/event-stream. */
+            case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP, PSTATE_FIELD_NOP -> {
+                /* NOP observável — sem cache/pipeline/event-stream/campo de PSTATE modelado. */
             }
             case WFI -> core.setSleepState(CpuSleepState.HALTED);
+            case CLEAR_EXCLUSIVE -> core.clearExclusiveMonitor();
         }
         return false;
+    }
+
+    /// `MSR (immediate) DAIFSet`/`DAIFClr` (B8.3) — só o bit `I` de `DAIF` tem efeito neste
+    /// emulador (`D`/`A`/`F` ignorados, ver javadoc de {@link Ir64Op.InterruptMask}).
+    private boolean executeInterruptMask(Aarch64Core core, Ir64Op.InterruptMask op) {
+        if ((op.mask() & DAIF_MASK_BIT_I) != 0) {
+            core.pstate().setIrqDisabled(op.set());
+        }
+        return false;
+    }
+
+    /// `BRK` (B8.3) — sempre lança, capturado por {@link #step}/{@link #executeBlock} no MESMO
+    /// ponto que {@link MemoryTranslationException64} (ver os `catch` ali).
+    private boolean executeBreakpoint(Ir64Op.Breakpoint op) {
+        throw new Aarch64BreakpointException(op.immediate());
+    }
+
+    /// `HLT` sem estado de debug (B8.3) — mesmo contrato de {@link #executeBreakpoint}.
+    private boolean executeUndefinedInstructionTrap() {
+        throw new Aarch64UndefinedInstructionException();
     }
 
     /// `HVC`/`SMC` (B6.6.7) — sem EL2/EL3 modelados, sempre devolve `PSCI_RET_NOT_SUPPORTED`

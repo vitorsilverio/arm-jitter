@@ -424,3 +424,40 @@ setf16 w2
 cfinv
 xaflag
 axflag
+
+// -- B8.3: WFET/WFIT (FEAT_WFxT) --
+.arch_extension wfxt
+wfet x0
+wfit x1
+
+// -- B8.3: CLREX/SB --
+clrex
+.arch_extension sb
+sb
+
+// -- B8.3: BRK/HLT --
+brk #0x1234
+hlt #0x5678
+
+// -- B8.3: MSR (immediate) PSTATE fields --
+msr uao, #1
+msr pan, #1
+msr spsel, #1
+msr ssbs, #1
+msr tco, #1
+msr dit, #1
+msr allint, #1
+msr daifset, #0xf
+msr daifclr, #0xf
+
+// -- B8.3: SYS — TLBI per-VA (agora decodifica como "invalidar tudo", ver Aarch64Decoder) --
+tlbi vae1, x0
+
+// -- B8.3: fora de escopo (isa-nao-aplicavel.tsv) — CB<cc> (FEAT_CMPBR) e branches PAuth reais --
+.arch_extension pauth
+braa x0, x1
+blraa x2, x3
+retaa
+eretaa
+.arch_extension cmpbr
+cbgt x0, x1, 0

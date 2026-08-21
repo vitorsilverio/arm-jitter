@@ -58,3 +58,24 @@ SMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
 SMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
 UMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
 UMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
+
+# ── A64, "Branch/Exception/System" (B8.3): FEAT_CMPBR (Armv9.5-A) — compare-and-branch ────────
+# ── condicional, posterior ao Cortex-A53 do raspi3 (Armv8.0-A, alvo primário desta frente).
+CB_cond	A64	Armv9.5-A/FEAT_CMPBR ("CB<cc>", compare and branch condicional)
+CB_cond_imm	A64	Armv9.5-A/FEAT_CMPBR ("CB<cc>", compare-immediate and branch condicional)
+
+# ── A64, "Branch/Exception/System" (B8.3): FEAT_PAuth (ARMv8.3-A) — formas de branch com ──────
+# ── autenticação de ponteiro, posterior ao Cortex-A53 do raspi3 (ARMv8.0-A). As formas "hint"
+# ── (PACIA1716/PACIASP/...) já decodificam como NOP desde B6.6.7 (RES NOP mesmo sem FEAT_PAuth,
+# ── ARM DDI 0487 C6.2.132) — só as formas de BRANCH REAL ficam de fora aqui.
+BRAZ	A64	ARMv8.3-A/FEAT_PAuth ("BRAAZ"/"BRABZ", branch com chave de autenticação zero)
+BLRAZ	A64	ARMv8.3-A/FEAT_PAuth ("BLRAAZ"/"BLRABZ", branch-and-link com chave de autenticação zero)
+RETA	A64	ARMv8.3-A/FEAT_PAuth ("RETAA"/"RETAB", return com autenticação)
+BRA	A64	ARMv8.3-A/FEAT_PAuth ("BRAA"/"BRAB", branch com registrador modificador)
+BLRA	A64	ARMv8.3-A/FEAT_PAuth ("BLRAA"/"BLRAB", branch-and-link com registrador modificador)
+ERETA	A64	ARMv8.3-A/FEAT_PAuth ("ERETAA"/"ERETAB", exception return com autenticação)
+
+# ── A64, "System" (B8.3): FEAT_SME — `SVCR` controla o estado de streaming-SVE/ZA, que não ────
+# ── existe sem SME nenhum implementado (mesma decisão já registrada para o grupo SVE/SME
+# ── inteiro em docs/COBERTURA-ISA.md, "não se aplica a nenhum preset atual").
+MSR_i_SVCR	A64	ARMv9.2-A/FEAT_SME ("MSR SVCR, #imm" — controla estado de streaming-SVE/ZA)

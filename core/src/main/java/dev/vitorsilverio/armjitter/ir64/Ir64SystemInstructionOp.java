@@ -32,5 +32,19 @@ public enum Ir64SystemInstructionOp {
     /// contra `helper.c` real do QEMU (`v8_cp_reginfo`, todas marcadas `ARM_CP_NOP` lá pelo mesmo
     /// motivo). `DC ZVA` fica FORA deste grupo (tem efeito observável real, já anunciada como
     /// indisponível via `DCZID_EL0.DZP=1`, B6.10).
-    CACHE_MAINTENANCE_NOP
+    CACHE_MAINTENANCE_NOP,
+    /// `CLREX` (B8.3, `ARM DDI 0487 C6.2.62`): fecha o monitor de exclusividade sem completar
+    /// nenhum `STXR`/`STLXR` — mesmo efeito observável de uma exceção/`ERET` sobre o monitor
+    /// (`Aarch64Core#clearExclusiveMonitor`, já usado por `enterMemoryAbort`/`enterIrq`), só que
+    /// disparado por uma instrução explícita do guest em vez de uma entrada de exceção.
+    CLEAR_EXCLUSIVE,
+    /// Formas de `MSR (immediate)` sem efeito observável neste emulador (B8.3): `UAO`/`PAN`/
+    /// `SPSel`/`SBSS`/`DIT`/`TCO` — nenhum desses campos de `PSTATE` é lido por nenhum consumidor
+    /// modelado (sem MMU com checagem `PAN`/`UAO`, sem banking real de `SP_EL0`/`SP_EL1` distinto
+    /// por `SPSel`, sem telemetria de `DIT`, sem tags MTE que `TCO` afetaria). Mesma disciplina de
+    /// {@link #NOP_HINT}: decodifica corretamente e nomeado (evita a confusão silenciosa com
+    /// `CFINV`/`XAFLAG`/`AXFLAG`, que compartilhavam o mesmo `CRn` e foram encontradas colidindo
+    /// por acaso com estas formas antes desta task — ver Armadilhas da task B8.3), mas não guarda
+    /// estado nenhum.
+    PSTATE_FIELD_NOP
 }

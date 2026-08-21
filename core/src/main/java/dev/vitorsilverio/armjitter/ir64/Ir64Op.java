@@ -33,7 +33,8 @@ public sealed interface Ir64Op permits
         Ir64Op.ShiftVariable, Ir64Op.LoadExclusivePair, Ir64Op.StoreExclusivePair,
         Ir64Op.CompareAndSwap, Ir64Op.CompareAndSwapPair, Ir64Op.AluWithCarry, Ir64Op.Extract,
         Ir64Op.DataProcessing1Source, Ir64Op.MultiplyAccumulateLong, Ir64Op.MultiplyHigh,
-        Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags {
+        Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags,
+        Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -109,6 +110,12 @@ public sealed interface Ir64Op permits
         public static final int ROTATE_INTO_FLAGS = 41;
         /// B8.2: `CFINV`/`XAFLAG`/`AXFLAG` — ver {@link ConvertFlags}.
         public static final int CONVERT_FLAGS = 42;
+        /// B8.3: `MSR (immediate) DAIFSet`/`DAIFClr` — ver {@link InterruptMask}.
+        public static final int INTERRUPT_MASK = 43;
+        /// B8.3: `BRK` — ver {@link Breakpoint}.
+        public static final int BREAKPOINT = 44;
+        /// B8.3: `HLT` — ver {@link UndefinedInstructionTrap}.
+        public static final int UNDEFINED_INSTRUCTION_TRAP = 45;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1088,5 +1095,53 @@ public sealed interface Ir64Op permits
             /// Sub-operação.
             Ir64FlagConversionOp opcode) implements Ir64Op {
         @Override public int kind() { return Kind.CONVERT_FLAGS; }
+    }
+
+    /// `MSR (immediate) DAIFSet`/`DAIFClr` (`ARM DDI 0487 C6.2.149/C6.2.150`, B8.3, subgrupo
+    /// "MSR (immediate)" da classe System) — únicas duas formas de `MSR (immediate)` desta task
+    /// com efeito observável real: as demais (`UAO`/`PAN`/`SPSel`/`SBSS`/`DIT`/`TCO`) viram
+    /// {@link SystemInstruction} com {@link Ir64SystemInstructionOp#PSTATE_FIELD_NOP} porque este
+    /// emulador não modela os campos correspondentes de `PSTATE` (ver javadoc daquele valor). O bit
+    /// `I` de `DAIF` (mascaramento de IRQ) É modelado
+    /// ({@link dev.vitorsilverio.armjitter.core64.PstateRegister#irqDisabled()}, B6.6.7) — por
+    /// isso `DAIFSet`/`DAIFClr` ganham um record próprio em vez de virarem NOP como o resto do
+    /// grupo.
+    record InterruptMask(
+            /// `true` para `DAIFSet` (seta os bits de `imm` em `DAIF`); `false` para `DAIFClr`
+            /// (limpa).
+            boolean set,
+            /// Máscara de 4 bits do encoding (`imm[3:0]`, ordem `D:A:I:F` do manual — só o bit `I`
+            /// (posição 1) tem efeito neste emulador; `D`/`A`/`F` são ignorados, mesma decisão já
+            /// tomada para o resto de `DAIF` em B6.6.7).
+            int mask) implements Ir64Op {
+        @Override public int kind() { return Kind.INTERRUPT_MASK; }
+    }
+
+    /// `BRK` (`ARM DDI 0487 C6.2.29`, B8.3) — gera uma exceção síncrona de "Breakpoint Instruction"
+    /// (`ESR_EL1.EC=0x3C`) incondicionalmente, independente de estado de debug (ao contrário de
+    /// `HLT`, ver {@link UndefinedInstructionTrap}) — é assim que o Linux usa `BRK` para
+    /// `BUG()`/`WARN_ON()`/UBSAN em builds de kernel normais, sem depender de nenhum debugger
+    /// externo conectado. Executor lança
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException}, capturada no mesmo
+    /// ponto que {@link dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64}
+    /// (`Ir64BlockExecutor#step`/`#executeBlock`) — o endereço da própria instrução `BRK` (ELR_EL1)
+    /// vem do rastreamento de `Fetch` já existente ali, não deste record.
+    record Breakpoint(
+            /// Imediato de 16 bits do encoding — vira `ESR_EL1.ISS[15:0]` (`comment` do `BRK`,
+            /// convenção do Linux/GDB para identificar o motivo do trap).
+            int immediate) implements Ir64Op {
+        @Override public int kind() { return Kind.BREAKPOINT; }
+    }
+
+    /// `HLT` (`ARM DDI 0487 C6.2.148`, B8.3) — instrução de "Halting debug": sem estado de debug
+    /// externo modelado neste emulador (mesma decisão já registrada para os registradores de debug
+    /// em `Aarch64Core#ID_AA64DFR0_EL1_VALUE`), o pseudocódigo real do manual cai no caminho
+    /// `UNDEFINED` (`Halting_instruction`, "Otherwise, treat as UNDEFINED") — mesmo tratamento
+    /// arquitetural de um encoding reservado, só que agora um encoding REAL e nomeado, não uma
+    /// combinação de bits arbitrária. Sem operando: o imediato de 16 bits do encoding só teria
+    /// sentido para o host de debug externo, que não existe aqui (mesmo raciocínio do `imm16` de
+    /// `HVC`/`SMC` descartado em {@link PrivilegedCall}).
+    record UndefinedInstructionTrap() implements Ir64Op {
+        @Override public int kind() { return Kind.UNDEFINED_INSTRUCTION_TRAP; }
     }
 }

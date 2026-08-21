@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **54%** — 2186 de 3996 células aplicáveis decodificam.
+> **55%** — 2199 de 3984 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **83%** (579/690) |
 | v6-M | **22%** (88/385) |
 | v7-M | **54%** (210/385) |
-| A64 | **22%** (261/1147) |
+| A64 | **24%** (274/1135) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 22% (261/1147) |
+| A64 — AArch64 | 1161 | A64 24% (274/1135) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1656,21 +1656,21 @@ Inventário: `a64.decode` · 1161 instruções.
 | `CBZ` | ✅ |
 | `TBZ` | ✅ |
 | `B_cond` | ✅ |
-| `CB_cond` | ❌ |
-| `CB_cond` | ❌ |
-| `CB_cond` | ❌ |
-| `CB_cond` | ❌ |
-| `CB_cond_imm` | ❌ |
+| `CB_cond` | · |
+| `CB_cond` | · |
+| `CB_cond` | · |
+| `CB_cond` | · |
+| `CB_cond_imm` | · |
 | `BR` | ✅ |
 | `BLR` | ✅ |
 | `RET` | ✅ |
-| `BRAZ` | ❌ |
-| `BLRAZ` | ❌ |
-| `RETA` | ❌ |
-| `BRA` | ❌ |
-| `BLRA` | ❌ |
+| `BRAZ` | · |
+| `BLRAZ` | · |
+| `RETA` | · |
+| `BRA` | · |
+| `BLRA` | · |
 | `ERET` | ✅ |
-| `ERETA` | ❌ |
+| `ERETA` | · |
 | `YIELD` | ✅ |
 | `WFE` | ✅ |
 | `WFI` | ✅ |
@@ -1693,34 +1693,34 @@ Inventário: `a64.decode` · 1161 instruções.
 | `AUTIBSP` | ✅ |
 | `CHKFEAT` | ✅ |
 | `NOP` | ✅ |
-| `WFET` | ❌ |
-| `WFIT` | ❌ |
-| `CLREX` | ❌ |
+| `WFET` | ✅ |
+| `WFIT` | ✅ |
+| `CLREX` | ✅ |
 | `DSB_DMB` | ✅ |
-| `DSB_nXS` | ❌ |
+| `DSB_nXS` | ✅ |
 | `ISB` | ✅ |
-| `SB` | ❌ |
+| `SB` | ✅ |
 | `CFINV` | ✅ |
 | `XAFLAG` | ✅ |
 | `AXFLAG` | ✅ |
-| `MSR_i_UAO` | ❌ |
-| `MSR_i_PAN` | ❌ |
-| `MSR_i_SPSEL` | ❌ |
+| `MSR_i_UAO` | ✅ |
+| `MSR_i_PAN` | ✅ |
+| `MSR_i_SPSEL` | ✅ |
 | `MSR_i_SBSS` | ✅ |
 | `MSR_i_DIT` | ✅ |
-| `MSR_i_TCO` | ❌ |
-| `MSR_i_DAIFSET` | ❌ |
-| `MSR_i_DAIFCLEAR` | ❌ |
+| `MSR_i_TCO` | ✅ |
+| `MSR_i_DAIFSET` | ✅ |
+| `MSR_i_DAIFCLEAR` | ✅ |
 | `MSR_i_ALLINT` | ✅ |
-| `MSR_i_SVCR` | ❌ |
+| `MSR_i_SVCR` | · |
 | `SYS` | ❌ |
 | `SYS` | ❌ |
 | `SYS` | ✅ |
 | `SVC` | ✅ |
 | `HVC` | ✅ |
 | `SMC` | ✅ |
-| `BRK` | ❌ |
-| `HLT` | ❌ |
+| `BRK` | ✅ |
+| `HLT` | ✅ |
 | `STXR` | ✅ |
 | `LDXR` | ✅ |
 | `STLR` | ✅ |

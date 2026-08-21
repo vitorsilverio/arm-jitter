@@ -173,6 +173,14 @@ public final class Aarch64Decoder {
     /// `SMC` (B6.6.7): `LL(1:0)=11`, mesmo raciocínio de {@link #EXCEPTION_GEN_HVC_LOW5_FIXED}
     /// (CONFERIDO via `aarch64-none-elf-as`: `smc #0`).
     private static final int EXCEPTION_GEN_SMC_LOW5_FIXED = 0b0_0011;
+    /// `BRK` (B8.3): `opc` PRÓPRIO (`0b001`, diferente do `0b000` de `SVC`/`HVC`/`SMC`) — sem
+    /// sub-forma "LL", `low5` é sempre `0b00000` fixo (`opc2`/`LL` reservados em `0`).
+    private static final int EXCEPTION_GEN_OPC_BRK = 0b001;
+    /// `HLT` (B8.3): `opc=0b010`, mesmo raciocínio de {@link #EXCEPTION_GEN_OPC_BRK}.
+    private static final int EXCEPTION_GEN_OPC_HLT = 0b010;
+    /// `low5` fixo de `BRK`/`HLT` (`ARM DDI 0487`, campos `opc2`/`LL` sempre `0` nas duas) —
+    /// diferente de `SVC`/`HVC`/`SMC`, que usam `low5` para escolher entre si.
+    private static final int EXCEPTION_GEN_BRK_HLT_LOW5_FIXED = 0b0_0000;
 
     // ── MRS/MSR (register)/SYS family (B6.6.1 + B6.6.3, ARM DDI 0487 C5.2.3 / QEMU a64.decode
     // ── `SYS`): prefixo fixo(31:22)=1101010100 L(21) op0(20:19) op1(18:16) CRn(15:12) CRm(11:8)
@@ -285,6 +293,15 @@ public final class Aarch64Decoder {
     // ── Barreiras (`op0=0`, CRn=0b0011 fixo — "Barriers" no grupo hint/barreira/CLREX/PSTATE-imm)
     // ── valores conferidos contra `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
     private static final int SYSTEM_INSTRUCTION_BARRIER_CRN = 0b0011;
+    // ── B8.3: `CLREX`/`DSB` (variante `nXS`, `FEAT_XS`)/`SB` (`FEAT_SB`) — MESMO subgrupo
+    // ── "Barriers" (`CRn=0b0011`), só `op2` novo. `DSB_nXS` ignora o campo `CRm` (domain, RES0
+    // ── nesta variante segundo o próprio `a64.decode` do QEMU — "types always equals
+    // ── MBReqTypes_All and we ignore the domain bits") — mesmo tratamento de `BARRIER` (NOP, sem
+    // ── cache/pipeline modelados); `SB` idem (sem especulação modelada). `CLREX` TEM semântica
+    // ── própria (fecha o monitor de exclusividade, ver {@link Ir64SystemInstructionOp#CLEAR_EXCLUSIVE}).
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_CLREX = 0b010;
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DSB_NXS = 0b001;
+    private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_SB = 0b111;
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DSB = 0b100;
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_DMB = 0b101;
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_ISB = 0b110;
@@ -297,46 +314,76 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_HINT_CRN = 0b0010;
     private static final int SYSTEM_INSTRUCTION_HINT_OP2_WFI = 0b011;
 
+    // ── B8.3: `WFET`/`WFIT` (`FEAT_WFxT`) — subgrupo PRÓPRIO "System instructions with register
+    // ── argument" (`op0=0`, CRn=0b0001 — DIFERENTE do subgrupo "Hints" acima, `CRn=0b0010`), único
+    // ── deste bloco inteiro em que `Rt`(4:0) é um registrador de verdade (`Xd`, valor de timeout),
+    // ── não o `11111` fixo de barreiras/hints/flag-manip. O registrador é lido pelo decoder só por
+    // ── completude posicional — não carregado no `Ir64Op` porque o executor ignora o timeout
+    // ── (sem contador/event-stream modelado, mesma simplificação já aplicada a `WFE`/`SEV`).
+    private static final int SYSTEM_INSTRUCTION_WAIT_TIMEOUT_CRN = 0b0001;
+    private static final int SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFET = 0b000;
+    private static final int SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFIT = 0b001;
+
     // ── B8.2: `CFINV`/`XAFLAG`/`AXFLAG` (`FEAT_FlagM2`, `op0=0`, CRn=0b0100 fixo — mesmo subgrupo
     // ── de encoding de barreiras/hints acima, `Rt` fixo em `XZR` não checado aqui — mesma
     // ── simplificação já aplicada às barreiras/hints, ver Fatos de referência da task).
     private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_CRN = 0b0100;
+    /// `op1` fixo do subgrupo `CFINV`/`XAFLAG`/`AXFLAG`/`UAO`/`PAN`/`SPSel` — **achado real desta
+    /// task (G8)**: os formulários `MSR (immediate)` de `op1=0b011` (`SBSS`/`DIT`/`TCO`/
+    /// `DAIFSet`/`DAIFClr`) compartilham o MESMO `CRn=0b0100` E alguns dos MESMOS valores de `op2`
+    /// (`SBSS.op2=001` colide com `XAFLAG.op2=001`; `DIT.op2=010` colide com `AXFLAG.op2=010`;
+    /// `ALLINT.op1=0b001,op2=000` colide com `CFINV.op2=000`) — o decoder ANTES desta task
+    /// despachava só por `CRn`+`op2`, sem checar `op1`, e por isso decodificava `MSR SBSS`/`MSR
+    /// DIT`/`MSR ALLINT` SILENCIOSAMENTE como `XAFLAG`/`AXFLAG`/`CFINV` (a tabela de cobertura já
+    /// marcava as 3 formas `MSR_i_*` como ✅ por esse motivo — "decode teve sucesso" não é "decode
+    /// correto", ver o aviso permanente no topo de `docs/COBERTURA-ISA.md`). Corrigido: `op1` agora
+    /// É checado antes de despachar por `op2`.
+    private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP1 = 0b000;
     private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV = 0b000;
     private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG = 0b001;
     private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG = 0b010;
+    // ── B8.3: `UAO`/`PAN`/`SPSel` — MESMO `CRn`/`op1` de `CFINV`/`XAFLAG`/`AXFLAG` acima, `op2`
+    // ── novo (sem colisão: `011`/`100`/`101` nunca usados pelas 3 formas de flag). Nenhum efeito
+    // ── observável neste emulador — ver javadoc de `Ir64SystemInstructionOp#PSTATE_FIELD_NOP`.
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_UAO = 0b011;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_PAN = 0b100;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_SPSEL = 0b101;
+    // ── B8.3: `MSR ALLINT` — MESMO `CRn=0b0100`, `op1` PRÓPRIO (`0b001`, nem o `000` do grupo
+    // ── flag/UAO/PAN/SPSel nem o `011` do grupo abaixo) — sem `op1` checado antes desta task,
+    // ── colidia com `CFINV` (mesmo `op2=000`, ver o achado acima). Sem efeito observável (mesma
+    // ── razão de `PSTATE_FIELD_NOP`: `ALLINT` mascara TODAS as interrupções inclusive `IRQ`, mas
+    // ── nada consulta esse campo separado de `PstateRegister#irqDisabled`).
+    private static final int SYSTEM_INSTRUCTION_ALLINT_OP1 = 0b001;
+    // ── B8.3: `SBSS`/`DIT`/`TCO`/`DAIFSet`/`DAIFClr` (+ `SVCR`, fora de escopo — `FEAT_SME`) —
+    // ── MESMO `CRn=0b0100`, `op1` PRÓPRIO (`0b011`, ver o achado acima). `DAIFSet`/`DAIFClr` TÊM
+    // ── semântica própria sobre `PstateRegister#irqDisabled` (bit `I`); as demais são
+    // ── `PSTATE_FIELD_NOP` (mesma razão de `UAO`/`PAN`/`SPSel`). `SVCR` (`op2=0b011`) fica de fora
+    // ── do `switch` abaixo — cai no `default -> unsupported`, ver `docs/isa-nao-aplicavel.tsv`
+    // ── (`FEAT_SME`, não se aplica a nenhum preset atual deste emulador).
+    private static final int SYSTEM_INSTRUCTION_PSTATE_IMM_OP1 = 0b011;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS = 0b001;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DIT = 0b010;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_TCO = 0b100;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET = 0b110;
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR = 0b111;
 
-    // ── `TLBI VMALLE1`/`TLBI VMALLE1IS` (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral",
-    // ── CRn=0b1000 fixo (grupo TLB maintenance), CRm distingue IS/não-IS, op2=0 (ALL, sem VA).
+    // ── TLBI (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral", CRn=0b1000 fixo (grupo TLB
+    // ── maintenance). B8.3 trata QUALQUER `CRm`/`op2` deste grupo como "invalidar tudo" (ver
+    // ── javadoc de `decodeSystemInstructionSys` — sem TLB modelada, per-VA/per-ASID não tem como
+    // ── ser mais preciso que "invalidar tudo", e over-invalidar nunca corrompe estado).
     private static final int SYSTEM_INSTRUCTION_TLBI_OP1_EL1 = 0b000;
     private static final int SYSTEM_INSTRUCTION_TLBI_CRN = 0b1000;
-    private static final int SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1 = 0b0111;
-    private static final int SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1IS = 0b0011;
-    private static final int SYSTEM_INSTRUCTION_TLBI_OP2_ALL = 0b000;
 
     // ── Cache maintenance (B6.12, `op0=1`, `SYS`, `L=0`, CRn=0b0111 fixo — "Instruction/Data
-    // ── Cache maintenance operations", ARM DDI 0487 C5.4.11/C5.4.12): cada linha é
-    // ── `{op1, crm, op2}` de UMA operação real (nome no comentário à direita); todas viram NOP
-    // ── porque este emulador não modela caches — conferido contra `helper.c` real do QEMU
-    // ── (`v8_cp_reginfo`): as MESMAS 10 operações estão marcadas `ARM_CP_NOP` lá, com o
-    // ── comentário do próprio QEMU "Cache ops: all NOPs since we don't emulate caches".
-    // ── `DC ZVA` (CRm=0b0100,op2=1) é DELIBERADAMENTE EXCLUÍDA desta tabela: tem efeito
-    // ── observável real (zera memória) e já é anunciada como indisponível via
-    // ── `DCZID_EL0.DZP=1` (B6.10) — se algum guest ignorar isso e emitir `DC ZVA` mesmo assim,
-    // ── deve cair no `throw unsupported` (não presumir NOP silencioso). `AT`/`TLBI` per-VA
-    // ── (formas fora da `TLBI VMALLE1(IS)` já tratada acima) também ficam fora desta task.
+    // ── Cache maintenance operations", ARM DDI 0487 C5.4.11/C5.4.12). B8.3 trata QUALQUER
+    // ── `op1`/`CRm`/`op2` deste grupo como NOP (mesmo raciocínio de TLBI acima — sem cache
+    // ── modelada, qualquer operação de manutenção É um NOP correto), EXCETO `DC ZVA`
+    // ── (`CRm=0b0100,op2=0b001`): tem efeito observável real (zera memória) e já é anunciada como
+    // ── indisponível via `DCZID_EL0.DZP=1` (B6.10) — se algum guest ignorar isso e emitir `DC ZVA`
+    // ── mesmo assim, deve cair no `throw unsupported` (não presumir NOP silencioso).
     private static final int SYSTEM_INSTRUCTION_CACHE_CRN = 0b0111;
-    private static final int[][] SYSTEM_INSTRUCTION_CACHE_OPS = {
-            {0b000, 0b0001, 0b000}, // IC IALLUIS
-            {0b000, 0b0101, 0b000}, // IC IALLU
-            {0b011, 0b0101, 0b001}, // IC IVAU
-            {0b000, 0b0110, 0b001}, // DC IVAC
-            {0b000, 0b0110, 0b010}, // DC ISW
-            {0b011, 0b1010, 0b001}, // DC CVAC
-            {0b000, 0b1010, 0b010}, // DC CSW
-            {0b011, 0b1011, 0b001}, // DC CVAU
-            {0b011, 0b1110, 0b001}, // DC CIVAC
-            {0b000, 0b1110, 0b010}, // DC CISW
-    };
+    private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_CRM = 0b0100;
+    private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_OP2 = 0b001;
 
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
@@ -1817,26 +1864,44 @@ public final class Aarch64Decoder {
             // o handler em EL2/EL3, que este emulador não tem).
             return new Ir64Op.PrivilegedCall();
         }
-        // BRK/HLT/DCPS*: fora da fatia B6.1/B6.6.7.
+        if (opc == EXCEPTION_GEN_OPC_BRK && low5 == EXCEPTION_GEN_BRK_HLT_LOW5_FIXED) {
+            // BRK (B8.3): imm16 é o único operando.
+            return new Ir64Op.Breakpoint(imm16);
+        }
+        if (opc == EXCEPTION_GEN_OPC_HLT && low5 == EXCEPTION_GEN_BRK_HLT_LOW5_FIXED) {
+            // HLT (B8.3): sem estado de debug externo modelado, vira UNDEFINED (ver javadoc de
+            // Ir64Op.UndefinedInstructionTrap) — o imm16 do encoding só teria sentido para um host
+            // de debug, que não existe aqui.
+            return new Ir64Op.UndefinedInstructionTrap();
+        }
+        // DCPS1/DCPS2/DCPS3: sempre UNDEF fora de "halting debug state" (não implementado, mesmo
+        // achado documentado pelo próprio a64.decode do QEMU) — fora do escopo desta task.
         throw unsupported(word, address);
     }
 
-    /// `DSB`/`ISB`/`DMB` (B6.6.3) e os "Hints" `NOP`/`YIELD`/`WFE`/`WFI`/`SEV`/`SEVL` (B6.6.7) —
-    /// mesmo subgrupo de encoding `op0=0` (`CRn` distingue barreira de hint). Barreiras e a maior
-    /// parte dos hints viram NOP observável, mesmo precedente de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit; só `WFI` tem semântica
-    /// própria (ver {@link Ir64SystemInstructionOp#WFI}). Demais formas do subgrupo `op0=0`
-    /// (`CLREX`, `MSR (immediate, PSTATE)` incl. `DAIFSet`/`DAIFClr`, `SB`): fora do escopo desta
-    /// task (ver a task B6.6.7, "Não inclui" — `DAIFSet`/`DAIFClr` ficam para uma sub-task futura
-    /// se um consumidor real precisar mascarar IRQ explicitamente por software).
+    /// `DSB`/`ISB`/`DMB`/`DSB(nXS)`/`SB` (B6.6.3 + B8.3) e os "Hints" `NOP`/`YIELD`/`WFE`/`WFI`/
+    /// `SEV`/`SEVL`/`WFET`/`WFIT` (B6.6.7 + B8.3) — mesmo subgrupo de encoding `op0=0` (`CRn`
+    /// distingue barreira de hint de "wait with timeout" de `MSR (immediate)`). Barreiras e a
+    /// maior parte dos hints viram NOP observável, mesmo precedente de
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit; `WFI`/`WFIT` têm
+    /// semântica própria (ver {@link Ir64SystemInstructionOp#WFI}); `CLREX` fecha o monitor de
+    /// exclusividade (ver {@link Ir64SystemInstructionOp#CLEAR_EXCLUSIVE}); `MSR (immediate)`
+    /// (`CRn=0b0100`, junto de `CFINV`/`XAFLAG`/`AXFLAG`) delega em
+    /// {@link #decodeFlagOrPstateImmediate}.
     private Ir64Op decodeSystemInstructionBarrier(int word, long address) {
         int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
+        int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
         int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
-        if (crn == SYSTEM_INSTRUCTION_BARRIER_CRN
-                && (op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_DSB
-                        || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_DMB
-                        || op2 == SYSTEM_INSTRUCTION_BARRIER_OP2_ISB)) {
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
+        if (crn == SYSTEM_INSTRUCTION_BARRIER_CRN) {
+            return switch (op2) {
+                case SYSTEM_INSTRUCTION_BARRIER_OP2_DSB, SYSTEM_INSTRUCTION_BARRIER_OP2_DMB,
+                        SYSTEM_INSTRUCTION_BARRIER_OP2_ISB, SYSTEM_INSTRUCTION_BARRIER_OP2_DSB_NXS,
+                        SYSTEM_INSTRUCTION_BARRIER_OP2_SB ->
+                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
+                case SYSTEM_INSTRUCTION_BARRIER_OP2_CLREX ->
+                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE);
+                default -> throw unsupported(word, address);
+            };
         }
         if (crn == SYSTEM_INSTRUCTION_HINT_CRN) {
             if (op2 == SYSTEM_INSTRUCTION_HINT_OP2_WFI) {
@@ -1848,54 +1913,100 @@ public final class Aarch64Decoder {
             // modelado, `WFE`/`SEV`/`SEVL` não têm efeito observável neste emulador).
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
         }
-        if (crn == SYSTEM_INSTRUCTION_FLAG_MANIP_CRN) {
-            // CFINV/XAFLAG/AXFLAG (B8.2, FEAT_FlagM2) — diferente de barreiras/hints, estas TÊM
-            // semântica própria sobre PSTATE (ver Ir64FlagConversionOp), por isso um record
-            // dedicado (ConvertFlags) em vez de SystemInstruction/NOP.
-            Ir64FlagConversionOp flagOp = switch (op2) {
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV -> Ir64FlagConversionOp.INVERT_CARRY;
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG -> Ir64FlagConversionOp.EXTERNAL_TO_ARM;
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG -> Ir64FlagConversionOp.ARM_TO_EXTERNAL;
+        if (crn == SYSTEM_INSTRUCTION_WAIT_TIMEOUT_CRN) {
+            // WFET/WFIT (B8.3, FEAT_WFxT): mesmo tratamento de WFE (NOP)/WFI (dorme até IRQ) sem
+            // timeout — Rt (registrador com o valor de comparação) é ignorado, ver constante.
+            return switch (op2) {
+                case SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFET ->
+                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+                case SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFIT ->
+                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.WFI);
                 default -> throw unsupported(word, address);
             };
-            return new Ir64Op.ConvertFlags(flagOp);
+        }
+        if (crn == SYSTEM_INSTRUCTION_FLAG_MANIP_CRN) {
+            return decodeFlagOrPstateImmediate(word, address, op1, op2);
         }
         throw unsupported(word, address);
     }
 
-    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `op0=1`, `SYS` — achado real da rodada de
-    /// pesquisa: `TLBI` NÃO é `MRS`/`MSR`, é uma forma de `SYS` com o mesmo formato de campos) e
-    /// as 10 operações de manutenção de cache `IC`/`DC` (B6.12, ver
-    /// {@link #SYSTEM_INSTRUCTION_CACHE_OPS} — achado real da rodada de pesquisa: o próprio QEMU
-    /// trata TODAS como NOP por não emular caches, mesma decisão adotada aqui). Demais formas de
-    /// `SYS`/`SYSL` (`TLBI` per-VA como `VAE1`, `AT`, `DC ZVA`, `SYSL` propriamente dito com
-    /// `L=1`): fora do escopo, mesma simplificação "sem per-ASID/per-VA" do precedente 32-bit
-    /// (`Cp15VmsaCoprocessor`, `TLBIALL`).
+    /// `CFINV`/`XAFLAG`/`AXFLAG` (B8.2) + `MSR (immediate)` inteiro (B8.3): TODAS compartilham
+    /// `CRn=0b0100`, distinguidas por `op1` (ver o achado real documentado em
+    /// {@link #SYSTEM_INSTRUCTION_FLAG_MANIP_OP1}) e depois por `op2` dentro de cada grupo de
+    /// `op1`. `DAIFSet`/`DAIFClr` são as únicas com semântica própria além de flags NZCV (mascaram
+    /// IRQ) — o resto vira {@link Ir64SystemInstructionOp#PSTATE_FIELD_NOP} (sem estado modelado).
+    private Ir64Op decodeFlagOrPstateImmediate(int word, long address, int op1, int op2) {
+        if (op1 == SYSTEM_INSTRUCTION_FLAG_MANIP_OP1) {
+            Ir64FlagConversionOp flagOp = switch (op2) {
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV -> Ir64FlagConversionOp.INVERT_CARRY;
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG -> Ir64FlagConversionOp.EXTERNAL_TO_ARM;
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG -> Ir64FlagConversionOp.ARM_TO_EXTERNAL;
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_UAO, SYSTEM_INSTRUCTION_PSTATE_OP2_PAN,
+                        SYSTEM_INSTRUCTION_PSTATE_OP2_SPSEL -> null;
+                default -> throw unsupported(word, address);
+            };
+            return flagOp != null
+                    ? new Ir64Op.ConvertFlags(flagOp)
+                    : new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+        }
+        if (op1 == SYSTEM_INSTRUCTION_ALLINT_OP1 && op2 == SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV) {
+            // MSR ALLINT (op2 reaproveita o mesmo valor 0b000 de CFINV — só o op1 distingue, e já
+            // foi checado acima).
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+        }
+        if (op1 == SYSTEM_INSTRUCTION_PSTATE_IMM_OP1) {
+            int imm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+            return switch (op2) {
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS, SYSTEM_INSTRUCTION_PSTATE_OP2_DIT,
+                        SYSTEM_INSTRUCTION_PSTATE_OP2_TCO ->
+                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new Ir64Op.InterruptMask(true, imm);
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new Ir64Op.InterruptMask(false, imm);
+                // SVCR (op2=0b011, FEAT_SME): não se aplica a nenhum preset atual deste emulador
+                // (ver docs/isa-nao-aplicavel.tsv) — cai aqui no default, UNIMPLEMENTED de verdade.
+                default -> throw unsupported(word, address);
+            };
+        }
+        throw unsupported(word, address);
+    }
+
+    /// `TLBI`/manutenção de cache (`op0=1`, `SYS` — achado real da rodada de pesquisa de B6.6.3:
+    /// `TLBI` NÃO é `MRS`/`MSR`, é uma forma de `SYS` com o mesmo formato de campos).
+    ///
+    /// **B8.3 amplia os dois grupos** (achado real desta task): este emulador não modela NENHUMA
+    /// TLB nem cache — a spec original (B6.6.3) só reconhecia `TLBI VMALLE1(IS)` (invalidação
+    /// total) e um subconjunto de 10 operações `IC`/`DC` por engano de escopo, mas como não existe
+    /// TLB/cache nenhuma para invalidar de forma diferenciada, QUALQUER `TLBI` do regime EL1
+    /// (`op1=0b000`, qualquer `CRm`/`op2` dentro de `CRn=0b1000`) e QUALQUER manutenção `IC`/`DC`
+    /// (`CRn=0b0111`, qualquer `op1`/`CRm`/`op2`) é um NOP igualmente seguro — invalidar/limpar
+    /// "demais" nunca corrompe estado (ao contrário de invalidar "de menos"). `DC ZVA` continua
+    /// EXCLUÍDA explicitamente (tem efeito observável real — zera memória — e já é anunciada como
+    /// indisponível via `DCZID_EL0.DZP=1`, B6.10; se um guest ignorar isso e emitir mesmo assim,
+    /// deve cair no `throw unsupported`, não silenciosamente virar NOP). `AT` (address
+    /// translation, escreve `PAR_EL1`) e o resto de `SYS`/`SYSL` (`TLBI` per-VA/per-ASID como
+    /// instrução ENDEREÇÁVEL individualmente — aqui tratada igual a "invalidar tudo", não byte a
+    /// byte — debug registers via `SYSL`, `op0=2`) ficam fora do escopo desta task, documentados
+    /// como próximo passo, não presumidos desnecessários (ver a task, "Não inclui").
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
         int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
-        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
-        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
-        if (!isSysl && op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 && crn == SYSTEM_INSTRUCTION_TLBI_CRN
-                && (crm == SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1 || crm == SYSTEM_INSTRUCTION_TLBI_CRM_VMALLE1IS)
-                && op2 == SYSTEM_INSTRUCTION_TLBI_OP2_ALL) {
+        if (!isSysl && op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 && crn == SYSTEM_INSTRUCTION_TLBI_CRN) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
-        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isCacheMaintenanceOp(op1, crm, op2)) {
+        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && !isDataCacheZva(word)) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
         throw unsupported(word, address);
     }
 
-    /// Confere se `{op1, crm, op2}` bate com alguma linha de {@link #SYSTEM_INSTRUCTION_CACHE_OPS}.
-    private static boolean isCacheMaintenanceOp(int op1, int crm, int op2) {
-        for (int[] row : SYSTEM_INSTRUCTION_CACHE_OPS) {
-            if (row[0] == op1 && row[1] == crm && row[2] == op2) {
-                return true;
-            }
-        }
-        return false;
+    /// Confere se `{CRm, op2}` bate com `DC ZVA` (`CRn=0b0111` já checado pelo chamador) — único
+    /// membro do grupo "manutenção de cache" excluído do NOP amplo de B8.3 (ver javadoc de
+    /// {@link #decodeSystemInstructionSys}).
+    private static boolean isDataCacheZva(int word) {
+        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        return crm == SYSTEM_INSTRUCTION_CACHE_DC_ZVA_CRM && op2 == SYSTEM_INSTRUCTION_CACHE_DC_ZVA_OP2;
     }
 
     /// `MRS`/`MSR (register)` (B6.6.1) — resolve a 5-upla `op0:op1:CRn:CRm:op2` crua para um
