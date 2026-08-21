@@ -45,7 +45,12 @@ não dá.
 | `toon_shading` | 0 | ❌ | depende de *fragment lighting* / LUT; avançou com a B3.9 |
 | `wide_mode_3d` | 0 | ❌ | modo de tela larga (800×240), não suportado; avançou com a B3.9 |
 
-**Placar: 7 de 20 produzem geometria; 1 validado visualmente ponta a ponta.**
+**Placar: 8 de 20 produzem geometria; 2 validados visualmente** — `simple_tri` e, depois da B3.9,
+`loop_subdivision`. Este último com textura, o que fecha a validação visual do caminho de textura da
+PR4 (que até então só tinha teste automatizado).
+
+> As contagens da coluna "Desenhos" são de execuções com orçamentos de fatias diferentes e servem
+> para separar "não desenha" de "desenha" — não são comparáveis entre si como medida de desempenho.
 
 ## O achado que mais valeu — e a hipótese errada que ele corrigiu
 
