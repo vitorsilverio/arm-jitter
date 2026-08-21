@@ -140,7 +140,12 @@ public final class VfpDecoder implements DecoderExtension {
             // VDIV_{sp,dp}: sem forma "bit6=1" (fora de escopo se bit6 estiver setado).
             case 0b100 -> bit6 ? null
                     : vfpAlu(IrOp.VfpOperation.DIV, doublePrecision, vd, vn, vm, address, raw, condition);
-            // op1==0b001 é VNMLA/VNMLS — fora do escopo desta task (não há VfpOperation para eles).
+            // VNMLS_{sp,dp} (bit6=0) / VNMLA_{sp,dp} (bit6=1) — ordem INVERTIDA em relação a
+            // VMLA/VMLS (ARM ARM A8.8.337: `op` seleciona VNMLA quando 1). Conferido contra
+            // `vfp.decode` do QEMU e contra o encoding real emitido pelo gcc do devkitARM
+            // (`ee171b0c` = `vnmls.f64 d1, d7, d12`, achado no `textured_cube` dos exemplos 3DS).
+            case 0b001 -> vfpAlu(bit6 ? IrOp.VfpOperation.NMLA : IrOp.VfpOperation.NMLS,
+                    doublePrecision, vd, vn, vm, address, raw, condition);
             default -> null;
         };
     }

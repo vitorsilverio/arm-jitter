@@ -85,6 +85,18 @@ public final class IrVfpExecutor {
                 float product = DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
                 yield DirectedFpRounding.roundFloat(vd - product, (double) vd - (double) product, mode);
             }
+            // VNMLA/VNMLS negam o ACUMULADOR, não o produto — e a negação é exata (troca de
+            // sinal), então os dois passos arredondados continuam sendo produto e soma.
+            case NMLA -> {
+                float vd = -flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                float product = -DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
+                yield DirectedFpRounding.roundFloat(vd + product, (double) vd + (double) product, mode);
+            }
+            case NMLS -> {
+                float vd = -flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                float product = DirectedFpRounding.roundFloat(vn * vm, (double) vn * (double) vm, mode);
+                yield DirectedFpRounding.roundFloat(vd + product, (double) vd + (double) product, mode);
+            }
             case NMUL -> DirectedFpRounding.roundFloat(-(vn * vm), -((double) vn * (double) vm), mode);
             // (float) Math.sqrt((double) x) é corretamente arredondado (IEEE 754) mesmo após o
             // narrowing final para float — ver Inclui da task B3.4; Math.sqrt(double) já é o
@@ -122,6 +134,16 @@ public final class IrVfpExecutor {
                 double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
                 double product = DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
                 yield DirectedFpRounding.roundDouble(vd - product, DirectedFpRounding.exactSub(vd, product), mode);
+            }
+            case NMLA -> {
+                double vd = -flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                double product = -DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
+                yield DirectedFpRounding.roundDouble(vd + product, DirectedFpRounding.exactAdd(vd, product), mode);
+            }
+            case NMLS -> {
+                double vd = -flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                double product = DirectedFpRounding.roundDouble(vn * vm, DirectedFpRounding.exactMul(vn, vm), mode);
+                yield DirectedFpRounding.roundDouble(vd + product, DirectedFpRounding.exactAdd(vd, product), mode);
             }
             case NMUL -> DirectedFpRounding.roundDouble(-(vn * vm), DirectedFpRounding.exactMul(vn, vm).negate(), mode);
             case SQRT -> DirectedFpRounding.roundDouble(Math.sqrt(vm), DirectedFpRounding.approxSqrt(vm), mode);

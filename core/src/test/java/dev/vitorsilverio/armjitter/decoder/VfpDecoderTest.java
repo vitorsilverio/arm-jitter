@@ -252,6 +252,27 @@ class VfpDecoderTest {
         assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MLS, true, 5, 0, 1, Condition.AL), mls);
     }
 
+    /// `op1==0b001`: ao contrário de VMLA/VMLS e VMUL/VNMUL, aqui `bit6==1` é a forma **negada
+    /// do acumulador COM produto negado** (VNMLA) e `bit6==0` é VNMLS — ordem invertida em relação
+    /// aos vizinhos (ARM ARM A8.8.337).
+    @Test
+    void nmlsNmlaSelectedByBit6() {
+        IrOp nmls = liftSingleOp(decodeArm(vfpAluWord(0b001, false, true, 5, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 5, 0, 1, Condition.AL), nmls);
+        IrOp nmla = liftSingleOp(decodeArm(vfpAluWord(0b001, true, true, 5, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLA, true, 5, 0, 1, Condition.AL), nmla);
+        IrOp nmlsSingle = liftSingleOp(decodeArm(vfpAluWord(0b001, false, false, 2, 0, 1)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), nmlsSingle);
+    }
+
+    /// Encoding LITERAL emitido pelo gcc do devkitARM, achado no `textured_cube` dos exemplos 3DS
+    /// — era ele que caía em instrução indefinida e derrubava 5 exemplos de uma vez.
+    @Test
+    void vnmlsF64EncodingRealDoDevkitArm() {
+        IrOp op = liftSingleOp(decodeArm(0xEE171B0C));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 1, 7, 12, Condition.AL), op);
+    }
+
     @Test
     void divSingle() {
         IrOp op = liftSingleOp(decodeArm(vfpAluWord(0b100, false, false, 6, 0, 1)));
@@ -545,14 +566,6 @@ class VfpDecoderTest {
     }
 
     // ── 6. UNPREDICTABLE/fora de escopo -> UNDEFINED ────────────────────────────────────────
-
-    @Test
-    void vnmlaVnmlsGroupIsOutOfScope() {
-        // op1==0b001 (VNMLA/VNMLS): sem VfpOperation correspondente no épico (Inclui só lista
-        // ADD/SUB/MUL/DIV/MLA/MLS/NMUL/NEG/ABS/SQRT/COPY) — UNDEFINED explícito.
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b001, false, false, 2, 0, 1)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b001, true, false, 2, 0, 1)).kind());
-    }
 
     @Test
     void vmsrOfNonFpscrRegisterIsUndefined() {

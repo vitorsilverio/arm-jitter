@@ -1775,14 +1775,15 @@ public final class AsmBlockCompiler {
     // VfpCorePairTransfer/VfpSystemTransfer chamam um helper estático em AsmRuntimeHelpers.
 
     /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VNEG`/`VABS`/`VMOV` registrador (bytecode direto);
-    /// `VMLA`/`VMLS`/`VNMUL`/`VSQRT` (mais raras) chamam {@code AsmRuntimeHelpers#vfpAluCold}.
+    /// `VMLA`/`VMLS`/`VNMLA`/`VNMLS`/`VNMUL`/`VSQRT` (mais raras) chamam
+    /// {@code AsmRuntimeHelpers#vfpAluCold}.
     private void emitVfpAlu(MethodVisitor method, IrOp.VfpAlu op) {
         switch (op.op()) {
             case ADD, SUB, MUL, DIV -> emitVfpArith(method, op);
             case NEG -> emitVfpSignBit(method, op, true);
             case ABS -> emitVfpSignBit(method, op, false);
             case COPY -> emitVfpCopy(method, op);
-            case MLA, MLS, NMUL, SQRT -> {
+            case MLA, MLS, NMLA, NMLS, NMUL, SQRT -> {
                 method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
                 AsmBytecode.visitIntConst(method, op.op().ordinal());
                 method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);

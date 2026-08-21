@@ -98,6 +98,39 @@ class IrVfpExecutorTest {
         assertEquals(4.0, core.vfp().dDouble(2)); // 10 - (2*3)
     }
 
+    /// `VNMLS: vd = -vd + (vn * vm)`. **O negado é o ACUMULADOR, não o produto** — é o que
+    /// distingue VNMLS de VMLS, e trocar os dois dá o mesmo resultado só quando `vd` e o produto
+    /// têm o mesmo módulo. Os valores aqui (10 e 6) são deliberadamente diferentes.
+    @Test
+    void nmlsNegatesTheAccumulatorNotTheProduct() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 2.0);  // vn
+        core.vfp().setDDouble(1, 3.0);  // vm
+        core.vfp().setDDouble(2, 10.0); // vd
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 2, 0, 1, Condition.AL), 0);
+        assertEquals(-4.0, core.vfp().dDouble(2)); // -10 + (2*3), NÃO 10 - (2*3) = 4
+    }
+
+    @Test
+    void nmlaNegatesAccumulatorAndProduct() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 2.0);
+        core.vfp().setDDouble(1, 3.0);
+        core.vfp().setDDouble(2, 10.0);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLA, true, 2, 0, 1, Condition.AL), 0);
+        assertEquals(-16.0, core.vfp().dDouble(2)); // -10 - (2*3)
+    }
+
+    @Test
+    void nmlsSinglePrecisionUsesTheSameRule() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 2.0f);
+        core.vfp().setSFloat(1, 3.0f);
+        core.vfp().setSFloat(2, 10.0f);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), 0);
+        assertEquals(-4.0f, core.vfp().sFloat(2));
+    }
+
     // ── 3. NEG/ABS preservam payload de NaN via bit de sinal ────────────────────
 
     @Test

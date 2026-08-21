@@ -985,6 +985,8 @@ public final class AsmRuntimeHelpers {
             double result = switch (op) {
                 case MLA -> vfp.dDouble(vd) + (vfp.dDouble(vn) * vfp.dDouble(vm));
                 case MLS -> vfp.dDouble(vd) - (vfp.dDouble(vn) * vfp.dDouble(vm));
+                case NMLA -> -vfp.dDouble(vd) - (vfp.dDouble(vn) * vfp.dDouble(vm));
+                case NMLS -> -vfp.dDouble(vd) + (vfp.dDouble(vn) * vfp.dDouble(vm));
                 case NMUL -> -(vfp.dDouble(vn) * vfp.dDouble(vm));
                 case SQRT -> Math.sqrt(vfp.dDouble(vm));
                 default -> throw new IllegalStateException("vfpAluCold: op inesperado " + op);
@@ -994,6 +996,8 @@ public final class AsmRuntimeHelpers {
             float result = switch (op) {
                 case MLA -> vfp.sFloat(vd) + (vfp.sFloat(vn) * vfp.sFloat(vm));
                 case MLS -> vfp.sFloat(vd) - (vfp.sFloat(vn) * vfp.sFloat(vm));
+                case NMLA -> -vfp.sFloat(vd) - (vfp.sFloat(vn) * vfp.sFloat(vm));
+                case NMLS -> -vfp.sFloat(vd) + (vfp.sFloat(vn) * vfp.sFloat(vm));
                 case NMUL -> -(vfp.sFloat(vn) * vfp.sFloat(vm));
                 case SQRT -> (float) Math.sqrt((double) vfp.sFloat(vm));
                 default -> throw new IllegalStateException("vfpAluCold: op inesperado " + op);

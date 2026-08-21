@@ -906,6 +906,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         MLA,
         /// `VMLS`: `vd = vd - (vn * vm)`, NÃO fundido.
         MLS,
+        /// `VNMLA`: `vd = -vd - (vn * vm)`, NÃO fundido (ARM ARM A8.8.337: "-fd + -(fn * fm)").
+        NMLA,
+        /// `VNMLS`: `vd = -vd + (vn * vm)`, NÃO fundido (ARM ARM A8.8.337: "-fd + (fn * fm)").
+        /// **Não** é `VMLS` com o sinal trocado: quem é negado é o ACUMULADOR, não o produto.
+        NMLS,
         /// `VNMUL`: `vd = -(vn * vm)`.
         NMUL,
         /// `VNEG` (unária, usa só `vm`): inverte o bit de sinal.
