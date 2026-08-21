@@ -1,8 +1,17 @@
-# B7/B8 — plano de cobertura de ISA: fechar as lacunas das arquiteturas que os emuladores usam
+# B9/B8 — plano de cobertura de ISA: fechar as lacunas das arquiteturas que os emuladores usam
 
 **Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** 📋 plano
 
-Documento MESTRE da frente de cobertura. Cada degrau (`B7.x`, `B8.x`) é uma task de uma sessão.
+⚠️ **Renumerado em 2026-08-21** (achado da sessão da `B8.1`): a escada 32 bits usava originalmente
+`B7.1`-`B7.7`, mas esses IDs já pertenciam ao épico "Perfil M / Cortex-M"
+(`ExceptionModel`/`MProfileExceptionModel`/SCS-NVIC-SysTick/presets ARMv6-M-ARMv7-M/armbox
+`--machine=cortex-m`), fechado em 2026-07-23 — ver `tasks/trilha-b-arquiteturas/INDICE.md`. Antes
+de qualquer task desta escada ser executada (nenhuma tinha sido, a colisão foi achada a tempo),
+os IDs foram trocados para **`B9.1`-`B9.7`** (namespace livre — `B8` já é a escada A64, `B9` nunca
+foi usado). `B8.x` (A64) não muda.
+
+Documento MESTRE da frente de cobertura. Cada degrau (`B9.x` no 32 bits, `B8.x` no A64) é uma
+task de uma sessão.
 A fonte da verdade do que falta é sempre `docs/COBERTURA-ISA.md`, **regenerada no início de cada
 task** (`./gerar-cobertura-isa.sh`) — nunca a lista colada aqui, que envelhece.
 
@@ -46,17 +55,17 @@ lista:
 - **na dúvida, implementar.** Errar para o lado de implementar custa trabalho; errar para o lado de
   excluir recria exatamente o problema que esta frente existe para acabar.
 
-## Escada — 32 bits (B7)
+## Escada — 32 bits (B9)
 
 | Task | Escopo | Alvos | Tamanho |
 |---|---|---|---:|
-| **B7.1** | A32 DSP/media: `SMLAD`/`SMLADX`/`SMLSD`/`SMLSDX`/`SMLALD`/`SMLALDX`/`SMLSLD`/`SMLSLDX`/`SMMLA`/`SMMLAR`/`SMMLS`/`SMMLSR` + `UDF` | MPCore, v7-A | ~13 |
-| **B7.2** | A32, triagem + implementação do resto: `MOVW`/`MOVT`/`MLS`/`SBFX`/`UBFX`/`BFCI`/`RBIT`/`SDIV`/`UDIV` (⚠️ ARMv6T2/v7 — provável exclusão para ARMv6K puro; **conferir**) | MPCore | ~9 |
-| **B7.3** | T16 ARMv6 genuínos: `CPS`, `REV`, `REVSH`, `SXTAH`/`SXTAB`/`UXTAH`/`UXTAB`, `SETEND` + hints (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`) | todos | ~14 |
-| **B7.4** | T16 restante, com triagem: `IT`, `CBZ`, `HLT`, `UDF`, `B`, `BLX` | v7-A | ~6 |
-| **B7.5** | VFP `VCVT` (8 formas) + `VMOV` (7 formas) — VFPv2 genuínos, é o que mais aparece em código real | MPCore, v7-A | ~15 |
-| **B7.6** | VFP fundidas `VFMA`/`VFMS`/`VFNMA`/`VFNMS` (⚠️ VFPv4 — provável exclusão para MPCore; **conferir**) | v7-A | ~8 |
-| **B7.7** | T32 (Thumb-2) — 58 lacunas: `LDM`/`STM`/`RFE`/`SRS`, `LDRxT`/`STRxT` (não privilegiadas), `MRS`/`MSR`, `PKH`, DSP/media, `SMC`/`HVC`/`ERET`/`BXJ` | v7-A | ~58 |
+| **B9.1** | A32 DSP/media: `SMLAD`/`SMLADX`/`SMLSD`/`SMLSDX`/`SMLALD`/`SMLALDX`/`SMLSLD`/`SMLSLDX`/`SMMLA`/`SMMLAR`/`SMMLS`/`SMMLSR` + `UDF` | MPCore, v7-A | ~13 |
+| **B9.2** | A32, triagem + implementação do resto: `MOVW`/`MOVT`/`MLS`/`SBFX`/`UBFX`/`BFCI`/`RBIT`/`SDIV`/`UDIV` (⚠️ ARMv6T2/v7 — provável exclusão para ARMv6K puro; **conferir**) | MPCore | ~9 |
+| **B9.3** | T16 ARMv6 genuínos: `CPS`, `REV`, `REVSH`, `SXTAH`/`SXTAB`/`UXTAH`/`UXTAB`, `SETEND` + hints (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`) | todos | ~14 |
+| **B9.4** | T16 restante, com triagem: `IT`, `CBZ`, `HLT`, `UDF`, `B`, `BLX` | v7-A | ~6 |
+| **B9.5** | VFP `VCVT` (8 formas) + `VMOV` (7 formas) — VFPv2 genuínos, é o que mais aparece em código real | MPCore, v7-A | ~15 |
+| **B9.6** | VFP fundidas `VFMA`/`VFMS`/`VFNMA`/`VFNMS` (⚠️ VFPv4 — provável exclusão para MPCore; **conferir**) | v7-A | ~8 |
+| **B9.7** | T32 (Thumb-2) — 58 lacunas: `LDM`/`STM`/`RFE`/`SRS`, `LDRxT`/`STRxT` (não privilegiadas), `MRS`/`MSR`, `PKH`, DSP/media, `SMC`/`HVC`/`ERET`/`BXJ` | v7-A | ~58 |
 
 ## Escada — A64 (B8) — onde está o trabalho
 
