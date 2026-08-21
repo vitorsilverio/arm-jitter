@@ -84,6 +84,29 @@ nos outros**: labels, `ISSUE_TEMPLATE`, e a CI da F6 (`.github/workflows`). Cand
 Diagnóstico medido: no 32 bits já estamos em 82-83% (o que derrubava os emuladores era a cauda
 longa, não "quase nada implementado"); **em A64 estamos em 18%, e é lá que está ~90% do trabalho.**
 
+## 🔝🔝 B10 — EL2/EL3 completo (priorizado pelo usuário em 2026-08-21, à FRENTE do resto da Onda 5)
+
+Ao fechar B8.3, o usuário reagiu ao adiamento documentado de `AT`/registradores de debug: **nenhuma
+instrução ARM real fica de fora por parecer grande demais** — se depende de EL2/EL3 completos,
+implementa-se EL2/EL3. Ver `feedback-nunca-excluir-instrucao-arm` na memória do agente e o plano
+mestre `trilha-b-arquiteturas/b10-plano-el2-el3.md` (leia ANTES de pegar qualquer `B10.x` — traz a
+escada completa, fatos de referência do `ARM DDI 0487` e a ordem sugerida). Isto passa NA FRENTE de
+Q5+ abaixo: só volte para B9.x/B8.4+ depois que a escada B10 fechar (ou o usuário repriorizar).
+
+| # | Task | Arquivo | Repo | Depende de | Nota |
+|---|------|---------|------|-----------|------|
+| R1 | **B10.1** — generalizar estado de exceção para EL0-EL3 | `trilha-b-arquiteturas/b10-plano-el2-el3.md` | arm-jitter | — | fundação do épico, tudo abaixo depende dela |
+| R2 | **B10.2** — registradores de sistema EL2 | idem | arm-jitter | B10.1 | `HCR_EL2`/`SCTLR_EL2`/`VTCR_EL2`/`VTTBR_EL2`/... |
+| R3 | **B10.3** — registradores de sistema EL3 | idem | arm-jitter | B10.1 | `SCR_EL3`/`SCTLR_EL3`/... (paralelo a R2) |
+| R4 | **B10.4** — `HVC` real (entra em EL2) | idem | arm-jitter | B10.1, B10.2 | substitui o stub `PSCI_RET_NOT_SUPPORTED` |
+| R5 | **B10.5** — `SMC` real (entra em EL3) | idem | arm-jitter | B10.1, B10.3 | idem, para EL3 |
+| R6 | **B10.6** — `AT` (todas as formas) | idem | arm-jitter | B10.1, B10.2 | escreve `PAR_EL1` com tradução real |
+| R7 | **B10.7** — registradores de debug (`op0=2`) | idem | arm-jitter | — | independente, pode entrar a qualquer momento |
+| R8 | **B10.8** — stage-2 (`IPA→PA`) | idem | arm-jitter | B10.2, B10.6 | o mais arriscado, deixar por último |
+| R9 | **B10.9** — `TLBI` EL2/EL3 + stage-2 | idem | arm-jitter | B10.1 | |
+
+## Onda 5 — cobertura de ISA restante (retomar só depois de B10 fechar)
+
 | # | Task | Arquivo | Repo | Depende de | Nota |
 |---|------|---------|------|-----------|------|
 | ~~Q1~~ | ~~**E6**~~ ✅ fechada 2026-08-21 — espaço incondicional (`cond==0b1111`) agora vira `UNIMPLEMENTED` | `trilha-e-manutencao/e6-espaco-incondicional-undefined.md` | arm-jitter | — | `decodeUnconditional` novo roteia `cond=1111` antes de qualquer dispatch condicional (inclusive antes do `SWI`, que tinha o mesmo vazamento); os 8 carve-outs já existentes movidos sem mudar bits; `CoprocessorDecoder`/`VfpDecoder` preservados via `decoderExtensions()`. Teste de regressão: `0xF2000000` (`VHADD`) não vira mais `AND`. `mvn -o test` verde + G5 nos 4 consumidores (armbox com a falha pré-existente já documentada). Sem mudança na tabela de cobertura (o script já contava esses casos como ❌) — sem marco de release. Ver índice da trilha E para o detalhe completo. **Destrava Q2 (B8.1)** |
