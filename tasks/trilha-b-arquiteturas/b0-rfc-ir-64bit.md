@@ -48,3 +48,7 @@ incremental — aprovado pelo usuário antes de qualquer implementação.
 ## Não fazer
 
 - Nenhuma mudança em código de produção ou testes.
+
+## Resultado
+
+✅ ([RFC](../docs/RFC-IR-64BIT.md) **APROVADA 2026-07-10: Opção B** — IR-64 paralelo + `Aarch64Core` irmão + `AddressSpace64`; §5 em vigor p/ B1–B3, ex.: monitor LDREX/STREX de B1.4 com endereço `long`; B6/F1+ destravados quando priorizados)
