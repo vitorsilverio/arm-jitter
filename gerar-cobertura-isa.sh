@@ -25,4 +25,4 @@ done
 
 mvn -o -q -pl core test-compile
 java -cp "core/target/classes;core/target/test-classes" \
-     dev.vitorsilverio.armjitter.tools.IsaCoverageReport "$DECODE_DIR" docs/COBERTURA-ISA.md
+     dev.vitorsilverio.armjitter.tools.IsaCoverageReport "$DECODE_DIR" docs/COBERTURA-ISA.md docs/isa-nao-aplicavel.tsv

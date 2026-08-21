@@ -20,6 +20,40 @@ sem contexto prévio do projeto. Leia este arquivo inteiro antes de executar qua
    achados, decisões) numa seção `## Resultado` no final do arquivo da própria task.
    Faça um commit por task (mensagem em português, começando com o ID da task, ex.:
    `B1.2: ...`).
+8. **`git push` em TODO repositório que a task tocou** — ver "Push obrigatório" abaixo.
+
+## Push obrigatório (regra nova, 2026-08-21)
+
+Os repositórios estavam acumulando dezenas de commits **só localmente** (o `arm-jitter` chegou a 76
+commits à frente do `origin`, o `virtual-arm-box` a 34). Isso anula o backup, a CI do GitHub (F6) e
+qualquer possibilidade de outra pessoa ver o trabalho.
+
+**Toda task termina com `git push` em cada repositório que ela tocou**, depois das suítes verdes e
+do commit. Se o push falhar (rejeitado por divergência), resolver na hora — não deixar para depois.
+
+Um repositório sem `origin` é um problema a reportar ao usuário, não a ignorar.
+
+## Marcos de cobertura de ISA → release no Maven Central (regra nova, 2026-08-21)
+
+A frente de cobertura de ISA (`trilha-b-arquiteturas/b7-plano-cobertura-isa.md`) mede progresso em
+`docs/COBERTURA-ISA.md`, seção "Progresso global". **Publicar uma versão nova do `arm-jitter` no
+Maven Central sempre que**, desde o último release:
+
+- o **global** subir **≥ 5 pontos percentuais**, OU
+- qualquer **arquitetura** subir **≥ 10 pontos percentuais**.
+
+Baseline do primeiro marco (2026-08-21, versão `1.0.0` publicada): **global 53%** — v4T 62% ·
+v5TE 67% · v6K 86% · MPCore 82% · v7-A 83% · v6-M 22% · v7-M 54% · **A64 18%**.
+
+Regras do release:
+
+- Versão **minor** (`1.1.0`, `1.2.0`, ...): a frente é aditiva, e o invariante **G3** proíbe
+  breaking change.
+- Segue o procedimento já validado pela **F5** (`trilha-f-infra/f5-maven-central-publicacao.md`).
+- `CHANGELOG.md` ganha a entrada, citando a tabela de progresso antes e depois.
+- Depois de publicar, **F7**: subir os 4 consumidores para a versão nova
+  (`trilha-f-infra/f7-consumidores-central.md`) — a F4 já mostrou que deixar essa janela aberta
+  quebra todo mundo.
 
 ## Invariantes globais (NUNCA violar)
 
@@ -39,6 +73,11 @@ sem contexto prévio do projeto. Leia este arquivo inteiro antes de executar qua
 - **G6 — Sem números mágicos.** Constantes arquiteturais (registradores PC/LR, máscaras,
   offsets) recebem nome.
 - **G7 — Javadoc `///` (markdown, Java 25) em toda API pública**, em português.
+- **G8 — Instrução não implementada TEM que ser recusada, não silenciosamente confundida
+  com outra.** Um decoder que devolve a instrução errada para um encoding desconhecido troca um
+  diagnóstico (exceção de instrução indefinida, que a B3.9 mostrou resolver em minutos) por
+  corrupção silenciosa. Ao acrescentar um espaço de encoding, garantir que o que sobra cai em
+  `UNIMPLEMENTED`. Ver a task `E6`.
 
 ## Estrutura de uma task
 

@@ -59,6 +59,41 @@ valem para QUALQUER sessão futura desta fila:
    passo). O arquivo ativo deve continuar pequeno — ele é lido INTEIRO por todo agente novo
    como parte do protocolo, então seu tamanho é custo pago em toda sessão futura.
 ---
+## Onda 5 — cobertura de ISA (priorizada pelo usuário em 2026-08-21) 🔝 TOPO DA FILA
+
+Frente pedida pelo usuário depois de ver a `docs/COBERTURA-ISA.md`: **completar as instruções das
+arquiteturas que os emuladores usam, mínimo 80% por arquitetura, alvo final tudo ✅** — sem presumir
+que alguma instrução "nunca vai ser usada" (o precedente é EL1/EL2, descartado como desnecessário e
+depois exigido inteiro pelo `virtual-arm-box`).
+
+**Plano mestre: `trilha-b-arquiteturas/b7-plano-cobertura-isa.md`** — leia ANTES de pegar qualquer
+`B7.x`/`B8.x`. Ele traz a regra de triagem (o inventário do QEMU mistura versões de arquitetura) e
+o protocolo por task.
+
+**Duas regras novas do `tasks/README.md` valem para TODA task, não só desta onda:**
+- **push obrigatório** ao fechar (os repos estavam só locais — `arm-jitter` chegou a 76 commits à
+  frente do `origin`);
+- **marco de cobertura → release no Maven Central**: global +5 pp ou qualquer arquitetura +10 pp
+  desde o último release. Baseline 2026-08-21: global **53%**, A64 **18%**.
+
+Diagnóstico medido: no 32 bits já estamos em 82-83% (o que derrubava os emuladores era a cauda
+longa, não "quase nada implementado"); **em A64 estamos em 18%, e é lá que está ~90% do trabalho.**
+
+| # | Task | Arquivo | Repo | Depende de | Nota |
+|---|------|---------|------|-----------|------|
+| Q1 | **E6** — espaço incondicional (`cond==0b1111`) decodificado como condicional | `trilha-e-manutencao/` (a escrever) | arm-jitter | — | **PRIMEIRO da onda, e por um motivo**: hoje `0xF2000000` (`VHADD` de NEON) vira `AND cond=AL`. Enquanto isso não for corrigido, toda lacuna nova se manifesta como **corrupção silenciosa** em vez de instrução indefinida — e foi justamente a instrução indefinida (`pc=0x4`) que resolveu a B3.9 em minutos. Fecha o invariante **G8** novo |
+| Q2 | **B8.1** — A64 load/store escalar | `trilha-b-arquiteturas/` (a escrever) | arm-jitter | E6 | ~95 lacunas. Junto com Q3/Q4 é o que um kernel Linux real executa — **destrava a F11** (raspi3) |
+| Q3 | **B8.2** — A64 inteiro restante | idem | arm-jitter | B8.1 | ~30 |
+| Q4 | **B8.3** — A64 branch/system | idem | arm-jitter | B8.2 | ~35 |
+| Q5 | **B7.5** — VFP `VCVT` (8) + `VMOV` (7) | idem | arm-jitter | — | ~15. **Maior retorno por esforço no 32 bits**: são as formas que mais aparecem em código real, e atingem MPCore (n3dsemu + raspi1) e v7-A de uma vez |
+| Q6 | **B7.1** — A32 DSP/media (`SMLAD`/`SMLSD`/`SMLALD`/`SMMLA`/...) | idem | arm-jitter | — | ~13, ARMv6 genuínos |
+| Q7 | **B7.3** — T16 ARMv6 (`CPS`/`REV`/`REVSH`/`SXTAH`/`SETEND` + hints) | idem | arm-jitter | — | ~14 |
+| Q8 | **B8.4** — A64 FP escalar: aritmética | idem | arm-jitter | B8.3 | ~40 |
+| Q9 | **B8.5** — A64 FP escalar: comparação/conversão | idem | arm-jitter | B8.4 | ~110 |
+| Q10 | **B7.7** — T32 (Thumb-2), 58 lacunas | idem | arm-jitter | — | só v7-A/armbox |
+| Q11 | **B7.2 / B7.4 / B7.6** — triagem do resto do 32 bits | idem | arm-jitter | — | provável exclusão justificada (ARMv6T2/VFPv4 num ARMv6K) |
+| Q12+ | **B8.6-B8.11** — AdvSIMD A64 (~690) | idem | arm-jitter | B8.5 | por classe funcional; ver o plano mestre |
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

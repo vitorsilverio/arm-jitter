@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.tools;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
@@ -63,8 +64,28 @@ import java.util.Map;
 public final class IsaCoverageReport {
 
     /// Um grupo do relatório: o arquivo de inventário, a largura do encoding e como sondá-lo.
-    private record Group(String decodeFile, String title, int width, Probe probe, boolean simd, String note) {
+    private record Group(String decodeFile, String title, int width, Probe probe, boolean simd,
+                          Applicability applicability, String note) {
     }
+
+    /// A qual arquitetura este grupo de encodings **pertence**. Sem isto a tabela conta Thumb-2,
+    /// NEON e MVE como "faltando" num ARM11 MPCore, que simplesmente NÃO TEM essas extensões — o
+    /// denominador fica errado e a meta de "tudo ✅" vira inalcançável por construção.
+    @FunctionalInterface
+    private interface Applicability {
+        boolean appliesTo(ArmArchitecture architecture);
+    }
+
+    /// Perfil A/R clássico: instruções ARM de 32 bits não existem no perfil M (só Thumb).
+    private static final Applicability CLASSIC_ARM = arch -> !arch.has(ArmFeature.M_PROFILE);
+    private static final Applicability ALWAYS = arch -> true;
+    private static final Applicability THUMB2 = arch -> arch.has(ArmFeature.THUMB2);
+    private static final Applicability VFP = arch -> arch.has(ArmFeature.VFPV2);
+    private static final Applicability M_PROFILE = arch -> arch.has(ArmFeature.M_PROFILE);
+    /// Extensões que NENHUM preset atual do `ArmArchitecture` declara — ficam na tabela para o
+    /// inventário ser completo (não presumir que algo nunca será necessário), mas marcadas como
+    /// não aplicáveis em vez de "faltando".
+    private static final Applicability NOT_IN_ANY_PRESET = arch -> false;
 
     /// Resultado da sondagem de uma instrução.
     private enum Status {
@@ -96,20 +117,26 @@ public final class IsaCoverageReport {
     }
 
     private static final List<Group> GROUPS = List.of(
-            new Group("a32.decode", "A32 — instruções ARM de 32 bits", 32, Probe.ARM32, false, ""),
-            new Group("t16.decode", "T16 — Thumb clássico", 16, Probe.THUMB16, false, ""),
-            new Group("t32.decode", "T32 — Thumb-2", 32, Probe.THUMB32, false, ""),
-            new Group("vfp.decode", "VFP — ponto flutuante (condicional)", 32, Probe.ARM32, true, ""),
-            new Group("vfp-uncond.decode", "VFP — formas incondicionais", 32, Probe.ARM32, true, ""),
+            new Group("a32.decode", "A32 — instruções ARM de 32 bits", 32, Probe.ARM32, false, CLASSIC_ARM, ""),
+            new Group("t16.decode", "T16 — Thumb clássico", 16, Probe.THUMB16, false, ALWAYS, ""),
+            new Group("t32.decode", "T32 — Thumb-2", 32, Probe.THUMB32, false, THUMB2,
+                    "Só existe a partir do ARMv6T2 — um ARM11 MPCore (ARMv6K) NÃO tem Thumb-2."),
+            new Group("vfp.decode", "VFP — ponto flutuante (condicional)", 32, Probe.ARM32, true, VFP,
+                    "As formas `_hp` (meia precisão) são ARMv8.2-FP16, não VFPv2/v3."),
+            new Group("vfp-uncond.decode", "VFP — formas incondicionais (ARMv8-A)", 32, Probe.ARM32, true,
+                    NOT_IN_ANY_PRESET, "`VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVTA` são ARMv8-A de 32 bits."),
             new Group("neon-dp.decode", "NEON — processamento de dados", 32, Probe.ARM32, true,
-                    "SIMD Advanced (ARMv7-A NEON)."),
-            new Group("neon-ls.decode", "NEON — load/store", 32, Probe.ARM32, true, ""),
-            new Group("neon-shared.decode", "NEON — formas compartilhadas VFP/NEON", 32, Probe.ARM32, true, ""),
-            new Group("m-nocp.decode", "ARMv7-M — coprocessador ausente", 32, Probe.THUMB32, true, ""),
-            new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, ""),
-            new Group("a64.decode", "A64 — AArch64", 32, Probe.A64, false, ""),
-            new Group("sve.decode", "SVE/SVE2 — vetor escalável", 32, Probe.A64, false, ""),
-            new Group("sme.decode", "SME — extensão matricial", 32, Probe.A64, false, ""));
+                    NOT_IN_ANY_PRESET, "Advanced SIMD: extensão OPCIONAL do ARMv7-A; nenhum preset a declara hoje."),
+            new Group("neon-ls.decode", "NEON — load/store", 32, Probe.ARM32, true, NOT_IN_ANY_PRESET, ""),
+            new Group("neon-shared.decode", "NEON — formas compartilhadas VFP/NEON", 32, Probe.ARM32, true,
+                    NOT_IN_ANY_PRESET, ""),
+            new Group("m-nocp.decode", "ARMv7-M — coprocessador ausente", 32, Probe.THUMB32, true, M_PROFILE, ""),
+            new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, NOT_IN_ANY_PRESET, ""),
+            new Group("a64.decode", "A64 — AArch64", 32, Probe.A64, false, ALWAYS, ""),
+            new Group("sve.decode", "SVE/SVE2 — vetor escalável", 32, Probe.A64, false, NOT_IN_ANY_PRESET,
+                    "Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE."),
+            new Group("sme.decode", "SME — extensão matricial", 32, Probe.A64, false, NOT_IN_ANY_PRESET,
+                    "Extensão opcional do ARMv9; nenhum alvo atual a tem."));
 
     /// Arquiteturas de 32 bits sondadas, na ordem das colunas da tabela.
     private static final Map<String, ArmArchitecture> ARM_ARCHITECTURES = new LinkedHashMap<>();
@@ -142,6 +169,46 @@ public final class IsaCoverageReport {
     private IsaCoverageReport() {
     }
 
+    /// Exclusões curadas (`docs/isa-nao-aplicavel.tsv`): instrução → arquiteturas em que ela NÃO
+    /// existe. Ver o cabeçalho daquele arquivo para o formato e a regra de curadoria.
+    private static final List<Exclusion> EXCLUSIONS = new ArrayList<>();
+    /// Acumulador do progresso global: arquitetura → `{suportadas, aplicáveis}`.
+    private static final Map<String, int[]> globalPerArchitecture = new LinkedHashMap<>();
+    private static int totalSupported;
+    private static int totalApplicable;
+
+    private record Exclusion(String pattern, List<String> architectures, String reason) {
+        boolean matches(String instruction, String column) {
+            boolean nameMatches = pattern.endsWith("*")
+                    ? instruction.startsWith(pattern.substring(0, pattern.length() - 1))
+                    : pattern.startsWith("*")
+                        ? instruction.endsWith(pattern.substring(1))
+                        : instruction.equals(pattern);
+            return nameMatches && (architectures.contains("*") || architectures.contains(column));
+        }
+    }
+
+    private static void loadExclusions(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return;
+        }
+        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            if (line.isBlank() || line.startsWith("#")) {
+                continue;
+            }
+            String[] columns = line.split("\t");
+            if (columns.length < 3) {
+                continue;
+            }
+            EXCLUSIONS.add(new Exclusion(columns[0].trim(),
+                    List.of(columns[1].trim().split(",")), columns[2].trim()));
+        }
+    }
+
+    private static boolean isExcluded(String instruction, String column) {
+        return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column));
+    }
+
     public static void main(String[] args) throws IOException {
         if (args.length < 2) {
             System.err.println("uso: IsaCoverageReport <dir-com-os-.decode> <arquivo-markdown-de-saida>");
@@ -149,6 +216,10 @@ public final class IsaCoverageReport {
             return;
         }
         Path decodeDirectory = Path.of(args[0]);
+        globalPerArchitecture.clear();
+        totalSupported = 0;
+        totalApplicable = 0;
+        loadExclusions(Path.of(args.length > 2 ? args[2] : "docs/isa-nao-aplicavel.tsv"));
         StringBuilder report = new StringBuilder();
         appendHeader(report);
         List<String> summary = new ArrayList<>();
@@ -165,7 +236,20 @@ public final class IsaCoverageReport {
 
         StringBuilder full = new StringBuilder();
         appendHeader(full);
-        full.append("## Resumo\n\n");
+        full.append("## Progresso global\n\n");
+        full.append("Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este número\n");
+        full.append("que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,\n");
+        full.append("secão \"Marcos de cobertura de ISA\".\n\n");
+        full.append(String.format(Locale.ROOT, "> **%d%%** — %d de %d células aplicáveis decodificam.%n%n",
+                totalApplicable == 0 ? 0 : totalSupported * 100 / totalApplicable,
+                totalSupported, totalApplicable));
+        full.append("Por arquitetura:\n\n| Arquitetura | Cobertura |\n|---|---|\n");
+        for (Map.Entry<String, int[]> entry : globalPerArchitecture.entrySet()) {
+            int[] counters = entry.getValue();
+            full.append(String.format(Locale.ROOT, "| %s | **%d%%** (%d/%d) |%n", entry.getKey(),
+                    counters[1] == 0 ? 0 : counters[0] * 100 / counters[1], counters[0], counters[1]));
+        }
+        full.append("\n## Resumo\n\n");
         full.append("| Grupo | Instruções | Cobertura |\n|---|---:|---|\n");
         summary.forEach(line -> full.append(line).append('\n'));
         full.append('\n');
@@ -193,7 +277,7 @@ public final class IsaCoverageReport {
                 |---|---|
                 | ✅ | o decoder reconhece o encoding |
                 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
-                | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
+                | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
 
                 **O que ✅ NÃO significa:** que a semântica está certa. `STREX` (E3) e `LDR/STR` alinhado
                 (F3) decodificavam e estavam errados. Esta tabela elimina "não suporta" da lista de
@@ -213,17 +297,34 @@ public final class IsaCoverageReport {
         List<String> columns = aarch64 ? List.of("A64") : List.copyOf(ARM_ARCHITECTURES.keySet());
 
         Map<String, Integer> supportedPerColumn = new LinkedHashMap<>();
-        columns.forEach(column -> supportedPerColumn.put(column, 0));
+        Map<String, Integer> applicablePerColumn = new LinkedHashMap<>();
+        columns.forEach(column -> {
+            supportedPerColumn.put(column, 0);
+            applicablePerColumn.put(column, 0);
+        });
 
         StringBuilder rows = new StringBuilder();
         for (DecodeTreeSpec.Instruction instruction : instructions) {
             rows.append("| `").append(instruction.name()).append("` |");
             for (String column : columns) {
+                ArmArchitecture architecture = aarch64 ? null : ARM_ARCHITECTURES.get(column);
+                boolean applicable = aarch64
+                        ? group.applicability() != NOT_IN_ANY_PRESET
+                        : group.applicability().appliesTo(architecture);
+                if (!applicable || isExcluded(instruction.name(), column)) {
+                    rows.append(" · |");
+                    continue;
+                }
+                applicablePerColumn.merge(column, 1, Integer::sum);
+                globalPerArchitecture.computeIfAbsent(column, unused -> new int[2])[1]++;
+                totalApplicable++;
                 Status status = aarch64
                         ? probeAarch64(instruction)
-                        : probeArm(instruction, ARM_ARCHITECTURES.get(column), group);
+                        : probeArm(instruction, architecture, group);
                 if (status == Status.SUPPORTED) {
                     supportedPerColumn.merge(column, 1, Integer::sum);
+                    globalPerArchitecture.get(column)[0]++;
+                    totalSupported++;
                 }
                 rows.append(' ').append(status.mark).append(" |");
             }
@@ -244,11 +345,16 @@ public final class IsaCoverageReport {
 
         StringBuilder coverage = new StringBuilder();
         for (String column : columns) {
+            int applicable = applicablePerColumn.get(column);
+            if (applicable == 0) {
+                continue; // grupo não pertence a esta arquitetura: não entra na conta
+            }
             int supported = supportedPerColumn.get(column);
-            int percent = instructions.isEmpty() ? 0 : supported * 100 / instructions.size();
-            coverage.append(String.format(Locale.ROOT, "%s %d%% (%d) · ", column, percent, supported));
+            coverage.append(String.format(Locale.ROOT, "%s %d%% (%d/%d) · ",
+                    column, supported * 100 / applicable, supported, applicable));
         }
-        String trimmed = coverage.length() > 3 ? coverage.substring(0, coverage.length() - 3) : "—";
+        String trimmed = coverage.length() > 3 ? coverage.substring(0, coverage.length() - 3)
+                : "não se aplica a nenhum preset atual";
         return "| " + group.title() + " | " + instructions.size() + " | " + trimmed + " |";
     }
 

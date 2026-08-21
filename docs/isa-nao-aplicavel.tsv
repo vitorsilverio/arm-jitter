@@ -1,0 +1,53 @@
+# Instruções que aparecem no inventário do QEMU mas NÃO pertencem à arquitetura da coluna.
+#
+# O arquivo `.decode` do QEMU agrupa por ESPAÇO DE ENCODING, não por versão de arquitetura: o
+# `a32.decode` traz junto instruções de ARMv4 e de ARMv8.  Sem esta lista, a tabela cobra de um
+# ARM11 MPCore instruções que esse núcleo nunca teve, o denominador fica errado e a meta de
+# "tudo ✅" vira inalcançável por construção.
+#
+# Formato (separado por TAB):   instrução <TAB> arquiteturas <TAB> motivo
+#   - `instrução`     é o mnemônico exatamente como no inventário; `*` no fim casa por prefixo.
+#   - `arquiteturas`  é `*` (todas) ou uma lista separada por vírgula (`MPCore,v6K`).
+#   - `motivo`        TEM que citar a versão de arquitetura que introduziu a instrução.
+#
+# Esta lista é CURADA À MÃO e cresce por triagem: cada task de cobertura que encontrar uma
+# instrução fora da arquitetura-alvo acrescenta a linha com a justificativa. Só entram aqui casos
+# com fonte — na dúvida, a instrução fica como ❌ e vira trabalho, que é o lado seguro do erro.
+
+# ── ARMv8-A: instruções de aquisição/liberação (load-acquire / store-release) ─────────────────
+LDA	*	ARMv8-A (load-acquire); não existe em ARMv4T..ARMv7-A
+LDAB	*	ARMv8-A (load-acquire)
+LDAH	*	ARMv8-A (load-acquire)
+LDAEX	*	ARMv8-A (load-acquire exclusive)
+LDAEXB	*	ARMv8-A (load-acquire exclusive)
+LDAEXH	*	ARMv8-A (load-acquire exclusive)
+LDAEXD	*	ARMv8-A (load-acquire exclusive)
+STL	*	ARMv8-A (store-release)
+STLB	*	ARMv8-A (store-release)
+STLH	*	ARMv8-A (store-release)
+STLEX	*	ARMv8-A (store-release exclusive)
+STLEXB	*	ARMv8-A (store-release exclusive)
+STLEXH	*	ARMv8-A (store-release exclusive)
+STLEXD	*	ARMv8-A (store-release exclusive)
+
+# ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
+CRC32*	*	ARMv8-A; não existe em ARMv4T..ARMv7-A
+
+# ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
+VRINTR*	*	ARMv8-A (VFP)
+VRINTZ*	*	ARMv8-A (VFP)
+VRINTX*	*	ARMv8-A (VFP)
+VJCVT	*	ARMv8.3-A (conversão com semântica de JavaScript)
+
+# ── ARMv8.2-A FP16: as formas `_hp` (meia precisão) ──────────────────────────────────────────
+*_hp	*	ARMv8.2-A FP16; VFPv2/VFPv3 só têm precisão simples e dupla
+
+# ── ARMv8-M Security Extension (perfil M) ────────────────────────────────────────────────────
+BXNS	*	ARMv8-M Security Extension
+BLXNS	*	ARMv8-M Security Extension
+
+# ── ARMv8-A ─────────────────────────────────────────────────────────────────────────────────
+SEVL	*	ARMv8-A (hint "send event local")
+
+# ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
+VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje
