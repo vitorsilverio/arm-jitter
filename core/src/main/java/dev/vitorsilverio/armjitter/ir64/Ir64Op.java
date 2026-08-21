@@ -31,7 +31,9 @@ public sealed interface Ir64Op permits
         Ir64Op.Fp64Alu, Ir64Op.Fp64MoveImmediate, Ir64Op.Fp64Compare, Ir64Op.Fp64Convert,
         Ir64Op.PrivilegedCall, Ir64Op.ConditionalCompare, Ir64Op.LogicalShiftedRegister,
         Ir64Op.ShiftVariable, Ir64Op.LoadExclusivePair, Ir64Op.StoreExclusivePair,
-        Ir64Op.CompareAndSwap, Ir64Op.CompareAndSwapPair {
+        Ir64Op.CompareAndSwap, Ir64Op.CompareAndSwapPair, Ir64Op.AluWithCarry, Ir64Op.Extract,
+        Ir64Op.DataProcessing1Source, Ir64Op.MultiplyAccumulateLong, Ir64Op.MultiplyHigh,
+        Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -91,6 +93,22 @@ public sealed interface Ir64Op permits
         public static final int COMPARE_AND_SWAP = 33;
         /// B8.1: `CASP`/`CASPA`/`CASPL`/`CASPAL` — ver {@link CompareAndSwapPair}.
         public static final int COMPARE_AND_SWAP_PAIR = 34;
+        /// B8.2: `ADC`/`ADCS`/`SBC`/`SBCS` — ver {@link AluWithCarry}.
+        public static final int ALU_WITH_CARRY = 35;
+        /// B8.2: `EXTR` — ver {@link Extract}.
+        public static final int EXTRACT = 36;
+        /// B8.2: `RBIT`/`REV16`/`CLZ`/`CLS`/`CNT` — ver {@link DataProcessing1Source}.
+        public static final int DATA_PROCESSING_1_SOURCE = 37;
+        /// B8.2: `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` — ver {@link MultiplyAccumulateLong}.
+        public static final int MULTIPLY_ACCUMULATE_LONG = 38;
+        /// B8.2: `SMULH`/`UMULH` — ver {@link MultiplyHigh}.
+        public static final int MULTIPLY_HIGH = 39;
+        /// B8.2: `SETF8`/`SETF16` — ver {@link EvaluateIntoFlags}.
+        public static final int EVALUATE_INTO_FLAGS = 40;
+        /// B8.2: `RMIF` — ver {@link RotateIntoFlags}.
+        public static final int ROTATE_INTO_FLAGS = 41;
+        /// B8.2: `CFINV`/`XAFLAG`/`AXFLAG` — ver {@link ConvertFlags}.
+        public static final int CONVERT_FLAGS = 42;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -908,5 +926,167 @@ public sealed interface Ir64Op permits
             /// como `NZCV` quando {@link #condition} é falsa.
             int nzcv) implements Ir64Op {
         @Override public int kind() { return Kind.CONDITIONAL_COMPARE; }
+    }
+
+    /// `ADC`/`ADCS`/`SBC`/`SBCS` (`ARM DDI 0487 C6.2.2/1/242/244`, B8.2, subgrupo "Add/subtract
+    /// (carry)" de "Data Processing — Register") — soma/subtrai COM o `C` de entrada atual de
+    /// `PSTATE` (diferente de {@link AluShiftedRegister}/{@link Alu64}, que nunca leem `C` como
+    /// entrada, só o escrevem como saída). `Rd`/`Rn`/`Rm` NUNCA são `SP` (`cpu_reg` puro no
+    /// encoding, mesmo grupo de {@link Divide}/{@link MultiplyAccumulate}).
+    record AluWithCarry(
+            /// `false` para `ADC`/`ADCS`, `true` para `SBC`/`SBCS` (bit `op`, MESMA posição/
+            /// semântica de {@link AluShiftedRegister#opcode} — aqui como `boolean` puro em vez de
+            /// {@link Ir64AluOp} porque a operação real não é `ADD`/`SUB` simples, é
+            /// `AddWithCarry` de 3 operandos: reaproveitar o enum sugeriria incorretamente que o
+            /// executor poderia cair no mesmo caminho de {@link #addWithFlags}/
+            /// {@code #subWithFlags} de 2 operandos).
+            boolean subtract,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro operando (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo operando (`Rm`, índice `0`-`31`; `31` é sempre `XZR`) — NUNCA deslocado
+            /// (ao contrário de {@link AluShiftedRegister#src2}, esta forma não tem campo de
+            /// deslocamento no encoding).
+            int src2,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado sempre
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide,
+            /// Indica se `NZCV` deve ser atualizado (`ADCS`/`SBCS` vs `ADC`/`SBC`).
+            boolean setFlags) implements Ir64Op {
+        @Override public int kind() { return Kind.ALU_WITH_CARRY; }
+    }
+
+    /// `EXTR` (`ARM DDI 0487 C6.2.113`, B8.2, subgrupo "Extract" de "Data Processing —
+    /// Immediate") — concatena {@link #src1}`:`{@link #src2} (o dobro da largura da operação,
+    /// `Rn` na metade ALTA) e extrai uma janela do tamanho da operação a partir do bit
+    /// {@link #lsb} dessa concatenação. O alias `ROR Rd,Rs,#shift` (`Rn`=`Rm`=`Rs`) não tem
+    /// representação própria — o caminho geral já produz rotação quando os dois campos coincidem
+    /// (mesma decisão de não reconhecer alias já usada por {@link Bitfield}/
+    /// {@link MultiplyAccumulate}). `Rd`/`Rn`/`Rm` NUNCA são `SP`.
+    record Extract(
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Metade ALTA da concatenação (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Metade BAIXA da concatenação (`Rm`, índice `0`-`31`; `31` é sempre `XZR`) — quando
+            /// {@link #lsb}`==0`, o resultado é exatamente este registrador, sem ler
+            /// {@link #src1}.
+            int src2,
+            /// Deslocamento da janela dentro da concatenação de 2×largura (`0`-`31` quando
+            /// `!`{@link #wide}, `0`-`63` quando {@link #wide} — já validado pelo decoder via o
+            /// bit reservado da forma de 32 bits, ver `Aarch64Decoder#decodeExtract`).
+            int lsb,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.EXTRACT; }
+    }
+
+    /// `RBIT`/`REV16`/`CLZ`/`CLS`/`CNT` (B8.2, subgrupo "Data-processing (1 source)" de "Data
+    /// Processing — Register", `opc2`(bits`[30:29]`)`=10`) — mesmo grupo de bits fixos
+    /// `[28:21]="11010110"` de {@link Divide}/{@link ShiftVariable} (subgrupo "2 source",
+    /// `opc2=00`); SEM checar `opc2` o decoder confundia `REV32`/`REV64`/`CLZ`/etc com
+    /// `SDIV`/`UDIV` (bug real corrigido por esta task — ver a seção "Bugs reais achados e
+    /// corrigidos" de `b8.2-a64-inteiro-restante.md`). `Rd`/`Rn` NUNCA são `SP`.
+    record DataProcessing1Source(
+            /// Sub-operação.
+            Ir64OneSourceOp opcode,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Registrador de origem (índice `0`-`31`; `31` é sempre `XZR`).
+            int src,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado sempre
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.DATA_PROCESSING_1_SOURCE; }
+    }
+
+    /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (`ARM DDI 0487 C6.2.` — multiplicação 32×32→64 com
+    /// acumulador de 64, B8.2, subgrupo "Data-processing (3 source)") — `sf` é FIXO em `1` no
+    /// encoding (só existe a forma que produz um resultado `X`; não há variante `W`):
+    /// {@link #src1}/{@link #src2} são SEMPRE lidos como `W` (32 bits), {@link #accumulator}/
+    /// {@link #dst} SEMPRE como `X` (64 bits) — por isso este record não tem campo `wide`, ao
+    /// contrário de {@link MultiplyAccumulate}. Os aliases `SMULL`/`SMNEGL`/`UMULL`/`UMNEGL`
+    /// (`Ra=XZR`) não têm representação própria (mesma decisão de {@link MultiplyAccumulate}).
+    record MultiplyAccumulateLong(
+            /// `false` para `SMADDL`/`UMADDL` (soma o produto ao acumulador), `true` para
+            /// `SMSUBL`/`UMSUBL` (subtrai).
+            boolean subtract,
+            /// `false` para `UMADDL`/`UMSUBL` (multiplicação sem sinal), `true` para
+            /// `SMADDL`/`SMSUBL` (com sinal) — controla a extensão de {@link #src1}/{@link #src2}
+            /// de 32 para 64 bits ANTES de multiplicar.
+            boolean signed,
+            /// Registrador de destino, sempre `X` (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro multiplicando, sempre `W` (`Rn`, índice `0`-`31`; `31` é sempre `WZR`).
+            int src1,
+            /// Segundo multiplicando, sempre `W` (`Rm`, índice `0`-`31`; `31` é sempre `WZR`).
+            int src2,
+            /// Acumulador, sempre `X` (`Ra`, índice `0`-`31`; `31` é sempre `XZR` — é assim que
+            /// `SMULL`/`SMNEGL`/`UMULL`/`UMNEGL` chegam aqui sem `case` de decode dedicado).
+            int accumulator) implements Ir64Op {
+        @Override public int kind() { return Kind.MULTIPLY_ACCUMULATE_LONG; }
+    }
+
+    /// `SMULH`/`UMULH` (`ARM DDI 0487 C6.2.373/402`, B8.2, subgrupo "Data-processing (3 source)")
+    /// — os 64 bits ALTOS do produto de 128 bits de {@link #src1}×{@link #src2} (os 64 baixos são
+    /// o que `MUL`/{@link MultiplyAccumulate} já produz). `Ra` é FIXO em `11111`(`XZR`) no
+    /// encoding — não é um acumulador de verdade (diferente de {@link MultiplyAccumulateLong}),
+    /// por isso este record não tem campo `accumulator`. `sf` é FIXO em `1` (só existe a forma
+    /// `X`; `SMULH`/`UMULH` de 32 bits não existem — usa-se `MUL` normal, o produto de 32×32
+    /// sempre cabe em 64).
+    record MultiplyHigh(
+            /// `false` para `UMULH` (sem sinal, {@code Math.unsignedMultiplyHigh}), `true` para
+            /// `SMULH` (com sinal, {@code Math.multiplyHigh}).
+            boolean signed,
+            /// Registrador de destino, sempre `X` (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro multiplicando, sempre `X` (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo multiplicando, sempre `X` (`Rm`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src2) implements Ir64Op {
+        @Override public int kind() { return Kind.MULTIPLY_HIGH; }
+    }
+
+    /// `SETF8`/`SETF16` (`ARM DDI 0487 C6.2.` — "Evaluate into flags", B8.2, `FEAT_FlagM`) —
+    /// avalia o byte/halfword BAIXO de {@link #rn} como se fosse o resultado de uma soma,
+    /// atualizando `N`/`Z`/`V` (`C` NUNCA muda — só as 3 outras). Sem registrador de destino: só
+    /// lê {@link #rn}, nunca escreve registrador (mesmo padrão de {@link ConditionalCompare}).
+    record EvaluateIntoFlags(
+            /// Registrador avaliado (índice `0`-`31`; `31` é `XZR`, ou seja, sempre avalia `0`).
+            int rn,
+            /// Largura do campo avaliado em bits: `8` (`SETF8`) ou `16` (`SETF16`) — ver
+            /// `Aarch64Decoder#EVALUATE_FLAGS_SIZE_8`/`_16`.
+            int sizeBits) implements Ir64Op {
+        @Override public int kind() { return Kind.EVALUATE_INTO_FLAGS; }
+    }
+
+    /// `RMIF` (`ARM DDI 0487 C6.2.` — "Rotate right into flags", B8.2, `FEAT_FlagM`) — rotaciona
+    /// {@link #rn} para a direita por {@link #shift} bits, toma os 4 bits baixos do resultado
+    /// como candidato a `N:Z:C:V` (MESMA ordem de bit de
+    /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#setNzcv(int)}) e atualiza só os
+    /// flags cujo bit correspondente está setado em {@link #mask} (também na mesma ordem
+    /// `N:Z:C:V`) — os demais permanecem INALTERADOS.
+    record RotateIntoFlags(
+            /// Registrador rotacionado, sempre lido como `X` de 64 bits mesmo que só os 4 bits
+            /// baixos do resultado importem (índice `0`-`31`; `31` é `XZR`).
+            int rn,
+            /// Quantidade de rotação à direita (`0`-`63`, cru do encoding — `imm6`).
+            int shift,
+            /// Máscara de 4 bits (`N:Z:C:V`, mesma ordem/formato de
+            /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#nzcv()}) selecionando
+            /// quais flags são atualizados.
+            int mask) implements Ir64Op {
+        @Override public int kind() { return Kind.ROTATE_INTO_FLAGS; }
+    }
+
+    /// `CFINV`/`XAFLAG`/`AXFLAG` (B8.2, `FEAT_FlagM2`, classe "System") — as 3 instruções que
+    /// manipulam `PSTATE.{N,Z,C,V}` diretamente sem nenhum operando de registrador geral (`Rt` é
+    /// fixo em `11111` no encoding das 3, não lido). Ver {@link Ir64FlagConversionOp} para a
+    /// semântica de cada uma.
+    record ConvertFlags(
+            /// Sub-operação.
+            Ir64FlagConversionOp opcode) implements Ir64Op {
+        @Override public int kind() { return Kind.CONVERT_FLAGS; }
     }
 }

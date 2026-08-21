@@ -51,3 +51,10 @@ SEVL	*	ARMv8-A (hint "send event local")
 
 # ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
 VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje
+
+# ── A64, "Data-processing (1/2 source)": FEAT_CSSC (ARMv8.9-A) — posterior ao escopo da B8.2 ──
+CTZ	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (1 source)")
+SMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
+SMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
+UMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
+UMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")

@@ -17,6 +17,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
+import java.math.BigInteger;
+
 /// Interpretador mínimo para AArch64 — fatia B6.1: SEM cache de blocos, SEM JIT, um `step()`/
 /// `run()` direto sobre {@link Aarch64Core}. O pipeline tiered/compilado chega em B6.4 (ver
 /// `tasks/trilha-b-arquiteturas/b6-aarch64.md`); esta classe é o oráculo de referência que aquele
@@ -54,6 +56,20 @@ public final class Ir64BlockExecutor {
     private static final int BITFIELD_WIDE_BITSIZE = 64;
     /// Largura em bits de uma operação `W` (32 bits) — ver {@link #BITFIELD_WIDE_BITSIZE}.
     private static final int BITFIELD_NARROW_BITSIZE = 32;
+    /// Máscara de um halfword (16 bits) — B8.2, {@code executeDataProcessing1Source}/`REV16`.
+    private static final long HALFWORD_MASK = 0xFFFFL;
+    /// Máscara de um byte — mesmo uso de {@link #HALFWORD_MASK}.
+    private static final long BYTE_MASK = 0xFFL;
+    /// Máscara dos 4 bits de `N:Z:C:V` — MESMA ordem de bit de
+    /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#nzcv()}, usada por
+    /// {@code executeRotateIntoFlags} (`RMIF`, B8.2).
+    private static final int NZCV_FIELD_MASK = 0xF;
+    /// `2^64` como {@link BigInteger} — usado por {@link #addWithCarryFlags} para detectar
+    /// carry-out da forma de 64 bits (que precisa de mais de 64 bits de precisão intermediária
+    /// para ser exato — ver o Javadoc daquele método).
+    private static final BigInteger TWO_POW_64 = BigInteger.ONE.shiftLeft(Long.SIZE);
+    /// Máscara dos 64 bits baixos como {@link BigInteger} — ver {@link #TWO_POW_64}.
+    private static final BigInteger MASK_64_BITS = TWO_POW_64.subtract(BigInteger.ONE);
 
     private final Aarch64Decoder decoder = new Aarch64Decoder();
 
@@ -247,6 +263,18 @@ public final class Ir64BlockExecutor {
                     Ir64FpExecutor.executeFpConvert(core, (Ir64Op.Fp64Convert) op);
             case Ir64Op.Kind.PRIVILEGED_CALL ->
                     executePrivilegedCall(core, (Ir64Op.PrivilegedCall) op);
+            case Ir64Op.Kind.ALU_WITH_CARRY -> executeAluWithCarry(core, (Ir64Op.AluWithCarry) op);
+            case Ir64Op.Kind.EXTRACT -> executeExtract(core, (Ir64Op.Extract) op);
+            case Ir64Op.Kind.DATA_PROCESSING_1_SOURCE ->
+                    executeDataProcessing1Source(core, (Ir64Op.DataProcessing1Source) op);
+            case Ir64Op.Kind.MULTIPLY_ACCUMULATE_LONG ->
+                    executeMultiplyAccumulateLong(core, (Ir64Op.MultiplyAccumulateLong) op);
+            case Ir64Op.Kind.MULTIPLY_HIGH -> executeMultiplyHigh(core, (Ir64Op.MultiplyHigh) op);
+            case Ir64Op.Kind.EVALUATE_INTO_FLAGS ->
+                    executeEvaluateIntoFlags(core, (Ir64Op.EvaluateIntoFlags) op);
+            case Ir64Op.Kind.ROTATE_INTO_FLAGS ->
+                    executeRotateIntoFlags(core, (Ir64Op.RotateIntoFlags) op);
+            case Ir64Op.Kind.CONVERT_FLAGS -> executeConvertFlags(core, (Ir64Op.ConvertFlags) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -464,6 +492,193 @@ public final class Ir64BlockExecutor {
             core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
         } else {
             core.pstate().setNzcv(op.nzcv());
+        }
+        return false;
+    }
+
+    /// `ADC`/`ADCS`/`SBC`/`SBCS` (B8.2) — soma/subtrai COM o `C` de entrada atual (diferente de
+    /// {@link #executeAlu}/{@link #executeAluShiftedRegister}, que nunca leem `C` como entrada).
+    /// `SBC` é `AddWithCarry(a, NOT(b), C)` (`ARM DDI 0487` pseudocódigo de `SBC`) — reaproveita
+    /// {@link #addWithCarryFlags} invertendo `b` bit a bit em vez de duplicar o cálculo.
+    private boolean executeAluWithCarry(Aarch64Core core, Ir64Op.AluWithCarry op) {
+        long operand1 = core.xForWidth(op.src1(), op.wide());
+        long rawOperand2 = core.xForWidth(op.src2(), op.wide());
+        long operand2 = op.subtract() ? ~rawOperand2 : rawOperand2;
+        // `PSTATE.C` de ENTRADA (não forçado) — mesmo para SBC: `a - b - (1-C)`, ou seja,
+        // `AddWithCarry(a, NOT(b), C)` com o `C` ATUAL, nunca `1` fixo (armadilha real encontrada
+        // nesta task: um `carryIn` forçado para `SBC` produziria sempre `a-b` sem nunca propagar
+        // borrow entre instruções encadeadas de precisão múltipla).
+        boolean carryIn = core.pstate().carry();
+        AluResult result = addWithCarryFlags(operand1, operand2, carryIn, op.wide());
+        if (op.setFlags()) {
+            core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
+        }
+        core.setXForWidth(op.dst(), result.value, op.wide());
+        return false;
+    }
+
+    /// `EXTR` (B8.2) — concatena {@link Ir64Op.Extract#src1}`:`{@link Ir64Op.Extract#src2} (`Rn`
+    /// na metade ALTA) e extrai uma janela do tamanho da operação a partir do bit
+    /// {@link Ir64Op.Extract#lsb}. `lsb=0` é um caso especial explícito (evita deslocamento por
+    /// `64`/`32`, que em Java é UB — `x << 64` não é zero, é `x << 0`, mod-largura do shift).
+    private boolean executeExtract(Aarch64Core core, Ir64Op.Extract op) {
+        long high = core.xForWidth(op.src1(), op.wide());
+        long low = core.xForWidth(op.src2(), op.wide());
+        int lsb = op.lsb();
+        long result;
+        if (lsb == 0) {
+            result = low;
+        } else if (op.wide()) {
+            result = (low >>> lsb) | (high << (Long.SIZE - lsb));
+        } else {
+            int narrowHigh = (int) high;
+            int narrowLow = (int) low;
+            int narrowResult = (narrowLow >>> lsb) | (narrowHigh << (Integer.SIZE - lsb));
+            result = narrowResult & LOW_32_BITS_MASK;
+        }
+        core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2). Nenhuma forma
+    /// afeta `NZCV`.
+    private boolean executeDataProcessing1Source(Aarch64Core core, Ir64Op.DataProcessing1Source op) {
+        long src = core.xForWidth(op.src(), op.wide());
+        long result = switch (op.opcode()) {
+            case RBIT -> op.wide()
+                    ? Long.reverse(src)
+                    : Integer.reverse((int) src) & LOW_32_BITS_MASK;
+            case REV16 -> reverseHalfwordBytes(src, op.wide());
+            case REV32 -> reverseWordBytes(src, op.wide());
+            case REV64 -> Long.reverseBytes(src);
+            case CLZ -> op.wide() ? Long.numberOfLeadingZeros(src) : Integer.numberOfLeadingZeros((int) src);
+            case CLS -> countLeadingSignBits(src, op.wide());
+            case CNT -> op.wide() ? Long.bitCount(src) : Integer.bitCount((int) src);
+        };
+        core.setXForWidth(op.dst(), result, op.wide());
+        return false;
+    }
+
+    /// `REV16` de A64 (B8.2): inverte a ordem dos BYTES dentro de cada halfword de 16 bits do
+    /// registrador — diferente do `REV16` de 32 bits do ARM32 ({@code AsmRuntimeHelpers}), que só
+    /// tem 1 halfword.
+    private static long reverseHalfwordBytes(long value, boolean wide) {
+        int halfwordCount = wide ? Long.BYTES / Short.BYTES : Integer.BYTES / Short.BYTES;
+        long result = 0;
+        for (int i = 0; i < halfwordCount; i++) {
+            int shift = i * Short.SIZE;
+            long halfword = (value >>> shift) & HALFWORD_MASK;
+            long swapped = ((halfword & BYTE_MASK) << Byte.SIZE) | ((halfword >>> Byte.SIZE) & BYTE_MASK);
+            result |= swapped << shift;
+        }
+        return wide ? result : (result & LOW_32_BITS_MASK);
+    }
+
+    /// `REV`(`W`, 1 palavra)/`REV32`(`X`, 2 palavras) de A64 (B8.2): inverte a ordem dos BYTES
+    /// DENTRO de cada palavra de 32 bits, mantendo a ORDEM das palavras — MESMO opcode do
+    /// encoding para as duas larguras (ver {@code Ir64OneSourceOp#REV32}).
+    private static long reverseWordBytes(long value, boolean wide) {
+        if (!wide) {
+            return Integer.reverseBytes((int) value) & LOW_32_BITS_MASK;
+        }
+        long lowWordReversed = Integer.reverseBytes((int) value) & LOW_32_BITS_MASK;
+        long highWordReversed = Integer.reverseBytes((int) (value >>> Integer.SIZE)) & LOW_32_BITS_MASK;
+        return (highWordReversed << Integer.SIZE) | lowWordReversed;
+    }
+
+    /// `CLS` (B8.2): conta bits à esquerda IGUAIS ao bit de sinal, SEM contar o próprio bit de
+    /// sinal — `numberOfLeadingZeros(x XOR (x >> 1 aritmético)) - 1` (XOR de cada bit com seu
+    /// vizinho mais significativo marca em `1` a primeira posição onde o valor DIFERE do sinal;
+    /// `numberOfLeadingZeros` disso, menos o `1` que descarta o próprio bit de sinal, é exatamente
+    /// a contagem pedida — mesma técnica de `CountLeadingSignBits` do `ARM DDI 0487` pseudocódigo).
+    private static long countLeadingSignBits(long value, boolean wide) {
+        if (wide) {
+            long diffFromSign = value ^ (value >> 1);
+            return Long.numberOfLeadingZeros(diffFromSign) - 1;
+        }
+        int narrow = (int) value;
+        int diffFromSign = narrow ^ (narrow >> 1);
+        return Integer.numberOfLeadingZeros(diffFromSign) - 1;
+    }
+
+    /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (B8.2) — multiplicação 32×32→64 (sempre exata em
+    /// `long`, o produto de dois valores de magnitude `<=2^32` nunca ultrapassa os 63 bits úteis
+    /// de um `long` assinado) com acumulador de 64.
+    private boolean executeMultiplyAccumulateLong(Aarch64Core core, Ir64Op.MultiplyAccumulateLong op) {
+        long n = op.signed() ? (long) (int) core.x(op.src1()) : core.x(op.src1()) & LOW_32_BITS_MASK;
+        long m = op.signed() ? (long) (int) core.x(op.src2()) : core.x(op.src2()) & LOW_32_BITS_MASK;
+        long product = n * m;
+        long accumulator = core.x(op.accumulator());
+        long result = op.subtract() ? accumulator - product : accumulator + product;
+        core.setX(op.dst(), result);
+        return false;
+    }
+
+    /// `SMULH`/`UMULH` (B8.2) — os 64 bits ALTOS do produto de 128 bits de dois `X`. `Math`
+    /// carrega os dois intrínsecos prontos desde o Java 18 (`multiplyHigh`/`unsignedMultiplyHigh`)
+    /// — sem necessidade de decompor em meias-palavras manualmente.
+    private boolean executeMultiplyHigh(Aarch64Core core, Ir64Op.MultiplyHigh op) {
+        long a = core.x(op.src1());
+        long b = core.x(op.src2());
+        long result = op.signed() ? Math.multiplyHigh(a, b) : Math.unsignedMultiplyHigh(a, b);
+        core.setX(op.dst(), result);
+        return false;
+    }
+
+    /// `SETF8`/`SETF16` (B8.2, "Evaluate into flags") — avalia o campo BAIXO de {@link
+    /// Ir64Op.EvaluateIntoFlags#rn} como se fosse o resultado de uma soma: `N`=bit de sinal do
+    /// campo, `Z`=campo zero, `V`=bit de sinal XOR o bit logo abaixo (`ARM DDI 0487`
+    /// pseudocódigo de `SETF8`/`SETF16`). `C` NUNCA muda — por isso {@link
+    /// dev.vitorsilverio.armjitter.core64.PstateRegister#carry()} é relido e devolvido como está.
+    private boolean executeEvaluateIntoFlags(Aarch64Core core, Ir64Op.EvaluateIntoFlags op) {
+        long full = core.x(op.rn());
+        int sizeBits = op.sizeBits();
+        long fieldMask = (1L << sizeBits) - 1;
+        long value = full & fieldMask;
+        int signBitPosition = sizeBits - 1;
+        boolean negative = ((value >>> signBitPosition) & 1) != 0;
+        boolean zero = value == 0;
+        boolean nextBit = ((value >>> (signBitPosition - 1)) & 1) != 0;
+        boolean overflow = negative != nextBit;
+        core.pstate().setNzcv(negative, zero, core.pstate().carry(), overflow);
+        return false;
+    }
+
+    /// `RMIF` (B8.2, "Rotate right into flags") — rotaciona {@link Ir64Op.RotateIntoFlags#rn}
+    /// para a direita por {@link Ir64Op.RotateIntoFlags#shift} bits e atualiza só os flags cujo
+    /// bit correspondente está setado em {@link Ir64Op.RotateIntoFlags#mask} — os 4 bits baixos
+    /// do valor rotacionado usam a MESMA ordem `N:Z:C:V` do formato bruto de
+    /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#nzcv()}, então nenhuma
+    /// reordenação de bit é necessária entre "candidato" e "máscara".
+    private boolean executeRotateIntoFlags(Aarch64Core core, Ir64Op.RotateIntoFlags op) {
+        long source = core.x(op.rn());
+        int candidate = (int) (Long.rotateRight(source, op.shift()) & NZCV_FIELD_MASK);
+        int mask = op.mask();
+        int currentNzcv = core.pstate().nzcv();
+        int updatedNzcv = (currentNzcv & ~mask) | (candidate & mask);
+        core.pstate().setNzcv(updatedNzcv);
+        return false;
+    }
+
+    /// `CFINV`/`XAFLAG`/`AXFLAG` (B8.2, `FEAT_FlagM2`) — `XAFLAG`/`AXFLAG` seguem o pseudocódigo
+    /// do `ARM DDI 0487` para conversão de flags "eXternal"↔"Arm" (usadas por sequências
+    /// vetoriais de comparação lane-a-lane reduzidas a um resultado escalar).
+    private boolean executeConvertFlags(Aarch64Core core, Ir64Op.ConvertFlags op) {
+        var pstate = core.pstate();
+        switch (op.opcode()) {
+            case INVERT_CARRY ->
+                    pstate.setNzcv(pstate.negative(), pstate.zero(), !pstate.carry(), pstate.overflow());
+            case EXTERNAL_TO_ARM -> {
+                boolean oldZero = pstate.zero();
+                boolean oldCarry = pstate.carry();
+                pstate.setNzcv(false, oldZero && oldCarry, oldCarry && !oldZero, false);
+            }
+            case ARM_TO_EXTERNAL -> {
+                boolean oldZero = pstate.zero();
+                boolean oldCarry = pstate.carry();
+                boolean oldOverflow = pstate.overflow();
+                pstate.setNzcv(false, oldZero || oldOverflow, oldCarry && !oldOverflow, false);
+            }
         }
         return false;
     }
@@ -972,6 +1187,43 @@ public final class Ir64BlockExecutor {
 
     private int executeCycle(Ir64Op.Cycle op) {
         return op.count();
+    }
+
+    /// `AddWithCarry(a, b, carryIn)` do `ARM DDI 0487` pseudocódigo — usado por `ADC`/`SBC`
+    /// (B8.2, {@link #executeAluWithCarry}) e futuramente por qualquer soma de 3 operandos.
+    /// Diferente de {@link #addWithFlags} (2 operandos): a soma de 3 operandos (`a+b+carryIn`)
+    /// pode precisar de MAIS de 64 bits de precisão intermediária para calcular `carry`/
+    /// `overflow` corretamente — um encadeamento ingênuo de duas somas de 64 bits (somar `a+b`,
+    /// depois somar o carry) foi TESTADO E REJEITADO nesta task: o `overflow` de uma soma de 3
+    /// operandos NÃO é a soma (OU) dos overflows de cada passo em sequência (contra-exemplo
+    /// encontrado: `a=Long.MIN_VALUE, b=-1, carryIn=1` — a soma exata é `Long.MIN_VALUE`, dentro
+    /// do range, mas o encadeamento por passos sinaliza overflow por engano no primeiro passo).
+    /// {@link BigInteger} dá a precisão exata sem essa armadilha — `ADC`/`SBC` não são caminho
+    /// quente o bastante para justificar bit-tricks (sem suporte ASM nativo nesta task, ver
+    /// "Não inclui").
+    private static AluResult addWithCarryFlags(long a, long b, boolean carryIn, boolean wide) {
+        BigInteger carryInValue = carryIn ? BigInteger.ONE : BigInteger.ZERO;
+        if (wide) {
+            BigInteger unsignedA = a >= 0 ? BigInteger.valueOf(a) : BigInteger.valueOf(a).add(TWO_POW_64);
+            BigInteger unsignedB = b >= 0 ? BigInteger.valueOf(b) : BigInteger.valueOf(b).add(TWO_POW_64);
+            BigInteger unsignedSum = unsignedA.add(unsignedB).add(carryInValue);
+            long result = unsignedSum.and(MASK_64_BITS).longValue();
+            boolean carryOut = unsignedSum.compareTo(TWO_POW_64) >= 0;
+            BigInteger signedSum = BigInteger.valueOf(a).add(BigInteger.valueOf(b)).add(carryInValue);
+            boolean overflow = signedSum.compareTo(BigInteger.valueOf(result)) != 0;
+            return new AluResult(result, result < 0, result == 0, carryOut, overflow);
+        }
+        // Forma `W`: 32+32+1 bits cabe folgado em `long` (assinado E sem sinal), sem precisar de
+        // `BigInteger`.
+        int ai = (int) a;
+        int bi = (int) b;
+        long unsignedSum = (ai & LOW_32_BITS_MASK) + (bi & LOW_32_BITS_MASK) + (carryIn ? 1L : 0L);
+        int resultInt = (int) unsignedSum;
+        long result = resultInt & LOW_32_BITS_MASK;
+        boolean carryOut = unsignedSum != result;
+        long signedSum = (long) ai + bi + (carryIn ? 1L : 0L);
+        boolean overflow = signedSum != resultInt;
+        return new AluResult(result, (result & 0x8000_0000L) != 0, result == 0, carryOut, overflow);
     }
 
     private static AluResult addWithFlags(long a, long b, boolean wide) {

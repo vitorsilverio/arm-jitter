@@ -10,10 +10,12 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 // Ir64Op.MultiplyAccumulate/Ir64Op.Divide (B6.3.3) são referenciados via Ir64Op.* (mesmo padrão
 // já usado neste arquivo para os demais subtipos aninhados).
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
@@ -3103,5 +3105,288 @@ class Aarch64DecoderCorpusTest {
         assertEquals(20, op.rt());
         assertEquals(22, op.rn());
         assertTrue(op.wide());
+    }
+
+    // ── B8.2 ──────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void adc() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x530);
+        assertFalse(op.subtract());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertTrue(op.wide());
+        assertFalse(op.setFlags());
+    }
+
+    @Test
+    void adcsSetsFlags() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x534);
+        assertFalse(op.subtract());
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertTrue(op.setFlags());
+    }
+
+    @Test
+    void sbc() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x538);
+        assertTrue(op.subtract());
+        assertEquals(6, op.dst());
+        assertEquals(7, op.src1());
+        assertEquals(8, op.src2());
+        assertFalse(op.setFlags());
+    }
+
+    @Test
+    void sbcsSetsFlags() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x53c);
+        assertTrue(op.subtract());
+        assertEquals(9, op.dst());
+        assertTrue(op.setFlags());
+    }
+
+    @Test
+    void adcNarrow() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x540);
+        assertEquals(12, op.dst());
+        assertEquals(13, op.src1());
+        assertEquals(14, op.src2());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void sbcNarrow() {
+        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x544);
+        assertTrue(op.subtract());
+        assertEquals(15, op.dst());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void extrWide() {
+        Ir64Op.Extract op = (Ir64Op.Extract) DECODER.decode(memory, 0x548);
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertEquals(4, op.lsb());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void extrNarrow() {
+        Ir64Op.Extract op = (Ir64Op.Extract) DECODER.decode(memory, 0x54c);
+        assertEquals(3, op.dst());
+        assertEquals(4, op.src1());
+        assertEquals(5, op.src2());
+        assertEquals(8, op.lsb());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void rbitWide() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x550);
+        assertEquals(Ir64OneSourceOp.RBIT, op.opcode());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void rbitNarrow() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x554);
+        assertEquals(Ir64OneSourceOp.RBIT, op.opcode());
+        assertEquals(2, op.dst());
+        assertEquals(3, op.src());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void rev16Wide() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x558);
+        assertEquals(Ir64OneSourceOp.REV16, op.opcode());
+        assertEquals(4, op.dst());
+        assertEquals(5, op.src());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void rev16Narrow() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x55c);
+        assertEquals(Ir64OneSourceOp.REV16, op.opcode());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void rev32() {
+        // "rev32 x8,x9" — mesmo opcode de "rev w,w" (Ir64OneSourceOp#REV32), aqui na forma X.
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x560);
+        assertEquals(Ir64OneSourceOp.REV32, op.opcode());
+        assertEquals(8, op.dst());
+        assertEquals(9, op.src());
+        assertTrue(op.wide());
+    }
+
+    @Test
+    void revWideIsRev64() {
+        // "rev x10,x11" (opcode=0b000011, sf=1) é o REV64 do encoding — só existe na forma X.
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x564);
+        assertEquals(Ir64OneSourceOp.REV64, op.opcode());
+        assertEquals(10, op.dst());
+        assertEquals(11, op.src());
+    }
+
+    @Test
+    void revNarrowIsRev32Opcode() {
+        // "rev w12,w13" — MESMO opcode de "rev32 x,x" (0b000010), aqui na forma W (única forma
+        // possível: REV64 não existe com sf=0).
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x568);
+        assertEquals(Ir64OneSourceOp.REV32, op.opcode());
+        assertEquals(12, op.dst());
+        assertEquals(13, op.src());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void clzWide() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x56c);
+        assertEquals(Ir64OneSourceOp.CLZ, op.opcode());
+        assertEquals(14, op.dst());
+        assertEquals(15, op.src());
+    }
+
+    @Test
+    void clzNarrow() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x570);
+        assertEquals(Ir64OneSourceOp.CLZ, op.opcode());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void clsWide() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x574);
+        assertEquals(Ir64OneSourceOp.CLS, op.opcode());
+        assertEquals(18, op.dst());
+        assertEquals(19, op.src());
+    }
+
+    @Test
+    void clsNarrow() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x578);
+        assertEquals(Ir64OneSourceOp.CLS, op.opcode());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void cntWide() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x57c);
+        assertEquals(Ir64OneSourceOp.CNT, op.opcode());
+        assertEquals(22, op.dst());
+        assertEquals(23, op.src());
+    }
+
+    @Test
+    void cntNarrow() {
+        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x580);
+        assertEquals(Ir64OneSourceOp.CNT, op.opcode());
+        assertFalse(op.wide());
+    }
+
+    @Test
+    void smaddl() {
+        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x584);
+        assertFalse(op.subtract());
+        assertTrue(op.signed());
+        assertEquals(0, op.dst());
+        assertEquals(1, op.src1());
+        assertEquals(2, op.src2());
+        assertEquals(3, op.accumulator());
+    }
+
+    @Test
+    void smsubl() {
+        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x588);
+        assertTrue(op.subtract());
+        assertTrue(op.signed());
+        assertEquals(4, op.dst());
+        assertEquals(7, op.accumulator());
+    }
+
+    @Test
+    void umaddl() {
+        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x58c);
+        assertFalse(op.subtract());
+        assertFalse(op.signed());
+        assertEquals(8, op.dst());
+        assertEquals(11, op.accumulator());
+    }
+
+    @Test
+    void umsubl() {
+        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x590);
+        assertTrue(op.subtract());
+        assertFalse(op.signed());
+        assertEquals(12, op.dst());
+        assertEquals(15, op.accumulator());
+    }
+
+    @Test
+    void smulh() {
+        Ir64Op.MultiplyHigh op = (Ir64Op.MultiplyHigh) DECODER.decode(memory, 0x594);
+        assertTrue(op.signed());
+        assertEquals(16, op.dst());
+        assertEquals(17, op.src1());
+        assertEquals(18, op.src2());
+    }
+
+    @Test
+    void umulh() {
+        Ir64Op.MultiplyHigh op = (Ir64Op.MultiplyHigh) DECODER.decode(memory, 0x598);
+        assertFalse(op.signed());
+        assertEquals(19, op.dst());
+        assertEquals(20, op.src1());
+        assertEquals(21, op.src2());
+    }
+
+    @Test
+    void rmif() {
+        Ir64Op.RotateIntoFlags op = (Ir64Op.RotateIntoFlags) DECODER.decode(memory, 0x59c);
+        assertEquals(0, op.rn());
+        assertEquals(4, op.shift());
+        assertEquals(5, op.mask());
+    }
+
+    @Test
+    void setf8() {
+        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) DECODER.decode(memory, 0x5a0);
+        assertEquals(1, op.rn());
+        assertEquals(8, op.sizeBits());
+    }
+
+    @Test
+    void setf16() {
+        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) DECODER.decode(memory, 0x5a4);
+        assertEquals(2, op.rn());
+        assertEquals(16, op.sizeBits());
+    }
+
+    @Test
+    void cfinv() {
+        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5a8);
+        assertEquals(Ir64FlagConversionOp.INVERT_CARRY, op.opcode());
+    }
+
+    @Test
+    void xaflag() {
+        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5ac);
+        assertEquals(Ir64FlagConversionOp.EXTERNAL_TO_ARM, op.opcode());
+    }
+
+    @Test
+    void axflag() {
+        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5b0);
+        assertEquals(Ir64FlagConversionOp.ARM_TO_EXTERNAL, op.opcode());
     }
 }

@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **53%** — 2158 de 4001 células aplicáveis decodificam.
+> **54%** — 2186 de 3996 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **83%** (579/690) |
 | v6-M | **22%** (88/385) |
 | v7-M | **54%** (210/385) |
-| A64 | **20%** (233/1152) |
+| A64 | **22%** (261/1147) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 20% (233/1152) |
+| A64 — AArch64 | 1161 | A64 22% (261/1147) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1649,8 +1649,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `BFM` | ✅ |
 | `UBFM` | ✅ |
 | `UBFM` | ✅ |
-| `EXTR` | ❌ |
-| `EXTR` | ❌ |
+| `EXTR` | ✅ |
+| `EXTR` | ✅ |
 | `B` | ✅ |
 | `BL` | ✅ |
 | `CBZ` | ✅ |
@@ -1700,18 +1700,18 @@ Inventário: `a64.decode` · 1161 instruções.
 | `DSB_nXS` | ❌ |
 | `ISB` | ✅ |
 | `SB` | ❌ |
-| `CFINV` | ❌ |
-| `XAFLAG` | ❌ |
-| `AXFLAG` | ❌ |
+| `CFINV` | ✅ |
+| `XAFLAG` | ✅ |
+| `AXFLAG` | ✅ |
 | `MSR_i_UAO` | ❌ |
 | `MSR_i_PAN` | ❌ |
 | `MSR_i_SPSEL` | ❌ |
-| `MSR_i_SBSS` | ❌ |
-| `MSR_i_DIT` | ❌ |
+| `MSR_i_SBSS` | ✅ |
+| `MSR_i_DIT` | ✅ |
 | `MSR_i_TCO` | ❌ |
 | `MSR_i_DAIFSET` | ❌ |
 | `MSR_i_DAIFCLEAR` | ❌ |
-| `MSR_i_ALLINT` | ❌ |
+| `MSR_i_ALLINT` | ✅ |
 | `MSR_i_SVCR` | ❌ |
 | `SYS` | ❌ |
 | `SYS` | ❌ |
@@ -1957,27 +1957,27 @@ Inventário: `a64.decode` · 1161 instruções.
 | `IRG` | ❌ |
 | `GMI` | ❌ |
 | `PACGA` | ❌ |
-| `SMAX` | ❌ |
-| `SMIN` | ❌ |
-| `UMAX` | ❌ |
-| `UMIN` | ❌ |
-| `RBIT` | ❌ |
-| `REV16` | ❌ |
+| `SMAX` | · |
+| `SMIN` | · |
+| `UMAX` | · |
+| `UMIN` | · |
+| `RBIT` | ✅ |
+| `REV16` | ✅ |
 | `REV32` | ✅ |
 | `REV64` | ✅ |
-| `CLZ` | ❌ |
-| `CLS` | ❌ |
-| `CTZ` | ❌ |
-| `CNT` | ❌ |
-| `ABS` | ✅ |
+| `CLZ` | ✅ |
+| `CLS` | ✅ |
+| `CTZ` | · |
+| `CNT` | ✅ |
+| `ABS` | ❌ |
 | `PACIA` | ✅ |
 | `PACIB` | ✅ |
 | `PACDA` | ✅ |
 | `PACDB` | ✅ |
-| `AUTIA` | ❌ |
-| `AUTIB` | ❌ |
+| `AUTIA` | ✅ |
+| `AUTIB` | ✅ |
 | `AUTDA` | ❌ |
-| `AUTDB` | ❌ |
+| `AUTDB` | ✅ |
 | `XPACI` | ❌ |
 | `XPACD` | ❌ |
 | `AND_r` | ✅ |
@@ -1992,25 +1992,25 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SUB_ext` | ✅ |
 | `ADDS_ext` | ✅ |
 | `SUBS_ext` | ✅ |
-| `ADC` | ❌ |
-| `ADCS` | ❌ |
-| `SBC` | ❌ |
-| `SBCS` | ❌ |
-| `RMIF` | ❌ |
-| `SETF8` | ❌ |
-| `SETF16` | ❌ |
+| `ADC` | ✅ |
+| `ADCS` | ✅ |
+| `SBC` | ✅ |
+| `SBCS` | ✅ |
+| `RMIF` | ✅ |
+| `SETF8` | ✅ |
+| `SETF16` | ✅ |
 | `CCMP` | ✅ |
 | `CSEL` | ✅ |
 | `MADD_w` | ✅ |
 | `MSUB_w` | ✅ |
 | `MADD_x` | ✅ |
 | `MSUB_x` | ✅ |
-| `SMADDL` | ❌ |
-| `SMSUBL` | ❌ |
-| `UMADDL` | ❌ |
-| `UMSUBL` | ❌ |
-| `SMULH` | ❌ |
-| `UMULH` | ❌ |
+| `SMADDL` | ✅ |
+| `SMSUBL` | ✅ |
+| `UMADDL` | ✅ |
+| `UMSUBL` | ✅ |
+| `SMULH` | ✅ |
+| `UMULH` | ✅ |
 | `AESE` | ❌ |
 | `AESD` | ❌ |
 | `AESMC` | ❌ |

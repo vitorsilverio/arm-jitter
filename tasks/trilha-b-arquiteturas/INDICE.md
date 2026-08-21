@@ -73,5 +73,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [B7.4](b7.4-presets-armv6m-armv7m.md) | MRS/MSR SYSm + CPS M + presets `ARMV6M`/`ARMV7M` | B7.2 (pleno c/ B3.2) | ✅ (2026-07-23) — ver **Resultado** na task |
 | [B7.5](b7.5-runner-bare-metal.md) | armbox `--machine=cortex-m` + firmware torture + semihosting (fecha B7) | B7.3 ✅, B7.4 ✅ | ✅ (2026-07-23) — ver **Resultado** na task |
 | [B8.1](b8.1-a64-load-store-escalar.md) | A64: load/store escalar restantes (`STNP`/`LDNP`, `LDPSW`, `PRFM`, `LDTR`/`STTR`, `LDXP`/`STXP`, `LDAR`/`STLR`, `CAS`/`CASP`) — frente de cobertura de ISA, `b7-plano-cobertura-isa.md` | E6 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
+| [B8.2](b8.2-a64-inteiro-restante.md) | A64: inteiro restante (`ADC`/`SBC`, `EXTR`, `RBIT`/`REV16`/`REV32`/`REV64`/`CLZ`/`CLS`/`CNT`, `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL`/`SMULH`/`UMULH`, `RMIF`/`SETF8`/`SETF16`/`CFINV`/`XAFLAG`/`AXFLAG`) — frente de cobertura de ISA, `b7-plano-cobertura-isa.md` | B8.1 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

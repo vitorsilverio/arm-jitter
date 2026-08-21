@@ -341,3 +341,36 @@ Disassembly of section .text:
  524:	48a97d6a 	cash	w9, w10, [x11]
  528:	082c7e0e 	casp	w12, w13, w14, w15, [x16]
  52c:	48727ed4 	caspa	x18, x19, x20, x21, [x22]
+ 530:	9a020020 	adc	x0, x1, x2
+ 534:	ba050083 	adcs	x3, x4, x5
+ 538:	da0800e6 	sbc	x6, x7, x8
+ 53c:	fa0b0149 	sbcs	x9, x10, x11
+ 540:	1a0e01ac 	adc	w12, w13, w14
+ 544:	5a11020f 	sbc	w15, w16, w17
+ 548:	93c21020 	extr	x0, x1, x2, #4
+ 54c:	13852083 	extr	w3, w4, w5, #8
+ 550:	dac00020 	rbit	x0, x1
+ 554:	5ac00062 	rbit	w2, w3
+ 558:	dac004a4 	rev16	x4, x5
+ 55c:	5ac004e6 	rev16	w6, w7
+ 560:	dac00928 	rev32	x8, x9
+ 564:	dac00d6a 	rev	x10, x11
+ 568:	5ac009ac 	rev	w12, w13
+ 56c:	dac011ee 	clz	x14, x15
+ 570:	5ac01230 	clz	w16, w17
+ 574:	dac01672 	cls	x18, x19
+ 578:	5ac016b4 	cls	w20, w21
+ 57c:	dac01ef6 	cnt	x22, x23
+ 580:	5ac01f38 	cnt	w24, w25
+ 584:	9b220c20 	smaddl	x0, w1, w2, x3
+ 588:	9b269ca4 	smsubl	x4, w5, w6, x7
+ 58c:	9baa2d28 	umaddl	x8, w9, w10, x11
+ 590:	9baebdac 	umsubl	x12, w13, w14, x15
+ 594:	9b527e30 	smulh	x16, x17, x18
+ 598:	9bd57e93 	umulh	x19, x20, x21
+ 59c:	ba020405 	rmif	x0, #4, #5
+ 5a0:	3a00082d 	setf8	w1
+ 5a4:	3a00484d 	setf16	w2
+ 5a8:	d500401f 	cfinv
+ 5ac:	d500403f 	xaflag
+ 5b0:	d500405f 	axflag

@@ -378,3 +378,49 @@ casb w6, w7, [x8]
 cash w9, w10, [x11]
 casp w12, w13, w14, w15, [x16]
 caspa x18, x19, x20, x21, [x22]
+
+// -- B8.2: ADC/ADCS/SBC/SBCS --
+adc x0, x1, x2
+adcs x3, x4, x5
+sbc x6, x7, x8
+sbcs x9, x10, x11
+adc w12, w13, w14
+sbc w15, w16, w17
+
+// -- B8.2: EXTR --
+extr x0, x1, x2, #4
+extr w3, w4, w5, #8
+
+// -- B8.2: Data-processing (1 source): RBIT/REV16/REV(W)/REV32(X)/REV(X)=REV64/CLZ/CLS/CNT --
+rbit x0, x1
+rbit w2, w3
+rev16 x4, x5
+rev16 w6, w7
+rev32 x8, x9
+rev x10, x11
+rev w12, w13
+clz x14, x15
+clz w16, w17
+cls x18, x19
+cls w20, w21
+.arch_extension cssc
+cnt x22, x23
+cnt w24, w25
+
+// -- B8.2: Data-processing (3 source): SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH --
+smaddl x0, w1, w2, x3
+smsubl x4, w5, w6, x7
+umaddl x8, w9, w10, x11
+umsubl x12, w13, w14, x15
+smulh x16, x17, x18
+umulh x19, x20, x21
+
+// -- B8.2: RMIF/SETF8/SETF16/CFINV/XAFLAG/AXFLAG --
+.arch_extension flagm
+.arch_extension flagm2
+rmif x0, #4, #5
+setf8 w1
+setf16 w2
+cfinv
+xaflag
+axflag

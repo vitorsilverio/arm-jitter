@@ -10,10 +10,12 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -294,6 +296,14 @@ public final class Aarch64Decoder {
     // ── ver a task B6.6.7 "Não inclui"); só `WFI` tem semântica própria (durma até IRQ).
     private static final int SYSTEM_INSTRUCTION_HINT_CRN = 0b0010;
     private static final int SYSTEM_INSTRUCTION_HINT_OP2_WFI = 0b011;
+
+    // ── B8.2: `CFINV`/`XAFLAG`/`AXFLAG` (`FEAT_FlagM2`, `op0=0`, CRn=0b0100 fixo — mesmo subgrupo
+    // ── de encoding de barreiras/hints acima, `Rt` fixo em `XZR` não checado aqui — mesma
+    // ── simplificação já aplicada às barreiras/hints, ver Fatos de referência da task).
+    private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_CRN = 0b0100;
+    private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV = 0b000;
+    private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG = 0b001;
+    private static final int SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG = 0b010;
 
     // ── `TLBI VMALLE1`/`TLBI VMALLE1IS` (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral",
     // ── CRn=0b1000 fixo (grupo TLB maintenance), CRm distingue IS/não-IS, op2=0 (ALL, sem VA).
@@ -640,6 +650,83 @@ public final class Aarch64Decoder {
     private static final int CCMP_COND_SHIFT = 12;
     private static final int CCMP_NZCV_MASK = 0xF;
     private static final int DIVIDE_SIGNED_BIT_SHIFT = 10;
+
+    // ── Data-processing (1 source)/(2 source), B8.2: MESMO grupo de 8 bits fixos em bits[28:21] ──
+    // ── ("11010110") — só bits[30:29] (`opc2`) distingue os dois subgrupos (`00`=2-source, já ────
+    // ── tratado acima por decodeDivide/decodeShiftVariable; `10`=1-source, RBIT/REV16/CLZ/CLS/ ───
+    // ── CNT). SEM checar `opc2`, o decoder pré-B8.2 confundia REV32/REV64/CLZ/etc com SDIV/UDIV ──
+    // ── (bit[15:11] de REV32/REV64 casa por acaso com o opcode de SDIV/UDIV) — bug real corrigido ─
+    // ── por esta task, ver "Bugs reais achados e corrigidos" na task. ───────────────────────────
+    private static final int DP_SOURCE_OPC2_SHIFT = 29;
+    private static final int DP_SOURCE_OPC2_MASK = 0b11;
+    private static final int DP_SOURCE_OPC2_TWO_SOURCE = 0b00;
+    private static final int DP_SOURCE_OPC2_ONE_SOURCE = 0b10;
+    // ── opcode (bits[15:10], 6 bits) do subgrupo 1-source — os 7 valores em escopo desta task. ────
+    // ── CTZ(6)/ABS(8)/PACIA.../XPAC... (opcode ≥6, bit[21]=1 do subgrupo PAC/AUT) ficam fora ──────
+    // ── (extensões posteriores, isa-nao-aplicavel.tsv).
+    private static final int ONE_SOURCE_OPCODE_SHIFT = 10;
+    private static final int ONE_SOURCE_OPCODE_MASK = 0b11_1111;
+    private static final int ONE_SOURCE_OPCODE_RBIT = 0b00_0000;
+    private static final int ONE_SOURCE_OPCODE_REV16 = 0b00_0001;
+    /// `REV`(`sf=0`)/`REV32`(`sf=1`) — MESMO opcode, `sf` livre (ver {@link Ir64OneSourceOp#REV32}).
+    private static final int ONE_SOURCE_OPCODE_REV32 = 0b00_0010;
+    /// `REV64` — `sf=1` FIXO no encoding (só existe a forma `X`), checado à parte.
+    private static final int ONE_SOURCE_OPCODE_REV64 = 0b00_0011;
+    private static final int ONE_SOURCE_OPCODE_CLZ = 0b00_0100;
+    private static final int ONE_SOURCE_OPCODE_CLS = 0b00_0101;
+    private static final int ONE_SOURCE_OPCODE_CNT = 0b00_0111;
+
+    // ── Data-processing (3 source), B8.2: SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH — mesmo campo ──
+    // ── de 8 bits fixos em bits[28:21] de MADD/MSUB (MADD_MSUB_FIXED_PATTERN), mas com valores ────
+    // ── DIFERENTES (`sf` faz parte do prefixo fixo aqui, sempre `1` — só existe a forma `X`). ─────
+    private static final int MULDIV_LONG_FIXED_SIGNED = 0b1101_1001;
+    private static final int MULDIV_LONG_FIXED_UNSIGNED = 0b1101_1101;
+    private static final int MULH_FIXED_SIGNED = 0b1101_1010;
+    private static final int MULH_FIXED_UNSIGNED = 0b1101_1110;
+    /// `Ra` fixo em `XZR`(`11111`) no encoding de `SMULH`/`UMULH` — não é um acumulador real (ver
+    /// Javadoc de {@link Ir64Op.MultiplyHigh}), só validado para recusar combinações reservadas.
+    private static final int MULH_RA_FIXED = 0b1_1111;
+
+    // ── Add/subtract (carry) + Rotate/Evaluate into flags, B8.2: MESMO campo de 8 bits fixos em ───
+    // ── bits[28:21]="11010000" para os 3 subgrupos (ADC/SBC, RMIF, SETF8/SETF16) — distinguidos ───
+    // ── pelos bits[15:10] (opcode2) e, para RMIF/SETF, por `sf`/`opc` fixos adicionais (Fatos de ───
+    // ── referência da task, conferidos contra `a64.decode` real do QEMU). ───────────────────────
+    private static final int ADD_SUB_CARRY_FIXED_PATTERN = 0b1101_0000;
+    private static final int ADD_SUB_CARRY_OPCODE2_SHIFT = 10;
+    private static final int ADD_SUB_CARRY_OPCODE2_MASK = 0b11_1111;
+    private static final int ADD_SUB_CARRY_OPCODE2_ADC_SBC = 0b00_0000;
+    // ── RMIF: sf=1 fixo, opc(30:29)="01" fixo, imm6(20:15), "00001" fixo(14:10), rn(9:5), ─────────
+    // ── "0" fixo(bit4), mask(3:0). ───────────────────────────────────────────────────────────────
+    private static final int RMIF_FIXED_TAIL_SHIFT = 10;
+    private static final int RMIF_FIXED_TAIL_MASK = 0b1_1111;
+    private static final int RMIF_FIXED_TAIL_PATTERN = 0b0_0001;
+    private static final int RMIF_BIT4_MASK = 1 << 4;
+    private static final int RMIF_IMM6_SHIFT = 15;
+    private static final int RMIF_IMM6_MASK = 0b11_1111;
+    private static final int RMIF_MASK_FIELD_MASK = 0xF;
+    // ── SETF8/SETF16: sf=0 fixo, opc(30:29)="01" fixo, bits[20:16]="00000" fixo (MESMA posição de ─
+    // ── ADDSUB_REGISTER_RM_SHIFT/REGISTER_FIELD_MASK, reaproveitados), opcode2(15:10) distingue ───
+    // ── SETF8(0b000010)/SETF16(0b010010), rn(9:5), "01101" fixo(4:0). ───────────────────────────
+    private static final int SETF_OPCODE2_SETF8 = 0b00_0010;
+    private static final int SETF_OPCODE2_SETF16 = 0b01_0010;
+    private static final int SETF_LOW5_MASK = 0b1_1111;
+    private static final int SETF_LOW5_PATTERN = 0b0_1101;
+    /// `SETF8` avalia o BYTE baixo (`ARM DDI 0487`, "Evaluate into flags") — ver
+    /// {@link Ir64Op.EvaluateIntoFlags#sizeBits}.
+    private static final int EVALUATE_FLAGS_SIZE_8 = 8;
+    /// `SETF16` avalia o HALFWORD baixo.
+    private static final int EVALUATE_FLAGS_SIZE_16 = 16;
+
+    // ── Extract (EXTR), subgrupo `11` de Data Processing Immediate (B8.2) — MESMA posição de bit ──
+    // ── `N` (bit22) que Bitfield (BITFIELD_N_SHIFT, reaproveitado: deve ser igual a `sf`), bit21 ───
+    // ── fixo em `0` (`op0` do subgrupo, distinto do `1` reservado que indicaria outra família). ───
+    private static final int EXTRACT_OP21_SHIFT = 21;
+    /// Forma de 32 bits (`sf=0`) não tem os 6 bits completos de `imm` — bit15 é fixo em `0`
+    /// (`imm5`, não `imm6`); combinação `sf=0`+bit15=1 é reservada.
+    private static final int EXTRACT_NARROW_RESERVED_BIT = 1 << 15;
+    private static final int EXTRACT_SHIFT_FIELD_SHIFT = 10;
+    private static final int EXTRACT_IMM6_MASK = 0b11_1111;
+    private static final int EXTRACT_IMM5_MASK = 0b1_1111;
 
     // ── Bitfield (SBFM/BFM/UBFM), subgrupo `10` de Data Processing Immediate (B6.3.2): ─────────
     // ── sf(31) opc(30:29) 100110(28:23) N(22) immr(21:16) imms(15:10) Rn(9:5) Rd(4:0) — MESMAS ──
@@ -988,8 +1075,31 @@ public final class Aarch64Decoder {
         if (subgroup == SUBGROUP_BITFIELD) {
             return decodeBitfield(word, address);
         }
-        // Extract (11, EXTR): fora do escopo fechado do épico B6 — ver Armadilhas da task B6.3.2.
-        throw unsupported(word, address);
+        // subgroup == 0b11: Extract (EXTR, B8.2).
+        return decodeExtract(word, address);
+    }
+
+    /// `EXTR` (B8.2) — MESMA posição de bit `N`(22) que {@link #decodeBitfield} (deve ser igual a
+    /// `sf`); a forma de 32 bits não tem os 6 bits completos de `imm` (bit15 fixo em `0`).
+    private Ir64Op decodeExtract(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int n = (word >>> BITFIELD_N_SHIFT) & 1;
+        if (n != (wide ? 1 : 0)) {
+            throw unsupported(word, address);
+        }
+        if (((word >>> EXTRACT_OP21_SHIFT) & 1) != 0) {
+            throw unsupported(word, address);
+        }
+        if (!wide && (word & EXTRACT_NARROW_RESERVED_BIT) != 0) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int lsb = wide
+                ? (word >>> EXTRACT_SHIFT_FIELD_SHIFT) & EXTRACT_IMM6_MASK
+                : (word >>> EXTRACT_SHIFT_FIELD_SHIFT) & EXTRACT_IMM5_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Extract(rd, rn, rm, lsb, wide);
     }
 
     /// `SBFM`/`BFM`/`UBFM` (D2 da task B6.3.2): produz {@link Ir64Op.Bitfield} sempre a partir dos
@@ -1130,6 +1240,19 @@ public final class Aarch64Decoder {
             return decodeMultiplyAccumulate(word);
         }
         if (muldivFixed8 == DIVIDE_FIXED_PATTERN) {
+            // `opc2`(bits[30:29]) distingue "2 source" (`00`, SDIV/UDIV/LSLV/.../CRC32*) de
+            // "1 source" (`10`, RBIT/REV16/REV32/REV64/CLZ/CLS/CNT) — MESMOS bits[28:21] fixos
+            // para os dois subgrupos (B8.2, achado desta task: sem esta checagem, REV32/REV64/CLZ/
+            // etc caíam por acaso no dispatch de SDIV/UDIV — ver "Bugs reais achados e corrigidos"
+            // da task).
+            int opc2 = (word >>> DP_SOURCE_OPC2_SHIFT) & DP_SOURCE_OPC2_MASK;
+            if (opc2 == DP_SOURCE_OPC2_ONE_SOURCE) {
+                return decodeDataProcessing1Source(word, address);
+            }
+            if (opc2 != DP_SOURCE_OPC2_TWO_SOURCE) {
+                // `opc2` = `01`/`11`: SUBP/SUBPS/IRG/GMI/PACGA (MTE/PAC, fora de escopo).
+                throw unsupported(word, address);
+            }
             int divideOpcode = (word >>> DIVIDE_OPCODE_SHIFT) & DIVIDE_OPCODE_5BIT_MASK;
             if (divideOpcode == DIVIDE_OPCODE_PATTERN) {
                 return decodeDivide(word);
@@ -1138,8 +1261,18 @@ public final class Aarch64Decoder {
             if (shiftOpcode4 == SHIFT_VARIABLE_OPCODE_PATTERN) {
                 return decodeShiftVariable(word);
             }
-            // opcode != 00001/0010x: CRC32* (fora do escopo fechado do épico, B6.11).
+            // opcode != 00001/0010x: CRC32*/SMAX/SMIN/UMAX/UMIN (fora do escopo, ver
+            // isa-nao-aplicavel.tsv).
             throw unsupported(word, address);
+        }
+        if (muldivFixed8 == ADD_SUB_CARRY_FIXED_PATTERN) {
+            return decodeAddSubtractCarryOrFlags(word, address);
+        }
+        if (muldivFixed8 == MULDIV_LONG_FIXED_SIGNED || muldivFixed8 == MULDIV_LONG_FIXED_UNSIGNED) {
+            return decodeMultiplyAccumulateLong(word, muldivFixed8 == MULDIV_LONG_FIXED_SIGNED);
+        }
+        if (muldivFixed8 == MULH_FIXED_SIGNED || muldivFixed8 == MULH_FIXED_UNSIGNED) {
+            return decodeMultiplyHigh(word, address, muldivFixed8 == MULH_FIXED_SIGNED);
         }
         throw unsupported(word, address);
     }
@@ -1154,6 +1287,95 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.ShiftVariable(rd, rn, rm, shiftType, wide);
+    }
+
+    /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2, "Data-processing
+    /// (1 source)" — só chega aqui depois do gate de `opc2` em {@link #decodeDataProcessingRegister}).
+    private Ir64Op decodeDataProcessing1Source(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int opcode = (word >>> ONE_SOURCE_OPCODE_SHIFT) & ONE_SOURCE_OPCODE_MASK;
+        Ir64OneSourceOp op = switch (opcode) {
+            case ONE_SOURCE_OPCODE_RBIT -> Ir64OneSourceOp.RBIT;
+            case ONE_SOURCE_OPCODE_REV16 -> Ir64OneSourceOp.REV16;
+            case ONE_SOURCE_OPCODE_REV32 -> Ir64OneSourceOp.REV32;
+            case ONE_SOURCE_OPCODE_REV64 -> {
+                if (!wide) {
+                    // REV64 só existe com sf=1 — sf=0 com este opcode é reservado.
+                    throw unsupported(word, address);
+                }
+                yield Ir64OneSourceOp.REV64;
+            }
+            case ONE_SOURCE_OPCODE_CLZ -> Ir64OneSourceOp.CLZ;
+            case ONE_SOURCE_OPCODE_CLS -> Ir64OneSourceOp.CLS;
+            case ONE_SOURCE_OPCODE_CNT -> Ir64OneSourceOp.CNT;
+            // CTZ(6)/ABS(8)/PACIA.../XPAC...: extensões posteriores, fora do escopo desta task.
+            default -> throw unsupported(word, address);
+        };
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.DataProcessing1Source(op, rd, rn, wide);
+    }
+
+    /// `ADC`/`ADCS`/`SBC`/`SBCS` + `RMIF` + `SETF8`/`SETF16` (B8.2) — 3 subgrupos que
+    /// compartilham o MESMO campo de 8 bits fixos em bits[28:21] ("11010000"), distinguidos por
+    /// `opcode2`(bits[15:10]) e, para `RMIF`/`SETF`, por `sf`/`opc` fixos adicionais (ver Fatos de
+    /// referência da task).
+    private Ir64Op decodeAddSubtractCarryOrFlags(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean subtract = ((word >>> ADD_SUB_OP_SHIFT) & 1) != 0;
+        boolean setFlags = ((word >>> SET_FLAGS_SHIFT) & 1) != 0;
+        int opcode2 = (word >>> ADD_SUB_CARRY_OPCODE2_SHIFT) & ADD_SUB_CARRY_OPCODE2_MASK;
+        if (opcode2 == ADD_SUB_CARRY_OPCODE2_ADC_SBC) {
+            int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int rd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.AluWithCarry(subtract, rd, rn, rm, wide, setFlags);
+        }
+        boolean rmifFixedTail = ((word >>> RMIF_FIXED_TAIL_SHIFT) & RMIF_FIXED_TAIL_MASK) == RMIF_FIXED_TAIL_PATTERN;
+        boolean rmifBit4Clear = (word & RMIF_BIT4_MASK) == 0;
+        if (wide && !subtract && setFlags && rmifFixedTail && rmifBit4Clear) {
+            int shift = (word >>> RMIF_IMM6_SHIFT) & RMIF_IMM6_MASK;
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int mask = word & RMIF_MASK_FIELD_MASK;
+            return new Ir64Op.RotateIntoFlags(rn, shift, mask);
+        }
+        boolean setfRmFieldZero = ((word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK) == 0;
+        boolean setfLow5Fixed = (word & SETF_LOW5_MASK) == SETF_LOW5_PATTERN;
+        if (!wide && !subtract && setFlags && setfRmFieldZero && setfLow5Fixed) {
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            if (opcode2 == SETF_OPCODE2_SETF8) {
+                return new Ir64Op.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_8);
+            }
+            if (opcode2 == SETF_OPCODE2_SETF16) {
+                return new Ir64Op.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_16);
+            }
+        }
+        throw unsupported(word, address);
+    }
+
+    /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (B8.2) — `sf` é fixo em `1` no encoding (só existe a
+    /// forma `X`), por isso {@link Ir64Op.MultiplyAccumulateLong} não carrega `wide`.
+    private Ir64Op decodeMultiplyAccumulateLong(int word, boolean signed) {
+        boolean subtract = ((word >>> MADD_MSUB_O0_SHIFT) & 1) != 0;
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.MultiplyAccumulateLong(subtract, signed, rd, rn, rm, ra);
+    }
+
+    /// `SMULH`/`UMULH` (B8.2) — `Ra` fixo em `XZR` (não é campo real, ver Javadoc de
+    /// {@link Ir64Op.MultiplyHigh}); recusa qualquer combinação que viole isso (G8: em vez de
+    /// silenciosamente ignorar `Ra`, confere o valor fixo).
+    private Ir64Op decodeMultiplyHigh(int word, long address, boolean signed) {
+        int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
+        if (ra != MULH_RA_FIXED) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.MultiplyHigh(signed, rd, rn, rm);
     }
 
     /// `MADD`/`MSUB` (B6.3.3) — `MUL`/`MNEG` (aliases com `Ra=XZR`) chegam aqui como o mesmo
@@ -1625,6 +1847,18 @@ public final class Aarch64Decoder {
             // NOP puro, mesmo tratamento das barreiras (D2 da task B6.6.7 — sem event-stream
             // modelado, `WFE`/`SEV`/`SEVL` não têm efeito observável neste emulador).
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+        }
+        if (crn == SYSTEM_INSTRUCTION_FLAG_MANIP_CRN) {
+            // CFINV/XAFLAG/AXFLAG (B8.2, FEAT_FlagM2) — diferente de barreiras/hints, estas TÊM
+            // semântica própria sobre PSTATE (ver Ir64FlagConversionOp), por isso um record
+            // dedicado (ConvertFlags) em vez de SystemInstruction/NOP.
+            Ir64FlagConversionOp flagOp = switch (op2) {
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV -> Ir64FlagConversionOp.INVERT_CARRY;
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG -> Ir64FlagConversionOp.EXTERNAL_TO_ARM;
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG -> Ir64FlagConversionOp.ARM_TO_EXTERNAL;
+                default -> throw unsupported(word, address);
+            };
+            return new Ir64Op.ConvertFlags(flagOp);
         }
         throw unsupported(word, address);
     }
