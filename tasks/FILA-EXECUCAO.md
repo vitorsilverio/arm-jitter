@@ -70,6 +70,11 @@ depois exigido inteiro pelo `virtual-arm-box`).
 `B7.x`/`B8.x`. Ele traz a regra de triagem (o inventário do QEMU mistura versões de arquitetura) e
 o protocolo por task.
 
+**Estado dos repositórios (2026-08-21)**: os 6 estão sincronizados com o GitHub, `ahead=0`.
+O `n3dsemu` ganhou repositório nesta sessão (`https://github.com/vitorsilverio/n3dsemu`, público,
+21 commits) — ele era o único que nunca teve `origin`. ⚠️ **Ainda falta nele o que a F8/F9 fizeram
+nos outros**: labels, `ISSUE_TEMPLATE`, e a CI da F6 (`.github/workflows`). Candidato a task curta.
+
 **Duas regras novas do `tasks/README.md` valem para TODA task, não só desta onda:**
 - **push obrigatório** ao fechar (os repos estavam só locais — `arm-jitter` chegou a 76 commits à
   frente do `origin`);
