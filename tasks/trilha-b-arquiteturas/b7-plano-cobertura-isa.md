@@ -81,12 +81,13 @@ F11) → B8.4/B8.5 → o resto de AdvSIMD conforme surgir necessidade real.
 
 ## Além da tabela: dois achados que valem mais que uma linha ✅
 
-- **`E6` (aberta)** — `ArmDecoder` decodifica todo o espaço incondicional (`cond==0b1111`) como se
-  fosse condicional: `0xF2000000` (`VHADD` de NEON) vira `AND cond=AL`. Isso é **pior** que não
-  suportar: executa outra instrução em silêncio onde o hardware levantaria instrução indefinida —
-  e é a exceção de instrução indefinida que permite achar esse tipo de problema em minutos
-  (B3.9). **Fazer antes de B8**: sem isso, cada lacuna nova continua se manifestando como corrupção
-  silenciosa em vez de diagnóstico.
+- **`E6` (✅ fechada 2026-08-21)** — `ArmDecoder` decodificava todo o espaço incondicional
+  (`cond==0b1111`) como se fosse condicional: `0xF2000000` (`VHADD` de NEON) virava `AND cond=AL`.
+  Corrigido: `decodeUnconditional` novo reconhece explicitamente os grupos do espaço (`BLX`
+  imediato, `SETEND`, `CPS`, `CLREX`, `PLD`/`PLI`, `DMB`/`DSB`/`ISB`, `SRS`, `RFE` + extensões de
+  coprocessor/VFP) e devolve `UNIMPLEMENTED` para o resto — nunca mais cai no dispatch condicional
+  genérico. Ver `trilha-e-manutencao/e6-espaco-incondicional-undefined.md`. **B8 já pode ser
+  pega**: lacunas novas agora se manifestam como instrução indefinida, não corrupção silenciosa.
 - A tabela mede **decode, não semântica**. `STREX` (E3) e `LDR/STR` alinhado (F3) decodificavam e
   estavam errados.
 

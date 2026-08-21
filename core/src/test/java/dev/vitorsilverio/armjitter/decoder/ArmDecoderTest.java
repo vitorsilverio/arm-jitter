@@ -93,4 +93,32 @@ class ArmDecoderTest {
 
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
+
+    // ── Espaço incondicional (E6) ───────────────────────────────────────────────────────────
+
+    @Test
+    void unrecognizedUnconditionalSpaceEncodingIsUnimplementedNotDecodedAsConditional() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // 0xF2000000: um VHADD de NEON (cond==0b1111, espaço incondicional). Antes da E6 este
+        // encoding caía no dispatch ALU genérico e virava AND com condição AL (achado real da
+        // tabela de cobertura de ISA, E5) — NEON não é implementado, então tem que virar
+        // UNIMPLEMENTED, nunca outra instrução.
+        memory.put32(0, 0xF200_0000);
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.AND, instruction.kind());
+    }
+
+    @Test
+    void unconditionalSpaceCarveOutsStillDecodeAfterE6() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xFA00_0001); // BLX imediato (cond=1111)
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV5TE).decode(memory, 0);
+
+        assertEquals(InstructionKind.BRANCH_EXCHANGE, instruction.kind());
+        assertTrue(instruction.link());
+    }
 }
