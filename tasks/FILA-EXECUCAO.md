@@ -95,7 +95,7 @@ Q5+ abaixo: só volte para B9.x/B8.4+ depois que a escada B10 fechar (ou o usuá
 
 | # | Task | Arquivo | Repo | Depende de | Nota |
 |---|------|---------|------|-----------|------|
-| R1 | **B10.1** — generalizar estado de exceção para EL0-EL3 | `trilha-b-arquiteturas/b10-plano-el2-el3.md` | arm-jitter | — | fundação do épico, tudo abaixo depende dela |
+| ~~R1~~ | ~~**B10.1**~~ ✅ fechada 2026-08-21 — generalizar estado de exceção para EL0-EL3 | `trilha-b-arquiteturas/b10.1-el2-el3-estado-generalizado.md` | arm-jitter | — | `Aarch64ExceptionLevel` novo (4 níveis, `M[3:0]` real de `SPSR_ELx`); `Aarch64ExceptionState` generalizado por nível (conveniências EL1 preservadas, comportamento EL0↔EL1 idêntico); vetor de exceção agora escolhe o grupo certo ("mesmo nível" vs "nível inferior"); `ERET` lê o alvo real de `SPSR_ELx.M` em vez de sempre "EL0". `EL2`/`EL3` ainda não roteados de verdade (B10.4/B10.5) — só a infraestrutura. G5 completo (armbox 40/41 pré-existente). Ver **Resultado** na task. **Destrava B10.2/B10.3** |
 | R2 | **B10.2** — registradores de sistema EL2 | idem | arm-jitter | B10.1 | `HCR_EL2`/`SCTLR_EL2`/`VTCR_EL2`/`VTTBR_EL2`/... |
 | R3 | **B10.3** — registradores de sistema EL3 | idem | arm-jitter | B10.1 | `SCR_EL3`/`SCTLR_EL3`/... (paralelo a R2) |
 | R4 | **B10.4** — `HVC` real (entra em EL2) | idem | arm-jitter | B10.1, B10.2 | substitui o stub `PSCI_RET_NOT_SUPPORTED` |

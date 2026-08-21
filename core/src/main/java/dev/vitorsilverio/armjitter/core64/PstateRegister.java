@@ -90,9 +90,11 @@ public final class PstateRegister {
 
     /// Codifica o estado atual no formato real de armazenamento de `SPSR_ELx` (`ARM DDI 0487
     /// C5.2.19`): `N`/`Z`/`C`/`V` em `[31:28]` e `I` em `[7]` (B6.6.7) — usado por
-    /// {@link Aarch64Core#enterMemoryAbort}/`Aarch64Core#enterIrq` para preencher
-    /// `Aarch64ExceptionState#spsr1()`. Os demais bits (`D`/`A`/`F`/`SPSel`/`EL`...) ficam `0` —
-    /// não modelados ainda (ver javadoc da classe).
+    /// {@link Aarch64Core#enterMemoryAbort}/`Aarch64Core#enterIrq`/etc. para preencher o banco de
+    /// `SPSR_ELx` certo (ver `Aarch64ExceptionState#setSpsr`); o CHAMADOR ainda tem que somar
+    /// (`|`) o campo `M[3:0]` do nível de origem (`Aarch64ExceptionLevel#spsrMode()`, B10.1) —
+    /// esta classe não conhece nível de exceção nenhum. `D`/`A`/`F`/`SPSel` (dentro de `M`) ficam
+    /// `0` — não modelados ainda (ver javadoc da classe).
     public long toSpsrFormat() {
         return (((long) nzcv) << SPSR_NZCV_SHIFT) | (irqDisabled ? SPSR_I_BIT : 0);
     }

@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
@@ -1077,15 +1078,21 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `ERET` (B6.6.4, e B6.6.7 para o bit `I`): `PC←ELR_EL1`, `PSTATE.{N,Z,C,V,I}←SPSR_EL1`, sai
-    /// de EL1 — mesma ordem do precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático
-    /// aqui: A64 não precisa de subtração porque `ELR_EL1` já é o endereço exato de retomada, sem
-    /// o viés `+4`/`+8` do LR bancado do ARM32).
+    /// `ERET` (B6.6.4, e B6.6.7 para o bit `I`; generalizado em B10.1 para os 4 níveis): `PC←
+    /// ELR_ELx`, `PSTATE.{N,Z,C,V,I}←SPSR_ELx`, sai para o nível codificado em `SPSR_ELx.M[3:0]`
+    /// (`x` é o nível ATUAL — `ERET` sempre lê o PRÓPRIO banco de quem o executa, nunca o de um
+    /// nível fixo; o nível de DESTINO não é sempre "um abaixo do atual", ver
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel#fromSpsrValue}) — mesma
+    /// ordem do precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático aqui: A64 não
+    /// precisa de subtração porque `ELR_ELx` já é o endereço exato de retomada, sem o viés `+4`/
+    /// `+8` do LR bancado do ARM32).
     private boolean executeExceptionReturn(Aarch64Core core, Ir64Op.ExceptionReturn op) {
         Aarch64ExceptionState exceptionState = core.exceptionState();
-        long returnAddress = exceptionState.elr1();
-        core.pstate().setFromSpsrFormat(exceptionState.spsr1());
-        exceptionState.setInEl1(false);
+        Aarch64ExceptionLevel source = exceptionState.currentEl();
+        long returnAddress = exceptionState.elr(source);
+        long rawSpsr = exceptionState.spsr(source);
+        core.pstate().setFromSpsrFormat(rawSpsr);
+        exceptionState.setCurrentEl(Aarch64ExceptionLevel.fromSpsrValue(rawSpsr));
         core.setProgramCounter(returnAddress);
         return true;
     }

@@ -32,15 +32,23 @@ public final class Aarch64Core {
     /// Máscara para a metade baixa de 32 bits (visão `W` de um registrador `X`).
     private static final long LOW_32_BITS_MASK = 0xFFFF_FFFFL;
 
-    /// Deslocamento em bytes, dentro da tabela de vetores apontada por `VBAR_EL1`, da entrada
-    /// "Synchronous, exceção de um nível INFERIOR usando AArch64" (`ARM DDI 0487 D1.10`, tabela de
-    /// 16 entradas de {@link #VECTOR_TABLE_ENTRY_SIZE_BYTES} cada — 4 grupos de origem × 4 tipos).
-    /// É a ÚNICA entrada usada nesta task: o abort de memória (só origem modelada) é sempre
-    /// síncrono e sempre entra em EL1 vindo de EL0 (uma exceção de nível inferior, em AArch64 —
-    /// este core não tem estado AArch32) — as outras 15 entradas (IRQ/FIQ/SError, "current EL"
-    /// com SP0/SPx, "lower EL AArch32") não têm consumidor nesta fatia (`SVC`/`IRQ`/`FIQ`/`SError`
-    /// ficam fora, ver task B6.6.4 "Não inclui").
-    private static final long SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET = 0x400L;
+    /// Base em bytes, dentro da tabela de vetores apontada por `VBAR_ELx`, do grupo "exceção de um
+    /// nível INFERIOR usando AArch64" (`ARM DDI 0487 D1.10`, tabela de 16 entradas de
+    /// {@link #VECTOR_TABLE_ENTRY_SIZE_BYTES} cada — 4 grupos de origem × 4 tipos: `Synchronous`/
+    /// `IRQ`/`FIQ`/`SError`, offset dentro do grupo por
+    /// {@link #VECTOR_SYNCHRONOUS_OFFSET_WITHIN_GROUP}/{@link #VECTOR_IRQ_OFFSET_WITHIN_GROUP}).
+    private static final long VECTOR_GROUP_LOWER_EL_AARCH64_BASE = 0x400L;
+    /// Base em bytes do grupo "exceção do MESMO nível, `SP_ELx` bancado" (`ARM DDI 0487 D1.10`) —
+    /// B10.1: usada quando uma exceção síncrona/IRQ ocorre já dentro de `EL1`-`EL3` (ex.: `BRK`
+    /// dentro do próprio handler de EL1, ou de EL2/EL3 quando B10.2+/B10.4+/B10.5+ chegarem) — este
+    /// emulador só modela a forma "h" (`SP_ELx` bancado, nunca `SP_EL0` dentro de `ELx`), então o
+    /// grupo "mesmo nível com `SP_EL0`" (base `0x000`) nunca é usado.
+    private static final long VECTOR_GROUP_CURRENT_EL_SPX_BASE = 0x200L;
+    /// Deslocamento do tipo "Synchronous" dentro de QUALQUER grupo de origem (sempre a primeira
+    /// das 4 entradas).
+    private static final long VECTOR_SYNCHRONOUS_OFFSET_WITHIN_GROUP = 0x00L;
+    /// Deslocamento do tipo "IRQ" dentro de QUALQUER grupo de origem (segunda das 4 entradas).
+    private static final long VECTOR_IRQ_OFFSET_WITHIN_GROUP = 0x80L;
     /// Tamanho em bytes de cada entrada da tabela de vetores de exceção A64 (`ARM DDI 0487 D1.10`)
     /// — MUITO diferente do vetor único de 8 posições de 4 bytes do ARM32.
     private static final long VECTOR_TABLE_ENTRY_SIZE_BYTES = 0x80L;
@@ -67,13 +75,6 @@ public final class Aarch64Core {
     /// Máscara do imediato de 16 bits de `BRK`, que vira `ESR_EL1.ISS[15:0]` por inteiro (ao
     /// contrário do `ISS` de abort de memória, que só usa os 6 bits baixos).
     private static final long ESR_ISS_BRK_IMMEDIATE_MASK = 0xFFFFL;
-    /// Deslocamento em bytes, dentro da tabela de vetores apontada por `VBAR_EL1`, da entrada
-    /// "IRQ, exceção de um nível INFERIOR usando AArch64" (`ARM DDI 0487 D1.10`, B6.6.7) — mesma
-    /// tabela de 16 entradas de {@link #VECTOR_TABLE_ENTRY_SIZE_BYTES} de
-    /// {@link #SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET}, próxima entrada do mesmo grupo de
-    /// origem (sync=`0x400`, IRQ=`0x480`, FIQ=`0x500`, SError=`0x580` — só IRQ tem consumidor
-    /// nesta task).
-    private static final long IRQ_LOWER_EL_AARCH64_VECTOR_OFFSET = 0x480L;
 
     // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
     // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
@@ -81,6 +82,10 @@ public final class Aarch64Core {
     private static final long CURRENT_EL_VALUE_EL0 = 0L;
     /// `CurrentEL` quando em EL1 (`[3:2]=0b01`).
     private static final long CURRENT_EL_VALUE_EL1 = 0b01L << 2;
+    /// `CurrentEL` quando em EL2 (`[3:2]=0b10`) — B10.1.
+    private static final long CURRENT_EL_VALUE_EL2 = 0b10L << 2;
+    /// `CurrentEL` quando em EL3 (`[3:2]=0b11`) — B10.1.
+    private static final long CURRENT_EL_VALUE_EL3 = 0b11L << 2;
     /// `MPIDR_EL1` constante: `RES1`(31) + `U`(30, uniprocessador) setados, `Aff0`-`Aff3=0` (core
     /// único emulado, `ARM DDI 0487 D19.2.87`).
     private static final long MPIDR_EL1_VALUE = 0x8000_0000L | (1L << 30);
@@ -205,21 +210,23 @@ public final class Aarch64Core {
         setX(index, wide ? value : (value & LOW_32_BITS_MASK));
     }
 
-    /// Retorna o stack pointer ATIVO: `SP_EL0` quando o core está em EL0 (comportamento de
-    /// sempre, pré-B6.6.4), ou `SP_EL1` quando {@link #exceptionState()} indica
-    /// {@link Aarch64ExceptionState#inEl1()} (dentro de um handler de abort, B6.6.4) — resolução
-    /// automática que preserva TODO código existente do executor (`readBaseRegister`/ALU `SP`)
-    /// sem precisar checar o nível explicitamente em cada uso.
+    /// Retorna o stack pointer ATIVO: `SP_EL0` quando o core está em `EL0` (comportamento de
+    /// sempre, pré-B6.6.4), ou `SP_ELx` do nível atual (`EL1`-`EL3`, generalizado em B10.1 — era
+    /// só `EL1` até então) — resolução automática que preserva TODO código existente do executor
+    /// (`readBaseRegister`/ALU `SP`) sem precisar checar o nível explicitamente em cada uso.
     public long sp() {
-        return exceptionState.inEl1() ? exceptionState.sp1() : spEl0;
+        Aarch64ExceptionLevel level = exceptionState.currentEl();
+        return level == Aarch64ExceptionLevel.EL0 ? spEl0 : exceptionState.sp(level);
     }
 
-    /// Atualiza o stack pointer ATIVO (`SP_EL0` ou `SP_EL1`, mesma resolução de {@link #sp()}).
+    /// Atualiza o stack pointer ATIVO (`SP_EL0` ou `SP_ELx` do nível atual, mesma resolução de
+    /// {@link #sp()}).
     public void setSp(long value) {
-        if (exceptionState.inEl1()) {
-            exceptionState.setSp1(value);
-        } else {
+        Aarch64ExceptionLevel level = exceptionState.currentEl();
+        if (level == Aarch64ExceptionLevel.EL0) {
             spEl0 = value;
+        } else {
+            exceptionState.setSp(level, value);
         }
     }
 
@@ -347,10 +354,16 @@ public final class Aarch64Core {
 
     /// `MRS` de uma identidade da CPU (B6.6.7, {@link #handlesSystemRegisterIntrinsically} deve
     /// ser checado antes pelo chamador). `CurrentEL` é o único campo dinâmico (reflete
-    /// {@link Aarch64ExceptionState#inEl1()}); os demais são constantes fixas deste core.
+    /// {@link Aarch64ExceptionState#currentEl()}, generalizado para os 4 níveis em B10.1); os
+    /// demais são constantes fixas deste core.
     public long readIntrinsicSystemRegister(Aarch64SystemRegisterId register) {
         return switch (register) {
-            case CURRENT_EL -> exceptionState.inEl1() ? CURRENT_EL_VALUE_EL1 : CURRENT_EL_VALUE_EL0;
+            case CURRENT_EL -> switch (exceptionState.currentEl()) {
+                case EL0 -> CURRENT_EL_VALUE_EL0;
+                case EL1 -> CURRENT_EL_VALUE_EL1;
+                case EL2 -> CURRENT_EL_VALUE_EL2;
+                case EL3 -> CURRENT_EL_VALUE_EL3;
+            };
             case MPIDR_EL1 -> MPIDR_EL1_VALUE;
             case MIDR_EL1 -> MIDR_EL1_VALUE;
             case ID_AA64PFR0_EL1 -> ID_AA64PFR0_EL1_VALUE;
@@ -421,18 +434,26 @@ public final class Aarch64Core {
         return true;
     }
 
-    /// Entrada de exceção EL0→EL1 por IRQ (B6.6.7) — espelho de {@link #enterMemoryAbort}, mas SEM
-    /// tocar `ESR_EL1`/`FAR_EL1` (uma IRQ não tem síndrome de falta associada; o hardware real
-    /// deixa esses registradores com o valor anterior). `ELR_EL1` recebe o PC ATUAL (endereço da
-    /// PRÓXIMA instrução que executaria — IRQ é assíncrona, ao contrário de um abort síncrono, que
-    /// salva o endereço da instrução FALTOSA). `PSTATE.I` é forçado a `1` na entrada (mascara IRQ
-    /// aninhada dentro do handler — `ERET` restaura o valor salvo em `SPSR_EL1`).
+    /// Entrada de exceção por IRQ (B6.6.7; alvo generalizado em B10.1) — espelho de
+    /// {@link #enterMemoryAbort}, mas SEM tocar `ESR_ELx`/`FAR_ELx` (uma IRQ não tem síndrome de
+    /// falta associada; o hardware real deixa esses registradores com o valor anterior). `ELR_ELx`
+    /// recebe o PC ATUAL (endereço da PRÓXIMA instrução que executaria — IRQ é assíncrona, ao
+    /// contrário de um abort síncrono, que salva o endereço da instrução FALTOSA). `PSTATE.I` é
+    /// forçado a `1` na entrada (mascara IRQ aninhada dentro do handler — `ERET` restaura o valor
+    /// salvo em `SPSR_ELx`).
+    ///
+    /// Alvo fixo em `EL1` até B10.4/B10.5 chegarem (nenhum roteamento por `HCR_EL2.IMO`/
+    /// `SCR_EL3.IRQ` ainda — comportamento IDÊNTICO ao de antes de B10.1, só implementado sobre o
+    /// armazenamento genérico por nível agora).
     public void enterIrq() {
-        exceptionState.setElr1(pc);
-        exceptionState.setSpsr1(pstate.toSpsrFormat());
-        exceptionState.setInEl1(true);
+        Aarch64ExceptionLevel target = Aarch64ExceptionLevel.EL1;
+        Aarch64ExceptionLevel source = exceptionState.currentEl();
+        exceptionState.setElr(target, pc);
+        exceptionState.setSpsr(target, pstate.toSpsrFormat() | source.spsrMode());
+        exceptionState.setCurrentEl(target);
         pstate.setIrqDisabled(true);
-        setProgramCounter(exceptionState.vbar1() + IRQ_LOWER_EL_AARCH64_VECTOR_OFFSET);
+        setProgramCounter(exceptionState.vbar(target) + vectorGroupBase(source, target)
+                + VECTOR_IRQ_OFFSET_WITHIN_GROUP);
     }
 
     /// Retorna o estado de exceção EL0→EL1 (B6.6.4) — `ELR_EL1`/`SPSR_EL1`/`ESR_EL1`/`FAR_EL1`/
@@ -445,75 +466,100 @@ public final class Aarch64Core {
     }
 
     /// Converte uma {@link MemoryTranslationException64} capturada pelo executor
-    /// (`Ir64BlockExecutor`, B6.6.4) numa entrada de exceção síncrona EL0→EL1 — mesmo contrato do
+    /// (`Ir64BlockExecutor`, B6.6.4) numa entrada de exceção síncrona — mesmo contrato do
     /// precedente {@link dev.vitorsilverio.armjitter.core.ArmCore#enterMemoryAbort}:
     /// {@code instructionAddress} é o endereço da PRÓPRIA instrução faltosa (fetch ou load/store),
     /// não o sequencial seguinte.
     ///
-    /// Preenche `ESR_EL1` (`EC`+`IL`+`ISS[5:0]`, `ARM DDI 0487 D17.2.30`) e `FAR_EL1`, salva
-    /// `ELR_EL1←instructionAddress` e `SPSR_EL1←PSTATE` atual, abre o monitor de exclusividade
+    /// Preenche `ESR_ELx` (`EC`+`IL`+`ISS[5:0]`, `ARM DDI 0487 D17.2.30`) e `FAR_ELx`, salva
+    /// `ELR_ELx←instructionAddress` e `SPSR_ELx←PSTATE` atual, abre o monitor de exclusividade
     /// (mesma disciplina de {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel} — um
     /// `STXR`/`STLXR` após o retorno deve falhar e refazer o par `LDXR`/`STXR`, fecha a pendência
-    /// de B6.3.4), entra em EL1 e salta para `VBAR_EL1 +`
-    /// {@link #SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET} (única entrada da tabela de vetores
-    /// usada nesta task — ver a constante).
+    /// de B6.3.4) e salta pro vetor certo (`ARM DDI 0487 D1.10`).
+    ///
+    /// Alvo fixo em `EL1` até B10.4/B10.5 chegarem (nenhum roteamento por `HCR_EL2`/`SCR_EL3`
+    /// ainda — comportamento IDÊNTICO ao de antes de B10.1).
     ///
     /// @param instructionAddress endereço da instrução que causou a falta
     /// @param fault falta de tradução capturada
     public void enterMemoryAbort(long instructionAddress, MemoryTranslationException64 fault) {
+        Aarch64ExceptionLevel target = Aarch64ExceptionLevel.EL1;
         boolean isInstructionFetch = fault.accessType() == MemoryAccessType.INSTRUCTION_FETCH;
         long ec = isInstructionFetch ? ESR_EC_INSTRUCTION_ABORT_LOWER_EL : ESR_EC_DATA_ABORT_LOWER_EL;
         long faultStatusCode = fault.faultStatus().code() & ESR_ISS_FAULT_STATUS_MASK;
         long esr = (ec << ESR_EC_SHIFT) | ESR_IL_BIT | faultStatusCode;
-        exceptionState.setFar1(fault.virtualAddress());
-        enterSynchronousException(instructionAddress, esr);
+        exceptionState.setFar(target, fault.virtualAddress());
+        enterSynchronousException(target, instructionAddress, esr);
     }
 
-    /// `BRK` (`ARM DDI 0487 C6.2.29`, B8.3) — mesma entrada de exceção síncrona EL0→EL1 de
-    /// {@link #enterMemoryAbort}, mas SEM tocar `FAR_EL1` (`BRK` não tem endereço de falta —
+    /// `BRK` (`ARM DDI 0487 C6.2.29`, B8.3) — mesma entrada de exceção síncrona de
+    /// {@link #enterMemoryAbort}, mas SEM tocar `FAR_ELx` (`BRK` não tem endereço de falta —
     /// `ARM DDI 0487` deixa o registrador com o valor anterior, mesma disciplina já aplicada a
-    /// {@link #enterIrq}). `ESR_EL1.ISS[15:0]` recebe o imediato de 16 bits da própria instrução
-    /// (convenção do Linux/GDB para identificar o motivo do trap sem reler a instrução).
+    /// {@link #enterIrq}). `ESR_ELx.ISS[15:0]` recebe o imediato de 16 bits da própria instrução
+    /// (convenção do Linux/GDB para identificar o motivo do trap sem reler a instrução). Alvo fixo
+    /// em `EL1`, mesma ressalva de {@link #enterMemoryAbort}.
     ///
-    /// @param instructionAddress endereço da própria instrução `BRK` (ELR_EL1)
+    /// @param instructionAddress endereço da própria instrução `BRK` (`ELR_ELx`)
     /// @param immediate imediato de 16 bits do encoding
     public void enterBreakpointException(long instructionAddress, int immediate) {
         long esr = (ESR_EC_BREAKPOINT << ESR_EC_SHIFT) | ESR_IL_BIT
                 | (immediate & ESR_ISS_BRK_IMMEDIATE_MASK);
-        enterSynchronousException(instructionAddress, esr);
+        enterSynchronousException(Aarch64ExceptionLevel.EL1, instructionAddress, esr);
     }
 
     /// `HLT` sem estado de debug externo modelado (B8.3) — pseudocódigo real do manual cai no
     /// caminho `UNDEFINED` (`Halting_instruction`), mesma classe (`EC=0x00`, "Unknown reason") de
     /// qualquer encoding reservado que um `Aarch64Decoder` real rejeitasse. Mesmo contrato de
     /// {@link #enterBreakpointException}, sem imediato (`ISS=0`, "Unknown reason" não carrega
-    /// síndrome).
+    /// síndrome). Alvo fixo em `EL1`, mesma ressalva de {@link #enterMemoryAbort}.
     ///
-    /// @param instructionAddress endereço da própria instrução `HLT` (ELR_EL1)
+    /// @param instructionAddress endereço da própria instrução `HLT` (`ELR_ELx`)
     public void enterUndefinedInstructionException(long instructionAddress) {
         long esr = (ESR_EC_UNKNOWN_REASON << ESR_EC_SHIFT) | ESR_IL_BIT;
-        enterSynchronousException(instructionAddress, esr);
+        enterSynchronousException(Aarch64ExceptionLevel.EL1, instructionAddress, esr);
     }
 
-    /// Núcleo comum de toda exceção síncrona EL0→EL1 (`ARM DDI 0487` pseudocódigo
-    /// `AArch64.TakeException`, extraído de {@link #enterMemoryAbort} nesta task para ser
-    /// reaproveitado por {@link #enterBreakpointException}/{@link #enterUndefinedInstructionException}
-    /// — as três compartilham `ELR_EL1←instructionAddress`, `SPSR_EL1←PSTATE` atual, fecham o
-    /// monitor de exclusividade, entram em EL1 e saltam para o MESMO vetor "Synchronous, exceção
-    /// de nível inferior" — só `ESR_EL1`/`FAR_EL1` mudam por tipo de falta, e `FAR_EL1` é
+    /// Núcleo comum de toda exceção síncrona (`ARM DDI 0487` pseudocódigo `AArch64.TakeException`,
+    /// extraído de {@link #enterMemoryAbort} em B8.3, generalizado para nível-alvo explícito em
+    /// B10.1) — reaproveitado por {@link #enterBreakpointException}/
+    /// {@link #enterUndefinedInstructionException} e futuramente por `HVC`/`SMC` reais (B10.4/
+    /// B10.5): todas compartilham `ELR_ELx←instructionAddress`, `SPSR_ELx←PSTATE` atual (com o
+    /// nível de ORIGEM codificado no campo `M[3:0]`, para `ERET` saber pra onde voltar — ver
+    /// {@link Aarch64ExceptionLevel}), fecham o monitor de exclusividade, entram no nível-alvo e
+    /// saltam pro vetor certo (grupo "mesmo nível" ou "nível inferior", conforme
+    /// {@link #vectorGroupBase} — só `ESR_ELx`/`FAR_ELx` mudam por tipo de falta, e `FAR_ELx` é
     /// preenchido pelo CHAMADOR antes de vir aqui quando aplicável).
-    private void enterSynchronousException(long instructionAddress, long esr) {
-        exceptionState.setEsr1(esr);
-        exceptionState.setElr1(instructionAddress);
-        exceptionState.setSpsr1(pstate.toSpsrFormat());
+    ///
+    /// @param target nível de exceção que vai tratar esta exceção (nunca `EL0`, nunca abaixo do
+    ///               nível atual — ver {@link #vectorGroupBase})
+    private void enterSynchronousException(Aarch64ExceptionLevel target, long instructionAddress, long esr) {
+        Aarch64ExceptionLevel source = exceptionState.currentEl();
+        exceptionState.setEsr(target, esr);
+        exceptionState.setElr(target, instructionAddress);
+        exceptionState.setSpsr(target, pstate.toSpsrFormat() | source.spsrMode());
         clearExclusiveMonitor();
-        exceptionState.setInEl1(true);
+        exceptionState.setCurrentEl(target);
         // B6.6.7: qualquer entrada de exceção mascara IRQ (`ARM DDI 0487` pseudocódigo
-        // `AArch64.TakeException` seta `PSTATE.{D,A,I,F}=1`) — `spsr1` acima já capturou o valor
+        // `AArch64.TakeException` seta `PSTATE.{D,A,I,F}=1`) — `spsr` acima já capturou o valor
         // ANTIGO da máscara (o que `ERET` deve restaurar), então esta linha só afeta o `PSTATE`
         // ATIVO durante o handler em si.
         pstate.setIrqDisabled(true);
-        setProgramCounter(exceptionState.vbar1() + SYNCHRONOUS_LOWER_EL_AARCH64_VECTOR_OFFSET);
+        setProgramCounter(exceptionState.vbar(target) + vectorGroupBase(source, target)
+                + VECTOR_SYNCHRONOUS_OFFSET_WITHIN_GROUP);
+    }
+
+    /// Base do grupo de origem certo na tabela de vetores (`ARM DDI 0487 D1.10`, B10.1): "mesmo
+    /// nível, `SP_ELx`" quando a exceção ocorre já dentro do nível-alvo (ex.: `BRK` dentro do
+    /// próprio handler de EL1), "nível inferior usando AArch64" quando entra vindo de um nível
+    /// mais baixo (o caso de toda entrada EL0→EL1 até B10.1). Uma exceção NUNCA reduz o nível de
+    /// privilégio — `target` abaixo de `source` é um bug de chamador, não um caso arquitetural
+    /// real, por isso lança em vez de silenciosamente escolher um grupo errado (G8).
+    private static long vectorGroupBase(Aarch64ExceptionLevel source, Aarch64ExceptionLevel target) {
+        if (target.ordinal() < source.ordinal()) {
+            throw new IllegalStateException(
+                    "entrada de exceção não pode reduzir o nível de privilégio: " + source + " -> " + target);
+        }
+        return target == source ? VECTOR_GROUP_CURRENT_EL_SPX_BASE : VECTOR_GROUP_LOWER_EL_AARCH64_BASE;
     }
 
     private static void checkRegisterIndex(int index) {
