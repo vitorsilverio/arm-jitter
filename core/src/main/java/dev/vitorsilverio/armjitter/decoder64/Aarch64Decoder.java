@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
@@ -454,6 +455,17 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_CACHE_CRN = 0b0111;
     private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_CRM = 0b0100;
     private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_OP2 = 0b001;
+
+    // ── B10.6: `AT` (`op0=1`, `SYS`, `L=0`, `op1=0b000` — MESMO `CRn=0b0111` da manutenção de
+    // ── cache acima, mas `CRm=0b1000` — achado real desta task: o `if` genérico de cache maintenance
+    // ── de B8.3 tratava QUALQUER `CRn=0b0111` (exceto `DC ZVA`) como NOP, o que incluía `AT` por
+    // ── engano (G8 — `AT` tem efeito observável real, escreve `PAR_EL1`, não é um NOP). O carve-out
+    // ── de `AT` precisa vir ANTES do bucket genérico de cache no decoder.
+    private static final int SYSTEM_INSTRUCTION_AT_STAGE1_CRM = 0b1000;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E1R = 0b000;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E1W = 0b001;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0R = 0b010;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0W = 0b011;
 
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
@@ -2052,11 +2064,19 @@ public final class Aarch64Decoder {
     /// "demais" nunca corrompe estado (ao contrário de invalidar "de menos"). `DC ZVA` continua
     /// EXCLUÍDA explicitamente (tem efeito observável real — zera memória — e já é anunciada como
     /// indisponível via `DCZID_EL0.DZP=1`, B6.10; se um guest ignorar isso e emitir mesmo assim,
-    /// deve cair no `throw unsupported`, não silenciosamente virar NOP). `AT` (address
-    /// translation, escreve `PAR_EL1`) e o resto de `SYS`/`SYSL` (`TLBI` per-VA/per-ASID como
-    /// instrução ENDEREÇÁVEL individualmente — aqui tratada igual a "invalidar tudo", não byte a
-    /// byte — debug registers via `SYSL`, `op0=2`) ficam fora do escopo desta task, documentados
-    /// como próximo passo, não presumidos desnecessários (ver a task, "Não inclui").
+    /// deve cair no `throw unsupported`, não silenciosamente virar NOP).
+    ///
+    /// **B10.6**: `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (address translation, escreve `PAR_EL1`) —
+    /// MESMO `CRn=0b0111` da manutenção de cache, distinguida por `CRm=0b1000` — precisa de
+    /// carve-out ANTES do bucket genérico de cache abaixo, ou cairia incorretamente em
+    /// `CACHE_MAINTENANCE_NOP` (achado real desta task: era exatamente isso que acontecia antes,
+    /// já que o `if` de cache de B8.3 não checava `CRm`, ver javadoc da task). `S1E2*`/`S1E3*`/
+    /// `S12E*` (regimes EL2/EL3/stage-2, que não existem ainda neste emulador) continuam fora,
+    /// caindo em `throw unsupported` como qualquer encoding não reconhecido (G8). O resto de
+    /// `SYS`/`SYSL` (`TLBI` per-VA/per-ASID como instrução ENDEREÇÁVEL individualmente — aqui
+    /// tratada igual a "invalidar tudo", não byte a byte — debug registers via `SYSL`, `op0=2`)
+    /// fica fora do escopo desta task, documentado como próximo passo, não presumido desnecessário
+    /// (ver a task, "Não inclui").
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
@@ -2064,10 +2084,41 @@ public final class Aarch64Decoder {
         if (!isSysl && op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 && crn == SYSTEM_INSTRUCTION_TLBI_CRN) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
+        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isAddressTranslateStage1Crm(word)) {
+            // CRm=0b1000 é SEMPRE `AT` (nunca manutenção de cache), para QUALQUER `op1` — só
+            // `op1=0b000` (regime EL1&0) tem forma implementada; `op1=4/6` (EL2/EL3, B10.6b/B10.6c)
+            // cai em `unsupported` abaixo, nunca no bucket de NOP genérico (G8 — ver Armadilhas).
+            if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1) {
+                return decodeAddressTranslate(word, address);
+            }
+            throw unsupported(word, address);
+        }
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && !isDataCacheZva(word)) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
         throw unsupported(word, address);
+    }
+
+    /// Confere se `CRm` bate com o grupo `AT` (`CRn=0b0111` já checado pelo chamador).
+    private static boolean isAddressTranslateStage1Crm(int word) {
+        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+        return crm == SYSTEM_INSTRUCTION_AT_STAGE1_CRM;
+    }
+
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6) — `op2` seleciona a forma; `Rt` carrega o VA de
+    /// origem (mesma convenção de {@link #decodeSystemRegister}, `31`=`XZR`). Chamado só quando
+    /// `op1`/`CRn`/`CRm` já bateram com o grupo `AT` EL1&0 (ver {@link #decodeSystemInstructionSys}).
+    private Ir64Op decodeAddressTranslate(int word, long address) {
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        Aarch64AddressTranslateForm form = switch (op2) {
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E1R -> Aarch64AddressTranslateForm.S1E1R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E1W -> Aarch64AddressTranslateForm.S1E1W;
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E0R -> Aarch64AddressTranslateForm.S1E0R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E0W -> Aarch64AddressTranslateForm.S1E0W;
+            default -> throw unsupported(word, address);
+        };
+        return new Ir64Op.AddressTranslate(form, rt);
     }
 
     /// Confere se `{CRm, op2}` bate com `DC ZVA` (`CRn=0b0111` já checado pelo chamador) — único

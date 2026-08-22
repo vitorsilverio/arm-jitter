@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
@@ -25,7 +26,10 @@ class Aarch64VmsaSystemRegistersTest {
     private static final long DESC_TABLE_OR_PAGE = 0b10L;
     private static final int AP_SHIFT = 6;
     private static final int AP_FULL_ACCESS = 0b01;
+    private static final int AP_EL1_ONLY_READ_WRITE = 0b00;
+    private static final int AP_EL1_ONLY_READ_ONLY = 0b10;
     private static final long OUTPUT_ADDRESS_MASK = 0x0000_FFFF_FFFF_F000L;
+    private static final long F_BIT = 1L;
 
     private static long tableDescriptor(long nextTableBase) {
         return (nextTableBase & OUTPUT_ADDRESS_MASK) | DESC_TABLE_OR_PAGE | DESC_VALID;
@@ -277,5 +281,111 @@ class Aarch64VmsaSystemRegistersTest {
         assertEquals(0x1234_5678, mmu.read32(0));
         assertEquals(0x1234_5678, mmuPhysical.read32(0), "bloco identidade: PA == VA");
         assertTrue(mmu.pageWalkCount() > walksBeforeAccess, "acesso pós-M=1 deve ter percorrido a tabela real");
+    }
+
+    // ── B10.6: AT S1E1R/S1E1W/S1E0R/S1E0W (Ir64Op.AddressTranslate) ────────────────────────
+
+    /// Página de 4KiB identity-mapped em `PA=0`, `AP` configurável (índice L3 `0`).
+    private static Aarch64Core coreWithMmuPageAtZero(int ap) {
+        AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
+        physical.write64(0, tableDescriptor(0x1000));    // L0[0] -> L1
+        physical.write64(0x1000, tableDescriptor(0x2000)); // L1[0] -> L2
+        physical.write64(0x2000, tableDescriptor(0x3000)); // L2[0] -> L3
+        physical.write64(0x3000, (0L & OUTPUT_ADDRESS_MASK) | ((long) ap << AP_SHIFT) | 0b10L | 0b1L); // L3[0]
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(physical);
+        mmu.setTtbr0(0);
+        mmu.setMmuEnabled(true);
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x100)));
+        core.setSystemRegisterBus(new Aarch64VmsaSystemRegisters(mmu, core));
+        return core;
+    }
+
+    @Test
+    void s1e1rBemSucedidoEscrevePar() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_FULL_ACCESS);
+        core.setX(0, 0x100L); // VA dentro da página identity-mapped
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida");
+        assertEquals(0x100L & OUTPUT_ADDRESS_MASK, par & OUTPUT_ADDRESS_MASK);
+    }
+
+    @Test
+    void s1e0rEmPaginaSoPrivilegiadaFalhaComParFSemLancarExcecao() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_EL1_ONLY_READ_WRITE);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        // Não deve lançar: AT nunca gera abort para o guest, só reporta em PAR_EL1.
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E0R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "F=1: S1E0R numa página EL1-only deve falhar por permissão");
+    }
+
+    @Test
+    void s1e1rNaMesmaPaginaContinuaOkPoisTraduzComoEl1() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_EL1_ONLY_READ_WRITE);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT, "S1E1R checa como EL1, que tem acesso à página EL1-only");
+    }
+
+    @Test
+    void s1e1wEmPaginaSomenteLeituraFalha() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_EL1_ONLY_READ_ONLY);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1W, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "S1E1W numa página só-leitura deve falhar por permissão");
+    }
+
+    @Test
+    void enderecoSemDescritorValidoFalhaComTranslationFault() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_FULL_ACCESS);
+        core.setX(0, 1L << 30); // fora da única página mapeada (L0[0]->L1[0]->L2[0]->L3[0])
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "F=1: sem descritor válido no caminho do walk");
+    }
+
+    @Test
+    void xzrComoOrigemDoVaTraduzEnderecoZero() {
+        Aarch64Core core = coreWithMmuPageAtZero(AP_FULL_ACCESS);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 31));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT);
+        assertEquals(0L, par & OUTPUT_ADDRESS_MASK, "XZR (rt=31) deve traduzir VA=0");
+    }
+
+    @Test
+    void manutencaoDeCacheRealContinuaNopAposOCarveOutDeAt() {
+        // Regressão do achado desta task: IC IALLU (CRm=1, op1=0, CRn=7, op2=5, != AT CRm=8)
+        // precisa continuar caindo no bucket genérico de cache maintenance, não em AT.
+        Aarch64Core core = coreWithoutCode();
+        core.setProgramCounter(0x20);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        boolean pcChanged = executor.executeOp(
+                core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP));
+
+        assertFalse(pcChanged);
+        assertEquals(0x20, core.pc());
     }
 }

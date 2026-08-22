@@ -304,6 +304,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (Ir64Op.InterruptMask) op);
             case Ir64Op.Kind.BREAKPOINT -> executeBreakpoint((Ir64Op.Breakpoint) op);
             case Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> executeUndefinedInstructionTrap();
+            case Ir64Op.Kind.ADDRESS_TRANSLATE ->
+                    executeAddressTranslate(core, (Ir64Op.AddressTranslate) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -1035,6 +1037,19 @@ public final class Ir64BlockExecutor {
         } else {
             bus.write(op.register(), core.x(op.rt()));
         }
+        return false;
+    }
+
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6) — delega inteiramente ao
+    /// {@link Aarch64SystemRegisterBus} instalado; um barramento sem MMU (default, sem
+    /// {@link Aarch64SystemRegisterBus#handles} — o método nem checa isso, ao contrário de
+    /// {@link #executeSystemRegister}) lança {@link UnsupportedOperationException} direto do default
+    /// de {@link Aarch64SystemRegisterBus#addressTranslate}. `rt=31` (`XZR`) lê `0` via
+    /// {@link Aarch64Core#x}, mesma convenção de {@link Ir64Op.SystemRegister}. Sem escrita em
+    /// registrador geral: o resultado vai só para `PAR_EL1`, dentro do bus.
+    private boolean executeAddressTranslate(Aarch64Core core, Ir64Op.AddressTranslate op) {
+        long va = core.x(op.rt());
+        core.systemRegisterBus().addressTranslate(op.form(), va);
         return false;
     }
 

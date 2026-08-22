@@ -289,6 +289,30 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
         return (tlb.ppn(idx) << PAGE_BITS) | (va & PAGE_OFFSET_MASK);
     }
 
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6): mesmo page-walk de {@link #walk}, mas SEM
+    /// consultar/preencher a micro-TLB (`AT` não deve ter efeito colateral na TLB — mesmo raciocínio
+    /// de "efeito mínimo" já aplicado ao precedente 32-bit) e com o `privileged` usado na checagem
+    /// de acesso decidido pelo CHAMADOR (`unprivileged`), não pelo {@link #privileged} real do
+    /// wrapper — `AT S1E0*` sempre traduz "como EL0" mesmo executando a partir de EL1. O valor
+    /// original de {@link #privileged} é restaurado no `finally`, nunca vaza para acessos normais
+    /// depois desta chamada.
+    ///
+    /// @param unprivileged {@code true} para `S1E0*` (checa acesso como EL0); {@code false} para
+    ///                     `S1E1*` (checa acesso como EL1)
+    /// @return endereço físico completo em sucesso
+    /// @throws MemoryTranslationException64 em falha de tradução ou permissão — capturada por quem
+    ///         chama (`Aarch64VmsaSystemRegisters#addressTranslate`), NUNCA propagada como abort
+    ///         real (`AT` não gera exceção síncrona para o guest)
+    public long translateForAddressTranslate(long va, MemoryAccessType type, boolean unprivileged) {
+        boolean saved = this.privileged;
+        this.privileged = !unprivileged;
+        try {
+            return walk(va, type).physicalAddress();
+        } finally {
+            this.privileged = saved;
+        }
+    }
+
     private static int indexShift(int level) {
         return switch (level) {
             case LEVEL_L0 -> L0_SHIFT;

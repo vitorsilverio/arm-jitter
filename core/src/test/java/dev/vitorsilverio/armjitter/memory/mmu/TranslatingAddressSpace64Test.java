@@ -277,6 +277,52 @@ class TranslatingAddressSpace64Test {
                 assertThrows(MemoryTranslationException64.class, () -> mmu.read32(VA_L3_FAULT)).faultStatus());
     }
 
+    // ── B10.6: translateForAddressTranslate (AT S1E1R/S1E1W/S1E0R/S1E0W) ────────────────────
+
+    @Test
+    void translateForAddressTranslateDevolvePaSemMexerNaTlb() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        long beforeAt = mmu.pageWalkCount();
+
+        long pa = mmu.translateForAddressTranslate(VA_IDENTITY, MemoryAccessType.DATA_READ, false);
+
+        assertEquals(PA_IDENTITY, pa);
+        assertEquals(beforeAt + 1, mmu.pageWalkCount());
+
+        // Segunda chamada idêntica: se tivesse preenchido a TLB, seria HIT (sem novo walk). AT
+        // nunca deve ficar residente na TLB — cada chamada refaz o walk.
+        mmu.translateForAddressTranslate(VA_IDENTITY, MemoryAccessType.DATA_READ, false);
+        assertEquals(beforeAt + 2, mmu.pageWalkCount());
+    }
+
+    @Test
+    void translateForAddressTranslateFalhaDeTraducaoPropagaFaultStatus() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+
+        MemoryTranslationException64 fault = assertThrows(MemoryTranslationException64.class,
+                () -> mmu.translateForAddressTranslate(VA_L3_FAULT, MemoryAccessType.DATA_READ, false));
+
+        assertEquals(FaultStatus64.TRANSLATION_FAULT_L3, fault.faultStatus());
+    }
+
+    @Test
+    void translateForAddressTranslateUnprivilegedChecaComoEl0IndependenteDoPrivilegedReal() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setPrivileged(true); // como um kernel real em EL1 perguntando "isso seria acessível por EL0?"
+
+        MemoryTranslationException64 fault = assertThrows(MemoryTranslationException64.class,
+                () -> mmu.translateForAddressTranslate(VA_EL1_ONLY, MemoryAccessType.DATA_READ, true));
+
+        assertEquals(FaultStatus64.PERMISSION_FAULT_L3, fault.faultStatus());
+        // S1E1* (unprivileged=false) na MESMA página deve continuar permitido: privileged real
+        // não foi alterado permanentemente pela chamada anterior (finally restaura).
+        assertEquals(PA_EL1_ONLY,
+                mmu.translateForAddressTranslate(VA_EL1_ONLY, MemoryAccessType.DATA_READ, false));
+    }
+
     @Test
     void translationGenerationIncrementaSoEmSetTtbr0EInvalidateTlbAll() {
         AddressSpace64 physical = newPhysical();

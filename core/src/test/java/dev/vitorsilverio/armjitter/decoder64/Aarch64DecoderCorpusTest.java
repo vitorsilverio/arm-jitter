@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
@@ -2793,6 +2794,76 @@ class Aarch64DecoderCorpusTest {
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+    }
+
+    // ── B10.6: AT S1E1R/S1E1W/S1E0R/S1E0W — mesmo CRn=0b0111 da manutenção de cache acima
+    // ── (CRm=0b1000 distingue), construídos à mão a partir do encoding real (ARM DDI 0487 C6.2.23)
+    // ── — não representáveis pelo corpus (nunca gerados por este emulador). Achado real desta
+    // ── task: ANTES do carve-out, essas palavras caíam incorretamente em CACHE_MAINTENANCE_NOP
+    // ── (ver javadoc de Aarch64Decoder#decodeSystemInstructionSys) — os testes abaixo confirmam
+    // ── que agora viram Ir64Op.AddressTranslate de verdade.
+
+    private static Ir64Op decodeAt(int word) {
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        return DECODER.decode(scratch, 0);
+    }
+
+    @Test
+    void atS1e1rX0() {
+        // at s1e1r, x0 (0xd5087800: L=0,op0=1,op1=0,CRn=7,CRm=8,op2=0,rt=0)
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087800);
+        assertEquals(Aarch64AddressTranslateForm.S1E1R, op.form());
+        assertEquals(0, op.rt());
+    }
+
+    @Test
+    void atS1e1wX0() {
+        // at s1e1w, x0 (0xd5087820: op2=1)
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087820);
+        assertEquals(Aarch64AddressTranslateForm.S1E1W, op.form());
+    }
+
+    @Test
+    void atS1e0rX0() {
+        // at s1e0r, x0 (0xd5087840: op2=2)
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087840);
+        assertEquals(Aarch64AddressTranslateForm.S1E0R, op.form());
+    }
+
+    @Test
+    void atS1e0wXzr() {
+        // at s1e0w, xzr (0xd508787f: op2=3, rt=31)
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd508787f);
+        assertEquals(Aarch64AddressTranslateForm.S1E0W, op.form());
+        assertEquals(31, op.rt(), "rt=31 é XZR, mesma convenção de SystemRegister");
+    }
+
+    @Test
+    void icIalluisContinuaCacheMaintenanceNoopAposOCarveOutDeAt() {
+        // Regressão do achado real: ic ialluis (CRm=1, != AT CRm=8) precisa continuar caindo no
+        // bucket genérico de cache maintenance, não ser afetada pelo carve-out de AT que também
+        // vive em CRn=0b0111.
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decodeAt(0xd5087100);
+        assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
+    }
+
+    @Test
+    void atS1e2rStaysUnsupported() {
+        // at s1e2r, x0 (op1=4/0b100, CRm=8, op2=0): regime EL2, fora de escopo de B10.6 (ver
+        // "Não inclui" da task — TTBR0_EL2 nem existe ainda). Deve cair em UNIMPLEMENTED (G8), não
+        // ser confundida com nenhuma forma EL1&0, nem cair de volta no bucket de NOP genérico
+        // (achado real: um primeiro carve-out que só olhava op1==0 tinha exatamente esse bug).
+        int word = 0xd5087800 | (0b100 << 16);
+        assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
+    }
+
+    @Test
+    void atS1e3rStaysUnsupported() {
+        // at s1e3r, x0 (op1=6/0b110, CRm=8, op2=0): regime EL3, mesma razão de atS1e2rStaysUnsupported.
+        int word = 0xd5087800 | (0b110 << 16);
+        assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
     }
 
     // ── B8.1: LDR/STR/LDP/STP restantes, LDXP/STXP, CAS/CASP, LDAR/STLR — apêndice do mesmo

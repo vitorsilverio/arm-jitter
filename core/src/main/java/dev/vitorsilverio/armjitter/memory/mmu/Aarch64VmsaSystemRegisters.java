@@ -4,7 +4,9 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
+import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 
 /// VMSA64 (`ARM DDI 0487 D8`, task B6.6.3): liga `MRS`/`MSR (register)` (B6.6.1) e `TLBI VMALLE1`/
 /// `VMALLE1IS` (`Ir64Op.SystemInstruction`, também B6.6.3) aos controles expostos por
@@ -41,6 +43,11 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 /// `ELR_EL3`/`SPSR_EL3`) idem — armazenamento puro (nenhum código roda em EL3 ainda; roteamento
 /// real de `SMC` é B10.5). `VBAR_EL3`/`ELR_EL3`/`SPSR_EL3` delegam ao banco por nível, mesma
 /// disciplina dos pares EL1/EL2.
+///
+/// **B10.6**: `PAR_EL1` é armazenamento puro (`par`), mas {@link #addressTranslate} tem side
+/// effect REAL — é quem normalmente escreve `par`, traduzindo de verdade via
+/// {@link TranslatingAddressSpace64#translateForAddressTranslate}. Único registrador/método deste
+/// barramento com efeito observável fora de si mesmo além dos pares EL1 já existentes.
 public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBus {
     private static final long SCTLR_M_BIT = 1;
 
@@ -72,6 +79,9 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private long mdcrEl3;
     private long cptrEl3;
 
+    // ── B10.6: PAR_EL1 (armazenamento — quem calcula o valor real é addressTranslate) ──────
+    private long par;
+
     /// @param mmu  wrapper (B6.6.2) que este barramento controla
     /// @param core core cujo {@link Aarch64Core#exceptionState()} guarda `ESR_EL1`/`FAR_EL1`/
     ///             `VBAR_EL1`/`ELR_EL1`/`SPSR_EL1` (B6.6.4) — único consumidor real do parâmetro
@@ -95,7 +105,7 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case SCTLR_EL1, TTBR0_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1, VBAR_EL1, ELR_EL1,
                  SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
                  SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
-                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3 -> true;
+                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, PAR_EL1 -> true;
             default -> false;
         };
     }
@@ -132,6 +142,7 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL3 -> exceptionState.vbar(Aarch64ExceptionLevel.EL3);
             case ELR_EL3 -> exceptionState.elr(Aarch64ExceptionLevel.EL3);
             case SPSR_EL3 -> exceptionState.spsr(Aarch64ExceptionLevel.EL3);
+            case PAR_EL1 -> par;
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         };
@@ -178,6 +189,7 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL3 -> exceptionState.setVbar(Aarch64ExceptionLevel.EL3, value);
             case ELR_EL3 -> exceptionState.setElr(Aarch64ExceptionLevel.EL3, value);
             case SPSR_EL3 -> exceptionState.setSpsr(Aarch64ExceptionLevel.EL3, value);
+            case PAR_EL1 -> par = value;
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         }
@@ -186,6 +198,21 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     @Override
     public void invalidateTlbAll() {
         mmu.invalidateTlbAll();
+    }
+
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6): traduz `va` via
+    /// {@link TranslatingAddressSpace64#translateForAddressTranslate} e escreve {@link #par} —
+    /// sucesso via {@link Aarch64ParEncoder#success}, falha (capturada AQUI, nunca relançada — `AT`
+    /// não gera abort) via {@link Aarch64ParEncoder#fault}.
+    @Override
+    public void addressTranslate(Aarch64AddressTranslateForm form, long va) {
+        MemoryAccessType type = form.isWrite() ? MemoryAccessType.DATA_WRITE : MemoryAccessType.DATA_READ;
+        try {
+            long physicalAddress = mmu.translateForAddressTranslate(va, type, form.isUnprivileged());
+            par = Aarch64ParEncoder.success(physicalAddress);
+        } catch (MemoryTranslationException64 fault) {
+            par = Aarch64ParEncoder.fault(fault.faultStatus());
+        }
     }
 
     private long sctlrValue() {

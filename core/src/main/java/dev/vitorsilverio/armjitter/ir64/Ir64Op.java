@@ -34,7 +34,8 @@ public sealed interface Ir64Op permits
         Ir64Op.CompareAndSwap, Ir64Op.CompareAndSwapPair, Ir64Op.AluWithCarry, Ir64Op.Extract,
         Ir64Op.DataProcessing1Source, Ir64Op.MultiplyAccumulateLong, Ir64Op.MultiplyHigh,
         Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags,
-        Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap {
+        Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap,
+        Ir64Op.AddressTranslate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -116,6 +117,8 @@ public sealed interface Ir64Op permits
         public static final int BREAKPOINT = 44;
         /// B8.3: `HLT` — ver {@link UndefinedInstructionTrap}.
         public static final int UNDEFINED_INSTRUCTION_TRAP = 45;
+        /// B10.6: `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` — ver {@link AddressTranslate}.
+        public static final int ADDRESS_TRANSLATE = 46;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -806,6 +809,19 @@ public sealed interface Ir64Op permits
     ///              B10.5)
     record PrivilegedCall(boolean isHvc) implements Ir64Op {
         @Override public int kind() { return Kind.PRIVILEGED_CALL; }
+    }
+
+    /// `AT` (`ARM DDI 0487 C6.2.23`, task B10.6) — traduz `Xt` (VA) pelo regime EL1&0 real e
+    /// escreve `PAR_EL1`, SEM gerar acesso de memória nem exceção síncrona para o guest (falha vira
+    /// `PAR_EL1.F=1`, nunca um abort) — ver
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64VmsaSystemRegisters#addressTranslate}.
+    /// `S1E2*`/`S1E3*`/`S12E*` não são decodificadas ainda (ver `Aarch64AddressTranslateForm`).
+    ///
+    /// @param form forma decodificada (`S1E1R`/`S1E1W`/`S1E0R`/`S1E0W`)
+    /// @param rt   registrador de origem do VA (índice `0`-`31`; `31` é `XZR`, mesma convenção de
+    ///             {@link SystemRegister#rt})
+    record AddressTranslate(Aarch64AddressTranslateForm form, int rt) implements Ir64Op {
+        @Override public int kind() { return Kind.ADDRESS_TRANSLATE; }
     }
 
     /// Sub-operação de {@link Fp64Alu} — leitura literal do épico B6.5 ("FMOV/FADD/FMUL/FDIV/

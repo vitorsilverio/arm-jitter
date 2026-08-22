@@ -190,5 +190,14 @@ public enum Aarch64SystemRegisterId {
     ELR_EL3,
     /// `VBAR_EL3` (`op0=3,op1=6,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
     /// EL3. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
-    VBAR_EL3
+    VBAR_EL3,
+
+    // ── B10.6: `PAR_EL1` (`op0=3,op1=0,CRn=7,CRm=4,op2=0`) — resultado da instrução `AT`. ──
+
+    /// `PAR_EL1` (`op0=3,op1=0,CRn=7,CRm=4,op2=0`) — resultado da última `AT` (ou escrito
+    /// diretamente pelo guest via `MSR`, arquiteturalmente válido). Armazenamento puro em
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64VmsaSystemRegisters}; quem calcula o
+    /// valor real é {@code Ir64Op.AddressTranslate} via
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus#addressTranslate}.
+    PAR_EL1
 }
