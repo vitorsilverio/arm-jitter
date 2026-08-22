@@ -36,6 +36,11 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 /// EL2 ainda; `SCTLR_EL2.M` não liga `mmu`, que é stage-1 de EL1). `ESR_EL2`/`FAR_EL2`/`VBAR_EL2`/
 /// `ELR_EL2`/`SPSR_EL2` delegam ao banco por nível de {@link Aarch64ExceptionState} (B10.1), mesma
 /// fonte única já usada pelos pares EL1.
+///
+/// **B10.3**: os 7 registradores EL3 (`SCTLR_EL3`/`SCR_EL3`/`MDCR_EL3`/`CPTR_EL3`/`VBAR_EL3`/
+/// `ELR_EL3`/`SPSR_EL3`) idem — armazenamento puro (nenhum código roda em EL3 ainda; roteamento
+/// real de `SMC` é B10.5). `VBAR_EL3`/`ELR_EL3`/`SPSR_EL3` delegam ao banco por nível, mesma
+/// disciplina dos pares EL1/EL2.
 public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBus {
     private static final long SCTLR_M_BIT = 1;
 
@@ -59,6 +64,14 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private long vtcrEl2;
     private long cnthctlEl2;
 
+    // ── B10.3: registradores de sistema EL3, armazenamento puro (sem side effect). VBAR_EL3/
+    // ── ELR_EL3/SPSR_EL3 NÃO têm campo próprio: delegam ao banco por nível de
+    // ── Aarch64ExceptionState (mesma disciplina dos pares EL1/EL2 acima).
+    private long sctlrEl3;
+    private long scrEl3;
+    private long mdcrEl3;
+    private long cptrEl3;
+
     /// @param mmu  wrapper (B6.6.2) que este barramento controla
     /// @param core core cujo {@link Aarch64Core#exceptionState()} guarda `ESR_EL1`/`FAR_EL1`/
     ///             `VBAR_EL1`/`ELR_EL1`/`SPSR_EL1` (B6.6.4) — único consumidor real do parâmetro
@@ -81,7 +94,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         return switch (register) {
             case SCTLR_EL1, TTBR0_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1, VBAR_EL1, ELR_EL1,
                  SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
-                 SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2 -> true;
+                 SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
+                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3 -> true;
             default -> false;
         };
     }
@@ -111,6 +125,13 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL2 -> exceptionState.vbar(Aarch64ExceptionLevel.EL2);
             case ELR_EL2 -> exceptionState.elr(Aarch64ExceptionLevel.EL2);
             case SPSR_EL2 -> exceptionState.spsr(Aarch64ExceptionLevel.EL2);
+            case SCTLR_EL3 -> sctlrEl3;
+            case SCR_EL3 -> scrEl3;
+            case MDCR_EL3 -> mdcrEl3;
+            case CPTR_EL3 -> cptrEl3;
+            case VBAR_EL3 -> exceptionState.vbar(Aarch64ExceptionLevel.EL3);
+            case ELR_EL3 -> exceptionState.elr(Aarch64ExceptionLevel.EL3);
+            case SPSR_EL3 -> exceptionState.spsr(Aarch64ExceptionLevel.EL3);
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         };
@@ -150,6 +171,13 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL2 -> exceptionState.setVbar(Aarch64ExceptionLevel.EL2, value);
             case ELR_EL2 -> exceptionState.setElr(Aarch64ExceptionLevel.EL2, value);
             case SPSR_EL2 -> exceptionState.setSpsr(Aarch64ExceptionLevel.EL2, value);
+            case SCTLR_EL3 -> sctlrEl3 = value;
+            case SCR_EL3 -> scrEl3 = value;
+            case MDCR_EL3 -> mdcrEl3 = value;
+            case CPTR_EL3 -> cptrEl3 = value;
+            case VBAR_EL3 -> exceptionState.setVbar(Aarch64ExceptionLevel.EL3, value);
+            case ELR_EL3 -> exceptionState.setElr(Aarch64ExceptionLevel.EL3, value);
+            case SPSR_EL3 -> exceptionState.setSpsr(Aarch64ExceptionLevel.EL3, value);
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         }

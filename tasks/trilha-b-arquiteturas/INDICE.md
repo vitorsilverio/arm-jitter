@@ -77,5 +77,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [B8.3](b8.3-a64-branch-system.md) | A64: branch/system (`CB*` excluído/`FEAT_CMPBR`, `BRK`/`HLT`, `DSB`/`CLREX`/`SB`, `MSR`/`MRS` restantes, `WFET`/`WFIT`, `SYS`/TLBI/cache ampliado) — frente de cobertura de ISA, `b7-plano-cobertura-isa.md` | B8.2 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 | [B10.1](b10.1-el2-el3-estado-generalizado.md) | EL2/EL3: generaliza `Aarch64ExceptionState`/`Aarch64Core` para os 4 níveis (`Aarch64ExceptionLevel`, vetor "mesmo nível"/"nível inferior", `ERET` lendo o alvo real de `SPSR_ELx.M`) — fundação do épico `b10-plano-el2-el3.md` | — | ✅ (2026-08-21) — ver **Resultado** na task |
 | [B10.2](b10.2-el2-registradores-sistema.md) | EL2: 13 registradores de sistema via `MRS`/`MSR` (`SCTLR_EL2`/`HCR_EL2`/`MDCR_EL2`/`CPTR_EL2`/`TCR_EL2`/`VTTBR_EL2`/`VTCR_EL2`/`SPSR_EL2`/`ELR_EL2`/`FAR_EL2`/`ESR_EL2`/`CNTHCTL_EL2`/`VBAR_EL2`) — armazenamento puro, sem side effect ainda | B10.1 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
+| [B10.3](b10.3-el3-registradores-sistema.md) | EL3: 7 registradores de sistema via `MRS`/`MSR` (`SCTLR_EL3`/`SCR_EL3`/`MDCR_EL3`/`CPTR_EL3`/`SPSR_EL3`/`ELR_EL3`/`VBAR_EL3`) — armazenamento puro, sem side effect ainda | B10.1 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

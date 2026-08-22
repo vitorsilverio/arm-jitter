@@ -161,5 +161,34 @@ public enum Aarch64SystemRegisterId {
     CNTHCTL_EL2,
     /// `VBAR_EL2` (`op0=3,op1=4,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
     /// EL2. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
-    VBAR_EL2
+    VBAR_EL2,
+
+    // ── B10.3: registradores de sistema EL3 (`op0=3,op1=6`), mesma disciplina de B10.2:
+    // ── armazenamento puro por enquanto — SEM side effect funcional (nenhum código roda em EL3
+    // ── ainda; roteamento real de SMC é B10.5). `ESR_EL3`/`FAR_EL3` deliberadamente FORA (não
+    // ── listados no plano mestre para esta task, ao contrário de EL2).
+
+    /// `SCTLR_EL3` (`op0=3,op1=6,CRn=1,CRm=0,op2=0`) — controle do sistema em EL3. Armazenamento
+    /// puro: NÃO liga nenhuma MMU (stage-1 de EL3 não é modelada por este épico).
+    SCTLR_EL3,
+    /// `SCR_EL3` (`op0=3,op1=6,CRn=1,CRm=1,op2=0`) — controle seguro (`NS`, roteamento de
+    /// `SMC`/IRQ/FIQ para EL3). Armazenamento puro; o roteamento real que estes bits deveriam
+    /// decidir é B10.5.
+    SCR_EL3,
+    /// `CPTR_EL3` (`op0=3,op1=6,CRn=1,CRm=1,op2=2`) — controle de trap de FP/SIMD/SVE para EL3.
+    /// Armazenamento puro (sem trap real modelado ainda).
+    CPTR_EL3,
+    /// `MDCR_EL3` (`op0=3,op1=6,CRn=1,CRm=3,op2=1`) — controle de debug/trace delegado a EL3.
+    /// Armazenamento puro (sem debugger de hardware conectado, mesma disciplina de B10.7).
+    MDCR_EL3,
+    /// `SPSR_EL3` (`op0=3,op1=6,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção em EL3.
+    /// Delega ao banco por nível de {@link dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState}
+    /// (generalizado em B10.1) — mesma fonte única já usada por {@link #SPSR_EL2}.
+    SPSR_EL3,
+    /// `ELR_EL3` (`op0=3,op1=6,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção em EL3.
+    /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
+    ELR_EL3,
+    /// `VBAR_EL3` (`op0=3,op1=6,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
+    /// EL3. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
+    VBAR_EL3
 }
