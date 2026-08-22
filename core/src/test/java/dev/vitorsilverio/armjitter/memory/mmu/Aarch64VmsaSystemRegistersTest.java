@@ -205,6 +205,31 @@ class Aarch64VmsaSystemRegistersTest {
     }
 
     @Test
+    void debugRegistersRoundTripAndIndependent() {
+        // B10.7: armazenamento puro, sem enforcement de RO/WO (OSLAR_EL1 é WO / OSLSR_EL1 é RO no
+        // hardware real, aqui os dois aceitam leitura/escrita — decisão explícita da task).
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(AddressSpace64.wrapping(new TestAddressSpace(0x1000)));
+        Aarch64VmsaSystemRegisters bus = new Aarch64VmsaSystemRegisters(mmu, coreWithoutCode());
+
+        bus.write(Aarch64SystemRegisterId.MDSCR_EL1, 0x1111L);
+        bus.write(Aarch64SystemRegisterId.OSLAR_EL1, 0x2222L);
+        bus.write(Aarch64SystemRegisterId.OSLSR_EL1, 0x3333L);
+        bus.write(Aarch64SystemRegisterId.DBGBVR0_EL1, 0x4444L);
+        bus.write(Aarch64SystemRegisterId.DBGBCR0_EL1, 0x5555L);
+        bus.write(Aarch64SystemRegisterId.DBGWVR0_EL1, 0x6666L);
+        bus.write(Aarch64SystemRegisterId.DBGWCR0_EL1, 0x7777L);
+
+        assertEquals(0x1111L, bus.read(Aarch64SystemRegisterId.MDSCR_EL1));
+        assertEquals(0x2222L, bus.read(Aarch64SystemRegisterId.OSLAR_EL1));
+        assertEquals(0x3333L, bus.read(Aarch64SystemRegisterId.OSLSR_EL1));
+        assertEquals(0x4444L, bus.read(Aarch64SystemRegisterId.DBGBVR0_EL1));
+        assertEquals(0x5555L, bus.read(Aarch64SystemRegisterId.DBGBCR0_EL1));
+        assertEquals(0x6666L, bus.read(Aarch64SystemRegisterId.DBGWVR0_EL1));
+        assertEquals(0x7777L, bus.read(Aarch64SystemRegisterId.DBGWCR0_EL1));
+        assertFalse(mmu.mmuEnabled(), "nenhum registrador de debug toca a MMU");
+    }
+
+    @Test
     void tlbiForwardedToMmu() {
         AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
         physical.write64(0, tableDescriptor(0x1000)); // L0[0] -> L1

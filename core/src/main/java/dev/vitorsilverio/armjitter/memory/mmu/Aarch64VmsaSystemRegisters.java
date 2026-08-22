@@ -48,6 +48,11 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 /// effect REAL — é quem normalmente escreve `par`, traduzindo de verdade via
 /// {@link TranslatingAddressSpace64#translateForAddressTranslate}. Único registrador/método deste
 /// barramento com efeito observável fora de si mesmo além dos pares EL1 já existentes.
+///
+/// **B10.7**: os 7 registradores de debug (`MDSCR_EL1`/`OSLAR_EL1`/`OSLSR_EL1`/`DBGBVR0_EL1`/
+/// `DBGBCR0_EL1`/`DBGWVR0_EL1`/`DBGWCR0_EL1`) também são atendidos aqui, armazenamento puro — SEM
+/// enforcement de `RO`/`WO` mesmo onde o hardware real os teria (`OSLAR_EL1`/`OSLSR_EL1`), por
+/// decisão explícita da task: sem debugger conectado, tolerar o guest em vez de travá-lo.
 public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBus {
     private static final long SCTLR_M_BIT = 1;
 
@@ -82,6 +87,16 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     // ── B10.6: PAR_EL1 (armazenamento — quem calcula o valor real é addressTranslate) ──────
     private long par;
 
+    // ── B10.7: registradores de debug, armazenamento puro (sem enforcement de RO/WO — ver
+    // ── javadoc de Aarch64SystemRegisterId). Só n=0 de DBGBVR/DBGBCR/DBGWVR/DBGWCR.
+    private long mdscrEl1;
+    private long oslarEl1;
+    private long oslsrEl1;
+    private long dbgbvr0El1;
+    private long dbgbcr0El1;
+    private long dbgwvr0El1;
+    private long dbgwcr0El1;
+
     /// @param mmu  wrapper (B6.6.2) que este barramento controla
     /// @param core core cujo {@link Aarch64Core#exceptionState()} guarda `ESR_EL1`/`FAR_EL1`/
     ///             `VBAR_EL1`/`ELR_EL1`/`SPSR_EL1` (B6.6.4) — único consumidor real do parâmetro
@@ -105,7 +120,9 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case SCTLR_EL1, TTBR0_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1, VBAR_EL1, ELR_EL1,
                  SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
                  SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
-                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, PAR_EL1 -> true;
+                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, PAR_EL1,
+                 MDSCR_EL1, OSLAR_EL1, OSLSR_EL1, DBGBVR0_EL1, DBGBCR0_EL1, DBGWVR0_EL1,
+                 DBGWCR0_EL1 -> true;
             default -> false;
         };
     }
@@ -143,6 +160,13 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case ELR_EL3 -> exceptionState.elr(Aarch64ExceptionLevel.EL3);
             case SPSR_EL3 -> exceptionState.spsr(Aarch64ExceptionLevel.EL3);
             case PAR_EL1 -> par;
+            case MDSCR_EL1 -> mdscrEl1;
+            case OSLAR_EL1 -> oslarEl1;
+            case OSLSR_EL1 -> oslsrEl1;
+            case DBGBVR0_EL1 -> dbgbvr0El1;
+            case DBGBCR0_EL1 -> dbgbcr0El1;
+            case DBGWVR0_EL1 -> dbgwvr0El1;
+            case DBGWCR0_EL1 -> dbgwcr0El1;
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         };
@@ -190,6 +214,13 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case ELR_EL3 -> exceptionState.setElr(Aarch64ExceptionLevel.EL3, value);
             case SPSR_EL3 -> exceptionState.setSpsr(Aarch64ExceptionLevel.EL3, value);
             case PAR_EL1 -> par = value;
+            case MDSCR_EL1 -> mdscrEl1 = value;
+            case OSLAR_EL1 -> oslarEl1 = value;
+            case OSLSR_EL1 -> oslsrEl1 = value;
+            case DBGBVR0_EL1 -> dbgbvr0El1 = value;
+            case DBGBCR0_EL1 -> dbgbcr0El1 = value;
+            case DBGWVR0_EL1 -> dbgwvr0El1 = value;
+            case DBGWCR0_EL1 -> dbgwcr0El1 = value;
             default -> throw new UnsupportedOperationException(
                     "Aarch64VmsaSystemRegisters não atende: " + register);
         }

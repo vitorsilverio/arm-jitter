@@ -199,5 +199,35 @@ public enum Aarch64SystemRegisterId {
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64VmsaSystemRegisters}; quem calcula o
     /// valor real é {@code Ir64Op.AddressTranslate} via
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus#addressTranslate}.
-    PAR_EL1
+    PAR_EL1,
+
+    // ── B10.7: registradores de debug (`op0=2,op1=0`) — sem debugger de hardware conectado, só
+    // ── armazenamento puro (leitura devolve exatamente o que foi escrito), SEM enforcement de
+    // ── `RO`/`WO` mesmo onde o hardware real os teria (`OSLAR_EL1` é `WO`, `OSLSR_EL1` é `RO`) —
+    // ── decisão explícita da task: tolerar o guest, não travá-lo. Só `n=0` de
+    // ── `DBGBVR`/`DBGBCR`/`DBGWVR`/`DBGWCR` (consistente com `ID_AA64DFR0_EL1.BRPs=WRPs=0` já
+    // ── anunciado por `Aarch64Core`, B6.6.7/B6.10 — ver "Decisão de escopo" da task B10.7).
+
+    /// `MDSCR_EL1` (`op0=2,op1=0,CRn=0,CRm=2,op2=2`) — controle do monitor de debug (`MDE`/`KDE`/
+    /// `SS`/...). Armazenamento puro; nenhum bit tem efeito observável (sem debugger conectado).
+    MDSCR_EL1,
+    /// `OSLAR_EL1` (`op0=2,op1=0,CRn=1,CRm=0,op2=4`) — OS Lock Access Register. `WO` no hardware
+    /// real; aqui é armazenamento puro leitura/escrita (ver javadoc da classe, "não travar o
+    /// guest").
+    OSLAR_EL1,
+    /// `OSLSR_EL1` (`op0=2,op1=0,CRn=1,CRm=1,op2=4`) — OS Lock Status Register. `RO` no hardware
+    /// real; aqui é armazenamento puro leitura/escrita, mesma disciplina de {@link #OSLAR_EL1}.
+    OSLSR_EL1,
+    /// `DBGBVR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=4`) — valor de endereço do breakpoint 0.
+    /// Armazenamento puro.
+    DBGBVR0_EL1,
+    /// `DBGBCR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=5`) — controle do breakpoint 0. Armazenamento
+    /// puro.
+    DBGBCR0_EL1,
+    /// `DBGWVR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=6`) — valor de endereço do watchpoint 0.
+    /// Armazenamento puro.
+    DBGWVR0_EL1,
+    /// `DBGWCR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=7`) — controle do watchpoint 0. Armazenamento
+    /// puro.
+    DBGWCR0_EL1
 }

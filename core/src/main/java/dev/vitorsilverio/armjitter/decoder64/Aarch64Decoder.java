@@ -307,6 +307,26 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_VBAR_EL3 = 0;
     private static final int SYSREG_OP2_VBAR_EL3 = 0;
 
+    // ── B10.7: registradores de debug (`op0=2,op1=0`) — armazenamento puro, sem enforcement de
+    // ── RO/WO (ver javadoc de Aarch64SystemRegisterId). Valores conferidos contra
+    // ── `target/arm/debug_helper.c` real do QEMU (`WebFetch`, task B10.7), não de memória.
+    private static final int SYSREG_OP0_DEBUG = 2;
+    private static final int SYSREG_CRN_MDSCR = 0;
+    private static final int SYSREG_CRM_MDSCR = 2;
+    private static final int SYSREG_OP2_MDSCR = 2;
+    private static final int SYSREG_CRN_OSLAR = 1;
+    private static final int SYSREG_CRM_OSLAR = 0;
+    private static final int SYSREG_OP2_OSLAR = 4;
+    private static final int SYSREG_CRN_OSLSR = 1;
+    private static final int SYSREG_CRM_OSLSR = 1;
+    private static final int SYSREG_OP2_OSLSR = 4;
+    private static final int SYSREG_CRN_DBG_BKPT_WATCH = 0;
+    private static final int SYSREG_CRM_DBGBVR0 = 0;
+    private static final int SYSREG_OP2_DBGBVR = 4;
+    private static final int SYSREG_OP2_DBGBCR = 5;
+    private static final int SYSREG_OP2_DBGWVR = 6;
+    private static final int SYSREG_OP2_DBGWCR = 7;
+
     // ── B6.6.7: identidade da CPU, ainda `op0=3`/`op1=0` (mesma tabela EL1 "geral" acima) —
     // ── valores conferidos contra `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
     private static final int SYSREG_CRN_CURRENT_EL = 4;
@@ -2158,6 +2178,9 @@ public final class Aarch64Decoder {
     /// {@link UnsupportedOperationException}).
     private static Aarch64SystemRegisterId decodeSystemRegisterId(
             int op0, int op1, int crn, int crm, int op2) {
+        if (op0 == SYSREG_OP0_DEBUG) {
+            return op1 == SYSREG_OP1_EL1 ? decodeDebugRegisterId(crn, crm, op2) : null;
+        }
         if (op0 != SYSREG_OP0_EL1) {
             return null;
         }
@@ -2325,6 +2348,36 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_VBAR_EL3 && crm == SYSREG_CRM_VBAR_EL3 && op2 == SYSREG_OP2_VBAR_EL3) {
             return Aarch64SystemRegisterId.VBAR_EL3;
+        }
+        return null;
+    }
+
+    /// Tabela de registradores de debug (`op0=2,op1=0`, B10.7) — armazenamento puro, sem
+    /// enforcement de `RO`/`WO` (ver javadoc de `Aarch64SystemRegisterId`). Só `n=0` de
+    /// `DBGBVR`/`DBGBCR`/`DBGWVR`/`DBGWCR` (decisão de escopo da task).
+    private static Aarch64SystemRegisterId decodeDebugRegisterId(int crn, int crm, int op2) {
+        if (crn == SYSREG_CRN_MDSCR && crm == SYSREG_CRM_MDSCR && op2 == SYSREG_OP2_MDSCR) {
+            return Aarch64SystemRegisterId.MDSCR_EL1;
+        }
+        if (crn == SYSREG_CRN_OSLAR && crm == SYSREG_CRM_OSLAR && op2 == SYSREG_OP2_OSLAR) {
+            return Aarch64SystemRegisterId.OSLAR_EL1;
+        }
+        if (crn == SYSREG_CRN_OSLSR && crm == SYSREG_CRM_OSLSR && op2 == SYSREG_OP2_OSLSR) {
+            return Aarch64SystemRegisterId.OSLSR_EL1;
+        }
+        if (crn == SYSREG_CRN_DBG_BKPT_WATCH && crm == SYSREG_CRM_DBGBVR0) {
+            if (op2 == SYSREG_OP2_DBGBVR) {
+                return Aarch64SystemRegisterId.DBGBVR0_EL1;
+            }
+            if (op2 == SYSREG_OP2_DBGBCR) {
+                return Aarch64SystemRegisterId.DBGBCR0_EL1;
+            }
+            if (op2 == SYSREG_OP2_DBGWVR) {
+                return Aarch64SystemRegisterId.DBGWVR0_EL1;
+            }
+            if (op2 == SYSREG_OP2_DBGWCR) {
+                return Aarch64SystemRegisterId.DBGWCR0_EL1;
+            }
         }
         return null;
     }
