@@ -793,14 +793,19 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.EXCEPTION_RETURN; }
     }
 
-    /// `HVC`/`SMC` (`ARM DDI 0487 C6.2.148/C6.2.294`, task B6.6.7) — sem EL2/EL3 modelados (fora
-    /// de escopo do épico B6, ver `b6-aarch64.md`), tratadas como uma chamada inerte que sempre
-    /// devolve `PSCI_RET_NOT_SUPPORTED` em `X0` (mesmo espírito de "fingir sucesso/falha plausível
-    /// e seguir" já usado para SVCs desconhecidas no n3dsemu — aqui é uma falha PLAUSÍVEL, não um
-    /// sucesso falso, já que o emulador de fato não tem PSCI). Sem campo de imediato: o `imm16` do
-    /// encoding só teria sentido para um handler em EL2/EL3, que não existe aqui (ver Armadilhas
-    /// da task).
-    record PrivilegedCall() implements Ir64Op {
+    /// `HVC`/`SMC` (`ARM DDI 0487 C6.2.148/C6.2.294`, task B6.6.7; `HVC` real desde B10.4). `SMC`
+    /// continua sem EL3 modelado (fora de escopo até B10.5) — tratada como uma chamada inerte que
+    /// sempre devolve `PSCI_RET_NOT_SUPPORTED` em `X0` (mesmo espírito de "fingir sucesso/falha
+    /// plausível e seguir" já usado para SVCs desconhecidas no n3dsemu — aqui é uma falha
+    /// PLAUSÍVEL, não um sucesso falso, já que o emulador de fato não tem PSCI para `SMC` ainda).
+    /// `HVC` (B10.4) entra em EL2 de verdade via
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#enterHypervisorCall} — ver
+    /// `Ir64BlockExecutor#executePrivilegedCall`. Sem campo de imediato: o `imm16` do encoding só
+    /// teria sentido para um handler em EL2/EL3 que leia a própria instrução, que este emulador não
+    /// modela (ver Armadilhas da task B10.4).
+    ///
+    /// @param isHvc `true` para `HVC` (entra em EL2, B10.4), `false` para `SMC` (stub, B10.5)
+    record PrivilegedCall(boolean isHvc) implements Ir64Op {
         @Override public int kind() { return Kind.PRIVILEGED_CALL; }
     }
 

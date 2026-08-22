@@ -115,13 +115,15 @@ class Aarch64IrqAndCpuIdentityTest {
     }
 
     @Test
-    void hvcAndSmcReturnPsciNotSupportedInX0WithoutTrapping() {
+    void smcStillReturnsPsciNotSupportedInX0WithoutTrapping() {
+        // SMC (B10.5, ainda stub) — comportamento pré-B10.4 inalterado. HVC agora entra em EL2 de
+        // verdade (ver Aarch64HypervisorCallTest), este teste cobre só o irmão que ainda é stub.
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
         core.setX(0, 0x1111_1111L);
-        executor.executeOp(core, new Ir64Op.PrivilegedCall());
+        executor.executeOp(core, new Ir64Op.PrivilegedCall(false));
         assertEquals(0xFFFF_FFFFL, core.x(0));
-        assertFalse(core.exceptionState().inEl1(), "HVC/SMC não entram em EL1 (sem EL2/EL3 modelados)");
+        assertFalse(core.exceptionState().inEl1(), "SMC não entra em EL1 (sem EL3 modelado, B10.5)");
     }
 
     @Test

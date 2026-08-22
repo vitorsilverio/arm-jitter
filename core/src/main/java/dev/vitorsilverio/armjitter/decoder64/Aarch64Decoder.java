@@ -1927,12 +1927,12 @@ public final class Aarch64Decoder {
         }
         if (opc == EXCEPTION_GEN_OPC_SVC
                 && (low5 == EXCEPTION_GEN_HVC_LOW5_FIXED || low5 == EXCEPTION_GEN_SMC_LOW5_FIXED)) {
-            // HVC/SMC (B6.6.7): sem EL2/EL3 modelados (fora de escopo do épico B6) — tratadas como
-            // um "host call" inerte que sempre devolve PSCI_RET_NOT_SUPPORTED em X0 (ver
-            // Ir64BlockExecutor#executePrivilegedCall e a task, "Não inclui"). O `imm16` é ignorado
-            // pela semântica (mesmo padrão real de hardware: o imediato de HVC/SMC só importa para
-            // o handler em EL2/EL3, que este emulador não tem).
-            return new Ir64Op.PrivilegedCall();
+            // HVC (B10.4): entra em EL2 de verdade, ver Aarch64Core#enterHypervisorCall. SMC
+            // (B10.5, ainda stub): sem EL3 modelado, sempre devolve PSCI_RET_NOT_SUPPORTED em X0
+            // (ver Ir64BlockExecutor#executePrivilegedCall). O `imm16` é ignorado pela semântica em
+            // ambos os casos (mesmo padrão real de hardware: o imediato só importa para o handler
+            // em EL2/EL3, que lê a própria instrução — este emulador não modela isso).
+            return new Ir64Op.PrivilegedCall(low5 == EXCEPTION_GEN_HVC_LOW5_FIXED);
         }
         if (opc == EXCEPTION_GEN_OPC_BRK && low5 == EXCEPTION_GEN_BRK_HLT_LOW5_FIXED) {
             // BRK (B8.3): imm16 é o único operando.

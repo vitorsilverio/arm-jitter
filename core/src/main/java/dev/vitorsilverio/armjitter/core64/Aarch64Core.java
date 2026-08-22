@@ -75,6 +75,13 @@ public final class Aarch64Core {
     /// Máscara do imediato de 16 bits de `BRK`, que vira `ESR_EL1.ISS[15:0]` por inteiro (ao
     /// contrário do `ISS` de abort de memória, que só usa os 6 bits baixos).
     private static final long ESR_ISS_BRK_IMMEDIATE_MASK = 0xFFFFL;
+    /// `EC` (`ESR_EL2[31:26]`) de `HVC` executado em AArch64 (`ARM DDI 0487 D17.2.30`, B10.4) —
+    /// diferente de `0x12` (`HVC` em AArch32, fora de escopo, este emulador é A64-only).
+    private static final long ESR_EC_HVC_AARCH64 = 0x16L;
+    /// `HCR_EL2.HCD` (bit 29, "Hypervisor Call Disable", `ARM DDI 0487 D19.2.53`, B10.4) — só se
+    /// aplica à rota `EL1`→`EL2`; em `EL2`, `HVC` sempre entra (auto-chamada), ver
+    /// {@link #enterHypervisorCall} e a task, "Armadilhas".
+    private static final long HCR_EL2_HCD_BIT = 1L << 29;
 
     // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
     // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
@@ -517,6 +524,53 @@ public final class Aarch64Core {
     public void enterUndefinedInstructionException(long instructionAddress) {
         long esr = (ESR_EC_UNKNOWN_REASON << ESR_EC_SHIFT) | ESR_IL_BIT;
         enterSynchronousException(Aarch64ExceptionLevel.EL1, instructionAddress, esr);
+    }
+
+    /// `HVC` real (`ARM DDI 0487 C6.2.83`, B10.4) — árvore de decisão do pseudocódigo real da
+    /// instrução (não "sempre EL2"): `EL0`/`EL3` não têm `HVC` definida (cai em `UNDEFINED`, mesmo
+    /// caminho de {@link #enterUndefinedInstructionException} — `EL3` chama `SMC` para o monitor,
+    /// não `HVC`, ver B10.5); em `EL1`, `HCR_EL2.HCD` desabilita a rota (mesmo destino `UNDEFINED`);
+    /// em `EL2`, `HVC` sempre entra (auto-chamada, "mesmo nível" — caso real do manual, usado por
+    /// virtualização aninhada, `HCD` não se aplica aqui). Sem hospedeiro de `HCR_EL2` instalado
+    /// (`systemRegisterBus` "none"), `HCD` é tratado como `0` (não desabilitado — mesmo padrão
+    /// "registrador sem hospedeiro = zerado" já usado alhures).
+    ///
+    /// @param instructionAddress endereço da própria instrução `HVC` (`ELR_ELx` quando aplicável)
+    public void enterHypervisorCall(long instructionAddress) {
+        Aarch64ExceptionLevel source = exceptionState.currentEl();
+        if (source == Aarch64ExceptionLevel.EL0) {
+            // enterUndefinedInstructionException() tem alvo fixo em EL1, correto aqui: EL0 nunca
+            // trata sua própria exceção (não bancado), EL1 é o único alvo real de um UNDEFINED
+            // vindo de EL0.
+            enterUndefinedInstructionException(instructionAddress);
+            return;
+        }
+        if (source == Aarch64ExceptionLevel.EL3) {
+            // NÃO reusa enterUndefinedInstructionException() aqui: seu alvo fixo em EL1 seria uma
+            // redução de privilégio (EL3->EL1), que enterSynchronousException recusa (G8, ver
+            // vectorGroupBase). UNDEFINED em EL3 se auto-trata (mesmo nível), mesmo raciocínio do
+            // ramo EL1 abaixo.
+            long esr = (ESR_EC_UNKNOWN_REASON << ESR_EC_SHIFT) | ESR_IL_BIT;
+            enterSynchronousException(Aarch64ExceptionLevel.EL3, instructionAddress, esr);
+            return;
+        }
+        if (source == Aarch64ExceptionLevel.EL1 && hypervisorCallDisabled()) {
+            // Alvo fixo em EL1 de enterUndefinedInstructionException() colide com `source` aqui
+            // (EL1->EL1, "mesmo nível") — correto, mesmo raciocínio do ramo EL3 acima.
+            enterUndefinedInstructionException(instructionAddress);
+            return;
+        }
+        long esr = (ESR_EC_HVC_AARCH64 << ESR_EC_SHIFT) | ESR_IL_BIT;
+        enterSynchronousException(Aarch64ExceptionLevel.EL2, instructionAddress, esr);
+    }
+
+    /// Leitura de `HCR_EL2.HCD` para {@link #enterHypervisorCall} — via {@link #systemRegisterBus}
+    /// em vez de armazenamento próprio deste core (mesma disciplina de todo registrador de sistema
+    /// EL2/EL3 desde B10.2/B10.3: a fonte única é o barramento instalado pelo hospedeiro, `Aarch64Core`
+    /// não duplica estado).
+    private boolean hypervisorCallDisabled() {
+        return systemRegisterBus.handles(Aarch64SystemRegisterId.HCR_EL2)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.HCR_EL2) & HCR_EL2_HCD_BIT) != 0;
     }
 
     /// Núcleo comum de toda exceção síncrona (`ARM DDI 0487` pseudocódigo `AArch64.TakeException`,

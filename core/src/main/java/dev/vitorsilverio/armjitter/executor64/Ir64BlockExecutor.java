@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
+import dev.vitorsilverio.armjitter.core64.Aarch64HypervisorCallException;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
@@ -132,6 +133,8 @@ public final class Ir64BlockExecutor {
             core.enterBreakpointException(pc, brk.immediate());
         } catch (Aarch64UndefinedInstructionException undefined) {
             core.enterUndefinedInstructionException(pc);
+        } catch (Aarch64HypervisorCallException hvc) {
+            core.enterHypervisorCall(pc);
         }
         return cycles;
     }
@@ -223,6 +226,8 @@ public final class Ir64BlockExecutor {
             core.enterBreakpointException(lastFetchAddress, brk.immediate());
         } catch (Aarch64UndefinedInstructionException undefined) {
             core.enterUndefinedInstructionException(lastFetchAddress);
+        } catch (Aarch64HypervisorCallException hvc) {
+            core.enterHypervisorCall(lastFetchAddress);
         }
         return cycles;
     }
@@ -1065,13 +1070,19 @@ public final class Ir64BlockExecutor {
         throw new Aarch64UndefinedInstructionException();
     }
 
-    /// `HVC`/`SMC` (B6.6.7) — sem EL2/EL3 modelados, sempre devolve `PSCI_RET_NOT_SUPPORTED`
-    /// (`-1`) em `X0` (ver javadoc de {@link Ir64Op.PrivilegedCall}). `setXForWidth(..., false)`
-    /// (não `setX`) porque o valor de retorno real de uma chamada PSCI de 32 bits (`SMC32`/`HVC32`,
-    /// a convenção mais comum) é lido pelo guest via `W0` — zero-estender os 32 bits altos evita
-    /// que um `CMP W0, #0` do guest veja lixo ali (mesmo cuidado de qualquer escrita `W` no resto
-    /// do executor).
+    /// `HVC` (B10.4): lança, capturada por {@link #step}/{@link #executeBlock} no MESMO ponto que
+    /// {@link Aarch64BreakpointException}/{@link Aarch64UndefinedInstructionException} (precisa do
+    /// endereço da própria instrução, só disponível ali — mesmo motivo de {@link #executeBreakpoint}).
+    /// `SMC` (B10.5, ainda stub): sem EL3 modelado, sempre devolve `PSCI_RET_NOT_SUPPORTED` (`-1`)
+    /// em `X0` (ver javadoc de {@link Ir64Op.PrivilegedCall}). `setXForWidth(..., false)` (não
+    /// `setX`) porque o valor de retorno real de uma chamada PSCI de 32 bits (`SMC32`, a convenção
+    /// mais comum) é lido pelo guest via `W0` — zero-estender os 32 bits altos evita que um
+    /// `CMP W0, #0` do guest veja lixo ali (mesmo cuidado de qualquer escrita `W` no resto do
+    /// executor).
     private boolean executePrivilegedCall(Aarch64Core core, Ir64Op.PrivilegedCall op) {
+        if (op.isHvc()) {
+            throw new Aarch64HypervisorCallException();
+        }
         final int returnRegister = 0;
         final long pscretNotSupported = 0xFFFF_FFFFL;
         core.setXForWidth(returnRegister, pscretNotSupported, false);
