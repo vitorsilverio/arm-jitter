@@ -236,6 +236,50 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_SPSR = 0;
     private static final int SYSREG_OP2_SPSR = 0;
 
+    // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`) — valores conferidos contra a tabela
+    // ── de registradores de sistema real (`aarch64-none-elf-as`/`objdump`, forma genérica
+    // ── `S3_4_Cn_Cm_op2`), ver corpus da task.
+    private static final int SYSREG_OP1_EL2 = 4;
+    private static final int SYSREG_CRN_SCTLR_EL2 = 1;
+    private static final int SYSREG_CRM_SCTLR_EL2 = 0;
+    private static final int SYSREG_OP2_SCTLR_EL2 = 0;
+    private static final int SYSREG_CRN_HCR_EL2 = 1;
+    private static final int SYSREG_CRM_HCR_EL2 = 1;
+    private static final int SYSREG_OP2_HCR_EL2 = 0;
+    private static final int SYSREG_CRN_MDCR_EL2 = 1;
+    private static final int SYSREG_CRM_MDCR_EL2 = 1;
+    private static final int SYSREG_OP2_MDCR_EL2 = 1;
+    private static final int SYSREG_CRN_CPTR_EL2 = 1;
+    private static final int SYSREG_CRM_CPTR_EL2 = 1;
+    private static final int SYSREG_OP2_CPTR_EL2 = 2;
+    private static final int SYSREG_CRN_TCR_EL2 = 2;
+    private static final int SYSREG_CRM_TCR_EL2 = 0;
+    private static final int SYSREG_OP2_TCR_EL2 = 2;
+    private static final int SYSREG_CRN_VTTBR_EL2 = 2;
+    private static final int SYSREG_CRM_VTTBR_EL2 = 1;
+    private static final int SYSREG_OP2_VTTBR_EL2 = 0;
+    private static final int SYSREG_CRN_VTCR_EL2 = 2;
+    private static final int SYSREG_CRM_VTCR_EL2 = 1;
+    private static final int SYSREG_OP2_VTCR_EL2 = 2;
+    private static final int SYSREG_CRN_SPSR_EL2 = 4;
+    private static final int SYSREG_CRM_SPSR_EL2 = 0;
+    private static final int SYSREG_OP2_SPSR_EL2 = 0;
+    private static final int SYSREG_CRN_ELR_EL2 = 4;
+    private static final int SYSREG_CRM_ELR_EL2 = 0;
+    private static final int SYSREG_OP2_ELR_EL2 = 1;
+    private static final int SYSREG_CRN_FAR_EL2 = 6;
+    private static final int SYSREG_CRM_FAR_EL2 = 0;
+    private static final int SYSREG_OP2_FAR_EL2 = 0;
+    private static final int SYSREG_CRN_ESR_EL2 = 5;
+    private static final int SYSREG_CRM_ESR_EL2 = 2;
+    private static final int SYSREG_OP2_ESR_EL2 = 0;
+    private static final int SYSREG_CRN_CNTHCTL_EL2 = 14;
+    private static final int SYSREG_CRM_CNTHCTL_EL2 = 1;
+    private static final int SYSREG_OP2_CNTHCTL_EL2 = 0;
+    private static final int SYSREG_CRN_VBAR_EL2 = 12;
+    private static final int SYSREG_CRM_VBAR_EL2 = 0;
+    private static final int SYSREG_OP2_VBAR_EL2 = 0;
+
     // ── B6.6.7: identidade da CPU, ainda `op0=3`/`op1=0` (mesma tabela EL1 "geral" acima) —
     // ── valores conferidos contra `aarch64-none-elf-as`/`objdump` reais (devkitA64), ver corpus.
     private static final int SYSREG_CRN_CURRENT_EL = 4;
@@ -2046,6 +2090,9 @@ public final class Aarch64Decoder {
             }
             return decodeGenericTimerRegisterId(crn, crm, op2);
         }
+        if (op1 == SYSREG_OP1_EL2) {
+            return decodeEl2RegisterId(crn, crm, op2);
+        }
         if (op1 != SYSREG_OP1_EL1) {
             return null;
         }
@@ -2126,6 +2173,51 @@ public final class Aarch64Decoder {
         }
         if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_CVAL) {
             return Aarch64SystemRegisterId.CNTP_CVAL_EL0;
+        }
+        return null;
+    }
+
+    /// Tabela de registradores de sistema EL2 (`op0=3,op1=4`, B10.2) — armazenamento puro, sem
+    /// roteamento real (ver javadoc de `Aarch64SystemRegisterId`).
+    private static Aarch64SystemRegisterId decodeEl2RegisterId(int crn, int crm, int op2) {
+        if (crn == SYSREG_CRN_SCTLR_EL2 && crm == SYSREG_CRM_SCTLR_EL2 && op2 == SYSREG_OP2_SCTLR_EL2) {
+            return Aarch64SystemRegisterId.SCTLR_EL2;
+        }
+        if (crn == SYSREG_CRN_HCR_EL2 && crm == SYSREG_CRM_HCR_EL2 && op2 == SYSREG_OP2_HCR_EL2) {
+            return Aarch64SystemRegisterId.HCR_EL2;
+        }
+        if (crn == SYSREG_CRN_MDCR_EL2 && crm == SYSREG_CRM_MDCR_EL2 && op2 == SYSREG_OP2_MDCR_EL2) {
+            return Aarch64SystemRegisterId.MDCR_EL2;
+        }
+        if (crn == SYSREG_CRN_CPTR_EL2 && crm == SYSREG_CRM_CPTR_EL2 && op2 == SYSREG_OP2_CPTR_EL2) {
+            return Aarch64SystemRegisterId.CPTR_EL2;
+        }
+        if (crn == SYSREG_CRN_TCR_EL2 && crm == SYSREG_CRM_TCR_EL2 && op2 == SYSREG_OP2_TCR_EL2) {
+            return Aarch64SystemRegisterId.TCR_EL2;
+        }
+        if (crn == SYSREG_CRN_VTTBR_EL2 && crm == SYSREG_CRM_VTTBR_EL2 && op2 == SYSREG_OP2_VTTBR_EL2) {
+            return Aarch64SystemRegisterId.VTTBR_EL2;
+        }
+        if (crn == SYSREG_CRN_VTCR_EL2 && crm == SYSREG_CRM_VTCR_EL2 && op2 == SYSREG_OP2_VTCR_EL2) {
+            return Aarch64SystemRegisterId.VTCR_EL2;
+        }
+        if (crn == SYSREG_CRN_SPSR_EL2 && crm == SYSREG_CRM_SPSR_EL2 && op2 == SYSREG_OP2_SPSR_EL2) {
+            return Aarch64SystemRegisterId.SPSR_EL2;
+        }
+        if (crn == SYSREG_CRN_ELR_EL2 && crm == SYSREG_CRM_ELR_EL2 && op2 == SYSREG_OP2_ELR_EL2) {
+            return Aarch64SystemRegisterId.ELR_EL2;
+        }
+        if (crn == SYSREG_CRN_FAR_EL2 && crm == SYSREG_CRM_FAR_EL2 && op2 == SYSREG_OP2_FAR_EL2) {
+            return Aarch64SystemRegisterId.FAR_EL2;
+        }
+        if (crn == SYSREG_CRN_ESR_EL2 && crm == SYSREG_CRM_ESR_EL2 && op2 == SYSREG_OP2_ESR_EL2) {
+            return Aarch64SystemRegisterId.ESR_EL2;
+        }
+        if (crn == SYSREG_CRN_CNTHCTL_EL2 && crm == SYSREG_CRM_CNTHCTL_EL2 && op2 == SYSREG_OP2_CNTHCTL_EL2) {
+            return Aarch64SystemRegisterId.CNTHCTL_EL2;
+        }
+        if (crn == SYSREG_CRN_VBAR_EL2 && crm == SYSREG_CRM_VBAR_EL2 && op2 == SYSREG_OP2_VBAR_EL2) {
+            return Aarch64SystemRegisterId.VBAR_EL2;
         }
         return null;
     }

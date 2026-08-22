@@ -114,5 +114,52 @@ public enum Aarch64SystemRegisterId {
     CNTP_CTL_EL0,
     /// `CNTP_CVAL_EL0` (`op0=3,op1=3,CRn=14,CRm=2,op2=2`) — valor absoluto de disparo do
     /// comparador físico.
-    CNTP_CVAL_EL0
+    CNTP_CVAL_EL0,
+
+    // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`), armazenamento puro por enquanto —
+    // ── SEM side effect funcional (nenhum código roda em EL2 ainda, ver `Aarch64VmsaSystemRegisters`;
+    // ── roteamento real de HVC/SMC/IRQ/abort é B10.4/B10.5, stage-2 é B10.8).
+
+    /// `SCTLR_EL2` (`op0=3,op1=4,CRn=1,CRm=0,op2=0`) — controle do sistema em EL2. Armazenamento
+    /// puro: NÃO liga a MMU de stage-1 EL1 (`TranslatingAddressSpace64`) — essa é controlada só
+    /// por {@link #SCTLR_EL1}; ligar stage-2 real é B10.8.
+    SCTLR_EL2,
+    /// `HCR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=0`) — controle de virtualização (`VM`, `TGE`, ...).
+    /// Armazenamento puro; o roteamento real que estes bits deveriam decidir é B10.4/B10.8.
+    HCR_EL2,
+    /// `MDCR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=1`) — controle de debug/trace delegado a EL2.
+    /// Armazenamento puro (sem debugger de hardware conectado, mesma disciplina de B10.7).
+    MDCR_EL2,
+    /// `CPTR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=2`) — controle de trap de FP/SIMD/SVE para EL2.
+    /// Armazenamento puro (sem trap real modelado ainda).
+    CPTR_EL2,
+    /// `TCR_EL2` (`op0=3,op1=4,CRn=2,CRm=0,op2=2`) — controle de tradução de stage-1 EL2.
+    /// Armazenamento puro (nenhuma tabela de tradução de EL2 é consultada ainda).
+    TCR_EL2,
+    /// `VTTBR_EL2` (`op0=3,op1=4,CRn=2,CRm=1,op2=0`) — base da tabela de tradução de stage-2.
+    /// Armazenamento puro; ligar de verdade em `TranslatingAddressSpace64` é B10.8.
+    VTTBR_EL2,
+    /// `VTCR_EL2` (`op0=3,op1=4,CRn=2,CRm=1,op2=2`) — controle de tradução de stage-2.
+    /// Armazenamento puro; mesmo destino futuro de {@link #VTTBR_EL2}.
+    VTCR_EL2,
+    /// `SPSR_EL2` (`op0=3,op1=4,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção em EL2.
+    /// Delega ao banco por nível de {@link dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState}
+    /// (generalizado em B10.1) — mesma fonte única já usada por {@link #SPSR_EL1}.
+    SPSR_EL2,
+    /// `ELR_EL2` (`op0=3,op1=4,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção em EL2.
+    /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
+    ELR_EL2,
+    /// `FAR_EL2` (`op0=3,op1=4,CRn=6,CRm=0,op2=0`) — endereço faltoso da exceção mais recente em
+    /// EL2. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
+    FAR_EL2,
+    /// `ESR_EL2` (`op0=3,op1=4,CRn=5,CRm=2,op2=0`) — síndrome da exceção mais recente em EL2.
+    /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
+    ESR_EL2,
+    /// `CNTHCTL_EL2` (`op0=3,op1=4,CRn=14,CRm=1,op2=0`) — controle do timer genérico visto de EL2.
+    /// Armazenamento puro (o timer genérico deste emulador, B6.6.7, não modela os traps que este
+    /// registrador controlaria).
+    CNTHCTL_EL2,
+    /// `VBAR_EL2` (`op0=3,op1=4,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
+    /// EL2. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
+    VBAR_EL2
 }

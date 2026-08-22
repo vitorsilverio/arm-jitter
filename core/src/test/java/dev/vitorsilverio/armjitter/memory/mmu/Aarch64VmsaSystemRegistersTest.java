@@ -87,6 +87,67 @@ class Aarch64VmsaSystemRegistersTest {
     }
 
     @Test
+    void el2StorageOnlyRegistersRoundTrip() {
+        // B10.2: sem side effect nenhum ainda (SCTLR_EL2.M NÃO deve tocar a MMU — essa é stage-1
+        // de EL1; ligar stage-2 real é B10.8).
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(AddressSpace64.wrapping(new TestAddressSpace(0x1000)));
+        Aarch64VmsaSystemRegisters bus = new Aarch64VmsaSystemRegisters(mmu, coreWithoutCode());
+
+        bus.write(Aarch64SystemRegisterId.SCTLR_EL2, 1L);
+        assertFalse(mmu.mmuEnabled(), "SCTLR_EL2.M não liga a MMU de stage-1 EL1 (B10.8 trata stage-2)");
+        assertEquals(1L, bus.read(Aarch64SystemRegisterId.SCTLR_EL2));
+
+        bus.write(Aarch64SystemRegisterId.HCR_EL2, 0x1111_2222L);
+        bus.write(Aarch64SystemRegisterId.MDCR_EL2, 0x33L);
+        bus.write(Aarch64SystemRegisterId.CPTR_EL2, 0x44L);
+        bus.write(Aarch64SystemRegisterId.TCR_EL2, 0x55L);
+        bus.write(Aarch64SystemRegisterId.VTTBR_EL2, 0x6000_0000L);
+        bus.write(Aarch64SystemRegisterId.VTCR_EL2, 0x77L);
+        bus.write(Aarch64SystemRegisterId.CNTHCTL_EL2, 0x88L);
+
+        assertEquals(0x1111_2222L, bus.read(Aarch64SystemRegisterId.HCR_EL2));
+        assertEquals(0x33L, bus.read(Aarch64SystemRegisterId.MDCR_EL2));
+        assertEquals(0x44L, bus.read(Aarch64SystemRegisterId.CPTR_EL2));
+        assertEquals(0x55L, bus.read(Aarch64SystemRegisterId.TCR_EL2));
+        assertEquals(0x6000_0000L, bus.read(Aarch64SystemRegisterId.VTTBR_EL2));
+        assertEquals(0x77L, bus.read(Aarch64SystemRegisterId.VTCR_EL2));
+        assertEquals(0x88L, bus.read(Aarch64SystemRegisterId.CNTHCTL_EL2));
+    }
+
+    @Test
+    void el2ExceptionRegistersAreIndependentFromEl1() {
+        // ESR_EL2/FAR_EL2/VBAR_EL2/ELR_EL2/SPSR_EL2 delegam ao banco por nível de
+        // Aarch64ExceptionState (B10.1) — escrever o par EL1 não deve mudar o par EL2.
+        Aarch64Core core = coreWithoutCode();
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(AddressSpace64.wrapping(new TestAddressSpace(0x1000)));
+        Aarch64VmsaSystemRegisters bus = new Aarch64VmsaSystemRegisters(mmu, core);
+
+        bus.write(Aarch64SystemRegisterId.ESR_EL1, 0x1111L);
+        bus.write(Aarch64SystemRegisterId.FAR_EL1, 0x2222L);
+        bus.write(Aarch64SystemRegisterId.VBAR_EL1, 0x3333L);
+        bus.write(Aarch64SystemRegisterId.ELR_EL1, 0x4444L);
+        bus.write(Aarch64SystemRegisterId.SPSR_EL1, 0x5555L);
+
+        bus.write(Aarch64SystemRegisterId.ESR_EL2, 0xAAAAL);
+        bus.write(Aarch64SystemRegisterId.FAR_EL2, 0xBBBBL);
+        bus.write(Aarch64SystemRegisterId.VBAR_EL2, 0xCCCCL);
+        bus.write(Aarch64SystemRegisterId.ELR_EL2, 0xDDDDL);
+        bus.write(Aarch64SystemRegisterId.SPSR_EL2, 0xEEEEL);
+
+        assertEquals(0x1111L, bus.read(Aarch64SystemRegisterId.ESR_EL1));
+        assertEquals(0x2222L, bus.read(Aarch64SystemRegisterId.FAR_EL1));
+        assertEquals(0x3333L, bus.read(Aarch64SystemRegisterId.VBAR_EL1));
+        assertEquals(0x4444L, bus.read(Aarch64SystemRegisterId.ELR_EL1));
+        assertEquals(0x5555L, bus.read(Aarch64SystemRegisterId.SPSR_EL1));
+
+        assertEquals(0xAAAAL, bus.read(Aarch64SystemRegisterId.ESR_EL2));
+        assertEquals(0xBBBBL, bus.read(Aarch64SystemRegisterId.FAR_EL2));
+        assertEquals(0xCCCCL, bus.read(Aarch64SystemRegisterId.VBAR_EL2));
+        assertEquals(0xDDDDL, bus.read(Aarch64SystemRegisterId.ELR_EL2));
+        assertEquals(0xEEEEL, bus.read(Aarch64SystemRegisterId.SPSR_EL2));
+    }
+
+    @Test
     void tlbiForwardedToMmu() {
         AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
         physical.write64(0, tableDescriptor(0x1000)); // L0[0] -> L1
