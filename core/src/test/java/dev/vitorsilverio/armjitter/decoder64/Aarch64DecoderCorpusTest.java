@@ -2919,6 +2919,59 @@ class Aarch64DecoderCorpusTest {
         assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
     }
 
+    // ── B10.8: AT S12E1R/S12E1W/S12E0R/S12E0W — MESMO op1=4/0b100 de AT S1E2R/S1E2W acima,
+    // ── distinguidas só por op2 (conferido contra cpregs-at.c real do QEMU: AT_S1E2R/AT_S1E2W =
+    // ── op2 0/1; AT_S12E1R/S12E1W/S12E0R/S12E0W = op2 4/5/6/7 — op2 2/3 reservados). Palavras
+    // ── construídas à mão a partir do encoding base de atS1e1rX0 (não representáveis pelo corpus).
+
+    @Test
+    void atS12e1rX0() {
+        // at s12e1r, x0 (op1=4, CRm=8, op2=4, rt=0)
+        int word = 0xd5087800 | (0b100 << 16) | (0b100 << 5);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S12E1R, op.form());
+        assertEquals(0, op.rt());
+    }
+
+    @Test
+    void atS12e1wX0() {
+        // at s12e1w, x0 (op1=4, CRm=8, op2=5)
+        int word = 0xd5087800 | (0b100 << 16) | (0b101 << 5);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S12E1W, op.form());
+    }
+
+    @Test
+    void atS12e0rX0() {
+        // at s12e0r, x0 (op1=4, CRm=8, op2=6)
+        int word = 0xd5087800 | (0b100 << 16) | (0b110 << 5);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S12E0R, op.form());
+    }
+
+    @Test
+    void atS12e0wXzr() {
+        // at s12e0w, xzr (op1=4, CRm=8, op2=7, rt=31)
+        int word = 0xd508787f | (0b100 << 16) | (0b111 << 5);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S12E0W, op.form());
+        assertEquals(31, op.rt());
+    }
+
+    @Test
+    void atS1e2rStillUnsupportedAfterS12eCarveOut() {
+        // Regressão: op1=4/op2=0 (S1E2R, ainda não implementada — B10.6b) não pode ser confundida
+        // com nenhuma forma S12E* pelo switch de decodeAddressTranslateStage12.
+        assertThrows(UnsupportedOperationException.class, () -> decodeAt(0xd5087800 | (0b100 << 16)));
+    }
+
+    @Test
+    void atOp1EqualsFourOp2TwoStaysUnsupported() {
+        // op2=2/3 (reservado dentro de op1=4, nem S1E2* nem S12E*) deve continuar unsupported.
+        int word = 0xd5087800 | (0b100 << 16) | (0b010 << 5);
+        assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
+    }
+
     // ── B8.1: LDR/STR/LDP/STP restantes, LDXP/STXP, CAS/CASP, LDAR/STLR — apêndice do mesmo
     // ── corpus.s/.bin/.objdump.txt, offsets 0x49c-0x52c ─────────────────────────────────────────
 

@@ -399,6 +399,100 @@ class Aarch64VmsaSystemRegistersTest {
         assertEquals(0L, par & OUTPUT_ADDRESS_MASK, "XZR (rt=31) deve traduzir VA=0");
     }
 
+    // ── B10.8: AT S12E1R/S12E1W/S12E0R/S12E0W (combinada stage-1+stage-2) ──────────────────
+
+    private static final long S2_L0_BASE = 0x0090_0000L;
+    private static final long S2_L1_BASE = 0x0091_0000L;
+    private static final long S2_L2_BASE = 0x0092_0000L;
+    private static final long S2_L3_BASE = 0x0093_0000L;
+    private static final int S2AP_READ_WRITE = 0b11;
+    private static final int S2AP_NONE = 0b00;
+    private static final long STAGE2_FINAL_PA = 0x0050_0000L;
+    private static final long S_STAGE_BIT = 1L << 9;
+
+    /// Mesma página de stage-1 identity-mapped em `PA=0` de {@link #coreWithMmuPageAtZero}, mais
+    /// uma tabela de stage-2 completa (`VTTBR_EL2` já escrito) mapeando o MESMO IPA (`0`, já que
+    /// stage-1 aqui é identidade) para {@link #STAGE2_FINAL_PA} com o `s2ap` pedido — o teste
+    /// decide se liga `HCR_EL2.VM` ou não.
+    private static Aarch64Core coreWithStage1AndStage2(int stage1Ap, int s2ap) {
+        AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
+        physical.write64(0, tableDescriptor(0x1000));
+        physical.write64(0x1000, tableDescriptor(0x2000));
+        physical.write64(0x2000, tableDescriptor(0x3000));
+        physical.write64(0x3000, (0L & OUTPUT_ADDRESS_MASK) | ((long) stage1Ap << AP_SHIFT) | DESC_TABLE_OR_PAGE
+                | DESC_VALID);
+
+        physical.write64(S2_L0_BASE, tableDescriptor(S2_L1_BASE));
+        physical.write64(S2_L1_BASE, tableDescriptor(S2_L2_BASE));
+        physical.write64(S2_L2_BASE, tableDescriptor(S2_L3_BASE));
+        physical.write64(S2_L3_BASE, (STAGE2_FINAL_PA & OUTPUT_ADDRESS_MASK) | ((long) s2ap << AP_SHIFT)
+                | DESC_TABLE_OR_PAGE | DESC_VALID);
+
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(physical);
+        mmu.setTtbr0(0);
+        mmu.setMmuEnabled(true);
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x100)));
+        core.setSystemRegisterBus(new Aarch64VmsaSystemRegisters(mmu, core));
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.VTTBR_EL2, S2_L0_BASE);
+        return core;
+    }
+
+    @Test
+    void s12e1rComHcrVmZeroSeComportaComoS1e1r() {
+        // HCR_EL2.VM nunca escrito == 0: stage-2 desligada, S12E1R deve ignorar a tabela de
+        // stage-2 (que mapearia para STAGE2_FINAL_PA) e devolver o mesmo resultado de S1E1R.
+        Aarch64Core core = coreWithStage1AndStage2(AP_FULL_ACCESS, S2AP_READ_WRITE);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT);
+        assertEquals(0L, par & OUTPUT_ADDRESS_MASK, "VM=0: PA deve ser o IPA da stage-1 (identidade), sem stage-2");
+    }
+
+    @Test
+    void s12e1rComHcrVmUmPassaPelasDuasEtapas() {
+        Aarch64Core core = coreWithStage1AndStage2(AP_FULL_ACCESS, S2AP_READ_WRITE);
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT);
+        assertEquals(STAGE2_FINAL_PA, par & OUTPUT_ADDRESS_MASK,
+                "VM=1: PA final deve vir da stage-2, não do IPA intermediário");
+    }
+
+    @Test
+    void s12e1rComStage2SemAcessoFalhaComSBitSetado() {
+        Aarch64Core core = coreWithStage1AndStage2(AP_FULL_ACCESS, S2AP_NONE);
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "F=1: stage-2 nega o acesso (S2AP=00)");
+        assertEquals(S_STAGE_BIT, par & S_STAGE_BIT, "S=1: falha veio da stage-2, não da stage-1");
+    }
+
+    @Test
+    void s12e0rEmPaginaSoPrivilegiadaDeStage1FalhaAntesDeChegarNaStage2() {
+        // Falha de stage-1 (AP_EL1_ONLY_READ_WRITE nega EL0) — S12E0R nunca chega a consultar a
+        // stage-2 (S2AP_READ_WRITE aqui, que teria permitido); o F=1 deve vir sem o bit S setado.
+        Aarch64Core core = coreWithStage1AndStage2(AP_EL1_ONLY_READ_WRITE, S2AP_READ_WRITE);
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E0R, 31));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT);
+        assertEquals(0, par & S_STAGE_BIT, "S=0: a falha foi de stage-1 (permissão EL0), não de stage-2");
+    }
+
     @Test
     void manutencaoDeCacheRealContinuaNopAposOCarveOutDeAt() {
         // Regressão do achado desta task: IC IALLU (CRm=1, op1=0, CRn=7, op2=5, != AT CRm=8)

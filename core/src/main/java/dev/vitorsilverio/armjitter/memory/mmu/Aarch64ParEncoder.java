@@ -27,15 +27,33 @@ public final class Aarch64ParEncoder {
     private static final int FAULT_FST_SHIFT = 1;
     private static final long FAULT_FST_MASK = 0b11_1111L;
 
+    /// `S` (bit `9`, "stage"): `0` = falha de stage 1, `1` = falha de stage 2 (B10.8) — o `FST`
+    /// usa os MESMOS códigos por nível nas duas etapas (confirmado contra `arm_fi_to_lfsc` real do
+    /// QEMU: a distinção de estágio não entra no valor de `FST`, só neste bit separado do layout de
+    /// `PAR_EL1`).
+    private static final long S_STAGE_BIT = 1L << 9;
+
     /// Codifica sucesso: `F=0`, `PA` nos bits `[47:12]`. `ATTR`/`SH`/`NS` ficam `0` (sem `MAIR`
     /// real modelado — mesma disciplina "storage-only" de {@link TranslatingAddressSpace64}).
     public static long success(long physicalAddress) {
         return physicalAddress & SUCCESS_PA_MASK;
     }
 
-    /// Codifica falha: `F=1`, `FST` nos bits `[6:1]` a partir de {@link FaultStatus64#code()}.
-    /// `S`(stage)/`PTW` ficam `0` (só stage 1 é traduzido, ver B10.8 para stage 2).
+    /// Codifica falha de stage 1 (`S=0`): `F=1`, `FST` nos bits `[6:1]` a partir de
+    /// {@link FaultStatus64#code()}. `PTW` fica `0` (não modelado, ver {@link #fault(FaultStatus64,
+    /// boolean)}).
     public static long fault(FaultStatus64 status) {
-        return F_BIT | ((status.code() & FAULT_FST_MASK) << FAULT_FST_SHIFT);
+        return fault(status, false);
+    }
+
+    /// Codifica falha (B10.8): `F=1`, `FST` nos bits `[6:1]`, `S` no bit `9` conforme
+    /// {@code stage2} ({@code true} = falha veio de {@link Stage2TranslatingAddressSpace64}, ver
+    /// {@link MemoryTranslationException64#isStage2()}). `PTW` (bit `8`, "falha durante o walk de
+    /// stage-1 dentro de uma tradução stage-2") fica `0` — não modelado (B10.8 simplifica os
+    /// acessos às tabelas de stage-1 como leitura física direta, ver javadoc de
+    /// {@link Stage2TranslatingAddressSpace64}, então essa distinção nunca se aplicaria aqui).
+    public static long fault(FaultStatus64 status, boolean stage2) {
+        long value = F_BIT | ((status.code() & FAULT_FST_MASK) << FAULT_FST_SHIFT);
+        return stage2 ? value | S_STAGE_BIT : value;
     }
 }

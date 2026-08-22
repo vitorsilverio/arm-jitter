@@ -4,12 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 
-/// B10.6: layout de bits de `PAR_EL1` (`ARM DDI 0487 D19.2.97`, formato de 64 bits).
+/// B10.6/B10.8: layout de bits de `PAR_EL1` (`ARM DDI 0487 D19.2.97`, formato de 64 bits).
 class Aarch64ParEncoderTest {
     private static final long F_BIT = 1L;
     private static final int FST_SHIFT = 1;
     private static final long FST_MASK = 0b11_1111L;
     private static final long PA_MASK = 0x0000_FFFF_FFFF_F000L;
+    private static final long S_STAGE_BIT = 1L << 9;
 
     @Test
     void successCarregaPaNosBitsCorretosComFZero() {
@@ -42,5 +43,25 @@ class Aarch64ParEncoderTest {
 
         assertEquals(1, par & F_BIT);
         assertEquals(FaultStatus64.PERMISSION_FAULT_L3.code(), (par >>> FST_SHIFT) & FST_MASK);
+    }
+
+    // ── B10.8: bit S (stage) ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void faultSemStageDeixaSBitZero() {
+        long par = Aarch64ParEncoder.fault(FaultStatus64.TRANSLATION_FAULT_L1, false);
+
+        assertEquals(0, par & S_STAGE_BIT, "overload de 1 arg / stage2=false deve manter S=0");
+        assertEquals(Aarch64ParEncoder.fault(FaultStatus64.TRANSLATION_FAULT_L1), par);
+    }
+
+    @Test
+    void faultComStage2SetaSBitMasMantemMesmoFst() {
+        long par = Aarch64ParEncoder.fault(FaultStatus64.TRANSLATION_FAULT_L1, true);
+
+        assertEquals(1, par & F_BIT);
+        assertEquals(S_STAGE_BIT, par & S_STAGE_BIT, "S=1 para falha de stage-2");
+        assertEquals(FaultStatus64.TRANSLATION_FAULT_L1.code(), (par >>> FST_SHIFT) & FST_MASK,
+                "FST usa o MESMO código independente do estágio — só o bit S distingue");
     }
 }

@@ -313,6 +313,38 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
         }
     }
 
+    /// `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (B10.8, formas combinadas): mesmo walk de stage-1 de
+    /// {@link #translateForAddressTranslate}, seguido de {@link Stage2TranslatingAddressSpace64#translate}
+    /// no resultado — o VA passa pela stage-1 (produzindo o que semanticamente é um IPA quando
+    /// `HCR_EL2.VM=1`), depois esse IPA passa pela stage-2 até o PA final.
+    ///
+    /// **Simplificação explícita** (mesma disciplina "escopo mínimo documentado" do resto desta
+    /// classe): os acessos às PRÓPRIAS tabelas de stage-1 (leitura dos descritores L0-L3 dentro do
+    /// walk de stage-1) continuam lendo `physical` diretamente, SEM passar pela stage-2 — no
+    /// hardware real, essas leituras também seriam traduzidas (as tabelas de stage-1 vivem em IPA
+    /// sob um hypervisor real). Só o endereço de DADOS final que a stage-1 resolve passa pela
+    /// stage-2 aqui. Ver javadoc de {@link Stage2TranslatingAddressSpace64} para o raciocínio
+    /// completo — nenhum consumidor real deste emulador roda um guest sob hypervisor emulado hoje,
+    /// então a distinção não é observável por enquanto.
+    ///
+    /// @param stage2 tradutor de stage-2 (`VTTBR_EL2`) — chamador decide se {@code HCR_EL2.VM=1}
+    ///               antes de passar um valor não-nulo; se a stage-2 estiver desligada, o chamador
+    ///               deve usar {@link #translateForAddressTranslate} em vez deste método
+    /// @throws MemoryTranslationException64 em falha de stage-1 (`isStage2()==false`) ou stage-2
+    ///         (`isStage2()==true`) — capturada por quem chama, nunca propagada como abort real
+    public long translateForAddressTranslateStage12(long va, MemoryAccessType type, boolean unprivileged,
+            Stage2TranslatingAddressSpace64 stage2) {
+        long ipa = translateForAddressTranslate(va, type, unprivileged);
+        return stage2.translate(ipa, type);
+    }
+
+    /// Barramento físico por trás desta tradução — usado por
+    /// {@link Aarch64VmsaSystemRegisters} para construir o {@link Stage2TranslatingAddressSpace64}
+    /// (B10.8), que traduz sobre o MESMO físico, sem envolver este wrapper de stage-1.
+    public AddressSpace64 physicalAddressSpace() {
+        return physical;
+    }
+
     private static int indexShift(int level) {
         return switch (level) {
             case LEVEL_L0 -> L0_SHIFT;

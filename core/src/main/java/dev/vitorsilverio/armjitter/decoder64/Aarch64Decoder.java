@@ -493,6 +493,17 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0R = 0b010;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0W = 0b011;
 
+    // ── B10.8: `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (combinadas stage-1+stage-2) — MESMO
+    // ── `op1=0b100` de `AT S1E2R`/`S1E2W` (regime EL2, `SYSTEM_INSTRUCTION_TLBI_OP1_EL2`, reusado
+    // ── aqui), distinguidas só por `op2` (conferido contra `cpregs-at.c` real do QEMU:
+    // ── `AT_S1E2R`/`AT_S1E2W` = op2 0/1; `AT_S12E1R`/`AT_S12E1W`/`AT_S12E0R`/`AT_S12E0W` = op2
+    // ── 4/5/6/7 — op2 2/3 são reservados). `S1E2R`/`S1E2W` continuam `unsupported` (B10.6b, exigem
+    // ── `TTBR0_EL2` que não existe).
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E1R = 0b100;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E1W = 0b101;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E0R = 0b110;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E0W = 0b111;
+
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
     private static final int LOAD_STORE_CLASS_BIT25_SHIFT = 25;
@@ -2122,10 +2133,15 @@ public final class Aarch64Decoder {
         }
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isAddressTranslateStage1Crm(word)) {
             // CRm=0b1000 é SEMPRE `AT` (nunca manutenção de cache), para QUALQUER `op1` — só
-            // `op1=0b000` (regime EL1&0) tem forma implementada; `op1=4/6` (EL2/EL3, B10.6b/B10.6c)
-            // cai em `unsupported` abaixo, nunca no bucket de NOP genérico (G8 — ver Armadilhas).
+            // `op1=0b000` (regime EL1&0, B10.6) e `op1=0b100`/`op2` 4-7 (formas combinadas
+            // `S12E*`, B10.8) têm forma implementada; o resto (`op1=4`/`op2` 0-1 = `S1E2*`,
+            // `op1=6` = `S1E3*`) cai em `unsupported` abaixo, nunca no bucket de NOP genérico
+            // (G8 — ver Armadilhas).
             if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1) {
                 return decodeAddressTranslate(word, address);
+            }
+            if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL2) {
+                return decodeAddressTranslateStage12(word, address);
             }
             throw unsupported(word, address);
         }
@@ -2160,6 +2176,23 @@ public final class Aarch64Decoder {
             case SYSTEM_INSTRUCTION_AT_OP2_S1E1W -> Aarch64AddressTranslateForm.S1E1W;
             case SYSTEM_INSTRUCTION_AT_OP2_S1E0R -> Aarch64AddressTranslateForm.S1E0R;
             case SYSTEM_INSTRUCTION_AT_OP2_S1E0W -> Aarch64AddressTranslateForm.S1E0W;
+            default -> throw unsupported(word, address);
+        };
+        return new Ir64Op.AddressTranslate(form, rt);
+    }
+
+    /// `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (B10.8, formas combinadas stage-1+stage-2) — `op2`
+    /// seleciona a forma; `S1E2R`/`S1E2W` (`op2=0/1`, MESMO `op1`) e `op2` reservado (`2`/`3`) caem
+    /// em `unsupported` (B10.6b, não implementado — exige `TTBR0_EL2`). Chamado só quando
+    /// `op1`/`CRn`/`CRm` já bateram com o grupo `AT` EL2 (ver {@link #decodeSystemInstructionSys}).
+    private Ir64Op decodeAddressTranslateStage12(int word, long address) {
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        Aarch64AddressTranslateForm form = switch (op2) {
+            case SYSTEM_INSTRUCTION_AT_OP2_S12E1R -> Aarch64AddressTranslateForm.S12E1R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S12E1W -> Aarch64AddressTranslateForm.S12E1W;
+            case SYSTEM_INSTRUCTION_AT_OP2_S12E0R -> Aarch64AddressTranslateForm.S12E0R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S12E0W -> Aarch64AddressTranslateForm.S12E0W;
             default -> throw unsupported(word, address);
         };
         return new Ir64Op.AddressTranslate(form, rt);

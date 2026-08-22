@@ -1,7 +1,9 @@
 package dev.vitorsilverio.armjitter.memory.mmu;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
@@ -338,6 +340,83 @@ class TranslatingAddressSpace64Test {
 
         mmu.setTtbr0(L0_BASE);
         assertEquals(afterSetup + 2, mmu.translationGeneration());
+    }
+
+    // ── B10.8: translateForAddressTranslateStage12 (AT S12E1R/S12E1W/S12E0R/S12E0W) ──────────
+    // Tabela de stage-2 própria, num pedaço do MESMO físico não usado pelas tabelas/páginas de
+    // stage-1 acima (offsets >= 0x0090_0000).
+    private static final long S2_L0_BASE = 0x0090_0000L;
+    private static final long S2_L1_BASE = 0x0091_0000L;
+    private static final long S2_L2_BASE = 0x0092_0000L;
+    private static final long S2_L3_BASE = 0x0093_0000L;
+    private static final int S2AP_READ_WRITE = 0b11;
+    private static final int S2AP_NONE = 0b00;
+
+    private static long s2TableDescriptor(long nextTableBase) {
+        return (nextTableBase & OUTPUT_ADDRESS_MASK) | DESC_TABLE_OR_PAGE | DESC_VALID;
+    }
+
+    private static long s2PageDescriptor(long outputBase, int s2ap) {
+        return (outputBase & OUTPUT_ADDRESS_MASK) | ((long) s2ap << AP_SHIFT) | DESC_TABLE_OR_PAGE | DESC_VALID;
+    }
+
+    /// Monta uma stage-2 cujo mapeamento identidade cobre `PA_IDENTITY`/`PA_EL1_ONLY` (os IPAs que
+    /// a stage-1 de {@link #newMmu} produz para `VA_IDENTITY`/`VA_EL1_ONLY`) — index `0x100`/`0x120`
+    /// da L3 de stage-2, mesmo esquema de índice usado por {@link #newMmu}.
+    private static Stage2TranslatingAddressSpace64 newStage2(AddressSpace64 physical, long finalPaForIdentity) {
+        physical.write64(S2_L0_BASE, s2TableDescriptor(S2_L1_BASE));
+        physical.write64(S2_L1_BASE, s2TableDescriptor(S2_L2_BASE));
+        physical.write64(S2_L2_BASE, s2TableDescriptor(S2_L3_BASE)); // L2[0]: cobre PA_IDENTITY (IPA < 2MiB)
+        physical.write64(S2_L2_BASE + 1 * 8, s2TableDescriptor(S2_L3_BASE)); // L2[1]: cobre PA_EL1_ONLY (IPA no 2º bloco de 2MiB)
+        physical.write64(S2_L3_BASE + 0x100 * 8, s2PageDescriptor(finalPaForIdentity, S2AP_READ_WRITE));
+        physical.write64(S2_L3_BASE + 0x120 * 8, s2PageDescriptor(finalPaForIdentity, S2AP_NONE));
+        // demais índices inválidos — falta de tradução de stage-2.
+
+        Stage2TranslatingAddressSpace64 stage2 = new Stage2TranslatingAddressSpace64(physical);
+        stage2.setVttbr(S2_L0_BASE);
+        return stage2;
+    }
+
+    @Test
+    void translateForAddressTranslateStage12ComStage2HabilitadaPassaPelasDuasEtapas() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        long finalPa = 0x00A0_0000L;
+        Stage2TranslatingAddressSpace64 stage2 = newStage2(physical, finalPa);
+
+        long pa = mmu.translateForAddressTranslateStage12(VA_IDENTITY, MemoryAccessType.DATA_READ, false, stage2);
+
+        // VA_IDENTITY → (stage-1) PA_IDENTITY, que aqui faz o papel de IPA → (stage-2) finalPa.
+        assertEquals(finalPa, pa);
+    }
+
+    @Test
+    void translateForAddressTranslateStage12FalhaDeStage1NaoMarcaIsStage2() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        Stage2TranslatingAddressSpace64 stage2 = newStage2(physical, 0x00A0_0000L);
+
+        MemoryTranslationException64 fault = assertThrows(MemoryTranslationException64.class,
+                () -> mmu.translateForAddressTranslateStage12(VA_L3_FAULT, MemoryAccessType.DATA_READ, false,
+                        stage2));
+
+        assertEquals(FaultStatus64.TRANSLATION_FAULT_L3, fault.faultStatus());
+        assertFalse(fault.isStage2(), "falha na stage-1 (page-walk de VA→IPA) não é uma falha de stage-2");
+    }
+
+    @Test
+    void translateForAddressTranslateStage12FalhaDeStage2MarcaIsStage2() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        // VA_EL1_ONLY: stage-1 produz IPA=PA_EL1_ONLY, mapeado sem acesso nenhum na stage-2.
+        Stage2TranslatingAddressSpace64 stage2 = newStage2(physical, 0x00A0_0000L);
+
+        MemoryTranslationException64 fault = assertThrows(MemoryTranslationException64.class,
+                () -> mmu.translateForAddressTranslateStage12(VA_EL1_ONLY, MemoryAccessType.DATA_READ, false,
+                        stage2));
+
+        assertEquals(FaultStatus64.PERMISSION_FAULT_L3, fault.faultStatus());
+        assertTrue(fault.isStage2(), "S2AP=00 nega o acesso na stage-2, distinto da permissão de stage-1");
     }
 
     @Test

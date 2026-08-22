@@ -49,6 +49,12 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 /// {@link TranslatingAddressSpace64#translateForAddressTranslate}. Único registrador/método deste
 /// barramento com efeito observável fora de si mesmo além dos pares EL1 já existentes.
 ///
+/// **B10.8**: `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (formas combinadas stage-1+stage-2) também
+/// passam por {@link #addressTranslate} — quando `HCR_EL2.VM=1`, o resultado da stage-1 (VA→IPA)
+/// é traduzido de novo por {@link #stage2} (IPA→PA, {@link Stage2TranslatingAddressSpace64}, sobre
+/// o MESMO físico); `VTTBR_EL2` (já armazenamento puro desde B10.2) agora também alimenta
+/// {@link Stage2TranslatingAddressSpace64#setVttbr} a cada escrita.
+///
 /// **B10.7**: os 7 registradores de debug (`MDSCR_EL1`/`OSLAR_EL1`/`OSLSR_EL1`/`DBGBVR0_EL1`/
 /// `DBGBCR0_EL1`/`DBGWVR0_EL1`/`DBGWCR0_EL1`) também são atendidos aqui, armazenamento puro — SEM
 /// enforcement de `RO`/`WO` mesmo onde o hardware real os teria (`OSLAR_EL1`/`OSLSR_EL1`), por
@@ -56,8 +62,16 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBus {
     private static final long SCTLR_M_BIT = 1;
 
+    /// `HCR_EL2.VM` (bit `0`, "Virtualization enable" — `ARM DDI 0487 D19.2.44`): liga a stage-2
+    /// (B10.8). Sem este bit, `AT S12E*` se comporta EXATAMENTE como `AT S1E*` (stage-1 só) —
+    /// {@link Stage2TranslatingAddressSpace64} nunca é consultado.
+    private static final long HCR_EL2_VM_BIT = 1;
+
     private final TranslatingAddressSpace64 mmu;
     private final Aarch64ExceptionState exceptionState;
+    /// B10.8: stage-2, sobre o MESMO físico que a stage-1 usa — só consultada pelas formas
+    /// combinadas `AT S12E*` quando {@link #HCR_EL2_VM_BIT} está setado em {@link #hcrEl2}.
+    private final Stage2TranslatingAddressSpace64 stage2;
 
     private long ttbr0;
     private long tcr;
@@ -104,6 +118,7 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     public Aarch64VmsaSystemRegisters(TranslatingAddressSpace64 mmu, Aarch64Core core) {
         this.mmu = mmu;
         this.exceptionState = core.exceptionState();
+        this.stage2 = new Stage2TranslatingAddressSpace64(mmu.physicalAddressSpace());
         // Reset real de hardware: MMU desligada (SCTLR_EL1.M=0) até o software habilitar.
         mmu.setMmuEnabled(false);
     }
@@ -198,7 +213,10 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case MDCR_EL2 -> mdcrEl2 = value;
             case CPTR_EL2 -> cptrEl2 = value;
             case TCR_EL2 -> tcrEl2 = value;
-            case VTTBR_EL2 -> vttbrEl2 = value;
+            case VTTBR_EL2 -> {
+                vttbrEl2 = value;
+                stage2.setVttbr(value);
+            }
             case VTCR_EL2 -> vtcrEl2 = value;
             case CNTHCTL_EL2 -> cnthctlEl2 = value;
             case ESR_EL2 -> exceptionState.setEsr(Aarch64ExceptionLevel.EL2, value);
@@ -231,18 +249,27 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         mmu.invalidateTlbAll();
     }
 
-    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6): traduz `va` via
-    /// {@link TranslatingAddressSpace64#translateForAddressTranslate} e escreve {@link #par} —
-    /// sucesso via {@link Aarch64ParEncoder#success}, falha (capturada AQUI, nunca relançada — `AT`
-    /// não gera abort) via {@link Aarch64ParEncoder#fault}.
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6, stage-1 só) e `AT S12E1R`/`S12E1W`/`S12E0R`/
+    /// `S12E0W` (B10.8, combinadas) — traduz `va` e escreve {@link #par}: sucesso via
+    /// {@link Aarch64ParEncoder#success}, falha (capturada AQUI, nunca relançada — `AT` não gera
+    /// abort) via {@link Aarch64ParEncoder#fault}. Formas combinadas só passam pela stage-2
+    /// ({@link #stage2}) quando {@link #HCR_EL2_VM_BIT} está setado em {@link #hcrEl2} — com
+    /// `HCR_EL2.VM=0`, `S12E*` se comporta idêntico à forma `S1E*` correspondente (stage-2
+    /// desligada, mesma simplificação "efeito mínimo" já aplicada ao resto desta classe).
     @Override
     public void addressTranslate(Aarch64AddressTranslateForm form, long va) {
         MemoryAccessType type = form.isWrite() ? MemoryAccessType.DATA_WRITE : MemoryAccessType.DATA_READ;
+        boolean unprivileged = form.isUnprivileged();
         try {
-            long physicalAddress = mmu.translateForAddressTranslate(va, type, form.isUnprivileged());
-            par = Aarch64ParEncoder.success(physicalAddress);
+            if (form.isCombinedStage12() && (hcrEl2 & HCR_EL2_VM_BIT) != 0) {
+                long physicalAddress = mmu.translateForAddressTranslateStage12(va, type, unprivileged, stage2);
+                par = Aarch64ParEncoder.success(physicalAddress);
+            } else {
+                long physicalAddress = mmu.translateForAddressTranslate(va, type, unprivileged);
+                par = Aarch64ParEncoder.success(physicalAddress);
+            }
         } catch (MemoryTranslationException64 fault) {
-            par = Aarch64ParEncoder.fault(fault.faultStatus());
+            par = Aarch64ParEncoder.fault(fault.faultStatus(), fault.isStage2());
         }
     }
 
