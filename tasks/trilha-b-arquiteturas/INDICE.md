@@ -79,5 +79,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [B10.2](b10.2-el2-registradores-sistema.md) | EL2: 13 registradores de sistema via `MRS`/`MSR` (`SCTLR_EL2`/`HCR_EL2`/`MDCR_EL2`/`CPTR_EL2`/`TCR_EL2`/`VTTBR_EL2`/`VTCR_EL2`/`SPSR_EL2`/`ELR_EL2`/`FAR_EL2`/`ESR_EL2`/`CNTHCTL_EL2`/`VBAR_EL2`) — armazenamento puro, sem side effect ainda | B10.1 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 | [B10.3](b10.3-el3-registradores-sistema.md) | EL3: 7 registradores de sistema via `MRS`/`MSR` (`SCTLR_EL3`/`SCR_EL3`/`MDCR_EL3`/`CPTR_EL3`/`SPSR_EL3`/`ELR_EL3`/`VBAR_EL3`) — armazenamento puro, sem side effect ainda | B10.1 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 | [B10.4](b10.4-hvc-real.md) | `HVC` real: entra em EL2 de verdade (árvore de decisão completa por nível-fonte + `HCR_EL2.HCD`), substitui o stub `PSCI_RET_NOT_SUPPORTED` para `HVC` (`SMC` continua stub, B10.5) | B10.1 ✅, B10.2 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
+| [B10.5](b10.5-smc-real.md) | `SMC` real: entra em EL3 de verdade (árvore de decisão completa por nível-fonte + `SCR_EL3.SMD`), remove o stub `PSCI_RET_NOT_SUPPORTED` (comportamento herdado de B6, agora só até B10.5) | B10.1 ✅, B10.3 ✅ | ✅ (2026-08-21) — ver **Resultado** na task |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

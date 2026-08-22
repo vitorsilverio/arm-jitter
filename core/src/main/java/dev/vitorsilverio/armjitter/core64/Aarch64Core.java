@@ -82,6 +82,13 @@ public final class Aarch64Core {
     /// aplica à rota `EL1`→`EL2`; em `EL2`, `HVC` sempre entra (auto-chamada), ver
     /// {@link #enterHypervisorCall} e a task, "Armadilhas".
     private static final long HCR_EL2_HCD_BIT = 1L << 29;
+    /// `EC` (`ESR_EL3[31:26]`) de `SMC` executado em AArch64 (`ARM DDI 0487 D17.2.30`, B10.5) —
+    /// diferente de `0x16` (`HVC`, B10.4) e de `0x13` (`SMC` em AArch32, fora de escopo).
+    private static final long ESR_EC_SMC_AARCH64 = 0x17L;
+    /// `SCR_EL3.SMD` (bit 7, "Secure Monitor Call Disable", `ARM DDI 0487 D19.2.101`, B10.5) —
+    /// desabilita a rota para `EL3` a partir de `EL1`/`EL2`/`EL3`, mesmo raciocínio de
+    /// {@link #HCR_EL2_HCD_BIT} para `HVC`; ver {@link #enterSecureMonitorCall}.
+    private static final long SCR_EL3_SMD_BIT = 1L << 7;
 
     // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
     // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
@@ -573,11 +580,59 @@ public final class Aarch64Core {
                 && (systemRegisterBus.read(Aarch64SystemRegisterId.HCR_EL2) & HCR_EL2_HCD_BIT) != 0;
     }
 
+    /// `SMC` real (`ARM DDI 0487 C6.2.294`, B10.5) — árvore de decisão do pseudocódigo real da
+    /// instrução, SIMPLIFICADA (sem o ramo `HCR_EL2.TSC` que roteia `EL1`→`EL2`, deliberadamente
+    /// fora de escopo, ver a task "Não inclui" — mesma simplificação que B10.4 aplicou a `HVC` para
+    /// `HCR_EL2.TGE`): `EL0` não tem `SMC` definida (cai em `UNDEFINED`, mesmo caminho de
+    /// {@link #enterUndefinedInstructionException}); em `EL1`/`EL2`/`EL3`, `SCR_EL3.SMD` desabilita
+    /// a rota (self-trap `UNDEFINED` no PRÓPRIO nível de origem — nunca reduz nem aumenta
+    /// privilégio); senão entra em `EL3` (auto-chamada quando a origem já é `EL3`, "mesmo nível" —
+    /// mesmo caso real do manual usado pelo ramo `EL2→EL2` de {@link #enterHypervisorCall}). Sem
+    /// hospedeiro de `SCR_EL3` instalado (`systemRegisterBus` "none"), `SMD` é tratado como `0`
+    /// (não desabilitado, mesmo padrão "registrador sem hospedeiro = zerado" de {@link #hypervisorCallDisabled}).
+    ///
+    /// @param instructionAddress endereço da própria instrução `SMC` (`ELR_ELx` quando aplicável)
+    public void enterSecureMonitorCall(long instructionAddress) {
+        Aarch64ExceptionLevel source = exceptionState.currentEl();
+        if (source == Aarch64ExceptionLevel.EL0) {
+            // Mesmo raciocínio do ramo EL0 de enterHypervisorCall: EL1 é o único alvo real de um
+            // UNDEFINED vindo de EL0 (não bancado), alvo fixo do método de conveniência é correto
+            // aqui.
+            enterUndefinedInstructionException(instructionAddress);
+            return;
+        }
+        if (secureMonitorCallDisabled()) {
+            if (source == Aarch64ExceptionLevel.EL1) {
+                // Alvo fixo EL1 de enterUndefinedInstructionException() coincide com `source`
+                // aqui (EL1->EL1, "mesmo nível") — correto, mesmo raciocínio do ramo EL1 de
+                // enterHypervisorCall.
+                enterUndefinedInstructionException(instructionAddress);
+                return;
+            }
+            // EL2/EL3 com SMD setado: NÃO reusa enterUndefinedInstructionException() (alvo fixo
+            // EL1 seria uma redução de privilégio, que enterSynchronousException recusa via
+            // vectorGroupBase, G8 — mesmo achado registrado nas Armadilhas de B10.4 para o ramo
+            // EL3 de HVC). UNDEFINED se auto-trata no próprio nível de origem.
+            long undefinedEsr = (ESR_EC_UNKNOWN_REASON << ESR_EC_SHIFT) | ESR_IL_BIT;
+            enterSynchronousException(source, instructionAddress, undefinedEsr);
+            return;
+        }
+        long esr = (ESR_EC_SMC_AARCH64 << ESR_EC_SHIFT) | ESR_IL_BIT;
+        enterSynchronousException(Aarch64ExceptionLevel.EL3, instructionAddress, esr);
+    }
+
+    /// Leitura de `SCR_EL3.SMD` para {@link #enterSecureMonitorCall} — via
+    /// {@link #systemRegisterBus}, mesma disciplina de {@link #hypervisorCallDisabled}.
+    private boolean secureMonitorCallDisabled() {
+        return systemRegisterBus.handles(Aarch64SystemRegisterId.SCR_EL3)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.SCR_EL3) & SCR_EL3_SMD_BIT) != 0;
+    }
+
     /// Núcleo comum de toda exceção síncrona (`ARM DDI 0487` pseudocódigo `AArch64.TakeException`,
     /// extraído de {@link #enterMemoryAbort} em B8.3, generalizado para nível-alvo explícito em
     /// B10.1) — reaproveitado por {@link #enterBreakpointException}/
-    /// {@link #enterUndefinedInstructionException} e futuramente por `HVC`/`SMC` reais (B10.4/
-    /// B10.5): todas compartilham `ELR_ELx←instructionAddress`, `SPSR_ELx←PSTATE` atual (com o
+    /// {@link #enterUndefinedInstructionException} e por `HVC`/`SMC` reais ({@link #enterHypervisorCall}/
+    /// {@link #enterSecureMonitorCall}, B10.4/B10.5): todas compartilham `ELR_ELx←instructionAddress`, `SPSR_ELx←PSTATE` atual (com o
     /// nível de ORIGEM codificado no campo `M[3:0]`, para `ERET` saber pra onde voltar — ver
     /// {@link Aarch64ExceptionLevel}), fecham o monitor de exclusividade, entram no nível-alvo e
     /// saltam pro vetor certo (grupo "mesmo nível" ou "nível inferior", conforme

@@ -14,6 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /// o estilo de {@link Ir64BlockExecutorB101Test} (`step()` real sobre memória, não chamada direta a
 /// `Aarch64Core#enterHypervisorCall`, para provar o caminho de captura completo:
 /// decoder→`Ir64BlockExecutor#executePrivilegedCall`→`Aarch64HypervisorCallException`→`step()`).
+/// `SMC` (B10.5, real desde então) tem sua própria árvore de decisão coberta em
+/// {@link Aarch64SecureMonitorCallTest} — este arquivo só mantém um teste de regressão rápido para
+/// confirmar que a mudança de `HVC` não afetou `SMC`.
 class Aarch64HypervisorCallTest {
     private static final Ir64BlockExecutor EXECUTOR = new Ir64BlockExecutor();
     private static final int HVC_0 = 0xd400_0002; // hvc #0
@@ -114,17 +117,17 @@ class Aarch64HypervisorCallTest {
     }
 
     @Test
-    void smcStillReturnsPsciNotSupportedFromAnyLevelUnaffectedByHvcChange() {
+    void smcUnaffectedByHvcChangeEntersEl3ForRegressionSeeAarch64SecureMonitorCallTest() {
+        // SMC virou real em B10.5 (Aarch64SecureMonitorCallTest cobre a árvore de decisão
+        // completa) — este teste só confirma que a mudança de HVC (B10.4) não afetou SMC.
         Aarch64Core core = newCore();
         core.exceptionState().setCurrentEl(Aarch64ExceptionLevel.EL1);
-        core.setX(0, 0x1111_1111L);
         core.memory().write32(0x0, SMC_0);
+        core.memory().write32(VECTOR_GROUP_LOWER_EL_SYNCHRONOUS, ERET);
 
         EXECUTOR.step(core);
 
-        assertEquals(0xFFFF_FFFFL, core.x(0));
-        assertEquals(Aarch64ExceptionLevel.EL1, core.exceptionState().currentEl(),
-                "SMC (B10.5, ainda stub) não entra em EL3 — comportamento pré-B10.4 preservado");
+        assertEquals(Aarch64ExceptionLevel.EL3, core.exceptionState().currentEl());
     }
 
     private static Aarch64SystemRegisterBus hcrEl2Bus(long hcrEl2Value) {

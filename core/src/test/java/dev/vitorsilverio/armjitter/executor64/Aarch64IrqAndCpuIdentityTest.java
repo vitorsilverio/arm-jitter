@@ -115,15 +115,15 @@ class Aarch64IrqAndCpuIdentityTest {
     }
 
     @Test
-    void smcStillReturnsPsciNotSupportedInX0WithoutTrapping() {
-        // SMC (B10.5, ainda stub) — comportamento pré-B10.4 inalterado. HVC agora entra em EL2 de
-        // verdade (ver Aarch64HypervisorCallTest), este teste cobre só o irmão que ainda é stub.
+    void smcThrowsSecureMonitorCallExceptionViaExecuteOp() {
+        // SMC agora é real (B10.5) — a árvore de decisão completa (EL0/EL1/EL2/EL3, SCR_EL3.SMD)
+        // é coberta em Aarch64SecureMonitorCallTest via step() real; este teste só confirma que
+        // executeOp() (chamado direto, sem o catch de step()/executeBlock()) propaga a exceção de
+        // sinalização em vez de escrever um valor de retorno stub (comportamento pré-B10.5).
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        core.setX(0, 0x1111_1111L);
-        executor.executeOp(core, new Ir64Op.PrivilegedCall(false));
-        assertEquals(0xFFFF_FFFFL, core.x(0));
-        assertFalse(core.exceptionState().inEl1(), "SMC não entra em EL1 (sem EL3 modelado, B10.5)");
+        assertThrows(dev.vitorsilverio.armjitter.core64.Aarch64SecureMonitorCallException.class,
+                () -> executor.executeOp(core, new Ir64Op.PrivilegedCall(false)));
     }
 
     @Test

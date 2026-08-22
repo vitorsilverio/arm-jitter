@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
 import dev.vitorsilverio.armjitter.core64.Aarch64HypervisorCallException;
+import dev.vitorsilverio.armjitter.core64.Aarch64SecureMonitorCallException;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
@@ -135,6 +136,8 @@ public final class Ir64BlockExecutor {
             core.enterUndefinedInstructionException(pc);
         } catch (Aarch64HypervisorCallException hvc) {
             core.enterHypervisorCall(pc);
+        } catch (Aarch64SecureMonitorCallException smc) {
+            core.enterSecureMonitorCall(pc);
         }
         return cycles;
     }
@@ -228,6 +231,8 @@ public final class Ir64BlockExecutor {
             core.enterUndefinedInstructionException(lastFetchAddress);
         } catch (Aarch64HypervisorCallException hvc) {
             core.enterHypervisorCall(lastFetchAddress);
+        } catch (Aarch64SecureMonitorCallException smc) {
+            core.enterSecureMonitorCall(lastFetchAddress);
         }
         return cycles;
     }
@@ -283,7 +288,7 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.FP64_CONVERT ->
                     Ir64FpExecutor.executeFpConvert(core, (Ir64Op.Fp64Convert) op);
             case Ir64Op.Kind.PRIVILEGED_CALL ->
-                    executePrivilegedCall(core, (Ir64Op.PrivilegedCall) op);
+                    executePrivilegedCall((Ir64Op.PrivilegedCall) op);
             case Ir64Op.Kind.ALU_WITH_CARRY -> executeAluWithCarry(core, (Ir64Op.AluWithCarry) op);
             case Ir64Op.Kind.EXTRACT -> executeExtract(core, (Ir64Op.Extract) op);
             case Ir64Op.Kind.DATA_PROCESSING_1_SOURCE ->
@@ -1070,23 +1075,18 @@ public final class Ir64BlockExecutor {
         throw new Aarch64UndefinedInstructionException();
     }
 
-    /// `HVC` (B10.4): lança, capturada por {@link #step}/{@link #executeBlock} no MESMO ponto que
-    /// {@link Aarch64BreakpointException}/{@link Aarch64UndefinedInstructionException} (precisa do
-    /// endereço da própria instrução, só disponível ali — mesmo motivo de {@link #executeBreakpoint}).
-    /// `SMC` (B10.5, ainda stub): sem EL3 modelado, sempre devolve `PSCI_RET_NOT_SUPPORTED` (`-1`)
-    /// em `X0` (ver javadoc de {@link Ir64Op.PrivilegedCall}). `setXForWidth(..., false)` (não
-    /// `setX`) porque o valor de retorno real de uma chamada PSCI de 32 bits (`SMC32`, a convenção
-    /// mais comum) é lido pelo guest via `W0` — zero-estender os 32 bits altos evita que um
-    /// `CMP W0, #0` do guest veja lixo ali (mesmo cuidado de qualquer escrita `W` no resto do
-    /// executor).
-    private boolean executePrivilegedCall(Aarch64Core core, Ir64Op.PrivilegedCall op) {
+    /// `HVC`/`SMC` (B10.4/B10.5): sempre lança, capturada por {@link #step}/{@link #executeBlock}
+    /// no MESMO ponto que {@link Aarch64BreakpointException}/{@link Aarch64UndefinedInstructionException}
+    /// (precisa do endereço da própria instrução, só disponível ali — mesmo motivo de
+    /// {@link #executeBreakpoint}). O antigo stub `PSCI_RET_NOT_SUPPORTED` de `SMC` (pré-B10.5)
+    /// foi REMOVIDO — `SMC` agora entra em EL3 de verdade via
+    /// {@link Aarch64Core#enterSecureMonitorCall}, mesmo mecanismo de `HVC`/
+    /// {@link Aarch64Core#enterHypervisorCall}.
+    private boolean executePrivilegedCall(Ir64Op.PrivilegedCall op) {
         if (op.isHvc()) {
             throw new Aarch64HypervisorCallException();
         }
-        final int returnRegister = 0;
-        final long pscretNotSupported = 0xFFFF_FFFFL;
-        core.setXForWidth(returnRegister, pscretNotSupported, false);
-        return false;
+        throw new Aarch64SecureMonitorCallException();
     }
 
     /// `ERET` (B6.6.4, e B6.6.7 para o bit `I`; generalizado em B10.1 para os 4 níveis): `PC←
