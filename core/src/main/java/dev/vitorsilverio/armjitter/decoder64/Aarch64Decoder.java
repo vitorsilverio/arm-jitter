@@ -458,11 +458,17 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET = 0b110;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR = 0b111;
 
-    // ── TLBI (`op0=1`, `SYS` — não `SYSL`, `L=0`): op1=EL1 "geral", CRn=0b1000 fixo (grupo TLB
-    // ── maintenance). B8.3 trata QUALQUER `CRm`/`op2` deste grupo como "invalidar tudo" (ver
-    // ── javadoc de `decodeSystemInstructionSys` — sem TLB modelada, per-VA/per-ASID não tem como
-    // ── ser mais preciso que "invalidar tudo", e over-invalidar nunca corrompe estado).
+    // ── TLBI (`op0=1`, `SYS` — não `SYSL`, `L=0`): CRn=0b1000 fixo (grupo TLB maintenance),
+    // ── `op1` seleciona o REGIME (EL1&0, EL2 — incl. stage-2 `IPAS2E1*`/`ALLE1`/`VMALLS12E1`,
+    // ── que reusam `op1=0b100` conferido contra `tlbi_el1_cp_reginfo`/`tlbi_el2_cp_reginfo` reais
+    // ── do QEMU (`target/arm/tcg/tlb-insns.c`) — ou EL3). B8.3 trata QUALQUER `CRm`/`op2` do
+    // ── regime EL1&0 como "invalidar tudo" (ver javadoc de `decodeSystemInstructionSys` — sem TLB
+    // ── modelada, per-VA/per-ASID/per-IPA não tem como ser mais preciso que "invalidar tudo", e
+    // ── over-invalidar nunca corrompe estado); B10.9 estende o MESMO raciocínio para os regimes
+    // ── EL2/EL3/stage-2 — nenhum deles tem TLB própria modelada também.
     private static final int SYSTEM_INSTRUCTION_TLBI_OP1_EL1 = 0b000;
+    private static final int SYSTEM_INSTRUCTION_TLBI_OP1_EL2 = 0b100;
+    private static final int SYSTEM_INSTRUCTION_TLBI_OP1_EL3 = 0b110;
     private static final int SYSTEM_INSTRUCTION_TLBI_CRN = 0b1000;
 
     // ── Cache maintenance (B6.12, `op0=1`, `SYS`, `L=0`, CRn=0b0111 fixo — "Instruction/Data
@@ -2097,11 +2103,21 @@ public final class Aarch64Decoder {
     /// tratada igual a "invalidar tudo", não byte a byte — debug registers via `SYSL`, `op0=2`)
     /// fica fora do escopo desta task, documentado como próximo passo, não presumido desnecessário
     /// (ver a task, "Não inclui").
+    ///
+    /// **B10.9**: `TLBI` dos regimes EL2 (`op1=0b100`, cobre também as formas stage-2
+    /// `IPAS2E1*`/`IPAS2LE1*` e as combinadas `ALLE1*`/`VMALLS12E1*` — todas vivem no MESMO
+    /// `op1=0b100` no hardware real, conferido contra `tlbi_el1_cp_reginfo`/`tlbi_el2_cp_reginfo`
+    /// reais do QEMU) e EL3 (`op1=0b110`) passam a ser aceitas aqui, com a MESMA simplificação
+    /// "invalidar tudo" já aplicada ao regime EL1&0 por B8.3 — nenhum dos três regimes tem TLB
+    /// própria modelada, então não há como (nem por que) diferenciar `ALLE2` de `VAE2` de
+    /// `IPAS2E1`, etc. `AT S1E2*`/`S1E3*`/`S12E*` continuam FORA (B10.6b/B10.6c/B10.8, exigem
+    /// `TTBR0_EL2`/`TTBR0_EL3`/stage-2 que não existem) — o carve-out de `CRn=0b0111` acima já
+    /// lança `unsupported` para `op1` fora de EL1&0, sem mudança nesta task.
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
         int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
-        if (!isSysl && op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 && crn == SYSTEM_INSTRUCTION_TLBI_CRN) {
+        if (!isSysl && crn == SYSTEM_INSTRUCTION_TLBI_CRN && isTlbiRegime(op1)) {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isAddressTranslateStage1Crm(word)) {
@@ -2117,6 +2133,14 @@ public final class Aarch64Decoder {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
         throw unsupported(word, address);
+    }
+
+    /// Confere se `op1` é um dos 3 regimes de `TLBI` que este emulador aceita (B10.9): EL1&0, EL2
+    /// (incl. stage-2, mesmo `op1` no hardware real) e EL3 — ver javadoc de
+    /// {@link #decodeSystemInstructionSys}.
+    private static boolean isTlbiRegime(int op1) {
+        return op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1 || op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL2
+                || op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL3;
     }
 
     /// Confere se `CRm` bate com o grupo `AT` (`CRn=0b0111` já checado pelo chamador).

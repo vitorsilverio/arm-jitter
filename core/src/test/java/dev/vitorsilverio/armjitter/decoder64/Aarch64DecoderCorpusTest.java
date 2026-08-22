@@ -1685,6 +1685,59 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
+    void tlbiAlle2DecodesAsInvalidateAll() {
+        // `tlbi alle2` (B10.9: regime EL2, `op1=0b100`) — encoding real via aarch64-none-elf-as.
+        assertTlbiAllAtWord(0xd50c871f);
+    }
+
+    @Test
+    void tlbiVae2DecodesAsInvalidateAll() {
+        // `tlbi vae2, x0` (B10.9: mesmo `op1=0b100` de `alle2`, per-VA — encoding real).
+        assertTlbiAllAtWord(0xd50c8720);
+    }
+
+    @Test
+    void tlbiIpas2e1DecodesAsInvalidateAll() {
+        // `tlbi ipas2e1, x0` (B10.9: stage-2, MESMO `op1=0b100` de EL2 no hardware real —
+        // conferido contra `tlbi_el1_cp_reginfo` real do QEMU, `target/arm/tcg/tlb-insns.c` —,
+        // só `CRm=0b0100` distingue de `alle2`/`vae2` acima; este emulador não diferencia).
+        assertTlbiAllAtWord(0xd50c8420);
+    }
+
+    @Test
+    void tlbiIpas2le1DecodesAsInvalidateAll() {
+        // `tlbi ipas2le1, x0` (B10.9) — encoding real via aarch64-none-elf-as.
+        assertTlbiAllAtWord(0xd50c84a0);
+    }
+
+    @Test
+    void tlbiVmalls12e1DecodesAsInvalidateAll() {
+        // `tlbi vmalls12e1` (B10.9: combinada stage-1+stage-2, ainda `op1=0b100`/`CRm=0b0111`,
+        // mesmo grupo de `alle1`) — encoding real via aarch64-none-elf-as.
+        assertTlbiAllAtWord(0xd50c87df);
+    }
+
+    @Test
+    void tlbiAlle3DecodesAsInvalidateAll() {
+        // `tlbi alle3` (B10.9: regime EL3, `op1=0b110`) — encoding real via aarch64-none-elf-as.
+        assertTlbiAllAtWord(0xd50e871f);
+    }
+
+    @Test
+    void tlbiVae3DecodesAsInvalidateAll() {
+        // `tlbi vae3, x0` (B10.9) — encoding real via aarch64-none-elf-as.
+        assertTlbiAllAtWord(0xd50e8720);
+    }
+
+    private static void assertTlbiAllAtWord(int word) {
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
+    }
+
+    @Test
     void syslFormThrows() {
         // `sysl x0, #0, c8, c7, #0` (`L=1`, mesmos CRn/CRm/op2 do TLBI VMALLE1) — fora do escopo,
         // esta task só reconhece a forma `SYS` (`L=0`) — encoding real via aarch64-none-elf-as.
