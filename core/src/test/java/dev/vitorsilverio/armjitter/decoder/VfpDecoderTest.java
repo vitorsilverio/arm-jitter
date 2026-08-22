@@ -582,9 +582,103 @@ class VfpDecoderTest {
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(word).kind());
     }
 
+    // ── 7. B9.5: VMOV_64_sp, VMOV_to_gp/from_gp (word) e VCVT_fix ──────────────────────────
+
+    /// `VMOV_64_sp` (par de `S` consecutivos): `---- 1100 010 op rt2(4) rt(4) 1010 00 . 1 vm(4)`
+    /// — mesmo layout de {@link #vfpCorePairTransferWord}, mas `size=1010` (não `1011`) e `vm`
+    /// endereçado como registrador `S` (não `D`).
+    private static int vmov64SpWord(boolean toArmRegisters, int rt, int rt2, int vm) {
+        int word = (COND_AL << 28) | (0xC << 24) | (0b010 << 21) | (toArmRegisters ? 1 : 0) << 20;
+        word |= rt2 << 16;
+        word |= rt << 12;
+        word |= 0xA << 8;
+        word |= extOf(vm, false) << 5;
+        word |= 1 << 4;
+        word |= nibbleOf(vm, false);
+        return word;
+    }
+
+    /// `VMOV_to_gp`/`VMOV_from_gp`, forma word (`size=2` NEON): `---- 1110 0 0 index 1|0 vn(4)
+    /// rt(4) 1011 . 00 1 0000` — `vn` é o `D` combinado (0-15), `index` seleciona `S(2*vn+index)`.
+    private static int vmovScalarGpWordForm(boolean toArmRegister, int index, int rt, int vn) {
+        int word = (COND_AL << 28) | (0xE << 24);
+        word |= index << 21;
+        word |= (toArmRegister ? 1 : 0) << 20;
+        word |= nibbleOf(vn, true) << 16;
+        word |= rt << 12;
+        word |= 0xB << 8;
+        word |= extOf(vn, true) << 7;
+        word |= 1 << 4;
+        return word;
+    }
+
+    /// `VMOV_to_gp`, forma byte (`size=0`, `bit22=1`) — NEON-gated, sempre fora de escopo aqui.
+    private static int vmovScalarGpByteForm(int rt) {
+        return (COND_AL << 28) | (0xE << 24) | (1 << 22) | (1 << 20) | (rt << 12) | (0xB << 8) | (1 << 4);
+    }
+
+    /// `VMOV_to_gp`, forma halfword (`size=1`, `bit22=0,bit5=1`) — NEON-gated, fora de escopo.
+    private static int vmovScalarGpHalfwordForm(int rt) {
+        return (COND_AL << 28) | (0xE << 24) | (1 << 20) | (rt << 12) | (0xB << 8) | (1 << 5) | (1 << 4);
+    }
+
+    /// `VCVT_fix_{sp,dp}`: `opc2` empacota `1_op_1_u` (bits 19-16), `sx`=bit7, `imm`=`%vm_sp`
+    /// (5 bits, MESMO layout de campo que um número `S`, aqui reaproveitado como imediato).
+    private static int vfpConvertFixedWord(boolean toFixedPoint, boolean unsignedFixedPoint, boolean is32Bit,
+            int imm5, boolean doublePrecision, int vd) {
+        int word = (COND_AL << 28) | (0xE << 24) | (1 << 23) | (1 << 21) | (1 << 20);
+        word |= extOf(vd, doublePrecision) << 22;
+        word |= 1 << 19;
+        word |= (toFixedPoint ? 1 : 0) << 18;
+        word |= 1 << 17;
+        word |= (unsignedFixedPoint ? 1 : 0) << 16;
+        word |= nibbleOf(vd, doublePrecision) << 12;
+        word |= size(doublePrecision) << 8;
+        word |= (is32Bit ? 1 : 0) << 7;
+        word |= 1 << 6;
+        word |= (imm5 & 1) << 5;
+        word |= (imm5 >>> 1) & 0xF;
+        return word;
+    }
+
     @Test
-    void vfpFixedPointConvertIsOutOfScope() {
-        // VCVT_fix: opc2 ocupa {0xA,0xB,0xE,0xF} dependendo de op/x — fora do "Não inclui".
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpTwoOperandWord(0xA, true, false, 1, 0)).kind());
+    void vmov64SpBothDirections() {
+        IrOp toArm = liftSingleOp(decodeArm(vmov64SpWord(true, 1, 2, 8)));
+        assertEquals(new IrOp.VfpCorePairTransferSingle(true, 1, 2, 8, Condition.AL), toArm);
+
+        IrOp toVfp = liftSingleOp(decodeArm(vmov64SpWord(false, 1, 2, 8)));
+        assertEquals(new IrOp.VfpCorePairTransferSingle(false, 1, 2, 8, Condition.AL), toVfp);
+    }
+
+    @Test
+    void vmovScalarGpWordFormReusesCoreTransfer() {
+        // vn=3 (D combinado), index=1 -> S(2*3+1)=S7.
+        IrOp toArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(true, 1, 2, 3)));
+        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 7, Condition.AL), toArm);
+
+        IrOp fromArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(false, 0, 2, 3)));
+        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 6, Condition.AL), fromArm);
+    }
+
+    @Test
+    void vmovScalarGpByteAndHalfwordFormsAreNeonGatedOutOfScope() {
+        // QEMU translate-vfp.c: size!=MO_32 exige ARM_FEATURE_NEON — nenhum preset deste projeto
+        // (nem o ARM11 MPCore real do 3DS) tem NEON, então ficam UNIMPLEMENTED (B9.5).
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vmovScalarGpByteForm(1)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vmovScalarGpHalfwordForm(1)).kind());
+    }
+
+    @Test
+    void vcvtFixSignedToFixedRoundToZero() {
+        // op=1 (float->fixo), u=0 (com sinal), sx=1 (32 bits), imm=0 -> fractionBits=32.
+        IrOp op = liftSingleOp(decodeArm(vfpConvertFixedWord(true, false, true, 0, false, 1)));
+        assertEquals(new IrOp.VfpConvertFixed(false, true, false, true, 32, 1, Condition.AL), op);
+    }
+
+    @Test
+    void vcvtFixUnsignedFromFixedRoundToNearest() {
+        // op=0 (fixo->float), u=1 (sem sinal), sx=0 (16 bits), imm=4 -> fractionBits=12, dupla.
+        IrOp op = liftSingleOp(decodeArm(vfpConvertFixedWord(false, true, false, 4, true, 2)));
+        assertEquals(new IrOp.VfpConvertFixed(true, false, true, false, 12, 2, Condition.AL), op);
     }
 }

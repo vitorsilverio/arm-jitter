@@ -54,6 +54,9 @@ public final class VfpDecoder implements DecoderExtension {
     private static final int SIZE_FIELD_MASK = 0xF;
     private static final int SIZE_SINGLE = 0xA;
     private static final int SIZE_DOUBLE = 0xB;
+    private static final int SINGLE_REGISTER_COUNT = 32;
+    private static final int BIT16_MASK = 1 << 16;
+    private static final int BIT18_MASK = 1 << 18;
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
@@ -241,7 +244,31 @@ public final class VfpDecoder implements DecoderExtension {
                         : (doublePrecision ? IrOp.VfpConversion.F64_TO_U32 : IrOp.VfpConversion.F32_TO_U32);
                 yield vfpConvert(conversion, vdSingle, vmSource, address, raw, condition);
             }
-            default -> null; // VRINT*/VCVT_f16*/VJCVT/VCVT_fix — fora de escopo (Não inclui).
+            // VCVT_fix_{sp,dp} (B9.5, VFPv3, ARM DDI 0406C A8.8.397): `opc2` aqui vale
+            // {0xA,0xB,0xE,0xF} = nibble `1_X_1_Y` — os bits X (19-16 relativo, real bit18) e Y
+            // (bit16) NÃO são um seletor fixo como nos outros `case`s: são 2 dos 3 bits do campo
+            // real `opc=op:u:sx` do encoding (`vfp.decode` `%vcvt_fix_op = 18:1 16:1 7:1`), o
+            // terceiro (`sx`) é `bit7` (já extraído acima). `imm`=`%vm_sp` (MESMO layout de campo
+            // que um número de registrador `S`, aqui reaproveitado como imediato de 5 bits — não é
+            // um registrador). Conferido em `target/arm/tcg/vfp_helper.c` (`VFP_CONV_FIX*`) antes
+            // de implementar: fixo→float sempre arredonda ao mais próximo; float→fixo sempre
+            // trunca para zero e satura — resolvido no `StandardIrBuilder`, não aqui.
+            case 0xA, 0xB, 0xE, 0xF -> {
+                if (!validDoubleRegister(vd, doublePrecision)) {
+                    yield null;
+                }
+                boolean toFixedPoint = (raw & BIT18_MASK) != 0; // `op`.
+                boolean unsignedFixedPoint = (raw & BIT16_MASK) != 0; // `u`.
+                boolean fixedPointIs32Bit = bit7; // `sx`.
+                int imm = vm(raw, false); // `%vm_sp`: nibble(3:0)<<1 | bit5.
+                int packed = imm << 3
+                        | (fixedPointIs32Bit ? 0b100 : 0)
+                        | (unsignedFixedPoint ? 0b010 : 0)
+                        | (toFixedPoint ? 0b001 : 0);
+                yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.VFP_CONVERT_FIXED, vd, -1, -1, packed, false, false, false, 0, doublePrecision);
+            }
+            default -> null; // VRINT*/VCVT_f16*/VJCVT/VCVT_b16_f32/VCVT_hp_int — fora de escopo.
         };
     }
 
@@ -271,7 +298,46 @@ public final class VfpDecoder implements DecoderExtension {
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_SYSTEM_TRANSFER,
                     rt, -1, -1, 0, false, false, read);
         }
-        return null; // VMOV_to_gp/VMOV_from_gp/VDUP (formas NEON escalares) — fora de escopo.
+        if (size == SIZE_DOUBLE) {
+            return decodeScalarGpTransfer(raw, address, condition);
+        }
+        return null; // VDUP (forma NEON) — fora de escopo.
+    }
+
+    // ── bits[27:24]=1110, bit4=1, size=1011 (double): VMOV_to_gp/VMOV_from_gp (B9.5) ──
+
+    private static final int SCALAR_SIZE_BIT22_MASK = 1 << 22;
+    private static final int SCALAR_SIZE_BIT5_MASK = 1 << 5;
+
+    /// `VMOV_to_gp`/`VMOV_from_gp` (ARM DDI 0406C A8.8.343/A8.8.344): decodifica só a forma
+    /// "word" (elemento de 32 bits, `size=2` do encoding NEON — não confundir com o `size`
+    /// genérico bits[11:8]=1011 deste `switch`, que é o MESMO para as 3 formas). As formas
+    /// byte/halfword (`size=0/1`) são NEON de verdade (QEMU `translate-vfp.c`
+    /// `trans_VMOV_to_gp`/`trans_VMOV_from_gp`: `insn_is_neon = size != MO_32`, gate
+    /// `ARM_FEATURE_NEON`) — nenhum preset deste projeto tem NEON (0% de cobertura documentado),
+    /// e o ARM11 MPCore real do 3DS também não tem; ficam em `docs/isa-nao-aplicavel.tsv`.
+    /// A forma word é `aa32_fpsp_v2` genuína — mesma transferência de {@link #decodeCoreTransferOrSystem}
+    /// (`VMOV_single`), só endereçada via lane de um `D` combinado em vez de um `S` direto —
+    /// por isso reaproveita o MESMO {@link InstructionKind#VFP_CORE_TRANSFER} sem `Kind` novo.
+    private DecodedInstruction decodeScalarGpTransfer(int raw, int address, Condition condition) {
+        boolean byteForm = (raw & SCALAR_SIZE_BIT22_MASK) != 0;
+        boolean halfwordForm = !byteForm && (raw & SCALAR_SIZE_BIT5_MASK) != 0;
+        if (byteForm || halfwordForm) {
+            return null; // NEON-gated — fora de escopo (B9.5), ver `docs/isa-nao-aplicavel.tsv`.
+        }
+        if ((raw & BIT6_MASK) != 0) {
+            return null; // combinação reservada, nenhuma das 3 formas reais usa bit6=1 aqui.
+        }
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, true);
+        if (!validDoubleRegister(vn, true)) {
+            return null; // D16-D31 não existem neste projeto (sem VFPv3-D32/NEON).
+        }
+        boolean toArmRegister = (raw & BIT20_MASK) != 0; // VMOV_to_gp (1) / VMOV_from_gp (0).
+        int wordIndex = (raw & BIT21_MASK) != 0 ? 1 : 0; // metade alta/baixa do D combinado.
+        int sRegister = (vn << 1) | wordIndex;
+        int rt = (raw >>> VD_NIBBLE_SHIFT) & NIBBLE_MASK;
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CORE_TRANSFER,
+                rt, sRegister, -1, 0, false, false, toArmRegister);
     }
 
     // ── bits[27:24]=1101: VLDR/VSTR (bit21=0) ou VLDM/VSTM decrement-before/writeback (bit21=1) ──
@@ -319,13 +385,26 @@ public final class VfpDecoder implements DecoderExtension {
             return null; // não é o formato `010 op` de VMOV_64_{sp,dp} (bits 22:21 fixos em 1,0).
         }
         int size = size(raw);
-        if (size != SIZE_DOUBLE) {
-            return null; // VMOV_64_sp (par de registradores S, forma depreciada) — fora de escopo.
-        }
-        // VMOV_64_dp: `---- 1100 010 op rt2(4) rt(4) 1011 00 . 1 vm(4)`.
-        boolean toArmRegisters = (raw & BIT20_MASK) != 0; // op=1: Dm -> (Rt,Rt2) (FMRRD).
+        boolean toArmRegisters = (raw & BIT20_MASK) != 0; // op=1: fonte -> (Rt,Rt2).
         int rt2 = (raw >>> VN_NIBBLE_SHIFT) & NIBBLE_MASK;
         int rt = (raw >>> VD_NIBBLE_SHIFT) & NIBBLE_MASK;
+        if (size == SIZE_SINGLE) {
+            // VMOV_64_sp (B9.5, ARM DDI 0406C A8.8.346 — forma depreciada mas VFPv2 genuína,
+            // `aa32_fpsp_v2` no QEMU real): `---- 1100 010 op rt2(4) rt(4) 1010 00 . 1 vm(4)`.
+            // `Sm`/`Sm+1` (par CONSECUTIVO) só coincidem com um `D` inteiro se `m` for par — para
+            // `m` ímpar as duas metades pertencem a `D` diferentes, por isso `Kind` PRÓPRIO em vez
+            // de reaproveitar {@link InstructionKind#VFP_CORE_PAIR_TRANSFER} (que assume um `D`).
+            int vm = registerNumber(raw, 0, VM_EXTENSION_BIT, false); // vm_sp: nibble(3:0)<<1|bit5.
+            if (vm >= SINGLE_REGISTER_COUNT - 1) {
+                return null; // `Sm+1` sairia do banco de 32 `S` — combinação não definida.
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    InstructionKind.VFP_CORE_PAIR_TRANSFER_SINGLE, rt, rt2, vm, 0, false, false, toArmRegisters);
+        }
+        if (size != SIZE_DOUBLE) {
+            return null;
+        }
+        // VMOV_64_dp: `---- 1100 010 op rt2(4) rt(4) 1011 00 . 1 vm(4)`.
         int vm = registerNumber(raw, 0, VM_EXTENSION_BIT, true);
         if (!validDoubleRegister(vm, true)) {
             return null;

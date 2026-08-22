@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **55%** — 2199 de 3984 células aplicáveis decodificam.
+> **55%** — 2209 de 3972 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -35,8 +35,8 @@ Por arquitetura:
 | v4T | **62%** (207/330) |
 | v5TE | **67%** (224/330) |
 | v6K | **86%** (286/330) |
-| MPCore | **82%** (331/399) |
-| v7-A | **83%** (579/690) |
+| MPCore | **85%** (336/393) |
+| v7-A | **85%** (584/684) |
 | v6-M | **22%** (88/385) |
 | v7-M | **54%** (210/385) |
 | A64 | **24%** (274/1135) |
@@ -48,7 +48,7 @@ Por arquitetura:
 | A32 — instruções ARM de 32 bits | 266 | v4T 59% (147/247) · v5TE 65% (161/247) · v6K 90% (223/247) · MPCore 90% (223/247) · v7-A 93% (232/247) |
 | T16 — Thumb clássico | 86 | v4T 72% (60/83) · v5TE 75% (63/83) · v6K 75% (63/83) · MPCore 75% (63/83) · v7-A 83% (69/83) · v6-M 81% (68/83) · v7-M 84% (70/83) |
 | T32 — Thumb-2 | 310 | v7-A 80% (233/291) · v6-M 6% (20/291) · v7-M 48% (140/291) |
-| VFP — ponto flutuante (condicional) | 101 | MPCore 65% (45/69) · v7-A 65% (45/69) |
+| VFP — ponto flutuante (condicional) | 101 | MPCore 79% (50/63) · v7-A 79% (50/63) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
 | NEON — load/store | 5 | não se aplica a nenhum preset atual |
@@ -756,15 +756,15 @@ Inventário: `vfp.decode` · 101 instruções.
 |---|---|---|---|---|---|---|---|
 | `VMOV_to_gp` | · | · | · | ❌ | ❌ | · | · |
 | `VMOV_to_gp` | · | · | · | ❌ | ❌ | · | · |
-| `VMOV_to_gp` | · | · | · | ❌ | ❌ | · | · |
+| `VMOV_to_gp` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_from_gp` | · | · | · | ❌ | ❌ | · | · |
 | `VMOV_from_gp` | · | · | · | ❌ | ❌ | · | · |
-| `VMOV_from_gp` | · | · | · | ❌ | ❌ | · | · |
+| `VMOV_from_gp` | · | · | · | ✅ | ✅ | · | · |
 | `VDUP` | · | · | · | · | · | · | · |
 | `VMSR_VMRS` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_half` | · | · | · | ⚠️ | ⚠️ | · | · |
 | `VMOV_single` | · | · | · | ✅ | ✅ | · | · |
-| `VMOV_64_sp` | · | · | · | ❌ | ❌ | · | · |
+| `VMOV_64_sp` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_64_dp` | · | · | · | ✅ | ✅ | · | · |
 | `VLDR_VSTR_hp` | · | · | · | · | · | · | · |
 | `VLDR_VSTR_sp` | · | · | · | ✅ | ✅ | · | · |
@@ -829,11 +829,11 @@ Inventário: `vfp.decode` · 101 instruções.
 | `VCMP_hp` | · | · | · | · | · | · | · |
 | `VCMP_sp` | · | · | · | ✅ | ✅ | · | · |
 | `VCMP_dp` | · | · | · | ✅ | ✅ | · | · |
-| `VCVT_f32_f16` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_f64_f16` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_b16_f32` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_f16_f32` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_f16_f64` | · | · | · | ❌ | ❌ | · | · |
+| `VCVT_f32_f16` | · | · | · | · | · | · | · |
+| `VCVT_f64_f16` | · | · | · | · | · | · | · |
+| `VCVT_b16_f32` | · | · | · | · | · | · | · |
+| `VCVT_f16_f32` | · | · | · | · | · | · | · |
+| `VCVT_f16_f64` | · | · | · | · | · | · | · |
 | `VRINTR_hp` | · | · | · | · | · | · | · |
 | `VRINTR_sp` | · | · | · | · | · | · | · |
 | `VRINTR_dp` | · | · | · | · | · | · | · |
@@ -850,9 +850,9 @@ Inventário: `vfp.decode` · 101 instruções.
 | `VCVT_int_dp` | · | · | · | ✅ | ✅ | · | · |
 | `VJCVT` | · | · | · | · | · | · | · |
 | `VCVT_fix_hp` | · | · | · | · | · | · | · |
-| `VCVT_fix_sp` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_fix_dp` | · | · | · | ❌ | ❌ | · | · |
-| `VCVT_hp_int` | · | · | · | ❌ | ❌ | · | · |
+| `VCVT_fix_sp` | · | · | · | ✅ | ✅ | · | · |
+| `VCVT_fix_dp` | · | · | · | ✅ | ✅ | · | · |
+| `VCVT_hp_int` | · | · | · | · | · | · | · |
 | `VCVT_sp_int` | · | · | · | ✅ | ✅ | · | · |
 | `VCVT_dp_int` | · | · | · | ✅ | ✅ | · | · |
 

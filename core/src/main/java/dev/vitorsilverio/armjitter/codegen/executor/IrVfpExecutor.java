@@ -367,4 +367,73 @@ public final class IrVfpExecutor {
             core.fpscr().setValue(core.register(op.armRegister()));
         }
     }
+
+    /// `VMOV_64_sp`: `armLow`/`armHigh` de/para `Sm`/`Sm+1` (par consecutivo, NAO via `d()`/`setD()`
+    /// — `m` pode ser ímpar, caso em que as duas metades pertencem a `D` diferentes).
+    public void executeVfpCorePairTransferSingle(ArmCore core, IrOp.VfpCorePairTransferSingle op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        if (op.toArmRegisters()) {
+            core.setRegister(op.armLow(), vfp.s(op.vm()));
+            core.setRegister(op.armHigh(), vfp.s(op.vm() + 1));
+        } else {
+            vfp.setS(op.vm(), core.register(op.armLow()));
+            vfp.setS(op.vm() + 1, core.register(op.armHigh()));
+        }
+    }
+
+    /// `VCVT_fix_{sp,dp}`: converte, NO MESMO `vd`, entre float e um inteiro fixo de 16/32 bits
+    /// com `fractionBits` bits fracionários (ver Javadoc de {@link IrOp.VfpConvertFixed}). Fixo →
+    /// float SEMPRE arredonda ao mais próximo (par); float → fixo SEMPRE trunca para zero e satura
+    /// (QEMU `vfp_helper.c` `VFP_CONV_FIX*`, conferido antes de implementar).
+    public void executeVfpConvertFixed(ArmCore core, IrOp.VfpConvertFixed op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        double scale = Math.scalb(1.0, op.fractionBits());
+        if (op.doublePrecision()) {
+            if (op.toFixedPoint()) {
+                vfp.setD(op.vd(), doubleToFixed(vfp.dDouble(op.vd()) * scale, op));
+            } else {
+                vfp.setDDouble(op.vd(), fixedToDouble(vfp.d(op.vd()), op) / scale);
+            }
+        } else if (op.toFixedPoint()) {
+            vfp.setS(op.vd(), (int) doubleToFixed((double) vfp.sFloat(op.vd()) * scale, op));
+        } else {
+            vfp.setSFloat(op.vd(), (float) (fixedToDouble(vfp.s(op.vd()), op) / scale));
+        }
+    }
+
+    /// Extrai o inteiro fixo (com/sem sinal, 16/32 bits) empacotado nos bits baixos de `raw` e
+    /// devolve seu valor `double` já sem a escala (o `/scale` fica a cargo do chamador). `raw` é o
+    /// registrador INTEIRO (32 bits em `sp`, 64 em `dp`) — só os `fixedPointIs32Bit ? 32 : 16` bits
+    /// baixos importam, o resto é ignorado (QEMU passa o registrador cheio e o `itype` do helper
+    /// trunca; nunca lançamos por excesso de bits altos, mesma tolerância do hardware real).
+    private static double fixedToDouble(long raw, IrOp.VfpConvertFixed op) {
+        if (op.fixedPointIs32Bit()) {
+            return op.unsignedFixedPoint() ? (double) (raw & 0xFFFF_FFFFL) : (double) (int) raw;
+        }
+        long masked = raw & 0xFFFFL;
+        return op.unsignedFixedPoint() ? (double) masked : (double) (short) masked;
+    }
+
+    /// Converte `scaledValue` (já multiplicado por `2^fractionBits`) para o inteiro fixo de 16/32
+    /// bits, truncando para zero e saturando na largura/sinal do campo — devolve o valor NUMÉRICO
+    /// já sinalizado/sem sinal corretamente (não os bits empacotados): para `sp`, `(int)` do
+    /// resultado já trunca certo; para `dp`, o `long` já é a extensão de sinal/zero de 64 bits
+    /// correta para {@link VfpRegisters#setD} (QEMU: o helper devolve um `int16_t`/`int32_t`
+    /// implicitamente convertido para o `uint64_t` de retorno — sign/zero-extend, nunca zero alto).
+    private static long doubleToFixed(double scaledValue, IrOp.VfpConvertFixed op) {
+        int bits = op.fixedPointIs32Bit() ? 32 : 16;
+        double minValue = op.unsignedFixedPoint() ? 0.0 : -Math.scalb(1.0, bits - 1);
+        double maxValue = op.unsignedFixedPoint() ? Math.scalb(1.0, bits) - 1.0 : Math.scalb(1.0, bits - 1) - 1.0;
+        double truncated = scaledValue < 0 ? Math.ceil(scaledValue) : Math.floor(scaledValue);
+        if (Double.isNaN(truncated)) {
+            truncated = 0.0;
+        }
+        return (long) Math.max(minValue, Math.min(maxValue, truncated));
+    }
 }

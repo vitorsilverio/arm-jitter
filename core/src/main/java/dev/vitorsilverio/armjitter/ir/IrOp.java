@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -81,6 +81,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int M_PROFILE_SYSTEM_REGISTER = 54;
         public static final int BREAKPOINT = 55;
         public static final int COPROCESSOR_DOUBLE = 56;
+        public static final int VFP_CORE_PAIR_TRANSFER_SINGLE = 57;
+        public static final int VFP_CONVERT_FIXED = 58;
     }
 
     /// Operacao ALU generica.
@@ -1139,6 +1141,51 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_SYSTEM_TRANSFER; }
+    }
+
+    // -- VFP (B9.5): VMOV_64_sp (par de S consecutivos) e VCVT_fix (fixed-point). --
+
+    /// `VMOV_64_sp` (ARM DDI 0406C A8.8.346, forma depreciada mas VFPv2 genuina): transfere `Sm`
+    /// (metade baixa) e `Sm+1` (metade alta, calculado em tempo de execucao a partir de `vm`) de/
+    /// para dois registradores ARM. NAO reaproveita {@link VfpCorePairTransfer} porque `Sm`/`Sm+1`
+    /// so coincidem com um registrador `D` inteiro quando `m` e par -- para `m` impar as duas
+    /// metades pertencem a `D` diferentes, e o acesso precisa ser via `S` diretamente.
+    record VfpCorePairTransferSingle(
+            /// `true` para `(Sm,Sm+1)` -> `(armLow,armHigh)`; `false` para o sentido inverso.
+            boolean toArmRegisters,
+            /// Registrador ARM que recebe/fornece a metade BAIXA (`Sm`).
+            int armLow,
+            /// Registrador ARM que recebe/fornece a metade ALTA (`Sm+1`).
+            int armHigh,
+            /// Primeiro registrador `S` do par consecutivo (o segundo e `vm+1`).
+            int vm,
+            /// Condicao necessaria para executar a transferencia.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER_SINGLE; }
+    }
+
+    /// `VCVT_fix_{sp,dp}` (ARM DDI 0406C A8.8.397, VFPv3): converte, no MESMO registrador `vd`
+    /// (fonte e destino coincidem), entre ponto flutuante e um inteiro fixo empacotado nos bits
+    /// baixos do registrador. Fixo -> float sempre arredonda ao mais proximo (par); float -> fixo
+    /// sempre trunca para zero e satura na largura do inteiro (16 ou 32 bits, com/sem sinal
+    /// conforme `unsignedFixedPoint`) -- QEMU `vfp_helper.c` `VFP_CONV_FIX*`, conferido antes de
+    /// implementar (aritmetica de conversao fixo<->float NUNCA e so um deslocamento de bits).
+    record VfpConvertFixed(
+            /// `true` para precisao dupla do lado float (`vd` e um registrador `D`), `false` simples (`S`).
+            boolean doublePrecision,
+            /// `true`: float -> fixo (arredonda p/ zero, satura). `false`: fixo -> float (arred. p/ perto).
+            boolean toFixedPoint,
+            /// `true`: inteiro fixo SEM sinal. `false`: COM sinal.
+            boolean unsignedFixedPoint,
+            /// `true`: inteiro fixo de 32 bits. `false`: 16 bits.
+            boolean fixedPointIs32Bit,
+            /// Quantidade de bits fracionarios, ja resolvida (`fixedPointIs32Bit ? 32-imm : 16-imm`).
+            int fractionBits,
+            /// Registrador `vd`: fonte E destino (mesma posicao nos dois sentidos).
+            int vd,
+            /// Condicao necessaria para executar a conversao.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT_FIXED; }
     }
 
     /// `MRS`/`MSR` na forma SYSm do perfil M (B7.4): transfere um registrador especial Cortex-M

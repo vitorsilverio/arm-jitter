@@ -116,6 +116,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_CORE_TRANSFER -> vfp.executeVfpCoreTransfer(core, (IrOp.VfpCoreTransfer) op);
                 case IrOp.Kind.VFP_CORE_PAIR_TRANSFER -> vfp.executeVfpCorePairTransfer(core, (IrOp.VfpCorePairTransfer) op);
                 case IrOp.Kind.VFP_SYSTEM_TRANSFER -> vfp.executeVfpSystemTransfer(core, (IrOp.VfpSystemTransfer) op);
+                case IrOp.Kind.VFP_CORE_PAIR_TRANSFER_SINGLE -> vfp.executeVfpCorePairTransferSingle(core, (IrOp.VfpCorePairTransferSingle) op);
+                case IrOp.Kind.VFP_CONVERT_FIXED -> vfp.executeVfpConvertFixed(core, (IrOp.VfpConvertFixed) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
@@ -240,6 +242,8 @@ public final class IrBlockExecutor {
             case IrOp.VfpCoreTransfer vfpCore -> { vfp.executeVfpCoreTransfer(core, vfpCore); yield false; }
             case IrOp.VfpCorePairTransfer vfpCorePair -> { vfp.executeVfpCorePairTransfer(core, vfpCorePair); yield false; }
             case IrOp.VfpSystemTransfer vfpSys -> { vfp.executeVfpSystemTransfer(core, vfpSys); yield false; }
+            case IrOp.VfpCorePairTransferSingle vfpCorePairSingle -> { vfp.executeVfpCorePairTransferSingle(core, vfpCorePairSingle); yield false; }
+            case IrOp.VfpConvertFixed vfpCvtFixed -> { vfp.executeVfpConvertFixed(core, vfpCvtFixed); yield false; }
             case IrOp.MProfileSystemRegister m -> { system.executeMProfileSystemRegister(core, m); yield false; }
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
         };

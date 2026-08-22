@@ -79,3 +79,28 @@ ERETA	A64	ARMv8.3-A/FEAT_PAuth ("ERETAA"/"ERETAB", exception return com autentic
 # ── existe sem SME nenhum implementado (mesma decisão já registrada para o grupo SVE/SME
 # ── inteiro em docs/COBERTURA-ISA.md, "não se aplica a nenhum preset atual").
 MSR_i_SVCR	A64	ARMv9.2-A/FEAT_SME ("MSR SVCR, #imm" — controla estado de streaming-SVE/ZA)
+
+# -- VFP (B9.5): conversao de/para meia precisao (extensao opcional de VFPv3, aa32_fp16_spconv/
+# -- aa32_fp16_dpconv no QEMU real) e BFloat16 (ARMv8.6). Conferido em
+# -- target/arm/tcg/translate-vfp.c: trans_VCVT_f32_f16/trans_VCVT_f16_f32 exigem
+# -- dc_isar_feature(aa32_fp16_spconv), trans_VCVT_f64_f16/trans_VCVT_f16_f64 exigem
+# -- aa32_fpdp_v2+aa32_fp16_dpconv, trans_VCVT_b16_f32 exige aa32_bf16 -- nenhuma feature deste
+# -- projeto (nem o ARM11 MPCore real do 3DS) declara essas extensoes. VCVT_int_hp/VCVT_hp_int
+# -- (conversao inteiro<->meia precisao ARITMETICA, nao so bits) exigem aa32_fp16_arith
+# -- (ARMv8.2-A FP16 completo) -- so VCVT_int_hp casa com o padrao `*_hp` acima, VCVT_hp_int
+# -- precisa de linha propria (nome termina em "_int", nao em "_hp").
+VCVT_f32_f16	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
+VCVT_f16_f32	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
+VCVT_f64_f16	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
+VCVT_f16_f64	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
+VCVT_b16_f32	MPCore,v7-A	ARMv8.6-A BFloat16 (aa32_bf16)
+VCVT_hp_int	MPCore,v7-A	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
+
+# -- VFP (B9.5): VMOV_to_gp/VMOV_from_gp formas byte/halfword (size=0/1 do encoding NEON) sao
+# -- Advanced SIMD de verdade (QEMU translate-vfp.c: insn_is_neon = size != MO_32, exige
+# -- ARM_FEATURE_NEON), so a forma word (size=2) e VFPv2 genuina (aa32_fpsp_v2) e foi
+# -- implementada. NAO adicionadas aqui: o inventario usa o MESMO mnemonico "VMOV_to_gp"/
+# -- "VMOV_from_gp" para as 3 formas (byte/halfword/word), e a curadoria deste arquivo casa por
+# -- NOME, sem distinguir sub-encoding -- excluir aqui apagaria tambem a forma word ja
+# -- implementada. Ficam como falso-negativo conhecido (2 das 3 linhas de cada mnemonico
+# -- continuam ❌), documentado em vez de "corrigido incorretamente" -- ver Resultado da B9.5.

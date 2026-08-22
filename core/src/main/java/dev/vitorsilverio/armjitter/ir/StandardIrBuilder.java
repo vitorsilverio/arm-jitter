@@ -479,6 +479,30 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.condition()));
+            // VMOV_64_sp (B9.5): par de S consecutivos, ver IrOp.VfpCorePairTransferSingle.
+            case VFP_CORE_PAIR_TRANSFER_SINGLE -> block.add(new IrOp.VfpCorePairTransferSingle(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            // VCVT_fix_{sp,dp} (B9.5): `immediate` empacota bit0=toFixedPoint, bit1=unsigned,
+            // bit2=is32Bit, bits[N:3]=imm cru — `fractionBits` resolvido aqui, mesmo padrao de
+            // vfpExpandImm (VFP_MOVE_IMMEDIATE acima).
+            case VFP_CONVERT_FIXED -> {
+                int packed = instruction.immediate();
+                boolean fixedPointIs32Bit = (packed & 0b100) != 0;
+                int imm = packed >>> 3;
+                int fractionBits = fixedPointIs32Bit ? (32 - imm) : (16 - imm);
+                block.add(new IrOp.VfpConvertFixed(
+                        instruction.signedAccess(),
+                        (packed & 0b001) != 0,
+                        (packed & 0b010) != 0,
+                        fixedPointIs32Bit,
+                        fractionBits,
+                        instruction.destinationRegister(),
+                        instruction.condition()));
+            }
             // MRS/MSR SYSm do perfil M (B7.4): `immediate` carrega o campo SYSm; o registrador ARP
             // ARM é o destino (MRS) ou a fonte (MSR). Ver IrOp.MProfileSystemRegister.
             case MPROFILE_MRS -> block.add(new IrOp.MProfileSystemRegister(

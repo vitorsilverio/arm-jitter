@@ -497,4 +497,93 @@ class IrVfpExecutorTest {
         newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(Float.MIN_VALUE, core.vfp().sFloat(2));
     }
+
+    // ── 12. VMOV_64_sp (B9.5): par de S consecutivos, m PODE ser ímpar ──────────
+
+    @Test
+    void corePairTransferSingleToArmRegistersReadsConsecutiveSRegisters() {
+        ArmCore core = newCore();
+        core.vfp().setS(5, 0x1111_1111);
+        core.vfp().setS(6, 0x2222_2222);
+        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(true, 1, 2, 5, Condition.AL), 0);
+        assertEquals(0x1111_1111, core.register(1));
+        assertEquals(0x2222_2222, core.register(2));
+    }
+
+    @Test
+    void corePairTransferSingleFromArmRegistersWritesConsecutiveSRegisters() {
+        ArmCore core = newCore();
+        core.setRegister(1, 0x3333_3333);
+        core.setRegister(2, 0x4444_4444);
+        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(false, 1, 2, 5, Condition.AL), 0);
+        assertEquals(0x3333_3333, core.vfp().s(5));
+        assertEquals(0x4444_4444, core.vfp().s(6));
+    }
+
+    @Test
+    void corePairTransferSingleWithOddVmSpansTwoDifferentDRegisters() {
+        // vm=1 (ímpar): S1 é a metade ALTA de D0, S2 é a metade BAIXA de D1 — confirma que a
+        // transferência NÃO passa por d()/setD() (que assumiria os dois dentro do MESMO D).
+        ArmCore core = newCore();
+        core.vfp().setD(0, 0xAAAA_AAAA_1111_1111L); // S0=low, S1=high=0xAAAAAAAA
+        core.vfp().setD(1, 0x2222_2222_BBBB_BBBBL); // S2=low=0x22222222, S3=high
+        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(true, 3, 4, 1, Condition.AL), 0);
+        assertEquals(0xAAAA_AAAA, core.register(3)); // S1 (metade alta de D0)
+        assertEquals(0xBBBB_BBBB, core.register(4)); // S2 (metade baixa de D1)
+    }
+
+    // ── 13. VCVT_fix (B9.5): fixo<->float, arred. ao mais próximo / p/ zero+saturação ──
+
+    @Test
+    void convertFixedSignedFromFixedRoundsToNearest() {
+        // fixo assinado de 16 bits, fractionBits=8 -> 0x0180 (384) / 256 = 1.5.
+        ArmCore core = newCore();
+        core.vfp().setS(0, 0x0180);
+        newExecutor().executeOp(core,
+                new IrOp.VfpConvertFixed(false, false, false, false, 8, 0, Condition.AL), 0);
+        assertEquals(1.5f, core.vfp().sFloat(0));
+    }
+
+    @Test
+    void convertFixedSignedToFixedRoundsToZeroAndSaturates() {
+        // float->fixo trunca p/ zero: 1.9 com fractionBits=8 -> 486.4 -> trunca p/ 486 (0x01E6).
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 1.9f);
+        newExecutor().executeOp(core,
+                new IrOp.VfpConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
+        assertEquals((short) 486, (short) core.vfp().s(0));
+
+        // Satura no MAX de um fixo COM sinal de 16 bits (32767) em vez de estourar.
+        ArmCore satCore = newCore();
+        satCore.vfp().setSFloat(0, 1000.0f);
+        newExecutor().executeOp(satCore,
+                new IrOp.VfpConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
+        assertEquals(32767, core16(satCore.vfp().s(0)));
+    }
+
+    private static int core16(int raw) {
+        return raw & 0xFFFF;
+    }
+
+    @Test
+    void convertFixedUnsigned32BitDoublePrecisionRoundTrips() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 100.25);
+        newExecutor().executeOp(core,
+                new IrOp.VfpConvertFixed(true, true, true, true, 2, 0, Condition.AL), 0);
+        // 100.25 * 4 = 401 exato, sem sinal de 32 bits -> round-trip perfeito.
+        assertEquals(401L, core.vfp().d(0));
+        newExecutor().executeOp(core,
+                new IrOp.VfpConvertFixed(true, false, true, true, 2, 0, Condition.AL), 0);
+        assertEquals(100.25, core.vfp().dDouble(0));
+    }
+
+    @Test
+    void convertFixedUnsignedToFixedClampsNegativeToZero() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, -5.0f);
+        newExecutor().executeOp(core,
+                new IrOp.VfpConvertFixed(false, true, true, false, 0, 0, Condition.AL), 0);
+        assertEquals(0, core.vfp().s(0) & 0xFFFF);
+    }
 }

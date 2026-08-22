@@ -134,6 +134,10 @@ public final class AsmNativePolicy {
             case IrOp.VfpCoreTransfer ignored -> true;
             case IrOp.VfpCorePairTransfer ignored -> true;
             case IrOp.VfpSystemTransfer ignored -> true;
+            // VMOV_64_sp/VCVT_fix (B9.5): sem emissao nativa ainda, cai no interpretado por
+            // AsmFallbackPolicy.PER_OP -- mesma simplificacao aceita por varias tasks B8.x/B9.x.
+            case IrOp.VfpCorePairTransferSingle ignored -> false;
+            case IrOp.VfpConvertFixed ignored -> false;
             // MRS/MSR SYSm do perfil M (B7.4): interpretado, nunca nativo — mesmo padrão de toda op
             // de sistema nova (delega ao MProfileExceptionModel via IrSystemExecutor).
             case IrOp.MProfileSystemRegister ignored -> false;

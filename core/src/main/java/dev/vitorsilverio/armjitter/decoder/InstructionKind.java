@@ -268,5 +268,31 @@ public enum InstructionKind {
     /// registradores ARM (`Rt`/`Rt2`) são transferidos de uma vez. `destinationRegister`=Rt,
     /// `sourceRegister`=Rt2, `immediate` empacota: bits 3:0=coprocessor, bits 7:4=opcode1,
     /// bits 11:8=CRm; `link`=`true` para `MRRC` (coprocessador→registradores), `false` para `MCRR`.
-    COPROCESSOR_DOUBLE
+    COPROCESSOR_DOUBLE,
+
+    // VFP (B9.5): 2 formas genuinamente VFPv2/v3 encontradas pela triagem de VMOV/VCVT restantes
+    // -- as demais lacunas de VMOV_to_gp/VMOV_from_gp (byte/halfword) e de VCVT (conversao de/para
+    // meia precisao, BFloat16) exigem NEON/extensoes opcionais posteriores (conferido em
+    // target/arm/tcg/translate-vfp.c real do QEMU) e foram para docs/isa-nao-aplicavel.tsv, nao
+    // implementadas aqui.
+
+    /// `VMOV Rt,Rt2,Sm,Sm+1` / `VMOV Sm,Sm+1,Rt,Rt2` (`VMOV_64_sp`, forma depreciada mas VFPv2
+    /// genuina -- ARM DDI 0406C A8.8.346): transfere um PAR de registradores `S` CONSECUTIVOS
+    /// (`Sm`/`Sm+1`) de/para dois registradores ARM. Diferente de {@link #VFP_CORE_PAIR_TRANSFER}
+    /// (`VMOV_64_dp`, que usa UM registrador `D`): aqui `Sm`/`Sm+1` so coincidem com um `D`
+    /// completo quando `m` e par -- para `m` impar as duas metades pertencem a `D` DIFERENTES, por
+    /// isso um `Kind` proprio em vez de reaproveitar o de `D` (ver Armadilhas da task).
+    /// `destinationRegister`=Rt (metade baixa, `Sm`), `sourceRegister`=Rt2 (metade alta,
+    /// `Sm+1`), `secondSourceRegister`=`Sm` (o primeiro dos dois `S` consecutivos), `link`=`true`
+    /// para `(Sm,Sm+1)`->`(Rt,Rt2)`.
+    VFP_CORE_PAIR_TRANSFER_SINGLE,
+    /// `VCVT` de/para fixed-point (`VCVT_fix_{sp,dp}`, VFPv3 -- ARM DDI 0406C A8.8.397): converte,
+    /// NO MESMO registrador `Vd` (fonte e destino coincidem), entre ponto flutuante e um inteiro
+    /// fixo de 16 ou 32 bits com `fractionBits` bits fracionarios. `destinationRegister`=Vd,
+    /// `immediate` empacota bit0=`toFixedPoint` (`true`=float->fixo, arredonda p/ zero e satura;
+    /// `false`=fixo->float, arredonda ao mais proximo), bit1=`unsignedFixedPoint`, bit2=
+    /// `fixedPointIs32Bit` (`true`=32 bits, `false`=16 bits), bits 7:3=`imm` cru de 5 bits
+    /// (`fractionBits` = `fixedPointIs32Bit ? 32-imm : 16-imm`, resolvido no `StandardIrBuilder`,
+    /// mesmo padrao de `VFPExpandImm`); `signedAccess`=precisao dupla de `Vd` (`sp`/`dp`).
+    VFP_CONVERT_FIXED
 }
