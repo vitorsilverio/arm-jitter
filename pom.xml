@@ -6,7 +6,7 @@
 
     <groupId>dev.vitorsilverio</groupId>
     <artifactId>arm-jitter-parent</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <packaging>pom</packaging>
     <name>arm-jitter-parent</name>
     <description>Parent do arm-jitter: core (biblioteca JIT ARM/THUMB) + módulos opcionais.</description>
