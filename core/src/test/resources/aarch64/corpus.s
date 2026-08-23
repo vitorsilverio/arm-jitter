@@ -487,3 +487,54 @@ fnmadd s26, s27, s28, s29
 fnmadd d26, d27, d28, d29
 fnmsub s30, s31, s0, s1
 fnmsub d30, d31, d0, d1
+
+// -- B8.5: FCSEL/FCCMP(E) --
+fcsel s6, s7, s8, eq
+fcsel d1, d2, d3, ne
+fccmp s1, s2, #0xd, pl
+fccmp d4, d5, #0x3, gt
+fccmpe s1, s2, #0x5, lt
+
+// -- B8.5: FRINTx (1-source, ROUND para inteiro mantendo FP) --
+frintn s0, s1
+frintn d0, d1
+frintp s0, s1
+frintm s0, s1
+frintz s0, s1
+frinta s0, s1
+frintx s0, s1
+frinti s0, s1
+
+// -- B8.5: conversão FP<->inteiro (registrador geral), sem escala --
+scvtf s1, w1
+scvtf d1, x1
+ucvtf s2, w2
+ucvtf d2, x2
+fcvtns w3, s3
+fcvtnu w4, s4
+fcvtps w5, s5
+fcvtpu w6, s6
+fcvtms w7, s7
+fcvtmu w8, s8
+fcvtzs w9, s9
+fcvtzu w10, s10
+fcvtas w11, s11
+fcvtau w12, s12
+fcvtzs x13, d13
+fcvtzu x14, d14
+
+// -- B8.5: conversão FP<->ponto-fixo (registrador geral), COM escala (#fbits) --
+scvtf s15, w15, #3
+scvtf d16, x16, #10
+ucvtf s17, w17, #5
+ucvtf d18, x18, #20
+fcvtzs w19, s19, #7
+fcvtzu w20, s20, #12
+fcvtzs x21, d21, #30
+fcvtzu x22, d22, #40
+
+// -- B8.5: FMOV registrador-geral<->FP (cópia crua de bits) --
+fmov w23, s23
+fmov s24, w24
+fmov x25, d25
+fmov d26, x26

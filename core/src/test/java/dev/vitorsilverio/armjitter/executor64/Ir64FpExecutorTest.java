@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -371,5 +372,242 @@ class Ir64FpExecutorTest {
         new Ir64BlockExecutor().executeOp(core,
                 new Ir64Op.Fp64MultiplyAdd(false, false, false, 3, 0, 1, 2));
         assertTrue(Float.isNaN(core.fp().sFloat(3)));
+    }
+
+    // ── 11. FCSEL (B8.5) — só LÊ PSTATE, nunca escreve ──────────────────────────
+
+    @Test
+    void fcselPicksVnWhenConditionTrue() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 1.0f);
+        core.fp().setSFloat(1, 2.0f);
+        core.pstate().setNzcv(false, true, false, false); // Z=1 -> EQ verdadeira
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64ConditionalSelect(false, 2, 0, 1, Ir64Condition.EQ));
+        assertEquals(1.0f, core.fp().sFloat(2));
+    }
+
+    @Test
+    void fcselPicksVmWhenConditionFalse() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, 1.0);
+        core.fp().setDDouble(1, 2.0);
+        core.pstate().setNzcv(false, false, false, false); // Z=0 -> EQ falsa
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64ConditionalSelect(true, 2, 0, 1, Ir64Condition.EQ));
+        assertEquals(2.0, core.fp().dDouble(2));
+    }
+
+    // ── 12. FCCMP/FCCMPE (B8.5) ──────────────────────────────────────────────────
+
+    @Test
+    void fccmpWhenConditionTrueRecalculatesFromComparison() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 5.0f);
+        core.fp().setSFloat(1, 5.0f);
+        core.pstate().setNzcv(false, true, false, false); // condição AL-like: EQ com Z já 1
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64ConditionalCompare(false, false, 0, 1, Ir64Condition.EQ, 0b0000));
+        // 5.0 == 5.0 -> equal: Z=1,C=1,N=0,V=0 (MESMA tabela de FCMP).
+        assertTrue(core.pstate().zero());
+        assertTrue(core.pstate().carry());
+        assertFalse(core.pstate().negative());
+        assertFalse(core.pstate().overflow());
+    }
+
+    @Test
+    void fccmpWhenConditionFalseUsesRawNzcvWithoutReadingOperands() {
+        Aarch64Core core = newCore();
+        // vn/vm ficam com NaN — se o executor os lesse por engano (em vez de ramificar), o
+        // resultado seria unordered (N=0,Z=0,C=1,V=1), diferente do nzcv cru pedido aqui.
+        core.fp().setS(0, 0x7FC00000);
+        core.fp().setS(1, 0x7FC00000);
+        core.pstate().setNzcv(false, false, false, false); // NE falsa (Z=0 -> EQ seria verdadeira; usamos EQ com Z=0 => falsa)
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64ConditionalCompare(false, false, 0, 1, Ir64Condition.EQ, 0b1101));
+        assertEquals(0b1101, core.pstate().nzcv());
+    }
+
+    // ── 13. FRINTx (B8.5) — arredonda para inteiro, mantém em FP ────────────────
+
+    @Test
+    void frintnRoundsTiesToEven() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, 2.5);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, 1, 0));
+        assertEquals(2.0, core.fp().dDouble(1), "2.5 -> par mais próximo = 2");
+
+        core.fp().setDDouble(0, 3.5);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, 1, 0));
+        assertEquals(4.0, core.fp().dDouble(1), "3.5 -> par mais próximo = 4");
+    }
+
+    @Test
+    void frintaRoundsTiesAwayFromZero() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 2.5f);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, false, 1, 0));
+        assertEquals(3.0f, core.fp().sFloat(1));
+
+        core.fp().setSFloat(0, -2.5f);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, false, 1, 0));
+        assertEquals(-3.0f, core.fp().sFloat(1), "empate afasta de zero, não sempre para cima");
+    }
+
+    @Test
+    void frintpAndFrintmRoundTowardInfinities() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 1.2f);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, false, 1, 0));
+        assertEquals(2.0f, core.fp().sFloat(1));
+
+        core.fp().setSFloat(0, -1.2f);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, false, 1, 0));
+        assertEquals(-2.0f, core.fp().sFloat(1));
+    }
+
+    @Test
+    void frintzTruncatesTowardZero() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, -1.9f);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, 1, 0));
+        assertEquals(-1.0f, core.fp().sFloat(1));
+    }
+
+    @Test
+    void frintOfNanAndInfinityPassThroughUnchanged() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, Float.POSITIVE_INFINITY);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, 1, 0));
+        assertEquals(Float.POSITIVE_INFINITY, core.fp().sFloat(1));
+
+        core.fp().setS(0, 0x7FC00001);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, 1, 0));
+        assertEquals(0x7FC00001, core.fp().s(1));
+    }
+
+    // ── 14. SCVTF/UCVTF/FCVTxS/FCVTxU registrador-geral (B8.5) ──────────────────
+
+    @Test
+    void scvtfConvertsSigned32BitIntegerToFloat() {
+        Aarch64Core core = newCore();
+        core.setXForWidth(1, -5L, false);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                true, true, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, false, 0, 2, 1));
+        assertEquals(-5.0f, core.fp().sFloat(2));
+    }
+
+    @Test
+    void ucvtfTreatsRegisterAsUnsigned() {
+        Aarch64Core core = newCore();
+        // W-form: xForWidth já zero-estende, então -1 vira 0xFFFFFFFF (4294967295) sem sinal.
+        core.setXForWidth(1, -1L, false);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                true, false, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, false, 0, 2, 1));
+        assertEquals(4294967295.0, core.fp().dDouble(2));
+    }
+
+    @Test
+    void ucvtfWideTreatsFullRegisterAsUnsigned64Bit() {
+        Aarch64Core core = newCore();
+        core.setXForWidth(1, -1L, true); // 0xFFFF_FFFF_FFFF_FFFF sem sinal = 2^64-1
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                true, false, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, true, 0, 2, 1));
+        // 2^64-1 não cabe exato em 53 bits de mantissa — o double mais próximo é 2^64 (a distância
+        // até 2^64 é 1; até o representável anterior, 2^64-4096, é 4095).
+        assertEquals(Math.scalb(1.0, 64), core.fp().dDouble(2));
+    }
+
+    @Test
+    void fcvtzsTruncatesTowardZeroAndSaturates() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, -3.9f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 0, 1));
+        assertEquals(-3, (int) core.xForWidth(1, false));
+
+        core.fp().setSFloat(0, 1e30f); // muito grande para caber num W (32 bits)
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 0, 1));
+        assertEquals(Integer.MAX_VALUE, (int) core.xForWidth(1, false), "satura no limite, não faz wraparound");
+    }
+
+    @Test
+    void fcvtzsOfNanConvertsToZero() {
+        Aarch64Core core = newCore();
+        core.fp().setS(0, 0x7FC00000);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 0, 1));
+        assertEquals(0L, core.xForWidth(1, false));
+    }
+
+    @Test
+    void fcvtasRoundsTiesAwayFromZeroBeforeConverting() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 2.5f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, true, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, false, false, 0, 0, 1));
+        assertEquals(3L, core.xForWidth(1, false));
+    }
+
+    @Test
+    void fcvtzuOfNegativeValueSaturatesToZero() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, -1.0f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, false, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 0, 1));
+        assertEquals(0L, core.xForWidth(1, false));
+    }
+
+    // ── 15. Ponto fixo (shift) e FMOV registrador-geral<->FP (B8.5) ─────────────
+
+    @Test
+    void scvtfFixedPointDividesByTwoToTheFractionBits() {
+        Aarch64Core core = newCore();
+        core.setXForWidth(1, 10L, false); // 10 / 2^1 = 5.0
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                true, true, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, false, 1, 2, 1));
+        assertEquals(5.0f, core.fp().sFloat(2));
+    }
+
+    @Test
+    void fcvtzsFixedPointMultipliesByTwoToTheFractionBitsBeforeTruncating() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 5.0f); // 5.0 * 2^1 = 10
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64IntegerConvert(
+                false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 1, 0, 1));
+        assertEquals(10L, core.xForWidth(1, false));
+    }
+
+    @Test
+    void fmovGeneralRegisterMoveCopiesRawBitsWithoutConversion() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 1.5f); // valor cujo padrão de bits, lido como int, NÃO é 1.5.
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64GeneralRegisterMove(false, false, 0, 1));
+        assertEquals(Float.floatToRawIntBits(1.5f) & 0xFFFF_FFFFL, core.xForWidth(1, false));
+
+        core.setXForWidth(2, Float.floatToRawIntBits(1.5f), false);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64GeneralRegisterMove(true, false, 3, 2));
+        assertEquals(1.5f, core.fp().sFloat(3));
+    }
+
+    @Test
+    void fmovGeneralRegisterMoveWideRoundTripsDoubleBits() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, Math.PI);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64GeneralRegisterMove(false, true, 0, 1));
+        assertEquals(Double.doubleToRawLongBits(Math.PI), core.xForWidth(1, true));
+
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64GeneralRegisterMove(true, true, 2, 1));
+        assertEquals(Math.PI, core.fp().dDouble(2));
     }
 }

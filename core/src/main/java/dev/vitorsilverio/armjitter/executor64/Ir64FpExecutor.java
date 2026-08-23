@@ -203,4 +203,181 @@ final class Ir64FpExecutor {
         }
         return false;
     }
+
+    /// `FCSEL` (B8.5) — só LÊ `PSTATE` (nunca escreve), mesmo padrão de
+    /// {@code Ir64BlockExecutor#executeConditionalSelect} no mundo inteiro (`CSEL`).
+    static boolean executeFpConditionalSelect(Aarch64Core core, Ir64Op.Fp64ConditionalSelect op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean useVn = core.pstate().evalCond(op.condition());
+        if (op.doublePrecision()) {
+            fp.setD(op.vd(), useVn ? fp.d(op.vn()) : fp.d(op.vm()));
+        } else {
+            fp.setS(op.vd(), useVn ? fp.s(op.vn()) : fp.s(op.vm()));
+        }
+        return false;
+    }
+
+    /// `FCCMP`/`FCCMPE` (B8.5) — reaproveita a MESMA tabela de resultado de
+    /// {@link #executeFpCompare} quando {@link Ir64Op.Fp64ConditionalCompare#condition} é
+    /// verdadeira; senão, `NZCV` recebe os 4 bits crus de {@link Ir64Op.Fp64ConditionalCompare#nzcv}
+    /// diretamente, SEM ler {@link Ir64Op.Fp64ConditionalCompare#vn}/{@link
+    /// Ir64Op.Fp64ConditionalCompare#vm} — mesma armadilha de `CCMP`/`CCMN`.
+    static boolean executeFpConditionalCompare(Aarch64Core core, Ir64Op.Fp64ConditionalCompare op) {
+        if (core.pstate().evalCond(op.condition())) {
+            executeFpCompare(core, new Ir64Op.Fp64Compare(
+                    op.doublePrecision(), false, op.signalOnQuietNaN(), op.vn(), op.vm()));
+        } else {
+            core.pstate().setNzcv(op.nzcv());
+        }
+        return false;
+    }
+
+    /// `FRINTN`/`FRINTP`/`FRINTM`/`FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI` (B8.5) — arredonda para um
+    /// valor integral, mantendo o resultado em ponto flutuante. `NaN`/infinito passam intocados
+    /// (mesma convenção do restante do executor A64: não há valor integral "mais próximo" de um
+    /// deles).
+    static boolean executeFpRound(Aarch64Core core, Ir64Op.Fp64Round op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.doublePrecision()) {
+            fp.setDDouble(op.vd(), roundToIntegral(fp.dDouble(op.vn()), op.direction()));
+        } else {
+            fp.setSFloat(op.vd(), (float) roundToIntegral(fp.sFloat(op.vn()), op.direction()));
+        }
+        return false;
+    }
+
+    private static double roundToIntegral(double value, Ir64Op.Fp64RoundingDirection direction) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return value;
+        }
+        return switch (direction) {
+            // `Math.rint` já implementa "mais próximo, par" (ties-to-even) — IDÊNTICO ao
+            // arredondamento IEEE 754 `roundToIntegralTiesToEven` que `FRINTN` pede.
+            case NEAREST_TIES_EVEN -> Math.rint(value);
+            case TOWARD_POSITIVE_INFINITY -> Math.ceil(value);
+            case TOWARD_NEGATIVE_INFINITY -> Math.floor(value);
+            case TOWARD_ZERO -> value < 0 ? Math.ceil(value) : Math.floor(value);
+            case NEAREST_TIES_AWAY -> roundTiesAway(value);
+        };
+    }
+
+    /// "Mais próximo, empate afasta de zero" (`FPRoundInt` com `RMode`=`FPRounding_TIEAWAY`) —
+    /// `Math.round` NÃO serve (arredonda meio PARA CIMA sempre, não "para longe de zero": `Math
+    /// .round(-2.5)` devolve `-2`, não `-3`). Preserva o sinal de `-0.0` (só entra no ramo de
+    /// empate quando a fração é exatamente `0.5`; um valor já integral tem fração `0.0` e cai no
+    /// ramo `< 0.5`, devolvendo `floor` — que é o próprio valor).
+    private static double roundTiesAway(double value) {
+        double floor = Math.floor(value);
+        double fraction = value - floor;
+        if (fraction > 0.5) {
+            return floor + 1.0;
+        }
+        if (fraction < 0.5) {
+            return floor;
+        }
+        return value >= 0 ? floor + 1.0 : floor;
+    }
+
+    /// `SCVTF`/`UCVTF`/`FCVTxS`/`FCVTxU` (forma registrador-geral, B8.5) — nos dois sentidos.
+    static boolean executeFpIntegerConvert(Aarch64Core core, Ir64Op.Fp64IntegerConvert op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.toFloat()) {
+            long raw = core.xForWidth(op.gpReg(), op.wide());
+            double intAsDouble;
+            if (!op.wide() && op.signed()) {
+                intAsDouble = (int) raw; // sinal-estende os 32 bits baixos (xForWidth zero-estende).
+            } else if (op.wide() && !op.signed()) {
+                intAsDouble = unsignedLongToDouble(raw);
+            } else {
+                intAsDouble = (double) raw; // signed64 (já correto) ou unsigned32 (já não-negativo).
+            }
+            double scaled = op.fixedPointFractionBits() == 0
+                    ? intAsDouble : Math.scalb(intAsDouble, -op.fixedPointFractionBits());
+            if (op.doublePrecision()) {
+                fp.setDDouble(op.fpReg(), scaled);
+            } else {
+                fp.setSFloat(op.fpReg(), (float) scaled);
+            }
+        } else {
+            double value = op.doublePrecision() ? fp.dDouble(op.fpReg()) : fp.sFloat(op.fpReg());
+            double scaled = op.fixedPointFractionBits() == 0
+                    ? value : Math.scalb(value, op.fixedPointFractionBits());
+            double rounded = roundToIntegralForConversion(scaled, op.rounding());
+            long result = saturateToInteger(rounded, op.signed(), op.wide());
+            core.setXForWidth(op.gpReg(), result, op.wide());
+        }
+        return false;
+    }
+
+    /// Mesma direção de {@link #roundToIntegral}, mas SEM o curto-circuito NaN/infinito — quem
+    /// chama ({@link #saturateToInteger}) precisa do `NaN`/infinito intactos para saturar
+    /// corretamente (`FPToFixed`: `NaN`→`0`, infinito→limite da largura).
+    private static double roundToIntegralForConversion(double value, Ir64Op.Fp64RoundingDirection direction) {
+        if (Double.isNaN(value)) {
+            return value;
+        }
+        if (Double.isInfinite(value)) {
+            return value;
+        }
+        return roundToIntegral(value, direction);
+    }
+
+    /// Converte um `long` de 64 bits SEM SINAL (bit mais alto pode estar setado) para o `double`
+    /// mais próximo — truque padrão (deslocar 1 bit sem sinal, escalar de volta, somar o bit
+    /// perdido) já que `(double) long` do Java sempre assume sinal.
+    private static double unsignedLongToDouble(long value) {
+        if (value >= 0) {
+            return (double) value;
+        }
+        return ((double) (value >>> 1)) * 2.0 + (value & 1L);
+    }
+
+    /// `FPToFixed`: arredonda+satura `rounded` (já na direção certa) para a largura/sinal pedida.
+    /// `NaN`→`0`; fora da faixa→o limite mais próximo (mesma convenção de
+    /// {@code IrVfpExecutor#doubleToFixed}, o precedente VFP32 desta mesma técnica).
+    private static long saturateToInteger(double rounded, boolean signed, boolean wide) {
+        if (Double.isNaN(rounded)) {
+            return 0L;
+        }
+        int bits = wide ? 64 : 32;
+        double minValue = signed ? -Math.scalb(1.0, bits - 1) : 0.0;
+        double maxValue = signed ? Math.scalb(1.0, bits - 1) - 1.0 : Math.scalb(1.0, bits) - 1.0;
+        double clamped = Math.max(minValue, Math.min(maxValue, rounded));
+        if (wide && !signed) {
+            return doubleToUnsignedLongBits(clamped);
+        }
+        // signed64: o cast (double->long) do Java já satura em Long.MIN/MAX_VALUE por JLS 5.1.3 —
+        // signed32/unsigned32 cabem folgados na faixa de `long`, {@link
+        // Aarch64Core#setXForWidth} zera/mascara os 32 bits altos ao escrever.
+        return (long) clamped;
+    }
+
+    /// `clamped` já está em `[0, 2^64-1]` — para a metade superior (`>= 2^63`), o cast direto
+    /// `(long)` do Java satura em `Long.MAX_VALUE` (não produz o padrão de bits sem sinal
+    /// correto); desloca para baixo de `2^63` primeiro, converte, e soma de volta em aritmética de
+    /// complemento de dois (que "dá a volta" corretamente para o padrão de bits desejado).
+    private static long doubleToUnsignedLongBits(double clamped) {
+        double twoToThe63 = Math.scalb(1.0, 63);
+        if (clamped < twoToThe63) {
+            return (long) clamped;
+        }
+        return Long.MIN_VALUE + (long) (clamped - twoToThe63);
+    }
+
+    /// `FMOV` registrador-geral↔FP escalar (B8.5) — cópia CRUA de bits, sem conversão de valor.
+    static boolean executeFpGeneralRegisterMove(Aarch64Core core, Ir64Op.Fp64GeneralRegisterMove op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.toFloat()) {
+            long raw = core.xForWidth(op.gpReg(), op.wide());
+            if (op.wide()) {
+                fp.setD(op.fpReg(), raw);
+            } else {
+                fp.setS(op.fpReg(), (int) raw);
+            }
+        } else {
+            long raw = op.wide() ? fp.d(op.fpReg()) : (fp.s(op.fpReg()) & 0xFFFF_FFFFL);
+            core.setXForWidth(op.gpReg(), raw, op.wide());
+        }
+        return false;
+    }
 }

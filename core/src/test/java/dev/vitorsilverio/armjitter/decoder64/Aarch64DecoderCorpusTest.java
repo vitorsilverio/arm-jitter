@@ -2090,26 +2090,40 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void floatingPointToIntegerConversionStaysUnsupported() {
+    void floatingPointToIntegerConversionNowDecodesSinceB85() {
         // `scvtf s1, w1` (conversão inteiro->FP escalar, mesmo prefixo(28:24)="11110"/bit21=1 da
-        // classe decodificada aqui, mas discriminada por não bater nenhum dos 4 padrões fixos de
-        // sub-grupo) — encoding real via aarch64-none-elf-as, herdado como fora de escopo de
-        // B6.5.2 (SCVTF/UCVTF/FCVTZS/FCVTZU).
+        // classe decodificada aqui) — encoding real via aarch64-none-elf-as. Até a B8.5 esta
+        // asserção era NEGATIVA (fora de escopo, herdado de B6.5.2); agora `SCVTF`/`UCVTF`/
+        // `FCVTxS`/`FCVTxU` (registrador-geral) fazem parte do escopo implementado, ver
+        // `decodeFpIntegerConvertOrGeneralRegisterMove`.
         int word = 0x1e220021;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(scratch, 0);
+        assertTrue(op.toFloat());
+        assertTrue(op.signed());
+        assertFalse(op.doublePrecision());
+        assertFalse(op.wide());
+        assertEquals(0, op.fixedPointFractionBits());
+        assertEquals(1, op.fpReg());
+        assertEquals(1, op.gpReg());
     }
 
     @Test
-    void floatingPointConditionalSelectStaysUnsupported() {
-        // `fcsel s6, s7, s8, eq` — mesmo prefixo/bit21, fora de escopo (herdado de B6.5.2).
+    void floatingPointConditionalSelectNowDecodesSinceB85() {
+        // `fcsel s6, s7, s8, eq` — até a B8.5 esta asserção era NEGATIVA (fora de escopo, herdado
+        // de B6.5.2); agora `FCSEL` faz parte do escopo implementado.
         int word = 0x1e280ce6;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.Fp64ConditionalSelect op = (Ir64Op.Fp64ConditionalSelect) DECODER.decode(scratch, 0);
+        assertFalse(op.doublePrecision());
+        assertEquals(6, op.vd());
+        assertEquals(7, op.vn());
+        assertEquals(8, op.vm());
+        assertEquals(Ir64Condition.EQ, op.condition());
     }
 
     @Test
@@ -3898,5 +3912,335 @@ class Aarch64DecoderCorpusTest {
         assertTrue(op.doublePrecision());
         assertTrue(op.negateAddend());
         assertFalse(op.negateProduct());
+    }
+
+    // ── B8.5: FCSEL/FCCMP(E) ──────────────────────────────────────────────────────────────────
+
+    @Test
+    void fcselDouble() {
+        Ir64Op.Fp64ConditionalSelect op = (Ir64Op.Fp64ConditionalSelect) DECODER.decode(memory, 0x65c);
+        assertTrue(op.doublePrecision());
+        assertEquals(1, op.vd());
+        assertEquals(2, op.vn());
+        assertEquals(3, op.vm());
+        assertEquals(Ir64Condition.NE, op.condition());
+    }
+
+    @Test
+    void fccmpSingle() {
+        // fccmp s1, s2, #0xd, pl — nzcv=0xd quando a condição é falsa.
+        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x660);
+        assertFalse(op.doublePrecision());
+        assertFalse(op.signalOnQuietNaN());
+        assertEquals(1, op.vn());
+        assertEquals(2, op.vm());
+        assertEquals(Ir64Condition.PL, op.condition());
+        assertEquals(0xd, op.nzcv());
+    }
+
+    @Test
+    void fccmpDouble() {
+        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x664);
+        assertTrue(op.doublePrecision());
+        assertEquals(4, op.vn());
+        assertEquals(5, op.vm());
+        assertEquals(Ir64Condition.GT, op.condition());
+        assertEquals(0x3, op.nzcv());
+    }
+
+    @Test
+    void fccmpe() {
+        // fccmpe s1, s2, #0x5, lt — só o bit `E` muda (sem efeito observável, ver Javadoc).
+        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x668);
+        assertTrue(op.signalOnQuietNaN());
+        assertEquals(Ir64Condition.LT, op.condition());
+        assertEquals(0x5, op.nzcv());
+    }
+
+    // ── B8.5: FRINTx (1-source) ───────────────────────────────────────────────────────────────
+
+    @Test
+    void frintnSingle() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x66c);
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        assertFalse(op.doublePrecision());
+        assertEquals(0, op.vd());
+        assertEquals(1, op.vn());
+    }
+
+    @Test
+    void frintnDouble() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x670);
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void frintp() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x674);
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.direction());
+    }
+
+    @Test
+    void frintm() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x678);
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.direction());
+    }
+
+    @Test
+    void frintz() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x67c);
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.direction());
+    }
+
+    @Test
+    void frinta() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x680);
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.direction());
+    }
+
+    @Test
+    void frintx() {
+        // frintx: MESMA direção de frintn — ver Javadoc de Ir64Op.Fp64Round (FPCR.RMode não
+        // modelado em A64).
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x684);
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+    }
+
+    @Test
+    void frinti() {
+        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x688);
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+    }
+
+    // ── B8.5: conversão FP<->inteiro (registrador geral), sem escala ─────────────────────────
+
+    @Test
+    void scvtfDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x690);
+        assertTrue(op.toFloat());
+        assertTrue(op.signed());
+        assertTrue(op.doublePrecision());
+        assertTrue(op.wide());
+        assertEquals(0, op.fixedPointFractionBits());
+        assertEquals(1, op.fpReg());
+        assertEquals(1, op.gpReg());
+    }
+
+    @Test
+    void ucvtfSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x694);
+        assertTrue(op.toFloat());
+        assertFalse(op.signed());
+        assertFalse(op.doublePrecision());
+        assertFalse(op.wide());
+        assertEquals(2, op.fpReg());
+        assertEquals(2, op.gpReg());
+    }
+
+    @Test
+    void fcvtnsSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x69c);
+        assertFalse(op.toFloat());
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
+        assertEquals(3, op.fpReg());
+        assertEquals(3, op.gpReg());
+    }
+
+    @Test
+    void fcvtnu() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a0);
+        assertFalse(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
+    }
+
+    @Test
+    void fcvtps() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a4);
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
+    }
+
+    @Test
+    void fcvtpu() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a8);
+        assertFalse(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
+    }
+
+    @Test
+    void fcvtms() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6ac);
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
+    }
+
+    @Test
+    void fcvtmu() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b0);
+        assertFalse(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
+    }
+
+    @Test
+    void fcvtzsSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b4);
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+        assertEquals(0, op.fixedPointFractionBits());
+    }
+
+    @Test
+    void fcvtzu() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b8);
+        assertFalse(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+    }
+
+    @Test
+    void fcvtas() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6bc);
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
+    }
+
+    @Test
+    void fcvtau() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c0);
+        assertFalse(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
+    }
+
+    @Test
+    void fcvtzsDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c4);
+        assertFalse(op.toFloat());
+        assertTrue(op.signed());
+        assertTrue(op.doublePrecision());
+        assertTrue(op.wide());
+        assertEquals(13, op.fpReg());
+        assertEquals(13, op.gpReg());
+    }
+
+    @Test
+    void fcvtzuDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c8);
+        assertFalse(op.signed());
+        assertTrue(op.wide());
+    }
+
+    // ── B8.5: conversão FP<->ponto-fixo (registrador geral), COM escala ──────────────────────
+
+    @Test
+    void scvtfFixedSingleW() {
+        // scvtf s15, w15, #3 — shift = 32 - raw (raw=29 no encoding real).
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6cc);
+        assertTrue(op.toFloat());
+        assertTrue(op.signed());
+        assertFalse(op.wide());
+        assertEquals(3, op.fixedPointFractionBits());
+        assertEquals(15, op.fpReg());
+        assertEquals(15, op.gpReg());
+    }
+
+    @Test
+    void scvtfFixedDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d0);
+        assertTrue(op.toFloat());
+        assertTrue(op.wide());
+        assertEquals(10, op.fixedPointFractionBits());
+        assertEquals(16, op.fpReg());
+        assertEquals(16, op.gpReg());
+    }
+
+    @Test
+    void ucvtfFixedSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d4);
+        assertFalse(op.signed());
+        assertEquals(5, op.fixedPointFractionBits());
+    }
+
+    @Test
+    void ucvtfFixedDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d8);
+        assertFalse(op.signed());
+        assertTrue(op.wide());
+        assertEquals(20, op.fixedPointFractionBits());
+    }
+
+    @Test
+    void fcvtzsFixedSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6dc);
+        assertFalse(op.toFloat());
+        assertTrue(op.signed());
+        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+        assertEquals(7, op.fixedPointFractionBits());
+        assertEquals(19, op.fpReg());
+        assertEquals(19, op.gpReg());
+    }
+
+    @Test
+    void fcvtzuFixedSingleW() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e0);
+        assertFalse(op.signed());
+        assertEquals(12, op.fixedPointFractionBits());
+    }
+
+    @Test
+    void fcvtzsFixedDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e4);
+        assertTrue(op.wide());
+        assertEquals(30, op.fixedPointFractionBits());
+    }
+
+    @Test
+    void fcvtzuFixedDoubleX() {
+        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e8);
+        assertTrue(op.wide());
+        assertFalse(op.signed());
+        assertEquals(40, op.fixedPointFractionBits());
+    }
+
+    // ── B8.5: FMOV registrador-geral<->FP (cópia crua de bits) ───────────────────────────────
+
+    @Test
+    void fmovToGpSingle() {
+        // fmov w23, s23 — FP->GP (toFloat=false).
+        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6ec);
+        assertFalse(op.toFloat());
+        assertFalse(op.wide());
+        assertEquals(23, op.fpReg());
+        assertEquals(23, op.gpReg());
+    }
+
+    @Test
+    void fmovToFpSingle() {
+        // fmov s24, w24 — GP->FP (toFloat=true).
+        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f0);
+        assertTrue(op.toFloat());
+        assertFalse(op.wide());
+        assertEquals(24, op.fpReg());
+        assertEquals(24, op.gpReg());
+    }
+
+    @Test
+    void fmovToGpDouble() {
+        // fmov x25, d25 — FP->GP, 64 bits.
+        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f4);
+        assertFalse(op.toFloat());
+        assertTrue(op.wide());
+        assertEquals(25, op.fpReg());
+        assertEquals(25, op.gpReg());
+    }
+
+    @Test
+    void fmovToFpDouble() {
+        // fmov d26, x26 — GP->FP, 64 bits.
+        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f8);
+        assertTrue(op.toFloat());
+        assertTrue(op.wide());
+        assertEquals(26, op.fpReg());
+        assertEquals(26, op.gpReg());
     }
 }

@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **57%** — 2288 de 3948 células aplicáveis decodificam.
+> **59%** — 2321 de 3924 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **88%** (607/684) |
 | v6-M | **22%** (88/385) |
 | v7-M | **56%** (217/385) |
-| A64 | **24%** (275/1135) |
+| A64 | **27%** (308/1111) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 24% (275/1135) |
+| A64 — AArch64 | 1161 | A64 27% (308/1111) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2371,7 +2371,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMLALL_sb_vi` | ❌ |
 | `FDOT_sb_vi` | ❌ |
 | `FDOT_hb_vi` | ❌ |
-| `FCSEL` | ❌ |
+| `FCSEL` | ✅ |
 | `FMADD` | ✅ |
 | `FMSUB` | ✅ |
 | `FNMADD` | ✅ |
@@ -2404,72 +2404,72 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMAXV_s` | ❌ |
 | `FMINV_h` | ❌ |
 | `FMINV_s` | ❌ |
-| `SCVTF_g` | ❌ |
-| `SCVTF_g` | ❌ |
-| `UCVTF_g` | ❌ |
-| `UCVTF_g` | ❌ |
-| `FCVTZS_g` | ❌ |
-| `FCVTZS_g` | ❌ |
-| `FCVTZU_g` | ❌ |
-| `FCVTZU_g` | ❌ |
-| `SCVTF_g` | ❌ |
-| `UCVTF_g` | ❌ |
-| `FCVTNS_g` | ❌ |
-| `FCVTNU_g` | ❌ |
-| `FCVTPS_g` | ❌ |
-| `FCVTPU_g` | ❌ |
-| `FCVTMS_g` | ❌ |
-| `FCVTMU_g` | ❌ |
-| `FCVTZS_g` | ❌ |
-| `FCVTZU_g` | ❌ |
-| `FCVTAS_g` | ❌ |
-| `FCVTAU_g` | ❌ |
-| `SCVTF_simd` | ❌ |
-| `UCVTF_simd` | ❌ |
-| `FCVTAS_g_simd` | ❌ |
-| `FCVTAU_g_simd` | ❌ |
-| `FCVTMS_g_simd` | ❌ |
-| `FCVTMU_g_simd` | ❌ |
-| `FCVTNS_g_simd` | ❌ |
-| `FCVTNU_g_simd` | ❌ |
-| `FCVTPS_g_simd` | ❌ |
-| `FCVTPU_g_simd` | ❌ |
-| `FCVTZS_g_simd` | ❌ |
-| `FCVTZU_g_simd` | ❌ |
-| `FJCVTZS` | ❌ |
-| `FMOV_ws` | ❌ |
-| `FMOV_sw` | ❌ |
-| `FMOV_xd` | ❌ |
-| `FMOV_dx` | ❌ |
+| `SCVTF_g` | ✅ |
+| `SCVTF_g` | ✅ |
+| `UCVTF_g` | ✅ |
+| `UCVTF_g` | ✅ |
+| `FCVTZS_g` | ✅ |
+| `FCVTZS_g` | ✅ |
+| `FCVTZU_g` | ✅ |
+| `FCVTZU_g` | ✅ |
+| `SCVTF_g` | ✅ |
+| `UCVTF_g` | ✅ |
+| `FCVTNS_g` | ✅ |
+| `FCVTNU_g` | ✅ |
+| `FCVTPS_g` | ✅ |
+| `FCVTPU_g` | ✅ |
+| `FCVTMS_g` | ✅ |
+| `FCVTMU_g` | ✅ |
+| `FCVTZS_g` | ✅ |
+| `FCVTZU_g` | ✅ |
+| `FCVTAS_g` | ✅ |
+| `FCVTAU_g` | ✅ |
+| `SCVTF_simd` | · |
+| `UCVTF_simd` | · |
+| `FCVTAS_g_simd` | · |
+| `FCVTAU_g_simd` | · |
+| `FCVTMS_g_simd` | · |
+| `FCVTMU_g_simd` | · |
+| `FCVTNS_g_simd` | · |
+| `FCVTNU_g_simd` | · |
+| `FCVTPS_g_simd` | · |
+| `FCVTPU_g_simd` | · |
+| `FCVTZS_g_simd` | · |
+| `FCVTZU_g_simd` | · |
+| `FJCVTZS` | · |
+| `FMOV_ws` | ✅ |
+| `FMOV_sw` | ✅ |
+| `FMOV_xd` | ✅ |
+| `FMOV_dx` | ✅ |
 | `FMOV_xu` | ❌ |
 | `FMOV_ux` | ❌ |
-| `FMOV_xh` | ❌ |
-| `FMOV_hx` | ❌ |
+| `FMOV_xh` | · |
+| `FMOV_hx` | · |
 | `FMOV_s` | ✅ |
 | `FABS_s` | ✅ |
 | `FNEG_s` | ✅ |
 | `FSQRT_s` | ✅ |
-| `FRINTN_s` | ❌ |
-| `FRINTP_s` | ❌ |
-| `FRINTM_s` | ❌ |
-| `FRINTZ_s` | ❌ |
-| `FRINTA_s` | ❌ |
-| `FRINTX_s` | ❌ |
-| `FRINTI_s` | ❌ |
-| `BFCVT_s` | ❌ |
-| `FRINT32Z_s` | ❌ |
-| `FRINT32X_s` | ❌ |
-| `FRINT64Z_s` | ❌ |
-| `FRINT64X_s` | ❌ |
+| `FRINTN_s` | ✅ |
+| `FRINTP_s` | ✅ |
+| `FRINTM_s` | ✅ |
+| `FRINTZ_s` | ✅ |
+| `FRINTA_s` | ✅ |
+| `FRINTX_s` | ✅ |
+| `FRINTI_s` | ✅ |
+| `BFCVT_s` | · |
+| `FRINT32Z_s` | · |
+| `FRINT32X_s` | · |
+| `FRINT64Z_s` | · |
+| `FRINT64X_s` | · |
 | `FCVT_s_ds` | ✅ |
-| `FCVT_s_hs` | ❌ |
+| `FCVT_s_hs` | · |
 | `FCVT_s_sd` | ✅ |
-| `FCVT_s_hd` | ❌ |
-| `FCVT_s_sh` | ❌ |
-| `FCVT_s_dh` | ❌ |
+| `FCVT_s_hd` | · |
+| `FCVT_s_sh` | · |
+| `FCVT_s_dh` | · |
 | `FMOVI_s` | ✅ |
 | `FCMP` | ✅ |
-| `FCCMP` | ❌ |
+| `FCCMP` | ✅ |
 | `FMOVI_v_h` | ❌ |
 | `Vimm` | ❌ |
 | `SSHR_v` | ❌ |

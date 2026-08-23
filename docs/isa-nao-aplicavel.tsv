@@ -120,3 +120,41 @@ SMMLA	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 SMMLAR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 SMMLS	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 SMMLSR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
+
+# ── A64, "Floating-point <-> integer/half-precision" (B8.5): FEAT_FP16 — meia-precisão é ──────
+# ── extensão OPCIONAL (ARMv8.2-A), CONFERIDA em `fp_access_check_scalar_hsd` real do QEMU ─────
+# ── (`translate-a64.c`: qualquer operando `MO_16` exige `dc_isar_feature(aa64_fp16, s)`), o ───
+# ── Cortex-A53 do Raspberry Pi 3 não a tem.
+FMOV_xh	A64	ARMv8.2-A/FEAT_FP16 (move Xd<-Vn meia-precisão)
+FMOV_hx	A64	ARMv8.2-A/FEAT_FP16 (move Vd<-Xn meia-precisão)
+FCVT_s_hs	A64	ARMv8.2-A/FEAT_FP16 (FCVT single->half)
+FCVT_s_hd	A64	ARMv8.2-A/FEAT_FP16 (FCVT double->half)
+FCVT_s_sh	A64	ARMv8.2-A/FEAT_FP16 (FCVT half->single)
+FCVT_s_dh	A64	ARMv8.2-A/FEAT_FP16 (FCVT half->double)
+
+# ── A64, "Floating-point data-processing (1 source)" (B8.5): extensões opcionais POSTERIORES, ──
+# ── CONFERIDAS contra `translate-a64.c` real (`TRANS_FEAT(..., aa64_bf16/aa64_frint, ...)`). ──
+BFCVT_s	A64	ARMv8.6-A/FEAT_BF16 (FCVT para bfloat16)
+FRINT32Z_s	A64	ARMv8.5-A/FEAT_FRINTTS
+FRINT32X_s	A64	ARMv8.5-A/FEAT_FRINTTS
+FRINT64Z_s	A64	ARMv8.5-A/FEAT_FRINTTS
+FRINT64X_s	A64	ARMv8.5-A/FEAT_FRINTTS
+
+# ── A64, "Conversion between floating-point and integer" (B8.5): FJCVTZS é FEAT_JSCVT ─────────
+# ── (ARMv8.3-A, CONFERIDO via `dc_isar_feature(aa64_jscvt, s)` em `trans_FJCVTZS`); as formas ──
+# ── "_g_simd"/"_simd" (mesmo opcode(21:16) de SCVTF/UCVTF/FCVTxS/FCVTxU "de verdade", só o bit ──
+# ── `op0` de nível superior muda) são FEAT_FPRCVT (ARMv9.x, `ID_AA64ISAR3.FPRCVT`, CONFERIDO ───
+# ── via `TRANS_FEAT(..., aa64_fprcvt, ...)`) — nenhum Cortex-A53 as tem.
+FJCVTZS	A64	ARMv8.3-A/FEAT_JSCVT (Javascript convert)
+SCVTF_simd	A64	ARMv9.x/FEAT_FPRCVT
+UCVTF_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTAS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTAU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTMS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTMU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTNS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTNU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTPS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTPU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTZS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+FCVTZU_g_simd	A64	ARMv9.x/FEAT_FPRCVT

@@ -1,5 +1,5 @@
 
-C:/Users/user/AppData/Local/Temp/corpus_new.o:     file format elf64-littleaarch64
+C:/Users/user/.claude/jobs/fc357d60/tmp/b85/corpus_full.o:     file format elf64-littleaarch64
 
 
 Disassembly of section .text:
@@ -415,3 +415,44 @@ Disassembly of section .text:
  64c:	1f7c777a 	fnmadd	d26, d27, d28, d29
  650:	1f2087fe 	fnmsub	s30, s31, s0, s1
  654:	1f6087fe 	fnmsub	d30, d31, d0, d1
+ 658:	1e280ce6 	fcsel	s6, s7, s8, eq	// eq = none
+ 65c:	1e631c41 	fcsel	d1, d2, d3, ne	// ne = any
+ 660:	1e22542d 	fccmp	s1, s2, #0xd, pl	// pl = nfrst
+ 664:	1e65c483 	fccmp	d4, d5, #0x3, gt
+ 668:	1e22b435 	fccmpe	s1, s2, #0x5, lt	// lt = tstop
+ 66c:	1e244020 	frintn	s0, s1
+ 670:	1e644020 	frintn	d0, d1
+ 674:	1e24c020 	frintp	s0, s1
+ 678:	1e254020 	frintm	s0, s1
+ 67c:	1e25c020 	frintz	s0, s1
+ 680:	1e264020 	frinta	s0, s1
+ 684:	1e274020 	frintx	s0, s1
+ 688:	1e27c020 	frinti	s0, s1
+ 68c:	1e220021 	scvtf	s1, w1
+ 690:	9e620021 	scvtf	d1, x1
+ 694:	1e230042 	ucvtf	s2, w2
+ 698:	9e630042 	ucvtf	d2, x2
+ 69c:	1e200063 	fcvtns	w3, s3
+ 6a0:	1e210084 	fcvtnu	w4, s4
+ 6a4:	1e2800a5 	fcvtps	w5, s5
+ 6a8:	1e2900c6 	fcvtpu	w6, s6
+ 6ac:	1e3000e7 	fcvtms	w7, s7
+ 6b0:	1e310108 	fcvtmu	w8, s8
+ 6b4:	1e380129 	fcvtzs	w9, s9
+ 6b8:	1e39014a 	fcvtzu	w10, s10
+ 6bc:	1e24016b 	fcvtas	w11, s11
+ 6c0:	1e25018c 	fcvtau	w12, s12
+ 6c4:	9e7801ad 	fcvtzs	x13, d13
+ 6c8:	9e7901ce 	fcvtzu	x14, d14
+ 6cc:	1e02f5ef 	scvtf	s15, w15, #3
+ 6d0:	9e42da10 	scvtf	d16, x16, #10
+ 6d4:	1e03ee31 	ucvtf	s17, w17, #5
+ 6d8:	9e43b252 	ucvtf	d18, x18, #20
+ 6dc:	1e18e673 	fcvtzs	w19, s19, #7
+ 6e0:	1e19d294 	fcvtzu	w20, s20, #12
+ 6e4:	9e588ab5 	fcvtzs	x21, d21, #30
+ 6e8:	9e5962d6 	fcvtzu	x22, d22, #40
+ 6ec:	1e2602f7 	fmov	w23, s23
+ 6f0:	1e270318 	fmov	s24, w24
+ 6f4:	9e660339 	fmov	x25, d25
+ 6f8:	9e67035a 	fmov	d26, x26

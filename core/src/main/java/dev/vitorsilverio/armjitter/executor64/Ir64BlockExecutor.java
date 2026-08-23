@@ -308,6 +308,15 @@ public final class Ir64BlockExecutor {
                     executeAddressTranslate(core, (Ir64Op.AddressTranslate) op);
             case Ir64Op.Kind.FP64_MULTIPLY_ADD ->
                     Ir64FpExecutor.executeFpMultiplyAdd(core, (Ir64Op.Fp64MultiplyAdd) op);
+            case Ir64Op.Kind.FP64_CONDITIONAL_SELECT ->
+                    Ir64FpExecutor.executeFpConditionalSelect(core, (Ir64Op.Fp64ConditionalSelect) op);
+            case Ir64Op.Kind.FP64_CONDITIONAL_COMPARE ->
+                    Ir64FpExecutor.executeFpConditionalCompare(core, (Ir64Op.Fp64ConditionalCompare) op);
+            case Ir64Op.Kind.FP64_ROUND -> Ir64FpExecutor.executeFpRound(core, (Ir64Op.Fp64Round) op);
+            case Ir64Op.Kind.FP64_INTEGER_CONVERT ->
+                    Ir64FpExecutor.executeFpIntegerConvert(core, (Ir64Op.Fp64IntegerConvert) op);
+            case Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE ->
+                    Ir64FpExecutor.executeFpGeneralRegisterMove(core, (Ir64Op.Fp64GeneralRegisterMove) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

@@ -35,7 +35,9 @@ public sealed interface Ir64Op permits
         Ir64Op.DataProcessing1Source, Ir64Op.MultiplyAccumulateLong, Ir64Op.MultiplyHigh,
         Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags,
         Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap,
-        Ir64Op.AddressTranslate, Ir64Op.Fp64MultiplyAdd {
+        Ir64Op.AddressTranslate, Ir64Op.Fp64MultiplyAdd, Ir64Op.Fp64ConditionalSelect,
+        Ir64Op.Fp64ConditionalCompare, Ir64Op.Fp64Round, Ir64Op.Fp64IntegerConvert,
+        Ir64Op.Fp64GeneralRegisterMove {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -122,6 +124,19 @@ public sealed interface Ir64Op permits
         /// B8.4: `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (Floating-point data-processing, 3 source) —
         /// ver {@link Fp64MultiplyAdd}.
         public static final int FP64_MULTIPLY_ADD = 47;
+        /// B8.5: `FCSEL` — ver {@link Fp64ConditionalSelect}.
+        public static final int FP64_CONDITIONAL_SELECT = 48;
+        /// B8.5: `FCCMP`/`FCCMPE` — ver {@link Fp64ConditionalCompare}.
+        public static final int FP64_CONDITIONAL_COMPARE = 49;
+        /// B8.5: `FRINTN`/`FRINTP`/`FRINTM`/`FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI` — ver
+        /// {@link Fp64Round}.
+        public static final int FP64_ROUND = 50;
+        /// B8.5: `SCVTF`/`UCVTF`/`FCVTxS`/`FCVTxU` (forma registrador-geral, inteira e ponto
+        /// fixo) — ver {@link Fp64IntegerConvert}.
+        public static final int FP64_INTEGER_CONVERT = 51;
+        /// B8.5: `FMOV` entre registrador geral e FP escalar (cópia crua de bits) — ver
+        /// {@link Fp64GeneralRegisterMove}.
+        public static final int FP64_GENERAL_REGISTER_MOVE = 52;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -941,6 +956,135 @@ public sealed interface Ir64Op permits
             /// Acumulador (somado — ou subtraído, ver {@link #negateAddend} — ao produto).
             int va) implements Ir64Op {
         @Override public int kind() { return Kind.FP64_MULTIPLY_ADD; }
+    }
+
+    /// `FCSEL` (`ARM DDI 0487 C6.2.75`, "Floating-point conditional select", B8.5) — seleciona
+    /// entre {@link #vn} (condição verdadeira) e {@link #vm} (falsa), sem aritmética. Espelho FP
+    /// de {@link ConditionalSelect}, mas só a forma direta (`FCSEL` não tem as variantes
+    /// `CSINC`/`CSINV`/`CSNEG` de {@link Ir64ConditionalSelectOp} — não existem para FP).
+    record Fp64ConditionalSelect(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Operando escolhido quando {@link #condition} é verdadeira.
+            int vn,
+            /// Operando escolhido quando {@link #condition} é falsa.
+            int vm,
+            /// Condição avaliada contra `PSTATE.{N,Z,C,V}`.
+            Ir64Condition condition) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_CONDITIONAL_SELECT; }
+    }
+
+    /// `FCCMP`/`FCCMPE` (`ARM DDI 0487 C6.2.74`, "Floating-point conditional compare", B8.5) —
+    /// espelho FP de {@link ConditionalCompare}: quando {@link #condition} é verdadeira, `NZCV`
+    /// recebe o resultado de comparar {@link #vn}/{@link #vm} (MESMA tabela de resultado que
+    /// {@link Fp64Compare} — unordered/equal/less/greater); quando falsa, os 4 bits crus de
+    /// {@link #nzcv} substituem `NZCV` diretamente, SEM ler {@link #vn}/{@link #vm} (mesma
+    /// armadilha de {@link ConditionalCompare}, Testes mínimos daquela task).
+    record Fp64ConditionalCompare(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// `true` para `FCCMPE` (bit `E`) — sem efeito observável adicional neste core, mesmo
+            /// precedente de {@link Fp64Compare#signalOnQuietNaN}.
+            boolean signalOnQuietNaN,
+            /// Primeiro operando da comparação.
+            int vn,
+            /// Segundo operando da comparação.
+            int vm,
+            /// Condição avaliada contra `PSTATE.{N,Z,C,V}`.
+            Ir64Condition condition,
+            /// Os 4 bits crus `N:Z:C:V` do encoding, usados como `NZCV` quando {@link #condition}
+            /// é falsa.
+            int nzcv) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_CONDITIONAL_COMPARE; }
+    }
+
+    /// Direção de arredondamento de {@link Fp64Round} e (no sentido float→inteiro) de
+    /// {@link Fp64IntegerConvert}.
+    enum Fp64RoundingDirection {
+        NEAREST_TIES_EVEN, TOWARD_POSITIVE_INFINITY, TOWARD_NEGATIVE_INFINITY, TOWARD_ZERO,
+        NEAREST_TIES_AWAY
+    }
+
+    /// `FRINTN`/`FRINTP`/`FRINTM`/`FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI` (`ARM DDI 0487 C6.2`
+    /// "Floating-point data-processing (1 source)", B8.5) — arredonda para um valor integral
+    /// MANTENDO o resultado em ponto flutuante (diferente de {@link Fp64IntegerConvert}, que
+    /// converte para um registrador geral). `FRINTX`/`FRINTI` usam a MESMA direção de `FRINTN`
+    /// (`NEAREST_TIES_EVEN`) — este core não modela `FPCR.RMode` em A64 (pendência documentada
+    /// desde B6.5.1), então "modo de arredondamento corrente" (`FRINTI`) degenera para o default,
+    /// e a única diferença real de `FRINTX` no hardware (sinalizar `FPSR.IXC` quando o resultado
+    /// não é exato) não é observável neste core, que não modela `FPSR` em nenhuma outra operação
+    /// de A64.
+    record Fp64Round(
+            /// Direção de arredondamento (`FRINTN`/`X`/`I`→`NEAREST_TIES_EVEN`,
+            /// `FRINTP`→`TOWARD_POSITIVE_INFINITY`, `FRINTM`→`TOWARD_NEGATIVE_INFINITY`,
+            /// `FRINTZ`→`TOWARD_ZERO`, `FRINTA`→`NEAREST_TIES_AWAY`).
+            Fp64RoundingDirection direction,
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Registrador de origem.
+            int vn) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_ROUND; }
+    }
+
+    /// `SCVTF`/`UCVTF`/`FCVTNS`/`FCVTNU`/`FCVTPS`/`FCVTPU`/`FCVTMS`/`FCVTMU`/`FCVTZS`/`FCVTZU`/
+    /// `FCVTAS`/`FCVTAU` (forma REGISTRADOR-GERAL, `ARM DDI 0487 C6.2`, B8.5): conversão entre um
+    /// registrador GERAL (`Wn`/`Xn`) e um registrador FP escalar (`Sn`/`Dn`), nos dois sentidos.
+    /// Um único record cobre TRÊS classes reais do encoding (mesmo padrão de
+    /// {@link ConditionalCompare} unificando registrador/imediato): "Conversion between
+    /// floating-point and integer (general register)" ({@link #fixedPointFractionBits}`=0`, os 5
+    /// modos de arredondamento por opcode) e "Conversion between floating-point and fixed-point
+    /// (general register)" ({@link #fixedPointFractionBits}`>0`, só `SCVTF`/`UCVTF`/`FCVTZS`/
+    /// `FCVTZU` existem nesse grupo — `Z` é literal no nome, arredondamento SEMPRE
+    /// `TOWARD_ZERO` no sentido float→inteiro, e o sentido inteiro→float é SEMPRE
+    /// `NEAREST_TIES_EVEN` nos dois grupos, nunca configurável).
+    record Fp64IntegerConvert(
+            /// `true`: `Wn`/`Xn` (inteiro) → `Sd`/`Dd` (float) — `SCVTF`/`UCVTF`. `false`:
+            /// `Sn`/`Dn` (float) → `Wd`/`Xd` (inteiro) — `FCVTxS`/`FCVTxU`.
+            boolean toFloat,
+            /// `true` para as formas com sinal (`SCVTF`/`FCVTxS`); `false` sem sinal
+            /// (`UCVTF`/`FCVTxU`).
+            boolean signed,
+            /// Direção de arredondamento no sentido float→inteiro; IGNORADA no sentido
+            /// inteiro→float (sempre `NEAREST_TIES_EVEN`, ver Javadoc da classe).
+            Fp64RoundingDirection rounding,
+            /// `true` para registrador FP de precisão dupla (`Dn`/`Dd`), `false` simples
+            /// (`Sn`/`Sd`).
+            boolean doublePrecision,
+            /// `true` para registrador geral de 64 bits (`Xn`/`Xd`), `false` de 32 (`Wn`/`Wd`).
+            boolean wide,
+            /// Bits fracionários do ponto fixo: `0` nas formas inteiras puras (`SCVTF`/`UCVTF`/
+            /// `FCVTNS`/etc. sem escala); `1`-`32` (`!wide`) ou `1`-`64` (`wide`) nas formas de
+            /// ponto fixo com escala (`SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` com `#fbits`).
+            int fixedPointFractionBits,
+            /// Registrador FP (índice `0`-`31`, `V<n>`) — destino quando {@link #toFloat}, origem
+            /// senão.
+            int fpReg,
+            /// Registrador geral (índice `0`-`31`) — origem quando {@link #toFloat}, destino
+            /// senão.
+            int gpReg) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_INTEGER_CONVERT; }
+    }
+
+    /// `FMOV` entre registrador geral e FP escalar SEM conversão de valor — cópia CRUA de bits
+    /// (`FMOV Wd,Sn`/`FMOV Sd,Wn`/`FMOV Xd,Dn`/`FMOV Dd,Xn`, B8.5). **Não inclui** as formas que
+    /// tocam a metade alta de um registrador de 128 bits (`FMOV Xd,Vn.D[1]`/`FMOV Vd.D[1],Xn`) —
+    /// este core só armazena `D`/`S` por `V<n>` (decisão de B6.5.1, sem os 64 bits altos), que
+    /// depende do armazenamento de 128 bits que só chega com AdvSIMD (B8.6+).
+    record Fp64GeneralRegisterMove(
+            /// `true`: `Xn`/`Wn` → `Vd` (bits crus). `false`: `Vn` → `Xd`/`Wd` (bits crus).
+            boolean toFloat,
+            /// `true` para 64 bits (`Xn`/`Dd` ou `Dn`/`Xd`), `false` para 32 (`Wn`/`Sd` ou
+            /// `Sn`/`Wd`).
+            boolean wide,
+            /// Registrador FP (índice `0`-`31`, `V<n>`).
+            int fpReg,
+            /// Registrador geral (índice `0`-`31`).
+            int gpReg) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_GENERAL_REGISTER_MOVE; }
     }
 
     /// `CCMP`/`CCMN` (`ARM DDI 0487 C6.2.25/24`, B6.8) — gap achado por uma sessão de F11

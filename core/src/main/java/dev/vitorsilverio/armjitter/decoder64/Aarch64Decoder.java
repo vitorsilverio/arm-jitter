@@ -751,6 +751,85 @@ public final class Aarch64Decoder {
     private static final int FP_COMPARE_E_BIT_SHIFT = 4;
     private static final int FP_COMPARE_ZERO_BIT_SHIFT = 3;
 
+    // ── B8.5: `FCSEL`/`FCCMP` — MESMO prefixo(30:24)+bit21=1 das 4 sub-classes acima; distinguidas
+    // ── por bits[11:10], que nas 4 sub-classes acima é sempre "00" (compare/1-source, dentro de um
+    // ── campo fixo maior) ou "10" (2-source) — "11"/"01" nunca colidem (CONFERIDO: bit10=1 nas duas
+    // ── formas novas, bit10=0 em TODAS as 4 anteriores). `cond`(15:12) e `Rm`(20:16) compartilhados;
+    // ── `FCCMP` tem `E`(bit4)+`nzcv`(3:0) onde `FCSEL` tem `Rn`(9:5, mesma posição)+`Rd`(4:0).
+    private static final int FP_SELECT_COMPARE_FIXED_SHIFT = 10;
+    private static final int FP_SELECT_COMPARE_FIXED_MASK = 0b11;
+    private static final int FP_CSEL_FIXED_PATTERN = 0b11;
+    private static final int FP_CCMP_FIXED_PATTERN = 0b01;
+    private static final int FP_COND_SHIFT = 12;
+    private static final int FP_CCMP_E_BIT_SHIFT = 4;
+    private static final int FP_CCMP_NZCV_MASK = 0b1111;
+
+    // ── B8.5: "Conversion between floating-point and fixed-point (general register)" — MESMO
+    // ── prefixo(30:24), mas bit21=0 (ao contrário das sub-classes acima, todas bit21=1): `sf`(31)
+    // ── largura do registrador geral, opcode(21:16) só 4 valores válidos (`SCVTF`/`UCVTF`/`FCVTZS`/
+    // ── `FCVTZU` — únicos mnemônicos deste grupo, "Z" já é o nome: sempre trunca p/ zero no sentido
+    // ── float->inteiro), `shift`(15:10, 6 bits) = `N - raw` (`N`=32 quando `!sf`, exige bit15=1;
+    // ── `N`=64 quando `sf`, usa os 6 bits inteiros) — CONFERIDO contra `a64.decode` real do QEMU
+    // ── (`@fcvt32`/`@fcvt64`, `%fcvt_shift32`/`%fcvt_shift64` = `rsub_32`/`rsub_64`).
+    private static final int FP_FIXED_CONVERT_OPCODE_SHIFT = 16;
+    private static final int FP_FIXED_CONVERT_OPCODE_MASK = 0b11_1111;
+    private static final int FP_FIXED_CONVERT_OPCODE_SCVTF = 0b00_0010;
+    private static final int FP_FIXED_CONVERT_OPCODE_UCVTF = 0b00_0011;
+    private static final int FP_FIXED_CONVERT_OPCODE_FCVTZS = 0b01_1000;
+    private static final int FP_FIXED_CONVERT_OPCODE_FCVTZU = 0b01_1001;
+    private static final int FP_FIXED_CONVERT_SHIFT_FIELD_SHIFT = 10;
+    private static final int FP_FIXED_CONVERT_SHIFT_FIELD_MASK = 0b11_1111;
+    private static final int FP_FIXED_CONVERT_NARROW_MARKER_BIT = 1 << 15;
+    private static final int FP_FIXED_CONVERT_NARROW_RAW_MASK = 0b1_1111;
+
+    // ── B8.5: "Conversion between floating-point and integer (general register)" — MESMO
+    // ── prefixo(30:24)+bit21=1 de `FCSEL`/`FCCMP`/2-source/1-source/imediato/compare, mas
+    // ── bits[15:10] fixo="000000" (nenhuma das 6 sub-classes anteriores tem esse valor ali —
+    // ── `FCSEL`/`FCCMP` têm bit10=1 sempre; compare/1-source exigem bits[14:10]≠0; 2-source exige
+    // ── bits[11:10]="10"≠"00"). Opcode(21:16) 6 bits: 12 valores válidos (`SCVTF`/`UCVTF`/8
+    // ── arredondamentos `FCVTxS`/`FCVTxU` + `FCVTAS`/`FCVTAU`); os demais valores deste mesmo campo
+    // ── (`_g_simd`/`_simd`/`FJCVTZS`) são extensões POSTERIORES (`FEAT_FPRCVT`/`FEAT_JSCVT`,
+    // ── CONFERIDAS contra `translate-a64.c` real — `TRANS_FEAT(..., aa64_fprcvt, ...)`/
+    // ── `dc_isar_feature(aa64_jscvt, ...)`), ficam de fora por não bater nenhum `case` (ver
+    // ── `docs/isa-nao-aplicavel.tsv`).
+    private static final int FP_INT_CONVERT_SUFFIX_SHIFT = 10;
+    private static final int FP_INT_CONVERT_SUFFIX_MASK = 0b11_1111;
+    private static final int FP_INT_CONVERT_SUFFIX_PATTERN = 0;
+    private static final int FP_INT_CONVERT_OPCODE_SCVTF = 0b10_0010;
+    private static final int FP_INT_CONVERT_OPCODE_UCVTF = 0b10_0011;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTNS = 0b10_0000;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTNU = 0b10_0001;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTPS = 0b10_1000;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTPU = 0b10_1001;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTMS = 0b11_0000;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTMU = 0b11_0001;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTZS = 0b11_1000;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTZU = 0b11_1001;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTAS = 0b10_0100;
+    private static final int FP_INT_CONVERT_OPCODE_FCVTAU = 0b10_0101;
+
+    // ── B8.5: `FMOV` registrador-geral<->FP (cópia crua de bits) — mesmo `@rr`/bits[15:10]="000000"
+    // ── de "Conversion (general register)" acima (MESMO valor de sufixo!), mas opcode(21:16) só
+    // ── "100110"/"100111" — CONFERIDO: não colide com nenhum dos 12 opcodes de conversão inteira
+    // ── acima (nenhum tem valor 100110/100111). `type`(23:22) é sempre `sf?01:00` aqui (nunca `10`/
+    // ── `11` — essas são as formas de metade-alta/meia-precisão, fora de escopo, ver Javadoc de
+    // ── {@link Ir64Op.Fp64GeneralRegisterMove}), então basta ler `sf` e ignorar `type`.
+    private static final int FP_GP_MOVE_OPCODE_TO_FLOAT = 0b10_0111;
+    private static final int FP_GP_MOVE_OPCODE_TO_GP = 0b10_0110;
+
+    // ── B8.5: "Floating-point data-processing (1 source)" — `FRINTx`, opcode(20:15) 6 bits,
+    // ── MESMO grupo/bits[14:10]="10000" de `FMOV`/`FABS`/`FNEG`/`FSQRT`/`FCVT` (F32<->F64) já
+    // ── decodificados — só o valor do opcode muda. `FRINT32*`/`FRINT64*`(`FEAT_FRINTTS`)/
+    // ── `BFCVT_s`(`FEAT_BF16`) são extensões POSTERIORES, CONFERIDAS contra `translate-a64.c`
+    // ── (`TRANS_FEAT(..., aa64_frint/aa64_bf16, ...)`) — ficam de fora (`isa-nao-aplicavel.tsv`).
+    private static final int FP_ROUND_OPCODE_FRINTN = 0b00_1000;
+    private static final int FP_ROUND_OPCODE_FRINTP = 0b00_1001;
+    private static final int FP_ROUND_OPCODE_FRINTM = 0b00_1010;
+    private static final int FP_ROUND_OPCODE_FRINTZ = 0b00_1011;
+    private static final int FP_ROUND_OPCODE_FRINTA = 0b00_1100;
+    private static final int FP_ROUND_OPCODE_FRINTX = 0b00_1110;
+    private static final int FP_ROUND_OPCODE_FRINTI = 0b00_1111;
+
     // ── Add/subtract (shifted/extended register), subgrupo de Data Processing — Register: ─────
     // ── bits[28:24] fixo=01011 nas duas formas; bit21 distingue shifted(0)/extended(1, com ────
     // ── bits[23:22]=00 fixo também) — Fatos de referência #4/#5 da task B6.3.1. ────────────────
@@ -1753,10 +1832,10 @@ public final class Aarch64Decoder {
     /// (`FADD`/`FSUB`/`FMUL`/`FDIV`/`FNEG`/`FABS`/`FMOV` registrador/imediato/`FCMP`/`FCMPE`/
     /// `FCVT` F32↔F64), estendido pela B8.4 com o resto de "2 source" (`FMAX`/`FMIN`/`FMAXNM`/
     /// `FMINNM`/`FNMUL`), `FSQRT` ("1 source") e "3 source" (`FMADD`/`FMSUB`/`FNMADD`/`FNMSUB`,
-    /// prefixo próprio, ver abaixo). Advanced SIMD vetorial, `FCCMP`/`FCSEL` e conversões FP↔
-    /// inteiro continuam fora (Não inclui da task), reconhecidos aqui só pela AUSÊNCIA de
-    /// qualquer um dos padrões fixos abaixo (nunca por um `case` próprio que tentaria
-    /// decodificá-los).
+    /// prefixo próprio, ver abaixo), e pela B8.5 com `FCSEL`/`FCCMP`, `FRINTx` ("1 source"),
+    /// conversão FP↔ponto-fixo/inteiro (registrador geral) e `FMOV` registrador-geral↔FP.
+    /// Advanced SIMD vetorial continua fora, reconhecida só pela AUSÊNCIA de qualquer um dos
+    /// padrões fixos abaixo (nunca por um `case` próprio que tentaria decodificá-la).
     private Ir64Op decodeDataProcessingScalarFpSimd(int word, long address) {
         // B8.4: "Floating-point data-processing (3 source)" checado ANTES do resto — usa um
         // prefixo de 8 bits próprio (não os 5 bits de SCALAR_FP_FIXED_PREFIX abaixo), porque
@@ -1769,11 +1848,15 @@ public final class Aarch64Decoder {
             return decodeFpThreeSource(word, address);
         }
         int fixedPrefix = (word >>> SCALAR_FP_FIXED_PREFIX_SHIFT) & SCALAR_FP_FIXED_PREFIX_MASK;
-        boolean bit21Set = ((word >>> SCALAR_FP_BIT21_SHIFT) & 1) != 0;
-        if (fixedPrefix != SCALAR_FP_FIXED_PREFIX_PATTERN || !bit21Set) {
-            // Advanced SIMD vetorial (prefixo(28:24) diferente, ex. "01110") ou conversões
-            // FP<->fixed-point (bit21=0 na forma com shift): fora do escopo fechado desta task.
+        if (fixedPrefix != SCALAR_FP_FIXED_PREFIX_PATTERN) {
+            // Advanced SIMD vetorial (prefixo(28:24) diferente, ex. "01110"): fora do escopo.
             throw unsupported(word, address);
+        }
+        boolean bit21Set = ((word >>> SCALAR_FP_BIT21_SHIFT) & 1) != 0;
+        if (!bit21Set) {
+            // B8.5: "Conversion between floating-point and fixed-point (general register)" —
+            // ÚNICO subgrupo deste prefixo com bit21=0 (todos os outros abaixo têm bit21=1).
+            return decodeFpFixedPointConvert(word, address);
         }
         int immediateFixed = (word >>> FP_IMMEDIATE_FIXED_SHIFT) & FP_IMMEDIATE_FIXED_MASK;
         if (immediateFixed == FP_IMMEDIATE_FIXED_PATTERN) {
@@ -1793,9 +1876,22 @@ public final class Aarch64Decoder {
         if (twoSourceFixed == FP_TWO_SOURCE_FIXED_PATTERN) {
             return decodeFpTwoSource(word, address);
         }
-        // FCCMP/FCSEL (conditional compare/select) e conversões FP<->inteiro (SCVTF/UCVTF/
-        // FCVTZS/FCVTZU): mesmo prefixo(28:24)/bit21, discriminados por outros campos — fora do
-        // escopo fechado desta task (herdado de B6.5.2, ver Não inclui).
+        // B8.5: `FCSEL`(bits[11:10]="11")/`FCCMP`(bits[11:10]="01") — CONFERIDO que bit10=1 nunca
+        // ocorre em nenhum dos 4 padrões já checados acima (compare/1-source exigem bits[14:10]
+        // fixo terminando em "00"; 2-source exige bits[11:10]="10").
+        int selectCompareFixed = (word >>> FP_SELECT_COMPARE_FIXED_SHIFT) & FP_SELECT_COMPARE_FIXED_MASK;
+        if (selectCompareFixed == FP_CSEL_FIXED_PATTERN) {
+            return decodeFpConditionalSelect(word, address);
+        }
+        if (selectCompareFixed == FP_CCMP_FIXED_PATTERN) {
+            return decodeFpConditionalCompare(word, address);
+        }
+        // B8.5: "Conversion between floating-point and integer (general register)" e `FMOV`
+        // registrador-geral↔FP — MESMO sufixo bits[15:10]="000000", discriminados só pelo opcode.
+        int intConvertSuffix = (word >>> FP_INT_CONVERT_SUFFIX_SHIFT) & FP_INT_CONVERT_SUFFIX_MASK;
+        if (intConvertSuffix == FP_INT_CONVERT_SUFFIX_PATTERN) {
+            return decodeFpIntegerConvertOrGeneralRegisterMove(word, address);
+        }
         throw unsupported(word, address);
     }
 
@@ -1863,9 +1959,11 @@ public final class Aarch64Decoder {
         return new Ir64Op.Fp64Alu(op, doublePrecision, vd, vn, vm);
     }
 
-    /// `FMOV`/`FABS`/`FNEG`/`FSQRT` (unárias) e `FCVT` F32↔F64 (Floating-point data-processing,
-    /// 1 source) — opcode(20:15) distingue as 6 formas cobertas; demais valores (`FCVT` de/para
-    /// meia-precisão, `FRINTx`) ficam fora do escopo fechado desta task.
+    /// `FMOV`/`FABS`/`FNEG`/`FSQRT` (unárias), `FCVT` F32↔F64 e (B8.5) `FRINTN`/`FRINTP`/`FRINTM`/
+    /// `FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI` (Floating-point data-processing, 1 source) —
+    /// opcode(20:15) distingue as formas cobertas; demais valores (`FCVT` de/para meia-precisão —
+    /// opcode 6/7, sempre `FEAT_FP16` real, `docs/isa-nao-aplicavel.tsv` — `BFCVT_s`/
+    /// `FRINT32*`/`FRINT64*`, extensões POSTERIORES) ficam fora, ver `isa-nao-aplicavel.tsv`.
     private Ir64Op decodeFpOneSource(int word, long address) {
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int opcode = (word >>> FP_ONE_SOURCE_OPCODE_SHIFT) & FP_ONE_SOURCE_OPCODE_MASK;
@@ -1897,6 +1995,22 @@ public final class Aarch64Decoder {
                 }
                 yield new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F64_TO_F32, vd, vn);
             }
+            case FP_ROUND_OPCODE_FRINTN -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTP -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTM -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTZ -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTA -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, doublePrecision, vd, vn);
+            // FRINTX/FRINTI: MESMA direção de FRINTN — ver Javadoc de Ir64Op.Fp64Round (FPCR.RMode
+            // não modelado em A64).
+            case FP_ROUND_OPCODE_FRINTX -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTI -> new Ir64Op.Fp64Round(
+                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
             default -> throw unsupported(word, address);
         };
     }
@@ -1920,6 +2034,129 @@ public final class Aarch64Decoder {
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vm = compareWithZero ? 0 : (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
         return new Ir64Op.Fp64Compare(doublePrecision, compareWithZero, signalOnQuietNaN, vn, vm);
+    }
+
+    /// `FCSEL` (B8.5) — `Rm`(20:16)/`cond`(15:12) compartilhados com {@link #decodeFpConditionalCompare},
+    /// `Rn`(9:5)/`Rd`(4:0) na posição normal de operandos FP.
+    private Ir64Op decodeFpConditionalSelect(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int vm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
+        Ir64Condition condition = Ir64Condition.decode((word >>> FP_COND_SHIFT) & COND_FIELD_MASK);
+        int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Fp64ConditionalSelect(doublePrecision, vd, vn, vm, condition);
+    }
+
+    /// `FCCMP`/`FCCMPE` (B8.5) — `Rn`(9:5)/`Vm`(20:16)/`cond`(15:12) na MESMA posição de `FCSEL`;
+    /// `E`(bit4)/`nzcv`(3:0) onde `FCSEL` tem `Rd`.
+    private Ir64Op decodeFpConditionalCompare(int word, long address) {
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int vm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
+        Ir64Condition condition = Ir64Condition.decode((word >>> FP_COND_SHIFT) & COND_FIELD_MASK);
+        int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        boolean signalOnQuietNaN = ((word >>> FP_CCMP_E_BIT_SHIFT) & 1) != 0;
+        int nzcv = word & FP_CCMP_NZCV_MASK;
+        return new Ir64Op.Fp64ConditionalCompare(doublePrecision, signalOnQuietNaN, vn, vm, condition, nzcv);
+    }
+
+    /// "Conversion between floating-point and fixed-point (general register)" (B8.5): SÓ
+    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` existem neste grupo (`Z` já é o nome — sempre trunca p/
+    /// zero). `shift` é `N - raw` (`N`=32 quando `!sf`, exigindo bit15=1 e só os 5 bits baixos do
+    /// campo — CONFERIDO contra `%fcvt_shift32` real; `N`=64 quando `sf`, campo de 6 bits inteiro).
+    private Ir64Op decodeFpFixedPointConvert(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int opcode = (word >>> FP_FIXED_CONVERT_OPCODE_SHIFT) & FP_FIXED_CONVERT_OPCODE_MASK;
+        boolean toFloat;
+        boolean signed;
+        switch (opcode) {
+            case FP_FIXED_CONVERT_OPCODE_SCVTF -> { toFloat = true; signed = true; }
+            case FP_FIXED_CONVERT_OPCODE_UCVTF -> { toFloat = true; signed = false; }
+            case FP_FIXED_CONVERT_OPCODE_FCVTZS -> { toFloat = false; signed = true; }
+            case FP_FIXED_CONVERT_OPCODE_FCVTZU -> { toFloat = false; signed = false; }
+            default -> throw unsupported(word, address);
+        }
+        int rawShift = (word >>> FP_FIXED_CONVERT_SHIFT_FIELD_SHIFT) & FP_FIXED_CONVERT_SHIFT_FIELD_MASK;
+        int fractionBits;
+        if (wide) {
+            fractionBits = 64 - rawShift;
+        } else {
+            if ((word & FP_FIXED_CONVERT_NARROW_MARKER_BIT) == 0) {
+                // Forma de 32 bits exige bit15=1 (marcador fixo do encoding real, ver
+                // %fcvt_shift32) — sem ele, este não é um encoding válido desta classe.
+                throw unsupported(word, address);
+            }
+            fractionBits = 32 - (rawShift & FP_FIXED_CONVERT_NARROW_RAW_MASK);
+        }
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        int fpReg = toFloat ? rd : rn;
+        int gpReg = toFloat ? rn : rd;
+        return new Ir64Op.Fp64IntegerConvert(toFloat, signed,
+                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, wide, fractionBits, fpReg, gpReg);
+    }
+
+    /// "Conversion between floating-point and integer (general register)" e `FMOV` registrador-
+    /// geral↔FP (B8.5) — MESMO sufixo bits[15:10]="000000", discriminados pelo opcode(21:16).
+    private Ir64Op decodeFpIntegerConvertOrGeneralRegisterMove(int word, long address) {
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
+        int opcode = (word >>> FP_FIXED_CONVERT_OPCODE_SHIFT) & FP_FIXED_CONVERT_OPCODE_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        if (opcode == FP_GP_MOVE_OPCODE_TO_FLOAT) {
+            return new Ir64Op.Fp64GeneralRegisterMove(true, wide, rd, rn);
+        }
+        if (opcode == FP_GP_MOVE_OPCODE_TO_GP) {
+            return new Ir64Op.Fp64GeneralRegisterMove(false, wide, rn, rd);
+        }
+        boolean toFloat;
+        boolean signed;
+        Ir64Op.Fp64RoundingDirection rounding;
+        switch (opcode) {
+            case FP_INT_CONVERT_OPCODE_SCVTF -> {
+                toFloat = true; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+            }
+            case FP_INT_CONVERT_OPCODE_UCVTF -> {
+                toFloat = true; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTNS -> {
+                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTNU -> {
+                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTPS -> {
+                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTPU -> {
+                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTMS -> {
+                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTMU -> {
+                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTZS -> {
+                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTZU -> {
+                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTAS -> {
+                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
+            }
+            case FP_INT_CONVERT_OPCODE_FCVTAU -> {
+                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
+            }
+            // `_g_simd`/`_simd` (FEAT_FPRCVT)/`FJCVTZS` (FEAT_JSCVT): extensões POSTERIORES,
+            // CONFERIDAS contra translate-a64.c — ver isa-nao-aplicavel.tsv.
+            default -> throw unsupported(word, address);
+        }
+        int fpReg = toFloat ? rd : rn;
+        int gpReg = toFloat ? rn : rd;
+        return new Ir64Op.Fp64IntegerConvert(toFloat, signed, rounding, doublePrecision, wide, 0, fpReg, gpReg);
     }
 
     /// `VFPExpandImm`-equivalente de A64 (Armadilhas da task B6.5.3): MESMO algoritmo conceitual
