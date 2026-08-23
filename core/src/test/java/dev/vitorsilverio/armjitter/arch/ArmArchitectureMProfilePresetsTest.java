@@ -2,7 +2,6 @@ package dev.vitorsilverio.armjitter.arch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
@@ -78,8 +77,14 @@ class ArmArchitectureMProfilePresetsTest {
         // CPSID f (0xB671) precisa de M_FAULT_MASKING → UNDEFINED no v6-M, CPS no v7-M.
         assertEquals(InstructionKind.UNIMPLEMENTED, decode16(ArmArchitecture.ARMV6M, 0xB671).kind());
         assertEquals(InstructionKind.CPS, decode16(ArmArchitecture.ARMV7M, 0xB671).kind());
-        // Sob A-profile o mesmo 0xB672 NÃO é o CPS de 16 bits do perfil M (encoding não reivindicado).
-        assertNotEquals(InstructionKind.CPS, decode16(ArmArchitecture.ARMV6K_THUMB2, 0xB672).kind());
+        // ⚠️ B9.3: o mesmo prefixo de 11 bits (0xB660-0xB67F) é reaproveitado pelo `CPS` A/R-profile
+        // genuíno de 16 bits (ARMv6 T1, ARM DDI 0406C A8.8.27) — ANTES desta task, o A-profile não
+        // decodificava nada ali (gap real, não invariante G2/G3: a instrução pertence à
+        // arquitetura-alvo, ver `b7-plano-cobertura-isa.md`). Sob A-profile 0xB672 agora É `CPS`
+        // (`CPSID i`), só que empacotado com o campo `A` (ver `ThumbDecoder`), não o layout
+        // exclusivo do perfil M — a precedência (`!M_PROFILE` no decoder) garante que os dois
+        // presets nunca competem pelo mesmo encoding.
+        assertEquals(InstructionKind.CPS, decode16(ArmArchitecture.ARMV6K_THUMB2, 0xB672).kind());
     }
 
     // ── SVC em ARMV6M entra pela exceção M (não pelo SwiDispatcher) ──────────────────────────

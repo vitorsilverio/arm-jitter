@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **56%** — 2250 de 3948 células aplicáveis decodificam.
+> **57%** — 2287 de 3948 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -34,11 +34,11 @@ Por arquitetura:
 |---|---|
 | v4T | **65%** (208/318) |
 | v5TE | **70%** (225/318) |
-| v6K | **90%** (299/330) |
-| MPCore | **88%** (349/393) |
-| v7-A | **87%** (597/684) |
+| v6K | **93%** (309/330) |
+| MPCore | **91%** (359/393) |
+| v7-A | **88%** (607/684) |
 | v6-M | **22%** (88/385) |
-| v7-M | **54%** (210/385) |
+| v7-M | **56%** (217/385) |
 | A64 | **24%** (274/1135) |
 
 ## Resumo
@@ -46,7 +46,7 @@ Por arquitetura:
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 62% (148/235) · v5TE 68% (162/235) · v6K 95% (236/247) · MPCore 95% (236/247) · v7-A 99% (245/247) |
-| T16 — Thumb clássico | 86 | v4T 72% (60/83) · v5TE 75% (63/83) · v6K 75% (63/83) · MPCore 75% (63/83) · v7-A 83% (69/83) · v6-M 81% (68/83) · v7-M 84% (70/83) |
+| T16 — Thumb clássico | 86 | v4T 72% (60/83) · v5TE 75% (63/83) · v6K 87% (73/83) · MPCore 87% (73/83) · v7-A 95% (79/83) · v6-M 81% (68/83) · v7-M 92% (77/83) |
 | T32 — Thumb-2 | 310 | v7-A 80% (233/291) · v6-M 6% (20/291) · v7-M 48% (140/291) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 79% (50/63) · v7-A 79% (50/63) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
@@ -397,16 +397,16 @@ Inventário: `t16.decode` · 86 instruções.
 | `BLX_r` | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | `BXNS` | · | · | · | · | · | · | · |
 | `BLXNS` | · | · | · | · | · | · | · |
-| `SXTAH` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `SXTAB` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `UXTAH` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `UXTAB` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `SETEND` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `CPS` | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| `CPS_v7m` | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| `REV` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `REV16` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `REVSH` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SXTAH` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `SXTAB` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `UXTAH` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `UXTAB` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `SETEND` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `CPS` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CPS_v7m` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REV` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `REV16` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `REVSH` | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | `YIELD` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | `WFE` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | `WFI` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |

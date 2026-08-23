@@ -86,6 +86,76 @@ public final class ThumbDecoder implements InstructionDecoder {
     private static final int CPS16_PACKED_I_SHIFT = 4;
     private static final int CPS16_PACKED_F_SHIFT = 5;
 
+    /// `SETEND` de 16 bits (ARMv6, ARM DDI 0406C A8.8.120 T1, confirmado contra
+    /// `target/arm/tcg/t16.decode` do QEMU): `1011 0110 010 1 E 000` — `0xB650`=`SETEND LE`,
+    /// `0xB658`=`SETEND BE`. Mesma feature/comportamento observável do `SETEND` A32 (B1.5, `ArmDecoder`):
+    /// {@link ArmFeature#SETEND_BIG_ENDIAN_DATA}, `immediate` empacotado = bit `E` (0/1).
+    private static final int SETEND16_MASK = 0xFFF7;
+    private static final int SETEND16_VALUE = 0xB650;
+    private static final int SETEND16_E_BIT = 1 << 3;
+
+    /// `CPS` de 16 bits **A/R-profile** (ARMv6, ARM DDI 0406C A8.8.27 T1, confirmado contra
+    /// `target/arm/tcg/t16.decode`/`translate.c` do QEMU — `trans_CPS`, `!ENABLE_ARCH_6 ||
+    /// ARM_FEATURE_M` recusa): MESMO prefixo de 11 bits que {@link #CPS16_VALUE} (perfil M, B7.4)
+    /// — os dois perfis reaproveitam o mesmo espaço de encoding de 16 bits com um campo a mais no
+    /// A/R-profile (bit 2 = flag `A`, reservado/SBZ no M-profile). Formato: `1011 0110 011 im 0 A
+    /// I F`. Sem troca de modo (T16 não carrega um campo de modo de 5 bits: `M=0`/`mode=0`
+    /// sempre). Gate {@link ArmFeature#MODE_CHANGE_INSTRUCTIONS} (ARMv6+, herdado por `ARMV6K`) e
+    /// `!M_PROFILE` — em qualquer preset M-profile o bloco de {@link #CPS16_VALUE} acima já
+    /// reivindicou o encoding primeiro.
+    private static final int CPS16_A_BIT = 1 << 2;
+    /// Bit 3 é reservado (SBZ) em AMBOS os perfis — só o M-profile trata o bit 2 também como
+    /// reservado (sem campo `A`).
+    private static final int CPS16_SBZ_BIT = 1 << 3;
+    /// Empacotamento de `immediate` para `InstructionKind.CPS` na forma A/R-profile (mesma
+    /// convenção do `CPS` ARM/Thumb-2 A/R-profile, `StandardIrBuilder`/`IrSystemExecutor`): bit 1
+    /// = `changeFlags` (sempre 1 aqui — este T1 sempre muda A/I/F), bit 0 = `imod` baixo (0=IE,
+    /// 1=ID), bit 3 = `changeA`, bit 4 = `changeI`, bit 5 = `changeF`. `changeMode`/`mode` = 0.
+    /// (`%imod` do QEMU, `4:1 !function=plus_2`, soma 2 ao bit `im` bruto: `im=0` -> `imod=0b10`
+    /// IE, `im=1` -> `imod=0b11` ID — os dois já têm o bit 1 setado.)
+    private static final int CPS16_A_PROFILE_PACKED_CHANGE_FLAGS = 1 << 1;
+    private static final int CPS16_A_PROFILE_PACKED_DISABLE_BIT = 1;
+    private static final int CPS16_A_PROFILE_PACKED_A_SHIFT = 3;
+    private static final int CPS16_A_PROFILE_PACKED_I_SHIFT = 4;
+    private static final int CPS16_A_PROFILE_PACKED_F_SHIFT = 5;
+
+    /// Inversão de bytes de 16 bits (ARMv6, ARM DDI 0406C A8.8.144/145/146 T1, confirmado contra
+    /// `target/arm/tcg/t16.decode`, `@rdm`): `REV`=`1011 1010 00 mmm ddd` (`0xBA00`),
+    /// `REV16`=mesmo prefixo com `..01..` (`0xBA40`), `REVSH`=`..11..` (`0xBAC0`) — `..10..` é
+    /// reservado (mesmo buraco que a forma A32 já tem). Reaproveita {@link
+    /// InstructionKind#BYTE_REVERSE} (mesmo `Kind`/executor da forma A32, B1.2) com `immediate`
+    /// 0/1/2 para REV/REV16/REVSH. Gate {@link ArmFeature#BYTE_REVERSE} (mesma feature da forma A32).
+    private static final int BYTE_REVERSE16_MASK = 0xFFC0;
+    private static final int BYTE_REVERSE16_REV_VALUE = 0xBA00;
+    private static final int BYTE_REVERSE16_REV16_VALUE = 0xBA40;
+    private static final int BYTE_REVERSE16_REVSH_VALUE = 0xBAC0;
+
+    /// Extensão de sinal/zero de 16 bits **sem acumulador** (ARMv6, ARM DDI 0406C
+    /// A8.8.232/233/236/237 T1, confirmado contra `target/arm/tcg/t16.decode`+`translate.c` do
+    /// QEMU). ⚠️ **Achado de triagem (B9.3)**: o `t16.decode` do QEMU nomeia estas 4 linhas
+    /// `SXTAH`/`SXTAB`/`UXTAH`/`UXTAB` (reaproveita o `trans_*` COM acumulador da forma A32), mas o
+    /// formato `@extend` do T16 fixa `rn=15` — e `op_xta` (`translate.c`) só soma o acumulador
+    /// quando `rn!=15`. Ou seja, a instrução T16 real (mnemônico do ARM ARM) é a forma SEM
+    /// acumulador: `SXTH`/`SXTB`/`UXTH`/`UXTB Rd,Rm` — **NÃO** `SXTAH`/`SXTAB`/`UXTAH`/`UXTAB`
+    /// (essas só existem de verdade no espaço A32/T32 de 32 bits, com um `Rn` real). O plano
+    /// mestre (`b7-plano-cobertura-isa.md`, linha B9.3) citava os nomes errados; corrigido aqui —
+    /// ver "Triagem real" na spec desta task. `0xB200`=SXTH, `0xB240`=SXTB, `0xB280`=UXTH,
+    /// `0xB2C0`=UXTB. Reaproveita {@link InstructionKind#EXTEND} (mesmo `Kind`/executor da forma
+    /// A32, B1.2) com `sourceRegister=-1` (sem acumulador, rotação sempre 0). Gate {@link
+    /// ArmFeature#EXTEND_ROTATE} (mesma feature da forma A32).
+    private static final int EXTEND16_MASK = 0xFFC0;
+    private static final int EXTEND16_SXTH_VALUE = 0xB200;
+    private static final int EXTEND16_SXTB_VALUE = 0xB240;
+    private static final int EXTEND16_UXTH_VALUE = 0xB280;
+    private static final int EXTEND16_UXTB_VALUE = 0xB2C0;
+    /// Campo `field` empacotado em `InstructionKind.EXTEND.immediate()` (convenção A32,
+    /// `ArmDecoder`/`StandardIrBuilder#liftExtend`): `0b10`=byte, `0b11`=halfword (`0b00`=B16
+    /// paralelo, não alcançável por este T1 de 16 bits).
+    private static final int EXTEND_FIELD_BYTE = 0b10;
+    private static final int EXTEND_FIELD_HALFWORD = 0b11;
+    private static final int EXTEND_FIELD_SHIFT = 2;
+    private static final int EXTEND_UNSIGNED_BIT = 1 << 4;
+
     /// Decodifica uma instrução THUMB16 (ou, com {@link ArmFeature#THUMB2}, um candidato Thumb de
     /// 32 bits) no endereço informado.
     @Override
@@ -391,6 +461,68 @@ public final class ThumbDecoder implements InstructionDecoder {
                     | (changeF ? (1 << CPS16_PACKED_F_SHIFT) : 0);
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
                     InstructionKind.CPS, -1, -1, -1, packed, false, false, false);
+        }
+
+        // `SETEND` de 16 bits (ARMv6 T16, B9.3): ver constantes acima.
+        if ((raw & SETEND16_MASK) == SETEND16_VALUE) {
+            if (!architecture.has(ArmFeature.SETEND_BIG_ENDIAN_DATA)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int endianBit = (raw & SETEND16_E_BIT) != 0 ? 1 : 0;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.SETEND, -1, -1, -1, endianBit, false, false, false);
+        }
+
+        // `CPS` A/R-profile de 16 bits (ARMv6 T16, B9.3): ver constantes acima. Só é alcançado se
+        // o bloco M-profile acima não reivindicou o mesmo prefixo de 11 bits.
+        if (!architecture.has(ArmFeature.M_PROFILE) && (raw & CPS16_MASK) == CPS16_VALUE) {
+            if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS) || (raw & CPS16_SBZ_BIT) != 0) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            boolean disable = (raw & CPS16_IM_BIT) != 0;
+            boolean changeA = (raw & CPS16_A_BIT) != 0;
+            boolean changeI = (raw & CPS16_I_BIT) != 0;
+            boolean changeF = (raw & CPS16_F_BIT) != 0;
+            int packed = CPS16_A_PROFILE_PACKED_CHANGE_FLAGS
+                    | (disable ? CPS16_A_PROFILE_PACKED_DISABLE_BIT : 0)
+                    | (changeA ? (1 << CPS16_A_PROFILE_PACKED_A_SHIFT) : 0)
+                    | (changeI ? (1 << CPS16_A_PROFILE_PACKED_I_SHIFT) : 0)
+                    | (changeF ? (1 << CPS16_A_PROFILE_PACKED_F_SHIFT) : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.CPS, -1, -1, -1, packed, false, false, false);
+        }
+
+        // `REV`/`REV16`/`REVSH` de 16 bits (ARMv6 T16, B9.3): ver constantes acima.
+        if ((raw & BYTE_REVERSE16_MASK) == BYTE_REVERSE16_REV_VALUE
+                || (raw & BYTE_REVERSE16_MASK) == BYTE_REVERSE16_REV16_VALUE
+                || (raw & BYTE_REVERSE16_MASK) == BYTE_REVERSE16_REVSH_VALUE) {
+            if (!architecture.has(ArmFeature.BYTE_REVERSE)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int selector = raw & BYTE_REVERSE16_MASK;
+            int variant = selector == BYTE_REVERSE16_REV_VALUE ? 0 : selector == BYTE_REVERSE16_REV16_VALUE ? 1 : 2;
+            int rm = (raw >>> 3) & 0x7;
+            int rd = raw & 0x7;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.BYTE_REVERSE, rd, rm, -1, variant, false, false, false);
+        }
+
+        // `SXTH`/`SXTB`/`UXTH`/`UXTB` de 16 bits, sem acumulador (ARMv6 T16, B9.3): ver
+        // constantes acima (achado de triagem: NÃO são `SXTAH`/`SXTAB`/`UXTAH`/`UXTAB`).
+        if ((raw & EXTEND16_MASK) == EXTEND16_SXTH_VALUE || (raw & EXTEND16_MASK) == EXTEND16_SXTB_VALUE
+                || (raw & EXTEND16_MASK) == EXTEND16_UXTH_VALUE || (raw & EXTEND16_MASK) == EXTEND16_UXTB_VALUE) {
+            if (!architecture.has(ArmFeature.EXTEND_ROTATE)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int selector = raw & EXTEND16_MASK;
+            boolean unsigned = selector == EXTEND16_UXTH_VALUE || selector == EXTEND16_UXTB_VALUE;
+            int field = (selector == EXTEND16_SXTB_VALUE || selector == EXTEND16_UXTB_VALUE)
+                    ? EXTEND_FIELD_BYTE : EXTEND_FIELD_HALFWORD;
+            int packed = (field << EXTEND_FIELD_SHIFT) | (unsigned ? EXTEND_UNSIGNED_BIT : 0);
+            int rm = (raw >>> 3) & 0x7;
+            int rd = raw & 0x7;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.EXTEND, rd, -1, rm, packed, false, false, false);
         }
 
         // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é
