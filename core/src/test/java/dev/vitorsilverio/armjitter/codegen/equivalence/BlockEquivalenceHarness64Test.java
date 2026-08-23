@@ -626,9 +626,15 @@ class BlockEquivalenceHarness64Test {
     @Test
     void fp64AluPropertyTestRandomValuesFixedSeed() {
         Random random = new Random(0x6_5_4L);
+        // B8.4 estende o property test com as 6 operações novas — NMUL/MAX/MIN/MAXNM/MINNM
+        // binárias (vn=0, vm=1, mesma convenção das 4 originais) e SQRT unária (só lê `vm=1`,
+        // mesma convenção de NEG/ABS/MOV — `vn=0` fica sem uso, harmless).
         Ir64Op.Fp64Operation[] operations = {
                 Ir64Op.Fp64Operation.ADD, Ir64Op.Fp64Operation.SUB,
-                Ir64Op.Fp64Operation.MUL, Ir64Op.Fp64Operation.DIV};
+                Ir64Op.Fp64Operation.MUL, Ir64Op.Fp64Operation.DIV,
+                Ir64Op.Fp64Operation.NMUL, Ir64Op.Fp64Operation.SQRT,
+                Ir64Op.Fp64Operation.MAX, Ir64Op.Fp64Operation.MIN,
+                Ir64Op.Fp64Operation.MAXNM, Ir64Op.Fp64Operation.MINNM};
         long pc = 0xB000;
         for (int i = 0; i < 50; i++) {
             boolean doublePrecision = random.nextBoolean();

@@ -306,6 +306,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> executeUndefinedInstructionTrap();
             case Ir64Op.Kind.ADDRESS_TRANSLATE ->
                     executeAddressTranslate(core, (Ir64Op.AddressTranslate) op);
+            case Ir64Op.Kind.FP64_MULTIPLY_ADD ->
+                    Ir64FpExecutor.executeFpMultiplyAdd(core, (Ir64Op.Fp64MultiplyAdd) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

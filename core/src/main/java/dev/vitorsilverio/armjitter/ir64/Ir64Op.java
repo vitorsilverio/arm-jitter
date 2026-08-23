@@ -35,7 +35,7 @@ public sealed interface Ir64Op permits
         Ir64Op.DataProcessing1Source, Ir64Op.MultiplyAccumulateLong, Ir64Op.MultiplyHigh,
         Ir64Op.EvaluateIntoFlags, Ir64Op.RotateIntoFlags, Ir64Op.ConvertFlags,
         Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap,
-        Ir64Op.AddressTranslate {
+        Ir64Op.AddressTranslate, Ir64Op.Fp64MultiplyAdd {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -119,6 +119,9 @@ public sealed interface Ir64Op permits
         public static final int UNDEFINED_INSTRUCTION_TRAP = 45;
         /// B10.6: `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` — ver {@link AddressTranslate}.
         public static final int ADDRESS_TRANSLATE = 46;
+        /// B8.4: `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (Floating-point data-processing, 3 source) —
+        /// ver {@link Fp64MultiplyAdd}.
+        public static final int FP64_MULTIPLY_ADD = 47;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -829,8 +832,14 @@ public sealed interface Ir64Op permits
     /// {@code IrOp.VfpOperation}) ficam FORA de propósito — não citados nesta leitura, ver
     /// Armadilhas da task. `MOV` é a forma registrador↔registrador de `FMOV` (cópia de bits, sem
     /// aritmética) — não confundir com {@link Fp64MoveImmediate} (`FMOV` imediato).
+    ///
+    /// B8.4 estende com `NMUL`/`SQRT` (unárias/binárias que a B6.5.2 tinha deixado de fora de
+    /// propósito, não por não existirem em A64 — `FMLA`/`FMLS` continuam de fora: essas formas
+    /// escalares fundidas vivem no espaço Advanced SIMD escalar `neon-dp.decode`, não em
+    /// "Floating-point data-processing", ver Não inclui da task) e `MAX`/`MIN`/`MAXNM`/`MINNM`
+    /// (binárias novas, sem equivalente no VFP32 — `FMAX`/`FMIN` só existem a partir do A64).
     enum Fp64Operation {
-        ADD, SUB, MUL, DIV, NEG, ABS, MOV
+        ADD, SUB, MUL, DIV, NEG, ABS, MOV, NMUL, SQRT, MAX, MIN, MAXNM, MINNM
     }
 
     /// `FADD`/`FSUB`/`FMUL`/`FDIV`/`FNEG`/`FABS`/`FMOV` registrador↔registrador (`ARM DDI 0487
@@ -906,6 +915,32 @@ public sealed interface Ir64Op permits
             /// Registrador de origem (índice `0`-`31`, `V<n>`).
             int vm) implements Ir64Op {
         @Override public int kind() { return Kind.FP64_CONVERT; }
+    }
+
+    /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (`ARM DDI 0487 C6.2` "Floating-point data-processing,
+    /// 3 source", B8.4): multiplicação-acumulação FUNDIDA (arredondamento único, `Math.fma`) — as
+    /// 4 formas são a MESMA operação `Vd = fma(±Vn, Vm, ±Va)` com sinais diferentes em `Vn`/`Va`
+    /// (confirmado contra `do_fmadd`/`translate-a64.c` real do QEMU: `neg_a`/`neg_n` como
+    /// parâmetros booleanos do mesmo helper para as 4 instruções — nenhuma delas nega `Vm`).
+    /// `FMADD`=(false,false), `FNMADD`=(true,true), `FMSUB`=(false,true), `FNMSUB`=(true,false).
+    /// A negação acontece no BIT DE SINAL (não `0-x`), mesma armadilha de {@link Fp64Operation#NEG} —
+    /// preserva o sinal de um `NaN` de entrada em vez de canonizá-lo.
+    record Fp64MultiplyAdd(
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// `true` inverte o sinal de `Va` antes da soma (`FNMADD`/`FNMSUB`).
+            boolean negateAddend,
+            /// `true` inverte o sinal de `Vn` antes da multiplicação (`FMSUB`/`FNMSUB`).
+            boolean negateProduct,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Primeiro fator da multiplicação.
+            int vn,
+            /// Segundo fator da multiplicação.
+            int vm,
+            /// Acumulador (somado — ou subtraído, ver {@link #negateAddend} — ao produto).
+            int va) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_MULTIPLY_ADD; }
     }
 
     /// `CCMP`/`CCMN` (`ARM DDI 0487 C6.2.25/24`, B6.8) — gap achado por uma sessão de F11

@@ -395,3 +395,23 @@ Disassembly of section .text:
  5fc:	d65f0bff 	retaa
  600:	d69f0bff 	eretaa
  604:	f4010000 	cbgt	x0, x1, 604 <litlabel+0x4f0>
+ 608:	1e2648a4 	fmax	s4, s5, s6
+ 60c:	1e6648a4 	fmax	d4, d5, d6
+ 610:	1e295907 	fmin	s7, s8, s9
+ 614:	1e695907 	fmin	d7, d8, d9
+ 618:	1e2c696a 	fmaxnm	s10, s11, s12
+ 61c:	1e6c696a 	fmaxnm	d10, d11, d12
+ 620:	1e2f79cd 	fminnm	s13, s14, s15
+ 624:	1e6f79cd 	fminnm	d13, d14, d15
+ 628:	1e238841 	fnmul	s1, s2, s3
+ 62c:	1e638841 	fnmul	d1, d2, d3
+ 630:	1e21c230 	fsqrt	s16, s17
+ 634:	1e61c230 	fsqrt	d16, d17
+ 638:	1f145672 	fmadd	s18, s19, s20, s21
+ 63c:	1f545672 	fmadd	d18, d19, d20, d21
+ 640:	1f18e6f6 	fmsub	s22, s23, s24, s25
+ 644:	1f58e6f6 	fmsub	d22, d23, d24, d25
+ 648:	1f3c777a 	fnmadd	s26, s27, s28, s29
+ 64c:	1f7c777a 	fnmadd	d26, d27, d28, d29
+ 650:	1f2087fe 	fnmsub	s30, s31, s0, s1
+ 654:	1f6087fe 	fnmsub	d30, d31, d0, d1

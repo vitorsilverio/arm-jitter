@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **57%** — 2287 de 3948 células aplicáveis decodificam.
+> **57%** — 2288 de 3948 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **88%** (607/684) |
 | v6-M | **22%** (88/385) |
 | v7-M | **56%** (217/385) |
-| A64 | **24%** (274/1135) |
+| A64 | **24%** (275/1135) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 24% (274/1135) |
+| A64 — AArch64 | 1161 | A64 24% (275/1135) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2022,9 +2022,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SHA256H` | ❌ |
 | `SHA256H2` | ❌ |
 | `SHA256SU1` | ❌ |
-| `SHA1H` | ✅ |
-| `SHA1SU1` | ✅ |
-| `SHA256SU0` | ✅ |
+| `SHA1H` | ❌ |
+| `SHA1SU1` | ❌ |
+| `SHA256SU0` | ❌ |
 | `SHA512H` | ❌ |
 | `SHA512H2` | ❌ |
 | `SHA512SU1` | ❌ |
@@ -2053,11 +2053,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FSUB_s` | ✅ |
 | `FDIV_s` | ✅ |
 | `FMUL_s` | ✅ |
-| `FNMUL_s` | ❌ |
-| `FMAX_s` | ❌ |
-| `FMIN_s` | ❌ |
-| `FMAXNM_s` | ❌ |
-| `FMINNM_s` | ❌ |
+| `FNMUL_s` | ✅ |
+| `FMAX_s` | ✅ |
+| `FMIN_s` | ✅ |
+| `FMAXNM_s` | ✅ |
+| `FMINNM_s` | ✅ |
 | `FMULX_s` | ❌ |
 | `FMULX_s` | ❌ |
 | `FCMEQ_s` | ❌ |
@@ -2080,8 +2080,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `UQADD_s` | ❌ |
 | `SQSUB_s` | ❌ |
 | `UQSUB_s` | ❌ |
-| `SUQADD_s` | ✅ |
-| `USQADD_s` | ✅ |
+| `SUQADD_s` | ❌ |
+| `USQADD_s` | ❌ |
 | `SSHL_s` | ❌ |
 | `USHL_s` | ❌ |
 | `SRSHL_s` | ❌ |
@@ -2102,11 +2102,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQRDMULH_s` | ❌ |
 | `SQRDMLAH_s` | ❌ |
 | `SQRDMLSH_s` | ❌ |
-| `SQDMULL_si` | ✅ |
 | `SQDMULL_si` | ❌ |
-| `SQDMLAL_si` | ✅ |
+| `SQDMULL_si` | ❌ |
 | `SQDMLAL_si` | ❌ |
-| `SQDMLSL_si` | ✅ |
+| `SQDMLAL_si` | ❌ |
+| `SQDMLSL_si` | ❌ |
 | `SQDMLSL_si` | ❌ |
 | `FADDP_s` | ❌ |
 | `FADDP_s` | ❌ |
@@ -2372,10 +2372,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FDOT_sb_vi` | ❌ |
 | `FDOT_hb_vi` | ❌ |
 | `FCSEL` | ❌ |
-| `FMADD` | ❌ |
-| `FMSUB` | ❌ |
-| `FNMADD` | ❌ |
-| `FNMSUB` | ❌ |
+| `FMADD` | ✅ |
+| `FMSUB` | ✅ |
+| `FNMADD` | ✅ |
+| `FNMSUB` | ✅ |
 | `EXT_d` | ❌ |
 | `EXT_q` | ❌ |
 | `TBL_TBX` | ❌ |
@@ -2448,7 +2448,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMOV_s` | ✅ |
 | `FABS_s` | ✅ |
 | `FNEG_s` | ✅ |
-| `FSQRT_s` | ❌ |
+| `FSQRT_s` | ✅ |
 | `FRINTN_s` | ❌ |
 | `FRINTP_s` | ❌ |
 | `FRINTM_s` | ❌ |
@@ -2608,7 +2608,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `CMEQ0_s` | ❌ |
 | `CMLE0_s` | ❌ |
 | `CMLT0_s` | ❌ |
-| `SQXTUN_s` | ✅ |
+| `SQXTUN_s` | ❌ |
 | `SQXTN_s` | ❌ |
 | `UQXTN_s` | ❌ |
 | `FCVTXN_s` | ❌ |

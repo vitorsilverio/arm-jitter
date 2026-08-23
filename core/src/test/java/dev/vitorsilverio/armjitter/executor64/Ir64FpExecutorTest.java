@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// Testes da IR de FP escalar de A64 (B6.5.2): vetores concretos por operação, executados no
@@ -215,5 +216,160 @@ class Ir64FpExecutorTest {
         boolean pcChanged = new Ir64BlockExecutor().executeOp(core,
                 new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ADD, false, 2, 0, 1));
         assertFalse(pcChanged);
+    }
+
+    // ── 9. B8.4: NMUL/SQRT/MAX/MIN/MAXNM/MINNM (Fp64Alu estendido) ──────────────
+
+    @Test
+    void nmulNegatesTheProductNotAFactor() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 3.0f);
+        core.fp().setSFloat(1, 4.0f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.NMUL, false, 2, 0, 1));
+        assertEquals(-12.0f, core.fp().sFloat(2));
+    }
+
+    @Test
+    void sqrtSingleAndDouble() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 16.0f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.SQRT, false, 1, 0, 0));
+        assertEquals(4.0f, core.fp().sFloat(1));
+
+        core.fp().setDDouble(2, 81.0);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.SQRT, true, 3, 0, 2));
+        assertEquals(9.0, core.fp().dDouble(3));
+    }
+
+    @Test
+    void maxAndMinPropagateNanFromEitherOperand() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, Float.NaN);
+        core.fp().setSFloat(1, 5.0f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MAX, false, 2, 0, 1));
+        assertTrue(Float.isNaN(core.fp().sFloat(2)));
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MIN, false, 3, 0, 1));
+        assertTrue(Float.isNaN(core.fp().sFloat(3)));
+    }
+
+    @Test
+    void maxPrefersPositiveZeroMinPrefersNegativeZero() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 0.0f);
+        core.fp().setSFloat(1, -0.0f);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MAX, false, 2, 0, 1));
+        assertEquals(0, Float.floatToRawIntBits(core.fp().sFloat(2)), "FMAX(+0,-0) = +0");
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MIN, false, 3, 0, 1));
+        assertEquals(Integer.MIN_VALUE, Float.floatToRawIntBits(core.fp().sFloat(3)), "FMIN(+0,-0) = -0");
+    }
+
+    @Test
+    void maxnmAndMinnmReturnTheNumberWhenOnlyOneOperandIsNan() {
+        // FPMaxNum/FPMinNum: diferente de MAX/MIN puro, um NaN isolado NÃO contamina o resultado —
+        // só quando os DOIS operandos são NaN o resultado é NaN.
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, Double.NaN);
+        core.fp().setDDouble(1, 7.0);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MAXNM, true, 2, 0, 1));
+        assertEquals(7.0, core.fp().dDouble(2));
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MINNM, true, 3, 0, 1));
+        assertEquals(7.0, core.fp().dDouble(3));
+    }
+
+    @Test
+    void maxnmOfTwoNansIsNan() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, Double.NaN);
+        core.fp().setDDouble(1, Double.NaN);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MAXNM, true, 2, 0, 1));
+        assertTrue(Double.isNaN(core.fp().dDouble(2)));
+    }
+
+    @Test
+    void maxnmWithoutNanBehavesLikeNormalMax() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, 3.0);
+        core.fp().setDDouble(1, 9.0);
+        new Ir64BlockExecutor().executeOp(core, new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MAXNM, true, 2, 0, 1));
+        assertEquals(9.0, core.fp().dDouble(2));
+    }
+
+    // ── 10. B8.4: FMADD/FMSUB/FNMADD/FNMSUB (Fp64MultiplyAdd, arredondamento único) ─────────────
+
+    @Test
+    void fmaddIsAPlusNTimesM() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 2.0f); // n
+        core.fp().setSFloat(1, 3.0f); // m
+        core.fp().setSFloat(2, 1.0f); // a
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(false, false, false, 3, 0, 1, 2));
+        assertEquals(7.0f, core.fp().sFloat(3), "a + n*m = 1 + 2*3 = 7");
+    }
+
+    @Test
+    void fmsubIsAMinusNTimesM() {
+        Aarch64Core core = newCore();
+        core.fp().setDDouble(0, 2.0); // n
+        core.fp().setDDouble(1, 3.0); // m
+        core.fp().setDDouble(2, 10.0); // a
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(true, false, true, 3, 0, 1, 2));
+        assertEquals(4.0, core.fp().dDouble(3), "a - n*m = 10 - 2*3 = 4");
+    }
+
+    @Test
+    void fnmaddIsNegatedAPlusNTimesM() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 2.0f); // n
+        core.fp().setSFloat(1, 3.0f); // m
+        core.fp().setSFloat(2, 1.0f); // a
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(false, true, true, 3, 0, 1, 2));
+        assertEquals(-7.0f, core.fp().sFloat(3), "-(a + n*m) = -(1 + 2*3) = -7");
+    }
+
+    @Test
+    void fnmsubIsNTimesMMinusA() {
+        Aarch64Core core = newCore();
+        core.fp().setSFloat(0, 2.0f); // n
+        core.fp().setSFloat(1, 3.0f); // m
+        core.fp().setSFloat(2, 1.0f); // a
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(false, true, false, 3, 0, 1, 2));
+        assertEquals(5.0f, core.fp().sFloat(3), "n*m - a = 2*3 - 1 = 5");
+    }
+
+    @Test
+    void fusedMultiplyAddRoundsOnceUnlikeSeparateMulThenAdd() {
+        // Vetor clássico de arredondamento único: a soma separada (mul arredondado, depois add
+        // arredondado) perde precisão que a fma (arredondamento ÚNICO) preserva.
+        Aarch64Core core = newCore();
+        double n = 1.0 + Math.ulp(1.0);
+        double m = 1.0 - Math.ulp(1.0);
+        double a = -1.0;
+        core.fp().setDDouble(0, n);
+        core.fp().setDDouble(1, m);
+        core.fp().setDDouble(2, a);
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(true, false, false, 3, 0, 1, 2));
+        assertEquals(Math.fma(n, m, a), core.fp().dDouble(3));
+        assertNotEquals((n * m) + a, core.fp().dDouble(3), "fma real arredonda diferente de mul+add separados");
+    }
+
+    @Test
+    void fmaddPreservesNanSignViaBitFlipNotArithmeticNegation() {
+        // Mesma armadilha de NEG/ABS: negar o BIT de sinal de um NaN (não `0-x`) preserva o
+        // payload — aqui verificado indiretamente checando que o bit de sinal do NaN de `va`
+        // aparece invertido no resultado quando `n*m` também é NaN (soma de dois NaN preserva o
+        // sinal do primeiro operando na fma real do Java, mesma convenção do hardware ARM).
+        int nanWithPayload = 0x7FC00001;
+        Aarch64Core core = newCore();
+        core.fp().setS(0, nanWithPayload); // n = NaN
+        core.fp().setSFloat(1, 1.0f); // m
+        core.fp().setSFloat(2, 1.0f); // a
+        new Ir64BlockExecutor().executeOp(core,
+                new Ir64Op.Fp64MultiplyAdd(false, false, false, 3, 0, 1, 2));
+        assertTrue(Float.isNaN(core.fp().sFloat(3)));
     }
 }

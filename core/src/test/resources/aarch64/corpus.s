@@ -461,3 +461,29 @@ retaa
 eretaa
 .arch_extension cmpbr
 cbgt x0, x1, 0
+
+// -- B8.4: FP escalar aritmética — FMAX/FMIN/FMAXNM/FMINNM/FNMUL (2-source, opcode novo) --
+fmax s4, s5, s6
+fmax d4, d5, d6
+fmin s7, s8, s9
+fmin d7, d8, d9
+fmaxnm s10, s11, s12
+fmaxnm d10, d11, d12
+fminnm s13, s14, s15
+fminnm d13, d14, d15
+fnmul s1, s2, s3
+fnmul d1, d2, d3
+
+// -- B8.4: FSQRT (1-source, opcode 3) --
+fsqrt s16, s17
+fsqrt d16, d17
+
+// -- B8.4: FMADD/FMSUB/FNMADD/FNMSUB (3-source) --
+fmadd s18, s19, s20, s21
+fmadd d18, d19, d20, d21
+fmsub s22, s23, s24, s25
+fmsub d22, d23, d24, d25
+fnmadd s26, s27, s28, s29
+fnmadd d26, d27, d28, d29
+fnmsub s30, s31, s0, s1
+fnmsub d30, d31, d0, d1

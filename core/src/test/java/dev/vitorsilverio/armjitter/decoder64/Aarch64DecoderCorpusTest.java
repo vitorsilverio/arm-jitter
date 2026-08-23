@@ -2113,16 +2113,22 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void floatingPointSquareRootStaysUnsupported() {
-        // `fsqrt s3, s4` — MESMO padrão fixo de 1-source ("10000" em bits[14:10]) das formas
-        // cobertas (FMOV/FABS/FNEG/FCVT), mas opcode diferente (3) — regressão negativa
-        // confirmando que o `switch` de opcode não "vaza" para SQRT (fora de escopo, herdado de
-        // B6.5.2).
+    void floatingPointSquareRootNowDecodesSinceB84() {
+        // `fsqrt s3, s4` — MESMO padrão fixo de 1-source ("10000" em bits[14:10]) das formas já
+        // cobertas por B6.5.3 (FMOV/FABS/FNEG/FCVT), opcode(20:15)=3. Até a B8.4 esta asserção era
+        // NEGATIVA (fora de escopo, herdado de B6.5.2) — agora `FSQRT` faz parte do escopo
+        // implementado (ver `fsqrtSingle`/`fsqrtDouble`, que usam o corpus real em vez deste vetor
+        // manual); mantido como regressão de que o `switch` de opcode reconhece exatamente este
+        // valor.
         int word = 0x1e21c083;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(scratch, 0);
+        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(3, op.vd());
+        assertEquals(4, op.vm());
     }
 
     @Test
@@ -3700,5 +3706,197 @@ class Aarch64DecoderCorpusTest {
     @Test
     void cbccCompareBranchUnsupported() {
         assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x604));
+    }
+
+    // ── B8.4: FP escalar aritmética — offsets 0x608+, apêndice do mesmo corpus.s/corpus.bin/ ──────
+    // ── corpus.objdump.txt ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    void fmaxSingle() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x608);
+        assertEquals(Ir64Op.Fp64Operation.MAX, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(4, op.vd());
+        assertEquals(5, op.vn());
+        assertEquals(6, op.vm());
+    }
+
+    @Test
+    void fmaxDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x60c);
+        assertEquals(Ir64Op.Fp64Operation.MAX, op.op());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void fminSingle() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x610);
+        assertEquals(Ir64Op.Fp64Operation.MIN, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(7, op.vd());
+        assertEquals(8, op.vn());
+        assertEquals(9, op.vm());
+    }
+
+    @Test
+    void fminDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x614);
+        assertEquals(Ir64Op.Fp64Operation.MIN, op.op());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void fmaxnmSingle() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x618);
+        assertEquals(Ir64Op.Fp64Operation.MAXNM, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(10, op.vd());
+        assertEquals(11, op.vn());
+        assertEquals(12, op.vm());
+    }
+
+    @Test
+    void fmaxnmDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x61c);
+        assertEquals(Ir64Op.Fp64Operation.MAXNM, op.op());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void fminnmSingle() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x620);
+        assertEquals(Ir64Op.Fp64Operation.MINNM, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(13, op.vd());
+        assertEquals(14, op.vn());
+        assertEquals(15, op.vm());
+    }
+
+    @Test
+    void fminnmDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x624);
+        assertEquals(Ir64Op.Fp64Operation.MINNM, op.op());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void fnmulSingle() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x628);
+        assertEquals(Ir64Op.Fp64Operation.NMUL, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(1, op.vd());
+        assertEquals(2, op.vn());
+        assertEquals(3, op.vm());
+    }
+
+    @Test
+    void fnmulDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x62c);
+        assertEquals(Ir64Op.Fp64Operation.NMUL, op.op());
+        assertTrue(op.doublePrecision());
+    }
+
+    @Test
+    void fsqrtSingle() {
+        // fsqrt s16, s17 — 1-source (unário), operando único em `vm` (Rn do encoding), mesma
+        // convenção de fnegSingle/fabsSingle.
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x630);
+        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        assertFalse(op.doublePrecision());
+        assertEquals(16, op.vd());
+        assertEquals(17, op.vm());
+    }
+
+    @Test
+    void fsqrtDouble() {
+        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x634);
+        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        assertTrue(op.doublePrecision());
+        assertEquals(16, op.vd());
+        assertEquals(17, op.vm());
+    }
+
+    @Test
+    void fmaddSingle() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x638);
+        assertFalse(op.doublePrecision());
+        assertFalse(op.negateAddend());
+        assertFalse(op.negateProduct());
+        assertEquals(18, op.vd());
+        assertEquals(19, op.vn());
+        assertEquals(20, op.vm());
+        assertEquals(21, op.va());
+    }
+
+    @Test
+    void fmaddDouble() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x63c);
+        assertTrue(op.doublePrecision());
+        assertFalse(op.negateAddend());
+        assertFalse(op.negateProduct());
+        assertEquals(18, op.vd());
+        assertEquals(19, op.vn());
+        assertEquals(20, op.vm());
+        assertEquals(21, op.va());
+    }
+
+    @Test
+    void fmsubSingle() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x640);
+        assertFalse(op.doublePrecision());
+        assertFalse(op.negateAddend());
+        assertTrue(op.negateProduct());
+        assertEquals(22, op.vd());
+        assertEquals(23, op.vn());
+        assertEquals(24, op.vm());
+        assertEquals(25, op.va());
+    }
+
+    @Test
+    void fmsubDouble() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x644);
+        assertTrue(op.doublePrecision());
+        assertFalse(op.negateAddend());
+        assertTrue(op.negateProduct());
+    }
+
+    @Test
+    void fnmaddSingle() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x648);
+        assertFalse(op.doublePrecision());
+        assertTrue(op.negateAddend());
+        assertTrue(op.negateProduct());
+        assertEquals(26, op.vd());
+        assertEquals(27, op.vn());
+        assertEquals(28, op.vm());
+        assertEquals(29, op.va());
+    }
+
+    @Test
+    void fnmaddDouble() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x64c);
+        assertTrue(op.doublePrecision());
+        assertTrue(op.negateAddend());
+        assertTrue(op.negateProduct());
+    }
+
+    @Test
+    void fnmsubSingle() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x650);
+        assertFalse(op.doublePrecision());
+        assertTrue(op.negateAddend());
+        assertFalse(op.negateProduct());
+        assertEquals(30, op.vd());
+        assertEquals(31, op.vn());
+        assertEquals(0, op.vm());
+        assertEquals(1, op.va());
+    }
+
+    @Test
+    void fnmsubDouble() {
+        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x654);
+        assertTrue(op.doublePrecision());
+        assertTrue(op.negateAddend());
+        assertFalse(op.negateProduct());
     }
 }
