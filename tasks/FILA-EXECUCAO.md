@@ -135,11 +135,13 @@ da B9.7. Nova baseline de release: v7-A **88%**, global **59%**. A B9.7 mediu co
 (não a do `1.0.0`) e ficou abaixo dos dois gatilhos (v7-A +7pp, global +1pp) — **sem marco de
 release pendente no momento**.
 
-**🔔 F7 NÃO foi feita ainda** (confirmado 2026-08-23, verificação nos 5 `pom.xml` dos consumidores:
-gbaemu/ndsemu/armbox/virtual-arm-box/n3dsemu continuam todos em `arm-jitter:1.0.0`) — a mesma janela
-que a F4 abriu e a F7 fechou da última vez está aberta de novo desde o `dcb5ca1`. Próxima sessão
-deveria fechar isso antes de mais trabalho de cobertura no arm-jitter, seguindo
-`trilha-f-infra/f7-consumidores-central.md`.
+✅ **F7 rodada 2 fechada (2026-08-23)** — os 5 consumidores (gbaemu/ndsemu/armbox/virtual-arm-box/
+n3dsemu) subiram de `1.0.0` para `1.1.0`; `org.ow2.asm` já não estava mais declarado em nenhum
+(nada a remover). Aceite reconfirmado com `~/.m2/repository/dev/vitorsilverio` renomeada: gbaemu
+240, ndsemu 183, armbox 40/41 (falha pré-existente, não relacionada), virtual-arm-box 87, n3dsemu
+199 — todos resolvendo do Central. Commit+push nos 5 consumidores e no arm-jitter (docs). Ver
+**Resultado** em `trilha-f-infra/f7-consumidores-central.md`. Janela F4/F7 fechada de novo — volta
+ao usuário decidir o próximo item (Onda 5 restante: Q11 triagem 32-bit, ou Q12+ AdvSIMD A64).
 
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à

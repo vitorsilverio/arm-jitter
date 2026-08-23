@@ -151,3 +151,50 @@ completo** desta onda — os dois emuladores verdes são o gate de regressão.
   de `src/`). Não os apague, não os mova, e use paths explícitos no `git add`.
 - O armbox depende **também** de `arm-jitter-truffle` e de `org.graalvm.sdk:nativeimage` —
   esse último **não** sai, é dependência legítima e direta dele.
+
+## Resultado
+
+**Rodada 1 (2026-08-15)**: task executada como especificada acima, contra a `1.0.0`. Ver
+`tasks/trilha-f-infra/INDICE.md` (linha F7) para o relato original.
+
+**Rodada 2 (2026-08-23)**: a `1.1.0` foi publicada no Central pela B8.5 (commit `dcb5ca1`, mesmo
+dia da B8.5, antes da B9.7 começar) — mesma janela que a F4 tinha aberto da primeira vez, agora
+reaberta. Confirmado nos 5 `pom.xml` dos consumidores (`gbaemu`/`ndsemu`/`armbox`/
+`virtual-arm-box`/`n3dsemu` — o `n3dsemu` é novo desde a rodada 1, não existia em 2026-08-15):
+todos continuavam pedindo `1.0.0`.
+
+**Diferença de escopo desta rodada**: `org.ow2.asm:asm` já não estava declarado em nenhum dos 5
+POMs (`grep -n "org.ow2.asm"` vazio nos 5) — a rodada 1 já tinha feito essa parte, nada a remover
+de novo. Trabalho real: bump de versão + docs.
+
+1. `gbaemu/pom.xml`, `ndsemu/pom.xml`, `virtual-arm-box/pom.xml`, `n3dsemu/pom.xml`: `arm-jitter`
+   `1.0.0` → `1.1.0`.
+2. `armbox/pom.xml`: `arm-jitter` e `arm-jitter-truffle`, ambos `1.0.0` → `1.1.0`.
+3. Docs com a versão de exemplo escrita literalmente (`README.md`/`AGENTS.md`): `gbaemu/README.md`,
+   `ndsemu/README.md`+`AGENTS.md`, `armbox/README.md`, `n3dsemu/README.md`+`AGENTS.md`,
+   `arm-jitter/README.md` ("Coordenadas Maven atuais"). `virtual-arm-box` não cita a versão em
+   prosa, nada a mudar lá. A frase histórica do `arm-jitter/README.md` ("Desde a publicação... 1.0.0,
+   task F5") foi deixada como está — é um registro do evento original, não uma instrução de versão
+   atual.
+
+**Prova de resolução do Central** (`~/.m2/repository/dev/vitorsilverio` renomeada para
+`.bak` e restaurada ao final, `mvn test` com JBR 25 em cada repo, sem `-o`):
+
+| Repo | Resultado |
+|------|-----------|
+| gbaemu | 240 testes, 17 skipped, BUILD SUCCESS |
+| ndsemu | 183 testes, 0 skipped, BUILD SUCCESS |
+| armbox | 40/41 — 1 erro em `Armv7TortureTest` (`ArrayIndexOutOfBounds` em `VfpRegisters`), a mesma
+  falha pré-existente já documentada em várias tasks anteriores (B10.x, B9.x), não relacionada a
+  esta mudança |
+| virtual-arm-box | 87 testes, 5 skipped, BUILD SUCCESS |
+| n3dsemu | 199 testes, 0 skipped, BUILD SUCCESS |
+
+`mvn -o dependency:tree` do gbaemu (com o `.m2` já restaurado) confirma `org.ow2.asm:asm:9.7.1`
+chegando transitivo do `arm-jitter`.
+
+`mvn test` do arm-jitter em si não precisou rodar — nenhum arquivo de código tocado, só POMs e
+Markdown dos consumidores + `arm-jitter/README.md`.
+
+Commit por repo (`F7: atualiza arm-jitter [/arm-jitter-truffle] para 1.1.0 (Maven Central)`), push
+feito nos 5 consumidores + no arm-jitter.
