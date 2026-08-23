@@ -200,14 +200,18 @@ class Thumb2MultiplyDivideDecoderTest {
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
-    // ── Vizinho reservado (ARMv7 fora de escopo, ex. SMLAD family=0010) — UNDEFINED, não decode errado ──
+    // ── Vizinho reservado dentro do prefixo 0xFB — UNDEFINED, não decode errado ─────────────
 
     @Test
     void reservedNeighborFamilyIsUndefinedNotDecodedAsMlsOrDivide() {
-        // family=0010 (SMLAD/SMLADX, ARMv7, nenhuma task cobre ainda) — reivindicado por
-        // claimsEncodingSpace (todo o prefixo 0xFB), então cai em UNDEFINED controlado.
+        // family=1111: a B9.7 preencheu as famílias 0x0-0xE inteiras (MUL/MLA/MLS, SMLA<x><y>,
+        // SMLAD{X}, SMLAW<y>/SMULW<y>, SMLSD{X}, SMMLA{R}, SMMLS{R}, USAD(A)8, SMULL, SDIV,
+        // UMULL, UDIV, SMLAL/SMLAL<x><y>/SMLALD{X}, SMLSLD{X}, UMLAL/UMAAL) — só 0xF permanece
+        // reservado no `t32.decode` real (nenhuma instrução usa esse nibble alto), continua
+        // reivindicado por `claimsEncodingSpace` (todo o prefixo 0xFB), então cai em UNDEFINED
+        // controlado.
         TestAddressSpace memory = new TestAddressSpace(16);
-        memory.put16(0, hi(0x2, 1));
+        memory.put16(0, hi(0xF, 1));
         memory.put16(2, lo(2, 0, 0, 3));
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());

@@ -736,6 +736,81 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
         assertNotEquals(InstructionKind.STORE_MULTIPLE, instruction.kind());
     }
 
+    // ── B9.7: RFE/SRS — mesmos 2 combos (P,U) que LDM.W/STM.W NÃO usam, dentro de EXTRA_TOP7 ──
+
+    /// `RFE{DA,DB,IA,IB} Rn{!}` — T32 só define os combos `(P,U)==(0,0)`("DA")/`(1,1)`("IB"); os
+    /// outros 2 pertencem a `LDM.W`/`STM.W` (ver `ldmStm` acima). Mesmo layout de `ldmStm`, sem
+    /// `mask` (tail fixo `0xC000`).
+    private static int rfeT(boolean p, boolean u, boolean w, int rn) {
+        return (0b1110100 << 25) | ((p ? 1 : 0) << 24) | ((u ? 1 : 0) << 23)
+                | ((w ? 1 : 0) << 21) | (1 << 20) | (rn << 16) | 0xC000;
+    }
+
+    /// `SRS{DA,DB,IA,IB} #mode{!}` — `Rn`(19:16) fixo em `0b1101` (não é registrador real).
+    private static int srsT(boolean p, boolean u, boolean w, int mode) {
+        return (0b1110100 << 25) | ((p ? 1 : 0) << 24) | ((u ? 1 : 0) << 23)
+                | ((w ? 1 : 0) << 21) | (0b1101 << 16) | 0xC000 | (mode & 0x1F);
+    }
+
+    @Test
+    void rfeDecodesForBothValidPuCombinations() {
+        // (P,U)==(0,0) e (1,1) — os 2 combos que pertencem a RFE/SRS neste espaço (ver javadoc).
+        boolean[][] puCombos = {{false, false}, {true, true}};
+        for (boolean[] pu : puCombos) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            int raw = rfeT(pu[0], pu[1], true, 1); // RFE r1!
+            memory.put16(0, hi(raw));
+            memory.put16(2, lo(raw));
+            DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+            assertEquals(InstructionKind.RETURN_FROM_EXCEPTION, instruction.kind(),
+                    "p=" + pu[0] + " u=" + pu[1]);
+            assertEquals(1, instruction.sourceRegister());
+            assertTrue(instruction.writeback());
+        }
+    }
+
+    @Test
+    void srsDecodesForBothValidPuCombinationsWithTargetMode() {
+        boolean[][] puCombos = {{false, false}, {true, true}};
+        for (boolean[] pu : puCombos) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            int raw = srsT(pu[0], pu[1], true, 0b10011); // SRS #0x13 (SVC)!
+            memory.put16(0, hi(raw));
+            memory.put16(2, lo(raw));
+            DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+            assertEquals(InstructionKind.STORE_RETURN_STATE, instruction.kind(),
+                    "p=" + pu[0] + " u=" + pu[1]);
+            assertEquals(0b10011, instruction.immediate());
+            assertTrue(instruction.writeback());
+        }
+    }
+
+    @Test
+    void rfeIsUndefinedWithoutModeChangeInstructionsFeature() {
+        ArmArchitecture noModeChange = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV4T, "NoModeChange-Rfe", ArmFeature.THUMB2)
+                .withThumb32DecoderExtensions(List.of(new Thumb2LoadStoreDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV4T, "NoModeChange-Rfe-Inner", ArmFeature.THUMB2))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = rfeT(false, false, true, 1);
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+        DecodedInstruction instruction = new ThumbDecoder(noModeChange).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void rfeAndSrsAreNotClaimedForTheOtherTwoPuCombinations() {
+        // (P,U)==(0,1) e (1,0) pertencem a LDM.W/STM.W (IA/DB) — `decodeReturnFromExceptionOrStoreReturnState`
+        // nunca é chamado para esses combos (branch `if`/`else if` do chamador já os desvia).
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = rfeT(false, true, true, 1); // (P=0,U=1) = IA -> pertence a LDM.W, não RFE
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+        assertNotEquals(InstructionKind.RETURN_FROM_EXCEPTION, instruction.kind());
+    }
+
     @Test
     void ldmWideWithStackPointerInListIsNotClaimedAsLoadMultiple() {
         // SP na lista é UNPREDICTABLE; mesma correção de B2.2.2 do teste acima.

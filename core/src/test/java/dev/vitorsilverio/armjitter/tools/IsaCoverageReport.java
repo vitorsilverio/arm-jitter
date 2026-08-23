@@ -164,6 +164,14 @@ public final class IsaCoverageReport {
             {1, 2, 3, 4, 1},
             {0, 0, 0, 0, 0},
             {2, 4, 6, 8, 2},
+            // B9.7: achado real — nenhuma das 4 estratégias acima produz >=2 bits setados num
+            // campo NÃO-registrador (ex. `list:16` de LDM/STM), então qualquer instrução cuja
+            // UNPREDICTABLE-check exija >=2 bits (`Thumb2LoadStoreDecoder#decodeMultipleTransfer`,
+            // `Integer.bitCount(mask) < 2`) sempre reportava ❌ mesmo já implementada e testada
+            // (`STM_t32`/`LDM_t32`, confirmado por `Thumb2LoadStoreDecoderTest` linhas 668+) — falso
+            // negativo do MEDIDOR, não da implementação. `6` (0b110) garante 2 bits num campo de
+            // 16 bits sem quebrar campos de 1 bit já cobertos por outras estratégias (0/1 acima).
+            {1, 2, 3, 4, 6},
     };
 
     private IsaCoverageReport() {

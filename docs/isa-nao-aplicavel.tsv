@@ -21,14 +21,14 @@ LDAH	*	ARMv8-A (load-acquire)
 LDAEX	*	ARMv8-A (load-acquire exclusive)
 LDAEXB	*	ARMv8-A (load-acquire exclusive)
 LDAEXH	*	ARMv8-A (load-acquire exclusive)
-LDAEXD	*	ARMv8-A (load-acquire exclusive)
+LDAEXD*	*	ARMv8-A (load-acquire exclusive); `*` casa também `LDAEXD_t32` (inventário do t32.decode)
 STL	*	ARMv8-A (store-release)
 STLB	*	ARMv8-A (store-release)
 STLH	*	ARMv8-A (store-release)
 STLEX	*	ARMv8-A (store-release exclusive)
 STLEXB	*	ARMv8-A (store-release exclusive)
 STLEXH	*	ARMv8-A (store-release exclusive)
-STLEXD	*	ARMv8-A (store-release exclusive)
+STLEXD*	*	ARMv8-A (store-release exclusive); `*` casa também `STLEXD_t32` (inventário do t32.decode)
 
 # ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
 CRC32*	*	ARMv8-A; não existe em ARMv4T..ARMv7-A
@@ -158,3 +158,43 @@ FCVTPS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
 FCVTPU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
 FCVTZS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
 FCVTZU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
+
+# ── T32 (B9.7): MVE (Helium) "long shift" — ARMv8.1-M, exigem `@mve_sh_ri`/`@mve_shl_ri`/ ──────
+# ── `@mve_sh_rr`/`@mve_shl_rr` (t32.decode), espaço reservado em ARMv7-A puro. CONFERIDO: o ────
+# ── grupo inteiro só existe sob `ARM_FEATURE_MVE`/`ARM_FEATURE_V8_1M` no QEMU. ──────────────────
+UQSHL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+LSLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+UQSHLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+URSHR_ri	v7-A	ARMv8.1-M/MVE (Helium)
+LSRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+URSHRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+SRSHR_ri	v7-A	ARMv8.1-M/MVE (Helium)
+ASRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+SRSHRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+SQSHL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+SQSHLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
+UQRSHL_rr	v7-A	ARMv8.1-M/MVE (Helium)
+LSLL_rr	v7-A	ARMv8.1-M/MVE (Helium)
+UQRSHLL64_rr	v7-A	ARMv8.1-M/MVE (Helium)
+SQRSHR_rr	v7-A	ARMv8.1-M/MVE (Helium)
+ASRL_rr	v7-A	ARMv8.1-M/MVE (Helium)
+SQRSHRL64_rr	v7-A	ARMv8.1-M/MVE (Helium)
+UQRSHLL48_rr	v7-A	ARMv8.1-M/MVE (Helium)
+SQRSHRL48_rr	v7-A	ARMv8.1-M/MVE (Helium)
+
+# ── T32 (B9.7): CLRM — QEMU t32.decode comentário explícito "M-profile CLRM uses that encoding" ─
+# ── (mesmo bit-pattern de LDM_t32 com Rn=1111, que em A/R-profile é UNDEFINED — Rn=PC não pode ──
+# ── ser base de LDM). Não existe em v7-A. ────────────────────────────────────────────────────────
+CLRM	v7-A	ARMv8-M mainline (perfil M, não A/R-profile)
+
+# ── T32 (B9.7): SB (Speculation Barrier) — CONFERIDO via `dc_isar_feature(aa32_sb, s)` em ──────
+# ── `trans_SB` (target/arm/tcg/translate.c real do QEMU): FEAT_SB, extensão opcional ARMv8.0, ──
+# ── posterior a v7-A (backport arquitetural, não faz parte do ARMv7-A base). ────────────────────
+SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
+
+# ── T32 (B9.7): MRS_bank/MSR_bank/ERET/SMC/HVC NÃO entram aqui — regra do usuário (2026-08-23,
+# ── ver memória `feedback-nunca-excluir-instrucao-arm`): são instruções REAIS do ARMv7VE/Security
+# ── Extensions, mesma versão de arquitetura-alvo (v7-A), só optativas — não "posteriores". O
+# ── precedente é EL1/EL2 no AArch64 (B10): construir Hyp/Monitor mode, não excluir. Ficam ❌
+# ── na tabela até uma escada própria (Hyp mode + Monitor mode de 32 bits) — ver nota em
+# ── `trilha-b-arquiteturas/b9.7-t32-thumb2.md`.

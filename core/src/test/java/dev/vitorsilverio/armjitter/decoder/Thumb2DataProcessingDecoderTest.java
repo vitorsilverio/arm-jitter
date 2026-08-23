@@ -86,6 +86,21 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
     private static final ArmArchitecture ARM_CLASSIC_BITFIELD_ARCH = ArmArchitecture.extending(
             ArmArchitecture.ARMV6K, "ARM-TestClassic-BitField", ArmFeature.BIT_FIELD);
 
+    // ── B9.7: PKH — mesmo grupo "Data-processing (register)" (`op4=0110`, `S` sempre 0) ────
+
+    private static final ArmArchitecture PKH_ARCH_FEATURES = ArmArchitecture.extending(
+            ArmArchitecture.ARMV6K, "ARMv7-TestThumb2-Pkh", ArmFeature.THUMB2, ArmFeature.PACK_SATURATE);
+    private static final ArmArchitecture PKH_ARCH = PKH_ARCH_FEATURES
+            .withThumb32DecoderExtensions(List.of(new Thumb2DataProcessingDecoder(PKH_ARCH_FEATURES)));
+    private static final ArmArchitecture ARM_CLASSIC_PKH_ARCH = ArmArchitecture.extending(
+            ArmArchitecture.ARMV6K, "ARM-TestClassic-Pkh", ArmFeature.PACK_SATURATE);
+
+    private static ArmCore newPkhCore() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), PKH_ARCH);
+        core.cpsr().setThumbMode(true);
+        return core;
+    }
+
     /// `lo` das formas de bitfield: `0 imm3 Rd imm2 0 widthOrMsb` — layout DIFERENTE de
     /// {@link #dataProcessingLo}, não contíguo (`imm3` em `raw[14:12]`, `imm2` em `raw[7:6]`).
     private static int bitFieldLo(int imm3, int rd, int imm2, int widthMinusOneOrMsb) {
@@ -434,5 +449,60 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
         memory.put16(2, bitFieldLo(0b000, 0, 0b00, 7));
         DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV6K).decode(memory, 0);
         assertNotEquals(InstructionKind.BIT_FIELD_EXTRACT, instruction.kind());
+    }
+
+    // ── B9.7: PKH ────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void pkhBtWithNoShiftMatchesArmClassicEquivalent() {
+        // PKH r0, r1, r2 (BT, sem shift): Rd[31:16] = (Rm LSL 0)[31:16], Rd[15:0] = Rn[15:0]
+        // (ARM DDI 0406C A8.8.125) -> r0 = 0xAAAA0000 | 0x0000BBBB.
+        ArmCore thumb2Core = newPkhCore();
+        thumb2Core.setRegister(1, 0xFFFF_BBBB);
+        thumb2Core.setRegister(2, 0xAAAA_FFFF);
+        runBitField(thumb2Core, 0xEAC1, 0x0002); // PKHBT r0,r1,r2 (imm5=0,tb=0)
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_PKH_ARCH);
+        armCore.setRegister(1, 0xFFFF_BBBB);
+        armCore.setRegister(2, 0xAAAA_FFFF);
+        armCore.memory().write32(0, 0xE681_0012); // PKHBT r0,r1,r2
+        armCore.step();
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0xAAAA_BBBB, thumb2Core.register(0));
+    }
+
+    @Test
+    void pkhTbWithShiftSixteenMatchesArmClassicEquivalent() {
+        // PKH r0, r1, r2, ASR #16 (TB): Rd = Rn[31:16] | (Rm ASR #16)[15:0] -> r0 = 0xFFFF0000 | 0x0000AAAA.
+        ArmCore thumb2Core = newPkhCore();
+        thumb2Core.setRegister(1, 0xFFFF_BBBB);
+        thumb2Core.setRegister(2, 0xAAAA_0000);
+        runBitField(thumb2Core, 0xEAC1, 0x4022); // PKHTB r0,r1,r2,ASR #16 (imm5=16,tb=1)
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ARM_CLASSIC_PKH_ARCH);
+        armCore.setRegister(1, 0xFFFF_BBBB);
+        armCore.setRegister(2, 0xAAAA_0000);
+        armCore.memory().write32(0, 0xE681_0852); // PKHTB r0,r1,r2,ASR #16
+        armCore.step();
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+        assertEquals(0xFFFF_AAAA, thumb2Core.register(0));
+    }
+
+    @Test
+    void pkhIsUndefinedWithoutPackSaturateFeature() {
+        // `ArmArchitecture.ARMV6K` já TEM `PACK_SATURATE` por padrão (mesmo achado de
+        // `dspMultiplyFamiliesAreUndefinedWithoutDspMultiplyFeature` em `Thumb2MultiplyDecoderTest`
+        // para `SIGNED_MULTIPLY_MEDIA`) — precisa de um preset "vazio" (`ArmArchitecture.of`), não
+        // `extending(ARMV6K, ...)`.
+        ArmArchitecture noPackSaturate = ArmArchitecture.of("NoPackSaturate-Pkh", ArmFeature.THUMB2);
+        ArmArchitecture arch = noPackSaturate.withThumb32DecoderExtensions(
+                List.of(new Thumb2DataProcessingDecoder(noPackSaturate)));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xEAC1);
+        memory.put16(2, 0x0002);
+        DecodedInstruction instruction = new ThumbDecoder(arch).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 }

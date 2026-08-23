@@ -357,6 +357,90 @@ class Thumb2MiscDecoderTest {
         assertEquals(before & 0xFF, core.cpsr().get() & 0xFF);
     }
 
+    // ── B9.7: BXJ/UDF.W/SUBS PC,LR,#imm (alias T5 de exception return) ──────────────────────
+
+    private static int bxjHi(int rm) {
+        return 0xF3C0 | rm;
+    }
+
+    private static final int BXJ_LO = 0x8F00;
+    private static final int UDF_HI = 0xF7F0;
+    private static final int UDF_LO = 0xA000;
+    private static final int EXCEPTION_RETURN_SUB_HI = 0xF3DE;
+
+    private static int exceptionReturnSubLo(int imm8) {
+        return 0x8F00 | (imm8 & 0xFF);
+    }
+
+    @Test
+    void bxjMatchesArmClassicBxSameRegister() {
+        ArmCore thumb2Core = newCore(THUMB2_ARCH);
+        thumb2Core.setRegister(3, 0x2001); // bit0=1 -> permanece THUMB
+        run32(thumb2Core, bxjHi(3), BXJ_LO); // BXJ r3
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        armCore.setRegister(3, 0x2001);
+        armCore.memory().write32(0, 0xE12F_FF13); // BX r3
+        armCore.step();
+
+        assertEquals(armCore.programCounter(), thumb2Core.programCounter());
+        assertEquals(armCore.cpsr().isThumbMode(), thumb2Core.cpsr().isThumbMode());
+        assertEquals(0x2000, thumb2Core.programCounter());
+    }
+
+    @Test
+    void bxjIsUndefinedUnderMProfile() {
+        ArmArchitecture mProfile = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV6M, "BxjMProfile", ArmFeature.THUMB2)
+                .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV6M, "BxjMProfile-Inner", ArmFeature.THUMB2))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, bxjHi(3));
+        memory.put16(2, BXJ_LO);
+        DecodedInstruction instruction = new ThumbDecoder(mProfile).decode(memory, 0);
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.BRANCH_EXCHANGE, instruction.kind());
+    }
+
+    @Test
+    void udfWDecodesAsUdfRegardlessOfIgnoredBits() {
+        // `hi` nibble baixo e `lo` bits 11:0 são ignorados pelo hardware real (QEMU `t32.decode`:
+        // `----`) — duas variantes com esses bits diferentes têm que decodificar igual.
+        int[][] variants = {{UDF_HI, UDF_LO}, {UDF_HI | 0x3, UDF_LO | 0x3F1}};
+        for (int[] variant : variants) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            memory.put16(0, variant[0]);
+            memory.put16(2, variant[1]);
+            DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+            assertEquals(InstructionKind.UDF, instruction.kind());
+        }
+    }
+
+    @Test
+    void subRriExceptionReturnAliasMatchesArmClassicInPrivilegedMode() {
+        // SUBS PC,LR,#4 executada em modo IRQ (com SPSR válido) restaura CPSR<-SPSR e PC<-LR-4 —
+        // mesmo caminho genérico de `IrAluExecutor#executeAlu` (`Rd==PC && setFlags`) que
+        // `MOVS PC,LR` ARM clássico já usa (G1, nenhuma IR nova).
+        ArmCore thumb2Core = newCore(THUMB2_ARCH);
+        thumb2Core.switchMode(CpuMode.IRQ);
+        thumb2Core.setRegister(14, 0x1008);
+        thumb2Core.setSpsr(CpuMode.IRQ, 0x6000_001F); // NZCV=0110, modo SYSTEM (0x1F)
+        run32(thumb2Core, EXCEPTION_RETURN_SUB_HI, exceptionReturnSubLo(4)); // SUBS PC,LR,#4
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV6K);
+        armCore.switchMode(CpuMode.IRQ);
+        armCore.setRegister(14, 0x1008);
+        armCore.setSpsr(CpuMode.IRQ, 0x6000_001F);
+        armCore.memory().write32(0, 0xE25E_F004); // SUBS PC, LR, #4
+
+        armCore.step();
+
+        assertEquals(armCore.programCounter(), thumb2Core.programCounter());
+        assertEquals(armCore.mode(), thumb2Core.mode());
+        assertEquals(CpuMode.SYSTEM, thumb2Core.mode());
+        assertEquals(0x1004, thumb2Core.programCounter());
+    }
+
     // ── Gating G2: sem THUMB2, cai no caminho legado (UNDEFINED, comportamento inalterado) ──
 
     @Test

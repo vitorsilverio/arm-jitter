@@ -314,7 +314,11 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         } else if (p && !upOrFixed) {
             mode = BlockTransferMode.DB;
         } else {
-            return null;
+            // (P,U) == (0,0) ou (1,1) — os dois combos que `LDM.W`/`STM.W` NÃO usam (só IA/DB
+            // existem em Thumb-2, ao contrário do ARM clássico com as 4 formas) são exatamente os
+            // dois que `RFE`/`SRS` ocupam neste MESMO prefixo (B9.7, QEMU `t32.decode` `@rfe`/
+            // `@srs`, `pu=2`⇒(0,0)/`pu=1`⇒(1,1)) — ver {@link #decodeReturnFromExceptionOrStoreReturnState}.
+            return decodeReturnFromExceptionOrStoreReturnState(raw, address, condition, p, upOrFixed);
         }
         return decodeMultipleTransfer(raw, address, condition, mode, w);
     }
@@ -359,6 +363,48 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         InstructionKind kind = load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
                 -1, rn, -1, mask, true, false, false, 4, false, writeback, false, mode);
+    }
+
+    // ── RFE/SRS — mesmo prefixo `EXTRA_TOP7`, (P,U)==(0,0)/(1,1) (B9.7) ─────────────────────
+
+    /// `RFE`/`SRS` Thumb-2 (QEMU `t32.decode` `@rfe`/`@srs`): mesma semântica/`InstructionKind`
+    /// do encoding ARM clássico equivalente ({@link ArmDecoder}, gate
+    /// {@link ArmFeature#MODE_CHANGE_INSTRUCTIONS}) — zero IR nova (G1). `L`(bit20) distingue
+    /// `RFE` (`1`, load) de `SRS` (`0`, store), mesma convenção do ARM clássico. Ao contrário do
+    /// ARM clássico (só 2 dos 4 combos `P`/`U` existem para `LDM.W`/`STM.W` acima E só os outros 2
+    /// existem aqui — nenhuma colisão real, cada combo pertence a exatamente um grupo).
+    private DecodedInstruction decodeReturnFromExceptionOrStoreReturnState(int raw, int address,
+            Condition condition, boolean p, boolean u) {
+        boolean load = ((raw >>> L_BIT) & 1) != 0;
+        boolean writeback = ((raw >>> W_BIT) & 1) != 0;
+        BlockTransferMode mode = BlockTransferMode.fromArmBits(p, u);
+        if (load) {
+            // RFE: `rn`(19:16) é a base REAL (não fixa); os 16 bits baixos são inteiramente fixos
+            // (`1100_0000_0000_0000`, sem campo de modo — RFE não escolhe modo, só restaura CPSR).
+            if ((raw & 0xFFFF) != 0xC000) {
+                return null;
+            }
+            if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.RETURN_FROM_EXCEPTION, -1, rn, -1, 0, false, false, false,
+                    0, false, writeback, false, mode);
+        }
+        // SRS: o campo `rn`(19:16) é FIXO em `1101` (não é um registrador real — SRS sempre opera
+        // no SP bancado do modo ALVO, nunca no Rn do modo atual); `mode`(4:0) substitui o resto do
+        // campo fixo de RFE.
+        if (((raw >>> RN2_SHIFT) & RN2_MASK) != 0b1101 || (raw & 0xFFE0) != 0xC000) {
+            return null;
+        }
+        if (!architecture.has(ArmFeature.MODE_CHANGE_INSTRUCTIONS)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int targetMode = raw & 0x1F;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.STORE_RETURN_STATE, -1, -1, -1, targetMode, false, false, false,
+                0, false, writeback, false, mode);
     }
 
     // ── LDREX/STREX/LDREXB/H/D/STREXB/H/D — raw[22]=1,P=0,W=0 dentro de EXTRA_TOP7 (B2.7 PR3) ──

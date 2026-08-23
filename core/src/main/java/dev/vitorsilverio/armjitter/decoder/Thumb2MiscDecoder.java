@@ -18,10 +18,20 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// confirmados contra o QEMU `target/arm/tcg/t32.decode` (seção "Hints, and CPS" / "Miscellaneous
 /// control" / `MRS_reg`/`MSR_reg`), que reproduz a ARM DDI 0406C A5.3.
 ///
-/// <p><b>Fora de escopo desta task</b> (deliberado — ver Armadilhas de b2.5-thumb2-misc.md):
-/// `SB` (mesmo espaço de "Miscellaneous control" das barreiras/`CLREX`, mas não pedido no
-/// Objetivo desta task) e as formas banked de `MRS`/`MSR` (extensão de virtualização ARMv7VE,
-/// fora do escopo do GBA/NDS).
+/// <p><b>Fora de escopo</b> (deliberado — ver `docs/isa-nao-aplicavel.tsv`): `SB` (`FEAT_SB`,
+/// ARMv8.0 opcional, genuinamente POSTERIOR a v7-A — critério de versão de arquitetura, não de
+/// consumidor).
+///
+/// <p><b>B9.7</b> acrescenta `BXJ` (trivialmente equivalente a `BX`, Jazelle não implementado —
+/// mesmo `InstructionKind#BRANCH_EXCHANGE`), `UDF.W` (mesmo `InstructionKind#UDF` de B9.1) e
+/// `SUBS PC, LR, #imm` (alias "T5" de exception return — reusa `InstructionKind#SUB`, o executor
+/// genérico já trata `Rd==PC&amp;&amp;setFlags`, G1). `ERET`/`SMC`/`HVC`/`MRS_bank`/`MSR_bank`
+/// continuam `UNIMPLEMENTED` — são instruções REAIS do ARMv7VE/Security Extensions (mesma versão
+/// v7-A, extensões optativas, não posteriores), então NÃO entram em `isa-nao-aplicavel.tsv`
+/// (regra do usuário, ver memória `feedback-nunca-excluir-instrucao-arm`, mesmo precedente da
+/// escada EL1/EL2 do AArch64/B10). Implementá-las exige Hyp mode + Monitor mode de 32 bits
+/// (registradores bancados `ELR_hyp`/`SPSR_hyp`/`LR_mon`/`SPSR_mon`, modos de CPU novos) — fora
+/// do escopo desta task de decode (`b9.7-t32-thumb2.md`), registrado como próxima escada.
 ///
 /// <p><b>B2.7 PR3</b>: `CPS` de 32 bits (antes fora de escopo — mesmo prefixo de hi =
 /// {@code 0xF3AF} desta classe, distinguido de hints por `imod`/`M` ≠ 0, ver
@@ -139,6 +149,39 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     /// MESMO `hi` de {@link #MISC_CONTROL_HI} que as barreiras `DMB`/`DSB`/`ISB` já usam.
     private static final int CLREX_LO = 0x8F2F;
 
+    /// `BXJ` (B9.7, ARM DDI 0406C A8.8.27): `hi[15:4]=1111 0011 1100`, `rm`=`hi[3:0]`,
+    /// `lo=1000 1111 0000 0000` fixo. QEMU `trans_BXJ` real: sem suporte a Jazelle no host,
+    /// comportamento "trivialmente equivalente a BX" (`gen_bx`) — reusa `InstructionKind
+    /// #BRANCH_EXCHANGE` sem semântica nova (G1), mesmo Kind que `BX` ARM clássico/Thumb-1 já usa.
+    private static final int BXJ_HI_MASK = 0xFFF0;
+    private static final int BXJ_HI_VALUE = 0xF3C0;
+    private static final int BXJ_LO = 0x8F00;
+
+    /// `UDF.W` (B9.7, ARM DDI 0406C A8.8.247): `hi[15:4]=1111 0111 1111` (nibble baixo de `hi`
+    /// ignorado, sem campo nomeado — QEMU `t32.decode` usa `----`), `lo[15:12]=1010` fixo (resto
+    /// ignorado). Mesmo `InstructionKind#UDF` do encoding ARM clássico equivalente (B9.1,
+    /// {@link ArmDecoder}) — instrução permanentemente indefinida, sem feature/gate.
+    private static final int UDF_HI_MASK = 0xFFF0;
+    private static final int UDF_HI_VALUE = 0xF7F0;
+    private static final int UDF_LO_MASK = 0xF000;
+    private static final int UDF_LO_VALUE = 0xA000;
+
+    /// `SUBS PC, LR, #imm` (B9.7, alias "T5" de exception return, ARM DDI 0406C B9.3.19): mesmo
+    /// encoding-espaço de `ERET` — QEMU `trans_ERET` exige {@code ARM_FEATURE_V7VE} (Extensões de
+    /// Virtualização, modo Hyp) e devolve `false` sem ela, caindo no fallback `trans_SUB_rri`
+    /// (ARM ARM: "at v6T2, this is the T5 encoding of SUBS PC, LR, #IMM ... with v7VE, IMM=0 is
+    /// redefined as ERET"). Este projeto não modela EL2/Hyp de 32 bits (sem `MRS_bank`/`MSR_bank`,
+    /// ver `docs/isa-nao-aplicavel.tsv`) — `ERET` fica de fora, mas a forma-base `SUB` (TODOS os
+    /// `imm8`, incl. `0`) é real e reusa `InstructionKind#SUB` sem IR nova: o executor genérico de
+    /// `SUB` já trata `Rd==PC &amp;&amp; setFlags` como exception return
+    /// ({@code IrAluExecutor#restoreCpsrFromCurrentSpsr}, mesmo caminho que `MOVS PC,LR` ARM
+    /// clássico já usa) — G1.
+    private static final int EXCEPTION_RETURN_SUB_HI = 0xF3DE;
+    private static final int EXCEPTION_RETURN_SUB_LO_FIXED_MASK = 0xFF00;
+    private static final int EXCEPTION_RETURN_SUB_LO_FIXED_VALUE = 0x8F00;
+    private static final int EXCEPTION_RETURN_DESTINATION = 15; // PC
+    private static final int EXCEPTION_RETURN_SOURCE = 14; // LR
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         int hi = raw >>> 16;
@@ -156,7 +199,53 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         if ((hi & MSR_HI_MASK) == MSR_HI_VALUE) {
             return decodeMsr(raw, address, condition, hi, lo);
         }
+        if ((hi & BXJ_HI_MASK) == BXJ_HI_VALUE) {
+            return decodeBxj(raw, address, condition, hi, lo);
+        }
+        if ((hi & UDF_HI_MASK) == UDF_HI_VALUE) {
+            return decodeUdf(raw, address, condition, lo);
+        }
+        if (hi == EXCEPTION_RETURN_SUB_HI) {
+            return decodeExceptionReturnSub(raw, address, condition, lo);
+        }
         return null;
+    }
+
+    // ── SUBS PC, LR, #imm (alias "T5" de exception return) — A8.8.121/B9.3.19 ──────────────
+
+    private DecodedInstruction decodeExceptionReturnSub(int raw, int address, Condition condition, int lo) {
+        if ((lo & EXCEPTION_RETURN_SUB_LO_FIXED_MASK) != EXCEPTION_RETURN_SUB_LO_FIXED_VALUE) {
+            return null;
+        }
+        int imm8 = lo & 0xFF;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SUB,
+                EXCEPTION_RETURN_DESTINATION, EXCEPTION_RETURN_SOURCE, -1, imm8, true, true, false);
+    }
+
+    // ── BXJ — A8.8.27 ────────────────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeBxj(int raw, int address, Condition condition, int hi, int lo) {
+        if (lo != BXJ_LO) {
+            return null;
+        }
+        if (architecture.has(ArmFeature.M_PROFILE)) {
+            // QEMU `trans_BXJ`: `arm_dc_feature(s, ARM_FEATURE_M)` devolve `false` (UNDEFINED) —
+            // BXJ não existe no perfil M.
+            return null;
+        }
+        int rm = hi & 0xF;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.BRANCH_EXCHANGE, -1, rm, -1, 0, false, false, false);
+    }
+
+    // ── UDF.W — A8.8.247 ─────────────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeUdf(int raw, int address, Condition condition, int lo) {
+        if ((lo & UDF_LO_MASK) != UDF_LO_VALUE) {
+            return null;
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.UDF,
+                -1, -1, -1, 0, false, false, false);
     }
 
     // ── Hints (NOP/YIELD/WFE/WFI/SEV) — A5.3.5, "Hints, and CPS" ────────────────────────────

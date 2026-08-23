@@ -51,14 +51,29 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
 
     private static final int FAMILY_MUL_MLA = 0x0; // também MLS (op=0x1, B3.2)
     private static final int FAMILY_SMLA_XY = 0x1;   // SMLA<x><y>/SMUL<x><y> (16x16)
+    private static final int FAMILY_SMLAD = 0x2;     // SMLAD{X} (B9.7)
     private static final int FAMILY_SMLAW_Y = 0x3;   // SMLAW<y>/SMULW<y>
+    private static final int FAMILY_SMLSD = 0x4;     // SMLSD{X} (B9.7)
+    private static final int FAMILY_SMMLA = 0x5;     // SMMLA{R} (B9.7)
+    private static final int FAMILY_SMMLS = 0x6;     // SMMLS{R} (B9.7)
     private static final int FAMILY_SDIV = 0x9;      // B3.2
     private static final int FAMILY_USADA8 = 0x7;
     private static final int FAMILY_SMULL = 0x8;
     private static final int FAMILY_UMULL = 0xA;
     private static final int FAMILY_UDIV = 0xB;      // B3.2
-    private static final int FAMILY_SMLAL = 0xC; // também SMLAL<x><y> (op>=0x8)
+    private static final int FAMILY_SMLAL = 0xC; // também SMLAL<x><y> (op=0x8..0xB) e SMLALD{X} (op=0xC/0xD, B9.7)
+    private static final int FAMILY_SMLSLD = 0xD;    // SMLSLD{X} (B9.7)
     private static final int FAMILY_UMLAL = 0xE; // também UMAAL (op=0x6)
+
+    /// `op` (nibble[7:4]) das formas com dois produtos 16x16 (`SMLAD{X}`/`SMLSD{X}`) e das formas
+    /// 32x32 truncadas (`SMMLA{R}`/`SMMLS{R}`) — bit0 seleciona `X`/`R` (exchange/round), QEMU
+    /// `t32.decode` linhas 312-325 (`@rnadm`, mesmo layout de registrador do resto deste decoder).
+    private static final int DSP_OP_PLAIN = 0x0;
+    private static final int DSP_OP_EXCHANGE_OR_ROUND = 0x1;
+    /// `op` (nibble[7:4]) das formas longas `SMLALD{X}`/`SMLSLD{X}` dentro de `FAMILY_SMLAL`/
+    /// `FAMILY_SMLSLD` — QEMU `t32.decode` linhas 317-320 (`1100`/`1101` no nibble alto do `op`,
+    /// distinto do `1000`/`1001`/`1010`/`1011` de `SMLAL&lt;x&gt;&lt;y&gt;`).
+    private static final int DUAL_LONG_OP_BASE = 0xC;
 
     /// `op` (nibble[7:4]) fixo `1111` em `SDIV`/`UDIV` (QEMU `@rndm`, "1111 Rd 1111 Rm") — mesmo
     /// valor do sentinel `NO_ACCUMULATOR`, mas com significado diferente aqui (não é Ra).
@@ -97,8 +112,20 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
                 default -> null;
             };
             case FAMILY_SMLA_XY -> decodeDspMultiplySixteenBySixteen(raw, address, condition, op);
+            case FAMILY_SMLAD -> (op == DSP_OP_PLAIN || op == DSP_OP_EXCHANGE_OR_ROUND)
+                    ? decodeDspDualMultiply(raw, address, condition, false, op == DSP_OP_EXCHANGE_OR_ROUND, false)
+                    : null;
             case FAMILY_SMLAW_Y -> (op == 0 || op == 1)
                     ? decodeDspMultiplyWordBySixteen(raw, address, condition, op)
+                    : null;
+            case FAMILY_SMLSD -> (op == DSP_OP_PLAIN || op == DSP_OP_EXCHANGE_OR_ROUND)
+                    ? decodeDspDualMultiply(raw, address, condition, true, op == DSP_OP_EXCHANGE_OR_ROUND, false)
+                    : null;
+            case FAMILY_SMMLA -> (op == DSP_OP_PLAIN || op == DSP_OP_EXCHANGE_OR_ROUND)
+                    ? decodeDspTopWordMultiply(raw, address, condition, false, op == DSP_OP_EXCHANGE_OR_ROUND)
+                    : null;
+            case FAMILY_SMMLS -> (op == DSP_OP_PLAIN || op == DSP_OP_EXCHANGE_OR_ROUND)
+                    ? decodeDspTopWordMultiply(raw, address, condition, true, op == DSP_OP_EXCHANGE_OR_ROUND)
                     : null;
             case FAMILY_USADA8 -> op == 0 ? decodeUsad8(raw, address, condition) : null;
             case FAMILY_SMULL -> op == 0 ? decodeLongMultiply(raw, address, condition,
@@ -108,6 +135,9 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
             case FAMILY_SDIV -> op == DIVIDE_OP ? decodeDivide(raw, address, condition, true) : null;
             case FAMILY_UDIV -> op == DIVIDE_OP ? decodeDivide(raw, address, condition, false) : null;
             case FAMILY_SMLAL -> decodeSmlalFamily(raw, address, condition, op);
+            case FAMILY_SMLSLD -> (op == DUAL_LONG_OP_BASE || op == (DUAL_LONG_OP_BASE | 1))
+                    ? decodeDspDualMultiply(raw, address, condition, true, (op & 1) != 0, true)
+                    : null;
             case FAMILY_UMLAL -> decodeUmlalFamily(raw, address, condition, op);
             default -> null; // reservado dentro do prefixo 0xFB — UNDEFINED controlado (claimsEncodingSpace)
         };
@@ -199,12 +229,74 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         if (op == 0) {
             return decodeLongMultiply(raw, address, condition, InstructionKind.SMLAL);
         }
+        // SMLALD{X} (op=1100/1101, B9.7): ACHADO REAL — antes desta task, `(op & 0x8) != 0` sozinho
+        // desviava op=0xC/0xD para `decodeDspMultiplySixtyFourBitAccumulate` (SMLAL<x><y>), que
+        // computa x=(op>>1)&1/y=op&1 IDÊNTICOS aos de op=0x8 (SMLALBB) — um caso de decode ERRADO
+        // e SILENCIOSO (G8): o encoding decodificava sem lançar, mas como a instrução errada
+        // (soma de um produto 16x16 em vez de dois produtos 16x16 somados entre si). A tabela
+        // `docs/COBERTURA-ISA.md` já marcava `SMLALD`/`SMLALDX` como ✅ antes desta correção — a
+        // tabela mede só "decodifica", não semântica (mesmo aviso do cabeçalho do arquivo),
+        // exatamente o padrão de bug que motivou a nota "STREX (E3) decodificava e estava errado".
+        if (op == DUAL_LONG_OP_BASE || op == (DUAL_LONG_OP_BASE | 1)) {
+            return decodeDspDualMultiply(raw, address, condition, false, (op & 1) != 0, true);
+        }
         // SMLAL<x><y> (op=1000..1011): acumulador 64 bits {RdHi:RdLo} += Rn.x * Rm.y — IrOp.DspMultiply
         // op2=2 (mesma semântica de IrAluExecutor#executeDspMultiply, caso 2).
         if ((op & 0x8) != 0) {
             return decodeDspMultiplySixtyFourBitAccumulate(raw, address, condition, op);
         }
-        return null; // op=0001..0111 reservado (SMLALD/SMLSLD são ARMv7, fora de escopo — ver B3.2)
+        return null; // op=0001..0111 reservado
+    }
+
+    // ── SMLAD{X}/SMLSD{X}/SMLALD{X}/SMLSLD{X} — QEMU "Multiply..." (B9.7, famílias 0010/0100/1100/1101) ──
+
+    /// Mesma semântica/empacotamento do encoding ARM clássico equivalente (B9.1, {@link ArmDecoder}
+    /// `InstructionKind#DSP_DUAL_MULTIPLY`) — zero IR nova (G1). Layout de registrador `@rnadm`:
+    /// `rn`(19:16)=Rn do manual (bits 3:0 na forma ARM — papel de `secondSourceRegister`),
+    /// `ra`(15:12)=acumulador (`RdLo` na forma longa), `rd`(11:8)=Rd do manual (bits 19:16 na forma
+    /// ARM — `destinationRegister`, `RdHi` na forma longa), `rm`(3:0)=Rm do manual (bits 11:8 na
+    /// forma ARM — papel de `sourceRegister`). Mesma troca de posições entre A32/T32 já documentada
+    /// no cabeçalho da classe para `SMLA&lt;x&gt;&lt;y&gt;`.
+    private DecodedInstruction decodeDspDualMultiply(int raw, int address, Condition condition,
+            boolean subtract, boolean exchange, boolean longForm) {
+        if (!architecture.has(ArmFeature.SIGNED_MULTIPLY_MEDIA)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> 16) & 0xF;
+        int ra = (raw >>> 12) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int rm = raw & 0xF;
+        if (isRestricted(rd) || isRestricted(rm) || isRestricted(rn) || (longForm && isRestricted(ra))) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        // Ra=15 é o alias sem acumulador (SMUAD/SMUSD) na forma curta — UNPREDICTABLE só na longa
+        // (SMLALD/SMLSLD sempre acumulam), mesma regra do encoding ARM clássico.
+        int packed = ra | (subtract ? 1 << 4 : 0) | (exchange ? 1 << 5 : 0) | (longForm ? 1 << 6 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.DSP_DUAL_MULTIPLY, rd, rm, rn, packed, false, false, false);
+    }
+
+    // ── SMMLA{R}/SMMLS{R} — QEMU "Multiply..." (B9.7, famílias 0101/0110) ──────────────────
+
+    /// Mesma semântica/empacotamento do encoding ARM clássico equivalente (B9.1, {@link ArmDecoder}
+    /// `InstructionKind#DSP_TOP_WORD_MULTIPLY`). Layout `@rnadm`: `rn`(19:16)=Rn do manual
+    /// (`sourceRegister`), `ra`(15:12)=acumulador, `rd`(11:8)=Rd do manual (`destinationRegister`),
+    /// `rm`(3:0)=Rm do manual (`secondSourceRegister`).
+    private DecodedInstruction decodeDspTopWordMultiply(int raw, int address, Condition condition,
+            boolean subtract, boolean round) {
+        if (!architecture.has(ArmFeature.SIGNED_MULTIPLY_MEDIA)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> 16) & 0xF;
+        int ra = (raw >>> 12) & 0xF;
+        int rd = (raw >>> 8) & 0xF;
+        int rm = raw & 0xF;
+        if (isRestricted(rd) || isRestricted(rm) || isRestricted(rn)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int packed = ra | (subtract ? 1 << 4 : 0) | (round ? 1 << 5 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.DSP_TOP_WORD_MULTIPLY, rd, rn, rm, packed, false, false, false);
     }
 
     private DecodedInstruction decodeUmlalFamily(int raw, int address, Condition condition, int op) {

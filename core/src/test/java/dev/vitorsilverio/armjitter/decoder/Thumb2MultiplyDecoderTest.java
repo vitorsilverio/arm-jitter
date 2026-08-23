@@ -69,6 +69,19 @@ class Thumb2MultiplyDecoderTest {
         return COND_AL | 0x0100_0080 | (op2 << 21) | (rd << 16) | (ra << 12) | (rs << 8) | (y << 6) | (x << 5) | rm;
     }
 
+    // ── B9.7: SMLAD{X}/SMLSD{X}/SMLALD{X}/SMLSLD{X} — mesmos bits de `ArmDecoder` (B9.1) ────
+
+    private static int armDspDualMultiply(boolean subtract, boolean exchange, boolean longForm,
+            int rd, int ra, int rm, int rn) {
+        return COND_AL | 0x0700_0010 | (longForm ? 1 << 22 : 0) | (subtract ? 1 << 6 : 0)
+                | (exchange ? 1 << 5 : 0) | (rd << 16) | (ra << 12) | (rm << 8) | rn;
+    }
+
+    private static int armDspTopWordMultiply(boolean subtract, boolean round, int rd, int ra, int rn, int rm) {
+        return COND_AL | 0x0750_0010 | (subtract ? 1 << 6 : 0) | (round ? 1 << 5 : 0)
+                | (rd << 16) | (ra << 12) | (rm << 8) | rn;
+    }
+
     // ── Runners ──────────────────────────────────────────────────────────────────────────────
 
     private static ArmCore newThumb2Core() {
@@ -357,6 +370,157 @@ class Thumb2MultiplyDecoderTest {
         }
     }
 
+    // ── B9.7: SMLAD{X}/SMLSD{X}/SMMLA{R}/SMMLS{R}/SMLALD{X}/SMLSLD{X} ───────────────────────
+
+    @Test
+    void smladAndSmladxMatchArmClassicForBothExchangeValues() {
+        int[] ops = {0, 1}; // 0=SMLAD, 1=SMLADX (exchange)
+        for (int op : ops) {
+            ArmCore thumb2Core = newThumb2Core();
+            thumb2Core.setRegister(1, 0x0002_0003);
+            thumb2Core.setRegister(2, 0x0005_0007);
+            thumb2Core.setRegister(3, 100); // Ra
+            runThumb2(thumb2Core, hi(0x2, 1), lo(3, 0, op, 2)); // SMLAD{X} r0,r1,r2,r3
+
+            ArmCore armCore = newArmCore();
+            armCore.setRegister(1, 0x0002_0003);
+            armCore.setRegister(2, 0x0005_0007);
+            armCore.setRegister(3, 100);
+            runArm(armCore, armDspDualMultiply(false, op == 1, false, 0, 3, 2, 1));
+
+            assertEquals(armCore.register(0), thumb2Core.register(0), "op=" + op);
+        }
+    }
+
+    @Test
+    void smusadAliasWithoutAccumulatorMatchesArmClassic() {
+        // Ra=1111: alias sem acumulador (SMUAD), mesmo encoding.
+        ArmCore thumb2Core = newThumb2Core();
+        thumb2Core.setRegister(1, 0x0002_0003);
+        thumb2Core.setRegister(2, 0x0005_0007);
+        runThumb2(thumb2Core, hi(0x2, 1), lo(0xF, 0, 0, 2)); // SMUAD r0,r1,r2
+
+        ArmCore armCore = newArmCore();
+        armCore.setRegister(1, 0x0002_0003);
+        armCore.setRegister(2, 0x0005_0007);
+        runArm(armCore, armDspDualMultiply(false, false, false, 0, 0xF, 2, 1));
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+    }
+
+    @Test
+    void smlsdMatchesArmClassic() {
+        ArmCore thumb2Core = newThumb2Core();
+        thumb2Core.setRegister(1, 0x0002_0003);
+        thumb2Core.setRegister(2, 0x0005_0007);
+        thumb2Core.setRegister(3, 100);
+        runThumb2(thumb2Core, hi(0x4, 1), lo(3, 0, 0, 2)); // SMLSD r0,r1,r2,r3
+
+        ArmCore armCore = newArmCore();
+        armCore.setRegister(1, 0x0002_0003);
+        armCore.setRegister(2, 0x0005_0007);
+        armCore.setRegister(3, 100);
+        runArm(armCore, armDspDualMultiply(true, false, false, 0, 3, 2, 1));
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+    }
+
+    @Test
+    void smmlaAndSmmlarMatchArmClassicForBothRoundValues() {
+        int[] ops = {0, 1}; // 0=SMMLA, 1=SMMLAR (round)
+        for (int op : ops) {
+            ArmCore thumb2Core = newThumb2Core();
+            thumb2Core.setRegister(1, 0x0002_0003);
+            thumb2Core.setRegister(2, 0x0005_0007);
+            thumb2Core.setRegister(3, 100);
+            runThumb2(thumb2Core, hi(0x5, 1), lo(3, 0, op, 2)); // SMMLA{R} r0,r1,r2,r3
+
+            ArmCore armCore = newArmCore();
+            armCore.setRegister(1, 0x0002_0003);
+            armCore.setRegister(2, 0x0005_0007);
+            armCore.setRegister(3, 100);
+            runArm(armCore, armDspTopWordMultiply(false, op == 1, 0, 3, 1, 2));
+
+            assertEquals(armCore.register(0), thumb2Core.register(0), "op=" + op);
+        }
+    }
+
+    @Test
+    void smmlsMatchesArmClassic() {
+        ArmCore thumb2Core = newThumb2Core();
+        thumb2Core.setRegister(1, 0x0002_0003);
+        thumb2Core.setRegister(2, 0x0005_0007);
+        thumb2Core.setRegister(3, 100);
+        runThumb2(thumb2Core, hi(0x6, 1), lo(3, 0, 0, 2)); // SMMLS r0,r1,r2,r3
+
+        ArmCore armCore = newArmCore();
+        armCore.setRegister(1, 0x0002_0003);
+        armCore.setRegister(2, 0x0005_0007);
+        armCore.setRegister(3, 100);
+        runArm(armCore, armDspTopWordMultiply(true, false, 0, 3, 1, 2));
+
+        assertEquals(armCore.register(0), thumb2Core.register(0));
+    }
+
+    @Test
+    void smlaldAndSmlaldxMatchArmClassicAndFixTheSilentMisdecodeBug() {
+        // Achado real da B9.7 (G8): antes desta task, `op=0xC`/`0xD` (SMLALD/SMLALDX) caía em
+        // `decodeDspMultiplySixtyFourBitAccumulate` (SMLAL<x><y>, x=y=0 — IDÊNTICO a SMLALBB,
+        // op=0x8) porque só `(op & 0x8) != 0` era checado. Este teste prova que o resultado agora
+        // bate com a semântica REAL de SMLALD (soma de DOIS produtos de 16 bits, não um só).
+        int[] ops = {0xC, 0xD}; // SMLALD, SMLALDX (exchange)
+        for (int op : ops) {
+            ArmCore thumb2Core = newThumb2Core();
+            thumb2Core.setRegister(1, 0x0002_0003);
+            thumb2Core.setRegister(3, 0x0005_0007);
+            thumb2Core.setRegister(2, 5);  // RdLo
+            thumb2Core.setRegister(4, 0);  // RdHi
+            runThumb2(thumb2Core, hi(0xC, 1), lo(2, 4, op, 3)); // SMLALD{X} r2,r4,r1,r3
+
+            ArmCore armCore = newArmCore();
+            armCore.setRegister(1, 0x0002_0003);
+            armCore.setRegister(3, 0x0005_0007);
+            armCore.setRegister(2, 5);
+            armCore.setRegister(4, 0);
+            runArm(armCore, armDspDualMultiply(false, op == 0xD, true, 4, 2, 3, 1));
+
+            assertEquals(armCore.register(2), thumb2Core.register(2), "op=" + op);
+            assertEquals(armCore.register(4), thumb2Core.register(4), "op=" + op);
+            // O bug antigo produzia o MESMO resultado de SMLALBB (x=0,y=0) — provamos que o
+            // resultado NÃO é isso, comparando com a computação halfword-halfword ingênua.
+            ArmCore halfwordBugCore = newArmCore();
+            halfwordBugCore.setRegister(1, 0x0002_0003);
+            halfwordBugCore.setRegister(3, 0x0005_0007);
+            halfwordBugCore.setRegister(2, 5);
+            halfwordBugCore.setRegister(4, 0);
+            runArm(halfwordBugCore, armDspMultiply(2, 4, 2, 3, 0, 0, 1)); // SMLALBB r2,r4,r1,r3
+            assertNotEquals(halfwordBugCore.register(2), thumb2Core.register(2), "op=" + op);
+        }
+    }
+
+    @Test
+    void smlsldMatchesArmClassic() {
+        int[] ops = {0xC, 0xD}; // SMLSLD, SMLSLDX (exchange)
+        for (int op : ops) {
+            ArmCore thumb2Core = newThumb2Core();
+            thumb2Core.setRegister(1, 0x0002_0003);
+            thumb2Core.setRegister(3, 0x0005_0007);
+            thumb2Core.setRegister(2, 5);
+            thumb2Core.setRegister(4, 0);
+            runThumb2(thumb2Core, hi(0xD, 1), lo(2, 4, op, 3)); // SMLSLD{X} r2,r4,r1,r3
+
+            ArmCore armCore = newArmCore();
+            armCore.setRegister(1, 0x0002_0003);
+            armCore.setRegister(3, 0x0005_0007);
+            armCore.setRegister(2, 5);
+            armCore.setRegister(4, 0);
+            runArm(armCore, armDspDualMultiply(true, op == 0xD, true, 4, 2, 3, 1));
+
+            assertEquals(armCore.register(2), thumb2Core.register(2), "op=" + op);
+            assertEquals(armCore.register(4), thumb2Core.register(4), "op=" + op);
+        }
+    }
+
     @Test
     void dspMultiplyFamiliesAreUndefinedWithoutDspMultiplyFeature() {
         ArmArchitecture noDsp = ArmArchitecture.of("NoDsp", ArmFeature.THUMB2);
@@ -378,11 +542,8 @@ class Thumb2MultiplyDecoderTest {
         mlsMemory.put16(2, lo(4, 2, 1, 3));
         assertEquals(InstructionKind.UNIMPLEMENTED, new ThumbDecoder(THUMB2_ARCH).decode(mlsMemory, 0).kind());
 
-        // SMLAD: family=0010, op=0000 — fora de escopo (B3.2).
-        TestAddressSpace smladMemory = new TestAddressSpace(16);
-        smladMemory.put16(0, hi(0x2, 1));
-        smladMemory.put16(2, lo(4, 2, 0, 3));
-        assertEquals(InstructionKind.UNIMPLEMENTED, new ThumbDecoder(THUMB2_ARCH).decode(smladMemory, 0).kind());
+        // SMLAD (family=0010, op=0000): implementado pela B9.7 — não é mais reservado, ver os
+        // testes `smlad*`/`smlsd*`/`smmla*`/`smmls*`/`smlald*`/`smlsld*` abaixo.
 
         // SDIV: family=1001 — fora de escopo (B3.2).
         TestAddressSpace sdivMemory = new TestAddressSpace(16);

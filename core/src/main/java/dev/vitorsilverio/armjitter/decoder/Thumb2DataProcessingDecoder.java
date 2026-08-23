@@ -88,6 +88,12 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
     private static final int OP4_SBC = 0b1011;
     private static final int OP4_SUB = 0b1101;
     private static final int OP4_RSB = 0b1110;
+    /// `raw[24:21]` (B9.7): `PKH` — mesmo espaço "Data-processing (register)" com `S`(bit20)
+    /// SEMPRE `0` (não é um bit de flags real aqui; QEMU `t32.decode` linha `PKH 1110101 0110 0
+    /// ...`). `op4=0110` não é usado por nenhuma ALU (gap entre `EOR`=0100 e `ADD`=1000), então
+    /// não há colisão real — só precisa ser reconhecido explicitamente em vez de cair no `default
+    /// -> null` de {@link #plainKindFor}.
+    private static final int OP4_PKH = 0b0110;
 
     private static final int SET_FLAGS_BIT = 20;
     private static final int PROGRAM_COUNTER = 15;
@@ -236,6 +242,10 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
             return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
         }
 
+        if (op4 == OP4_PKH && !setFlags) {
+            return decodePkh(raw, address, condition, rd, rn, rm);
+        }
+
         if (op4 == OP4_ORR && rn == PROGRAM_COUNTER) {
             if (rd == PROGRAM_COUNTER) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
@@ -373,6 +383,23 @@ public final class Thumb2DataProcessingDecoder implements DecoderExtension {
         int packed = satImm | (shiftImm << 5) | (asr ? 1 << 10 : 0) | (unsigned ? 1 << 12 : 0);
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SATURATE,
                 rd, -1, rn, packed, false, false, false);
+    }
+
+    /// `PKH` (B9.7) — QEMU `t32.decode` `PKH 1110101 0110 0 rn:4 0 imm3:3 rd:4 imm2:2 tb:1 0
+    /// rm:4`, `&pkh imm=%imm5_12_6` (mesma composição não-contígua `imm3:imm2` de `SBFX`/`UBFX`
+    /// acima, campo `bitFieldLsb` reaproveitado por coincidência de layout, não por relação
+    /// semântica). Mesmo `InstructionKind#PKH`/empacotamento (`shiftImm | tb&lt;&lt;5`) do encoding
+    /// ARM clássico equivalente ({@link ArmDecoder}, gate {@link ArmFeature#PACK_SATURATE}) —
+    /// zero IR nova (G1).
+    private DecodedInstruction decodePkh(int raw, int address, Condition condition, int rd, int rn, int rm) {
+        if (!architecture.has(ArmFeature.PACK_SATURATE)) {
+            return null; // UNDEFINED controlado do ThumbDecoder (top7=1110101), sem a feature
+        }
+        int shiftImm = bitFieldLsb(raw);
+        boolean tb = (raw & (1 << 5)) != 0;
+        int packed = shiftImm | (tb ? 1 << 5 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.PKH,
+                rd, rn, rm, packed, false, false, false);
     }
 
     private DecodedInstruction decodeAddSubOrAdr(int raw, int address, Condition condition, boolean subtract) {
