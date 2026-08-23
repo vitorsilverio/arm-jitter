@@ -149,5 +149,12 @@ public enum ArmFeature {
     /// `BKPT #imm` (ARMv5T+ em todo perfil — A/R e M). Ausente do {@code ARMV4T} (o ARM7TDMI do
     /// GBA/NDS não tem BKPT — G2), presente em todos os demais presets. Sem esta feature o
     /// encoding cai no `UNDEFINED` controlado de sempre (comportamento pré-B7.5, preservado).
-    BREAKPOINT
+    BREAKPOINT,
+
+    // ---- Onda 5, B9.1 (cobertura de ISA) ----
+    /// Multiplicações/multiplicações-acumulação "media" com sinal (`SMLAD`/`SMLSD`/`SMLALD`/
+    /// `SMLSLD` e formas `X`, `SMMLA`/`SMMLAR`/`SMMLS`/`SMMLSR` — ARM DDI 0406C A5.2.6). ARMv6+
+    /// (confirmado contra `op_smlad`/`op_smlald`/`op_smmla` reais em `target/arm/tcg/translate.c`
+    /// do QEMU, todos gateados por `ENABLE_ARCH_6`) — NÃO existe em ARMv4T/ARMv5TE.
+    SIGNED_MULTIPLY_MEDIA
 }

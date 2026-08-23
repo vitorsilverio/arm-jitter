@@ -95,6 +95,8 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
                     bx.sourceValueOverride() < 0 ? (1 << bx.sourceRegister()) : 0;
             case IrOp.Saturating sat -> (1 << sat.rm()) | (1 << sat.rn());
             case IrOp.DspMultiply dsp -> (1 << dsp.rm()) | (1 << dsp.rs()) | (1 << dsp.rn());
+            case IrOp.DspDualMultiply dsp -> (1 << dsp.rm()) | (1 << dsp.rn()) | (1 << dsp.ra());
+            case IrOp.DspTopWordMultiply dsp -> (1 << dsp.rn()) | (1 << dsp.rm()) | (1 << dsp.ra());
             case IrOp.ParallelAlu p -> (1 << p.rn()) | (1 << p.rm());
             case IrOp.Sel sel -> (1 << sel.rn()) | (1 << sel.rm());
             case IrOp.Saturate sat -> operandUse(sat.operand());
@@ -210,6 +212,8 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             case IrOp.LongMultiply m -> (1 << m.dstLow()) | (1 << m.dstHigh());
             case IrOp.Saturating sat -> (1 << sat.dst());
             case IrOp.DspMultiply dsp -> (1 << dsp.dst()) | (dsp.op2() == 2 ? (1 << dsp.rn()) : 0);
+            case IrOp.DspDualMultiply dsp -> (1 << dsp.dst()) | (dsp.longForm() ? (1 << dsp.ra()) : 0);
+            case IrOp.DspTopWordMultiply dsp -> (1 << dsp.dst());
             case IrOp.ParallelAlu p -> (1 << p.dst());
             case IrOp.Sel sel -> (1 << sel.dst());
             case IrOp.Saturate sat -> (1 << sat.dst());

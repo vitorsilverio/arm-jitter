@@ -144,6 +144,10 @@ public final class AsmNativePolicy {
             // BKPT (B7.5): depende do BkptDispatcher do host (semihosting) — mesmo padrão de
             // IrOp.Swi/IrOp.Coprocessor, mas sem emissão nativa ainda (op nova e rara).
             case IrOp.Breakpoint ignored -> false;
+            // SMLAD/SMLSD/SMLALD/SMLSLD/SMMLA/SMMLS (B9.1): sem emissao nativa ainda, cai no
+            // interpretado por AsmFallbackPolicy.PER_OP -- mesma simplificacao de VfpConvertFixed.
+            case IrOp.DspDualMultiply ignored -> false;
+            case IrOp.DspTopWordMultiply ignored -> false;
         };
     }
 

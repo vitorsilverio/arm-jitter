@@ -294,5 +294,38 @@ public enum InstructionKind {
     /// `fixedPointIs32Bit` (`true`=32 bits, `false`=16 bits), bits 7:3=`imm` cru de 5 bits
     /// (`fractionBits` = `fixedPointIs32Bit ? 32-imm : 16-imm`, resolvido no `StandardIrBuilder`,
     /// mesmo padrao de `VFPExpandImm`); `signedAccess`=precisao dupla de `Vd` (`sp`/`dp`).
-    VFP_CONVERT_FIXED
+    VFP_CONVERT_FIXED,
+
+    // A32 DSP/media (B9.1): "Signed multiply, signed and unsigned divide" (ARM DDI 0406C A5.2.6),
+    // ARMv6 -- confirmado contra target/arm/tcg/translate.c real do QEMU (op_smlad/op_smlald/
+    // op_smmla, todos gateados por `ENABLE_ARCH_6`).
+
+    /// `SMLAD{X}`/`SMLSD{X}`/`SMLALD{X}`/`SMLSLD{X}` (ARMv6, ARM DDI 0406C A8.8.161-164): dois
+    /// produtos de 16x16 com sinal (metades de `sourceRegister`/`secondSourceRegister`, a segunda
+    /// trocada de metade quando `exchange`) somados ou subtraidos entre si e acumulados.
+    /// `destinationRegister`=Rd (RdHi na forma longa), `sourceRegister`=Rm (bits 11:8),
+    /// `secondSourceRegister`=Rn (bits 3:0) -- ordem dos operandos do produto nao importa
+    /// (comutativo). `immediate` empacota: bits 3:0=Ra (acumulador de 32 bits; RdLo na forma
+    /// longa; `Ra=15` e o alias sem acumulador `SMUAD`/`SMUSD`, mesmo encoding por definicao do
+    /// manual), bit4=`subtract` (produto1-produto2 em vez de produto1+produto2), bit5=`exchange`
+    /// (troca as metades do segundo operando antes de multiplicar), bit6=`longForm` (acumula em
+    /// 64 bits em `Ra:Rd`, sem flag Q, em vez de 32 bits com Q sticky em overflow).
+    DSP_DUAL_MULTIPLY,
+    /// `SMMLA{R}`/`SMMLS{R}` (ARMv6, ARM DDI 0406C A8.8.165/166): multiplicacao 32x32 com sinal,
+    /// mantendo so a metade mais significativa de 32 bits do produto de 64 bits, somada ou
+    /// subtraida (`Ra<<32 +/- Rn*Rm`) a um acumulador posicionado nos 32 bits altos.
+    /// `destinationRegister`=Rd, `sourceRegister`=Rn (bits 3:0), `secondSourceRegister`=Rm (bits
+    /// 11:8). `immediate` empacota: bits 3:0=Ra (`Ra=15` e o alias sem acumulador `SMMUL`/`SMMLS`
+    /// sem Ra, mesmo encoding), bit4=`subtract` (`SMMLS`/`SMMLSR`), bit5=`round`
+    /// (`SMMLAR`/`SMMLSR`: soma `0x8000_0000` antes de truncar, arredondando ao inves de truncar
+    /// puro). Nunca escreve flags.
+    DSP_TOP_WORD_MULTIPLY,
+    /// `UDF` (ARM DDI 0406C A8.8.247): instrucao permanentemente indefinida -- o espaco de
+    /// encoding nunca foi alocado a nenhuma instrucao real, entao a arquitetura garante uma
+    /// excecao de instrucao indefinida em qualquer versao ARM, sem gate de feature. Reconhecida
+    /// explicitamente (em vez de cair no `UNIMPLEMENTED` generico por coincidencia) para que a
+    /// tabela de cobertura distinga "sempre indefinida por definicao" de "gap de decode real"
+    /// (ver `tasks/README.md`, invariante G8). Comportamento identico ao de `UNIMPLEMENTED`: gera
+    /// `IrOp.Undefined`.
+    UDF
 }

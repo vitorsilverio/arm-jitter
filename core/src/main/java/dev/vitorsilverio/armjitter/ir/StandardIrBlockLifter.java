@@ -73,7 +73,13 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                 }
                 throw exception;
             }
-            if (instruction.kind() == InstructionKind.UNIMPLEMENTED && !block.isEmpty()) {
+            // UDF (B9.1) é permanentemente indefinida, mas o corte de bloco aqui é uma OTIMIZAÇÃO
+            // de fronteira de bloco (não perde a exceção real: a próxima vez que a execução
+            // alcançar este PC, um bloco NOVO começa vazio aqui e a levanta normalmente) — mesmo
+            // motivo de UNIMPLEMENTED, então recebe o mesmo tratamento em vez de virar um op extra
+            // à cauda de um bloco que já tinha instruções reais.
+            if ((instruction.kind() == InstructionKind.UNIMPLEMENTED || instruction.kind() == InstructionKind.UDF)
+                    && !block.isEmpty()) {
                 break;
             }
 
@@ -133,7 +139,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // MCR de wait-for-interrupt do CP15 acima): ambas terminam o bloco. TBB/TBH e CBZ/CBNZ
             // (B2.4) sempre trocam o PC (ou podem trocar, no caso de CBZ/CBNZ) — mesmo tratamento
             // que BRANCH já recebe, terminal independente do guard condicional.
-            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, UNIMPLEMENTED,
+            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, UNIMPLEMENTED, UDF,
                     // COPROCESSOR_DOUBLE (MCRR/MRRC, F3): mesmo motivo de COPROCESSOR acima — hoje só
                     // implementado como NOP de manutenção de cache (Cp15VmsaCoprocessor), mas o
                     // barramento é um gancho do host arbitrário, então terminal por precaução.
@@ -145,7 +151,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     BREAKPOINT -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
-            case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,
+            case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,
                     CPS, SETEND, STORE_RETURN_STATE, ORN, MOVE_TOP, MEMORY_BARRIER, IT,
                     MLS, BIT_FIELD_EXTRACT, BIT_FIELD_INSERT, BIT_REVERSE, DIVIDE,
                     // VFP (B3.5): nenhuma toca o PC.

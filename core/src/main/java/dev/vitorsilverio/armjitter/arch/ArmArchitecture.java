@@ -59,7 +59,8 @@ public final class ArmArchitecture {
             ArmFeature.MODE_CHANGE_INSTRUCTIONS,
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
             ArmFeature.WAIT_HINTS,
-            ArmFeature.UNALIGNED_ACCESS);
+            ArmFeature.UNALIGNED_ACCESS,
+            ArmFeature.SIGNED_MULTIPLY_MEDIA);
     // PRELOAD_HINTS (PLD/PLDW/PLI) agora vem herdado de ARMV5TE (correção acima) — antes desta
     // task estava listado aqui, sugerindo (erradamente) que só ARMv6K tinha PLD.
 

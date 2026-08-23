@@ -26,17 +26,17 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **55%** — 2209 de 3972 células aplicáveis decodificam.
+> **56%** — 2250 de 3948 células aplicáveis decodificam.
 
 Por arquitetura:
 
 | Arquitetura | Cobertura |
 |---|---|
-| v4T | **62%** (207/330) |
-| v5TE | **67%** (224/330) |
-| v6K | **86%** (286/330) |
-| MPCore | **85%** (336/393) |
-| v7-A | **85%** (584/684) |
+| v4T | **65%** (208/318) |
+| v5TE | **70%** (225/318) |
+| v6K | **90%** (299/330) |
+| MPCore | **88%** (349/393) |
+| v7-A | **87%** (597/684) |
 | v6-M | **22%** (88/385) |
 | v7-M | **54%** (210/385) |
 | A64 | **24%** (274/1135) |
@@ -45,7 +45,7 @@ Por arquitetura:
 
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
-| A32 — instruções ARM de 32 bits | 266 | v4T 59% (147/247) · v5TE 65% (161/247) · v6K 90% (223/247) · MPCore 90% (223/247) · v7-A 93% (232/247) |
+| A32 — instruções ARM de 32 bits | 266 | v4T 62% (148/235) · v5TE 68% (162/235) · v6K 95% (236/247) · MPCore 95% (236/247) · v7-A 99% (245/247) |
 | T16 — Thumb clássico | 86 | v4T 72% (60/83) · v5TE 75% (63/83) · v6K 75% (63/83) · MPCore 75% (63/83) · v7-A 83% (69/83) · v6-M 81% (68/83) · v7-M 84% (70/83) |
 | T32 — Thumb-2 | 310 | v7-A 80% (233/291) · v6-M 6% (20/291) · v7-M 48% (140/291) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 79% (50/63) · v7-A 79% (50/63) |
@@ -257,7 +257,7 @@ Inventário: `a32.decode` · 266 instruções.
 | `SBFX` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
 | `UBFX` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
 | `BFCI` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `UDF` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
+| `UDF` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `SADD16` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `SASX` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `SSAX` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
@@ -310,20 +310,20 @@ Inventário: `a32.decode` · 266 instruções.
 | `REV16` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `REVSH` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `RBIT` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `SMLAD` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLADX` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLSD` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLSDX` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
+| `SMLAD` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLADX` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLSD` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLSDX` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SDIV` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
 | `UDIV` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `SMLALD` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLALDX` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLSLD` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMLSLDX` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMMLA` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMMLAR` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMMLS` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `SMMLSR` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
+| `SMLALD` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLALDX` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLSLD` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMLSLDX` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMMLA` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMMLAR` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMMLS` | · | · | ✅ | ✅ | ✅ | · | · |
+| `SMMLSR` | · | · | ✅ | ✅ | ✅ | · | · |
 | `STM` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `LDM_a32` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `B` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |

@@ -315,6 +315,57 @@ public final class IrAluExecutor {
         }
     }
 
+    /// Sentinela `Ra=15` para o acumulador das famílias `SMLAD`/`SMMLA` (B9.1): "sem acumulador",
+    /// o alias `SMUAD`/`SMUSD`/`SMMUL`/`SMMLS` sem `Ra` — mesmo encoding, por definição do manual.
+    private static final int DSP_MEDIA_NO_ACCUMULATOR = 15;
+
+    /// `SMLAD{X}`/`SMLSD{X}`/`SMLALD{X}`/`SMLSLD{X}` (ARMv6, B9.1): dois produtos 16x16 com sinal
+    /// (a segunda metade de `rn` trocada quando `exchange`) somados ou subtraídos entre si.
+    /// Forma curta (`!longForm`): acumula em 32 bits, seta Q sticky em overflow (equivalente, em
+    /// precisão de 64 bits, ao 3-way-add real do hardware — a ordem de operações não afeta o
+    /// resultado nem a detecção de overflow, só a forma como o QEMU evita um único caso de
+    /// arredondamento incorreto). Forma longa: acumula em 64 bits `Ra:Rd`, nunca seta Q.
+    public void executeDspDualMultiply(ArmCore core, IrOp.DspDualMultiply op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int rn = core.register(op.rn());
+        int rm = op.exchange() ? Integer.rotateRight(core.register(op.rm()), 16) : core.register(op.rm());
+        long product1 = (long) (short) rn * (short) rm;
+        long product2 = (long) (short) (rn >> 16) * (short) (rm >> 16);
+        long combined = op.subtract() ? product1 - product2 : product1 + product2;
+        if (op.longForm()) {
+            long acc = ((long) core.register(op.dst()) << 32) | (core.register(op.ra()) & 0xFFFF_FFFFL);
+            long result = acc + combined;
+            core.setRegister(op.ra(), (int) result);           // RdLo
+            core.setRegister(op.dst(), (int) (result >>> 32));  // RdHi
+        } else {
+            long acc = op.ra() == DSP_MEDIA_NO_ACCUMULATOR ? 0 : core.register(op.ra());
+            long sum = combined + acc;
+            core.setRegister(op.dst(), (int) sum);
+            if (sum != (int) sum) {
+                core.cpsr().setSaturation(true);
+            }
+        }
+    }
+
+    /// `SMMLA{R}`/`SMMLS{R}` (ARMv6, B9.1): multiplicação 32x32 com sinal, mantendo só a metade
+    /// mais significativa de 32 bits do produto de 64 bits, somada/subtraída a um acumulador
+    /// posicionado nos 32 bits altos (`Ra<<32 ± Rn×Rm`), com arredondamento opcional. Nunca seta
+    /// flags (equivalente, em precisão de 64 bits, ao truque de soma em duas metades do QEMU).
+    public void executeDspTopWordMultiply(ArmCore core, IrOp.DspTopWordMultiply op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        long product = (long) core.register(op.rn()) * (long) core.register(op.rm());
+        long acc = op.ra() == DSP_MEDIA_NO_ACCUMULATOR ? 0 : ((long) core.register(op.ra())) << 32;
+        long combined = op.subtract() ? acc - product : acc + product;
+        if (op.round()) {
+            combined += 0x8000_0000L;
+        }
+        core.setRegister(op.dst(), (int) (combined >>> 32));
+    }
+
     /// Aritmética paralela ARMv6 (SADD16/UQSUB8/SHASX/...): cada lane é computada em precisão
     /// larga (int) e finalizada pela variante — wrap (escrevendo GE), saturação ou halving.
     /// As variantes saturadas paralelas NÃO tocam o flag Q sticky (diferente de QADD/QSUB).

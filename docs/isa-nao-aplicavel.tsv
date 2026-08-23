@@ -104,3 +104,19 @@ VCVT_hp_int	MPCore,v7-A	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
 # -- NOME, sem distinguir sub-encoding -- excluir aqui apagaria tambem a forma word ja
 # -- implementada. Ficam como falso-negativo conhecido (2 das 3 linhas de cada mnemonico
 # -- continuam ❌), documentado em vez de "corrigido incorretamente" -- ver Resultado da B9.5.
+
+# -- B9.1: "Signed multiply, signed and unsigned divide" (ARM DDI 0406C A5.2.6) e ARMv6 --
+# -- confirmado contra op_smlad/op_smlald/op_smmla reais em target/arm/tcg/translate.c do QEMU,
+# -- todos gateados por `ENABLE_ARCH_6` -- nao existe em ARMv4T (v4T) nem ARMv5TE (v5TE).
+SMLAD	v4T,v5TE	ARMv6 (op_smlad, ENABLE_ARCH_6)
+SMLADX	v4T,v5TE	ARMv6 (op_smlad, ENABLE_ARCH_6)
+SMLSD	v4T,v5TE	ARMv6 (op_smlad, ENABLE_ARCH_6)
+SMLSDX	v4T,v5TE	ARMv6 (op_smlad, ENABLE_ARCH_6)
+SMLALD	v4T,v5TE	ARMv6 (op_smlald, ENABLE_ARCH_6)
+SMLALDX	v4T,v5TE	ARMv6 (op_smlald, ENABLE_ARCH_6)
+SMLSLD	v4T,v5TE	ARMv6 (op_smlald, ENABLE_ARCH_6)
+SMLSLDX	v4T,v5TE	ARMv6 (op_smlald, ENABLE_ARCH_6)
+SMMLA	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
+SMMLAR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
+SMMLS	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
+SMMLSR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)

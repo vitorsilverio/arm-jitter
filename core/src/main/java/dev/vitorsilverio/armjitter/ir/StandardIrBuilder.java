@@ -509,7 +509,38 @@ public final class StandardIrBuilder implements IrBuilder {
                     true, instruction.destinationRegister(), instruction.immediate(), instruction.condition()));
             case MPROFILE_MSR -> block.add(new IrOp.MProfileSystemRegister(
                     false, instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
-            case UNIMPLEMENTED -> block.add(new IrOp.Undefined(
+            // B9.1: dois produtos 16x16 com sinal somados/subtraídos e acumulados; `dst`=Rd
+            // (RdHi na forma longa), `rm`=Rm (bits 11:8), `rs`=Rn (bits 3:0) — reaproveita os
+            // nomes de campo de DSP_MULTIPLY (mesmo papel), `immediate` empacota Ra/subtract/
+            // exchange/longForm conforme o Javadoc de InstructionKind#DSP_DUAL_MULTIPLY.
+            case DSP_DUAL_MULTIPLY -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.DspDualMultiply(
+                        instruction.destinationRegister(),
+                        instruction.sourceRegister(),
+                        instruction.secondSourceRegister(),
+                        packed & 0xF,          // Ra (RdLo na forma longa; 15 = sem acumulador)
+                        (packed & (1 << 4)) != 0, // subtract
+                        (packed & (1 << 5)) != 0, // exchange
+                        (packed & (1 << 6)) != 0, // longForm
+                        instruction.condition()));
+            }
+            // B9.1: SMMLA{R}/SMMLS{R}; `dst`=Rd, `rn`=Rn (bits 3:0), `rm`=Rm (bits 11:8),
+            // `immediate` empacota Ra/subtract/round conforme InstructionKind#DSP_TOP_WORD_MULTIPLY.
+            case DSP_TOP_WORD_MULTIPLY -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.DspTopWordMultiply(
+                        instruction.destinationRegister(),
+                        instruction.sourceRegister(),
+                        instruction.secondSourceRegister(),
+                        packed & 0xF,          // Ra (15 = sem acumulador)
+                        (packed & (1 << 4)) != 0, // subtract
+                        (packed & (1 << 5)) != 0, // round
+                        instruction.condition()));
+            }
+            // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
+            // Javadoc de InstructionKind#UDF).
+            case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
         }

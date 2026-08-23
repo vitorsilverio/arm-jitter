@@ -82,6 +82,34 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int SDIV_VALUE = 0x0710_F010;
     private static final int UDIV_VALUE = 0x0730_F010;
 
+    /// `SMLAD{X}`/`SMLSD{X}`/`SMLALD{X}`/`SMLSLD{X}` (B9.1, ARMv6, ARM DDI 0406C A5.2.6):
+    /// `cccc 0111 0d00 dddd aaaa mmmm 00M1 nnnn` (dual, 32-bit acc; `d`=0) /
+    /// `cccc 0111 0d00 dddd aaaa mmmm 0sM1 nnnn` (dual longo, 64-bit acc; `d`=1, bit22).
+    /// `s`(bit6)=`subtract` (`SMLSD*`), `M`(bit5)=`exchange` (forma `X`). Confirmado contra
+    /// `a32.decode`/`translate.c` reais do QEMU (`op_smlad`/`op_smlald`, `ENABLE_ARCH_6`).
+    private static final int DSP_DUAL_MULTIPLY_MASK = 0x0FB0_0090;
+    private static final int DSP_DUAL_MULTIPLY_VALUE = 0x0700_0010;
+    private static final int DSP_DUAL_MULTIPLY_LONG_BIT = 22;
+    private static final int DSP_DUAL_MULTIPLY_SUBTRACT_BIT = 6;
+    private static final int DSP_DUAL_MULTIPLY_EXCHANGE_BIT = 5;
+
+    /// `SMMLA{R}`/`SMMLS{R}` (B9.1, ARMv6, ARM DDI 0406C A5.2.6):
+    /// `cccc 0111 0101 dddd aaaa mmmm sr01 nnnn`. `s`(bit6)=`subtract` (`SMMLS*`), `r`(bit5)=
+    /// `round` (`SMMLA R`/`SMMLS R`). Confirmado contra `op_smmla` real do QEMU (`ENABLE_ARCH_6`).
+    private static final int DSP_TOP_WORD_MULTIPLY_MASK = 0x0FF0_0010;
+    private static final int DSP_TOP_WORD_MULTIPLY_VALUE = 0x0750_0010;
+    private static final int DSP_TOP_WORD_MULTIPLY_SUBTRACT_BIT = 6;
+    private static final int DSP_TOP_WORD_MULTIPLY_ROUND_BIT = 5;
+
+    /// `UDF` (ARM DDI 0406C A8.8.247): `1110 0111 1111 ---- ---- ---- 1111 ----` — instrução
+    /// permanentemente indefinida, sem gate de versão (o espaço nunca foi alocado a nenhuma
+    /// instrução real, então SEMPRE levanta instrução indefinida — mesmo comportamento de
+    /// `UNIMPLEMENTED`, só reconhecida explicitamente para a tabela de cobertura). Fixa `cond` em
+    /// `AL`; outros valores de `cond` sobre o mesmo padrão de bits também caem em `UNIMPLEMENTED`
+    /// via o dispatch condicional normal (mesmo resultado observável).
+    private static final int UDF_MASK = 0xFFF0_00F0;
+    private static final int UDF_VALUE = 0xE7F0_00F0;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -544,6 +572,50 @@ public final class ArmDecoder implements InstructionDecoder {
             }
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.DIVIDE,
                     rd, rn, rm, 0, false, false, false, 0, signedDivide);
+        }
+
+        // UDF (B9.1): precisa vir ANTES do bloco de LDR/STR imediato abaixo, mesmo motivo do
+        // grupo SBFX/UBFX/BFI/BFC/RBIT/SDIV/UDIV logo acima (mesmo espaço "media instructions").
+        if ((raw & UDF_MASK) == UDF_VALUE) {
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.UDF,
+                    -1, -1, -1, 0, false, false, false);
+        }
+
+        // SMLAD{X}/SMLSD{X}/SMLALD{X}/SMLSLD{X} (B9.1, ARMv6): precisa vir ANTES do bloco de
+        // LDR/STR imediato abaixo, mesmo motivo do grupo SBFX/... logo acima.
+        if ((raw & DSP_DUAL_MULTIPLY_MASK) == DSP_DUAL_MULTIPLY_VALUE
+                && architecture.has(ArmFeature.SIGNED_MULTIPLY_MEDIA)) {
+            int rd = (raw >>> 16) & 0xF;
+            int ra = (raw >>> 12) & 0xF;
+            int rm = (raw >>> 8) & 0xF;
+            int rn = raw & 0xF;
+            boolean longForm = ((raw >>> DSP_DUAL_MULTIPLY_LONG_BIT) & 1) != 0;
+            boolean subtract = ((raw >>> DSP_DUAL_MULTIPLY_SUBTRACT_BIT) & 1) != 0;
+            boolean exchange = ((raw >>> DSP_DUAL_MULTIPLY_EXCHANGE_BIT) & 1) != 0;
+            if (rd == PROGRAM_COUNTER || rm == PROGRAM_COUNTER || rn == PROGRAM_COUNTER
+                    || (longForm && ra == PROGRAM_COUNTER)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int packed = ra | (subtract ? 1 << 4 : 0) | (exchange ? 1 << 5 : 0) | (longForm ? 1 << 6 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    InstructionKind.DSP_DUAL_MULTIPLY, rd, rm, rn, packed, false, false, false);
+        }
+
+        // SMMLA{R}/SMMLS{R} (B9.1, ARMv6): mesmo motivo de posicionamento acima.
+        if ((raw & DSP_TOP_WORD_MULTIPLY_MASK) == DSP_TOP_WORD_MULTIPLY_VALUE
+                && architecture.has(ArmFeature.SIGNED_MULTIPLY_MEDIA)) {
+            int rd = (raw >>> 16) & 0xF;
+            int ra = (raw >>> 12) & 0xF;
+            int rm = (raw >>> 8) & 0xF;
+            int rn = raw & 0xF;
+            boolean subtract = ((raw >>> DSP_TOP_WORD_MULTIPLY_SUBTRACT_BIT) & 1) != 0;
+            boolean round = ((raw >>> DSP_TOP_WORD_MULTIPLY_ROUND_BIT) & 1) != 0;
+            if (rd == PROGRAM_COUNTER || rm == PROGRAM_COUNTER || rn == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int packed = ra | (subtract ? 1 << 4 : 0) | (round ? 1 << 5 : 0);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    InstructionKind.DSP_TOP_WORD_MULTIPLY, rd, rn, rm, packed, false, false, false);
         }
 
         if ((raw & 0x0C00_0000) == 0x0400_0000) {
