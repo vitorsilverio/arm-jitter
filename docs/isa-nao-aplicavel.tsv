@@ -249,3 +249,25 @@ SQRDMLAH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A
 SQRDMLSH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
 SQRDMLAH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
 SQRDMLSH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+
+# ── A64 (B8.9): extensões opcionais de AdvSIMD FP vetorial, todas posteriores ao Cortex-A53
+# ── (ARMv8.0-A) do raspi3. NÃO inclui as linhas de meia-precisão (`FEAT_FP16`) de `FADD_v`/
+# ── `FSUB_v`/`FMUL_v`/.../`FMINNMP_v` — essas instruções aparecem DUAS VEZES no inventário do QEMU
+# ── (uma linha "h"/meia-precisão, uma linha "sd"/simples-dupla, MESMO mnemônico `a64.decode`) e a
+# ── curadoria deste arquivo casa por NOME, não por linha — TSV-ar essas duas suprimiria também a
+# ── linha "sd" que a B8.9 IMPLEMENTOU. A linha "h" de cada uma fica ❌ deliberadamente (ver a task
+# ── `b8.9-a64-advsimd-fp-vetorial.md`, seção Armadilhas), sem entrada aqui.
+FMLAL_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm, "FP16 fused multiply-add long"), posterior ao Cortex-A53
+FMLSL_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FMLAL2_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FMLSL2_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FCADD_90	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma, "complex number FP add"), posterior ao Cortex-A53
+FCADD_270	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
+FCMLA_v	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
+FRINT32Z_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT32Z_s (escalar, tabela A64 "·" desde a rodada anterior)
+FRINT32X_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT32X_s (escalar)
+FRINT64Z_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT64Z_s (escalar)
+FRINT64X_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT64X_s (escalar)
+FAMAX	A64	ARMv9.4-A/FEAT_FAMINMAX ("floating-point absolute max/min"), muito posterior ao Cortex-A53
+FAMIN	A64	ARMv9.4-A/FEAT_FAMINMAX, muito posterior ao Cortex-A53
+FSCALE	A64	extensão FP recente (SVE2.1/FEAT_FP8, ~ARMv9.x), muito posterior ao Cortex-A53

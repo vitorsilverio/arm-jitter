@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **69%** — 2666 de 3857 células aplicáveis decodificam.
+> **70%** — 2721 de 3840 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **54%** (598/1107) |
+| A64 | **59%** (653/1090) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 54% (598/1107) |
+| A64 — AArch64 | 1161 | A64 59% (653/1090) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2030,8 +2030,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SHA512SU1` | ✅ |
 | `RAX1` | ✅ |
 | `SM3PARTW1` | ✅ |
-| `SM3PARTW2` | ❌ |
-| `SM4EKEY` | ❌ |
+| `SM3PARTW2` | ✅ |
+| `SM4EKEY` | ✅ |
 | `SHA512SU0` | ❌ |
 | `SM4E` | ❌ |
 | `EOR3` | ❌ |
@@ -2120,57 +2120,57 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMINNMP_s` | ❌ |
 | `ADDP_s` | ✅ |
 | `FADD_v` | ❌ |
-| `FADD_v` | ❌ |
+| `FADD_v` | ✅ |
 | `FSUB_v` | ❌ |
-| `FSUB_v` | ❌ |
+| `FSUB_v` | ✅ |
 | `FDIV_v` | ❌ |
-| `FDIV_v` | ❌ |
+| `FDIV_v` | ✅ |
 | `FMUL_v` | ❌ |
-| `FMUL_v` | ❌ |
+| `FMUL_v` | ✅ |
 | `FMAX_v` | ❌ |
-| `FMAX_v` | ❌ |
+| `FMAX_v` | ✅ |
 | `FMIN_v` | ❌ |
-| `FMIN_v` | ❌ |
+| `FMIN_v` | ✅ |
 | `FMAXNM_v` | ❌ |
-| `FMAXNM_v` | ❌ |
+| `FMAXNM_v` | ✅ |
 | `FMINNM_v` | ❌ |
-| `FMINNM_v` | ❌ |
+| `FMINNM_v` | ✅ |
 | `FMULX_v` | ❌ |
-| `FMULX_v` | ❌ |
+| `FMULX_v` | ✅ |
 | `FMLA_v` | ❌ |
-| `FMLA_v` | ❌ |
+| `FMLA_v` | ✅ |
 | `FMLS_v` | ❌ |
-| `FMLS_v` | ❌ |
-| `FMLAL_v` | ❌ |
-| `FMLSL_v` | ❌ |
-| `FMLAL2_v` | ❌ |
-| `FMLSL2_v` | ❌ |
+| `FMLS_v` | ✅ |
+| `FMLAL_v` | · |
+| `FMLSL_v` | · |
+| `FMLAL2_v` | · |
+| `FMLSL2_v` | · |
 | `FCMEQ_v` | ❌ |
-| `FCMEQ_v` | ❌ |
+| `FCMEQ_v` | ✅ |
 | `FCMGE_v` | ❌ |
-| `FCMGE_v` | ❌ |
+| `FCMGE_v` | ✅ |
 | `FCMGT_v` | ❌ |
-| `FCMGT_v` | ❌ |
+| `FCMGT_v` | ✅ |
 | `FACGE_v` | ❌ |
-| `FACGE_v` | ❌ |
+| `FACGE_v` | ✅ |
 | `FACGT_v` | ❌ |
-| `FACGT_v` | ❌ |
+| `FACGT_v` | ✅ |
 | `FABD_v` | ❌ |
-| `FABD_v` | ❌ |
+| `FABD_v` | ✅ |
 | `FRECPS_v` | ❌ |
-| `FRECPS_v` | ❌ |
+| `FRECPS_v` | ✅ |
 | `FRSQRTS_v` | ❌ |
-| `FRSQRTS_v` | ❌ |
+| `FRSQRTS_v` | ✅ |
 | `FADDP_v` | ❌ |
-| `FADDP_v` | ❌ |
+| `FADDP_v` | ✅ |
 | `FMAXP_v` | ❌ |
-| `FMAXP_v` | ❌ |
+| `FMAXP_v` | ✅ |
 | `FMINP_v` | ❌ |
-| `FMINP_v` | ❌ |
+| `FMINP_v` | ✅ |
 | `FMAXNMP_v` | ❌ |
-| `FMAXNMP_v` | ❌ |
+| `FMAXNMP_v` | ✅ |
 | `FMINNMP_v` | ❌ |
-| `FMINNMP_v` | ❌ |
+| `FMINNMP_v` | ✅ |
 | `ADDP_v` | ✅ |
 | `SMAXP_v` | ✅ |
 | `SMINP_v` | ✅ |
@@ -2237,9 +2237,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SMMLA` | ❌ |
 | `UMMLA` | ❌ |
 | `USMMLA` | ❌ |
-| `FCADD_90` | ❌ |
-| `FCADD_270` | ❌ |
-| `FCMLA_v` | ❌ |
+| `FCADD_90` | · |
+| `FCADD_270` | · |
+| `FCMLA_v` | · |
 | `SMULL_v` | ✅ |
 | `UMULL_v` | ✅ |
 | `SMLAL_v` | ✅ |
@@ -2270,12 +2270,12 @@ Inventário: `a64.decode` · 1161 instruções.
 | `RSUBHN` | ✅ |
 | `PMULL_p8` | ❌ |
 | `PMULL_p64` | ❌ |
-| `FAMAX` | ❌ |
-| `FAMAX` | ❌ |
-| `FAMIN` | ❌ |
-| `FAMIN` | ❌ |
-| `FSCALE` | ❌ |
-| `FSCALE` | ❌ |
+| `FAMAX` | · |
+| `FAMAX` | · |
+| `FAMIN` | · |
+| `FAMIN` | · |
+| `FSCALE` | · |
+| `FSCALE` | · |
 | `FCVTN_bh` | ❌ |
 | `FCVTN_bs` | ❌ |
 | `FMLAL_hb_v` | ❌ |
@@ -2694,67 +2694,67 @@ Inventário: `a64.decode` · 1161 instruções.
 | `BFCVTN_v` | ❌ |
 | `SHLL_v` | ❌ |
 | `FABS_v` | ❌ |
-| `FABS_v` | ❌ |
+| `FABS_v` | ✅ |
 | `FNEG_v` | ❌ |
-| `FNEG_v` | ❌ |
+| `FNEG_v` | ✅ |
 | `FSQRT_v` | ❌ |
-| `FSQRT_v` | ❌ |
+| `FSQRT_v` | ✅ |
 | `FRINTN_v` | ❌ |
-| `FRINTN_v` | ❌ |
+| `FRINTN_v` | ✅ |
 | `FRINTM_v` | ❌ |
-| `FRINTM_v` | ❌ |
+| `FRINTM_v` | ✅ |
 | `FRINTP_v` | ❌ |
-| `FRINTP_v` | ❌ |
+| `FRINTP_v` | ✅ |
 | `FRINTZ_v` | ❌ |
-| `FRINTZ_v` | ❌ |
+| `FRINTZ_v` | ✅ |
 | `FRINTA_v` | ❌ |
-| `FRINTA_v` | ❌ |
+| `FRINTA_v` | ✅ |
 | `FRINTX_v` | ❌ |
-| `FRINTX_v` | ❌ |
+| `FRINTX_v` | ✅ |
 | `FRINTI_v` | ❌ |
-| `FRINTI_v` | ❌ |
-| `FRINT32Z_v` | ❌ |
-| `FRINT32X_v` | ❌ |
-| `FRINT64Z_v` | ❌ |
-| `FRINT64X_v` | ❌ |
+| `FRINTI_v` | ✅ |
+| `FRINT32Z_v` | · |
+| `FRINT32X_v` | · |
+| `FRINT64Z_v` | · |
+| `FRINT64X_v` | · |
 | `SCVTF_vi` | ❌ |
-| `SCVTF_vi` | ❌ |
+| `SCVTF_vi` | ✅ |
 | `UCVTF_vi` | ❌ |
-| `UCVTF_vi` | ❌ |
+| `UCVTF_vi` | ✅ |
 | `FCVTNS_vi` | ✅ |
-| `FCVTNS_vi` | ❌ |
+| `FCVTNS_vi` | ✅ |
 | `FCVTNU_vi` | ✅ |
-| `FCVTNU_vi` | ❌ |
+| `FCVTNU_vi` | ✅ |
 | `FCVTPS_vi` | ❌ |
-| `FCVTPS_vi` | ❌ |
+| `FCVTPS_vi` | ✅ |
 | `FCVTPU_vi` | ❌ |
-| `FCVTPU_vi` | ❌ |
+| `FCVTPU_vi` | ✅ |
 | `FCVTMS_vi` | ✅ |
-| `FCVTMS_vi` | ❌ |
+| `FCVTMS_vi` | ✅ |
 | `FCVTMU_vi` | ❌ |
-| `FCVTMU_vi` | ❌ |
+| `FCVTMU_vi` | ✅ |
 | `FCVTZS_vi` | ❌ |
-| `FCVTZS_vi` | ❌ |
+| `FCVTZS_vi` | ✅ |
 | `FCVTZU_vi` | ❌ |
-| `FCVTZU_vi` | ❌ |
+| `FCVTZU_vi` | ✅ |
 | `FCVTAS_vi` | ❌ |
-| `FCVTAS_vi` | ❌ |
+| `FCVTAS_vi` | ✅ |
 | `FCVTAU_vi` | ❌ |
-| `FCVTAU_vi` | ❌ |
+| `FCVTAU_vi` | ✅ |
 | `FCMGT0_v` | ❌ |
-| `FCMGT0_v` | ❌ |
+| `FCMGT0_v` | ✅ |
 | `FCMGE0_v` | ❌ |
-| `FCMGE0_v` | ❌ |
+| `FCMGE0_v` | ✅ |
 | `FCMEQ0_v` | ❌ |
-| `FCMEQ0_v` | ❌ |
+| `FCMEQ0_v` | ✅ |
 | `FCMLE0_v` | ❌ |
-| `FCMLE0_v` | ❌ |
+| `FCMLE0_v` | ✅ |
 | `FCMLT0_v` | ❌ |
-| `FCMLT0_v` | ❌ |
+| `FCMLT0_v` | ✅ |
 | `FRECPE_v` | ❌ |
-| `FRECPE_v` | ❌ |
+| `FRECPE_v` | ✅ |
 | `FRSQRTE_v` | ❌ |
-| `FRSQRTE_v` | ❌ |
+| `FRSQRTE_v` | ✅ |
 | `URECPE_v` | ❌ |
 | `URSQRTE_v` | ❌ |
 | `FCVTL_v` | ❌ |

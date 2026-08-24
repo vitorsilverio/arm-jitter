@@ -73,14 +73,14 @@ final class Ir64FpExecutor {
 
     /// `FPMaxNum` (`ARM DDI 0487`): se exatamente um operando é NaN, devolve o OUTRO; se os dois
     /// são NaN, devolve NaN; senão, `Math.max` normal (mesma semântica de sinal de zero do `MAX`).
-    private static float maxNum(float a, float b) {
+    static float maxNum(float a, float b) {
         if (Float.isNaN(a)) {
             return Float.isNaN(b) ? a : b;
         }
         return Float.isNaN(b) ? a : Math.max(a, b);
     }
 
-    private static double maxNum(double a, double b) {
+    static double maxNum(double a, double b) {
         if (Double.isNaN(a)) {
             return Double.isNaN(b) ? a : b;
         }
@@ -88,14 +88,14 @@ final class Ir64FpExecutor {
     }
 
     /// `FPMinNum` — espelho de {@link #maxNum(float, float)} com `Math.min`.
-    private static float minNum(float a, float b) {
+    static float minNum(float a, float b) {
         if (Float.isNaN(a)) {
             return Float.isNaN(b) ? a : b;
         }
         return Float.isNaN(b) ? a : Math.min(a, b);
     }
 
-    private static double minNum(double a, double b) {
+    static double minNum(double a, double b) {
         if (Double.isNaN(a)) {
             return Double.isNaN(b) ? a : b;
         }
@@ -246,7 +246,10 @@ final class Ir64FpExecutor {
         return false;
     }
 
-    private static double roundToIntegral(double value, Ir64Op.Fp64RoundingDirection direction) {
+    /// Package-private (B8.9): reaproveitado por {@link Ir64VectorFpArithmeticExecutor} para
+    /// `FRINTx_v`/`FCVTxS_vi`/`FCVTxU_vi` — MESMA tabela de arredondamento do escalar (B8.5), sem
+    /// duplicar a lógica.
+    static double roundToIntegral(double value, Ir64Op.Fp64RoundingDirection direction) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return value;
         }
@@ -312,7 +315,7 @@ final class Ir64FpExecutor {
     /// Mesma direção de {@link #roundToIntegral}, mas SEM o curto-circuito NaN/infinito — quem
     /// chama ({@link #saturateToInteger}) precisa do `NaN`/infinito intactos para saturar
     /// corretamente (`FPToFixed`: `NaN`→`0`, infinito→limite da largura).
-    private static double roundToIntegralForConversion(double value, Ir64Op.Fp64RoundingDirection direction) {
+    static double roundToIntegralForConversion(double value, Ir64Op.Fp64RoundingDirection direction) {
         if (Double.isNaN(value)) {
             return value;
         }
@@ -325,7 +328,7 @@ final class Ir64FpExecutor {
     /// Converte um `long` de 64 bits SEM SINAL (bit mais alto pode estar setado) para o `double`
     /// mais próximo — truque padrão (deslocar 1 bit sem sinal, escalar de volta, somar o bit
     /// perdido) já que `(double) long` do Java sempre assume sinal.
-    private static double unsignedLongToDouble(long value) {
+    static double unsignedLongToDouble(long value) {
         if (value >= 0) {
             return (double) value;
         }
@@ -335,7 +338,7 @@ final class Ir64FpExecutor {
     /// `FPToFixed`: arredonda+satura `rounded` (já na direção certa) para a largura/sinal pedida.
     /// `NaN`→`0`; fora da faixa→o limite mais próximo (mesma convenção de
     /// {@code IrVfpExecutor#doubleToFixed}, o precedente VFP32 desta mesma técnica).
-    private static long saturateToInteger(double rounded, boolean signed, boolean wide) {
+    static long saturateToInteger(double rounded, boolean signed, boolean wide) {
         if (Double.isNaN(rounded)) {
             return 0L;
         }

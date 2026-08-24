@@ -42,7 +42,9 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorArithmeticWidening, Ir64Op.VectorArithmeticWide, Ir64Op.VectorArithmeticNarrow,
         Ir64Op.VectorAcrossLanes, Ir64Op.VectorArithmeticUnary, Ir64Op.VectorScalarPairwiseAdd,
         Ir64Op.VectorArithmeticNarrowUnary, Ir64Op.VectorShiftImmediate,
-        Ir64Op.VectorShiftNarrowImmediate, Ir64Op.VectorShiftWidenImmediate {
+        Ir64Op.VectorShiftNarrowImmediate, Ir64Op.VectorShiftWidenImmediate,
+        Ir64Op.VectorFpArithmeticThreeSame, Ir64Op.VectorFpArithmeticPairwise,
+        Ir64Op.VectorFpArithmeticUnary {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -186,6 +188,18 @@ public sealed interface Ir64Op permits
         /// B8.8: `SSHLL`/`USHLL` (AdvSIMD "shift by immediate" alargando) — ver
         /// {@link VectorShiftWidenImmediate}.
         public static final int VECTOR_SHIFT_WIDEN_IMMEDIATE = 67;
+        /// B8.9: `FADD_v`/`FSUB_v`/`FMUL_v`/`FDIV_v`/`FMAX_v`/`FMIN_v`/`FMAXNM_v`/`FMINNM_v`/
+        /// `FMULX_v`/`FMLA_v`/`FMLS_v`/`FCMEQ_v`/`FCMGE_v`/`FCMGT_v`/`FACGE_v`/`FACGT_v`/`FABD_v`/
+        /// `FRECPS_v`/`FRSQRTS_v` (AdvSIMD "three same" de ponto flutuante, só simples/dupla) — ver
+        /// {@link VectorFpArithmeticThreeSame}.
+        public static final int VECTOR_FP_ARITHMETIC_THREE_SAME = 68;
+        /// B8.9: `FADDP_v`/`FMAXP_v`/`FMINP_v`/`FMAXNMP_v`/`FMINNMP_v` — ver
+        /// {@link VectorFpArithmeticPairwise}.
+        public static final int VECTOR_FP_ARITHMETIC_PAIRWISE = 69;
+        /// B8.9: `FABS_v`/`FNEG_v`/`FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`FCM**0_v`/
+        /// `SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/`FCVTxU_vi` (AdvSIMD "two-register miscellaneous" de
+        /// ponto flutuante) — ver {@link VectorFpArithmeticUnary}.
+        public static final int VECTOR_FP_ARITHMETIC_UNARY = 70;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1768,5 +1782,68 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte (elementos `esz`).
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_SHIFT_WIDEN_IMMEDIATE; }
+    }
+
+    /// AdvSIMD "three same" de ponto flutuante (`FADD_v`/`FSUB_v`/`FMUL_v`/.../`FRSQRTS_v`, B8.9) —
+    /// os 3 operandos (`Rd`/`Rn`/`Rm`) têm o MESMO tamanho de elemento {@link #esz}, sempre `2`
+    /// (simples) ou `3` (dupla) — meia-precisão (`FEAT_FP16`) fica fora (`docs/isa-nao-aplicavel.tsv`).
+    /// Só a forma VETORIAL — ver {@link Ir64VectorFpThreeSameOp}.
+    record VectorFpArithmeticThreeSame(
+            /// Operação a executar.
+            Ir64VectorFpThreeSameOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: sempre `2` (single, 32 bits) ou `3`
+            /// (double, 64 bits).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME; }
+    }
+
+    /// AdvSIMD "three same" de ponto flutuante, pareado (`FADDP_v`/`FMAXP_v`/`FMINP_v`/
+    /// `FMAXNMP_v`/`FMINNMP_v`, B8.9) — concatena `Rn:Rm` e combina pares adjacentes, mesmo esquema
+    /// de {@link VectorArithmeticPairwise} (inteiro).
+    record VectorFpArithmeticPairwise(
+            /// Operação a executar.
+            Ir64VectorFpPairwiseOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`2` ou `3`).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (metade BAIXA do resultado).
+            int rn,
+            /// Registrador `V` fonte 2 (metade ALTA do resultado).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_PAIRWISE; }
+    }
+
+    /// AdvSIMD "two-register miscellaneous" de ponto flutuante (`FABS_v`/`FNEG_v`/`FSQRT_v`/
+    /// `FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`FCM**0_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/`FCVTxU_vi`,
+    /// B8.9) — um único operando de origem (`Rn`). Vive em DOIS slots de encoding diferentes do
+    /// mesmo grupo (achado da triagem — ver {@link Ir64VectorFpUnaryOp}), resolvido pelo decoder,
+    /// transparente para este record: sempre `Rd`/`Rn`/`esz`/`q`.
+    record VectorFpArithmeticUnary(
+            /// Operação a executar.
+            Ir64VectorFpUnaryOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`2` ou `3`) — para
+            /// {@link Ir64VectorFpUnaryOp#SCVTF}/{@link Ir64VectorFpUnaryOp#UCVTF}, é o tamanho do
+            /// elemento INTEIRO de entrada (mesmo tamanho do resultado FP); para as demais
+            /// `FCVTxS`/`FCVTxU`, é o tamanho do elemento FP de entrada (mesmo tamanho do inteiro
+            /// de saída).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_UNARY; }
     }
 }

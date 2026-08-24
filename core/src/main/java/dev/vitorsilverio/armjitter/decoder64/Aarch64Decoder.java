@@ -19,6 +19,9 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
@@ -841,6 +844,13 @@ public final class Aarch64Decoder {
     /// Bit alto de `Rm` setado — "across lanes" (`ADDV`/...)/`ADDP_s` (Rm parcialmente livre,
     /// dispatch por tabela exata em vez de decompor mais).
     private static final int ADVSIMD_INT_RM_ACROSS_LANES_BIT = 0b1_0000;
+    /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
+    /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
+    /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
+    /// tamanho do elemento; o bit ALTO — `bit23`, "a" — é mais um bit de discriminação de opcode,
+    /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
+    /// deriva só de `sz`, bit22).
+    private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
 
     // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
     // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
@@ -2202,21 +2212,50 @@ public final class Aarch64Decoder {
         }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
             Ir64VectorUnaryOp op = decodeVectorUnaryOpcode(u, opcode, scalar);
-            if (op == null) {
-                throw unsupported(word, address);
+            if (op != null) {
+                validateScalarUnaryEsz(word, address, scalar, op, esz);
+                return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
             }
-            validateScalarUnaryEsz(word, address, scalar, op, esz);
-            return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
+            // B8.9: `FABS_v`/`FNEG_v`/`FCM**0_v` vivem no MESMO slot `Rm=00000` do inteiro
+            // (achado real da triagem — ver javadoc de {@link Ir64VectorFpUnaryOp}). Só vetorial
+            // (a forma escalar destas mesmas operações É uma instrução `AdvSIMD scalar` real —
+            // `FABS`/`FNEG`/`FSQRT` escalares já são {@link Ir64Op.Fp64Alu} desde B8.4, um
+            // encoding TOTALMENTE diferente; `FCM**0_s` fica fora desta task).
+            if (!scalar) {
+                boolean a = ((esz >>> 1) & 1) != 0;
+                int floatEsz = 2 + (esz & 1);
+                Ir64VectorFpUnaryOp fpOp = decodeVectorFpUnaryRmZeroOpcode(u, a, opcode);
+                if (fpOp != null) {
+                    return new Ir64Op.VectorFpArithmeticUnary(fpOp, q, floatEsz, rd, rn);
+                }
+            }
+            throw unsupported(word, address);
         }
         if (rm == ADVSIMD_INT_RM_NARROW_UNARY) {
-            // B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (narrow unário saturante) — o resto do slot
-            // (`FCVTXN`/conversões FP) continua fora de escopo (B8.9).
+            // B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (narrow unário saturante).
             Ir64VectorNarrowUnaryOp narrowOp = decodeVectorNarrowUnaryOpcode(u, opcode);
-            if (narrowOp == null || esz == ADVSIMD_INT_SCALAR_ESZ) {
-                // Doubleword não tem forma estreitada real (não há `Q`→`D`); G8.
-                throw unsupported(word, address);
+            if (narrowOp != null) {
+                if (esz == ADVSIMD_INT_SCALAR_ESZ) {
+                    // Doubleword não tem forma estreitada real (não há `Q`→`D`); G8.
+                    throw unsupported(word, address);
+                }
+                return new Ir64Op.VectorArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
             }
-            return new Ir64Op.VectorArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
+            // B8.9: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/
+            // `FCVTxU_vi` vivem no MESMO slot `Rm=00001` do inteiro narrow-unário — a
+            // `FCVTXN`/conversão narrow de precisão FP (bit10=0 real do encoding, DIFERENTE de
+            // `narrowOp` acima) continua fora de escopo (candidata a task própria, ver "Não
+            // inclui"). Só vetorial (`FCVTXN_s`/`FRECPE_s`/`FRECPX_s`/`FRSQRTE_s`/conversão
+            // escalar via `V` ficam fora desta task).
+            if (!scalar) {
+                boolean a = ((esz >>> 1) & 1) != 0;
+                int floatEsz = 2 + (esz & 1);
+                Ir64VectorFpUnaryOp fpOp = decodeVectorFpUnaryRmOneOpcode(u, a, opcode);
+                if (fpOp != null) {
+                    return new Ir64Op.VectorFpArithmeticUnary(fpOp, q, floatEsz, rd, rn);
+                }
+            }
+            throw unsupported(word, address);
         }
         if ((rm & ADVSIMD_INT_RM_ACROSS_LANES_BIT) != 0) {
             if (scalar) {
@@ -2279,7 +2318,94 @@ public final class Aarch64Decoder {
                 return new Ir64Op.VectorArithmeticPairwise(pairwiseOp, q, esz, rd, rn, rm);
             }
         }
+        // B8.9: "AdvSIMD three same (FP)"/"three same pairwise (FP)" — MESMO prefixo/bit10 do
+        // inteiro, opcodes NUNCA colidem com a tabela inteira (conferido exaustivamente contra
+        // `a64.decode` real: os opcodes FP começam sempre em `0b11000`, acima do maior opcode
+        // inteiro desta tabela). Só forma VETORIAL (`scalar` fica de fora — ver javadoc de
+        // {@link Ir64VectorFpThreeSameOp}); `esz` aqui é ainda o valor cru bits[23:22], que para FP
+        // precisa ser desmontado em `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
+        if (!scalar) {
+            boolean a = ((esz >>> 1) & 1) != 0;
+            int floatEsz = 2 + (esz & 1);
+            Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
+            if (fpOp != null) {
+                return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, q, floatEsz, rd, rn, rm);
+            }
+            Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpPairwiseOpcode(u, a, opcode);
+            if (fpPairwiseOp != null) {
+                return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, q, floatEsz, rd, rn, rm);
+            }
+        }
         throw unsupported(word, address);
+    }
+
+    /// AdvSIMD "three same (FP)" — tabela `(u, a, opcode)` conferida linha a linha contra
+    /// `a64.decode` real do QEMU (`FADD_v`/.../`FRSQRTS_v`, formas `sd` só — `h`/meia-precisão
+    /// excluída, `FEAT_FP16`). `a` é o bit23 (ver {@link #ADVSIMD_FP_A_BIT_SHIFT}), NUNCA um
+    /// tamanho de elemento.
+    private static Ir64VectorFpThreeSameOp decodeVectorFpThreeSameOpcode(boolean u, boolean a, int opcode) {
+        int key = (u ? 0b100 : 0) | (a ? 0b010 : 0);
+        return switch (opcode) {
+            case 0b1_1010 -> switch (key) {
+                case 0b000 -> Ir64VectorFpThreeSameOp.ADD;
+                case 0b010 -> Ir64VectorFpThreeSameOp.SUB;
+                case 0b110 -> Ir64VectorFpThreeSameOp.ABD;
+                default -> null;
+            };
+            case 0b1_1111 -> switch (key) {
+                case 0b100 -> Ir64VectorFpThreeSameOp.DIV;
+                case 0b000 -> Ir64VectorFpThreeSameOp.RECPS;
+                case 0b010 -> Ir64VectorFpThreeSameOp.RSQRTS;
+                default -> null;
+            };
+            case 0b1_1011 -> switch (key) {
+                case 0b100 -> Ir64VectorFpThreeSameOp.MUL;
+                case 0b000 -> Ir64VectorFpThreeSameOp.MULX;
+                default -> null;
+            };
+            case 0b1_1110 -> switch (key) {
+                case 0b000 -> Ir64VectorFpThreeSameOp.MAX;
+                case 0b010 -> Ir64VectorFpThreeSameOp.MIN;
+                default -> null;
+            };
+            case 0b1_1000 -> switch (key) {
+                case 0b000 -> Ir64VectorFpThreeSameOp.MAXNM;
+                case 0b010 -> Ir64VectorFpThreeSameOp.MINNM;
+                default -> null;
+            };
+            case 0b1_1001 -> switch (key) {
+                case 0b000 -> Ir64VectorFpThreeSameOp.MLA;
+                case 0b010 -> Ir64VectorFpThreeSameOp.MLS;
+                default -> null;
+            };
+            case 0b1_1100 -> switch (key) {
+                case 0b000 -> Ir64VectorFpThreeSameOp.CMEQ;
+                case 0b100 -> Ir64VectorFpThreeSameOp.CMGE;
+                case 0b110 -> Ir64VectorFpThreeSameOp.CMGT;
+                default -> null;
+            };
+            case 0b1_1101 -> switch (key) {
+                case 0b100 -> Ir64VectorFpThreeSameOp.FACGE;
+                case 0b110 -> Ir64VectorFpThreeSameOp.FACGT;
+                default -> null;
+            };
+            default -> null;
+        };
+    }
+
+    /// AdvSIMD "three same pairwise (FP)" — mesma disciplina de
+    /// {@link #decodeVectorFpThreeSameOpcode}. Opcodes reaproveitados (`26`/`30`/`24`) só colidem
+    /// com combinações `(u,a)` NÃO usadas pela tabela não-pareada (conferido acima).
+    private static Ir64VectorFpPairwiseOp decodeVectorFpPairwiseOpcode(boolean u, boolean a, int opcode) {
+        if (!u) {
+            return null;
+        }
+        return switch (opcode) {
+            case 0b1_1010 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
+            case 0b1_1110 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
+            case 0b1_1000 -> a ? Ir64VectorFpPairwiseOp.MINNM : Ir64VectorFpPairwiseOp.MAXNM;
+            default -> null;
+        };
     }
 
     /// `esz` mínimo/máximo aceito por cada subconjunto ESCALAR de "three same" (B8.8) — nomeado em
@@ -2395,6 +2521,73 @@ public final class Aarch64Decoder {
         return switch (opcode) {
             case 0b0_1001 -> u ? Ir64VectorNarrowUnaryOp.UQXTN : Ir64VectorNarrowUnaryOp.SQXTN;
             case 0b0_0101 -> u ? Ir64VectorNarrowUnaryOp.SQXTUN : null;
+            default -> null;
+        };
+    }
+
+    /// AdvSIMD "two-register misc (FP)", slot `Rm=00000` (B8.9) — `FABS_v`/`FNEG_v`/`FCM**0_v`.
+    /// Todas têm `a`(bit23)`=1` no encoding real; a tabela ainda recebe `a` explícito (em vez de
+    /// assumir) para deixar claro que combinações com `a=0` neste slot são reservadas (G8, não
+    /// alcançáveis por nenhuma linha do `switch`).
+    private static Ir64VectorFpUnaryOp decodeVectorFpUnaryRmZeroOpcode(boolean u, boolean a, int opcode) {
+        if (!a) {
+            return null;
+        }
+        return switch (opcode) {
+            case 0b1_1111 -> u ? Ir64VectorFpUnaryOp.NEG : Ir64VectorFpUnaryOp.ABS;
+            case 0b1_1001 -> u ? Ir64VectorFpUnaryOp.CMGE0 : Ir64VectorFpUnaryOp.CMGT0;
+            case 0b1_1011 -> u ? Ir64VectorFpUnaryOp.CMLE0 : Ir64VectorFpUnaryOp.CMEQ0;
+            case 0b1_1101 -> u ? null : Ir64VectorFpUnaryOp.CMLT0;
+            default -> null;
+        };
+    }
+
+    /// AdvSIMD "two-register misc (FP)", slot `Rm=00001` (B8.9) — `FSQRT_v`/`FRINTx_v`/
+    /// `FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/`FCVTxU_vi`. Tabela `(u,a,opcode)`
+    /// conferida linha a linha contra `a64.decode` real do QEMU, formas `sd` só.
+    private static Ir64VectorFpUnaryOp decodeVectorFpUnaryRmOneOpcode(boolean u, boolean a, int opcode) {
+        int key = (u ? 0b10 : 0) | (a ? 0b01 : 0);
+        return switch (opcode) {
+            case 0b1_0001 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.RINTN;
+                case 0b01 -> Ir64VectorFpUnaryOp.RINTP;
+                case 0b10 -> Ir64VectorFpUnaryOp.RINTA;
+                default -> null;
+            };
+            case 0b1_0011 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.RINTM;
+                case 0b01 -> Ir64VectorFpUnaryOp.RINTZ;
+                case 0b10 -> Ir64VectorFpUnaryOp.RINTX;
+                case 0b11 -> Ir64VectorFpUnaryOp.RINTI;
+                default -> null;
+            };
+            case 0b1_0101 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.FCVTNS;
+                case 0b10 -> Ir64VectorFpUnaryOp.FCVTNU;
+                case 0b01 -> Ir64VectorFpUnaryOp.FCVTPS;
+                case 0b11 -> Ir64VectorFpUnaryOp.FCVTPU;
+                default -> null;
+            };
+            case 0b1_0111 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.FCVTMS;
+                case 0b10 -> Ir64VectorFpUnaryOp.FCVTMU;
+                case 0b01 -> Ir64VectorFpUnaryOp.FCVTZS;
+                case 0b11 -> Ir64VectorFpUnaryOp.FCVTZU;
+                default -> null;
+            };
+            case 0b1_1001 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.FCVTAS;
+                case 0b10 -> Ir64VectorFpUnaryOp.FCVTAU;
+                default -> null;
+            };
+            case 0b1_1011 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.SCVTF;
+                case 0b10 -> Ir64VectorFpUnaryOp.UCVTF;
+                case 0b01 -> Ir64VectorFpUnaryOp.RECPE;
+                case 0b11 -> Ir64VectorFpUnaryOp.RSQRTE;
+                default -> null;
+            };
+            case 0b1_1111 -> key == 0b11 ? Ir64VectorFpUnaryOp.SQRT : null;
             default -> null;
         };
     }

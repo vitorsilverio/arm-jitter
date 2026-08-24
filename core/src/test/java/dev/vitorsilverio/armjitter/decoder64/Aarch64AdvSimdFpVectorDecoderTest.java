@@ -1,0 +1,182 @@
+package dev.vitorsilverio.armjitter.decoder64;
+
+import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
+import dev.vitorsilverio.armjitter.memory.AddressSpace64;
+import dev.vitorsilverio.armjitter.support.TestAddressSpace;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+/// AdvSIMD FP vetorial (B8.9): "three same"/"three same pairwise"/"two-register miscellaneous" de
+/// ponto flutuante, só precisão simples/dupla. Sem `aarch64-none-elf-as`/`objdump` disponíveis
+/// nesta sessão (toolchain devkitA64 ausente) — palavras construídas por FÓRMULA a partir dos
+/// campos do encoding real (`a64.decode` do QEMU, via `WebFetch`), mesmo fallback de
+/// {@link Aarch64AdvSimdShiftSaturateDecoderTest} (B8.8). Cada `@Test` documenta os campos usados.
+class Aarch64AdvSimdFpVectorDecoderTest {
+    private static final Aarch64Decoder DECODER = new Aarch64Decoder();
+
+    private static Ir64Op decodeWord(int word) {
+        TestAddressSpace raw = new TestAddressSpace(4);
+        raw.put32(0, word);
+        return DECODER.decode(AddressSpace64.wrapping(raw), 0);
+    }
+
+    // ── Three same (FP): Q=1,Rn=1,Rm=2,Rd=0 ──────────────────────────────────────────────────────
+
+    @Test
+    void faddFsubVector() {
+        // Q=1,U=0,a=0,sz=0,Rm=2,opcode=11010,bit10=1,Rn=1,Rd=0 → FADD_v.4s
+        Ir64Op.VectorFpArithmeticThreeSame add = (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22d420);
+        assertEquals(Ir64VectorFpThreeSameOp.ADD, add.op());
+        assertEquals(true, add.q());
+        assertEquals(2, add.esz());
+        assertEquals(0, add.rd());
+        assertEquals(1, add.rn());
+        assertEquals(2, add.rm());
+
+        // sz=1 → .2d (double)
+        Ir64Op.VectorFpArithmeticThreeSame addD = (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e62d420);
+        assertEquals(Ir64VectorFpThreeSameOp.ADD, addD.op());
+        assertEquals(3, addD.esz());
+
+        // a=1 → FSUB_v.4s
+        assertEquals(Ir64VectorFpThreeSameOp.SUB, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4ea2d420)).op());
+    }
+
+    @Test
+    void fdivFmulFmulxVector() {
+        assertEquals(Ir64VectorFpThreeSameOp.DIV, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6e22fc20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MUL, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6e22dc20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MULX, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22dc20)).op());
+    }
+
+    @Test
+    void maxMinMaxnmMinnmVector() {
+        assertEquals(Ir64VectorFpThreeSameOp.MAX, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22f420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MIN, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4ea2f420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MAXNM, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22c420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MINNM, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4ea2c420)).op());
+    }
+
+    @Test
+    void mlaMlsVector() {
+        assertEquals(Ir64VectorFpThreeSameOp.MLA, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22cc20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MLS, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4ea2cc20)).op());
+    }
+
+    @Test
+    void compareVector() {
+        assertEquals(Ir64VectorFpThreeSameOp.CMEQ, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22e420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.CMGE, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6e22e420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.CMGT, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6ea2e420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.FACGE, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6e22ec20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.FACGT, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6ea2ec20)).op());
+    }
+
+    @Test
+    void abdRecpsRsqrtsVector() {
+        assertEquals(Ir64VectorFpThreeSameOp.ABD, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x6ea2d420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.RECPS, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4e22fc20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.RSQRTS, ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(0x4ea2fc20)).op());
+    }
+
+    // ── Three same pairwise (FP) ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void pairwiseVector() {
+        Ir64Op.VectorFpArithmeticPairwise add = (Ir64Op.VectorFpArithmeticPairwise) decodeWord(0x6e22d420);
+        assertEquals(Ir64VectorFpPairwiseOp.ADD, add.op());
+        assertEquals(0, add.rd());
+        assertEquals(1, add.rn());
+        assertEquals(2, add.rm());
+        assertEquals(Ir64VectorFpPairwiseOp.MAX, ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(0x6e22f420)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MIN, ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(0x6ea2f420)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MAXNM, ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(0x6e22c420)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MINNM, ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(0x6ea2c420)).op());
+    }
+
+    // ── Two-register misc (FP), slot Rm=00000: ABS/NEG/CM**0 ────────────────────────────────────
+
+    @Test
+    void absNegVector() {
+        Ir64Op.VectorFpArithmeticUnary abs = (Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea0f820);
+        assertEquals(Ir64VectorFpUnaryOp.ABS, abs.op());
+        assertEquals(true, abs.q());
+        assertEquals(2, abs.esz());
+        assertEquals(0, abs.rd());
+        assertEquals(1, abs.rn());
+        assertEquals(Ir64VectorFpUnaryOp.NEG, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea0f820)).op());
+    }
+
+    @Test
+    void compareZeroVector() {
+        assertEquals(Ir64VectorFpUnaryOp.CMGT0, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea0c820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMGE0, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea0c820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMEQ0, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea0d820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLE0, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea0d820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLT0, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea0e820)).op());
+    }
+
+    // ── Two-register misc (FP), slot Rm=00001: FSQRT/FRINTx/FRECPE/FRSQRTE/SCVTF/UCVTF/FCVTx ─────
+
+    @Test
+    void sqrtVector() {
+        Ir64Op.VectorFpArithmeticUnary sqrt = (Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea1f820);
+        assertEquals(Ir64VectorFpUnaryOp.SQRT, sqrt.op());
+        assertEquals(2, sqrt.esz());
+    }
+
+    @Test
+    void rintVector() {
+        assertEquals(Ir64VectorFpUnaryOp.RINTN, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e218820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTP, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea18820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTA, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e218820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTM, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e219820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTZ, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea19820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTX, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e219820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTI, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea19820)).op());
+    }
+
+    @Test
+    void fcvtWithRoundingModeVector() {
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNS, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e21a820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNU, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e21a820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPS, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea1a820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPU, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea1a820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMS, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e21b820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMU, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e21b820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZS, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea1b820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZU, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea1b820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAS, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e21c820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAU, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e21c820)).op());
+    }
+
+    @Test
+    void scvtfUcvtfRecpeRsqrteVector() {
+        assertEquals(Ir64VectorFpUnaryOp.SCVTF, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4e21d820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.UCVTF, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6e21d820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RECPE, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x4ea1d820)).op());
+        assertEquals(Ir64VectorFpUnaryOp.RSQRTE, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea1d820)).op());
+    }
+
+    // ── Fora de escopo: meia-precisão (FEAT_FP16) e formas escalares AdvSIMD ────────────────────
+
+    @Test
+    void halfPrecisionThreeSameIsUnimplemented() {
+        // FADD_v.8h: Q=1,U=0,bit23=0,bit22=1(sz-slot da forma "h"),bit21=0 (prefixo "h", não
+        // "sd" — a forma "sd" real exige bit21=1) — cai no guard `bit21==0` já existente
+        // (G8: UNIMPLEMENTED, não ✅ por acaso).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4e421420));
+    }
+
+    @Test
+    void scalarFpThreeSameIsUnimplemented() {
+        // FMULX_s (AdvSIMD scalar, prefixo bit30=1/bit28=1): fora de escopo desta task (só
+        // vetorial) — deve continuar UNIMPLEMENTED, não ser confundido com a forma vetorial.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e22dc20));
+    }
+}

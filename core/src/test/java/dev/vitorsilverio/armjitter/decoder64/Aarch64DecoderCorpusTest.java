@@ -2077,16 +2077,18 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void advancedSimdVectorFormStaysUnsupported() {
+    void advancedSimdVectorFormNowDecodesSinceB89() {
         // `fadd v0.4s, v1.4s, v2.4s` (Advanced SIMD vetorial, MESMO bit26=1 da classe escalar
-        // decodificada por esta task, mas prefixo(28:24) DIFERENTE — "01110" em vez de "11110")
-        // — encoding real via aarch64-none-elf-as, regressão negativa confirmando que o dispatch
-        // novo não "vazou" para a forma vetorial (Não inclui da task).
+        // decodificada pelas tasks B6.5.x/B8.4/B8.5, mas prefixo(28:24) DIFERENTE — "01110" em vez
+        // de "11110") — encoding real via aarch64-none-elf-as. Até a B8.9 esta asserção era
+        // NEGATIVA (fora de escopo, herdado de B6.5.3); agora `FADD_v`/... (AdvSIMD "three same" de
+        // ponto flutuante) fazem parte do escopo implementado, ver `decodeVectorFpThreeSameOpcode`.
         int word = 0x4e22d420;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op op = DECODER.decode(scratch, 0);
+        assertInstanceOf(Ir64Op.VectorFpArithmeticThreeSame.class, op);
     }
 
     @Test
