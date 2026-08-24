@@ -149,6 +149,22 @@ public final class VfpDecoder implements DecoderExtension {
             // (`ee171b0c` = `vnmls.f64 d1, d7, d12`, achado no `textured_cube` dos exemplos 3DS).
             case 0b001 -> vfpAlu(bit6 ? IrOp.VfpOperation.NMLA : IrOp.VfpOperation.NMLS,
                     doublePrecision, vd, vn, vm, address, raw, condition);
+            // VFMA_{sp,dp} (bit6=0) / VFMS_{sp,dp} (bit6=1) — FUNDIDAS, VFPv4 (B9.6). MESMO campo
+            // bit6 dos vizinhos MLA/MLS/NMLA/NMLS acima (confirmado contra `vfp.decode` real do
+            // QEMU: `MAKE_ONE_VFM_TRANS_FN(VFMA,...,false,false)`/`(VFMS,...,true,false)` — o
+            // "neg_n" de VFMS é o mesmo bit6 que já seleciona "produto negado" na família não
+            // fundida). Gate adicional (além de VFPV2, já checado por quem chama este método):
+            // sem VFP_FUSED_MULTIPLY_ACCUMULATE, cai em `null` → UNDEFINED explícito (G8) — este
+            // encoding nunca foi reivindicado por nenhum outro dispatch antes da B9.6.
+            case 0b110 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
+                    : vfpAlu(bit6 ? IrOp.VfpOperation.FMS : IrOp.VfpOperation.FMA,
+                    doublePrecision, vd, vn, vm, address, raw, condition);
+            // VFNMS_{sp,dp} (bit6=0) / VFNMA_{sp,dp} (bit6=1) — FUNDIDAS, VFPv4 (B9.6). Mesma
+            // ordem invertida de VNMLS/VNMLA (ver o comentário do case 0b001 acima) confirmada
+            // contra `MAKE_ONE_VFM_TRANS_FN(VFNMS,...,false,true)`/`(VFNMA,...,true,true)`.
+            case 0b101 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
+                    : vfpAlu(bit6 ? IrOp.VfpOperation.FNMA : IrOp.VfpOperation.FNMS,
+                    doublePrecision, vd, vn, vm, address, raw, condition);
             default -> null;
         };
     }

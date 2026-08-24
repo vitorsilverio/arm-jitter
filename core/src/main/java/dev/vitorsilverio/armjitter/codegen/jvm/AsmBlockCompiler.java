@@ -1783,7 +1783,7 @@ public final class AsmBlockCompiler {
             case NEG -> emitVfpSignBit(method, op, true);
             case ABS -> emitVfpSignBit(method, op, false);
             case COPY -> emitVfpCopy(method, op);
-            case MLA, MLS, NMLA, NMLS, NMUL, SQRT -> {
+            case MLA, MLS, NMLA, NMLS, NMUL, SQRT, FMA, FMS, FNMA, FNMS -> {
                 method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
                 AsmBytecode.visitIntConst(method, op.op().ordinal());
                 method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);

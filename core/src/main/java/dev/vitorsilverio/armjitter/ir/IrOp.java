@@ -966,14 +966,31 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// `VSQRT` (unária, usa só `vm`): raiz quadrada corretamente arredondada.
         SQRT,
         /// `VMOV` registrador-a-registrador (unária, usa só `vm`): cópia bit a bit.
-        COPY
+        COPY,
+        /// `VFMA` (B9.6, VFPv4): `vd = vd + (vn * vm)`, FUNDIDO — um único passo de arredondamento
+        /// para o produto-e-soma inteiro (`Math.fma`), ao contrário de {@link #MLA}. Mesma
+        /// convenção de sinal de {@link #MLA}, só muda o arredondamento.
+        FMA,
+        /// `VFMS` (B9.6, VFPv4): `vd = vd - (vn * vm)`, FUNDIDO. Mesma convenção de sinal de
+        /// {@link #MLS} (produto negado, não o acumulador).
+        FMS,
+        /// `VFNMA` (B9.6, VFPv4): `vd = -vd - (vn * vm)`, FUNDIDO. Mesma convenção de sinal de
+        /// {@link #NMLA} (confirmado contra `MAKE_ONE_VFM_TRANS_FN`/`do_vfm_sp` reais do QEMU:
+        /// `neg_n=true, neg_d=true` → `fma(-vd, -vn, vm)` = `-(vd + vn·vm)`).
+        FNMA,
+        /// `VFNMS` (B9.6, VFPv4): `vd = -vd + (vn * vm)`, FUNDIDO. Mesma convenção de sinal de
+        /// {@link #NMLS} (`neg_n=false, neg_d=true` → `fma(-vd, vn, vm)` = `-vd + vn·vm`).
+        FNMS
     }
 
     /// Operação aritmética/unária VFP (`VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/
-    /// `VABS`/`VSQRT`/`VMOV` registrador). `VMLA`/`VMLS`/`VNMUL` NUNCA usam `Math.fma` — o VFP
-    /// real não funde a multiplicação com a soma/subtração (ver Armadilhas de B3.4). As formas
-    /// unárias (`NEG`/`ABS`/`SQRT`/`COPY`) usam somente `vm`; `MLA`/`MLS` também leem o `vd` atual
-    /// como acumulador.
+    /// `VABS`/`VSQRT`/`VMOV` registrador, mais `VFMA`/`VFMS`/`VFNMA`/`VFNMS`, B9.6). `VMLA`/`VMLS`/
+    /// `VNMUL`/`VNMLA`/`VNMLS` NUNCA usam `Math.fma` — o VFPv2 real não funde a multiplicação com a
+    /// soma/subtração (ver Armadilhas de B3.4). Só `FMA`/`FMS`/`FNMA`/`FNMS` (VFPv4, B9.6) usam
+    /// `Math.fma` de verdade — é literalmente a diferença arquitetural entre as duas famílias
+    /// (fundida vs não-fundida), não uma escolha de implementação. As formas unárias (`NEG`/`ABS`/
+    /// `SQRT`/`COPY`) usam somente `vm`; `MLA`/`MLS`/`FMA`/`FMS` também leem o `vd` atual como
+    /// acumulador.
     record VfpAlu(
             /// Operação a executar.
             VfpOperation op,

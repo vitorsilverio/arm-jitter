@@ -102,6 +102,29 @@ public final class IrVfpExecutor {
             // narrowing final para float — ver Inclui da task B3.4; Math.sqrt(double) já é o
             // "exato" de altíssima precisão para o arredondamento dirigido.
             case SQRT -> DirectedFpRounding.roundFloat((float) Math.sqrt((double) vm), Math.sqrt((double) vm), mode);
+            // FMA/FMS/FNMA/FNMS (B9.6, VFPv4): FUNDIDO — um único arredondamento para produto+soma
+            // (`Math.fma`), ao contrário de MLA/MLS/NMLA/NMLS acima. Mesma convenção de sinal
+            // (produto negado para *MS, acumulador negado para *NMA/*NMS — ver IrOp.VfpOperation).
+            case FMA -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundFloat(Math.fma(vn, vm, vd),
+                        DirectedFpRounding.exactFma(vn, vm, vd).doubleValue(), mode);
+            }
+            case FMS -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundFloat(Math.fma(-vn, vm, vd),
+                        DirectedFpRounding.exactFma(-vn, vm, vd).doubleValue(), mode);
+            }
+            case FNMA -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundFloat(Math.fma(-vn, vm, -vd),
+                        DirectedFpRounding.exactFma(-vn, vm, -vd).doubleValue(), mode);
+            }
+            case FNMS -> {
+                float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundFloat(Math.fma(vn, vm, -vd),
+                        DirectedFpRounding.exactFma(vn, vm, -vd).doubleValue(), mode);
+            }
             case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeSingle");
         };
         return flushSingle(result, flushToZero);
@@ -147,6 +170,23 @@ public final class IrVfpExecutor {
             }
             case NMUL -> DirectedFpRounding.roundDouble(-(vn * vm), DirectedFpRounding.exactMul(vn, vm).negate(), mode);
             case SQRT -> DirectedFpRounding.roundDouble(Math.sqrt(vm), DirectedFpRounding.approxSqrt(vm), mode);
+            // FMA/FMS/FNMA/FNMS (B9.6, VFPv4): FUNDIDO — ver o espelho em computeSingleArithmetic.
+            case FMA -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundDouble(Math.fma(vn, vm, vd), DirectedFpRounding.exactFma(vn, vm, vd), mode);
+            }
+            case FMS -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundDouble(Math.fma(-vn, vm, vd), DirectedFpRounding.exactFma(-vn, vm, vd), mode);
+            }
+            case FNMA -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundDouble(Math.fma(-vn, vm, -vd), DirectedFpRounding.exactFma(-vn, vm, -vd), mode);
+            }
+            case FNMS -> {
+                double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
+                yield DirectedFpRounding.roundDouble(Math.fma(vn, vm, -vd), DirectedFpRounding.exactFma(vn, vm, -vd), mode);
+            }
             case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeDouble");
         };
         return flushDouble(result, flushToZero);

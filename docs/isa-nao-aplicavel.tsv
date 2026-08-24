@@ -198,3 +198,43 @@ SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
 # ── precedente é EL1/EL2 no AArch64 (B10): construir Hyp/Monitor mode, não excluir. Ficam ❌
 # ── na tabela até uma escada própria (Hyp mode + Monitor mode de 32 bits) — ver nota em
 # ── `trilha-b-arquiteturas/b9.7-t32-thumb2.md`.
+
+# ── A32 (B9.2): MOVW/MOVT/MLS/SBFX/UBFX/BFCI/RBIT — CONFERIDO contra `target/arm/tcg/translate.c`
+# ── real do QEMU: todas gateadas por `ENABLE_ARCH_6T2` (`#define ENABLE_ARCH_6T2
+# ── arm_dc_feature(s, ARM_FEATURE_THUMB2)`) — ARMv6T2, não ARMv6K. O ARM11 MPCore real (3DS) e o
+# ── ARM1176JZF-S (raspi1/`virtual-arm-box`) são ARMv6K puro, sem Thumb-2 (confirmado também por
+# ── `arm11mpcore_initfn` do QEMU: só `ARM_FEATURE_V6K`, nunca `ARM_FEATURE_THUMB2`) — já uma
+# ── decisão registrada em `b5.2` (`ARM11_MPCORE` preset, "Sem Thumb-2"). Já implementadas em
+# ── `ARMV7A` desde B3.1 (`ArmFeature.MOVW_MOVT`/`MLS_MULTIPLY`/`BIT_FIELD`/`BIT_REVERSE`).
+MOVW	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
+MOVT	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
+MLS	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
+SBFX	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), MPCore/v6K reais não têm Thumb-2
+UBFX	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), MPCore/v6K reais não têm Thumb-2
+BFCI	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_BFCI = BFC/BFI), MPCore/v6K reais não têm Thumb-2
+RBIT	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_RBIT), MPCore/v6K reais não têm Thumb-2
+
+# ── A32 (B9.2): SDIV/UDIV — CONFERIDO contra `op_div`/`trans_SDIV`/`trans_UDIV` reais do QEMU:
+# ── gateadas por `dc_isar_feature(aa32_arm_div, s)` — a extensão OPCIONAL de divisão inteira do
+# ── ARMv7-A/R (nem existe o bit ISAR antes da v7), mais nova ainda que ARMv6T2. Não pertence ao
+# ── ARM11 MPCore/ARMv6K por nenhuma leitura. Já implementada em `ARMV7A` desde B3.1
+# ── (`ArmFeature.DIVIDE`, mesma nota "core que a possui, como o Cortex-A15/A7").
+SDIV	v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v6K
+UDIV	v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v6K
+
+# ── VFP (B9.6): VFMA/VFMS/VFNMA/VFNMS (multiplicação-acumulação FUNDIDA) — CONFERIDO contra
+# ── `target/arm/tcg/translate-vfp.c` real do QEMU (`do_vfm_sp`/`do_vfm_dp`, comentário literal
+# ── "Present in VFPv4 only", gate `dc_isar_feature(aa32_simdfmac, s)`): VFPv4, não VFPv2. O ARM11
+# ── MPCore (3DS) é cronologicamente ANTERIOR à especificação VFPv4 (ARM11 ~2002-2003, VFPv4 com a
+# ── geração Cortex-A15/A7 ~2010) — não é "improvável", é impossível por construção. Já
+# ── implementadas em `ARMV7A` (B9.6, `ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE`, Cortex-A15/A7
+# ── real tem VFPv4). `_hp` (meia precisão) fora do escopo por outro motivo, ver a seção VCVT_f32_f16
+# ── acima — nem chega a aparecer como célula aplicável.
+VFMA_sp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFMS_sp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFNMA_sp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFNMS_sp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFMA_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFNMA_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+VFNMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4

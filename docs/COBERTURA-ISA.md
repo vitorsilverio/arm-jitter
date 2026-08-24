@@ -26,29 +26,29 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **60%** — 2354 de 3887 células aplicáveis decodificam.
+> **61%** — 2376 de 3861 células aplicáveis decodificam.
 
 Por arquitetura:
 
 | Arquitetura | Cobertura |
 |---|---|
-| v4T | **65%** (208/316) |
-| v5TE | **71%** (225/316) |
-| v6K | **94%** (309/328) |
-| MPCore | **91%** (359/391) |
-| v7-A | **95%** (630/659) |
-| v6-M | **23%** (91/383) |
-| v7-M | **58%** (224/383) |
+| v4T | **66%** (210/316) |
+| v5TE | **71%** (227/316) |
+| v6K | **97%** (311/319) |
+| MPCore | **96%** (361/374) |
+| v7-A | **97%** (640/659) |
+| v6-M | **24%** (93/383) |
+| v7-M | **59%** (226/383) |
 | A64 | **27%** (308/1111) |
 
 ## Resumo
 
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
-| A32 — instruções ARM de 32 bits | 266 | v4T 63% (148/233) · v5TE 69% (162/233) · v6K 96% (236/245) · MPCore 96% (236/245) · v7-A 100% (245/245) |
-| T16 — Thumb clássico | 86 | v4T 72% (60/83) · v5TE 75% (63/83) · v6K 87% (73/83) · MPCore 87% (73/83) · v7-A 95% (79/83) · v6-M 81% (68/83) · v7-M 92% (77/83) |
+| A32 — instruções ARM de 32 bits | 266 | v4T 63% (148/233) · v5TE 69% (162/233) · v6K 100% (236/236) · MPCore 100% (236/236) · v7-A 100% (245/245) |
+| T16 — Thumb clássico | 86 | v4T 74% (62/83) · v5TE 78% (65/83) · v6K 90% (75/83) · MPCore 90% (75/83) · v7-A 97% (81/83) · v6-M 84% (70/83) · v7-M 95% (79/83) |
 | T32 — Thumb-2 | 310 | v7-A 95% (256/268) · v6-M 7% (23/289) · v7-M 50% (147/289) |
-| VFP — ponto flutuante (condicional) | 101 | MPCore 79% (50/63) · v7-A 79% (50/63) |
+| VFP — ponto flutuante (condicional) | 101 | MPCore 90% (50/55) · v7-A 92% (58/63) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
 | NEON — load/store | 5 | não se aplica a nenhum preset atual |
@@ -83,8 +83,8 @@ Inventário: `a32.decode` · 266 instruções.
 | `MOV_rxri` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `BIC_rrri` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `MVN_rxri` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
-| `MOVW` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `MOVT` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `MOVW` | ❌ | ❌ | · | · | ✅ | · | · |
+| `MOVT` | ❌ | ❌ | · | · | ✅ | · | · |
 | `AND_rrrr` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `EOR_rrrr` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `SUB_rrrr` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
@@ -120,7 +120,7 @@ Inventário: `a32.decode` · 266 instruções.
 | `MUL` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `MLA` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `UMAAL` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
-| `MLS` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `MLS` | ❌ | ❌ | · | · | ✅ | · | · |
 | `UMULL` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `UMLAL` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `SMULL` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
@@ -254,9 +254,9 @@ Inventário: `a32.decode` · 266 instruções.
 | `LDAB` | · | · | · | · | · | · | · |
 | `LDAH` | · | · | · | · | · | · | · |
 | `USADA8` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
-| `SBFX` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `UBFX` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `BFCI` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `SBFX` | ❌ | ❌ | · | · | ✅ | · | · |
+| `UBFX` | ❌ | ❌ | · | · | ✅ | · | · |
+| `BFCI` | ❌ | ❌ | · | · | ✅ | · | · |
 | `UDF` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `SADD16` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `SASX` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
@@ -309,13 +309,13 @@ Inventário: `a32.decode` · 266 instruções.
 | `REV` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `REV16` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
 | `REVSH` | ❌ | ❌ | ✅ | ✅ | ✅ | · | · |
-| `RBIT` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `RBIT` | ❌ | ❌ | · | · | ✅ | · | · |
 | `SMLAD` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SMLADX` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SMLSD` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SMLSDX` | · | · | ✅ | ✅ | ✅ | · | · |
-| `SDIV` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
-| `UDIV` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `SDIV` | ❌ | ❌ | · | · | ✅ | · | · |
+| `UDIV` | ❌ | ❌ | · | · | ✅ | · | · |
 | `SMLALD` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SMLALDX` | · | · | ✅ | ✅ | ✅ | · | · |
 | `SMLSLD` | · | · | ✅ | ✅ | ✅ | · | · |
@@ -419,9 +419,9 @@ Inventário: `t16.decode` · 86 instruções.
 | `CBZ` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | `STM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `LDM_t16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `UDF` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UDF` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SVC` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `B_cond_thumb` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `B_cond_thumb` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `B` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `BLX_suffix` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | `BL_BLX_prefix` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
@@ -804,14 +804,14 @@ Inventário: `vfp.decode` · 101 instruções.
 | `VFMS_hp` | · | · | · | · | · | · | · |
 | `VFNMS_hp` | · | · | · | · | · | · | · |
 | `VFNMA_hp` | · | · | · | · | · | · | · |
-| `VFMA_sp` | · | · | · | ❌ | ❌ | · | · |
-| `VFMS_sp` | · | · | · | ❌ | ❌ | · | · |
-| `VFNMS_sp` | · | · | · | ❌ | ❌ | · | · |
-| `VFNMA_sp` | · | · | · | ❌ | ❌ | · | · |
-| `VFMA_dp` | · | · | · | ❌ | ❌ | · | · |
-| `VFMS_dp` | · | · | · | ❌ | ❌ | · | · |
-| `VFNMS_dp` | · | · | · | ❌ | ❌ | · | · |
-| `VFNMA_dp` | · | · | · | ❌ | ❌ | · | · |
+| `VFMA_sp` | · | · | · | · | ✅ | · | · |
+| `VFMS_sp` | · | · | · | · | ✅ | · | · |
+| `VFNMS_sp` | · | · | · | · | ✅ | · | · |
+| `VFNMA_sp` | · | · | · | · | ✅ | · | · |
+| `VFMA_dp` | · | · | · | · | ✅ | · | · |
+| `VFMS_dp` | · | · | · | · | ✅ | · | · |
+| `VFNMS_dp` | · | · | · | · | ✅ | · | · |
+| `VFNMA_dp` | · | · | · | · | ✅ | · | · |
 | `VMOV_imm_hp` | · | · | · | · | · | · | · |
 | `VMOV_imm_sp` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_imm_dp` | · | · | · | ✅ | ✅ | · | · |

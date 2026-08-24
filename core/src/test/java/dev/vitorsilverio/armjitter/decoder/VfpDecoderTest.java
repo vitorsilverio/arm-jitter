@@ -29,6 +29,15 @@ class VfpDecoderTest {
             .withDecoderExtensions(List.of(new VfpDecoder(VFP_TEST_FEATURES), new CoprocessorDecoder()))
             .withThumb32DecoderExtensions(thumb32ExtensionsWithVfpFirst());
 
+    /// B9.6: mesma base de {@link #VFP_TEST_ARCH}, mais {@link ArmFeature#VFP_FUSED_MULTIPLY_ACCUMULATE}
+    /// (VFPv4) — só para os testes de `VFMA`/`VFMS`/`VFNMA`/`VFNMS`; {@link #VFP_TEST_ARCH} (sem a
+    /// feature) continua sendo o "MPCore" desta suíte, usado para provar a exclusão.
+    private static final ArmArchitecture VFP_FUSED_TEST_FEATURES =
+            ArmArchitecture.extending(VFP_TEST_FEATURES, "ARMv7-TestVfpFused",
+                    ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE);
+    private static final ArmArchitecture VFP_FUSED_TEST_ARCH = VFP_FUSED_TEST_FEATURES
+            .withDecoderExtensions(List.of(new VfpDecoder(VFP_FUSED_TEST_FEATURES), new CoprocessorDecoder()));
+
     private static List<DecoderExtension> thumb32ExtensionsWithVfpFirst() {
         List<DecoderExtension> extensions = new ArrayList<>();
         extensions.add(new Thumb2VfpDecoder(VFP_TEST_FEATURES));
@@ -282,6 +291,76 @@ class VfpDecoderTest {
     @Test
     void divWithBit6SetIsUndefined() {
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b100, true, false, 6, 0, 1)).kind());
+    }
+
+    // ── B9.6: VFMA/VFMS/VFNMA/VFNMS (fundidas, VFPv4) — mesmo espaço `op1` de VMLA/VDIV acima ──
+
+    private static DecodedInstruction decodeArmFused(int word) {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put32(0, word);
+        return new ArmDecoder(VFP_FUSED_TEST_ARCH).decode(memory, 0);
+    }
+
+    /// `op1=0b110`: `bit6=0` é `VFMA`, `bit6=1` é `VFMS` — MESMO bit6 dos vizinhos `VMLA`/`VMLS`.
+    /// Encoding real conferido com `arm-none-eabi-as -mfpu=vfpv4` (devkitARM): `vfma.f32 s0,s1,s2`
+    /// → `0xeea00a81`, `vfms.f32 s0,s1,s2` → `0xeea00ac1`.
+    @Test
+    void vfmaVfmsSelectedByBit6() {
+        assertEquals(0xEEA00A81, vfpAluWord(0b110, false, false, 0, 1, 2));
+        assertEquals(0xEEA00AC1, vfpAluWord(0b110, true, false, 0, 1, 2));
+        IrOp fma = liftSingleOp(decodeArmFused(vfpAluWord(0b110, false, false, 0, 1, 2)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMA, false, 0, 1, 2, Condition.AL), fma);
+        IrOp fms = liftSingleOp(decodeArmFused(vfpAluWord(0b110, true, false, 0, 1, 2)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMS, false, 0, 1, 2, Condition.AL), fms);
+    }
+
+    /// `op1=0b101`: ordem invertida (mesmo padrão de `VNMLA`/`VNMLS`, ver `nmlsNmlaSelectedByBit6`)
+    /// — `bit6=0` é `VFNMS`, `bit6=1` é `VFNMA`. Encoding real: `vfnma.f32 s0,s1,s2` → `0xee900ac1`,
+    /// `vfnms.f32 s0,s1,s2` → `0xee900a81`; `vfma.f64 d0,d1,d2` → `0xeea10b02`, `vfnma.f64 d3,d4,d5`
+    /// (Thumb-2) → `0xee943b45`.
+    @Test
+    void vfnmsVfnmaSelectedByBit6() {
+        assertEquals(0xEE900AC1, vfpAluWord(0b101, true, false, 0, 1, 2));
+        assertEquals(0xEE900A81, vfpAluWord(0b101, false, false, 0, 1, 2));
+        IrOp fnma = liftSingleOp(decodeArmFused(vfpAluWord(0b101, true, false, 0, 1, 2)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, false, 0, 1, 2, Condition.AL), fnma);
+        IrOp fnms = liftSingleOp(decodeArmFused(vfpAluWord(0b101, false, false, 0, 1, 2)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMS, false, 0, 1, 2, Condition.AL), fnms);
+    }
+
+    @Test
+    void vfmaDoublePrecisionRealEncoding() {
+        assertEquals(0xEEA10B02, vfpAluWord(0b110, false, true, 0, 1, 2));
+        IrOp op = liftSingleOp(decodeArmFused(vfpAluWord(0b110, false, true, 0, 1, 2)));
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMA, true, 0, 1, 2, Condition.AL), op);
+    }
+
+    /// Thumb-2: `vfnma.f64 d3,d4,d5` → `0xee943b45` (real, devkitARM), decodificado via
+    /// `Thumb2VfpDecoder` (mesma casca fina que reusa `VfpDecoder`).
+    @Test
+    void vfnmaDoublePrecisionThumb2RealEncoding() {
+        int word = vfpAluWord(0b101, true, true, 3, 4, 5);
+        assertEquals(0xEE943B45, word);
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put16(0, word >>> 16);
+        memory.put16(2, word & 0xFFFF);
+        ArmArchitecture fusedThumb2 = VFP_FUSED_TEST_FEATURES.withThumb32DecoderExtensions(List.of(
+                new Thumb2VfpDecoder(VFP_FUSED_TEST_FEATURES)));
+        DecodedInstruction decoded = new ThumbDecoder(fusedThumb2).decode(memory, 0);
+        IrOp op = liftSingleOp(decoded);
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, true, 3, 4, 5, Condition.AL), op);
+    }
+
+    /// B9.6/triagem: sem `VFP_FUSED_MULTIPLY_ACCUMULATE` (arquitetura com só VFPv2, como o ARM11
+    /// MPCore real) os 4 encodings caem em `UNDEFINED` — nunca foram reivindicados por nenhum outro
+    /// dispatch antes desta task (G8), então a ausência da feature não corrompe silenciosamente em
+    /// outra instrução.
+    @Test
+    void fusedVfpFamilyUndefinedWithoutFeature() {
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b110, false, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b110, true, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b101, false, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b101, true, false, 0, 1, 2)).kind());
     }
 
     @Test

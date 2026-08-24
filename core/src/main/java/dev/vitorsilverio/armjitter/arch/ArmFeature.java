@@ -156,5 +156,22 @@ public enum ArmFeature {
     /// `SMLSLD` e formas `X`, `SMMLA`/`SMMLAR`/`SMMLS`/`SMMLSR` — ARM DDI 0406C A5.2.6). ARMv6+
     /// (confirmado contra `op_smlad`/`op_smlald`/`op_smmla` reais em `target/arm/tcg/translate.c`
     /// do QEMU, todos gateados por `ENABLE_ARCH_6`) — NÃO existe em ARMv4T/ARMv5TE.
-    SIGNED_MULTIPLY_MEDIA
+    SIGNED_MULTIPLY_MEDIA,
+
+    // ---- Onda 5, B9.6 (cobertura de ISA) ----
+    /// `VFMA`/`VFMS`/`VFNMA`/`VFNMS` (multiplicação-acumulação VFP FUNDIDA: um único passo de
+    /// arredondamento para o produto+soma, ao contrário de `VMLA`/`VMLS`/`VNMLA`/`VNMLS` — ver
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.VfpOperation}). **VFPv4, não VFPv2** — confirmado
+    /// contra `target/arm/tcg/translate-vfp.c` real do QEMU (`do_vfm_sp`/`do_vfm_dp`, comentário
+    /// literal "Present in VFPv4 only", gate `dc_isar_feature(aa32_simdfmac, s)`) e
+    /// cronologicamente: a especificação VFPv4 (ARM Cortex-A15/A7, ~2010) é POSTERIOR à geração
+    /// ARM11 (ARM1176/MPCore, ~2002-2003, VFPv2 no máximo) — o ARM11 MPCore do 3DS não pode tê-la
+    /// por construção, não só "improvável" (ver a task B9.6 para a triagem completa). Presente só
+    /// no preset {@code ARMV7A} (não em {@code ARM11_MPCORE}/{@code ARMV6K}). Encoding ARM/Thumb-2
+    /// (B9.6) é decodificado dentro de {@link dev.vitorsilverio.armjitter.decoder.VfpDecoder}/
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder} (mesmo espaço de 3 registradores
+    /// de `VMLA`/`VDIV`, `op1` `0b110`/`0b101` — antes desta feature caíam em `default -> null`,
+    /// nunca reivindicados por nenhum outro dispatch, então viravam `UNDEFINED` sem risco de
+    /// misdecode, G8).
+    VFP_FUSED_MULTIPLY_ACCUMULATE
 }

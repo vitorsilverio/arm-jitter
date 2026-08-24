@@ -99,6 +99,17 @@ public final class DirectedFpRounding {
                 : UNREPRESENTABLE_EXACT_PLACEHOLDER;
     }
 
+    /// Valor exato de uma multiplicação-acumulação FUNDIDA (`a*b+c`, `VFMA`/`VFMS`/`VFNMA`/`VFNMS`,
+    /// B9.6) — produto E soma calculados numa única expressão {@link BigDecimal}, sem o
+    /// arredondamento intermediário que {@link #exactMul}+{@link #exactAdd} em dois passos teria
+    /// (é exatamente esse único-passo que distingue a família fundida da não-fundida `VMLA`/`VMLS`).
+    /// Nunca perde precisão, mesma garantia de {@link #exactAdd(double, double)}.
+    public static BigDecimal exactFma(double a, double b, double c) {
+        return isFinite(a) && isFinite(b) && isFinite(c)
+                ? new BigDecimal(a).multiply(new BigDecimal(b)).add(new BigDecimal(c))
+                : UNREPRESENTABLE_EXACT_PLACEHOLDER;
+    }
+
     /// Aproximação de altíssima precisão de `a / b` (ver a classe).
     public static BigDecimal approxDiv(double a, double b) {
         return isFinite(a) && isFinite(b) && b != 0.0

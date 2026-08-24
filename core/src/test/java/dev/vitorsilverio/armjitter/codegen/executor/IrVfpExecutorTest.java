@@ -88,6 +88,66 @@ class IrVfpExecutorTest {
         assertNotEquals(Float.floatToRawIntBits(fused), core.vfp().s(2));
     }
 
+    // ── 2b. FMA/FMS/FNMA/FNMS FUNDIDO de verdade (B9.6, VFPv4) — espelho exato do teste acima,
+    // mesmo vetor `a`/`b`/`c`, provando que `Kind` diferente muda o resultado observável. ──
+
+    @Test
+    void fmaIsFusedWithMathFma() {
+        float a = 1.0000001f;
+        float b = 1.0000001f;
+        float c = -1.0000002f;
+        float fused = Math.fma(a, b, c);
+        float unfused = c + (a * b);
+        assertNotEquals(Float.floatToRawIntBits(fused), Float.floatToRawIntBits(unfused),
+                "vetor de teste precisa distinguir FMA de duas operações separadas");
+
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, a); // vn
+        core.vfp().setSFloat(1, b); // vm
+        core.vfp().setSFloat(2, c); // vd (acumulador de entrada)
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FMA, false, 2, 0, 1, Condition.AL), 0);
+
+        assertEquals(Float.floatToRawIntBits(fused), core.vfp().s(2));
+        assertNotEquals(Float.floatToRawIntBits(unfused), core.vfp().s(2));
+    }
+
+    @Test
+    void fmsNegatesTheProductBeforeFusing() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 2.0);  // vn
+        core.vfp().setDDouble(1, 3.0);  // vm
+        core.vfp().setDDouble(2, 10.0); // vd
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FMS, true, 2, 0, 1, Condition.AL), 0);
+        // vd - vn*vm = 10 - 6 = 4 (Math.fma(-2,3,10)).
+        assertEquals(4.0, core.vfp().dDouble(2));
+    }
+
+    /// `neg_n=true, neg_d=true` → `fma(-vd,-vn,vm)` = `-(vd + vn*vm)` — mesma convenção de sinal de
+    /// `VNMLA` (confirmado contra `MAKE_ONE_VFM_TRANS_FN` real do QEMU, ver `IrOp.VfpOperation`).
+    @Test
+    void fnmaNegatesTheWholeSum() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 2.0);  // vn
+        core.vfp().setDDouble(1, 3.0);  // vm
+        core.vfp().setDDouble(2, 10.0); // vd
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, true, 2, 0, 1, Condition.AL), 0);
+        // -(vd + vn*vm) = -(10 + 6) = -16.
+        assertEquals(-16.0, core.vfp().dDouble(2));
+    }
+
+    /// `neg_n=false, neg_d=true` → `fma(-vd,vn,vm)` = `-vd + vn*vm` — mesma convenção de sinal de
+    /// `VNMLS`.
+    @Test
+    void fnmsNegatesOnlyTheAccumulator() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 2.0);  // vn
+        core.vfp().setDDouble(1, 3.0);  // vm
+        core.vfp().setDDouble(2, 10.0); // vd
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FNMS, true, 2, 0, 1, Condition.AL), 0);
+        // -vd + vn*vm = -10 + 6 = -4.
+        assertEquals(-4.0, core.vfp().dDouble(2));
+    }
+
     @Test
     void mlsSubtractsTheUnfusedProduct() {
         ArmCore core = newCore();

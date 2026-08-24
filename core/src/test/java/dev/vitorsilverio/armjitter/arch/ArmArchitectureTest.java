@@ -125,6 +125,28 @@ class ArmArchitectureTest {
         assertFalse(ArmArchitecture.ARMV6K.has(ArmFeature.VFPV2), "a base ARMV6K não pode ser mutada");
     }
 
+    /// B9.2/B9.6 (triagem do resto do 32 bits): o ARM11 MPCore real do 3DS é ARMv6K puro (mesmo
+    /// `ARM_FEATURE_V6K` do `arm11mpcore_initfn` do QEMU, sem `ARM_FEATURE_THUMB2`) — `MOVW`/
+    /// `MOVT`/`MLS`/`SBFX`/`UBFX`/`BFC`/`BFI`/`RBIT` são ARMv6T2 (confirmado contra
+    /// `ENABLE_ARCH_6T2` real em `target/arm/tcg/translate.c`), `SDIV`/`UDIV` são a extensão
+    /// opcional de divisão do ARMv7-A/R (`dc_isar_feature(aa32_arm_div, ...)`, nem existe antes da
+    /// v7), e `VFMA`/`VFMS`/`VFNMA`/`VFNMS` são VFPv4 (comentário literal "Present in VFPv4 only"
+    /// em `translate-vfp.c`, cronologicamente posterior à geração ARM11/MPCore) — nenhuma das 11
+    /// pertence ao MPCore. Todas ficam de fora deste preset; `ARMV7A` continua tendo as 11 (ver
+    /// `arm7aHasAllOfV7Integer`/os testes de `VfpDecoderTest` para as fundidas).
+    @Test
+    void arm11MpCoreLacksArmv6t2AndDivideAndFusedVfp() {
+        ArmArchitecture preset = ArmArchitecture.ARM11_MPCORE;
+        assertFalse(preset.has(ArmFeature.MOVW_MOVT), "MOVW/MOVT é ARMv6T2, não ARMv6K");
+        assertFalse(preset.has(ArmFeature.MLS_MULTIPLY), "MLS é ARMv6T2, não ARMv6K");
+        assertFalse(preset.has(ArmFeature.BIT_FIELD), "SBFX/UBFX/BFC/BFI é ARMv6T2, não ARMv6K");
+        assertFalse(preset.has(ArmFeature.BIT_REVERSE), "RBIT é ARMv6T2, não ARMv6K");
+        assertFalse(preset.has(ArmFeature.DIVIDE), "SDIV/UDIV é extensão opcional do ARMv7-A/R");
+        assertFalse(preset.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE), "VFMA/VFMS/VFNMA/VFNMS é VFPv4");
+        assertTrue(ArmArchitecture.ARMV7A.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE),
+                "v7-A (Cortex-A15/A7) tem VFPv4 — mesma nota já feita para SDIV/UDIV no preset");
+    }
+
     /// VFP decodifica (VADD.F32 S2,S0,S1 — mesmo vetor manual de `VfpDecoderTest#addSingleDecodesToVfpAlu`).
     @Test
     void arm11MpCoreDecodesVfpInstructions() {

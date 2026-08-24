@@ -464,14 +464,26 @@ public final class IsaCoverageReport {
 
     /// Monta o encoding: bits fixos do padrão + campos preenchidos pela estratégia. `cond` é sempre
     /// `AL` (`0b1110`) quando livre — um `cond` inválido faria o decoder rejeitar por outro motivo.
+    ///
+    /// **Exceção real, achada pela B9.4**: `B_cond_thumb` (`t16.decode`) também tem um campo
+    /// chamado `cond`, mas ali o nibble NÃO é o campo de condição de 4 bits do resto da ISA — é o
+    /// codificador do Thumb1 `B<cond>` de 16 bits (ARM DDI 0406C A8.8.4), cujos únicos valores
+    /// válidos são `0b0000`-`0b1101` (as 14 condições reais); `0b1110` é reservado e permanentemente
+    /// indefinido (é, byte a byte, o mesmo encoding de `UDF #0`, ARM DDI 0406C A8.8.247 — por isso
+    /// `ThumbDecoder` intercepta `0xDE00`-`0xDEFF` ANTES de chegar no dispatch de `B_cond_thumb`) e
+    /// `0b1111` é `SVC`. Forçar `cond=AL` (`0b1110`) para esta instrução específica não sonda "branch
+    /// sempre", sonda o encoding reservado de `UDF` — falso negativo puro da ferramenta, não um gap
+    /// de decode real (`ThumbDecoder` já decodifica `B<cond>` corretamente para as 14 condições
+    /// válidas, ver o teste de regressão). `EQ` (`0b0000`) é sempre válido para este mnemônico.
     private static int encode(DecodeTreeSpec.Instruction instruction, int[] strategy) {
         int word = instruction.fixedOnes();
         int registerIndex = 0;
+        boolean thumbConditionalBranch = instruction.name().equalsIgnoreCase("B_cond_thumb");
         for (Map.Entry<String, int[]> field : instruction.fields().entrySet()) {
             String name = field.getKey().toLowerCase(Locale.ROOT);
             int value;
             if (name.equals("cond")) {
-                value = 0b1110;
+                value = thumbConditionalBranch ? 0b0000 : 0b1110;
             } else if (REGISTER_FIELDS.contains(name)) {
                 value = strategy[Math.min(registerIndex++, strategy.length - 2)];
             } else {

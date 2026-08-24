@@ -989,6 +989,16 @@ public final class AsmRuntimeHelpers {
                 case NMLS -> -vfp.dDouble(vd) + (vfp.dDouble(vn) * vfp.dDouble(vm));
                 case NMUL -> -(vfp.dDouble(vn) * vfp.dDouble(vm));
                 case SQRT -> Math.sqrt(vfp.dDouble(vm));
+                // FMA/FMS/FNMA/FNMS (B9.6, VFPv4): FUNDIDO — `Math.fma` de verdade (um único
+                // arredondamento), mesma convenção de sinal de MLA/MLS/NMLA/NMLS acima. Sob
+                // FPSCR default (RMode=nearest, FZ=0) equivale byte a byte ao que
+                // IrVfpExecutor/DirectedFpRounding calculam (RMode!=nearest cai no interpretado,
+                // AsmNativePolicy só cobre o caminho comum — mesma limitação pré-existente dos
+                // vizinhos MLA/MLS/NMLA/NMLS/NMUL/SQRT deste helper, não introduzida por B9.6).
+                case FMA -> Math.fma(vfp.dDouble(vn), vfp.dDouble(vm), vfp.dDouble(vd));
+                case FMS -> Math.fma(-vfp.dDouble(vn), vfp.dDouble(vm), vfp.dDouble(vd));
+                case FNMA -> Math.fma(-vfp.dDouble(vn), vfp.dDouble(vm), -vfp.dDouble(vd));
+                case FNMS -> Math.fma(vfp.dDouble(vn), vfp.dDouble(vm), -vfp.dDouble(vd));
                 default -> throw new IllegalStateException("vfpAluCold: op inesperado " + op);
             };
             vfp.setDDouble(vd, result);
@@ -1000,6 +1010,10 @@ public final class AsmRuntimeHelpers {
                 case NMLS -> -vfp.sFloat(vd) + (vfp.sFloat(vn) * vfp.sFloat(vm));
                 case NMUL -> -(vfp.sFloat(vn) * vfp.sFloat(vm));
                 case SQRT -> (float) Math.sqrt((double) vfp.sFloat(vm));
+                case FMA -> Math.fma(vfp.sFloat(vn), vfp.sFloat(vm), vfp.sFloat(vd));
+                case FMS -> Math.fma(-vfp.sFloat(vn), vfp.sFloat(vm), vfp.sFloat(vd));
+                case FNMA -> Math.fma(-vfp.sFloat(vn), vfp.sFloat(vm), -vfp.sFloat(vd));
+                case FNMS -> Math.fma(vfp.sFloat(vn), vfp.sFloat(vm), -vfp.sFloat(vd));
                 default -> throw new IllegalStateException("vfpAluCold: op inesperado " + op);
             };
             vfp.setSFloat(vd, result);

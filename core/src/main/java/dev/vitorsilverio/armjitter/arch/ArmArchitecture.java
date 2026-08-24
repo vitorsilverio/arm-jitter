@@ -165,7 +165,11 @@ public final class ArmArchitecture {
     /// precisam ser construídas.
     private static final ArmArchitecture ARMV7A_FEATURES = extending(ARMV6K_THUMB2, "ARMv7-A",
             ArmFeature.MLS_MULTIPLY, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
-            ArmFeature.DIVIDE, ArmFeature.VFPV2);
+            ArmFeature.DIVIDE, ArmFeature.VFPV2,
+            // B9.6: VFPv4 (VFMA/VFMS/VFNMA/VFNMS) — este preset emula um core que a possui
+            // (Cortex-A15/A7, mesma nota já feita para SDIV/UDIV acima); NÃO herdada por
+            // ARM11_MPCORE (ver o Javadoc da feature, exclusão cronológica real).
+            ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE);
 
     public static final ArmArchitecture ARMV7A = ARMV7A_FEATURES
             .withDecoderExtensions(List.of(

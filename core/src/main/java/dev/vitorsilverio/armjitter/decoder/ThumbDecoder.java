@@ -388,8 +388,16 @@ public final class ThumbDecoder implements InstructionDecoder {
                     rd, 13, -1, offset, true, false, false);
         }
 
+        // `UDF` de 16 bits (B9.4, ARM DDI 0406C A8.8.247, `t16.decode`: `1101 1110 imm8`) —
+        // instrução permanentemente indefinida, sem gate de versão, mesmo tratamento do `UDF` de
+        // 32 bits/A32 já reconhecido explicitamente (B9.1/`ArmDecoder`/B9.7 `UDF.W`) — só marcada
+        // com `InstructionKind.UDF` em vez do `UNIMPLEMENTED` genérico para a tabela de cobertura
+        // distinguir "sempre indefinida por definição" de "gap de decode real" (mesmo comportamento
+        // observável: ambas levantam a exceção de instrução indefinida via
+        // `StandardIrBlockLifter`, que já corta a fronteira de bloco para os dois `Kind`s, ver B9.1).
         if ((raw & 0xFF00) == 0xDE00) {
-            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.UDF,
+                    -1, -1, -1, 0, false, false, false);
         }
 
         // `BKPT #imm8` (B7.5, ARM DDI 0406C A6.7): `1011 1110 imm8`. ARMv5T+; sem a feature cai
