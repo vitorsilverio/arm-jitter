@@ -238,3 +238,14 @@ VFMA_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificaçã
 VFMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
 VFNMA_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
 VFNMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
+
+# ── A64 (B8.8): SQRDMLAH/SQRDMLSH (rounding doubling multiply-accumulate/subtract, vetorial e
+# ── escalar) são FEAT_RDM (ARMv8.1-A, "Rounding Double Multiply Add" — QEMU gateia com
+# ── `dc_isar_feature(aa64_rdm, s)`), extensão OPCIONAL introduzida depois do ARMv8.0-A. O
+# ── Cortex-A53 do raspi3 (alvo do virtual-arm-box) é ARMv8.0-A e não anuncia FEAT_RDM em
+# ── ID_AA64ISAR0_EL1 — posterior, não "improvável" (mesmo padrão de exclusão de B9.6 para VFPv4).
+# ── SQDMULH/SQRDMULH (SEM o "L" de acumulação) são ARMv8.0 genuínos e FORAM implementados.
+SQRDMLAH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLSH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLAH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLSH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)

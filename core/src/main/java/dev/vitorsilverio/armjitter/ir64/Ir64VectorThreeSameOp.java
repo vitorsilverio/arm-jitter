@@ -57,5 +57,41 @@ public enum Ir64VectorThreeSameOp {
     /// `Rd += Rn * Rm` (multiply-accumulate — lê o `Rd` ATUAL).
     MLA,
     /// `Rd -= Rn * Rm` (multiply-subtract — lê o `Rd` ATUAL).
-    MLS
+    MLS,
+    /// `SignedSaturate(sext(a)+sext(b))` (B8.8) — forma escalar aceita QUALQUER `esz` (`0`-`3`,
+    /// diferente de `ADD_s`/`SUB_s`/`CM**_s`, que são D-only).
+    SQADD,
+    /// `UnsignedSaturate(a+b)` (B8.8) — mesma observação de escalar de {@link #SQADD}.
+    UQADD,
+    /// `SignedSaturate(sext(a)-sext(b))` (B8.8).
+    SQSUB,
+    /// `UnsignedSaturate(a-b)` (B8.8, satura em `0` por baixo).
+    UQSUB,
+    /// Deslocamento por REGISTRADOR, assinado, truncando (`Elem[m,e,8]` como quantidade — só o
+    /// BYTE BAIXO de `b`, não `sext(b,esz)`; `>=0` desloca à esquerda, `<0` à direita) — B8.8. Forma
+    /// escalar é D-only.
+    SSHL,
+    /// Como {@link #SSHL}, mas não assinado (deslocamento à direita lógico) — B8.8. Forma escalar
+    /// D-only.
+    USHL,
+    /// Como {@link #SSHL}, mas com ARREDONDAMENTO no deslocamento à direita (`>=0` continua sem
+    /// arredondar, é deslocamento à esquerda puro) — B8.8. Forma escalar D-only.
+    SRSHL,
+    /// Como {@link #SRSHL}, não assinado — B8.8. Forma escalar D-only.
+    URSHL,
+    /// Deslocamento por REGISTRADOR com SATURAÇÃO quando `>=0` (esquerda); quando `<0` comporta-se
+    /// como {@link #SSHL} (direita, sem saturar) — B8.8. Forma escalar aceita qualquer `esz`.
+    SQSHL,
+    /// Como {@link #SQSHL}, não assinado — B8.8. Forma escalar aceita qualquer `esz`.
+    UQSHL,
+    /// Como {@link #SQSHL}, mas o lado `<0` (direita) usa ARREDONDAMENTO (como {@link #SRSHL}) em
+    /// vez de truncar puro — B8.8. Forma escalar aceita qualquer `esz`.
+    SQRSHL,
+    /// Como {@link #SQRSHL}, não assinado — B8.8. Forma escalar aceita qualquer `esz`.
+    UQRSHL,
+    /// Multiplicação dobrada de alta ordem, saturante: `SignedSaturate((2*sext(a)*sext(b)) >>
+    /// esize)` — só `esz` `1`(H)/`2`(S) — B8.8. Forma escalar aceita `H`/`S`.
+    SQDMULH,
+    /// Como {@link #SQDMULH}, com ARREDONDAMENTO antes do deslocamento — B8.8.
+    SQRDMULH
 }

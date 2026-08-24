@@ -20,7 +20,11 @@ import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideOp;
@@ -837,6 +841,22 @@ public final class Aarch64Decoder {
     /// Bit alto de `Rm` setado — "across lanes" (`ADDV`/...)/`ADDP_s` (Rm parcialmente livre,
     /// dispatch por tabela exata em vez de decompor mais).
     private static final int ADVSIMD_INT_RM_ACROSS_LANES_BIT = 0b1_0000;
+
+    // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
+    // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
+    // ── "two-register miscellaneous" acima ("01110"/"11110": bit24 é o único bit que muda,
+    // ── `0`→three-same, `1`→shift-immediate; conferido bit a bit contra `a64.decode` real, mesma
+    // ── técnica de {@link #ADVSIMD_INT_PREFIX_SHIFT}). Layout de campos totalmente diferente:
+    // ── `U`(29)/`Q`(30, só vetorial)/`immh`(22:19)/`immb`(18:16)/`opcode`(15:11)/bit10=1 fixo/
+    // ── `Rn`(9:5)/`Rd`(4:0) — SEM `size`/`Rm` (o "tamanho do elemento" é DERIVADO do bit mais alto
+    // ── setado de `immh`, nunca um campo de 2 bits solto; a forma D-only escalar EXIGE `immh`
+    // ── com bit3 setado, senão é UNALLOCATED — diferente do truque `esz=3` fixo usado acima).
+    private static final int ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN = 0b0_1111;
+    private static final int ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN = 0b1_1111;
+    private static final int ADVSIMD_SHIFT_IMMH_SHIFT = 19;
+    private static final int ADVSIMD_SHIFT_IMMH_MASK = 0b1111;
+    private static final int ADVSIMD_SHIFT_IMMB_SHIFT = 16;
+    private static final int ADVSIMD_SHIFT_IMMB_MASK = 0b111;
 
     // ── Floating-point immediate — `FMOV Sd,#imm`/`FMOV Dd,#imm`: bits[12:5] fixo="10000000",
     // ── imm8(20:13) — CONFERIDO: campo contíguo em A64 (diferente do VFP32, que espalha imm8 em
@@ -2138,6 +2158,15 @@ public final class Aarch64Decoder {
     /// miscellaneous" (`0`, sub-roteado por `Rm`, ver as constantes `ADVSIMD_INT_RM_*`).
     private Ir64Op decodeAdvancedSimdInteger(int word, long address) {
         int prefix = (word >>> ADVSIMD_INT_PREFIX_SHIFT) & ADVSIMD_INT_PREFIX_MASK;
+        // B8.8: "Advanced SIMD shift by immediate" tem prefixo PRÓPRIO (bits[28:24], um bit a mais
+        // que o das tabelas acima: `01111` vetorial/`11111` escalar, contra `01110`/`11110` das
+        // demais) — checado ANTES do resto porque usa um layout de campos totalmente diferente
+        // (`immh:immb` em vez de `size`+`Rm`).
+        if (prefix == ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN
+                || (prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN
+                        && ((word >>> ADVSIMD_INT_SCALAR_BIT30_SHIFT) & 1) != 0)) {
+            return decodeAdvancedSimdShiftByImmediate(word, address);
+        }
         boolean scalar;
         if (prefix == ADVSIMD_INT_PREFIX_VECTOR_PATTERN) {
             scalar = false;
@@ -2151,7 +2180,17 @@ public final class Aarch64Decoder {
             throw unsupported(word, address);
         }
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
-        int esz = scalar ? ADVSIMD_INT_SCALAR_ESZ : (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
+        // B8.8: campo `size` real SEMPRE lido, mesmo escalar — B8.7 assumia `esz=3` fixo para TODO
+        // escalar (válido só para `ADD_s`/`SUB_s`/`CM**_s`/`ABS_s`/`NEG_s`/`CM**0_s`, que exigem
+        // literalmente `11` nesses bits no encoding real). `SQADD_s`/`SQSHL_s`/`SUQADD_s`/etc
+        // aceitam QUALQUER tamanho (`@rrr_e`/`@r2r_e` reais, não `@rrr_d`) — ler o campo cru e
+        // validar por OPCODE (não por prefixo) é o único jeito de decodificar os dois corretamente
+        // sem duplicar o dispatch. Achado: isso também CORRIGE um bug latente da B8.7 — antes desta
+        // task, `esz` era forçado a `3` mesmo quando os bits reais não eram `11`, então um encoding
+        // reservado (`ADD_s` com `size!=11`) era silenciosamente decodificado como `ADD_s` válido
+        // em vez de cair em `UNIMPLEMENTED` (G8); agora `decodeAdvancedSimdThreeSameShape`/
+        // `decodeVectorUnaryOpcode` validam o `esz` real contra o que cada opcode aceita.
+        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
@@ -2166,18 +2205,27 @@ public final class Aarch64Decoder {
             if (op == null) {
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorArithmeticUnary(op, q, esz, rd, rn);
+            validateScalarUnaryEsz(word, address, scalar, op, esz);
+            return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
         }
         if (rm == ADVSIMD_INT_RM_NARROW_UNARY) {
-            // `SQXTN`/`SQXTUN`/`UQXTN`/`FCVTXN`/... — narrow/widen unário saturante/FP, fora de
-            // escopo (B8.8/B8.9).
-            throw unsupported(word, address);
+            // B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (narrow unário saturante) — o resto do slot
+            // (`FCVTXN`/conversões FP) continua fora de escopo (B8.9).
+            Ir64VectorNarrowUnaryOp narrowOp = decodeVectorNarrowUnaryOpcode(u, opcode);
+            if (narrowOp == null || esz == ADVSIMD_INT_SCALAR_ESZ) {
+                // Doubleword não tem forma estreitada real (não há `Q`→`D`); G8.
+                throw unsupported(word, address);
+            }
+            return new Ir64Op.VectorArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
         }
         if ((rm & ADVSIMD_INT_RM_ACROSS_LANES_BIT) != 0) {
             if (scalar) {
                 // Único mnemônico escalar desta forma: `ADDP_s` (`U=0`,`Rm=0b10001`,`opcode=0b10111`
-                // — valores conferidos contra o corpus real, não decompostos mais finamente).
-                if (!u && rm == 0b1_0001 && opcode == 0b1_0111) {
+                // — valores conferidos contra o corpus real, não decompostos mais finamente). B8.8:
+                // `esz` agora é lido cru (ver comentário acima) — `ADDP_s` exige literalmente
+                // `size=11` no encoding real, então valida aqui (G8; antes o hardcode de B8.7
+                // tornava essa checagem desnecessária).
+                if (!u && rm == 0b1_0001 && opcode == 0b1_0111 && esz == ADVSIMD_INT_SCALAR_ESZ) {
                     return new Ir64Op.VectorScalarPairwiseAdd(rd, rn);
                 }
                 throw unsupported(word, address);
@@ -2200,16 +2248,18 @@ public final class Aarch64Decoder {
 
     /// "AdvSIMD three same"/"three same pairwise" (`bit10=1`): opcodes das duas famílias NUNCA
     /// colidem entre si (conferido contra `a64.decode` real), então um único `switch` resolve as
-    /// duas. A forma ESCALAR só aceita o subconjunto realmente definido pelo manual (`ADD`/`SUB`/
-    /// `CM**`) — os demais opcodes desta tabela (`SHADD`/`SMAX`/`MUL`/...) não têm equivalente
-    /// escalar puro (`SQADD_s`/`SSHL_s`/... vivem em OUTROS opcodes, fora desta tabela, e por isso
-    /// já caem em `unsupported` sozinhos sem checagem extra).
+    /// duas. A forma ESCALAR só aceita o subconjunto realmente definido pelo manual, e cada
+    /// subconjunto tem uma restrição de `esz` DIFERENTE (`ADD_s`/`CM**_s`/`SSHL_s`/`SRSHL_s` são
+    /// D-only; `SQADD_s`/`SQSHL_s`/`SQRSHL_s` aceitam qualquer tamanho; `SQDMULH_s`/`SQRDMULH_s`
+    /// só H/S) — validado por {@link #validateScalarThreeSameEsz}, não mais um simples booleano
+    /// "tem forma escalar" (B8.7 só precisava do booleano porque todo escalar que tratava era
+    /// D-only).
     private Ir64Op decodeAdvancedSimdThreeSameShape(int word, long address, boolean scalar, boolean q, int esz,
             boolean u, int opcode, int rn, int rd, int rm) {
         Ir64VectorThreeSameOp threeSameOp = decodeVectorThreeSameOpcode(u, opcode);
         if (threeSameOp != null) {
-            if (scalar && !isScalarThreeSameOp(threeSameOp)) {
-                throw unsupported(word, address);
+            if (scalar) {
+                validateScalarThreeSameEsz(word, address, threeSameOp, esz);
             }
             if ((threeSameOp == Ir64VectorThreeSameOp.MUL || threeSameOp == Ir64VectorThreeSameOp.MLA
                     || threeSameOp == Ir64VectorThreeSameOp.MLS) && esz == ADVSIMD_INT_SCALAR_ESZ) {
@@ -2221,7 +2271,7 @@ public final class Aarch64Decoder {
                 // encoding real, não um campo livre de 2 bits como o resto desta tabela (G8).
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorArithmeticThreeSame(threeSameOp, q, esz, rd, rn, rm);
+            return new Ir64Op.VectorArithmeticThreeSame(threeSameOp, scalar, q, esz, rd, rn, rm);
         }
         if (!scalar) {
             Ir64VectorPairwiseOp pairwiseOp = decodeVectorPairwiseOpcode(u, opcode);
@@ -2232,11 +2282,31 @@ public final class Aarch64Decoder {
         throw unsupported(word, address);
     }
 
-    private static boolean isScalarThreeSameOp(Ir64VectorThreeSameOp op) {
-        return switch (op) {
-            case ADD, SUB, CMGT, CMHI, CMGE, CMHS, CMTST, CMEQ -> true;
-            default -> false;
-        };
+    /// `esz` mínimo/máximo aceito por cada subconjunto ESCALAR de "three same" (B8.8) — nomeado em
+    /// vez de literal solto (G6): `H`/`S` são os únicos tamanhos reais de `SQDMULH_s`/`SQRDMULH_s`.
+    private static final int ADVSIMD_ESZ_HALFWORD = 1;
+    private static final int ADVSIMD_ESZ_WORD = 2;
+
+    private void validateScalarThreeSameEsz(int word, long address, Ir64VectorThreeSameOp op, int esz) {
+        switch (op) {
+            case ADD, SUB, CMGT, CMHI, CMGE, CMHS, CMTST, CMEQ, SSHL, USHL, SRSHL, URSHL -> {
+                if (esz != ADVSIMD_INT_SCALAR_ESZ) {
+                    // Real: `ADD_s`/`SSHL_s`/... exigem `size=11` literalmente no encoding — G8.
+                    throw unsupported(word, address);
+                }
+            }
+            case SQADD, UQADD, SQSUB, UQSUB, SQSHL, UQSHL, SQRSHL, UQRSHL -> {
+                // Aceitam B/H/S/D — sem restrição adicional (`@rrr_e` real, campo `size` livre).
+            }
+            case SQDMULH, SQRDMULH -> {
+                if (esz != ADVSIMD_ESZ_HALFWORD && esz != ADVSIMD_ESZ_WORD) {
+                    throw unsupported(word, address);
+                }
+            }
+            default ->
+                // `SHADD`/`SMAX`/`MUL`/... não têm equivalente escalar puro real.
+                throw unsupported(word, address);
+        }
     }
 
     private static Ir64VectorThreeSameOp decodeVectorThreeSameOpcode(boolean u, int opcode) {
@@ -2254,6 +2324,14 @@ public final class Aarch64Decoder {
             case 0b0_1111 -> u ? Ir64VectorThreeSameOp.UABA : Ir64VectorThreeSameOp.SABA;
             case 0b1_0011 -> u ? Ir64VectorThreeSameOp.PMUL : Ir64VectorThreeSameOp.MUL;
             case 0b1_0010 -> u ? Ir64VectorThreeSameOp.MLS : Ir64VectorThreeSameOp.MLA;
+            // B8.8: saturante/deslocamento por registrador/multiplicação dobrada.
+            case 0b0_0001 -> u ? Ir64VectorThreeSameOp.UQADD : Ir64VectorThreeSameOp.SQADD;
+            case 0b0_0101 -> u ? Ir64VectorThreeSameOp.UQSUB : Ir64VectorThreeSameOp.SQSUB;
+            case 0b0_1000 -> u ? Ir64VectorThreeSameOp.USHL : Ir64VectorThreeSameOp.SSHL;
+            case 0b0_1010 -> u ? Ir64VectorThreeSameOp.URSHL : Ir64VectorThreeSameOp.SRSHL;
+            case 0b0_1001 -> u ? Ir64VectorThreeSameOp.UQSHL : Ir64VectorThreeSameOp.SQSHL;
+            case 0b0_1011 -> u ? Ir64VectorThreeSameOp.UQRSHL : Ir64VectorThreeSameOp.SQRSHL;
+            case 0b1_0110 -> u ? Ir64VectorThreeSameOp.SQRDMULH : Ir64VectorThreeSameOp.SQDMULH;
             default -> null;
         };
     }
@@ -2275,6 +2353,8 @@ public final class Aarch64Decoder {
             case 0b1_0101 -> u ? null : Ir64VectorUnaryOp.CMLT0;
             case 0b0_0101 -> u ? Ir64VectorUnaryOp.UADDLP : Ir64VectorUnaryOp.SADDLP;
             case 0b0_1101 -> u ? Ir64VectorUnaryOp.UADALP : Ir64VectorUnaryOp.SADALP;
+            // B8.8: acumulação saturante — `SUQADD`/`USQADD`.
+            case 0b0_0111 -> u ? Ir64VectorUnaryOp.USQADD : Ir64VectorUnaryOp.SUQADD;
             default -> null;
         };
         if (scalar && op != null && (op == Ir64VectorUnaryOp.SADDLP || op == Ir64VectorUnaryOp.UADDLP
@@ -2283,6 +2363,40 @@ public final class Aarch64Decoder {
             return null;
         }
         return op;
+    }
+
+    /// `esz` mínimo/máximo aceito por cada subconjunto ESCALAR de "two-register miscellaneous"
+    /// (B8.8): `ABS_s`/`NEG_s`/`CM**0_s` são D-only (herdado de B8.7); `SUQADD_s`/`USQADD_s`
+    /// aceitam qualquer tamanho (`@r2r_e` real).
+    private void validateScalarUnaryEsz(int word, long address, boolean scalar, Ir64VectorUnaryOp op, int esz) {
+        if (!scalar) {
+            return;
+        }
+        switch (op) {
+            case ABS, NEG, CMEQ0, CMGT0, CMGE0, CMLT0, CMLE0 -> {
+                if (esz != ADVSIMD_INT_SCALAR_ESZ) {
+                    throw unsupported(word, address);
+                }
+            }
+            case SUQADD, USQADD -> {
+                // Aceitam B/H/S/D — sem restrição adicional.
+            }
+            default ->
+                // `SADDLP`/`UADDLP`/`SADALP`/`UADALP` já voltam `null` de
+                // `decodeVectorUnaryOpcode` antes de chegar aqui quando `scalar`.
+                throw unsupported(word, address);
+        }
+    }
+
+    /// `SQXTN`/`SQXTUN`/`UQXTN` (B8.8, narrow unário saturante) — vive no MESMO opcode `01001` de
+    /// `SQXTN`/`UQXTN` (`U` distingue) e `00101` só para `SQXTUN` (`U=1`; `U=0` nesse opcode é
+    /// `FCVTN`, fora de escopo — B8.9).
+    private static Ir64VectorNarrowUnaryOp decodeVectorNarrowUnaryOpcode(boolean u, int opcode) {
+        return switch (opcode) {
+            case 0b0_1001 -> u ? Ir64VectorNarrowUnaryOp.UQXTN : Ir64VectorNarrowUnaryOp.SQXTN;
+            case 0b0_0101 -> u ? Ir64VectorNarrowUnaryOp.SQXTUN : null;
+            default -> null;
+        };
     }
 
     private static Ir64VectorAcrossLanesOp decodeVectorAcrossLanesOpcode(boolean u, int rm, int opcode) {
@@ -2315,9 +2429,20 @@ public final class Aarch64Decoder {
             case 0b0_0100 -> u ? Ir64VectorWideningOp.USUBL : Ir64VectorWideningOp.SSUBL;
             case 0b0_1010 -> u ? Ir64VectorWideningOp.UABAL : Ir64VectorWideningOp.SABAL;
             case 0b0_1110 -> u ? Ir64VectorWideningOp.UABDL : Ir64VectorWideningOp.SABDL;
+            // B8.8: `SQDMULL`/`SQDMLAL`/`SQDMLSL` — SEM forma `U=1` (não existe `UQDMULL`, `U=1`
+            // com estes opcodes é reservado, `u?null:...` rejeita).
+            case 0b1_1010 -> u ? null : Ir64VectorWideningOp.SQDMULL;
+            case 0b1_0010 -> u ? null : Ir64VectorWideningOp.SQDMLAL;
+            case 0b1_0110 -> u ? null : Ir64VectorWideningOp.SQDMLSL;
             default -> null;
         };
         if (wideningOp != null) {
+            boolean isSaturatingDoubling = wideningOp == Ir64VectorWideningOp.SQDMULL
+                    || wideningOp == Ir64VectorWideningOp.SQDMLAL || wideningOp == Ir64VectorWideningOp.SQDMLSL;
+            if (isSaturatingDoubling && esz == 0) {
+                // `SQDMULL`/`SQDMLAL`/`SQDMLSL` só existem H→S/S→D — sem forma `byte` (G8).
+                throw unsupported(word, address);
+            }
             return new Ir64Op.VectorArithmeticWidening(wideningOp, q, esz, rd, rn, rm);
         }
         Ir64VectorWideOp wideOp = switch (opcode) {
@@ -2336,9 +2461,110 @@ public final class Aarch64Decoder {
         if (narrowOp != null) {
             return new Ir64Op.VectorArithmeticNarrow(narrowOp, q, esz, rd, rn, rm);
         }
-        // `SQDMULL`/`SQDMLAL`/`SQDMLSL` (saturante, B8.8) e `PMULL`/`PMULL2` (cripto, B8.11) usam
-        // outros valores de `opcode` dentro deste mesmo grupo — fora de escopo, G8.
+        // `PMULL`/`PMULL2` (cripto, B8.11) usa outro valor de `opcode` dentro deste mesmo grupo —
+        // fora de escopo, G8.
         throw unsupported(word, address);
+    }
+
+    /// "AdvSIMD shift by immediate" (B8.8) — entra já sabendo que o prefixo bateu
+    /// ({@link #ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN}/{@link #ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN}).
+    /// O tamanho do elemento é DERIVADO do bit mais alto setado de `immh` (`0001`=byte,`001x`=
+    /// halfword,`01xx`=word,`1xxx`=doubleword; `0000` é UNALLOCATED — G8), e o deslocamento é
+    /// resolvido AQUI a partir de `immh:immb` (7 bits, `esize=8<<esz`): à DIREITA
+    /// `shift=2*esize-combined` (`1`-`esize`); à ESQUERDA `shift=combined-esize` (`0`-`esize-1`) —
+    /// fórmula conferida contra o pseudocódigo real do manual (`ARM DDI 0487`, "shift amount").
+    private Ir64Op decodeAdvancedSimdShiftByImmediate(int word, long address) {
+        int prefix = (word >>> ADVSIMD_INT_PREFIX_SHIFT) & ADVSIMD_INT_PREFIX_MASK;
+        boolean scalar = prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN;
+        if (((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) == 0) {
+            throw unsupported(word, address);
+        }
+        boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        int immh = (word >>> ADVSIMD_SHIFT_IMMH_SHIFT) & ADVSIMD_SHIFT_IMMH_MASK;
+        int immb = (word >>> ADVSIMD_SHIFT_IMMB_SHIFT) & ADVSIMD_SHIFT_IMMB_MASK;
+        int esz = highestSetImmhBit(immh);
+        if (esz < 0) {
+            // `immh=0000` — UNALLOCATED real (G8).
+            throw unsupported(word, address);
+        }
+        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        int combined = (immh << 3) | immb;
+        int esize = 8 << esz;
+        int rightShift = 2 * esize - combined;
+        int leftShift = combined - esize;
+
+        // Grupo estreitando (`SHRN`/.../`SQRSHRUN`) e alargando (`SSHLL`/`USHLL`) — `esz` variável
+        // real mas restrito a `0`-`2` (não há forma `Q`↔`D`); checado ANTES do grupo geral porque
+        // usa records/enums diferentes.
+        Ir64VectorShiftNarrowOp narrowOp = switch (opcode) {
+            case 0b1_0000 -> u ? Ir64VectorShiftNarrowOp.SQSHRUN : Ir64VectorShiftNarrowOp.SHRN;
+            case 0b1_0001 -> u ? Ir64VectorShiftNarrowOp.SQRSHRUN : Ir64VectorShiftNarrowOp.RSHRN;
+            case 0b1_0010 -> u ? Ir64VectorShiftNarrowOp.UQSHRN : Ir64VectorShiftNarrowOp.SQSHRN;
+            case 0b1_0011 -> u ? Ir64VectorShiftNarrowOp.UQRSHRN : Ir64VectorShiftNarrowOp.SQRSHRN;
+            default -> null;
+        };
+        if (narrowOp != null) {
+            if (esz == ADVSIMD_INT_SCALAR_ESZ) {
+                throw unsupported(word, address);
+            }
+            if (scalar && (narrowOp == Ir64VectorShiftNarrowOp.SHRN || narrowOp == Ir64VectorShiftNarrowOp.RSHRN)) {
+                // `SHRN`/`RSHRN` não têm forma escalar real (só as saturantes têm) — G8.
+                throw unsupported(word, address);
+            }
+            return new Ir64Op.VectorShiftNarrowImmediate(narrowOp, scalar, q, esz, rightShift, rd, rn);
+        }
+        if (opcode == 0b1_0100) {
+            // `SSHLL`/`USHLL` — sem forma escalar real (G8).
+            if (scalar || esz == ADVSIMD_INT_SCALAR_ESZ) {
+                throw unsupported(word, address);
+            }
+            Ir64VectorShiftWidenOp widenOp = u ? Ir64VectorShiftWidenOp.USHLL : Ir64VectorShiftWidenOp.SSHLL;
+            return new Ir64Op.VectorShiftWidenImmediate(widenOp, q, esz, leftShift, rd, rn);
+        }
+
+        Ir64VectorShiftOp op = switch (opcode) {
+            case 0b0_0000 -> u ? Ir64VectorShiftOp.USHR : Ir64VectorShiftOp.SSHR;
+            case 0b0_0010 -> u ? Ir64VectorShiftOp.USRA : Ir64VectorShiftOp.SSRA;
+            case 0b0_0100 -> u ? Ir64VectorShiftOp.URSHR : Ir64VectorShiftOp.SRSHR;
+            case 0b0_0110 -> u ? Ir64VectorShiftOp.URSRA : Ir64VectorShiftOp.SRSRA;
+            case 0b0_1000 -> u ? Ir64VectorShiftOp.SRI : null;
+            case 0b0_1010 -> u ? Ir64VectorShiftOp.SLI : Ir64VectorShiftOp.SHL;
+            case 0b0_1100 -> u ? Ir64VectorShiftOp.SQSHLU : null;
+            case 0b0_1110 -> u ? Ir64VectorShiftOp.UQSHL : Ir64VectorShiftOp.SQSHL;
+            default -> null;
+        };
+        if (op == null) {
+            throw unsupported(word, address);
+        }
+        boolean isRightShift = op == Ir64VectorShiftOp.SSHR || op == Ir64VectorShiftOp.USHR
+                || op == Ir64VectorShiftOp.SSRA || op == Ir64VectorShiftOp.USRA
+                || op == Ir64VectorShiftOp.SRSHR || op == Ir64VectorShiftOp.URSHR
+                || op == Ir64VectorShiftOp.SRSRA || op == Ir64VectorShiftOp.URSRA
+                || op == Ir64VectorShiftOp.SRI;
+        // `SQSHL`/`UQSHL`/`SQSHLU` aceitam qualquer `esz` (`0`-`3`); o resto desta tabela é D-only
+        // na forma escalar (`@shri_d`/`@shli_d` reais — nunca `@shri_b/h/s`/`@shli_b/h/s`).
+        boolean acceptsAnyScalarEsz = op == Ir64VectorShiftOp.SQSHL || op == Ir64VectorShiftOp.UQSHL
+                || op == Ir64VectorShiftOp.SQSHLU;
+        if (scalar && !acceptsAnyScalarEsz && esz != ADVSIMD_INT_SCALAR_ESZ) {
+            throw unsupported(word, address);
+        }
+        int shift = isRightShift ? rightShift : leftShift;
+        return new Ir64Op.VectorShiftImmediate(op, scalar, q, esz, shift, rd, rn);
+    }
+
+    /// Posição (`0`-`3`) do bit mais alto setado de `immh` (4 bits) — `-1` se `immh=0000`
+    /// (UNALLOCATED). `0`=byte,`1`=halfword,`2`=word,`3`=doubleword (`ARM DDI 0487`, "shift by
+    /// immediate": o tamanho do elemento é sempre derivado assim, nunca um campo `size` solto).
+    private static int highestSetImmhBit(int immh) {
+        for (int bit = 3; bit >= 0; bit--) {
+            if (((immh >>> bit) & 1) != 0) {
+                return bit;
+            }
+        }
+        return -1;
     }
 
     /// `type` (bits[23:22], Fatos de referência #4): posição idêntica nos 4 subgrupos escalares

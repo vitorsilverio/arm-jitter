@@ -25,5 +25,13 @@ public enum Ir64VectorUnaryOp {
     /// Como {@link #SADDLP}, mas ACUMULA no `Rd` ATUAL (já em `esz+1`) em vez de sobrescrever.
     SADALP,
     /// Como {@link #UADDLP}, mas ACUMULA no `Rd` ATUAL (já em `esz+1`) em vez de sobrescrever.
-    UADALP
+    UADALP,
+    /// `SignedSaturate(sext(Rd_atual) + zext(Rn))` (B8.8, "signed saturating accumulate of
+    /// unsigned value") — acumula no MESMO tamanho de elemento (ao contrário de `SADALP`, que
+    /// alarga). Forma escalar aceita qualquer `esz` (`0`-`3`).
+    SUQADD,
+    /// `UnsignedSaturate(zext(Rd_atual) + sext(Rn))` (B8.8, "unsigned saturating accumulate of
+    /// signed value") — satura em `0` por baixo se `Rn` for bem negativo. Forma escalar aceita
+    /// qualquer `esz`.
+    USQADD
 }

@@ -5,11 +5,17 @@ import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp;
+
+import java.math.BigInteger;
 
 /// Executa a IR de AdvSIMD inteiro — aritmética/comparação (B8.7): "three same"/"three same
 /// pairwise"/"three different" (alargando/largo+estreito/estreitando)/"across lanes"/
@@ -51,6 +57,167 @@ final class Ir64VectorArithmeticExecutor {
         return (q ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES) >> esz;
     }
 
+    /// Reinterpreta um `long` java (que pode ser negativo) como o inteiro NÃO ASSINADO de 64 bits
+    /// que ele representa em complemento de dois — necessário porque `esz=3` (doubleword) é o
+    /// único tamanho em que um elemento não assinado pode ultrapassar {@link Long#MAX_VALUE}, e daí
+    /// pra frente toda a aritmética de saturação de B8.8 usa {@link BigInteger} deliberadamente
+    /// (não é otimização prematura: `Kind`s desta task não entram em `Ir64NativePolicy`, caem no
+    /// interpretador, então exatidão pesa mais que velocidade de bit a bit aqui).
+    private static BigInteger unsignedBig(long value) {
+        return value >= 0 ? BigInteger.valueOf(value) : BigInteger.valueOf(value).add(BigInteger.ONE.shiftLeft(64));
+    }
+
+    /// Satura `value` (matemático, sem wraparound) ao intervalo representável por um elemento de
+    /// {@code esz} bytes, assinado ou não — usado por toda operação `SQ*`/`UQ*` desta task.
+    private static long saturateToElement(BigInteger value, int esz, boolean signed) {
+        int bits = 8 << esz;
+        BigInteger max = signed
+                ? BigInteger.ONE.shiftLeft(bits - 1).subtract(BigInteger.ONE)
+                : BigInteger.ONE.shiftLeft(bits).subtract(BigInteger.ONE);
+        BigInteger min = signed ? max.negate().subtract(BigInteger.ONE) : BigInteger.ZERO;
+        if (value.compareTo(max) > 0) {
+            return max.longValue();
+        }
+        if (value.compareTo(min) < 0) {
+            return min.longValue();
+        }
+        return value.longValue();
+    }
+
+    private static long signedSaturatingAdd(long sa, long sb, int esz) {
+        return saturateToElement(BigInteger.valueOf(sa).add(BigInteger.valueOf(sb)), esz, true);
+    }
+
+    private static long signedSaturatingSub(long sa, long sb, int esz) {
+        return saturateToElement(BigInteger.valueOf(sa).subtract(BigInteger.valueOf(sb)), esz, true);
+    }
+
+    private static long unsignedSaturatingAdd(long a, long b, int esz) {
+        return saturateToElement(unsignedBig(a).add(unsignedBig(b)), esz, false);
+    }
+
+    private static long unsignedSaturatingSub(long a, long b, int esz) {
+        return saturateToElement(unsignedBig(a).subtract(unsignedBig(b)), esz, false);
+    }
+
+    /// Acumulação saturante em elemento ASSINADO com operando NÃO assinado (`SUQADD`).
+    private static long signedAccumulateSaturating(long signedCurrent, long unsignedOperand, int esz) {
+        return saturateToElement(BigInteger.valueOf(signedCurrent).add(unsignedBig(unsignedOperand)), esz, true);
+    }
+
+    /// Acumulação saturante em elemento NÃO assinado com operando ASSINADO (`USQADD`).
+    private static long unsignedAccumulateSaturating(long unsignedCurrent, long signedOperand, int esz) {
+        return saturateToElement(unsignedBig(unsignedCurrent).add(BigInteger.valueOf(signedOperand)), esz, false);
+    }
+
+    /// Deslocamento à esquerda seguro: Java `<<`/`>>>`/`>>` usam o deslocamento MOD 64 para `long`
+    /// (`x << 64` == `x << 0`, não `0`) — esta e as duas próximas funções são o guarda-corpo contra
+    /// esse comportamento sempre que o deslocamento pode chegar a `64` (só acontece com `esz=3`) ou,
+    /// no caso do deslocamento POR REGISTRADOR, a qualquer magnitude de um byte assinado (`-128`..
+    /// `127`).
+    private static long safeShiftLeft(long value, int shift) {
+        return shift >= 64 ? 0L : value << shift;
+    }
+
+    private static long logicalShiftRight(long value, int shift) {
+        return shift >= 64 ? 0L : value >>> shift;
+    }
+
+    private static long arithmeticShiftRight(long value, int shift) {
+        return shift >= 64 ? (value < 0 ? -1L : 0L) : value >> shift;
+    }
+
+    /// Deslocamento à direita com ARREDONDAMENTO (`round = 1 << (shift-1)` somado antes de
+    /// deslocar) — em {@link BigInteger} para não ter que lidar manualmente com o transbordo de 64
+    /// bits que a soma `value + round` pode causar quando `esz=3` (ver {@link #unsignedBig}).
+    private static long roundingShiftRight(long value, int shift, boolean signed) {
+        if (shift <= 0) {
+            return value;
+        }
+        BigInteger v = signed ? BigInteger.valueOf(value) : unsignedBig(value);
+        BigInteger round = BigInteger.ONE.shiftLeft(shift - 1);
+        return v.add(round).shiftRight(shift).longValue();
+    }
+
+    /// Deslocamento à esquerda por quantidade VARIÁVEL (`0`-`127`, deslocamento por registrador ou
+    /// imediato) com saturação ao tamanho do elemento — {@link BigInteger} evita ter que truncar
+    /// manualmente antes de saturar (deslocar um `long` de 64 bits por `> 64` bits já perde
+    /// informação em Java antes mesmo da saturação rodar).
+    private static long saturatingShiftLeft(long value, int shift, int esz, boolean signed) {
+        BigInteger v = signed ? BigInteger.valueOf(value) : unsignedBig(value);
+        return saturateToElement(v.shiftLeft(shift), esz, signed);
+    }
+
+    /// Multiplicação dobrada de alta ordem saturante (`SQDMULH`/`SQRDMULH`) — `esize = 8<<esz`.
+    private static long doublingMultiplyHigh(long sa, long sb, int esz, boolean rounding) {
+        int esize = 8 << esz;
+        BigInteger product = BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1);
+        if (rounding) {
+            product = product.add(BigInteger.ONE.shiftLeft(esize - 1));
+        }
+        return saturateToElement(product.shiftRight(esize), esz, true);
+    }
+
+    /// `2*sext(a)*sext(b)`, saturado ao tamanho `esz` (LARGO — `esz` aqui já é o `wideEsz` do
+    /// chamador) — usado por `SQDMULL`/`SQDMLAL`/`SQDMLSL`.
+    private static long saturatingDoublingProduct(long sa, long sb, int wideEsz) {
+        return saturateToElement(BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1), wideEsz, true);
+    }
+
+    /// Deslocamento por REGISTRADOR (`SSHL`/`USHL`/`SQSHL`/`UQSHL`/...): a quantidade é o BYTE
+    /// BAIXO do elemento `Rm`, sempre — nunca `sext(Rm,esz)` (`ARM DDI 0487`, pseudocódigo de
+    /// `SSHL`: `shift = SInt(Elem[m,e,8])`). `>=0` desloca à esquerda; `<0` desloca à direita com a
+    /// MAGNITUDE (`-shift`).
+    private static int registerShiftAmount(long rmElement) {
+        return (byte) rmElement;
+    }
+
+    private static long shiftByRegister(long value, int amount, boolean signed) {
+        if (amount >= 0) {
+            return safeShiftLeft(value, amount);
+        }
+        int magnitude = -amount;
+        return signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude);
+    }
+
+    private static long roundingShiftByRegister(long value, int amount, boolean signed) {
+        if (amount >= 0) {
+            return safeShiftLeft(value, amount);
+        }
+        return roundingShiftRight(value, -amount, signed);
+    }
+
+    /// `SQSHL`/`UQSHL`/`SQRSHL`/`UQRSHL` por registrador: só o lado ESQUERDO (`amount>=0`) satura;
+    /// o lado direito (`amount<0`) é um deslocamento comum (com ou sem arredondamento conforme
+    /// {@code rounding}), NUNCA satura (a magnitude só encolhe).
+    private static long saturatingShiftByRegister(long value, int amount, int esz, boolean signed, boolean rounding) {
+        if (amount >= 0) {
+            return saturatingShiftLeft(value, amount, esz, signed);
+        }
+        int magnitude = -amount;
+        return rounding ? roundingShiftRight(value, magnitude, signed)
+                : (signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude));
+    }
+
+    /// "Shift Left and Insert" (`SLI`): desloca `source` à esquerda por `shift` e insere no `Rd`
+    /// ATUAL, preservando os `shift` bits BAIXOS de `Rd` (o deslocamento já traz zeros nos bits
+    /// baixos, então basta unir com a máscara dos bits preservados de `current`).
+    private static long insertShiftLeft(long current, long source, int shift) {
+        long shifted = safeShiftLeft(source, shift);
+        long preserveMask = shift <= 0 ? 0L : (shift >= 64 ? -1L : (1L << shift) - 1);
+        return (current & preserveMask) | shifted;
+    }
+
+    /// "Shift Right and Insert" (`SRI`): desloca `source` à direita por `shift` e insere no `Rd`
+    /// ATUAL, preservando os `shift` bits ALTOS de `Rd` dentro da largura do elemento.
+    private static long insertShiftRight(long current, long source, int shift, int esz) {
+        long shifted = logicalShiftRight(source, shift);
+        int esize = 8 << esz;
+        long mask = elementMask(esz);
+        long preserveMask = shift >= esize ? mask : (mask & ~((1L << (esize - shift)) - 1));
+        return (current & preserveMask) | shifted;
+    }
+
     /// Escrita "SIMD&FP destructive": zera os bits altos de `rd` quando `!q` — a forma vetorial
     /// com `q=false` só escreveu os 64 bits baixos; a forma escalar (`esz=3`/`q=false` reaproveitado,
     /// ver javadoc do record) também passa por aqui.
@@ -60,10 +227,26 @@ final class Ir64VectorArithmeticExecutor {
         }
     }
 
+    /// Escrita destrutiva CIENTE de forma escalar (B8.8): quando {@code scalar}, zera TUDO acima
+    /// de {@code esz} bits — inclusive dentro do `low64`, não só os 64 bits altos — porque a forma
+    /// escalar de B8.8 processa um ÚNICO elemento que pode ser menor que 64 bits (`SQADD_s.B`,
+    /// `SQSHL_s.H`, ...). `fp.element(rd,0,esz)` já devolve o elemento recém-escrito (zero-
+    /// extendido a `esz` bits); usá-lo como o `low64` inteiro zera o resto automaticamente. Sem
+    /// isto, `sqadd b0,...` deixaria lixo de uma escrita anterior mais larga nos bits `[63:8]` de
+    /// `V0` — bug real que {@link #finishDestructiveWrite} (só zera `[127:64]`) não cobre quando
+    /// `esz<3` (ver javadoc de {@link Ir64Op.VectorArithmeticThreeSame#scalar}).
+    private static void finishScalarAwareWrite(Aarch64FpRegisters fp, int rd, boolean scalar, boolean q, int esz) {
+        if (scalar) {
+            fp.setQ(rd, fp.element(rd, 0, esz), 0L);
+        } else {
+            finishDestructiveWrite(fp, rd, q);
+        }
+    }
+
     static boolean executeThreeSame(Aarch64Core core, Ir64Op.VectorArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        int elements = elementsPerRegister(op.q(), esz);
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
         for (int i = 0; i < elements; i++) {
             long a = fp.element(op.rn(), i, esz);
             long b = fp.element(op.rm(), i, esz);
@@ -97,10 +280,24 @@ final class Ir64VectorArithmeticExecutor {
                 case PMUL -> polynomialMultiply8(a, b);
                 case MLA -> fp.element(op.rd(), i, esz) + a * b;
                 case MLS -> fp.element(op.rd(), i, esz) - a * b;
+                case SQADD -> signedSaturatingAdd(sa, sb, esz);
+                case UQADD -> unsignedSaturatingAdd(a, b, esz);
+                case SQSUB -> signedSaturatingSub(sa, sb, esz);
+                case UQSUB -> unsignedSaturatingSub(a, b, esz);
+                case SSHL -> shiftByRegister(sa, registerShiftAmount(b), true);
+                case USHL -> shiftByRegister(a, registerShiftAmount(b), false);
+                case SRSHL -> roundingShiftByRegister(sa, registerShiftAmount(b), true);
+                case URSHL -> roundingShiftByRegister(a, registerShiftAmount(b), false);
+                case SQSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, false);
+                case UQSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, false);
+                case SQRSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, true);
+                case UQRSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, true);
+                case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
+                case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
-        finishDestructiveWrite(fp, op.rd(), op.q());
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 
@@ -172,6 +369,12 @@ final class Ir64VectorArithmeticExecutor {
                 case UABAL -> current + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
                 case SABDL -> Math.abs(sa - sb);
                 case UABDL -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
+                // `SQDMULL`/`SQDMLAL`/`SQDMLSL` (B8.8): a MULTIPLICAÇÃO satura primeiro
+                // (`SignedSaturate(2*sext(Rn)*sext(Rm))`), DEPOIS a soma/subtração satura de novo
+                // — duas saturações independentes, conferido contra o pseudocódigo real.
+                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
+                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
             };
             fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
         }
@@ -281,7 +484,7 @@ final class Ir64VectorArithmeticExecutor {
             finishDestructiveWrite(fp, op.rd(), op.q());
             return false;
         }
-        int elements = elementsPerRegister(op.q(), esz);
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
         for (int i = 0; i < elements; i++) {
             long a = fp.element(op.rn(), i, esz);
             long sa = signExtend(a, esz);
@@ -293,12 +496,14 @@ final class Ir64VectorArithmeticExecutor {
                 case CMGE0 -> boolMask(sa >= 0, esz);
                 case CMLT0 -> boolMask(sa < 0, esz);
                 case CMLE0 -> boolMask(sa <= 0, esz);
+                case SUQADD -> signedAccumulateSaturating(signExtend(fp.element(op.rd(), i, esz), esz), a, esz);
+                case USQADD -> unsignedAccumulateSaturating(fp.element(op.rd(), i, esz), sa, esz);
                 case SADDLP, UADDLP, SADALP, UADALP ->
                         throw new IllegalStateException("tratado no ramo widening acima");
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
-        finishDestructiveWrite(fp, op.rd(), op.q());
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 
@@ -306,6 +511,113 @@ final class Ir64VectorArithmeticExecutor {
         Aarch64FpRegisters fp = core.fp();
         long result = fp.element(op.rn(), 0, 3) + fp.element(op.rn(), 1, 3);
         fp.setD(op.rd(), result);
+        return false;
+    }
+
+    /// `SQXTN`/`SQXTUN`/`UQXTN` (B8.8) — narrow unário saturante, vetorial e escalar (a forma
+    /// escalar processa só o elemento `0`, ver {@link Ir64Op.VectorArithmeticNarrowUnary#scalar}).
+    static boolean executeNarrowUnary(Aarch64Core core, Ir64Op.VectorArithmeticNarrowUnary op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int wideEsz = esz + 1;
+        int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
+        int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
+        for (int i = 0; i < elements; i++) {
+            long wide = fp.element(op.rn(), i, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow = switch (op.op()) {
+                case SQXTN -> saturateToElement(BigInteger.valueOf(signedWide), esz, true);
+                case SQXTUN -> saturateToElement(BigInteger.valueOf(signedWide), esz, false);
+                case UQXTN -> saturateToElement(unsignedBig(wide), esz, false);
+            };
+            fp.setElement(op.rd(), laneOffset + i, esz, truncate(narrow, esz));
+        }
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
+    /// `SSHR`/`USHR`/`SRSHR`/`URSHR`/`SSRA`/`USRA`/`SRSRA`/`URSRA`/`SRI`/`SHL`/`SLI`/`SQSHL`/
+    /// `UQSHL`/`SQSHLU` (B8.8, "shift by immediate" não-largo/não-estreito), vetorial e escalar.
+    static boolean executeShiftImmediate(Aarch64Core core, Ir64Op.VectorShiftImmediate op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int shift = op.shift();
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
+        for (int i = 0; i < elements; i++) {
+            long a = fp.element(op.rn(), i, esz);
+            long sa = signExtend(a, esz);
+            long current = fp.element(op.rd(), i, esz);
+            long result = switch (op.op()) {
+                case SSHR -> arithmeticShiftRight(sa, shift);
+                case USHR -> logicalShiftRight(a, shift);
+                case SRSHR -> roundingShiftRight(sa, shift, true);
+                case URSHR -> roundingShiftRight(a, shift, false);
+                case SSRA -> signExtend(current, esz) + arithmeticShiftRight(sa, shift);
+                case USRA -> current + logicalShiftRight(a, shift);
+                case SRSRA -> signExtend(current, esz) + roundingShiftRight(sa, shift, true);
+                case URSRA -> current + roundingShiftRight(a, shift, false);
+                case SRI -> insertShiftRight(current, a, shift, esz);
+                case SHL -> safeShiftLeft(a, shift);
+                case SLI -> insertShiftLeft(current, a, shift);
+                case SQSHL -> saturatingShiftLeft(sa, shift, esz, true);
+                case UQSHL -> saturatingShiftLeft(a, shift, esz, false);
+                // `SQSHLU`: fonte ASSINADA (desloca como `sa`, não `a`) mas saturação NÃO
+                // assinada — `saturatingShiftLeft` não serve aqui porque seu único parâmetro
+                // `signed` governa as DUAS coisas (interpretação do deslocamento E sinal da
+                // saturação), que para `SQSHLU` divergem de propósito (achado real ao testar:
+                // `unsignedBig(sa=-1)` trataria `-1` como quase `2^64`, produzindo lixo em vez de
+                // saturar em `0`).
+                case SQSHLU -> saturateToElement(BigInteger.valueOf(sa).shiftLeft(shift), esz, false);
+            };
+            fp.setElement(op.rd(), i, esz, truncate(result, esz));
+        }
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
+    /// `SHRN`/`RSHRN`/`SQSHRN`/`UQSHRN`/`SQSHRUN`/`SQRSHRN`/`UQRSHRN`/`SQRSHRUN` (B8.8, "shift by
+    /// immediate" estreitando).
+    static boolean executeShiftNarrowImmediate(Aarch64Core core, Ir64Op.VectorShiftNarrowImmediate op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int wideEsz = esz + 1;
+        int shift = op.shift();
+        int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
+        int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
+        for (int i = 0; i < elements; i++) {
+            long wide = fp.element(op.rn(), i, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow = switch (op.op()) {
+                case SHRN -> logicalShiftRight(wide, shift);
+                case RSHRN -> roundingShiftRight(wide, shift, false);
+                case SQSHRN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, true);
+                case UQSHRN -> saturateToElement(BigInteger.valueOf(logicalShiftRight(wide, shift)), esz, false);
+                case SQSHRUN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, false);
+                case SQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, true);
+                case UQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(wide, shift, false)), esz, false);
+                case SQRSHRUN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, false);
+            };
+            fp.setElement(op.rd(), laneOffset + i, esz, truncate(narrow, esz));
+        }
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
+    /// `SSHLL`/`USHLL` (B8.8, "shift by immediate" alargando) — sempre preenche os 128 bits
+    /// inteiros de `Rd`, sem saturar (o valor alargado sempre cabe no container maior).
+    static boolean executeShiftWidenImmediate(Aarch64Core core, Ir64Op.VectorShiftWidenImmediate op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int wideEsz = esz + 1;
+        int shift = op.shift();
+        int outputElements = elementsPerRegister(true, wideEsz);
+        int laneOffset = op.q() ? outputElements : 0;
+        for (int i = 0; i < outputElements; i++) {
+            long narrow = fp.element(op.rn(), laneOffset + i, esz);
+            long extended = op.op() == Ir64VectorShiftWidenOp.SSHLL ? signExtend(narrow, esz) : narrow;
+            long result = safeShiftLeft(extended, shift);
+            fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+        }
         return false;
     }
 }

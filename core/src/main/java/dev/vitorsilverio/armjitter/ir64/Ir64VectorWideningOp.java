@@ -32,5 +32,15 @@ public enum Ir64VectorWideningOp {
     /// `|sext(Rn)-sext(Rm)|`.
     SABDL,
     /// `|zext(Rn)-zext(Rm)|`.
-    UABDL
+    UABDL,
+    /// `SignedSaturate(2*sext(Rn)*sext(Rm))` (B8.8, "three different" saturante) — só `esz`
+    /// `1`(H→S)/`2`(S→D), sem forma `U=1` (não existe `UQDMULL`).
+    SQDMULL,
+    /// `Rd = SignedSaturate(Rd_atual + SignedSaturate(2*sext(Rn)*sext(Rm)))` (B8.8) — a MULTIPLICAÇÃO
+    /// satura primeiro, DEPOIS a soma satura de novo (duas saturações independentes, conferido
+    /// contra o pseudocódigo real `SQDMLAL`).
+    SQDMLAL,
+    /// Como {@link #SQDMLAL}, mas subtrai (`Rd_atual - SignedSaturate(2*sext(Rn)*sext(Rm))`,
+    /// saturando os dois passos) — B8.8.
+    SQDMLSL
 }

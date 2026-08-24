@@ -40,7 +40,9 @@ public sealed interface Ir64Op permits
         Ir64Op.Fp64GeneralRegisterMove, Ir64Op.VectorLoadStoreMultiple, Ir64Op.VectorLoadStoreSingle,
         Ir64Op.VectorLoadSingleReplicate, Ir64Op.VectorArithmeticThreeSame, Ir64Op.VectorArithmeticPairwise,
         Ir64Op.VectorArithmeticWidening, Ir64Op.VectorArithmeticWide, Ir64Op.VectorArithmeticNarrow,
-        Ir64Op.VectorAcrossLanes, Ir64Op.VectorArithmeticUnary, Ir64Op.VectorScalarPairwiseAdd {
+        Ir64Op.VectorAcrossLanes, Ir64Op.VectorArithmeticUnary, Ir64Op.VectorScalarPairwiseAdd,
+        Ir64Op.VectorArithmeticNarrowUnary, Ir64Op.VectorShiftImmediate,
+        Ir64Op.VectorShiftNarrowImmediate, Ir64Op.VectorShiftWidenImmediate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -171,6 +173,19 @@ public sealed interface Ir64Op permits
         /// B8.7: `ADDP_s` (pareamento escalar D, único mnemônico desta forma) — ver
         /// {@link VectorScalarPairwiseAdd}.
         public static final int VECTOR_SCALAR_PAIRWISE_ADD = 63;
+        /// B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (AdvSIMD "narrow unary" saturante, vetorial e escalar) —
+        /// ver {@link VectorArithmeticNarrowUnary}.
+        public static final int VECTOR_ARITHMETIC_NARROW_UNARY = 64;
+        /// B8.8: `SSHR`/`USHR`/`SRSHR`/`URSHR`/`SSRA`/`USRA`/`SRSRA`/`URSRA`/`SRI`/`SHL`/`SLI`/
+        /// `SQSHL`/`UQSHL`/`SQSHLU` (AdvSIMD "shift by immediate", não-largo/não-estreito) — ver
+        /// {@link VectorShiftImmediate}.
+        public static final int VECTOR_SHIFT_IMMEDIATE = 65;
+        /// B8.8: `SHRN`/`RSHRN`/`SQSHRN`/`UQSHRN`/`SQSHRUN`/`SQRSHRN`/`UQRSHRN`/`SQRSHRUN`
+        /// (AdvSIMD "shift by immediate" estreitando) — ver {@link VectorShiftNarrowImmediate}.
+        public static final int VECTOR_SHIFT_NARROW_IMMEDIATE = 66;
+        /// B8.8: `SSHLL`/`USHLL` (AdvSIMD "shift by immediate" alargando) — ver
+        /// {@link VectorShiftWidenImmediate}.
+        public static final int VECTOR_SHIFT_WIDEN_IMMEDIATE = 67;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1483,16 +1498,23 @@ public sealed interface Ir64Op permits
 
     /// AdvSIMD "three same" inteiro (`ADD_v`/`SUB_v`/`CM**_v`/`SHADD_v`/.../`MLA_v`/`MLS_v`, B8.7)
     /// — os 3 operandos (`Rd`/`Rn`/`Rm`) têm o MESMO tamanho de elemento {@link #esz}. Também
-    /// representa a forma ESCALAR (`ADD_s`/`SUB_s`/`CM**_s`), que no encoding real vive num
-    /// prefixo diferente (bit28 fixo) mas é semanticamente idêntica a esta forma vetorial com
-    /// `esz=3`(doubleword, único tamanho que a forma escalar aceita)/`q=false` — combinação que a
-    /// forma VETORIAL nunca produz de verdade (doubleword exige `q=true` no hardware real, já que
-    /// só existe `.2d`, nunca `.1d`), então reaproveitar o mesmo par `(esz=3,q=false)` para o
-    /// escalar não colide com nenhum uso vetorial legítimo — o DECODER nunca deriva esse par de um
-    /// campo `Q` real ao decodificar a forma escalar, escreve os dois literais direto.
+    /// representa a forma ESCALAR (`ADD_s`/`SUB_s`/`CM**_s`/`SQADD_s`/..., B8.7+B8.8), que no
+    /// encoding real vive num prefixo diferente (bit28 fixo).
+    ///
+    /// ⚠️ B8.8: {@link #scalar} passou a ser um `boolean` EXPLÍCITO (antes, B8.7 reaproveitava
+    /// `esz=3`(doubleword)/`q=false` como sentinela implícito de "é escalar" — válido enquanto TODA
+    /// forma escalar desta tabela fosse D-only, como `ADD_s`/`CM**_s`. B8.8 introduziu formas
+    /// escalares de tamanho VARIÁVEL (`SQADD_s`/`SQSHL_s`/`SQDMULH_s`/...), e `sqadd v0.8b,...`
+    /// (VETORIAL, `esz=0`/`q=false`) e `sqadd b0,...` (ESCALAR, `esz=0`/`q=false` TAMBÉM) ficaram
+    /// indistinguíveis pelo par antigo — colisão real que exigiria zerar bits diferentes do destino
+    /// (vetorial `q=false` preserva TODO o `low64`; escalar zera tudo acima do elemento único,
+    /// mesmo dentro do `low64`). Corrigido threading um `scalar` explícito do decoder ao executor.
     record VectorArithmeticThreeSame(
             /// Operação a executar.
             Ir64VectorThreeSameOp op,
+            /// `true` para a forma ESCALAR (processa só o elemento `0`; escreve destrutivamente
+            /// TUDO acima de {@link #esz} bits, inclusive dentro do `low64` — ver acima).
+            boolean scalar,
             /// `true` para arranjo de 128 bits, `false` para 64 bits (ou forma escalar, ver acima).
             boolean q,
             /// `log2` do tamanho do elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
@@ -1613,18 +1635,21 @@ public sealed interface Ir64Op permits
 
     /// AdvSIMD "two-register miscellaneous" inteiro (`ABS_v`/`NEG_v`/`CM**0_v`/`SADDLP_v`/
     /// `UADDLP_v`/`SADALP_v`/`UADALP_v`, B8.7) — um único operando de origem (`Rn`). Também
-    /// representa a forma ESCALAR (`ABS_s`/`NEG_s`/`CM**0_s`), mesmo truque de
-    /// {@link VectorArithmeticThreeSame} (`esz=3`/`q=false`, combinação que a forma vetorial nunca
-    /// produz de verdade). {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
+    /// representa a forma ESCALAR (`ABS_s`/`NEG_s`/`CM**0_s`/`SUQADD_s`/`USQADD_s`, B8.7+B8.8).
+    /// {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
     /// {@link Ir64VectorUnaryOp#SADALP}/{@link Ir64VectorUnaryOp#UADALP} não têm forma escalar real
-    /// (só vetorial).
+    /// (só vetorial). Ver o javadoc de {@link #scalar} em {@link VectorArithmeticThreeSame} —
+    /// MESMA colisão `esz`/`q` corrigida pela B8.8, MESMO motivo (`SUQADD_s`/`USQADD_s` aceitam
+    /// `esz` variável, ao contrário de `ABS_s`/`NEG_s`/`CM**0_s`, que são D-only).
     record VectorArithmeticUnary(
             /// Operação a executar.
             Ir64VectorUnaryOp op,
+            /// `true` para a forma ESCALAR — ver {@link VectorArithmeticThreeSame#scalar}.
+            boolean scalar,
             /// `true` para arranjo de 128 bits, `false` para 64 bits (ou forma escalar, ver acima).
             boolean q,
             /// `log2` do tamanho do elemento de ENTRADA (`Rn`) em bytes (`0`-`3`, forma escalar
-            /// sempre `3`). Para {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
+            /// sempre `3` exceto `SUQADD`/`USQADD`). Para {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
             /// {@link Ir64VectorUnaryOp#SADALP}/{@link Ir64VectorUnaryOp#UADALP} o resultado em
             /// `Rd` usa `esz+1`; para as demais, `Rd` usa o mesmo `esz`.
             int esz,
@@ -1644,5 +1669,104 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte (lido como `.2d`, 2 elementos doubleword).
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_SCALAR_PAIRWISE_ADD; }
+    }
+
+    /// AdvSIMD "narrow unary" saturante (`SQXTN`/`SQXTUN`/`UQXTN`, B8.8) — reduz um elemento de
+    /// `esz+1` bytes (`Rn`) para `esz` bytes (`Rd`), saturando. Vive no MESMO slot de encoding
+    /// (`Rm=00001`) que a forma "two-register misc" usa para narrow/widen — B8.7 deixou esse slot
+    /// inteiro fora de escopo. Diferente de {@link VectorArithmeticThreeSame}/
+    /// {@link VectorArithmeticUnary} (que reaproveitam `esz=3`/`q=false` para a forma escalar
+    /// porque essa combinação é impossível na forma vetorial real), aqui `esz` VARIA legitimamente
+    /// tanto na forma vetorial quanto na escalar (`0`-`2` nas duas — nunca `3`, não existe
+    /// estreitamento de `Q` para `D`), então a forma escalar precisa de um `boolean` próprio.
+    record VectorArithmeticNarrowUnary(
+            /// Operação a executar.
+            Ir64VectorNarrowUnaryOp op,
+            /// `true` para a forma ESCALAR (processa só o elemento `0`, `q` ignorado — ver acima).
+            boolean scalar,
+            /// `false`=escreve a metade BAIXA de `Rd` (forma sem `2`). `true`=escreve a metade
+            /// ALTA (forma `*2`). Ignorado quando {@link #scalar}.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rd`) em bytes — `0`-`2`. `Rn` usa `esz+1`.
+            int esz,
+            /// Registrador `V` de destino (elementos `esz`).
+            int rd,
+            /// Registrador `V` fonte, largo (elementos `esz+1`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_NARROW_UNARY; }
+    }
+
+    /// AdvSIMD "shift by immediate" não-largo/não-estreito (B8.8) — `Rd`/`Rn` têm o MESMO tamanho
+    /// de elemento; {@link #shift} já é a quantidade RESOLVIDA pelo decoder a partir de
+    /// `immh:immb` (nunca o campo cru, mesma convenção de {@link Alu64#immediate}). Também
+    /// representa a forma ESCALAR das operações que a aceitam (ver {@link Ir64VectorShiftOp}) — o
+    /// DECODER valida quais operações aceitam qual `esz` na forma escalar, nunca o executor.
+    /// {@link #scalar} é EXPLÍCITO (não reaproveita `esz=3`/`q=false`, mesmo motivo de
+    /// {@link VectorArithmeticThreeSame#scalar}: `SQSHL`/`UQSHL`/`SQSHLU` aceitam `esz` variável na
+    /// forma escalar, então `sqshl v0.8b,...,#imm` (vetorial) e `sqshl b0,...,#imm` (escalar) têm o
+    /// MESMO par `esz=0`/`q=false`).
+    record VectorShiftImmediate(
+            /// Operação a executar.
+            Ir64VectorShiftOp op,
+            /// `true` para a forma ESCALAR — ver acima e {@link VectorArithmeticThreeSame#scalar}.
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ou forma escalar).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Quantidade de deslocamento já resolvida: `1`-`(8<<esz)` para operações à direita
+            /// (`SSHR`/`USHR`/`SRSHR`/`URSHR`/`SSRA`/`USRA`/`SRSRA`/`URSRA`/`SRI`), `0`-`(8<<esz)-1`
+            /// para operações à esquerda (`SHL`/`SLI`/`SQSHL`/`UQSHL`/`SQSHLU`).
+            int shift,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_SHIFT_IMMEDIATE; }
+    }
+
+    /// AdvSIMD "shift by immediate" estreitando (`SHRN`/`RSHRN`/`SQSHRN`/`UQSHRN`/`SQSHRUN`/
+    /// `SQRSHRN`/`UQRSHRN`/`SQRSHRUN`, B8.8) — `Rn` tem elementos de `esz+1` bytes, `Rd` recebe
+    /// elementos de `esz` bytes (metade selecionada por {@link #q}, mesma convenção "SIMD&FP
+    /// destructive write" de {@link VectorArithmeticNarrow}). A forma ESCALAR (só as saturantes:
+    /// `SHRN`/`RSHRN` não têm forma escalar real) processa um único elemento — {@link #scalar}
+    /// explícito, mesmo motivo de {@link VectorShiftImmediate#scalar}.
+    record VectorShiftNarrowImmediate(
+            /// Operação a executar.
+            Ir64VectorShiftNarrowOp op,
+            /// `true` para a forma ESCALAR (processa só o elemento `0`; `q` ignorado).
+            boolean scalar,
+            /// `false`=escreve a metade BAIXA de `Rd`. `true`=escreve a metade ALTA (forma `*2`).
+            /// Ignorado quando {@link #scalar}.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rd`) em bytes — `0`-`2`. `Rn` usa `esz+1`.
+            int esz,
+            /// Quantidade de deslocamento à direita já resolvida: `1`-`(8<<esz)`.
+            int shift,
+            /// Registrador `V` de destino (elementos `esz`).
+            int rd,
+            /// Registrador `V` fonte, largo (elementos `esz+1`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_SHIFT_NARROW_IMMEDIATE; }
+    }
+
+    /// AdvSIMD "shift by immediate" alargando (`SSHLL`/`USHLL`, B8.8) — `Rn` tem elementos de `esz`
+    /// bytes (metade selecionada por {@link #q}, mesma convenção de
+    /// {@link VectorArithmeticWidening#q}), `Rd` recebe elementos de `esz+1` bytes, SEMPRE
+    /// preenchendo os 128 bits inteiros (sem saturar).
+    record VectorShiftWidenImmediate(
+            /// Operação a executar.
+            Ir64VectorShiftWidenOp op,
+            /// Metade de `Rn` usada como entrada — ver {@link VectorArithmeticWidening#q}.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rn`) em bytes — `0`-`2`. `Rd` usa `esz+1`.
+            int esz,
+            /// Quantidade de deslocamento à esquerda já resolvida: `0`-`(8<<esz)-1`.
+            int shift,
+            /// Registrador `V` de destino (elementos `esz+1`, 128 bits inteiros).
+            int rd,
+            /// Registrador `V` fonte (elementos `esz`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_SHIFT_WIDEN_IMMEDIATE; }
     }
 }
