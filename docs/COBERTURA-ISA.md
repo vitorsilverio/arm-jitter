@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **61%** — 2376 de 3861 células aplicáveis decodificam.
+> **64%** — 2495 de 3861 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **27%** (308/1111) |
+| A64 | **38%** (427/1111) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 27% (308/1111) |
+| A64 — AArch64 | 1161 | A64 38% (427/1111) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1887,29 +1887,29 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDAPR_i` | ✅ |
 | `LDAPR_i` | ✅ |
 | `GCSSTR` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `ST_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `LD_mult` | ❌ |
-| `ST_single` | ❌ |
-| `ST_single` | ❌ |
-| `ST_single` | ❌ |
-| `ST_single` | ❌ |
-| `LD_single` | ❌ |
-| `LD_single` | ❌ |
-| `LD_single` | ❌ |
-| `LD_single` | ❌ |
-| `LD_single_repl` | ❌ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `ST_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `LD_mult` | ✅ |
+| `ST_single` | ✅ |
+| `ST_single` | ✅ |
+| `ST_single` | ✅ |
+| `ST_single` | ✅ |
+| `LD_single` | ✅ |
+| `LD_single` | ✅ |
+| `LD_single` | ✅ |
+| `LD_single` | ✅ |
+| `LD_single_repl` | ✅ |
 | `STZGM` | ❌ |
 | `STG` | ❌ |
 | `STG` | ❌ |
@@ -2025,17 +2025,17 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SHA1H` | ❌ |
 | `SHA1SU1` | ❌ |
 | `SHA256SU0` | ❌ |
-| `SHA512H` | ❌ |
-| `SHA512H2` | ❌ |
-| `SHA512SU1` | ❌ |
-| `RAX1` | ❌ |
-| `SM3PARTW1` | ❌ |
+| `SHA512H` | ✅ |
+| `SHA512H2` | ✅ |
+| `SHA512SU1` | ✅ |
+| `RAX1` | ✅ |
+| `SM3PARTW1` | ✅ |
 | `SM3PARTW2` | ❌ |
 | `SM4EKEY` | ❌ |
 | `SHA512SU0` | ❌ |
 | `SM4E` | ❌ |
 | `EOR3` | ❌ |
-| `BCAX` | ❌ |
+| `BCAX` | ✅ |
 | `SM3SS1` | ❌ |
 | `SM3TT1A` | ❌ |
 | `SM3TT1B` | ❌ |
@@ -2090,14 +2090,14 @@ Inventário: `a64.decode` · 1161 instruções.
 | `UQSHL_s` | ❌ |
 | `SQRSHL_s` | ❌ |
 | `UQRSHL_s` | ❌ |
-| `ADD_s` | ❌ |
-| `SUB_s` | ❌ |
-| `CMGT_s` | ❌ |
-| `CMHI_s` | ❌ |
-| `CMGE_s` | ❌ |
-| `CMHS_s` | ❌ |
-| `CMTST_s` | ❌ |
-| `CMEQ_s` | ❌ |
+| `ADD_s` | ✅ |
+| `SUB_s` | ✅ |
+| `CMGT_s` | ✅ |
+| `CMHI_s` | ✅ |
+| `CMGE_s` | ✅ |
+| `CMHS_s` | ✅ |
+| `CMTST_s` | ✅ |
+| `CMEQ_s` | ✅ |
 | `SQDMULH_s` | ❌ |
 | `SQRDMULH_s` | ❌ |
 | `SQRDMLAH_s` | ❌ |
@@ -2118,7 +2118,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMAXNMP_s` | ❌ |
 | `FMINNMP_s` | ❌ |
 | `FMINNMP_s` | ❌ |
-| `ADDP_s` | ❌ |
+| `ADDP_s` | ✅ |
 | `FADD_v` | ❌ |
 | `FADD_v` | ❌ |
 | `FSUB_v` | ❌ |
@@ -2171,11 +2171,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMAXNMP_v` | ❌ |
 | `FMINNMP_v` | ❌ |
 | `FMINNMP_v` | ❌ |
-| `ADDP_v` | ❌ |
-| `SMAXP_v` | ❌ |
-| `SMINP_v` | ❌ |
-| `UMAXP_v` | ❌ |
-| `UMINP_v` | ❌ |
+| `ADDP_v` | ✅ |
+| `SMAXP_v` | ✅ |
+| `SMINP_v` | ✅ |
+| `UMAXP_v` | ✅ |
+| `UMINP_v` | ✅ |
 | `AND_v` | ❌ |
 | `BIC_v` | ❌ |
 | `ORR_v` | ❌ |
@@ -2198,32 +2198,32 @@ Inventário: `a64.decode` · 1161 instruções.
 | `UQSHL_v` | ❌ |
 | `SQRSHL_v` | ❌ |
 | `UQRSHL_v` | ❌ |
-| `ADD_v` | ❌ |
-| `SUB_v` | ❌ |
-| `CMGT_v` | ❌ |
-| `CMHI_v` | ❌ |
-| `CMGE_v` | ❌ |
-| `CMHS_v` | ❌ |
-| `CMTST_v` | ❌ |
-| `CMEQ_v` | ❌ |
-| `SHADD_v` | ❌ |
-| `UHADD_v` | ❌ |
-| `SHSUB_v` | ❌ |
-| `UHSUB_v` | ❌ |
-| `SRHADD_v` | ❌ |
-| `URHADD_v` | ❌ |
-| `SMAX_v` | ❌ |
-| `UMAX_v` | ❌ |
-| `SMIN_v` | ❌ |
-| `UMIN_v` | ❌ |
-| `SABD_v` | ❌ |
-| `UABD_v` | ❌ |
-| `SABA_v` | ❌ |
-| `UABA_v` | ❌ |
-| `MUL_v` | ❌ |
-| `PMUL_v` | ❌ |
-| `MLA_v` | ❌ |
-| `MLS_v` | ❌ |
+| `ADD_v` | ✅ |
+| `SUB_v` | ✅ |
+| `CMGT_v` | ✅ |
+| `CMHI_v` | ✅ |
+| `CMGE_v` | ✅ |
+| `CMHS_v` | ✅ |
+| `CMTST_v` | ✅ |
+| `CMEQ_v` | ✅ |
+| `SHADD_v` | ✅ |
+| `UHADD_v` | ✅ |
+| `SHSUB_v` | ✅ |
+| `UHSUB_v` | ✅ |
+| `SRHADD_v` | ✅ |
+| `URHADD_v` | ✅ |
+| `SMAX_v` | ✅ |
+| `UMAX_v` | ✅ |
+| `SMIN_v` | ✅ |
+| `UMIN_v` | ✅ |
+| `SABD_v` | ✅ |
+| `UABD_v` | ✅ |
+| `SABA_v` | ✅ |
+| `UABA_v` | ✅ |
+| `MUL_v` | ✅ |
+| `PMUL_v` | ✅ |
+| `MLA_v` | ✅ |
+| `MLS_v` | ✅ |
 | `SQDMULH_v` | ❌ |
 | `SQRDMULH_v` | ❌ |
 | `SQRDMLAH_v` | ❌ |
@@ -2240,34 +2240,34 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCADD_90` | ❌ |
 | `FCADD_270` | ❌ |
 | `FCMLA_v` | ❌ |
-| `SMULL_v` | ❌ |
-| `UMULL_v` | ❌ |
-| `SMLAL_v` | ❌ |
-| `UMLAL_v` | ❌ |
-| `SMLSL_v` | ❌ |
-| `UMLSL_v` | ❌ |
-| `SADDL_v` | ❌ |
-| `UADDL_v` | ❌ |
-| `SSUBL_v` | ❌ |
-| `USUBL_v` | ❌ |
-| `SABAL_v` | ❌ |
-| `UABAL_v` | ❌ |
-| `SABDL_v` | ❌ |
-| `UABDL_v` | ❌ |
+| `SMULL_v` | ✅ |
+| `UMULL_v` | ✅ |
+| `SMLAL_v` | ✅ |
+| `UMLAL_v` | ✅ |
+| `SMLSL_v` | ✅ |
+| `UMLSL_v` | ✅ |
+| `SADDL_v` | ✅ |
+| `UADDL_v` | ✅ |
+| `SSUBL_v` | ✅ |
+| `USUBL_v` | ✅ |
+| `SABAL_v` | ✅ |
+| `UABAL_v` | ✅ |
+| `SABDL_v` | ✅ |
+| `UABDL_v` | ✅ |
 | `SQDMULL_v` | ❌ |
 | `SQDMULL_v` | ❌ |
 | `SQDMLAL_v` | ❌ |
 | `SQDMLAL_v` | ❌ |
 | `SQDMLSL_v` | ❌ |
 | `SQDMLSL_v` | ❌ |
-| `SADDW` | ❌ |
-| `UADDW` | ❌ |
-| `SSUBW` | ❌ |
-| `USUBW` | ❌ |
-| `ADDHN` | ❌ |
-| `RADDHN` | ❌ |
-| `SUBHN` | ❌ |
-| `RSUBHN` | ❌ |
+| `SADDW` | ✅ |
+| `UADDW` | ✅ |
+| `SSUBW` | ✅ |
+| `USUBW` | ✅ |
+| `ADDHN` | ✅ |
+| `RADDHN` | ✅ |
+| `SUBHN` | ✅ |
+| `RSUBHN` | ✅ |
 | `PMULL_p8` | ❌ |
 | `PMULL_p64` | ❌ |
 | `FAMAX` | ❌ |
@@ -2389,13 +2389,13 @@ Inventário: `a64.decode` · 1161 instruções.
 | `TRN2` | ❌ |
 | `ZIP1` | ❌ |
 | `ZIP2` | ❌ |
-| `ADDV` | ❌ |
-| `SADDLV` | ❌ |
-| `UADDLV` | ❌ |
-| `SMAXV` | ❌ |
-| `UMAXV` | ❌ |
-| `SMINV` | ❌ |
-| `UMINV` | ❌ |
+| `ADDV` | ✅ |
+| `SADDLV` | ✅ |
+| `UADDLV` | ✅ |
+| `SMAXV` | ✅ |
+| `UMAXV` | ✅ |
+| `SMINV` | ✅ |
+| `UMINV` | ✅ |
 | `FMAXNMV_h` | ❌ |
 | `FMAXNMV_s` | ❌ |
 | `FMINNMV_h` | ❌ |
@@ -2601,13 +2601,13 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQRSHRUN_si` | ❌ |
 | `SQABS_s` | ❌ |
 | `SQNEG_s` | ❌ |
-| `ABS_s` | ❌ |
-| `NEG_s` | ❌ |
-| `CMGT0_s` | ❌ |
-| `CMGE0_s` | ❌ |
-| `CMEQ0_s` | ❌ |
-| `CMLE0_s` | ❌ |
-| `CMLT0_s` | ❌ |
+| `ABS_s` | ✅ |
+| `NEG_s` | ✅ |
+| `CMGT0_s` | ✅ |
+| `CMGE0_s` | ✅ |
+| `CMEQ0_s` | ✅ |
+| `CMLE0_s` | ✅ |
+| `CMLT0_s` | ✅ |
 | `SQXTUN_s` | ❌ |
 | `SQXTN_s` | ❌ |
 | `UQXTN_s` | ❌ |
@@ -2666,25 +2666,25 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTZU_f` | ❌ |
 | `SQABS_v` | ❌ |
 | `SQNEG_v` | ❌ |
-| `ABS_v` | ❌ |
-| `NEG_v` | ❌ |
+| `ABS_v` | ✅ |
+| `NEG_v` | ✅ |
 | `CLS_v` | ❌ |
 | `CLZ_v` | ❌ |
 | `CNT_v` | ❌ |
 | `NOT_v` | ❌ |
 | `RBIT_v` | ❌ |
-| `CMGT0_v` | ❌ |
-| `CMGE0_v` | ❌ |
-| `CMEQ0_v` | ❌ |
-| `CMLE0_v` | ❌ |
-| `CMLT0_v` | ❌ |
+| `CMGT0_v` | ✅ |
+| `CMGE0_v` | ✅ |
+| `CMEQ0_v` | ✅ |
+| `CMLE0_v` | ✅ |
+| `CMLT0_v` | ✅ |
 | `REV16_v` | ❌ |
 | `REV32_v` | ❌ |
 | `REV64_v` | ❌ |
-| `SADDLP_v` | ❌ |
-| `UADDLP_v` | ❌ |
-| `SADALP_v` | ❌ |
-| `UADALP_v` | ❌ |
+| `SADDLP_v` | ✅ |
+| `UADDLP_v` | ✅ |
+| `SADALP_v` | ✅ |
+| `UADALP_v` | ✅ |
 | `XTN` | ❌ |
 | `SQXTUN_v` | ❌ |
 | `SQXTN_v` | ❌ |
@@ -2721,15 +2721,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SCVTF_vi` | ❌ |
 | `UCVTF_vi` | ❌ |
 | `UCVTF_vi` | ❌ |
+| `FCVTNS_vi` | ✅ |
 | `FCVTNS_vi` | ❌ |
-| `FCVTNS_vi` | ❌ |
-| `FCVTNU_vi` | ❌ |
+| `FCVTNU_vi` | ✅ |
 | `FCVTNU_vi` | ❌ |
 | `FCVTPS_vi` | ❌ |
 | `FCVTPS_vi` | ❌ |
 | `FCVTPU_vi` | ❌ |
 | `FCVTPU_vi` | ❌ |
-| `FCVTMS_vi` | ❌ |
+| `FCVTMS_vi` | ✅ |
 | `FCVTMS_vi` | ❌ |
 | `FCVTMU_vi` | ❌ |
 | `FCVTMU_vi` | ❌ |

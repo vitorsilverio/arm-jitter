@@ -38,7 +38,9 @@ public sealed interface Ir64Op permits
         Ir64Op.AddressTranslate, Ir64Op.Fp64MultiplyAdd, Ir64Op.Fp64ConditionalSelect,
         Ir64Op.Fp64ConditionalCompare, Ir64Op.Fp64Round, Ir64Op.Fp64IntegerConvert,
         Ir64Op.Fp64GeneralRegisterMove, Ir64Op.VectorLoadStoreMultiple, Ir64Op.VectorLoadStoreSingle,
-        Ir64Op.VectorLoadSingleReplicate {
+        Ir64Op.VectorLoadSingleReplicate, Ir64Op.VectorArithmeticThreeSame, Ir64Op.VectorArithmeticPairwise,
+        Ir64Op.VectorArithmeticWidening, Ir64Op.VectorArithmeticWide, Ir64Op.VectorArithmeticNarrow,
+        Ir64Op.VectorAcrossLanes, Ir64Op.VectorArithmeticUnary, Ir64Op.VectorScalarPairwiseAdd {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -147,6 +149,28 @@ public sealed interface Ir64Op permits
         /// B8.6: `LD1R`-`LD4R` (AdvSIMD load single structure and replicate) — ver
         /// {@link VectorLoadSingleReplicate}.
         public static final int VECTOR_LOAD_SINGLE_REPLICATE = 55;
+        /// B8.7: `ADD`/`SUB`/`CM**`/`SHADD`/`SMAX`/`SABA`/`MUL`/`MLA`/... (AdvSIMD "three same" e
+        /// escalar D-only) — ver {@link VectorArithmeticThreeSame}.
+        public static final int VECTOR_ARITHMETIC_THREE_SAME = 56;
+        /// B8.7: `ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/`UMINP_v` — ver
+        /// {@link VectorArithmeticPairwise}.
+        public static final int VECTOR_ARITHMETIC_PAIRWISE = 57;
+        /// B8.7: `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/`SADDL`/`UADDL`/`SSUBL`/`USUBL`/
+        /// `SABAL`/`UABAL`/`SABDL`/`UABDL` — ver {@link VectorArithmeticWidening}.
+        public static final int VECTOR_ARITHMETIC_WIDENING = 58;
+        /// B8.7: `SADDW`/`UADDW`/`SSUBW`/`USUBW` — ver {@link VectorArithmeticWide}.
+        public static final int VECTOR_ARITHMETIC_WIDE = 59;
+        /// B8.7: `ADDHN`/`RADDHN`/`SUBHN`/`RSUBHN` — ver {@link VectorArithmeticNarrow}.
+        public static final int VECTOR_ARITHMETIC_NARROW = 60;
+        /// B8.7: `ADDV`/`SADDLV`/`UADDLV`/`SMAXV`/`UMAXV`/`SMINV`/`UMINV` — ver
+        /// {@link VectorAcrossLanes}.
+        public static final int VECTOR_ACROSS_LANES = 61;
+        /// B8.7: `ABS`/`NEG`/`CM**0`/`SADDLP`/`UADDLP`/`SADALP`/`UADALP` (AdvSIMD "two-register
+        /// miscellaneous" e escalar D-only) — ver {@link VectorArithmeticUnary}.
+        public static final int VECTOR_ARITHMETIC_UNARY = 62;
+        /// B8.7: `ADDP_s` (pareamento escalar D, único mnemônico desta forma) — ver
+        /// {@link VectorScalarPairwiseAdd}.
+        public static final int VECTOR_SCALAR_PAIRWISE_ADD = 63;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1455,5 +1479,170 @@ public sealed interface Ir64Op permits
             /// `3`=`LD3R`, `4`=`LD4R`).
             int selem) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_LOAD_SINGLE_REPLICATE; }
+    }
+
+    /// AdvSIMD "three same" inteiro (`ADD_v`/`SUB_v`/`CM**_v`/`SHADD_v`/.../`MLA_v`/`MLS_v`, B8.7)
+    /// — os 3 operandos (`Rd`/`Rn`/`Rm`) têm o MESMO tamanho de elemento {@link #esz}. Também
+    /// representa a forma ESCALAR (`ADD_s`/`SUB_s`/`CM**_s`), que no encoding real vive num
+    /// prefixo diferente (bit28 fixo) mas é semanticamente idêntica a esta forma vetorial com
+    /// `esz=3`(doubleword, único tamanho que a forma escalar aceita)/`q=false` — combinação que a
+    /// forma VETORIAL nunca produz de verdade (doubleword exige `q=true` no hardware real, já que
+    /// só existe `.2d`, nunca `.1d`), então reaproveitar o mesmo par `(esz=3,q=false)` para o
+    /// escalar não colide com nenhum uso vetorial legítimo — o DECODER nunca deriva esse par de um
+    /// campo `Q` real ao decodificar a forma escalar, escreve os dois literais direto.
+    record VectorArithmeticThreeSame(
+            /// Operação a executar.
+            Ir64VectorThreeSameOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ou forma escalar, ver acima).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
+            /// `3`=doubleword (só válido com `q=true` na forma vetorial; a forma escalar usa
+            /// sempre `3`/`q=false`, ver acima).
+            int esz,
+            /// Registrador `V` de destino (índice `0`-`31`).
+            int rd,
+            /// Registrador `V` fonte 1 (índice `0`-`31`).
+            int rn,
+            /// Registrador `V` fonte 2 (índice `0`-`31`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_THREE_SAME; }
+    }
+
+    /// AdvSIMD "three same" pareado (`ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/`UMINP_v`, B8.7) —
+    /// concatena `Rn:Rm` e combina pares adjacentes (ver {@link Ir64VectorPairwiseOp}). Não cobre
+    /// `ADDP_s` (escalar D, reduz `Rn.2d` a um único elemento) — ver {@link VectorScalarPairwiseAdd}.
+    record VectorArithmeticPairwise(
+            /// Operação a executar.
+            Ir64VectorPairwiseOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (metade BAIXA do resultado).
+            int rn,
+            /// Registrador `V` fonte 2 (metade ALTA do resultado).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_PAIRWISE; }
+    }
+
+    /// AdvSIMD "three different" alargando (`SMULL`/`UMULL`/`SMLAL`/.../`SABDL`/`UABDL`, B8.7) —
+    /// `Rn`/`Rm` têm elementos de {@link #esz} bytes, `Rd` tem elementos de `esz+1` (dobro),
+    /// SEMPRE preenchendo os 128 bits inteiros (nunca escrita destrutiva parcial, ao contrário da
+    /// forma "three same" com `q=false`).
+    record VectorArithmeticWidening(
+            /// Operação a executar.
+            Ir64VectorWideningOp op,
+            /// `false` (forma sem `2`, ex. `SMULL`): usa a metade BAIXA de `Rn`/`Rm` como entrada.
+            /// `true` (forma `*2`, ex. `SMULL2`): usa a metade ALTA.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rn`/`Rm`) em bytes — `0`-`2` (byte/half/
+            /// word; doubleword não tem forma alargada real). `Rd` usa `esz+1`.
+            int esz,
+            /// Registrador `V` de destino (elementos `esz+1`, 128 bits inteiros).
+            int rd,
+            /// Registrador `V` fonte 1 (elementos `esz`).
+            int rn,
+            /// Registrador `V` fonte 2 (elementos `esz`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDENING; }
+    }
+
+    /// AdvSIMD "three different" largo+estreito (`SADDW`/`UADDW`/`SSUBW`/`USUBW`, B8.7) — `Rd`/
+    /// `Rn` já têm elementos LARGOS (`esz+1`), só `Rm` é estreito (`esz`, metade selecionada por
+    /// {@link #q}, mesma convenção de {@link VectorArithmeticWidening#q}).
+    record VectorArithmeticWide(
+            /// Operação a executar.
+            Ir64VectorWideOp op,
+            /// Metade de `Rm` usada como entrada — ver {@link VectorArithmeticWidening#q}.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rm`) em bytes — `0`-`2`. `Rd`/`Rn` usam
+            /// `esz+1`.
+            int esz,
+            /// Registrador `V` de destino (elementos `esz+1`).
+            int rd,
+            /// Registrador `V` fonte 1, já largo (elementos `esz+1`).
+            int rn,
+            /// Registrador `V` fonte 2, estreito (elementos `esz`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDE; }
+    }
+
+    /// AdvSIMD "three different" estreitando (`ADDHN`/`RADDHN`/`SUBHN`/`RSUBHN`, B8.7) — `Rn`/`Rm`
+    /// têm elementos LARGOS (`esz+1`), `Rd` recebe elementos ESTREITOS (`esz`, metade BAIXA quando
+    /// `q=false`/forma sem `2` — ZERANDO a metade alta, "SIMD&FP destructive write" —, metade ALTA
+    /// quando `q=true`/forma `*2` — preservando a metade baixa já escrita por uma `HN` anterior).
+    record VectorArithmeticNarrow(
+            /// Operação a executar.
+            Ir64VectorNarrowOp op,
+            /// `false`=escreve a metade BAIXA de `Rd` (forma sem `2`). `true`=escreve a metade
+            /// ALTA (forma `*2`).
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rd`) em bytes — `0`-`2`. `Rn`/`Rm` usam
+            /// `esz+1`.
+            int esz,
+            /// Registrador `V` de destino (elementos `esz`).
+            int rd,
+            /// Registrador `V` fonte 1, largo (elementos `esz+1`).
+            int rn,
+            /// Registrador `V` fonte 2, largo (elementos `esz+1`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_NARROW; }
+    }
+
+    /// AdvSIMD "across lanes" (`ADDV`/`SADDLV`/`UADDLV`/`SMAXV`/`UMAXV`/`SMINV`/`UMINV`, B8.7) —
+    /// reduz TODOS os elementos de `Rn` a um único escalar em `Rd` (escrita destrutiva, "SIMD&FP
+    /// destructive write": os bits altos de `Rd` são zerados).
+    record VectorAcrossLanes(
+            /// Operação a executar.
+            Ir64VectorAcrossLanesOp op,
+            /// `true` para reduzir 128 bits de `Rn`, `false` para reduzir só os 64 baixos.
+            boolean q,
+            /// `log2` do tamanho de cada elemento de ENTRADA (`Rn`) em bytes — `0`-`2` (byte/half/
+            /// word; nenhuma destas operações reduz doubleword). O resultado em `Rd` usa este
+            /// mesmo tamanho, exceto {@link Ir64VectorAcrossLanesOp#SADDLV}/
+            /// {@link Ir64VectorAcrossLanesOp#UADDLV} (`esz+1`).
+            int esz,
+            /// Registrador `V` de destino (escalar).
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ACROSS_LANES; }
+    }
+
+    /// AdvSIMD "two-register miscellaneous" inteiro (`ABS_v`/`NEG_v`/`CM**0_v`/`SADDLP_v`/
+    /// `UADDLP_v`/`SADALP_v`/`UADALP_v`, B8.7) — um único operando de origem (`Rn`). Também
+    /// representa a forma ESCALAR (`ABS_s`/`NEG_s`/`CM**0_s`), mesmo truque de
+    /// {@link VectorArithmeticThreeSame} (`esz=3`/`q=false`, combinação que a forma vetorial nunca
+    /// produz de verdade). {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
+    /// {@link Ir64VectorUnaryOp#SADALP}/{@link Ir64VectorUnaryOp#UADALP} não têm forma escalar real
+    /// (só vetorial).
+    record VectorArithmeticUnary(
+            /// Operação a executar.
+            Ir64VectorUnaryOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ou forma escalar, ver acima).
+            boolean q,
+            /// `log2` do tamanho do elemento de ENTRADA (`Rn`) em bytes (`0`-`3`, forma escalar
+            /// sempre `3`). Para {@link Ir64VectorUnaryOp#SADDLP}/{@link Ir64VectorUnaryOp#UADDLP}/
+            /// {@link Ir64VectorUnaryOp#SADALP}/{@link Ir64VectorUnaryOp#UADALP} o resultado em
+            /// `Rd` usa `esz+1`; para as demais, `Rd` usa o mesmo `esz`.
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_UNARY; }
+    }
+
+    /// `ADDP_s` (AdvSIMD scalar pairwise, B8.7) — único mnemônico inteiro desta forma: reduz os
+    /// 2 elementos doubleword de `Rn.2d` a um único escalar D em `Rd` (`Rd = Rn[0] + Rn[1]`,
+    /// escrita destrutiva, bits altos de `Rd` zerados).
+    record VectorScalarPairwiseAdd(
+            /// Registrador `V` de destino (escalar D).
+            int rd,
+            /// Registrador `V` fonte (lido como `.2d`, 2 elementos doubleword).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_SCALAR_PAIRWISE_ADD; }
     }
 }

@@ -324,6 +324,22 @@ public final class Ir64BlockExecutor {
                     executeVectorLoadStoreSingle(core, (Ir64Op.VectorLoadStoreSingle) op);
             case Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE ->
                     executeVectorLoadSingleReplicate(core, (Ir64Op.VectorLoadSingleReplicate) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_THREE_SAME ->
+                    Ir64VectorArithmeticExecutor.executeThreeSame(core, (Ir64Op.VectorArithmeticThreeSame) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_PAIRWISE ->
+                    Ir64VectorArithmeticExecutor.executePairwise(core, (Ir64Op.VectorArithmeticPairwise) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_WIDENING ->
+                    Ir64VectorArithmeticExecutor.executeWidening(core, (Ir64Op.VectorArithmeticWidening) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_WIDE ->
+                    Ir64VectorArithmeticExecutor.executeWide(core, (Ir64Op.VectorArithmeticWide) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_NARROW ->
+                    Ir64VectorArithmeticExecutor.executeNarrow(core, (Ir64Op.VectorArithmeticNarrow) op);
+            case Ir64Op.Kind.VECTOR_ACROSS_LANES ->
+                    Ir64VectorArithmeticExecutor.executeAcrossLanes(core, (Ir64Op.VectorAcrossLanes) op);
+            case Ir64Op.Kind.VECTOR_ARITHMETIC_UNARY ->
+                    Ir64VectorArithmeticExecutor.executeUnary(core, (Ir64Op.VectorArithmeticUnary) op);
+            case Ir64Op.Kind.VECTOR_SCALAR_PAIRWISE_ADD ->
+                    Ir64VectorArithmeticExecutor.executeScalarPairwiseAdd(core, (Ir64Op.VectorScalarPairwiseAdd) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
