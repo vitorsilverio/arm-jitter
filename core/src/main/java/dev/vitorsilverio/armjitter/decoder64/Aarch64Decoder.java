@@ -35,10 +35,13 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 ///
 /// `Extract` (`EXTR`, mesmo subgrupo de `Bitfield` dentro de `Data Processing Immediate`),
 /// `LDXP`/`STXP`/`CAS`/`LDAR`/`STLR` (mesmo subgrupo de exclusivo/atômico de `LDXR`/`STXR`, ver
-/// B6.3.4), load/store de
-/// registrador SIMD&FP (`V=1`) e data-processing SIMD&FP ficam FORA do escopo fechado do épico B6
-/// — qualquer encoding fora do escopo listado lança {@link UnsupportedOperationException} em vez
-/// de tentar adivinhar semântica (nenhum oráculo real cobre o que não foi implementado).
+/// B6.3.4), load/store escalar de registrador SIMD&FP (`V=1`, `LDR`/`STR`/`LDP`/`STP`) e
+/// data-processing SIMD&FP ficam FORA do escopo fechado do épico B6 — qualquer encoding fora do
+/// escopo listado lança {@link UnsupportedOperationException} em vez de tentar adivinhar semântica
+/// (nenhum oráculo real cobre o que não foi implementado). B8.6 (dentro do mesmo `V=1`) acrescenta
+/// `LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R` (AdvSIMD load/store multiple/single structures) — ver
+/// {@link Ir64Op.VectorLoadStoreMultiple}/{@link Ir64Op.VectorLoadStoreSingle}/
+/// {@link Ir64Op.VectorLoadSingleReplicate}.
 public final class Aarch64Decoder {
     // ── Classe top-level (ARM DDI 0487 C4.1): prefixo fixo de 3 bits em bits[28:26] (o 4º bit
     // do op0 nominal do manual, bit25, é wildcard dentro da classe e tratado nos sub-decoders) ─
@@ -514,6 +517,70 @@ public final class Aarch64Decoder {
     private static final int SUBCLASS_LITERAL = 0b01;
     private static final int SUBCLASS_PAIR = 0b10;
     private static final int SUBCLASS_SINGLE = 0b11;
+
+    // ── AdvSIMD load/store multiple/single structures (`LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R`, ────
+    // ── B8.6): V=1 dentro da classe Loads-and-Stores, bit31 fixo=0, bit30=Q, bits[29:24] fixo ─────
+    // ── "001100"(múltiplas)/"001101"(única) — fatos conferidos contra `a64.decode`/ ───────────────
+    // ── `translate-a64.c` reais do QEMU (`@ldst_mult`/`@ldst_single_*`/`LD_single_repl`, ver ───────
+    // ── `trans_LD_mult`/`trans_ST_mult`/`trans_LD_single`/`trans_ST_single`/`trans_LD_single_repl`)
+    private static final int ADVSIMD_LDST_FIXED_SHIFT = 24;
+    private static final int ADVSIMD_LDST_FIXED_MASK = 0b11_1111;
+    private static final int ADVSIMD_LDST_MULTIPLE_PATTERN = 0b00_1100;
+    private static final int ADVSIMD_LDST_SINGLE_PATTERN = 0b00_1101;
+    private static final int ADVSIMD_LDST_Q_SHIFT = 30;
+    private static final int ADVSIMD_LDST_POST_INDEX_SHIFT = 23; // p
+    private static final int ADVSIMD_LDST_LOAD_SHIFT = 22; // L
+    private static final int ADVSIMD_LDST_RM_SHIFT = 16;
+    /// `Rm=11111`: pós-índice IMEDIATO (avança pelo tamanho total transferido) em vez de um
+    /// registrador `X` real — mesma convenção de `LDR`/`STR` pós-indexado por registrador.
+    private static final int ADVSIMD_LDST_RM_IMMEDIATE_ENCODING = 0b1_1111;
+
+    // ── Multiple structures: opcode(15:12) escolhe rpt/selem (`@ldst_mult`), sz(11:10) é o ────────
+    // ── log2 do tamanho do elemento — nome de cada constante segue (rpt × selem), não o mnemônico ─
+    // ── `LDn`/`STn` (que depende de `selem` sozinho: `selem=1` é sempre `LD1`/`ST1`, mesmo com ─────
+    // ── `rpt>1` para múltiplos registradores). ──────────────────────────────────────────────────
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SHIFT = 12;
+    private static final int ADVSIMD_LDST_MULT_OPCODE_MASK = 0b1111;
+    private static final int ADVSIMD_LDST_MULT_SIZE_SHIFT = 10;
+    private static final int ADVSIMD_LDST_MULT_SIZE_MASK = 0b11;
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM4 = 0b0000; // rpt=1 selem=4 (LD4/ST4)
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM1_X4REG = 0b0010; // rpt=4 selem=1
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM3 = 0b0100; // rpt=1 selem=3 (LD3/ST3)
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM1_X3REG = 0b0110; // rpt=3 selem=1
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM1_X1REG = 0b0111; // rpt=1 selem=1
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM2 = 0b1000; // rpt=1 selem=2 (LD2/ST2)
+    private static final int ADVSIMD_LDST_MULT_OPCODE_SELEM1_X2REG = 0b1010; // rpt=2 selem=1
+    /// `elementSizeLog2` de doubleword — combinado com `!Q` e `selem!=1` é UNALLOCATED
+    /// (`.1D` não existe fora de `LD1`/`ST1`; só o arranjo `.2D` de 128 bits comporta o elemento de
+    /// 8 bytes quando há mais de 1 estrutura entrelaçada).
+    private static final int ADVSIMD_LDST_ELEMENT_SIZE_LOG2_DOUBLEWORD = 3;
+
+    // ── Single structure (`@ldst_single_*`/`LD_single_repl`): selem vem de 2 bits ESPALHADOS ───────
+    // ── (bit13 alto, bit21/`S` baixo, `%ldst_single_selem` real do QEMU) — mesmos 2 bits nas 3 ─────
+    // ── formas (byte/half/word-ou-double, replicar). bits[15:14] escolhem a família de tamanho; ────
+    // ── dentro dela, os bits restantes codificam `scale`/`index` de um jeito ESPECÍFICO por ────────
+    // ── tamanho (ver `decodeAdvancedSimdLoadStoreSingle`). ─────────────────────────────────────────
+    private static final int ADVSIMD_LDST_SINGLE_SELEM_LOW_SHIFT = 13;
+    private static final int ADVSIMD_LDST_SINGLE_SELEM_HIGH_SHIFT = 21; // S
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_SHIFT = 14;
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_MASK = 0b11;
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_BYTE = 0b00;
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_HALF = 0b01;
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_WORD_OR_DOUBLE = 0b10;
+    private static final int ADVSIMD_LDST_SINGLE_OPC_HIGH_REPLICATE = 0b11;
+    private static final int ADVSIMD_LDST_SINGLE_INDEX_LOW_BYTE_SHIFT = 10;
+    private static final int ADVSIMD_LDST_SINGLE_INDEX_LOW_BYTE_MASK = 0b111;
+    private static final int ADVSIMD_LDST_SINGLE_HALF_RESERVED_BIT_SHIFT = 10;
+    private static final int ADVSIMD_LDST_SINGLE_INDEX_LOW_HALF_SHIFT = 11;
+    private static final int ADVSIMD_LDST_SINGLE_INDEX_LOW_HALF_MASK = 0b11;
+    private static final int ADVSIMD_LDST_SINGLE_WORD_OR_DOUBLE_BIT_SHIFT = 10; // 0=word, 1=double
+    private static final int ADVSIMD_LDST_SINGLE_WORD_RESERVED_BIT_SHIFT = 11;
+    private static final int ADVSIMD_LDST_SINGLE_INDEX_WORD_BIT_SHIFT = 12;
+    private static final int ADVSIMD_LDST_SINGLE_DOUBLE_RESERVED_SHIFT = 11;
+    private static final int ADVSIMD_LDST_SINGLE_DOUBLE_RESERVED_MASK = 0b11;
+    private static final int ADVSIMD_LDST_SINGLE_REPL_RESERVED_BIT_SHIFT = 12;
+    private static final int ADVSIMD_LDST_SINGLE_REPL_SCALE_SHIFT = 10;
+    private static final int ADVSIMD_LDST_SINGLE_REPL_SCALE_MASK = 0b11;
 
     // ── LDXR/LDAXR/STXR/STLXR (`@stxr`, B6.3.4): sz(31:30) 001000(29:24) form(23:21) rs(20:16) ──
     // ── lasr(15) rt2(14:10, fixo 11111 nesta forma não-par) rn(9:5) rt(4:0) — Fatos de ─────────
@@ -1066,7 +1133,18 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeLoadsAndStores(int word, long address) {
         if (((word >>> VECTOR_FORM_BIT_SHIFT) & 1) != 0) {
-            // Load/store de registrador SIMD&FP (V=1): fora da fatia B6.2.
+            // AdvSIMD load/store multiple/single structures (B8.6): bit31 fixo=0 nas duas formas
+            // reais (não existe eixo W/X de 32/64 bits aqui, Q assume esse papel).
+            boolean bit31Clear = (word >>> 31) == 0;
+            int advSimdFixed = (word >>> ADVSIMD_LDST_FIXED_SHIFT) & ADVSIMD_LDST_FIXED_MASK;
+            if (bit31Clear && advSimdFixed == ADVSIMD_LDST_MULTIPLE_PATTERN) {
+                return decodeAdvancedSimdLoadStoreMultiple(word, address);
+            }
+            if (bit31Clear && advSimdFixed == ADVSIMD_LDST_SINGLE_PATTERN) {
+                return decodeAdvancedSimdLoadStoreSingle(word, address);
+            }
+            // Resto do espaço V=1 (LDR/STR/LDP/STP escalar SIMD&FP): fora do escopo fechado da
+            // B8.6 (só a família estruturada `LDn`/`STn` foi pedida) — mesma decisão de B6.2.
             throw unsupported(word, address);
         }
         int subclass = (word >>> LOAD_STORE_SUBCLASS_SHIFT) & LOAD_STORE_SUBCLASS_MASK;
@@ -1184,6 +1262,115 @@ public final class Aarch64Decoder {
             case SIZE_DOUBLEWORD -> Ir64MemSize.DOUBLEWORD;
             default -> throw new IllegalStateException("unreachable");
         };
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, B8.6) — ver
+    /// {@link Ir64Op.VectorLoadStoreMultiple}.
+    private Ir64Op decodeAdvancedSimdLoadStoreMultiple(int word, long address) {
+        boolean q = ((word >>> ADVSIMD_LDST_Q_SHIFT) & 1) != 0;
+        boolean postIndex = ((word >>> ADVSIMD_LDST_POST_INDEX_SHIFT) & 1) != 0;
+        boolean load = ((word >>> ADVSIMD_LDST_LOAD_SHIFT) & 1) != 0;
+        int rawRm = (word >>> ADVSIMD_LDST_RM_SHIFT) & REGISTER_FIELD_MASK;
+        if (!postIndex && rawRm != 0) {
+            // "For non-postindexed accesses the Rm field must be 0" (trans_LD_mult/trans_ST_mult
+            // reais do QEMU) — G8: recusar a combinação reservada em vez de ignorar o campo.
+            throw unsupported(word, address);
+        }
+        int opcode = (word >>> ADVSIMD_LDST_MULT_OPCODE_SHIFT) & ADVSIMD_LDST_MULT_OPCODE_MASK;
+        int rpt;
+        int selem;
+        switch (opcode) {
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM4 -> { rpt = 1; selem = 4; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM1_X4REG -> { rpt = 4; selem = 1; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM3 -> { rpt = 1; selem = 3; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM1_X3REG -> { rpt = 3; selem = 1; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM1_X1REG -> { rpt = 1; selem = 1; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM2 -> { rpt = 1; selem = 2; }
+            case ADVSIMD_LDST_MULT_OPCODE_SELEM1_X2REG -> { rpt = 2; selem = 1; }
+            // Demais valores de `opcode` são UNALLOCATED (G8).
+            default -> throw unsupported(word, address);
+        }
+        int elementSizeLog2 = (word >>> ADVSIMD_LDST_MULT_SIZE_SHIFT) & ADVSIMD_LDST_MULT_SIZE_MASK;
+        if (elementSizeLog2 == ADVSIMD_LDST_ELEMENT_SIZE_LOG2_DOUBLEWORD && !q && selem != 1) {
+            throw unsupported(word, address);
+        }
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        int rm = postIndex ? (rawRm == ADVSIMD_LDST_RM_IMMEDIATE_ENCODING ? -1 : rawRm) : -1;
+        return new Ir64Op.VectorLoadStoreMultiple(load, rt, rn, rm, q, postIndex, elementSizeLog2, rpt, selem);
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R` (AdvSIMD load/store SINGLE structure, B8.6) — ver
+    /// {@link Ir64Op.VectorLoadStoreSingle}/{@link Ir64Op.VectorLoadSingleReplicate}. `selem` usa
+    /// os mesmos 2 bits espalhados (`bit13`+`bit21`) nas 3 famílias de tamanho E na forma de
+    /// replicar; o resto dos bits de `opcode`/`S`/`size` é interpretado de um jeito DIFERENTE por
+    /// família (byte/half/word/double/replicar) — fatos conferidos contra `a64.decode` real do
+    /// QEMU (ver bloco de constantes `ADVSIMD_LDST_SINGLE_*`).
+    private Ir64Op decodeAdvancedSimdLoadStoreSingle(int word, long address) {
+        boolean q = ((word >>> ADVSIMD_LDST_Q_SHIFT) & 1) != 0;
+        boolean postIndex = ((word >>> ADVSIMD_LDST_POST_INDEX_SHIFT) & 1) != 0;
+        boolean load = ((word >>> ADVSIMD_LDST_LOAD_SHIFT) & 1) != 0;
+        int rawRm = (word >>> ADVSIMD_LDST_RM_SHIFT) & REGISTER_FIELD_MASK;
+        if (!postIndex && rawRm != 0) {
+            throw unsupported(word, address);
+        }
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        int rm = postIndex ? (rawRm == ADVSIMD_LDST_RM_IMMEDIATE_ENCODING ? -1 : rawRm) : -1;
+        int selemLow = (word >>> ADVSIMD_LDST_SINGLE_SELEM_LOW_SHIFT) & 1;
+        int selemHigh = (word >>> ADVSIMD_LDST_SINGLE_SELEM_HIGH_SHIFT) & 1;
+        int selem = ((selemLow << 1) | selemHigh) + 1;
+        int opcHigh = (word >>> ADVSIMD_LDST_SINGLE_OPC_HIGH_SHIFT) & ADVSIMD_LDST_SINGLE_OPC_HIGH_MASK;
+        if (opcHigh == ADVSIMD_LDST_SINGLE_OPC_HIGH_REPLICATE) {
+            // `LD1R`-`LD4R`: não existe forma `ST` (bit22=`L` sempre `1` no encoding real) nem
+            // combinação com o bit reservado setado (`trans_LD_single_repl` real do QEMU).
+            boolean reservedBitSet = ((word >>> ADVSIMD_LDST_SINGLE_REPL_RESERVED_BIT_SHIFT) & 1) != 0;
+            if (!load || reservedBitSet) {
+                throw unsupported(word, address);
+            }
+            int elementSizeLog2 = (word >>> ADVSIMD_LDST_SINGLE_REPL_SCALE_SHIFT) & ADVSIMD_LDST_SINGLE_REPL_SCALE_MASK;
+            return new Ir64Op.VectorLoadSingleReplicate(rt, rn, rm, q, postIndex, elementSizeLog2, selem);
+        }
+        int elementSizeLog2;
+        int index;
+        switch (opcHigh) {
+            case ADVSIMD_LDST_SINGLE_OPC_HIGH_BYTE -> {
+                elementSizeLog2 = 0;
+                int indexLow = (word >>> ADVSIMD_LDST_SINGLE_INDEX_LOW_BYTE_SHIFT) & ADVSIMD_LDST_SINGLE_INDEX_LOW_BYTE_MASK;
+                index = ((q ? 1 : 0) << 3) | indexLow;
+            }
+            case ADVSIMD_LDST_SINGLE_OPC_HIGH_HALF -> {
+                boolean reservedBitSet = ((word >>> ADVSIMD_LDST_SINGLE_HALF_RESERVED_BIT_SHIFT) & 1) != 0;
+                if (reservedBitSet) {
+                    throw unsupported(word, address);
+                }
+                elementSizeLog2 = 1;
+                int indexLow = (word >>> ADVSIMD_LDST_SINGLE_INDEX_LOW_HALF_SHIFT) & ADVSIMD_LDST_SINGLE_INDEX_LOW_HALF_MASK;
+                index = ((q ? 1 : 0) << 2) | indexLow;
+            }
+            case ADVSIMD_LDST_SINGLE_OPC_HIGH_WORD_OR_DOUBLE -> {
+                boolean isDoubleword = ((word >>> ADVSIMD_LDST_SINGLE_WORD_OR_DOUBLE_BIT_SHIFT) & 1) != 0;
+                if (!isDoubleword) {
+                    boolean reservedBitSet = ((word >>> ADVSIMD_LDST_SINGLE_WORD_RESERVED_BIT_SHIFT) & 1) != 0;
+                    if (reservedBitSet) {
+                        throw unsupported(word, address);
+                    }
+                    elementSizeLog2 = 2;
+                    index = ((q ? 1 : 0) << 1) | ((word >>> ADVSIMD_LDST_SINGLE_INDEX_WORD_BIT_SHIFT) & 1);
+                } else {
+                    int reserved = (word >>> ADVSIMD_LDST_SINGLE_DOUBLE_RESERVED_SHIFT) & ADVSIMD_LDST_SINGLE_DOUBLE_RESERVED_MASK;
+                    if (reserved != 0) {
+                        throw unsupported(word, address);
+                    }
+                    elementSizeLog2 = 3;
+                    // Doubleword: `Q` reaproveitado DIRETAMENTE como índice (`@ldst_single_d` real
+                    // nomeia esse mesmo bit `index`, não `q` — só 2 lanes de 8 bytes existem).
+                    index = q ? 1 : 0;
+                }
+            }
+            default -> throw new IllegalStateException("unreachable");
+        }
+        return new Ir64Op.VectorLoadStoreSingle(load, rt, rn, rm, postIndex, elementSizeLog2, selem, index);
     }
 
     private Ir64Op decodeLoadLiteral(int word, long address) {

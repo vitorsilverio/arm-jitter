@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState;
+import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64HypervisorCallException;
 import dev.vitorsilverio.armjitter.core64.Aarch64SecureMonitorCallException;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
@@ -317,6 +318,12 @@ public final class Ir64BlockExecutor {
                     Ir64FpExecutor.executeFpIntegerConvert(core, (Ir64Op.Fp64IntegerConvert) op);
             case Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE ->
                     Ir64FpExecutor.executeFpGeneralRegisterMove(core, (Ir64Op.Fp64GeneralRegisterMove) op);
+            case Ir64Op.Kind.VECTOR_LOAD_STORE_MULTIPLE ->
+                    executeVectorLoadStoreMultiple(core, (Ir64Op.VectorLoadStoreMultiple) op);
+            case Ir64Op.Kind.VECTOR_LOAD_STORE_SINGLE ->
+                    executeVectorLoadStoreSingle(core, (Ir64Op.VectorLoadStoreSingle) op);
+            case Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE ->
+                    executeVectorLoadSingleReplicate(core, (Ir64Op.VectorLoadSingleReplicate) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
@@ -1132,6 +1139,111 @@ public final class Ir64BlockExecutor {
         exceptionState.setCurrentEl(Aarch64ExceptionLevel.fromSpsrValue(rawSpsr));
         core.setProgramCounter(returnAddress);
         return true;
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, B8.6) — semântica conferida
+    /// contra `trans_LD_mult`/`trans_ST_mult` reais do QEMU, ver {@link Ir64Op.VectorLoadStoreMultiple}.
+    private boolean executeVectorLoadStoreMultiple(Aarch64Core core, Ir64Op.VectorLoadStoreMultiple op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = base;
+        Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
+        int elementBytes = 1 << op.elementSizeLog2();
+        int elementsPerRegister = (op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES)
+                >> op.elementSizeLog2();
+        Aarch64FpRegisters fp = core.fp();
+        for (int r = 0; r < op.rpt(); r++) {
+            for (int e = 0; e < elementsPerRegister; e++) {
+                for (int xs = 0; xs < op.selem(); xs++) {
+                    int register = (op.rt() + r + xs) % Aarch64FpRegisters.V_REGISTER_COUNT;
+                    if (op.load()) {
+                        fp.setElement(register, e, op.elementSizeLog2(), readMemory(core, address, size));
+                    } else {
+                        writeMemory(core, address, size, fp.element(register, e, op.elementSizeLog2()));
+                        core.notifyOrdinaryWrite(address, elementBytes);
+                    }
+                    address += elementBytes;
+                }
+            }
+        }
+        if (op.load() && !op.q()) {
+            // "SIMD&FP destructive write" (B6.5.1 D3): forma não-quad só escreveu os 64 bits
+            // baixos de cada registrador tocado — os altos precisam ser zerados explicitamente
+            // (o loop principal, espelhando o QEMU real, faz isso numa passada separada DEPOIS da
+            // cópia, sobre os `rpt*selem` registradores distintos — nunca há sobreposição, porque
+            // `rpt>1` só ocorre quando `selem=1` e vice-versa).
+            for (int r = 0; r < op.rpt() * op.selem(); r++) {
+                int register = (op.rt() + r) % Aarch64FpRegisters.V_REGISTER_COUNT;
+                fp.setQ(register, fp.low64(register), 0L);
+            }
+        }
+        long total = (long) op.rpt() * op.selem()
+                * (op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES);
+        writeVectorPostIndex(core, op.rn(), op.postIndex(), op.rm(), base, total);
+        return false;
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store SINGLE structure, sem replicar, B8.6) —
+    /// semântica conferida contra `trans_LD_single`/`trans_ST_single` reais do QEMU, ver
+    /// {@link Ir64Op.VectorLoadStoreSingle}.
+    private boolean executeVectorLoadStoreSingle(Aarch64Core core, Ir64Op.VectorLoadStoreSingle op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = base;
+        Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
+        int elementBytes = 1 << op.elementSizeLog2();
+        Aarch64FpRegisters fp = core.fp();
+        for (int xs = 0; xs < op.selem(); xs++) {
+            int register = (op.rt() + xs) % Aarch64FpRegisters.V_REGISTER_COUNT;
+            if (op.load()) {
+                fp.setElement(register, op.index(), op.elementSizeLog2(), readMemory(core, address, size));
+            } else {
+                writeMemory(core, address, size, fp.element(register, op.index(), op.elementSizeLog2()));
+                core.notifyOrdinaryWrite(address, elementBytes);
+            }
+            address += elementBytes;
+        }
+        long total = (long) op.selem() * elementBytes;
+        writeVectorPostIndex(core, op.rn(), op.postIndex(), op.rm(), base, total);
+        return false;
+    }
+
+    /// `LD1R`-`LD4R` (AdvSIMD load single structure and replicate, B8.6) — semântica conferida
+    /// contra `trans_LD_single_repl` real do QEMU, ver {@link Ir64Op.VectorLoadSingleReplicate}.
+    private boolean executeVectorLoadSingleReplicate(Aarch64Core core, Ir64Op.VectorLoadSingleReplicate op) {
+        long base = readBaseRegister(core, op.rn());
+        long address = base;
+        Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
+        int elementBytes = 1 << op.elementSizeLog2();
+        Aarch64FpRegisters fp = core.fp();
+        for (int xs = 0; xs < op.selem(); xs++) {
+            int register = (op.rt() + xs) % Aarch64FpRegisters.V_REGISTER_COUNT;
+            fp.replicateElement(register, readMemory(core, address, size), op.elementSizeLog2(), op.q());
+            address += elementBytes;
+        }
+        long total = (long) op.selem() * elementBytes;
+        writeVectorPostIndex(core, op.rn(), op.postIndex(), op.rm(), base, total);
+        return false;
+    }
+
+    /// Escrita de volta pós-índice compartilhada pelas 3 formas de AdvSIMD load/store (B8.6):
+    /// `rm=-1` (sentinela do decoder) é o pós-índice IMEDIATO (avança `total` bytes, o tamanho
+    /// inteiro transferido pela instrução); qualquer outro valor é um registrador `X` real.
+    private static void writeVectorPostIndex(Aarch64Core core, int rn, boolean postIndex, int rm, long base,
+            long total) {
+        if (!postIndex) {
+            return;
+        }
+        long newBase = rm == -1 ? base + total : base + core.x(rm);
+        writeBaseRegister(core, rn, newBase);
+    }
+
+    private static Ir64MemSize memSizeForElementLog2(int sizeLog2) {
+        return switch (sizeLog2) {
+            case 0 -> Ir64MemSize.BYTE;
+            case 1 -> Ir64MemSize.HALF;
+            case 2 -> Ir64MemSize.WORD;
+            case 3 -> Ir64MemSize.DOUBLEWORD;
+            default -> throw new IllegalStateException("elementSizeLog2 inválido: " + sizeLog2);
+        };
     }
 
     private boolean executeLoadStorePair(Aarch64Core core, Ir64Op.LoadStorePair op) {

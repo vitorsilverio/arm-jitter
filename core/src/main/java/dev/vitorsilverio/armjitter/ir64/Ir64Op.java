@@ -37,7 +37,8 @@ public sealed interface Ir64Op permits
         Ir64Op.InterruptMask, Ir64Op.Breakpoint, Ir64Op.UndefinedInstructionTrap,
         Ir64Op.AddressTranslate, Ir64Op.Fp64MultiplyAdd, Ir64Op.Fp64ConditionalSelect,
         Ir64Op.Fp64ConditionalCompare, Ir64Op.Fp64Round, Ir64Op.Fp64IntegerConvert,
-        Ir64Op.Fp64GeneralRegisterMove {
+        Ir64Op.Fp64GeneralRegisterMove, Ir64Op.VectorLoadStoreMultiple, Ir64Op.VectorLoadStoreSingle,
+        Ir64Op.VectorLoadSingleReplicate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -137,6 +138,15 @@ public sealed interface Ir64Op permits
         /// B8.5: `FMOV` entre registrador geral e FP escalar (cópia crua de bits) — ver
         /// {@link Fp64GeneralRegisterMove}.
         public static final int FP64_GENERAL_REGISTER_MOVE = 52;
+        /// B8.6: `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store multiple structures) — ver
+        /// {@link VectorLoadStoreMultiple}.
+        public static final int VECTOR_LOAD_STORE_MULTIPLE = 53;
+        /// B8.6: `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store single structure, sem replicar) — ver
+        /// {@link VectorLoadStoreSingle}.
+        public static final int VECTOR_LOAD_STORE_SINGLE = 54;
+        /// B8.6: `LD1R`-`LD4R` (AdvSIMD load single structure and replicate) — ver
+        /// {@link VectorLoadSingleReplicate}.
+        public static final int VECTOR_LOAD_SINGLE_REPLICATE = 55;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1342,5 +1352,108 @@ public sealed interface Ir64Op permits
     /// `HVC`/`SMC` descartado em {@link PrivilegedCall}).
     record UndefinedInstructionTrap() implements Ir64Op {
         @Override public int kind() { return Kind.UNDEFINED_INSTRUCTION_TRAP; }
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, B8.6) — transfere `rpt`
+    /// repetições de `selem` registradores consecutivos (`Vt`, `Vt+1`, ... módulo `32`), cada um
+    /// com `(q ? 16 : 8) >> elementSizeLog2` elementos, para/de memória CONSECUTIVA (elementos
+    /// intercalados quando `selem>1` — estrutura "array of structures"). Semântica conferida contra
+    /// `target/arm/tcg/translate-a64.c` real do QEMU (`trans_LD_mult`/`trans_ST_mult`): para
+    /// `r` em `0..rpt`, `e` em `0..elementos`, `xs` em `0..selem`, escreve/lê o elemento `e` do
+    /// registrador `(Vt+r+xs) % 32`, avançando o endereço `1 << elementSizeLog2` bytes a cada
+    /// elemento. Para `LD` (não `ST`), os registradores tocados têm os 64 bits altos ZERADOS
+    /// quando `!q` (mesma disciplina "SIMD&FP destructive write" de {@link Fp64Alu}, mas aplicada
+    /// por registrador INTEIRO aqui, não por elemento).
+    record VectorLoadStoreMultiple(
+            /// `true` para `LD1`-`LD4`, `false` para `ST1`-`ST4`.
+            boolean load,
+            /// Primeiro registrador `V` transferido (índice `0`-`31`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`, ver {@link Load64#rn}).
+            int rn,
+            /// Registrador de deslocamento pós-índice (índice `0`-`30`); `-1` quando não há
+            /// pós-índice OU quando o pós-índice é IMEDIATO (encoding `Rm=11111`, avança
+            /// `rpt * selem * (q ? 16 : 8)` bytes — o próprio decoder já resolveu essa
+            /// ambiguidade, o executor nunca lê `31` como registrador real).
+            int rm,
+            /// `true` para arranjo de 128 bits (`Vt.16B`/`.8H`/`.4S`/`.2D`), `false` para 64 bits
+            /// (`Vt.8B`/`.4H`/`.2S`/`.1D`).
+            boolean q,
+            /// `true` quando há escrita de volta em {@link #rn} após a transferência (forma
+            /// pós-indexada, imediata ou por registrador conforme {@link #rm}).
+            boolean postIndex,
+            /// `log2` do tamanho de cada elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
+            /// `3`=doubleword.
+            int elementSizeLog2,
+            /// Quantas vezes o grupo de {@link #selem} registradores se repete (`1`-`4`) — só
+            /// `selem=1` permite `rpt>1` (`LD1`/`ST1` com `1`-`4` registradores); as demais
+            /// combinações (`LD2`-`LD4`/`ST2`-`ST4`) têm `rpt=1`.
+            int rpt,
+            /// Quantos registradores compõem UMA estrutura entrelaçada na memória (`1`=`LD1`/
+            /// `ST1`, `2`=`LD2`/`ST2`, `3`=`LD3`/`ST3`, `4`=`LD4`/`ST4`).
+            int selem) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_LOAD_STORE_MULTIPLE; }
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store SINGLE structure, sem replicar, B8.6) —
+    /// transfere UM elemento de `1 << elementSizeLog2` bytes para/de cada um de {@link #selem}
+    /// registradores consecutivos (`Vt`, `Vt+1`, ... módulo `32`), no índice de lane {@link #index}
+    /// de cada um, SEM afetar nenhum outro bit desses registradores (diferente de
+    /// {@link VectorLoadStoreMultiple}, que sempre toca o registrador inteiro). Semântica
+    /// conferida contra `trans_LD_single`/`trans_ST_single` reais do QEMU: para `xs` em
+    /// `0..selem`, escreve/lê o elemento {@link #index} do registrador `(Vt+xs) % 32`, avançando
+    /// o endereço `1 << elementSizeLog2` bytes a cada elemento.
+    record VectorLoadStoreSingle(
+            /// `true` para `LD1`-`LD4`, `false` para `ST1`-`ST4`.
+            boolean load,
+            /// Primeiro registrador `V` transferido (índice `0`-`31`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Registrador de deslocamento pós-índice, mesma convenção de
+            /// {@link VectorLoadStoreMultiple#rm} (`-1`=sem pós-índice ou pós-índice imediato,
+            /// que aqui avança `selem << elementSizeLog2` bytes).
+            int rm,
+            /// `true` quando há escrita de volta em {@link #rn}.
+            boolean postIndex,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`), ver
+            /// {@link VectorLoadStoreMultiple#elementSizeLog2}.
+            int elementSizeLog2,
+            /// Quantos registradores consecutivos recebem/fornecem o elemento (`1`-`4`).
+            int selem,
+            /// Índice da lane (dentro do registrador de 128 bits) que recebe/fornece o elemento —
+            /// faixa depende de {@link #elementSizeLog2} (`0`-`15` byte, `0`-`7` halfword, `0`-`3`
+            /// word, `0`-`1` doubleword; o bit mais significativo do índice É o próprio `Q` do
+            /// encoding real, resolvido pelo decoder).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_LOAD_STORE_SINGLE; }
+    }
+
+    /// `LD1R`-`LD4R` (AdvSIMD load single structure and Replicate to all lanes, B8.6) — lê UM
+    /// elemento de `1 << elementSizeLog2` bytes por registrador (mesmo padrão de endereçamento de
+    /// {@link VectorLoadStoreSingle}, `selem` registradores consecutivos) e REPLICA esse valor por
+    /// todas as lanes de cada registrador (`(q ? 16 : 8) >> elementSizeLog2` cópias) — não existe
+    /// forma `ST` (só faz sentido para leitura). Semântica conferida contra `trans_LD_single_repl`
+    /// real do QEMU.
+    record VectorLoadSingleReplicate(
+            /// Primeiro registrador `V` preenchido (índice `0`-`31`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Registrador de deslocamento pós-índice, mesma convenção de
+            /// {@link VectorLoadStoreMultiple#rm} (`-1`=sem pós-índice ou pós-índice imediato, que
+            /// aqui avança `selem << elementSizeLog2` bytes).
+            int rm,
+            /// `true` para replicar pelos 128 bits do registrador, `false` para só os 64 baixos
+            /// (zerando os altos, ver {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#replicateElement}).
+            boolean q,
+            /// `true` quando há escrita de volta em {@link #rn}.
+            boolean postIndex,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int elementSizeLog2,
+            /// Quantos registradores consecutivos são preenchidos (`1`=`LD1R`, `2`=`LD2R`,
+            /// `3`=`LD3R`, `4`=`LD4R`).
+            int selem) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_LOAD_SINGLE_REPLICATE; }
     }
 }
