@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
@@ -280,5 +281,49 @@ class Ir64VectorFpArithmeticExecutorTest {
         fp.setElement(1, 0, 2, Float.floatToRawIntBits(4.0f) & 0xFFFF_FFFFL);
         EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.RSQRTE, false, 2, 0, 1));
         assertEquals(0.5f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
+    }
+
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (B8.10) — reduz os 4 elementos `.4s` de `Rn`.
+    private static void setFourSingleElements(Aarch64FpRegisters fp, int reg, float a, float b, float c, float d) {
+        fp.setElement(reg, 0, 2, Float.floatToRawIntBits(a) & 0xFFFF_FFFFL);
+        fp.setElement(reg, 1, 2, Float.floatToRawIntBits(b) & 0xFFFF_FFFFL);
+        fp.setElement(reg, 2, 2, Float.floatToRawIntBits(c) & 0xFFFF_FFFFL);
+        fp.setElement(reg, 3, 2, Float.floatToRawIntBits(d) & 0xFFFF_FFFFL);
+    }
+
+    @Test
+    void fmaxvFminvReduceFourElements() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setFourSingleElements(fp, 1, 1.0f, -5.0f, 3.5f, 2.0f);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, 0, 1));
+        assertEquals(3.5f, fp.sFloat(0));
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINV, 0, 1));
+        assertEquals(-5.0f, fp.sFloat(0));
+    }
+
+    @Test
+    void fmaxnmvFminnmvIgnoreNaN() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setFourSingleElements(fp, 1, Float.NaN, 7.0f, 1.0f, 2.0f);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXNMV, 0, 1));
+        assertEquals(7.0f, fp.sFloat(0), "FMAXNMV ignora o NaN quando há operando numérico");
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINNMV, 0, 1));
+        assertEquals(1.0f, fp.sFloat(0), "FMINNMV ignora o NaN quando há operando numérico");
+    }
+
+    @Test
+    void fmaxvPropagatesNaN() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setFourSingleElements(fp, 1, Float.NaN, 7.0f, 1.0f, 2.0f);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, 0, 1));
+        assertEquals(true, Float.isNaN(fp.sFloat(0)), "FMAXV (sem NM) propaga NaN");
     }
 }

@@ -82,7 +82,7 @@ lista:
 | **B8.7** | AdvSIMD inteiro — aritmética e comparação | ~150 |
 | **B8.8** | AdvSIMD — deslocamento, saturação e estreitamento (`SQ*`/`UQ*`/`*SHRN`) | ~140 |
 | **B8.9** | AdvSIMD FP vetorial | ~120 |
-| **B8.10** | AdvSIMD — permutação, redução, tabela (`EXT`/`UZP`/`TRN`/`ZIP`/`TBL`/`*V`) | ~40 |
+| ~~**B8.10**~~ | ✅ fechada 2026-08-24 — AdvSIMD — permutação, redução, tabela (`EXT`/`UZP`/`TRN`/`ZIP`/`TBL`/`*V`) | ~40 |
 | **B8.11** | Extensões opcionais, com triagem: cripto (`AES*`/`SHA*`/`SM3`/`SM4`/`PMULL`), PAC (`AUTI*`/`BRA*`/`XPAC*`), MTE (`STG*`/`LDG*`/`IRG`), `CPY*`/`SET*` (ARMv8.8 memcpy), dot/matmul (`SDOT`/`SMMLA`/`BF*`) — **a maioria não está no Cortex-A53 do raspi3**; a entrega desta task pode ser majoritariamente `isa-nao-aplicavel.tsv` justificado | ~180 |
 
 **Ordem sugerida**: B8.1 → B8.2 → B8.3 (é o que um kernel Linux realmente executa, e destrava a

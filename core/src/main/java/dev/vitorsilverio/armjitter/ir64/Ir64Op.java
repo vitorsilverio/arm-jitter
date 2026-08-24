@@ -44,7 +44,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorArithmeticNarrowUnary, Ir64Op.VectorShiftImmediate,
         Ir64Op.VectorShiftNarrowImmediate, Ir64Op.VectorShiftWidenImmediate,
         Ir64Op.VectorFpArithmeticThreeSame, Ir64Op.VectorFpArithmeticPairwise,
-        Ir64Op.VectorFpArithmeticUnary {
+        Ir64Op.VectorFpArithmeticUnary, Ir64Op.VectorExtract, Ir64Op.VectorPermute,
+        Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -200,6 +201,14 @@ public sealed interface Ir64Op permits
         /// `SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/`FCVTxU_vi` (AdvSIMD "two-register miscellaneous" de
         /// ponto flutuante) — ver {@link VectorFpArithmeticUnary}.
         public static final int VECTOR_FP_ARITHMETIC_UNARY = 70;
+        /// B8.10: `EXT` — ver {@link VectorExtract}.
+        public static final int VECTOR_EXTRACT = 71;
+        /// B8.10: `UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2` — ver {@link VectorPermute}.
+        public static final int VECTOR_PERMUTE = 72;
+        /// B8.10: `TBL`/`TBX` — ver {@link VectorTableLookup}.
+        public static final int VECTOR_TABLE_LOOKUP = 73;
+        /// B8.10: `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — ver {@link VectorFpAcrossLanes}.
+        public static final int VECTOR_FP_ACROSS_LANES = 74;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1845,5 +1854,86 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_UNARY; }
+    }
+
+    /// `EXT` (AdvSIMD extract, B8.10) — concatena `Rm:Rn` (`Rn` ocupa os bits BAIXOS, `Rm` os
+    /// ALTOS, `ARM DDI 0487` `Extract`) e extrai uma janela de `datasize` bits (`64` sem
+    /// {@link #q}, `128` com) começando no deslocamento `imm*8` bits — puramente reorganização de
+    /// bytes, sem aritmética. Único mnemônico desta forma (`EXT_d`/`EXT_q` do inventário são o
+    /// MESMO encoding, distinto só pela largura do campo `imm`, já resolvida pelo decoder).
+    record VectorExtract(
+            /// `true` para arranjo de 128 bits (`imm` até `15`), `false` para 64 bits (`imm` até
+            /// `7`).
+            boolean q,
+            /// Deslocamento em BYTES (não bits) dentro da janela concatenada — faixa depende de
+            /// {@link #q}.
+            int imm,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (metade BAIXA da concatenação).
+            int rn,
+            /// Registrador `V` fonte 2 (metade ALTA da concatenação).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_EXTRACT; }
+    }
+
+    /// `UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2` (AdvSIMD permute, B8.10) — reorganiza os elementos
+    /// de `Rn`/`Rm` numa ordem fixa (ver {@link Ir64VectorPermuteOp}), sem aritmética. Único
+    /// tamanho de elemento livre desta família (diferente de {@link VectorExtract}, que opera
+    /// sempre em bytes).
+    record VectorPermute(
+            /// Operação a executar.
+            Ir64VectorPermuteOp op,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_PERMUTE; }
+    }
+
+    /// `TBL`/`TBX` (AdvSIMD table lookup, B8.10) — trata os registradores `Rn`, `Rn+1`, ...,
+    /// `Rn+len` (módulo `32`, {@link #len} registradores no total) como UMA tabela contígua de
+    /// bytes (`16*(len+1)` bytes) e substitui cada BYTE de `Rm` pelo byte da tabela no índice que
+    /// ele contém — índice `>= 16*(len+1)` produz `0` ({@code TBL}) ou preserva o byte ATUAL de
+    /// `Rd` ({@code TBX}, {@link #tbx}). Opera sempre byte a byte, sem `esz` (mesmo padrão de
+    /// {@link VectorExtract}).
+    record VectorTableLookup(
+            /// `true` para `TBX` (índice fora da tabela preserva `Rd`), `false` para `TBL` (produz
+            /// `0`).
+            boolean tbx,
+            /// Quantos registradores ALÉM de {@link #rn} compõem a tabela, MENOS `1` (`0`=`1`
+            /// registrador, ..., `3`=`4` registradores) — nome espelha o campo `len` do encoding
+            /// real (`ARM DDI 0487`), não "quantidade" para evitar off-by-one silencioso.
+            int len,
+            /// `true` para processar os 16 bytes de {@link #rm} (arranjo `16b`), `false` para só
+            /// os 8 baixos (arranjo `8b`).
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro registrador `V` da tabela (índice `0`-`31`; os demais são
+            /// `(rn+1)%32`...`(rn+len)%32`).
+            int rn,
+            /// Registrador `V` com os índices (um por byte).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_TABLE_LOOKUP; }
+    }
+
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (AdvSIMD across lanes de ponto flutuante, B8.10) —
+    /// reduz os 4 elementos SIMPLES de `Rn` (arranjo `4S`, único real; `Q`/`esz` sempre fixos,
+    /// diferente de {@link VectorAcrossLanes}) a um único escalar simples em `Rd`.
+    record VectorFpAcrossLanes(
+            /// Operação a executar.
+            Ir64VectorFpAcrossLanesOp op,
+            /// Registrador `V` de destino (escalar S).
+            int rd,
+            /// Registrador `V` fonte (lido como `.4s`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ACROSS_LANES; }
     }
 }

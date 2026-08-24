@@ -271,3 +271,18 @@ FRINT64X_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — 
 FAMAX	A64	ARMv9.4-A/FEAT_FAMINMAX ("floating-point absolute max/min"), muito posterior ao Cortex-A53
 FAMIN	A64	ARMv9.4-A/FEAT_FAMINMAX, muito posterior ao Cortex-A53
 FSCALE	A64	extensão FP recente (SVE2.1/FEAT_FP8, ~ARMv9.x), muito posterior ao Cortex-A53
+
+# ── A64 (B8.10): extensões opcionais do grupo "permutação/redução/tabela" — `LUTI2`/`LUTI4`
+# ── (ARMv9.4-A/FEAT_LUT, table lookup indexado, não confundir com TBL/TBX comuns, IMPLEMENTADOS
+# ── por esta task) e meia-precisão (`FEAT_FP16`) de `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — aqui SEM
+# ── o problema de colisão de nome de B8.9 (`FMAXV_h`/`FMAXV_s` são mnemônicos DISTINTOS no
+# ── inventário, não o mesmo nome duas vezes), então podem entrar na TSV sem suprimir a forma "s"
+# ── implementada.
+LUTI2_1b	A64	ARMv9.4-A/FEAT_LUT (table lookup indexado), muito posterior ao Cortex-A53
+LUTI2_1h	A64	ARMv9.4-A/FEAT_LUT, muito posterior ao Cortex-A53
+LUTI4_1b	A64	ARMv9.4-A/FEAT_LUT, muito posterior ao Cortex-A53
+LUTI4_2h	A64	ARMv9.4-A/FEAT_LUT, muito posterior ao Cortex-A53
+FMAXNMV_h	A64	ARMv8.2-A/FEAT_FP16 (meia-precisão), posterior ao Cortex-A53
+FMINNMV_h	A64	ARMv8.2-A/FEAT_FP16, posterior ao Cortex-A53
+FMAXV_h	A64	ARMv8.2-A/FEAT_FP16, posterior ao Cortex-A53
+FMINV_h	A64	ARMv8.2-A/FEAT_FP16, posterior ao Cortex-A53

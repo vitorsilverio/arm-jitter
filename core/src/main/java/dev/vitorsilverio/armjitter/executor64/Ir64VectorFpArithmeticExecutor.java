@@ -272,4 +272,24 @@ final class Ir64VectorFpArithmeticExecutor {
         finishDestructiveWrite(fp, op.rd(), op.q());
         return false;
     }
+
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (B8.10) — reduz os 4 elementos SIMPLES de `Rn` a um
+    /// único escalar S em `Rd`. Só precisão simples (único arranjo real desta família, `esz`
+    /// sempre `2` — ver {@link Ir64Op.VectorFpAcrossLanes}), por isso sem o `switch` esz==2/3 do
+    /// resto desta classe.
+    static boolean executeFpAcrossLanes(Aarch64Core core, Ir64Op.VectorFpAcrossLanes op) {
+        Aarch64FpRegisters fp = core.fp();
+        float result = Float.intBitsToFloat((int) fp.element(op.rn(), 0, 2));
+        for (int i = 1; i < 4; i++) {
+            float v = Float.intBitsToFloat((int) fp.element(op.rn(), i, 2));
+            result = switch (op.op()) {
+                case FMAXNMV -> Ir64FpExecutor.maxNum(result, v);
+                case FMINNMV -> Ir64FpExecutor.minNum(result, v);
+                case FMAXV -> Math.max(result, v);
+                case FMINV -> Math.min(result, v);
+            };
+        }
+        fp.setS(op.rd(), Float.floatToRawIntBits(result));
+        return false;
+    }
 }

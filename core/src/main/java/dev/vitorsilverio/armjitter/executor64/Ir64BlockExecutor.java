@@ -354,6 +354,14 @@ public final class Ir64BlockExecutor {
                     Ir64VectorFpArithmeticExecutor.executePairwise(core, (Ir64Op.VectorFpArithmeticPairwise) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_UNARY ->
                     Ir64VectorFpArithmeticExecutor.executeUnary(core, (Ir64Op.VectorFpArithmeticUnary) op);
+            case Ir64Op.Kind.VECTOR_EXTRACT ->
+                    Ir64VectorArithmeticExecutor.executeExtract(core, (Ir64Op.VectorExtract) op);
+            case Ir64Op.Kind.VECTOR_PERMUTE ->
+                    Ir64VectorArithmeticExecutor.executePermute(core, (Ir64Op.VectorPermute) op);
+            case Ir64Op.Kind.VECTOR_TABLE_LOOKUP ->
+                    Ir64VectorArithmeticExecutor.executeTableLookup(core, (Ir64Op.VectorTableLookup) op);
+            case Ir64Op.Kind.VECTOR_FP_ACROSS_LANES ->
+                    Ir64VectorFpArithmeticExecutor.executeFpAcrossLanes(core, (Ir64Op.VectorFpAcrossLanes) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

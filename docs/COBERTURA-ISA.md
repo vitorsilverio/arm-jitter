@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **70%** — 2721 de 3840 células aplicáveis decodificam.
+> **71%** — 2740 de 3832 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **59%** (653/1090) |
+| A64 | **62%** (672/1082) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 59% (653/1090) |
+| A64 — AArch64 | 1161 | A64 62% (672/1082) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2034,14 +2034,14 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SM4EKEY` | ✅ |
 | `SHA512SU0` | ❌ |
 | `SM4E` | ❌ |
-| `EOR3` | ❌ |
+| `EOR3` | ✅ |
 | `BCAX` | ✅ |
 | `SM3SS1` | ❌ |
 | `SM3TT1A` | ❌ |
 | `SM3TT1B` | ❌ |
 | `SM3TT2A` | ❌ |
 | `SM3TT2B` | ❌ |
-| `XAR` | ❌ |
+| `XAR` | ✅ |
 | `DUP_element_s` | ❌ |
 | `DUP_element_v` | ❌ |
 | `DUP_general` | ❌ |
@@ -2376,19 +2376,19 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMSUB` | ✅ |
 | `FNMADD` | ✅ |
 | `FNMSUB` | ✅ |
-| `EXT_d` | ❌ |
-| `EXT_q` | ❌ |
-| `TBL_TBX` | ❌ |
-| `LUTI2_1b` | ❌ |
-| `LUTI2_1h` | ❌ |
-| `LUTI4_1b` | ❌ |
-| `LUTI4_2h` | ❌ |
-| `UZP1` | ❌ |
-| `UZP2` | ❌ |
-| `TRN1` | ❌ |
-| `TRN2` | ❌ |
-| `ZIP1` | ❌ |
-| `ZIP2` | ❌ |
+| `EXT_d` | ✅ |
+| `EXT_q` | ✅ |
+| `TBL_TBX` | ✅ |
+| `LUTI2_1b` | · |
+| `LUTI2_1h` | · |
+| `LUTI4_1b` | · |
+| `LUTI4_2h` | · |
+| `UZP1` | ✅ |
+| `UZP2` | ✅ |
+| `TRN1` | ✅ |
+| `TRN2` | ✅ |
+| `ZIP1` | ✅ |
+| `ZIP2` | ✅ |
 | `ADDV` | ✅ |
 | `SADDLV` | ✅ |
 | `UADDLV` | ✅ |
@@ -2396,14 +2396,14 @@ Inventário: `a64.decode` · 1161 instruções.
 | `UMAXV` | ✅ |
 | `SMINV` | ✅ |
 | `UMINV` | ✅ |
-| `FMAXNMV_h` | ❌ |
-| `FMAXNMV_s` | ❌ |
-| `FMINNMV_h` | ❌ |
-| `FMINNMV_s` | ❌ |
-| `FMAXV_h` | ❌ |
-| `FMAXV_s` | ❌ |
-| `FMINV_h` | ❌ |
-| `FMINV_s` | ❌ |
+| `FMAXNMV_h` | · |
+| `FMAXNMV_s` | ✅ |
+| `FMINNMV_h` | · |
+| `FMINNMV_s` | ✅ |
+| `FMAXV_h` | · |
+| `FMAXV_s` | ✅ |
+| `FMINV_h` | · |
+| `FMINV_s` | ✅ |
 | `SCVTF_g` | ✅ |
 | `SCVTF_g` | ✅ |
 | `UCVTF_g` | ✅ |
@@ -2695,9 +2695,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SHLL_v` | ❌ |
 | `FABS_v` | ❌ |
 | `FABS_v` | ✅ |
-| `FNEG_v` | ❌ |
 | `FNEG_v` | ✅ |
-| `FSQRT_v` | ❌ |
+| `FNEG_v` | ✅ |
+| `FSQRT_v` | ✅ |
 | `FSQRT_v` | ✅ |
 | `FRINTN_v` | ❌ |
 | `FRINTN_v` | ✅ |
@@ -2739,11 +2739,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTZU_vi` | ✅ |
 | `FCVTAS_vi` | ❌ |
 | `FCVTAS_vi` | ✅ |
-| `FCVTAU_vi` | ❌ |
+| `FCVTAU_vi` | ✅ |
 | `FCVTAU_vi` | ✅ |
 | `FCMGT0_v` | ❌ |
 | `FCMGT0_v` | ✅ |
-| `FCMGE0_v` | ❌ |
+| `FCMGE0_v` | ✅ |
 | `FCMGE0_v` | ✅ |
 | `FCMEQ0_v` | ❌ |
 | `FCMEQ0_v` | ✅ |

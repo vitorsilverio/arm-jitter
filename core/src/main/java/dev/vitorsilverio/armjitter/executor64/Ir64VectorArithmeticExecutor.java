@@ -620,4 +620,89 @@ final class Ir64VectorArithmeticExecutor {
         }
         return false;
     }
+
+    /// `EXT` (B8.10) — concatena `Rm:Rn` (`Rn` nos bytes BAIXOS) e extrai a janela de
+    /// {@code datasize} bytes começando em {@link Ir64Op.VectorExtract#imm}, byte a byte (sempre
+    /// `esz=0`, sem aritmética).
+    static boolean executeExtract(Aarch64Core core, Ir64Op.VectorExtract op) {
+        Aarch64FpRegisters fp = core.fp();
+        int datasize = op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES;
+        long resultLo = 0L;
+        long resultHi = 0L;
+        for (int i = 0; i < datasize; i++) {
+            int srcIndex = op.imm() + i;
+            long byteValue = srcIndex < datasize
+                    ? fp.element(op.rn(), srcIndex, 0)
+                    : fp.element(op.rm(), srcIndex - datasize, 0);
+            if (i < Aarch64FpRegisters.DOUBLEWORD_BYTES) {
+                resultLo |= byteValue << (i * 8);
+            } else {
+                resultHi |= byteValue << ((i - Aarch64FpRegisters.DOUBLEWORD_BYTES) * 8);
+            }
+        }
+        fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
+
+    /// `UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2` (B8.10) — reorganiza os elementos de `Rn`/`Rm`,
+    /// sem aritmética. `pairIndex`/`secondOfPair` decompõem o índice de saída `i` no par
+    /// `(par, metade)` que `TRN*`/`ZIP*` precisam; `UZP*` usa `i` diretamente (metade do registro
+    /// inteira vem de `Rn`, a outra de `Rm`).
+    static boolean executePermute(Aarch64Core core, Ir64Op.VectorPermute op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        int half = elements / 2;
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            int pairIndex = i / 2;
+            boolean secondOfPair = (i % 2) == 1;
+            results[i] = switch (op.op()) {
+                case UZP1 -> fp.element(i < half ? op.rn() : op.rm(), 2 * (i < half ? i : i - half), esz);
+                case UZP2 -> fp.element(i < half ? op.rn() : op.rm(), 2 * (i < half ? i : i - half) + 1, esz);
+                case TRN1 -> fp.element(secondOfPair ? op.rm() : op.rn(), pairIndex * 2, esz);
+                case TRN2 -> fp.element(secondOfPair ? op.rm() : op.rn(), pairIndex * 2 + 1, esz);
+                case ZIP1 -> fp.element(secondOfPair ? op.rm() : op.rn(), pairIndex, esz);
+                case ZIP2 -> fp.element(secondOfPair ? op.rm() : op.rn(), half + pairIndex, esz);
+            };
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, esz, results[i]);
+        }
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `TBL`/`TBX` (B8.10) — trata `Rn`, `Rn+1`, ..., `Rn+len` (módulo
+    /// {@link Aarch64FpRegisters#V_REGISTER_COUNT}) como uma tabela contígua de bytes; cada byte de
+    /// `Rm` é um índice nessa tabela. Índice fora da tabela: `0` (`TBL`) ou o byte ATUAL de `Rd`
+    /// (`TBX`) — lido ANTES da escrita final, já que {@link Aarch64FpRegisters#setQ} substitui os
+    /// 128 bits de uma vez.
+    static boolean executeTableLookup(Aarch64Core core, Ir64Op.VectorTableLookup op) {
+        Aarch64FpRegisters fp = core.fp();
+        int tableBytes = (op.len() + 1) * Aarch64FpRegisters.QUADWORD_BYTES;
+        int indexCount = op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES;
+        long resultLo = 0L;
+        long resultHi = 0L;
+        for (int i = 0; i < indexCount; i++) {
+            int index = (int) fp.element(op.rm(), i, 0);
+            long value;
+            if (index < tableBytes) {
+                int tableReg = (op.rn() + index / Aarch64FpRegisters.QUADWORD_BYTES) % Aarch64FpRegisters.V_REGISTER_COUNT;
+                int byteInReg = index % Aarch64FpRegisters.QUADWORD_BYTES;
+                value = fp.element(tableReg, byteInReg, 0);
+            } else if (op.tbx()) {
+                value = fp.element(op.rd(), i, 0);
+            } else {
+                value = 0L;
+            }
+            if (i < Aarch64FpRegisters.DOUBLEWORD_BYTES) {
+                resultLo |= value << (i * 8);
+            } else {
+                resultHi |= value << ((i - Aarch64FpRegisters.DOUBLEWORD_BYTES) * 8);
+            }
+        }
+        fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
 }
