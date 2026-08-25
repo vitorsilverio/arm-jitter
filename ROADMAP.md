@@ -134,9 +134,15 @@ só "native-image" (prioridade menor).
 
 ## Trilha B — Novas arquiteturas guest
 
-Objetivo: abrir a cadeia ARMv6 → ARMv7 → AArch64 para 3DS, Raspberry Pi, Linux e
-Android. Nota de nomenclatura: **ARMv9 é um superset do ARMv8-A** (SVE2, MTE); o alvo
-prático de 64 bits é ARMv8-A/AArch64 — v9 vem de graça depois, por feature flag.
+Objetivo: abrir a cadeia ARMv6 → ARMv7 → AArch64 para 3DS, Raspberry Pi, Linux
+moderno (distros genéricas, não só o kernel Raspberry Pi bare-metal da F11) e
+Android. **Atualizado 2026-08-24 (decisão do usuário)**: ARMv9 passa a ser alvo real,
+não "de graça depois" — o `virtual-arm-box` precisa rodar Linux moderno de forma
+mais ampla que só Raspberry Pi (candidato natural: reviver a rota `virt64`/QEMU
+`virt` genérico, B6.6.6, hoje [REFINAR]/em espera atrás da F11). Consequência direta
+para a Trilha B7 (cobertura de ISA): extensões ARMv8.1+/ARMv9.x antes excluídas de
+`docs/isa-nao-aplicavel.tsv` por "posterior ao Cortex-A53" precisam de nova triagem
+sob este alvo mais amplo — ver nota em `b7-plano-cobertura-isa.md`.
 
 ### Mapa dispositivo → core → arquitetura
 

@@ -1,5 +1,10 @@
 # arm-jitter
 
+> 🎯 **Meta do projeto**: emular ARM 100%. Se uma arquitetura/feature ARM existe — de v4T até a
+> mais recente AArch64/ARMv9.x, qualquer perfil, qualquer extensão opcional real — ela é alvo,
+> cedo ou tarde; nada fica de fora por parecer grande ou raro demais. Ver a regra completa no
+> topo de [`tasks/README.md`](tasks/README.md).
+
 [![CI](https://github.com/vitorsilverio/arm-jitter/actions/workflows/ci.yml/badge.svg)](https://github.com/vitorsilverio/arm-jitter/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/dev.vitorsilverio/arm-jitter)](https://central.sonatype.com/artifact/dev.vitorsilverio/arm-jitter)
 

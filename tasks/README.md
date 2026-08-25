@@ -3,6 +3,36 @@
 Cada arquivo aqui é uma task **autocontida**, escrita para ser executada por um agente
 sem contexto prévio do projeto. Leia este arquivo inteiro antes de executar qualquer task.
 
+## 🎯 Regra máxima do projeto (decisão do usuário, 2026-08-24 — NUNCA reabrir sem ele)
+
+**Este emulador vai emular ARM 100%. Se alguma arquitetura ARM existe — v4T até a mais recente
+AArch64/ARMv9.x, qualquer perfil (A/R/M), qualquer extensão opcional real (`FEAT_*`) — ela é alvo
+deste projeto, cedo ou tarde. Nenhuma instrução, nenhum registrador, nenhuma feature ARM real fica
+de fora por parecer "grande demais", "rara demais", "posterior ao hardware que mirávamos hoje" ou
+"nenhum consumidor usa isso agora". "Alvo atual" (Cortex-A53/raspi3, por exemplo) é sobre ORDEM de
+trabalho, nunca sobre ESCOPO final — o escopo final é ARM inteiro.**
+
+Consequências práticas, obrigatórias para toda sessão:
+
+- **`docs/isa-nao-aplicavel.tsv` nunca é "está fora do nosso alvo".** A única entrada legítima é
+  "esta versão de arquitetura/feature ainda não foi implementada, com a fonte que prova a versão
+  real que a introduziu" — a instrução continua sendo trabalho PENDENTE, só reclassificado por
+  degrau cronológico dentro do próprio ARM, nunca descartado. Quando alguma trilha (B7/B7-plano)
+  chegar perto de "tudo ✅" numa arquitetura, o próximo degrau natural é a versão SEGUINTE do ARM,
+  não parar.
+- **Nenhuma task decide "isso está fora de escopo para sempre".** Uma task pode legitimamente dizer
+  "fora do orçamento desta sessão, candidata a task própria" — isso é sequenciamento, não exclusão.
+  Nunca "não vamos implementar isso".
+- Precedentes que já geraram este princípio e continuam valendo: `feedback-nunca-excluir-instrucao-arm`
+  (memória do agente, sobre EL1/EL2/EL3 — "se existe no ARM, emular, mesmo que exija EL2/EL3
+  completos") e a decisão de 2026-08-24 sobre ARMv9 ser alvo real do `virtual-arm-box` (não "vem de
+  graça depois", ver `ROADMAP.md` Trilha B) — este bloco generaliza os dois para TODA a superfície
+  do ARM, não só os casos que já apareceram.
+- Se uma sessão encontrar uma instrução/feature/versão de arquitetura que parece implicar trabalho
+  enorme (ex.: um perfil inteiro, um modo de exceção completo, uma extensão SIMD grande) — a reação
+  correta é **quebrar em tasks menores e enfileirar**, nunca excluir. Documentar o tamanho é
+  informação; decidir não fazer não é uma opção disponível para o agente sozinho.
+
 ## Protocolo de execução (obrigatório)
 
 1. Leia a task inteira, incluindo **Armadilhas** e **Não fazer**.

@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **71%** — 2740 de 3832 células aplicáveis decodificam.
+> **71%** — 2740 de 3836 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **62%** (672/1082) |
+| A64 | **61%** (672/1086) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 62% (672/1082) |
+| A64 — AArch64 | 1161 | A64 61% (672/1086) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2379,10 +2379,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `EXT_d` | ✅ |
 | `EXT_q` | ✅ |
 | `TBL_TBX` | ✅ |
-| `LUTI2_1b` | · |
-| `LUTI2_1h` | · |
-| `LUTI4_1b` | · |
-| `LUTI4_2h` | · |
+| `LUTI2_1b` | ❌ |
+| `LUTI2_1h` | ❌ |
+| `LUTI4_1b` | ❌ |
+| `LUTI4_2h` | ❌ |
 | `UZP1` | ✅ |
 | `UZP2` | ✅ |
 | `TRN1` | ✅ |
