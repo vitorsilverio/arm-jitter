@@ -212,18 +212,7 @@ Registradas para não virarem tasks vagas; um agente comum NÃO deve tentá-las:
    causada pelo Fix C (`ASM_CHECK` não liga loop-superblocos; `JitRuntime.reset()` se
    comporta byte-a-byte como o `blockCache().clear()` antigo nesse backend) — pré-
    existente, versão de origem desconhecida, não investigada.
-7. **Bug real achado na sessão de B6.3.1 (2026-07-25), NÃO corrigido (fora do
-   "Inclui" daquela task)**: `Ir64BlockExecutor#executeAlu` (B6.1, `Ir64Op.Alu64`
-   — forma imediata de `ADD`/`SUB`) resolve `Rd|SP`/`Rn|SP` checando SÓ a flag
-   booleira (`dstIsStackPointer`/`src1IsStackPointer`), nunca o ÍNDICE do
-   registrador (`== 31`) — o pseudocódigo real do manual (`if n == 31 then SP[]
-   else X[n]`; `if d == 31 && !setflags then SP[] = result else X[d] = result`)
-   e o próprio `readBaseRegister`/`writeBaseRegister` (load/store, mesmo
-   arquivo) checam o índice. Confirmado com um teste descartável (não commitado)
-   que `add x4, x5, #0x123` (`Rd=4`, `Rn=5`, nenhum dos dois é `31`) grava o
-   resultado em `SP` em vez de `X4` — qualquer `ADD`/`SUB` (imediato) real com
-   `Rd`/`Rn` != 31 está quebrado hoje. O código NOVO de B6.3.1
-   (`Ir64Op.AluExtendedRegister`) implementa a checagem CORRETA (por índice),
-   não copia esse padrão. Precisa de uma task de correção dedicada (fix +
-   revisão dos testes de B6.1 que não pegaram isso porque coincidiam com `SP`
-   default `0`).
+7. ~~Bug real achado na sessão de B6.3.1~~ ✅ **CORRIGIDO pela `B6.14`, 2026-08-24** —
+   `Ir64BlockExecutor#executeAlu` resolvia `Rd|SP`/`Rn|SP` só pela flag do decoder, nunca pelo
+   índice; ganhou a mesma checagem dupla de `executeAluExtendedRegister`. Ver
+   `trilha-b-arquiteturas/b6.14-aarch64-alu-immediate-sp-bug.md`.

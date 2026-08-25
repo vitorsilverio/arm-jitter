@@ -369,7 +369,14 @@ public final class Ir64BlockExecutor {
     }
 
     private boolean executeAlu(Aarch64Core core, Ir64Op.Alu64 op) {
-        long operand1 = op.src1IsStackPointer() ? core.sp() : core.xForWidth(op.src1(), op.wide());
+        // B6.14: `dstIsStackPointer`/`src1IsStackPointer` marcam a CLASSE do campo no encoding
+        // (Rd|SP / Rn|SP), não que o operando SEJA SP — só é SP quando o índice também é `31`
+        // (`ALU_STACK_POINTER_ENCODING`), mesma checagem dupla que `executeAluExtendedRegister`
+        // já faz. Faltava aqui: um `add x4, x5, #imm` (Rd=4, Rn=5, sem `S`) lia SP em vez de X5 e
+        // gravava o resultado em SP em vez de X4 — bug real, achado investigando corrupção de SP
+        // no boot do `Raspi364Machine` (F11/B6.13).
+        long operand1 = op.src1IsStackPointer() && op.src1() == ALU_STACK_POINTER_ENCODING
+                ? core.sp() : core.xForWidth(op.src1(), op.wide());
         long operand2 = op.immediate();
         AluResult result = switch (op.opcode()) {
             case ADD -> addWithFlags(operand1, operand2, op.wide());
@@ -381,7 +388,7 @@ public final class Ir64BlockExecutor {
         if (op.setFlags()) {
             core.pstate().setNzcv(result.negative, result.zero, result.carry, result.overflow);
         }
-        if (op.dstIsStackPointer()) {
+        if (op.dstIsStackPointer() && op.dst() == ALU_STACK_POINTER_ENCODING) {
             core.setSp(op.wide() ? result.value : (result.value & 0xFFFF_FFFFL));
         } else {
             core.setXForWidth(op.dst(), result.value, op.wide());

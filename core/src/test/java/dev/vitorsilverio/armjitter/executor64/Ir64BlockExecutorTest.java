@@ -132,6 +132,50 @@ class Ir64BlockExecutorTest {
         assertFalse(core.pstate().negative());
     }
 
+    // ── B6.14: ADD/SUB (immediate) — Rd/Rn|SP resolvidos pelo ÍNDICE, não só pela flag ──────
+
+    @Test
+    void addImmediateNonSpOperandsNeverTouchStackPointer() {
+        Aarch64Core core = newCore(16);
+        // add x4, x5, #0x123 (nem Rd nem Rn é 31) — antes do fix, `executeAlu` ignorava o
+        // índice e sempre lia/gravava SP (bug real achado investigando corrupção de SP no boot
+        // do Raspi364Machine, F11/B6.13/B6.14).
+        putWord(core, 0, 0x91048ca4);
+        core.setX(5, 10);
+        core.setSp(0xDEAD_BEEFL);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(10 + 0x123L, core.x(4), "resultado deveria ir para X4, não SP");
+        assertEquals(0xDEAD_BEEFL, core.sp(), "SP não deveria ser tocado");
+    }
+
+    @Test
+    void addImmediateSpAsBothRnAndRdUpdatesStackPointer() {
+        Aarch64Core core = newCore(16);
+        // add sp, sp, #0x30 — Rd=Rn=31, forma real usada em prólogos.
+        putWord(core, 0, 0x9100c3ff);
+        core.setSp(0x1000);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x1030L, core.sp());
+    }
+
+    @Test
+    void addImmediateSpAsSourceOnlyWritesNormalDestination() {
+        Aarch64Core core = newCore(16);
+        // add x2, sp, #8 — Rn=31 (lê SP), Rd=2 (grava X2, não SP).
+        putWord(core, 0, 0x910023e2);
+        core.setSp(0x2000);
+        core.setX(2, 0xDEAD_BEEFL);
+
+        new Ir64BlockExecutor().step(core);
+
+        assertEquals(0x2008L, core.x(2));
+        assertEquals(0x2000L, core.sp(), "SP não deveria ser modificado por ADD, só lido");
+    }
+
     @Test
     void retReturnsToLinkRegisterValue() {
         Aarch64Core core = newCore(16);
