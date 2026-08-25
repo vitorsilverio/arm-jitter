@@ -17,7 +17,9 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 ///
 /// Registradores atendidos (todos `op0=3,op1=0`, únicos válidos para os registradores "gerais" de
 /// EL1 cobertos por B6.6.1): `SCTLR_EL1` (só o bit `M`, habilita a MMU — A64 não tem bit `V`/
-/// vetores-altos, o vetor de exceção é sempre `VBAR_EL1`), `TTBR0_EL1`, `TCR_EL1`, `MAIR_EL1`
+/// vetores-altos, o vetor de exceção é sempre `VBAR_EL1`), `TTBR0_EL1`, `TTBR1_EL1` (achado real
+/// da F11 — liga de verdade em {@link TranslatingAddressSpace64#setTtbr1}, seleção por VA[55] no
+/// walk), `TCR_EL1`, `MAIR_EL1`
 /// ligam em {@link TranslatingAddressSpace64}; `ESR_EL1`/`FAR_EL1`/`VBAR_EL1`/`ELR_EL1`/
 /// `SPSR_EL1` (B6.6.4) delegam DIRETAMENTE para {@link Aarch64ExceptionState} (via
 /// {@link Aarch64Core#exceptionState()}) — SEM cópia própria: antes de B6.6.4 este barramento
@@ -74,8 +76,13 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private final Stage2TranslatingAddressSpace64 stage2;
 
     private long ttbr0;
+    private long ttbr1;
     private long tcr;
     private long mair;
+
+    /// `CPACR_EL1` (achado real da F11, gap que bloqueava o boot logo após `SCTLR_EL1`) —
+    /// armazenamento puro, mesma disciplina de {@code CPTR_EL2}/{@code CPTR_EL3}: sem trap real.
+    private long cpacrEl1;
 
     // ── B10.2: registradores de sistema EL2, armazenamento puro (sem side effect — ver javadoc de
     // ── cada constante em Aarch64SystemRegisterId). ESR_EL2/FAR_EL2/VBAR_EL2/ELR_EL2/SPSR_EL2 NÃO
@@ -132,8 +139,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         // MMU/exceção, um consumidor real (F11/B6.6.6) precisa instalar/compor um bus de timer
         // separado quando existir.
         return switch (register) {
-            case SCTLR_EL1, TTBR0_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1, VBAR_EL1, ELR_EL1,
-                 SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
+            case SCTLR_EL1, CPACR_EL1, TTBR0_EL1, TTBR1_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1,
+                 VBAR_EL1, ELR_EL1, SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
                  SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
                  SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, PAR_EL1,
                  MDSCR_EL1, OSLAR_EL1, OSLSR_EL1, DBGBVR0_EL1, DBGBCR0_EL1, DBGWVR0_EL1,
@@ -146,7 +153,9 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     public long read(Aarch64SystemRegisterId register) {
         return switch (register) {
             case SCTLR_EL1 -> sctlrValue();
+            case CPACR_EL1 -> cpacrEl1;
             case TTBR0_EL1 -> ttbr0;
+            case TTBR1_EL1 -> ttbr1;
             case TCR_EL1 -> tcr;
             case MAIR_EL1 -> mair;
             case ESR_EL1 -> exceptionState.esr1();
@@ -191,9 +200,14 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     public void write(Aarch64SystemRegisterId register, long value) {
         switch (register) {
             case SCTLR_EL1 -> mmu.setMmuEnabled((value & SCTLR_M_BIT) != 0);
+            case CPACR_EL1 -> cpacrEl1 = value;
             case TTBR0_EL1 -> {
                 ttbr0 = value;
                 mmu.setTtbr0(value);
+            }
+            case TTBR1_EL1 -> {
+                ttbr1 = value;
+                mmu.setTtbr1(value);
             }
             case TCR_EL1 -> {
                 tcr = value;

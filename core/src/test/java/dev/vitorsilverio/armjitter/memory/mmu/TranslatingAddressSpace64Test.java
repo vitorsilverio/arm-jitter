@@ -420,6 +420,34 @@ class TranslatingAddressSpace64Test {
     }
 
     @Test
+    void ttbr1ResolveEspacoDeEnderecoAltoSelecionadoPeloBit55() {
+        // F11: kernel8.img real programa TTBR1_EL1 com uma tabela L0 PRÓPRIA para o espaço de
+        // endereço do kernel (VA[55]=1) — B6.13 refutou a hipótese "bit 63 seleciona"
+        // instrumentando o boot real; o QEMU (aa64_va_parameters) usa bit 55.
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+
+        long ttbr1L0 = 0x0090_0000L;
+        long ttbr1L3Page = 0x0091_0000L;
+        long paViaTtbr1 = 0x0092_0000L;
+        physical.write64(ttbr1L0, tableDescriptor(ttbr1L0 + 0x1000));
+        physical.write64(ttbr1L0 + 0x1000, tableDescriptor(ttbr1L0 + 0x2000));
+        physical.write64(ttbr1L0 + 0x2000, tableDescriptor(ttbr1L3Page));
+        // VA_IDENTITY (0x0010_0000) tem índice L3 = 0x100 (não 0) — mesmo índice usado por
+        // newMmu() para o L3_BASE original, replicado aqui para a tabela própria de TTBR1.
+        physical.write64(ttbr1L3Page + 0x100 * 8, pageDescriptor(paViaTtbr1, AP_FULL_ACCESS, false, false));
+        mmu.setTtbr1(ttbr1L0);
+
+        long vaHigh = (1L << 55) | VA_IDENTITY; // mesmos índices L1/L2/L3 de VA_IDENTITY, bit55 setado
+        mmu.write32(vaHigh, 0x1111_2222);
+
+        assertEquals(0x1111_2222, physical.read32(paViaTtbr1), "VA[55]=1 deve usar a tabela de TTBR1, não TTBR0");
+        // TTBR0 continua servindo o VA sem o bit 55 — as duas tabelas coexistem.
+        assertEquals(0, physical.read32(PA_IDENTITY), "TTBR0 não deve ser tocado pela escrita via TTBR1");
+        assertEquals(0x1111_2222, mmu.read32(vaHigh));
+    }
+
+    @Test
     void fisicoContinuaAcessivelDiretamenteSemMmu() {
         // G3: TranslatingAddressSpace64 é um wrapper novo; o AddressSpace64 físico continua
         // funcionando sozinho para quem (armbox Aarch64LinuxMachine, B6.2) não usa MMU.

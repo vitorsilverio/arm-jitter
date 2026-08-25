@@ -231,9 +231,15 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_SCTLR = 1;
     private static final int SYSREG_CRM_SCTLR = 0;
     private static final int SYSREG_OP2_SCTLR = 0;
+    private static final int SYSREG_CRN_CPACR = 1;
+    private static final int SYSREG_CRM_CPACR = 0;
+    private static final int SYSREG_OP2_CPACR = 2;
     private static final int SYSREG_CRN_TTBR0 = 2;
     private static final int SYSREG_CRM_TTBR0 = 0;
     private static final int SYSREG_OP2_TTBR0 = 0;
+    private static final int SYSREG_CRN_TTBR1 = 2;
+    private static final int SYSREG_CRM_TTBR1 = 0;
+    private static final int SYSREG_OP2_TTBR1 = 1;
     private static final int SYSREG_CRN_TCR = 2;
     private static final int SYSREG_CRM_TCR = 0;
     private static final int SYSREG_OP2_TCR = 2;
@@ -366,6 +372,36 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_ID_AA64MMFR0 = 0;
     private static final int SYSREG_CRM_ID_AA64MMFR0 = 7;
     private static final int SYSREG_OP2_ID_AA64MMFR0 = 0;
+    private static final int SYSREG_CRN_ID_AA64MMFR1 = 0;
+    private static final int SYSREG_CRM_ID_AA64MMFR1 = 7;
+    private static final int SYSREG_OP2_ID_AA64MMFR1 = 1;
+    private static final int SYSREG_CRN_ID_AA64MMFR2 = 0;
+    private static final int SYSREG_CRM_ID_AA64MMFR2 = 7;
+    private static final int SYSREG_OP2_ID_AA64MMFR2 = 2;
+    private static final int SYSREG_CRN_ID_AA64MMFR3 = 0;
+    private static final int SYSREG_CRM_ID_AA64MMFR3 = 7;
+    private static final int SYSREG_OP2_ID_AA64MMFR3 = 3;
+    private static final int SYSREG_CRN_ID_AA64MMFR4 = 0;
+    private static final int SYSREG_CRM_ID_AA64MMFR4 = 7;
+    private static final int SYSREG_OP2_ID_AA64MMFR4 = 4;
+    private static final int SYSREG_CRN_ID_AA64PFR1 = 0;
+    private static final int SYSREG_CRM_ID_AA64PFR1 = 4;
+    private static final int SYSREG_OP2_ID_AA64PFR1 = 1;
+    private static final int SYSREG_CRN_ID_AA64ZFR0 = 0;
+    private static final int SYSREG_CRM_ID_AA64ZFR0 = 4;
+    private static final int SYSREG_OP2_ID_AA64ZFR0 = 4;
+    private static final int SYSREG_CRN_ID_AA64DFR1 = 0;
+    private static final int SYSREG_CRM_ID_AA64DFR1 = 5;
+    private static final int SYSREG_OP2_ID_AA64DFR1 = 1;
+    private static final int SYSREG_CRN_ID_AA64ISAR1 = 0;
+    private static final int SYSREG_CRM_ID_AA64ISAR1 = 6;
+    private static final int SYSREG_OP2_ID_AA64ISAR1 = 1;
+    private static final int SYSREG_CRN_ID_AA64ISAR2 = 0;
+    private static final int SYSREG_CRM_ID_AA64ISAR2 = 6;
+    private static final int SYSREG_OP2_ID_AA64ISAR2 = 2;
+    private static final int SYSREG_CRN_REVIDR = 0;
+    private static final int SYSREG_CRM_REVIDR = 0;
+    private static final int SYSREG_OP2_REVIDR = 6;
     private static final int SYSREG_CRN_ID_AA64DFR0 = 0;
     private static final int SYSREG_CRM_ID_AA64DFR0 = 5;
     private static final int SYSREG_OP2_ID_AA64DFR0 = 0;
@@ -3586,6 +3622,36 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_ID_AA64MMFR0 && crm == SYSREG_CRM_ID_AA64MMFR0 && op2 == SYSREG_OP2_ID_AA64MMFR0) {
             return Aarch64SystemRegisterId.ID_AA64MMFR0_EL1;
         }
+        if (crn == SYSREG_CRN_ID_AA64MMFR1 && crm == SYSREG_CRM_ID_AA64MMFR1 && op2 == SYSREG_OP2_ID_AA64MMFR1) {
+            return Aarch64SystemRegisterId.ID_AA64MMFR1_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64MMFR2 && crm == SYSREG_CRM_ID_AA64MMFR2 && op2 == SYSREG_OP2_ID_AA64MMFR2) {
+            return Aarch64SystemRegisterId.ID_AA64MMFR2_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64MMFR3 && crm == SYSREG_CRM_ID_AA64MMFR3 && op2 == SYSREG_OP2_ID_AA64MMFR3) {
+            return Aarch64SystemRegisterId.ID_AA64MMFR3_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64MMFR4 && crm == SYSREG_CRM_ID_AA64MMFR4 && op2 == SYSREG_OP2_ID_AA64MMFR4) {
+            return Aarch64SystemRegisterId.ID_AA64MMFR4_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64PFR1 && crm == SYSREG_CRM_ID_AA64PFR1 && op2 == SYSREG_OP2_ID_AA64PFR1) {
+            return Aarch64SystemRegisterId.ID_AA64PFR1_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64ZFR0 && crm == SYSREG_CRM_ID_AA64ZFR0 && op2 == SYSREG_OP2_ID_AA64ZFR0) {
+            return Aarch64SystemRegisterId.ID_AA64ZFR0_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64DFR1 && crm == SYSREG_CRM_ID_AA64DFR1 && op2 == SYSREG_OP2_ID_AA64DFR1) {
+            return Aarch64SystemRegisterId.ID_AA64DFR1_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64ISAR1 && crm == SYSREG_CRM_ID_AA64ISAR1 && op2 == SYSREG_OP2_ID_AA64ISAR1) {
+            return Aarch64SystemRegisterId.ID_AA64ISAR1_EL1;
+        }
+        if (crn == SYSREG_CRN_ID_AA64ISAR2 && crm == SYSREG_CRM_ID_AA64ISAR2 && op2 == SYSREG_OP2_ID_AA64ISAR2) {
+            return Aarch64SystemRegisterId.ID_AA64ISAR2_EL1;
+        }
+        if (crn == SYSREG_CRN_REVIDR && crm == SYSREG_CRM_REVIDR && op2 == SYSREG_OP2_REVIDR) {
+            return Aarch64SystemRegisterId.REVIDR_EL1;
+        }
         if (crn == SYSREG_CRN_ID_AA64DFR0 && crm == SYSREG_CRM_ID_AA64DFR0 && op2 == SYSREG_OP2_ID_AA64DFR0) {
             return Aarch64SystemRegisterId.ID_AA64DFR0_EL1;
         }
@@ -3595,8 +3661,14 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_SCTLR) {
             return Aarch64SystemRegisterId.SCTLR_EL1;
         }
+        if (crn == SYSREG_CRN_CPACR && crm == SYSREG_CRM_CPACR && op2 == SYSREG_OP2_CPACR) {
+            return Aarch64SystemRegisterId.CPACR_EL1;
+        }
         if (crn == SYSREG_CRN_TTBR0 && crm == SYSREG_CRM_TTBR0 && op2 == SYSREG_OP2_TTBR0) {
             return Aarch64SystemRegisterId.TTBR0_EL1;
+        }
+        if (crn == SYSREG_CRN_TTBR1 && crm == SYSREG_CRM_TTBR1 && op2 == SYSREG_OP2_TTBR1) {
+            return Aarch64SystemRegisterId.TTBR1_EL1;
         }
         if (crn == SYSREG_CRN_TCR && crm == SYSREG_CRM_TCR && op2 == SYSREG_OP2_TCR) {
             return Aarch64SystemRegisterId.TCR_EL1;

@@ -27,6 +27,13 @@ public enum Aarch64SystemRegisterId {
     SCTLR_EL1,
     /// `TTBR0_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=0`) — base da tabela de tradução.
     TTBR0_EL1,
+    /// `TTBR1_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=1`) — base da tabela de tradução do espaço de
+    /// endereço ALTO (kernel, VA com bit 55 setado). Achado real da F11: a hipótese original de
+    /// `B6.13` (bit 63 selecionaria) foi refutada por instrumentação — o QEMU real
+    /// (`aa64_va_parameters`) seleciona por bit 55; implementado de verdade aqui (não mais
+    /// armazenamento puro) porque o `kernel8.img` real programa este registrador antes de ativar
+    /// a MMU, e o espaço de endereço do próprio kernel depende dele.
+    TTBR1_EL1,
     /// `TCR_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=2`) — controle de tradução (granule/tamanho).
     TCR_EL1,
     /// `MAIR_EL1` (`op0=3,op1=0,CRn=10,CRm=2,op2=0`) — atributos de memória indexados.
@@ -41,6 +48,13 @@ public enum Aarch64SystemRegisterId {
     ELR_EL1,
     /// `SPSR_EL1` (`op0=3,op1=0,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção.
     SPSR_EL1,
+    /// `CPACR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=2`) — controle de trap de FP/SIMD/SVE para EL1
+    /// (mesmo `CRn`/`CRm` de {@link #SCTLR_EL1}, só `op2` diferente — achado real da F11, gap que
+    /// bloqueava `cpacr_el1` sendo escrito no início de `head.S`). Armazenamento puro, mesma
+    /// disciplina de {@code CPTR_EL2}/{@code CPTR_EL3} (B10.2/B10.3): sem trap real modelado, o
+    /// decoder A64 deste emulador nunca consulta os bits `FPEN` para decidir se uma instrução VFP/
+    /// AdvSIMD é permitida.
+    CPACR_EL1,
 
     // ── B6.6.7: identidade da CPU, resolvidos direto pelo `Aarch64Core` (ver javadoc da classe) ──
 
@@ -73,6 +87,40 @@ public enum Aarch64SystemRegisterId {
     /// `TranslatingAddressSpace64`/B6.6.2 já suporta em VA), `TGran4[31:28]=0b0000` (granule de
     /// 4KiB suportado — único granule que este emulador decodifica).
     ID_AA64MMFR0_EL1,
+    /// `ID_AA64MMFR1_EL1` (`op0=3,op1=0,CRn=0,CRm=7,op2=1`) — features de gerência de memória
+    /// (parte 2: `VHE`/`HPDS`/`LOR`/`PAN`/`VMIDBits`/...). Constante `0` (nenhuma extensão
+    /// opcional implementada), mesma disciplina de {@link #ID_AA64ISAR0_EL1} — achado real da F11
+    /// (`kernel8.img` real lê este registrador logo depois de `CPACR_EL1` em `head.S`).
+    ID_AA64MMFR1_EL1,
+    /// `ID_AA64MMFR2_EL1` (`CRn=0,CRm=7,op2=2`) — features de gerência de memória (parte 3).
+    /// Constante `0`, mesma disciplina de {@link #ID_AA64MMFR1_EL1} — achado real da F11.
+    ID_AA64MMFR2_EL1,
+    /// `ID_AA64MMFR3_EL1` (`CRn=0,CRm=7,op2=3`) — features de gerência de memória (parte 4:
+    /// `MEC`/`S1PIE`/`S1POE`/`SCTLRX`/...). Constante `0`, achado real da F11 (bloqueio
+    /// imediatamente seguinte a `ID_AA64MMFR1_EL1` no `head.S` real).
+    ID_AA64MMFR3_EL1,
+    /// `ID_AA64MMFR4_EL1` (`CRn=0,CRm=7,op2=4`) — features de gerência de memória (parte 5).
+    /// Constante `0`, mesma disciplina de {@link #ID_AA64MMFR1_EL1}.
+    ID_AA64MMFR4_EL1,
+    /// `ID_AA64PFR1_EL1` (`CRn=0,CRm=4,op2=1`) — features de processamento (parte 2: `BT`/`SSBS`/
+    /// `MTE`/`SME`/...). Constante `0` (nenhuma extensão opcional implementada).
+    ID_AA64PFR1_EL1,
+    /// `ID_AA64ZFR0_EL1` (`CRn=0,CRm=4,op2=4`) — features de SVE. Constante `0` (SVE não
+    /// implementada — coerente com {@link #ID_AA64PFR0_EL1}, que não anuncia SVE).
+    ID_AA64ZFR0_EL1,
+    /// `ID_AA64DFR1_EL1` (`CRn=0,CRm=5,op2=1`) — features de debug (parte 2). Constante `0`.
+    ID_AA64DFR1_EL1,
+    /// `ID_AA64ISAR1_EL1` (`CRn=0,CRm=6,op2=1`) — extensões de conjunto de instrução (parte 2:
+    /// `DPB`/`APA`/`API`/`JSCVT`/`FCMA`/...). Constante `0`, mesma disciplina de
+    /// {@link #ID_AA64ISAR0_EL1}.
+    ID_AA64ISAR1_EL1,
+    /// `ID_AA64ISAR2_EL1` (`CRn=0,CRm=6,op2=2`) — extensões de conjunto de instrução (parte 3).
+    /// Constante `0`, mesma disciplina de {@link #ID_AA64ISAR0_EL1}.
+    ID_AA64ISAR2_EL1,
+    /// `REVIDR_EL1` (`CRn=0,CRm=0,op2=6`) — revisão específica do implementador, sem significado
+    /// arquitetural padronizado (`ARM DDI 0487 D19.2.109`). Constante `0` (mesmo valor default
+    /// documentado quando o implementador não define nada específico).
+    REVIDR_EL1,
     /// `ID_AA64DFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=5,op2=0`) — features de debug. Constante:
     /// `DebugVer[3:0]=0b0110` (arquitetura de debug ARMv8, valor real de referência — nenhum
     /// registrador de debug em si é implementado, só o campo de versão para não confundir

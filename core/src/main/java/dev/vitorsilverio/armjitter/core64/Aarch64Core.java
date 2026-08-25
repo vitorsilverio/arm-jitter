@@ -115,6 +115,23 @@ public final class Aarch64Core {
     /// `ID_AA64MMFR0_EL1` constante: `PARange[3:0]=0b0101` (48 bits, casando com
     /// `TranslatingAddressSpace64`), `TGran4[31:28]=0b0000` (4KiB suportado).
     private static final long ID_AA64MMFR0_EL1_VALUE = 0x5L;
+    /// `ID_AA64MMFR1_EL1` constante: `0` (nenhuma extensão opcional implementada — `VHE`/`HPDS`/
+    /// `LOR`/`PAN`/`VMIDBits`/... ausentes, mesma disciplina de {@link #ID_AA64ISAR0_EL1_VALUE}).
+    private static final long ID_AA64MMFR1_EL1_VALUE = 0L;
+    /// `ID_AA64MMFR2_EL1`/`ID_AA64MMFR3_EL1`/`ID_AA64MMFR4_EL1`/`ID_AA64PFR1_EL1`/
+    /// `ID_AA64ZFR0_EL1`/`ID_AA64DFR1_EL1`/`ID_AA64ISAR1_EL1`/`ID_AA64ISAR2_EL1`/`REVIDR_EL1`
+    /// constantes: `0` (nenhuma extensão opcional implementada / sem revisão específica de
+    /// implementador), mesma disciplina de {@link #ID_AA64MMFR1_EL1_VALUE} — achados reais da F11
+    /// (`kernel8.img` real sonda todo este grupo em sequência em `head.S`/`cpufeature.c`).
+    private static final long ID_AA64MMFR2_EL1_VALUE = 0L;
+    private static final long ID_AA64MMFR3_EL1_VALUE = 0L;
+    private static final long ID_AA64MMFR4_EL1_VALUE = 0L;
+    private static final long ID_AA64PFR1_EL1_VALUE = 0L;
+    private static final long ID_AA64ZFR0_EL1_VALUE = 0L;
+    private static final long ID_AA64DFR1_EL1_VALUE = 0L;
+    private static final long ID_AA64ISAR1_EL1_VALUE = 0L;
+    private static final long ID_AA64ISAR2_EL1_VALUE = 0L;
+    private static final long REVIDR_EL1_VALUE = 0L;
     /// `ID_AA64DFR0_EL1` constante: `DebugVer[3:0]=0b0110` (ARMv8, valor de referência — nenhum
     /// registrador de debug implementado, só o campo de versão).
     private static final long ID_AA64DFR0_EL1_VALUE = 0x6L;
@@ -360,8 +377,11 @@ public final class Aarch64Core {
     /// {@link #systemRegisterBus()}), delegado ao executor decidir a rota.
     public boolean handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId register) {
         return switch (register) {
-            case CURRENT_EL, MPIDR_EL1, MIDR_EL1, ID_AA64PFR0_EL1, ID_AA64ISAR0_EL1,
-                 ID_AA64MMFR0_EL1, ID_AA64DFR0_EL1, TPIDR_EL1, CTR_EL0, DCZID_EL0 -> true;
+            case CURRENT_EL, MPIDR_EL1, MIDR_EL1, ID_AA64PFR0_EL1, ID_AA64PFR1_EL1,
+                 ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
+                 ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
+                 ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
+                 CTR_EL0, DCZID_EL0 -> true;
             default -> false;
         };
     }
@@ -383,6 +403,16 @@ public final class Aarch64Core {
             case ID_AA64PFR0_EL1 -> ID_AA64PFR0_EL1_VALUE;
             case ID_AA64ISAR0_EL1 -> ID_AA64ISAR0_EL1_VALUE;
             case ID_AA64MMFR0_EL1 -> ID_AA64MMFR0_EL1_VALUE;
+            case ID_AA64MMFR1_EL1 -> ID_AA64MMFR1_EL1_VALUE;
+            case ID_AA64MMFR2_EL1 -> ID_AA64MMFR2_EL1_VALUE;
+            case ID_AA64MMFR3_EL1 -> ID_AA64MMFR3_EL1_VALUE;
+            case ID_AA64MMFR4_EL1 -> ID_AA64MMFR4_EL1_VALUE;
+            case ID_AA64PFR1_EL1 -> ID_AA64PFR1_EL1_VALUE;
+            case ID_AA64ZFR0_EL1 -> ID_AA64ZFR0_EL1_VALUE;
+            case ID_AA64DFR1_EL1 -> ID_AA64DFR1_EL1_VALUE;
+            case ID_AA64ISAR1_EL1 -> ID_AA64ISAR1_EL1_VALUE;
+            case ID_AA64ISAR2_EL1 -> ID_AA64ISAR2_EL1_VALUE;
+            case REVIDR_EL1 -> REVIDR_EL1_VALUE;
             case ID_AA64DFR0_EL1 -> ID_AA64DFR0_EL1_VALUE;
             case TPIDR_EL1 -> tpidrEl1;
             case CTR_EL0 -> CTR_EL0_VALUE;

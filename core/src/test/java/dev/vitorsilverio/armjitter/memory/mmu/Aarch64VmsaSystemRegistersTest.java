@@ -91,6 +91,21 @@ class Aarch64VmsaSystemRegistersTest {
     }
 
     @Test
+    void cpacrEl1IsStorageOnlyAndDoesNotTouchMmu() {
+        // F11: msr cpacr_el1, xzr (visto no head.S real do kernel8.img do Raspberry Pi 3) não deve
+        // lançar nem afetar a MMU — mesma disciplina de CPTR_EL2/CPTR_EL3 (sem trap real modelado).
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(AddressSpace64.wrapping(new TestAddressSpace(0x1000)));
+        Aarch64VmsaSystemRegisters bus = new Aarch64VmsaSystemRegisters(mmu, coreWithoutCode());
+
+        bus.write(Aarch64SystemRegisterId.CPACR_EL1, 0L);
+        assertFalse(mmu.mmuEnabled());
+        assertEquals(0L, bus.read(Aarch64SystemRegisterId.CPACR_EL1));
+
+        bus.write(Aarch64SystemRegisterId.CPACR_EL1, 0x0030_0000L);
+        assertEquals(0x0030_0000L, bus.read(Aarch64SystemRegisterId.CPACR_EL1));
+    }
+
+    @Test
     void el2StorageOnlyRegistersRoundTrip() {
         // B10.2: sem side effect nenhum ainda (SCTLR_EL2.M NÃO deve tocar a MMU — essa é stage-1
         // de EL1; ligar stage-2 real é B10.8).

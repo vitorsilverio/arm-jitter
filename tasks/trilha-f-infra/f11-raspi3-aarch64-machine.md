@@ -118,3 +118,56 @@ só se algum arquivo do arm-jitter for tocado.
 - Antes de escrever qualquer periférico, **confirmar que os assets (`kernel8.img` + DTB do Pi 3)
   realmente estão publicados no `raspberrypi/firmware`** — se não estiverem (ex.: só existirem
   para Pi 4/`bcm2711`), documentar e devolver ao usuário em vez de trocar de alvo sem avisar.
+
+## Resultado (sessão 7, 2026-08-24/25)
+
+Retomada depois que `B6.9`/`B6.13`/`B6.14` fecharam (a última, 2026-08-24, corrigiu a corrupção
+real de `SP` em `ADD`/`SUB (immediate)` que era a causa raiz do sétimo bloqueio antigo, refutando
+a hipótese original de `B6.13` sobre `TTBR1_EL1`). Com o `.m2` local atualizado, o boot avançou
+MUITO além do ponto anterior (`0x139e82c`) e bateu 4 gaps reais novos, todos fechados no
+`arm-jitter` nesta mesma sessão (encodings conferidos via `aarch64-none-elf-as`/`objdump` reais,
+devkitA64 disponível — G1):
+
+1. **`CPACR_EL1`** (`op0=3,op1=0,CRn=1,CRm=0,op2=2`) — escrito logo após `SCTLR_EL1` em `head.S`,
+   nunca decodificado (mesmo `CRn`/`CRm` de `SCTLR_EL1`, só `op2` diferia). Armazenamento puro
+   (mesma disciplina de `CPTR_EL2`/`CPTR_EL3`).
+2. **Grupo inteiro `ID_AA64*` restante** (`CRn=0,CRm=4-7`: `ID_AA64PFR1_EL1`/`ID_AA64ZFR0_EL1`/
+   `ID_AA64DFR1_EL1`/`ID_AA64ISAR1_EL1`/`ID_AA64ISAR2_EL1`/`ID_AA64MMFR1_EL1`-`ID_AA64MMFR4_EL1`/
+   `REVIDR_EL1`) — `head.S`/`cpufeature.c` sondam todos em sequência; resolvidos de uma vez em vez
+   de gap-a-gap (cada iteração anterior custava um boot inteiro) — todos constantes `0`
+   (nenhuma extensão opcional implementada), mesma disciplina de `ID_AA64ISAR0_EL1`.
+3. **`TTBR1_EL1` implementado de verdade** (não só decodificado): `TranslatingAddressSpace64`
+   ganhou `setTtbr1`/segunda tabela-base; `walk()` agora seleciona `TTBR0`/`TTBR1` pelo bit **55**
+   do VA (fato já registrado por `B6.13` contra `aa64_va_parameters` real do QEMU — a hipótese de
+   `B6.13` sobre a MECÂNICA estava certa, só a causa do bloqueio antigo estava errada). Achado
+   real de teste: o VA de kernel usa índices L0-L3 diferentes do VA de identidade usado pelos
+   testes existentes — um teste inicial cometeu o mesmo erro (índice L3 errado), corrigido.
+
+Com os 3 fechados (arm-jitter `mvn -o test` verde, 2167+ testes, `mvn -o install` local), o
+backend **INTERPRETED roda 10 minutos inteiros sem lançar exceção nenhuma** — não há mais
+bloqueio "duro" conhecido, mas também não alcança `EARLYCON_BANNER` dentro do orçamento (o
+`@Timeout` de 10min interrompe antes de `MAX_SLICES` esgotar). Causa (boot genuinamente mais
+lento agora vs. laço ocioso real, mesmo padrão da investigação de silêncio da F3 em 2026-08-16)
+**não isolada nesta sessão** (disciplina de custo). O backend **JIT** foi tentado como alternativa
+mais barata e diverge MUITO mais cedo com uma falha DIFERENTE
+(`MemoryTranslationException64: TRANSLATION_FAULT_L3 em 0x200`, ~1s) — não investigado.
+
+**Achado operacional relevante**: dois processos `surefirebooter` órfãos de tentativas anteriores
+(mortas pelo agente mas não pelo SO) ficaram consumindo ~7,6GB de RAM, causando
+`OutOfMemoryError`/crash de JVM nas tentativas seguintes ("insufficient memory... Native memory
+allocation (mmap) failed") — resolvido matando os PIDs órfãos (`taskkill /F /T`) antes de repetir
+o teste. Vale checar processos `java.exe`/`surefirebooter` travados antes de sessões futuras desta
+task, caso o mesmo sintoma reapareça.
+
+`mvn -o test` verde no virtual-arm-box (suíte completa, 3 testes de marco textual voltam a
+`@Disabled` com o achado atualizado); G5 completo revalidado nesta sessão: arm-jitter ✅,
+gbaemu ✅, ndsemu ✅, armbox 40/41 (falha pré-existente `Armv7TortureTest`/`VfpRegisters`, não
+relacionada), n3dsemu ✅. Sem marco de release (nenhuma mudança de cobertura de ISA mensurada —
+estes registradores não entram no `docs/COBERTURA-ISA.md`, que mede A64 de forma ampla, não por
+task).
+
+**F11 segue 🟡 PARCIAL** — nenhum bloqueio "duro" (decode gap/exceção) restante conhecido, mas o
+aceite (`EARLYCON_BANNER` no console) ainda não foi alcançado. Candidatas à próxima sessão: (a)
+profiling do INTERPRETED (slices/s, procurar `WFI`/loop-e-volta) para separar "lento de verdade"
+de "preso"; (b) investigar a divergência do JIT separadamente (endereço `0x200` sugere algo bem
+anterior aos 3 gaps fechados aqui, possivelmente não relacionado).

@@ -56,8 +56,13 @@ class Aarch64IrqAndCpuIdentityTest {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
         for (Aarch64SystemRegisterId id : new Aarch64SystemRegisterId[] {
-                Aarch64SystemRegisterId.ID_AA64PFR0_EL1, Aarch64SystemRegisterId.ID_AA64ISAR0_EL1,
-                Aarch64SystemRegisterId.ID_AA64MMFR0_EL1, Aarch64SystemRegisterId.ID_AA64DFR0_EL1}) {
+                Aarch64SystemRegisterId.ID_AA64PFR0_EL1, Aarch64SystemRegisterId.ID_AA64PFR1_EL1,
+                Aarch64SystemRegisterId.ID_AA64ISAR0_EL1, Aarch64SystemRegisterId.ID_AA64ISAR1_EL1,
+                Aarch64SystemRegisterId.ID_AA64ISAR2_EL1, Aarch64SystemRegisterId.ID_AA64MMFR0_EL1,
+                Aarch64SystemRegisterId.ID_AA64MMFR1_EL1, Aarch64SystemRegisterId.ID_AA64MMFR2_EL1,
+                Aarch64SystemRegisterId.ID_AA64MMFR3_EL1, Aarch64SystemRegisterId.ID_AA64MMFR4_EL1,
+                Aarch64SystemRegisterId.ID_AA64ZFR0_EL1, Aarch64SystemRegisterId.ID_AA64DFR0_EL1,
+                Aarch64SystemRegisterId.ID_AA64DFR1_EL1, Aarch64SystemRegisterId.REVIDR_EL1}) {
             executor.executeOp(core, new Ir64Op.SystemRegister(true, id, 2));
         }
     }

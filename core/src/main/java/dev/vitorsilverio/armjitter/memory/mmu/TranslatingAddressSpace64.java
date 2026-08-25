@@ -89,6 +89,9 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
     private static final int ASID_SHIFT = 48;
     private static final long ASID_MASK = 0xFFFFL;
 
+    // ── seleção TTBR0/TTBR1 (achado real da F11/B6.13): bit 55 do VA, não bit 63 ──────
+    private static final int VA_TTBR_SELECT_BIT = 55;
+
     // ── micro-TLB: granularidade fixa de 4KiB, direto-mapeada, 256 entradas ─────────
     private static final int TLB_ENTRIES = 256;
     private static final long TLB_INDEX_MASK = TLB_ENTRIES - 1;
@@ -98,6 +101,13 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
     private final MicroTlb64 instructionTlb = new MicroTlb64();
 
     private long ttbr0Base;
+    /// `TTBR1_EL1` (achado real da F11, confirmado pela investigação de B6.13 contra
+    /// `aa64_va_parameters` real do QEMU): segunda tabela-base para o espaço de endereço alto do
+    /// kernel — {@link #walk} escolhe entre esta e {@link #ttbr0Base} olhando SÓ o bit 55 do VA
+    /// (não o bit 63, como a hipótese original errada de B6.13 presumia). Sem ASID próprio (D2,
+    /// mesma simplificação de {@link #asid} — `TCR_EL1.A1` não é lido, o ASID efetivo continua
+    /// vindo sempre de {@link #ttbr0Base}, coerente com o default de hardware `TCR_EL1.A1=0`).
+    private long ttbr1Base;
     private int asid;
     private long tcr;
     private long mair;
@@ -125,6 +135,15 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
     public void setTtbr0(long ttbr0) {
         this.ttbr0Base = ttbr0 & TABLE_OR_PAGE_ADDRESS_MASK;
         this.asid = (int) ((ttbr0 >>> ASID_SHIFT) & ASID_MASK);
+        translationGeneration++;
+    }
+
+    /// Define `TTBR1_EL1`: base da tabela L0 do espaço de endereço alto (mascarada para bits
+    /// `[47:12]`, mesmo alinhamento de {@link #setTtbr0}). Não muda {@link #asid} (D2, ver javadoc
+    /// de {@link #ttbr1Base}); bumpa {@link #translationGeneration} pela mesma razão de
+    /// {@link #setTtbr0} (troca de tabela de páginas do kernel).
+    public void setTtbr1(long ttbr1) {
+        this.ttbr1Base = ttbr1 & TABLE_OR_PAGE_ADDRESS_MASK;
         translationGeneration++;
     }
 
@@ -357,7 +376,7 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
 
     private WalkResult walk(long va, MemoryAccessType type) {
         walkCount++;
-        long tableBase = ttbr0Base;
+        long tableBase = ((va >>> VA_TTBR_SELECT_BIT) & 1L) != 0 ? ttbr1Base : ttbr0Base;
         for (int level = LEVEL_L0; level <= LEVEL_L3; level++) {
             int index = (int) ((va >>> indexShift(level)) & LEVEL_INDEX_MASK);
             long descriptor = physical.read64(tableBase + index * (long) DESCRIPTOR_SIZE_BYTES);
