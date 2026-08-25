@@ -31,13 +31,13 @@ não dá.
 | `2d_shapes` | 69 | 🟡 desenha | citro2d; fundo `#FFD8B0` lido corretamente |
 | `stereoscopic_2d` | 339 | 🟡 desenha | sem 3D estereoscópico (fora do escopo da G5), só o olho esquerdo |
 | `particles` | 60 | 🟡 desenha | fundo preto; sem *blending* configurável ainda |
-| `composite_scene` | — | ❌ | não termina o orçamento depois da B3.9; próxima parada não isolada |
-| `fragment_light` | 0 | ❌ | avançou com a B3.9 (já executa o `MemoryFill`, cor de fundo lida) mas ainda não desenha |
-| `lenny` | 0 | ❌ | idem |
+| `composite_scene` | 0 | ❌ | **causa real achada (G6.1)**: `fs:USER OpenArchive` (0x080C) não implementado → `svcBreak(PANIC)` do guest. Termina sozinho em <3000 fatias (não é mais timeout) |
+| `fragment_light` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x2F` (`CMP`) não implementado no `VertexShaderInterpreter` |
+| `lenny` | 0 | ❌ | **causa real achada (G6.1)**: mesmo gap de `fragment_light` — `CMP` (`0x2F`) |
 | `loop_subdivision` | 501 | 🟡 **desenha COM TEXTURA** (`tex0=32x32`) | destravado pela B3.9; a malha sai desalinhada porque **não há teste de profundidade** (item 2 do backlog) |
-| `textured_cube` | 0 | ❌ | idem; a validação visual do caminho de textura acabou vindo do `loop_subdivision` |
-| `cubemap` | — | ❌ | não termina o orçamento (timeout); não investigado |
-| `gpusprites` | — | ❌ | idem |
+| `textured_cube` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x3C` (`MAD`) não implementado no `VertexShaderInterpreter` |
+| `cubemap` | 0 | ❌ | **causa real achada (G6.1)**: `fs:USER OpenArchive`(0x080C)/`OpenFileDirectly`(0x0803) não implementados → `svcBreak(PANIC)`. Termina sozinho em <3000 fatias (não é mais timeout) |
+| `gpusprites` | 0 | ❌ | **causa real achada (G6.1)**: mesmo gap de `cubemap` — `fs:USER OpenArchive`/`OpenFileDirectly` |
 | `immediate` | 0 | ❌ | usa **submissão imediata de vértices** (`GPUREG_FIXEDATTRIB_INDEX = 0xF`), caminho não implementado |
 | `mipmap_fog` | 0 | ❌ | sem mipmap nem fog (`GPUREG_TEXUNIT*_LOD`, tabela de fog) |
 | `normal_mapping` | 0 | ❌ | depende de *fragment lighting* fixo, fora do escopo da G5 |
@@ -80,11 +80,38 @@ Corrigido pela **B3.9** (`tasks/trilha-b-arquiteturas/b3.9-vfp-vnmla-vnmls.md`).
 dedução por padrão de sintoma apontou para o lugar errado. Um relatório pode registrar hipóteses —
 mas elas têm que estar rotuladas como hipótese, não como achado.
 
+## G6.1 (2026-08-24) — causa real dos 6 exemplos que ainda não desenhavam
+
+Ver `g6.1-exemplos-restantes.md` para a task completa. Achado: **não era mais preciso usar a
+técnica `pc`/`sp`+`lr-4`** (essa era para instrução indefinida sem vetor — a assinatura da B3.9).
+Os 6 exemplos-alvo terminam sozinhos dentro de 3000 fatias com uma exceção/`svcBreak` explícitos —
+bastou capturar o log de "comando desconhecido" (`AbstractService#respondUnknown`, já existente
+desde a G3) e a mensagem de exceção do `VertexShaderInterpreter`. Duas causas reais, cada uma
+batendo em **3 exemplos**:
+
+1. **`fs:USER OpenArchive`(0x080C)/`OpenFileDirectly`(0x0803) não implementados** — `composite_scene`,
+   `cubemap`, `gpusprites` carregam ativos via RomFS; sem esses dois comandos, `FSUSER_OpenArchive`
+   falha e o próprio exemplo chama `svcBreak(PANIC)` (padrão comum dos exemplos do devkitPro: checar
+   `Result` e abortar se falhar). Nomes confirmados via `3dbrew.org/wiki/Filesystem_services`
+   (`0x08030204`=`OpenFileDirectly`, `0x080C00C2`=`OpenArchive`) — cabeçalho reconstruído a partir de
+   `normais`/`traduzidos` logados (`(normal<<6)|translate`) e batido contra a tabela real.
+2. **`VertexShaderInterpreter` não implementa `CMP` (opcodes `0x2E`-`0x2F`) nem `MAD`
+   (opcodes `0x30`-`0x3F`)** — confirmado via `3dbrew.org/wiki/Shader_Instruction_Set` (tabela real
+   do PICA200). `fragment_light`/`lenny` usam `CMP` (`0x2F`); `textured_cube` usa `MAD` (`0x3C`).
+   `MAD` é uma instrução fundamental do PICA200 (multiply-add, formato de 3 operandos) — gap real
+   com potencial de bloquear outros exemplos futuros também, não só este.
+
+Nenhuma correção aplicada nesta sessão (RomFS e `CMP`/`MAD` não são "pequenos e óbvios" — cada um é
+um subsistema/família de opcodes novo, mesmo critério que separou a B3.9 de G2.2/G3.3). Candidatas a
+task própria: **G6.2** (RomFS mínimo em `fs:USER` — `OpenArchive`+`OpenFileDirectly`+`ReadFile`) e
+**G6.3** (`VertexShaderInterpreter`: `CMP`+`MAD`, mesmo padrão de investigação-com-corpus-real da
+B3.9). Nenhuma pega automaticamente — mesma regra de sempre.
+
 ## Backlog gráfico derivado (ordem sugerida)
 
 1. ~~Dessincronia da fila GX~~ — **hipótese refutada**; a causa real era o gap de VFP, fechado pela
-   B3.9. Restam 4 exemplos parando mais adiante: repetir a técnica (`pc`/`sp` na parada +
-   desmontagem em `lr-4`) para cada um.
+   B3.9. ~~Restam 4 exemplos parando mais adiante~~ — **fechado pela G6.1** (ver seção acima: RomFS +
+   `CMP`/`MAD` do vertex shader).
 2. **Teste de profundidade** — é o que faz o `loop_subdivision` sair desalinhado; hoje é o defeito
    visual mais evidente do renderizador.
    Não há *depth buffer* no render pass de geometria: qualquer cena 3D com faces sobrepostas

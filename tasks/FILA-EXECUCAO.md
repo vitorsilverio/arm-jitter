@@ -160,8 +160,19 @@ opções (B8.8 arm-jitter vs. G6.1 n3dsemu vs. B6.14 F11); ver linha Q14 acima.
 Próximo item sem dependência pendente: **B8.11** (extensões opcionais A64 com triagem: cripto/PAC/
 MTE/`CPY*`/dot-product/matmul, ~180 — a maioria não se aplica ao Cortex-A53 do raspi3, entrega
 majoritariamente `isa-nao-aplicavel.tsv`) — não pego automaticamente, aguardando o usuário confirmar
-prioridade (mesma regra de sempre para o topo da fila; G6.1/B6.14 seguem candidatas também, e a
-nova candidata "`DUP`/`INS`/AdvSIMD copy" achada por esta sessão).
+prioridade (mesma regra de sempre para o topo da fila; B6.14 segue candidata também, e a nova
+candidata "`DUP`/`INS`/AdvSIMD copy" achada por esta sessão).
+
+✅ **G6.1 fechada 2026-08-24** (`arm-jitter/tasks/trilha-g-3ds/g6.1-exemplos-restantes.md`, escrita
+e executada na mesma sessão, priorizada pelo usuário entre B8.11/G6.1/B6.14/AdvSIMD-copy) — os 6
+exemplos `graphics/gpu` que ainda não desenhavam (`composite_scene`/`fragment_light`/`lenny`/
+`textured_cube`/`cubemap`/`gpusprites`) têm causa real diagnosticada, sem correção aplicada (não são
+"pequenas e óbvias"): 3 morrem por `fs:USER` sem RomFS (`OpenArchive`/`OpenFileDirectly` não
+implementados → `svcBreak(PANIC)` do guest), os outros 3 por `VertexShaderInterpreter` sem `CMP`
+(opcodes `0x2E`-`0x2F`) nem `MAD` (`0x30`-`0x3F`, instrução multiply-add fundamental do PICA200).
+Só documentação tocada (`tasks/`), nenhum código de produção — G5-invariante não se aplica. Ver
+**Resultado** na task. **Candidatas novas, não pegas automaticamente**: `G6.2` (RomFS mínimo em
+`fs:USER`) e `G6.3` (`VertexShaderInterpreter`: `CMP`+`MAD`).
 
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
