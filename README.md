@@ -56,7 +56,7 @@ funcional em JVM, 🟡 native-image roda mas ainda não compila blocos reais.
 Índice completo e status task-a-task: [tasks/README.md](tasks/README.md). Plano
 narrativo por trilha: [ROADMAP.md](ROADMAP.md).
 
-## Uso basico
+## Uso básico
 
 ```java
 AddressSpace memory = new AddressSpace() {
@@ -74,214 +74,6 @@ core.step();
 core.step(16);
 ```
 
-Para skip BIOS ou restaurar snapshot de boot, configure PC e CPSR juntos para que
-os bancos de registradores acompanhem o modo da CPU:
-
-```java
-core.setBankedRegister(CpuMode.SUPERVISOR, 13, 0x03007FE0);
-core.setBankedRegister(CpuMode.IRQ, 13, 0x03007FA0);
-core.configureExecutionState(
-        0x08000000,
-        CpuMode.SYSTEM,
-        InstructionSet.ARM,
-        false,
-        true);
-```
-
-Para investigar loops de BIOS/ROM, instale um trace leve:
-
-```java
-core.setTraceListener(new ArmTraceListener() {
-    @Override
-    public void afterInstruction(ArmCore tracedCore, DecodedInstruction instruction) {
-        System.out.printf(
-                "pc=%08X raw=%08X kind=%s cpsr=%08X r0=%08X sp=%08X lr=%08X%n",
-                instruction.address(),
-                instruction.raw(),
-                instruction.kind(),
-                tracedCore.cpsr().get(),
-                tracedCore.register(0),
-                tracedCore.register(13),
-                tracedCore.register(14));
-    }
-});
-```
-
-Para implementar waitstates de memória no emulador hospedeiro, sobrescreva
-`accessCycles`. Esses ciclos extras são acumulados em `core.cycles()`:
-
-```java
-@Override
-public int accessCycles(int address, int sizeBytes, MemoryAccessType type) {
-    if ((address & 0x0E000000) == 0x08000000) {
-        return type == MemoryAccessType.INSTRUCTION_FETCH ? 3 : 5;
-    }
-    return 0;
-}
-```
-
-Para mapear `HALTCNT` ou um mecanismo equivalente:
-
-```java
-core.halt();
-core.setInterruptLine(true);
-```
-
-## Gerando IR
-
-```java
-IrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(), new StandardIrBuilder());
-IrBlock block = lifter.lift(memory, 0x08000000, 32);
-```
-
-## Runtime JIT
-
-O pipeline é o mesmo (cache → decode → lift → otimizar → emit); o que muda é o backend:
-
-| Backend | Factory | Comportamento | Quando usar |
-|---------|---------|---------------|-------------|
-| `JVM_BYTECODE` | `armThumb(...)` | Tiered: tier frio interpretado + tier quente em bytecode JVM (ASM, fallback `PER_OP`, compilação em pool de threads) | **Padrão recomendado** (default dos consumidores gbaemu/ndsemu) |
-| `INTERPRETED_IR` | `interpretedArmThumb(...)` | Loop Java sobre `IrOp[]` | Debug, step-by-step, oráculo de testes |
-| `TRUFFLE` | `TruffleJitRuntimeFactory.truffleArmThumb(...)` (módulo opcional `arm-jitter-truffle`) | Tiered: tier frio interpretado + tier quente em nós Truffle/AST, compilados por partial evaluation quando o host roda sob Graal/JVMCI | Blocos/traces grandes (superblocos) e `native-image` (trilha A) — **opt-in**, não é default de nenhum consumidor |
-| (ambos) | `divergenceCheckingArmThumb(...)` | Executa cada bloco pelos dois backends e lança na primeira divergência | Diagnóstico de bugs de codegen com ROM real |
-
-### Backend Truffle/GraalVM — quando escolher
-
-Módulo opcional `arm-jitter-truffle` (core não depende de API Truffle), exposto por
-`TruffleJitRuntimeFactory.truffleArmThumb(cacheEntries, hotThreshold[, architecture])`.
-Único motivo real de existir: viabilizar JIT dentro de **native-image**, onde o backend
-ASM não funciona (`defineClass` em runtime não é suportado). Em JVM normal o **ASM
-continua a escolha certa** para o tamanho de bloco típico de jogo (poucas dezenas de
-instruções) — o Truffle só vence em blocos/traces grandes, e o ponto de crossover é
-JVM-dependente (medido entre ~80 e 320 instruções). gbaemu/ndsemu não usam Truffle hoje
-(opt-in, sem wiring nos consumidores). A especialização de nós por `IrOp` (task A6)
-destravou a compilação real de blocos ARM reais **na JVM** (JBR + Unchained: 1812
-`opt done`, 0 `opt failed`); sob **native-image** o bailout de partial evaluation
-persiste byte a byte (mesmo `FrameWithoutBoxing should not be materialized` da A5,
-0 `opt done`) — medido de novo pós-A6 em [A7](tasks/trilha-a-truffle/a7-native-image-revalidacao.md),
-que fechou como resultado misto (corretude ok, ganho de tempo falha nos dois
-ambientes): o pipeline JVMCI foi resolvido, mas o pipeline SVM/Enterprise Truffle
-Compiler tem causa raiz própria, ainda sem diagnóstico — fica para sessão de modelo
-forte dedicada. `native-image` (perfil `native` do armbox) roda hoje só com o backend
-`INTERPRETED_IR`, com PGO+`-O3` como default (task A8).
-
-Benchmarks completos, notas sobre a distribuição GraalVM e o relatório do native-image:
-**[docs/TRUFFLE-BACKEND.md](docs/TRUFFLE-BACKEND.md)**.
-
-### Uso recomendado
-
-```java
-// Produção — bytecode JVM com constant fold + DCE + flag merge (ARMv4T por padrão)
-JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
-
-// Para um core ARM9E (NDS): mesmas factories com a arquitetura explícita
-JitRuntime arm9 = JitRuntimeFactory.armThumb(1024, 3, ArmArchitecture.ARMV5TE);
-
-int cycles = runtime.execute(core.programCounter(), core);
-long frameSliceCycles = core.runBlocks(runtime, 256);
-```
-
-### Encadeamento de blocos
-
-Blocos quentes podem se encadear sem voltar ao dispatch do runtime, dentro de um
-orçamento de ciclos por chamada de `execute`:
-
-```java
-runtime.setChainCycleBudget(96); // 0 desliga (default)
-```
-
-O budget é sensível a timing entre CPUs no hospedeiro (handshakes de boot cross-CPU);
-suba com medição e validação de boot dos jogos de referência.
-
-### Debug / oráculo
-
-```java
-// Interpretador IR puro — útil para comparar comportamento ou depurar
-JitRuntime oracle = JitRuntimeFactory.interpretedArmThumb(1024, 3);
-```
-
-### Depuração com GDB
-
-`GdbServer` expõe o core como um stub GDB remote serial (como o do mGBA): registradores,
-memória, breakpoints em PC, watchpoints de escrita, step e continue:
-
-```java
-GdbServer.listenAndServe(3333, core, memory, () -> stepOneInstruction());
-// arm-none-eabi-gdb> target remote :3333
-```
-
-### Introspecção
-
-```java
-CodegenBackend backend = runtime.codegenBackend(); // JVM_BYTECODE para armThumb(...)
-```
-
-### Migração de `jvmArmThumb`
-
-`JitRuntimeFactory.jvmArmThumb(...)` está depreciado desde a Fase 8. Substitua por `armThumb(...)`:
-
-```java
-// Antes
-JitRuntime runtime = JitRuntimeFactory.jvmArmThumb(1024, 3);
-
-// Depois — inclui otimizador GBA (constant fold + DCE + flag merge)
-JitRuntime runtime = JitRuntimeFactory.armThumb(1024, 3);
-```
-
-### Política de fallback e métricas (AsmCodeEmitter)
-
-```java
-// PER_OP: ops ainda não emitidas nativamente são despachadas ao interpretado inline
-// no bloco compilado, em vez de derrubar o bloco inteiro
-AsmCodeEmitter emitter = new AsmCodeEmitter(
-        ArmArchitecture.ARMV5TE, AsmFallbackPolicy.PER_OP, StandardIrOptimizer.gba());
-
-// Contadores de diagnóstico
-long native   = emitter.nativeBlockCount();
-long fallback = emitter.fallbackBlockCount();
-long perOpOps = emitter.perOpFallbackOpCount();
-emitter.resetCounters();
-
-// Tipos de IrOp e opcodes ALU emitidos nativamente
-Set<Class<? extends IrOp>> supported = AsmCodeEmitter.supportedOps();
-Set<IrOpCode> supportedAlu = AsmCodeEmitter.supportedAluOpcodes();
-```
-
-### Testes de equivalência entre emissores
-
-```java
-BlockEquivalenceHarness harness = new BlockEquivalenceHarness();
-harness.assertEquivalent(
-        new InterpretedCodeEmitter(),
-        candidateEmitter,
-        irBlock,
-        EquivalenceTestSupport.independentPair(memory, core -> core.setRegister(0, 1)));
-```
-
-## Invalidação SMC
-
-Para invalidar blocos automaticamente em escrita de memoria:
-
-```java
-AddressSpace memoryWithInvalidation = new InvalidationAwareAddressSpace(deviceMemory, runtime);
-ArmCore core = new ArmCore(memoryWithInvalidation, SwiDispatcher.empty());
-```
-
-Para interceptar SWIs no host mantendo acesso ao numero solicitado:
-
-```java
-SwiDispatcher dispatcher = SwiDispatcher.empty();
-dispatcher.fallbackWithNumber((swi, state) -> {
-    return state.withR0(swi);
-});
-```
-
-Para publicar no repositorio Maven local e consumir em outro emulador:
-
-```bash
-mvn install
-```
-
 Coordenadas Maven atuais:
 
 ```xml
@@ -292,66 +84,16 @@ Coordenadas Maven atuais:
 </dependency>
 ```
 
+Guia de uso completo (runtimes JIT, geração de IR, invalidação SMC, GDB, testes de
+equivalência): **[docs/USAGE.md](docs/USAGE.md)**.
+
 ## Biblioteca nativa (C API)
 
-O módulo opcional `capi/` (task A9, PR1) expõe o núcleo ARM/THUMB como uma
-biblioteca nativa (`arm_jitter.dll`/`.so`) com funções C (`aj_*`), via GraalVM
-`native-image --shared` — qualquer linguagem com FFI (C/C++/Rust/Zig/Python
-`ctypes`/C#/Go) pode embutir o emulador sem depender de uma JVM. O módulo é
-inerte no build padrão: `mvn test`/`install` não exigem GraalVM, só o perfil
-`native-lib`.
-
-Backend hoje: `INTERPRETED_IR` (o backend ASM define classes em runtime,
-incompatível com native-image). O backend Truffle fica para a task A9 PR2,
-que depende de A7 fechar nos dois ambientes.
-
-### Build
-
-```bat
-:: 1. Instala o arm-jitter (core) no repo Maven local — JBR 25 é suficiente.
-set JAVA_HOME=C:\Users\user\.jdks\jbr-25.0.3
-mvn -o install -DskipTests
-
-:: 2. Build da lib nativa — precisa do ambiente MSVC carregado + JAVA_HOME=GraalVM.
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
-set JAVA_HOME=E:\graalvm-jdk-25.0.3+9.1
-set PATH=%JAVA_HOME%\bin;%PATH%
-cd capi
-mvn -Pnative-lib -DskipTests package
-:: -> target\arm_jitter.dll + arm_jitter.lib + arm_jitter.h + graal_isolate.h
-```
-
-Smoke test em C (cria isolate, roda um bloco ARM real, testa callback MMIO,
-save/load state e o caminho de erro sem exceção atravessando a fronteira):
-
-```powershell
-capi\build-and-run-smoke.ps1
-```
-
-### Tabela de funções (API v1)
-
-Toda função recebe `graal_isolatethread_t*` como primeiro parâmetro (gerado de
-graça pelo header `graal_isolate.h`). Handles são opacos (`long long`, nunca um
-ponteiro Java); nenhuma exceção Java atravessa a fronteira — falhas viram
-código de erro negativo + `aj_last_error`.
-
-| Função | Descrição |
-|---|---|
-| `aj_create(t, architectureId, backendId)` | Cria um core. `architectureId`: 0=ARMV4T, 1=ARMV5TE, 2=ARMV6K, 3=ARMV6K_THUMB2, 4=ARMV7A. `backendId`: 0=INTERPRETED (único suportado no PR1), 1=TRUFFLE (PR2). Devolve handle (`>=0`) ou `-1`. |
-| `aj_destroy(t, handle)` | Libera o core e o buffer nativo de erro do handle. |
-| `aj_map_ram(t, handle, base, size)` | Mapeia `size` bytes de RAM zerada em `base` (ambos múltiplos de 4KiB — `PagedAddressSpace`, task C3). |
-| `aj_write(t, handle, addr, src, len)` / `aj_read(t, handle, addr, dst, len)` | Acesso direto à memória do core, byte a byte. |
-| `aj_set_mmio_callbacks(t, handle, readFn, writeFn, userData)` | Instala os callbacks C chamados para todo endereço FORA de qualquer região de `aj_map_ram` (o barramento aberto do handle). `readFn`/`writeFn` são invocados NA THREAD que chamou `aj_run_cycles`/`aj_read`/`aj_write` — sem concorrência. |
-| `aj_get_register`/`aj_set_register(t, handle, index, value)` | R0–R15. |
-| `aj_get_cpsr`/`aj_set_cpsr(t, handle, value)` | CPSR bruto. |
-| `aj_set_pc(t, handle, pc, thumb)` | PC + conjunto de instruções (ARM/THUMB). |
-| `aj_run_cycles(t, handle, cycles)` | Executa blocos até acumular pelo menos `cycles` ciclos internos; devolve os ciclos realmente consumidos (pode passar do pedido — blocos não são cortados no meio) ou `-1` em erro. Não pode ser chamado de novo, no mesmo handle, de dentro de um callback MMIO disparado pela mesma chamada (erro claro, não deadlock). |
-| `aj_set_irq_line(t, handle, asserted)` | Linha de IRQ do core. |
-| `aj_save_state`/`aj_load_state(t, handle, buf, cap/len)` | Serialização via `ArmCore#saveState`/`loadState`. |
-| `aj_last_error(t, handle)` | Última mensagem de erro deste handle (ou do buffer global, se o handle já não existe — ex. `aj_create` falho). |
-
-Fora de escopo do v1 (documentado, entram por demanda): múltiplos cores
-acoplados, GDB stub, dispatcher de SWI customizado.
+Módulo opcional (`capi/`) que expõe o núcleo ARM/THUMB como biblioteca nativa
+(`arm_jitter.dll`/`.so`, funções `aj_*`) via GraalVM `native-image --shared`, para
+embutir o emulador em qualquer linguagem com FFI (C/C++/Rust/Zig/Python/C#/Go) sem
+depender de uma JVM. Inerte no build padrão (`mvn test`/`install` não exigem GraalVM).
+Detalhes e tabela de funções: **[docs/NATIVE-API.md](docs/NATIVE-API.md)**.
 
 ## Roadmap
 
@@ -369,21 +111,8 @@ mvn -o test
 Mudanças aqui exigem `mvn install` local e as suítes dos consumidores (gbaemu e
 ndsemu) verdes antes do commit (invariante G5 do `tasks/README.md`).
 
-## Desenvolvendo a lib junto com um consumidor
-
-Desde a publicação no Maven Central (`dev.vitorsilverio:arm-jitter:1.0.0`, task F5), nenhum
-consumidor (gbaemu, ndsemu, armbox, virtual-arm-box, n3dsemu) precisa de `mvn install` local
-para compilar — a dependência resolve direto do Central.
-
-Enquanto uma mudança da lib não está publicada, o consumidor precisa da versão local:
-
-1. No arm-jitter: `<version>1.0.1-SNAPSHOT</version>` + `mvn -o install`.
-2. No consumidor: apontar a dependência para `1.0.1-SNAPSHOT` **sem commitar**.
-3. Ao publicar (tag `v1.0.1`, ver `docs/PUBLICAR.md`), voltar os dois para a versão final e
-   aí sim commitar.
-
-Nunca commite um consumidor apontando para um `-SNAPSHOT`: o CI não resolve SNAPSHOT do
-Central e o build quebra para todo mundo.
+Desenvolvimento em conjunto com um consumidor (versão `-SNAPSHOT` local, ainda não
+publicada): ver [docs/USAGE.md](docs/USAGE.md#desenvolvendo-a-lib-junto-com-um-consumidor).
 
 ## Versionamento
 
@@ -397,6 +126,16 @@ só quebra em uma versão MAIOR):
 **Não** é API pública (pode mudar em versão MENOR): os pacotes `*.internal`, detalhes de
 emissão de bytecode, a forma exata da IR otimizada, e o módulo `arm-jitter-truffle`, que é
 experimental enquanto o backend Truffle não fechar sob `native-image`.
+
+## Como contribuir
+
+Issues e pull requests são bem-vindos — ver [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Autor e contato
+
+Feito por [Vitor Silvério Rodrigues](https://vitorsilverio.dev/) — blog/currículo com mais
+detalhes sobre este e outros projetos. Contato: vitor.silverio.rodrigues@gmail.com ou uma
+[issue](https://github.com/vitorsilverio/arm-jitter/issues) neste repositório.
 
 ## Licença
 
