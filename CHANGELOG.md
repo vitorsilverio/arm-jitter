@@ -17,6 +17,12 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - `GdbServer`/`Gdb64Server`: um acesso de memória (`m`/`M`) a um endereço fora da faixa mapeada
   do hospedeiro agora responde `E01` ao gdb em vez de deixar a exceção do hospedeiro (ex. um
   segfault simulado de guest) atravessar e derrubar a sessão de depuração inteira.
+- **`VSQRT` (interpretado, `IrVfpExecutor`)**: `computeSingleArithmetic`/`computeDoubleArithmetic`
+  liam `vfp.sFloat(op.vn())`/`dDouble(op.vn())` incondicionalmente antes do `switch`, mas `SQRT`
+  é unário (só `Vm`) e o decoder grava `vn=-1` (sentinel "sem `Vn`") para essa forma — qualquer
+  `VSQRT` real lançava `ArrayIndexOutOfBoundsException`. Achado pelo `armbox`
+  (`Armv7TortureTest`, binário `gcc` real com `vsqrt.f32`); o backend ASM nativo não tinha o
+  bug (já lia `vn` só dentro dos `case`s que o usam).
 
 ## [1.1.0] — 2026-08-23
 

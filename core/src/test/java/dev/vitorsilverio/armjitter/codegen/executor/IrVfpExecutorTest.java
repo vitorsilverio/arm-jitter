@@ -237,6 +237,24 @@ class IrVfpExecutorTest {
         assertEquals(0x3FB504F3, core.vfp().s(1));
     }
 
+    /// Achado real (`Armv7TortureTest` do `armbox`, `VSQRT.F32` num binário real):
+    /// `VfpDecoder` grava `vn=-1` para `SQRT` (é unário, só `Vm` — mesmo sentinel de
+    /// NEG/ABS/COPY), não `0` como os testes acima passam à mão. `computeSingleArithmetic`/
+    /// `computeDoubleArithmetic` liam `vfp.sFloat(op.vn())`/`dDouble(op.vn())`
+    /// INCONDICIONALMENTE antes do `switch`, e `VfpRegisters.s(-1)` lança
+    /// `ArrayIndexOutOfBoundsException` — nenhum teste existente usava o `vn` real do decoder.
+    @Test
+    void sqrtWithTheRealDecoderSentinelVnDoesNotThrow() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 2.0f);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 1, -1, 0, Condition.AL), 0);
+        assertEquals(0x3FB504F3, core.vfp().s(1));
+
+        core.vfp().setDDouble(0, 2.0);
+        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 2, -1, 0, Condition.AL), 0);
+        assertEquals(Math.sqrt(2.0), core.vfp().dDouble(2));
+    }
+
     // ── 5. VCMP: os 4 quadrantes ─────────────────────────────────────────────────
 
     @Test

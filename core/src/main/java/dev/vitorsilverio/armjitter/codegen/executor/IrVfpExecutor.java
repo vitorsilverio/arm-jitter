@@ -62,7 +62,12 @@ public final class IrVfpExecutor {
 
     private static float computeSingleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
             boolean flushToZero) {
-        float vn = flushSingle(vfp.sFloat(op.vn()), flushToZero);
+        // `SQRT` é unário (só `Vm`) — o decoder marca `vn=-1` (sentinel "sem Vn", mesmo valor
+        // usado para NEG/ABS/COPY em `VfpDecoder`) porque a instrução real não tem esse campo.
+        // Ler incondicionalmente `vfp.sFloat(op.vn())` aqui (achado real, `Armv7TortureTest`:
+        // `ArrayIndexOutOfBoundsException` em `VSQRT.F32`) explodia nesse índice negativo antes
+        // do `switch` sequer chegar ao case `SQRT`, que nunca usa `vn`.
+        float vn = op.vn() >= 0 ? flushSingle(vfp.sFloat(op.vn()), flushToZero) : 0f;
         float vm = flushSingle(vfp.sFloat(op.vm()), flushToZero);
         // "Exato" de ADD/SUB/MUL de float cabe sem perda em double (ver DirectedFpRounding);
         // DIV/SQRT usam double como aproximação de altíssima precisão (idem).
@@ -141,7 +146,9 @@ public final class IrVfpExecutor {
 
     private static double computeDoubleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
             boolean flushToZero) {
-        double vn = flushDouble(vfp.dDouble(op.vn()), flushToZero);
+        // Mesma proteção de {@link #computeSingleArithmetic} — `SQRT` (`VSQRT.F64`) também não
+        // tem `Vn` real, `vn=-1` do decoder.
+        double vn = op.vn() >= 0 ? flushDouble(vfp.dDouble(op.vn()), flushToZero) : 0.0;
         double vm = flushDouble(vfp.dDouble(op.vm()), flushToZero);
         double result = switch (op.op()) {
             case ADD -> DirectedFpRounding.roundDouble(vn + vm, DirectedFpRounding.exactAdd(vn, vm), mode);
