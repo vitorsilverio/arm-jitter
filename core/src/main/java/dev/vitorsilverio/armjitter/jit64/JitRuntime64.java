@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64BlockLifter;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
 import dev.vitorsilverio.armjitter.jit.ExecutionThreshold;
+import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
 import java.util.Objects;
 
@@ -19,6 +20,18 @@ import java.util.Objects;
 /// {@link ExecutionThreshold} é reaproveitado DIRETAMENTE do pacote `jit` (32 bits) — é genérico
 /// o bastante (só `int hotCount`, nenhuma referência a `ArmCore`/`int pc`), decisão D0 da spec.
 public final class JitRuntime64 {
+    /// Ciclos reportados quando o `lift()` de um bloco NUNCA-antes-visto falta na tradução —
+    /// MESMO achado (e mesmo valor) de `JitRuntime#LIFT_FAULT_CYCLES` (32-bit, B4.1.5): o
+    /// {@link BlockCache64} só ganha proteção de {@link MemoryTranslationException64} DEPOIS que um
+    /// bloco existe ({@link Ir64BlockCompiler}/{@link Ir64BlockExecutor#executeBlock} cercam a
+    /// EXECUÇÃO) — o `lift()` em si, que decodifica AINDA MAIS instruções à frente de `pc` só para
+    /// decidir onde o bloco termina (até {@code maxBlockInstructions}), não tinha proteção nenhuma
+    /// aqui e vazava a exceção para fora do runtime inteiro. Achado real (retomada da F11,
+    /// 2026-08-26): o precedente 32-bit já tinha essa proteção desde B4.1.5, nunca foi portado para
+    /// o mundo A64 — o boot real de `raspi3-64` divergia entre os backends JIT/INTERPRETED
+    /// exatamente por isto (`TRANSLATION_FAULT_L3 em 0x200`, um bloco quente cujo lookahead de
+    /// lifting cruzava para uma página ainda não mapeada, nunca de fato alcançada pela execução).
+    private static final int LIFT_FAULT_CYCLES = 1;
     private final BlockCache64 blockCache;
     private final Ir64BlockLifter lifter;
     private final Ir64BlockExecutor coldExecutor;
@@ -78,7 +91,13 @@ public final class JitRuntime64 {
                 core.setProgramCounter(pc);
                 return coldExecutor.step(core);
             }
-            Ir64Block irBlock = lifter.lift(core.memory(), pc, maxBlockInstructions);
+            Ir64Block irBlock;
+            try {
+                irBlock = lifter.lift(core.memory(), pc, maxBlockInstructions);
+            } catch (MemoryTranslationException64 fault) {
+                core.enterMemoryAbort(pc, fault);
+                return LIFT_FAULT_CYCLES;
+            }
             block = emitter.emit(irBlock);
             blockCache.put(key, block);
         }

@@ -164,7 +164,7 @@ tem histórico registrado.
 | B | Arquiteturas | 66 | [trilha-b-arquiteturas/INDICE.md](trilha-b-arquiteturas/INDICE.md) |
 | C | Performance | 16 | [trilha-c-perf/INDICE.md](trilha-c-perf/INDICE.md) |
 | D | Compatibilidade | 6 | [trilha-d-compat/INDICE.md](trilha-d-compat/INDICE.md) |
-| E | Manutenção | 3 | [trilha-e-manutencao/INDICE.md](trilha-e-manutencao/INDICE.md) |
+| E | Manutenção | 4 | [trilha-e-manutencao/INDICE.md](trilha-e-manutencao/INDICE.md) |
 | F | Infra | 11 | [trilha-f-infra/INDICE.md](trilha-f-infra/INDICE.md) |
 | G | 3DS | 12 | [trilha-g-3ds/INDICE.md](trilha-g-3ds/INDICE.md) |
 

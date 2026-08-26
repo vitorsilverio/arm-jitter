@@ -37,11 +37,42 @@ public final class Ir64BlockCompiler {
     private static final String IR64_RUNTIME_HELPERS =
             "dev/vitorsilverio/armjitter/codegen64/jvm64/Ir64AsmRuntimeHelpers";
     private static final String EXECUTE_DESCRIPTOR = "(" + AARCH64_CORE_REF + ")I";
+    /// As 5 exceções de controle que {@code Ir64AsmRuntimeHelpers#executeOp}/{@link #emitFetch}
+    /// podem lançar — MESMO conjunto capturado por {@code Ir64BlockExecutor#executeBlock} (G1: o
+    /// interpretador é o oráculo, o bloco compilado precisa entrar na exceção do guest exatamente
+    /// como ele, não deixar a exceção do HOST escapar). Achado real (sessão de retomada da F11,
+    /// 2026-08-26): este `try/catch` nunca existiu aqui — ao contrário do precedente 32-bit
+    /// ({@link dev.vitorsilverio.armjitter.codegen.jvm.AsmBlockCompiler#compile}, que cerca o bloco
+    /// inteiro desde B4.1.3), um bloco A64 promovido a nativo deixava QUALQUER falta de tradução
+    /// (ou `BRK`/instrução indefinida/`HVC`/`SMC`) escapar como exceção Java não capturada em vez de
+    /// entrar no handler do guest — divergência observável entre os backends JIT/INTERPRETED (JIT
+    /// "trava" com uma `RuntimeException`, INTERPRETED entra na exceção e continua).
+    private static final String MEMORY_TRANSLATION_EXCEPTION_64 =
+            "dev/vitorsilverio/armjitter/memory/mmu/MemoryTranslationException64";
+    private static final String AARCH64_BREAKPOINT_EXCEPTION =
+            "dev/vitorsilverio/armjitter/core64/Aarch64BreakpointException";
+    private static final String AARCH64_UNDEFINED_INSTRUCTION_EXCEPTION =
+            "dev/vitorsilverio/armjitter/core64/Aarch64UndefinedInstructionException";
+    private static final String AARCH64_HYPERVISOR_CALL_EXCEPTION =
+            "dev/vitorsilverio/armjitter/core64/Aarch64HypervisorCallException";
+    private static final String AARCH64_SECURE_MONITOR_CALL_EXCEPTION =
+            "dev/vitorsilverio/armjitter/core64/Aarch64SecureMonitorCallException";
     /// Slot local do parâmetro `core` (`0` é `this`).
     private static final int LOCAL_CORE = 1;
     /// Slot local escalar de uso temporário (resultado de `AddressSpace64#accessCycles` em
     /// {@link #emitFetch}) — reusado por instrução, nunca precisa sobreviver entre chamadas.
     private static final int LOCAL_SCRATCH_INT = 2;
+    /// Ciclos acumulados EM TEMPO DE EXECUÇÃO (não mais uma constante de compilação somada num
+    /// `int` do compilador — precisa sobreviver a um `catch` no meio do bloco, devolvendo só os
+    /// ciclos das instruções que rodaram ANTES da falta, mesma semântica de
+    /// {@code Ir64BlockExecutor#executeBlock}).
+    private static final int LOCAL_CYCLES = 3;
+    /// Endereço da instrução dona da op corrente (`long` — ocupa os slots `4` e `5`), regravado a
+    /// cada `Fetch` (constante de compilação, `LDC2_W`+`LSTORE`) — mesmo papel de `FAULT_PC_LOCAL`
+    /// no precedente 32-bit, adaptado para endereço de 64 bits.
+    private static final int LOCAL_FAULT_PC = 4;
+    /// Referência da exceção capturada por um dos 5 handlers (`ASTORE`), usada só ali.
+    private static final int LOCAL_FAULT_EXCEPTION = 6;
 
     /// Compila `block` para uma classe que implementa {@link CompiledBlock64}.
     ///
@@ -80,14 +111,39 @@ public final class Ir64BlockCompiler {
     }
 
     private void emitBody(MethodVisitor mv, Ir64Block block) {
-        int totalCycles = 0;
+        mv.visitInsn(Opcodes.ICONST_0);
+        mv.visitVarInsn(Opcodes.ISTORE, LOCAL_CYCLES);
+
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        Label translationFaultHandler = new Label();
+        Label breakpointHandler = new Label();
+        Label undefinedHandler = new Label();
+        Label hypervisorCallHandler = new Label();
+        Label secureMonitorCallHandler = new Label();
+        mv.visitTryCatchBlock(tryStart, tryEnd, translationFaultHandler, MEMORY_TRANSLATION_EXCEPTION_64);
+        mv.visitTryCatchBlock(tryStart, tryEnd, breakpointHandler, AARCH64_BREAKPOINT_EXCEPTION);
+        mv.visitTryCatchBlock(tryStart, tryEnd, undefinedHandler, AARCH64_UNDEFINED_INSTRUCTION_EXCEPTION);
+        mv.visitTryCatchBlock(tryStart, tryEnd, hypervisorCallHandler, AARCH64_HYPERVISOR_CALL_EXCEPTION);
+        mv.visitTryCatchBlock(tryStart, tryEnd, secureMonitorCallHandler, AARCH64_SECURE_MONITOR_CALL_EXCEPTION);
+
+        // LOCAL_FAULT_PC precisa de um valor ANTES de tryStart (mesmo motivo do precedente
+        // 32-bit, `AsmBlockCompiler#compile`): o verificador da JVM trata os 5 handlers como
+        // alcançáveis a partir de QUALQUER bytecode dentro do range protegido, inclusive o
+        // primeiro `Fetch` (que já pode lançar `MemoryTranslationException64`, ver a Javadoc de
+        // `Ir64BlockExecutor#step`).
+        mv.visitLdcInsn(block.startPc());
+        mv.visitVarInsn(Opcodes.LSTORE, LOCAL_FAULT_PC);
+        mv.visitLabel(tryStart);
         long lastFetchAddress = -1L;
         int lastFetchSizeBytes = 0;
         for (Ir64Op op : block.operations()) {
             switch (op.kind()) {
-                case Ir64Op.Kind.CYCLE -> totalCycles += ((Ir64Op.Cycle) op).count();
+                case Ir64Op.Kind.CYCLE -> emitCycle(mv, (Ir64Op.Cycle) op);
                 case Ir64Op.Kind.FETCH -> {
                     Ir64Op.Fetch fetch = (Ir64Op.Fetch) op;
+                    mv.visitLdcInsn(fetch.address());
+                    mv.visitVarInsn(Opcodes.LSTORE, LOCAL_FAULT_PC);
                     emitFetch(mv, fetch);
                     lastFetchAddress = fetch.address();
                     lastFetchSizeBytes = fetch.sizeBytes();
@@ -95,8 +151,67 @@ public final class Ir64BlockCompiler {
                 default -> emitOp(mv, op, lastFetchAddress + lastFetchSizeBytes);
             }
         }
-        mv.visitLdcInsn(totalCycles);
+        mv.visitLabel(tryEnd);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
         mv.visitInsn(Opcodes.IRETURN);
+
+        // Os 5 handlers espelham `Ir64BlockExecutor#executeBlock` ops a op: materializam a
+        // exceção do GUEST no `core` (`enterMemoryAbort`/`enterBreakpointException`/etc, usando
+        // `LOCAL_FAULT_PC` como endereço da instrução faltosa) e devolvem os ciclos PARCIAIS já
+        // acumulados em `LOCAL_CYCLES` (instruções executadas antes da falta) — nunca os do bloco
+        // inteiro, que não terminou de rodar.
+        mv.visitLabel(translationFaultHandler);
+        mv.visitVarInsn(Opcodes.ASTORE, LOCAL_FAULT_EXCEPTION);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitVarInsn(Opcodes.LLOAD, LOCAL_FAULT_PC);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_FAULT_EXCEPTION);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_CORE, "enterMemoryAbort",
+                "(JL" + MEMORY_TRANSLATION_EXCEPTION_64 + ";)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitInsn(Opcodes.IRETURN);
+
+        mv.visitLabel(breakpointHandler);
+        mv.visitVarInsn(Opcodes.ASTORE, LOCAL_FAULT_EXCEPTION);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitVarInsn(Opcodes.LLOAD, LOCAL_FAULT_PC);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_FAULT_EXCEPTION);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_BREAKPOINT_EXCEPTION, "immediate", "()I", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_CORE, "enterBreakpointException", "(JI)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitInsn(Opcodes.IRETURN);
+
+        mv.visitLabel(undefinedHandler);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitVarInsn(Opcodes.LLOAD, LOCAL_FAULT_PC);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_CORE, "enterUndefinedInstructionException", "(J)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitInsn(Opcodes.IRETURN);
+
+        mv.visitLabel(hypervisorCallHandler);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitVarInsn(Opcodes.LLOAD, LOCAL_FAULT_PC);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_CORE, "enterHypervisorCall", "(J)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitInsn(Opcodes.IRETURN);
+
+        mv.visitLabel(secureMonitorCallHandler);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitVarInsn(Opcodes.LLOAD, LOCAL_FAULT_PC);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, AARCH64_CORE, "enterSecureMonitorCall", "(J)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitInsn(Opcodes.IRETURN);
+    }
+
+    /// `LOCAL_CYCLES += op.count()` — acumulado em TEMPO DE EXECUÇÃO (não mais uma constante de
+    /// compilação somada num `int` do compilador, ver a Javadoc de {@link #LOCAL_CYCLES}).
+    private void emitCycle(MethodVisitor mv, Ir64Op.Cycle op) {
+        mv.visitVarInsn(Opcodes.ILOAD, LOCAL_CYCLES);
+        mv.visitLdcInsn(op.count());
+        mv.visitInsn(Opcodes.IADD);
+        mv.visitVarInsn(Opcodes.ISTORE, LOCAL_CYCLES);
     }
 
     /// `core.memory().accessCycles(address, sizeBytes, INSTRUCTION_FETCH)`; se `> 0`,
