@@ -3,6 +3,21 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] — 2026-08-26
+
+### Adicionado
+- **`Gdb64Server`**: stub do protocolo de série remota GDB para {@code Aarch64Core} — irmão A64
+  do `GdbServer` (ARM32) já existente, mesma capacidade (ler/escrever registradores e memória,
+  breakpoints em PC, watchpoints de escrita, step/continue), layout de registrador `g`/`p`/`P`
+  no formato AArch64 real (`x0`-`x30`/`sp`/`pc`/`cpsr`) e endereços de 64 bits em `m`/`M`/`Z`/`z`.
+  Classe nova, não uma generalização do `GdbServer` existente — os dois mundos de 32/64 bits já
+  são independentes por desenho no resto do arm-jitter.
+
+### Corrigido
+- `GdbServer`/`Gdb64Server`: um acesso de memória (`m`/`M`) a um endereço fora da faixa mapeada
+  do hospedeiro agora responde `E01` ao gdb em vez de deixar a exceção do hospedeiro (ex. um
+  segfault simulado de guest) atravessar e derrubar a sessão de depuração inteira.
+
 ## [1.1.0] — 2026-08-23
 
 Marco de cobertura de ISA (`docs/COBERTURA-ISA.md`): **global 53% → 59%**, **A64 18% → 27%**

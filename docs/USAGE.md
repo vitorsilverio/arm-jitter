@@ -148,6 +148,14 @@ GdbServer.listenAndServe(3333, core, memory, () -> stepOneInstruction());
 // arm-none-eabi-gdb> target remote :3333
 ```
 
+Para um core AArch64, `Gdb64Server` é o irmão de 64 bits (mesmo protocolo, registradores/
+endereços de 64 bits, layout `x0`-`x30`/`sp`/`pc`/`cpsr`):
+
+```java
+Gdb64Server.listenAndServe(3333, core64, memory64, () -> executor.step(core64));
+// aarch64-none-elf-gdb> target remote :3333
+```
+
 ### Introspecção
 
 ```java

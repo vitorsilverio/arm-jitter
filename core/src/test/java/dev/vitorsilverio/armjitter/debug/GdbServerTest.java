@@ -72,9 +72,25 @@ class GdbServerTest {
         assertTrue(calls[0] >= 3, "stepped until the watched word changed");
     }
 
+    @Test
+    void readingUnmappedMemoryRepliesWithErrorInsteadOfPropagating() throws IOException {
+        AddressSpace segfaultingMemory = new SegfaultingMemory();
+        ArmCore cpu = new ArmCore(segfaultingMemory, SwiDispatcher.empty());
+
+        List<String> replies = run(cpu, segfaultingMemory, () -> { },
+                packet("m8000000,4") + packet("M8000000,1:ff") + packet("D"));
+
+        assertEquals("E01", replies.get(0), "read of unmapped address reports E01, not a crash");
+        assertEquals("E01", replies.get(1), "write of unmapped address reports E01, not a crash");
+    }
+
     // ---- helpers ----
 
     private List<String> run(ArmCore cpu, Runnable stepOne, String input) throws IOException {
+        return run(cpu, memory, stepOne, input);
+    }
+
+    private List<String> run(ArmCore cpu, AddressSpace memory, Runnable stepOne, String input) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         GdbServer server = new GdbServer(cpu, memory, stepOne,
                 new ByteArrayInputStream(input.getBytes(StandardCharsets.US_ASCII)), out);
@@ -136,6 +152,42 @@ class GdbServerTest {
         public void write32(int address, int value) {
             write16(address, value);
             write16(address + 2, value >> 16);
+        }
+    }
+
+    /// Simula um hospedeiro cujo barramento lança (ex. `armbox`'s `GuestSegmentationFault`) para
+    /// endereço fora da faixa mapeada — usado para provar que {@link GdbServer} não deixa essa
+    /// exceção derrubar a sessão inteira de depuração (ver {@link
+    /// #readingUnmappedMemoryRepliesWithErrorInsteadOfPropagating}).
+    private static final class SegfaultingMemory implements AddressSpace {
+        @Override
+        public int read8(int address) {
+            throw new RuntimeException("unmapped: 0x" + Integer.toHexString(address));
+        }
+
+        @Override
+        public int read16(int address) {
+            return read8(address);
+        }
+
+        @Override
+        public int read32(int address) {
+            return read8(address);
+        }
+
+        @Override
+        public void write8(int address, int value) {
+            throw new RuntimeException("unmapped: 0x" + Integer.toHexString(address));
+        }
+
+        @Override
+        public void write16(int address, int value) {
+            write8(address, value);
+        }
+
+        @Override
+        public void write32(int address, int value) {
+            write8(address, value);
         }
     }
 }

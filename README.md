@@ -25,7 +25,8 @@ Pacotes principais:
 - `codegen` / `codegen.jvm`: emissores de código (interpretado, bytecode JVM via ASM) + harness de equivalência.
 - `coprocessor`: barramento de coprocessadores (CP15 etc. ficam no hospedeiro).
 - `swi`: callbacks de SWI sem obrigar entrada na BIOS.
-- `debug`: `GdbServer` (stub GDB remote serial) e trace listener.
+- `debug`: `GdbServer` (stub GDB remote serial para o ARM32) + `Gdb64Server` (mesma coisa para o
+  AArch64) e trace listener.
 
 O interpretador é a referência de semântica (G1); todo backend compilado passa em
 harness de equivalência e em runs longos de divergence-checking com ROMs reais.
@@ -80,7 +81,7 @@ Coordenadas Maven atuais:
 <dependency>
     <groupId>dev.vitorsilverio</groupId>
     <artifactId>arm-jitter</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
