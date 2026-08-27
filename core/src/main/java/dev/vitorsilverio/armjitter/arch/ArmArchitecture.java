@@ -60,7 +60,11 @@ public final class ArmArchitecture {
             ArmFeature.SETEND_BIG_ENDIAN_DATA,
             ArmFeature.WAIT_HINTS,
             ArmFeature.UNALIGNED_ACCESS,
-            ArmFeature.SIGNED_MULTIPLY_MEDIA);
+            ArmFeature.SIGNED_MULTIPLY_MEDIA,
+            // B9.8.3: SMC (ARMv6K base, ver Javadoc da feature) — mais antigo que HVC
+            // (ARMV7A_FEATURES), então entra já aqui e é herdado por ARM11_MPCORE/ARMV6K_THUMB2/
+            // ARMV7A automaticamente.
+            ArmFeature.SECURE_MONITOR_CALL);
     // PRELOAD_HINTS (PLD/PLDW/PLI) agora vem herdado de ARMV5TE (correção acima) — antes desta
     // task estava listado aqui, sugerindo (erradamente) que só ARMv6K tinha PLD.
 

@@ -461,6 +461,18 @@ completo nos 5 consumidores ✅ (virtual-arm-box é o único consumidor A32 real
 nenhum boot). Sem marco de release. Ver **Resultado** na task. **Próximas da escada, qualquer
 ordem**: `B9.8.3` (`SMC`), `B9.8.4` (`ERET` A32), `B9.8.5` (`MRS_bank`/`MSR_bank`).
 
+✅ **B9.8.3 fechada 2026-08-27** (`trilha-b-arquiteturas/b9.8.3-smc-real.md`, spec escrita e
+executada nesta sessão — próximo item sem dependência pendente da escada B9.8) — `SMC` real (A32 e
+T32): `ArmFeature.SECURE_MONITOR_CALL` novo, gate `ARMv6K` (mais antigo que `HVC`/`ARMv7`, herdado
+já por `ARM11_MPCORE`); entra em Monitor mode via `LR_mon` (banco normal, SEM branch especial em
+`enterException` — ao contrário de `HVC`/`ELR_hyp`), vetor fixo `0x08` (colide com `SWI` no esquema
+sem `MVBAR`, documentado, inofensivo hoje). **Bug real de dispatch T32 corrigido (G8)**: `SMC` e
+`UDF.W` compartilham o mesmo prefixo de `hi` (`0xF7Fx`) — `decodeUdf` engolia todo `SMC` em `null`
+sem chance de outro branch reconhecê-lo; corrigido com fallback para `decodeSmc` quando o `lo` de
+`UDF` não bate. Encodings reais via `arm-none-eabi-as -march=armv7ve`. `mvn -o test` verde (+11) +
+`install`; G5 completo nos 5 consumidores ✅. Sem marco de release. Ver **Resultado** na task.
+**Próximas da escada, qualquer ordem**: `B9.8.4` (`ERET` A32), `B9.8.5` (`MRS_bank`/`MSR_bank`).
+
 ## F3 (`virtual-arm-box --machine=raspi1`) — resumo (histórico minucioso movido para `tasks/FILA-HISTORICO.md`)
 
 M1 e M2 ✅ fechados (JIT e INTERPRETED). M3 (shell interativo): a sessão de

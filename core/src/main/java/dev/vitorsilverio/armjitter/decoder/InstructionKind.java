@@ -333,5 +333,10 @@ public enum InstructionKind {
     /// tempo de execução — o decode em si é independente de modo, ver
     /// `IrSystemExecutor#executeHvc`). `immediate` = `imm16` do encoding (sem uso funcional hoje,
     /// carregado só para fidelidade de trace/debug, mesmo padrão de `SWI`).
-    HVC
+    HVC,
+    /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20, formas A32 e T32): entra em Monitor mode via
+    /// `IrOp.Smc`/`ArmException#SMC`. `UNDEFINED` quando executada em modo `USER` (checado em
+    /// tempo de execução, ver `IrSystemExecutor#executeSmc`). `immediate` = `imm4` do encoding
+    /// (sem uso funcional hoje, mesmo padrão de `HVC`/`SWI`).
+    SMC
 }

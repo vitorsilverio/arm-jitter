@@ -17,5 +17,7 @@ public enum ArmException {
     /// Fast interrupt request.
     FIQ,
     /// `HVC` (B9.8.2, ARMv7VE-adjacent — ver `ArmFeature#HYPERVISOR_CALL`): entra em Hyp mode.
-    HVC
+    HVC,
+    /// `SMC` (B9.8.3 — ver `ArmFeature#SECURE_MONITOR_CALL`): entra em Monitor mode.
+    SMC
 }

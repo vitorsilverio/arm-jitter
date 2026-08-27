@@ -182,5 +182,13 @@ public enum ArmFeature {
     /// `ARM_FEATURE_V7VE` (Virtualization Extensions), ao contrário do que se poderia supor por
     /// analogia com `ERET`. Presente só no preset {@code ARMV7A} (não em {@code ARMV7M}, perfil M
     /// — nem em presets pré-v7).
-    HYPERVISOR_CALL
+    HYPERVISOR_CALL,
+
+    /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20, formas A32 e T32): entra em Monitor mode. Confirmado
+    /// contra `target/arm/tcg/translate.c` real do QEMU (`trans_SMC`): gate real é
+    /// `ENABLE_ARCH_6K &amp;&amp; !ARM_FEATURE_M` — **mais antigo que `HYPERVISOR_CALL`**
+    /// (`ENABLE_ARCH_7`). Habilitada já em {@code ARMV6K} (herdada por {@code ARM11_MPCORE}/
+    /// {@code ARMV6K_THUMB2}/{@code ARMV7A}), ao contrário de `HYPERVISOR_CALL`, restrita a
+    /// {@code ARMV7A}.
+    SECURE_MONITOR_CALL
 }

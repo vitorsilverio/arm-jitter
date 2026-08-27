@@ -54,7 +54,10 @@ public final class AProfileExceptionModel implements ExceptionModel {
             // o PC sequencial (endereço da PRÓXIMA instrução) antes de pedir a exceção, mesmo
             // achado real conferido no `gen_hvc` do QEMU (`gen_update_pc(s, curr_insn_len(s))`
             // ANTES de levantar `EXCP_HVC`).
-            case SWI, UNDEFINED, HVC -> core.programCounter();
+            // SMC: mesma convenção de SWI/HVC — retorno = PC sequencial, confirmado em
+            // `gen_smc`/`take_aarch32_exception` do QEMU (`offset=0`, regs[15] já avançado antes
+            // da exceção).
+            case SWI, UNDEFINED, HVC, SMC -> core.programCounter();
             case IRQ, FIQ -> core.programCounter() + 4;
             case PREFETCH_ABORT -> core.programCounter() + 4;
             case DATA_ABORT -> core.programCounter() + 8;
@@ -70,6 +73,7 @@ public final class AProfileExceptionModel implements ExceptionModel {
             case IRQ -> CpuMode.IRQ;
             case FIQ -> CpuMode.FIQ;
             case HVC -> CpuMode.HYP;
+            case SMC -> CpuMode.MONITOR;
         };
     }
 
@@ -90,6 +94,15 @@ public final class AProfileExceptionModel implements ExceptionModel {
             // si mesmo" (que usaria 0x08 no hardware real) não é distinguido aqui, mesma
             // simplificação documentada no plano mestre `b9.8-plano-hyp-monitor-32bit.md`.
             case HVC -> 0x14;
+            // SMC (B9.8.3): vetor real é MVBAR+0x08 (`arm_cpu_do_interrupt_aarch32`, caso
+            // EXCP_SMC) — MVBAR não é modelado nesta escada (mesma simplificação deliberada de
+            // HVBAR para HVC, ver plano mestre `b9.8-plano-hyp-monitor-32bit.md`), então reusa o
+            // MESMO esquema fixo (`highVectors`). **Achado real, colisão documentada**: no
+            // hardware real Monitor mode tem tabela de vetores PRÓPRIA (MVBAR), então SMC nunca
+            // colide com SWI apesar do mesmo offset `0x08` — aqui, sem MVBAR modelado, os dois
+            // apontam para o MESMO endereço. Inofensivo hoje (nenhum consumidor usa Monitor mode);
+            // documentado em vez de escondido, mesma disciplina do resto desta escada.
+            case SMC -> 0x08;
         };
     }
 }

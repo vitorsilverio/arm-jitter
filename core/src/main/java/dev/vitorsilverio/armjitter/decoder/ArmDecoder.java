@@ -121,6 +121,13 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int HVC_IMM_LO_MASK = 0xF;
     private static final int HVC_IMM_LO_SHIFT_IN_IMM16 = 4;
 
+    /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20): `cccc 0001 0110 0000 0000 0000 0111 iiii` —
+    /// `imm4` = bits\[3:0\]. Confirmado contra `target/arm/tcg/a32.decode` real do QEMU
+    /// (`SMC ---- 0001 0110 0000 0000 0000 0111 imm:4`), mesmo espaço condicional de `HVC`/`SWI`.
+    private static final int SMC_MASK = 0x0FFF_FFF0;
+    private static final int SMC_VALUE = 0x0160_0070;
+    private static final int SMC_IMM_MASK = 0xF;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -167,6 +174,17 @@ public final class ArmDecoder implements InstructionDecoder {
                     | (raw & HVC_IMM_LO_MASK);
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.HVC,
                     -1, -1, -1, imm16, false, false, false);
+        }
+
+        // SMC (B9.8.3): mesmo padrão de HVC acima — checado antes do dispatch condicional
+        // genérico; sem a feature, UNIMPLEMENTED (o espaço é real, G8).
+        if ((raw & SMC_MASK) == SMC_VALUE) {
+            if (!architecture.has(ArmFeature.SECURE_MONITOR_CALL)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int imm4 = raw & SMC_IMM_MASK;
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SMC,
+                    -1, -1, -1, imm4, false, false, false);
         }
 
         // WFI (ARMv6K hint): `cccc 0011 0010 0000 1111 0000 0000 0011`. No hardware real,

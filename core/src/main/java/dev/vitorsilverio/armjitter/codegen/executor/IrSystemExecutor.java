@@ -75,6 +75,23 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `SMC` (B9.8.3): entra em Monitor mode, exceto em modo `USER` (`UNDEFINED` — mesma checagem
+    /// em tempo de EXECUÇÃO de {@link #executeHvc}). Mesma convenção de PC sequencial.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeSmc(ArmCore core, IrOp.Smc smc, int sequentialPc) {
+        if (!core.cpsr().evalCond(smc.condition())) {
+            return false;
+        }
+        core.setProgramCounter(sequentialPc);
+        if (core.mode() == CpuMode.USER) {
+            core.requestException(ArmException.UNDEFINED);
+        } else {
+            core.requestException(ArmException.SMC);
+        }
+        return true;
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
     /// incondicional, sem campo de condição em nenhum dos dois modos)
     public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {

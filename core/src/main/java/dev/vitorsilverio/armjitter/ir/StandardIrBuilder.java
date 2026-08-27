@@ -293,6 +293,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             case SWI -> block.add(new IrOp.Swi(instruction.immediate(), instruction.condition()));
             case HVC -> block.add(new IrOp.Hvc(instruction.immediate(), instruction.condition()));
+            case SMC -> block.add(new IrOp.Smc(instruction.immediate(), instruction.condition()));
             case BREAKPOINT -> block.add(new IrOp.Breakpoint(instruction.immediate()));
             case COPROCESSOR -> block.add(new IrOp.Coprocessor(
                     instruction.link(),

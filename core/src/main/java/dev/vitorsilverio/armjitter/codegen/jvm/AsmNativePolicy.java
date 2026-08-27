@@ -151,6 +151,8 @@ public final class AsmNativePolicy {
             // HVC (B9.8.2): sem emissao nativa ainda, cai no interpretado por AsmFallbackPolicy.PER_OP
             // -- mesma simplificacao de Breakpoint/DspDualMultiply (op nova e rara).
             case IrOp.Hvc ignored -> false;
+            // SMC (B9.8.3): mesma simplificação de Hvc.
+            case IrOp.Smc ignored -> false;
         };
     }
 

@@ -193,4 +193,80 @@ class ArmDecoderTest {
         assertEquals(CpuMode.SUPERVISOR, core.mode(), "cond falsa não deve entrar em Hyp mode");
         assertEquals(4, core.programCounter(), "Cycle/Fetch avançam o PC mesmo com guard falho (G4)");
     }
+
+    // ── SMC (B9.8.3, ARM DDI 0406C A8.8.20) ─────────────────────────────────────────────────
+
+    @Test
+    void decodesArmSmcWithSecureMonitorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_0075); // SMC #5 (encoding real, arm-none-eabi-as -march=armv7ve)
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.SMC, instruction.kind());
+        assertEquals(Condition.AL, instruction.condition());
+        assertEquals(5, instruction.immediate());
+    }
+
+    @Test
+    void armSmcIsUnimplementedWithoutSecureMonitorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_0075);
+
+        // Default do construtor sem argumentos é ARMV4T — sem ArmFeature#SECURE_MONITOR_CALL, o
+        // espaço é real (não UDF fixo) mas não implementado nesta arquitetura (G8).
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.SMC, instruction.kind());
+    }
+
+    @Test
+    void armSmcIsAlreadyDecodedInArm11MpcoreDueToOlderGateThanHvc() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_0075);
+
+        // SMC exige só ARMv6K (ENABLE_ARCH_6K), mais antigo que HVC (ENABLE_ARCH_7) — o preset
+        // ARM11_MPCORE (3DS) já decodifica SMC de verdade, ao contrário de HVC.
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARM11_MPCORE).decode(memory, 0);
+
+        assertEquals(InstructionKind.SMC, instruction.kind());
+    }
+
+    @Test
+    void armSmcEntersMonitorModeWithLrMonAsReturnAddress() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.memory().write32(0, 0xE160_0075); // SMC #5, modo inicial SUPERVISOR (reset)
+
+        core.step();
+
+        assertEquals(CpuMode.MONITOR, core.mode());
+        assertEquals(0x08, core.programCounter());
+        assertEquals(4, core.register(14), "LR_mon recebe o retorno, banco PRÓPRIO (B9.8.1)");
+    }
+
+    @Test
+    void armSmcIsUndefinedWhenExecutedInUserMode() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.switchMode(CpuMode.USER);
+        core.memory().write32(0, 0xE160_0075); // SMC #5
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+        assertNotEquals(CpuMode.MONITOR, core.mode());
+    }
+
+    @Test
+    void armSmcvsIsSkippedWhenOverflowFlagIsClear() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.cpsr().setNzcv(false, false, false, false); // V=0 -> cond VS falsa
+        core.memory().write32(0, 0x6160_0070); // SMCVS #0
+
+        core.step();
+
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "cond falsa não deve entrar em Monitor mode");
+        assertEquals(4, core.programCounter(), "Cycle/Fetch avançam o PC mesmo com guard falho (G4)");
+    }
 }

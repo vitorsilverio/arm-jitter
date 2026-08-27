@@ -34,8 +34,9 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// do escopo desta task de decode (`b9.7-t32-thumb2.md`), registrado como próxima escada.
 ///
 /// <p><b>B9.8.2</b> implementa `HVC` (A32 e T32) de verdade — ver
-/// {@link #decodeHvc}/{@link ArmFeature#HYPERVISOR_CALL}; `ERET`/`SMC`/`MRS_bank`/`MSR_bank`
-/// seguem como próximas tasks da mesma escada (`B9.8.3`-`B9.8.5`).
+/// {@link #decodeHvc}/{@link ArmFeature#HYPERVISOR_CALL}. <b>B9.8.3</b> implementa `SMC` (A32 e
+/// T32) — ver {@link #decodeSmc}/{@link ArmFeature#SECURE_MONITOR_CALL}; `ERET`/`MRS_bank`/
+/// `MSR_bank` seguem como próximas tasks da mesma escada (`B9.8.4`/`B9.8.5`).
 ///
 /// <p><b>B2.7 PR3</b>: `CPS` de 32 bits (antes fora de escopo — mesmo prefixo de hi =
 /// {@code 0xF3AF} desta classe, distinguido de hints por `imod`/`M` ≠ 0, ver
@@ -201,6 +202,21 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int HVC_LO_FIXED_VALUE = 0x8000;
     private static final int HVC_LO_IMM_MASK = 0xFFF;
 
+    /// `SMC` T32 (B9.8.3, ARM DDI 0406C A8.8.20): `hi = 1111 0111 1111 iiii` (`imm4` = nibble
+    /// baixo de `hi`), `lo = 1000 0000 0000 0000` (fixo, sem imediato — ao contrário de `HVC`, o
+    /// `imm4` mora inteiro em `hi`). Confirmado contra `target/arm/tcg/t32.decode` real do QEMU
+    /// (`SMC 1111 0111 1111 imm:4 1000 0000 0000 0000 &amp;i`).
+    ///
+    /// <p><b>MESMO prefixo de `hi` que `UDF.W`</b> (`UDF_HI_MASK`/`UDF_HI_VALUE` = `0xF7F0`,
+    /// nibble baixo de `hi` ali é apenas ignorado, não um imediato) — só o `lo` distingue as duas
+    /// (`UDF`: `lo[15:12]=1010`; `SMC`: `lo` inteiro fixo em `0x8000`). {@link #tryDecode} tenta
+    /// {@link #decodeUdf} primeiro e, se o `lo` não bater, tenta {@link #decodeSmc} — sem isso,
+    /// todo `SMC` T32 cairia silenciosamente em `null` (G8: instrução real engolida por outro
+    /// dispatch em vez de virar `UNIMPLEMENTED`, mesma categoria de bug já corrigida pela `E6`/
+    /// `E8` em outros decoders).
+    private static final int SMC_HI_IMM_MASK = 0xF;
+    private static final int SMC_LO_VALUE = 0x8000;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         int hi = raw >>> 16;
@@ -222,7 +238,14 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
             return decodeBxj(raw, address, condition, hi, lo);
         }
         if ((hi & UDF_HI_MASK) == UDF_HI_VALUE) {
-            return decodeUdf(raw, address, condition, lo);
+            // UDF.W e SMC compartilham o mesmo prefixo de hi (0xF7Fx) — só o lo distingue (ver
+            // Javadoc de SMC_LO_VALUE). Tentar UDF primeiro e cair para SMC evita que um SMC
+            // válido seja engolido como null (G8).
+            DecodedInstruction udf = decodeUdf(raw, address, condition, lo);
+            if (udf != null) {
+                return udf;
+            }
+            return decodeSmc(raw, address, condition, hi, lo);
         }
         if ((hi & HVC_HI_MASK) == HVC_HI_VALUE) {
             return decodeHvc(raw, address, condition, hi, lo);
@@ -282,6 +305,20 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         int imm16 = ((hi & HVC_HI_IMM_MASK) << HVC_HI_IMM_SHIFT_IN_IMM16) | (lo & HVC_LO_IMM_MASK);
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.HVC,
                 -1, -1, -1, imm16, false, false, false);
+    }
+
+    // ── SMC — A8.8.20 (B9.8.3) ───────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeSmc(int raw, int address, Condition condition, int hi, int lo) {
+        if (lo != SMC_LO_VALUE) {
+            return null;
+        }
+        if (!architecture.has(ArmFeature.SECURE_MONITOR_CALL)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int imm4 = hi & SMC_HI_IMM_MASK;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SMC,
+                -1, -1, -1, imm4, false, false, false);
     }
 
     // ── Hints (NOP/YIELD/WFE/WFI/SEV) — A5.3.5, "Hints, and CPS" ────────────────────────────

@@ -139,7 +139,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // MCR de wait-for-interrupt do CP15 acima): ambas terminam o bloco. TBB/TBH e CBZ/CBNZ
             // (B2.4) sempre trocam o PC (ou podem trocar, no caso de CBZ/CBNZ) — mesmo tratamento
             // que BRANCH já recebe, terminal independente do guard condicional.
-            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, HVC, UNIMPLEMENTED, UDF,
+            case BRANCH, BRANCH_EXCHANGE, LONG_BRANCH_SUFFIX, LONG_BRANCH_32, POP, SWI, HVC, SMC, UNIMPLEMENTED, UDF,
                     // COPROCESSOR_DOUBLE (MCRR/MRRC, F3): mesmo motivo de COPROCESSOR acima — hoje só
                     // implementado como NOP de manutenção de cache (Cp15VmsaCoprocessor), mas o
                     // barramento é um gancho do host arbitrário, então terminal por precaução.

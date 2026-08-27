@@ -493,6 +493,73 @@ class Thumb2MiscDecoderTest {
         assertEquals(0xCAFE, thumb2Core.register(14));
     }
 
+    // ── B9.8.3: SMC.W ────────────────────────────────────────────────────────────────────
+
+    private static final int SMC_HI = 0xF7F5;
+    private static final int SMC_LO = 0x8000;
+
+    @Test
+    void smcWDecodesImm4WithSecureMonitorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, SMC_HI); // SMC.W #5 (encoding real, arm-none-eabi-as -march=armv7ve)
+        memory.put16(2, SMC_LO);
+
+        DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.SMC, instruction.kind());
+        assertEquals(5, instruction.immediate());
+    }
+
+    @Test
+    void smcWIsUnimplementedWithoutSecureMonitorCallFeature() {
+        // THUMB2_ARCH herda de ARMV6K, que já tem SECURE_MONITOR_CALL (B9.8.3, gate ARMv6K) —
+        // diferente de HYPERVISOR_CALL, não dá para reusá-la para testar a ausência da feature.
+        // Constrói um preset Thumb-2 a partir de ARMV5TE (sem SECURE_MONITOR_CALL) só para isto.
+        ArmArchitecture noSmcThumb2 = ArmArchitecture.extending(
+                        ArmArchitecture.ARMV5TE, "Thumb2-NoSmc", ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS)
+                .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
+                        ArmArchitecture.extending(ArmArchitecture.ARMV5TE, "Thumb2-NoSmc-Inner",
+                                ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS))));
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, SMC_HI);
+        memory.put16(2, SMC_LO);
+
+        DecodedInstruction instruction = new ThumbDecoder(noSmcThumb2).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.SMC, instruction.kind());
+    }
+
+    @Test
+    void smcWEntersMonitorModeMatchingArmClassic() {
+        ArmCore thumb2Core = newCore(ArmArchitecture.ARMV7A);
+        run32(thumb2Core, SMC_HI, SMC_LO); // SMC.W #5
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        armCore.memory().write32(0, 0xE160_0075); // SMC #5
+        armCore.step();
+
+        assertEquals(armCore.mode(), thumb2Core.mode());
+        assertEquals(CpuMode.MONITOR, thumb2Core.mode());
+        assertEquals(armCore.programCounter(), thumb2Core.programCounter());
+        assertEquals(armCore.register(14), thumb2Core.register(14));
+    }
+
+    @Test
+    void udfWStillDecodesAsUdfInTheSameHiRangeAsSmc() {
+        // UDF.W e SMC.W compartilham o mesmo prefixo de hi (0xF7Fx, ver Javadoc de
+        // Thumb2MiscDecoder#decodeSmc) — regressão do bug de dispatch corrigido nesta task: UDF
+        // continua sendo tentada primeiro e reconhecida normalmente.
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, UDF_HI);
+        memory.put16(2, UDF_LO);
+
+        DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.UDF, instruction.kind());
+        assertNotEquals(InstructionKind.SMC, instruction.kind());
+    }
+
     // ── Gating G2: sem THUMB2, cai no caminho legado (UNDEFINED, comportamento inalterado) ──
 
     @Test
