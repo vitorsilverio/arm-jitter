@@ -77,6 +77,17 @@ public final class Aarch64FpRegisters {
         hi[index] = hiBits;
     }
 
+    /// Grava um valor escalar de `1 << sizeLog2` bytes (`sizeLog2` `0`-`3`, `B`/`H`/`S`/`D`) em
+    /// `V<index>` e ZERA o resto do registrador — mesma disciplina "SIMD&FP destructive write" de
+    /// {@link #setS}/{@link #setD}, generalizada para `B`/`H` (`LDR B`/`LDR H`, B8.13). Para `Q`
+    /// (128 bits inteiros) use {@link #setQ} diretamente — não há "resto para zerar".
+    public void setScalar(int index, int sizeLog2, long value) {
+        int elementBits = 8 << sizeLog2;
+        long mask = elementBits == 64 ? -1L : (1L << elementBits) - 1;
+        lo[index] = value & mask;
+        hi[index] = 0;
+    }
+
     /// Lê um elemento (lane) de `V<index>` de `1 << sizeLog2` bytes, começando no índice `lane`
     /// (lane `0` = bits menos significativos), com zero-extend em um `long`. `sizeLog2` vai de `0`
     /// (byte) a `3` (doubleword) — ARM DDI 0487, notação de "arrangement" AdvSIMD.

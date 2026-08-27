@@ -454,6 +454,26 @@ armbox (47, +4); G5 não se aplica (só `armbox/linux/` tocado, nada do arm-jitt
 B4.0.5** (fase 3: fork/pipes, usa este busybox como corpus) — ainda não pega automaticamente,
 "1 sessão = 1 task".
 
+## 🔒 Congelamento de subprojetos (decisão do usuário, 2026-08-27)
+
+**Nenhuma task de armbox/gbaemu/ndsemu/virtual-arm-box/n3dsemu deve ser pega enquanto o arm-jitter
+não cobrir ~100% de instruções/perfis/features/modos ARM** — ver `tasks/README.md` e a memória do
+agente `feedback-100-cobertura-antes-subprojetos`. Só cobertura de ISA no arm-jitter é elegível.
+
+✅ **B8.13 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.13-a64-fp-simd-load-store-escalar.md`,
+achado tentando rodar o `busybox-aarch64` da sessão anterior) — `LDR`/`STR`/`LDP`/`STP`/
+`LDR (literal)` SIMD&FP escalar (`B`/`H`/`S`/`D`/`Q`), gap que `decodeLoadsAndStores` recusava por
+completo fora da família estruturada da B8.6. `Ir64FpMemSize` novo (com `QUAD`, que o enum de
+GPR não tem), 4 `Ir64Op`s novos, decode+executor completos, corpus real via devkitA64
+(`Aarch64FpLoadStoreDecoderTest` 32 + `Ir64BlockExecutorB813Test` 10). `mvn -o test` verde
+(2394+42) + `install`; G5: gbaemu 240 ✅, ndsemu 183 ✅, armbox 47 ✅. `docs/COBERTURA-ISA.md`:
+A64 68%→73%, global 73%→74% — abaixo dos 2 gatilhos de release. **Achado colateral**: com o gap
+fechado, `busybox-aarch64` avança bem mais fundo no boot e revela um gap NOVO — `MRS`/`MSR` de um
+registrador de sistema não reconhecido (`0xd51bd040`). **NÃO investigado nesta sessão** (decisão
+consciente: reagir corrida-atrás-do-crash é exatamente o padrão que motivou o congelamento — a
+próxima sessão ataca cobertura de registradores de sistema A64 de forma sistemática via
+`docs/COBERTURA-ISA.md`, não "roda o binário de novo"). Ver **Resultado** na task.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

@@ -33,6 +33,21 @@ Consequências práticas, obrigatórias para toda sessão:
   correta é **quebrar em tasks menores e enfileirar**, nunca excluir. Documentar o tamanho é
   informação; decidir não fazer não é uma opção disponível para o agente sozinho.
 
+## 🔒 Congelamento de subprojetos até 100% de cobertura (decisão do usuário, 2026-08-27 — NUNCA reabrir sem ele)
+
+**Nenhuma task de `armbox`/`gbaemu`/`ndsemu`/`virtual-arm-box`/`n3dsemu` deve ser pega — nem
+investigação, nem feature, nem bugfix de compatibilidade — enquanto `docs/COBERTURA-ISA.md` não
+mostrar cobertura completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de
+cobertura de ISA no `arm-jitter` é elegível agora.
+
+Motivo: sessão após sessão, um gap de decode só era descoberto ao rodar um binário real num
+subprojeto ("achado real: instrução X não implementada") — o custo de debugar e isolar cada gap
+um a um acabou sendo maior e mais frustrante do que teria sido cobrir a ISA inteira desde o
+início. Isso não é uma mudança da Regra Máxima acima (que já dizia "ARM 100% é o escopo final") —
+é uma ordem de PRIORIDADE: cobertura primeiro, tudo mais depois. Se uma sessão de subprojeto
+revelar um gap novo, ele vira task de cobertura no `arm-jitter`, não motivo para aprofundar no
+subprojeto. Ver memória do agente `feedback-100-cobertura-antes-subprojetos`.
+
 ## Protocolo de execução (obrigatório)
 
 1. Leia a task inteira, incluindo **Armadilhas** e **Não fazer**.

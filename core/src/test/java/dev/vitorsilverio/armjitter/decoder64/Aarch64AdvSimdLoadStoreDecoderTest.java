@@ -394,17 +394,17 @@ class Aarch64AdvSimdLoadStoreDecoderTest {
         assertEquals(1, op.rm());
     }
 
-    // ── Recusa (G8): espaço V=1 fora do escopo B8.6 (LDR/STR/LDP/STP escalar SIMD&FP) ─────────────
+    // ── B8.13 fechou o gap: LDR/STR/LDP/STP escalar SIMD&FP agora decodifica (ver
+    // Aarch64FpLoadStoreDecoderTest para a suíte completa) — este teste era uma recusa
+    // explícita (G8) datada de quando só a família estruturada da B8.6 existia; atualizado em
+    // vez de apagado, mesmo padrão de B10.6b/c ao preencher um `unsupported` documentado. ────────
 
     @Test
-    void scalarFpLoadStillUnsupported() {
-        // ldr d0, [x0] (LDR imediato, SIMD&FP, unsigned offset) — fora do escopo da B8.6 (só a
-        // família estruturada foi pedida), continua UNSUPPORTED como antes (B6.2).
-        assertThrowsUnsupported(0xfd400000);
-    }
-
-    private static void assertThrowsUnsupported(int word) {
-        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
-                () -> decodeWord(word));
+    void scalarFpLoadNowDecodesAsFpLoad64() {
+        // fd400000: ldr d0, [x0] (LDR imediato, SIMD&FP, unsigned offset) — B8.13.
+        Ir64Op.FpLoad64 op = (Ir64Op.FpLoad64) decodeWord(0xfd400000);
+        assertEquals(0, op.vt());
+        assertEquals(0, op.rn());
+        assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE, op.size());
     }
 }

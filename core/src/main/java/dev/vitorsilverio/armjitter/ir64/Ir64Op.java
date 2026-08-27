@@ -48,7 +48,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes, Ir64Op.CryptoAes,
         Ir64Op.VectorPolynomialMultiplyLong, Ir64Op.CryptoShaThreeRegister, Ir64Op.CryptoShaTwoRegister,
         Ir64Op.VectorDuplicateElement, Ir64Op.VectorDuplicateGeneral, Ir64Op.VectorInsertGeneral,
-        Ir64Op.VectorInsertElement, Ir64Op.VectorMoveElement {
+        Ir64Op.VectorInsertElement, Ir64Op.VectorMoveElement,
+        Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -234,6 +235,13 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_INSERT_ELEMENT = 82;
         /// B8.12: `SMOV`/`UMOV` — ver {@link VectorMoveElement}.
         public static final int VECTOR_MOVE_ELEMENT = 83;
+        /// B8.13: `LDR`/`STR` SIMD&FP registrador-imediato — ver {@link FpLoad64}/{@link FpStore64}.
+        public static final int FP_LOAD64 = 84;
+        public static final int FP_STORE64 = 85;
+        /// B8.13: `LDP`/`STP` SIMD&FP — ver {@link FpLoadStorePair}.
+        public static final int FP_LOAD_STORE_PAIR = 86;
+        /// B8.13: `LDR (literal)` SIMD&FP — ver {@link FpLoadLiteral64}.
+        public static final int FP_LOAD_LITERAL64 = 87;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -505,6 +513,98 @@ public sealed interface Ir64Op permits
             /// para os 64 bits do destino.
             boolean signExtend) implements Ir64Op {
         @Override public int kind() { return Kind.LOAD_LITERAL64; }
+    }
+
+    /// `LDR` SIMD&FP registrador-imediato (`ARM DDI 0487 C4.1.5`, `V=1` — B8.13): mesmas 4 formas
+    /// de endereçamento de {@link Load64}, mas o destino é `V<t>` (banco
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters}), tamanhos `B`/`H`/`S`/`D`/`Q`
+    /// (só {@link Load64} tem `W`/`X`; aqui a escrita é sempre "destructive" — zera o resto do
+    /// registro, exceto `Q` onde os 128 bits inteiros já são o resultado). Sem sinal — SIMD&FP não
+    /// tem forma equivalente a `LDRSB`/`LDRSH`/`LDRSW`. `Rn` é SEMPRE `Rn|SP` (nunca `XZR`, mesma
+    /// convenção de {@link Load64#rn}).
+    record FpLoad64(
+            /// Registrador de destino `V<t>` (índice `0`-`31`).
+            int vt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Tamanho da transferência/registro (`B`/`H`/`S`/`D`/`Q`).
+            Ir64FpMemSize size,
+            /// Modo de endereçamento.
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes — ver {@link Load64#immediate}.
+            long immediate,
+            /// Registrador de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `-1` nas demais formas.
+            int rm,
+            /// Extensão de {@link #rm}, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `null` nas demais formas.
+            Ir64ExtendType extendType,
+            /// Quantidade de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
+            int shiftAmount) implements Ir64Op {
+        @Override public int kind() { return Kind.FP_LOAD64; }
+    }
+
+    /// `STR` SIMD&FP registrador-imediato — mesmo formato de {@link FpLoad64}, fonte em vez de
+    /// destino.
+    record FpStore64(
+            /// Registrador de origem `V<t>` (índice `0`-`31`).
+            int vt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Tamanho da transferência/registro (`B`/`H`/`S`/`D`/`Q`).
+            Ir64FpMemSize size,
+            /// Modo de endereçamento.
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes.
+            long immediate,
+            /// Registrador de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `-1` nas demais formas.
+            int rm,
+            /// Extensão de {@link #rm}, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}; `null` nas demais formas.
+            Ir64ExtendType extendType,
+            /// Quantidade de deslocamento, válido só em
+            /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
+            int shiftAmount) implements Ir64Op {
+        @Override public int kind() { return Kind.FP_STORE64; }
+    }
+
+    /// `LDP`/`STP` SIMD&FP (`ARM DDI 0487 C6.2.127`/`C6.2.338`, `V=1` — B8.13): mesmo idioma de
+    /// {@link LoadStorePair}, mas os 2 registradores são `V<t>`/`V<t2>` e o tamanho do par é
+    /// `S`/`D`/`Q` (nunca `B`/`H` — não existe `LDP` de byte/halfword) e sem forma com sinal (ao
+    /// contrário de {@link LoadStorePair#signExtend}, `LDPSW`).
+    record FpLoadStorePair(
+            /// `true` para `LDP`, `false` para `STP`.
+            boolean load,
+            /// Primeiro registrador transferido `V<t>` (índice `0`-`31`).
+            int vt,
+            /// Segundo registrador transferido `V<t2>` (índice `0`-`31`).
+            int vt2,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Tamanho de cada elemento do par (`SINGLE`/`DOUBLE`/`QUAD` — nunca `BYTE`/`HALF`).
+            Ir64FpMemSize size,
+            /// Modo de endereçamento (`OFFSET`/`PRE_INDEX`/`POST_INDEX` — nunca
+            /// `REGISTER_OFFSET`).
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento imediato em bytes, já escalado pelo decoder (`imm7` × `size.bytes()`).
+            long immediate) implements Ir64Op {
+        @Override public int kind() { return Kind.FP_LOAD_STORE_PAIR; }
+    }
+
+    /// `LDR (literal)` SIMD&FP (`ARM DDI 0487 C6.2.122`, `V=1` — B8.13): mesmo idioma de
+    /// {@link LoadLiteral64}, mas o destino é `V<t>` e o tamanho é `S`/`D`/`Q` (campo `opc` de 2
+    /// bits — `11` reservado, nunca alcança aqui).
+    record FpLoadLiteral64(
+            /// Registrador de destino `V<t>` (índice `0`-`31`).
+            int vt,
+            /// Endereço absoluto já resolvido pelo decoder (mesma convenção de
+            /// {@link LoadLiteral64#address}).
+            long address,
+            /// Tamanho do registro (`SINGLE`/`DOUBLE`/`QUAD`).
+            Ir64FpMemSize size) implements Ir64Op {
+        @Override public int kind() { return Kind.FP_LOAD_LITERAL64; }
     }
 
     /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "shifted register" (`ARM DDI 0487 C6.2.4`/`C6.2.339`

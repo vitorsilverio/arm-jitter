@@ -15,6 +15,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
@@ -1300,6 +1301,7 @@ public final class Aarch64Decoder {
     }
 
     private Ir64Op decodeLoadsAndStores(int word, long address) {
+        int subclass = (word >>> LOAD_STORE_SUBCLASS_SHIFT) & LOAD_STORE_SUBCLASS_MASK;
         if (((word >>> VECTOR_FORM_BIT_SHIFT) & 1) != 0) {
             // AdvSIMD load/store multiple/single structures (B8.6): bit31 fixo=0 nas duas formas
             // reais (não existe eixo W/X de 32/64 bits aqui, Q assume esse papel).
@@ -1311,11 +1313,18 @@ public final class Aarch64Decoder {
             if (bit31Clear && advSimdFixed == ADVSIMD_LDST_SINGLE_PATTERN) {
                 return decodeAdvancedSimdLoadStoreSingle(word, address);
             }
-            // Resto do espaço V=1 (LDR/STR/LDP/STP escalar SIMD&FP): fora do escopo fechado da
-            // B8.6 (só a família estruturada `LDn`/`STn` foi pedida) — mesma decisão de B6.2.
-            throw unsupported(word, address);
+            // B8.13: `LDR`/`STR`/`LDP`/`STP`/`LDR (literal)` escalar SIMD&FP — MESMO campo de 2
+            // bits (`subclass`, bits[29:28]) que já discrimina o lado GPR (V=0) abaixo; os 2
+            // patterns AdvSIMD acima ocupam `subclass=00` com um prefixo de 6 bits mais específico
+            // (checados primeiro), então o `default` aqui é só o resto de `subclass=00` (espaço
+            // atômico/LSE, que SIMD&FP não tem no hardware real) — recusado de propósito (G8).
+            return switch (subclass) {
+                case SUBCLASS_LITERAL -> decodeFpLoadLiteral(word, address);
+                case SUBCLASS_PAIR -> decodeFpLoadStorePair(word, address);
+                case SUBCLASS_SINGLE -> decodeFpLoadStoreSingle(word, address);
+                default -> throw unsupported(word, address);
+            };
         }
-        int subclass = (word >>> LOAD_STORE_SUBCLASS_SHIFT) & LOAD_STORE_SUBCLASS_MASK;
         return switch (subclass) {
             case SUBCLASS_LITERAL -> decodeLoadLiteral(word, address);
             case SUBCLASS_PAIR -> decodeLoadStorePair(word, address);
@@ -1692,6 +1701,138 @@ public final class Aarch64Decoder {
         }
         return new Ir64Op.Load64(rt, rn, form.size, form.signExtend, form.wide, addressingMode,
                 immediate, rm, extendType, shiftAmount);
+    }
+
+    /// `LDR`/`STR` SIMD&FP registrador-imediato (`ARM DDI 0487 C4.1.5`, `V=1` — B8.13): MESMO
+    /// layout de campos de {@link #decodeLoadStoreSingle} (`size`/`opc`/`imm12`/`imm9`/`Rm`+
+    /// `option`+`S`) — só a tabela `size`→tamanho e a ausência de sinal mudam. Espelha
+    /// {@link #decodeLoadStoreSingle} quase linha a linha de propósito (mesmos nomes de campo do
+    /// encoding real), não abstraído num helper comum para não arriscar o lado GPR já testado.
+    private Ir64Op decodeFpLoadStoreSingle(int word, long address) {
+        int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
+        int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        FpSingleForm form = decodeFpSingleForm(sizeField, opcField, word, address);
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vt = word & REGISTER_FIELD_MASK;
+
+        boolean scaledOffset = ((word >>> SINGLE_SCALED_OFFSET_BIT_SHIFT) & 1) != 0;
+        if (scaledOffset) {
+            int imm12 = (word >>> SINGLE_IMM12_SHIFT) & SINGLE_IMM12_MASK;
+            long immediate = (long) imm12 * form.size.bytes();
+            return buildFpSingle(form, vt, rn, Ir64AddressingMode.OFFSET, immediate, -1, null, 0);
+        }
+        int idx = (word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK;
+        boolean bit21 = ((word >>> SINGLE_BIT21_SHIFT) & 1) != 0;
+        if (idx == IDX_REGISTER_OFFSET && bit21) {
+            int rm = (word >>> SINGLE_RM_SHIFT) & REGISTER_FIELD_MASK;
+            int option = (word >>> SINGLE_OPTION_SHIFT) & SINGLE_OPTION_MASK;
+            Ir64ExtendType extendType = switch (option) {
+                case OPTION_UXTW -> Ir64ExtendType.UXTW;
+                case OPTION_LSL -> Ir64ExtendType.LSL;
+                case OPTION_SXTW -> Ir64ExtendType.SXTW;
+                case OPTION_SXTX -> Ir64ExtendType.SXTX;
+                default -> throw unsupported(word, address); // option reservado
+            };
+            boolean shiftFlag = ((word >>> SINGLE_SHIFT_FLAG_SHIFT) & 1) != 0;
+            int shiftAmount = shiftFlag ? form.size.sizeLog2() : 0;
+            return buildFpSingle(form, vt, rn, Ir64AddressingMode.REGISTER_OFFSET, 0, rm, extendType, shiftAmount);
+        }
+        if (idx == IDX_UNSCALED && bit21) {
+            // Espaço atômico/LSE (mesmo bit de decodeLoadStoreSingle) — SIMD&FP não tem forma
+            // atômica no hardware real (LSE é só GPR); recusar em vez de confundir com LDUR/STUR.
+            throw unsupported(word, address);
+        }
+        Ir64AddressingMode addressingMode = switch (idx) {
+            case IDX_UNSCALED, IDX_REGISTER_OFFSET -> Ir64AddressingMode.OFFSET;
+            case IDX_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case IDX_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        int imm9 = (word >>> SINGLE_IMM9_SHIFT) & (int) bitMask(SINGLE_IMM9_BITS);
+        long immediate = signExtend(imm9, SINGLE_IMM9_BITS);
+        return buildFpSingle(form, vt, rn, addressingMode, immediate, -1, null, 0);
+    }
+
+    /// Resultado de `size`+`opc` já resolvidos (`ARM DDI 0487 C4.1.5`, tabela por `size`/`opc` das
+    /// formas `LDR`/`STR` `B`/`H`/`S`/`D`/`Q`) — compartilhado pelas 4 formas de endereçamento de
+    /// {@link #decodeFpLoadStoreSingle}. Irmão de {@link SingleForm} (GPR), sem `signExtend`/`wide`
+    /// (SIMD&FP não tem forma com sinal nem eixo `W`/`X`).
+    private record FpSingleForm(Ir64FpMemSize size, boolean store) {
+    }
+
+    private FpSingleForm decodeFpSingleForm(int sizeField, int opcField, int word, long address) {
+        // opc[1] (bit mais significativo de `opcField`) = 0 → tamanho vem de `size` (B/H/S/D);
+        // opc[1] = 1 → forma `Q` (128 bits), que exige `size=00` (as outras 3 combinações de
+        // `size` com `opc[1]=1` são reservadas). opc[0] = L (1=carga, 0=armazenamento) nas duas
+        // famílias — confirmado contra `target/arm/tcg/a64.decode` real do QEMU antes de codificar.
+        boolean opcHigh = (opcField & 0b10) != 0;
+        boolean load = (opcField & 0b01) != 0;
+        if (opcHigh) {
+            if (sizeField != SIZE_BYTE) {
+                throw unsupported(word, address); // size != 00 com opc[1]=1: reservado
+            }
+            return new FpSingleForm(Ir64FpMemSize.QUAD, !load);
+        }
+        Ir64FpMemSize size = switch (sizeField) {
+            case SIZE_BYTE -> Ir64FpMemSize.BYTE;
+            case SIZE_HALF -> Ir64FpMemSize.HALF;
+            case SIZE_WORD -> Ir64FpMemSize.SINGLE;
+            case SIZE_DOUBLEWORD -> Ir64FpMemSize.DOUBLE;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        return new FpSingleForm(size, !load);
+    }
+
+    private Ir64Op buildFpSingle(FpSingleForm form, int vt, int rn, Ir64AddressingMode addressingMode,
+            long immediate, int rm, Ir64ExtendType extendType, int shiftAmount) {
+        if (form.store) {
+            return new Ir64Op.FpStore64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
+        }
+        return new Ir64Op.FpLoad64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
+    }
+
+    /// `LDP`/`STP` SIMD&FP (`ARM DDI 0487 C6.2.127`/`C6.2.338`, `V=1` — B8.13): MESMO layout de
+    /// {@link #decodeLoadStorePair}, só a tabela `opc`→tamanho muda (`S`/`D`/`Q` em vez de `W`/`X`,
+    /// sem forma com sinal — não existe `LDPSW` para SIMD&FP).
+    private Ir64Op decodeFpLoadStorePair(int word, long address) {
+        int opc = (word >>> PAIR_OPC_SHIFT) & PAIR_OPC_MASK;
+        boolean load = ((word >>> PAIR_LOAD_BIT_SHIFT) & 1) != 0;
+        Ir64FpMemSize size = switch (opc) {
+            case 0b00 -> Ir64FpMemSize.SINGLE;
+            case 0b01 -> Ir64FpMemSize.DOUBLE;
+            case 0b10 -> Ir64FpMemSize.QUAD;
+            default -> throw unsupported(word, address); // opc=11 reservado
+        };
+        int addrModeField = (word >>> PAIR_ADDR_MODE_SHIFT) & PAIR_ADDR_MODE_MASK;
+        Ir64AddressingMode addressingMode = switch (addrModeField) {
+            case PAIR_ADDR_MODE_NO_ALLOC_HINT, PAIR_ADDR_MODE_OFFSET -> Ir64AddressingMode.OFFSET;
+            case PAIR_ADDR_MODE_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case PAIR_ADDR_MODE_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        long imm7 = (word >>> PAIR_IMM7_SHIFT) & bitMask(PAIR_IMM7_BITS);
+        long immediate = signExtend(imm7, PAIR_IMM7_BITS) * size.bytes();
+        int vt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int vt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.FpLoadStorePair(load, vt, vt2, rn, size, addressingMode, immediate);
+    }
+
+    /// `LDR (literal)` SIMD&FP (`ARM DDI 0487 C6.2.122`, `V=1` — B8.13): MESMO layout de
+    /// {@link #decodeLoadLiteral}, só a tabela `opc`→tamanho muda (`S`/`D`/`Q`, `opc=11`
+    /// reservado — não existe forma com sinal).
+    private Ir64Op decodeFpLoadLiteral(int word, long address) {
+        int opc = (word >>> LITERAL_OPC_SHIFT) & LITERAL_OPC_MASK;
+        Ir64FpMemSize size = switch (opc) {
+            case 0b00 -> Ir64FpMemSize.SINGLE;
+            case 0b01 -> Ir64FpMemSize.DOUBLE;
+            case 0b10 -> Ir64FpMemSize.QUAD;
+            default -> throw unsupported(word, address); // opc=11 reservado
+        };
+        long imm19 = (word >>> LITERAL_IMM19_SHIFT) & bitMask(LITERAL_IMM19_BITS);
+        long offset = signExtend(imm19, LITERAL_IMM19_BITS) * LITERAL_BYTES_PER_UNIT;
+        int vt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.FpLoadLiteral64(vt, address + offset, size);
     }
 
     private Ir64Op decodeDataProcessingImmediate(int word, long address) {
