@@ -75,6 +75,21 @@ Maven Central sempre que**, desde o último release:
 Baseline do primeiro marco (2026-08-21, versão `1.0.0` publicada): **global 53%** — v4T 62% ·
 v5TE 67% · v6K 86% · MPCore 82% · v7-A 83% · v6-M 22% · v7-M 54% · **A64 18%**.
 
+**Histórico de releases** (baseline = cobertura no momento de cada publicação):
+
+| Versão | Data | Global | A64 | Nota |
+|---|---|---|---|---|
+| `1.0.0` | 2026-08-21 | 53% | 18% | primeiro release |
+| `1.1.0` | 2026-08-23 | 59% | 27% | marco B10 (EL2/EL3) + B8.1-B8.5 |
+| `1.2.0` | 2026-08-26 | 71% | 61% | marco B8.6-B8.10 (AdvSIMD) — publicada por sessão sem registro na `FILA-EXECUCAO.md` na hora |
+| `1.3.0` | 2026-08-27 | 73% | 68% | B8.11/B8.11b/B8.12 + E7/E8 — publicada a pedido do usuário **abaixo dos dois gatilhos** (delta desde `1.2.0`: global +2pp, A64 +7pp); via CI (`release.yml`), sincronização com `repo1.maven.org` mais lenta que o normal |
+
+⚠️ **F7 (subir os consumidores) ficou incompleta na `1.3.0`** — adiada a pedido do usuário por causa
+da demora incomum de sincronização do Central (usuário citou estar perto do limite mensal de
+releases da conta). Retomar quando `1.3.0` estiver resolvível
+(`https://repo1.maven.org/maven2/dev/vitorsilverio/arm-jitter/1.3.0/arm-jitter-1.3.0.pom` → `200`).
+Estado por repo: `armbox` em `1.2.0`; `gbaemu`/`ndsemu`/`virtual-arm-box`/`n3dsemu` em `1.1.0`.
+
 Regras do release:
 
 - Versão **minor** (`1.1.0`, `1.2.0`, ...): a frente é aditiva, e o invariante **G3** proíbe

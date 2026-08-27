@@ -226,9 +226,33 @@ arquivo do arm-jitter tocado). `cubemap`/`gpusprites` leem seus `.t3x` reais do 
 panicam mais (ainda 0 desenhos no `--report`, não investigado além disso); `composite_scene` não
 panica mais por `fs:USER`, mas revela causa NOVA e não relacionada em `APT:U` (`0x0044`/`0x000B`/
 `0x0102`), candidata a task própria. Ver **Resultado** na task. **Candidatas restantes, não pegas
-automaticamente**: `G6.3` (n3dsemu, `VertexShaderInterpreter` `CMP`+`MAD`), o `APT:U` achado acima,
-e a publicação pendente do release Maven Central (marco de cobertura cruzado desde `1.1.0`/`1.2.0`
-sem release dedicado — ver topo do arquivo).
+automaticamente**: `G6.3` (n3dsemu, `VertexShaderInterpreter` `CMP`+`MAD`), o `APT:U` achado acima.
+~~A publicação pendente do release Maven Central~~ — **ver nota logo abaixo: já havia sido feita
+(`1.2.0`, 2026-08-26) por sessão não refletida aqui, e uma `1.3.0` nova foi publicada em seguida.**
+
+✅ **`1.2.0` publicada no Maven Central em 2026-08-26** (sessão sem registro nesta fila até agora —
+achado só na sessão da `1.3.0` abaixo) — inclui todo o trabalho de cobertura B8.6-B8.10 (AdvSIMD:
+load/store estruturado, inteiro, deslocamento/saturação, FP vetorial, permutação/redução/tabela) +
+`Gdb64Server` (stub GDB para AArch64) + fix de `VSQRT` interpretado (`vn=-1`). `armbox` já estava em
+`1.2.0`; `gbaemu`/`ndsemu`/`virtual-arm-box`/`n3dsemu` ficaram para trás em `1.1.0` (F7 incompleta).
+
+✅ **`1.3.0` publicada no Maven Central em 2026-08-27** (a pedido explícito do usuário, mesmo com o
+delta desde `1.2.0` abaixo dos dois gatilhos normais de release — A64 61%→68%=+7pp, global
+71%→73%=+2pp) — `B8.11`/`B8.11b` (Crypto Extension: `AES*`/`PMULL*`/`SHA1*`/`SHA256*`), `B8.12`
+(AdvSIMD copy: `DUP`/`INS`/`SMOV`/`UMOV`), `E7` (JIT A64: exceções de guest escapando pro host) e
+`E8` (bug de dispatch `decodeAdvancedSimdInteger`/`Rm`). Publicado via CI (`release.yml`, tag
+`v1.3.0`, commit `eaa979f`) — a publicação manual (`mvn -Prelease clean deploy`) tinha travado no
+`maven-gpg-plugin` pedindo pinentry interativo (sem passphrase salva em `settings.xml`, decisão do
+usuário). O workflow do GitHub Actions terminou ✅, mas a sincronização com `repo1.maven.org` ficou
+MUITO mais lenta que o normal (>1h30, portal mostrando `PUBLISHING` — usuário mencionou que a conta
+está perto do limite mensal de releases do Central, possível causa). **F7 (subir os 5 consumidores
+para `1.3.0`) foi ADIADA a pedido do usuário** — não pegar automaticamente ainda; retomar quando o
+usuário confirmar que `1.3.0` sincronizou (checar
+`https://repo1.maven.org/maven2/dev/vitorsilverio/arm-jitter/1.3.0/arm-jitter-1.3.0.pom`). Estado
+dos consumidores nesta pausa: `armbox` em `1.2.0`; `gbaemu`/`ndsemu`/`virtual-arm-box`/`n3dsemu`
+ainda em `1.1.0`. **Considerar, antes de publicar a próxima versão**: mirror de artefatos (jar/pom
+direto) e GitHub Pages como réplica do Central foram avaliados e EXPLICITAMENTE RECUSADOS pelo
+usuário (2026-08-27) — nada de mirror, só o Central mesmo, mesmo com o limite mensal apertado.
 
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
