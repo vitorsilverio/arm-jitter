@@ -157,11 +157,19 @@ opções (B8.8 arm-jitter vs. G6.1 n3dsemu vs. B6.14 F11); ver linha Q14 acima.
 ✅ **B8.10 (AdvSIMD permutação/redução/tabela) fechada 2026-08-24** — priorizada pelo usuário entre
 3 opções (B8.10 arm-jitter vs. G6.1 n3dsemu vs. B6.14 F11); ver linha Q16 acima. Achado novo:
 `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy) ficaram de fora, candidata a task própria.
-Próximo item sem dependência pendente: **B8.11** (extensões opcionais A64 com triagem: cripto/PAC/
-MTE/`CPY*`/dot-product/matmul, ~180 — a maioria não se aplica ao Cortex-A53 do raspi3, entrega
-majoritariamente `isa-nao-aplicavel.tsv`) — não pego automaticamente, aguardando o usuário confirmar
-prioridade (mesma regra de sempre para o topo da fila; B6.14 segue candidata também, e a nova
-candidata "`DUP`/`INS`/AdvSIMD copy" achada por esta sessão).
+✅ **B8.11 fechada 2026-08-26** (priorizada pelo usuário entre B8.11/G6.2/G6.3/AdvSIMD-copy) —
+`AESE`/`AESD`/`AESMC`/`AESIMC`/`PMULL`/`PMULL2` implementados (achado: o Cortex-A53 do raspi3 TEM a
+Crypto Extension base, ao contrário do que o plano mestre presumia); 66 exclusões TSV reais
+(PAC/MTE/`CPY*`/dot-matmul/SHA512/SM3/SM4, todas ARMv8.2-9.x confirmadas); `SHA1*`/`SHA256*` ficaram
+de fora por orçamento (candidata **B8.11b**, mesma Crypto Extension ARMv8.0). A64 61%→66%, global
+71%→72%; marco cumulativo desde `1.1.0` continua cruzado, release não feito nesta sessão (mesma
+decisão consciente de B8.7-B8.10). **Achado de bug PRÉ-EXISTENTE** (B8.7+, não desta task):
+`decodeAdvancedSimdInteger` confunde "AdvSIMD across lanes" com "three different" genuíno sempre que
+`Rm` é um registrador `16`-`31` (heurística de bit4 inválida nesse caso) — documentado com teste de
+regressão, não corrigido, candidata a task própria. Ver **Resultado** em
+`trilha-b-arquiteturas/b8.11-a64-extensoes-opcionais-triagem.md`. **Candidatas seguintes, não pegas
+automaticamente**: `B8.11b` (SHA1/SHA256), o bug de dispatch across-lanes×three-different, `DUP`/
+`INS`/`SMOV`/`UMOV` (achado de B8.10), `G6.2`/`G6.3` (n3dsemu).
 
 ✅ **G6.1 fechada 2026-08-24** (`arm-jitter/tasks/trilha-g-3ds/g6.1-exemplos-restantes.md`, escrita
 e executada na mesma sessão, priorizada pelo usuário entre B8.11/G6.1/B6.14/AdvSIMD-copy) — os 6

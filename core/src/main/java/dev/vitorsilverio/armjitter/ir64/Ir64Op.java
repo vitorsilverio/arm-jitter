@@ -45,7 +45,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorShiftNarrowImmediate, Ir64Op.VectorShiftWidenImmediate,
         Ir64Op.VectorFpArithmeticThreeSame, Ir64Op.VectorFpArithmeticPairwise,
         Ir64Op.VectorFpArithmeticUnary, Ir64Op.VectorExtract, Ir64Op.VectorPermute,
-        Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes {
+        Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes, Ir64Op.CryptoAes,
+        Ir64Op.VectorPolynomialMultiplyLong {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -209,6 +210,12 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_TABLE_LOOKUP = 73;
         /// B8.10: `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — ver {@link VectorFpAcrossLanes}.
         public static final int VECTOR_FP_ACROSS_LANES = 74;
+        /// B8.11: `AESE`/`AESD`/`AESMC`/`AESIMC` (ARMv8-A Cryptographic Extension, AES) — ver
+        /// {@link CryptoAes}.
+        public static final int CRYPTO_AES = 75;
+        /// B8.11: `PMULL`/`PMULL2` formas `p8`/`p64` (multiplicação polinomial alargando,
+        /// Cryptographic Extension) — ver {@link VectorPolynomialMultiplyLong}.
+        public static final int VECTOR_POLYNOMIAL_MULTIPLY_LONG = 76;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1935,5 +1942,48 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte (lido como `.4s`).
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ACROSS_LANES; }
+    }
+
+    /// `AESE`/`AESD`/`AESMC`/`AESIMC` (B8.11, ARMv8-A Cryptographic Extension) — sempre opera nos
+    /// 128 bits inteiros (`Q` fixo em `1` no encoding real, sem forma "metade"). Para `AESE`/
+    /// `AESD`, {@link #rn} é o SEGUNDO operando (`Rm` no manual — o decoder já resolve o alias
+    /// `Rn=Rd` do encoding real, ver `ARM DDI 0487` "AESE"); `Rd` ATUAL é lido como primeiro
+    /// operando pelo executor (escrita destrutiva real, não uma cópia). Para `AESMC`/`AESIMC`,
+    /// {@link #rn} é o ÚNICO operando (`Rd` atual é ignorado).
+    record CryptoAes(
+            /// Operação a executar.
+            Ir64CryptoAesOp op,
+            /// Registrador `V` de destino (e, para `AESE`/`AESD`, primeiro operando).
+            int rd,
+            /// Registrador `V` fonte (segundo operando para `AESE`/`AESD`; único operando para
+            /// `AESMC`/`AESIMC`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_AES; }
+    }
+
+    /// `PMULL`/`PMULL2` (B8.11, ARMv8-A Cryptographic Extension — `PMULL_p64` tecnicamente exige
+    /// `FEAT_PMULL`, empacotado junto com AES no Cortex-A53 do raspi3): multiplicação polinomial
+    /// `GF(2)` SEM redução (ao contrário de `PMUL`, que trunca — ver
+    /// {@link Ir64Op.VectorArithmeticThreeSame}), alargando o elemento. `p8`=`false`: 8 lanes de
+    /// byte (`Rn`/`Rm` metade selecionada por {@link #q}, mesma convenção de
+    /// {@link VectorArithmeticWidening#q}) produzindo 8 lanes de halfword em `Rd`. `p8`=`true`:
+    /// UM elemento de 64 bits (a metade de `Rn`/`Rm` selecionada por {@link #q}) produzindo os 128
+    /// bits inteiros de `Rd` — não cabe no formato genérico de {@link VectorArithmeticWidening}
+    /// (que assume `esz+1` sempre um tamanho de elemento válido; aqui `64+64=128` é o registro
+    /// inteiro, não um "elemento" further-alargável), por isso um record próprio.
+    record VectorPolynomialMultiplyLong(
+            /// `true` para a forma de 64 bits (`PMULL_p64`, um elemento, resultado no registro
+            /// inteiro); `false` para a forma de 8 bits (`PMULL_p8`, 8 lanes).
+            boolean p64,
+            /// `false` (forma sem `2`): usa a metade BAIXA de `Rn`/`Rm`. `true` (forma `*2`): usa
+            /// a metade ALTA. Mesma convenção de {@link VectorArithmeticWidening#q}.
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG; }
     }
 }

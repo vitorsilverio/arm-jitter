@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **71%** — 2740 de 3836 células aplicáveis decodificam.
+> **72%** — 2746 de 3777 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **61%** (672/1086) |
+| A64 | **66%** (678/1027) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 61% (672/1086) |
+| A64 — AArch64 | 1161 | A64 66% (678/1027) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1779,9 +1779,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDP_v` | ❌ |
 | `STP_v` | ❌ |
 | `LDP_v` | ❌ |
-| `STGP` | ❌ |
-| `STGP` | ❌ |
-| `STGP` | ❌ |
+| `STGP` | · |
+| `STGP` | · |
+| `STGP` | · |
 | `STR_i` | ✅ |
 | `LDR_i` | ✅ |
 | `LDR_i` | ✅ |
@@ -1886,7 +1886,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDAPR_i` | ✅ |
 | `LDAPR_i` | ✅ |
 | `LDAPR_i` | ✅ |
-| `GCSSTR` | ❌ |
+| `GCSSTR` | · |
 | `ST_mult` | ✅ |
 | `ST_mult` | ✅ |
 | `ST_mult` | ✅ |
@@ -1910,34 +1910,34 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LD_single` | ✅ |
 | `LD_single` | ✅ |
 | `LD_single_repl` | ✅ |
-| `STZGM` | ❌ |
-| `STG` | ❌ |
-| `STG` | ❌ |
-| `STG` | ❌ |
-| `LDG` | ❌ |
-| `STZG` | ❌ |
-| `STZG` | ❌ |
-| `STZG` | ❌ |
-| `STGM` | ❌ |
-| `ST2G` | ❌ |
-| `ST2G` | ❌ |
-| `ST2G` | ❌ |
-| `LDGM` | ❌ |
-| `STZ2G` | ❌ |
-| `STZ2G` | ❌ |
-| `STZ2G` | ❌ |
+| `STZGM` | · |
+| `STG` | · |
+| `STG` | · |
+| `STG` | · |
+| `LDG` | · |
+| `STZG` | · |
+| `STZG` | · |
+| `STZG` | · |
+| `STGM` | · |
+| `ST2G` | · |
+| `ST2G` | · |
+| `ST2G` | · |
+| `LDGM` | · |
+| `STZ2G` | · |
+| `STZ2G` | · |
+| `STZ2G` | · |
 | `SETP` | ✅ |
 | `SETM` | ✅ |
 | `SETE` | ✅ |
-| `SETGP` | ❌ |
-| `SETGM` | ❌ |
-| `SETGE` | ❌ |
+| `SETGP` | · |
+| `SETGM` | · |
+| `SETGE` | · |
 | `CPYFP` | ✅ |
 | `CPYFM` | ✅ |
 | `CPYFE` | ✅ |
-| `CPYP` | ❌ |
-| `CPYM` | ❌ |
-| `CPYE` | ❌ |
+| `CPYP` | · |
+| `CPYM` | · |
+| `CPYE` | · |
 | `UDIV` | ✅ |
 | `SDIV` | ✅ |
 | `LSLV` | ✅ |
@@ -1952,10 +1952,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `CRC32C` | · |
 | `CRC32C` | · |
 | `CRC32C` | · |
-| `SUBP` | ❌ |
-| `SUBPS` | ❌ |
-| `IRG` | ❌ |
-| `GMI` | ❌ |
+| `SUBP` | · |
+| `SUBPS` | · |
+| `IRG` | · |
+| `GMI` | · |
 | `PACGA` | ❌ |
 | `SMAX` | · |
 | `SMIN` | · |
@@ -1976,10 +1976,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `PACDB` | ✅ |
 | `AUTIA` | ✅ |
 | `AUTIB` | ✅ |
-| `AUTDA` | ❌ |
+| `AUTDA` | · |
 | `AUTDB` | ✅ |
-| `XPACI` | ❌ |
-| `XPACD` | ❌ |
+| `XPACI` | · |
+| `XPACD` | · |
 | `AND_r` | ✅ |
 | `ORR_r` | ✅ |
 | `EOR_r` | ✅ |
@@ -2011,10 +2011,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `UMSUBL` | ✅ |
 | `SMULH` | ✅ |
 | `UMULH` | ✅ |
-| `AESE` | ❌ |
-| `AESD` | ❌ |
-| `AESMC` | ❌ |
-| `AESIMC` | ❌ |
+| `AESE` | ✅ |
+| `AESD` | ✅ |
+| `AESMC` | ✅ |
+| `AESIMC` | ✅ |
 | `SHA1C` | ❌ |
 | `SHA1P` | ❌ |
 | `SHA1M` | ❌ |
@@ -2032,15 +2032,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SM3PARTW1` | ✅ |
 | `SM3PARTW2` | ✅ |
 | `SM4EKEY` | ✅ |
-| `SHA512SU0` | ❌ |
-| `SM4E` | ❌ |
+| `SHA512SU0` | · |
+| `SM4E` | · |
 | `EOR3` | ✅ |
 | `BCAX` | ✅ |
-| `SM3SS1` | ❌ |
-| `SM3TT1A` | ❌ |
-| `SM3TT1B` | ❌ |
-| `SM3TT2A` | ❌ |
-| `SM3TT2B` | ❌ |
+| `SM3SS1` | · |
+| `SM3TT1A` | · |
+| `SM3TT1B` | · |
+| `SM3TT2A` | · |
+| `SM3TT2B` | · |
 | `XAR` | ✅ |
 | `DUP_element_s` | ❌ |
 | `DUP_element_v` | ❌ |
@@ -2228,15 +2228,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQRDMULH_v` | ✅ |
 | `SQRDMLAH_v` | · |
 | `SQRDMLSH_v` | · |
-| `SDOT_v` | ❌ |
-| `UDOT_v` | ❌ |
-| `USDOT_v` | ❌ |
-| `BFDOT_v` | ❌ |
+| `SDOT_v` | · |
+| `UDOT_v` | · |
+| `USDOT_v` | · |
+| `BFDOT_v` | · |
 | `BFMLAL_v` | ❌ |
-| `BFMMLA` | ❌ |
-| `SMMLA` | ❌ |
-| `UMMLA` | ❌ |
-| `USMMLA` | ❌ |
+| `BFMMLA` | · |
+| `SMMLA` | · |
+| `UMMLA` | · |
+| `USMMLA` | · |
 | `FCADD_90` | · |
 | `FCADD_270` | · |
 | `FCMLA_v` | · |
@@ -2268,8 +2268,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `RADDHN` | ✅ |
 | `SUBHN` | ✅ |
 | `RSUBHN` | ✅ |
-| `PMULL_p8` | ❌ |
-| `PMULL_p64` | ❌ |
+| `PMULL_p8` | ✅ |
+| `PMULL_p64` | ✅ |
 | `FAMAX` | · |
 | `FAMAX` | · |
 | `FAMIN` | · |
@@ -2280,10 +2280,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTN_bs` | ❌ |
 | `FMLAL_hb_v` | ❌ |
 | `FMLALL_sb_v` | ❌ |
-| `FDOT_sb_v` | ❌ |
-| `FDOT_hb_v` | ❌ |
-| `FMMLA_sb` | ❌ |
-| `FMMLA_hb` | ❌ |
+| `FDOT_sb_v` | · |
+| `FDOT_hb_v` | · |
+| `FMMLA_sb` | · |
+| `FMMLA_hb` | · |
 | `FMUL_si` | ❌ |
 | `FMUL_si` | ❌ |
 | `FMUL_si` | ❌ |
@@ -2340,11 +2340,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQRDMLAH_vi` | ❌ |
 | `SQRDMLSH_vi` | ❌ |
 | `SQRDMLSH_vi` | ❌ |
-| `SDOT_vi` | ❌ |
-| `UDOT_vi` | ❌ |
-| `SUDOT_vi` | ❌ |
-| `USDOT_vi` | ❌ |
-| `BFDOT_vi` | ❌ |
+| `SDOT_vi` | · |
+| `UDOT_vi` | · |
+| `SUDOT_vi` | · |
+| `USDOT_vi` | · |
+| `BFDOT_vi` | · |
 | `BFMLAL_vi` | ❌ |
 | `FCMLA_vi` | ❌ |
 | `FCMLA_vi` | ❌ |
@@ -2369,8 +2369,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQDMLSL_vi` | ❌ |
 | `FMLAL_hb_vi` | ❌ |
 | `FMLALL_sb_vi` | ❌ |
-| `FDOT_sb_vi` | ❌ |
-| `FDOT_hb_vi` | ❌ |
+| `FDOT_sb_vi` | · |
+| `FDOT_hb_vi` | · |
 | `FCSEL` | ✅ |
 | `FMADD` | ✅ |
 | `FMSUB` | ✅ |

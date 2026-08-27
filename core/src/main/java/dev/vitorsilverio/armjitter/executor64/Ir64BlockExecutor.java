@@ -362,6 +362,9 @@ public final class Ir64BlockExecutor {
                     Ir64VectorArithmeticExecutor.executeTableLookup(core, (Ir64Op.VectorTableLookup) op);
             case Ir64Op.Kind.VECTOR_FP_ACROSS_LANES ->
                     Ir64VectorFpArithmeticExecutor.executeFpAcrossLanes(core, (Ir64Op.VectorFpAcrossLanes) op);
+            case Ir64Op.Kind.CRYPTO_AES -> Ir64CryptoExecutor.executeAes(core, (Ir64Op.CryptoAes) op);
+            case Ir64Op.Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG ->
+                    Ir64VectorArithmeticExecutor.executePolynomialMultiplyLong(core, (Ir64Op.VectorPolynomialMultiplyLong) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

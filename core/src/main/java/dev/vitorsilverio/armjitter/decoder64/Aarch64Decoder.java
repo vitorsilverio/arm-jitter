@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
@@ -882,6 +883,10 @@ public final class Aarch64Decoder {
     /// Bit alto de `Rm` setado — "across lanes" (`ADDV`/...)/`ADDP_s` (Rm parcialmente livre,
     /// dispatch por tabela exata em vez de decompor mais).
     private static final int ADVSIMD_INT_RM_ACROSS_LANES_BIT = 0b1_0000;
+    /// B8.11: `Rm` fixo="01000" — `AESE`/`AESD`/`AESMC`/`AESIMC` ("Cryptographic AES" do
+    /// `a64.decode` real, que aliasa neste mesmo espaço de bits — ver
+    /// {@link #decodeAdvancedSimdInteger}).
+    private static final int ADVSIMD_AES_RM = 0b0_1000;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -2272,6 +2277,21 @@ public final class Aarch64Decoder {
         if (threeSameShape) {
             return decodeAdvancedSimdThreeSameShape(word, address, scalar, q, esz, u, opcode, rn, rd, rm);
         }
+        // B8.11: `AESE`/`AESD`/`AESMC`/`AESIMC` (Cryptographic Extension) vivem no MESMO espaço de
+        // bits que "three different" (prefixo vetorial `01110`, `bit21=1`, `bit10=0`) — no
+        // encoding real (`a64.decode` do QEMU, seção "Cryptographic AES") são `Q=1`/`U=0`/`size=00`
+        // sempre fixos e `Rm=0b01000` sempre fixo (a diferença entre as 4 instruções mora inteira
+        // no campo `opcode`, `9`/`11`/`13`/`15` — nenhum desses 4 valores colide com os opcodes
+        // PARES já usados por `VectorArithmeticWidening`/`Wide`/`Narrow` em
+        // {@link #decodeAdvancedSimdThreeDifferent}, conferido exaustivamente). Checado ANTES do
+        // resto do dispatch de "three different" porque usa um record totalmente diferente (2
+        // registradores reais, não 3).
+        if (q && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
+            Ir64CryptoAesOp aesOp = decodeCryptoAesOpcode(opcode);
+            if (aesOp != null) {
+                return new Ir64Op.CryptoAes(aesOp, rd, rn);
+            }
+        }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
             Ir64VectorUnaryOp op = decodeVectorUnaryOpcode(u, opcode, scalar);
             if (op != null) {
@@ -2353,8 +2373,12 @@ public final class Aarch64Decoder {
         }
         // `Rm` livre, `bit10=0`: "three different" (alargando/largo+estreito/estreitando) — só
         // existe na forma VETORIAL (sem equivalente escalar puro nesta fatia).
-        if (scalar || esz == ADVSIMD_INT_SCALAR_ESZ) {
-            // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487); G8.
+        // B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA "three different" real com
+        // `esz=3`/doubleword (produz o registro `Q` inteiro, não um elemento `esz+1` comum) —
+        // deixado passar aqui para {@link #decodeAdvancedSimdThreeDifferent} tratar.
+        if (scalar || (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100)) {
+            // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487) — exceto PMULL_p64
+            // acima; G8.
             throw unsupported(word, address);
         }
         return decodeAdvancedSimdThreeDifferent(word, address, q, esz, u, opcode, rn, rd, rm);
@@ -2744,6 +2768,19 @@ public final class Aarch64Decoder {
         };
     }
 
+    /// B8.11: `AESE`(`opcode=9`)/`AESD`(`11`)/`AESMC`(`13`)/`AESIMC`(`15`) — os 4 valores ÍMPARES
+    /// de `opcode` dentro do slot `Rm=`{@link #ADVSIMD_AES_RM}, conferidos bit a bit contra
+    /// `a64.decode` real (seção "Cryptographic AES"/"Cryptographic two-register SHA" do QEMU).
+    private static Ir64CryptoAesOp decodeCryptoAesOpcode(int opcode) {
+        return switch (opcode) {
+            case 0b0_1001 -> Ir64CryptoAesOp.AESE;
+            case 0b0_1011 -> Ir64CryptoAesOp.AESD;
+            case 0b0_1101 -> Ir64CryptoAesOp.AESMC;
+            case 0b0_1111 -> Ir64CryptoAesOp.AESIMC;
+            default -> null;
+        };
+    }
+
     private static Ir64VectorAcrossLanesOp decodeVectorAcrossLanesOpcode(boolean u, int rm, int opcode) {
         return switch (opcode) {
             case 0b1_0111 -> u ? null : Ir64VectorAcrossLanesOp.ADDV;
@@ -2820,8 +2857,18 @@ public final class Aarch64Decoder {
         if (narrowOp != null) {
             return new Ir64Op.VectorArithmeticNarrow(narrowOp, q, esz, rd, rn, rm);
         }
-        // `PMULL`/`PMULL2` (cripto, B8.11) usa outro valor de `opcode` dentro deste mesmo grupo —
-        // fora de escopo, G8.
+        // B8.11: `PMULL`/`PMULL2` (`opcode=0b11100`, `u` sempre `false` no encoding real — mesmo
+        // slot que a triagem original desta task previa, conferido bit a bit contra `a64.decode`
+        // real). `esz` distingue `p8` (`00`, 8 lanes de byte→halfword) de `p64` (`11`,
+        // doubleword→128 bits inteiro); `01`/`10` são reservados (G8).
+        if (opcode == 0b1_1100 && !u) {
+            if (esz == 0) {
+                return new Ir64Op.VectorPolynomialMultiplyLong(false, q, rd, rn, rm);
+            }
+            if (esz == 3) {
+                return new Ir64Op.VectorPolynomialMultiplyLong(true, q, rd, rn, rm);
+            }
+        }
         throw unsupported(word, address);
     }
 

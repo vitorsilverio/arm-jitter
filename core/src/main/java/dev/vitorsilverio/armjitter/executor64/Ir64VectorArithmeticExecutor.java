@@ -705,4 +705,49 @@ final class Ir64VectorArithmeticExecutor {
         fp.setQ(op.rd(), resultLo, resultHi);
         return false;
     }
+
+    /// `PMULL`/`PMULL2` (`p8`/`p64`, B8.11) — multiplicação polinomial `GF(2)` alargando, SEM
+    /// redução (diferente de `PMUL`, que trunca — {@link #polynomialMultiply8}). `p8`: 8 lanes de
+    /// byte→halfword, reaproveita {@link #polynomialMultiply8} sem truncar o resultado de 15 bits.
+    /// `p64`: um único elemento de 64 bits→128 bits, {@link #polynomialMultiply64}.
+    static boolean executePolynomialMultiplyLong(Aarch64Core core, Ir64Op.VectorPolynomialMultiplyLong op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.p64()) {
+            int index = op.q() ? 1 : 0;
+            long a = fp.element(op.rn(), index, 3);
+            long b = fp.element(op.rm(), index, 3);
+            long[] result = polynomialMultiply64(a, b);
+            fp.setQ(op.rd(), result[0], result[1]);
+            return false;
+        }
+        int outputElements = elementsPerRegister(true, 1);
+        int laneOffset = op.q() ? outputElements : 0;
+        for (int i = 0; i < outputElements; i++) {
+            int lane = laneOffset + i;
+            long a = fp.element(op.rn(), lane, 0);
+            long b = fp.element(op.rm(), lane, 0);
+            fp.setElement(op.rd(), i, 1, polynomialMultiply8(a, b));
+        }
+        return false;
+    }
+
+    /// Multiplicação polinomial `GF(2)` de 64×64→128 bits, SEM redução: XOR de `a<<i` (como valor
+    /// de 128 bits) para cada bit `i` setado de `b` — mesma definição de {@link #polynomialMultiply8}
+    /// generalizada para 64 bits. `i=0` tratado à parte porque `x >>> 64` em Java equivale a
+    /// `x >>> 0` (o deslocamento é módulo 64), não a zero.
+    private static long[] polynomialMultiply64(long a, long b) {
+        long resultLo = 0L;
+        long resultHi = 0L;
+        for (int i = 0; i < 64; i++) {
+            if (((b >>> i) & 1) != 0) {
+                if (i == 0) {
+                    resultLo ^= a;
+                } else {
+                    resultLo ^= a << i;
+                    resultHi ^= a >>> (64 - i);
+                }
+            }
+        }
+        return new long[] {resultLo, resultHi};
+    }
 }

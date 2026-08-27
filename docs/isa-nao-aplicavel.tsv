@@ -283,3 +283,59 @@ FMAXNMV_h	A64	ARMv8.2-A/FEAT_FP16 (meia-precisão) — mantido excluído por ora
 FMINNMV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
 FMAXV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
 FMINV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
+
+# ── B8.11 (cripto/PAC/MTE/CPY-SET/XAR): triagem de "extensões opcionais" do plano mestre
+# ── (`b7-plano-cobertura-isa.md`). AES/SHA1/SHA256/PMULL (ARMv8-A Cryptographic Extension base,
+# ── ARMv8.0) IMPLEMENTADOS onde aplicável ao Cortex-A53 — ver `Ir64CryptoExecutor`/
+# ── `VectorPolynomialMultiplyLong`. O resto abaixo são versões REALMENTE posteriores (conferido
+# ── contra `a64.decode` real do QEMU) — pendência de sequenciamento, não exclusão definitiva
+# ── (regra máxima do `tasks/README.md`, 2026-08-24).
+SHA512SU0	A64	ARMv8.2-A/FEAT_SHA512
+SM3SS1	A64	ARMv8.2-A/FEAT_SM3
+SM3TT1A	A64	ARMv8.2-A/FEAT_SM3
+SM3TT1B	A64	ARMv8.2-A/FEAT_SM3
+SM3TT2A	A64	ARMv8.2-A/FEAT_SM3
+SM3TT2B	A64	ARMv8.2-A/FEAT_SM3
+SM4E	A64	ARMv8.2-A/FEAT_SM4
+AUTDA	A64	ARMv8.3-A/FEAT_PAuth (forma "data processing 1 source" real, registrador modificador livre — diferente da forma hint-space `AUTDZA`, que já cai no catch-all genérico de hints/NOP)
+XPACD	A64	ARMv8.3-A/FEAT_PAuth
+XPACI	A64	ARMv8.3-A/FEAT_PAuth
+STG	A64	ARMv8.5-A/FEAT_MTE2 (Memory Tagging Extension)
+LDG	A64	ARMv8.5-A/FEAT_MTE2
+STZG	A64	ARMv8.5-A/FEAT_MTE2
+ST2G	A64	ARMv8.5-A/FEAT_MTE2
+STZ2G	A64	ARMv8.5-A/FEAT_MTE2
+STGM	A64	ARMv8.5-A/FEAT_MTE2
+LDGM	A64	ARMv8.5-A/FEAT_MTE2
+STZGM	A64	ARMv8.5-A/FEAT_MTE2
+STGP	A64	ARMv8.5-A/FEAT_MTE2
+GMI	A64	ARMv8.5-A/FEAT_MTE2
+IRG	A64	ARMv8.5-A/FEAT_MTE2
+SUBP	A64	ARMv8.5-A/FEAT_MTE2
+SUBPS	A64	ARMv8.5-A/FEAT_MTE2
+SETGP	A64	ARMv8.5-A/FEAT_MTE2 (`SET*` com tag — diferente de `SETP`/`SETM`/`SETE` sem tag, ARMv8.8, já ✅)
+SETGM	A64	ARMv8.5-A/FEAT_MTE2
+SETGE	A64	ARMv8.5-A/FEAT_MTE2
+GCSSTR	A64	ARMv9.4-A/FEAT_GCS (Guarded Control Stack), bem posterior ao MTE
+CPYE	A64	ARMv8.8-A/FEAT_MOPS (memcpy) — achado: `SETP`/`SETM`/`SETE` (memset, mesma FEAT_MOPS) já decodificam ✅ via um caminho genérico existente; `CPY*` não passa por esse mesmo caminho, candidata a investigar junto (não feito nesta sessão)
+CPYM	A64	ARMv8.8-A/FEAT_MOPS
+CPYP	A64	ARMv8.8-A/FEAT_MOPS
+SDOT_v	A64	ARMv8.2-A/FEAT_DotProd
+SDOT_vi	A64	ARMv8.2-A/FEAT_DotProd
+UDOT_v	A64	ARMv8.2-A/FEAT_DotProd
+UDOT_vi	A64	ARMv8.2-A/FEAT_DotProd
+USDOT_v	A64	ARMv8.6-A/FEAT_I8MM
+USDOT_vi	A64	ARMv8.6-A/FEAT_I8MM
+SUDOT_vi	A64	ARMv8.6-A/FEAT_I8MM
+SMMLA	A64	ARMv8.6-A/FEAT_I8MM
+UMMLA	A64	ARMv8.6-A/FEAT_I8MM
+USMMLA	A64	ARMv8.6-A/FEAT_I8MM
+BFDOT_v	A64	ARMv8.6-A/FEAT_BF16
+BFDOT_vi	A64	ARMv8.6-A/FEAT_BF16
+BFMMLA	A64	ARMv8.6-A/FEAT_BF16
+FDOT_hb_v	A64	ARMv9.x/FEAT_F8DP2 (dot-product `fp8`), extensão recente
+FDOT_hb_vi	A64	ARMv9.x/FEAT_F8DP2
+FDOT_sb_v	A64	ARMv9.x/FEAT_F8DP4
+FDOT_sb_vi	A64	ARMv9.x/FEAT_F8DP4
+FMMLA_hb	A64	ARMv9.x/FEAT_F8MM8
+FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
