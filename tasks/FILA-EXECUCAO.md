@@ -271,6 +271,19 @@ task. **Candidatas restantes, não pegas automaticamente**: controle de fluxo do
 (`JMPC`/`JMPU`/`IFC`/`IFU`/`CALL*`/`LOOP`/`BREAK*`), o achado de `APT:U` da G6.2, e retomar a F7
 quando `1.3.0` sincronizar no Maven Central.
 
+✅ **G6.4 fechada 2026-08-27** (`trilha-g-3ds/g6.4-vertex-shader-controle-de-fluxo.md`, escrita e
+executada na mesma sessão, priorizada pelo usuário entre G6.4/investigar-APT:U/checar-sync-1.3.0) —
+controle de fluxo completo do `VertexShaderInterpreter` (`JMPC`/`JMPU`/`IFC`/`IFU`/`CALL`/`CALLC`/
+`CALLU`/`LOOP`/`BREAK`/`BREAKC`). Layout de bits do nihstro + semântica de 3 pilhas (`IF`/`CALL`/
+`LOOP`) transcrita fielmente do interpretador de referência real do Citra (`shader_interpreter.cpp`,
+fork `lime3ds/lime3ds` via `curl` — o `citra-emu/citra` original não existe mais nesse caminho).
+`fragment_light` (597 desenhos, 21492 vértices) e `lenny` (568 desenhos, 1899960 vértices)
+destravados por completo; sem regressão em `textured_cube`/`simple_tri`. `mvn -o test` verde no
+n3dsemu (215, +6); G5-invariante não se aplica (nenhum arquivo do arm-jitter tocado). Não validado
+visualmente (RFC D4). Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**:
+o achado de `APT:U` da G6.2 (`composite_scene`), e retomar a F7 quando `1.3.0` sincronizar no Maven
+Central.
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória

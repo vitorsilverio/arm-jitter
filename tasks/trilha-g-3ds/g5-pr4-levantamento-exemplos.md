@@ -32,8 +32,8 @@ não dá.
 | `stereoscopic_2d` | 339 | 🟡 desenha | sem 3D estereoscópico (fora do escopo da G5), só o olho esquerdo |
 | `particles` | 60 | 🟡 desenha | fundo preto; sem *blending* configurável ainda |
 | `composite_scene` | 0 | ❌ | **fs:USER corrigido pela G6.2** (sem `comando desconhecido` de `fs:USER` no trace) — `svcBreak(PANIC)` continua, causa NOVA e diferente: `APT:U` comando desconhecido `0x0044` (`GetSharedFont`)/`0x000B`/`0x0102`, não relacionada a RomFS. Candidata a task própria |
-| `fragment_light` | 0 | ❌ | **`CMP` implementado pela G6.3** (não morre mais nesse opcode) — bloqueio NOVO e diferente: opcode `0x2C` (`JMPC`, controle de fluxo condicional) não implementado; candidato a task própria (família `JMPC`/`JMPU`/`IFC`/`IFU`/`CALL*`/`BREAK*`) |
-| `lenny` | 0 | ❌ | **`CMP` implementado pela G6.3** — mesmo bloqueio novo de `fragment_light`: `JMPC` (`0x2C`) |
+| `fragment_light` | 597 | 🟡 **desenha** (21492 vértices) | **destravado pela G6.4** (controle de fluxo: `JMPC`/`IFC`/`CALL*`/`LOOP`/`BREAK*` implementados) — não validado visualmente ainda |
+| `lenny` | 568 | 🟡 **desenha** (1899960 vértices) | **destravado pela G6.4** — mesmo mecanismo de `fragment_light` |
 | `loop_subdivision` | 501 | 🟡 **desenha COM TEXTURA** (`tex0=32x32`) | destravado pela B3.9; a malha sai desalinhada porque **não há teste de profundidade** (item 2 do backlog) |
 | `textured_cube` | 605 | 🟡 **desenha** (21780 vértices) | **destravado pela G6.3** (`MAD` implementado) — não validado visualmente ainda |
 | `cubemap` | 0 | ❌ | **fs:USER corrigido pela G6.2**: `OpenFileDirectly` self-mount do RomFS embutido lê o `.t3x` real (`skybox.t3x`, offsets confirmados no trace) — não panica mais, mas ainda 0 desenhos em 3000/6000 fatias (não investigado além disso, fora do escopo da G6.2) |
@@ -45,7 +45,7 @@ não dá.
 | `toon_shading` | 0 | ❌ | depende de *fragment lighting* / LUT; avançou com a B3.9 |
 | `wide_mode_3d` | 0 | ❌ | modo de tela larga (800×240), não suportado; avançou com a B3.9 |
 
-**Placar: 8 de 20 produzem geometria; 2 validados visualmente** — `simple_tri` e, depois da B3.9,
+**Placar: 10 de 20 produzem geometria; 2 validados visualmente** — `simple_tri` e, depois da B3.9,
 `loop_subdivision`. Este último com textura, o que fecha a validação visual do caminho de textura da
 PR4 (que até então só tinha teste automatizado).
 
@@ -116,6 +116,14 @@ desconhecido `0x0044`/`0x000B`/`0x0102`); `cubemap`/`gpusprites` leem seus `.t3x
 embutido (confirmado pelos offsets de leitura no trace) e não panicam mais, mas ainda não
 produzem desenho dentro do orçamento testado — não investigado além disso, fora do escopo da
 G6.2. Ver **Resultado** na task para o detalhe completo.
+
+**✅ G6.4 fechada** (`g6.4-vertex-shader-controle-de-fluxo.md`) — controle de fluxo completo do
+`VertexShaderInterpreter` (`JMPC`/`JMPU`/`IFC`/`IFU`/`CALL`/`CALLC`/`CALLU`/`LOOP`/`BREAK`/`BREAKC`).
+Layout de bits do nihstro + semântica de pilha (3 pilhas: `IF`/`CALL`/`LOOP`) transcrita fielmente do
+interpretador de referência real do Citra (fork `lime3ds`, já que `citra-emu/citra` não existe mais
+nesse caminho). `fragment_light` (597 desenhos, 21492 vértices) e `lenny` (568 desenhos, 1899960
+vértices) destravados por completo — não morrem mais em `JMPC`. Não validado visualmente ainda. Ver
+**Resultado** na task para o detalhe completo.
 
 ## Backlog gráfico derivado (ordem sugerida)
 
