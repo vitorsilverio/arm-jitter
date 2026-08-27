@@ -20,9 +20,13 @@ import dev.vitorsilverio.armjitter.core.Condition;
 /// (seções "Load/store (register, immediate, literal)", "Load/Store Exclusive... and LDRD/STRD" e
 /// "Load/store multiple"), que reproduz a ARM DDI 0406C A5.3.7/A5.3.8/A5.3.9.
 ///
-/// <p><b>Fora de escopo desta task</b> (deliberado): `LDRT`/`STRT`/`LDRBT`/`STRBT`/`LDRHT`/`STRHT`/
-/// `LDRSBT`/`LDRSHT` (acesso "unprivileged" — mesmo espaço de bits do T4, mas semântica de troca de
-/// nível de privilégio irrelevante para GBA/NDS user-mode, nunca gerada por SDKs típicos);
+/// <p><b>`LDRT`/`STRT`/`LDRBT`/`STRBT`/`LDRHT`/`STRHT`/`LDRSBT`/`LDRSHT`</b> (acesso "unprivileged",
+/// B9.9): mesmo espaço de bits do T4 acima (`p&&u`, antes UNDEFINED controlado) — ver
+/// {@link #decodeT4}. `IrOp.Load`/`Store#unprivileged()` sinaliza o executor para ler/escrever
+/// usando a permissão de modo `USER` mesmo em modo privilegiado ({@code
+/// dev.vitorsilverio.armjitter.memory.AddressSpace#withUnprivilegedAccess}).
+///
+/// <p><b>Fora de escopo desta task</b> (deliberado):
 /// `TBB`/`TBH` (mesmo prefixo de 7 bits desta classe para `LDRD`/`STRD`/`LDREX`/`STREX`, mas são
 /// branches — ficam em B2.4, ver `b2.3-thumb2-loadstore.md`); as formas load-acquire/store-release
 /// ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, mesmo espaço de bits de `LDREX*`/`STREX*` — fora do
@@ -177,7 +181,8 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     /// T4 (ARM DDI 0406C A5.3.7 "Encoding T4"): imediato de 8 bits com P/U/W explícitos. `W=1`
     /// cobre os 4 modos pré/pós-indexados com writeback; `P=1,U=0,W=0` é o offset negativo sem
     /// writeback (complementa o T3, que só cobre offset positivo); `P=1,U=1,W=0` é a forma
-    /// "unprivileged" (`LDRT`/`STRT`/...), fora do escopo — UNDEFINED controlado.
+    /// "unprivileged" (`LDRT`/`STRT`/..., B9.9) — comporta-se como post-index normal, com
+    /// {@code unprivileged=true}.
     private DecodedInstruction decodeT4(int raw, int address, Condition condition, SingleTransferKind kind, int rn, int rt) {
         boolean p = ((raw >>> T4_P_SHIFT) & 1) != 0;
         boolean u = ((raw >>> T4_U_SHIFT) & 1) != 0;
@@ -185,18 +190,29 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         int imm8 = raw & IMM8_MASK;
         boolean writeback;
         boolean postIndexed;
+        boolean unprivileged;
         if (w) {
             writeback = true;
             postIndexed = !p;
+            unprivileged = false;
+        } else if (p && u) {
+            // Unprivileged (B9.9, `LDRxT`/`STRxT`): QEMU `t32.decode` confirma que este é o
+            // encoding "P=1,U=1,W=0" tratado como post-index normal (endereço = [Rn], Rn'=Rn+imm8)
+            // — só o nível de privilégio do acesso muda, nunca a semântica de registrador.
+            writeback = true;
+            postIndexed = true;
+            unprivileged = true;
         } else if (p && !u) {
             writeback = false;
             postIndexed = false;
+            unprivileged = false;
         } else {
-            return null; // p&&u (unprivileged) ou !p&&!w (reservado) — fora do escopo/UNDEFINED
+            return null; // !p&&!w — reservado, UNDEFINED
         }
         int signedOffset = u ? imm8 : -imm8;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind.instructionKind,
-                rt, rn, -1, signedOffset, true, false, false, kind.sizeBytes, kind.signed, writeback, postIndexed);
+                rt, rn, -1, signedOffset, true, false, false, kind.sizeBytes, kind.signed, writeback, postIndexed,
+                unprivileged);
     }
 
     /// T2 (ARM DDI 0406C A5.3.7 "Encoding T2"): `[Rn, Rm, LSL #imm2]`, sempre offset addressing

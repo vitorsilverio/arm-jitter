@@ -621,10 +621,13 @@ public final class ArmDecoder implements InstructionDecoder {
             if (sizeBytes < 0) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
+            // LDRHT/STRHT/LDRSBT/LDRSHT (B9.9): mesmo achado do bloco de LDR/STR word/byte acima —
+            // P=0,W=1 é o encoding "unprivileged", sem mudança de semântica de registrador.
+            boolean unprivileged = !preIndexed && writeback;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD : InstructionKind.STORE,
                     rd, rn, immediateOffset ? -1 : offset, signedOffset, immediateOffset, false, false,
-                    sizeBytes, transferKind != 0b01, writeback || !preIndexed, !preIndexed);
+                    sizeBytes, transferKind != 0b01, writeback || !preIndexed, !preIndexed, unprivileged);
         }
 
         // SBFX/UBFX/BFI/BFC/RBIT/SDIV/UDIV (ARMv6T2+/ARMv7, B3.1): todas têm bits27:26=01 e
@@ -754,10 +757,15 @@ public final class ArmDecoder implements InstructionDecoder {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
             int signedOffset = addOffset ? offset : -offset;
+            // LDRT/STRT/LDRBT/STRBT (B9.9): P=0 (post-indexed) com W=1 é o encoding "unprivileged"
+            // — nunca uma combinação nova de bits, o mesmo W que já marcava writeback normal.
+            // Semântica de registrador (endereço = base, base'=base+offset) é IDÊNTICA ao post-index
+            // comum; só o nível de privilégio do acesso à memória muda (ver IrMemoryExecutor).
+            boolean unprivileged = !preIndexed && writeback;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD : InstructionKind.STORE,
                     rd, rn, immediateOffset ? -1 : offset, signedOffset, immediateOffset, false, false,
-                    byteAccess ? 1 : 4, false, writeback || !preIndexed, !preIndexed);
+                    byteAccess ? 1 : 4, false, writeback || !preIndexed, !preIndexed, unprivileged);
         }
 
         if ((raw & 0x0E00_0000) == 0x0800_0000) {
@@ -771,7 +779,7 @@ public final class ArmDecoder implements InstructionDecoder {
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                     load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE,
                     -1, rn, -1, mask, true, false, userMode, 4, false, writeback,
-                    false, BlockTransferMode.fromArmBits(preIndexed, addOffset), mask == 0);
+                    false, BlockTransferMode.fromArmBits(preIndexed, addOffset), mask == 0, false);
         }
 
         // MOVW/MOVT (ARMv6T2+, B3.1): precisam ser checados ANTES do dispatch ALU genérico

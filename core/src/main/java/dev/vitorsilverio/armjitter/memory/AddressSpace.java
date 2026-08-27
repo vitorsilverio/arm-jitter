@@ -90,4 +90,21 @@ public interface AddressSpace {
     default int translationGeneration() {
         return 0;
     }
+
+    /// Executa `action` tratando qualquer leitura/escrita feita dentro dele como um acesso de
+    /// memória "unprivileged" (`LDRxT`/`STRxT`, B9.9) — a mesma tradução/checagem de permissão que
+    /// valeria para o modo `USER`, mesmo que o CPU esteja executando em modo privilegiado.
+    ///
+    /// O padrão (qualquer barramento sem MMU) apenas executa `action` sem nenhuma mudança de
+    /// comportamento — memória plana não tem noção de privilégio (G3: gbaemu/ndsemu/armbox sem
+    /// `TranslatingAddressSpace` continuam idênticos). Só um `AddressSpace` com MMU real
+    /// (`TranslatingAddressSpace`) sobrescreve, alternando sua checagem de privilégio para o
+    /// escopo de `action` e restaurando o valor original ao final (mesmo padrão de "efeito
+    /// mínimo, restaurado no `finally`" já usado por
+    /// `TranslatingAddressSpace64#translateForAddressTranslate`, B10.6).
+    ///
+    /// @param action a leitura ou escrita a executar sob permissão de `USER`
+    default void withUnprivilegedAccess(Runnable action) {
+        action.run();
+    }
 }

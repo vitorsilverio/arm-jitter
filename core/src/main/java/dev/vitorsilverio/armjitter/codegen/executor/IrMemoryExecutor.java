@@ -20,18 +20,37 @@ public final class IrMemoryExecutor {
         int base = load.baseValueOverride() != -1 ? load.baseValueOverride() : core.register(load.base());
         int address = load.postIndexed() ? base : base + offset;
         boolean loadsToProgramCounter = load.dst() == 15;
-        int value = switch (load.sizeBytes()) {
-            case 1 -> support.read8Arm7(core, address);
-            case 2 -> support.readHalfwordForLoad(core, address, load.signed(), loadsToProgramCounter);
-            case 4 -> support.readWordForLoad(core, address, loadsToProgramCounter);
-            default -> throw new UnsupportedOperationException("Unsupported IR load size: " + load.sizeBytes());
-        };
+        int value = readSized(core, address, load.sizeBytes(), load.signed(), loadsToProgramCounter, load.unprivileged());
         value = support.signExtendIfNeeded(value, load.sizeBytes(), load.signed());
         support.writeLoadedRegister(core, load.dst(), value);
         if (load.writeback() && load.base() != load.dst()) {
             core.setRegister(load.base(), base + offset);
         }
         return load.dst() == 15;
+    }
+
+    /// Leitura de tamanho variável usada por {@link #executeLoad}, com o fork "unprivileged"
+    /// (`LDRxT`, B9.9) isolado aqui: sob `unprivileged`, o acesso roda dentro de
+    /// {@link dev.vitorsilverio.armjitter.memory.AddressSpace#withUnprivilegedAccess}, que troca a
+    /// checagem de permissão do `AddressSpace` para `USER` só durante a chamada.
+    private int readSized(ArmCore core, int address, int sizeBytes, boolean signed, boolean loadsToProgramCounter,
+            boolean unprivileged) {
+        if (!unprivileged) {
+            return readSizedDirect(core, address, sizeBytes, signed, loadsToProgramCounter);
+        }
+        int[] result = new int[1];
+        core.memory().withUnprivilegedAccess(
+                () -> result[0] = readSizedDirect(core, address, sizeBytes, signed, loadsToProgramCounter));
+        return result[0];
+    }
+
+    private int readSizedDirect(ArmCore core, int address, int sizeBytes, boolean signed, boolean loadsToProgramCounter) {
+        return switch (sizeBytes) {
+            case 1 -> support.read8Arm7(core, address);
+            case 2 -> support.readHalfwordForLoad(core, address, signed, loadsToProgramCounter);
+            case 4 -> support.readWordForLoad(core, address, loadsToProgramCounter);
+            default -> throw new UnsupportedOperationException("Unsupported IR load size: " + sizeBytes);
+        };
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
@@ -57,14 +76,24 @@ public final class IrMemoryExecutor {
         int base = store.baseValueOverride() != -1 ? store.baseValueOverride() : core.register(store.base());
         int address = store.postIndexed() ? base : base + offset;
         int value = support.registerValue(core, store.src(), store.srcValueOverride());
-        switch (store.sizeBytes()) {
-            case 1 -> support.write8Arm7(core, address, value);
-            case 2 -> support.writeHalfwordForStore(core, address, value);
-            case 4 -> support.writeWordForStore(core, address, value);
-            default -> throw new UnsupportedOperationException("Unsupported IR store size: " + store.sizeBytes());
+        if (store.unprivileged()) {
+            core.memory().withUnprivilegedAccess(() -> writeSizedDirect(core, address, store.sizeBytes(), value));
+        } else {
+            writeSizedDirect(core, address, store.sizeBytes(), value);
         }
         if (store.writeback()) {
             core.setRegister(store.base(), base + offset);
+        }
+    }
+
+    /// Escrita de tamanho variável usada por {@link #executeStore} — ver o fork "unprivileged"
+    /// (`STRxT`, B9.9) documentado em {@link #readSized}.
+    private void writeSizedDirect(ArmCore core, int address, int sizeBytes, int value) {
+        switch (sizeBytes) {
+            case 1 -> support.write8Arm7(core, address, value);
+            case 2 -> support.writeHalfwordForStore(core, address, value);
+            case 4 -> support.writeWordForStore(core, address, value);
+            default -> throw new UnsupportedOperationException("Unsupported IR store size: " + sizeBytes);
         }
     }
 

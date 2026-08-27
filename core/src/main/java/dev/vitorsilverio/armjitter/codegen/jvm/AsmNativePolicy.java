@@ -77,8 +77,11 @@ public final class AsmNativePolicy {
             // dois pode ser PC num load. STRD só LÊ os registradores (sem troca de modo), então PC
             // como origem é seguro nativamente.
             case IrOp.DoubleTransfer d -> !d.load() || (d.first() != 15 && d.second() != 15);
-            case IrOp.Load ignored -> true;   // offsets shifted-register agora emitidos nativamente
-            case IrOp.Store ignored -> true;
+            // `unprivileged` (LDRxT/STRxT, B9.9) precisa de AddressSpace#withUnprivilegedAccess
+            // ao redor do acesso — sem equivalente no emissor nativo, cai no interpretado (mesma
+            // simplificação já aplicada a outras variantes raras desta escada, ex. B9.8.x).
+            case IrOp.Load l -> !l.unprivileged();   // offsets shifted-register agora emitidos nativamente
+            case IrOp.Store s -> !s.unprivileged();
             case IrOp.LoadLiteral ignored -> true;
             case IrOp.MultipleTransfer ignored -> true;
             case IrOp.Branch ignored -> true;

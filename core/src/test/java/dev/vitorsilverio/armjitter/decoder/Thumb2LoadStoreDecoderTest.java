@@ -428,22 +428,80 @@ class Thumb2LoadStoreDecoderTest extends BlockEquivalenceTest {
         assertEquals(0x200, core.register(1));
     }
 
+    // ── T4 unprivileged (LDRxT/STRxT, B9.9): P=1,U=1,W=0 no mesmo espaço T4 ─────────────────
+
     @Test
-    void t4UnprivilegedFormIsNotClaimedAsLoad() {
-        // P=1,U=1,W=0 (STRT/LDRT) — fora do escopo desta task; o decoder devolve `null` (não
-        // reivindica esse sub-encoding). B2.2.2: como `top8` continua batendo com
-        // `SINGLE_UNSIGNED_TOP8` (`claimsEncodingSpace`), o `ThumbDecoder` agora reconhece que é
-        // estruturalmente o espaço desta classe e vira UNDEFINED explícito em vez de cair no
-        // caminho legado BL/BLX — o importante continua sendo que NUNCA vira `LOAD`/`STORE`
-        // (nenhuma semântica de load/store incorreta é executada).
+    void t4UnprivilegedLdrtDecodesAsUnprivilegedPostIndexedLoad() {
         TestAddressSpace memory = new TestAddressSpace(16);
-        int raw = t4(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, true, true, false, 4);
+        int raw = t4(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, true, true, false, 4); // LDRT r0,[r1],#4
         memory.put16(0, hi(raw));
         memory.put16(2, lo(raw));
+
         DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertTrue(instruction.writeback());
+        assertTrue(instruction.postIndexed());
+        assertEquals(4, instruction.accessSizeBytes());
+    }
+
+    @Test
+    void t4UnprivilegedStrbtDecodesAsUnprivilegedPostIndexedStore() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = t4(UNSIGNED_TOP8, SIZE_L_STRB, 1, 0, true, true, false, 4); // STRBT r0,[r1],#4
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.STORE, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(1, instruction.accessSizeBytes());
+    }
+
+    @Test
+    void t4UnprivilegedLdrsbtDecodesAsUnprivilegedSignedLoad() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = t4(SIGNED_TOP8, SIZE_L_LDRSB, 1, 0, true, true, false, 4); // LDRSBT r0,[r1],#4
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(1, instruction.accessSizeBytes());
+        assertTrue(instruction.signedAccess());
+    }
+
+    @Test
+    void t4ReservedPNotSetWNotSetStillFallsToUndefined() {
+        // !P&&!W: única combinação que continua sem significado no T4 (a tabela real só define
+        // este quarto combo como "unprivileged" quando P&&U — ver decodeT4).
+        TestAddressSpace memory = new TestAddressSpace(16);
+        int raw = t4(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, false, false, false, 4);
+        memory.put16(0, hi(raw));
+        memory.put16(2, lo(raw));
+
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.LOAD, instruction.kind());
         assertNotEquals(InstructionKind.STORE, instruction.kind());
+    }
+
+    @Test
+    void t4UnprivilegedLoadActuallyWritesTheDestinationRegister() {
+        ArmCore core = newCore();
+        core.setRegister(1, 0x100);
+        core.memory().write32(0x100, 0xCAFEBABE);
+        int raw = t4(UNSIGNED_TOP8, SIZE_L_LDR, 1, 0, true, true, false, 4); // LDRT r0,[r1],#4
+
+        run(core, hi(raw), lo(raw));
+
+        assertEquals(0xCAFEBABE, core.register(0));
+        assertEquals(0x104, core.register(1), "unprivileged continua fazendo post-index writeback");
     }
 
     // ── PLD/PLDW/PLI (B2.8) — Rt=1111 no espaço de load vira hint, nunca um load real para o PC ──

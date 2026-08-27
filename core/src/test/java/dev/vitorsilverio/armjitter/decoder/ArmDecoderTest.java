@@ -545,4 +545,132 @@ class ArmDecoderTest {
         assertEquals(CpuMode.UNDEFINED, core.mode());
         assertEquals(0x04, core.programCounter());
     }
+
+    // ── LDRxT/STRxT (B9.9): P=0 (post-indexed) com W=1 é o encoding "unprivileged" ──────────
+
+    /// Monta o word/byte single-data-transfer clássico (ARM DDI 0406C A5.2.2): `bits[27:26]=01`,
+    /// `I`=offset por registrador (sempre `false` aqui, só imediato), `P`/`U`/`B`/`W`/`L` explícitos.
+    private static int singleDataTransfer(boolean preIndexed, boolean up, boolean byteAccess, boolean writeback,
+            boolean load, int rn, int rd, int imm12) {
+        return (0xE << 28) | (0b01 << 26)
+                | ((preIndexed ? 1 : 0) << 24) | ((up ? 1 : 0) << 23) | ((byteAccess ? 1 : 0) << 22)
+                | ((writeback ? 1 : 0) << 21) | ((load ? 1 : 0) << 20)
+                | (rn << 16) | (rd << 12) | (imm12 & 0xFFF);
+    }
+
+    /// Monta o halfword/signed "extra load/store" (ARM DDI 0406C A5.2.8), forma imediata
+    /// (`bits[22]=1`): mesmos `P`/`U`/`W`/`L` explícitos do bloco word/byte acima.
+    private static int extraLoadStoreImmediate(boolean preIndexed, boolean up, boolean writeback, boolean load,
+            int rn, int rd, int transferKind, int imm8) {
+        int immHigh = (imm8 >>> 4) & 0xF;
+        int immLow = imm8 & 0xF;
+        return (0xE << 28) | (0b000 << 25)
+                | ((preIndexed ? 1 : 0) << 24) | ((up ? 1 : 0) << 23) | (1 << 22)
+                | ((writeback ? 1 : 0) << 21) | ((load ? 1 : 0) << 20)
+                | (rn << 16) | (rd << 12) | (immHigh << 8) | (1 << 7) | (transferKind << 5) | (1 << 4) | immLow;
+    }
+
+    @Test
+    void armLdrtWordIsUnprivilegedPostIndexedLoad() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, singleDataTransfer(false, true, false, true, true, 1, 0, 8)); // LDRT r0,[r1],#8
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertTrue(instruction.writeback());
+        assertTrue(instruction.postIndexed());
+        assertEquals(4, instruction.accessSizeBytes());
+    }
+
+    @Test
+    void armStrbtByteIsUnprivilegedPostIndexedStore() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, singleDataTransfer(false, true, true, true, false, 1, 0, 4)); // STRBT r0,[r1],#4
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.STORE, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(1, instruction.accessSizeBytes());
+    }
+
+    @Test
+    void armPlainPostIndexedStoreIsNotUnprivileged() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, singleDataTransfer(false, true, false, false, false, 1, 0, 4)); // STR r0,[r1],#4 (W=0)
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.STORE, instruction.kind());
+        assertFalse(instruction.unprivileged());
+        assertTrue(instruction.writeback(), "post-index sempre escreve de volta, com ou sem W");
+    }
+
+    @Test
+    void armPreIndexedWritebackStoreIsNotUnprivileged() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, singleDataTransfer(true, true, false, true, false, 1, 0, 4)); // STR r0,[r1,#4]!
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.STORE, instruction.kind());
+        assertFalse(instruction.unprivileged());
+        assertTrue(instruction.writeback());
+        assertFalse(instruction.postIndexed());
+    }
+
+    @Test
+    void armLdrhtHalfwordIsUnprivilegedPostIndexedLoad() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // LDRHT r0,[r1],#8: transferKind=0b01 (halfword), L=1.
+        memory.put32(0, extraLoadStoreImmediate(false, true, true, true, 1, 0, 0b01, 8));
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(2, instruction.accessSizeBytes());
+        assertFalse(instruction.signedAccess());
+    }
+
+    @Test
+    void armLdrsbtIsUnprivilegedPostIndexedSignedLoad() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // LDRSBT r0,[r1],#4: transferKind=0b10 (signed byte), L=1.
+        memory.put32(0, extraLoadStoreImmediate(false, true, true, true, 1, 0, 0b10, 4));
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(1, instruction.accessSizeBytes());
+        assertTrue(instruction.signedAccess());
+    }
+
+    @Test
+    void armStrhtIsUnprivilegedPostIndexedStore() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // STRHT r0,[r1],#4: transferKind=0b01 (halfword), L=0.
+        memory.put32(0, extraLoadStoreImmediate(false, true, true, false, 1, 0, 0b01, 4));
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.STORE, instruction.kind());
+        assertTrue(instruction.unprivileged());
+        assertEquals(2, instruction.accessSizeBytes());
+    }
+
+    @Test
+    void armPlainPostIndexedHalfwordLoadIsNotUnprivileged() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // LDRH r0,[r1],#4 (W=0): mesmo modo de endereçamento, sem o encoding unprivileged.
+        memory.put32(0, extraLoadStoreImmediate(false, true, false, true, 1, 0, 0b01, 4));
+
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.LOAD, instruction.kind());
+        assertFalse(instruction.unprivileged());
+    }
 }

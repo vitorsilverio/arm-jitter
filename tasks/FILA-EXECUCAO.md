@@ -354,6 +354,24 @@ completo — B9.8.1 até B9.8.5.** Ver **Resultado** na task. Candidatas restant
 automaticamente: `LDRxT`/`STRxT` (precisa spec), `B10.6b`/`B10.6c` (bloqueadas), retomar F7 quando
 `1.3.0` sincronizar no Maven Central.
 
+✅ **B9.9 fechada 2026-08-27** (`trilha-b-arquiteturas/b9.9-ldrxt-strxt-unprivileged-access.md`, spec
+escrita e executada na mesma sessão, priorizada pelo usuário entre B9.9/B10.6b-B10.6c — `1.3.0`
+confirmada sincronizada no Maven Central `repo1.maven.org` durante a mesma checagem, então F7 também
+ficou desbloqueada, mas não foi executada nesta sessão) — `LDRxT`/`STRxT` (acesso "unprivileged", 8
+formas A32+T32) reais: `AddressSpace#withUnprivilegedAccess` novo (`TranslatingAddressSpace` alterna
+`privileged=false` no escopo, `try/finally`, mesmo padrão de
+`TranslatingAddressSpace64#translateForAddressTranslate`/B10.6); `DecodedInstruction`/`IrOp.Load`/
+`Store` ganham o campo `unprivileged`; A32 usa o mesmo bit `W` que já existia (`!preIndexed&&writeback`,
+sem bit novo), T32 usa o ramo `p&&u` do `decodeT4` que antes devolvia `null`; `AsmNativePolicy` cai
+no interpretado quando `unprivileged()`. Teste ponta-a-ponta novo (`LdrxtStrxtPrivilegeTest`) prova
+que um `STRT` em modo privilegiado aborta como `USER` numa página `AP_USER_READ_ONLY`, sob `step()`
+E sob bloco JIT compilado. `mvn -o test` verde (core+truffle) + `install`; G5 completo nos 5
+consumidores ✅. Sem marco de release (mudança pequena). **Fecha as 13 células que a B9.7 deixou `❌`
+de propósito por completo** (5 pela escada B9.8, 8 por esta task). Ver **Resultado** na task.
+**Candidatas restantes, não pegas automaticamente**: `F7` (subir os 4 consumidores para `1.3.0`,
+agora desbloqueada — `armbox` já em `1.2.0`, os outros 4 em `1.1.0`), `B10.6b`/`B10.6c`
+(bloqueadas em `TTBR0_EL2`/`TTBR0_EL3` novos, sem consumidor real).
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

@@ -219,6 +219,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean writeback,
             /// Indica endereçamento post-index.
             boolean postIndexed,
+            /// `LDRxT` (B9.9): quando `true`, o acesso à memória usa a permissão de modo `USER`
+            /// mesmo que o CPU esteja em modo privilegiado — ver
+            /// {@link dev.vitorsilverio.armjitter.memory.AddressSpace#withUnprivilegedAccess}.
+            boolean unprivileged,
             /// Condição necessária para executar a leitura.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.LOAD; }
@@ -242,6 +246,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             boolean writeback,
             /// Indica endereçamento post-index.
             boolean postIndexed,
+            /// `STRxT` (B9.9): ver {@link Load#unprivileged}.
+            boolean unprivileged,
             /// Condição necessária para executar a escrita.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.STORE; }

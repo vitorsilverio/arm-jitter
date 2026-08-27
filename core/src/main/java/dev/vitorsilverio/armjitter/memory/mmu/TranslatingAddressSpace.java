@@ -143,6 +143,21 @@ public final class TranslatingAddressSpace implements AddressSpace {
         this.privileged = privileged;
     }
 
+    /// `LDRxT`/`STRxT` (B9.9): alterna {@link #privileged} para `false` (checagem de acesso como
+    /// `USER`) só durante `action`, restaurando o valor original no `finally` — o `privileged`
+    /// original nunca vaza para acessos normais, mesmo padrão de efeito mínimo já aplicado ao
+    /// precedente 64-bit (`TranslatingAddressSpace64#translateForAddressTranslate`, B10.6).
+    @Override
+    public void withUnprivilegedAccess(Runnable action) {
+        boolean saved = this.privileged;
+        this.privileged = false;
+        try {
+            action.run();
+        } finally {
+            this.privileged = saved;
+        }
+    }
+
     /// Liga/desliga a tradução (`SCTLR.M`, B4.1.2). Desligada, todo acesso vira passthrough
     /// identidade para o físico — sem walk, sem TLB, sem checagem de permissão/domínio — igual ao
     /// comportamento real de hardware antes da MMU ser habilitada pelo software. Default `true`

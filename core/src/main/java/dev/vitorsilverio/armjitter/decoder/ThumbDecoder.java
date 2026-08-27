@@ -426,7 +426,7 @@ public final class ThumbDecoder implements InstructionDecoder {
             return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
                     load ? InstructionKind.LOAD_MULTIPLE : InstructionKind.STORE_MULTIPLE,
                     -1, rb, -1, mask, true, false, false, 4, false, true, false,
-                    BlockTransferMode.IA, mask == 0);
+                    BlockTransferMode.IA, mask == 0, false);
         }
 
         if ((raw & 0xFF00) == 0xB000) {

@@ -138,6 +138,43 @@ class TranslatingAddressSpaceTest {
         assertEquals(0x0040_0000, ex.virtualAddress());
     }
 
+    /// `LDRxT`/`STRxT` (B9.9): {@link TranslatingAddressSpace#withUnprivilegedAccess} deve tratar
+    /// o acesso como `USER` mesmo com o `AddressSpace` em modo privilegiado, e restaurar
+    /// `privileged` ao original depois — mesmo padrão de "efeito mínimo" que
+    /// {@link #permissaoUsuarioSoLeituraNaPaginaApUserReadOnly} já prova para {@code setPrivileged}
+    /// explícito, mas sem o CPU nunca sair de fato do modo privilegiado.
+    @Test
+    void withUnprivilegedAccessChecksPermissionAsUserThenRestoresPrivileged() {
+        TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
+        TranslatingAddressSpace mmu = newMmu(physical);
+        mmu.setPrivileged(true);
+        mmu.write32(0x0040_0000, 0x7777_8888); // ainda privilegiado: grava o valor esperado
+
+        MemoryTranslationException ex = assertThrows(MemoryTranslationException.class,
+                () -> mmu.withUnprivilegedAccess(() -> mmu.write32(0x0040_0000, 0x9999_0000)));
+        assertEquals(FaultStatus.PAGE_PERMISSION, ex.faultStatus());
+
+        // privilégio real restaurado: a MESMA escrita que acabou de falhar sob withUnprivilegedAccess
+        // funciona de novo fora dele.
+        mmu.write32(0x0040_0000, 0xABCD_EF01);
+        assertEquals(0xABCD_EF01, mmu.read32(0x0040_0000));
+    }
+
+    @Test
+    void withUnprivilegedAccessRestoresPrivilegedEvenWhenActionThrows() {
+        TestAddressSpace physical = new TestAddressSpace(0x0100_0000);
+        TranslatingAddressSpace mmu = newMmu(physical);
+        mmu.setPrivileged(true);
+
+        assertThrows(MemoryTranslationException.class,
+                () -> mmu.withUnprivilegedAccess(() -> mmu.write32(0x0040_0000, 0)));
+
+        // Sem restauração no finally, a checagem seguinte ainda estaria em modo usuário e esta
+        // escrita privilegiada legítima falharia também.
+        mmu.write32(0x0040_0000, 0x1234);
+        assertEquals(0x1234, mmu.read32(0x0040_0000));
+    }
+
     @Test
     void dominioNoAccessBloqueiaMesmoComApFullAccess() {
         TestAddressSpace physical = new TestAddressSpace(0x0100_0000);

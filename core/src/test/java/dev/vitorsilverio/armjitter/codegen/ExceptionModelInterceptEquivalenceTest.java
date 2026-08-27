@@ -75,7 +75,7 @@ class ExceptionModelInterceptEquivalenceTest {
     void loadPcToInterceptedTargetCallsBranchInterceptedInBothBackends() {
         IrBlock block = IrBlock.builder(0)
                 .add(new IrOp.Load(15, 0, -1, new IrOperand.Immediate(0), 4,
-                        false, false, true, Condition.AL))
+                        false, false, true, false, Condition.AL))
                 .endPc(4)
                 .sealed();
 

@@ -183,6 +183,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.signedAccess(),
                     instruction.writeback(),
                     instruction.postIndexed(),
+                    instruction.unprivileged(),
                     instruction.condition()));
             case STORE -> block.add(new IrOp.Store(
                     instruction.destinationRegister(),
@@ -193,6 +194,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.accessSizeBytes(),
                     instruction.writeback(),
                     instruction.postIndexed(),
+                    instruction.unprivileged(),
                     instruction.condition()));
             // ARM clássico (ARMv5TE): o encoding só tem um campo Rd, então `second` = `first + 1`
             // sempre (`secondSourceRegister` carrega o registrador de offset Rm nessa forma, não
