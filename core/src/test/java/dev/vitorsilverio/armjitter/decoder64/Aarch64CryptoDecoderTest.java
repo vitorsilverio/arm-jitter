@@ -81,8 +81,8 @@ class Aarch64CryptoDecoderTest {
 
     @Test
     void pmullP64() {
-        // `pmull v14.1q, v5.1d, v6.1d` — registradores < 16 DE PROPÓSITO, ver
-        // {@link #pmullP64WithHighRmHitsPreexistingAcrossLanesBug}.
+        // `pmull v14.1q, v5.1d, v6.1d` — registradores < 16, comparado com
+        // {@link #pmullP64WithHighRmNowDecodesCorrectly} (registrador `Rm>=16`, mesma instrução).
         Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x0ee6e0ae);
         assertEquals(true, op.p64());
         assertEquals(false, op.q());
@@ -103,17 +103,20 @@ class Aarch64CryptoDecoderTest {
     }
 
     @Test
-    void pmullP64WithHighRmHitsPreexistingAcrossLanesBug() {
-        // ACHADO desta sessão (B8.11), NÃO desta task: `pmull v14.1q, v15.1d, v16.1d` (Rm=v16,
-        // `0b10000`) é rejeitado porque {@link Aarch64Decoder#decodeAdvancedSimdInteger} usa "bit4
-        // de Rm setado" como heurística para "AdvSIMD across lanes" — válida SÓ para "two-register
-        // miscellaneous"/"across lanes" reais (onde esse campo não é um registrador de verdade),
-        // mas ERRADA para "three different"/`PMULL` (onde `Rm` É um registrador livre `0`-`31`,
-        // herdado de B8.7/B8.8). Documentado como regressão de teste intencional (não fixado aqui —
-        // fora do orçamento desta task, precisa reprojetar o dispatch de
-        // "two-register misc"/"across lanes"/"three different" para usar o bit real que os separa
-        // no `a64.decode`, não a coincidência de bit4). Candidata a task própria.
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x0ef0e1ee));
+    void pmullP64WithHighRmNowDecodesCorrectly() {
+        // E8: `pmull v14.1q, v15.1d, v16.1d` (Rm=v16, `0b10000`) era rejeitado pelo bug pré-
+        // existente achado (não corrigido) na B8.11: {@link Aarch64Decoder#decodeAdvancedSimdInteger}
+        // usava "bit4 de Rm setado" como heurística para "AdvSIMD across lanes" — válida SÓ para
+        // "two-register miscellaneous"/"across lanes" reais (onde esse campo não é um registrador de
+        // verdade), mas ERRADA para "three different"/`PMULL` (onde `Rm` É um registrador livre
+        // `0`-`31`, herdado de B8.7/B8.8). Corrigido na E8 trocando o discriminador para bit11 (fixo
+        // em `0` só em "three different", ver o achado em `decodeAdvancedSimdInteger`).
+        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x0ef0e1ee);
+        assertEquals(true, op.p64());
+        assertEquals(false, op.q());
+        assertEquals(14, op.rd());
+        assertEquals(15, op.rn());
+        assertEquals(16, op.rm());
     }
 
     @Test

@@ -880,9 +880,12 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_RM_TWO_REG_MISC = 0b0_0000;
     /// `Rm` fixo="00001" — narrow/widen unário (`SQXTN`/...), fora de escopo (B8.8).
     private static final int ADVSIMD_INT_RM_NARROW_UNARY = 0b0_0001;
-    /// Bit alto de `Rm` setado — "across lanes" (`ADDV`/...)/`ADDP_s` (Rm parcialmente livre,
-    /// dispatch por tabela exata em vez de decompor mais).
-    private static final int ADVSIMD_INT_RM_ACROSS_LANES_BIT = 0b1_0000;
+    /// `Rm[4:1]` fixo="1000" (`Rm=0b10000`/`0b10001`, bit0 livre) — "across lanes" (`ADDV`/...)/
+    /// `ADDP_s`. E8: só bit4 setado NÃO basta (`Rm=0b11000`/`0b11000+` também tem bit4 setado e é um
+    /// registrador livre válido de "three different" — ver o achado de bit11 em
+    /// {@link #decodeAdvancedSimdInteger}); a máscara/padrão exigem os 4 bits altos exatos.
+    private static final int ADVSIMD_INT_RM_ACROSS_LANES_MASK = 0b1_1110;
+    private static final int ADVSIMD_INT_RM_ACROSS_LANES_PATTERN = 0b1_0000;
     /// B8.11: `Rm` fixo="01000" — `AESE`/`AESD`/`AESMC`/`AESIMC` ("Cryptographic AES" do
     /// `a64.decode` real, que aliasa neste mesmo espaço de bits — ver
     /// {@link #decodeAdvancedSimdInteger}).
@@ -2277,6 +2280,32 @@ public final class Aarch64Decoder {
         if (threeSameShape) {
             return decodeAdvancedSimdThreeSameShape(word, address, scalar, q, esz, u, opcode, rn, rd, rm);
         }
+        // E8: bug pré-existente (achado na B8.11, não corrigido lá) — o discriminador REAL entre
+        // "three different" (`SMULL`/`PMULL`/..., `Rm` é um registrador livre `0`-`31`) e as formas
+        // que reaproveitam `Rm` como opcode disfarçado (two-register misc/narrow-unário/across-lanes/
+        // AES/`ADDP_s` escalar) é o bit11 do word (LSB do campo `opcode` de 5 bits lido acima), NUNCA
+        // o valor de `Rm`: no encoding real, "three different" tem um campo opcode de só 4 bits em
+        // bits[15:12] com bit11 fixo em `0`, enquanto as outras formas sempre têm bit11=`1`.
+        // Confirmado bit a bit via corpus real (`aarch64-none-elf-as`/`objdump`, devkitA64):
+        // `smull v0.8h,v1.8b,v16.8b` (`Rm=0b10000`) tem `Rm` IDÊNTICO ao `Rm` fixo de `SADDLV`, e
+        // `smull v0.8h,v1.8b,v0.8b` (`Rm=0`) tem `Rm` IDÊNTICO ao `Rm` fixo de `ABS`/two-reg-misc —
+        // nos dois casos bit11 vale `0` (three-different) contra bit11=`1` das outras (SADDLV/ABS),
+        // provando que `Rm` sozinho é ambíguo e bit11 nunca é. A checagem antiga (`Rm`&bit4) tratava
+        // só o subconjunto `Rm=16-31`; o caso `Rm=0`/`Rm=1` (colidindo com two-reg-misc/narrow-unário)
+        // era um bug igualmente real, não documentado pela B8.11.
+        boolean rmEncodesFixedOpcode = (opcode & 1) != 0;
+        if (!rmEncodesFixedOpcode) {
+            // "three different": só existe na forma VETORIAL (sem equivalente escalar puro nesta
+            // fatia). B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA "three different"
+            // real com `esz=3`/doubleword (produz o registro `Q` inteiro, não um elemento `esz+1`
+            // comum).
+            if (scalar || (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100)) {
+                // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487) — exceto
+                // PMULL_p64 acima; G8.
+                throw unsupported(word, address);
+            }
+            return decodeAdvancedSimdThreeDifferent(word, address, q, esz, u, opcode, rn, rd, rm);
+        }
         // B8.11: `AESE`/`AESD`/`AESMC`/`AESIMC` (Cryptographic Extension) vivem no MESMO espaço de
         // bits que "three different" (prefixo vetorial `01110`, `bit21=1`, `bit10=0`) — no
         // encoding real (`a64.decode` do QEMU, seção "Cryptographic AES") são `Q=1`/`U=0`/`size=00`
@@ -2339,7 +2368,7 @@ public final class Aarch64Decoder {
             }
             throw unsupported(word, address);
         }
-        if ((rm & ADVSIMD_INT_RM_ACROSS_LANES_BIT) != 0) {
+        if ((rm & ADVSIMD_INT_RM_ACROSS_LANES_MASK) == ADVSIMD_INT_RM_ACROSS_LANES_PATTERN) {
             if (scalar) {
                 // Único mnemônico escalar desta forma: `ADDP_s` (`U=0`,`Rm=0b10001`,`opcode=0b10111`
                 // — valores conferidos contra o corpus real, não decompostos mais finamente). B8.8:
@@ -2371,17 +2400,10 @@ public final class Aarch64Decoder {
             }
             throw unsupported(word, address);
         }
-        // `Rm` livre, `bit10=0`: "three different" (alargando/largo+estreito/estreitando) — só
-        // existe na forma VETORIAL (sem equivalente escalar puro nesta fatia).
-        // B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA "three different" real com
-        // `esz=3`/doubleword (produz o registro `Q` inteiro, não um elemento `esz+1` comum) —
-        // deixado passar aqui para {@link #decodeAdvancedSimdThreeDifferent} tratar.
-        if (scalar || (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100)) {
-            // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487) — exceto PMULL_p64
-            // acima; G8.
-            throw unsupported(word, address);
-        }
-        return decodeAdvancedSimdThreeDifferent(word, address, q, esz, u, opcode, rn, rd, rm);
+        // E8: bit11=1 mas `Rm` não bate com nenhum dos padrões fixos conhecidos (two-reg-misc/
+        // narrow-unário/AES/across-lanes) — encoding reservado, não "three different" (esse já foi
+        // tratado acima, antes de bit11=1 sequer ser checado); G8.
+        throw unsupported(word, address);
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,

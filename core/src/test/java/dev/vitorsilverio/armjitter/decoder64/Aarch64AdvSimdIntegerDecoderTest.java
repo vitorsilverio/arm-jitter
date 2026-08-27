@@ -156,6 +156,41 @@ class Aarch64AdvSimdIntegerDecoderTest {
     }
 
     @Test
+    void smullRmCollidingWithFixedOpcodePatternsDecodesAsThreeDifferent() {
+        // E8: bug pré-existente achado na B8.11 (não corrigido lá) — o dispatch usava o VALOR de
+        // `Rm` para decidir entre "three different" (Rm livre) e as formas que reaproveitam `Rm`
+        // como opcode disfarçado (two-register misc/narrow-unário/across-lanes). Como "three
+        // different" aceita QUALQUER `Rm` de `0` a `31`, ele colide com TODOS os padrões fixos —
+        // não só `Rm>=16` (documentado na B8.11), mas também `Rm=0`/`Rm=1`. O discriminador real é
+        // o bit11 do word (fixo em `0` só em "three different"), não `Rm`. Corpus real
+        // (`aarch64-none-elf-as`/`objdump`, devkitA64).
+        // smull v0.8h, v1.8b, v0.8b (Rm=0, colide com o Rm fixo de ABS/two-reg-misc)
+        Ir64Op.VectorArithmeticWidening rm0 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e20c020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm0.op());
+        assertEquals(0, rm0.rm());
+        // smull v0.8h, v1.8b, v1.8b (Rm=1, colide com o Rm fixo de SQXTN/narrow-unário)
+        Ir64Op.VectorArithmeticWidening rm1 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e21c020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm1.op());
+        assertEquals(1, rm1.rm());
+        // smull v0.8h, v1.8b, v16.8b (Rm=0b10000, IDÊNTICO ao Rm fixo de SADDLV/across-lanes)
+        Ir64Op.VectorArithmeticWidening rm16 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e30c020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm16.op());
+        assertEquals(16, rm16.rm());
+        // smull v0.8h, v1.8b, v17.8b (Rm=0b10001, IDÊNTICO ao Rm fixo de ADDV/across-lanes)
+        Ir64Op.VectorArithmeticWidening rm17 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e31c020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm17.op());
+        assertEquals(17, rm17.rm());
+        // smull v0.8h, v1.8b, v24.8b (Rm=0b11000, caso original documentado na B8.11)
+        Ir64Op.VectorArithmeticWidening rm24 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e38c020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm24.op());
+        assertEquals(24, rm24.rm());
+        // smull v0.8h, v1.8b, v30.8b (Rm=0b11110, topo do intervalo)
+        Ir64Op.VectorArithmeticWidening rm30 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e3ec020);
+        assertEquals(Ir64VectorWideningOp.SMULL, rm30.op());
+        assertEquals(30, rm30.rm());
+    }
+
+    @Test
     void smlalUmlalSmlslUmlsl() {
         assertEquals(Ir64VectorWideningOp.SMLAL,
                 ((Ir64Op.VectorArithmeticWidening) decodeWord(0x0e228020)).op()); // smlal
