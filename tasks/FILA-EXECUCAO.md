@@ -426,6 +426,34 @@ revertida via `git checkout`, nada commitado no ndsemu). Ver **Resultado** na ta
 **Fila automática vazia de novo** — restam só os itens bloqueados/modelo-forte do levantamento
 acima; próxima priorização cabe ao usuário.
 
+✅ **Ambiente `arm-linux-*`/`aarch64-linux-*` resolvido 2026-08-27** (usuário perguntou quais
+toolchains faltavam para B4.0.3/B6.2/B6.6.6, decidiu resolver na hora) — **WSL2 + Ubuntu 26.04**
+(já instalado pelo
+usuário) + `apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu` + cross-toolchains `musl`
+do `musl.cc` (`arm-linux-musleabihf-cross`/`aarch64-linux-musl-cross`, baixados e RODANDO de
+verdade dentro do WSL — o bloqueio antigo "ELF Linux não roda em MSYS2" nunca foi sobre o
+toolchain não existir, só sobre faltar um Linux de verdade para rodá-lo). `busybox-1.36.1`
+buildado estático para os dois alvos (musl, não glibc — glibc estático usa IFUNC para
+`memcpy`/`strcmp`, e nenhum loader do armbox processa `R_ARM_IRELATIVE`, confirmado crashando
+antes de trocar para musl) com `-no-pie -static` (achado: musl por padrão gera `static-pie`/
+`ET_DYN`, que o `Elf32Loader` recusa de propósito). ✅ **B4.0.3 fechada por completo** (item 3,
+Thumb-2, ver linha própria abaixo) — **destrava B4.0.5**. 🔶 **B6.2 aceite #2 (aarch64) NÃO
+fechada, mas o bloqueio mudou de natureza**: o binário aarch64 carrega e começa a rodar, mas o
+`Aarch64Decoder` não tem a família `LDR`/`STR` SIMD&FP registrador-imediato (`STR Q0,[x0]`, ARM
+DDI 0487 C4.1.5 — diferente da AdvSIMD estruturada de B8.6 e do load/store escalar de B6.2/B8.1),
+que musl usa em `memcpy`/`memset`. Não é mais bloqueio de ambiente — vira candidata de decode A64
+pura, mesma categoria de B8.x. `busybox-thumb2`/`busybox-aarch64` ficam versionados em
+`armbox/testdata/` para reuso. Ver **Resultado** em `b4.0.3-armbox-validar-thumb2-completo.md` e
+a atualização 2026-08-27 em `b6-aarch64.md`.
+
+✅ **B4.0.3 fechada 2026-08-27** — ver acima. `Thumb2BusyboxTest` novo (4 testes, INTERPRETED+JIT,
+`echo`/`sh -c` sequencial+aritmética) + 5 syscalls novas no `LinuxGuest` do armbox (`mprotect`,
+`set_robust_list`, `getrandom`, `clock_gettime64`, `rseq`/`statx` como `-ENOSYS` explícito — o
+musl trata como "kernel antigo" e cai pro caminho alternativo sozinho). `mvn -o test` verde no
+armbox (47, +4); G5 não se aplica (só `armbox/linux/` tocado, nada do arm-jitter). **Destrava
+B4.0.5** (fase 3: fork/pipes, usa este busybox como corpus) — ainda não pega automaticamente,
+"1 sessão = 1 task".
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
@@ -798,9 +826,9 @@ F11 não se esgotar — ver seção 🧑 abaixo (entrada ajustada) e a tabela de
 | ~~A9 PR1~~ ✅ fechada 2026-07-31 (ambiente GraalVM+MSVC ficou disponível nesta máquina — ver nota abaixo) | `trilha-a-truffle/a9-native-shared-library.md` | — | A9 PR2 segue bloqueada em A7 (bailout SVM do Truffle não fechou) |
 | ~~A8~~ ✅ fechada 2026-07-31 (mesma sessão desta nota de ambiente — task mecânica de build+medição, não precisava de validação humana além do ambiente GraalVM+MSVC já confirmado disponível) | `trilha-a-truffle/a8-native-image-otimizacoes.md` | — | PGO+`-O3` promovido a default do perfil `native` do armbox — ver índice do `tasks/README.md` |
 | C10 aceites #1/#2 pendentes | — | Medição fps MKDS + asmcheck JUS com ROM real | fecha de vez a C10 |
-| **B4.0.3 item 3** — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | Toolchain `arm-linux-*` real (musl/glibc) — ex. WSL com distro configurada + build tools, ou um cross-toolchain Windows-hosted; o musl.cc é ELF Linux (não roda em MSYS2) e o devkitARM instalado é bare-metal | fecha B4.0.3 por completo e destrava **B4.0.5** |
-| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Fonte confiável de busybox estático arm64/aarch64 real (busybox.net só publica `armv8l`, que é ARM 32-bit — ISA errada) OU um toolchain `aarch64-linux-*` (musl/glibc) para compilar da fonte, já que o devkitA64 instalado é bare-metal (`aarch64-none-elf`) | fecha B6.2 por completo (aceite #1, `hello-aarch64.elf`, já fechado 2026-07-24), **o aceite agregado do épico B6.3** ("`busybox sh -c` completo no armbox64", já com as 4 sub-tasks B6.3.1-B6.3.4 fechadas) **e o bench "busybox ≥3× interpretador" do PR3 de B6.4** (codegen fechado 2026-07-26, só falta medir) — mesmo bloqueio, um só ambiente resolve os três |
-| ~~B6.6.6~~ **EM ESPERA** (não cancelada) desde 2026-08-18 — hospedeiro `virt64` (kernel arm64 mínimo até shell) | `trilha-b-arquiteturas/b6.6.6-aarch64-virt64-host.md` | Kernel arm64 mainline real (pré-compilado ou toolchain para buildar) + idealmente um initramfs busybox aarch64 real — mesmo bloqueio de toolchain/binário de B6.2 aceite #2/B4.0.3 item 3, um só ambiente resolve os três; adicionalmente, GICv2/GICv3/PSCI/DTB são substancialmente mais complexos que os periféricos versatilepb do precedente B4.1.5, reservar tempo de sessão maior. O bloqueio de FEATURE do `arm-jitter` que B6.6.6 e F11 convergiam (registrador de sistema/exceção/IRQ que qualquer kernel EL1 real precisaria) **foi FECHADO pela B6.6.7 em 2026-08-18** (ver índice do `tasks/README.md`) — só resta o bloqueio de ambiente original (kernel/toolchain aarch64 real) | fecha o épico B6.6 por completo (depende de B6.6.1-B6.6.5, rodada de spec 2026-07-26, ver `b6-aarch64.md`) — feature-completo desde B6.6.7; só falta kernel/toolchain real |
+| ~~B4.0.3 item 3~~ ✅ fechada 2026-08-27 — busybox estático Thumb-2 (armbox) | `trilha-b-arquiteturas/b4.0.3-armbox-validar-thumb2-completo.md` | — (WSL2+Ubuntu resolveu o toolchain `arm-linux-*`; ver Onda 5/histórico) | fechou B4.0.3 por completo; **destrava B4.0.5** |
+| **B6.2 aceite #2** — busybox estático aarch64 (armbox) | `trilha-b-arquiteturas/b6-aarch64.md` (seção B6.2, item 4) | Ambiente RESOLVIDO 2026-08-27 (WSL2+Ubuntu, mesmo toolchain do B4.0.3) — o bloqueio real agora é um **gap de decode do arm-jitter**: `LDR`/`STR` SIMD&FP registrador-imediato (`STR Q0,[x0]`, ARM DDI 0487 C4.1.5) não implementado, musl usa isso em `memcpy`/`memset`. Precisa de sessão implementando essa família no `Aarch64Decoder`/`Ir64` (candidata de decode A64, não mais bloqueio de ambiente) | fecha B6.2 por completo (aceite #1 já fechado 2026-07-24), o aceite agregado do B6.3 e o bench do PR3 de B6.4 |
+| ~~B6.6.6~~ **EM ESPERA** (não cancelada) desde 2026-08-18 — hospedeiro `virt64` (kernel arm64 mínimo até shell) | `trilha-b-arquiteturas/b6.6.6-aarch64-virt64-host.md` | Toolchain aarch64 RESOLVIDO 2026-08-27 (WSL2+Ubuntu) — falta só um **kernel arm64 mainline real** (pré-compilado ou buildado) + idealmente um initramfs busybox aarch64 (já temos um estático em `armbox/testdata/busybox-aarch64`, mas trava no mesmo gap SIMD&FP do B6.2 se o kernel/init o exercitar). GICv2/GICv3/PSCI/DTB continuam mais complexos que o precedente B4.1.5 — reservar sessão maior. Feature-completo no arm-jitter desde B6.6.7 | fecha o épico B6.6 por completo — só falta kernel real (+ o gap SIMD&FP acima, se o initramfs precisar dele) |
 
 ## Fila de BUGS de compat (trilha D) — sessões separadas da fila principal
 
