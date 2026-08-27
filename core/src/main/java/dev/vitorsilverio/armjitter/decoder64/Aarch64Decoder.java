@@ -284,6 +284,11 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_TCR_EL2 = 2;
     private static final int SYSREG_CRM_TCR_EL2 = 0;
     private static final int SYSREG_OP2_TCR_EL2 = 2;
+    // ── B10.6b: `TTBR0_EL2` (mesmo `CRn`/`CRm` de `TCR_EL2`, `op2=0` em vez de `2` — MESMA posição
+    // ── relativa de `TTBR0_EL1`/`TCR_EL1` no grupo EL1&0 acima).
+    private static final int SYSREG_CRN_TTBR0_EL2 = 2;
+    private static final int SYSREG_CRM_TTBR0_EL2 = 0;
+    private static final int SYSREG_OP2_TTBR0_EL2 = 0;
     private static final int SYSREG_CRN_VTTBR_EL2 = 2;
     private static final int SYSREG_CRM_VTTBR_EL2 = 1;
     private static final int SYSREG_OP2_VTTBR_EL2 = 0;
@@ -334,6 +339,14 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_VBAR_EL3 = 12;
     private static final int SYSREG_CRM_VBAR_EL3 = 0;
     private static final int SYSREG_OP2_VBAR_EL3 = 0;
+    // ── B10.6c: `TTBR0_EL3`/`TCR_EL3` — mesma disciplina de `TTBR0_EL2`/`TCR_EL2` (B10.6b), MESMO
+    // ── `CRn`/`CRm`/`op2` relativos, só `op1=6` (grupo EL3 acima).
+    private static final int SYSREG_CRN_TTBR0_EL3 = 2;
+    private static final int SYSREG_CRM_TTBR0_EL3 = 0;
+    private static final int SYSREG_OP2_TTBR0_EL3 = 0;
+    private static final int SYSREG_CRN_TCR_EL3 = 2;
+    private static final int SYSREG_CRM_TCR_EL3 = 0;
+    private static final int SYSREG_OP2_TCR_EL3 = 2;
 
     // ── B10.7: registradores de debug (`op0=2,op1=0`) — armazenamento puro, sem enforcement de
     // ── RO/WO (ver javadoc de Aarch64SystemRegisterId). Valores conferidos contra
@@ -551,16 +564,22 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0R = 0b010;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E0W = 0b011;
 
-    // ── B10.8: `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (combinadas stage-1+stage-2) — MESMO
-    // ── `op1=0b100` de `AT S1E2R`/`S1E2W` (regime EL2, `SYSTEM_INSTRUCTION_TLBI_OP1_EL2`, reusado
-    // ── aqui), distinguidas só por `op2` (conferido contra `cpregs-at.c` real do QEMU:
-    // ── `AT_S1E2R`/`AT_S1E2W` = op2 0/1; `AT_S12E1R`/`AT_S12E1W`/`AT_S12E0R`/`AT_S12E0W` = op2
-    // ── 4/5/6/7 — op2 2/3 são reservados). `S1E2R`/`S1E2W` continuam `unsupported` (B10.6b, exigem
-    // ── `TTBR0_EL2` que não existe).
+    // ── B10.8/B10.6b: `AT S1E2R`/`S1E2W`/`S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` — MESMO `op1=0b100`
+    // ── (regime EL2, `SYSTEM_INSTRUCTION_TLBI_OP1_EL2`, reusado aqui), distinguidas só por `op2`
+    // ── (conferido contra `cpregs-at.c` real do QEMU: `AT_S1E2R`/`AT_S1E2W` = op2 0/1;
+    // ── `AT_S12E1R`/`AT_S12E1W`/`AT_S12E0R`/`AT_S12E0W` = op2 4/5/6/7 — op2 2/3 são reservados).
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E2R = 0b000;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E2W = 0b001;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E1R = 0b100;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E1W = 0b101;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E0R = 0b110;
     private static final int SYSTEM_INSTRUCTION_AT_OP2_S12E0W = 0b111;
+
+    // ── B10.6c: `AT S1E3R`/`S1E3W` — `op1=0b110` (regime EL3, `SYSTEM_INSTRUCTION_TLBI_OP1_EL3`),
+    // ── MESMO `CRn=0b0111`/`CRm=0b1000` de `AT` acima; `op2` 0/1 (conferido contra `cpregs-at.c`
+    // ── real do QEMU: `AT_S1E3R`/`AT_S1E3W`, sem formas combinadas `S12E3*` — EL3 não tem stage-2).
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E3R = 0b000;
+    private static final int SYSTEM_INSTRUCTION_AT_OP2_S1E3W = 0b001;
 
     // ── Loads and Stores (classe `x1x0`, ARM DDI 0487 C4.1.3): bit27 fixo=1, bit25 fixo=0 ─────
     private static final int LOAD_STORE_CLASS_BIT27_SHIFT = 27;
@@ -3666,9 +3685,10 @@ public final class Aarch64Decoder {
     /// MESMO `CRn=0b0111` da manutenção de cache, distinguida por `CRm=0b1000` — precisa de
     /// carve-out ANTES do bucket genérico de cache abaixo, ou cairia incorretamente em
     /// `CACHE_MAINTENANCE_NOP` (achado real desta task: era exatamente isso que acontecia antes,
-    /// já que o `if` de cache de B8.3 não checava `CRm`, ver javadoc da task). `S1E2*`/`S1E3*`/
-    /// `S12E*` (regimes EL2/EL3/stage-2, que não existem ainda neste emulador) continuam fora,
-    /// caindo em `throw unsupported` como qualquer encoding não reconhecido (G8). O resto de
+    /// já que o `if` de cache de B8.3 não checava `CRm`, ver javadoc da task). `AT S1E2*`/`S1E3*`
+    /// (B10.6b/B10.6c, stage-1 pura dos regimes EL2/EL3) e `S12E*` (B10.8, combinadas
+    /// stage-1+stage-2) também são reconhecidas, cada uma no seu `op1`; `op2` reservado dentro de
+    /// cada regime cai em `throw unsupported` como qualquer encoding não reconhecido (G8). O resto de
     /// `SYS`/`SYSL` (`TLBI` per-VA/per-ASID como instrução ENDEREÇÁVEL individualmente — aqui
     /// tratada igual a "invalidar tudo", não byte a byte — debug registers via `SYSL`, `op0=2`)
     /// fica fora do escopo desta task, documentado como próximo passo, não presumido desnecessário
@@ -3680,9 +3700,9 @@ public final class Aarch64Decoder {
     /// reais do QEMU) e EL3 (`op1=0b110`) passam a ser aceitas aqui, com a MESMA simplificação
     /// "invalidar tudo" já aplicada ao regime EL1&0 por B8.3 — nenhum dos três regimes tem TLB
     /// própria modelada, então não há como (nem por que) diferenciar `ALLE2` de `VAE2` de
-    /// `IPAS2E1`, etc. `AT S1E2*`/`S1E3*`/`S12E*` continuam FORA (B10.6b/B10.6c/B10.8, exigem
-    /// `TTBR0_EL2`/`TTBR0_EL3`/stage-2 que não existem) — o carve-out de `CRn=0b0111` acima já
-    /// lança `unsupported` para `op1` fora de EL1&0, sem mudança nesta task.
+    /// `IPAS2E1`, etc. (Nota histórica desta task, B10.9: na época, `AT S1E2*`/`S1E3*` ainda
+    /// estavam fora — implementadas depois por B10.6b/B10.6c, ver o carve-out de `CRn=0b0111`
+    /// acima.)
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
@@ -3691,16 +3711,18 @@ public final class Aarch64Decoder {
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isAddressTranslateStage1Crm(word)) {
-            // CRm=0b1000 é SEMPRE `AT` (nunca manutenção de cache), para QUALQUER `op1` — só
-            // `op1=0b000` (regime EL1&0, B10.6) e `op1=0b100`/`op2` 4-7 (formas combinadas
-            // `S12E*`, B10.8) têm forma implementada; o resto (`op1=4`/`op2` 0-1 = `S1E2*`,
-            // `op1=6` = `S1E3*`) cai em `unsupported` abaixo, nunca no bucket de NOP genérico
-            // (G8 — ver Armadilhas).
+            // CRm=0b1000 é SEMPRE `AT` (nunca manutenção de cache), para QUALQUER `op1` — os 3
+            // regimes (`op1=0b000` EL1&0 B10.6, `op1=0b100` EL2 B10.6b/B10.8, `op1=0b110` EL3
+            // B10.6c) agora têm forma implementada; `op2` reservado dentro de cada regime cai em
+            // `unsupported` abaixo, nunca no bucket de NOP genérico (G8 — ver Armadilhas).
             if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL1) {
                 return decodeAddressTranslate(word, address);
             }
             if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL2) {
-                return decodeAddressTranslateStage12(word, address);
+                return decodeAddressTranslateEl2(word, address);
+            }
+            if (op1 == SYSTEM_INSTRUCTION_TLBI_OP1_EL3) {
+                return decodeAddressTranslateEl3(word, address);
             }
             throw unsupported(word, address);
         }
@@ -3740,18 +3762,34 @@ public final class Aarch64Decoder {
         return new Ir64Op.AddressTranslate(form, rt);
     }
 
-    /// `AT S12E1R`/`S12E1W`/`S12E0R`/`S12E0W` (B10.8, formas combinadas stage-1+stage-2) — `op2`
-    /// seleciona a forma; `S1E2R`/`S1E2W` (`op2=0/1`, MESMO `op1`) e `op2` reservado (`2`/`3`) caem
-    /// em `unsupported` (B10.6b, não implementado — exige `TTBR0_EL2`). Chamado só quando
-    /// `op1`/`CRn`/`CRm` já bateram com o grupo `AT` EL2 (ver {@link #decodeSystemInstructionSys}).
-    private Ir64Op decodeAddressTranslateStage12(int word, long address) {
+    /// `AT S1E2R`/`S1E2W` (B10.6b, stage-1 pura do regime EL2) e `AT S12E1R`/`S12E1W`/`S12E0R`/
+    /// `S12E0W` (B10.8, formas combinadas stage-1+stage-2) — `op2` seleciona a forma; `op2`
+    /// reservado (`2`/`3`) cai em `unsupported`. Chamado só quando `op1`/`CRn`/`CRm` já bateram com
+    /// o grupo `AT` EL2 (ver {@link #decodeSystemInstructionSys}).
+    private Ir64Op decodeAddressTranslateEl2(int word, long address) {
         int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
         int rt = word & REGISTER_FIELD_MASK;
         Aarch64AddressTranslateForm form = switch (op2) {
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E2R -> Aarch64AddressTranslateForm.S1E2R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E2W -> Aarch64AddressTranslateForm.S1E2W;
             case SYSTEM_INSTRUCTION_AT_OP2_S12E1R -> Aarch64AddressTranslateForm.S12E1R;
             case SYSTEM_INSTRUCTION_AT_OP2_S12E1W -> Aarch64AddressTranslateForm.S12E1W;
             case SYSTEM_INSTRUCTION_AT_OP2_S12E0R -> Aarch64AddressTranslateForm.S12E0R;
             case SYSTEM_INSTRUCTION_AT_OP2_S12E0W -> Aarch64AddressTranslateForm.S12E0W;
+            default -> throw unsupported(word, address);
+        };
+        return new Ir64Op.AddressTranslate(form, rt);
+    }
+
+    /// `AT S1E3R`/`S1E3W` (B10.6c, stage-1 pura do regime EL3) — `op2` seleciona a forma; sem
+    /// formas combinadas `S12E3*` (EL3 não tem stage-2 no hardware real). Chamado só quando
+    /// `op1`/`CRn`/`CRm` já bateram com o grupo `AT` EL3 (ver {@link #decodeSystemInstructionSys}).
+    private Ir64Op decodeAddressTranslateEl3(int word, long address) {
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        Aarch64AddressTranslateForm form = switch (op2) {
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E3R -> Aarch64AddressTranslateForm.S1E3R;
+            case SYSTEM_INSTRUCTION_AT_OP2_S1E3W -> Aarch64AddressTranslateForm.S1E3W;
             default -> throw unsupported(word, address);
         };
         return new Ir64Op.AddressTranslate(form, rt);
@@ -3950,6 +3988,9 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_TCR_EL2 && crm == SYSREG_CRM_TCR_EL2 && op2 == SYSREG_OP2_TCR_EL2) {
             return Aarch64SystemRegisterId.TCR_EL2;
         }
+        if (crn == SYSREG_CRN_TTBR0_EL2 && crm == SYSREG_CRM_TTBR0_EL2 && op2 == SYSREG_OP2_TTBR0_EL2) {
+            return Aarch64SystemRegisterId.TTBR0_EL2;
+        }
         if (crn == SYSREG_CRN_VTTBR_EL2 && crm == SYSREG_CRM_VTTBR_EL2 && op2 == SYSREG_OP2_VTTBR_EL2) {
             return Aarch64SystemRegisterId.VTTBR_EL2;
         }
@@ -4000,6 +4041,12 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_VBAR_EL3 && crm == SYSREG_CRM_VBAR_EL3 && op2 == SYSREG_OP2_VBAR_EL3) {
             return Aarch64SystemRegisterId.VBAR_EL3;
+        }
+        if (crn == SYSREG_CRN_TTBR0_EL3 && crm == SYSREG_CRM_TTBR0_EL3 && op2 == SYSREG_OP2_TTBR0_EL3) {
+            return Aarch64SystemRegisterId.TTBR0_EL3;
+        }
+        if (crn == SYSREG_CRN_TCR_EL3 && crm == SYSREG_CRM_TCR_EL3 && op2 == SYSREG_OP2_TCR_EL3) {
+            return Aarch64SystemRegisterId.TCR_EL3;
         }
         return null;
     }

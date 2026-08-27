@@ -926,13 +926,14 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.PRIVILEGED_CALL; }
     }
 
-    /// `AT` (`ARM DDI 0487 C6.2.23`, task B10.6) — traduz `Xt` (VA) pelo regime EL1&0 real e
-    /// escreve `PAR_EL1`, SEM gerar acesso de memória nem exceção síncrona para o guest (falha vira
-    /// `PAR_EL1.F=1`, nunca um abort) — ver
+    /// `AT` (`ARM DDI 0487 C6.2.23`, task B10.6) — traduz `Xt` (VA) pelo regime real (EL1&0, EL2
+    /// puro, EL3 puro, ou EL1&0+stage-2 combinado, conforme a forma) e escreve `PAR_EL1`, SEM gerar
+    /// acesso de memória nem exceção síncrona para o guest (falha vira `PAR_EL1.F=1`, nunca um
+    /// abort) — ver
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64VmsaSystemRegisters#addressTranslate}.
-    /// `S1E2*`/`S1E3*`/`S12E*` não são decodificadas ainda (ver `Aarch64AddressTranslateForm`).
     ///
-    /// @param form forma decodificada (`S1E1R`/`S1E1W`/`S1E0R`/`S1E0W`)
+    /// @param form forma decodificada (`S1E1R`/`S1E1W`/`S1E0R`/`S1E0W`/`S1E2R`/`S1E2W`/`S1E3R`/
+    ///             `S1E3W`/`S12E1R`/`S12E1W`/`S12E0R`/`S12E0W`)
     /// @param rt   registrador de origem do VA (índice `0`-`31`; `31` é `XZR`, mesma convenção de
     ///             {@link SystemRegister#rt})
     record AddressTranslate(Aarch64AddressTranslateForm form, int rt) implements Ir64Op {

@@ -414,6 +414,138 @@ class Aarch64VmsaSystemRegistersTest {
         assertEquals(0L, par & OUTPUT_ADDRESS_MASK, "XZR (rt=31) deve traduzir VA=0");
     }
 
+    // ── B10.6b/B10.6c: AT S1E2R/S1E2W/S1E3R/S1E3W (stage-1 pura dos regimes EL2/EL3) ──────────
+
+    private static final long ELX_AP_READ_ONLY_BIT = 1L << 7;
+    private static final long ELX_XN_BIT = 1L << 54;
+
+    /// Descritor de folha do regime EL2/EL3: só `AP[2]` (bit `7`, somente-leitura) e `XN` único
+    /// (bit `54`) — sem `AP[1]`/`PXN`/`UXN` (ver {@link Aarch64PrivilegedStage1TranslatingAddressSpace64}).
+    private static long elxLeafDescriptor(long outputBase, boolean readOnly, boolean xn) {
+        long value = (outputBase & OUTPUT_ADDRESS_MASK) | DESC_TABLE_OR_PAGE | DESC_VALID;
+        if (readOnly) {
+            value |= ELX_AP_READ_ONLY_BIT;
+        }
+        if (xn) {
+            value |= ELX_XN_BIT;
+        }
+        return value;
+    }
+
+    /// Página de 4KiB identity-mapped em `PA=0` para o regime EL2 ou EL3 (conforme
+    /// {@code ttbrRegister}), `AP`/`XN` configuráveis (índice L3 `0`) — mesma hierarquia de tabelas
+    /// de {@link #coreWithMmuPageAtZero}, mas escrita/instalada via `TTBR0_EL2`/`TTBR0_EL3` em vez
+    /// de {@link TranslatingAddressSpace64#setTtbr0} direto (prova que o registrador real do
+    /// barramento alimenta {@link Aarch64PrivilegedStage1TranslatingAddressSpace64}).
+    private static Aarch64Core coreWithElxPageAtZero(Aarch64SystemRegisterId ttbrRegister, boolean readOnly,
+            boolean xn) {
+        AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
+        physical.write64(0, tableDescriptor(0x1000));
+        physical.write64(0x1000, tableDescriptor(0x2000));
+        physical.write64(0x2000, tableDescriptor(0x3000));
+        physical.write64(0x3000, elxLeafDescriptor(0, readOnly, xn));
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(physical);
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x100)));
+        core.setSystemRegisterBus(new Aarch64VmsaSystemRegisters(mmu, core));
+        core.systemRegisterBus().write(ttbrRegister, 0);
+        return core;
+    }
+
+    @Test
+    void s1e2rBemSucedidoEscrevePar() {
+        Aarch64Core core = coreWithElxPageAtZero(Aarch64SystemRegisterId.TTBR0_EL2, false, false);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida via TTBR0_EL2");
+        assertEquals(0x100L & OUTPUT_ADDRESS_MASK, par & OUTPUT_ADDRESS_MASK);
+    }
+
+    @Test
+    void s1e2wEmPaginaSomenteLeituraFalha() {
+        Aarch64Core core = coreWithElxPageAtZero(Aarch64SystemRegisterId.TTBR0_EL2, true, false);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "S1E2W numa página só-leitura (AP[2]=1) deve falhar por permissão");
+    }
+
+    @Test
+    void s1e2rComPaginaXnAindaTraduzLeituraComSucesso() {
+        // XN bloqueia FETCH, não leitura de dados — regime EL2 não distingue privilegiado/EL0.
+        Aarch64Core core = coreWithElxPageAtZero(Aarch64SystemRegisterId.TTBR0_EL2, false, true);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT, "XN não afeta leitura de dados, só fetch de instrução");
+    }
+
+    @Test
+    void s1e3rBemSucedidoEscrevePar() {
+        Aarch64Core core = coreWithElxPageAtZero(Aarch64SystemRegisterId.TTBR0_EL3, false, false);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3R, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida via TTBR0_EL3");
+        assertEquals(0x100L & OUTPUT_ADDRESS_MASK, par & OUTPUT_ADDRESS_MASK);
+    }
+
+    @Test
+    void s1e3wEmPaginaSomenteLeituraFalha() {
+        Aarch64Core core = coreWithElxPageAtZero(Aarch64SystemRegisterId.TTBR0_EL3, true, false);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
+
+        long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
+        assertEquals(1, par & F_BIT, "S1E3W numa página só-leitura (AP[2]=1) deve falhar por permissão");
+    }
+
+    @Test
+    void s1e3eS1e2UsamTabelasIndependentes() {
+        // El2 aponta pra uma página só-leitura; EL3 aponta pra uma página full-access — provam que
+        // os dois regimes (el2Stage1/el3Stage1) são objetos distintos, não compartilham TTBR0.
+        AddressSpace64 physical = AddressSpace64.wrapping(new TestAddressSpace(0x0100_0000));
+        physical.write64(0, tableDescriptor(0x1000));
+        physical.write64(0x1000, tableDescriptor(0x2000));
+        physical.write64(0x2000, tableDescriptor(0x3000));
+        physical.write64(0x3000, elxLeafDescriptor(0, true, false)); // EL2: somente-leitura
+
+        physical.write64(0x10000, tableDescriptor(0x11000));
+        physical.write64(0x11000, tableDescriptor(0x12000));
+        physical.write64(0x12000, tableDescriptor(0x13000));
+        physical.write64(0x13000, elxLeafDescriptor(0, false, false)); // EL3: full-access
+
+        TranslatingAddressSpace64 mmu = new TranslatingAddressSpace64(physical);
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x100)));
+        core.setSystemRegisterBus(new Aarch64VmsaSystemRegisters(mmu, core));
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.TTBR0_EL2, 0);
+        core.systemRegisterBus().write(Aarch64SystemRegisterId.TTBR0_EL3, 0x10000);
+        core.setX(0, 0x100L);
+        Ir64BlockExecutor executor = new Ir64BlockExecutor();
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
+        assertEquals(1, core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1) & F_BIT,
+                "EL2 é só-leitura");
+
+        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
+        assertEquals(0, core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1) & F_BIT,
+                "EL3 é full-access, tabela independente da de EL2");
+    }
+
     // ── B10.8: AT S12E1R/S12E1W/S12E0R/S12E0W (combinada stage-1+stage-2) ──────────────────
 
     private static final long S2_L0_BASE = 0x0090_0000L;

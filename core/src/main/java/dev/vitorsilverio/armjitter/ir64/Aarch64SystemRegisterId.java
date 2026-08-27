@@ -182,8 +182,15 @@ public enum Aarch64SystemRegisterId {
     /// Armazenamento puro (sem trap real modelado ainda).
     CPTR_EL2,
     /// `TCR_EL2` (`op0=3,op1=4,CRn=2,CRm=0,op2=2`) — controle de tradução de stage-1 EL2.
-    /// Armazenamento puro (nenhuma tabela de tradução de EL2 é consultada ainda).
+    /// Armazenamento puro (mesma disciplina de {@link #TCR_EL1}: granule/tamanho fixos, o valor
+    /// escrito não é lido pela stage-1 de EL2).
     TCR_EL2,
+    /// `TTBR0_EL2` (`op0=3,op1=4,CRn=2,CRm=0,op2=0`) — base da tabela de tradução de stage-1 EL2
+    /// (tasks B10.6b, `AT S1E2R`/`S1E2W`). Liga de verdade em
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64PrivilegedStage1TranslatingAddressSpace64#setTtbr0}
+    /// — diferente de {@link #TCR_EL2} (armazenamento puro), este registrador tem efeito
+    /// observável real desde que existe.
+    TTBR0_EL2,
     /// `VTTBR_EL2` (`op0=3,op1=4,CRn=2,CRm=1,op2=0`) — base da tabela de tradução de stage-2.
     /// Armazenamento puro; ligar de verdade em `TranslatingAddressSpace64` é B10.8.
     VTTBR_EL2,
@@ -239,6 +246,14 @@ public enum Aarch64SystemRegisterId {
     /// `VBAR_EL3` (`op0=3,op1=6,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
     /// EL3. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
     VBAR_EL3,
+    /// `TTBR0_EL3` (`op0=3,op1=6,CRn=2,CRm=0,op2=0`) — base da tabela de tradução de stage-1 EL3
+    /// (task B10.6c, `AT S1E3R`/`S1E3W`). Liga de verdade em
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64PrivilegedStage1TranslatingAddressSpace64#setTtbr0}
+    /// — mesma disciplina de {@link #TTBR0_EL2}.
+    TTBR0_EL3,
+    /// `TCR_EL3` (`op0=3,op1=6,CRn=2,CRm=0,op2=2`) — controle de tradução de stage-1 EL3.
+    /// Armazenamento puro, mesma disciplina de {@link #TCR_EL2}.
+    TCR_EL3,
 
     // ── B10.6: `PAR_EL1` (`op0=3,op1=0,CRn=7,CRm=4,op2=0`) — resultado da instrução `AT`. ──
 

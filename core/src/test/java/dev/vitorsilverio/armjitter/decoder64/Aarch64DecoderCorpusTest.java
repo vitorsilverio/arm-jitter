@@ -2924,20 +2924,49 @@ class Aarch64DecoderCorpusTest {
         assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
     }
 
+    // ── B10.6b/B10.6c: AT S1E2R/S1E2W/S1E3R/S1E3W — regimes EL2/EL3 puros, sem stage-2
+    // ── (TTBR0_EL2/TTBR0_EL3 novos). Palavras construídas à mão a partir do encoding base de
+    // ── atS1e1rX0 (não representáveis pelo corpus).
+
     @Test
-    void atS1e2rStaysUnsupported() {
-        // at s1e2r, x0 (op1=4/0b100, CRm=8, op2=0): regime EL2, fora de escopo de B10.6 (ver
-        // "Não inclui" da task — TTBR0_EL2 nem existe ainda). Deve cair em UNIMPLEMENTED (G8), não
-        // ser confundida com nenhuma forma EL1&0, nem cair de volta no bucket de NOP genérico
-        // (achado real: um primeiro carve-out que só olhava op1==0 tinha exatamente esse bug).
+    void atS1e2rX0() {
+        // at s1e2r, x0 (op1=4/0b100, CRm=8, op2=0)
         int word = 0xd5087800 | (0b100 << 16);
-        assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S1E2R, op.form());
+        assertEquals(0, op.rt());
     }
 
     @Test
-    void atS1e3rStaysUnsupported() {
-        // at s1e3r, x0 (op1=6/0b110, CRm=8, op2=0): regime EL3, mesma razão de atS1e2rStaysUnsupported.
+    void atS1e2wX0() {
+        // at s1e2w, x0 (op1=4, CRm=8, op2=1)
+        int word = 0xd5087820 | (0b100 << 16);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S1E2W, op.form());
+    }
+
+    @Test
+    void atS1e3rX0() {
+        // at s1e3r, x0 (op1=6/0b110, CRm=8, op2=0)
         int word = 0xd5087800 | (0b110 << 16);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S1E3R, op.form());
+        assertEquals(0, op.rt());
+    }
+
+    @Test
+    void atS1e3wXzr() {
+        // at s1e3w, xzr (op1=6, CRm=8, op2=1, rt=31)
+        int word = 0xd508781f | (0b110 << 16) | (0b1 << 5);
+        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        assertEquals(Aarch64AddressTranslateForm.S1E3W, op.form());
+        assertEquals(31, op.rt());
+    }
+
+    @Test
+    void atS1e3rReservedOp2StaysUnsupported() {
+        // op1=6/0b110, op2=2 (reservado no regime EL3 — não existe S12E3*, EL3 não tem stage-2).
+        int word = 0xd5087800 | (0b110 << 16) | (0b010 << 5);
         assertThrows(UnsupportedOperationException.class, () -> decodeAt(word));
     }
 
@@ -2981,10 +3010,13 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void atS1e2rStillUnsupportedAfterS12eCarveOut() {
-        // Regressão: op1=4/op2=0 (S1E2R, ainda não implementada — B10.6b) não pode ser confundida
-        // com nenhuma forma S12E* pelo switch de decodeAddressTranslateStage12.
-        assertThrows(UnsupportedOperationException.class, () -> decodeAt(0xd5087800 | (0b100 << 16)));
+    void atS1e2ReservedOp2StaysUnsupported() {
+        // op1=4/0b100, op2=2/3: reservado no regime EL2 (entre S1E2W=1 e S12E1R=4) — não pode ser
+        // confundido nem com S1E2*/S12E* pelo switch de decodeAddressTranslateEl2.
+        assertThrows(UnsupportedOperationException.class,
+                () -> decodeAt(0xd5087800 | (0b100 << 16) | (0b010 << 5)));
+        assertThrows(UnsupportedOperationException.class,
+                () -> decodeAt(0xd5087800 | (0b100 << 16) | (0b011 << 5)));
     }
 
     @Test

@@ -61,6 +61,12 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 /// `DBGBCR0_EL1`/`DBGWVR0_EL1`/`DBGWCR0_EL1`) também são atendidos aqui, armazenamento puro — SEM
 /// enforcement de `RO`/`WO` mesmo onde o hardware real os teria (`OSLAR_EL1`/`OSLSR_EL1`), por
 /// decisão explícita da task: sem debugger conectado, tolerar o guest em vez de travá-lo.
+///
+/// **B10.6b/B10.6c**: `TTBR0_EL2`/`TTBR0_EL3` (armazenamento com side effect real, alimentam
+/// {@link #el2Stage1}/{@link #el3Stage1}) e `TCR_EL3` (armazenamento puro, mesma disciplina de
+/// `TCR_EL2`) completam os registradores que faltavam para `AT S1E2R`/`S1E2W`/`S1E3R`/`S1E3W` —
+/// stage-1 PURA dos regimes EL2/EL3 (sem stage-2, diferente de `S12E*`/B10.8), via
+/// {@link #addressTranslate}.
 public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBus {
     private static final long SCTLR_M_BIT = 1;
 
@@ -74,6 +80,11 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     /// B10.8: stage-2, sobre o MESMO físico que a stage-1 usa — só consultada pelas formas
     /// combinadas `AT S12E*` quando {@link #HCR_EL2_VM_BIT} está setado em {@link #hcrEl2}.
     private final Stage2TranslatingAddressSpace64 stage2;
+    /// B10.6b: stage-1 pura do regime EL2 (`AT S1E2R`/`S1E2W`) — sobre o MESMO físico, mas
+    /// independente de {@link #mmu} (regime estruturalmente diferente, sem `AP[1]`/EL0).
+    private final Aarch64PrivilegedStage1TranslatingAddressSpace64 el2Stage1;
+    /// B10.6c: stage-1 pura do regime EL3 (`AT S1E3R`/`S1E3W`) — mesma disciplina de {@link #el2Stage1}.
+    private final Aarch64PrivilegedStage1TranslatingAddressSpace64 el3Stage1;
 
     private long ttbr0;
     private long ttbr1;
@@ -96,6 +107,9 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private long vttbrEl2;
     private long vtcrEl2;
     private long cnthctlEl2;
+    /// `TTBR0_EL2` (B10.6b) — ao contrário dos demais campos deste bloco, tem side effect real:
+    /// alimenta {@link #el2Stage1}.
+    private long ttbr0El2;
 
     // ── B10.3: registradores de sistema EL3, armazenamento puro (sem side effect). VBAR_EL3/
     // ── ELR_EL3/SPSR_EL3 NÃO têm campo próprio: delegam ao banco por nível de
@@ -104,6 +118,10 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
     private long scrEl3;
     private long mdcrEl3;
     private long cptrEl3;
+    /// `TTBR0_EL3` (B10.6c) — side effect real: alimenta {@link #el3Stage1}.
+    private long ttbr0El3;
+    /// `TCR_EL3` (B10.6c) — armazenamento puro, mesma disciplina de {@link #tcrEl2}.
+    private long tcrEl3;
 
     // ── B10.6: PAR_EL1 (armazenamento — quem calcula o valor real é addressTranslate) ──────
     private long par;
@@ -126,6 +144,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         this.mmu = mmu;
         this.exceptionState = core.exceptionState();
         this.stage2 = new Stage2TranslatingAddressSpace64(mmu.physicalAddressSpace());
+        this.el2Stage1 = new Aarch64PrivilegedStage1TranslatingAddressSpace64(mmu.physicalAddressSpace());
+        this.el3Stage1 = new Aarch64PrivilegedStage1TranslatingAddressSpace64(mmu.physicalAddressSpace());
         // Reset real de hardware: MMU desligada (SCTLR_EL1.M=0) até o software habilitar.
         mmu.setMmuEnabled(false);
     }
@@ -140,10 +160,10 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         // separado quando existir.
         return switch (register) {
             case SCTLR_EL1, CPACR_EL1, TTBR0_EL1, TTBR1_EL1, TCR_EL1, MAIR_EL1, ESR_EL1, FAR_EL1,
-                 VBAR_EL1, ELR_EL1, SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, VTTBR_EL2, VTCR_EL2,
-                 SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
-                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, PAR_EL1,
-                 MDSCR_EL1, OSLAR_EL1, OSLSR_EL1, DBGBVR0_EL1, DBGBCR0_EL1, DBGWVR0_EL1,
+                 VBAR_EL1, ELR_EL1, SPSR_EL1, SCTLR_EL2, HCR_EL2, MDCR_EL2, CPTR_EL2, TCR_EL2, TTBR0_EL2,
+                 VTTBR_EL2, VTCR_EL2, SPSR_EL2, ELR_EL2, FAR_EL2, ESR_EL2, CNTHCTL_EL2, VBAR_EL2,
+                 SCTLR_EL3, SCR_EL3, MDCR_EL3, CPTR_EL3, SPSR_EL3, ELR_EL3, VBAR_EL3, TTBR0_EL3, TCR_EL3,
+                 PAR_EL1, MDSCR_EL1, OSLAR_EL1, OSLSR_EL1, DBGBVR0_EL1, DBGBCR0_EL1, DBGWVR0_EL1,
                  DBGWCR0_EL1 -> true;
             default -> false;
         };
@@ -168,6 +188,7 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case MDCR_EL2 -> mdcrEl2;
             case CPTR_EL2 -> cptrEl2;
             case TCR_EL2 -> tcrEl2;
+            case TTBR0_EL2 -> ttbr0El2;
             case VTTBR_EL2 -> vttbrEl2;
             case VTCR_EL2 -> vtcrEl2;
             case CNTHCTL_EL2 -> cnthctlEl2;
@@ -183,6 +204,8 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL3 -> exceptionState.vbar(Aarch64ExceptionLevel.EL3);
             case ELR_EL3 -> exceptionState.elr(Aarch64ExceptionLevel.EL3);
             case SPSR_EL3 -> exceptionState.spsr(Aarch64ExceptionLevel.EL3);
+            case TTBR0_EL3 -> ttbr0El3;
+            case TCR_EL3 -> tcrEl3;
             case PAR_EL1 -> par;
             case MDSCR_EL1 -> mdscrEl1;
             case OSLAR_EL1 -> oslarEl1;
@@ -227,6 +250,10 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case MDCR_EL2 -> mdcrEl2 = value;
             case CPTR_EL2 -> cptrEl2 = value;
             case TCR_EL2 -> tcrEl2 = value;
+            case TTBR0_EL2 -> {
+                ttbr0El2 = value;
+                el2Stage1.setTtbr0(value);
+            }
             case VTTBR_EL2 -> {
                 vttbrEl2 = value;
                 stage2.setVttbr(value);
@@ -245,6 +272,11 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
             case VBAR_EL3 -> exceptionState.setVbar(Aarch64ExceptionLevel.EL3, value);
             case ELR_EL3 -> exceptionState.setElr(Aarch64ExceptionLevel.EL3, value);
             case SPSR_EL3 -> exceptionState.setSpsr(Aarch64ExceptionLevel.EL3, value);
+            case TTBR0_EL3 -> {
+                ttbr0El3 = value;
+                el3Stage1.setTtbr0(value);
+            }
+            case TCR_EL3 -> tcrEl3 = value;
             case PAR_EL1 -> par = value;
             case MDSCR_EL1 -> mdscrEl1 = value;
             case OSLAR_EL1 -> oslarEl1 = value;
@@ -263,25 +295,29 @@ public final class Aarch64VmsaSystemRegisters implements Aarch64SystemRegisterBu
         mmu.invalidateTlbAll();
     }
 
-    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6, stage-1 só) e `AT S12E1R`/`S12E1W`/`S12E0R`/
-    /// `S12E0W` (B10.8, combinadas) — traduz `va` e escreve {@link #par}: sucesso via
-    /// {@link Aarch64ParEncoder#success}, falha (capturada AQUI, nunca relançada — `AT` não gera
-    /// abort) via {@link Aarch64ParEncoder#fault}. Formas combinadas só passam pela stage-2
-    /// ({@link #stage2}) quando {@link #HCR_EL2_VM_BIT} está setado em {@link #hcrEl2} — com
-    /// `HCR_EL2.VM=0`, `S12E*` se comporta idêntico à forma `S1E*` correspondente (stage-2
-    /// desligada, mesma simplificação "efeito mínimo" já aplicada ao resto desta classe).
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6, stage-1 EL1&amp;0), `AT S12E1R`/`S12E1W`/`S12E0R`/
+    /// `S12E0W` (B10.8, combinadas stage-1+stage-2) e `AT S1E2R`/`S1E2W`/`S1E3R`/`S1E3W` (B10.6b/
+    /// B10.6c, stage-1 pura dos regimes EL2/EL3) — traduz `va` pelo regime da `form` e escreve
+    /// {@link #par}: sucesso via {@link Aarch64ParEncoder#success}, falha (capturada AQUI, nunca
+    /// relançada — `AT` não gera abort) via {@link Aarch64ParEncoder#fault}. Formas combinadas só
+    /// passam pela stage-2 ({@link #stage2}) quando {@link #HCR_EL2_VM_BIT} está setado em
+    /// {@link #hcrEl2} — com `HCR_EL2.VM=0`, `S12E*` se comporta idêntico à forma `S1E*`
+    /// correspondente (stage-2 desligada, mesma simplificação "efeito mínimo" já aplicada ao resto
+    /// desta classe).
     @Override
     public void addressTranslate(Aarch64AddressTranslateForm form, long va) {
         MemoryAccessType type = form.isWrite() ? MemoryAccessType.DATA_WRITE : MemoryAccessType.DATA_READ;
         boolean unprivileged = form.isUnprivileged();
         try {
-            if (form.isCombinedStage12() && (hcrEl2 & HCR_EL2_VM_BIT) != 0) {
-                long physicalAddress = mmu.translateForAddressTranslateStage12(va, type, unprivileged, stage2);
-                par = Aarch64ParEncoder.success(physicalAddress);
-            } else {
-                long physicalAddress = mmu.translateForAddressTranslate(va, type, unprivileged);
-                par = Aarch64ParEncoder.success(physicalAddress);
-            }
+            long physicalAddress = switch (form) {
+                case S1E1R, S1E1W, S1E0R, S1E0W -> mmu.translateForAddressTranslate(va, type, unprivileged);
+                case S12E1R, S12E1W, S12E0R, S12E0W -> (hcrEl2 & HCR_EL2_VM_BIT) != 0
+                        ? mmu.translateForAddressTranslateStage12(va, type, unprivileged, stage2)
+                        : mmu.translateForAddressTranslate(va, type, unprivileged);
+                case S1E2R, S1E2W -> el2Stage1.translate(va, type);
+                case S1E3R, S1E3W -> el3Stage1.translate(va, type);
+            };
+            par = Aarch64ParEncoder.success(physicalAddress);
         } catch (MemoryTranslationException64 fault) {
             par = Aarch64ParEncoder.fault(fault.faultStatus(), fault.isStage2());
         }
