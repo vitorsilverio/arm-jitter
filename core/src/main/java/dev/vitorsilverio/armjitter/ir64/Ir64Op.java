@@ -46,7 +46,9 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpArithmeticThreeSame, Ir64Op.VectorFpArithmeticPairwise,
         Ir64Op.VectorFpArithmeticUnary, Ir64Op.VectorExtract, Ir64Op.VectorPermute,
         Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes, Ir64Op.CryptoAes,
-        Ir64Op.VectorPolynomialMultiplyLong, Ir64Op.CryptoShaThreeRegister, Ir64Op.CryptoShaTwoRegister {
+        Ir64Op.VectorPolynomialMultiplyLong, Ir64Op.CryptoShaThreeRegister, Ir64Op.CryptoShaTwoRegister,
+        Ir64Op.VectorDuplicateElement, Ir64Op.VectorDuplicateGeneral, Ir64Op.VectorInsertGeneral,
+        Ir64Op.VectorInsertElement, Ir64Op.VectorMoveElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -222,6 +224,16 @@ public sealed interface Ir64Op permits
         /// B8.11b: "Cryptographic two-register SHA" (`SHA1H`/`SHA1SU1`/`SHA256SU0`) — ver
         /// {@link CryptoShaTwoRegister}.
         public static final int CRYPTO_SHA_TWO_REGISTER = 78;
+        /// B8.12: `DUP` (elemento vetorial) — ver {@link VectorDuplicateElement}.
+        public static final int VECTOR_DUPLICATE_ELEMENT = 79;
+        /// B8.12: `DUP` (registrador geral) — ver {@link VectorDuplicateGeneral}.
+        public static final int VECTOR_DUPLICATE_GENERAL = 80;
+        /// B8.12: `INS` (registrador geral) — ver {@link VectorInsertGeneral}.
+        public static final int VECTOR_INSERT_GENERAL = 81;
+        /// B8.12: `INS` (elemento vetorial) — ver {@link VectorInsertElement}.
+        public static final int VECTOR_INSERT_ELEMENT = 82;
+        /// B8.12: `SMOV`/`UMOV` — ver {@link VectorMoveElement}.
+        public static final int VECTOR_MOVE_ELEMENT = 83;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2022,5 +2034,96 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.CRYPTO_SHA_TWO_REGISTER; }
+    }
+
+    /// `DUP` (AdvSIMD copy, elemento vetorial, B8.12) — replica o elemento `esz` de `Vn[index]`
+    /// por todas as lanes de `Vd` (`ARM DDI 0487 C6.2.109`). `esz`/`index` vêm de `imm5` no
+    /// encoding real (`esz = LowestSetBit(imm5)`, `index = imm5 >>> (esz+1)`), já resolvidos pelo
+    /// decoder.
+    record VectorDuplicateElement(
+            /// `true` para arranjo de 128 bits, `false` para 64 (zera os bits altos, mesma
+            /// disciplina de {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#setD}).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`; `3` exige {@link #q}).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn,
+            /// Índice do elemento fonte dentro de {@link #rn}.
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_DUPLICATE_ELEMENT; }
+    }
+
+    /// `DUP` (AdvSIMD copy, registrador geral, B8.12) — replica `Wn`/`Xn` (`esz`{@code ==3}
+    /// escolhe `Xn`, senão `Wn`) por todas as lanes de `Vd`.
+    record VectorDuplicateGeneral(
+            /// `true` para arranjo de 128 bits, `false` para 64 (zera os bits altos).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`; `3` exige {@link #q}).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador geral fonte (índice `0`-`31`; `31` é `WZR`/`XZR`, sem forma `SP`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_DUPLICATE_GENERAL; }
+    }
+
+    /// `INS` (AdvSIMD copy, registrador geral, B8.12) — grava `Wn`/`Xn` no elemento `esz` de
+    /// `Vd[index]`, SEM afetar o resto de `Vd` (escrita não-destrutiva, `ARM DDI 0487 C6.2.176`,
+    /// forma "general"). `Q` é sempre `1` no encoding real (não uma escolha de arranjo — o
+    /// decoder já validou isso).
+    record VectorInsertGeneral(
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador `V` de destino (elemento único modificado, resto preservado).
+            int rd,
+            /// Registrador geral fonte (índice `0`-`31`; `31` é `WZR`/`XZR`).
+            int rn,
+            /// Índice do elemento de destino dentro de {@link #rd}.
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_INSERT_GENERAL; }
+    }
+
+    /// `INS` (AdvSIMD copy, elemento vetorial, B8.12) — copia o elemento `esz` de
+    /// `Vn[srcIndex]` para `Vd[destIndex]`, SEM afetar o resto de `Vd` (`ARM DDI 0487 C6.2.176`,
+    /// forma "element"). `Q` é sempre `1` no encoding real (decoder já validou).
+    record VectorInsertElement(
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador `V` de destino (elemento único modificado, resto preservado).
+            int rd,
+            /// Registrador `V` fonte.
+            int rn,
+            /// Índice do elemento de destino dentro de {@link #rd}.
+            int destIndex,
+            /// Índice do elemento fonte dentro de {@link #rn}.
+            int srcIndex) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_INSERT_ELEMENT; }
+    }
+
+    /// `SMOV`/`UMOV` (AdvSIMD copy, B8.12) — lê o elemento `esz` de `Vn[index]` e grava em `Rd`
+    /// (`Wd` ou `Xd`, conforme {@link #wide}), com ou sem extensão de sinal conforme
+    /// {@link #signed} (`ARM DDI 0487 C6.2.240/C6.2.355`). Um único record cobre as duas
+    /// instruções — mesma técnica de {@link Fp64GeneralRegisterMove} — porque a única diferença
+    /// semântica é sinal vs. zero-extensão; o decoder já valida as combinações `esz`/`wide`
+    /// permitidas por instrução (`UMOV`: `wide == (esz==3)` sempre; `SMOV`: `esz<3`, e `esz==2`
+    /// exige `wide`).
+    record VectorMoveElement(
+            /// `true` para `SMOV` (extensão de sinal), `false` para `UMOV` (zero-extensão — já
+            /// implícita em {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#element}).
+            boolean signed,
+            /// `true` para `Xd` (64 bits), `false` para `Wd` (32 bits, zero os altos do `X`
+            /// correspondente).
+            boolean wide,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador geral de destino (índice `0`-`31`; `31` é `WZR`/`XZR`).
+            int rd,
+            /// Registrador `V` fonte.
+            int rn,
+            /// Índice do elemento fonte dentro de {@link #rn}.
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_MOVE_ELEMENT; }
     }
 }

@@ -193,6 +193,17 @@ release isolado, mas o cumulativo desde `1.1.0` continua cruzado (release não f
 Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**: `DUP`/`INS`/`SMOV`/
 `UMOV` (achado de B8.10), `G6.2`/`G6.3` (n3dsemu).
 
+✅ **B8.12 fechada 2026-08-26** (`trilha-b-arquiteturas/b8.12-a64-advsimd-copy.md`, priorizada pelo
+usuário entre B8.12/G6.2/G6.3) — `DUP`(elemento/geral)/`INS`(geral/elemento)/`SMOV`/`UMOV`
+implementados. Achado real: o discriminador desta família dentro do sub-dispatch da B8.10 é
+`bit10` (não `bit15`, como a nota "Não inclui" da B8.10 sugeria) — as 5 instruções têm `bit10=1`
+fixo, oposto de `EXT`/permute/`TBL`/`TBX`, então o gate `if(bit10) return null` do topo já
+descartava a família inteira antes de chegar ao `if(bit15)`; método novo `decodeAdvancedSimdCopy`
+despachado a partir desse gate. `mvn -o test` verde (2260) + `install`; G5 completo nos 5
+consumidores ✅ (armbox 43/43, falha pré-existente não reproduziu). A64 66%→68%, global 72%→73%;
+marco cumulativo desde `1.1.0` continua cruzado (release não feito nesta sessão). **Candidatas
+restantes, não pegas automaticamente**: `G6.2`/`G6.3` (n3dsemu).
+
 ✅ **G6.1 fechada 2026-08-24** (`arm-jitter/tasks/trilha-g-3ds/g6.1-exemplos-restantes.md`, escrita
 e executada na mesma sessão, priorizada pelo usuário entre B8.11/G6.1/B6.14/AdvSIMD-copy) — os 6
 exemplos `graphics/gpu` que ainda não desenhavam (`composite_scene`/`fragment_light`/`lenny`/

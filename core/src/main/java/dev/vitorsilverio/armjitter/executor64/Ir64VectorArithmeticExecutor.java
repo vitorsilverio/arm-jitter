@@ -28,6 +28,10 @@ final class Ir64VectorArithmeticExecutor {
     private Ir64VectorArithmeticExecutor() {
     }
 
+    /// `log2` do tamanho de um elemento doubleword (8 bytes) — B8.12, usado para escolher entre
+    /// `Wn`/`Xn` em `DUP`/`INS` (registrador geral).
+    private static final int DOUBLEWORD_ESZ = 3;
+
     /// Sign-extende um elemento de `1 << esz` bytes (já lido zero-extendido por
     /// {@link Aarch64FpRegisters#element}) para `long`.
     private static long signExtend(long value, int esz) {
@@ -703,6 +707,56 @@ final class Ir64VectorArithmeticExecutor {
             }
         }
         fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
+
+    /// `DUP` elemento vetorial (B8.12) — {@link Aarch64FpRegisters#replicateElement} já zera os
+    /// bits altos quando `!q` (mesma disciplina de {@link #finishDestructiveWrite}).
+    static boolean executeDuplicateElement(Aarch64Core core, Ir64Op.VectorDuplicateElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        long value = fp.element(op.rn(), op.index(), op.esz());
+        fp.replicateElement(op.rd(), value, op.esz(), op.q());
+        return false;
+    }
+
+    /// `DUP` registrador geral (B8.12) — `esz==3` lê `Xn` (64 bits), senão `Wn` (32, zero-
+    /// estendido — {@link Aarch64Core#xForWidth} já zero-estende, e
+    /// {@link Aarch64FpRegisters#replicateElement} só usa os `esz` bytes baixos do valor).
+    static boolean executeDuplicateGeneral(Aarch64Core core, Ir64Op.VectorDuplicateGeneral op) {
+        Aarch64FpRegisters fp = core.fp();
+        long value = core.xForWidth(op.rn(), op.esz() == DOUBLEWORD_ESZ);
+        fp.replicateElement(op.rd(), value, op.esz(), op.q());
+        return false;
+    }
+
+    /// `INS` registrador geral (B8.12) — {@link Aarch64FpRegisters#setElement} já é não-
+    /// destrutivo (só o elemento indicado muda, resto de `Rd` preservado).
+    static boolean executeInsertGeneral(Aarch64Core core, Ir64Op.VectorInsertGeneral op) {
+        Aarch64FpRegisters fp = core.fp();
+        long value = core.xForWidth(op.rn(), op.esz() == DOUBLEWORD_ESZ);
+        fp.setElement(op.rd(), op.index(), op.esz(), value);
+        return false;
+    }
+
+    /// `INS` elemento vetorial (B8.12) — copia `Rn[srcIndex]` para `Rd[destIndex]`, sem afetar o
+    /// resto de `Rd`.
+    static boolean executeInsertElement(Aarch64Core core, Ir64Op.VectorInsertElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        long value = fp.element(op.rn(), op.srcIndex(), op.esz());
+        fp.setElement(op.rd(), op.destIndex(), op.esz(), value);
+        return false;
+    }
+
+    /// `SMOV`/`UMOV` (B8.12) — {@link Aarch64FpRegisters#element} já devolve o elemento zero-
+    /// estendido (`UMOV`); {@link #signExtend} estende o sinal a partir de `esz` bytes quando
+    /// {@link Ir64Op.VectorMoveElement#signed} (`SMOV`) — a mesma extensão serve para `Wd`/`Xd`
+    /// porque {@link Aarch64Core#setXForWidth} trunca o resultado de 64 bits para os 32 baixos
+    /// quando `!wide`, preservando o sinal correto dentro dessa largura.
+    static boolean executeMoveElement(Aarch64Core core, Ir64Op.VectorMoveElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        long raw = fp.element(op.rn(), op.index(), op.esz());
+        long value = op.signed() ? signExtend(raw, op.esz()) : raw;
+        core.setXForWidth(op.rd(), value, op.wide());
         return false;
     }
 

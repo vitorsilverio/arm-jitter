@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **72%** — 2749 de 3777 células aplicáveis decodificam.
+> **73%** — 2774 de 3777 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **66%** (681/1027) |
+| A64 | **68%** (706/1027) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 66% (681/1027) |
+| A64 — AArch64 | 1161 | A64 68% (706/1027) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2043,12 +2043,12 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SM3TT2B` | · |
 | `XAR` | ✅ |
 | `DUP_element_s` | ❌ |
-| `DUP_element_v` | ❌ |
-| `DUP_general` | ❌ |
-| `INS_general` | ❌ |
-| `SMOV` | ❌ |
-| `UMOV` | ❌ |
-| `INS_element` | ❌ |
+| `DUP_element_v` | ✅ |
+| `DUP_general` | ✅ |
+| `INS_general` | ✅ |
+| `SMOV` | ✅ |
+| `UMOV` | ✅ |
+| `INS_element` | ✅ |
 | `FADD_s` | ✅ |
 | `FSUB_s` | ✅ |
 | `FDIV_s` | ✅ |
@@ -2123,23 +2123,23 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FADD_v` | ✅ |
 | `FSUB_v` | ❌ |
 | `FSUB_v` | ✅ |
-| `FDIV_v` | ❌ |
 | `FDIV_v` | ✅ |
-| `FMUL_v` | ❌ |
+| `FDIV_v` | ✅ |
+| `FMUL_v` | ✅ |
 | `FMUL_v` | ✅ |
 | `FMAX_v` | ❌ |
 | `FMAX_v` | ✅ |
 | `FMIN_v` | ❌ |
 | `FMIN_v` | ✅ |
-| `FMAXNM_v` | ❌ |
 | `FMAXNM_v` | ✅ |
-| `FMINNM_v` | ❌ |
+| `FMAXNM_v` | ✅ |
 | `FMINNM_v` | ✅ |
-| `FMULX_v` | ❌ |
+| `FMINNM_v` | ✅ |
 | `FMULX_v` | ✅ |
-| `FMLA_v` | ❌ |
+| `FMULX_v` | ✅ |
 | `FMLA_v` | ✅ |
-| `FMLS_v` | ❌ |
+| `FMLA_v` | ✅ |
+| `FMLS_v` | ✅ |
 | `FMLS_v` | ✅ |
 | `FMLAL_v` | · |
 | `FMLSL_v` | · |
@@ -2147,29 +2147,29 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMLSL2_v` | · |
 | `FCMEQ_v` | ❌ |
 | `FCMEQ_v` | ✅ |
-| `FCMGE_v` | ❌ |
 | `FCMGE_v` | ✅ |
-| `FCMGT_v` | ❌ |
+| `FCMGE_v` | ✅ |
 | `FCMGT_v` | ✅ |
-| `FACGE_v` | ❌ |
+| `FCMGT_v` | ✅ |
 | `FACGE_v` | ✅ |
-| `FACGT_v` | ❌ |
+| `FACGE_v` | ✅ |
 | `FACGT_v` | ✅ |
-| `FABD_v` | ❌ |
+| `FACGT_v` | ✅ |
 | `FABD_v` | ✅ |
-| `FRECPS_v` | ❌ |
+| `FABD_v` | ✅ |
 | `FRECPS_v` | ✅ |
-| `FRSQRTS_v` | ❌ |
+| `FRECPS_v` | ✅ |
 | `FRSQRTS_v` | ✅ |
-| `FADDP_v` | ❌ |
+| `FRSQRTS_v` | ✅ |
 | `FADDP_v` | ✅ |
-| `FMAXP_v` | ❌ |
+| `FADDP_v` | ✅ |
 | `FMAXP_v` | ✅ |
-| `FMINP_v` | ❌ |
+| `FMAXP_v` | ✅ |
 | `FMINP_v` | ✅ |
-| `FMAXNMP_v` | ❌ |
+| `FMINP_v` | ✅ |
 | `FMAXNMP_v` | ✅ |
-| `FMINNMP_v` | ❌ |
+| `FMAXNMP_v` | ✅ |
+| `FMINNMP_v` | ✅ |
 | `FMINNMP_v` | ✅ |
 | `ADDP_v` | ✅ |
 | `SMAXP_v` | ✅ |

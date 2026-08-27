@@ -369,6 +369,16 @@ public final class Ir64BlockExecutor {
                     Ir64CryptoExecutor.executeShaThreeRegister(core, (Ir64Op.CryptoShaThreeRegister) op);
             case Ir64Op.Kind.CRYPTO_SHA_TWO_REGISTER ->
                     Ir64CryptoExecutor.executeShaTwoRegister(core, (Ir64Op.CryptoShaTwoRegister) op);
+            case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT ->
+                    Ir64VectorArithmeticExecutor.executeDuplicateElement(core, (Ir64Op.VectorDuplicateElement) op);
+            case Ir64Op.Kind.VECTOR_DUPLICATE_GENERAL ->
+                    Ir64VectorArithmeticExecutor.executeDuplicateGeneral(core, (Ir64Op.VectorDuplicateGeneral) op);
+            case Ir64Op.Kind.VECTOR_INSERT_GENERAL ->
+                    Ir64VectorArithmeticExecutor.executeInsertGeneral(core, (Ir64Op.VectorInsertGeneral) op);
+            case Ir64Op.Kind.VECTOR_INSERT_ELEMENT ->
+                    Ir64VectorArithmeticExecutor.executeInsertElement(core, (Ir64Op.VectorInsertElement) op);
+            case Ir64Op.Kind.VECTOR_MOVE_ELEMENT ->
+                    Ir64VectorArithmeticExecutor.executeMoveElement(core, (Ir64Op.VectorMoveElement) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

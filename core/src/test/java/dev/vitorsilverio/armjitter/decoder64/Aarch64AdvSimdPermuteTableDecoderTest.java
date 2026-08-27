@@ -170,11 +170,13 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     }
 
     @Test
-    void advancedSimdCopyStaysUnsupported() {
-        // `dup v0.4s, w1` / `dup v0.4s, v1.s[2]` — AdvSIMD copy (`bit15=1`), fora de escopo desta
-        // task (candidata a task própria); confirma que o sub-dispatch novo devolve `null` para
-        // elas em vez de decodificar errado (G8).
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4e040c20));
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4e140420));
+    void advancedSimdCopyNowHandledByB812() {
+        // `dup v0.4s, w1` / `dup v0.4s, v1.s[2]` — AdvSIMD copy (`bit10=1`), fora de escopo desta
+        // task quando escrita (B8.10: o sub-dispatch devolvia `null` para elas, G8). Implementada
+        // por B8.12 (ver `Aarch64AdvSimdCopyDecoderTest`) — este teste só confirma que o dispatch
+        // deste método (`bit10=0`) segue intocado: as duas palavras agora decodificam para os
+        // tipos novos, não mais `UnsupportedOperationException`.
+        assertEquals(Ir64Op.VectorDuplicateGeneral.class, decodeWord(0x4e040c20).getClass());
+        assertEquals(Ir64Op.VectorDuplicateElement.class, decodeWord(0x4e140420).getClass());
     }
 }

@@ -907,16 +907,27 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
 
     /// B8.10: bit alto (bit15, único bit de {@link #ADVSIMD_INT_OPCODE_SHIFT} acima do campo de 4
-    /// bits de `EXT`/permute/`TBL`/`TBX`) — quando setado, o encoding pertence a "AdvSIMD copy"
-    /// (`DUP`/`INS`/`SMOV`/`UMOV`), fora de escopo — ver
-    /// {@link #decodeAdvancedSimdExtractPermuteTable}.
+    /// bits de `EXT`/permute/`TBL`/`TBX`) — quando setado (com `bit10=0`), o encoding é reservado
+    /// dentro do espaço EXT/permute/TBL — ver {@link #decodeAdvancedSimdExtractPermuteTable}.
+    /// B8.12: usado também dentro de `INS_element` (`bit10=1`), onde `bit15` fixo em `1` é
+    /// igualmente reservado — ver {@link #decodeAdvancedSimdCopy}.
     private static final int ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK = 0b1_0000;
     /// B8.10: `imm4` de `EXT` (bits[14:11]) — igual ao campo `opcode` inteiro quando
-    /// {@link #ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK} não está setado.
+    /// {@link #ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK} não está setado. B8.12: MESMA posição de bits
+    /// reaproveitada por `imm4` de `DUP`/`INS_general`/`SMOV`/`UMOV` e por `si` (índice fonte) de
+    /// `INS_element` — ver {@link #decodeAdvancedSimdCopy}.
     private static final int ADVSIMD_EXTRACT_IMM_MASK = 0b1111;
     /// B8.10: bit alto de `imm4` (bit14) — só existe na forma `Q` real (`imm3`, 3 bits, na forma
     /// `D`); setado sem `Q` é reservado (G8).
     private static final int ADVSIMD_EXTRACT_IMM_Q_BIT = 0b1000;
+    /// B8.12: valores de `imm4` (bits[14:11], ver {@link #ADVSIMD_EXTRACT_IMM_MASK}) que
+    /// selecionam cada instrução de "AdvSIMD copy" com `U=0` — conferidos bit a bit contra corpus
+    /// real (`aarch64-none-elf-as`/`objdump`, devkitA64). Valores fora desta lista são reservados.
+    private static final int ADVSIMD_COPY_DUP_ELEMENT = 0b0000;
+    private static final int ADVSIMD_COPY_DUP_GENERAL = 0b0001;
+    private static final int ADVSIMD_COPY_INS_GENERAL = 0b0011;
+    private static final int ADVSIMD_COPY_SMOV = 0b0101;
+    private static final int ADVSIMD_COPY_UMOV = 0b0111;
 
     // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
     // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
@@ -2256,10 +2267,9 @@ public final class Aarch64Decoder {
         if (((word >>> ADVSIMD_INT_BIT21_SHIFT) & 1) == 0) {
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
-            // tratavam `bit21=1`, lançando `unsupported` direto para o resto). `DUP`/`INS`/`SMOV`/
-            // `UMOV` (AdvSIMD copy) TAMBÉM vivem aqui mas ficam fora de escopo (candidata a task
-            // própria) — o sub-dispatch abaixo devolve `null` para eles, caindo no `unsupported`
-            // final (G8).
+            // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
+            // `SMOV`/`UMOV` (AdvSIMD copy) TAMBÉM vivem aqui (`bit10=1`, oposto das famílias
+            // acima) — ver {@link #decodeAdvancedSimdCopy}.
             if (!scalar) {
                 Ir64Op op = decodeAdvancedSimdExtractPermuteTable(word, address, q);
                 if (op != null) {
@@ -2444,13 +2454,15 @@ public final class Aarch64Decoder {
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
-    /// `bit11=0`) — B8.10: as três famílias que vivem no prefixo vetorial "01110", `bit21=0`
-    /// (espaço nunca examinado por B8.7-B8.9, que só tratavam `bit21=1` e lançavam `unsupported`
-    /// direto para o resto). `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy) TAMBÉM vivem aqui
-    /// (`U=0`,`bit15=1`, fora do alcance dos `if`s abaixo) — ficam fora de escopo, candidata a task
-    /// própria; este método devolve `null` para eles (nunca um encoding ERRADO, G8), e o chamador
-    /// lança `unsupported`. Discriminadores conferidos linha a linha contra `a64.decode` real do
-    /// QEMU (seções "Advanced SIMD extract"/"permute"/"table lookup").
+    /// `bit11=0`) — B8.10: as três famílias que vivem no prefixo vetorial "01110", `bit21=0`,
+    /// `bit10=0` (espaço nunca examinado por B8.7-B8.9, que só tratavam `bit21=1` e lançavam
+    /// `unsupported` direto para o resto). B8.12: `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy) vivem
+    /// no MESMO prefixo com `bit10=1` — despachadas para {@link #decodeAdvancedSimdCopy} antes de
+    /// qualquer checagem deste método (ver ali). Este método continua devolvendo `null` (nunca um
+    /// encoding ERRADO, G8) para qualquer combinação reservada dentro do seu próprio espaço
+    /// (`bit10=0`); o chamador lança `unsupported`. Discriminadores conferidos linha a linha
+    /// contra `a64.decode` real do QEMU (seções "Advanced SIMD extract"/"permute"/"table
+    /// lookup").
     private Ir64Op decodeAdvancedSimdExtractPermuteTable(int word, long address, boolean q) {
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
@@ -2465,9 +2477,10 @@ public final class Aarch64Decoder {
         boolean bit11 = (opcode & 1) != 0;
         boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
         if (bit10) {
-            // Nenhuma das três famílias desta task tem `bit10=1` — espaço de encoding diferente,
-            // fora de escopo (G8: recusa em vez de arriscar colisão).
-            return null;
+            // B8.12: `bit10=1` é exatamente o espaço de "AdvSIMD copy" (`DUP`/`INS`/`SMOV`/
+            // `UMOV`) — oposto de EXT/permute/TBL/TBX abaixo, que exigem `bit10=0`. Layout de
+            // campos (imm5/imm4/si) não tem nada a ver com o resto desta função — método próprio.
+            return decodeAdvancedSimdCopy(word, address, q);
         }
         if (u) {
             // `EXT`: único mnemônico desta forma; `imm` lido cru como 4 bits (bits[14:11], que são
@@ -2485,7 +2498,8 @@ public final class Aarch64Decoder {
             return new Ir64Op.VectorExtract(q, imm, rd, rn, rm);
         }
         if (bit15) {
-            // `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy) — fora de escopo desta task.
+            // Reservado dentro do espaço EXT/permute/TBL (`bit10=0`) — `AdvSIMD copy` já foi
+            // desviada acima antes de chegar aqui.
             return null;
         }
         if (bit11) {
@@ -2518,6 +2532,65 @@ public final class Aarch64Decoder {
         int len = (opcode >>> 2) & 0b11;
         boolean tbx = ((opcode >>> 1) & 1) != 0;
         return new Ir64Op.VectorTableLookup(tbx, len, q, rd, rn, rm);
+    }
+
+    /// `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy, B8.12) — quarta família do prefixo vetorial
+    /// "01110", `bit21=0`, discriminada de EXT/permute/TBL/TBX (que ficam em
+    /// {@link #decodeAdvancedSimdExtractPermuteTable}) por `bit10=1`. `U`(bit29) separa
+    /// `INS_element` (`u=1`, dois registradores `V`, índice fonte em `si`) das outras quatro
+    /// (`u=0`, `imm4` em bits[14:11] seleciona a instrução —
+    /// {@link #ADVSIMD_COPY_DUP_ELEMENT}/{@link #ADVSIMD_COPY_DUP_GENERAL}/
+    /// {@link #ADVSIMD_COPY_INS_GENERAL}/{@link #ADVSIMD_COPY_SMOV}/{@link #ADVSIMD_COPY_UMOV}).
+    /// `esz`/índice vêm SEMPRE de `imm5` (bits[20:16], mesma posição de `Rm`/`di` alhures) pelo
+    /// truque padrão do ARM DDI 0487 "AdvSIMD copy": `esz = LowestSetBit(imm5)`, `index =
+    /// imm5 >>> (esz+1)` — `imm5==0` ou `esz>3` é reservado (G8). Encodings conferidos bit a bit
+    /// contra corpus real (`aarch64-none-elf-as`/`objdump`, devkitA64).
+    private Ir64Op decodeAdvancedSimdCopy(int word, long address, boolean q) {
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        int imm5 = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        int esz = imm5 == 0 ? -1 : Integer.numberOfTrailingZeros(imm5);
+        if (esz < 0 || esz > ADVSIMD_INT_SCALAR_ESZ) {
+            // `imm5==0` (nenhum bit de tamanho marcado) ou `esz==4` (bit4 sozinho — tamanho maior
+            // que doubleword não existe em AdvSIMD) — reservado.
+            return null;
+        }
+        int index = imm5 >>> (esz + 1);
+        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        boolean bit15 = (opcode & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
+        if (u) {
+            // `INS_element`: `Q` é fixo em `1` no encoding real (literal, não uma escolha de
+            // arranjo — inserir um elemento sempre referencia o registrador `V` inteiro); `bit15`
+            // fixo em `0` (`si` ocupa só os 4 bits baixos de `opcode`, bits[14:11]).
+            if (!q || bit15) {
+                return null;
+            }
+            int srcIndex = (opcode & ADVSIMD_EXTRACT_IMM_MASK) >>> esz;
+            return new Ir64Op.VectorInsertElement(esz, rd, rn, index, srcIndex);
+        }
+        if (bit15) {
+            return null;
+        }
+        int imm4 = opcode & ADVSIMD_EXTRACT_IMM_MASK;
+        return switch (imm4) {
+            case ADVSIMD_COPY_DUP_ELEMENT -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
+                    ? null // doubleword exige `Q=1` (não existe arranjo "1D"), G8
+                    : new Ir64Op.VectorDuplicateElement(q, esz, rd, rn, index);
+            case ADVSIMD_COPY_DUP_GENERAL -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
+                    ? null
+                    : new Ir64Op.VectorDuplicateGeneral(q, esz, rd, rn);
+            case ADVSIMD_COPY_INS_GENERAL -> !q
+                    ? null // `Q=1` fixo no encoding real, mesma regra de `INS_element`
+                    : new Ir64Op.VectorInsertGeneral(esz, rd, rn, index);
+            case ADVSIMD_COPY_SMOV -> (esz == ADVSIMD_INT_SCALAR_ESZ || (esz == 2 && !q))
+                    ? null // `SMOV` não existe p/ doubleword; `esz=2`(word) só sign-estende p/ `Xd`
+                    : new Ir64Op.VectorMoveElement(true, q, esz, rd, rn, index);
+            case ADVSIMD_COPY_UMOV -> q != (esz == ADVSIMD_INT_SCALAR_ESZ)
+                    ? null // `Q` é sempre `esz==3` p/ `UMOV` (sem forma "estendida" redundante)
+                    : new Ir64Op.VectorMoveElement(false, q, esz, rd, rn, index);
+            default -> null;
+        };
     }
 
     /// "AdvSIMD three same"/"three same pairwise" (`bit10=1`): opcodes das duas famílias NUNCA
