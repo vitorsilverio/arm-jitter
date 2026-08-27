@@ -280,9 +280,22 @@ fork `lime3ds/lime3ds` via `curl` — o `citra-emu/citra` original não existe m
 `fragment_light` (597 desenhos, 21492 vértices) e `lenny` (568 desenhos, 1899960 vértices)
 destravados por completo; sem regressão em `textured_cube`/`simple_tri`. `mvn -o test` verde no
 n3dsemu (215, +6); G5-invariante não se aplica (nenhum arquivo do arm-jitter tocado). Não validado
-visualmente (RFC D4). Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**:
-o achado de `APT:U` da G6.2 (`composite_scene`), e retomar a F7 quando `1.3.0` sincronizar no Maven
-Central.
+visualmente (RFC D4). Ver **Resultado** na task.
+
+✅ **G6.5 fechada 2026-08-27** (`trilha-g-3ds/g6.5-apt-inquire-checknew3ds-sharedfont.md`, escrita e
+executada na mesma sessão, priorizada pelo usuário para investigar o achado de `APT:U` da G6.2) —
+`InquireNotification`/`CheckNew3DS` triviais; `GetSharedFont` (a causa REAL do `svcBreak(PANIC)`
+em `composite_scene` — `C2D_TextParse`/citro2d exige fonte mapeada) implementado com
+`SharedFontGenerator` novo, gerando um BCFNT/CFNU real via `java.awt.Font` (Noto Sans, SIL OFL
+1.1, embutida em `src/main/resources/fonts/`). **Achado que revogou parte da decisão da G4.1**: o
+toolset `JayFoxRox/3ds-font` (clonado nesta sessão) mostrou ser um stub Python2/pycairo
+não-funcional (nunca serializou BCFNT de verdade) — substituído por um serializador próprio
+escrito contra a especificação pública do 3dbrew. `composite_scene` não panica mais e desenha de
+verdade pela 1ª vez (`desenhos=834 vertices=105084`). `mvn -o test` verde no n3dsemu (219, +4);
+G5-invariante não se aplica (nenhum arquivo do arm-jitter tocado). Ver **Resultado** na task.
+**Candidatas restantes, não pegas automaticamente**: `ptm:sysm` (sessão sem serviço registrado,
+achado colateral da G6.5, não bloqueador), e retomar a F7 quando `1.3.0` sincronizar no Maven
+Central (checado nesta sessão: ainda 404 em `repo1.maven.org`).
 
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
