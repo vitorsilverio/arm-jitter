@@ -405,6 +405,27 @@ Ver **Resultado** na task. **Candidata registrada, não pega automaticamente**: 
 Virtualization Extensions (Hyp/Monitor 32-bit real) para essas 5 células ficarem `✅` de verdade —
 sem consumidor real pedindo isso hoje. **Fila automática vazia de novo.**
 
+✅ **Levantamento geral 2026-08-27** (a pedido do usuário: "verificar o que tem de tarefas em
+aberto nas várias frentes") — cruzado `FILA-EXECUCAO.md` com o `INDICE.md` de cada trilha
+(vários estavam desatualizados, mesmo padrão de dessincronia já visto). Resultado completo
+entregue ao usuário no chat; resumo: só **G7** estava livre de bloqueio real, o resto é
+🧑 bloqueado (C7/C9, C10, B4.0.3 item 3, B6.2 aceite #2, B6.6.6, A9 PR2, G6 comercial) ou
+"exige modelo forte" (D6, dispatch megamórfico ndsemu, idle-loop skip, JUS ASM×interp,
+WiFi fases 3-5, Platinum INTERPRETED, Platinum billboard/VRAM). Usuário escolheu G7.
+
+🔴 **G7 refinada 2026-08-27** (`trilha-g-3ds/g7-backport-vulkan-ndsemu.md`) — a pergunta gating
+do próprio `[REFINAR]` ("vale a pena mover a rasterização pro Vulkan?") foi respondida por
+MEDIÇÃO real (instrumentação temporária revertida, `mvn exec:java ... bench asm` em MKDS e
+SM64DS): a rasterização 3D já roda numa thread própria overlapada com a CPU do próximo quadro
+(`RenderPipeline`, ping-pong de 2 slots) e o tempo de render (10,5-11,3ms) fica folgadamente
+abaixo do tempo de CPU por quadro (13,5-21,3ms nos dois jogos) — CPU é o teto, não a
+rasterização, confirmando por medição direta o que `ndsemu-perf-plan` já suspeitava por outro
+caminho. **G7 não avança como proposta de ganho de fps** — decisão registrada na task, não é
+"nunca fazer" (só sem motivo hoje). Nenhum código de produção alterado (instrumentação
+revertida via `git checkout`, nada commitado no ndsemu). Ver **Resultado** na task.
+**Fila automática vazia de novo** — restam só os itens bloqueados/modelo-forte do levantamento
+acima; próxima priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
