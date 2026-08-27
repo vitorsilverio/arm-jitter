@@ -90,6 +90,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.HVC -> pcChanged |= system.executeHvc(core, (IrOp.Hvc) op, block.endPc());
                 case IrOp.Kind.SMC -> pcChanged |= system.executeSmc(core, (IrOp.Smc) op, block.endPc());
                 case IrOp.Kind.ERET -> pcChanged |= system.executeEret(core, (IrOp.Eret) op, block.endPc());
+                case IrOp.Kind.MRS_BANK -> pcChanged |= system.executeMrsBank(core, (IrOp.MrsBank) op, block.endPc());
+                case IrOp.Kind.MSR_BANK -> pcChanged |= system.executeMsrBank(core, (IrOp.MsrBank) op, block.endPc());
                 case IrOp.Kind.COPROCESSOR -> pcChanged |= system.executeCoprocessor(core, (IrOp.Coprocessor) op);
                 case IrOp.Kind.COPROCESSOR_DOUBLE -> pcChanged |= system.executeCoprocessorDouble(core, (IrOp.CoprocessorDouble) op);
                 case IrOp.Kind.UNDEFINED -> pcChanged |= system.executeUndefined(core, (IrOp.Undefined) op);
@@ -221,6 +223,8 @@ public final class IrBlockExecutor {
             case IrOp.Hvc hvc -> system.executeHvc(core, hvc, blockEndPc);
             case IrOp.Smc smc -> system.executeSmc(core, smc, blockEndPc);
             case IrOp.Eret eret -> system.executeEret(core, eret, blockEndPc);
+            case IrOp.MrsBank mrsBank -> system.executeMrsBank(core, mrsBank, blockEndPc);
+            case IrOp.MsrBank msrBank -> system.executeMsrBank(core, msrBank, blockEndPc);
             case IrOp.Coprocessor cp -> system.executeCoprocessor(core, cp);
             case IrOp.CoprocessorDouble cp -> system.executeCoprocessorDouble(core, cp);
             case IrOp.Undefined undef -> system.executeUndefined(core, undef);

@@ -155,6 +155,9 @@ public final class AsmNativePolicy {
             case IrOp.Smc ignored -> false;
             // ERET (B9.8.4): mesma simplificação de Hvc/Smc.
             case IrOp.Eret ignored -> false;
+            // MRS_BANK/MSR_BANK (B9.8.5): mesma simplificação de Hvc/Smc/Eret.
+            case IrOp.MrsBank ignored -> false;
+            case IrOp.MsrBank ignored -> false;
         };
     }
 

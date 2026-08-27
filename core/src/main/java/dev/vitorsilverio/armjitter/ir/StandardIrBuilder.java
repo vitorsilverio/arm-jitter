@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.decoder.BankedRegisterSysm;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
@@ -295,6 +297,20 @@ public final class StandardIrBuilder implements IrBuilder {
             case HVC -> block.add(new IrOp.Hvc(instruction.immediate(), instruction.condition()));
             case SMC -> block.add(new IrOp.Smc(instruction.immediate(), instruction.condition()));
             case ERET -> block.add(new IrOp.Eret(instruction.condition()));
+            case MRS_BANK -> block.add(new IrOp.MrsBank(
+                    instruction.destinationRegister(),
+                    CpuMode.values()[instruction.immediate() & BankedRegisterSysm.MODE_MASK],
+                    (instruction.immediate() >>> BankedRegisterSysm.REGISTER_SHIFT) & BankedRegisterSysm.REGISTER_MASK,
+                    (instruction.immediate() & BankedRegisterSysm.ELR_HYP_BIT) != 0,
+                    (instruction.immediate() & BankedRegisterSysm.SPSR_BIT) != 0,
+                    instruction.condition()));
+            case MSR_BANK -> block.add(new IrOp.MsrBank(
+                    instruction.sourceRegister(),
+                    CpuMode.values()[instruction.immediate() & BankedRegisterSysm.MODE_MASK],
+                    (instruction.immediate() >>> BankedRegisterSysm.REGISTER_SHIFT) & BankedRegisterSysm.REGISTER_MASK,
+                    (instruction.immediate() & BankedRegisterSysm.ELR_HYP_BIT) != 0,
+                    (instruction.immediate() & BankedRegisterSysm.SPSR_BIT) != 0,
+                    instruction.condition()));
             case BREAKPOINT -> block.add(new IrOp.Breakpoint(instruction.immediate()));
             case COPROCESSOR -> block.add(new IrOp.Coprocessor(
                     instruction.link(),

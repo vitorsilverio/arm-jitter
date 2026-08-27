@@ -116,6 +116,53 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `MRS` bancado (B9.8.5): entra em `UNDEFINED` em modo `USER` (mesma checagem em tempo de
+    /// EXECUÇÃO de {@link #executeHvc}/{@link #executeSmc}/{@link #executeEret}); senão lê o valor
+    /// do modo ALVO (não o ativo) via `SPSR`/`ELR_hyp`/registrador bancado, conforme os campos já
+    /// resolvidos pelo decoder. Sem checagem de Secure/Monitor state (simplificação da escada
+    /// B9.8, ver `b9.8-plano-hyp-monitor-32bit.md`).
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação (só no caso `UNDEFINED`)
+    public boolean executeMrsBank(ArmCore core, IrOp.MrsBank mrs, int sequentialPc) {
+        if (!core.cpsr().evalCond(mrs.condition())) {
+            return false;
+        }
+        if (core.mode() == CpuMode.USER) {
+            core.setProgramCounter(sequentialPc);
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        int value = mrs.spsr()
+                ? core.spsr(mrs.targetMode())
+                : mrs.elrHyp() ? core.elrHyp() : core.bankedRegister(mrs.targetMode(), mrs.bankedRegister());
+        core.setRegister(mrs.armRegister(), value);
+        return false;
+    }
+
+    /// `MSR` bancado (B9.8.5): mesma checagem de modo `USER` de {@link #executeMrsBank}; senão
+    /// escreve o registrador geral de origem no `SPSR`/`ELR_hyp`/registrador bancado do modo ALVO.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação (só no caso `UNDEFINED`)
+    public boolean executeMsrBank(ArmCore core, IrOp.MsrBank msr, int sequentialPc) {
+        if (!core.cpsr().evalCond(msr.condition())) {
+            return false;
+        }
+        if (core.mode() == CpuMode.USER) {
+            core.setProgramCounter(sequentialPc);
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        int value = core.register(msr.armRegister());
+        if (msr.spsr()) {
+            core.setSpsr(msr.targetMode(), value);
+        } else if (msr.elrHyp()) {
+            core.setElrHyp(value);
+        } else {
+            core.setBankedRegister(msr.targetMode(), msr.bankedRegister(), value);
+        }
+        return false;
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
     /// incondicional, sem campo de condição em nenhum dos dois modos)
     public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {

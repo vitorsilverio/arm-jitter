@@ -135,6 +135,26 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int ERET_MASK = 0x0FFF_FFFF;
     private static final int ERET_VALUE = 0x0160_006E;
 
+    /// `MRS`/`MSR` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64/A8.8.66): `sysm` de 5 bits =
+    /// `bit8&lt;&lt;4 | bits[19:16]`, `r` = bit22 (campo SEPARADO do `sysm` — `r=0` seleciona
+    /// registrador geral, `r=1` seleciona `SPSR` do modo alvo). `MRS_bank`: `cccc 0001 0 r 00 mmmm
+    /// dddd 001m 0000 0000` (`Rd` em bits\[15:12\]). `MSR_bank`: `cccc 0001 0 r 10 mmmm 1111 001m
+    /// 0000 nnnn` (`Rn` em bits\[3:0\], mesma posição que `MSR_reg` já usa — por isso o `MSR`
+    /// clássico já cai corretamente em `UNIMPLEMENTED`/`null` quando o `lo`/`bits[11:8]` não bate,
+    /// sem colisão nova). Confirmado contra `target/arm/tcg/{a32.decode,translate.c}` real do QEMU
+    /// (`msr_banked_access_decode`) e encodings reais via `arm-none-eabi-as -march=armv7ve`.
+    private static final int MRS_BANK_MASK = 0x0FB0_0EFF;
+    private static final int MRS_BANK_VALUE = 0x0100_0200;
+    private static final int MSR_BANK_MASK = 0x0FB0_FEF0;
+    private static final int MSR_BANK_VALUE = 0x0120_F200;
+    private static final int BANKED_R_BIT = 1 << 22;
+    private static final int BANKED_SYSM_LOW_SHIFT = 16;
+    private static final int BANKED_SYSM_LOW_MASK = 0xF;
+    private static final int BANKED_SYSM_HIGH_BIT = 1 << 8;
+    private static final int BANKED_SYSM_HIGH_SHIFT_INTO_SYSM = 4;
+    private static final int BANKED_RD_SHIFT = 12;
+    private static final int BANKED_RD_MASK = 0xF;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -390,6 +410,48 @@ public final class ArmDecoder implements InstructionDecoder {
                 return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                         InstructionKind.BYTE_REVERSE, rd, rm, -1, variant, false, false, false);
             }
+        }
+
+        // MRS/MSR bancados (B9.8.5): checados ANTES das formas clássicas — sem colisão real (o
+        // bloco `001m` fixo em bits[11:9] das formas bancadas nunca aparece nas formas clássicas,
+        // que exigem bits[11:0]=0 inteiro ou bits[11:8] livres/mask), mas mantidos primeiro por
+        // organização (mesmo padrão de ERET antes de SMC).
+        if ((raw & MRS_BANK_MASK) == MRS_BANK_VALUE) {
+            int rd = (raw >>> BANKED_RD_SHIFT) & BANKED_RD_MASK;
+            if (rd == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            if (!architecture.has(ArmFeature.VIRTUALIZATION_EXTENSIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            boolean r = (raw & BANKED_R_BIT) != 0;
+            int sysm = (((raw & BANKED_SYSM_HIGH_BIT) != 0 ? 1 : 0) << BANKED_SYSM_HIGH_SHIFT_INTO_SYSM)
+                    | ((raw >>> BANKED_SYSM_LOW_SHIFT) & BANKED_SYSM_LOW_MASK);
+            int packed = BankedRegisterSysm.resolve(r, sysm);
+            if (packed < 0) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MRS_BANK,
+                    rd, -1, -1, packed, false, false, false);
+        }
+
+        if ((raw & MSR_BANK_MASK) == MSR_BANK_VALUE) {
+            int rn = raw & 0xF;
+            if (rn == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            if (!architecture.has(ArmFeature.VIRTUALIZATION_EXTENSIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            boolean r = (raw & BANKED_R_BIT) != 0;
+            int sysm = (((raw & BANKED_SYSM_HIGH_BIT) != 0 ? 1 : 0) << BANKED_SYSM_HIGH_SHIFT_INTO_SYSM)
+                    | ((raw >>> BANKED_SYSM_LOW_SHIFT) & BANKED_SYSM_LOW_MASK);
+            int packed = BankedRegisterSysm.resolve(r, sysm);
+            if (packed < 0) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.MSR_BANK,
+                    -1, rn, -1, packed, false, false, false);
         }
 
         if ((raw & 0x0FBF_0FFF) == 0x010F_0000) {

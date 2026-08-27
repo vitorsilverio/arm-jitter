@@ -368,4 +368,181 @@ class ArmDecoderTest {
         assertEquals(CpuMode.SUPERVISOR, core.mode(), "cond falsa não deve entrar em Monitor mode");
         assertEquals(4, core.programCounter(), "Cycle/Fetch avançam o PC mesmo com guard falho (G4)");
     }
+
+    // ── MRS/MSR bancado (B9.8.5, A32, ARM DDI 0406C A8.8.64/A8.8.66) ────────────────────────
+
+    private static ArmCore newVirtualizationCore() {
+        return new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ARMV7VE);
+    }
+
+    @Test
+    void decodesArmMrsBankWithVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE100_0200); // MRS r0, R8_usr (encoding real, arm-none-eabi-as -march=armv7ve)
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.MRS_BANK, instruction.kind());
+        assertEquals(0, instruction.destinationRegister());
+    }
+
+    @Test
+    void armMrsBankIsUnimplementedWithoutVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE100_0200);
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.MRS_BANK, instruction.kind());
+    }
+
+    @Test
+    void armMrsBankWithUnallocatedSysmIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // sysm=0x7 (entre r14_usr=0x6 e r8_fiq=0x8): nenhuma entrada real na tabela ARM DDI 0487 F5.2.3.
+        memory.put32(0, 0xE107_0200);
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void armMrsBankWithRdEqualToProgramCounterIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE100_F200); // MRS pc, R8_usr — UNPREDICTABLE
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void armMrsBankReadsGeneralRegisterOfAnotherModeWithoutChangingActiveMode() {
+        ArmCore core = newVirtualizationCore();
+        core.switchMode(CpuMode.SYSTEM); // SP_usr/SP_sys compartilhado
+        core.setRegister(13, 0x1234);
+        core.switchMode(CpuMode.SUPERVISOR); // volta ao modo de reset
+        core.memory().write32(0, 0xE105_0200); // MRS r0, SP_usr
+
+        core.step();
+
+        assertEquals(0x1234, core.register(0));
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "leitura bancada não deve trocar o modo ativo");
+    }
+
+    @Test
+    void armMrsBankReadsElrHypDistinctFromLr() {
+        ArmCore core = newVirtualizationCore();
+        core.setElrHyp(0x9000);
+        core.setRegister(14, 0xBAD); // LR_usr/sys compartilhado — ELR_hyp é registrador à parte
+        core.memory().write32(0, 0xE10E_0300); // MRS r0, ELR_hyp
+
+        core.step();
+
+        assertEquals(0x9000, core.register(0), "ELR_hyp não é o mesmo registrador que LR");
+    }
+
+    @Test
+    void armMrsBankReadsSpsrOfAnotherModeWithoutTouchingActiveSpsr() {
+        ArmCore core = newVirtualizationCore();
+        core.setSpsr(CpuMode.FIQ, 0xABCD);
+        core.memory().write32(0, 0xE14E_0200); // MRS r0, SPSR_fiq
+
+        core.step();
+
+        assertEquals(0xABCD, core.register(0));
+    }
+
+    @Test
+    void armMrsBankIsUndefinedWhenExecutedInUserMode() {
+        ArmCore core = newVirtualizationCore();
+        core.switchMode(CpuMode.USER);
+        core.memory().write32(0, 0xE100_0200); // MRS r0, R8_usr
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+    }
+
+    @Test
+    void decodesArmMsrBankWithVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE125_F200); // MSR SP_usr, r0
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.MSR_BANK, instruction.kind());
+        assertEquals(0, instruction.sourceRegister());
+    }
+
+    @Test
+    void armMsrBankIsUnimplementedWithoutVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE125_F200);
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.MSR_BANK, instruction.kind());
+    }
+
+    @Test
+    void armMsrBankWithRnEqualToProgramCounterIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE125_F20F); // MSR SP_usr, pc — UNPREDICTABLE
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void armMsrBankWritesGeneralRegisterOfAnotherModeWithoutChangingActiveMode() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0x1234);
+        core.memory().write32(0, 0xE125_F200); // MSR SP_usr, r0
+
+        core.step();
+
+        core.switchMode(CpuMode.SYSTEM);
+        assertEquals(0x1234, core.register(13));
+        assertEquals(CpuMode.SYSTEM, core.mode());
+    }
+
+    @Test
+    void armMsrBankWritesElrHyp() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0x9000);
+        core.memory().write32(0, 0xE12E_F300); // MSR ELR_hyp, r0
+
+        core.step();
+
+        assertEquals(0x9000, core.elrHyp());
+    }
+
+    @Test
+    void armMsrBankWritesSpsrOfAnotherMode() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0xBEEF);
+        core.memory().write32(0, 0xE16E_F300); // MSR SPSR_hyp, r0
+
+        core.step();
+
+        assertEquals(0xBEEF, core.spsr(CpuMode.HYP));
+    }
+
+    @Test
+    void armMsrBankIsUndefinedWhenExecutedInUserMode() {
+        ArmCore core = newVirtualizationCore();
+        core.switchMode(CpuMode.USER);
+        core.memory().write32(0, 0xE125_F200); // MSR SP_usr, r0
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+    }
 }

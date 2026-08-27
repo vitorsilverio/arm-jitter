@@ -341,6 +341,19 @@ não-privilegiado (`LDRxT`/`STRxT`, 8 instruções) — precisa de `IrOp` novo +
 efetivo na tradução MMU, candidato a task própria. Nenhum dos dois pego automaticamente — são
 épicos, não sessões.
 
+✅ **B9.8.5 fechada 2026-08-27** (`trilha-b-arquiteturas/b9.8.5-mrs-msr-bank.md`, spec escrita e
+executada na mesma sessão — próximo item natural da escada B9.8 já aberta, sem precisar de nova
+priorização do usuário) — `MRS`/`MSR` bancado (A32 e T32): `BankedRegisterSysm` novo resolve `(r,
+sysm)` em `(modo,registro|ELR_hyp|SPSR)`, reaproveita `bankedRegister`/`setBankedRegister`/`spsr`/
+`setSpsr`/`elrHyp` de B9.8.1; `UNDEFINED` em modo `USER`. Achado real: o dispatch T32 de `MRS` em
+`Thumb2MiscDecoder` usava igualdade exata (só reconhecia a forma registrador) — generalizado para
+máscara, mesmo padrão que `MSR` já usava. Encodings reais via devkitARM antes de codificar. `mvn -o
+test` verde + `install`; G5 completo nos 5 consumidores ✅ (armbox 43/43 desta vez, a falha
+pré-existente não reproduziu). Sem marco de release. **Fecha a escada B9.8 (Hyp/Monitor 32-bit) por
+completo — B9.8.1 até B9.8.5.** Ver **Resultado** na task. Candidatas restantes, não pegas
+automaticamente: `LDRxT`/`STRxT` (precisa spec), `B10.6b`/`B10.6c` (bloqueadas), retomar F7 quando
+`1.3.0` sincronizar no Maven Central.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

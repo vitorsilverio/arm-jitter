@@ -344,5 +344,16 @@ public enum InstructionKind {
     /// do modo ativo. `UNDEFINED` quando executada em modo `USER` (checado em tempo de execução,
     /// ver `IrSystemExecutor#executeEret`). Sem `ArmException` própria — instrução de RETORNO pura
     /// (mesma categoria de `RETURN_FROM_EXCEPTION`/`RFE`), não entra em exceção nova.
-    ERET
+    ERET,
+    /// `MRS` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64, formas A32 e T32): lê um registrador
+    /// geral ou `SPSR` de outro modo (não o ativo) via `IrOp.MrsBank` — `sysm`/`r` já resolvidos
+    /// em `(modo, registrador)` em tempo de DECODE (`BankedRegisterSysm`, campos estáticos).
+    /// `UNDEFINED` quando executada em modo `USER` (checado em tempo de execução, ver
+    /// `IrSystemExecutor#executeMrsBank`). `destinationRegister` = `Rd`; `immediate` = valor
+    /// empacotado de `BankedRegisterSysm#resolve`.
+    MRS_BANK,
+    /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou
+    /// `SPSR` de outro modo via `IrOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
+    /// `sourceRegister` = `Rn`; `immediate` = valor empacotado de `BankedRegisterSysm#resolve`.
+    MSR_BANK
 }

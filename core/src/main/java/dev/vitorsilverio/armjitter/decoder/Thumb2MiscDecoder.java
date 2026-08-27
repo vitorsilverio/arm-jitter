@@ -61,6 +61,10 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         this.architecture = architecture;
     }
 
+    /// Registrador PC — usado para checar UNPREDICTABLE (`Rd`/`Rn`==PC) em `MRS_bank`/`MSR_bank`
+    /// (B9.8.5).
+    private static final int PROGRAM_COUNTER = 15;
+
     /// `hi` fixo do subgrupo "Hints, and CPS" (ARM DDI 0406C A5.3.5) — `1111 0011 1010 1111`.
     private static final int HINTS_AND_CPS_HI = 0xF3AF;
     /// `lo[15:8]` fixo (`1000 0000`) que, dentro do subgrupo acima, seleciona a forma "hint"
@@ -91,16 +95,33 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int BARRIER_OP_DMB = 0x5;
     private static final int BARRIER_OP_ISB = 0x6;
 
-    /// `hi` do subgrupo `MRS_reg` com `r=0` (CPSR); `r=1` (SPSR) soma {@link #MRS_R_BIT_IN_HI}.
-    /// `r` é o bit menos significativo do terceiro nibble de `hi` (bits 7:4 = `111r`) — bit 4,
-    /// não bit 8 (esse é parte do prefixo fixo `0011` do segundo nibble, bits 11:8).
-    private static final int MRS_HI_BASE = 0xF3EF;
+    /// `r` do subgrupo `MRS_reg`/`MRS_bank` é o bit menos significativo do terceiro nibble de `hi`
+    /// (bits 7:4 = `111r`) — bit 4, não bit 8 (esse é parte do prefixo fixo `0011` do segundo
+    /// nibble, bits 11:8). `r=0`: CPSR (`MRS_reg`) ou registrador geral (`MRS_bank`); `r=1`: SPSR
+    /// nos dois casos.
     private static final int MRS_R_BIT_IN_HI = 1 << 4;
     /// `lo[15:12]` fixo (`1000`) e `lo[7:0]` fixo (`0000 0000`) de `MRS_reg`; `lo[11:8]` = `rd`.
     private static final int MRS_LO_FIXED_MASK = 0xF0FF;
     private static final int MRS_LO_FIXED_VALUE = 0x8000;
     private static final int MRS_RD_SHIFT = 8;
     private static final int MRS_RD_MASK = 0xF;
+
+    /// `MRS_bank` (B9.8.5, ARM DDI 0406C A8.8.64): mesmo prefixo `hi[15:5]` de `MRS_reg`
+    /// (`1111 0011 111`), mas `hi[3:0]` deixa de ser fixo em `1111` — vira a metade alta do `sysm`
+    /// (bits\[19:16\] do encoding real), e `hi[4]` continua sendo `r`. `MRS_HI_MASK`/`VALUE` genérico
+    /// (livre em `hi[4:0]`) substitui a igualdade exata que o dispatch de `tryDecode` usava antes
+    /// desta task — sem essa generalização, `decodeMrs` nunca é chamado para `sysm`-alto != `0xF`.
+    private static final int MRS_HI_MASK = 0xFFE0;
+    private static final int MRS_HI_VALUE = 0xF3E0;
+    /// `lo[7:5]` fixo (`001`) e `lo[3:0]` fixo (`0000`) de `MRS_bank`/`MSR_bank` (MESMA forma nos
+    /// dois — `lo[11:8]` = `rd` em `MRS_bank`/metade alta do `sysm` em `MSR_bank`, `lo[4]` = metade
+    /// baixa do `sysm` nos dois). Único bit que distingue de `MRS_LO_FIXED_VALUE`/`MSR_LO_FIXED_VALUE`
+    /// (`lo[5]`, sempre `0` na forma registrador) é o que evita colisão real entre as formas.
+    private static final int BANKED_LO_MASK = 0xF0EF;
+    private static final int BANKED_LO_VALUE = 0x8020;
+    private static final int BANKED_SYSM_LOW_BIT_IN_LO = 1 << 4;
+    private static final int BANKED_SYSM_HIGH_SHIFT_INTO_SYSM = 4;
+    private static final int BANKED_SYSM_HIGH_MASK = 0xF;
 
     /// `hi[8:4]` fixo (`1000 0` com `r` no bit 4) de `MSR_reg`; `hi[3:0]` = `rn` (registrador
     /// geral cujo valor é escrito no PSR).
@@ -228,7 +249,7 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         if (hi == MISC_CONTROL_HI) {
             return decodeMiscControl(raw, address, condition, lo);
         }
-        if (hi == MRS_HI_BASE || hi == (MRS_HI_BASE | MRS_R_BIT_IN_HI)) {
+        if ((hi & MRS_HI_MASK) == MRS_HI_VALUE) {
             return decodeMrs(raw, address, condition, hi, lo);
         }
         if ((hi & MSR_HI_MASK) == MSR_HI_VALUE) {
@@ -429,12 +450,38 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
             return decodeMrsMProfile(raw, address, condition, lo);
         }
         if ((lo & MRS_LO_FIXED_MASK) != MRS_LO_FIXED_VALUE) {
-            return null; // MRS_bank/MRS_v7m compartilham o mesmo hi, mas lo diferente.
+            // MRS_bank/MRS_v7m compartilham o mesmo hi, mas lo diferente (B9.8.5: tenta bank antes
+            // de desistir, mesmo padrão de decodeUdf->decodeSmc).
+            return decodeMrsBank(raw, address, condition, hi, lo);
         }
         boolean spsr = (hi & MRS_R_BIT_IN_HI) != 0;
         int rd = (lo >>> MRS_RD_SHIFT) & MRS_RD_MASK;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MRS,
                 rd, -1, -1, spsr ? 1 : 0, true, false, false);
+    }
+
+    // ── MRS_bank (B9.8.5) — A8.8.64 ─────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeMrsBank(int raw, int address, Condition condition, int hi, int lo) {
+        if ((lo & BANKED_LO_MASK) != BANKED_LO_VALUE) {
+            return null; // Nem registrador, nem bank — forma realmente desconhecida.
+        }
+        int rd = (lo >>> MRS_RD_SHIFT) & MRS_RD_MASK;
+        if (rd == PROGRAM_COUNTER) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        if (!architecture.has(ArmFeature.VIRTUALIZATION_EXTENSIONS)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        boolean r = (hi & MRS_R_BIT_IN_HI) != 0;
+        int sysm = (hi & BANKED_SYSM_HIGH_MASK)
+                | (((lo & BANKED_SYSM_LOW_BIT_IN_LO) != 0 ? 1 : 0) << BANKED_SYSM_HIGH_SHIFT_INTO_SYSM);
+        int packed = BankedRegisterSysm.resolve(r, sysm);
+        if (packed < 0) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MRS_BANK,
+                rd, -1, -1, packed, false, false, false);
     }
 
     /// `MRS Rd, <SYSm>` do perfil M (B7.4): `lo[15:12]=1000` fixo, `lo[11:8]`=Rd, `lo[7:0]`=SYSm.
@@ -476,7 +523,9 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
             return decodeMsrMProfile(raw, address, condition, hi, lo);
         }
         if ((lo & MSR_LO_FIXED_MASK) != MSR_LO_FIXED_VALUE) {
-            return null; // MSR_bank/MSR_v7m compartilham o mesmo hi, mas lo diferente.
+            // MSR_bank/MSR_v7m compartilham o mesmo hi, mas lo diferente (B9.8.5: tenta bank antes
+            // de desistir, mesmo padrão de decodeMrs acima).
+            return decodeMsrBank(raw, address, condition, hi, lo);
         }
         boolean spsr = (hi & MSR_R_BIT_IN_HI) != 0;
         int sourceRegister = hi & MSR_RN_MASK;
@@ -484,6 +533,30 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         int packed = (spsr ? PSR_SPSR_BIT : 0) | (fieldMask & PSR_FIELD_MASK_BITS);
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MSR,
                 -1, sourceRegister, -1, packed, false, false, false);
+    }
+
+    // ── MSR_bank (B9.8.5) — A8.8.66 ─────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeMsrBank(int raw, int address, Condition condition, int hi, int lo) {
+        if ((lo & BANKED_LO_MASK) != BANKED_LO_VALUE) {
+            return null; // Nem registrador, nem bank — forma realmente desconhecida.
+        }
+        int rn = hi & MSR_RN_MASK;
+        if (rn == PROGRAM_COUNTER) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        if (!architecture.has(ArmFeature.VIRTUALIZATION_EXTENSIONS)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        boolean r = (hi & MSR_R_BIT_IN_HI) != 0;
+        int sysm = ((lo >>> MSR_FIELD_MASK_SHIFT) & BANKED_SYSM_HIGH_MASK)
+                | (((lo & BANKED_SYSM_LOW_BIT_IN_LO) != 0 ? 1 : 0) << BANKED_SYSM_HIGH_SHIFT_INTO_SYSM);
+        int packed = BankedRegisterSysm.resolve(r, sysm);
+        if (packed < 0) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MSR_BANK,
+                -1, rn, -1, packed, false, false, false);
     }
 
     /// `MSR <SYSm>, Rn` do perfil M (B7.4): `lo[15:12]=1000` fixo, `lo[7:0]`=SYSm, `hi[3:0]`=Rn. A

@@ -582,4 +582,168 @@ class Thumb2MiscDecoderTest {
 
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
+
+    // ── MRS/MSR bancado (B9.8.5, T32, ARM DDI 0406C A8.8.64/A8.8.66) ────────────────────────
+
+    /// `ARMV7A` (base do resto desta suíte para `HVC`/`SMC`) não tem `VIRTUALIZATION_EXTENSIONS`
+    /// habilitada — precisa de um preset dedicado, mesmo padrão de `THUMB2_ARCH`/`noSmcThumb2`
+    /// acima: o `Thumb2MiscDecoder` interno precisa da MESMA feature, não só o preset externo
+    /// (`ArmArchitecture#extending` preserva a LISTA de extensões, mas cada extensão guarda sua
+    /// própria referência de arquitetura para gating interno).
+    private static final ArmArchitecture ARMV7VE_THUMB2 = ArmArchitecture.extending(
+                    ArmArchitecture.ARMV7A, "ARMv7VE-Thumb2", ArmFeature.VIRTUALIZATION_EXTENSIONS)
+            .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
+                    ArmArchitecture.extending(ArmArchitecture.ARMV7A, "ARMv7VE-Thumb2-Inner",
+                            ArmFeature.VIRTUALIZATION_EXTENSIONS))));
+
+    private static ArmCore newVirtualizationCore() {
+        return newCore(ARMV7VE_THUMB2);
+    }
+
+    @Test
+    void mrsBankWDecodesWithVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF3E0); // MRS r0, R8_usr (encoding real, arm-none-eabi-as -march=armv7ve)
+        memory.put16(2, 0x8020);
+
+        DecodedInstruction instruction = new ThumbDecoder(ARMV7VE_THUMB2).decode(memory, 0);
+
+        assertEquals(InstructionKind.MRS_BANK, instruction.kind());
+        assertEquals(0, instruction.destinationRegister());
+    }
+
+    @Test
+    void mrsBankWIsUnimplementedWithoutVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF3E0);
+        memory.put16(2, 0x8020);
+
+        // THUMB2_ARCH tem THUMB2/MEMORY_BARRIERS mas não VIRTUALIZATION_EXTENSIONS.
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.MRS_BANK, instruction.kind());
+    }
+
+    @Test
+    void mrsBankWWithUnallocatedSysmIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        // sysm=0x7 (entre r14_usr=0x6 e r8_fiq=0x8): nenhuma entrada real na tabela.
+        memory.put16(0, 0xF3E7);
+        memory.put16(2, 0x8020);
+
+        DecodedInstruction instruction = new ThumbDecoder(ARMV7VE_THUMB2).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void mrsBankWWithRdEqualToProgramCounterIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF3E0);
+        memory.put16(2, 0x8F20); // MRS pc, R8_usr — UNPREDICTABLE
+
+        DecodedInstruction instruction = new ThumbDecoder(ARMV7VE_THUMB2).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void mrsBankWEntersUndefinedInUserModeMatchingArmClassic() {
+        ArmCore thumb2Core = newVirtualizationCore();
+        thumb2Core.switchMode(CpuMode.USER);
+        run32(thumb2Core, 0xF3E0, 0x8020); // MRS r0, R8_usr
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(),
+                ArmArchitecture.extending(ArmArchitecture.ARMV7A, "ARMv7VE-A32", ArmFeature.VIRTUALIZATION_EXTENSIONS));
+        armCore.switchMode(CpuMode.USER);
+        armCore.memory().write32(0, 0xE100_0200); // MRS r0, R8_usr
+        armCore.step();
+
+        assertEquals(armCore.mode(), thumb2Core.mode());
+        assertEquals(CpuMode.UNDEFINED, thumb2Core.mode());
+        assertEquals(armCore.programCounter(), thumb2Core.programCounter());
+    }
+
+    @Test
+    void mrsBankWReadsElrHypDistinctFromLr() {
+        ArmCore core = newVirtualizationCore();
+        core.setElrHyp(0x9000);
+        core.setRegister(14, 0xBAD); // LR_usr/sys compartilhado — ELR_hyp é registrador à parte
+        run32(core, 0xF3EE, 0x8030); // MRS r0, ELR_hyp
+
+        assertEquals(0x9000, core.register(0), "ELR_hyp não é o mesmo registrador que LR");
+    }
+
+    @Test
+    void mrsBankWReadsSpsrOfAnotherMode() {
+        ArmCore core = newVirtualizationCore();
+        core.setSpsr(CpuMode.HYP, 0xBEEF);
+        run32(core, 0xF3FE, 0x8030); // MRS r0, SPSR_hyp
+
+        assertEquals(0xBEEF, core.register(0));
+    }
+
+    @Test
+    void msrBankWDecodesWithVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF380); // MSR SP_usr, r0
+        memory.put16(2, 0x8520);
+
+        DecodedInstruction instruction = new ThumbDecoder(ARMV7VE_THUMB2).decode(memory, 0);
+
+        assertEquals(InstructionKind.MSR_BANK, instruction.kind());
+        assertEquals(0, instruction.sourceRegister());
+    }
+
+    @Test
+    void msrBankWIsUnimplementedWithoutVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF380);
+        memory.put16(2, 0x8520);
+
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.MSR_BANK, instruction.kind());
+    }
+
+    @Test
+    void msrBankWWithRnEqualToProgramCounterIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, 0xF38F); // MSR SP_usr, pc — UNPREDICTABLE
+        memory.put16(2, 0x8520);
+
+        DecodedInstruction instruction = new ThumbDecoder(ARMV7VE_THUMB2).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    @Test
+    void msrBankWWritesGeneralRegisterOfAnotherModeWithoutChangingActiveMode() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0x1234);
+        run32(core, 0xF380, 0x8520); // MSR SP_usr, r0
+
+        core.switchMode(CpuMode.SYSTEM);
+        assertEquals(0x1234, core.register(13));
+    }
+
+    @Test
+    void msrBankWWritesElrHyp() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0x9000);
+        run32(core, 0xF380, 0x8E30); // MSR ELR_hyp, r0
+
+        assertEquals(0x9000, core.elrHyp());
+    }
+
+    @Test
+    void msrBankWWritesSpsrOfAnotherMode() {
+        ArmCore core = newVirtualizationCore();
+        core.setRegister(0, 0xBEEF);
+        run32(core, 0xF390, 0x8E30); // MSR SPSR_hyp, r0
+
+        assertEquals(0xBEEF, core.spsr(CpuMode.HYP));
+    }
 }

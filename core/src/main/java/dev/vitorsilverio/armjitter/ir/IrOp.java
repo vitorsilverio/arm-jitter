@@ -1,11 +1,12 @@
 package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -88,6 +89,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int HVC = 61;
         public static final int SMC = 62;
         public static final int ERET = 63;
+        public static final int MRS_BANK = 64;
+        public static final int MSR_BANK = 65;
     }
 
     /// Operacao ALU generica.
@@ -649,6 +652,49 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// espaço condicional de {@link Hvc}/{@link Smc}/{@link Swi}).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.ERET; }
+    }
+
+    /// `MRS` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64): lê um registrador geral ou `SPSR` de
+    /// outro modo (não o ativo) — `sysm`/`r` já resolvidos em `(modo, registrador)` em tempo de
+    /// DECODE (`BankedRegisterSysm`), então esta op é semântica pura do core, sem re-decodificar
+    /// nada. `UNDEFINED` em modo `USER` (checado em tempo de EXECUÇÃO, mesma convenção de
+    /// {@link Hvc}/{@link Smc}/{@link Eret}). Sem checagem de Secure/Monitor state (simplificação
+    /// documentada em `b9.8-plano-hyp-monitor-32bit.md`).
+    record MrsBank(
+            /// Registrador geral de destino (`Rd`).
+            int armRegister,
+            /// Modo do registrador bancado alvo (não necessariamente o modo ativo).
+            CpuMode targetMode,
+            /// Índice do registrador bancado (8-14), significativo só quando {@link #elrHyp()} e
+            /// {@link #spsr()} são ambos `false`.
+            int bankedRegister,
+            /// `true` quando o alvo é `ELR_hyp` — registrador à parte, fora de R0-R15 (Hyp mode
+            /// não banca `LR`, ver `ArmCore#elrHyp`).
+            boolean elrHyp,
+            /// `true` quando o alvo é o `SPSR` do modo (em vez de um registrador geral).
+            boolean spsr,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MRS_BANK; }
+    }
+
+    /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou `SPSR`
+    /// de outro modo — mesma convenção de {@link MrsBank}.
+    record MsrBank(
+            /// Registrador geral de origem (`Rn`).
+            int armRegister,
+            /// Modo do registrador bancado alvo.
+            CpuMode targetMode,
+            /// Índice do registrador bancado (8-14), significativo só quando {@link #elrHyp()} e
+            /// {@link #spsr()} são ambos `false`.
+            int bankedRegister,
+            /// `true` quando o alvo é `ELR_hyp`.
+            boolean elrHyp,
+            /// `true` quando o alvo é o `SPSR` do modo.
+            boolean spsr,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MSR_BANK; }
     }
 
     /// Operação SWI delegada ao dispatcher do host.
