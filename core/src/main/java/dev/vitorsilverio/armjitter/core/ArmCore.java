@@ -23,12 +23,12 @@ public final class ArmCore {
     /// Índice do link register (visível no pacote para {@link AProfileExceptionModel}).
     static final int LR = 14;
     /// Versão do formato de {@link #saveState}/{@link #loadState}: `1` = formato anterior à
-    /// B3.3 (sem banco VFP/FPSCR), `2` = inclui o banco VFP completo. Lida por este core, não
-    /// pelos consumidores (`GbaConsole`/`NdsConsole` têm o próprio versionamento por cima, que
-    /// já rejeita formatos incompatíveis por inteiro — esta versão interna existe para que
-    /// `ArmCore.loadState` sozinho degrade sem exceção quando alimentado por um stream antigo,
-    /// ex. em teste).
-    private static final int STATE_VERSION = 2;
+    /// B3.3 (sem banco VFP/FPSCR), `2` = inclui o banco VFP completo, `3` = inclui o banco
+    /// Hyp/Monitor (B9.8.1). Lida por este core, não pelos consumidores (`GbaConsole`/
+    /// `NdsConsole` têm o próprio versionamento por cima, que já rejeita formatos incompatíveis
+    /// por inteiro — esta versão interna existe para que `ArmCore.loadState` sozinho degrade
+    /// sem exceção quando alimentado por um stream antigo, ex. em teste).
+    private static final int STATE_VERSION = 3;
     private static final int RESET_CPSR = CpuMode.SUPERVISOR.bits()
             | CpsrRegister.IRQ_DISABLE_FLAG
             | CpsrRegister.FIQ_DISABLE_FLAG;
@@ -56,6 +56,18 @@ public final class ArmCore {
     private int fiqSpsr;
     private int abortSpsr;
     private int undefinedSpsr;
+    /// `SP_hyp` (B9.8.1) — único registrador de propósito geral realmente bancado por Hyp mode.
+    /// `LR` em Hyp mode NÃO é bancado (é o mesmo `LR_usr`/`LR_sys` compartilhado, ver
+    /// {@link #saveSpLr}/{@link #restoreSpLr}); o registrador de retorno real do modo é
+    /// {@link #elrHyp}, separado da numeração R0-R15.
+    private int hypSp;
+    /// `ELR_hyp` (B9.8.1) — registrador arquitetural À PARTE (fora de R0-R15, "regno 17" na
+    /// nomenclatura do QEMU), usado por `ERET` executado em Hyp mode em vez de `LR`.
+    private int elrHyp;
+    private int hypSpsr;
+    /// `SP_mon`/`LR_mon` (B9.8.1) — banco normal, mesmo padrão de `supervisorSpLr`/`abortSpLr`.
+    private final int[] monitorSpLr = new int[2];
+    private int monitorSpsr;
     private final CpsrRegister cpsr = new CpsrRegister();
     private final VfpRegisters vfp = new VfpRegisters();
     private final FpscrRegister fpscr = new FpscrRegister();
@@ -147,6 +159,11 @@ public final class ArmCore {
         out.writeInt(fiqSpsr);
         out.writeInt(abortSpsr);
         out.writeInt(undefinedSpsr);
+        out.writeInt(hypSp);
+        out.writeInt(elrHyp);
+        out.writeInt(hypSpsr);
+        writeInts(out, monitorSpLr);
+        out.writeInt(monitorSpsr);
         out.writeInt(cpsr.get());
         out.writeLong(cycles);
         out.writeBoolean(interruptLine);
@@ -173,6 +190,19 @@ public final class ArmCore {
         fiqSpsr = in.readInt();
         abortSpsr = in.readInt();
         undefinedSpsr = in.readInt();
+        if (version >= 3) {
+            hypSp = in.readInt();
+            elrHyp = in.readInt();
+            hypSpsr = in.readInt();
+            readInts(in, monitorSpLr);
+            monitorSpsr = in.readInt();
+        } else {
+            hypSp = 0;
+            elrHyp = 0;
+            hypSpsr = 0;
+            java.util.Arrays.fill(monitorSpLr, 0);
+            monitorSpsr = 0;
+        }
         cpsr.set(in.readInt());
         cycles = in.readLong();
         interruptLine = in.readBoolean();
@@ -635,6 +665,11 @@ public final class ArmCore {
         if (mode == CpuMode.FIQ) {
             return fiqR8ToR14[register - 8];
         }
+        if (mode == CpuMode.HYP) {
+            // SP_hyp é banco próprio; LR em Hyp mode É o LR_usr/LR_sys compartilhado (não há
+            // banco Hyp para ele) — ver javadoc de #hypSp.
+            return register == SP ? hypSp : userSystemSpLr[1];
+        }
         int[] bank = spLrBank(mode);
         return bank[register - SP];
     }
@@ -661,6 +696,14 @@ public final class ArmCore {
             fiqR8ToR14[register - 8] = value;
             return;
         }
+        if (mode == CpuMode.HYP) {
+            if (register == SP) {
+                hypSp = value;
+            } else {
+                userSystemSpLr[1] = value;
+            }
+            return;
+        }
         int[] bank = spLrBank(mode);
         bank[register - SP] = value;
     }
@@ -673,6 +716,8 @@ public final class ArmCore {
             case FIQ -> fiqSpsr;
             case ABORT -> abortSpsr;
             case UNDEFINED -> undefinedSpsr;
+            case HYP -> hypSpsr;
+            case MONITOR -> monitorSpsr;
             case USER, SYSTEM -> throw new IllegalArgumentException("Mode has no SPSR: " + mode);
         };
     }
@@ -685,8 +730,23 @@ public final class ArmCore {
             case FIQ -> fiqSpsr = value;
             case ABORT -> abortSpsr = value;
             case UNDEFINED -> undefinedSpsr = value;
+            case HYP -> hypSpsr = value;
+            case MONITOR -> monitorSpsr = value;
             case USER, SYSTEM -> throw new IllegalArgumentException("Mode has no SPSR: " + mode);
         }
+    }
+
+    /// Lê `ELR_hyp` (B9.8.1) — registrador de retorno de Hyp mode, usado por `ERET` quando
+    /// executado nesse modo em vez de `LR`. Registrador arquitetural À PARTE, fora da numeração
+    /// R0-R15 (não confundir com `LR`/registrador 14, que em Hyp mode é o `LR_usr` compartilhado
+    /// — ver {@link #saveSpLr}).
+    public int elrHyp() {
+        return elrHyp;
+    }
+
+    /// Atualiza `ELR_hyp` (B9.8.1).
+    public void setElrHyp(int value) {
+        elrHyp = value;
     }
 
     /// Troca o modo atual salvando e restaurando bancos de registradores.
@@ -846,6 +906,15 @@ public final class ArmCore {
             fiqR8ToR14[LR - 8] = registers[LR];
             return;
         }
+        if (mode == CpuMode.HYP) {
+            // LR em Hyp mode é o MESMO registrador físico que LR_usr/LR_sys (não bancado) —
+            // ao sair de Hyp mode, o valor corrente precisa ser escrito de volta no banco
+            // usr/sys compartilhado, senão uma escrita feita durante a execução em Hyp mode
+            // "some" ao trocar de modo. Ver javadoc de #hypSp.
+            hypSp = registers[SP];
+            userSystemSpLr[1] = registers[LR];
+            return;
+        }
         int[] spLr = spLrBank(mode);
         spLr[0] = registers[SP];
         spLr[1] = registers[LR];
@@ -855,6 +924,11 @@ public final class ArmCore {
         if (mode == CpuMode.FIQ) {
             registers[SP] = fiqR8ToR14[SP - 8];
             registers[LR] = fiqR8ToR14[LR - 8];
+            return;
+        }
+        if (mode == CpuMode.HYP) {
+            registers[SP] = hypSp;
+            registers[LR] = userSystemSpLr[1];
             return;
         }
         int[] spLr = spLrBank(mode);
@@ -870,6 +944,9 @@ public final class ArmCore {
             case SUPERVISOR -> supervisorSpLr;
             case ABORT -> abortSpLr;
             case UNDEFINED -> undefinedSpLr;
+            case HYP -> throw new IllegalArgumentException(
+                    "HYP SP/LR are not a peer bank — SP is hypSp, LR is the shared userSystemSpLr[1]");
+            case MONITOR -> monitorSpLr;
         };
     }
 

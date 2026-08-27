@@ -306,6 +306,19 @@ restantes, não pegas automaticamente**: `B9.8` (Hyp/Monitor mode 32-bit, precis
 `STRxT` (precisa spec), retomar F7 quando `1.3.0` sincronizar (ainda 404 em 2026-08-27), `B10.6b`/
 `B10.6c` (bloqueadas em `TTBR0_EL2`/`TTBR0_EL3` novos, sem consumidor real).
 
+✅ **B9.8.1 fechada 2026-08-27** (`trilha-b-arquiteturas/b9.8.1-hyp-monitor-estado-generalizado.md`,
+priorizada pelo usuário entre B9.8/LDRxT-STRxT — escolheu B9.8) — plano mestre novo
+`b9.8-plano-hyp-monitor-32bit.md` escrito nesta sessão (mesmo padrão do `b10-plano-el2-el3.md`,
+fatos conferidos via QEMU real: `target/arm/tcg/{translate.c,a32.decode}`, `curl` direto). B9.8.1 é
+a fundação (fecha o achado 6 da B9.7): `CpuMode.HYP`/`CpuMode.MONITOR` novos + banking real em
+`ArmCore` — `SP_hyp` banco próprio, `LR` em Hyp mode é o `LR_usr`/`LR_sys` COMPARTILHADO (achado
+real do QEMU: Hyp mode não banca LR), `ELR_hyp` registrador à parte fora de R0-R15, `SP_mon`/
+`LR_mon`/`SPSR_mon` banco normal. Corrige bug latente (`CpuMode.fromBits` lançava para esses 2 bits
+de modo). Puramente aditivo, sem decode de instrução nova ainda. `mvn -o test` verde (core +
+suíte completa) + `install`; G5 completo nos 5 consumidores ✅ (zero-diff, nenhum usa Hyp/Monitor
+ainda). Ver **Resultado** na task. **Próximas da escada B9.8, qualquer ordem**: B9.8.2 (`HVC`),
+B9.8.3 (`SMC`), B9.8.4 (`ERET` A32), B9.8.5 (`MRS_bank`/`MSR_bank`).
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória

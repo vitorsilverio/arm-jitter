@@ -15,7 +15,14 @@ public enum CpuMode {
     /// Modo undefined.
     UNDEFINED(0b11011),
     /// Modo system.
-    SYSTEM(0b11111);
+    SYSTEM(0b11111),
+    /// Modo Hyp (ARMv7VE, Virtualization Extensions). `SP` é bancado à parte; `LR` NÃO é —
+    /// usa o mesmo `LR_usr`/`LR_sys` compartilhado (ver `ArmCore#elrHyp`, que modela o
+    /// registrador de retorno real deste modo, `ELR_hyp`, separado da numeração R0-R15).
+    HYP(0b11010),
+    /// Modo Monitor (ARMv6K+, Security Extensions/TrustZone). Banco normal (`SP`/`LR`/`SPSR`
+    /// próprios), ao contrário de `HYP`.
+    MONITOR(0b10110);
 
     private final int bits;
 
