@@ -372,6 +372,16 @@ de propósito por completo** (5 pela escada B9.8, 8 por esta task). Ver **Result
 agora desbloqueada — `armbox` já em `1.2.0`, os outros 4 em `1.1.0`), `B10.6b`/`B10.6c`
 (bloqueadas em `TTBR0_EL2`/`TTBR0_EL3` novos, sem consumidor real).
 
+✅ **F7 fechada 2026-08-27** (`trilha-f-infra/f7-consumidores-central.md`, "Rodada 3" — única
+candidata não bloqueada da lista acima, sem precisar de nova priorização do usuário) — `1.3.0`
+confirmada resolvível no Central antes de começar; os 5 consumidores (`gbaemu`/`ndsemu`/`armbox`/
+`virtual-arm-box`/`n3dsemu`) bump para `1.3.0` (armbox vinha de `1.2.0`, os outros 4 de `1.1.0`) +
+docs corrigidas. Aceite com `~/.m2/repository/dev/vitorsilverio` renomeada: gbaemu 240, ndsemu 183,
+virtual-arm-box 87, n3dsemu 221, armbox 43/43 (falha pré-existente não reproduziu) — todos BUILD
+SUCCESS resolvendo do Central; `org.ow2.asm:asm:9.7.1` confirmado transitivo. Commit por repo +
+push. Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**: `B10.6b`/
+`B10.6c` (bloqueadas em `TTBR0_EL2`/`TTBR0_EL3` novos, sem consumidor real).
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

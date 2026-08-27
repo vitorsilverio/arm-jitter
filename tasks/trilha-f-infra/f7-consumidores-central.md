@@ -198,3 +198,36 @@ Markdown dos consumidores + `arm-jitter/README.md`.
 
 Commit por repo (`F7: atualiza arm-jitter [/arm-jitter-truffle] para 1.1.0 (Maven Central)`), push
 feito nos 5 consumidores + no arm-jitter.
+
+**Rodada 3 (2026-08-27)**: a `1.3.0` foi publicada no Central em 2026-08-27 (B8.11/B8.11b/B8.12 +
+E7/E8) — a `F7` desta versão tinha sido adiada a pedido do usuário por causa da demora incomum de
+sincronização do Central. Estado antes desta rodada: `armbox` em `1.2.0` (a `1.2.0` fora publicada
+por sessão sem registro na fila, ver `tasks/README.md`); `gbaemu`/`ndsemu`/`virtual-arm-box`/
+`n3dsemu` ainda em `1.1.0`. Confirmado primeiro que `1.3.0` está resolvível
+(`https://repo1.maven.org/maven2/dev/vitorsilverio/arm-jitter/1.3.0/arm-jitter-1.3.0.pom` → `200`).
+
+1. `gbaemu/pom.xml`, `ndsemu/pom.xml`, `virtual-arm-box/pom.xml`, `n3dsemu/pom.xml`: `arm-jitter`
+   → `1.3.0`.
+2. `armbox/pom.xml`: `arm-jitter` e `arm-jitter-truffle`, ambos → `1.3.0`.
+3. Docs com a versão de exemplo escrita literalmente: `gbaemu/README.md`, `ndsemu/README.md`+
+   `AGENTS.md`, `armbox/README.md`, `n3dsemu/README.md`+`AGENTS.md` corrigidas para `1.3.0`.
+   `virtual-arm-box` não cita a versão em prosa (nada a mudar). `arm-jitter/README.md` já estava em
+   `1.3.0` (atualizado por sessão anterior, sem retrabalho).
+
+**Prova de resolução do Central** (`~/.m2/repository/dev/vitorsilverio` renomeada para `.bak`,
+restaurada por merge ao final — a suíte baixou artefatos novos durante o teste, então a restauração
+foi um merge com `robocopy` em vez de um simples `Rename-Item` de volta, para não perder nem os
+artefatos antigos nem os novos):
+
+| Repo | Resultado |
+|------|-----------|
+| gbaemu | 240 testes, 17 skipped, BUILD SUCCESS |
+| ndsemu | 183 testes, 0 skipped, BUILD SUCCESS |
+| virtual-arm-box | 87 testes, 5 skipped, BUILD SUCCESS |
+| n3dsemu | 221 testes, 0 skipped, BUILD SUCCESS |
+| armbox | 43/43, BUILD SUCCESS (a falha pré-existente de `Armv7TortureTest`/`VfpRegisters` não
+  reproduziu nesta rodada, mesmo achado ocasional já visto em sessões anteriores) |
+
+`mvn -o dependency:tree` do gbaemu confirma `org.ow2.asm:asm:9.7.1` chegando transitivo do
+arm-jitter. Commit por repo (`F7: atualiza arm-jitter [/arm-jitter-truffle] para 1.3.0 (Maven
+Central)`), push feito nos 5 consumidores.
