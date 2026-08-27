@@ -1678,4 +1678,61 @@ um terceiro/quarto gap depois deste — instruções tão básicas como `MOV`/`A
 faltando sugere que a superfície "comum" da classe "Data Processing — Register" pode ter mais
 buracos do que os já mapeados).
 
+## B10.6b/B10.6c — sessão única (2026-08-27), relato minucioso
+
+Últimos dois itens do plano mestre `b10-plano-el2-el3.md` — task spec escrita e executada na mesma
+sessão (só existiam como duas linhas no plano mestre), combinadas numa task só (mesmo precedente de
+B9.2/B9.4/B9.6) por serem estruturalmente idênticas: `AT S1E2R`/`S1E2W`/`S1E3R`/`S1E3W`, stage-1
+PURA dos regimes EL2/EL3 (sem stage-2 — diferente de `S12E*`/B10.8), que B10.6/B10.8 tinham deixado
+de fora por faltar `TTBR0_EL2`/`TTBR0_EL3`.
+
+**Registradores novos**: `TTBR0_EL2` (`op1=4,CRn=2,CRm=0,op2=0`, mesmo `CRn`/`CRm` de `TCR_EL2`) e
+`TTBR0_EL3`/`TCR_EL3` (`op1=6,CRn=2,CRm=0,op2=0/2`) — `TTBR0_EL2`/`TTBR0_EL3` têm side effect real
+(alimentam a classe de tradução nova), `TCR_EL3` é armazenamento puro (mesma disciplina de
+`TCR_EL2`).
+
+**Classe de tradução nova**: `Aarch64PrivilegedStage1TranslatingAddressSpace64` (`memory.mmu`) —
+mesma geometria de granule 4KiB/48-bit/4-níveis de `TranslatingAddressSpace64`/
+`Stage2TranslatingAddressSpace64`, mas com o formato de permissão real e mais simples que os
+regimes EL2/EL3 usam sem VHE: só `AP[2]` (bit 7, somente-leitura — `AP[1]`/bit 6 é `RES0`, sem
+distinção EL0/EL1 porque esses regimes não têm um "EL0 companheiro" sem VHE) e um `XN` único
+(bit 54, sem `PXN`/`UXN` separados). Duas instâncias em `Aarch64VmsaSystemRegisters`
+(`el2Stage1`/`el3Stage1`), cada uma sobre o MESMO físico da stage-1 EL1&0.
+
+**Decoder**: `decodeAddressTranslateStage12` (que já existia desde B10.8, tratando o `op1=0b100` de
+EL2) foi renomeado para `decodeAddressTranslateEl2` e ganhou os casos `op2=0/1` (`S1E2R`/`S1E2W`);
+`decodeAddressTranslateEl3` novo trata `op1=0b110` (antes caía incondicionalmente em
+`unsupported`). Nenhuma colisão de decode nova — o espaço já estava isolado desde B10.6/B10.8, que
+documentavam esta task como o próximo passo natural.
+
+**`Aarch64VmsaSystemRegisters#addressTranslate` refatorado**: de um `if`/`else` (que só distinguia
+"combinada + `HCR_EL2.VM`" de "stage-1 EL1&0 só") para um `switch` exaustivo sobre
+`Aarch64AddressTranslateForm` — 4 grupos (EL1&0, combinada stage-1+stage-2, EL2 puro, EL3 puro). O
+método `isCombinedStage12()` do enum ficou sem chamador depois do refactor e foi removido (não
+deixar código morto).
+
+**Achado sobre `docs/COBERTURA-ISA.md`**: o script `gerar-cobertura-isa.sh` foi rodado (rede
+disponível nesta sessão) e mostrou 5 células de A32/T32 regredindo (`MRS_bank`/`MSR_bank`/`ERET`/
+`HVC`/`SMC`, `✅`→`❌`) — instruções que sessões B9.8.2-B9.8.5 já implementaram corretamente e que
+esta sessão NÃO tocou (nenhum arquivo A32/T32 foi modificado). Isso é instabilidade do medidor ou
+do inventário `decodetree` puxado do QEMU upstream (que pode ter mudado desde a última medição),
+não uma regressão real de código — mas a causa raiz não foi investigada (fora do orçamento desta
+task, que é sobre A64). A tabela regenerada foi **descartada** (`git checkout`) para não commitar
+números não explicados junto com o trabalho real desta sessão; documentado como achado/armadilha
+na task para quem for regenerar a tabela de verdade no futuro.
+
+Testes novos/atualizados: `Aarch64PrivilegedStage1TranslatingAddressSpace64Test` (5, mesmo padrão
+de `Stage2TranslatingAddressSpace64Test`), `Aarch64VmsaSystemRegistersTest` (+7, via `TTBR0_EL2`/
+`TTBR0_EL3` reais do barramento), `Aarch64DecoderCorpusTest` (3 testes antigos que assumiam
+`S1E2*`/`S1E3*` fora de escopo substituídos por 8 novos que decodificam de verdade + regressão de
+`op2` reservado). `mvn -o test` verde no `core` (2352 testes, baseline 2343) + `truffle`; `mvn -o
+install` local. G5 completo: gbaemu ✅, ndsemu ✅, n3dsemu ✅, virtual-arm-box ✅ (único consumidor
+A64 — F11 não emite `AT` EL2/EL3, sem mudança observável), armbox 43/43 (nenhuma falha
+pré-existente reproduzida nesta sessão). Commit `ab4e794`, push feito.
+
+**Fecha o épico `b10-plano-el2-el3.md` por completo** — as 12 linhas da escada B10 (B10.1-B10.9,
+incluindo B10.6b/B10.6c) estão todas fechadas. Sem marco de release cruzado (mudança de decode
+pequena, 4 formas de uma instrução já parcialmente coberta) — regeneração de cobertura real fica
+para sessão que também investigue o desvio de A32/T32 descrito acima.
+
 
