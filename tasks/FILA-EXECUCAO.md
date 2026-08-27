@@ -171,6 +171,14 @@ regressão, não corrigido, candidata a task própria. Ver **Resultado** em
 automaticamente**: `B8.11b` (SHA1/SHA256), o bug de dispatch across-lanes×three-different, `DUP`/
 `INS`/`SMOV`/`UMOV` (achado de B8.10), `G6.2`/`G6.3` (n3dsemu).
 
+✅ **E8 fechada 2026-08-26** (`trilha-e-manutencao/e8-advsimd-integer-rm-vs-bit11-dispatch-bug.md`) —
+priorizada pelo usuário entre as 4 candidatas acima; corrigiu o bug de dispatch across-lanes×
+three-different achado (não corrigido) pela B8.11. Achado mais amplo que o documentado: a colisão
+por `Rm` também acontecia com `Rm=0`/`Rm=1` (não só `Rm>=16`). Discriminador real = bit11 do word
+(fixo em `0` só em "three different"), corpus real via devkitA64. `mvn -o test` verde + `install`;
+G5 completo nos 5 consumidores + armbox ✅. Candidatas restantes, não pegas automaticamente:
+`B8.11b`, `DUP`/`INS`/`SMOV`/`UMOV`, `G6.2`/`G6.3`.
+
 ✅ **G6.1 fechada 2026-08-24** (`arm-jitter/tasks/trilha-g-3ds/g6.1-exemplos-restantes.md`, escrita
 e executada na mesma sessão, priorizada pelo usuário entre B8.11/G6.1/B6.14/AdvSIMD-copy) — os 6
 exemplos `graphics/gpu` que ainda não desenhavam (`composite_scene`/`fragment_light`/`lenny`/
