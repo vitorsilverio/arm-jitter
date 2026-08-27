@@ -297,6 +297,15 @@ G5-invariante não se aplica (nenhum arquivo do arm-jitter tocado). Ver **Result
 achado colateral da G6.5, não bloqueador), e retomar a F7 quando `1.3.0` sincronizar no Maven
 Central (checado nesta sessão: ainda 404 em `repo1.maven.org`).
 
+✅ **G6.6 já estava fechada 2026-08-27** (`trilha-g-3ds/g6.6-ptm-sysm.md`, priorizada pelo usuário
+nesta sessão entre G6.6/B9.8-spec/LDRxT-STRxT-spec — mas ao abrir a task, `PtmSysmService`/
+`PtmSysmServiceTest` já existiam commitados e pushados (`d2bf926`) e o `INDICE.md` da trilha G já
+mostrava ✅; esta `FILA-EXECUCAO.md` só estava desatualizada, mesmo padrão de dessincronia já visto
+com a `1.2.0`). Nada reexecutado; só esta entrada de bookkeeping foi escrita/pushada. **Candidatas
+restantes, não pegas automaticamente**: `B9.8` (Hyp/Monitor mode 32-bit, precisa spec), `LDRxT`/
+`STRxT` (precisa spec), retomar F7 quando `1.3.0` sincronizar (ainda 404 em 2026-08-27), `B10.6b`/
+`B10.6c` (bloqueadas em `TTBR0_EL2`/`TTBR0_EL3` novos, sem consumidor real).
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória
