@@ -32,10 +32,10 @@ não dá.
 | `stereoscopic_2d` | 339 | 🟡 desenha | sem 3D estereoscópico (fora do escopo da G5), só o olho esquerdo |
 | `particles` | 60 | 🟡 desenha | fundo preto; sem *blending* configurável ainda |
 | `composite_scene` | 0 | ❌ | **fs:USER corrigido pela G6.2** (sem `comando desconhecido` de `fs:USER` no trace) — `svcBreak(PANIC)` continua, causa NOVA e diferente: `APT:U` comando desconhecido `0x0044` (`GetSharedFont`)/`0x000B`/`0x0102`, não relacionada a RomFS. Candidata a task própria |
-| `fragment_light` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x2F` (`CMP`) não implementado no `VertexShaderInterpreter` |
-| `lenny` | 0 | ❌ | **causa real achada (G6.1)**: mesmo gap de `fragment_light` — `CMP` (`0x2F`) |
+| `fragment_light` | 0 | ❌ | **`CMP` implementado pela G6.3** (não morre mais nesse opcode) — bloqueio NOVO e diferente: opcode `0x2C` (`JMPC`, controle de fluxo condicional) não implementado; candidato a task própria (família `JMPC`/`JMPU`/`IFC`/`IFU`/`CALL*`/`BREAK*`) |
+| `lenny` | 0 | ❌ | **`CMP` implementado pela G6.3** — mesmo bloqueio novo de `fragment_light`: `JMPC` (`0x2C`) |
 | `loop_subdivision` | 501 | 🟡 **desenha COM TEXTURA** (`tex0=32x32`) | destravado pela B3.9; a malha sai desalinhada porque **não há teste de profundidade** (item 2 do backlog) |
-| `textured_cube` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x3C` (`MAD`) não implementado no `VertexShaderInterpreter` |
+| `textured_cube` | 605 | 🟡 **desenha** (21780 vértices) | **destravado pela G6.3** (`MAD` implementado) — não validado visualmente ainda |
 | `cubemap` | 0 | ❌ | **fs:USER corrigido pela G6.2**: `OpenFileDirectly` self-mount do RomFS embutido lê o `.t3x` real (`skybox.t3x`, offsets confirmados no trace) — não panica mais, mas ainda 0 desenhos em 3000/6000 fatias (não investigado além disso, fora do escopo da G6.2) |
 | `gpusprites` | 0 | ❌ | **fs:USER corrigido pela G6.2**: mesmo mecanismo de `cubemap`, lê `sprites.t3x` real — não panica mais, ainda 0 desenhos em 6000 fatias (não investigado além disso) |
 | `immediate` | 0 | ❌ | usa **submissão imediata de vértices** (`GPUREG_FIXEDATTRIB_INDEX = 0xF`), caminho não implementado |

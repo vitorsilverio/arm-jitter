@@ -254,6 +254,23 @@ ainda em `1.1.0`. **Considerar, antes de publicar a próxima versão**: mirror d
 direto) e GitHub Pages como réplica do Central foram avaliados e EXPLICITAMENTE RECUSADOS pelo
 usuário (2026-08-27) — nada de mirror, só o Central mesmo, mesmo com o limite mensal apertado.
 
+✅ **G6.3 fechada 2026-08-27** (`trilha-g-3ds/g6.3-vertex-shader-cmp-mad.md`, escrita e executada na
+mesma sessão, priorizada pelo usuário entre G6.3/investigar-APT:U/checar-sync-1.3.0) — `CMP`
+(formato 1c) e `MAD`/`MADI` (formato 5/5i) implementados no `VertexShaderInterpreter` do n3dsemu.
+Layout de bits validado contra o código-fonte real do nihstro (`shader_bytecode.h`, via `curl` — o
+`WebFetch` sobre o wiki do 3dbrew deu 403, e sobre o próprio `shader_bytecode.h` resumiu em vez de
+citar os `BitField`s). Achado real de decode: os bits "ignorados" na identificação de
+`CMP`/`MAD`/`MADI` (LSB/3-bits-baixos) são dados reais (`cmp.x`/parte de `dest`) — resolvido
+despachando por FAIXA de opcode antes do `switch` do formato 1. 3 testes sintéticos novos
+(`ShaderBinary`s montados à mão, sem `.shbin` real disponível que use essas instruções). `mvn -o
+test` verde no n3dsemu (209, +3); G5 não se aplica (nenhum arquivo do arm-jitter tocado). **Efeito
+real**: `textured_cube` destravado por completo (`desenhos=605 vertices=21780`, antes 0);
+`fragment_light`/`lenny` não morrem mais no `CMP`, mas revelam bloqueio NOVO em `JMPC` (`0x2C`,
+controle de fluxo condicional) — candidata própria, não pega automaticamente. Ver **Resultado** na
+task. **Candidatas restantes, não pegas automaticamente**: controle de fluxo do vertex shader
+(`JMPC`/`JMPU`/`IFC`/`IFU`/`CALL*`/`LOOP`/`BREAK*`), o achado de `APT:U` da G6.2, e retomar a F7
+quando `1.3.0` sincronizar no Maven Central.
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória
