@@ -25,13 +25,17 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// <p><b>B9.7</b> acrescenta `BXJ` (trivialmente equivalente a `BX`, Jazelle não implementado —
 /// mesmo `InstructionKind#BRANCH_EXCHANGE`), `UDF.W` (mesmo `InstructionKind#UDF` de B9.1) e
 /// `SUBS PC, LR, #imm` (alias "T5" de exception return — reusa `InstructionKind#SUB`, o executor
-/// genérico já trata `Rd==PC&amp;&amp;setFlags`, G1). `ERET`/`SMC`/`HVC`/`MRS_bank`/`MSR_bank`
+/// genérico já trata `Rd==PC&amp;&amp;setFlags`, G1). `ERET`/`SMC`/`MRS_bank`/`MSR_bank`
 /// continuam `UNIMPLEMENTED` — são instruções REAIS do ARMv7VE/Security Extensions (mesma versão
 /// v7-A, extensões optativas, não posteriores), então NÃO entram em `isa-nao-aplicavel.tsv`
 /// (regra do usuário, ver memória `feedback-nunca-excluir-instrucao-arm`, mesmo precedente da
 /// escada EL1/EL2 do AArch64/B10). Implementá-las exige Hyp mode + Monitor mode de 32 bits
 /// (registradores bancados `ELR_hyp`/`SPSR_hyp`/`LR_mon`/`SPSR_mon`, modos de CPU novos) — fora
 /// do escopo desta task de decode (`b9.7-t32-thumb2.md`), registrado como próxima escada.
+///
+/// <p><b>B9.8.2</b> implementa `HVC` (A32 e T32) de verdade — ver
+/// {@link #decodeHvc}/{@link ArmFeature#HYPERVISOR_CALL}; `ERET`/`SMC`/`MRS_bank`/`MSR_bank`
+/// seguem como próximas tasks da mesma escada (`B9.8.3`-`B9.8.5`).
 ///
 /// <p><b>B2.7 PR3</b>: `CPS` de 32 bits (antes fora de escopo — mesmo prefixo de hi =
 /// {@code 0xF3AF} desta classe, distinguido de hints por `imod`/`M` ≠ 0, ver
@@ -182,6 +186,21 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int EXCEPTION_RETURN_DESTINATION = 15; // PC
     private static final int EXCEPTION_RETURN_SOURCE = 14; // LR
 
+    /// `HVC` T32 (B9.8.2, ARM DDI 0406C A8.8.65): `hi = 1111 0111 1110 xxxx` (nibble baixo de
+    /// `hi` = bits\[19:16\] do `imm16`), `lo = 1000 xxxx xxxx xxxx` (`lo[15:12]=1000` fixo,
+    /// `lo[11:0]` = bits\[11:0\] do `imm16`). Confirmado contra `target/arm/tcg/t32.decode` real do
+    /// QEMU (`HVC 1111 0111 1110 .... 1000 .... .... .... &amp;i imm=%imm16_16_0`, com
+    /// `%imm16_16_0 16:4 26:1... 0:12` = bits altos do halfword 1 seguidos dos 12 baixos do
+    /// halfword 2) — MESMO prefixo de `hi` que `SMC`/`UDF.W` (`0xF7Fx`/`0xF7Ex`), distinguido pelo
+    /// nibble baixo de `hi` (`1110`, não `1111`).
+    private static final int HVC_HI_MASK = 0xFFF0;
+    private static final int HVC_HI_VALUE = 0xF7E0;
+    private static final int HVC_HI_IMM_MASK = 0xF;
+    private static final int HVC_HI_IMM_SHIFT_IN_IMM16 = 12;
+    private static final int HVC_LO_FIXED_MASK = 0xF000;
+    private static final int HVC_LO_FIXED_VALUE = 0x8000;
+    private static final int HVC_LO_IMM_MASK = 0xFFF;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         int hi = raw >>> 16;
@@ -204,6 +223,9 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         }
         if ((hi & UDF_HI_MASK) == UDF_HI_VALUE) {
             return decodeUdf(raw, address, condition, lo);
+        }
+        if ((hi & HVC_HI_MASK) == HVC_HI_VALUE) {
+            return decodeHvc(raw, address, condition, hi, lo);
         }
         if (hi == EXCEPTION_RETURN_SUB_HI) {
             return decodeExceptionReturnSub(raw, address, condition, lo);
@@ -246,6 +268,20 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         }
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.UDF,
                 -1, -1, -1, 0, false, false, false);
+    }
+
+    // ── HVC — A8.8.65 (B9.8.2) ───────────────────────────────────────────────────────────
+
+    private DecodedInstruction decodeHvc(int raw, int address, Condition condition, int hi, int lo) {
+        if ((lo & HVC_LO_FIXED_MASK) != HVC_LO_FIXED_VALUE) {
+            return null;
+        }
+        if (!architecture.has(ArmFeature.HYPERVISOR_CALL)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int imm16 = ((hi & HVC_HI_IMM_MASK) << HVC_HI_IMM_SHIFT_IN_IMM16) | (lo & HVC_LO_IMM_MASK);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.HVC,
+                -1, -1, -1, imm16, false, false, false);
     }
 
     // ── Hints (NOP/YIELD/WFE/WFI/SEV) — A5.3.5, "Hints, and CPS" ────────────────────────────

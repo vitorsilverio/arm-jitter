@@ -327,5 +327,11 @@ public enum InstructionKind {
     /// tabela de cobertura distinga "sempre indefinida por definicao" de "gap de decode real"
     /// (ver `tasks/README.md`, invariante G8). Comportamento identico ao de `UNIMPLEMENTED`: gera
     /// `IrOp.Undefined`.
-    UDF
+    UDF,
+    /// `HVC` (B9.8.2, ARM DDI 0406C A8.8.65, formas A32 e T32): entra em Hyp mode via
+    /// `IrOp.Hvc`/`ArmException#HVC`. `UNDEFINED` quando executada em modo `USER` (checado em
+    /// tempo de execução — o decode em si é independente de modo, ver
+    /// `IrSystemExecutor#executeHvc`). `immediate` = `imm16` do encoding (sem uso funcional hoje,
+    /// carregado só para fidelidade de trace/debug, mesmo padrão de `SWI`).
+    HVC
 }

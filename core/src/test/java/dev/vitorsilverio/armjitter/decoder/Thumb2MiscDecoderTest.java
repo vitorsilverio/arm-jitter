@@ -441,6 +441,58 @@ class Thumb2MiscDecoderTest {
         assertEquals(0x1004, thumb2Core.programCounter());
     }
 
+    // ── B9.8.2: HVC.W ────────────────────────────────────────────────────────────────────
+
+    private static final int HVC_HI = 0xF7E1;
+    private static final int HVC_LO = 0x8234;
+
+    @Test
+    void hvcWDecodesImm16WithHypervisorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HVC_HI); // HVC.W #0x1234 (encoding real, arm-none-eabi-as -march=armv7ve)
+        memory.put16(2, HVC_LO);
+
+        DecodedInstruction instruction = new ThumbDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.HVC, instruction.kind());
+        assertEquals(0x1234, instruction.immediate());
+    }
+
+    @Test
+    void hvcWIsUnimplementedWithoutHypervisorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HVC_HI);
+        memory.put16(2, HVC_LO);
+
+        // THUMB2_ARCH tem THUMB2/MEMORY_BARRIERS mas não HYPERVISOR_CALL.
+        DecodedInstruction instruction = new ThumbDecoder(THUMB2_ARCH).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.HVC, instruction.kind());
+    }
+
+    @Test
+    void hvcWEntersHypModeMatchingArmClassic() {
+        ArmCore thumb2Core = newCore(ArmArchitecture.ARMV7A);
+        thumb2Core.switchMode(CpuMode.SYSTEM);
+        thumb2Core.setRegister(14, 0xCAFE);
+        thumb2Core.switchMode(CpuMode.SUPERVISOR);
+        run32(thumb2Core, HVC_HI, HVC_LO); // HVC.W #0x1234
+
+        ArmCore armCore = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        armCore.switchMode(CpuMode.SYSTEM);
+        armCore.setRegister(14, 0xCAFE);
+        armCore.switchMode(CpuMode.SUPERVISOR);
+        armCore.memory().write32(0, 0xE141_2374); // HVC #0x1234
+        armCore.step();
+
+        assertEquals(armCore.mode(), thumb2Core.mode());
+        assertEquals(CpuMode.HYP, thumb2Core.mode());
+        assertEquals(armCore.elrHyp(), thumb2Core.elrHyp());
+        assertEquals(armCore.programCounter(), thumb2Core.programCounter());
+        assertEquals(0xCAFE, thumb2Core.register(14));
+    }
+
     // ── Gating G2: sem THUMB2, cai no caminho legado (UNDEFINED, comportamento inalterado) ──
 
     @Test

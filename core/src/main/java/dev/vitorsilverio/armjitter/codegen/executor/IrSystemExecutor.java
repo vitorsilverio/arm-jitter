@@ -55,6 +55,26 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `HVC` (B9.8.2): entra em Hyp mode, exceto em modo `USER` (`UNDEFINED` — checagem em tempo
+    /// de EXECUÇÃO, já que o decode em si é independente de modo). Mesma convenção de PC que
+    /// {@link #executeSwi}: `sequentialPc` (endereço da PRÓXIMA instrução) é gravado ANTES de
+    /// pedir a exceção — {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel} usa o PC
+    /// corrente como base de retorno tanto para `SWI` quanto para `HVC`.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeHvc(ArmCore core, IrOp.Hvc hvc, int sequentialPc) {
+        if (!core.cpsr().evalCond(hvc.condition())) {
+            return false;
+        }
+        core.setProgramCounter(sequentialPc);
+        if (core.mode() == CpuMode.USER) {
+            core.requestException(ArmException.UNDEFINED);
+        } else {
+            core.requestException(ArmException.HVC);
+        }
+        return true;
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
     /// incondicional, sem campo de condição em nenhum dos dois modos)
     public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {

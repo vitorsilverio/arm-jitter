@@ -148,6 +148,9 @@ public final class AsmNativePolicy {
             // interpretado por AsmFallbackPolicy.PER_OP -- mesma simplificacao de VfpConvertFixed.
             case IrOp.DspDualMultiply ignored -> false;
             case IrOp.DspTopWordMultiply ignored -> false;
+            // HVC (B9.8.2): sem emissao nativa ainda, cai no interpretado por AsmFallbackPolicy.PER_OP
+            // -- mesma simplificacao de Breakpoint/DspDualMultiply (op nova e rara).
+            case IrOp.Hvc ignored -> false;
         };
     }
 

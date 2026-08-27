@@ -448,6 +448,19 @@ dump de memória já usada em outras investigações desta fila). `mvn -o test` 
 
 | P17o | ~~**E7**~~ ✅ fechada 2026-08-26 — A64 JIT: 2 bugs reais faziam exceções de guest escaparem para o host (retomando a F11 pós-B6.14) | `trilha-e-manutencao/e7-a64-jit-guest-exceptions-escaping-to-host.md` | arm-jitter | — | `Ir64BlockCompiler` nunca cercava o bloco nativo com `try/catch` (precedente 32-bit `AsmBlockCompiler` tem desde B4.1.3); `JitRuntime64#execute` nunca protegia o `lift()` de um bloco quente (precedente 32-bit `LIFT_FAULT_CYCLES` desde B4.1.5) — este era a causa REAL do `TRANSLATION_FAULT_L3 em 0x200` que travava o boot JIT da F11 sessão 7. 2 testes de regressão novos, confirmados falhando sem o fix. `mvn -o test` verde + `install`; G5 nos 5 consumidores ✅. Sem release publicado. **Efeito no F11 (sessão 8, medido localmente)**: JIT deixa de lançar QUALQUER exceção e roda o orçamento completo (114s) — mas não alcança o marco, mesmo bloqueio "lento vs. preso" do INTERPRETED. `virtual-arm-box` segue em `1.1.0` (Central) — reabilitar `reachesEarlyconBannerJit` só depois que este fix for publicado (F5) e consumido (F7). Ver **Resultado** na task |
 
+✅ **B9.8.2 fechada 2026-08-27** (`trilha-b-arquiteturas/b9.8.2-hvc-real.md`, priorizada como próximo
+item da escada B9.8, sem dependência pendente — B9.8.1 já fechada) — `HVC` real (A32 e T32):
+`ArmFeature.HYPERVISOR_CALL` novo (só `ARMV7A`, gate real confirmado no QEMU: `ENABLE_ARCH_7 &&
+!M_PROFILE`, NÃO exige V7VE); `UNDEFINED` em modo `USER`, entra em Hyp mode (`ELR_hyp`=retorno, não
+`LR` — B9.8.1 já tinha o banking; `SPSR_hyp`=CPSR antigo; vetor fixo `0x14`) em qualquer outro modo.
+Encodings reais via `arm-none-eabi-as -march=armv7ve`. Achado real (corrigido ainda na escrita dos
+testes, nunca chegou a produção): `LR` em modo `SUPERVISOR` tem banco PRÓPRIO, diferente do
+`LR_usr`/`LR_sys` compartilhado com Hyp mode — testar a preservação de `LR` exige escrevê-lo a
+partir de `USER`/`SYSTEM`, não de `SUPERVISOR`. `mvn -o test` verde (2276, +8) + `install`; G5
+completo nos 5 consumidores ✅ (virtual-arm-box é o único consumidor A32 real, sem regressão em
+nenhum boot). Sem marco de release. Ver **Resultado** na task. **Próximas da escada, qualquer
+ordem**: `B9.8.3` (`SMC`), `B9.8.4` (`ERET` A32), `B9.8.5` (`MRS_bank`/`MSR_bank`).
+
 ## F3 (`virtual-arm-box --machine=raspi1`) — resumo (histórico minucioso movido para `tasks/FILA-HISTORICO.md`)
 
 M1 e M2 ✅ fechados (JIT e INTERPRETED). M3 (shell interativo): a sessão de

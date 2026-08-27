@@ -173,5 +173,14 @@ public enum ArmFeature {
     /// de `VMLA`/`VDIV`, `op1` `0b110`/`0b101` — antes desta feature caíam em `default -> null`,
     /// nunca reivindicados por nenhum outro dispatch, então viravam `UNDEFINED` sem risco de
     /// misdecode, G8).
-    VFP_FUSED_MULTIPLY_ACCUMULATE
+    VFP_FUSED_MULTIPLY_ACCUMULATE,
+
+    // ---- Onda 5, B9.8 (Hyp mode + Monitor mode 32-bit, ARMv7VE/Security Extensions) ----
+    /// `HVC` (ARM DDI 0406C A8.8.65, formas A32 e T32): entra em Hyp mode. Confirmado contra
+    /// `target/arm/tcg/translate.c` real do QEMU (`trans_HVC`): gate real é só `ENABLE_ARCH_7`
+    /// (ARMv7 base, QUALQUER perfil A/R) `&amp;&amp; !ARM_FEATURE_M` — **não** exige
+    /// `ARM_FEATURE_V7VE` (Virtualization Extensions), ao contrário do que se poderia supor por
+    /// analogia com `ERET`. Presente só no preset {@code ARMV7A} (não em {@code ARMV7M}, perfil M
+    /// — nem em presets pré-v7).
+    HYPERVISOR_CALL
 }

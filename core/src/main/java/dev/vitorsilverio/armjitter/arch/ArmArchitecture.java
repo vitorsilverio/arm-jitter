@@ -169,7 +169,10 @@ public final class ArmArchitecture {
             // B9.6: VFPv4 (VFMA/VFMS/VFNMA/VFNMS) — este preset emula um core que a possui
             // (Cortex-A15/A7, mesma nota já feita para SDIV/UDIV acima); NÃO herdada por
             // ARM11_MPCORE (ver o Javadoc da feature, exclusão cronológica real).
-            ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE);
+            ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE,
+            // B9.8.2: HVC (ARMv7 base, qualquer perfil A/R — ver Javadoc da feature). NÃO herdada
+            // por ARMV7M (perfil M não tem HVC, confirmado no QEMU real) nem por presets pré-v7.
+            ArmFeature.HYPERVISOR_CALL);
 
     public static final ArmArchitecture ARMV7A = ARMV7A_FEATURES
             .withDecoderExtensions(List.of(

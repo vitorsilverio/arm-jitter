@@ -15,5 +15,7 @@ public enum ArmException {
     /// Interrupt request.
     IRQ,
     /// Fast interrupt request.
-    FIQ
+    FIQ,
+    /// `HVC` (B9.8.2, ARMv7VE-adjacent — ver `ArmFeature#HYPERVISOR_CALL`): entra em Hyp mode.
+    HVC
 }

@@ -17,7 +17,15 @@ public final class AProfileExceptionModel implements ExceptionModel {
         int oldCpsr = core.cpsr().get();
         core.switchMode(targetMode);
         core.setSpsr(targetMode, oldCpsr);
-        core.setRegister(ArmCore.LR, returnAddress);
+        // Hyp mode não banca LR (é o LR_usr/LR_sys compartilhado, ver B9.8.1) — o registrador de
+        // retorno real do modo é ELR_hyp, à parte da numeração R0-R15 (ARM DDI 0406C, mesmo achado
+        // real que o `take_aarch32_exception` do QEMU confirma: só grava env->regs[14] quando
+        // new_mode != HYP).
+        if (targetMode == CpuMode.HYP) {
+            core.setElrHyp(returnAddress);
+        } else {
+            core.setRegister(ArmCore.LR, returnAddress);
+        }
         core.cpsr().setThumbMode(false);
         // ITSTATE (B2.4, Thumb-2 IT block): a entrada de exceção sempre limpa o ITSTATE do CPSR
         // NOVO (a `oldCpsr` completa, incl. o ITSTATE de origem, já foi capturada acima em
@@ -42,7 +50,11 @@ public final class AProfileExceptionModel implements ExceptionModel {
 
     private static int exceptionReturnAddress(ArmCore core, ArmException exception) {
         return switch (exception) {
-            case SWI, UNDEFINED -> core.programCounter();
+            // HVC: mesma convenção de SWI — o executor (`IrSystemExecutor#executeHvc`) já grava
+            // o PC sequencial (endereço da PRÓXIMA instrução) antes de pedir a exceção, mesmo
+            // achado real conferido no `gen_hvc` do QEMU (`gen_update_pc(s, curr_insn_len(s))`
+            // ANTES de levantar `EXCP_HVC`).
+            case SWI, UNDEFINED, HVC -> core.programCounter();
             case IRQ, FIQ -> core.programCounter() + 4;
             case PREFETCH_ABORT -> core.programCounter() + 4;
             case DATA_ABORT -> core.programCounter() + 8;
@@ -57,6 +69,7 @@ public final class AProfileExceptionModel implements ExceptionModel {
             case PREFETCH_ABORT, DATA_ABORT -> CpuMode.ABORT;
             case IRQ -> CpuMode.IRQ;
             case FIQ -> CpuMode.FIQ;
+            case HVC -> CpuMode.HYP;
         };
     }
 
@@ -69,6 +82,14 @@ public final class AProfileExceptionModel implements ExceptionModel {
             case DATA_ABORT -> 0x10;
             case IRQ -> 0x18;
             case FIQ -> 0x1C;
+            // HVC (B9.8.2): vetor "Hyp Trap"/genérico, simplificação deliberada desta escada — sem
+            // `HVBAR` real modelado ainda (nenhum consumidor reprograma vetores de Hyp hoje), reusa
+            // o MESMO esquema fixo (`highVectors`) que todo o resto do perfil A/R já usa. QEMU real
+            // (`arm_cpu_do_interrupt_aarch32_hyp`) usa este MESMO offset 0x14 para HVC executado a
+            // partir de qualquer modo que não seja o próprio Hyp mode — o caso "Hyp chamando HVC de
+            // si mesmo" (que usaria 0x08 no hardware real) não é distinguido aqui, mesma
+            // simplificação documentada no plano mestre `b9.8-plano-hyp-monitor-32bit.md`.
+            case HVC -> 0x14;
         };
     }
 }

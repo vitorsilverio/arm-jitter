@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -120,5 +121,76 @@ class ArmDecoderTest {
 
         assertEquals(InstructionKind.BRANCH_EXCHANGE, instruction.kind());
         assertTrue(instruction.link());
+    }
+
+    // ── HVC (B9.8.2, ARM DDI 0406C A8.8.65) ─────────────────────────────────────────────────
+
+    @Test
+    void decodesArmHvcWithHypervisorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE141_2374); // HVC #0x1234 (encoding real, arm-none-eabi-as -march=armv7ve)
+
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.HVC, instruction.kind());
+        assertEquals(Condition.AL, instruction.condition());
+        assertEquals(0x1234, instruction.immediate());
+    }
+
+    @Test
+    void armHvcIsUnimplementedWithoutHypervisorCallFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE141_2374);
+
+        // Default do construtor sem argumentos é ARMV4T — sem ArmFeature#HYPERVISOR_CALL, o
+        // espaço é real (não UDF fixo) mas não implementado nesta arquitetura (G8).
+        DecodedInstruction instruction = new ArmDecoder().decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.HVC, instruction.kind());
+    }
+
+    @Test
+    void armHvcEntersHypModeWithElrHypAsReturnAddressAndLeavesLrUntouched() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        // LR_usr/LR_sys (compartilhado com Hyp mode, B9.8.1) — DIFERENTE do LR bancado de
+        // SUPERVISOR, então grava pelo banco SYSTEM antes de voltar ao modo ativo real do HVC.
+        core.switchMode(CpuMode.SYSTEM);
+        core.setRegister(14, 0xCAFE);
+        core.switchMode(CpuMode.SUPERVISOR);
+        core.memory().write32(0, 0xE141_2374); // HVC #0x1234, modo inicial SUPERVISOR (reset)
+
+        core.step();
+
+        assertEquals(CpuMode.HYP, core.mode());
+        assertEquals(0x14, core.programCounter());
+        assertEquals(4, core.elrHyp()); // endereço da PRÓXIMA instrução, mesma convenção de SWI
+        assertEquals(0xCAFE, core.register(14), "LR é o LR_usr/LR_sys compartilhado, não bancado por Hyp");
+        assertFalse(core.cpsr().isThumbMode());
+    }
+
+    @Test
+    void armHvcIsUndefinedWhenExecutedInUserMode() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.switchMode(CpuMode.USER);
+        core.memory().write32(0, 0xE141_2374); // HVC #0x1234
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+        assertNotEquals(CpuMode.HYP, core.mode());
+    }
+
+    @Test
+    void armHvcvsIsSkippedWhenOverflowFlagIsClear() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.cpsr().setNzcv(false, false, false, false); // V=0 -> cond VS falsa
+        core.memory().write32(0, 0x6140_0070); // HVCVS #0
+
+        core.step();
+
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "cond falsa não deve entrar em Hyp mode");
+        assertEquals(4, core.programCounter(), "Cycle/Fetch avançam o PC mesmo com guard falho (G4)");
     }
 }

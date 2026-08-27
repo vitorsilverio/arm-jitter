@@ -110,6 +110,17 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int UDF_MASK = 0xFFF0_00F0;
     private static final int UDF_VALUE = 0xE7F0_00F0;
 
+    /// `HVC` (B9.8.2, ARM DDI 0406C A8.8.65): `cccc 0001 0100 iiii iiii iiii 0111 iiii` —
+    /// `imm16` = bits\[19:8\]<<4 | bits\[3:0\]. Confirmado contra `target/arm/tcg/a32.decode` real
+    /// do QEMU (`HVC .... 0001 0100 .... .... .... 0111 ....`, campo `cond` normal — mesmo espaço
+    /// condicional de `SWI`/`BKPT`, não o incondicional `cond=1111`).
+    private static final int HVC_MASK = 0x0FF0_00F0;
+    private static final int HVC_VALUE = 0x0140_0070;
+    private static final int HVC_IMM_HI_SHIFT = 8;
+    private static final int HVC_IMM_HI_MASK = 0xFFF;
+    private static final int HVC_IMM_LO_MASK = 0xF;
+    private static final int HVC_IMM_LO_SHIFT_IN_IMM16 = 4;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -143,6 +154,19 @@ public final class ArmDecoder implements InstructionDecoder {
         if ((raw & 0x0F00_0000) == 0x0F00_0000) {
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SWI,
                     -1, -1, -1, (raw & 0x00FF_FFFF) >> 16, true, false, false);
+        }
+
+        // HVC (B9.8.2): checado ANTES do dispatch condicional genérico (mesmo padrão de WFI/SWI
+        // acima) — sem a feature, cai no UNIMPLEMENTED normal do resto do decoder (não é UDF fixo:
+        // o espaço é real, só não implementado nesta arquitetura, G8).
+        if ((raw & HVC_MASK) == HVC_VALUE) {
+            if (!architecture.has(ArmFeature.HYPERVISOR_CALL)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int imm16 = (((raw >>> HVC_IMM_HI_SHIFT) & HVC_IMM_HI_MASK) << HVC_IMM_LO_SHIFT_IN_IMM16)
+                    | (raw & HVC_IMM_LO_MASK);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.HVC,
+                    -1, -1, -1, imm16, false, false, false);
         }
 
         // WFI (ARMv6K hint): `cccc 0011 0010 0000 1111 0000 0000 0011`. No hardware real,
