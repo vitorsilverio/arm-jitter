@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -87,6 +87,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int DSP_TOP_WORD_MULTIPLY = 60;
         public static final int HVC = 61;
         public static final int SMC = 62;
+        public static final int ERET = 63;
     }
 
     /// Operacao ALU generica.
@@ -635,6 +636,19 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// espaço condicional de {@link Hvc}/{@link Swi}).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.SMC; }
+    }
+
+    /// `ERET` (B9.8.4, A32, ARM DDI 0406C B9.3.3): retorna de exceção — `PC`←`ELR_hyp` (Hyp mode)
+    /// ou `LR` do banco ativo (qualquer outro modo privilegiado), `CPSR`←SPSR do modo ativo.
+    /// `UNDEFINED` em modo `USER`. Sem operandos de registrador (`Rn` fixo em `1111` no encoding,
+    /// não lido) — mesma categoria de {@link Hvc}/{@link Smc} (semântica pura do core), mas SEM
+    /// `ArmException` própria: é uma instrução de RETORNO pura, mesmo tratamento de
+    /// {@link ReturnFromException}/`RFE`, não de {@link Hvc}/{@link Smc}.
+    record Eret(
+            /// Condição necessária para executar (encoding real, checado normalmente — mesmo
+            /// espaço condicional de {@link Hvc}/{@link Smc}/{@link Swi}).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.ERET; }
     }
 
     /// Operação SWI delegada ao dispatcher do host.

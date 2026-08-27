@@ -258,6 +258,105 @@ class ArmDecoderTest {
         assertNotEquals(CpuMode.MONITOR, core.mode());
     }
 
+    // ── ERET (B9.8.4, A32, ARM DDI 0406C B9.3.3) ────────────────────────────────────────────
+
+    // ArmFeature#VIRTUALIZATION_EXTENSIONS não é habilitada em nenhum preset ainda (nenhum
+    // consumidor real modela V7VE) — precisa de um preset ad-hoc, mesmo padrão já usado por
+    // outros testes desta suíte (ArmV7MediaDecoderTest/Thumb2DataProcessingDecoderTest).
+    private static final ArmArchitecture ARMV7VE = ArmArchitecture.extending(
+            ArmArchitecture.ARMV7A, "ARMv7VE", ArmFeature.VIRTUALIZATION_EXTENSIONS);
+
+    @Test
+    void decodesArmEretWithVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_006E); // ERET (encoding real, arm-none-eabi-as -march=armv7ve)
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.ERET, instruction.kind());
+        assertEquals(Condition.AL, instruction.condition());
+    }
+
+    @Test
+    void armEretIsUnimplementedWithoutVirtualizationExtensionsFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_006E);
+
+        // ARMV7A puro não tem VIRTUALIZATION_EXTENSIONS (feature nova, sem preset habilitando
+        // ainda) — o espaço é real (não UDF fixo), só não implementado nesta arquitetura (G8).
+        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+        assertNotEquals(InstructionKind.ERET, instruction.kind());
+    }
+
+    @Test
+    void armEretDoesNotCollideWithSmcEncoding() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE160_0075); // SMC #5 — mesmo prefixo bits[27:8], bit4 diferente de ERET
+
+        DecodedInstruction instruction = new ArmDecoder(ARMV7VE).decode(memory, 0);
+
+        assertEquals(InstructionKind.SMC, instruction.kind());
+        assertNotEquals(InstructionKind.ERET, instruction.kind());
+    }
+
+    @Test
+    void armEretInHypModeReturnsViaElrHypNotLr() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ARMV7VE);
+        // Entra em Hyp mode "manualmente" (sem HVC) só para preparar o cenário: ELR_hyp e
+        // SPSR_hyp com valores conhecidos, LR_usr/LR_sys (compartilhado) com um valor DIFERENTE
+        // para provar que ERET em Hyp mode ignora LR.
+        core.switchMode(CpuMode.SYSTEM);
+        core.setRegister(14, 0xBAD);
+        core.switchMode(CpuMode.HYP);
+        core.setElrHyp(0x9000);
+        core.setSpsr(CpuMode.HYP, (core.cpsr().get() & ~0x1F) | CpuMode.SUPERVISOR.bits());
+        core.memory().write32(0, 0xE160_006E); // ERET
+
+        core.step();
+
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "CPSR restaurado a partir de SPSR_hyp");
+        assertEquals(0x9000, core.programCounter(), "PC vem de ELR_hyp, não de LR");
+    }
+
+    @Test
+    void armEretInSupervisorModeReturnsViaLrSvc() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ARMV7VE);
+        core.setRegister(14, 0x9000); // LR_svc
+        core.setSpsr(CpuMode.SUPERVISOR, (core.cpsr().get() & ~0x1F) | CpuMode.SYSTEM.bits());
+        core.memory().write32(0, 0xE160_006E); // ERET, modo inicial SUPERVISOR (reset)
+
+        core.step();
+
+        assertEquals(CpuMode.SYSTEM, core.mode(), "CPSR restaurado a partir de SPSR_svc");
+        assertEquals(0x9000, core.programCounter(), "PC vem de LR do banco ativo (SVC)");
+    }
+
+    @Test
+    void armEretIsUndefinedWhenExecutedInUserMode() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ARMV7VE);
+        core.switchMode(CpuMode.USER);
+        core.memory().write32(0, 0xE160_006E); // ERET
+
+        core.step();
+
+        assertEquals(CpuMode.UNDEFINED, core.mode());
+        assertEquals(0x04, core.programCounter());
+    }
+
+    @Test
+    void armEretvsIsSkippedWhenOverflowFlagIsClear() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ARMV7VE);
+        core.cpsr().setNzcv(false, false, false, false); // V=0 -> cond VS falsa
+        core.memory().write32(0, 0x6160_006E); // ERETVS
+
+        core.step();
+
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "cond falsa não deve alterar o modo");
+        assertEquals(4, core.programCounter(), "Cycle/Fetch avançam o PC mesmo com guard falho (G4)");
+    }
+
     @Test
     void armSmcvsIsSkippedWhenOverflowFlagIsClear() {
         ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);

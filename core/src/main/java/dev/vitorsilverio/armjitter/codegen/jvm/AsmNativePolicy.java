@@ -153,6 +153,8 @@ public final class AsmNativePolicy {
             case IrOp.Hvc ignored -> false;
             // SMC (B9.8.3): mesma simplificação de Hvc.
             case IrOp.Smc ignored -> false;
+            // ERET (B9.8.4): mesma simplificação de Hvc/Smc.
+            case IrOp.Eret ignored -> false;
         };
     }
 

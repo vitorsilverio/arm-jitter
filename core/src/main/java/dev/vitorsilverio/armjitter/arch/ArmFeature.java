@@ -190,5 +190,16 @@ public enum ArmFeature {
     /// (`ENABLE_ARCH_7`). Habilitada já em {@code ARMV6K} (herdada por {@code ARM11_MPCORE}/
     /// {@code ARMV6K_THUMB2}/{@code ARMV7A}), ao contrário de `HYPERVISOR_CALL`, restrita a
     /// {@code ARMV7A}.
-    SECURE_MONITOR_CALL
+    SECURE_MONITOR_CALL,
+
+    /// `ERET` A32 (B9.8.4, ARM DDI 0406C B9.3.3): retorna de exceção lendo `ELR_hyp` em Hyp mode
+    /// (em vez de `LR`). Confirmado contra `target/arm/tcg/{translate.c,a32.decode}` reais do QEMU
+    /// (`trans_ERET`): gate real é `ARM_FEATURE_V7VE` (Virtualization Extensions) — MAIS ESTRITO
+    /// que {@link #HYPERVISOR_CALL} (`ENABLE_ARCH_7`) e {@link #SECURE_MONITOR_CALL}
+    /// (`ENABLE_ARCH_6K`), ao contrário do que a analogia com as duas sugeriria. Nenhum preset deste
+    /// projeto modela `V7VE` como conceito à parte de `ARMV7A` base hoje — esta feature NÃO é
+    /// habilitada em preset nenhum (aditivo puro, sem consumidor real ainda, mesmo padrão de
+    /// `TTBR0_EL2`/`TTBR0_EL3` na escada `B10.6b`/`B10.6c`); a instrução decodifica e executa
+    /// corretamente assim que algum preset futuro ligar esta feature.
+    VIRTUALIZATION_EXTENSIONS
 }

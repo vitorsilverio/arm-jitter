@@ -319,6 +319,21 @@ suíte completa) + `install`; G5 completo nos 5 consumidores ✅ (zero-diff, nen
 ainda). Ver **Resultado** na task. **Próximas da escada B9.8, qualquer ordem**: B9.8.2 (`HVC`),
 B9.8.3 (`SMC`), B9.8.4 (`ERET` A32), B9.8.5 (`MRS_bank`/`MSR_bank`).
 
+✅ **B9.8.2 (`HVC` real) e B9.8.3 (`SMC` real) fechadas 2026-08-27** — sessão sem registro nesta fila
+até agora (mesmo padrão de dessincronia já visto com `1.2.0`/G6.6), achado só na sessão da B9.8.4
+abaixo. Ver **Resultado** em `b9.8.2-hvc-real.md`/`b9.8.3-smc-real.md`.
+
+✅ **B9.8.4 (`ERET` real A32) fechada 2026-08-27** (task spec escrita e executada na mesma sessão,
+só existia como linha no plano mestre) — `ArmFeature.VIRTUALIZATION_EXTENSIONS` novo, sem preset
+habilitando ainda (nenhum consumidor modela V7VE hoje, aditivo puro); `UNDEFINED` em `USER`; em
+qualquer outro modo, `PC`=`ELR_hyp` (Hyp mode) ou `LR` do banco ativo, `CPSR`=SPSR do modo ativo —
+instrução de RETORNO pura (`IrOp.Eret`), SEM `ArmException` nova (diferente de `HVC`/`SMC`, mesma
+categoria de `RFE`). Confirmado que o caminho genérico do ALU (`SUBS PC,LR` e o alias T32 de B9.7)
+continua lendo `LR` mesmo em Hyp mode — simplificação deliberada já documentada, não alterada por
+esta task. `mvn -o test` verde (core+truffle) + `install`; G5 completo nos 5 consumidores ✅. Sem
+marco de release. Ver **Resultado** em `b9.8.4-eret-real.md`. **Falta só `B9.8.5`
+(`MRS_bank`/`MSR_bank`) para fechar a escada B9.8 por completo.**
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória

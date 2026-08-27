@@ -92,6 +92,30 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `ERET` (B9.8.4, A32): retorna de exceção, exceto em modo `USER` (`UNDEFINED` — mesma
+    /// checagem em tempo de EXECUÇÃO de {@link #executeHvc}/{@link #executeSmc}). Ao contrário de
+    /// `HVC`/`SMC`, não entra em exceção nova — é uma instrução de RETORNO pura (mesma categoria de
+    /// `RFE`, {@code IrTransferExecutor#executeReturnFromException}): `PC`←`ELR_hyp` (Hyp mode) ou
+    /// `LR` do banco ativo (qualquer outro modo), `CPSR`←SPSR do modo ativo. O registrador de
+    /// retorno é lido ANTES de restaurar o CPSR — {@link IrExecutionSupport#restoreCpsrFromCurrentSpsr}
+    /// troca de modo/banco, então ler depois corromperia a leitura do banco de ORIGEM.
+    ///
+    /// @return {@code true} (sempre altera o PC — via `UNDEFINED` ou via retorno real)
+    public boolean executeEret(ArmCore core, IrOp.Eret eret, int sequentialPc) {
+        if (!core.cpsr().evalCond(eret.condition())) {
+            return false;
+        }
+        if (core.mode() == CpuMode.USER) {
+            core.setProgramCounter(sequentialPc);
+            core.requestException(ArmException.UNDEFINED);
+            return true;
+        }
+        int returnAddress = core.mode() == CpuMode.HYP ? core.elrHyp() : core.register(14);
+        support.restoreCpsrFromCurrentSpsr(core);
+        support.alignAndSetPc(core, returnAddress);
+        return true;
+    }
+
     /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
     /// incondicional, sem campo de condição em nenhum dos dois modos)
     public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {

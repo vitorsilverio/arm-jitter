@@ -128,6 +128,13 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int SMC_VALUE = 0x0160_0070;
     private static final int SMC_IMM_MASK = 0xF;
 
+    /// `ERET` (B9.8.4, ARM DDI 0406C B9.3.3): `cccc 0001 0110 0000 0000 0000 0110 1110` — encoding
+    /// TOTALMENTE fixo (sem imediato), MESMO prefixo de `SMC` (bits\[27:8\] idênticos), distinguido
+    /// só pelos 4 bits baixos (`SMC`: `0111 iiii`; `ERET`: `0110 1110`). Confirmado contra
+    /// `target/arm/tcg/a32.decode` real do QEMU no plano mestre `b9.8-plano-hyp-monitor-32bit.md`.
+    private static final int ERET_MASK = 0x0FFF_FFFF;
+    private static final int ERET_VALUE = 0x0160_006E;
+
     private final ArmArchitecture architecture;
 
     /// Decoder para a arquitetura base (ARMv4T / GBA).
@@ -174,6 +181,17 @@ public final class ArmDecoder implements InstructionDecoder {
                     | (raw & HVC_IMM_LO_MASK);
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.HVC,
                     -1, -1, -1, imm16, false, false, false);
+        }
+
+        // ERET (B9.8.4): mesmo prefixo de bits[27:8] que SMC, mas bit4 os distingue de verdade
+        // (SMC: bits[7:4]=0111; ERET: bits[7:4]=0110, bits[3:0] fixo em 1110) — sem overlap real
+        // entre as duas máscaras, checado antes de SMC só por organização do arquivo.
+        if ((raw & ERET_MASK) == ERET_VALUE) {
+            if (!architecture.has(ArmFeature.VIRTUALIZATION_EXTENSIONS)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.ERET,
+                    -1, -1, -1, 0, false, false, false);
         }
 
         // SMC (B9.8.3): mesmo padrão de HVC acima — checado antes do dispatch condicional

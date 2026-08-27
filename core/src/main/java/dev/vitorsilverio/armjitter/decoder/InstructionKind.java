@@ -338,5 +338,11 @@ public enum InstructionKind {
     /// `IrOp.Smc`/`ArmException#SMC`. `UNDEFINED` quando executada em modo `USER` (checado em
     /// tempo de execução, ver `IrSystemExecutor#executeSmc`). `immediate` = `imm4` do encoding
     /// (sem uso funcional hoje, mesmo padrão de `HVC`/`SWI`).
-    SMC
+    SMC,
+    /// `ERET` A32 (B9.8.4, ARM DDI 0406C B9.3.3): retorna de exceção via `IrOp.Eret` — `PC`←
+    /// `ELR_hyp` em Hyp mode, `LR` do banco ativo em qualquer outro modo privilegiado, `CPSR`←SPSR
+    /// do modo ativo. `UNDEFINED` quando executada em modo `USER` (checado em tempo de execução,
+    /// ver `IrSystemExecutor#executeEret`). Sem `ArmException` própria — instrução de RETORNO pura
+    /// (mesma categoria de `RETURN_FROM_EXCEPTION`/`RFE`), não entra em exceção nova.
+    ERET
 }
