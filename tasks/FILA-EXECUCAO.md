@@ -391,6 +391,20 @@ investigada — ver a task). Ver **Resultado**/histórico completo em `tasks/FIL
 **Fila automática vazia de novo** — próxima priorização cabe ao usuário (Onda 5 restante, Q5+,
 investigar o desvio de `docs/COBERTURA-ISA.md`, ou outra prioridade).
 
+✅ **E9 fechada 2026-08-27** (`trilha-e-manutencao/e9-cobertura-isa-mrs-bank-eret-regressao.md`,
+priorizada pelo usuário entre "investigar COBERTURA-ISA" / n3dsemu / aarch64-virt64) — a
+"regressão" de `MRS_bank`/`MSR_bank`/`ERET`/`HVC`/`SMC` (A32) achada pela B10.6b/B10.6c NÃO era
+regressão nem instabilidade do medidor: era um falso positivo antigo (G8, misdecode silencioso —
+`a32.decode` tem `simd=false`, então o medidor nunca rebaixava esses encodings pra `FALLBACK`)
+corrigido de verdade por `B9.8.2`-`B9.8.5`, que deram decode dedicado + gate real por `ArmFeature`
+a essas 5 instruções — nenhum preset declara `VIRTUALIZATION_EXTENSIONS` ainda (decisão explícita
+da B9.8.4, "aditivo puro"), então `❌` é o valor CORRETO hoje. `docs/COBERTURA-ISA.md` regenerado
+e COMMITADO (a sessão B10.6b/c tinha descartado): global 73%→73% (2774→2771/3777, sem gatilho de
+release — T32 subiu mais do que A32 "caiu"). Nenhum código de produção tocado, G5 não se aplica.
+Ver **Resultado** na task. **Candidata registrada, não pega automaticamente**: preset novo com
+Virtualization Extensions (Hyp/Monitor 32-bit real) para essas 5 células ficarem `✅` de verdade —
+sem consumidor real pedindo isso hoje. **Fila automática vazia de novo.**
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
