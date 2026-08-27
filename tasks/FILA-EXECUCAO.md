@@ -179,6 +179,20 @@ por `Rm` também acontecia com `Rm=0`/`Rm=1` (não só `Rm>=16`). Discriminador 
 G5 completo nos 5 consumidores + armbox ✅. Candidatas restantes, não pegas automaticamente:
 `B8.11b`, `DUP`/`INS`/`SMOV`/`UMOV`, `G6.2`/`G6.3`.
 
+✅ **B8.11b fechada 2026-08-26** (`trilha-b-arquiteturas/b8.11b-a64-sha1-sha256.md`, priorizada pelo
+usuário entre B8.11b/DUP-INS-SMOV-UMOV/G6.2/G6.3) — `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/
+`SHA256H2`/`SHA256SU1`/`SHA1H`/`SHA1SU1`/`SHA256SU0` implementados (resto da Crypto Extension da
+B8.11). 2 espaços de encoding novos achados: three-register SHA no prefixo escalar `bit21=0`
+(nunca examinado antes); two-register SHA no mesmo `Rm`/`esz`/`U` de `AESE` mas exigindo checagem
+própria `scalar && ...` (a checagem `q && ...` de AES nunca dispara para formas escalares, porque
+`q` é forçado a `false` ali). Corpus real via devkitA64; valores esperados do executor vieram de
+reimplementação Python independente do FIPS PUB 180-4. `mvn -o test` verde + `install`; G5 completo
+nos 5 consumidores ✅ (armbox 43/43, falha pré-existente não reproduziu, mesmo achado da B8.11). A64
+66%→66%, global 72%→72% (medidor conta células de decode-tree, não mnemônicos) — sem marco de
+release isolado, mas o cumulativo desde `1.1.0` continua cruzado (release não feito nesta sessão).
+Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**: `DUP`/`INS`/`SMOV`/
+`UMOV` (achado de B8.10), `G6.2`/`G6.3` (n3dsemu).
+
 ✅ **G6.1 fechada 2026-08-24** (`arm-jitter/tasks/trilha-g-3ds/g6.1-exemplos-restantes.md`, escrita
 e executada na mesma sessão, priorizada pelo usuário entre B8.11/G6.1/B6.14/AdvSIMD-copy) — os 6
 exemplos `graphics/gpu` que ainda não desenhavam (`composite_scene`/`fragment_light`/`lenny`/

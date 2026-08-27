@@ -10,6 +10,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
@@ -890,6 +892,12 @@ public final class Aarch64Decoder {
     /// `a64.decode` real, que aliasa neste mesmo espaço de bits — ver
     /// {@link #decodeAdvancedSimdInteger}).
     private static final int ADVSIMD_AES_RM = 0b0_1000;
+    /// B8.11b: campo `opcode` de "Cryptographic three-register SHA" — 6 bits em bits[15:10]
+    /// (diferente do `opcode` de 5 bits em bits[15:11] usado pelo resto de `decodeAdvancedSimdInteger`,
+    /// porque esta forma nunca checa `bit10` como "threeSameShape" — layout próprio, conferido
+    /// contra corpus real).
+    private static final int CRYPTO_SHA_THREE_REG_OPCODE_SHIFT = 10;
+    private static final int CRYPTO_SHA_THREE_REG_OPCODE_MASK = 0b11_1111;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -2257,6 +2265,22 @@ public final class Aarch64Decoder {
                 if (op != null) {
                     return op;
                 }
+            } else {
+                // B8.11b: "Cryptographic three-register SHA" (`SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/
+                // `SHA256H`/`SHA256H2`/`SHA256SU1`) vive no MESMO prefixo "escalar" que `AESE`/etc
+                // (bit30=1/bit21=0), espaço nunca examinado antes (B8.11 só tratava `bit21=1`).
+                // CONFERIDO bit a bit contra corpus real (`aarch64-none-elf-as`/`objdump`,
+                // devkitA64, `.arch armv8-a+crypto`): `Rm`(20:16)/`opcode`(15:10, 6 bits)/`Rn`(9:5)/
+                // `Rd`(4:0) — layout PRÓPRIO, diferente do resto de `decodeAdvancedSimdInteger`
+                // (sem `size`/`U` reais nesta forma).
+                int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+                int opcode = (word >>> CRYPTO_SHA_THREE_REG_OPCODE_SHIFT) & CRYPTO_SHA_THREE_REG_OPCODE_MASK;
+                int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                int rd = word & REGISTER_FIELD_MASK;
+                Ir64CryptoShaThreeRegisterOp shaOp = decodeCryptoShaThreeRegisterOpcode(opcode);
+                if (shaOp != null) {
+                    return new Ir64Op.CryptoShaThreeRegister(shaOp, rd, rn, rm);
+                }
             }
             throw unsupported(word, address);
         }
@@ -2319,6 +2343,19 @@ public final class Aarch64Decoder {
             Ir64CryptoAesOp aesOp = decodeCryptoAesOpcode(opcode);
             if (aesOp != null) {
                 return new Ir64Op.CryptoAes(aesOp, rd, rn);
+            }
+        }
+        // B8.11b: `SHA1H`/`SHA1SU1`/`SHA256SU0` ("Cryptographic two-register SHA") vivem no MESMO
+        // slot `Rm`/`opcode` que `AESE`/etc, mas do lado ESCALAR do dispatch (`q` acima é forçado a
+        // `false` para qualquer forma escalar — ver a definição de `q` no início desta função — por
+        // isso não pode reaproveitar a checagem `q && ...` de cima, que só é alcançável quando
+        // `!scalar`). Achado real: `AESE`/etc exigem `!scalar` (`Q=1` vetorial de verdade); este
+        // slot exige `scalar` (mesmo `Rm`/`esz`/`U` fixos, discriminados só pelo `opcode`, ver
+        // decodeCryptoShaTwoRegisterOpcode) — os dois são mutuamente exclusivos, nunca colidem.
+        if (scalar && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
+            Ir64CryptoShaTwoRegisterOp shaOp = decodeCryptoShaTwoRegisterOpcode(opcode);
+            if (shaOp != null) {
+                return new Ir64Op.CryptoShaTwoRegister(shaOp, rd, rn);
             }
         }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
@@ -2799,6 +2836,38 @@ public final class Aarch64Decoder {
             case 0b0_1011 -> Ir64CryptoAesOp.AESD;
             case 0b0_1101 -> Ir64CryptoAesOp.AESMC;
             case 0b0_1111 -> Ir64CryptoAesOp.AESIMC;
+            default -> null;
+        };
+    }
+
+    /// B8.11b: `SHA1H`(`opcode=1`)/`SHA1SU1`(`3`)/`SHA256SU0`(`5`) — "Cryptographic two-register
+    /// SHA" vive no MESMO slot `Rm=`{@link #ADVSIMD_AES_RM} que `AESE`/etc (`q=1`/`u=0`/`esz=0`,
+    /// checado pelo chamador), distinguido pelos mesmos 5 bits de `opcode` de
+    /// {@link #decodeCryptoAesOpcode} — valores ÍMPARES baixos (`1`/`3`/`5`), nenhum colide com os
+    /// 4 valores ÍMPARES altos (`9`/`11`/`13`/`15`) de AES. Conferido contra corpus real
+    /// (`aarch64-none-elf-as`/`objdump`, devkitA64, `.arch armv8-a+crypto`).
+    private static Ir64CryptoShaTwoRegisterOp decodeCryptoShaTwoRegisterOpcode(int opcode) {
+        return switch (opcode) {
+            case 0b0_0001 -> Ir64CryptoShaTwoRegisterOp.SHA1H;
+            case 0b0_0011 -> Ir64CryptoShaTwoRegisterOp.SHA1SU1;
+            case 0b0_0101 -> Ir64CryptoShaTwoRegisterOp.SHA256SU0;
+            default -> null;
+        };
+    }
+
+    /// B8.11b: `SHA1C`(`0`)/`SHA1P`(`4`)/`SHA1M`(`8`)/`SHA1SU0`(`12`)/`SHA256H`(`16`)/
+    /// `SHA256H2`(`20`)/`SHA256SU1`(`24`) — os 7 valores do campo `opcode` de 6 bits (bits[15:10])
+    /// de "Cryptographic three-register SHA", conferidos contra corpus real (mesma sessão de
+    /// `decodeCryptoShaTwoRegisterOpcode`).
+    private static Ir64CryptoShaThreeRegisterOp decodeCryptoShaThreeRegisterOpcode(int opcode) {
+        return switch (opcode) {
+            case 0b00_0000 -> Ir64CryptoShaThreeRegisterOp.SHA1C;
+            case 0b00_0100 -> Ir64CryptoShaThreeRegisterOp.SHA1P;
+            case 0b00_1000 -> Ir64CryptoShaThreeRegisterOp.SHA1M;
+            case 0b00_1100 -> Ir64CryptoShaThreeRegisterOp.SHA1SU0;
+            case 0b01_0000 -> Ir64CryptoShaThreeRegisterOp.SHA256H;
+            case 0b01_0100 -> Ir64CryptoShaThreeRegisterOp.SHA256H2;
+            case 0b01_1000 -> Ir64CryptoShaThreeRegisterOp.SHA256SU1;
             default -> null;
         };
     }

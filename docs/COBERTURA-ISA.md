@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **72%** — 2746 de 3777 células aplicáveis decodificam.
+> **72%** — 2749 de 3777 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **97%** (640/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **59%** (226/383) |
-| A64 | **66%** (678/1027) |
+| A64 | **66%** (681/1027) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 66% (678/1027) |
+| A64 — AArch64 | 1161 | A64 66% (681/1027) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2015,16 +2015,16 @@ Inventário: `a64.decode` · 1161 instruções.
 | `AESD` | ✅ |
 | `AESMC` | ✅ |
 | `AESIMC` | ✅ |
-| `SHA1C` | ❌ |
-| `SHA1P` | ❌ |
-| `SHA1M` | ❌ |
-| `SHA1SU0` | ❌ |
-| `SHA256H` | ❌ |
-| `SHA256H2` | ❌ |
-| `SHA256SU1` | ❌ |
-| `SHA1H` | ❌ |
-| `SHA1SU1` | ❌ |
-| `SHA256SU0` | ❌ |
+| `SHA1C` | ✅ |
+| `SHA1P` | ✅ |
+| `SHA1M` | ✅ |
+| `SHA1SU0` | ✅ |
+| `SHA256H` | ✅ |
+| `SHA256H2` | ✅ |
+| `SHA256SU1` | ✅ |
+| `SHA1H` | ✅ |
+| `SHA1SU1` | ✅ |
+| `SHA256SU0` | ✅ |
 | `SHA512H` | ✅ |
 | `SHA512H2` | ✅ |
 | `SHA512SU1` | ✅ |
@@ -2695,9 +2695,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SHLL_v` | ❌ |
 | `FABS_v` | ❌ |
 | `FABS_v` | ✅ |
+| `FNEG_v` | ❌ |
 | `FNEG_v` | ✅ |
-| `FNEG_v` | ✅ |
-| `FSQRT_v` | ✅ |
+| `FSQRT_v` | ❌ |
 | `FSQRT_v` | ✅ |
 | `FRINTN_v` | ❌ |
 | `FRINTN_v` | ✅ |
@@ -2721,15 +2721,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SCVTF_vi` | ✅ |
 | `UCVTF_vi` | ❌ |
 | `UCVTF_vi` | ✅ |
+| `FCVTNS_vi` | ❌ |
 | `FCVTNS_vi` | ✅ |
-| `FCVTNS_vi` | ✅ |
-| `FCVTNU_vi` | ✅ |
+| `FCVTNU_vi` | ❌ |
 | `FCVTNU_vi` | ✅ |
 | `FCVTPS_vi` | ❌ |
 | `FCVTPS_vi` | ✅ |
 | `FCVTPU_vi` | ❌ |
 | `FCVTPU_vi` | ✅ |
-| `FCVTMS_vi` | ✅ |
+| `FCVTMS_vi` | ❌ |
 | `FCVTMS_vi` | ✅ |
 | `FCVTMU_vi` | ❌ |
 | `FCVTMU_vi` | ✅ |
@@ -2739,11 +2739,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTZU_vi` | ✅ |
 | `FCVTAS_vi` | ❌ |
 | `FCVTAS_vi` | ✅ |
-| `FCVTAU_vi` | ✅ |
+| `FCVTAU_vi` | ❌ |
 | `FCVTAU_vi` | ✅ |
 | `FCMGT0_v` | ❌ |
 | `FCMGT0_v` | ✅ |
-| `FCMGE0_v` | ✅ |
+| `FCMGE0_v` | ❌ |
 | `FCMGE0_v` | ✅ |
 | `FCMEQ0_v` | ❌ |
 | `FCMEQ0_v` | ✅ |

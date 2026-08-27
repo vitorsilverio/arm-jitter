@@ -46,7 +46,7 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpArithmeticThreeSame, Ir64Op.VectorFpArithmeticPairwise,
         Ir64Op.VectorFpArithmeticUnary, Ir64Op.VectorExtract, Ir64Op.VectorPermute,
         Ir64Op.VectorTableLookup, Ir64Op.VectorFpAcrossLanes, Ir64Op.CryptoAes,
-        Ir64Op.VectorPolynomialMultiplyLong {
+        Ir64Op.VectorPolynomialMultiplyLong, Ir64Op.CryptoShaThreeRegister, Ir64Op.CryptoShaTwoRegister {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -216,6 +216,12 @@ public sealed interface Ir64Op permits
         /// B8.11: `PMULL`/`PMULL2` formas `p8`/`p64` (multiplicação polinomial alargando,
         /// Cryptographic Extension) — ver {@link VectorPolynomialMultiplyLong}.
         public static final int VECTOR_POLYNOMIAL_MULTIPLY_LONG = 76;
+        /// B8.11b: "Cryptographic three-register SHA" (`SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/
+        /// `SHA256H`/`SHA256H2`/`SHA256SU1`) — ver {@link CryptoShaThreeRegister}.
+        public static final int CRYPTO_SHA_THREE_REGISTER = 77;
+        /// B8.11b: "Cryptographic two-register SHA" (`SHA1H`/`SHA1SU1`/`SHA256SU0`) — ver
+        /// {@link CryptoShaTwoRegister}.
+        public static final int CRYPTO_SHA_TWO_REGISTER = 78;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1985,5 +1991,36 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte 2.
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG; }
+    }
+
+    /// "Cryptographic three-register SHA" (B8.11b, mesma ARMv8-A Cryptographic Extension de
+    /// {@link CryptoAes}) — `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1`.
+    /// Sempre opera nos 128 bits inteiros (`Q` fixo em `1`, sem forma "metade"). `SHA1C`/`SHA1P`/
+    /// `SHA1M` só usam a palavra 0 (32 bits baixos) de {@link #rn} (o "hash chain E" escalar do
+    /// SHA1, codificado como registrador `S`); `SHA256H`/`SHA256H2`/`SHA256SU1` usam os 4 elementos
+    /// de {@link #rn}. `Rn` NUNCA é escrito de volta por nenhuma destas operações — só {@link #rd}.
+    record CryptoShaThreeRegister(
+            /// Operação a executar.
+            Ir64CryptoShaThreeRegisterOp op,
+            /// Registrador `V` de destino (lido E escrito — estado corrente do hash).
+            int rd,
+            /// Segundo operando (fonte, nunca modificado).
+            int rn,
+            /// Terceiro operando (fonte, nunca modificado — bloco de mensagem `W`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA_THREE_REGISTER; }
+    }
+
+    /// "Cryptographic two-register SHA" (B8.11b, mesma extensão) — `SHA1H`/`SHA1SU1`/`SHA256SU0`.
+    /// Para `SHA1H`, {@link #rd} atual é ignorado (função pura de {@link #rn}); para `SHA1SU1`/
+    /// `SHA256SU0`, {@link #rd} é lido E escrito (acumula sobre o estado corrente).
+    record CryptoShaTwoRegister(
+            /// Operação a executar.
+            Ir64CryptoShaTwoRegisterOp op,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA_TWO_REGISTER; }
     }
 }

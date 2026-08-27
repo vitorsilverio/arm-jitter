@@ -365,6 +365,10 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.CRYPTO_AES -> Ir64CryptoExecutor.executeAes(core, (Ir64Op.CryptoAes) op);
             case Ir64Op.Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG ->
                     Ir64VectorArithmeticExecutor.executePolynomialMultiplyLong(core, (Ir64Op.VectorPolynomialMultiplyLong) op);
+            case Ir64Op.Kind.CRYPTO_SHA_THREE_REGISTER ->
+                    Ir64CryptoExecutor.executeShaThreeRegister(core, (Ir64Op.CryptoShaThreeRegister) op);
+            case Ir64Op.Kind.CRYPTO_SHA_TWO_REGISTER ->
+                    Ir64CryptoExecutor.executeShaTwoRegister(core, (Ir64Op.CryptoShaTwoRegister) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
