@@ -3,6 +3,26 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] — 2026-08-27
+
+Cobertura de ISA (`docs/COBERTURA-ISA.md`) desde o `1.2.0`: **global 71% → 73%**, **A64 61% → 68%**
+— publicada a pedido explícito do usuário mesmo abaixo dos gatilhos de release normais
+(`tasks/README.md`: global ≥5pp OU arquitetura ≥10pp).
+
+### Adicionado
+- **A64 — Cryptographic Extension** (`B8.11`/`B8.11b`): `AESE`/`AESD`/`AESMC`/`AESIMC`/`PMULL`/
+  `PMULL2` e `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA1H`/`SHA1SU1`/`SHA256H`/`SHA256H2`/`SHA256SU0`/
+  `SHA256SU1` (Cortex-A53 tem a Crypto Extension base).
+- **A64 — AdvSIMD copy** (`B8.12`): `DUP`(elemento/geral)/`INS`(geral/elemento)/`SMOV`/`UMOV`.
+
+### Corrigido
+- **JIT A64** (`E7`): exceções de guest (ex. `TRANSLATION_FAULT_L3`) escapavam para o host em vez
+  de serem tratadas — `Ir64BlockCompiler` não cercava o bloco nativo com `try/catch`, e
+  `JitRuntime64#execute` não protegia o `lift()` de um bloco quente.
+- **Decode A64** (`E8`): `decodeAdvancedSimdInteger` confundia "AdvSIMD across lanes" com "three
+  different" sempre que `Rm` caía em certas faixas (`0`/`1`/`≥16`) — discriminador real é `bit11`,
+  não `Rm`.
+
 ## [1.2.0] — 2026-08-26
 
 ### Adicionado
