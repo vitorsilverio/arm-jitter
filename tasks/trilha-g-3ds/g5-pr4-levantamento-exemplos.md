@@ -31,13 +31,13 @@ não dá.
 | `2d_shapes` | 69 | 🟡 desenha | citro2d; fundo `#FFD8B0` lido corretamente |
 | `stereoscopic_2d` | 339 | 🟡 desenha | sem 3D estereoscópico (fora do escopo da G5), só o olho esquerdo |
 | `particles` | 60 | 🟡 desenha | fundo preto; sem *blending* configurável ainda |
-| `composite_scene` | 0 | ❌ | **causa real achada (G6.1)**: `fs:USER OpenArchive` (0x080C) não implementado → `svcBreak(PANIC)` do guest. Termina sozinho em <3000 fatias (não é mais timeout) |
+| `composite_scene` | 0 | ❌ | **fs:USER corrigido pela G6.2** (sem `comando desconhecido` de `fs:USER` no trace) — `svcBreak(PANIC)` continua, causa NOVA e diferente: `APT:U` comando desconhecido `0x0044` (`GetSharedFont`)/`0x000B`/`0x0102`, não relacionada a RomFS. Candidata a task própria |
 | `fragment_light` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x2F` (`CMP`) não implementado no `VertexShaderInterpreter` |
 | `lenny` | 0 | ❌ | **causa real achada (G6.1)**: mesmo gap de `fragment_light` — `CMP` (`0x2F`) |
 | `loop_subdivision` | 501 | 🟡 **desenha COM TEXTURA** (`tex0=32x32`) | destravado pela B3.9; a malha sai desalinhada porque **não há teste de profundidade** (item 2 do backlog) |
 | `textured_cube` | 0 | ❌ | **causa real achada (G6.1)**: opcode de vertex shader `0x3C` (`MAD`) não implementado no `VertexShaderInterpreter` |
-| `cubemap` | 0 | ❌ | **causa real achada (G6.1)**: `fs:USER OpenArchive`(0x080C)/`OpenFileDirectly`(0x0803) não implementados → `svcBreak(PANIC)`. Termina sozinho em <3000 fatias (não é mais timeout) |
-| `gpusprites` | 0 | ❌ | **causa real achada (G6.1)**: mesmo gap de `cubemap` — `fs:USER OpenArchive`/`OpenFileDirectly` |
+| `cubemap` | 0 | ❌ | **fs:USER corrigido pela G6.2**: `OpenFileDirectly` self-mount do RomFS embutido lê o `.t3x` real (`skybox.t3x`, offsets confirmados no trace) — não panica mais, mas ainda 0 desenhos em 3000/6000 fatias (não investigado além disso, fora do escopo da G6.2) |
+| `gpusprites` | 0 | ❌ | **fs:USER corrigido pela G6.2**: mesmo mecanismo de `cubemap`, lê `sprites.t3x` real — não panica mais, ainda 0 desenhos em 6000 fatias (não investigado além disso) |
 | `immediate` | 0 | ❌ | usa **submissão imediata de vértices** (`GPUREG_FIXEDATTRIB_INDEX = 0xF`), caminho não implementado |
 | `mipmap_fog` | 0 | ❌ | sem mipmap nem fog (`GPUREG_TEXUNIT*_LOD`, tabela de fog) |
 | `normal_mapping` | 0 | ❌ | depende de *fragment lighting* fixo, fora do escopo da G5 |
@@ -106,6 +106,16 @@ um subsistema/família de opcodes novo, mesmo critério que separou a B3.9 de G2
 task própria: **G6.2** (RomFS mínimo em `fs:USER` — `OpenArchive`+`OpenFileDirectly`+`ReadFile`) e
 **G6.3** (`VertexShaderInterpreter`: `CMP`+`MAD`, mesmo padrão de investigação-com-corpus-real da
 B3.9). Nenhuma pega automaticamente — mesma regra de sempre.
+
+**✅ G6.2 fechada** (`g6.2-fs-user-romfs-self-mount.md`) — causa 1 corrigida. Achado real que
+simplificou a implementação: para um `.3dsx`, `romfsInit()` é `romfsMountSelf`, que abre o
+PRÓPRIO arquivo via `ARCHIVE_SDMC` e lê nele em offsets absolutos — o parsing da estrutura RomFS
+é feito inteiramente pelo GUEST, não precisou de parser de RomFS em Java. `composite_scene` não
+panica mais por `fs:USER`, mas revela uma causa NOVA e não relacionada (`APT:U` comando
+desconhecido `0x0044`/`0x000B`/`0x0102`); `cubemap`/`gpusprites` leem seus `.t3x` reais do RomFS
+embutido (confirmado pelos offsets de leitura no trace) e não panicam mais, mas ainda não
+produzem desenho dentro do orçamento testado — não investigado além disso, fora do escopo da
+G6.2. Ver **Resultado** na task para o detalhe completo.
 
 ## Backlog gráfico derivado (ordem sugerida)
 

@@ -215,6 +215,21 @@ Só documentação tocada (`tasks/`), nenhum código de produção — G5-invari
 **Resultado** na task. **Candidatas novas, não pegas automaticamente**: `G6.2` (RomFS mínimo em
 `fs:USER`) e `G6.3` (`VertexShaderInterpreter`: `CMP`+`MAD`).
 
+✅ **G6.2 fechada 2026-08-26** (`trilha-g-3ds/g6.2-fs-user-romfs-self-mount.md`, priorizada pelo
+usuário entre release Maven Central+F7/G6.2/G6.3) — `fs:USER OpenArchive`/`OpenFileDirectly` +
+`FSFILE::Read`/`GetSize`/`Close` implementados no n3dsemu. Achado real que simplificou a task: para
+um `.3dsx`, `romfsInit()` é `romfsMountSelf`, que abre o PRÓPRIO arquivo via `ARCHIVE_SDMC` e lê nele
+em offsets absolutos — o parsing da estrutura RomFS é feito inteiramente pelo GUEST, sem precisar de
+parser de RomFS em Java (bastou servir os bytes brutos do `.3dsx` já carregado via uma sessão de
+arquivo sintética por abertura). `mvn -o test` verde no n3dsemu (206, +7); G5 não se aplica (nenhum
+arquivo do arm-jitter tocado). `cubemap`/`gpusprites` leem seus `.t3x` reais do RomFS embutido e não
+panicam mais (ainda 0 desenhos no `--report`, não investigado além disso); `composite_scene` não
+panica mais por `fs:USER`, mas revela causa NOVA e não relacionada em `APT:U` (`0x0044`/`0x000B`/
+`0x0102`), candidata a task própria. Ver **Resultado** na task. **Candidatas restantes, não pegas
+automaticamente**: `G6.3` (n3dsemu, `VertexShaderInterpreter` `CMP`+`MAD`), o `APT:U` achado acima,
+e a publicação pendente do release Maven Central (marco de cobertura cruzado desde `1.1.0`/`1.2.0`
+sem release dedicado — ver topo do arquivo).
+
 **Trabalho real pendente aberto pela B9.7 (13 células T32, NÃO excluídas — ver a task)**: (1) Hyp
 mode + Monitor mode de 32 bits, para `MRS_bank`/`MSR_bank`/`ERET`/`SMC`/`HVC` — épico comparável à
 escada EL2/EL3 do AArch64 (B10), candidato a `B9.8`/spec própria; (2) acesso de memória
