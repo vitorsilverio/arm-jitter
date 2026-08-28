@@ -2249,6 +2249,11 @@ public final class Aarch64Decoder {
         boolean rmifFixedTail = ((word >>> RMIF_FIXED_TAIL_SHIFT) & RMIF_FIXED_TAIL_MASK) == RMIF_FIXED_TAIL_PATTERN;
         boolean rmifBit4Clear = (word & RMIF_BIT4_MASK) == 0;
         if (wide && !subtract && setFlags && rmifFixedTail && rmifBit4Clear) {
+            // B11.7: gate real — ARMv8.4-A introduziu FEAT_FlagM, um Cortex-A53 (ARMv8.0-A) não
+            // tem este encoding; sem a feature, cai em unsupported (G8) em vez de decodificar.
+            if (!architecture.has(Aarch64Feature.FLAG_MANIPULATION)) {
+                throw unsupported(word, address);
+            }
             int shift = (word >>> RMIF_IMM6_SHIFT) & RMIF_IMM6_MASK;
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int mask = word & RMIF_MASK_FIELD_MASK;
@@ -2257,6 +2262,11 @@ public final class Aarch64Decoder {
         boolean setfRmFieldZero = ((word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK) == 0;
         boolean setfLow5Fixed = (word & SETF_LOW5_MASK) == SETF_LOW5_PATTERN;
         if (!wide && !subtract && setFlags && setfRmFieldZero && setfLow5Fixed) {
+            // B11.7: mesmo gate de FEAT_FlagM que RMIF acima — SETF8/SETF16 são a outra metade
+            // da mesma extensão (ARMv8.4-A).
+            if (!architecture.has(Aarch64Feature.FLAG_MANIPULATION)) {
+                throw unsupported(word, address);
+            }
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             if (opcode2 == SETF_OPCODE2_SETF8) {
                 return new Ir64Op.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_8);

@@ -3588,24 +3588,21 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void rmif() {
-        Ir64Op.RotateIntoFlags op = (Ir64Op.RotateIntoFlags) DECODER.decode(memory, 0x59c);
-        assertEquals(0, op.rn());
-        assertEquals(4, op.shift());
-        assertEquals(5, op.mask());
+        // B11.7: FEAT_FlagM (ARMv8.4-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64FlagManipulationDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x59c));
     }
 
     @Test
     void setf8() {
-        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) DECODER.decode(memory, 0x5a0);
-        assertEquals(1, op.rn());
-        assertEquals(8, op.sizeBits());
+        // B11.7: mesmo gate de FEAT_FlagM que rmif() acima.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5a0));
     }
 
     @Test
     void setf16() {
-        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) DECODER.decode(memory, 0x5a4);
-        assertEquals(2, op.rn());
-        assertEquals(16, op.sizeBits());
+        // B11.7: mesmo gate de FEAT_FlagM que rmif() acima.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5a4));
     }
 
     @Test

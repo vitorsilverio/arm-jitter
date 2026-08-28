@@ -47,18 +47,18 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B11.6)
+## Onde estamos (atualizado 2026-08-28, após B11.7)
 
 A escada `B11` (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`, torna o A64 componível
-por versão/feature) está com B11.1-B11.6 ✅ — ver `INDICE.md` da trilha B, linha B11, para o resumo
+por versão/feature) está com B11.1-B11.7 ✅ — ver `INDICE.md` da trilha B, linha B11, para o resumo
 de cada uma. **Candidatas elegíveis agora, nenhuma pega automaticamente (usuário prioriza):**
 
-- Gatear as **8 features restantes** que B11.3/B11.5 catalogaram como implementadas sem gate:
-  `LSE` (`CAS`/`CASP`), `PAN`, `SHA3`, `UAO`, `FLAG_MANIPULATION` (`RMIF`/`SETF8`/`SETF16`), `DIT`,
-  `FLAG_MANIPULATION_2` (`AXFLAG`/`XAFLAG`), `NMI` (`MSR ALLINT`) — mesmo padrão de B11.4/B11.6, uma
-  task por feature. **Atenção com `LSE`**: `CAS`/`CASP` são atômicos reais que compiladores/libc
-  modernos podem emitir mesmo em binários "ARMv8.0-A nominal" — checar se algum consumidor real
-  (`virtual-arm-box`) os exercita antes de gatear (ver Resultado de B11.6 para o raciocínio completo).
+- Gatear as **7 features restantes** que B11.3/B11.5 catalogaram como implementadas sem gate:
+  `LSE` (`CAS`/`CASP`), `PAN`, `SHA3`, `UAO`, `DIT`, `FLAG_MANIPULATION_2` (`AXFLAG`/`XAFLAG`), `NMI`
+  (`MSR ALLINT`) — mesmo padrão de B11.4/B11.6/B11.7, uma task por feature. **Atenção com `LSE`**:
+  `CAS`/`CASP` são atômicos reais que compiladores/libc modernos podem emitir mesmo em binários
+  "ARMv8.0-A nominal" — checar se algum consumidor real (`virtual-arm-box`) os exercita antes de
+  gatear (ver Resultado de B11.6 para o raciocínio completo).
 - `B12.1`/`B12.3` (`trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`) — catálogo de
   processadores ARM reais nomeados, plano mestre escrito, nenhuma sub executada ainda.
 - Lacunas A64 pequenas remanescentes: `SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice,
