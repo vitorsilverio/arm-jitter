@@ -559,6 +559,20 @@ perto do limite mensal do Maven Central). **Achado adicional fora de escopo**: `
 índice, `REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`, publicação de
 `1.4.0`. **Fila automática vazia de novo** — próxima priorização cabe ao usuário.
 
+🆕 **Épico novo registrado 2026-08-27: `B11`** (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`)
+— o usuário perguntou por que o A64 não é componível por versão/feature como o 32-bit
+(`ArmFeature`/`ArmArchitecture`); investigação confirmou que `Aarch64Core`/`Aarch64Decoder` não têm
+NENHUM mecanismo de feature-gating (um construtor só, sem parâmetro de arquitetura) — dívida técnica
+nunca escolhida pelo usuário, não uma decisão de escopo. **Correção de rumo importante do usuário,
+ver `feedback-nunca-excluir-instrucao-arm` na memória do agente**: "essa biblioteca pode ter outros
+consumidores diferentes dos que estamos fazendo" — "nenhum consumidor NOSSO pede isso hoje" nunca é
+argumento para descartar/adiar uma feature ARM real (só para sequenciar). Escada B11.1-B11.5+
+definida na task (fundação → threading no core/decoder sem quebrar G3 → auditoria de versão por
+instrução já implementada → prova de conceito com 1 feature isolada → medidor `COBERTURA-ISA.md`
+por versão de A64, não mais uma coluna monolítica). **B11.1 é a próxima candidata pegável** (sem
+dependência), mas não pega automaticamente — cabe ao usuário confirmar prioridade frente às outras
+candidatas já registradas (`SQDMULL`/etc. sem índice, `REV16_v`/etc.).
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
