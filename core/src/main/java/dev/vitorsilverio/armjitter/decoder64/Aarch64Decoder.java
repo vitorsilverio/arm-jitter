@@ -989,6 +989,14 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE = 0b0_1011;
     /// `Rm` fixo="00001" — narrow/widen unário (`SQXTN`/...), fora de escopo (B8.8).
     private static final int ADVSIMD_INT_RM_NARROW_UNARY = 0b0_0001;
+    /// B8.20: opcode (bits[15:11]) de `SHLL`/`SHLL2` dentro do slot narrow/widen (`Rm=00001`,
+    /// sempre `U=1`) — ver o desvio em {@link #decodeAdvancedSimdInteger}.
+    private static final int ADVSIMD_TWO_REG_MISC_SHLL_OPCODE = 0b0_0111;
+    /// B8.20: opcode (bits[15:11]) de `URECPE`/`URSQRTE` dentro do MESMO slot narrow/widen
+    /// (`Rm=00001`) — MESMO opcode que `FCVTAS`/`FCVTAU` usam para `esz` `0`/`1` (`a=0`); só
+    /// colide na aparência, nunca no valor real (`URECPE`/`URSQRTE` exigem `esz=`
+    /// {@link #ADVSIMD_ESZ_WORD}, `a=1`, conferido contra corpus real).
+    private static final int ADVSIMD_URECPE_URSQRTE_OPCODE = 0b1_1001;
     /// `Rm[4:1]` fixo="1000" (`Rm=0b10000`/`0b10001`, bit0 livre) — "across lanes" (`ADDV`/...)/
     /// `ADDP_s`. E8: só bit4 setado NÃO basta (`Rm=0b11000`/`0b11000+` também tem bit4 setado e é um
     /// registrador livre válido de "three different" — ver o achado de bit11 em
@@ -2641,16 +2649,29 @@ public final class Aarch64Decoder {
         // era um bug igualmente real, não documentado pela B8.11.
         boolean rmEncodesFixedOpcode = (opcode & 1) != 0;
         if (!rmEncodesFixedOpcode) {
-            // "three different": só existe na forma VETORIAL (sem equivalente escalar puro nesta
-            // fatia). B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA "three different"
-            // real com `esz=3`/doubleword (produz o registro `Q` inteiro, não um elemento `esz+1`
-            // comum).
-            if (scalar || (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100)) {
+            if (scalar) {
+                // B8.20: `SQDMULL`/`SQDMLAL`/`SQDMLSL` ESCALARES sem índice — os ÚNICOS mnemônicos
+                // de "three different" com forma escalar real (ARM DDI 0487); todo o resto deste
+                // espaço (`SMULL`/`SADDL`/`SABAL`/.../`PMULL`) só existe vetorial (G8). `U=1` não
+                // tem forma real aqui (não existe `UQDMULL`), e a forma escalar só aceita `H`→`S`/
+                // `S`→`D` (nunca `B`/`D` — `esz=0` já é rejeitado dentro de
+                // {@link #decodeAdvancedSimdThreeDifferent}, `esz=3` rejeitado aqui).
+                boolean isSaturatingDoublingOpcode = !u
+                        && (opcode == 0b1_1010 || opcode == 0b1_0010 || opcode == 0b1_0110);
+                if (!isSaturatingDoublingOpcode || esz == ADVSIMD_INT_SCALAR_ESZ) {
+                    throw unsupported(word, address);
+                }
+                return decodeAdvancedSimdThreeDifferent(word, address, true, false, esz, u, opcode, rn, rd, rm);
+            }
+            // "three different" vetorial. B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA
+            // "three different" real com `esz=3`/doubleword (produz o registro `Q` inteiro, não um
+            // elemento `esz+1` comum).
+            if (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100) {
                 // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487) — exceto
                 // PMULL_p64 acima; G8.
                 throw unsupported(word, address);
             }
-            return decodeAdvancedSimdThreeDifferent(word, address, q, esz, u, opcode, rn, rd, rm);
+            return decodeAdvancedSimdThreeDifferent(word, address, false, q, esz, u, opcode, rn, rd, rm);
         }
         // B8.11: `AESE`/`AESD`/`AESMC`/`AESIMC` (Cryptographic Extension) vivem no MESMO espaço de
         // bits que "three different" (prefixo vetorial `01110`, `bit21=1`, `bit10=0`) — no
@@ -2698,6 +2719,7 @@ public final class Aarch64Decoder {
             Ir64VectorUnaryOp op = decodeVectorUnaryOpcode(u, opcode, scalar);
             if (op != null) {
                 validateScalarUnaryEsz(word, address, scalar, op, esz);
+                validateVectorUnaryEsz(word, address, op, esz);
                 return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
             }
             // B8.9: `FABS_v`/`FNEG_v`/`FCM**0_v` vivem no MESMO slot `Rm=00000` do inteiro
@@ -2716,14 +2738,36 @@ public final class Aarch64Decoder {
             throw unsupported(word, address);
         }
         if (rm == ADVSIMD_INT_RM_NARROW_UNARY) {
-            // B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (narrow unário saturante).
-            Ir64VectorNarrowUnaryOp narrowOp = decodeVectorNarrowUnaryOpcode(u, opcode);
+            // B8.8: `SQXTN`/`SQXTUN`/`UQXTN` (narrow unário saturante); B8.20: `XTN` reaproveita o
+            // MESMO opcode de `SQXTUN` (`U=0`, sem forma escalar — `decodeVectorNarrowUnaryOpcode`
+            // nega explicitamente).
+            Ir64VectorNarrowUnaryOp narrowOp = decodeVectorNarrowUnaryOpcode(u, opcode, scalar);
             if (narrowOp != null) {
                 if (esz == ADVSIMD_INT_SCALAR_ESZ) {
                     // Doubleword não tem forma estreitada real (não há `Q`→`D`); G8.
                     throw unsupported(word, address);
                 }
                 return new Ir64Op.VectorArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
+            }
+            // B8.20: `SHLL`/`SHLL2` — MESMO slot, opcode `0b0_0111`/`U=1`; reaproveita 100%
+            // `Ir64Op.VectorShiftWidenImmediate`/`USHLL` (B8.8) — `SHLL` É literalmente "zero-extend
+            // e desloca à esquerda pela largura INTEIRA do elemento estreito" (`8<<esz`, quantidade
+            // FIXA, não um imediato genérico), mas a fórmula do executor (`zext(Rn) << shift`) é
+            // idêntica; sem forma escalar/doubleword real (G8).
+            if (!scalar && u && opcode == ADVSIMD_TWO_REG_MISC_SHLL_OPCODE) {
+                if (esz == ADVSIMD_INT_SCALAR_ESZ) {
+                    throw unsupported(word, address);
+                }
+                return new Ir64Op.VectorShiftWidenImmediate(Ir64VectorShiftWidenOp.USHLL, q, esz, 8 << esz, rd, rn);
+            }
+            // B8.20: `URECPE`/`URSQRTE` — MESMO slot/opcode (`0b1_1001`) que `FCVTAS`/`FCVTAU` usam
+            // no dispatch FP abaixo, discriminados pelo bit ALTO de `esz` (`a`, ver
+            // {@link #decodeVectorFpUnaryRmOneOpcode}): `esz==` {@link #ADVSIMD_ESZ_WORD} (`a=1`)
+            // cai aqui, sem colisão com `FCVTAS`(`a=0`)/`FCVTAU` — conferido exaustivamente contra
+            // corpus real (devkitA64). Só arranjo `.2s`/`.4s` (sem forma escalar/doubleword, G8).
+            if (!scalar && opcode == ADVSIMD_URECPE_URSQRTE_OPCODE && esz == ADVSIMD_ESZ_WORD) {
+                Ir64VectorUnaryOp recipOp = u ? Ir64VectorUnaryOp.URSQRTE : Ir64VectorUnaryOp.URECPE;
+                return new Ir64Op.VectorArithmeticUnary(recipOp, false, q, esz, rd, rn);
             }
             // B8.9: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/
             // `FCVTxU_vi` vivem no MESMO slot `Rm=00001` do inteiro narrow-unário — a
@@ -3195,14 +3239,41 @@ public final class Aarch64Decoder {
             // adicional além da já aplicada pelo resto desta tabela.
             case 0b0_1111 -> u ? Ir64VectorUnaryOp.SQNEG : Ir64VectorUnaryOp.SQABS;
             case 0b0_1001 -> u ? Ir64VectorUnaryOp.CLZ : Ir64VectorUnaryOp.CLS;
+            // B8.20: `REV64`(`u=0`)/`REV32`(`u=1`) compartilham o MESMO opcode; `REV16` só existe
+            // `u=0` (`u=1` reservado, conferido contra corpus real).
+            case 0b0_0001 -> u ? Ir64VectorUnaryOp.REV32 : Ir64VectorUnaryOp.REV64;
+            case 0b0_0011 -> u ? null : Ir64VectorUnaryOp.REV16;
             default -> null;
         };
         if (scalar && op != null && (op == Ir64VectorUnaryOp.SADDLP || op == Ir64VectorUnaryOp.UADDLP
-                || op == Ir64VectorUnaryOp.SADALP || op == Ir64VectorUnaryOp.UADALP)) {
-            // `SADDLP`/`UADDLP`/`SADALP`/`UADALP` não têm forma escalar real (ARM DDI 0487).
+                || op == Ir64VectorUnaryOp.SADALP || op == Ir64VectorUnaryOp.UADALP
+                || op == Ir64VectorUnaryOp.REV64 || op == Ir64VectorUnaryOp.REV32
+                || op == Ir64VectorUnaryOp.REV16)) {
+            // `SADDLP`/`UADDLP`/`SADALP`/`UADALP`/`REV64`/`REV32`/`REV16` não têm forma escalar
+            // real (ARM DDI 0487).
             return null;
         }
         return op;
+    }
+
+    /// `esz` mínimo/máximo aceito pelas 3 famílias `REV*` (B8.20, sempre VETORIAL — a forma escalar
+    /// já foi negada por {@link #decodeVectorUnaryOpcode} antes de chegar aqui, então este método
+    /// não precisa checar `scalar`). Demais operações de {@link Ir64VectorUnaryOp} não têm restrição
+    /// adicional além da já validada por {@link #validateScalarUnaryEsz}.
+    private void validateVectorUnaryEsz(int word, long address, Ir64VectorUnaryOp op, int esz) {
+        boolean valid = switch (op) {
+            // Grupo de 64 bits — elemento word (esz=2) é o maior que cabe mais de uma vez; `esz=3`
+            // seria um grupo de 1 elemento (no-op), reservado.
+            case REV64 -> esz <= ADVSIMD_ESZ_WORD;
+            // Grupo de 32 bits — só byte/half cabem mais de uma vez.
+            case REV32 -> esz <= ADVSIMD_ESZ_HALFWORD;
+            // Grupo de 16 bits — só byte cabe mais de uma vez.
+            case REV16 -> esz == 0;
+            default -> true;
+        };
+        if (!valid) {
+            throw unsupported(word, address);
+        }
     }
 
     /// `CNT`/`NOT`/`RBIT` (B8.18) — MESMO opcode (`ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE`) dentro
@@ -3249,12 +3320,15 @@ public final class Aarch64Decoder {
     }
 
     /// `SQXTN`/`SQXTUN`/`UQXTN` (B8.8, narrow unário saturante) — vive no MESMO opcode `01001` de
-    /// `SQXTN`/`UQXTN` (`U` distingue) e `00101` só para `SQXTUN` (`U=1`; `U=0` nesse opcode é
-    /// `FCVTN`, fora de escopo — B8.9).
-    private static Ir64VectorNarrowUnaryOp decodeVectorNarrowUnaryOpcode(boolean u, int opcode) {
+    /// `SQXTN`/`UQXTN` (`U` distingue) e `00101` só para `SQXTUN` (`U=1`). `U=0` nesse MESMO opcode
+    /// `00101` é `XTN` (B8.20, SEM saturação) — achado real: o comentário original desta task
+    /// (B8.8) supunha que fosse `FCVTN`, mas o corpus real (devkitA64) confirma `XTN`; `FCVTN`
+    /// (conversão FP) vive em outro opcode, fora de escopo. `XTN` não tem forma escalar (`scalar`
+    /// devolve `null`, G8).
+    private static Ir64VectorNarrowUnaryOp decodeVectorNarrowUnaryOpcode(boolean u, int opcode, boolean scalar) {
         return switch (opcode) {
             case 0b0_1001 -> u ? Ir64VectorNarrowUnaryOp.UQXTN : Ir64VectorNarrowUnaryOp.SQXTN;
-            case 0b0_0101 -> u ? Ir64VectorNarrowUnaryOp.SQXTUN : null;
+            case 0b0_0101 -> u ? Ir64VectorNarrowUnaryOp.SQXTUN : (scalar ? null : Ir64VectorNarrowUnaryOp.XTN);
             default -> null;
         };
     }
@@ -3405,8 +3479,8 @@ public final class Aarch64Decoder {
     /// largo+estreito (`Rd`/`Rn` já em `esz+1`, só `Rm` estreito) ou estreitando (`Rn`/`Rm` em
     /// `esz+1`, `Rd` em `esz`) — os 3 conjuntos de opcodes NUNCA colidem entre si (conferido contra
     /// `a64.decode` real).
-    private Ir64Op decodeAdvancedSimdThreeDifferent(int word, long address, boolean q, int esz, boolean u,
-            int opcode, int rn, int rd, int rm) {
+    private Ir64Op decodeAdvancedSimdThreeDifferent(int word, long address, boolean scalar, boolean q, int esz,
+            boolean u, int opcode, int rn, int rd, int rm) {
         Ir64VectorWideningOp wideningOp = switch (opcode) {
             case 0b1_1000 -> u ? Ir64VectorWideningOp.UMULL : Ir64VectorWideningOp.SMULL;
             case 0b1_0000 -> u ? Ir64VectorWideningOp.UMLAL : Ir64VectorWideningOp.SMLAL;
@@ -3429,7 +3503,7 @@ public final class Aarch64Decoder {
                 // `SQDMULL`/`SQDMLAL`/`SQDMLSL` só existem H→S/S→D — sem forma `byte` (G8).
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorArithmeticWidening(wideningOp, q, esz, rd, rn, rm);
+            return new Ir64Op.VectorArithmeticWidening(wideningOp, scalar, q, esz, rd, rn, rm);
         }
         Ir64VectorWideOp wideOp = switch (opcode) {
             case 0b0_0010 -> u ? Ir64VectorWideOp.UADDW : Ir64VectorWideOp.SADDW;

@@ -393,8 +393,10 @@ final class Ir64VectorArithmeticExecutor {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
-        int outputElements = elementsPerRegister(true, wideEsz);
-        int laneOffset = op.q() ? outputElements : 0;
+        // B8.20: forma ESCALAR (`SQDMULL_s`/`SQDMLAL_s`/`SQDMLSL_s`) processa um ÚNICO elemento,
+        // sem metade de registrador (mesmo padrão de {@link #executeWideningByElement}).
+        int outputElements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
+        int laneOffset = (!op.scalar() && op.q()) ? outputElements : 0;
         for (int i = 0; i < outputElements; i++) {
             int lane = laneOffset + i;
             long a = fp.element(op.rn(), lane, esz);
@@ -425,6 +427,9 @@ final class Ir64VectorArithmeticExecutor {
                 case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
             };
             fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+        }
+        if (op.scalar()) {
+            finishScalarAwareWrite(fp, op.rd(), true, false, wideEsz);
         }
         return false;
     }
@@ -581,6 +586,13 @@ final class Ir64VectorArithmeticExecutor {
     static boolean executeUnary(Aarch64Core core, Ir64Op.VectorArithmeticUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
+        // B8.20: `REV64`/`REV32`/`REV16` PERMUTAM a posição dos elementos (não transformam o VALOR
+        // de cada um individualmente) — não cabem no laço genérico abaixo, mesmo tratamento
+        // especial que `widening` já recebe.
+        if (op.op() == Ir64VectorUnaryOp.REV64 || op.op() == Ir64VectorUnaryOp.REV32
+                || op.op() == Ir64VectorUnaryOp.REV16) {
+            return executeReverseGroups(fp, op);
+        }
         boolean widening = op.op() == Ir64VectorUnaryOp.SADDLP || op.op() == Ir64VectorUnaryOp.UADDLP
                 || op.op() == Ir64VectorUnaryOp.SADALP || op.op() == Ir64VectorUnaryOp.UADALP;
         if (widening) {
@@ -630,12 +642,102 @@ final class Ir64VectorArithmeticExecutor {
                 case CNT -> (long) Long.bitCount(a);
                 case NOT -> ~a;
                 case RBIT -> reverseBitsInByte(a);
+                // B8.20: estimativas por tabela pura-inteira — `a` já é o elemento word cru
+                // (zero-extendido pelo `fp.element` acima, `esz` sempre {@code ADVSIMD_ESZ_WORD}).
+                case URECPE -> unsignedRecipEstimate32(a);
+                case URSQRTE -> unsignedRSqrtEstimate32(a);
+                case REV64, REV32, REV16 ->
+                        throw new IllegalStateException("tratado em executeReverseGroups acima");
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
+
+    /// `REV64`/`REV32`/`REV16` (B8.20) — dentro de cada grupo consecutivo de {@code containerBits}
+    /// bits (64/32/16), inverte a ORDEM dos elementos de {@link Ir64Op.VectorArithmeticUnary#esz}
+    /// bytes (o VALOR de cada elemento não muda, só a posição) — conferido contra o pseudocódigo
+    /// real do manual (`Elem[]` por grupo). Sem forma escalar (filtrado no decoder).
+    private static boolean executeReverseGroups(Aarch64FpRegisters fp, Ir64Op.VectorArithmeticUnary op) {
+        int esz = op.esz();
+        int containerBits = switch (op.op()) {
+            case REV64 -> ADVSIMD_REV_GROUP_64_BITS;
+            case REV32 -> ADVSIMD_REV_GROUP_32_BITS;
+            case REV16 -> ADVSIMD_REV_GROUP_16_BITS;
+            default -> throw new IllegalStateException("op não é REV*: " + op.op());
+        };
+        int elementsPerContainer = containerBits / (8 << esz);
+        int elements = elementsPerRegister(op.q(), esz);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            int containerBase = (i / elementsPerContainer) * elementsPerContainer;
+            int offsetWithinContainer = i % elementsPerContainer;
+            int sourceIndex = containerBase + (elementsPerContainer - 1 - offsetWithinContainer);
+            results[i] = fp.element(op.rn(), sourceIndex, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, esz, truncate(results[i], esz));
+        }
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    private static final int ADVSIMD_REV_GROUP_16_BITS = 16;
+    private static final int ADVSIMD_REV_GROUP_32_BITS = 32;
+    private static final int ADVSIMD_REV_GROUP_64_BITS = 64;
+
+    /// `URECPE`/`UnsignedRecipEstimate` (B8.20) — algoritmo puro-inteiro do ARM DDI 0487, conferido
+    /// bit a bit contra `helper_recpe_u32`/`recip_estimate` do QEMU (`target/arm/tcg/vfp_helper.c`,
+    /// commit atual do `master` em 2026-08-28). `input`/`estimate` são campos de 9 bits (não 8 —
+    /// nome de variável do manual é enganoso), posicionados em `bits[31:23]` do resultado de 32
+    /// bits.
+    private static long unsignedRecipEstimate32(long a) {
+        if ((a & URECPE_TOP_BIT_MASK) == 0) {
+            return URECPE_ALL_ONES;
+        }
+        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
+        return ((long) recipEstimateTable(input)) << URECPE_FIELD_SHIFT;
+    }
+
+    /// `RecipEstimate` (ARM DDI 0487) — `input` em `[256,511)`, resultado em `[256,511)`.
+    private static int recipEstimateTable(int input) {
+        int a = (input * 2) + 1;
+        int b = (1 << 19) / a;
+        return (b + 1) >> 1;
+    }
+
+    /// `URSQRTE`/`UnsignedRSqrtEstimate` (B8.20) — mesma disciplina de {@link #unsignedRecipEstimate32},
+    /// conferido contra `helper_rsqrte_u32`/`do_recip_sqrt_estimate` do QEMU.
+    private static long unsignedRSqrtEstimate32(long a) {
+        if ((a & URSQRTE_TOP_BITS_MASK) == 0) {
+            return URECPE_ALL_ONES;
+        }
+        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
+        return ((long) rSqrtEstimateTable(input)) << URECPE_FIELD_SHIFT;
+    }
+
+    /// `RecipSqrtEstimate` (ARM DDI 0487) — `input` em `[128,512)`, resultado em `[256,511)`.
+    private static int rSqrtEstimateTable(int input) {
+        int a = input;
+        if (a < 256) {
+            a = (a * 2) + 1;
+        } else {
+            a = (a >> 1) << 1;
+            a = (a + 1) * 2;
+        }
+        int b = 512;
+        while ((long) a * (b + 1) * (b + 1) < (1L << 28)) {
+            b += 1;
+        }
+        return (b + 1) / 2;
+    }
+
+    private static final long URECPE_TOP_BIT_MASK = 0x8000_0000L;
+    private static final long URSQRTE_TOP_BITS_MASK = 0xC000_0000L;
+    private static final int URECPE_FIELD_SHIFT = 23;
+    private static final int URECPE_FIELD_MASK = 0x1FF;
+    private static final long URECPE_ALL_ONES = 0xFFFF_FFFFL;
 
     static boolean executeScalarPairwiseAdd(Aarch64Core core, Ir64Op.VectorScalarPairwiseAdd op) {
         Aarch64FpRegisters fp = core.fp();
@@ -659,6 +761,9 @@ final class Ir64VectorArithmeticExecutor {
                 case SQXTN -> saturateToElement(BigInteger.valueOf(signedWide), esz, true);
                 case SQXTUN -> saturateToElement(BigInteger.valueOf(signedWide), esz, false);
                 case UQXTN -> saturateToElement(unsignedBig(wide), esz, false);
+                // B8.20: `XTN` — SEM saturação, truncamento puro (`fp.setElement` abaixo já trunca
+                // para `esz` bytes).
+                case XTN -> wide;
             };
             fp.setElement(op.rd(), laneOffset + i, esz, truncate(narrow, esz));
         }

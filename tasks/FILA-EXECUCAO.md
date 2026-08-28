@@ -694,6 +694,31 @@ novas de verdade no decoder (mesmo padrão de B11.4/RDM, uma por vez), lacunas A
 `URECPE_v`/`URSQRTE_v`), `B12.1`/`B12.3`, publicação de `1.4.0` (reservada para 100%). **Fila
 automática vazia de novo** — próxima priorização cabe ao usuário.
 
+✅ **B8.20 fechada 2026-08-28** (`trilha-b-arquiteturas/b8.20-a64-rev-narrow-scalar-restante.md`,
+task spec escrita e executada na mesma sessão, priorizada pelo usuário entre 4 candidatas: lacunas
+A64 pequenas / gatear as 9 features de B11.5 / `B12.1` / `B4.0.5`) — fecha as 3 lacunas pequenas que
+B8.18/B8.19 tinham deixado de fora: `REV64`/`REV32`/`REV16` (permutação de grupo, "two-register
+misc"), `XTN`/`SHLL`/`URECPE`/`URSQRTE` (slot narrow/widen `Rm=00001`) e `SQDMULL`/`SQDMLAL`/
+`SQDMLSL` escalares sem índice (prefixo "three different" escalar). **Achados reais**: (1) `SHLL`
+reaproveita 100% `USHLL`/`Ir64Op.VectorShiftWidenImmediate` já existente (zero código novo de
+IR/executor — `shift` fixo em `8<<esz` em vez de imediato genérico, mas a fórmula é idêntica); (2)
+`URECPE`/`URSQRTE` são fórmula PURA-INTEIRA fechada no QEMU/ARM DDI 0487 (`recip_estimate`/
+`do_recip_sqrt_estimate`), não uma tabela de 256 entradas como o plano inicial temia — achado que
+baixou bastante o risco desta parte; (3) comentário antigo de B8.8 dizia que o opcode `0b00101`/
+`U=0` era `FCVTN` — corpus real (devkitA64) confirma que é `XTN`, `FCVTN` vive em outro opcode.
+`Ir64Op.VectorArithmeticWidening` ganhou campo `scalar` novo (breaking change de construtor interno,
+G3 preservado) para a forma escalar de `SQDMULL`-família reaproveitar o record/executor vetoriais já
+existentes. `Aarch64AdvSimdRevNarrowScalarDecoderTest` (27 testes, corpus real via devkitA64 para as
+formas positivas + encodings negativos derivados por fórmula) + 17 testes novos no executor
+compartilhado. `mvn -o test` verde (core+truffle) + `install`; G5 completo nos 5 consumidores ✅
+(gbaemu/ndsemu/armbox/virtual-arm-box/n3dsemu, zero-diff esperado e confirmado). `docs/COBERTURA-ISA.md`:
+A64 (`ARMv8.0-A`) 80%→82%, global 80%→81% — sem marco de release (suspenso até 100%, ver
+`tasks/README.md`). Ver **Resultado** na task. **Candidatas restantes, não pegas automaticamente**:
+gatear as 9 features A64 de B11.5, `B12.1`/`B12.3` (catálogo de processadores), `B4.0.5` (armbox
+fork/pipes — possivelmente já destravada por B4.0.3, não confirmado nesta sessão), demais lacunas A64
+da varredura sistemática (segue aberta), publicação de `1.4.0` (reservada para 100%). **Fila
+automática vazia de novo** — próxima priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

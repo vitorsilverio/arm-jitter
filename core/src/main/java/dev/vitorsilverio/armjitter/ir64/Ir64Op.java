@@ -1749,12 +1749,18 @@ public sealed interface Ir64Op permits
     /// AdvSIMD "three different" alargando (`SMULL`/`UMULL`/`SMLAL`/.../`SABDL`/`UABDL`, B8.7) —
     /// `Rn`/`Rm` têm elementos de {@link #esz} bytes, `Rd` tem elementos de `esz+1` (dobro),
     /// SEMPRE preenchendo os 128 bits inteiros (nunca escrita destrutiva parcial, ao contrário da
-    /// forma "three same" com `q=false`).
+    /// forma "three same" com `q=false`) — EXCETO na forma ESCALAR (B8.20, ver {@link #scalar}).
     record VectorArithmeticWidening(
             /// Operação a executar.
             Ir64VectorWideningOp op,
+            /// `true` para a forma ESCALAR (B8.20: só `SQDMULL`/`SQDMLAL`/`SQDMLSL` têm forma
+            /// escalar real neste espaço "three different" — os únicos 2 registradores reais, sem
+            /// `Rm` livre — produz um ÚNICO elemento largo, escrita destrutiva ciente de tamanho
+            /// ({@link Ir64Op.VectorArithmeticThreeSame#scalar}, mesmo padrão de
+            /// {@link VectorArithmeticWideningByElement#scalar}). `q` é ignorado quando `true`.
+            boolean scalar,
             /// `false` (forma sem `2`, ex. `SMULL`): usa a metade BAIXA de `Rn`/`Rm` como entrada.
-            /// `true` (forma `*2`, ex. `SMULL2`): usa a metade ALTA.
+            /// `true` (forma `*2`, ex. `SMULL2`): usa a metade ALTA. Ignorado se {@link #scalar}.
             boolean q,
             /// `log2` do tamanho do elemento ESTREITO (`Rn`/`Rm`) em bytes — `0`-`2` (byte/half/
             /// word; doubleword não tem forma alargada real). `Rd` usa `esz+1`.

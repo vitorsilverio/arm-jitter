@@ -56,5 +56,26 @@ public enum Ir64VectorUnaryOp {
     NOT,
     /// `RBIT` vetorial (B8.18) — inverte a ordem dos BITS dentro de cada BYTE (mesmo slot de
     /// {@link #CNT}/{@link #NOT}, discriminado pelo mesmo campo). Sem forma escalar real.
-    RBIT
+    RBIT,
+    /// `REV64` (B8.20) — inverte a ORDEM dos elementos de {@code esz} bytes dentro de cada grupo de
+    /// 64 bits (mantém os próprios elementos intactos, só permuta a POSIÇÃO deles; não confundir
+    /// com {@link #RBIT}, que inverte bits). MESMO slot `Rm=00000` de {@link #ABS}/{@link #NEG},
+    /// opcode diferente. `esz` aceita `0`-`2` (byte/half/word — doubleword seria um grupo de 1
+    /// elemento, no-op, reservado). Sem forma escalar real.
+    REV64,
+    /// `REV32` — como {@link #REV64}, mas grupos de 32 bits. MESMO opcode de {@link #REV64} (`U`
+    /// distingue). `esz` aceita só `0`-`1` (byte/half — grupo de 1 elemento word seria no-op).
+    REV32,
+    /// `REV16` — como {@link #REV64}, mas grupos de 16 bits. `esz` aceita só `0` (byte — grupo de 1
+    /// elemento halfword seria no-op). Sem forma `U=1` real neste opcode.
+    REV16,
+    /// `URECPE` (B8.20) — estimativa de recíproco não assinado de 8 bits de precisão
+    /// (`UnsignedRecipEstimate`, ARM DDI 0487), só arranjo `.2s`/`.4s` (`esz` fixo em word). Vive no
+    /// slot `Rm=00001` (narrow/widen), MESMO opcode que `FCVTAS`/`FCVTAU` usam para `esz` `0`/`1` —
+    /// discriminado pelo bit alto de `esz` (`a`), sem colisão real (conferido bit a bit). Sem forma
+    /// escalar.
+    URECPE,
+    /// `URSQRTE` — como {@link #URECPE}, mas raiz-recíproca (`UnsignedRSqrtEstimate`). MESMO opcode
+    /// de {@link #URECPE} (`U` distingue).
+    URSQRTE
 }

@@ -189,13 +189,13 @@ class Ir64VectorArithmeticExecutorTest {
         }
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SADDL, false, 0, 0, 1, 2)); // baixa: lanes 0-7
+                Ir64VectorWideningOp.SADDL, false, false, 0, 0, 1, 2)); // baixa: lanes 0-7
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 1, fp.element(0, i, 1));
         }
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SADDL, true, 0, 0, 1, 2)); // alta ("2"): lanes 8-15
+                Ir64VectorWideningOp.SADDL, false, true, 0, 0, 1, 2)); // alta ("2"): lanes 8-15
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 8 + 1, fp.element(0, i, 1));
         }
@@ -209,11 +209,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(2, 0, 0, 2);
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SMULL, false, 0, 0, 1, 2));
+                Ir64VectorWideningOp.SMULL, false, false, 0, 0, 1, 2));
         assertEquals((short) -2 & 0xFFFF, fp.element(0, 0, 1), "sext(-1)*2 = -2");
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.UMULL, false, 0, 0, 1, 2));
+                Ir64VectorWideningOp.UMULL, false, false, 0, 0, 1, 2));
         assertEquals(0xFF * 2, fp.element(0, 0, 1), "0xFF (não assinado) * 2 = 0x1FE");
     }
 
@@ -226,7 +226,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(2, 0, 0, 4);
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SMLAL, false, 0, 0, 1, 2));
+                Ir64VectorWideningOp.SMLAL, false, false, 0, 0, 1, 2));
 
         assertEquals(1012, fp.element(0, 0, 1), "1000 + 3*4 = 1012");
     }
@@ -600,7 +600,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(2, 0, 1, 0x8000);
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SQDMULL, false, 1, 0, 1, 2));
+                Ir64VectorWideningOp.SQDMULL, false, false, 1, 0, 1, 2));
 
         assertEquals(0x7FFF_FFFFL, fp.element(0, 0, 2), "2*(-32768)^2 = 2^31, satura em 2^31-1");
     }
@@ -614,7 +614,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(2, 0, 1, 100);
 
         EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
-                Ir64VectorWideningOp.SQDMLAL, false, 1, 0, 1, 2));
+                Ir64VectorWideningOp.SQDMLAL, false, false, 1, 0, 1, 2));
 
         assertEquals(20010L, fp.element(0, 0, 2), "10 + 2*100*100 = 20010");
     }
@@ -1075,5 +1075,175 @@ class Ir64VectorArithmeticExecutorTest {
                 Ir64VectorUnaryOp.RBIT, false, false, 0, 0, 1));
 
         assertEquals(0b1000_0000, fp.element(0, 0, 0));
+    }
+
+    // ── B8.20: REV64/REV32/REV16, XTN, SHLL, URECPE/URSQRTE, SQDMULL escalar ───────────────────────
+
+    @Test
+    void rev64ReversesHalfwordsWithinEach64BitGroup() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // v1.8h = {1,2,3,4,5,6,7,8} — 2 grupos de 64 bits (4 halfwords cada).
+        for (int i = 0; i < 8; i++) {
+            fp.setElement(1, i, 1, i + 1);
+        }
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.REV64, false, true, 1, 0, 1));
+
+        assertEquals(4, fp.element(0, 0, 1));
+        assertEquals(3, fp.element(0, 1, 1));
+        assertEquals(2, fp.element(0, 2, 1));
+        assertEquals(1, fp.element(0, 3, 1));
+        assertEquals(8, fp.element(0, 4, 1));
+        assertEquals(7, fp.element(0, 5, 1));
+        assertEquals(6, fp.element(0, 6, 1));
+        assertEquals(5, fp.element(0, 7, 1));
+    }
+
+    @Test
+    void rev32ReversesBytesWithinEach32BitGroup() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // v1.16b = {1,2,3,4, 5,6,7,8, ...} — grupos de 32 bits (4 bytes cada).
+        for (int i = 0; i < 16; i++) {
+            fp.setElement(1, i, 0, i + 1);
+        }
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.REV32, false, true, 0, 0, 1));
+
+        assertEquals(4, fp.element(0, 0, 0));
+        assertEquals(3, fp.element(0, 1, 0));
+        assertEquals(2, fp.element(0, 2, 0));
+        assertEquals(1, fp.element(0, 3, 0));
+        assertEquals(8, fp.element(0, 4, 0));
+        assertEquals(7, fp.element(0, 5, 0));
+        assertEquals(6, fp.element(0, 6, 0));
+        assertEquals(5, fp.element(0, 7, 0));
+    }
+
+    @Test
+    void rev16ReversesBytePairs() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0xAA);
+        fp.setElement(1, 1, 0, 0xBB);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.REV16, false, false, 0, 0, 1));
+
+        assertEquals(0xBB, fp.element(0, 0, 0));
+        assertEquals(0xAA, fp.element(0, 1, 0));
+    }
+
+    @Test
+    void xtnTruncatesWithoutSaturating() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // v1[0] (word, esz+1=2) = 0x1_2345 — SQXTN saturaria em 0x7FFF (excede int16), `XTN` só
+        // trunca os 16 bits baixos.
+        fp.setElement(1, 0, 2, 0x1_2345L);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+                Ir64VectorNarrowUnaryOp.XTN, false, false, 1, 0, 1));
+
+        assertEquals(0x2345, fp.element(0, 0, 1), "trunca para 16 bits, sem saturar (diferente de SQXTN/UQXTN)");
+    }
+
+    @Test
+    void shllWidensByFullElementWidth() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0xFF); // byte v1[0] = 0xFF (zero-extend, SHLL é sempre não assinado)
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+                Ir64VectorShiftWidenOp.USHLL, false, 0, 8, 0, 1));
+
+        assertEquals(0xFF00, fp.element(0, 0, 1), "0xFF << 8 (largura inteira do elemento estreito)");
+    }
+
+    @Test
+    void urecpeBelowHalfReturnsAllOnes() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, 0x7FFF_FFFFL); // bit31=0 → operando < 0.5
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.URECPE, false, false, 2, 0, 1));
+
+        assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2));
+    }
+
+    @Test
+    void urecpeAtHalfAndNearOne() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, 0x8000_0000L); // exatamente 0.5
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.URECPE, false, false, 2, 0, 1));
+
+        assertEquals(0xFF80_0000L, fp.element(0, 0, 2), "RecipEstimate(256)=511 -> 511<<23");
+
+        fp.setElement(1, 1, 2, 0xFFFF_FFFFL); // próximo de 1.0
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.URECPE, false, true, 2, 0, 1));
+        assertEquals(0x8000_0000L, fp.element(0, 1, 2), "RecipEstimate(511)=256 -> 256<<23");
+    }
+
+    @Test
+    void ursqrteBelowQuarterReturnsAllOnes() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, 0x3FFF_FFFFL); // bits31:30 == 0 → operando < 0.25
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.URSQRTE, false, false, 2, 0, 1));
+
+        assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2));
+    }
+
+    @Test
+    void ursqrteKnownInputs() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, 0x8000_0000L);
+        fp.setElement(1, 1, 2, 0x4000_0000L);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.URSQRTE, false, true, 2, 0, 1));
+
+        assertEquals(0xB480_0000L, fp.element(0, 0, 2), "RecipSqrtEstimate(256)=361 -> 361<<23");
+        assertEquals(0xFF80_0000L, fp.element(0, 1, 2), "RecipSqrtEstimate(128)=511 -> 511<<23");
+    }
+
+    @Test
+    void sqdmullScalarProducesSingleElementAndZeroesRest() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 2, 0xFFFF_FFFFL); // lixo pré-existente em Rd — escrita destrutiva deve zerar
+        fp.setElement(1, 0, 1, 0x8000);
+        fp.setElement(2, 0, 1, 0x8000);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+                Ir64VectorWideningOp.SQDMULL, true, false, 1, 0, 1, 2));
+
+        assertEquals(0x7FFF_FFFFL, fp.element(0, 0, 2), "2*(-32768)^2 satura em INT32_MAX, mesma saturação da forma vetorial");
+        assertEquals(0L, fp.high64(0), "escrita destrutiva ciente de tamanho zera os bits altos de V0");
+    }
+
+    @Test
+    void sqdmlalScalarAccumulates() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 2, 10L);
+        fp.setElement(1, 0, 1, 100);
+        fp.setElement(2, 0, 1, 100);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+                Ir64VectorWideningOp.SQDMLAL, true, false, 1, 0, 1, 2));
+
+        assertEquals(20010L, fp.element(0, 0, 2), "10 + 2*100*100 = 20010, MESMA lógica da forma vetorial");
     }
 }
