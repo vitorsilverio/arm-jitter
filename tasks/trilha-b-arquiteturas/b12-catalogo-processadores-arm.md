@@ -271,3 +271,45 @@ comportamento esperado (catálogo sem consumidor interno ainda).
 Próximo da escada: B12.2 (restante `ARMv8.4-A`→`ARMv9.5-A` — Neoverse V1/N2/V2/N3/V3,
 Cortex-A510+/X2+/A320+, C-Series) ou B12.3 (`arch.ArmProcessor`, lado 32-bit — ver a "Ordem
 sugerida" acima).
+
+## Resultado (B12.3, 2026-08-28)
+
+`arch.ArmProcessor` criado — enum com 24 constantes cobrindo ARM clássico + a linha Cortex-A
+32-bit já cobertos por preset existente (zero trabalho de arquitetura novo, só a tabela de
+resolução nome→`ArmArchitecture`):
+
+- `ARMV4T`: `ARM7TDMI`, `ARM710T`, `ARM720T`, `ARM740T`, `ARM9TDMI`, `ARM920T`, `ARM922T`,
+  `ARM940T`, `SC100` (SecurCore `SC100` — único núcleo SecurCore fora do perfil M, os demais
+  `SC000`/`SC300` são perfil M e ficam em B12.4, achado ao ler a linha da Wikipedia que a escada
+  original de B12 não tinha citado explicitamente para este item).
+- `ARMV5TE`: `ARM946E-S`, `ARM966E-S`, `ARM968E-S`, `ARM996HS`, `ARM1020E`, `ARM1022E` (arquitetura
+  literal `ARMv5TE` na Wikipedia) mais `ARM7EJ-S`, `ARM926EJ-S`, `ARM1026EJ-S` (a Wikipedia lista
+  `ARMv5TEJ` para estes — **aproximação documentada no Javadoc**: este projeto não modela nenhum
+  modo Jazelle, `ArmFeature` não tem entrada para isso, então o conjunto ARM/Thumb visível ao
+  decoder/executor é idêntico ao `ARMv5TE` puro).
+- `ARM11_MPCORE`: `ARM11 MPCore` (único núcleo da linha, `ARMv6K`).
+- `ARMV7A`: `Cortex-A5`, `Cortex-A7`, `Cortex-A8`, `Cortex-A9`, `Cortex-A12`, `Cortex-A15`,
+  `Cortex-A17`.
+
+**Deixados de fora desta task** (por escopo, não por esquecimento — candidatos às próximas
+sub-tasks da escada B12, ver o corpo do épico acima): `ARM810` (`ARMv4` puro, sem Thumb — mapear
+para `ARMV4T` seria incorreto, o preset assume Thumb disponível; sem preset próprio hoje, B12.5),
+`ARM1136J(F)-S`/`ARM1156T2(F)-S`/`ARM1176JZ(F)-S` (`ARMv6`/`ARMv6T2`/`ARMv6Z` puros, sem preset,
+B12.5), `Cortex-A32` (`ARMv8-A` AArch32-only, decisão de preset pendente, B12.6), `SecurCore
+SC000`/`SC300` e toda a linha `Cortex-M` (perfil M, B12.4), perfil R (nunca modelado, épico
+próprio).
+
+Mesmo padrão de `Aarch64Processor` (B12.1): `(String displayName, ArmArchitecture architecture)`
+no construtor, getters `architecture()`/`displayName()`, `toString()` retornando o `displayName`.
+
+**Sem uso ainda em `ArmCore`** (G3, conforme a especificação do épico) — só a tabela de resolução
+nova, aditiva, sem mudança de comportamento observável em nenhum decoder/executor existente.
+
+Testes novos: `ArmProcessorTest` (9 casos — resolução por família incl. a aproximação `ARMv5TEJ`,
+`displayName()`, `toString()`, unicidade de nome comercial, round-trip de `valueOf`/`name()`),
+espelhando `Aarch64ProcessorTest`. `mvn -o test` verde (suíte inteira do `arm-jitter`, JBR 25,
+2665 testes) + `install` local; G5 nos 3 consumidores relevantes ao Java (`gbaemu`/`ndsemu`/
+`armbox`) verde — zero-diff esperado (catálogo sem consumidor interno ainda).
+
+Próximo da escada: B12.2 (A64 `ARMv8.4-A`→`ARMv9.5-A`) e B12.4 (perfil M) podem rodar em paralelo;
+B12.5/B12.6 (núcleos sem preset, pedem decisão de arquitetura nova) ficam para depois.
