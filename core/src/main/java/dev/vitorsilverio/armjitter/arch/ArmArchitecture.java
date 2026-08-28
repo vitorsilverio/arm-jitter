@@ -68,6 +68,70 @@ public final class ArmArchitecture {
     // PRELOAD_HINTS (PLD/PLDW/PLI) agora vem herdado de ARMV5TE (correção acima) — antes desta
     // task estava listado aqui, sugerindo (erradamente) que só ARMv6K tinha PLD.
 
+    /// ARMv6 **pura** (B12.5): ARM1136J(F)-S, base sobre a qual `ARMv6K`/`ARMv6T2`/`ARMv6Z` se
+    /// ramificam. Mesmo conjunto "ARMv6+" de {@link #ARMV6K} MENOS as extensões que a ARM real só
+    /// introduziu em versões subsequentes: sem {@link ArmFeature#EXCLUSIVE_SIZED} (`LDREXB/H/D`,
+    /// `STREXB/H/D`, `CLREX` — ARMv6K), sem {@link ArmFeature#WAIT_HINTS} (`WFI`/`WFE`/`SEV`/`YIELD`
+    /// como instruções dedicadas — ARMv6K) e sem {@link ArmFeature#SECURE_MONITOR_CALL} (`SMC` —
+    /// ARMv6K/ARMv6Z, nunca ARMv6 base; ver o Javadoc da própria feature, gate real
+    /// `ENABLE_ARCH_6K` no QEMU). Sem Thumb-2 (ARMv6T2+) e sem VFP (fora do escopo desta task, ver
+    /// `tasks/trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`, B12.5 — variantes "(F)" da
+    /// Wikipedia ficam de fora, candidatas a uma sub-task futura que componha {@link
+    /// ArmFeature#VFPV2} sobre este preset). Nenhum decoder/feature novo: reaproveita
+    /// {@link ArmFeature#EXTEND_ROTATE}/{@link ArmFeature#BYTE_REVERSE}/{@link ArmFeature#UMAAL}/
+    /// {@link ArmFeature#PARALLEL_SIMD}/{@link ArmFeature#PACK_SATURATE}/
+    /// {@link ArmFeature#EXCLUSIVE_WORD}/{@link ArmFeature#MODE_CHANGE_INSTRUCTIONS}/
+    /// {@link ArmFeature#SETEND_BIG_ENDIAN_DATA}/{@link ArmFeature#UNALIGNED_ACCESS}/
+    /// {@link ArmFeature#SIGNED_MULTIPLY_MEDIA}, todos já existentes e já gateados nos decoders
+    /// desde B1.2-B1.5/B9.1.
+    public static final ArmArchitecture ARMV6 = extending(ARMV5TE, "ARMv6",
+            ArmFeature.EXTEND_ROTATE,
+            ArmFeature.BYTE_REVERSE,
+            ArmFeature.UMAAL,
+            ArmFeature.PARALLEL_SIMD,
+            ArmFeature.PACK_SATURATE,
+            ArmFeature.EXCLUSIVE_WORD,
+            ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+            ArmFeature.SETEND_BIG_ENDIAN_DATA,
+            ArmFeature.UNALIGNED_ACCESS,
+            ArmFeature.SIGNED_MULTIPLY_MEDIA);
+
+    /// ARMv6T2 **pura** (B12.5): ARM1156T2(F)-S, o ramo "Thumb-2 sem as extensões de
+    /// multiprocessamento do ARMv6K" — arquitetura DIFERENTE de {@link #ARMV6K_THUMB2} (que é
+    /// ARMv6K + Thumb-2, o núcleo de referência do 3DS/B2). `MOVW_MOVT`/`MLS_MULTIPLY`/
+    /// `BIT_FIELD`/`BIT_REVERSE` são genuinamente ARMv6T2 (confirmado contra `ENABLE_ARCH_6T2` real
+    /// em `target/arm/tcg/translate.c` do QEMU — mesma nota já registrada em
+    /// `ArmArchitectureTest#arm11MpCoreLacksArmv6t2AndDivideAndFusedVfp`), então entram aqui; sem
+    /// {@link ArmFeature#MEMORY_BARRIERS} (`DMB`/`DSB`/`ISB` são ARMv7) nem
+    /// {@link ArmFeature#DIVIDE} (`SDIV`/`UDIV` são extensão opcional do ARMv7-A/R). Sem VFP (mesma
+    /// nota de {@link #ARMV6}, variantes "(F)" ficam de fora). Mesmo quebra-cabeça ovo-e-galinha de
+    /// {@link #ARMV6K_THUMB2_FEATURES}: as features primeiro, porque os decoders Thumb-2 recebem a
+    /// arquitetura no construtor.
+    private static final ArmArchitecture ARMV6T2_FEATURES = extending(ARMV6, "ARMv6T2",
+            ArmFeature.THUMB2, ArmFeature.MOVW_MOVT, ArmFeature.MLS_MULTIPLY,
+            ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE);
+
+    public static final ArmArchitecture ARMV6T2 = ARMV6T2_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV6T2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV6T2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV6T2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV6T2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6T2_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
+    /// ARMv6Z **pura** (B12.5): ARM1176JZ(F)-S, o ramo "Security Extensions (TrustZone) sem
+    /// Thumb-2" — arquitetura irmã de {@link #ARMV6T2} (mesma base {@link #ARMV6}, ramo diferente).
+    /// Único acréscimo real é {@link ArmFeature#SECURE_MONITOR_CALL} (`SMC`, entra em Monitor
+    /// mode) — **aproximação documentada**: este projeto não modela mundos seguro/não-seguro nem
+    /// bancos de registrador de TrustZone além do Monitor mode já existente (usado também por
+    /// {@link #ARMV6K}/{@link #ARMV7A}), então só a instrução `SMC` em si funciona, não a separação
+    /// completa de mundos do TrustZone real. Sem Thumb-2 (o ARM1176JZ(F)-S real não é ARMv6T2). Sem
+    /// VFP (mesma nota de {@link #ARMV6}).
+    public static final ArmArchitecture ARMV6Z = extending(ARMV6, "ARMv6Z",
+            ArmFeature.SECURE_MONITOR_CALL);
+
     /// Preset Thumb-2 do épico B2 (B2.1-B2.6) mais a paridade de encodings de B2.7: as extensões
     /// de decoder de 32 bits (`Thumb2DataProcessingDecoder`, `Thumb2RegisterDataProcessingDecoder`
     /// [B2.7 PR1], `Thumb2MultiplyDecoder` [B2.7 PR2], `Thumb2LoadStoreDecoder`,

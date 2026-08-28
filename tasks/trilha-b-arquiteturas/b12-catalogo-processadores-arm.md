@@ -418,3 +418,59 @@ JBR 25) + `install` local (valida os links `///` da doc nova); G5 leve (`mvn -o 
 
 Restam na escada B12: B12.5 (núcleos clássicos sem preset) e uma task de decode própria (fora de
 B12) para `LDA`/`STL`/`CRC32` de `ARMv8-A`, que destravaria `Cortex-A32` numa B12.6b futura.
+
+## Resultado (B12.5, 2026-08-28)
+
+Decisão por núcleo, conforme a escada pedia ("vira preset novo aditivo ou fica documentado como
+pendente"):
+
+**3 presets novos criados** em `ArmArchitecture` (zero decoder/feature novo — só combinações
+inéditas de `ArmFeature`s já existentes, confirmadas contra o gate real do QEMU já citado em
+`ArmArchitectureTest#arm11MpCoreLacksArmv6t2AndDivideAndFusedVfp`):
+
+- `ARMV6` — ARMv6 pura (ARM1136J-S): estende `ARMV5TE` com o conjunto "ArmV6+" MENOS as 3 extensões
+  que só chegam com ARMv6K (`EXCLUSIVE_SIZED`, `WAIT_HINTS`, `SECURE_MONITOR_CALL` — este último
+  confirmado no Javadoc da própria feature, gate real `ENABLE_ARCH_6K`, não ARMv6 base). Sem
+  Thumb-2, sem VFP.
+- `ARMV6T2` — ARMv6T2 pura (ARM1156T2-S): estende `ARMV6` (não `ARMV6K`) com `THUMB2` +
+  `MOVW_MOVT`/`MLS_MULTIPLY`/`BIT_FIELD`/`BIT_REVERSE` (as 4 features genuinamente ARMv6T2,
+  confirmadas contra `ENABLE_ARCH_6T2` real — já citado no teste acima). Sem `MEMORY_BARRIERS`/
+  `DIVIDE` (ARMv7) nem as extensões ARMv6K (é um ramo diferente de `ARMV6`, não de `ARMV6K`). 7
+  extensões de decoder Thumb-2, mesmo padrão de `ARMV6K_THUMB2`/`ARMV7M`.
+- `ARMV6Z` — ARMv6Z pura (ARM1176JZ-S): estende `ARMV6` com `SECURE_MONITOR_CALL` só (TrustZone —
+  aproximação documentada: só a instrução `SMC` funciona, nenhuma separação de mundo
+  seguro/não-seguro é modelada, mesmo nível de aproximação já usado para Jazelle em B12.3). Sem
+  Thumb-2 (o núcleo real não é ARMv6T2).
+
+3 constantes novas em `ArmProcessor`: `ARM1136J_S`, `ARM1156T2_S`, `ARM1176JZ_S` — só a variante
+sem VFP de cada núcleo (a Wikipedia usa `"(F)"` para cobrir as duas; a variante com VFP fica de
+fora, candidata trivial futura já que `ArmFeature.VFPV2` já existe e é ortogonal).
+
+**Item "ARMv5TEJ com Jazelle" da escada**: já estava fechado por B12.3 (`ARM7EJ_S`/`ARM926EJ_S`/
+`ARM1026EJ_S`, aproximação `ARMV5TE`) — nenhum trabalho novo precisou aqui, só documentado no
+Javadoc da classe apontando para lá.
+
+**Deixados de fora, deliberadamente, com Javadoc explicando por quê** (candidatos a épico próprio,
+nunca "fora de escopo para sempre"): `ARMv1`/`ARMv2`/`ARMv2a`/`ARMv3` (ARM1/ARM2/ARM250/
+ARM60..710a) — investigados e não implementados nesta task porque usam um modelo de
+registrador/exceção fundamentalmente diferente do que `ARMV4T` em diante assume (PC de 26 bits com
+flags empacotados no próprio R15, sem CPSR/SPSR separados antes da ARMv3, endereçamento de 32 bits
+só opcional na ARMv3) — não é uma lacuna de `ArmFeature`/`EnumSet`, é um modelo de núcleo diferente
+que exigiria mudança em `ArmCore`/`AProfileExceptionModel`/decoders de PC-flags antes de qualquer
+preset existir para catalogar. Fora do orçamento de B12 (catalogação pura, zero decode novo).
+
+Mesmo padrão de B12.1-B12.4: `(String displayName, ArmArchitecture architecture)` no construtor,
+getters herdados sem mudança. **Sem uso ainda em `ArmCore`** (G3) — só tabela de resolução e 3
+presets novos aditivos.
+
+Testes novos: 5 métodos em `ArmArchitectureTest` (features de `ARMV6`/`ARMV6T2`/`ARMV6Z` pura,
+incl. as exclusões negativas que provam a diferença de `ARMV6K`/`ARMV6K_THUMB2`) + 1 método em
+`ArmProcessorTest` (resolução dos 3 núcleos novos) — os testes estruturais existentes
+(`everyEntryHasAUniqueDisplayName`, `valueOfRoundTripsForEveryConstant`) cobrem as 3 constantes
+automaticamente. `mvn -o test` verde (suíte inteira do `arm-jitter`, JBR 25) + `install` local; G5
+leve (`mvn -o compile`) verde em `gbaemu`/`ndsemu`/`armbox` (zero-diff esperado, catálogo sem
+consumidor interno ainda).
+
+Restam na escada B12: `Cortex-A32` (`LDA`/`STL`/`CRC32` de `ARMv8-A`, task de decode própria fora
+de B12), o épico de perfil R (nunca modelado) e, agora fora de B12, um possível épico futuro de
+"modelo de registrador pré-ARMv3" que destravaria ARM1/ARM2/ARM250/ARM60..710a.

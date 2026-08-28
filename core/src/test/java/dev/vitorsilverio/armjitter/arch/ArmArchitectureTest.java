@@ -147,6 +147,52 @@ class ArmArchitectureTest {
                 "v7-A (Cortex-A15/A7) tem VFPv4 — mesma nota já feita para SDIV/UDIV no preset");
     }
 
+    /// B12.5: `ARMv6` pura (ARM1136J-S) tem o conjunto "ARMv6+" MENOS as extensões que só chegam
+    /// com ARMv6K (`EXCLUSIVE_SIZED`/`WAIT_HINTS`/`SECURE_MONITOR_CALL`) e sem Thumb-2.
+    @Test
+    void armv6PureHasArmv6FeaturesButNotArmv6kExtrasNorThumb2() {
+        ArmArchitecture preset = ArmArchitecture.ARMV6;
+        for (ArmFeature feature : List.of(ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE,
+                ArmFeature.UMAAL, ArmFeature.PARALLEL_SIMD, ArmFeature.PACK_SATURATE,
+                ArmFeature.EXCLUSIVE_WORD, ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+                ArmFeature.SETEND_BIG_ENDIAN_DATA, ArmFeature.UNALIGNED_ACCESS,
+                ArmFeature.SIGNED_MULTIPLY_MEDIA)) {
+            assertTrue(preset.has(feature), feature + " deve estar em ARMv6 pura");
+        }
+        assertFalse(preset.has(ArmFeature.EXCLUSIVE_SIZED), "LDREXB/H/D é ARMv6K, não ARMv6 pura");
+        assertFalse(preset.has(ArmFeature.WAIT_HINTS), "WFI/WFE/SEV/YIELD dedicados é ARMv6K");
+        assertFalse(preset.has(ArmFeature.SECURE_MONITOR_CALL), "SMC é ARMv6K/ARMv6Z, não ARMv6 pura");
+        assertFalse(preset.has(ArmFeature.THUMB2), "Thumb-2 é ARMv6T2+");
+    }
+
+    /// B12.5: `ARMv6T2` pura (ARM1156T2-S) tem Thumb-2 mais as 4 features "ARMv6T2 de verdade"
+    /// (`MOVW_MOVT`/`MLS_MULTIPLY`/`BIT_FIELD`/`BIT_REVERSE`), mas NÃO `MEMORY_BARRIERS`/`DIVIDE`
+    /// (ARMv7) nem as extensões `ARMv6K` (é um ramo diferente de `ARMV6`, não estende `ARMV6K`).
+    @Test
+    void armv6t2PureHasThumb2AndTheFourArmv6t2FeaturesButNotV7OrV6kExtras() {
+        ArmArchitecture preset = ArmArchitecture.ARMV6T2;
+        assertTrue(preset.has(ArmFeature.THUMB2));
+        assertTrue(preset.has(ArmFeature.MOVW_MOVT));
+        assertTrue(preset.has(ArmFeature.MLS_MULTIPLY));
+        assertTrue(preset.has(ArmFeature.BIT_FIELD));
+        assertTrue(preset.has(ArmFeature.BIT_REVERSE));
+        assertFalse(preset.has(ArmFeature.MEMORY_BARRIERS), "DMB/DSB/ISB é ARMv7");
+        assertFalse(preset.has(ArmFeature.DIVIDE), "SDIV/UDIV é extensão opcional do ARMv7-A/R");
+        assertFalse(preset.has(ArmFeature.EXCLUSIVE_SIZED), "extensões ARMv6K não vêm de ARMV6 pura");
+        assertFalse(preset.has(ArmFeature.SECURE_MONITOR_CALL));
+        assertEquals(7, preset.thumb32DecoderExtensions().size());
+    }
+
+    /// B12.5: `ARMv6Z` pura (ARM1176JZ-S) é `ARMV6` + `SECURE_MONITOR_CALL` (SMC), sem Thumb-2.
+    @Test
+    void armv6zPureHasSecureMonitorCallButNotThumb2() {
+        ArmArchitecture preset = ArmArchitecture.ARMV6Z;
+        assertTrue(preset.has(ArmFeature.SECURE_MONITOR_CALL));
+        assertTrue(preset.has(ArmFeature.EXTEND_ROTATE), "herda o conjunto ARMv6 pura");
+        assertFalse(preset.has(ArmFeature.THUMB2), "ARM1176JZ(F)-S não é ARMv6T2");
+        assertFalse(preset.has(ArmFeature.EXCLUSIVE_SIZED), "extensões ARMv6K não vêm de ARMV6 pura");
+    }
+
     /// VFP decodifica (VADD.F32 S2,S0,S1 — mesmo vetor manual de `VfpDecoderTest#addSingleDecodesToVfpAlu`).
     @Test
     void arm11MpCoreDecodesVfpInstructions() {

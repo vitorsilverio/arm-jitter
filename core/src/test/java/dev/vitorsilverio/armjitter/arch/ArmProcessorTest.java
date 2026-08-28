@@ -42,6 +42,13 @@ class ArmProcessorTest {
     }
 
     @Test
+    void classicArmv6BranchesResolveToTheirOwnPurePresets() {
+        assertSame(ArmArchitecture.ARMV6, ArmProcessor.ARM1136J_S.architecture());
+        assertSame(ArmArchitecture.ARMV6T2, ArmProcessor.ARM1156T2_S.architecture());
+        assertSame(ArmArchitecture.ARMV6Z, ArmProcessor.ARM1176JZ_S.architecture());
+    }
+
+    @Test
     void cortexAv7FamilyResolvesToArmv7a() {
         assertSame(ArmArchitecture.ARMV7A, ArmProcessor.CORTEX_A5.architecture());
         assertSame(ArmArchitecture.ARMV7A, ArmProcessor.CORTEX_A7.architecture());

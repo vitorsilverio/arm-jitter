@@ -12,6 +12,24 @@ package dev.vitorsilverio.armjitter.arch;
 /// AArch32-only) ficam para B12.5/B12.6; perfil R fica para um épico próprio (nunca modelado
 /// neste projeto).
 ///
+/// **Escopo de B12.5** (núcleos clássicos sem preset): {@link #ARM1136J_S}/{@link #ARM1156T2_S}/
+/// {@link #ARM1176JZ_S} resolvem para os presets NOVOS {@link ArmArchitecture#ARMV6}/
+/// {@link ArmArchitecture#ARMV6T2}/{@link ArmArchitecture#ARMV6Z} (aditivo — zero decoder/feature
+/// novo, só combinações inéditas de features já existentes; ver o Javadoc de cada preset). O item
+/// "ARMv5TEJ com Jazelle" da escada do épico já estava fechado por B12.3 ({@link #ARM7EJ_S}/
+/// {@link #ARM926EJ_S}/{@link #ARM1026EJ_S}, aproximação para `ARMV5TE`) — nenhum trabalho novo
+/// aqui. **`ARMv1`/`ARMv2`/`ARMv2a`/`ARMv3` (ARM1/ARM2/ARM250/ARM60..710a) ficam de fora,
+/// deliberadamente**: essas versões usam um modelo de CPU fundamentalmente diferente do que este
+/// projeto assume desde `ARMV4T` — PC de 26 bits com os flags de condição empacotados nos bits
+/// altos do próprio R15 (sem CPSR/SPSR separados antes da ARMv3), endereçamento de 32 bits só
+/// opcional na ARMv3 (obrigatório na ARMv3G) — não é uma questão de "feature faltando" que um
+/// `EnumSet<ArmFeature>` resolva (o padrão deste catálogo, `ArmArchitecture.of`/`extending`), é um
+/// modelo de registrador/exceção diferente, que exigiria mudanças no núcleo (`ArmCore`,
+/// `AProfileExceptionModel`, decoders de PC/flags) antes de existir qualquer preset para catalogar.
+/// Fora do orçamento de B12 (catalogação pura, sem decode novo — ver a Meta do épico); candidato a
+/// um épico próprio de "modelo de registrador pré-ARMv3", nunca "fora de escopo para sempre"
+/// (regra máxima do projeto, `tasks/README.md`).
+///
 /// **Escopo de B12.6** (`Cortex-A32`, `ARMv8-A` AArch32-only): investigado e deliberadamente
 /// deixado de fora do catálogo. `Cortex-A32` é um núcleo real `ARMv8-A` — ao contrário do
 /// `Cortex-A5`..`A17` (`ARMv7-A` puro, já resolvidos para {@link ArmArchitecture#ARMV7A} acima),
@@ -114,6 +132,21 @@ public enum ArmProcessor {
     /// `ARMv6K` — o núcleo principal do 3DS (2 cores, ver `Aarch64Processor`/B5 para o monitor de
     /// exclusividade) e do Raspberry Pi 1/Zero.
     ARM11_MPCORE("ARM11 MPCore", ArmArchitecture.ARM11_MPCORE),
+
+    /// `ARMv6` pura (B12.5) — variante sem VFP do núcleo (a Wikipedia lista `ARM1136J(F)-S`
+    /// cobrindo as duas; a variante `ARM1136JF-S`, com VFP, fica de fora, ver
+    /// {@link ArmArchitecture#ARMV6}).
+    ARM1136J_S("ARM1136J-S", ArmArchitecture.ARMV6),
+
+    /// `ARMv6T2` pura (B12.5) — variante sem VFP do núcleo (a Wikipedia lista `ARM1156T2(F)-S`
+    /// cobrindo as duas; a variante `ARM1156T2F-S`, com VFP, fica de fora, ver
+    /// {@link ArmArchitecture#ARMV6T2}).
+    ARM1156T2_S("ARM1156T2-S", ArmArchitecture.ARMV6T2),
+
+    /// `ARMv6Z` pura (B12.5) — variante sem VFP do núcleo (a Wikipedia lista `ARM1176JZ(F)-S`
+    /// cobrindo as duas; a variante `ARM1176JZF-S`, com VFP, fica de fora, ver
+    /// {@link ArmArchitecture#ARMV6Z}).
+    ARM1176JZ_S("ARM1176JZ-S", ArmArchitecture.ARMV6Z),
 
     /// `ARMv7-A`.
     CORTEX_A5("Cortex-A5", ArmArchitecture.ARMV7A),
