@@ -47,7 +47,7 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B12.4)
+## Onde estamos (atualizado 2026-08-28, após B12.6)
 
 A escada `B11` (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`, torna o A64 componível
 por versão/feature) está com B11.1-B11.12 ✅ — **completa, as 9 features de B11.5 todas gateadas** —
@@ -56,11 +56,13 @@ ver `INDICE.md` da trilha B, linha B11, para o resumo de cada uma. B11.12 revelo
 implementados do zero nesta sessão; ver `b11.12-aarch64-feature-sha3.md`). **Candidatas elegíveis
 agora, nenhuma pega automaticamente (usuário prioriza):**
 
-- `B12.5`/`B12.6` (`trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`) — núcleos ARM clássicos
-  sem preset (ARMv1/v2/v2a/v3, ARMv6/ARMv6T2/ARMv6Z puros) e `Cortex-A32` (ARMv8-A AArch32-only);
-  B12.1-B12.4 já ✅ (B12.4 fechou só a fatia `ARMv6-M` pura do perfil M — `SC300`/`Cortex-M3` em
-  diante seguem pendentes de um preset `ARMv7-M` puro sem `SATURATING`/DSP, ver **Resultado** de
-  B12.4 no `INDICE.md`).
+- `B12.5` (`trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`) — núcleos ARM clássicos sem
+  preset (ARMv1/v2/v2a/v3, ARMv6/ARMv6T2/ARMv6Z puros). B12.1-B12.4 e B12.6 já ✅ (B12.4 fechou só a
+  fatia `ARMv6-M` pura do perfil M — `SC300`/`Cortex-M3` em diante seguem pendentes de um preset
+  `ARMv7-M` puro sem `SATURATING`/DSP; B12.6 investigou `Cortex-A32` e decidiu deixá-lo de fora do
+  catálogo — `ARMv8-A` exige `LDA`/`STL` load-acquire/store-release, sem decoder/executor no
+  projeto, candidato a task de decode própria fora de B12 — ver **Resultado** de cada uma no
+  `INDICE.md`).
 - Lacunas A64 pequenas remanescentes: já fechadas por B8.20 em 2026-08-28 — conferir `INDICE.md` da
   trilha B antes de supor que ainda há alguma pendente aqui.
 - `B4.0.5` (armbox fork/pipes) — **bloqueada pelo congelamento acima**, não pegar até 100% de ISA.

@@ -389,3 +389,32 @@ inteira do `arm-jitter`, JBR 25) + `install` local; G5 verde em `gbaemu`/`ndsemu
 Restam na escada B12: B12.5 (núcleos clássicos sem preset), B12.6 (`Cortex-A32`), um preset
 `ARMv7-M` puro + `ARMv7E-M`/`ARMv8-M`/`ARMv8.1-M` (destravaria o restante do perfil M catalogado
 aqui) e o épico de perfil R (nunca modelado neste projeto).
+
+## Resultado (B12.6, 2026-08-28)
+
+**Nenhuma constante nova adicionada ao catálogo** — `Cortex-A32` (`ARMv8-A` AArch32-only)
+investigado e deliberadamente deixado de fora, decisão documentada no Javadoc da classe
+`ArmProcessor`.
+
+Achado real: ao contrário da linha `Cortex-A5`..`A17` (`ARMv7-A` puro, já resolvida para
+`ARMV7A` em B12.3), a base `ARMv8-A` torna **obrigatórias** (não opcionais) as instruções de
+load-acquire/store-release — `LDA`/`LDAB`/`LDAH`/`LDAEX*` e `STL`/`STLB`/`STLH`/`STLEX*` (ARM DDI
+0487) — e nenhuma delas tem decoder/executor neste projeto (confirmado em
+`docs/isa-nao-aplicavel.tsv`, entradas `LDA`/`STL`, que já as descreviam como "não existe em
+ARMv4T..ARMv7-A"). `CRC32` (opcional em `ARMv8.0-A`, obrigatório em `ARMv8.1-A`) também está
+ausente. Mapear `Cortex-A32` para `ARMV7A` seria uma entrada de catálogo factualmente ERRADA pelo
+mesmo motivo que excluiu `SC300`/`Cortex-M3` em B12.4: um superconjunto que o núcleo real aceita e
+este preset rejeitaria como `UNDEFINED`, não uma aproximação conservadora.
+
+Como B12 é catalogação pura (zero escopo novo de decode, ver a Meta do épico acima), a decisão
+correta é deixar `Cortex-A32` pendente, não implementar `LDA`/`STL`/`CRC32` aqui. Documentado no
+Javadoc de `ArmProcessor` como candidato a task própria de decode (`ArmFeature` novo para
+load-acquire/store-release + `CRC32`, depois um preset `ARMv8-A AArch32` composto sobre `ARMV7A`) —
+regra máxima do projeto, nunca "fora de escopo para sempre".
+
+Sem mudança de comportamento observável (só Javadoc). `mvn -o test` verde (suíte inteira,
+JBR 25) + `install` local (valida os links `///` da doc nova); G5 leve (`mvn -o compile`) verde em
+`gbaemu`/`ndsemu` contra o artefato reinstalado.
+
+Restam na escada B12: B12.5 (núcleos clássicos sem preset) e uma task de decode própria (fora de
+B12) para `LDA`/`STL`/`CRC32` de `ARMv8-A`, que destravaria `Cortex-A32` numa B12.6b futura.

@@ -12,6 +12,22 @@ package dev.vitorsilverio.armjitter.arch;
 /// AArch32-only) ficam para B12.5/B12.6; perfil R fica para um épico próprio (nunca modelado
 /// neste projeto).
 ///
+/// **Escopo de B12.6** (`Cortex-A32`, `ARMv8-A` AArch32-only): investigado e deliberadamente
+/// deixado de fora do catálogo. `Cortex-A32` é um núcleo real `ARMv8-A` — ao contrário do
+/// `Cortex-A5`..`A17` (`ARMv7-A` puro, já resolvidos para {@link ArmArchitecture#ARMV7A} acima),
+/// a base `ARMv8-A` inclui `LDA`/`LDAB`/`LDAH`/`LDAEX*` (load-acquire) e
+/// `STL`/`STLB`/`STLH`/`STLEX*` (store-release) como **obrigatórias**, não opcionais (ARM DDI
+/// 0487, A32/T32 baseline v8) — nenhuma delas tem decoder/executor neste projeto hoje (ver
+/// `docs/isa-nao-aplicavel.tsv`, entradas `LDA`/`STL`). Mapear `Cortex-A32` para
+/// {@link ArmArchitecture#ARMV7A} seria uma entrada de catálogo factualmente ERRADA pelo mesmo
+/// motivo que excluiu `SC300`/`Cortex-M3` em B12.4: o núcleo real aceita essas instruções, este
+/// preset as rejeitaria como `UNDEFINED`. `CRC32` (opcional em `ARMv8.0-A`) também está ausente.
+/// Como B12 é catalogação pura — **nunca implementa decode novo** (ver o corpo do épico,
+/// `tasks/trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`) —, `Cortex-A32` fica pendente
+/// de uma task própria de decode (`ArmFeature` novo para load-acquire/store-release + `CRC32`,
+/// depois um preset `ARMv8-A AArch32` composto sobre {@link ArmArchitecture#ARMV7A}), candidata
+/// futura na trilha B (regra máxima do projeto — nunca "fora de escopo para sempre").
+///
 /// **Escopo de B12.4** (perfil M): só o `ARMv6-M` puro (`SC000`/`Cortex-M0`/`M0+`/`M1`) resolve
 /// para preset existente (`ARMV6M`) sem ressalva. `SecurCore SC300`/`Cortex-M3` (`ARMv7-M` real,
 /// **sem** a extensão DSP) ficam de fora do catálogo: o preset `ARMV7M` deste projeto (B7.4) inclui
