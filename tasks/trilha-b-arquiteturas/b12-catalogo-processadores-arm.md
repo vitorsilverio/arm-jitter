@@ -313,3 +313,43 @@ espelhando `Aarch64ProcessorTest`. `mvn -o test` verde (suíte inteira do `arm-j
 
 Próximo da escada: B12.2 (A64 `ARMv8.4-A`→`ARMv9.5-A`) e B12.4 (perfil M) podem rodar em paralelo;
 B12.5/B12.6 (núcleos sem preset, pedem decisão de arquitetura nova) ficam para depois.
+
+## Resultado (B12.2, 2026-08-28)
+
+`arch64.Aarch64Processor` estendido com 30 constantes novas cobrindo o restante do inventário A64
+(`ARMv8.4-A`→`ARMv9.5-A`, zero trabalho de arquitetura novo — todos os presets já existiam em
+`Aarch64Architecture`):
+
+- `ARMV8_4_A`: `NEOVERSE_V1`.
+- `ARMV9_0_A`: `CORTEX_A510`, `CORTEX_A710`, `CORTEX_A715`, `CORTEX_X2`, `CORTEX_X3`, `NEOVERSE_N2`,
+  `NEOVERSE_V2` — a Wikipedia lista `"ARMv9-A"` genérico (sem sub-revisão) para esses 7 núcleos;
+  mapeados para `ARMV9_0_A` por ser o preset mais conservador (aproximação documentada no Javadoc de
+  cada constante, conforme a "Armadilha de precisão" do plano mestre acima — não confirmado contra o
+  TRM real).
+- `ARMV9_2_A`: `CORTEX_A320`, `CORTEX_A520`, `CORTEX_A720`, `CORTEX_A725`, `CORTEX_X4`,
+  `CORTEX_X925`, `NEOVERSE_N3`, `NEOVERSE_V3`.
+- `ARMV9_3_A`: `C1_ULTRA`, `C1_PREMIUM`, `C1_PRO`, `C1_NANO` (branding C-Series pós-2025).
+
+**Achado real (gap de B12.1)**: revisando a tabela de origem para B12.2, 8 núcleos A64-only
+`ARMv8.2-A` da linha "Cortex-A 64-bit" (`Cortex-A65`/`A65AE`/`A76`/`A76AE`/`A77`/`A78`/`A78AE`/
+`A78C`) estavam na mesma linha da Wikipedia que `Cortex-A55`/`A75` (já cobertos por B12.1) mas não
+entraram no catálogo — oversight da sub-task anterior, não decisão consciente (B12.1 não tem seção
+"deixados de fora" citando-os, diferente de B12.3). Fechados aqui também, reaproveitando o preset
+`ARMV8_2_A` já em uso — zero risco, mesmo padrão. Documentado no Javadoc da classe como "B12.2:
+gap-fill de B12.1".
+
+Mesmo padrão de B12.1/B12.3: `(String displayName, Aarch64Architecture architecture)` no construtor,
+`architecture()`/`displayName()`/`toString()` herdados sem mudança. **Sem uso ainda em
+`Aarch64Core`** (G3) — só tabela de resolução, aditiva.
+
+Testes novos: 6 métodos de teste adicionados a `Aarch64ProcessorTest` (gap-fill ARMv8.2-A, ARMv8.4-A,
+ARMv9-A genérico→ARMV9_0_A, ARMv9.2-A, C-Series→ARMv9.3-A, displayName com hífen do C-Series) — os 3
+testes estruturais existentes (`everyEntryHasAUniqueDisplayName`, `valueOfRoundTripsForEveryConstant`,
+etc.) cobrem as 30 constantes novas automaticamente por iterar `values()`. `mvn -o test` verde (suíte
+inteira do `arm-jitter`, JBR 25) + `install` local; G5 verde em `gbaemu`/`ndsemu`/`armbox` (zero-diff
+esperado, catálogo sem consumidor interno ainda).
+
+Catálogo A64 (`Aarch64Processor`) agora tem 41 constantes cobrindo toda a fatia "Cortex-A 64-bit +
+Cortex-X + Neoverse + C-Series" do inventário da Wikipedia deste épico. Restam no catálogo A64: nada
+do inventário listado no corpo do épico (perfil R fica para épico próprio). Próximo da escada: B12.4
+(perfil M, `arch.ArmProcessor`) segue elegível; B12.5/B12.6 (núcleos sem preset) ficam para depois.
