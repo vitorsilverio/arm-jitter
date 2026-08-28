@@ -4264,12 +4264,30 @@ public final class Aarch64Decoder {
     /// {@link #SYSTEM_INSTRUCTION_FLAG_MANIP_OP1}) e depois por `op2` dentro de cada grupo de
     /// `op1`. `DAIFSet`/`DAIFClr` são as únicas com semântica própria além de flags NZCV (mascaram
     /// IRQ) — o resto vira {@link Ir64SystemInstructionOp#PSTATE_FIELD_NOP} (sem estado modelado).
+    /// B11.9: `CFINV` (`FEAT_FlagM`) e `XAFLAG`/`AXFLAG` (`FEAT_FlagM2`) gateados — achado real: B11.7
+    /// só tinha gateado `RMIF`/`SETF8`/`SETF16` (método diferente), deixando `CFINV` aceito
+    /// incondicionalmente por engano.
     private Ir64Op decodeFlagOrPstateImmediate(int word, long address, int op1, int op2) {
         if (op1 == SYSTEM_INSTRUCTION_FLAG_MANIP_OP1) {
             Ir64FlagConversionOp flagOp = switch (op2) {
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV -> Ir64FlagConversionOp.INVERT_CARRY;
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG -> Ir64FlagConversionOp.EXTERNAL_TO_ARM;
-                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG -> Ir64FlagConversionOp.ARM_TO_EXTERNAL;
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV -> {
+                    if (!architecture.has(Aarch64Feature.FLAG_MANIPULATION)) {
+                        throw unsupported(word, address);
+                    }
+                    yield Ir64FlagConversionOp.INVERT_CARRY;
+                }
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_XAFLAG -> {
+                    if (!architecture.has(Aarch64Feature.FLAG_MANIPULATION_2)) {
+                        throw unsupported(word, address);
+                    }
+                    yield Ir64FlagConversionOp.EXTERNAL_TO_ARM;
+                }
+                case SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_AXFLAG -> {
+                    if (!architecture.has(Aarch64Feature.FLAG_MANIPULATION_2)) {
+                        throw unsupported(word, address);
+                    }
+                    yield Ir64FlagConversionOp.ARM_TO_EXTERNAL;
+                }
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_UAO, SYSTEM_INSTRUCTION_PSTATE_OP2_PAN,
                         SYSTEM_INSTRUCTION_PSTATE_OP2_SPSEL -> null;
                 default -> throw unsupported(word, address);

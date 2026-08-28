@@ -30,7 +30,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **81%** — 15285 de 18754 células aplicáveis decodificam.
+> **81%** — 15281 de 18750 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -43,10 +43,10 @@ Por arquitetura:
 | v7-A | **98%** (647/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **61%** (234/383) |
-| ARMv8.0-A | **82%** (797/971) |
-| ARMv8.1-A | **82%** (812/986) |
-| ARMv8.2-A | **82%** (823/997) |
-| ARMv8.3-A | **82%** (823/997) |
+| ARMv8.0-A | **82%** (796/970) |
+| ARMv8.1-A | **82%** (811/985) |
+| ARMv8.2-A | **82%** (822/996) |
+| ARMv8.3-A | **82%** (822/996) |
 | ARMv8.4-A | **82%** (827/1001) |
 | ARMv8.5-A | **82%** (829/1003) |
 | ARMv8.6-A | **82%** (829/1003) |
@@ -74,7 +74,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | ARMv8.0-A 82% (797/971) · ARMv8.1-A 82% (812/986) · ARMv8.2-A 82% (823/997) · ARMv8.3-A 82% (823/997) · ARMv8.4-A 82% (827/1001) · ARMv8.5-A 82% (829/1003) · ARMv8.6-A 82% (829/1003) · ARMv8.7-A 82% (831/1005) · ARMv8.8-A 82% (832/1006) · ARMv8.9-A 82% (832/1006) · ARMv9.0-A 82% (829/1003) · ARMv9.1-A 82% (829/1003) · ARMv9.2-A 82% (831/1005) · ARMv9.3-A 82% (832/1006) · ARMv9.4-A 82% (832/1006) · ARMv9.5-A 82% (832/1006) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 82% (796/970) · ARMv8.1-A 82% (811/985) · ARMv8.2-A 82% (822/996) · ARMv8.3-A 82% (822/996) · ARMv8.4-A 82% (827/1001) · ARMv8.5-A 82% (829/1003) · ARMv8.6-A 82% (829/1003) · ARMv8.7-A 82% (831/1005) · ARMv8.8-A 82% (832/1006) · ARMv8.9-A 82% (832/1006) · ARMv9.0-A 82% (829/1003) · ARMv9.1-A 82% (829/1003) · ARMv9.2-A 82% (831/1005) · ARMv9.3-A 82% (832/1006) · ARMv9.4-A 82% (832/1006) · ARMv9.5-A 82% (832/1006) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1719,7 +1719,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `DSB_nXS` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ISB` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SB` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `CFINV` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CFINV` | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `XAFLAG` | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `AXFLAG` | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `MSR_i_UAO` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

@@ -11,7 +11,6 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
-import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
@@ -3607,20 +3606,22 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cfinv() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5a8);
-        assertEquals(Ir64FlagConversionOp.INVERT_CARRY, op.opcode());
+        // B11.9: gateado por FEAT_FlagM (Aarch64Feature.FLAG_MANIPULATION) — decoder default
+        // (ARMv8.0-A) não tem a feature. Decode com sucesso migrou para
+        // Aarch64FlagManipulation2DecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5a8));
     }
 
     @Test
     void xaflag() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5ac);
-        assertEquals(Ir64FlagConversionOp.EXTERNAL_TO_ARM, op.opcode());
+        // B11.9: gateado por FEAT_FlagM2 (Aarch64Feature.FLAG_MANIPULATION_2) — mesmo motivo.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5ac));
     }
 
     @Test
     void axflag() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) DECODER.decode(memory, 0x5b0);
-        assertEquals(Ir64FlagConversionOp.ARM_TO_EXTERNAL, op.opcode());
+        // B11.9: gateado por FEAT_FlagM2 (Aarch64Feature.FLAG_MANIPULATION_2) — mesmo motivo.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5b0));
     }
 
     // ── B8.3: WFET/WFIT/CLREX/SB/BRK/HLT/MSR(immediate)/TLBI per-VA (offsets 0x5b4+) ──────────
