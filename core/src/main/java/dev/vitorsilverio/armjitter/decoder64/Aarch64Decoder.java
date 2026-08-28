@@ -425,6 +425,13 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_TPIDR_EL1 = 13;
     private static final int SYSREG_CRM_TPIDR_EL1 = 0;
     private static final int SYSREG_OP2_TPIDR_EL1 = 4;
+    // B8.14: TPIDR_EL0/TPIDRRO_EL0 (`op0=3,op1=3,CRn=13,CRm=0`) — MESMO CRn de TPIDR_EL1, `op1`
+    // diferente (grupo EL0, junto de CTR_EL0/DCZID_EL0/timer) já roteia pro branch certo em
+    // decodeSystemRegisterId. Achado real (busybox aarch64/musl, crt0 sempre grava seu bloco TLS
+    // aqui antes de main()): sem isso, NENHUM binário aarch64 real com libc chega a rodar.
+    private static final int SYSREG_CRM_TPIDR_EL0 = 0;
+    private static final int SYSREG_OP2_TPIDR_EL0 = 2;
+    private static final int SYSREG_OP2_TPIDRRO_EL0 = 3;
 
     // ── B6.6.7: timer genérico, `op0=3`/`op1=3` (registradores acessíveis de EL0, "CNT*_EL0" —
     // ── diferente do resto da tabela, que é toda `op1=0`), CRn=0b1110 fixo (grupo Generic Timer).
@@ -3983,6 +3990,9 @@ public final class Aarch64Decoder {
             if (crn == SYSREG_CRN_CACHE_IDENTITY) {
                 return decodeCacheIdentityRegisterId(crm, op2);
             }
+            if (crn == SYSREG_CRN_TPIDR_EL1) {
+                return decodeThreadPointerEl0RegisterId(crm, op2);
+            }
             return decodeGenericTimerRegisterId(crn, crm, op2);
         }
         if (op1 == SYSREG_OP1_EL2) {
@@ -4089,6 +4099,21 @@ public final class Aarch64Decoder {
     /// nem `CNTKCTL_EL1`/`CNTHCTL_EL2`). Roteados para o {@link
     /// dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus} do hospedeiro (ver javadoc de
     /// {@link Aarch64SystemRegisterId}), diferente das identidades resolvidas acima.
+    /// `TPIDR_EL0`/`TPIDRRO_EL0` (B8.14) — mesmo `CRn`/`CRm` de `TPIDR_EL1`, só `op1` (grupo EL0)
+    /// e `op2` mudam.
+    private static Aarch64SystemRegisterId decodeThreadPointerEl0RegisterId(int crm, int op2) {
+        if (crm != SYSREG_CRM_TPIDR_EL0) {
+            return null;
+        }
+        if (op2 == SYSREG_OP2_TPIDR_EL0) {
+            return Aarch64SystemRegisterId.TPIDR_EL0;
+        }
+        if (op2 == SYSREG_OP2_TPIDRRO_EL0) {
+            return Aarch64SystemRegisterId.TPIDRRO_EL0;
+        }
+        return null;
+    }
+
     private static Aarch64SystemRegisterId decodeGenericTimerRegisterId(int crn, int crm, int op2) {
         if (crn != SYSREG_CRN_TIMER) {
             return null;

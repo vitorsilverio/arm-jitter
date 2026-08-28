@@ -132,6 +132,18 @@ public enum Aarch64SystemRegisterId {
     /// contrário dos registradores de identidade acima, este É mutável, mas ainda não precisa de
     /// hospedeiro plugável (é só um escaninho de 64 bits, guardado direto no `Aarch64Core`).
     TPIDR_EL1,
+    /// `TPIDR_EL0` (`op0=3,op1=3,CRn=13,CRm=0,op2=2`, B8.14) — ponteiro de dados de thread do
+    /// USERSPACE (o TLS base que `musl`/`glibc` gravam no `crt0`, antes de qualquer outra coisa —
+    /// achado real: sem isso NENHUM binário aarch64 real com libc chega a rodar). Armazenamento
+    /// puro leitura/escrita, mesma disciplina de {@link #TPIDR_EL1} (não há hospedeiro plugável).
+    /// No hardware real é `R/W` de EL0 e EL1; este emulador não modela essa distinção de
+    /// privilégio (mesma simplificação já aplicada aos registradores de debug, B10.7).
+    TPIDR_EL0,
+    /// `TPIDRRO_EL0` (`op0=3,op1=3,CRn=13,CRm=0,op2=3`, B8.14) — segundo escaninho de thread,
+    /// `R/O` de EL0 e `R/W` de EL1 no hardware real (glibc o usa para um ponteiro de TLS
+    /// alternativo em alguns ABIs). Mesma simplificação de {@link #TPIDR_EL0}: sem enforcement de
+    /// privilégio, aceita `MSR`/`MRS` dos dois lados.
+    TPIDRRO_EL0,
     /// `CTR_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=1`) — Cache Type Register, somente leitura
     /// (`PL0_R` no hardware real). Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3
     /// (`0x84448004`, mesmo alvo de {@link #MIDR_EL1}, task B6.10) — apesar de viver no mesmo

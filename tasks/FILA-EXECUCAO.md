@@ -474,6 +474,18 @@ consciente: reagir corrida-atrás-do-crash é exatamente o padrão que motivou o
 próxima sessão ataca cobertura de registradores de sistema A64 de forma sistemática via
 `docs/COBERTURA-ISA.md`, não "roda o binário de novo"). Ver **Resultado** na task.
 
+✅ **B8.14 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.14-a64-tpidr-el0.md`, usuário escolheu
+"registradores de sistema A64 primeiro" entre 3 opções de sequenciamento pros 100%) — o gap que a
+B8.13 revelou (`MSR TPIDR_EL0, x0`) era `TPIDR_EL0`/`TPIDRRO_EL0` (ponteiro de TLS de EL0) — só
+`TPIDR_EL1` (kernel) existia desde B6.6.7; sem `TPIDR_EL0` NENHUM binário aarch64 real com libc
+roda (todo `crt0` grava isso antes de `main`). 2 escaninhos novos no `Aarch64Core`, mesmo padrão
+intrínseco já usado por `TPIDR_EL1`. `Aarch64ThreadPointerEl0Test` (6, corpus real via devkitA64).
+`mvn -o test` verde + `install`; G5: gbaemu 240 ✅, ndsemu 183 ✅, armbox 47 ✅. **Achado
+colateral**: com o registrador funcionando, `busybox-aarch64` avança de novo e bate um
+`Aarch64GuestSegmentationFault` por bloco TLS nunca alocado — isso é trabalho do ARMBOX (alocar
+memória de guest pro TLS no loader), fora do congelamento de subprojetos, não pego aqui. Ver
+**Resultado** na task.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
