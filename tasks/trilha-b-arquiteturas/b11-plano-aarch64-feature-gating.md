@@ -74,7 +74,9 @@ de existir no ARM.
 | ~~**B11.6**~~ ✅ fechada 2026-08-28 — segundo gate real: `FEAT_WFxT` (`WFET`/`WFIT`, `ARMv8.7-A`) — ver `trilha-b-arquiteturas/b11.6-aarch64-feature-gate-wfxt.md` | B11.4 ✅ |
 | ~~**B11.7**~~ ✅ fechada 2026-08-28 — terceiro gate real: `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`, `ARMv8.4-A`) — ver `trilha-b-arquiteturas/b11.7-aarch64-feature-gate-flagm.md` | B11.6 ✅ |
 | ~~**B11.8**~~ ✅ fechada 2026-08-28 — quarto gate real: `FEAT_NMI` (`ALLINT`, `ARMv8.8-A`, ambas as formas de encoding) — ver `trilha-b-arquiteturas/b11.8-aarch64-feature-gate-nmi.md` | B11.6 ✅ |
-| **B11.x** | Gatear as 6 features restantes que B11.3/B11.5 catalogaram como implementadas sem gate (`LSE`/`PAN`/`SHA3`/`UAO`/`FLAG_MANIPULATION`/`DIT`/`FLAG_MANIPULATION_2`), mesmo padrão de B11.4/B11.6/B11.7/B11.8 — depois, o resto de `docs/isa-nao-aplicavel.tsv` (SVE, SME, FP16, DotProd, FHM, FCMA, I8MM, BF16, PAC, MTE, ...) nasce gateado desde o início | B11.8 (padrão estabelecido) |
+| ~~**B11.9**~~ ✅ fechada 2026-08-28 — quinto gate real: `FEAT_FlagM2` (`XAFLAG`/`AXFLAG`) + `CFINV` (`FEAT_FlagM`, gap de B11.7) — ver `trilha-b-arquiteturas/b11.9-aarch64-feature-gate-flagm2.md` | B11.6 ✅ |
+| ~~**B11.10**~~ ✅ fechada 2026-08-28 — sexto gate real: `FEAT_PAN`/`FEAT_UAO`/`FEAT_DIT` (`PAN`/`UAO`/`DIT`, formas immediate e registrador) — ver `trilha-b-arquiteturas/b11.10-aarch64-feature-gate-pan-uao-dit.md` | B11.9 ✅ |
+| **B11.x** | Gatear as 2 features restantes que B11.3/B11.5 catalogaram como implementadas sem gate (`LSE`/`SHA3`), mesmo padrão de B11.4/B11.6/B11.7/B11.8/B11.9/B11.10 — depois, o resto de `docs/isa-nao-aplicavel.tsv` (SVE, SME, FP16, DotProd, FHM, FCMA, I8MM, BF16, PAC, MTE, ...) nasce gateado desde o início | B11.10 (padrão estabelecido) |
 
 **Ordem sugerida**: B11.1 (fundação) → B11.2 (fiação no core/decoder, ainda sem gatear nada de
 verdade — zero-diff comportamental) → B11.3 (auditoria, pode rodar em paralelo com B11.2) → B11.4

@@ -3664,14 +3664,16 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrUao() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5cc);
-        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+        // B11.10: FEAT_UAO (ARMv8.2-A) agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita.
+        // Decodificação bem-sucedida com ARMV8_2_A: ver Aarch64PanUaoDitDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5cc));
     }
 
     @Test
     void msrPan() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d0);
-        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+        // B11.10: FEAT_PAN (ARMv8.1-A) agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita.
+        // Decodificação bem-sucedida com ARMV8_1_A: ver Aarch64PanUaoDitDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5d0));
     }
 
     @Test
@@ -3696,8 +3698,9 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrDit() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5e0);
-        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+        // B11.10: FEAT_DIT (ARMv8.4-A) agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita.
+        // Decodificação bem-sucedida com ARMV8_4_A: ver Aarch64PanUaoDitDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5e0));
     }
 
     @Test

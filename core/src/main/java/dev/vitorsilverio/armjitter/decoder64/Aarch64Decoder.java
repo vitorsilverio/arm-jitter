@@ -4288,8 +4288,19 @@ public final class Aarch64Decoder {
                     }
                     yield Ir64FlagConversionOp.ARM_TO_EXTERNAL;
                 }
-                case SYSTEM_INSTRUCTION_PSTATE_OP2_UAO, SYSTEM_INSTRUCTION_PSTATE_OP2_PAN,
-                        SYSTEM_INSTRUCTION_PSTATE_OP2_SPSEL -> null;
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_UAO -> {
+                    if (!architecture.has(Aarch64Feature.UAO)) {
+                        throw unsupported(word, address);
+                    }
+                    yield null;
+                }
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_PAN -> {
+                    if (!architecture.has(Aarch64Feature.PAN)) {
+                        throw unsupported(word, address);
+                    }
+                    yield null;
+                }
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_SPSEL -> null;
                 default -> throw unsupported(word, address);
             };
             return flagOp != null
@@ -4307,9 +4318,14 @@ public final class Aarch64Decoder {
         if (op1 == SYSTEM_INSTRUCTION_PSTATE_IMM_OP1) {
             int imm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
             return switch (op2) {
-                case SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS, SYSTEM_INSTRUCTION_PSTATE_OP2_DIT,
-                        SYSTEM_INSTRUCTION_PSTATE_OP2_TCO ->
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS, SYSTEM_INSTRUCTION_PSTATE_OP2_TCO ->
                         new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_DIT -> {
+                    if (!architecture.has(Aarch64Feature.DIT)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                }
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new Ir64Op.InterruptMask(true, imm);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new Ir64Op.InterruptMask(false, imm);
                 // SVCR (op2=0b011, FEAT_SME): não se aplica a nenhum preset atual deste emulador
@@ -4477,6 +4493,17 @@ public final class Aarch64Decoder {
         }
         // B11.8: ALLINT (forma registrador) é FEAT_NMI (ARMv8.8-A) — gateada.
         if (register == Aarch64SystemRegisterId.ALLINT && !architecture.has(Aarch64Feature.NMI)) {
+            throw unsupported(word, address);
+        }
+        // B11.10: PAN/UAO/DIT (forma registrador) são FEAT_PAN/FEAT_UAO/FEAT_DIT (ARMv8.1-A/
+        // ARMv8.2-A/ARMv8.4-A) — gateadas, mesmo padrão de ALLINT acima.
+        if (register == Aarch64SystemRegisterId.PAN && !architecture.has(Aarch64Feature.PAN)) {
+            throw unsupported(word, address);
+        }
+        if (register == Aarch64SystemRegisterId.UAO && !architecture.has(Aarch64Feature.UAO)) {
+            throw unsupported(word, address);
+        }
+        if (register == Aarch64SystemRegisterId.DIT && !architecture.has(Aarch64Feature.DIT)) {
             throw unsupported(word, address);
         }
         return new Ir64Op.SystemRegister(read, register, rt);

@@ -42,20 +42,26 @@ class Aarch64PstateFieldRegistersTest {
 
     @Test
     void uaoDecodes() {
+        // B11.10: FEAT_UAO (ARMv8.2-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64PanUaoDitDecoderTest.
         // d5384281: mrs x1, uao
-        assertEquals(Aarch64SystemRegisterId.UAO, decode(0xd5384281).register());
+        assertThrows(UnsupportedOperationException.class, () -> decode(0xd5384281));
     }
 
     @Test
     void panDecodes() {
+        // B11.10: FEAT_PAN (ARMv8.1-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64PanUaoDitDecoderTest.
         // d5384262: mrs x2, pan
-        assertEquals(Aarch64SystemRegisterId.PAN, decode(0xd5384262).register());
+        assertThrows(UnsupportedOperationException.class, () -> decode(0xd5384262));
     }
 
     @Test
     void ditDecodes() {
+        // B11.10: FEAT_DIT (ARMv8.4-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64PanUaoDitDecoderTest.
         // d53b42a3: mrs x3, dit
-        assertEquals(Aarch64SystemRegisterId.DIT, decode(0xd53b42a3).register());
+        assertThrows(UnsupportedOperationException.class, () -> decode(0xd53b42a3));
     }
 
     @Test
