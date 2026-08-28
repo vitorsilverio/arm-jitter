@@ -53,9 +53,9 @@ A escada `B11` (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`, tor
 por versão/feature) está com B11.1-B11.7 ✅ — ver `INDICE.md` da trilha B, linha B11, para o resumo
 de cada uma. **Candidatas elegíveis agora, nenhuma pega automaticamente (usuário prioriza):**
 
-- Gatear as **7 features restantes** que B11.3/B11.5 catalogaram como implementadas sem gate:
-  `LSE` (`CAS`/`CASP`), `PAN`, `SHA3`, `UAO`, `DIT`, `FLAG_MANIPULATION_2` (`AXFLAG`/`XAFLAG`), `NMI`
-  (`MSR ALLINT`) — mesmo padrão de B11.4/B11.6/B11.7, uma task por feature. **Atenção com `LSE`**:
+- Gatear as **6 features restantes** que B11.3/B11.5 catalogaram como implementadas sem gate:
+  `LSE` (`CAS`/`CASP`), `PAN`, `SHA3`, `UAO`, `DIT`, `FLAG_MANIPULATION_2` (`AXFLAG`/`XAFLAG`) —
+  mesmo padrão de B11.4/B11.6/B11.7/B11.8, uma task por feature. **Atenção com `LSE`**:
   `CAS`/`CASP` são atômicos reais que compiladores/libc modernos podem emitir mesmo em binários
   "ARMv8.0-A nominal" — checar se algum consumidor real (`virtual-arm-box`) os exercita antes de
   gatear (ver Resultado de B11.6 para o raciocínio completo).

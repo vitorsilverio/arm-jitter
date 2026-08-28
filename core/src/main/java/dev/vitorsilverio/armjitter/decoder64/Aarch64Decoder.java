@@ -4280,7 +4280,10 @@ public final class Aarch64Decoder {
         }
         if (op1 == SYSTEM_INSTRUCTION_ALLINT_OP1 && op2 == SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV) {
             // MSR ALLINT (op2 reaproveita o mesmo valor 0b000 de CFINV — só o op1 distingue, e já
-            // foi checado acima).
+            // foi checado acima). B11.8: FEAT_NMI (ARMv8.8-A) gateada.
+            if (!architecture.has(Aarch64Feature.NMI)) {
+                throw unsupported(word, address);
+            }
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
         }
         if (op1 == SYSTEM_INSTRUCTION_PSTATE_IMM_OP1) {
@@ -4452,6 +4455,10 @@ public final class Aarch64Decoder {
         if (register == null) {
             // Combinação op0:op1:CRn:CRm:op2 válida arquiteturalmente, mas fora do subconjunto
             // desta task (não é UNDEFINED real — ver Armadilhas da task B6.6.1).
+            throw unsupported(word, address);
+        }
+        // B11.8: ALLINT (forma registrador) é FEAT_NMI (ARMv8.8-A) — gateada.
+        if (register == Aarch64SystemRegisterId.ALLINT && !architecture.has(Aarch64Feature.NMI)) {
             throw unsupported(word, address);
         }
         return new Ir64Op.SystemRegister(read, register, rt);

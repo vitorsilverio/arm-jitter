@@ -3701,8 +3701,9 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrAllint() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5e4);
-        assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
+        // B11.8: FEAT_NMI (ARMv8.8-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64NmiDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5e4));
     }
 
     @Test

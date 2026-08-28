@@ -72,7 +72,9 @@ de existir no ARM.
 | ~~**B11.4**~~ ✅ fechada 2026-08-28 — primeiro gate real: `FEAT_RDM` (`SQRDMLAH`/`SQRDMLSH`, `ARMv8.1-A`) — ver `trilha-b-arquiteturas/b11.4-aarch64-feature-gate-rdm.md` | B11.2 ✅, B11.3 ✅ |
 | ~~**B11.5**~~ ✅ fechada 2026-08-28 — `gerar-cobertura-isa.sh`/`IsaCoverageReport`: A64 passa a ter uma coluna por versão ARM (ver `trilha-b-arquiteturas/b11.5-medidor-por-versao-a64.md`) | B11.3 ✅ |
 | ~~**B11.6**~~ ✅ fechada 2026-08-28 — segundo gate real: `FEAT_WFxT` (`WFET`/`WFIT`, `ARMv8.7-A`) — ver `trilha-b-arquiteturas/b11.6-aarch64-feature-gate-wfxt.md` | B11.4 ✅ |
-| **B11.x** | Gatear as 8 features restantes que B11.3/B11.5 catalogaram como implementadas sem gate (`LSE`/`PAN`/`SHA3`/`UAO`/`FLAG_MANIPULATION`/`DIT`/`FLAG_MANIPULATION_2`/`NMI`), mesmo padrão de B11.4/B11.6 — depois, o resto de `docs/isa-nao-aplicavel.tsv` (SVE, SME, FP16, DotProd, FHM, FCMA, I8MM, BF16, PAC, MTE, ...) nasce gateado desde o início | B11.6 (padrão estabelecido) |
+| ~~**B11.7**~~ ✅ fechada 2026-08-28 — terceiro gate real: `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`, `ARMv8.4-A`) — ver `trilha-b-arquiteturas/b11.7-aarch64-feature-gate-flagm.md` | B11.6 ✅ |
+| ~~**B11.8**~~ ✅ fechada 2026-08-28 — quarto gate real: `FEAT_NMI` (`ALLINT`, `ARMv8.8-A`, ambas as formas de encoding) — ver `trilha-b-arquiteturas/b11.8-aarch64-feature-gate-nmi.md` | B11.6 ✅ |
+| **B11.x** | Gatear as 6 features restantes que B11.3/B11.5 catalogaram como implementadas sem gate (`LSE`/`PAN`/`SHA3`/`UAO`/`FLAG_MANIPULATION`/`DIT`/`FLAG_MANIPULATION_2`), mesmo padrão de B11.4/B11.6/B11.7/B11.8 — depois, o resto de `docs/isa-nao-aplicavel.tsv` (SVE, SME, FP16, DotProd, FHM, FCMA, I8MM, BF16, PAC, MTE, ...) nasce gateado desde o início | B11.8 (padrão estabelecido) |
 
 **Ordem sugerida**: B11.1 (fundação) → B11.2 (fiação no core/decoder, ainda sem gatear nada de
 verdade — zero-diff comportamental) → B11.3 (auditoria, pode rodar em paralelo com B11.2) → B11.4

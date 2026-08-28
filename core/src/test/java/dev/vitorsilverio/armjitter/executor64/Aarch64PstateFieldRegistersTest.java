@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /// `SPSel`/`PAN`/`UAO`/`DIT`/`SSBS`/`TCO`/`ALLINT` via `MRS`/`MSR` (B8.17) — completa a varredura
 /// dos campos `PSTATE` que a forma `MSR (immediate)` (B8.3) já tratava como NOP puro (nenhum
@@ -71,9 +72,11 @@ class Aarch64PstateFieldRegistersTest {
 
     @Test
     void allintDecodes() {
+        // B11.8: FEAT_NMI (ARMv8.8-A) gateada — o DECODER default (ARMv8.0-A) agora rejeita;
+        // decodificação bem-sucedida migrou para Aarch64NmiDecoderTest.
         // d5384306: mrs x6, allint / d5184306: msr allint, x6
-        assertEquals(Aarch64SystemRegisterId.ALLINT, decode(0xd5384306).register());
-        assertEquals(Aarch64SystemRegisterId.ALLINT, decode(0xd5184306).register());
+        assertThrows(UnsupportedOperationException.class, () -> decode(0xd5384306));
+        assertThrows(UnsupportedOperationException.class, () -> decode(0xd5184306));
     }
 
     @Test
