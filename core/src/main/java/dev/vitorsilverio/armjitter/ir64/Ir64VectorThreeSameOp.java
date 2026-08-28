@@ -94,6 +94,14 @@ public enum Ir64VectorThreeSameOp {
     SQDMULH,
     /// Como {@link #SQDMULH}, com ARREDONDAMENTO antes do deslocamento — B8.8.
     SQRDMULH,
+    /// `SignedSaturate(Rd + RoundingDoublingMultiplyHigh(sext(a), sext(b)))` — `FEAT_RDM`
+    /// (`ARMv8.1-A`, B11.4). Acumula sobre o `Rd` ATUAL (mesma disciplina RMW de {@link #MLA}/
+    /// {@link #SABA}), com DUAS saturações independentes: a de {@link #SQRDMULH} embutida no
+    /// `RoundingDoublingMultiplyHigh` e a da soma final. Só `esz` `1`(H)/`2`(S), mesma restrição de
+    /// {@link #SQDMULH}.
+    SQRDMLAH,
+    /// Como {@link #SQRDMLAH}, mas SUBTRAI do `Rd` ATUAL em vez de somar.
+    SQRDMLSH,
     /// `a & b` (B8.18) — AdvSIMD "three same" LÓGICO: vive no MESMO slot `bit10=1` deste enum, mas
     /// discriminado pelo campo que para o resto da tabela é `esz` (aqui não é tamanho de elemento —
     /// lógico bit a bit não distingue lane, sempre executado a `esz=0`, ver

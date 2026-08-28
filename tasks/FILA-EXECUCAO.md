@@ -649,6 +649,27 @@ lacunas A64 pequenas (`SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice, `REV1
 `REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`), `B12.1`/`B12.3`, publicação de `1.4.0`
 (reservada para 100%). **Fila automática vazia de novo** — próxima priorização cabe ao usuário.
 
+✅ **B11.4 fechada 2026-08-28** (`trilha-b-arquiteturas/b11.4-aarch64-feature-gate-rdm.md`, task
+spec escrita e executada na mesma sessão, priorizada pelo usuário entre B11.4/lacunas A64
+pequenas/B12.1/B12.3 — escolheu B11.4) — primeiro gate real de feature A64: `SQRDMLAH`/`SQRDMLSH`
+(`FEAT_RDM`, `ARMv8.1-A`), já isolados no espaço de encoding desde B8.8/B8.19, agora decodificam de
+verdade quando `architecture.has(Aarch64Feature.RDM)` (2 pontos no `Aarch64Decoder`: forma
+vetorial/escalar não-indexada, nova, e a indexada dentro de `decodeAdvancedSimdIndexedInt`).
+Reaproveita 100% o `Ir64VectorThreeSameOp`/`Ir64Op.VectorArithmeticThreeSame`/
+`VectorArithmeticThreeSameByElement` já existentes de `SQDMULH`/`SQRDMULH` — só 2 valores de enum +
+2 casos novos no executor (acumula `Rd` sign-extendido com a MESMA `doublingMultiplyHigh` de
+`SQRDMULH`, saturando). **Confirmado que não havia bug de decode (G8) a corrigir**: os 24 encodings
+já caíam em `unsupported` antes desta task, sem colisão com `decodeAdvancedSimdCopy`/SHA/indexado —
+só faltava implementação. Corpus real via devkitA64 (`.arch armv8.1-a`); `Aarch64AdvSimdRdmDecoderTest`
+novo (21 testes, incluindo regressão de que o decoder default `ARMv8.0-A` continua rejeitando os 24
+encodings) + 6 testes de executor novos (2 de saturação no acumulador). `mvn -o test` verde +
+`install`; G5 completo nos 5 consumidores ✅ (zero-diff esperado, nenhum usa `ARMv8.1-A`; armbox sem
+a falha pré-existente reproduzida desta vez). Sem mudança em `docs/COBERTURA-ISA.md` (medidor ainda
+não distingue por versão — isso é B11.5). Ver **Resultado** na task. **Próximo da escada, não pego
+automaticamente**: `B11.5` (medidor por versão A64) ou gatear mais features de
+`docs/isa-nao-aplicavel.tsv` seguindo o mesmo padrão. **Fila automática vazia de novo** — próxima
+priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

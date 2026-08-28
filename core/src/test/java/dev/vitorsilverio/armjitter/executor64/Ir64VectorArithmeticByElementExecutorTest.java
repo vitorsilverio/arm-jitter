@@ -186,4 +186,34 @@ class Ir64VectorArithmeticByElementExecutorTest {
         assertEquals(2.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2)), "FPMulX(0, +Inf) = 2.0");
         assertEquals(0L, fp.high64(0));
     }
+
+    @Test
+    void sqrdmlahByElementAccumulatesReplicatedRmElement() {
+        // B11.4 (`FEAT_RDM`): `Rm` contribui sempre o MESMO elemento `index`, mesma disciplina das
+        // outras famílias `*ByElement` desta classe — acumula sobre `Rd` ATUAL.
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, 5); // halfword v0[0] = 5 (acumulador)
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 2, 1, 3); // halfword v2[2] = 3 (índice usado)
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSameByElement(
+                Ir64VectorThreeSameOp.SQRDMLAH, false, false, 1, 0, 1, 2, 2));
+
+        assertEquals(7, fp.element(0, 0, 1), "5 + round(2*16384*3 >> 16) = 5 + 2 = 7");
+    }
+
+    @Test
+    void sqrdmlshByElementSubtractsReplicatedRmElement() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, 5);
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 2, 1, 3);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSameByElement(
+                Ir64VectorThreeSameOp.SQRDMLSH, false, false, 1, 0, 1, 2, 2));
+
+        assertEquals(3, fp.element(0, 0, 1), "5 - round(2*16384*3 >> 16) = 5 - 2 = 3");
+    }
 }

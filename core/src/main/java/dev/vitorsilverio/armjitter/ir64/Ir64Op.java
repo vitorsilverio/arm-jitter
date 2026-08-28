@@ -1701,12 +1701,14 @@ public sealed interface Ir64Op permits
     /// `V0`-`V15` para `esz=1`/halfword, `V0`-`V31` para `esz=2`/word), replicado para toda
     /// operação — nunca `esz=3`/doubleword (sem forma alargante real nesta família).
     record VectorArithmeticThreeSameByElement(
-            /// Operação a executar — só `MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH` são válidas aqui
+            /// Operação a executar — só `MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH`/`SQRDMLAH`/`SQRDMLSH`
+            /// (`SQRDMLAH`/`SQRDMLSH` só quando `FEAT_RDM` presente, B11.4) são válidas aqui
             /// (G8: o decoder nunca produz outro valor).
             Ir64VectorThreeSameOp op,
-            /// `true` para a forma ESCALAR (`SQDMULH_si`/`SQRDMULH_si`) — processa só o elemento
-            /// `0`, mesma disciplina de {@link VectorArithmeticThreeSame#scalar}. `MUL`/`MLA`/`MLS`
-            /// nunca são escalares (sem encoding real).
+            /// `true` para a forma ESCALAR (`SQDMULH_si`/`SQRDMULH_si`/`SQRDMLAH_si`/`SQRDMLSH_si`)
+            /// — processa só o elemento `0`, mesma disciplina de
+            /// {@link VectorArithmeticThreeSame#scalar}. `MUL`/`MLA`/`MLS` nunca são escalares
+            /// (sem encoding real).
             boolean scalar,
             /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
             boolean q,

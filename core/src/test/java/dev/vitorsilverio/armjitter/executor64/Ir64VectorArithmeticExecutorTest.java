@@ -533,6 +533,66 @@ class Ir64VectorArithmeticExecutorTest {
     }
 
     @Test
+    void sqrdmlahAccumulatesRoundingDoublingMultiplyHigh() {
+        // B11.4 (`FEAT_RDM`): MESMO produto de {@link #sqrdmulhRoundsBeforeShifting} (16384*3,
+        // arredondado = 2), acumulado sobre um `Rd` inicial em vez de sobrescrever.
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, 5); // halfword v0[0] = 5 (acumulador)
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 0, 1, 3);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.SQRDMLAH, false, false, 1, 0, 1, 2));
+
+        assertEquals(7, fp.element(0, 0, 1), "5 + round(2*16384*3 >> 16) = 5 + 2 = 7");
+    }
+
+    @Test
+    void sqrdmlshSubtractsRoundingDoublingMultiplyHigh() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, 5);
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 0, 1, 3);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.SQRDMLSH, false, false, 1, 0, 1, 2));
+
+        assertEquals(3, fp.element(0, 0, 1), "5 - round(2*16384*3 >> 16) = 5 - 2 = 3");
+    }
+
+    @Test
+    void sqrdmlahSaturatesOnAccumulateAtInt16Max() {
+        // Prova que a SEGUNDA saturação (soma sobre `Rd`) dispara de verdade, não só a de
+        // `SQRDMULH` embutida no produto — `Rd` já no limite positivo de halfword.
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, 0x7FFF); // halfword v0[0] = INT16_MAX
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 0, 1, 3); // produto arredondado = 2 (ver sqrdmulhRoundsBeforeShifting)
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.SQRDMLAH, false, false, 1, 0, 1, 2));
+
+        assertEquals(0x7FFF, fp.element(0, 0, 1), "32767 + 2 satura em 32767 (INT16_MAX)");
+    }
+
+    @Test
+    void sqrdmlshSaturatesOnAccumulateAtInt16Min() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, (short) 0x8000 & 0xFFFF); // halfword v0[0] = INT16_MIN
+        fp.setElement(1, 0, 1, 16384);
+        fp.setElement(2, 0, 1, 3);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.SQRDMLSH, false, false, 1, 0, 1, 2));
+
+        assertEquals(0x8000, fp.element(0, 0, 1), "-32768 - 2 satura em -32768 (INT16_MIN)");
+    }
+
+    @Test
     void sqdmullWidensAndSaturatesAtInt32Max() {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();

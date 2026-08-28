@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
@@ -969,6 +970,13 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_OPCODE_SHIFT = 11;
     private static final int ADVSIMD_INT_OPCODE_MASK = 0b1_1111;
     private static final int ADVSIMD_INT_BIT10_SHIFT = 10;
+    /// B11.4 (`FEAT_RDM`): `SQRDMLAH`/`SQRDMLSH` vetorial/escalar não-indexado vivem no MESMO
+    /// prefixo "01110" e MESMO valor de `opcode`(bits[15:11]) que `ADD_v`/`SUB_v` (`0b10000`), mas
+    /// com `bit21=0` (`ADD_v`/`SUB_v` têm `bit21=1`) — conferido bit a bit contra `a64.decode` real
+    /// do QEMU e corpus devkitA64 (`.arch armv8.1-a`). `SQRDMLSH` usa `0b10001`. `U=1` sempre (não
+    /// há forma `U=0` real neste opcode+`bit21=0`).
+    private static final int ADVSIMD_RDM_OPCODE_SQRDMLAH = 0b1_0000;
+    private static final int ADVSIMD_RDM_OPCODE_SQRDMLSH = 0b1_0001;
     /// Tamanho fixo do escalar D-only (`esz=3`) — a forma vetorial NUNCA produz `esz=3`/`q=false`
     /// de verdade (doubleword exige `q=true` no hardware real, só existe `.2d`), então este par é
     /// reaproveitado como sentinela da forma escalar sem ambiguidade (ver javadoc de
@@ -2556,6 +2564,19 @@ public final class Aarch64Decoder {
         }
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
         if (((word >>> ADVSIMD_INT_BIT21_SHIFT) & 1) == 0) {
+            // B11.4 (`FEAT_RDM`, primeiro gate real de feature A64): `SQRDMLAH`/`SQRDMLSH`
+            // vetorial/escalar não-indexado também vivem neste espaço `bit21=0` (ver
+            // {@link #ADVSIMD_RDM_OPCODE_SQRDMLAH}) — checados ANTES do resto (EXT/permute/TBL/
+            // copy/SHA abaixo) porque, sem a feature, o encoding precisa continuar caindo no
+            // `unsupported` de sempre (G3), e `decodeAdvancedSimdCopy` já devolve `null` para esses
+            // bits mesmo com a feature ausente (sem colisão), então a ordem aqui só importa para
+            // não fazer trabalho à toa quando a feature ESTÁ presente.
+            if (architecture.has(Aarch64Feature.RDM)) {
+                Ir64Op rdmOp = decodeAdvancedSimdRoundingDoublingMultiplyAccumulate(word, scalar, q);
+                if (rdmOp != null) {
+                    return rdmOp;
+                }
+            }
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
             // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
@@ -2756,6 +2777,40 @@ public final class Aarch64Decoder {
         // narrow-unário/AES/across-lanes) — encoding reservado, não "three different" (esse já foi
         // tratado acima, antes de bit11=1 sequer ser checado); G8.
         throw unsupported(word, address);
+    }
+
+    /// `SQRDMLAH`/`SQRDMLSH` vetorial/escalar não-indexado (B11.4, `FEAT_RDM`) — entra já sabendo
+    /// que `bit21=0` e que a feature está presente (checado pelo chamador). Devolve `null` (nunca
+    /// lança) para qualquer combinação que não bata, deixando o chamador continuar tentando
+    /// EXT/permute/TBL/copy/SHA no mesmo espaço (G8: o `unsupported` final continua vindo de lá).
+    private Ir64Op decodeAdvancedSimdRoundingDoublingMultiplyAccumulate(int word, boolean scalar, boolean q) {
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        if (!u) {
+            return null; // sem forma `U=0` real neste opcode+`bit21=0` (ver constante).
+        }
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!bit10) {
+            return null;
+        }
+        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        Ir64VectorThreeSameOp op = switch (opcode) {
+            case ADVSIMD_RDM_OPCODE_SQRDMLAH -> Ir64VectorThreeSameOp.SQRDMLAH;
+            case ADVSIMD_RDM_OPCODE_SQRDMLSH -> Ir64VectorThreeSameOp.SQRDMLSH;
+            default -> null;
+        };
+        if (op == null) {
+            return null;
+        }
+        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
+        if (esz != ADVSIMD_ESZ_HALFWORD && esz != ADVSIMD_ESZ_WORD) {
+            // Só `H`/`S` são reais nesta família (mesma restrição de `SQDMULH`/`SQRDMULH`) — `B`/`D`
+            // ficam reservados aqui, não silenciosamente aceitos (G8).
+            return null;
+        }
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorArithmeticThreeSame(op, scalar, q, esz, rd, rn, rm);
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
@@ -3411,8 +3466,10 @@ public final class Aarch64Decoder {
     /// `bit10=0` (ver o desvio em {@link #decodeAdvancedSimdInteger}). Escopo ARMv8.0/Cortex-A53:
     /// `MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH` (não-alargante), `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/
     /// `SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL` (alargante) e `FMUL`/`FMLA`/`FMLS`/`FMULX`
-    /// (ponto flutuante, só simples/dupla). EXCLUI (posteriores ao Cortex-A53, candidatas a task
-    /// própria): meia-precisão (`FEAT_FP16`, `size=00`), `SQRDMLAH`/`SQRDMLSH` (`FEAT_RDM`),
+    /// (ponto flutuante, só simples/dupla). `SQRDMLAH`/`SQRDMLSH` (`FEAT_RDM`) decodificam desde
+    /// B11.4, gateadas por {@link Aarch64Architecture#has} — ver
+    /// {@link #decodeAdvancedSimdIndexedInt}. EXCLUI (posteriores ao Cortex-A53, candidatas a task
+    /// própria): meia-precisão (`FEAT_FP16`, `size=00`),
     /// `SDOT`/`UDOT`/`SUDOT`/`USDOT`/`BFDOT` (`FEAT_DotProd`/`FEAT_BF16`), `FMLAL`/`FMLSL`/
     /// `FMLAL2`/`FMLSL2`/`BFMLAL` (`FEAT_FHM`/`FEAT_BF16`), `FCMLA` (`FEAT_FCMA`).
     private Ir64Op decodeAdvancedSimdIndexedElement(int word, long address, boolean scalar) {
@@ -3488,6 +3545,20 @@ public final class Aarch64Decoder {
     private Ir64Op decodeAdvancedSimdIndexedInt(
             boolean scalar, boolean q, int esz, boolean u, int opcode, int rn, int rd, int rm, int index) {
         int key = (u ? 0b1_0000 : 0) | opcode;
+        // B11.4 (`FEAT_RDM`): `SQRDMLAH_{vi,si}`/`SQRDMLSH_{vi,si}` reaproveitam este MESMO espaço
+        // `(U,opcode)` — `key=0b1_1101`/`0b1_1111`, nenhum dos dois usado pelo `switch` de
+        // `threeSameOp`/`wideningOp` abaixo (conferido bit a bit contra `a64.decode` real do QEMU e
+        // corpus devkitA64, `.arch armv8.1-a`). Ambas têm forma escalar real (`_si`).
+        if (architecture.has(Aarch64Feature.RDM)) {
+            Ir64VectorThreeSameOp rdmOp = switch (key) {
+                case 0b1_1101 -> Ir64VectorThreeSameOp.SQRDMLAH;
+                case 0b1_1111 -> Ir64VectorThreeSameOp.SQRDMLSH;
+                default -> null;
+            };
+            if (rdmOp != null) {
+                return new Ir64Op.VectorArithmeticThreeSameByElement(rdmOp, scalar, q, esz, rd, rn, rm, index);
+            }
+        }
         Ir64VectorThreeSameOp threeSameOp = switch (key) {
             case 0b0_1000 -> Ir64VectorThreeSameOp.MUL;
             case 0b1_0000 -> Ir64VectorThreeSameOp.MLA;

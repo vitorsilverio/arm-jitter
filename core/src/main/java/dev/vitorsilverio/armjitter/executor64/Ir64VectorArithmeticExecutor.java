@@ -323,6 +323,14 @@ final class Ir64VectorArithmeticExecutor {
                 case UQRSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, true);
                 case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
                 case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
+                // B11.4 (`FEAT_RDM`): acumula/subtrai a MESMA multiplicação dobrada arredondada de
+                // `SQRDMULH` sobre o `Rd` ATUAL, sign-extendido (mesma disciplina de {@link #SABA}
+                // acima — NÃO o padrão sem sign-extend de `SQDMLAL`/`SQDMLSL`, que é de outro
+                // executor/família).
+                case SQRDMLAH -> signedSaturatingAdd(signExtend(fp.element(op.rd(), i, esz), esz),
+                        doublingMultiplyHigh(sa, sb, esz, true), esz);
+                case SQRDMLSH -> signedSaturatingSub(signExtend(fp.element(op.rd(), i, esz), esz),
+                        doublingMultiplyHigh(sa, sb, esz, true), esz);
                 // B8.18: lógico — sempre `esz=0` (ver {@link Ir64Op.VectorArithmeticThreeSame}),
                 // `BSL`/`BIT`/`BIF` leem o `Rd` ATUAL como máscara de controle (RMW, mesmo padrão
                 // de {@link Ir64VectorThreeSameOp#SABA}/{@link Ir64VectorThreeSameOp#MLA} acima).
@@ -440,6 +448,10 @@ final class Ir64VectorArithmeticExecutor {
                 case MLS -> fp.element(op.rd(), i, esz) - a * b;
                 case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
                 case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
+                case SQRDMLAH -> signedSaturatingAdd(signExtend(fp.element(op.rd(), i, esz), esz),
+                        doublingMultiplyHigh(sa, sb, esz, true), esz);
+                case SQRDMLSH -> signedSaturatingSub(signExtend(fp.element(op.rd(), i, esz), esz),
+                        doublingMultiplyHigh(sa, sb, esz, true), esz);
                 default -> throw new IllegalStateException(
                         "Ir64VectorThreeSameOp não suportado em by-element: " + op.op());
             };
