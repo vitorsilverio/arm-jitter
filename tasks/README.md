@@ -78,11 +78,20 @@ do commit. Se o push falhar (rejeitado por divergência), resolver na hora — n
 
 Um repositório sem `origin` é um problema a reportar ao usuário, não a ignorar.
 
-## Marcos de cobertura de ISA → release no Maven Central (regra nova, 2026-08-21)
+## Marcos de cobertura de ISA → release no Maven Central (regra nova, 2026-08-21; **suspensa em
+## 2026-08-27, ver abaixo — NUNCA reabrir sem o usuário**)
+
+🔒 **`1.4.0` fica RESERVADA para quando `docs/COBERTURA-ISA.md` mostrar 100% de cobertura de TODA a
+arquitetura ARM alvo** (decisão do usuário, 2026-08-27) — a conta está perto do limite MENSAL de
+releases do Maven Central (já mencionado na publicação da `1.3.0`), e cada publicação consome esse
+orçamento crítico. **Os dois gatilhos abaixo (+5pp global / +10pp arquitetura) ficam SUSPENSOS**:
+não publicar nenhuma versão nova só por tê-los cruzado — B8.19 já cruzou o gatilho de arquitetura
+(A64 +12pp) e não foi publicada, decisão agora formalizada aqui. Continuar medindo e registrando o
+delta em cada task (é informação útil), mas a AÇÃO de publicar fica bloqueada até 100%.
 
 A frente de cobertura de ISA (`trilha-b-arquiteturas/b7-plano-cobertura-isa.md`) mede progresso em
-`docs/COBERTURA-ISA.md`, seção "Progresso global". **Publicar uma versão nova do `arm-jitter` no
-Maven Central sempre que**, desde o último release:
+`docs/COBERTURA-ISA.md`, seção "Progresso global". Gatilhos históricos (suspensos, ver acima) —
+**publicar uma versão nova do `arm-jitter` no Maven Central sempre que**, desde o último release:
 
 - o **global** subir **≥ 5 pontos percentuais**, OU
 - qualquer **arquitetura** subir **≥ 10 pontos percentuais**.
