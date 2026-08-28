@@ -30,19 +30,25 @@ public final class Aarch64Architecture {
     /// implementadas (ver `docs/isa-nao-aplicavel.tsv`).
     public static final Aarch64Architecture ARMV8_0_A = of("ARMv8.0-A");
 
-    /// ARMv8.1-A: acrescenta {@link Aarch64Feature#RDM}.
+    /// ARMv8.1-A: acrescenta {@link Aarch64Feature#RDM}, `FEAT_LSE` (`CAS`/`CASP`) e `FEAT_PAN`
+    /// (B11.5, auditoria de B11.3: os dois últimos já eram implementados sem gate desde B8.1/B8.3).
     public static final Aarch64Architecture ARMV8_1_A = extending(ARMV8_0_A, "ARMv8.1-A",
-            Aarch64Feature.RDM);
+            Aarch64Feature.RDM,
+            Aarch64Feature.LSE,
+            Aarch64Feature.PAN);
 
-    /// ARMv8.2-A: acrescenta meia-precisão, dot-product, FHM e as 3 famílias de criptografia
-    /// adicionadas nesta versão (SHA-512/SM3/SM4).
+    /// ARMv8.2-A: acrescenta meia-precisão, dot-product, FHM, as 4 famílias de criptografia
+    /// adicionadas nesta versão (SHA-512/SM3/SM4/SHA3) e `FEAT_UAO` (B11.5: as 4 últimas já eram
+    /// implementadas sem gate desde B8.2/B8.3/B8.11b).
     public static final Aarch64Architecture ARMV8_2_A = extending(ARMV8_1_A, "ARMv8.2-A",
             Aarch64Feature.FP16,
             Aarch64Feature.DOT_PRODUCT,
             Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG,
             Aarch64Feature.SHA512,
             Aarch64Feature.SM3,
-            Aarch64Feature.SM4);
+            Aarch64Feature.SM4,
+            Aarch64Feature.SHA3,
+            Aarch64Feature.UAO);
 
     /// ARMv8.3-A: acrescenta conversão com semântica Javascript, aritmética de número complexo e
     /// autenticação de ponteiro real.
@@ -51,29 +57,34 @@ public final class Aarch64Architecture {
             Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC,
             Aarch64Feature.POINTER_AUTHENTICATION);
 
-    /// ARMv8.4-A: nenhuma feature de `Aarch64Feature` mapeada a esta versão até agora (auditoria
-    /// completa fica para B11.3) — existe como degrau na escada para que `ARMV9_0_A` tenha um
-    /// nome de preset a apontar sem pular versões.
-    public static final Aarch64Architecture ARMV8_4_A = extending(ARMV8_3_A, "ARMv8.4-A");
+    /// ARMv8.4-A: acrescenta `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`) e `FEAT_DIT` (B11.5: os dois
+    /// já eram implementados sem gate desde B8.2/B8.3).
+    public static final Aarch64Architecture ARMV8_4_A = extending(ARMV8_3_A, "ARMv8.4-A",
+            Aarch64Feature.FLAG_MANIPULATION,
+            Aarch64Feature.DIT);
 
-    /// ARMv8.5-A: acrescenta arredondamento dirigido para inteiro de 32/64 bits e a Memory
-    /// Tagging Extension.
+    /// ARMv8.5-A: acrescenta arredondamento dirigido para inteiro de 32/64 bits, a Memory Tagging
+    /// Extension e `FEAT_FlagM2` (`AXFLAG`/`XAFLAG`, B11.5: já implementada sem gate desde B8.2).
     public static final Aarch64Architecture ARMV8_5_A = extending(ARMV8_4_A, "ARMv8.5-A",
             Aarch64Feature.DIRECTED_ROUNDING_TO_INTEGRAL,
-            Aarch64Feature.MEMORY_TAGGING);
+            Aarch64Feature.MEMORY_TAGGING,
+            Aarch64Feature.FLAG_MANIPULATION_2);
 
     /// ARMv8.6-A: acrescenta `bfloat16` e multiplicação de matriz inteira de 8 bits.
     public static final Aarch64Architecture ARMV8_6_A = extending(ARMV8_5_A, "ARMv8.6-A",
             Aarch64Feature.BFLOAT16,
             Aarch64Feature.INT8_MATRIX_MULTIPLY);
 
-    /// ARMv8.7-A: nenhuma feature de `Aarch64Feature` mapeada a esta versão até agora (mesma nota
-    /// de `ARMV8_4_A`).
-    public static final Aarch64Architecture ARMV8_7_A = extending(ARMV8_6_A, "ARMv8.7-A");
+    /// ARMv8.7-A: acrescenta `FEAT_WFxT` (`WFET`/`WFIT`, B11.5: já implementada sem gate desde
+    /// B8.3).
+    public static final Aarch64Architecture ARMV8_7_A = extending(ARMV8_6_A, "ARMv8.7-A",
+            Aarch64Feature.WFXT);
 
-    /// ARMv8.8-A: acrescenta as operações de memória aceleradas (`CPYE`/`CPYM`/`CPYP`).
+    /// ARMv8.8-A: acrescenta as operações de memória aceleradas (`CPYE`/`CPYM`/`CPYP`) e
+    /// `FEAT_NMI` (`MSR (immediate) ALLINT`, B11.5: já implementada sem gate desde B8.3).
     public static final Aarch64Architecture ARMV8_8_A = extending(ARMV8_7_A, "ARMv8.8-A",
-            Aarch64Feature.MEMORY_COPY_SET);
+            Aarch64Feature.MEMORY_COPY_SET,
+            Aarch64Feature.NMI);
 
     /// ARMv8.9-A: acrescenta `FEAT_CSSC` (`CTZ`/`SMAX`/`SMIN`/`UMAX`/`UMIN` escalares GPR).
     public static final Aarch64Architecture ARMV8_9_A = extending(ARMV8_8_A, "ARMv8.9-A",

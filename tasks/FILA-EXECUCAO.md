@@ -670,6 +670,30 @@ automaticamente**: `B11.5` (medidor por versão A64) ou gatear mais features de
 `docs/isa-nao-aplicavel.tsv` seguindo o mesmo padrão. **Fila automática vazia de novo** — próxima
 priorização cabe ao usuário.
 
+✅ **B11.5 fechada 2026-08-28** (`trilha-b-arquiteturas/b11.5-medidor-por-versao-a64.md`, task spec
+escrita e executada na mesma sessão, priorizada pelo usuário entre B11.5/lacunas A64 pequenas/B12.1/
+gatear mais features — escolheu B11.5) — `IsaCoverageReport`/`gerar-cobertura-isa.sh`: o grupo
+`a64.decode` passa a ter 16 colunas (`ARMv8.0-A`...`ARMv9.5-A`, presets de `Aarch64Architecture`),
+mesma UX de `v4T`/`v5TE`/.../`v7-M` do 32-bit. 9 features novas em `Aarch64Feature`
+(`LSE`/`PAN`/`SHA3`/`UAO`/`FLAG_MANIPULATION`/`DIT`/`FLAG_MANIPULATION_2`/`WFXT`/`NMI`) para os
+mnemônicos que B11.3 achou implementados SEM gate, ligadas nos presets `ARMV8_1_A`-`ARMV8_8_A` (zero
+gate real no decoder, só `FEAT_RDM`/B11.4 é consultado hoje — a versão aqui é curadoria própria do
+medidor, `AARCH64_VERSION_REQUIREMENTS`, mesmo espírito de `docs/isa-nao-aplicavel.tsv`). 8 linhas
+`SQRDMLAH_v`/`SQRDMLSH_v`/etc removidas do TSV (a curadoria nova já sabe que são `ARMv8.1-A`, e uma
+exclusão `A64` legada agora casa com TODA coluna de versão — mantê-las esconderia que já são `✅`
+desde `ARMv8.1-A`). `mvn -o test` verde (core+truffle) + `install`; G5 completo nos 5 consumidores
+✅ (zero-diff esperado). `docs/COBERTURA-ISA.md`: A64 vira 16 colunas (`ARMv8.0-A` 80%→`ARMv9.5-A`
+81%); global 76%→80% — **efeito esperado de denominador** (baseline A64 agora contado em 16 colunas
+em vez de 1, mesmo padrão do 32-bit contando cada arquitetura separadamente), não progresso real de
+implementação, documentado no Achado 3 da task. Sem gatilho de release (regra suspensa até 100%).
+**Achado**: `MSR (register)`/`MRS` não dão para versionar (mnemônico único no `a64.decode` cobrindo
+TODOS os registradores de sistema, sem granularidade por `sysreg`) — ficam baseline. Ver
+**Resultado** na task. **Candidatas restantes, não pegas automaticamente**: gatear as 9 features
+novas de verdade no decoder (mesmo padrão de B11.4/RDM, uma por vez), lacunas A64 pequenas
+(`SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice, `REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/
+`URECPE_v`/`URSQRTE_v`), `B12.1`/`B12.3`, publicação de `1.4.0` (reservada para 100%). **Fila
+automática vazia de novo** — próxima priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

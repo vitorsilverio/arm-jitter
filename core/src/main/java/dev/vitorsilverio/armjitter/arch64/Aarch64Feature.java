@@ -15,6 +15,13 @@ public enum Aarch64Feature {
     /// indexada). ARMv8.1-A. Já isolado no decoder desde B8.8/B8.19 (excluído via
     /// `docs/isa-nao-aplicavel.tsv`), candidato natural à prova de conceito de B11.4.
     RDM,
+    /// `FEAT_LSE` — "Large System Extensions" (`CAS`/`CASP`, compare-and-swap atômico). ARMv8.1-A.
+    /// **Achado de B11.3**: já implementado desde B8.1, sem gate — `Aarch64Architecture#ARMV8_0_A`
+    /// nunca teve isso corrigido até B11.5 conectar esta feature na cobertura por versão.
+    LSE,
+    /// `FEAT_PAN` — "Privileged Access Never" (`MSR (immediate) PAN`, forma registrador em
+    /// `MSR_reg`). ARMv8.1-A. Mesmo achado de {@link #LSE}: já implementado sem gate desde B8.3.
+    PAN,
     /// `FEAT_FP16` — aritmética de ponto flutuante em meia-precisão (`_hp`/`_h`) nos caminhos
     /// escalar e vetorial AdvSIMD. ARMv8.2-A.
     FP16,
@@ -30,6 +37,12 @@ public enum Aarch64Feature {
     SM3,
     /// `FEAT_SM4` — `SM4E`/`SM4EKEY`. ARMv8.2-A.
     SM4,
+    /// `FEAT_SHA3` — `EOR3`/`RAX1`/`XAR`/`BCAX`. ARMv8.2-A. **Achado de B11.3**: já implementado
+    /// desde B8.11b, sem gate (mesmo padrão de {@link #LSE}).
+    SHA3,
+    /// `FEAT_UAO` — "Unprivileged Access Override" (`MSR (immediate) UAO`, forma registrador em
+    /// `MSR_reg`). ARMv8.2-A. Mesmo achado de {@link #LSE}: já implementado sem gate desde B8.3.
+    UAO,
     /// `FEAT_JSCVT` — `FJCVTZS` (conversão FP→inteiro com semântica de `ToInt32` do Javascript).
     /// ARMv8.3-A.
     JAVASCRIPT_CONVERT,
@@ -42,21 +55,38 @@ public enum Aarch64Feature {
     /// hardware real quando `FEAT_PAuth` está ausente) — só as formas com efeito real de
     /// autenticação exigem esta feature. ARMv8.3-A.
     POINTER_AUTHENTICATION,
+    /// `FEAT_FlagM` — `RMIF`/`SETF8`/`SETF16` (manipulação de flags NZCV). ARMv8.4-A. **Achado de
+    /// B11.3**: já implementado sem gate desde B8.2 (mesmo padrão de {@link #LSE}).
+    FLAG_MANIPULATION,
+    /// `FEAT_DIT` — "Data Independent Timing" (`MSR (immediate) DIT`, forma registrador em
+    /// `MSR_reg`). ARMv8.4-A. Mesmo achado de {@link #LSE}: já implementado sem gate desde B8.3.
+    DIT,
     /// `FEAT_FRINTTS` — `FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X` (arredondamento dirigido para
     /// 32/64 bits, escalar e vetorial). ARMv8.5-A.
     DIRECTED_ROUNDING_TO_INTEGRAL,
     /// `FEAT_MTE2` — Memory Tagging Extension (`STG`/`LDG`/`IRG`/`SUBP`/`STGP`/... e o par de bits
     /// de tag por granule de memória que elas manipulam). ARMv8.5-A.
     MEMORY_TAGGING,
+    /// `FEAT_FlagM2` — `AXFLAG`/`XAFLAG` (conversão entre flags NZCV reais e flags "externas" de
+    /// ponto flutuante). ARMv8.5-A. **Achado de B11.3**: já implementado sem gate desde B8.2
+    /// (mesmo padrão de {@link #LSE}).
+    FLAG_MANIPULATION_2,
     /// `FEAT_BF16` — tipo `bfloat16` (`BFCVT`/`BFDOT`/`BFMMLA`/`BFMLAL`, formas vetorial e
     /// indexada). ARMv8.6-A.
     BFLOAT16,
     /// `FEAT_I8MM` — multiplicação de matriz inteira de 8 bits (`SMMLA`/`UMMLA`/`USMMLA`/`USDOT`/
     /// `SUDOT`, formas vetorial e indexada). ARMv8.6-A.
     INT8_MATRIX_MULTIPLY,
+    /// `FEAT_WFxT` — `WFET`/`WFIT` (wait-for-event/interrupt com timeout). ARMv8.7-A. **Achado de
+    /// B11.3**: já implementado sem gate desde B8.3 (mesmo padrão de {@link #LSE}).
+    WFXT,
     /// `FEAT_MOPS` — operações de memória aceleradas (`CPYE`/`CPYM`/`CPYP`, memcpy; `SETP`/`SETM`/
     /// `SETE`, memset, já ✅ via caminho genérico — só o trio `CPY*` falta). ARMv8.8-A.
     MEMORY_COPY_SET,
+    /// `FEAT_NMI` — "Non-Maskable Interrupt" (`MSR (immediate) ALLINT`, forma registrador em
+    /// `MSR_reg`). ARMv8.8-A. **Achado de B11.3**: já implementado sem gate desde B8.3 (mesmo
+    /// padrão de {@link #LSE}).
+    NMI,
     /// `FEAT_CSSC` — "Common Short Sequence Compression": `CTZ` (1 source), `SMAX`/`SMIN`/`UMAX`/
     /// `UMIN` (2 source), formas escalares GPR. ARMv8.9-A.
     COMMON_SHORT_SEQUENCE_COMPRESSION,

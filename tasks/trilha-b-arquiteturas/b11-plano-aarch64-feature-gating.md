@@ -70,7 +70,7 @@ de existir no ARM.
 | ~~**B11.2**~~ ✅ fechada 2026-08-28 — overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` + threading da arquitetura para `Aarch64Decoder`/`Ir64BlockExecutor`/`StandardIr64BlockLifter` | B11.1 ✅ |
 | ~~**B11.3**~~ ✅ fechada 2026-08-28 — auditoria de versão dos mnemônicos A64 já ✅ (ver `trilha-b-arquiteturas/b11.3-auditoria-versao-a64.md`) — achado principal: 10 falsos positivos por bug de decode real (`CPYFP`/`CPYFM`/`CPYFE`/`SETP`/`SETM`/`SETE`/`LDCLRP`/`LDSETP`/`SWPP`/`LDAPR_i`/`STLR_i` misdecodificados como `LDR (literal)`; `LDRA` como `STR`/`STUR`), corrigido (G8) + ~15 mnemônicos não-baseline catalogados (`FEAT_LSE`/`FlagM`/`FlagM2`/`WFxT`/`PAN`/`UAO`/`DIT`/`SSBS`/`NMI`/`SHA512`/`SM3`/`SM4`/`SHA3`) | B11.1 ✅ |
 | ~~**B11.4**~~ ✅ fechada 2026-08-28 — primeiro gate real: `FEAT_RDM` (`SQRDMLAH`/`SQRDMLSH`, `ARMv8.1-A`) — ver `trilha-b-arquiteturas/b11.4-aarch64-feature-gate-rdm.md` | B11.2 ✅, B11.3 ✅ |
-| **B11.5** | `gerar-cobertura-isa.sh`/`IsaCoverageReport`: A64 passa a ter uma linha por versão ARM (mesma UX de v4T/v5TE/... hoje), usando o mapeamento de B11.3 | B11.3 |
+| ~~**B11.5**~~ ✅ fechada 2026-08-28 — `gerar-cobertura-isa.sh`/`IsaCoverageReport`: A64 passa a ter uma coluna por versão ARM (ver `trilha-b-arquiteturas/b11.5-medidor-por-versao-a64.md`) | B11.3 ✅ |
 | **B11.x** | Implementar de fato o restante de `docs/isa-nao-aplicavel.tsv` (SVE, SME, FP16, DotProd, FHM, FCMA, I8MM, BF16, PAC, MTE, ...) — cada extensão vira uma ou mais tasks próprias, AGORA gateadas por `Aarch64Feature` em vez de simplesmente "implementado incondicionalmente" | B11.4 (padrão estabelecido) |
 
 **Ordem sugerida**: B11.1 (fundação) → B11.2 (fiação no core/decoder, ainda sem gatear nada de

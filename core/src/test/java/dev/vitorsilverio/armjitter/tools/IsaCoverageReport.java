@@ -2,6 +2,8 @@ package dev.vitorsilverio.armjitter.tools;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
@@ -151,6 +153,89 @@ public final class IsaCoverageReport {
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
     }
 
+    /// Arquiteturas A64 sondadas, uma coluna por versão ARM (B11.5) — mesma UX de
+    /// {@link #ARM_ARCHITECTURES} para o lado de 32 bits, usando os presets de
+    /// {@link Aarch64Architecture} (B11.1) e o mapeamento mnemônico→feature de
+    /// {@link #AARCH64_VERSION_REQUIREMENTS} (curadoria de B11.3).
+    private static final Map<String, Aarch64Architecture> AARCH64_ARCHITECTURES = new LinkedHashMap<>();
+
+    static {
+        AARCH64_ARCHITECTURES.put("ARMv8.0-A", Aarch64Architecture.ARMV8_0_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.1-A", Aarch64Architecture.ARMV8_1_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.2-A", Aarch64Architecture.ARMV8_2_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.3-A", Aarch64Architecture.ARMV8_3_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.4-A", Aarch64Architecture.ARMV8_4_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.5-A", Aarch64Architecture.ARMV8_5_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.6-A", Aarch64Architecture.ARMV8_6_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.7-A", Aarch64Architecture.ARMV8_7_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.8-A", Aarch64Architecture.ARMV8_8_A);
+        AARCH64_ARCHITECTURES.put("ARMv8.9-A", Aarch64Architecture.ARMV8_9_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.0-A", Aarch64Architecture.ARMV9_0_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.1-A", Aarch64Architecture.ARMV9_1_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.2-A", Aarch64Architecture.ARMV9_2_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.3-A", Aarch64Architecture.ARMV9_3_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.4-A", Aarch64Architecture.ARMV9_4_A);
+        AARCH64_ARCHITECTURES.put("ARMv9.5-A", Aarch64Architecture.ARMV9_5_A);
+    }
+
+    /// Mnemônico → feature mínima real que o exige (curadoria de B11.3, `## Achados`, seção 4).
+    /// Um mnemônico ausente daqui é ARMv8.0-A baseline — mesma regra de "só exceções entram na
+    /// lista" que `docs/isa-nao-aplicavel.tsv` já usa. **Isto não gateia o decoder** (B11.5 não
+    /// inclui gatear — só `FEAT_RDM`, via B11.4, é consultado de verdade pelo `Aarch64Decoder`):
+    /// serve só para decidir em qual COLUNA de versão esta instrução é aplicável/contada, igual à
+    /// curadoria de `docs/isa-nao-aplicavel.tsv` para as arquiteturas de 32 bits.
+    private static final Map<String, Aarch64Feature> AARCH64_VERSION_REQUIREMENTS = new LinkedHashMap<>();
+
+    static {
+        AARCH64_VERSION_REQUIREMENTS.put("CAS", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("CASP", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("MSR_i_PAN", Aarch64Feature.PAN);
+        AARCH64_VERSION_REQUIREMENTS.put("MSR_i_UAO", Aarch64Feature.UAO);
+        AARCH64_VERSION_REQUIREMENTS.put("MSR_i_DIT", Aarch64Feature.DIT);
+        AARCH64_VERSION_REQUIREMENTS.put("MSR_i_ALLINT", Aarch64Feature.NMI);
+        AARCH64_VERSION_REQUIREMENTS.put("RMIF", Aarch64Feature.FLAG_MANIPULATION);
+        AARCH64_VERSION_REQUIREMENTS.put("SETF8", Aarch64Feature.FLAG_MANIPULATION);
+        AARCH64_VERSION_REQUIREMENTS.put("SETF16", Aarch64Feature.FLAG_MANIPULATION);
+        AARCH64_VERSION_REQUIREMENTS.put("AXFLAG", Aarch64Feature.FLAG_MANIPULATION_2);
+        AARCH64_VERSION_REQUIREMENTS.put("XAFLAG", Aarch64Feature.FLAG_MANIPULATION_2);
+        AARCH64_VERSION_REQUIREMENTS.put("WFET", Aarch64Feature.WFXT);
+        AARCH64_VERSION_REQUIREMENTS.put("WFIT", Aarch64Feature.WFXT);
+        AARCH64_VERSION_REQUIREMENTS.put("SHA512H", Aarch64Feature.SHA512);
+        AARCH64_VERSION_REQUIREMENTS.put("SHA512H2", Aarch64Feature.SHA512);
+        AARCH64_VERSION_REQUIREMENTS.put("SHA512SU0", Aarch64Feature.SHA512);
+        AARCH64_VERSION_REQUIREMENTS.put("SHA512SU1", Aarch64Feature.SHA512);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3SS1", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3TT1A", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3TT1B", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3TT2A", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3TT2B", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3PARTW1", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM3PARTW2", Aarch64Feature.SM3);
+        AARCH64_VERSION_REQUIREMENTS.put("SM4E", Aarch64Feature.SM4);
+        AARCH64_VERSION_REQUIREMENTS.put("SM4EKEY", Aarch64Feature.SM4);
+        AARCH64_VERSION_REQUIREMENTS.put("EOR3", Aarch64Feature.SHA3);
+        AARCH64_VERSION_REQUIREMENTS.put("RAX1", Aarch64Feature.SHA3);
+        AARCH64_VERSION_REQUIREMENTS.put("XAR", Aarch64Feature.SHA3);
+        AARCH64_VERSION_REQUIREMENTS.put("BCAX", Aarch64Feature.SHA3);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLAH_v", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_v", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLAH_s", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_s", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLAH_vi", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_vi", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLAH_si", Aarch64Feature.RDM);
+        AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_si", Aarch64Feature.RDM);
+    }
+
+    /// `docs/COBERTURA-ISA.md` pré-B11.5 tratava A64 como uma única coluna chamada `A64` — vários
+    /// `docs/isa-nao-aplicavel.tsv` legados usam essa string. Para não reescrever essas linhas,
+    /// uma exclusão `A64` casa com QUALQUER coluna de versão A64 nova (uma extensão sem entrada em
+    /// {@link #AARCH64_VERSION_REQUIREMENTS} — ainda não mapeada por versão real — fica de fora de
+    /// toda a tabela por versão, igual ficava fora da coluna monolítica antiga).
+    private static boolean isAarch64VersionColumn(String column) {
+        return AARCH64_ARCHITECTURES.containsKey(column);
+    }
+
     /// Campos que são NÚMERO DE REGISTRADOR: preenchidos com valores baixos e distintos para não
     /// cair em `r15`/`UNPREDICTABLE`, que muitos encodings rejeitam legitimamente.
     private static final List<String> REGISTER_FIELDS = List.of(
@@ -192,7 +277,9 @@ public final class IsaCoverageReport {
                     : pattern.startsWith("*")
                         ? instruction.endsWith(pattern.substring(1))
                         : instruction.equals(pattern);
-            return nameMatches && (architectures.contains("*") || architectures.contains(column));
+            boolean columnMatches = architectures.contains("*") || architectures.contains(column)
+                    || (architectures.contains("A64") && isAarch64VersionColumn(column));
+            return nameMatches && columnMatches;
         }
     }
 
@@ -293,7 +380,11 @@ public final class IsaCoverageReport {
 
                 **Colunas** — as arquiteturas que o `ArmArchitecture` oferece como preset: `v4T` (GBA),
                 `v5TE` (NDS), `v6K`/`MPCore` (3DS), `v7-A` (armbox/virtual-arm-box), `v6-M`/`v7-M`
-                (microcontrolador). `A64` é um decoder separado, sem presets.
+                (microcontrolador). O grupo `a64.decode` (B11.5) tem uma coluna por versão real
+                (`ARMv8.0-A`...`ARMv9.5-A`, presets de `Aarch64Architecture`, B11.1); um mnemônico só
+                é aplicável a partir da versão que a introduz (curadoria de B11.3, não o decoder —
+                só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode`/`sme.decode`
+                continuam uma coluna monolítica `A64` (nada decodifica ainda).
 
                 <!--CORPO-->
                 """);
@@ -302,7 +393,12 @@ public final class IsaCoverageReport {
     private static String appendGroup(StringBuilder report, Group group,
                                        List<DecodeTreeSpec.Instruction> instructions) {
         boolean aarch64 = group.probe() == Probe.A64;
-        List<String> columns = aarch64 ? List.of("A64") : List.copyOf(ARM_ARCHITECTURES.keySet());
+        // B11.5: só `a64.decode` (o único grupo A64 com `applicability() != NOT_IN_ANY_PRESET`,
+        // ver GROUPS) ganha colunas por versão — `sve.decode`/`sme.decode` continuam "não se
+        // aplica a nenhum preset" (nada decodifica hoje, versionar não traria informação nova).
+        boolean aarch64Versioned = aarch64 && group.applicability() != NOT_IN_ANY_PRESET;
+        List<String> columns = aarch64Versioned ? List.copyOf(AARCH64_ARCHITECTURES.keySet())
+                : aarch64 ? List.of("A64") : List.copyOf(ARM_ARCHITECTURES.keySet());
 
         Map<String, Integer> supportedPerColumn = new LinkedHashMap<>();
         Map<String, Integer> applicablePerColumn = new LinkedHashMap<>();
@@ -316,8 +412,11 @@ public final class IsaCoverageReport {
             rows.append("| `").append(instruction.name()).append("` |");
             for (String column : columns) {
                 ArmArchitecture architecture = aarch64 ? null : ARM_ARCHITECTURES.get(column);
+                Aarch64Architecture aarch64Architecture = aarch64Versioned ? AARCH64_ARCHITECTURES.get(column) : null;
                 boolean applicable = aarch64
-                        ? group.applicability() != NOT_IN_ANY_PRESET
+                        ? (aarch64Versioned
+                                ? isApplicableToAarch64Version(instruction.name(), aarch64Architecture)
+                                : group.applicability() != NOT_IN_ANY_PRESET)
                         : group.applicability().appliesTo(architecture);
                 if (!applicable || isExcluded(instruction.name(), column)) {
                     rows.append(" · |");
@@ -327,7 +426,7 @@ public final class IsaCoverageReport {
                 globalPerArchitecture.computeIfAbsent(column, unused -> new int[2])[1]++;
                 totalApplicable++;
                 Status status = aarch64
-                        ? probeAarch64(instruction)
+                        ? probeAarch64(instruction, aarch64Architecture)
                         : probeArm(instruction, architecture, group);
                 if (status == Status.SUPPORTED) {
                     supportedPerColumn.merge(column, 1, Integer::sum);
@@ -446,13 +545,17 @@ public final class IsaCoverageReport {
         }
     }
 
-    private static Status probeAarch64(DecodeTreeSpec.Instruction instruction) {
+    /// `architecture` é `null` para os grupos A64 não versionados ainda (`sve.decode`/
+    /// `sme.decode`, ver {@link #appendGroup}) — nesse caso usa o decoder default (B11.2:
+    /// equivalente a `ARMV8_0_A`, mesmo comportamento de antes de B11.5).
+    private static Status probeAarch64(DecodeTreeSpec.Instruction instruction, Aarch64Architecture architecture) {
+        Aarch64Decoder decoder = architecture == null ? new Aarch64Decoder() : new Aarch64Decoder(architecture);
         for (int[] strategy : FILL_STRATEGIES) {
             int word = encode(instruction, strategy);
             try {
                 TestAddressSpace raw = new TestAddressSpace(8);
                 raw.put32(0, word);
-                if (new Aarch64Decoder().decode(AddressSpace64.wrapping(raw), 0) != null) {
+                if (decoder.decode(AddressSpace64.wrapping(raw), 0) != null) {
                     return Status.SUPPORTED;
                 }
             } catch (RuntimeException e) {
@@ -460,6 +563,14 @@ public final class IsaCoverageReport {
             }
         }
         return Status.MISSING;
+    }
+
+    /// Aplicabilidade curada por versão A64 (B11.5, ver {@link #AARCH64_VERSION_REQUIREMENTS}):
+    /// um mnemônico sem entrada é ARMv8.0-A baseline (aplicável a toda coluna); um mnemônico
+    /// mapeado só é aplicável a partir da versão que introduziu a feature real que ele exige.
+    private static boolean isApplicableToAarch64Version(String instruction, Aarch64Architecture architecture) {
+        Aarch64Feature required = AARCH64_VERSION_REQUIREMENTS.get(instruction);
+        return required == null || architecture.has(required);
     }
 
     /// Monta o encoding: bits fixos do padrão + campos preenchidos pela estratégia. `cond` é sempre

@@ -240,15 +240,13 @@ VFNMA_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificaç�
 VFNMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificação VFPv4
 
 # ── A64 (B8.8): SQRDMLAH/SQRDMLSH (rounding doubling multiply-accumulate/subtract, vetorial e
-# ── escalar) são FEAT_RDM (ARMv8.1-A, "Rounding Double Multiply Add" — QEMU gateia com
-# ── `dc_isar_feature(aa64_rdm, s)`), extensão OPCIONAL introduzida depois do ARMv8.0-A. O
-# ── Cortex-A53 do raspi3 (alvo do virtual-arm-box) é ARMv8.0-A e não anuncia FEAT_RDM em
-# ── ID_AA64ISAR0_EL1 — posterior, não "improvável" (mesmo padrão de exclusão de B9.6 para VFPv4).
+# ── escalar) são FEAT_RDM (ARMv8.1-A) — implementadas e GATEADAS de verdade pela B11.4
+# ── (`Aarch64Decoder` consulta `architecture.has(Aarch64Feature.RDM)`); a exclusão daqui saiu
+# ── (B11.5): o medidor por versão de A64 agora sabe que estas 4 só são aplicáveis a partir de
+# ── `ARMv8.1-A` via `IsaCoverageReport#AARCH64_VERSION_REQUIREMENTS`, sem precisar de uma linha
+# ── TSV — uma linha `A64` aqui casaria com TODA coluna de versão (curadoria legada) e esconderia
+# ── que elas SÃO `✅` a partir de `ARMv8.1-A`.
 # ── SQDMULH/SQRDMULH (SEM o "L" de acumulação) são ARMv8.0 genuínos e FORAM implementados.
-SQRDMLAH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLSH_v	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLAH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLSH_s	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
 
 # ── A64 (B8.9): extensões opcionais de AdvSIMD FP vetorial, todas posteriores ao Cortex-A53
 # ── (ARMv8.0-A) do raspi3. NÃO inclui as linhas de meia-precisão (`FEAT_FP16`) de `FADD_v`/
@@ -367,12 +365,9 @@ FMMLA_hb	A64	ARMv9.x/FEAT_F8MM8
 FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
 # ── A64 (B8.19): "vector/scalar × indexed element" — mesmas features opcionais já excluídas acima
 # ── para as formas "three same"/"three different" genéricas, agora nas formas POR ÍNDICE (nomes
-# ── distintos no `a64.decode` real do QEMU, `_vi`/`_si`) — SQRDMLAH_v/SQRDMLSH_v/SQRDMLAH_s/
-# ── SQRDMLSH_s já excluídos acima (B8.8) não cobrem estas linhas, mnemônico diferente.
-SQRDMLAH_vi	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLSH_vi	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLAH_si	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
-SQRDMLSH_si	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+# ── distintos no `a64.decode` real do QEMU, `_vi`/`_si`). SQRDMLAH_vi/SQRDMLSH_vi/SQRDMLAH_si/
+# ── SQRDMLSH_si: mesmo achado de B8.8 acima — implementadas e gateadas por B11.4, exclusão TSV
+# ── removida em B11.5 (o medidor por versão já sabe que são ARMv8.1-A/FEAT_RDM).
 FMLAL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
 FMLSL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
 FMLAL2_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53

@@ -15,10 +15,12 @@ class Aarch64ArchitectureTest {
     }
 
     @Test
-    void armv81aAddsOnlyRdm() {
+    void armv81aAddsRdmLseAndPan() {
         assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.RDM));
+        assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.LSE));
+        assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.PAN));
         for (Aarch64Feature feature : Aarch64Feature.values()) {
-            if (feature != Aarch64Feature.RDM) {
+            if (feature != Aarch64Feature.RDM && feature != Aarch64Feature.LSE && feature != Aarch64Feature.PAN) {
                 assertFalse(Aarch64Architecture.ARMV8_1_A.has(feature), feature + " must not be on ARMv8.1-A yet");
             }
         }
@@ -28,13 +30,45 @@ class Aarch64ArchitectureTest {
     void armv82aInheritsArmv81aAndAddsItsOwnFeatures() {
         Aarch64Architecture armv82a = Aarch64Architecture.ARMV8_2_A;
         assertTrue(armv82a.has(Aarch64Feature.RDM), "herdada de ARMv8.1-A");
+        assertTrue(armv82a.has(Aarch64Feature.LSE), "herdada de ARMv8.1-A");
+        assertTrue(armv82a.has(Aarch64Feature.PAN), "herdada de ARMv8.1-A");
         assertTrue(armv82a.has(Aarch64Feature.FP16));
         assertTrue(armv82a.has(Aarch64Feature.DOT_PRODUCT));
         assertTrue(armv82a.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG));
         assertTrue(armv82a.has(Aarch64Feature.SHA512));
         assertTrue(armv82a.has(Aarch64Feature.SM3));
         assertTrue(armv82a.has(Aarch64Feature.SM4));
+        assertTrue(armv82a.has(Aarch64Feature.SHA3));
+        assertTrue(armv82a.has(Aarch64Feature.UAO));
         assertFalse(armv82a.has(Aarch64Feature.JAVASCRIPT_CONVERT), "só entra em ARMv8.3-A");
+    }
+
+    @Test
+    void armv84aAddsFlagManipulationAndDit() {
+        Aarch64Architecture armv84a = Aarch64Architecture.ARMV8_4_A;
+        assertTrue(armv84a.has(Aarch64Feature.FLAG_MANIPULATION));
+        assertTrue(armv84a.has(Aarch64Feature.DIT));
+        assertFalse(Aarch64Architecture.ARMV8_3_A.has(Aarch64Feature.FLAG_MANIPULATION));
+    }
+
+    @Test
+    void armv85aAddsFlagManipulation2() {
+        assertTrue(Aarch64Architecture.ARMV8_5_A.has(Aarch64Feature.FLAG_MANIPULATION_2));
+        assertFalse(Aarch64Architecture.ARMV8_4_A.has(Aarch64Feature.FLAG_MANIPULATION_2));
+    }
+
+    @Test
+    void armv87aAddsWfxt() {
+        assertTrue(Aarch64Architecture.ARMV8_7_A.has(Aarch64Feature.WFXT));
+        assertFalse(Aarch64Architecture.ARMV8_6_A.has(Aarch64Feature.WFXT));
+    }
+
+    @Test
+    void armv88aAddsNmiOnTopOfMemoryCopySet() {
+        Aarch64Architecture armv88a = Aarch64Architecture.ARMV8_8_A;
+        assertTrue(armv88a.has(Aarch64Feature.NMI));
+        assertTrue(armv88a.has(Aarch64Feature.MEMORY_COPY_SET));
+        assertFalse(Aarch64Architecture.ARMV8_7_A.has(Aarch64Feature.NMI));
     }
 
     @Test
