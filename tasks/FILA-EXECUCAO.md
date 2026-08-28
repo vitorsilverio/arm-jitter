@@ -519,6 +519,23 @@ feito pela via `MSR (immediate)`. 7 escaninhos de armazenamento puro (mesma disc
 de varredura sistemática de registradores de sistema A64** (B8.13-B8.17) desta sessão — próxima
 frente cabe ao usuário decidir (v4T/v5TE, ou NEON/MVE/SVE/SME). Ver **Resultado** na task.
 
+✅ **B8.18 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.18-a64-advsimd-logico-two-register-misc-restante.md`,
+usuário pediu a lacuna `LDR`/`STR` SIMD&FP reg-imediato — já fechada pela `B8.13`; escolheu então
+"varredura sistemática A64 restante" entre as opções oferecidas) — triagem de `docs/COBERTURA-ISA.md`
+(274 lacunas A64) achou 2 clusters pequenos e limpos, deixados de fora dos títulos de B8.7/B8.8/B8.10:
+`AND_v`/`BIC_v`/`ORR_v`/`ORN_v`/`EOR_v`/`BSL_v`/`BIT_v`/`BIF_v` (AdvSIMD "three same" lógico, MESMO
+slot `bit10=1` de B8.7, opcode `0b00011` nunca tocado) e `SQABS`/`SQNEG`/`CLS`/`CLZ`/`CNT`/`NOT`/
+`RBIT` (resto do slot `Rm=00000` "two-register misc"). Achado real: `CNT_v`/`NOT_v`/`RBIT_v`
+compartilham o MESMO opcode (`0b01011`), o campo cru `esz` só desambigua as 3 (arranjo sempre
+byte, não tamanho de elemento livre). `Aarch64AdvSimdLogicalDecoderTest` (19, corpus real via
+devkitA64) + 17 testes novos no executor compartilhado. `mvn -o test` verde (core+truffle) +
+`install`; G5: gbaemu/ndsemu/armbox ✅. A64 73%→74%, global 74%→75% — sem marco de release. Ver
+**Resultado** na task. **Candidatas registradas, não pegas automaticamente**: `REV16_v`/`REV32_v`/
+`REV64_v` (reversão por grupo de bytes), `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v` (slot narrow/widen),
+`B8.19` (AdvSIMD "vector/scalar × indexed element", ~50 lacunas — `FMLA_vi`/`SQDMULL_si`/etc.,
+classe de encoding própria). **Fila automática vazia de novo** — próxima priorização cabe ao
+usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
