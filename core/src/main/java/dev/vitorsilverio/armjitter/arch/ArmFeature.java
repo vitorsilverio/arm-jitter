@@ -201,5 +201,18 @@ public enum ArmFeature {
     /// habilitada em preset nenhum (aditivo puro, sem consumidor real ainda, mesmo padrão de
     /// `TTBR0_EL2`/`TTBR0_EL3` na escada `B10.6b`/`B10.6c`); a instrução decodifica e executa
     /// corretamente assim que algum preset futuro ligar esta feature.
-    VIRTUALIZATION_EXTENSIONS
+    VIRTUALIZATION_EXTENSIONS,
+
+    // ---- Onda 5, B9.11 (achado colateral da B9.10 — auditoria de Thumb2MiscDecoder sob v6-M) ----
+    /// Subconjunto de 32 bits do grupo Thumb-2 "Hints, and CPS"/"Miscellaneous control
+    /// instructions" (ARM DDI 0406C A5.3.5) reservado ao perfil M: hints largos (`NOP.W`/
+    /// `YIELD.W`/`WFE.W`/`WFI.W`/`SEV.W`/`ESB`), `CPS.W` (forma A/R de 32 bits, com `imod`/`mode`)
+    /// e `UDF.W`. Confirmado ausente do `ARMv6-M Architecture Reference Manual` (ARM DDI 0419C)
+    /// A3.3.1 — a lista fechada de encodings de 32 bits do v6-M é só `BL`/`DMB`/`DSB`/`ISB`/
+    /// `MRS`/`MSR` (mesma fonte que a B9.10 usou); v6-M só tem as formas T1 de 16 bits desses
+    /// hints/`CPS`/`UDF`. Presente em `ARMV7M` (`Thumb2MiscDecoder` não distinguia v6-M de v7-M
+    /// para este subgrupo antes desta task — G8, mesma categoria do achado principal da B9.10 para
+    /// `B.W`/`TBB`/`TBH`). Não confundir com {@link #WAIT_HINTS}/{@link #MODE_CHANGE_INSTRUCTIONS}
+    /// (essas continuam controlando as formas de 16 bits equivalentes, que v6-M TEM).
+    M_PROFILE_WIDE_MISC_CONTROL
 }

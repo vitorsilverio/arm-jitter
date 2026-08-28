@@ -441,6 +441,82 @@ class Thumb2MiscDecoderTest {
         assertEquals(0x1004, thumb2Core.programCounter());
     }
 
+    // ── B9.11 (achado colateral da B9.10): ARMv6-M não tem hints/CPS/UDF largos nem o alias de
+    // exception-return — só ARMv7-M tem (ArmFeature#M_PROFILE_WIDE_MISC_CONTROL) ─────────────
+
+    @Test
+    void wideHintDecodesUnderArmV7MButNotUnderArmV6M() {
+        // WFI.W (seletor 0b011 dentro do subgrupo "Hints, and CPS").
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HINTS_HI);
+        memory.put16(2, hintLo(0b011));
+
+        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT,
+                new ThumbDecoder(ArmArchitecture.ARMV7M).decode(memory, 0).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV6M).decode(memory, 0).kind());
+    }
+
+    @Test
+    void reservedHintNopWDecodesUnderArmV7MButNotUnderArmV6M() {
+        // Seletor reservado (0xFF) — "reserved hint, behaves as nop" no hardware real.
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HINTS_HI);
+        memory.put16(2, hintLo(0xFF));
+
+        assertNotEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV7M).decode(memory, 0).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV6M).decode(memory, 0).kind());
+    }
+
+    @Test
+    void cpsWIsUndefinedUnderBothMProfilePresets() {
+        // Diferente de WFI.W/hints reservados/UDF.W, `CPS.W` (forma A/R de 32 bits com
+        // imod/mode) fica UNIMPLEMENTED nos DOIS presets M-profile: nenhum dos dois habilita
+        // ArmFeature#MODE_CHANGE_INSTRUCTIONS (decodeCps32 exige) — o perfil M só tem o `CPS`
+        // 16-bit T1 (`imod iflags`, sem campo `mode`), mesmo caso do alias de exception-return.
+        // O ✅ que a medição de cobertura mostrava para v6-M/v7-M antes desta task era um
+        // artefato do PROBE: um encoding de teste com imod=0/M=0 cai no ramo "reserved hint"
+        // (agora corretamente bloqueado para v6-M pelo gate de decodeHintsOrCps), não em
+        // decodeCps32 de verdade.
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, HINTS_HI);
+        memory.put16(2, cpsLo(0b11 /* imod=11 -> ID */, false, false, true, true, 0));
+
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV6M).decode(memory, 0).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV7M).decode(memory, 0).kind());
+    }
+
+    @Test
+    void udfWDecodesUnderArmV7MButNotUnderArmV6M() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, UDF_HI);
+        memory.put16(2, UDF_LO);
+
+        assertEquals(InstructionKind.UDF,
+                new ThumbDecoder(ArmArchitecture.ARMV7M).decode(memory, 0).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV6M).decode(memory, 0).kind());
+    }
+
+    @Test
+    void subRriExceptionReturnAliasIsUndefinedUnderBothMProfilePresets() {
+        // Diferente de hints/CPS/UDF, o alias T5 de exception-return não existe em NENHUM perfil
+        // M (v6-M ou v7-M) — não tem gate por ArmFeature#M_PROFILE_WIDE_MISC_CONTROL, é rejeitado
+        // por ArmFeature#M_PROFILE puro (mesma categoria de bxjIsUndefinedUnderMProfile).
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put16(0, EXCEPTION_RETURN_SUB_HI);
+        memory.put16(2, exceptionReturnSubLo(4));
+
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV6M).decode(memory, 0).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV7M).decode(memory, 0).kind());
+    }
+
     // ── B9.8.2: HVC.W ────────────────────────────────────────────────────────────────────
 
     private static final int HVC_HI = 0xF7E1;

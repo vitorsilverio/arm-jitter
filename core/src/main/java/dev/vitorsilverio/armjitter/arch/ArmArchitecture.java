@@ -304,6 +304,15 @@ public final class ArmArchitecture {
     /// engano (ele não aparece na enumeração do javadoc logo acima, que já dizia "BL... barreiras
     /// ... MRS/MSR — todos cobertos por Thumb2MiscDecoder"): sem esta correção, `ARMV6M` aceitava
     /// silenciosamente `B.W`/`TBB`/`TBH`, que a arquitetura real rejeita (G8).
+    ///
+    /// **B9.11** fechou o achado colateral que a B9.10 deixou pendente: dentro do próprio
+    /// `Thumb2MiscDecoder` (compartilhado com `ARMV7M`), os hints largos (`NOP.W`/`YIELD.W`/
+    /// `WFE.W`/`WFI.W`/`SEV.W`/`ESB`), `CPS.W` e `UDF.W` decodificavam sob `ARMV6M` sem gate — a
+    /// mesma categoria de bug do Achado 2 acima, só que dentro de um decoder compartilhado que
+    /// gateia alguns mnemônicos por feature e outros não (ver
+    /// {@link ArmFeature#M_PROFILE_WIDE_MISC_CONTROL}, presente só em `ARMV7M`). O alias de
+    /// exception-return `SUBS PC,LR,#imm`/`ERET` (T5) foi fechado para `M_PROFILE` inteiro (v6-M
+    /// E v7-M) — não existe em perfil M nenhum, que usa `EXC_RETURN` via `BX`/`POP`, não `SUBS PC`.
     public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
             .withThumb32DecoderExtensions(List.of(
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES)));
@@ -320,7 +329,7 @@ public final class ArmArchitecture {
             ArmFeature.EXCLUSIVE_WORD, ArmFeature.EXCLUSIVE_SIZED,
             ArmFeature.MOVW_MOVT, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
             ArmFeature.MLS_MULTIPLY, ArmFeature.DIVIDE, ArmFeature.SATURATING,
-            ArmFeature.M_FAULT_MASKING);
+            ArmFeature.M_FAULT_MASKING, ArmFeature.M_PROFILE_WIDE_MISC_CONTROL);
 
     public static final ArmArchitecture ARMV7M = ARMV7M_FEATURES
             .withThumb32DecoderExtensions(List.of(

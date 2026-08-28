@@ -38,6 +38,13 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// T32) — ver {@link #decodeSmc}/{@link ArmFeature#SECURE_MONITOR_CALL}; `ERET`/`MRS_bank`/
 /// `MSR_bank` seguem como próximas tasks da mesma escada (`B9.8.4`/`B9.8.5`).
 ///
+/// <p><b>B9.11</b> (achado colateral da B9.10): hints largos, `CPS.W` e `UDF.W` decodificavam sob
+/// `ARMV6M` sem gate (a arquitetura real só tem as formas T1 de 16 bits desses três — ARM DDI
+/// 0419C A3.3.1). Ver {@link ArmFeature#M_PROFILE_WIDE_MISC_CONTROL} (presente só em `ARMV7M`) e
+/// os gates no início de {@link #decodeHintsOrCps}/{@link #decodeUdf}. O alias de exception-return
+/// `SUBS PC,LR,#imm` (ver {@link #decodeExceptionReturnSub}) foi fechado para `M_PROFILE` inteiro
+/// (v6-M e v7-M), não só v6-M — não existe em perfil M nenhum.
+///
 /// <p><b>B2.7 PR3</b>: `CPS` de 32 bits (antes fora de escopo — mesmo prefixo de hi =
 /// {@code 0xF3AF} desta classe, distinguido de hints por `imod`/`M` ≠ 0, ver
 /// {@link #decodeHintsOrCps}) e `CLREX` de 32 bits (antes fora de escopo — mesmo espaço
@@ -280,6 +287,13 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     // ── SUBS PC, LR, #imm (alias "T5" de exception return) — A8.8.121/B9.3.19 ──────────────
 
     private DecodedInstruction decodeExceptionReturnSub(int raw, int address, Condition condition, int lo) {
+        if (architecture.has(ArmFeature.M_PROFILE)) {
+            // O alias T5 de exception-return não existe em perfil M nenhum (v6-M OU v7-M): a
+            // arquitetura M-profile não tem Hyp mode/SPSR desse tipo, o retorno de exceção é via
+            // EXC_RETURN (BX/POP), nunca SUBS PC,LR (B9.11, achado colateral da B9.10 — mesma
+            // categoria do bxjIsUndefinedUnderMProfile já existente para BXJ).
+            return null;
+        }
         if ((lo & EXCEPTION_RETURN_SUB_LO_FIXED_MASK) != EXCEPTION_RETURN_SUB_LO_FIXED_VALUE) {
             return null;
         }
@@ -308,6 +322,10 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
 
     private DecodedInstruction decodeUdf(int raw, int address, Condition condition, int lo) {
         if ((lo & UDF_LO_MASK) != UDF_LO_VALUE) {
+            return null;
+        }
+        if (architecture.has(ArmFeature.M_PROFILE) && !architecture.has(ArmFeature.M_PROFILE_WIDE_MISC_CONTROL)) {
+            // ARMv6-M: só a forma T1 de 16 bits de UDF existe (B9.11, achado colateral da B9.10).
             return null;
         }
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.UDF,
@@ -345,6 +363,13 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     // ── Hints (NOP/YIELD/WFE/WFI/SEV) — A5.3.5, "Hints, and CPS" ────────────────────────────
 
     private DecodedInstruction decodeHintsOrCps(int raw, int address, Condition condition, int lo) {
+        if (architecture.has(ArmFeature.M_PROFILE) && !architecture.has(ArmFeature.M_PROFILE_WIDE_MISC_CONTROL)) {
+            // ARMv6-M: nem os hints largos (NOP.W/YIELD.W/WFE.W/WFI.W/SEV.W/ESB) nem CPS.W de 32
+            // bits existem — só as formas T1 de 16 bits (B9.11, achado colateral da B9.10). Sem
+            // este gate, o ramo "reserved hint, behaves as nop" (default de decodeHintsOrCps,
+            // abaixo) aceitava QUALQUER encoding deste subgrupo incondicionalmente.
+            return null;
+        }
         if (((lo >>> TOP_BYTE_SHIFT) & TOP_BYTE_MASK) != HINTS_TOP_BYTE) {
             // imod!=00 ou M=1: é CPS de 32 bits (B2.7 PR3).
             return decodeCps32(raw, address, condition, lo);

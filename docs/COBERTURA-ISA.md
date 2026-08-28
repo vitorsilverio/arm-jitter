@@ -30,7 +30,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **81%** — 15195 de 18539 células aplicáveis decodificam.
+> **81%** — 15183 de 18539 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -41,8 +41,8 @@ Por arquitetura:
 | v6K | **96%** (307/319) |
 | MPCore | **95%** (357/374) |
 | v7-A | **98%** (647/659) |
-| v6-M | **52%** (91/172) |
-| v7-M | **61%** (234/383) |
+| v6-M | **47%** (81/172) |
+| v7-M | **60%** (232/383) |
 | ARMv8.0-A | **82%** (796/970) |
 | ARMv8.1-A | **82%** (811/985) |
 | ARMv8.2-A | **81%** (816/996) |
@@ -66,7 +66,7 @@ Por arquitetura:
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 61% (143/233) · v5TE 67% (157/233) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
 | T16 — Thumb clássico | 86 | v4T 74% (62/83) · v5TE 78% (65/83) · v6K 90% (75/83) · MPCore 90% (75/83) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
-| T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 21% (18/82) · v7-M 53% (155/289) |
+| T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 9% (8/82) · v7-M 52% (153/289) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 90% (50/55) · v7-A 92% (58/63) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
@@ -576,14 +576,14 @@ Inventário: `t32.decode` · 310 instruções.
 | `RBIT` | · | · | · | · | ✅ | · | ✅ |
 | `REVSH` | · | · | · | · | ✅ | ❌ | ✅ |
 | `CLZ` | · | · | · | · | ✅ | · | ❌ |
-| `YIELD` | · | · | · | · | ✅ | ✅ | ✅ |
-| `WFE` | · | · | · | · | ✅ | ✅ | ✅ |
-| `WFI` | · | · | · | · | ✅ | ✅ | ✅ |
-| `SEV` | · | · | · | · | ✅ | ✅ | ✅ |
+| `YIELD` | · | · | · | · | ✅ | ❌ | ✅ |
+| `WFE` | · | · | · | · | ✅ | ❌ | ✅ |
+| `WFI` | · | · | · | · | ✅ | ❌ | ✅ |
+| `SEV` | · | · | · | · | ✅ | ❌ | ✅ |
 | `SEVL` | · | · | · | · | · | · | · |
-| `ESB` | · | · | · | · | ✅ | ✅ | ✅ |
-| `NOP` | · | · | · | · | ✅ | ✅ | ✅ |
-| `CPS` | · | · | · | · | ✅ | ✅ | ✅ |
+| `ESB` | · | · | · | · | ✅ | ❌ | ✅ |
+| `NOP` | · | · | · | · | ✅ | ❌ | ✅ |
+| `CPS` | · | · | · | · | ✅ | ❌ | ✅ |
 | `CLREX` | · | · | · | · | ✅ | · | ✅ |
 | `DSB` | · | · | · | · | ✅ | ✅ | ✅ |
 | `DMB` | · | · | · | · | ✅ | ✅ | ✅ |
@@ -596,11 +596,11 @@ Inventário: `t32.decode` · 310 instruções.
 | `MSR_reg` | · | · | · | · | ✅ | ✅ | ✅ |
 | `MSR_v7m` | · | · | · | · | ✅ | ✅ | ✅ |
 | `BXJ` | · | · | · | · | ✅ | · | ❌ |
-| `ERET` | · | · | · | · | ✅ | ✅ | ✅ |
-| `SUB_rri` | · | · | · | · | ✅ | ✅ | ✅ |
+| `ERET` | · | · | · | · | ✅ | ❌ | ❌ |
+| `SUB_rri` | · | · | · | · | ✅ | ❌ | ❌ |
 | `SMC` | · | · | · | · | ✅ | · | ❌ |
 | `HVC` | · | · | · | · | ✅ | · | ❌ |
-| `UDF` | · | · | · | · | ✅ | ✅ | ✅ |
+| `UDF` | · | · | · | · | ✅ | ❌ | ✅ |
 | `B_cond_thumb` | · | · | · | · | ✅ | ❌ | ✅ |
 | `STRB_rr` | · | · | · | · | ✅ | ❌ | ✅ |
 | `STRB_ri` | · | · | · | · | ✅ | ❌ | ✅ |
