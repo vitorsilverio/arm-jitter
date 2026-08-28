@@ -131,6 +131,58 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// Escrita destrutiva CIENTE de forma escalar — mesma disciplina de
+    /// {@link Ir64VectorArithmeticExecutor#finishScalarAwareWrite} (duplicada aqui pelo mesmo
+    /// motivo de {@link #finishDestructiveWrite}: aquele método é `private` na classe irmã).
+    private static void finishScalarAwareWrite(Aarch64FpRegisters fp, int rd, boolean scalar, boolean q, int esz) {
+        if (scalar) {
+            fp.setQ(rd, fp.element(rd, 0, esz), 0L);
+        } else {
+            finishDestructiveWrite(fp, rd, q);
+        }
+    }
+
+    /// B8.19: `FMUL_{vi,si}`/`FMLA_{vi,si}`/`FMLS_{vi,si}`/`FMULX_{vi,si}` — MESMA lógica de
+    /// {@link #executeThreeSame}, exceto que `b` (de `Rm`) é lido UMA VEZ fora do laço, sempre no
+    /// elemento {@link Ir64Op.VectorFpArithmeticThreeSameByElement#index} (replicado), nunca
+    /// `fp.element(op.rm(), i, esz)`. A forma ESCALAR processa só o elemento `0`.
+    static boolean executeThreeSameByElement(Aarch64Core core, Ir64Op.VectorFpArithmeticThreeSameByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
+        for (int i = 0; i < elements; i++) {
+            long resultBits;
+            if (esz == 2) {
+                float a = Float.intBitsToFloat((int) fp.element(op.rn(), i, esz));
+                float b = Float.intBitsToFloat((int) fp.element(op.rm(), op.index(), esz));
+                float current = Float.intBitsToFloat((int) fp.element(op.rd(), i, esz));
+                resultBits = switch (op.op()) {
+                    case MUL -> floatBits(a * b);
+                    case MULX -> floatBits(mulX(a, b));
+                    case MLA -> floatBits(Math.fma(a, b, current));
+                    case MLS -> floatBits(Math.fma(-a, b, current));
+                    default -> throw new IllegalStateException(
+                            "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
+                };
+            } else {
+                double a = Double.longBitsToDouble(fp.element(op.rn(), i, esz));
+                double b = Double.longBitsToDouble(fp.element(op.rm(), op.index(), esz));
+                double current = Double.longBitsToDouble(fp.element(op.rd(), i, esz));
+                resultBits = switch (op.op()) {
+                    case MUL -> doubleBits(a * b);
+                    case MULX -> doubleBits(mulX(a, b));
+                    case MLA -> doubleBits(Math.fma(a, b, current));
+                    case MLS -> doubleBits(Math.fma(-a, b, current));
+                    default -> throw new IllegalStateException(
+                            "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
+                };
+            }
+            fp.setElement(op.rd(), i, esz, resultBits);
+        }
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
     static boolean executePairwise(Aarch64Core core, Ir64Op.VectorFpArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();

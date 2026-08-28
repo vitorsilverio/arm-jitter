@@ -339,3 +339,17 @@ FDOT_sb_v	A64	ARMv9.x/FEAT_F8DP4
 FDOT_sb_vi	A64	ARMv9.x/FEAT_F8DP4
 FMMLA_hb	A64	ARMv9.x/FEAT_F8MM8
 FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
+# ── A64 (B8.19): "vector/scalar × indexed element" — mesmas features opcionais já excluídas acima
+# ── para as formas "three same"/"three different" genéricas, agora nas formas POR ÍNDICE (nomes
+# ── distintos no `a64.decode` real do QEMU, `_vi`/`_si`) — SQRDMLAH_v/SQRDMLSH_v/SQRDMLAH_s/
+# ── SQRDMLSH_s já excluídos acima (B8.8) não cobrem estas linhas, mnemônico diferente.
+SQRDMLAH_vi	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLSH_vi	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLAH_si	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+SQRDMLSH_si	A64	ARMv8.1-A/FEAT_RDM (aa64_rdm), posterior ao Cortex-A53 (ARMv8.0-A)
+FMLAL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FMLSL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FMLAL2_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+FMLSL2_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+BFMLAL_vi	A64	ARMv8.6-A/FEAT_BF16
+FCMLA_vi	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53

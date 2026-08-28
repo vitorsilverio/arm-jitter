@@ -536,6 +536,29 @@ devkitA64) + 17 testes novos no executor compartilhado. `mvn -o test` verde (cor
 classe de encoding própria). **Fila automática vazia de novo** — próxima priorização cabe ao
 usuário.
 
+✅ **B8.19 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.19-a64-advsimd-vetor-escalar-indexed-element.md`,
+task spec escrita e executada na mesma sessão, priorizada pelo usuário entre B8.19/`REV16-32-64_v`/
+`XTN-SHLL-URECPE-URSQRTE_v` — escolheu B8.19, a maior das três) — `MUL`/`MLA`/`MLS`/`SQDMULH`/
+`SQRDMULH`/`SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL`/`FMUL`/
+`FMLA`/`FMLS`/`FMULX` (vetorial `_vi` e, onde real, escalar `_si`) implementados, escopo
+ARMv8.0/Cortex-A53 (meia-precisão/`SQRDMLAH`-`SQRDMLSH`/dot-product/`FMLAL`-família/`FCMLA`
+deliberadamente fora, `docs/isa-nao-aplicavel.tsv`). Achado real: a família inteira compartilha o
+MESMO prefixo de "shift by immediate" (B8.8), discriminada só por `bit10`. 3 `Ir64Op` novos
+(`VectorArithmeticThreeSameByElement`/`VectorArithmeticWideningByElement`/
+`VectorFpArithmeticThreeSameByElement`) reaproveitando 100% dos enums de operação já existentes —
+`Rm` sempre contribui o MESMO elemento `index`, replicado (diferente de "three same"/"three
+different"). `Aarch64AdvSimdIndexedElementDecoderTest` (27+4 negativos) + novos testes no executor,
+corpus real via devkitA64. `mvn -o test` verde (arm-jitter completo) + `install`; G5 nos 5
+consumidores ✅ (gbaemu/ndsemu/armbox/virtual-arm-box/n3dsemu). `docs/COBERTURA-ISA.md`: A64
+68%→81% (+12pp desde `1.3.0`), global 73%→76% (+3pp) — cruza o gatilho de arquitetura (+10pp);
+release (`1.4.0`) NÃO feito nesta sessão (mesma decisão consciente de sessões anteriores, conta
+perto do limite mensal do Maven Central). **Achado adicional fora de escopo**: `SQDMULL`/
+`SQDMLAL`/`SQDMLSL` escalares SEM índice (dois registradores, "three different" escalar) seguem
+`unsupported` — categoria diferente desta task, candidata própria. Ver **Resultado** na task.
+**Candidatas restantes, não pegas automaticamente**: `SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem
+índice, `REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`, publicação de
+`1.4.0`. **Fila automática vazia de novo** — próxima priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

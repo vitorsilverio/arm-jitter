@@ -49,7 +49,9 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorPolynomialMultiplyLong, Ir64Op.CryptoShaThreeRegister, Ir64Op.CryptoShaTwoRegister,
         Ir64Op.VectorDuplicateElement, Ir64Op.VectorDuplicateGeneral, Ir64Op.VectorInsertGeneral,
         Ir64Op.VectorInsertElement, Ir64Op.VectorMoveElement,
-        Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64 {
+        Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64,
+        Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
+        Ir64Op.VectorFpArithmeticThreeSameByElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -242,6 +244,18 @@ public sealed interface Ir64Op permits
         public static final int FP_LOAD_STORE_PAIR = 86;
         /// B8.13: `LDR (literal)` SIMD&FP — ver {@link FpLoadLiteral64}.
         public static final int FP_LOAD_LITERAL64 = 87;
+        /// B8.19: `MUL_vi`/`MLA_vi`/`MLS_vi`/`SQDMULH_{vi,si}`/`SQRDMULH_{vi,si}` (AdvSIMD "vector/
+        /// scalar × indexed element", subconjunto não-alargante) — ver
+        /// {@link VectorArithmeticThreeSameByElement}.
+        public static final int VECTOR_ARITHMETIC_THREE_SAME_BY_ELEMENT = 88;
+        /// B8.19: `SMULL_vi`/`UMULL_vi`/`SMLAL_vi`/`UMLAL_vi`/`SMLSL_vi`/`UMLSL_vi`/
+        /// `SQDMULL_{vi,si}`/`SQDMLAL_{vi,si}`/`SQDMLSL_{vi,si}` (AdvSIMD "vector/scalar × indexed
+        /// element", subconjunto alargante) — ver {@link VectorArithmeticWideningByElement}.
+        public static final int VECTOR_ARITHMETIC_WIDENING_BY_ELEMENT = 89;
+        /// B8.19: `FMUL_{vi,si}`/`FMLA_{vi,si}`/`FMLS_{vi,si}`/`FMULX_{vi,si}` (AdvSIMD "vector/
+        /// scalar × indexed element" de ponto flutuante, só simples/dupla) — ver
+        /// {@link VectorFpArithmeticThreeSameByElement}.
+        public static final int VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT = 90;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1679,6 +1693,38 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_THREE_SAME; }
     }
 
+    /// AdvSIMD "vector/scalar × indexed element" (B8.19), subconjunto SEM alargamento —
+    /// `MUL_vi`/`MLA_vi`/`MLS_vi` (só vetorial, sem forma `_si` real) e `SQDMULH`/`SQRDMULH`
+    /// (vetorial `_vi` e escalar `_si`). Reaproveita {@link Ir64VectorThreeSameOp} — MESMA
+    /// semântica por elemento de {@link VectorArithmeticThreeSame}, só que `Rm` não é lido
+    /// elemento a elemento: {@link #rm} sempre contribui o MESMO elemento {@link #index} (do banco
+    /// `V0`-`V15` para `esz=1`/halfword, `V0`-`V31` para `esz=2`/word), replicado para toda
+    /// operação — nunca `esz=3`/doubleword (sem forma alargante real nesta família).
+    record VectorArithmeticThreeSameByElement(
+            /// Operação a executar — só `MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH` são válidas aqui
+            /// (G8: o decoder nunca produz outro valor).
+            Ir64VectorThreeSameOp op,
+            /// `true` para a forma ESCALAR (`SQDMULH_si`/`SQRDMULH_si`) — processa só o elemento
+            /// `0`, mesma disciplina de {@link VectorArithmeticThreeSame#scalar}. `MUL`/`MLA`/`MLS`
+            /// nunca são escalares (sem encoding real).
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes — `1` (halfword) ou `2` (word).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (lido elemento a elemento, como em `Rn` de
+            /// {@link VectorArithmeticThreeSame}).
+            int rn,
+            /// Registrador `V` fonte 2 — só o elemento {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do elemento de {@link #rm} usado em TODA a operação (`0`-`7` para halfword,
+            /// `0`-`3` para word).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_THREE_SAME_BY_ELEMENT; }
+    }
+
     /// AdvSIMD "three same" pareado (`ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/`UMINP_v`, B8.7) —
     /// concatena `Rn:Rm` e combina pares adjacentes (ver {@link Ir64VectorPairwiseOp}). Não cobre
     /// `ADDP_s` (escalar D, reduz `Rn.2d` a um único elemento) — ver {@link VectorScalarPairwiseAdd}.
@@ -1718,6 +1764,39 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte 2 (elementos `esz`).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDENING; }
+    }
+
+    /// AdvSIMD "vector/scalar × indexed element" (B8.19), subconjunto ALARGANTE —
+    /// `SMULL_vi`/`UMULL_vi`/`SMLAL_vi`/`UMLAL_vi`/`SMLSL_vi`/`UMLSL_vi` (só vetorial) e
+    /// `SQDMULL`/`SQDMLAL`/`SQDMLSL` (vetorial `_vi` E escalar `_si`, mesma exceção de
+    /// {@link VectorArithmeticWidening#op}: sem forma `U=1`). Reaproveita
+    /// {@link Ir64VectorWideningOp} — MESMA semântica de {@link VectorArithmeticWidening}, exceto
+    /// que `Rm` sempre contribui o elemento {@link #index}, nunca `laneOffset+i`.
+    record VectorArithmeticWideningByElement(
+            /// Operação a executar — só `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/
+            /// `SQDMULL`/`SQDMLAL`/`SQDMLSL` são válidas aqui (G8).
+            Ir64VectorWideningOp op,
+            /// `true` para a forma ESCALAR (`SQDMULL_si`/`SQDMLAL_si`/`SQDMLSL_si`) — produz um
+            /// ÚNICO elemento largo (`esz+1` bytes), escrita destrutiva ciente de tamanho (mesma
+            /// disciplina de {@link VectorArithmeticThreeSame#scalar}). `SMULL`/`UMULL`/etc nunca
+            /// são escalares (sem encoding real nesta família).
+            boolean scalar,
+            /// `false` (forma sem `2`): usa a metade BAIXA de `Rn` como entrada. `true` (forma
+            /// `*2`): usa a metade ALTA. Ignorado se {@link #scalar}.
+            boolean q,
+            /// `log2` do tamanho do elemento ESTREITO (`Rn`/`Rm`) em bytes — `1` (halfword) ou `2`
+            /// (word). `Rd` usa `esz+1`.
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (lido elemento a elemento).
+            int rn,
+            /// Registrador `V` fonte 2 — só o elemento {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do elemento de {@link #rm} usado em TODA a operação (`0`-`7` para halfword,
+            /// `0`-`3` para word).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDENING_BY_ELEMENT; }
     }
 
     /// AdvSIMD "three different" largo+estreito (`SADDW`/`UADDW`/`SSUBW`/`USUBW`, B8.7) — `Rd`/
@@ -1938,6 +2017,33 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte 2.
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME; }
+    }
+
+    /// AdvSIMD "vector/scalar × indexed element" de ponto flutuante (B8.19) — `FMUL`/`FMLA`/
+    /// `FMLS`/`FMULX`, vetorial `_vi` E escalar `_si`, só simples/dupla (`esz` `2`/`3` — meia-
+    /// precisão é `FEAT_FP16`, fora do Cortex-A53). Reaproveita {@link Ir64VectorFpThreeSameOp} —
+    /// MESMA semântica de {@link VectorFpArithmeticThreeSame}, exceto que `Rm` sempre contribui o
+    /// elemento {@link #index}, nunca `i`.
+    record VectorFpArithmeticThreeSameByElement(
+            /// Operação a executar — só `MUL`/`MLA`/`MLS`/`MULX` são válidas aqui (G8).
+            Ir64VectorFpThreeSameOp op,
+            /// `true` para a forma ESCALAR (`FMUL_si`/`FMLA_si`/`FMLS_si`/`FMULX_si`) — processa
+            /// só o elemento `0`, mesma disciplina de {@link VectorArithmeticThreeSame#scalar}.
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: sempre `2` (simples) ou `3` (dupla).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (lido elemento a elemento).
+            int rn,
+            /// Registrador `V` fonte 2 — só o elemento {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do elemento de {@link #rm} usado em TODA a operação (`0`-`3` para simples,
+            /// `0`-`1` para dupla).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT; }
     }
 
     /// AdvSIMD "three same" de ponto flutuante, pareado (`FADDP_v`/`FMAXP_v`/`FMINP_v`/

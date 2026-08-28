@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **75%** — 2835 de 3777 células aplicáveis decodificam.
+> **76%** — 2889 de 3761 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **98%** (647/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **61%** (234/383) |
-| A64 | **74%** (770/1027) |
+| A64 | **81%** (824/1011) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 74% (770/1027) |
+| A64 — AArch64 | 1161 | A64 81% (824/1011) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2285,88 +2285,88 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMMLA_sb` | · |
 | `FMMLA_hb` | · |
 | `FMUL_si` | ❌ |
-| `FMUL_si` | ❌ |
-| `FMUL_si` | ❌ |
+| `FMUL_si` | ✅ |
+| `FMUL_si` | ✅ |
 | `FMLA_si` | ❌ |
-| `FMLA_si` | ❌ |
-| `FMLA_si` | ❌ |
+| `FMLA_si` | ✅ |
+| `FMLA_si` | ✅ |
 | `FMLS_si` | ❌ |
-| `FMLS_si` | ❌ |
-| `FMLS_si` | ❌ |
+| `FMLS_si` | ✅ |
+| `FMLS_si` | ✅ |
 | `FMULX_si` | ❌ |
-| `FMULX_si` | ❌ |
-| `FMULX_si` | ❌ |
-| `SQDMULH_si` | ❌ |
-| `SQDMULH_si` | ❌ |
-| `SQRDMULH_si` | ❌ |
-| `SQRDMULH_si` | ❌ |
-| `SQRDMLAH_si` | ❌ |
-| `SQRDMLAH_si` | ❌ |
-| `SQRDMLSH_si` | ❌ |
-| `SQRDMLSH_si` | ❌ |
-| `SQDMULL_si` | ❌ |
-| `SQDMULL_si` | ❌ |
-| `SQDMLAL_si` | ❌ |
-| `SQDMLAL_si` | ❌ |
-| `SQDMLSL_si` | ❌ |
-| `SQDMLSL_si` | ❌ |
+| `FMULX_si` | ✅ |
+| `FMULX_si` | ✅ |
+| `SQDMULH_si` | ✅ |
+| `SQDMULH_si` | ✅ |
+| `SQRDMULH_si` | ✅ |
+| `SQRDMULH_si` | ✅ |
+| `SQRDMLAH_si` | · |
+| `SQRDMLAH_si` | · |
+| `SQRDMLSH_si` | · |
+| `SQRDMLSH_si` | · |
+| `SQDMULL_si` | ✅ |
+| `SQDMULL_si` | ✅ |
+| `SQDMLAL_si` | ✅ |
+| `SQDMLAL_si` | ✅ |
+| `SQDMLSL_si` | ✅ |
+| `SQDMLSL_si` | ✅ |
 | `FMUL_vi` | ❌ |
-| `FMUL_vi` | ❌ |
-| `FMUL_vi` | ❌ |
+| `FMUL_vi` | ✅ |
+| `FMUL_vi` | ✅ |
 | `FMLA_vi` | ❌ |
-| `FMLA_vi` | ❌ |
-| `FMLA_vi` | ❌ |
+| `FMLA_vi` | ✅ |
+| `FMLA_vi` | ✅ |
 | `FMLS_vi` | ❌ |
-| `FMLS_vi` | ❌ |
-| `FMLS_vi` | ❌ |
+| `FMLS_vi` | ✅ |
+| `FMLS_vi` | ✅ |
 | `FMULX_vi` | ❌ |
-| `FMULX_vi` | ❌ |
-| `FMULX_vi` | ❌ |
-| `FMLAL_vi` | ❌ |
-| `FMLSL_vi` | ❌ |
-| `FMLAL2_vi` | ❌ |
-| `FMLSL2_vi` | ❌ |
-| `MUL_vi` | ❌ |
-| `MUL_vi` | ❌ |
-| `MLA_vi` | ❌ |
-| `MLA_vi` | ❌ |
-| `MLS_vi` | ❌ |
-| `MLS_vi` | ❌ |
-| `SQDMULH_vi` | ❌ |
-| `SQDMULH_vi` | ❌ |
-| `SQRDMULH_vi` | ❌ |
-| `SQRDMULH_vi` | ❌ |
-| `SQRDMLAH_vi` | ❌ |
-| `SQRDMLAH_vi` | ❌ |
-| `SQRDMLSH_vi` | ❌ |
-| `SQRDMLSH_vi` | ❌ |
+| `FMULX_vi` | ✅ |
+| `FMULX_vi` | ✅ |
+| `FMLAL_vi` | · |
+| `FMLSL_vi` | · |
+| `FMLAL2_vi` | · |
+| `FMLSL2_vi` | · |
+| `MUL_vi` | ✅ |
+| `MUL_vi` | ✅ |
+| `MLA_vi` | ✅ |
+| `MLA_vi` | ✅ |
+| `MLS_vi` | ✅ |
+| `MLS_vi` | ✅ |
+| `SQDMULH_vi` | ✅ |
+| `SQDMULH_vi` | ✅ |
+| `SQRDMULH_vi` | ✅ |
+| `SQRDMULH_vi` | ✅ |
+| `SQRDMLAH_vi` | · |
+| `SQRDMLAH_vi` | · |
+| `SQRDMLSH_vi` | · |
+| `SQRDMLSH_vi` | · |
 | `SDOT_vi` | · |
 | `UDOT_vi` | · |
 | `SUDOT_vi` | · |
 | `USDOT_vi` | · |
 | `BFDOT_vi` | · |
-| `BFMLAL_vi` | ❌ |
-| `FCMLA_vi` | ❌ |
-| `FCMLA_vi` | ❌ |
-| `FCMLA_vi` | ❌ |
-| `SMULL_vi` | ❌ |
-| `SMULL_vi` | ❌ |
-| `UMULL_vi` | ❌ |
-| `UMULL_vi` | ❌ |
-| `SMLAL_vi` | ❌ |
-| `SMLAL_vi` | ❌ |
-| `UMLAL_vi` | ❌ |
-| `UMLAL_vi` | ❌ |
-| `SMLSL_vi` | ❌ |
-| `SMLSL_vi` | ❌ |
-| `UMLSL_vi` | ❌ |
-| `UMLSL_vi` | ❌ |
-| `SQDMULL_vi` | ❌ |
-| `SQDMULL_vi` | ❌ |
-| `SQDMLAL_vi` | ❌ |
-| `SQDMLAL_vi` | ❌ |
-| `SQDMLSL_vi` | ❌ |
-| `SQDMLSL_vi` | ❌ |
+| `BFMLAL_vi` | · |
+| `FCMLA_vi` | · |
+| `FCMLA_vi` | · |
+| `FCMLA_vi` | · |
+| `SMULL_vi` | ✅ |
+| `SMULL_vi` | ✅ |
+| `UMULL_vi` | ✅ |
+| `UMULL_vi` | ✅ |
+| `SMLAL_vi` | ✅ |
+| `SMLAL_vi` | ✅ |
+| `UMLAL_vi` | ✅ |
+| `UMLAL_vi` | ✅ |
+| `SMLSL_vi` | ✅ |
+| `SMLSL_vi` | ✅ |
+| `UMLSL_vi` | ✅ |
+| `UMLSL_vi` | ✅ |
+| `SQDMULL_vi` | ✅ |
+| `SQDMULL_vi` | ✅ |
+| `SQDMLAL_vi` | ✅ |
+| `SQDMLAL_vi` | ✅ |
+| `SQDMLSL_vi` | ✅ |
+| `SQDMLSL_vi` | ✅ |
 | `FMLAL_hb_vi` | ❌ |
 | `FMLALL_sb_vi` | ❌ |
 | `FDOT_sb_vi` | · |
