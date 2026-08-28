@@ -1766,12 +1766,12 @@ class Aarch64DecoderCorpusTest {
         // SYS/MRS/MSR — mesmo prefixo fixo(31:22). Zerar op0 do encoding de `mrs x0,sctlr_el1`
         // cai em CRn=0b0001/op2=0b000 (`WFET`, B8.3) — antes desta task, `op0=0` inteiro era fora
         // de escopo; agora só combinações realmente reservadas dentro dele continuam UNDEFINED.
+        // B11.6: FEAT_WFxT agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita este encoding.
         int word = 0xd5381000 & ~(0b11 << 19); // zera op0
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
-        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
     }
 
     @Test
@@ -3630,14 +3630,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void wfet() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5b4);
-        assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
+        // B11.6: FEAT_WFxT (ARMv8.7-A) agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita.
+        // Decodificação bem-sucedida com ARMV8_7_A: ver Aarch64AdvSimdWfxtDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5b4));
     }
 
     @Test
     void wfit() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5b8);
-        assertEquals(Ir64SystemInstructionOp.WFI, op.opcode());
+        // B11.6: mesmo gate de #wfet — ver Aarch64AdvSimdWfxtDecoderTest para o caso positivo.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x5b8));
     }
 
     @Test

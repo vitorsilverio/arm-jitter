@@ -4230,6 +4230,11 @@ public final class Aarch64Decoder {
         if (crn == SYSTEM_INSTRUCTION_WAIT_TIMEOUT_CRN) {
             // WFET/WFIT (B8.3, FEAT_WFxT): mesmo tratamento de WFE (NOP)/WFI (dorme até IRQ) sem
             // timeout — Rt (registrador com o valor de comparação) é ignorado, ver constante.
+            // B11.6: gate real — ARMv8.7-A introduziu FEAT_WFxT, um Cortex-A53 (ARMv8.0-A) não tem
+            // esses 2 encodings; sem a feature, cai em unsupported (G8) em vez de decodificar.
+            if (!architecture.has(Aarch64Feature.WFXT)) {
+                throw unsupported(word, address);
+            }
             return switch (op2) {
                 case SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFET ->
                         new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
