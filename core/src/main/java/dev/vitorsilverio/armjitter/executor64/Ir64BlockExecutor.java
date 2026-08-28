@@ -409,6 +409,10 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeThreeSameByElement(
                             core, (Ir64Op.VectorFpArithmeticThreeSameByElement) op);
+            case Ir64Op.Kind.CRYPTO_SHA3_FOUR_REGISTER ->
+                    Ir64CryptoExecutor.executeSha3FourRegister(core, (Ir64Op.CryptoSha3FourRegister) op);
+            case Ir64Op.Kind.CRYPTO_SHA3_TWO_SOURCE_ROTATE ->
+                    Ir64CryptoExecutor.executeSha3TwoSourceRotate(core, (Ir64Op.CryptoSha3TwoSourceRotate) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());

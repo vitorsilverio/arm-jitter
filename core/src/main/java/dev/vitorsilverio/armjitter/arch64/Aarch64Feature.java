@@ -37,8 +37,11 @@ public enum Aarch64Feature {
     SM3,
     /// `FEAT_SM4` — `SM4E`/`SM4EKEY`. ARMv8.2-A.
     SM4,
-    /// `FEAT_SHA3` — `EOR3`/`RAX1`/`XAR`/`BCAX`. ARMv8.2-A. **Achado de B11.3**: já implementado
-    /// desde B8.11b, sem gate (mesmo padrão de {@link #LSE}).
+    /// `FEAT_SHA3` — `EOR3`/`RAX1`/`XAR`/`BCAX`. ARMv8.2-A. **Correção de B11.12** (a nota original
+    /// de B11.3, "já implementado desde B8.11b, sem gate", estava ERRADA — B8.11b só cobriu
+    /// `SHA1*`/`SHA256*`; `EOR3`/`RAX1`/`XAR`/`BCAX` nunca tiveram decoder nenhum até B11.12, que os
+    /// implementou já gateados, ao contrário do padrão "implementado sem gate" de {@link #LSE}/
+    /// {@link #PAN}/{@link #UAO}/{@link #FLAG_MANIPULATION}).
     SHA3,
     /// `FEAT_UAO` — "Unprivileged Access Override" (`MSR (immediate) UAO`, forma registrador em
     /// `MSR_reg`). ARMv8.2-A. Mesmo achado de {@link #LSE}: já implementado sem gate desde B8.3.

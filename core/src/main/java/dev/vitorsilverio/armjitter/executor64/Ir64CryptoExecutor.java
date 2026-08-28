@@ -260,6 +260,58 @@ final class Ir64CryptoExecutor {
         return false;
     }
 
+    /// Quantidade de rotação à ESQUERDA fixa do `RAX1` (sem campo de imediato no encoding real —
+    /// ver {@link Ir64Op.CryptoSha3TwoSourceRotate} javadoc).
+    private static final int RAX1_FIXED_ROTATE_LEFT = 1;
+
+    static boolean executeSha3FourRegister(Aarch64Core core, Ir64Op.CryptoSha3FourRegister op) {
+        Aarch64FpRegisters fp = core.fp();
+        long nLo = fp.low64(op.rn());
+        long nHi = fp.high64(op.rn());
+        long mLo = fp.low64(op.rm());
+        long mHi = fp.high64(op.rm());
+        long aLo = fp.low64(op.ra());
+        long aHi = fp.high64(op.ra());
+        long resultLo;
+        long resultHi;
+        switch (op.op()) {
+            case EOR3 -> {
+                resultLo = nLo ^ mLo ^ aLo;
+                resultHi = nHi ^ mHi ^ aHi;
+            }
+            case BCAX -> {
+                resultLo = nLo ^ (mLo & ~aLo);
+                resultHi = nHi ^ (mHi & ~aHi);
+            }
+            default -> throw new IllegalStateException("CryptoSha3FourRegister.op inesperado: " + op.op());
+        }
+        fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
+
+    static boolean executeSha3TwoSourceRotate(Aarch64Core core, Ir64Op.CryptoSha3TwoSourceRotate op) {
+        Aarch64FpRegisters fp = core.fp();
+        long nLo = fp.low64(op.rn());
+        long nHi = fp.high64(op.rn());
+        long mLo = fp.low64(op.rm());
+        long mHi = fp.high64(op.rm());
+        long resultLo;
+        long resultHi;
+        switch (op.op()) {
+            case RAX1 -> {
+                resultLo = nLo ^ Long.rotateLeft(mLo, RAX1_FIXED_ROTATE_LEFT);
+                resultHi = nHi ^ Long.rotateLeft(mHi, RAX1_FIXED_ROTATE_LEFT);
+            }
+            case XAR -> {
+                resultLo = Long.rotateRight(nLo ^ mLo, op.rotateAmount());
+                resultHi = Long.rotateRight(nHi ^ mHi, op.rotateAmount());
+            }
+            default -> throw new IllegalStateException("CryptoSha3TwoSourceRotate.op inesperado: " + op.op());
+        }
+        fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
+
     private static void writeState(Aarch64FpRegisters fp, int rd, byte[] state) {
         long lo = 0L;
         long hi = 0L;

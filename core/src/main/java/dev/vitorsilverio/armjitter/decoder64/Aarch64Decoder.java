@@ -12,6 +12,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
@@ -1020,6 +1021,49 @@ public final class Aarch64Decoder {
     /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
     /// deriva só de `sz`, bit22).
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
+
+    // ── B11.12 (`FEAT_SHA3`): `EOR3`/`BCAX` ("Cryptographic four-register") e `RAX1`/`XAR`
+    // ── ("Cryptographic three-register, imm2") — espaço de encoding PRÓPRIO, nunca examinado por
+    // ── nenhuma task anterior (achado desta sessão: `Aarch64Feature.SHA3`/B11.3/B11.11 diziam
+    // ── "implementado sem gate desde B8.11b", mas B8.11b só cobriu SHA1/SHA256 — EOR3/BCAX/RAX1/
+    // ── XAR nunca tiveram decoder algum). Prefixo fixo de 8 bits em bits[31:24] ("11001110"),
+    // ── DIFERENTE do prefixo de 5 bits (bits[28:24]) que {@link #decodeAdvancedSimdInteger} usa
+    // ── para distinguir vetorial/escalar — mas bits[28:24]="01110" sozinho colide de fato com o
+    // ── prefixo "vetorial" de lá (`bit31`/`bit29` nunca são checados naquele método). Por isso este
+    // ── prefixo precisa ser checado ANTES de cair em {@link #decodeAdvancedSimdInteger}, senão o
+    // ── encoding real do SHA3 seria silenciosamente tratado como AdvSIMD comum (G8) — conferido bit
+    // ── a bit contra corpus real (`aarch64-linux-gnu-as`/`objdump`, `.arch armv8.2-a+sha3`).
+    private static final int CRYPTO_SHA3_PREFIX_SHIFT = 24;
+    private static final int CRYPTO_SHA3_PREFIX_MASK = 0xFF;
+    private static final int CRYPTO_SHA3_PREFIX_PATTERN = 0b1100_1110;
+    /// Campo `Op0` (bits[23:21], 3 bits) que discrimina as 4 operações dentro do prefixo acima.
+    private static final int CRYPTO_SHA3_OP0_SHIFT = 21;
+    private static final int CRYPTO_SHA3_OP0_MASK = 0b111;
+    private static final int CRYPTO_SHA3_OP0_EOR3 = 0b000;
+    private static final int CRYPTO_SHA3_OP0_BCAX = 0b001;
+    private static final int CRYPTO_SHA3_OP0_RAX1 = 0b011;
+    private static final int CRYPTO_SHA3_OP0_XAR = 0b100;
+    /// `Ra` de `EOR3`/`BCAX` (bits[13:10]) — campo de SÓ 4 bits no encoding real (`V0`-`V15`),
+    /// diferente de `Rd`/`Rn`/`Rm` (5 bits, `REGISTER_FIELD_MASK`) — confirmado bit a bit contra
+    /// corpus real (assembler recusa `Va` fora de `V0`-`V15` com erro "operand out of range").
+    private static final int CRYPTO_SHA3_RA_SHIFT = 10;
+    private static final int CRYPTO_SHA3_RA_MASK = 0b1111;
+    /// `EOR3`/`BCAX`: bits[15:14] fixo="00" (posição ocupada por `imm6`/opcode nas outras formas
+    /// deste prefixo) — G8, recusar se não bater em vez de ignorar.
+    private static final int CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT = 14;
+    private static final int CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK = 0b11;
+    /// `RAX1`: bits[15:10] fixo="100011" — sem `Ra`/imediato (só 2 registradores fonte), este campo
+    /// de 6 bits é puro preenchimento fixo do encoding, não um opcode livre.
+    private static final int CRYPTO_SHA3_RAX1_BIT15_10_SHIFT = 10;
+    private static final int CRYPTO_SHA3_RAX1_BIT15_10_MASK = 0b11_1111;
+    private static final int CRYPTO_SHA3_RAX1_BIT15_10_PATTERN = 0b10_0011;
+    /// `XAR`: `imm6` (bits[15:10], rotação à direita, `0`-`63`).
+    private static final int CRYPTO_SHA3_XAR_IMM6_SHIFT = 10;
+    private static final int CRYPTO_SHA3_XAR_IMM6_MASK = 0b11_1111;
+    /// `RAX1` não tem campo de imediato real — o decoder passa `0` para
+    /// {@link Ir64Op.CryptoSha3TwoSourceRotate#rotateAmount()} (nunca lido pelo executor para esta
+    /// operação, ver o javadoc do record).
+    private static final int CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT = 0;
 
     /// B8.10: bit alto (bit15, único bit de {@link #ADVSIMD_INT_OPCODE_SHIFT} acima do campo de 4
     /// bits de `EXT`/permute/`TBL`/`TBX`) — quando setado (com `bit10=0`), o encoding é reservado
@@ -2504,6 +2548,13 @@ public final class Aarch64Decoder {
         if (threeSourcePrefix == FP_THREE_SOURCE_FIXED_PREFIX_PATTERN) {
             return decodeFpThreeSource(word, address);
         }
+        // B11.12: `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`) — prefixo de 8 bits próprio, checado
+        // ANTES do resto (ver o comentário de `CRYPTO_SHA3_PREFIX_PATTERN`: sem isto, o encoding
+        // real cairia silenciosamente em `decodeAdvancedSimdInteger`, G8).
+        int crypto3Prefix = (word >>> CRYPTO_SHA3_PREFIX_SHIFT) & CRYPTO_SHA3_PREFIX_MASK;
+        if (crypto3Prefix == CRYPTO_SHA3_PREFIX_PATTERN) {
+            return decodeCryptoSha3(word, address);
+        }
         int fixedPrefix = (word >>> SCALAR_FP_FIXED_PREFIX_SHIFT) & SCALAR_FP_FIXED_PREFIX_MASK;
         if (fixedPrefix != SCALAR_FP_FIXED_PREFIX_PATTERN) {
             // B8.7: Advanced SIMD vetorial (prefixo(28:24)="01110") ou escalar D-only inteiro
@@ -2555,6 +2606,43 @@ public final class Aarch64Decoder {
             return decodeFpIntegerConvertOrGeneralRegisterMove(word, address);
         }
         throw unsupported(word, address);
+    }
+
+    /// `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`, ARMv8.2-A, B11.12) — ver o comentário de
+    /// {@link #CRYPTO_SHA3_PREFIX_PATTERN}. Gateado por {@link Aarch64Feature#SHA3} (G3/G8: sem a
+    /// feature, `unsupported`, mesmo padrão de B11.4/6/7/8/9/10/11).
+    private Ir64Op decodeCryptoSha3(int word, long address) {
+        if (!architecture.has(Aarch64Feature.SHA3)) {
+            throw unsupported(word, address);
+        }
+        int op0 = (word >>> CRYPTO_SHA3_OP0_SHIFT) & CRYPTO_SHA3_OP0_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
+        return switch (op0) {
+            case CRYPTO_SHA3_OP0_EOR3, CRYPTO_SHA3_OP0_BCAX -> {
+                int bit15_14 = (word >>> CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT) & CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK;
+                if (bit15_14 != 0) {
+                    throw unsupported(word, address);
+                }
+                int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
+                Ir64CryptoSha3Op op = op0 == CRYPTO_SHA3_OP0_EOR3 ? Ir64CryptoSha3Op.EOR3 : Ir64CryptoSha3Op.BCAX;
+                yield new Ir64Op.CryptoSha3FourRegister(op, rd, rn, rm, ra);
+            }
+            case CRYPTO_SHA3_OP0_RAX1 -> {
+                int fixed = (word >>> CRYPTO_SHA3_RAX1_BIT15_10_SHIFT) & CRYPTO_SHA3_RAX1_BIT15_10_MASK;
+                if (fixed != CRYPTO_SHA3_RAX1_BIT15_10_PATTERN) {
+                    throw unsupported(word, address);
+                }
+                yield new Ir64Op.CryptoSha3TwoSourceRotate(
+                        Ir64CryptoSha3Op.RAX1, rd, rn, rm, CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT);
+            }
+            case CRYPTO_SHA3_OP0_XAR -> {
+                int imm6 = (word >>> CRYPTO_SHA3_XAR_IMM6_SHIFT) & CRYPTO_SHA3_XAR_IMM6_MASK;
+                yield new Ir64Op.CryptoSha3TwoSourceRotate(Ir64CryptoSha3Op.XAR, rd, rn, rm, imm6);
+            }
+            default -> throw unsupported(word, address);
+        };
     }
 
     /// Sub-dispatch de "AdvSIMD inteiro — aritmética e comparação" (B8.7): entra já sabendo que

@@ -47,18 +47,15 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B11.11)
+## Onde estamos (atualizado 2026-08-28, após B11.12)
 
 A escada `B11` (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`, torna o A64 componível
-por versão/feature) está com B11.1-B11.11 ✅ — ver `INDICE.md` da trilha B, linha B11, para o resumo
-de cada uma. **Candidatas elegíveis agora, nenhuma pega automaticamente (usuário prioriza):**
+por versão/feature) está com B11.1-B11.12 ✅ — **completa, as 9 features de B11.5 todas gateadas** —
+ver `INDICE.md` da trilha B, linha B11, para o resumo de cada uma. B11.12 revelou que a premissa
+"`SHA3` só precisa de gate" estava errada (`EOR3`/`BCAX`/`RAX1`/`XAR` nunca tinham decoder/executor —
+implementados do zero nesta sessão; ver `b11.12-aarch64-feature-sha3.md`). **Candidatas elegíveis
+agora, nenhuma pega automaticamente (usuário prioriza):**
 
-- Gatear a **1 feature restante** que B11.3/B11.5 catalogaram como implementada sem gate: `SHA3`
-  — mesmo padrão de B11.4/6/7/8/9/10/11, sem o risco extra que `LSE` teve (B11.11: risco checado a
-  fundo — `kernel8.img` real do `virtual-arm-box` contém `CAS`/`CASP` de verdade, mas
-  `ID_AA64ISAR0_EL1=0` já deveria fazer o alternative-patching do Linux evitar executá-los; G5 de
-  boot profundo não concluído empiricamente por limitação do sandbox, não por falha do gate — ver
-  Resultado de B11.11).
 - `B12.1`/`B12.3` (`trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`) — catálogo de
   processadores ARM reais nomeados, plano mestre escrito, nenhuma sub executada ainda.
 - Lacunas A64 pequenas remanescentes: `SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice,

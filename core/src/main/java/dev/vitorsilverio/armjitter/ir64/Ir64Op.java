@@ -51,7 +51,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorInsertElement, Ir64Op.VectorMoveElement,
         Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64,
         Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
-        Ir64Op.VectorFpArithmeticThreeSameByElement {
+        Ir64Op.VectorFpArithmeticThreeSameByElement, Ir64Op.CryptoSha3FourRegister,
+        Ir64Op.CryptoSha3TwoSourceRotate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -256,6 +257,12 @@ public sealed interface Ir64Op permits
         /// scalar × indexed element" de ponto flutuante, só simples/dupla) — ver
         /// {@link VectorFpArithmeticThreeSameByElement}.
         public static final int VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT = 90;
+        /// B11.12: `EOR3`/`BCAX` (`FEAT_SHA3`, "Cryptographic four-register") — ver
+        /// {@link CryptoSha3FourRegister}.
+        public static final int CRYPTO_SHA3_FOUR_REGISTER = 91;
+        /// B11.12: `RAX1`/`XAR` (`FEAT_SHA3`, "Cryptographic three-register, imm2") — ver
+        /// {@link CryptoSha3TwoSourceRotate}.
+        public static final int CRYPTO_SHA3_TWO_SOURCE_ROTATE = 92;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2249,6 +2256,45 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.CRYPTO_SHA_TWO_REGISTER; }
+    }
+
+    /// "Cryptographic four-register" (`FEAT_SHA3`, ARMv8.2-A, B11.12) — `EOR3`/`BCAX`. Sempre opera
+    /// nos 128 bits inteiros ({@code 16B}, sem forma de tamanho de elemento — a operação é bit a
+    /// bit e não depende de arranjo). {@link #ra} vem de um campo de SÓ 4 bits no encoding real
+    /// (`ARM DDI 0487`), diferente de {@link #rd}/{@link #rn}/{@link #rm} (5 bits) — restringe o
+    /// registrador `Va` real a `V0`-`V15`, confirmado bit a bit contra corpus real (ver
+    /// `Aarch64CryptoSha3DecoderTest`).
+    record CryptoSha3FourRegister(
+            /// Operação a executar (`EOR3` ou `BCAX`).
+            Ir64CryptoSha3Op op,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro operando fonte.
+            int rn,
+            /// Segundo operando fonte.
+            int rm,
+            /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
+            int ra) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA3_FOUR_REGISTER; }
+    }
+
+    /// "Cryptographic three-register, imm2" (`FEAT_SHA3`, ARMv8.2-A, B11.12) — `RAX1`/`XAR`. Opera
+    /// por lane de 64 bits ({@code 2D}, único arranjo válido). {@link #rotateAmount} só se aplica a
+    /// `XAR` (campo real `imm6`, `0`-`63`, rotação à DIREITA); `RAX1` não tem campo de imediato no
+    /// encoding real (rotação à ESQUERDA fixa por `1`) — o executor trata `RAX1` como caso próprio,
+    /// nunca lendo {@link #rotateAmount} para ele, e o decoder deixa o campo em `0` nesse caso.
+    record CryptoSha3TwoSourceRotate(
+            /// Operação a executar (`RAX1` ou `XAR`).
+            Ir64CryptoSha3Op op,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro operando fonte.
+            int rn,
+            /// Segundo operando fonte.
+            int rm,
+            /// Quantidade de rotação à direita usada só por `XAR`, `0`-`63` (ver javadoc da classe).
+            int rotateAmount) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA3_TWO_SOURCE_ROTATE; }
     }
 
     /// `DUP` (AdvSIMD copy, elemento vetorial, B8.12) — replica o elemento `esz` de `Vn[index]`
