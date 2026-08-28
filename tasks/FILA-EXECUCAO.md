@@ -588,6 +588,25 @@ de cada instrução A64 já implementada) — cabe ao usuário priorizar. Candid
 sessões anteriores continuam de pé: publicar `1.4.0`, `SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem
 índice, `REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`.
 
+🆕 **Épico novo registrado 2026-08-28: `B12`** (`trilha-b-arquiteturas/b12-catalogo-processadores-arm.md`,
+spec escrita a pedido do usuário — "escrever a spec para ter a lista completa de processadores e o
+cliente escolher no futuro", **NÃO EXECUTAR ainda**, só planejamento) — usuário perguntou se a
+coluna "Architecture" ou "Processor" da Wikipedia (`List of ARM processors`) determina o conjunto
+de instruções (resposta: Architecture; Processor é uma implementação daquela arquitetura) e, a
+partir disso, se o projeto poderia ter um catálogo de processadores reais nomeados (`Cortex-A53`,
+`ARM7TDMI`, `Neoverse V1`, ...) resolvendo para `ArmArchitecture`/`Aarch64Architecture`, em vez do
+cliente montar features na mão. Irmão de B11 (usa `Aarch64Architecture` de B11.1, mas é uma camada
+de conveniência por NOME comercial, não o mecanismo de composição por versão). Inventário completo
+das famílias (ARM clássico, SecurCore, Cortex-M/R/A/X, Neoverse, C-Series) extraído da Wikipedia e
+tabulado na task, com escada B12.1-B12.6+ (+ um épico de perfil R como pré-requisito de B12.x) —
+maior parte já resolve para presets `ArmArchitecture`/`Aarch64Architecture` existentes (zero
+trabalho de arquitetura novo, só a tabela de resolução nome→arquitetura); uma minoria (ARM clássico
+pré-v4T, perfil R, Cortex-A32 AArch32-only, `ARMv7E-M`/`ARMv8-M`/`ARMv8.1-M`) precisa de preset
+novo ou decisão de escopo, documentado por linha na task. **Candidata pegável, não pega
+automaticamente**: `B12.1` (Cortex-A/X/Neoverse ARMv8.0-A→ARMv8.2-A, maior massa por menor
+esforço) ou `B12.3` (equivalente 32-bit) — cabe ao usuário priorizar frente às candidatas de B11
+acima.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
