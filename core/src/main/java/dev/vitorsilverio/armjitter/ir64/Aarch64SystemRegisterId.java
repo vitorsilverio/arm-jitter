@@ -144,6 +144,20 @@ public enum Aarch64SystemRegisterId {
     /// alternativo em alguns ABIs). Mesma simplificação de {@link #TPIDR_EL0}: sem enforcement de
     /// privilégio, aceita `MSR`/`MRS` dos dois lados.
     TPIDRRO_EL0,
+    /// `FPCR` (`op0=3,op1=3,CRn=4,CRm=4,op2=0`, B8.15) — Floating-point Control Register
+    /// (arredondamento/exceções habilitadas/flush-to-zero). Pendência EXPLÍCITA desde B6.6.1 (D3)
+    /// e B6.5.1: armazenamento puro leitura/escrita — o modo de arredondamento efetivo continua
+    /// FIXO em round-to-nearest-even em toda a aritmética FP (mesma simplificação documentada em
+    /// `FRINTX`/`FRINTI`, `Aarch64Decoder`); o guest pode ler/escrever o registrador sem crashar,
+    /// mas mudar `RMode` não muda o comportamento real das operações — modelar isso de verdade é
+    /// escopo de uma task futura própria (não presumido desnecessário, só sequenciado depois).
+    FPCR,
+    /// `FPSR` (`op0=3,op1=3,CRn=4,CRm=4,op2=1`, B8.15) — Floating-point Status Register (flags de
+    /// exceção cumulativas: `IOC`/`DZC`/`OFC`/`UFC`/`IXC`/`IDC`). Mesma disciplina de "armazenamento
+    /// puro" de {@link #FPCR}: nenhuma operação FP deste emulador seta essas flags de verdade
+    /// ainda (nenhuma condição de exceção FP é detectada hoje) — o guest sempre lê o que ele mesmo
+    /// escreveu, nunca um flag setado pelo hardware emulado.
+    FPSR,
     /// `CTR_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=1`) — Cache Type Register, somente leitura
     /// (`PL0_R` no hardware real). Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3
     /// (`0x84448004`, mesmo alvo de {@link #MIDR_EL1}, task B6.10) — apesar de viver no mesmo

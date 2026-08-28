@@ -432,6 +432,12 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_TPIDR_EL0 = 0;
     private static final int SYSREG_OP2_TPIDR_EL0 = 2;
     private static final int SYSREG_OP2_TPIDRRO_EL0 = 3;
+    // B8.15: FPCR/FPSR (`op0=3,op1=3,CRn=4,CRm=4`) — pendência EXPLÍCITA desde B6.6.1 (D3, "o
+    // mecanismo geral já serve, task própria depois"). Mesmo grupo EL0 de TPIDR_EL0/CTR_EL0.
+    private static final int SYSREG_CRN_FPCR_FPSR = 4;
+    private static final int SYSREG_CRM_FPCR_FPSR = 4;
+    private static final int SYSREG_OP2_FPCR = 0;
+    private static final int SYSREG_OP2_FPSR = 1;
 
     // ── B6.6.7: timer genérico, `op0=3`/`op1=3` (registradores acessíveis de EL0, "CNT*_EL0" —
     // ── diferente do resto da tabela, que é toda `op1=0`), CRn=0b1110 fixo (grupo Generic Timer).
@@ -3993,6 +3999,9 @@ public final class Aarch64Decoder {
             if (crn == SYSREG_CRN_TPIDR_EL1) {
                 return decodeThreadPointerEl0RegisterId(crm, op2);
             }
+            if (crn == SYSREG_CRN_FPCR_FPSR) {
+                return decodeFpControlStatusRegisterId(crm, op2);
+            }
             return decodeGenericTimerRegisterId(crn, crm, op2);
         }
         if (op1 == SYSREG_OP1_EL2) {
@@ -4110,6 +4119,20 @@ public final class Aarch64Decoder {
         }
         if (op2 == SYSREG_OP2_TPIDRRO_EL0) {
             return Aarch64SystemRegisterId.TPIDRRO_EL0;
+        }
+        return null;
+    }
+
+    /// `FPCR`/`FPSR` (B8.15, pendência de B6.5.1/B6.6.1 D3) — mesmo `CRn`/`CRm`, só `op2` distingue.
+    private static Aarch64SystemRegisterId decodeFpControlStatusRegisterId(int crm, int op2) {
+        if (crm != SYSREG_CRM_FPCR_FPSR) {
+            return null;
+        }
+        if (op2 == SYSREG_OP2_FPCR) {
+            return Aarch64SystemRegisterId.FPCR;
+        }
+        if (op2 == SYSREG_OP2_FPSR) {
+            return Aarch64SystemRegisterId.FPSR;
         }
         return null;
     }

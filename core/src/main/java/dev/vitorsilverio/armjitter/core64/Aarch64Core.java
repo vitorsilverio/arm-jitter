@@ -181,6 +181,10 @@ public final class Aarch64Core {
     /// {@link Aarch64SystemRegisterId#TPIDR_EL0}).
     private long tpidrEl0;
     private long tpidrRoEl0;
+    /// `FPCR`/`FPSR` (B8.15) — armazenamento puro, sem efeito semântico real ainda (ver javadoc de
+    /// {@link Aarch64SystemRegisterId#FPCR}/{@link Aarch64SystemRegisterId#FPSR}).
+    private long fpcr;
+    private long fpsr;
     /// Linha de IRQ nível-sensível controlada pelo hospedeiro (mesmo papel de
     /// {@code ArmCore#interruptLine}, 32-bit) — B6.6.7. `true` = interrupção pendente até o
     /// hospedeiro desassertar; sem GIC modelado, cabe ao hospedeiro decidir quando assertar/
@@ -386,7 +390,7 @@ public final class Aarch64Core {
                  ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
-                 TPIDR_EL0, TPIDRRO_EL0, CTR_EL0, DCZID_EL0 -> true;
+                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, CTR_EL0, DCZID_EL0 -> true;
             default -> false;
         };
     }
@@ -422,6 +426,8 @@ public final class Aarch64Core {
             case TPIDR_EL1 -> tpidrEl1;
             case TPIDR_EL0 -> tpidrEl0;
             case TPIDRRO_EL0 -> tpidrRoEl0;
+            case FPCR -> fpcr;
+            case FPSR -> fpsr;
             case CTR_EL0 -> CTR_EL0_VALUE;
             case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
@@ -440,6 +446,8 @@ public final class Aarch64Core {
             // TPIDRRO_EL0 é RO de EL0/RW de EL1 no hardware real — este emulador não modela essa
             // distinção de privilégio (mesma simplificação de B10.7), aceita escrita dos 2 lados.
             case TPIDRRO_EL0 -> tpidrRoEl0 = value;
+            case FPCR -> fpcr = value;
+            case FPSR -> fpsr = value;
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }

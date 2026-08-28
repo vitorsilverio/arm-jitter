@@ -486,6 +486,17 @@ colateral**: com o registrador funcionando, `busybox-aarch64` avança de novo e 
 memória de guest pro TLS no loader), fora do congelamento de subprojetos, não pego aqui. Ver
 **Resultado** na task.
 
+✅ **B8.15 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.15-a64-fpcr-fpsr.md`) — continuação da
+varredura sistemática de registradores de sistema A64; diferente de B8.13/B8.14, não foi achado
+reativo — `FPCR`/`FPSR` já estavam documentados como pendência EXPLÍCITA desde B6.5.1/B6.6.1 (D3).
+Armazenamento puro (mesmo padrão intrínseco de `TPIDR_EL0`); arredondamento/flags de exceção
+continuam sem efeito real (fixo em round-to-nearest-even), decisão explícita registrada, não
+"nunca fazer". `Aarch64FpControlStatusRegisterTest` (5, corpus real). `mvn -o test` verde +
+`install`; G5: gbaemu 240 ✅, ndsemu 183 ✅, armbox 47 ✅. Confirmado que `busybox-aarch64` ainda
+para no mesmo segfault de TLS (achado da B8.14, trabalho do armbox) — `FPCR`/`FPSR` não eram o
+próximo bloqueio real, mas fecham a pendência de qualquer forma (varredura sistemática, não só
+reativa). Ver **Resultado** na task.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
