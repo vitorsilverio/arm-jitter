@@ -439,6 +439,23 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_NZCV_DAIF = 2;
     private static final int SYSREG_OP2_NZCV = 0;
     private static final int SYSREG_OP2_DAIF = 1;
+    // B8.17: DIT/SSBS/TCO reaproveitam o MESMO CRn=4,CRm=2 de NZCV/DAIF no grupo EL0 (só op2
+    // muda) — armazenamento puro sem efeito real, mesma disciplina já aplicada por B8.3 à forma
+    // `MSR (immediate)` destes 3 campos (nenhum consumidor modelado: sem telemetria de DIT, sem
+    // Spectre/SSBS real, sem tags MTE que TCO afetaria).
+    private static final int SYSREG_OP2_DIT = 5;
+    private static final int SYSREG_OP2_SSBS = 6;
+    private static final int SYSREG_OP2_TCO = 7;
+    // B8.17: SPSel/PAN/UAO (`op0=3,op1=0,CRn=4,CRm=2`) e ALLINT (`CRm=3,op2=0`) — grupo EL1
+    // "geral" (mesma disciplina de armazenamento puro, sem efeito real: `sp()` já ignora SPSel,
+    // sem MMU checando PAN/UAO).
+    private static final int SYSREG_CRN_PSTATE_FIELDS_EL1 = 4;
+    private static final int SYSREG_CRM_SPSEL_PAN_UAO = 2;
+    private static final int SYSREG_OP2_SPSEL = 0;
+    private static final int SYSREG_OP2_PAN = 3;
+    private static final int SYSREG_OP2_UAO = 4;
+    private static final int SYSREG_CRM_ALLINT = 3;
+    private static final int SYSREG_OP2_ALLINT = 0;
     private static final int SYSREG_CRM_FPCR_FPSR = 4;
     private static final int SYSREG_OP2_FPCR = 0;
     private static final int SYSREG_OP2_FPSR = 1;
@@ -4024,6 +4041,22 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_CURRENT_EL && crm == SYSREG_CRM_CURRENT_EL && op2 == SYSREG_OP2_CURRENT_EL) {
             return Aarch64SystemRegisterId.CURRENT_EL;
         }
+        // B8.17: SPSel/PAN/UAO/ALLINT — armazenamento puro, mesma disciplina de DIT/SSBS/TCO.
+        if (crn == SYSREG_CRN_PSTATE_FIELDS_EL1 && crm == SYSREG_CRM_SPSEL_PAN_UAO) {
+            if (op2 == SYSREG_OP2_SPSEL) {
+                return Aarch64SystemRegisterId.SPSEL;
+            }
+            if (op2 == SYSREG_OP2_PAN) {
+                return Aarch64SystemRegisterId.PAN;
+            }
+            if (op2 == SYSREG_OP2_UAO) {
+                return Aarch64SystemRegisterId.UAO;
+            }
+            return null;
+        }
+        if (crn == SYSREG_CRN_PSTATE_FIELDS_EL1 && crm == SYSREG_CRM_ALLINT && op2 == SYSREG_OP2_ALLINT) {
+            return Aarch64SystemRegisterId.ALLINT;
+        }
         if (crn == SYSREG_CRN_MPIDR && crm == SYSREG_CRM_MPIDR && op2 == SYSREG_OP2_MPIDR) {
             return Aarch64SystemRegisterId.MPIDR_EL1;
         }
@@ -4140,6 +4173,15 @@ public final class Aarch64Decoder {
             }
             if (op2 == SYSREG_OP2_DAIF) {
                 return Aarch64SystemRegisterId.DAIF;
+            }
+            if (op2 == SYSREG_OP2_DIT) {
+                return Aarch64SystemRegisterId.DIT;
+            }
+            if (op2 == SYSREG_OP2_SSBS) {
+                return Aarch64SystemRegisterId.SSBS;
+            }
+            if (op2 == SYSREG_OP2_TCO) {
+                return Aarch64SystemRegisterId.TCO;
             }
             return null;
         }

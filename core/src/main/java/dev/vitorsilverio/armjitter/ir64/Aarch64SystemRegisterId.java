@@ -217,6 +217,37 @@ public enum Aarch64SystemRegisterId {
     /// sempre lidos como `0`, nunca setados de verdade). Ler/escrever o bit `I` aqui afeta o MESMO
     /// estado que `Aarch64Core#enterIrq` consulta, não um escaninho paralelo.
     DAIF,
+    /// `DIT` (`op0=3,op1=3,CRn=4,CRm=2,op2=5`, B8.17, `FEAT_DIT` ARMv8.4) — Data Independent
+    /// Timing. Armazenamento puro: nenhum caminho de execução deste emulador tem timing
+    /// dependente de dado para `DIT=1` normalizar (mesma disciplina já aplicada à forma `MSR
+    /// (immediate)`, B8.3).
+    DIT,
+    /// `SSBS` (`op0=3,op1=3,CRn=4,CRm=2,op2=6`, B8.17, `FEAT_SSBS` ARMv8.5) — Speculative Store
+    /// Bypass Safe. Armazenamento puro: nenhuma mitigação de execução especulativa é modelada.
+    SSBS,
+    /// `TCO` (`op0=3,op1=3,CRn=4,CRm=2,op2=7`, B8.17, `FEAT_MTE` ARMv8.5) — Tag Check Override.
+    /// Armazenamento puro: MTE (Memory Tagging Extension) não é modelada, nenhuma tag para
+    /// `TCO=1` suprimir a checagem.
+    TCO,
+    /// `SPSel` (`op0=3,op1=0,CRn=4,CRm=2,op2=0`, B8.17) — seleciona `SP_EL0` vs. `SP_ELx` do
+    /// nível atual. Armazenamento puro: {@code Aarch64Core#sp()} já resolve isso sozinho a partir
+    /// só do nível de exceção atual (assume `SPSel=1` implicitamente para EL1+, mesma
+    /// simplificação documentada desde B10.1) — mudar este registrador não muda qual `SP` uma
+    /// instrução usa.
+    SPSEL,
+    /// `PAN` (`op0=3,op1=0,CRn=4,CRm=2,op2=3`, B8.17, `FEAT_PAN` ARMv8.1) — Privileged Access
+    /// Never. Armazenamento puro: a MMU deste emulador não modela a checagem de acesso
+    /// privilegiado a páginas de EL0 que `PAN=1` ativaria (mesma disciplina de `MSR (immediate)`,
+    /// B8.3).
+    PAN,
+    /// `UAO` (`op0=3,op1=0,CRn=4,CRm=2,op2=4`, B8.17, `FEAT_UAO` ARMv8.2) — User Access Override.
+    /// Armazenamento puro: sem acesso `LDTR`/`STTR` ("unprivileged") afetado por este bit no
+    /// modelo de MMU atual (mesma disciplina de `MSR (immediate)`, B8.3).
+    UAO,
+    /// `ALLINT` (`op0=3,op1=0,CRn=4,CRm=3,op2=0`, B8.17, `FEAT_NMI` ARMv8.8) — máscara de
+    /// interrupção não-mascarável. Armazenamento puro: este emulador não modela NMI (só IRQ
+    /// simples, B6.6.7).
+    ALLINT,
 
     // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`), armazenamento puro por enquanto —
     // ── SEM side effect funcional (nenhum código roda em EL2 ainda, ver `Aarch64VmsaSystemRegisters`;

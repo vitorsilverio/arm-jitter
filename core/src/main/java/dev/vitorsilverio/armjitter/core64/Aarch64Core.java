@@ -185,6 +185,15 @@ public final class Aarch64Core {
     /// {@link Aarch64SystemRegisterId#FPCR}/{@link Aarch64SystemRegisterId#FPSR}).
     private long fpcr;
     private long fpsr;
+    /// `DIT`/`SSBS`/`TCO`/`SPSel`/`PAN`/`UAO`/`ALLINT` (B8.17) — armazenamento puro, sem efeito
+    /// real (ver javadoc de cada constante em {@link Aarch64SystemRegisterId}).
+    private long dit;
+    private long ssbs;
+    private long tco;
+    private long spsel;
+    private long pan;
+    private long uao;
+    private long allint;
     /// Linha de IRQ nível-sensível controlada pelo hospedeiro (mesmo papel de
     /// {@code ArmCore#interruptLine}, 32-bit) — B6.6.7. `true` = interrupção pendente até o
     /// hospedeiro desassertar; sem GIC modelado, cabe ao hospedeiro decidir quando assertar/
@@ -390,7 +399,8 @@ public final class Aarch64Core {
                  ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
-                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, NZCV, DAIF, CTR_EL0, DCZID_EL0 -> true;
+                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN, UAO,
+                 ALLINT, CTR_EL0, DCZID_EL0 -> true;
             default -> false;
         };
     }
@@ -430,6 +440,13 @@ public final class Aarch64Core {
             case FPSR -> fpsr;
             case NZCV -> pstate.toNzcvRegisterFormat();
             case DAIF -> pstate.toDaifRegisterFormat();
+            case DIT -> dit;
+            case SSBS -> ssbs;
+            case TCO -> tco;
+            case SPSEL -> spsel;
+            case PAN -> pan;
+            case UAO -> uao;
+            case ALLINT -> allint;
             case CTR_EL0 -> CTR_EL0_VALUE;
             case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
@@ -452,6 +469,13 @@ public final class Aarch64Core {
             case FPSR -> fpsr = value;
             case NZCV -> pstate.setFromNzcvRegisterFormat(value);
             case DAIF -> pstate.setFromDaifRegisterFormat(value);
+            case DIT -> dit = value;
+            case SSBS -> ssbs = value;
+            case TCO -> tco = value;
+            case SPSEL -> spsel = value;
+            case PAN -> pan = value;
+            case UAO -> uao = value;
+            case ALLINT -> allint = value;
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }

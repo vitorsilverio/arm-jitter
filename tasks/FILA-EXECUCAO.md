@@ -509,6 +509,16 @@ armbox 47 ✅. Ver **Resultado** na task. **Candidatas registradas para a próxi
 frente**: `SPSel`/`UAO`/`PAN`/`DIT`/`SSBS`/`TCO`/`ALLINT` via `MRS`/`MSR (register)` (já existem
 como `MSR (immediate)`, B8.3), e o resto do espaço de registradores de sistema A64.
 
+✅ **B8.17 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.17-a64-pstate-fields-mrs-msr.md`,
+usuário escolheu fechar mesmo com baixo impacto prático esperado — "100% é 100%") — `SPSel`/`PAN`/
+`UAO`/`DIT`/`SSBS`/`TCO`/`ALLINT` via `MRS`/`MSR (register)`, completando o que `B8.3` já tinha
+feito pela via `MSR (immediate)`. 7 escaninhos de armazenamento puro (mesma disciplina de
+`FPCR`/`FPSR`, B8.15 — nenhum consumidor real modelado, confirmado já pela B8.3).
+`Aarch64PstateFieldRegistersTest` (8, corpus real via `aarch64-none-elf-as -march=armv8.5-a`).
+`mvn -o test` verde + `install`; G5: gbaemu 240 ✅, ndsemu 183 ✅, armbox 47 ✅. **Fecha a rodada
+de varredura sistemática de registradores de sistema A64** (B8.13-B8.17) desta sessão — próxima
+frente cabe ao usuário decidir (v4T/v5TE, ou NEON/MVE/SVE/SME). Ver **Resultado** na task.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
