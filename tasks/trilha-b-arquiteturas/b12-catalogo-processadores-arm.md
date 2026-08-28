@@ -353,3 +353,39 @@ Catálogo A64 (`Aarch64Processor`) agora tem 41 constantes cobrindo toda a fatia
 Cortex-X + Neoverse + C-Series" do inventário da Wikipedia deste épico. Restam no catálogo A64: nada
 do inventário listado no corpo do épico (perfil R fica para épico próprio). Próximo da escada: B12.4
 (perfil M, `arch.ArmProcessor`) segue elegível; B12.5/B12.6 (núcleos sem preset) ficam para depois.
+
+## Resultado (B12.4, 2026-08-28)
+
+`arch.ArmProcessor` estendido com 4 constantes novas cobrindo a fatia `ARMv6-M` PURA do perfil M
+(zero trabalho de arquitetura novo, reaproveitando o preset `ARMV6M` já existente desde B7.4):
+
+- `SC000` (SecurCore, perfil M).
+- `CORTEX_M0`, `CORTEX_M0PLUS`, `CORTEX_M1` (mesma família `ARMv6-M`).
+
+**Achado real / decisão de escopo (curadoria factual, não geração em massa)**: a tabela de origem do
+épico listava `SC300`/`Cortex-M3` como candidatos ao preset `ARMV7M` existente, mas essa mudança
+seria uma entrada **factualmente errada**, não uma aproximação conservadora — `ARMV7M` (B7.4) inclui
+`ArmFeature.SATURATING` (`QADD`/`QSUB`/`QDADD`/`QDSUB`), que é parte da extensão DSP opcional que só
+existe de fato em `ARMv7E-M`; um `SC300`/`Cortex-M3` real (`ARMv7-M` sem DSP) rejeitaria essas
+instruções como `UNDEFINED`, e este preset as aceitaria — o catálogo estaria afirmando algo que não é
+verdade sobre o núcleo, ao contrário do padrão já usado por {@code ARM7EJ_S} (B12.3), que é um
+subconjunto conservador (falta só Jazelle, nunca modelado). Por isso `SC300`/`Cortex-M3` **ficam de
+fora** do catálogo nesta task, documentados no Javadoc da classe como pendentes de um preset
+`ARMv7-M` puro (sem `SATURATING`) ainda não escrito — candidatos a uma sub-task de arquitetura
+própria, não a este épico de catalogação (regra máxima do projeto, nunca "fora de escopo para
+sempre"). Pelo mesmo motivo (nenhuma versão tem preset ainda), também ficam de fora: `Cortex-M4`/`M7`
+(`ARMv7E-M`), `Cortex-M23` (`ARMv8-M Baseline`), `Cortex-M33`/`M35P` (`ARMv8-M Mainline`) e
+`Cortex-M52`/`M55`/`M85` (`ARMv8.1-M Mainline`).
+
+Mesmo padrão de B12.1-B12.3: `(String displayName, ArmArchitecture architecture)` no construtor,
+getters herdados sem mudança. **Sem uso ainda em `ArmCore`** (G3) — só tabela de resolução, aditiva.
+
+Testes novos: `armv6mFamilyResolvesToArmv6m` em `ArmProcessorTest` (4 asserts) — os testes
+estruturais existentes (`everyEntryHasAUniqueDisplayName`, `valueOfRoundTripsForEveryConstant`, etc.)
+cobrem as 4 constantes novas automaticamente por iterar `values()`. `mvn -o test` verde (suíte
+inteira do `arm-jitter`, JBR 25) + `install` local; G5 verde em `gbaemu`/`ndsemu`/`armbox`
+(zero-diff, catálogo sem consumidor interno ainda).
+
+Restam na escada B12: B12.5 (núcleos clássicos sem preset), B12.6 (`Cortex-A32`), um preset
+`ARMv7-M` puro + `ARMv7E-M`/`ARMv8-M`/`ARMv8.1-M` (destravaria o restante do perfil M catalogado
+aqui) e o épico de perfil R (nunca modelado neste projeto).

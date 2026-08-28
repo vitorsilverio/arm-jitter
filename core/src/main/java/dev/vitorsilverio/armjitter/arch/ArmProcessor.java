@@ -6,11 +6,26 @@ package dev.vitorsilverio.armjitter.arch;
 /// da biblioteca escolher por nome comercial (`ARM7TDMI`, `Cortex-A9`, ...) em vez de montar a
 /// `ArmArchitecture` na mão.
 ///
-/// **Escopo desta task**: ARM clássico + linha Cortex-A 32-bit já cobertos por preset existente
+/// **Escopo de B12.3**: ARM clássico + linha Cortex-A 32-bit já cobertos por preset existente
 /// (`ARMV4T`/`ARMV5TE`/`ARM11_MPCORE`/`ARMV7A`) — nenhuma feature/arquitetura nova, só a tabela de
 /// resolução. Núcleos sem preset hoje (ARMv1/v2/v2a/v3, ARMv6/ARMv6T2/ARMv6Z puros, `Cortex-A32`
-/// AArch32-only) ficam para B12.5/B12.6; perfil M (`Cortex-M`/`SecurCore SC000`/`SC300`) fica para
-/// B12.4; perfil R fica para um épico próprio (nunca modelado neste projeto).
+/// AArch32-only) ficam para B12.5/B12.6; perfil R fica para um épico próprio (nunca modelado
+/// neste projeto).
+///
+/// **Escopo de B12.4** (perfil M): só o `ARMv6-M` puro (`SC000`/`Cortex-M0`/`M0+`/`M1`) resolve
+/// para preset existente (`ARMV6M`) sem ressalva. `SecurCore SC300`/`Cortex-M3` (`ARMv7-M` real,
+/// **sem** a extensão DSP) ficam de fora do catálogo: o preset `ARMV7M` deste projeto (B7.4) inclui
+/// {@link ArmFeature#SATURATING} (`QADD`/`QSUB`/`QDADD`/`QDSUB`, parte da extensão DSP opcional que
+/// só existe de fato em `ARMv7E-M`), então mapear `Cortex-M3` para `ARMV7M` seria uma entrada de
+/// catálogo factualmente ERRADA (superconjunto, não aproximação conservadora — o núcleo real
+/// rejeitaria `QADD` como `UNDEFINED`, este preset aceitaria) — diferente da aproximação
+/// documentada de {@link #ARM7EJ_S} (que é um subconjunto conservador, Jazelle nunca modelado).
+/// `Cortex-M4`/`M7` (`ARMv7E-M`), `Cortex-M23` (`ARMv8-M Baseline`), `Cortex-M33`/`M35P`
+/// (`ARMv8-M Mainline`) e `Cortex-M52`/`M55`/`M85` (`ARMv8.1-M Mainline`) também ficam de fora:
+/// nenhuma dessas versões tem preset ainda. Todos ficam documentados como pendentes (regra máxima
+/// do projeto, `tasks/README.md` — nunca "fora de escopo para sempre"), candidatos a uma sub-task
+/// que primeiro resolva o preset `ARMv7-M` puro (sem `SATURATING`) e depois crie os presets
+/// `ARMv7E-M`/`ARMv8-M`/`ARMv8.1-M`.
 ///
 /// **Sem uso ainda em `ArmCore`** (G3): este catálogo não muda nenhuma factory/API pública
 /// existente. Quem quiser usar hoje faz `new ArmCore(memory, ArmProcessor.ARM7TDMI.architecture())`
@@ -103,7 +118,21 @@ public enum ArmProcessor {
     CORTEX_A15("Cortex-A15", ArmArchitecture.ARMV7A),
 
     /// `ARMv7-A`.
-    CORTEX_A17("Cortex-A17", ArmArchitecture.ARMV7A);
+    CORTEX_A17("Cortex-A17", ArmArchitecture.ARMV7A),
+
+    /// SecurCore `SC000` — `ARMv6-M` (perfil M, T32-only), o único SecurCore junto de {@link #SC100}
+    /// que este catálogo cobre por ora (B12.4; `SC300` fica de fora, ver Javadoc da classe).
+    SC000("SecurCore SC000", ArmArchitecture.ARMV6M),
+
+    /// `ARMv6-M` (perfil M, T32-only) — o núcleo mais simples da linha Cortex-M (B12.4).
+    CORTEX_M0("Cortex-M0", ArmArchitecture.ARMV6M),
+
+    /// `ARMv6-M`, mesma família do Cortex-M0 (variante de baixo consumo, mesmo conjunto de
+    /// instruções).
+    CORTEX_M0PLUS("Cortex-M0+", ArmArchitecture.ARMV6M),
+
+    /// `ARMv6-M`, mesma família do Cortex-M0.
+    CORTEX_M1("Cortex-M1", ArmArchitecture.ARMV6M);
 
     private final String displayName;
     private final ArmArchitecture architecture;

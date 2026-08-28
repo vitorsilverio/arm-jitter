@@ -53,6 +53,14 @@ class ArmProcessorTest {
     }
 
     @Test
+    void armv6mFamilyResolvesToArmv6m() {
+        assertSame(ArmArchitecture.ARMV6M, ArmProcessor.SC000.architecture());
+        assertSame(ArmArchitecture.ARMV6M, ArmProcessor.CORTEX_M0.architecture());
+        assertSame(ArmArchitecture.ARMV6M, ArmProcessor.CORTEX_M0PLUS.architecture());
+        assertSame(ArmArchitecture.ARMV6M, ArmProcessor.CORTEX_M1.architecture());
+    }
+
+    @Test
     void displayNameMatchesCommercialName() {
         assertEquals("Cortex-A9", ArmProcessor.CORTEX_A9.displayName());
         assertEquals("ARM7TDMI", ArmProcessor.ARM7TDMI.displayName());
