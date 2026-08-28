@@ -107,6 +107,32 @@ public final class PstateRegister {
         irqDisabled = (spsrValue & SPSR_I_BIT) != 0;
     }
 
+    /// Codifica `N`/`Z`/`C`/`V` no formato do registrador `NZCV` (`ARM DDI 0487 C5.2.13`, B8.16,
+    /// `MRS Xt,NZCV`): mesma posição `[31:28]` de {@link #toSpsrFormat()}, mas SEM o bit `I` (o
+    /// registrador `NZCV` só expõe os 4 flags de condição, `DAIF` é uma via de acesso separada).
+    public long toNzcvRegisterFormat() {
+        return ((long) nzcv) << SPSR_NZCV_SHIFT;
+    }
+
+    /// `MSR NZCV,Xt` (B8.16): substitui `N`/`Z`/`C`/`V` a partir de `[31:28]` do valor escrito —
+    /// MUDA o estado real (a próxima `B.cond` já vê os flags novos), não um escaninho paralelo.
+    public void setFromNzcvRegisterFormat(long value) {
+        setNzcv((int) ((value >>> SPSR_NZCV_SHIFT) & 0xF));
+    }
+
+    /// Codifica o bit `I` no formato do registrador `DAIF` (`ARM DDI 0487 C5.2.3`, B8.16,
+    /// `MRS Xt,DAIF`) — MESMA posição de bit (`[7]`) de {@link #toSpsrFormat()}. `D`/`A`/`F`
+    /// (bits `9`/`8`/`6`) sempre `0` — não modelados (ver javadoc da classe).
+    public long toDaifRegisterFormat() {
+        return irqDisabled ? SPSR_I_BIT : 0;
+    }
+
+    /// `MSR DAIF,Xt` (B8.16): atualiza só o bit `I` a partir do valor escrito — `D`/`A`/`F` são
+    /// `WI` (aceitos, sem efeito; este emulador não modela debug/SError/FIQ).
+    public void setFromDaifRegisterFormat(long value) {
+        irqDisabled = (value & SPSR_I_BIT) != 0;
+    }
+
     /// Avalia uma {@link Ir64Condition} contra os flags atuais (`ARM DDI 0487 C1.2.4`,
     /// tabela `ConditionHolds`).
     public boolean evalCond(Ir64Condition condition) {

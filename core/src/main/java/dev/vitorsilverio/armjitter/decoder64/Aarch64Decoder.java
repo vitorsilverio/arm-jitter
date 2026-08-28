@@ -432,12 +432,20 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_TPIDR_EL0 = 0;
     private static final int SYSREG_OP2_TPIDR_EL0 = 2;
     private static final int SYSREG_OP2_TPIDRRO_EL0 = 3;
-    // B8.15: FPCR/FPSR (`op0=3,op1=3,CRn=4,CRm=4`) — pendência EXPLÍCITA desde B6.6.1 (D3, "o
-    // mecanismo geral já serve, task própria depois"). Mesmo grupo EL0 de TPIDR_EL0/CTR_EL0.
-    private static final int SYSREG_CRN_FPCR_FPSR = 4;
+    // B8.15/B8.16: CRn=4 hospeda 2 famílias distintas no grupo EL0 (`op1=3`) — `CRm=2` é
+    // NZCV/DAIF (B8.16), `CRm=4` é FPCR/FPSR (B8.15). MESMO CRn, roteado por `CRm` em
+    // decodeCrn4RegisterId (não são a mesma tabela — teria colisão se checássemos só CRn).
+    private static final int SYSREG_CRN_PROCESS_STATE = 4;
+    private static final int SYSREG_CRM_NZCV_DAIF = 2;
+    private static final int SYSREG_OP2_NZCV = 0;
+    private static final int SYSREG_OP2_DAIF = 1;
     private static final int SYSREG_CRM_FPCR_FPSR = 4;
     private static final int SYSREG_OP2_FPCR = 0;
     private static final int SYSREG_OP2_FPSR = 1;
+    // B8.16: CNTVCT_EL0 reaproveita CRm=0 do timer físico (só op2 muda); CNTV_TVAL/CTL/CVAL_EL0
+    // são o timer VIRTUAL, mesmo layout de CNTP_* (B6.6.7) em CRm=3 em vez de CRm=2.
+    private static final int SYSREG_OP2_CNTVCT = 2;
+    private static final int SYSREG_CRM_CNTV = 3;
 
     // ── B6.6.7: timer genérico, `op0=3`/`op1=3` (registradores acessíveis de EL0, "CNT*_EL0" —
     // ── diferente do resto da tabela, que é toda `op1=0`), CRn=0b1110 fixo (grupo Generic Timer).
@@ -3999,8 +4007,8 @@ public final class Aarch64Decoder {
             if (crn == SYSREG_CRN_TPIDR_EL1) {
                 return decodeThreadPointerEl0RegisterId(crm, op2);
             }
-            if (crn == SYSREG_CRN_FPCR_FPSR) {
-                return decodeFpControlStatusRegisterId(crm, op2);
+            if (crn == SYSREG_CRN_PROCESS_STATE) {
+                return decodeCrn4RegisterId(crm, op2);
             }
             return decodeGenericTimerRegisterId(crn, crm, op2);
         }
@@ -4123,16 +4131,26 @@ public final class Aarch64Decoder {
         return null;
     }
 
-    /// `FPCR`/`FPSR` (B8.15, pendência de B6.5.1/B6.6.1 D3) — mesmo `CRn`/`CRm`, só `op2` distingue.
-    private static Aarch64SystemRegisterId decodeFpControlStatusRegisterId(int crm, int op2) {
-        if (crm != SYSREG_CRM_FPCR_FPSR) {
+    /// `CRn=4` do grupo EL0 (`op1=3`) — 2 famílias distintas por `CRm`: `NZCV`/`DAIF` (B8.16,
+    /// `CRm=2`) e `FPCR`/`FPSR` (B8.15, `CRm=4`).
+    private static Aarch64SystemRegisterId decodeCrn4RegisterId(int crm, int op2) {
+        if (crm == SYSREG_CRM_NZCV_DAIF) {
+            if (op2 == SYSREG_OP2_NZCV) {
+                return Aarch64SystemRegisterId.NZCV;
+            }
+            if (op2 == SYSREG_OP2_DAIF) {
+                return Aarch64SystemRegisterId.DAIF;
+            }
             return null;
         }
-        if (op2 == SYSREG_OP2_FPCR) {
-            return Aarch64SystemRegisterId.FPCR;
-        }
-        if (op2 == SYSREG_OP2_FPSR) {
-            return Aarch64SystemRegisterId.FPSR;
+        if (crm == SYSREG_CRM_FPCR_FPSR) {
+            if (op2 == SYSREG_OP2_FPCR) {
+                return Aarch64SystemRegisterId.FPCR;
+            }
+            if (op2 == SYSREG_OP2_FPSR) {
+                return Aarch64SystemRegisterId.FPSR;
+            }
+            return null;
         }
         return null;
     }
@@ -4147,6 +4165,10 @@ public final class Aarch64Decoder {
         if (crm == SYSREG_CRM_CNTPCT && op2 == SYSREG_OP2_CNTPCT) {
             return Aarch64SystemRegisterId.CNTPCT_EL0;
         }
+        // B8.16: CNTVCT_EL0 (contador VIRTUAL, mesmo CRm=0 do físico, só op2 muda).
+        if (crm == SYSREG_CRM_CNTPCT && op2 == SYSREG_OP2_CNTVCT) {
+            return Aarch64SystemRegisterId.CNTVCT_EL0;
+        }
         if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_TVAL) {
             return Aarch64SystemRegisterId.CNTP_TVAL_EL0;
         }
@@ -4155,6 +4177,16 @@ public final class Aarch64Decoder {
         }
         if (crm == SYSREG_CRM_CNTP && op2 == SYSREG_OP2_CNTP_CVAL) {
             return Aarch64SystemRegisterId.CNTP_CVAL_EL0;
+        }
+        // B8.16: timer VIRTUAL (CNTV_*), mesmo layout do físico (CNTP_*) em CRm=3 em vez de CRm=2.
+        if (crm == SYSREG_CRM_CNTV && op2 == SYSREG_OP2_CNTP_TVAL) {
+            return Aarch64SystemRegisterId.CNTV_TVAL_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTV && op2 == SYSREG_OP2_CNTP_CTL) {
+            return Aarch64SystemRegisterId.CNTV_CTL_EL0;
+        }
+        if (crm == SYSREG_CRM_CNTV && op2 == SYSREG_OP2_CNTP_CVAL) {
+            return Aarch64SystemRegisterId.CNTV_CVAL_EL0;
         }
         return null;
     }

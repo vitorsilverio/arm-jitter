@@ -497,6 +497,18 @@ para no mesmo segfault de TLS (achado da B8.14, trabalho do armbox) — `FPCR`/`
 próximo bloqueio real, mas fecham a pendência de qualquer forma (varredura sistemática, não só
 reativa). Ver **Resultado** na task.
 
+✅ **B8.16 fechada 2026-08-27** (`trilha-b-arquiteturas/b8.16-a64-nzcv-daif-cntv.md`) — `NZCV`/
+`DAIF` via `MRS`/`MSR` + `CNTVCT_EL0`/timer virtual. **Achado de design real**: `NZCV`/`DAIF` NÃO
+podiam ser escaninhos novos como `TPIDR_EL0`/`FPCR`/`FPSR` — são uma segunda via de acesso ao
+MESMO estado que `B.cond`/`enterIrq` já consultam; `PstateRegister` ganhou métodos de
+codificação/decodificação que leem/escrevem o `nzcv`/`irqDisabled` reais (um escaninho paralelo
+teria sido um bug de verdade: `MSR NZCV` sem efeito na próxima `B.cond`). `CNTVCT_EL0`/`CNTV_*`
+reaproveitam o `Aarch64SystemRegisterBus` pluggable já existente. `Aarch64PstateSystemRegisterTest`
+(7, corpus real via devkitA64). `mvn -o test` verde + `install`; G5: gbaemu 240 ✅, ndsemu 183 ✅,
+armbox 47 ✅. Ver **Resultado** na task. **Candidatas registradas para a próxima sessão desta
+frente**: `SPSel`/`UAO`/`PAN`/`DIT`/`SSBS`/`TCO`/`ALLINT` via `MRS`/`MSR (register)` (já existem
+como `MSR (immediate)`, B8.3), e o resto do espaço de registradores de sistema A64.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo

@@ -189,6 +189,34 @@ public enum Aarch64SystemRegisterId {
     /// `CNTP_CVAL_EL0` (`op0=3,op1=3,CRn=14,CRm=2,op2=2`) — valor absoluto de disparo do
     /// comparador físico.
     CNTP_CVAL_EL0,
+    /// `CNTVCT_EL0` (`op0=3,op1=3,CRn=14,CRm=0,op2=2`, B8.16) — valor atual do contador VIRTUAL
+    /// (`= CNTPCT_EL0 - CNTVOFF_EL2`; sem `CNTVOFF_EL2` modelado, mesmo raciocínio de
+    /// simplificação já aplicado ao resto da árvore — o hospedeiro decide o que devolver, mesmo
+    /// papel de {@link #CNTPCT_EL0}).
+    CNTVCT_EL0,
+    /// `CNTV_TVAL_EL0`/`CNTV_CTL_EL0`/`CNTV_CVAL_EL0` (B8.16, `CRn=14,CRm=3`) — comparador
+    /// VIRTUAL, mesmo layout/papel de {@link #CNTP_TVAL_EL0}/{@link #CNTP_CTL_EL0}/
+    /// {@link #CNTP_CVAL_EL0}, só `CRm` muda (`2`→`3`).
+    CNTV_TVAL_EL0,
+    CNTV_CTL_EL0,
+    CNTV_CVAL_EL0,
+
+    // ── B8.16: PSTATE via MRS/MSR (`op0=3,op1=3,CRn=4,CRm=2`) — ESTADO REAL do core, resolvido
+    // ── intrinsecamente (não pluggable, mesma razão de CurrentEL/identidades da CPU) ────────────
+
+    /// `NZCV` (`op0=3,op1=3,CRn=4,CRm=2,op2=0`, B8.16) — os mesmos 4 flags de condição que toda
+    /// ALU/`B.cond` já lê via {@code Aarch64Core#pstate()} (`PstateRegister`), só expostos por uma
+    /// segunda via de acesso (`MRS`/`MSR` em vez de efeito colateral de instrução aritmética).
+    /// Formato do valor de 64 bits: `N`/`Z`/`C`/`V` em `[31:28]`, resto `RES0` — MESMA posição de
+    /// {@code PstateRegister#toSpsrFormat()}. Ler/escrever aqui MUDA o estado real (uma `B.cond`
+    /// logo depois de um `MSR NZCV` vê o valor novo) — não é um escaninho paralelo.
+    NZCV,
+    /// `DAIF` (`op0=3,op1=3,CRn=4,CRm=2,op2=1`, B8.16) — só o bit `I` (máscara de IRQ, bit `7`,
+    /// {@code PstateRegister#irqDisabled()}) tem efeito real, mesma disciplina já registrada por
+    /// B6.6.7 (`D`/`A`/`F` — debug/SError/FIQ — não são modelados, `WI`: aceitos na escrita, mas
+    /// sempre lidos como `0`, nunca setados de verdade). Ler/escrever o bit `I` aqui afeta o MESMO
+    /// estado que `Aarch64Core#enterIrq` consulta, não um escaninho paralelo.
+    DAIF,
 
     // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`), armazenamento puro por enquanto —
     // ── SEM side effect funcional (nenhum código roda em EL2 ainda, ver `Aarch64VmsaSystemRegisters`;

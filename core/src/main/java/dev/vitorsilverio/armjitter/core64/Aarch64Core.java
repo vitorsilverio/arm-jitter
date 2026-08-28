@@ -390,7 +390,7 @@ public final class Aarch64Core {
                  ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
-                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, CTR_EL0, DCZID_EL0 -> true;
+                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, NZCV, DAIF, CTR_EL0, DCZID_EL0 -> true;
             default -> false;
         };
     }
@@ -428,6 +428,8 @@ public final class Aarch64Core {
             case TPIDRRO_EL0 -> tpidrRoEl0;
             case FPCR -> fpcr;
             case FPSR -> fpsr;
+            case NZCV -> pstate.toNzcvRegisterFormat();
+            case DAIF -> pstate.toDaifRegisterFormat();
             case CTR_EL0 -> CTR_EL0_VALUE;
             case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
@@ -448,6 +450,8 @@ public final class Aarch64Core {
             case TPIDRRO_EL0 -> tpidrRoEl0 = value;
             case FPCR -> fpcr = value;
             case FPSR -> fpsr = value;
+            case NZCV -> pstate.setFromNzcvRegisterFormat(value);
+            case DAIF -> pstate.setFromDaifRegisterFormat(value);
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }
