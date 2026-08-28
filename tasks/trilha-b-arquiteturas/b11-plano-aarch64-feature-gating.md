@@ -66,7 +66,7 @@ de existir no ARM.
 
 | Task | Escopo | Depende de |
 |---|---|---|
-| **B11.1** | `arch64.Aarch64Feature` (enum) + `arch64.Aarch64Architecture` (presets `ARMV8_0_A`...`ARMV8_x_A`, `ARMV9_0_A`...), mesmo padrão de `EnumSet<Aarch64Feature>`/`has()`/`extending()` do lado 32-bit. SEM plugar em lugar nenhum ainda — só a estrutura, testada isoladamente (mesmo padrão de B10.1: fundação primeiro) | — |
+| ~~**B11.1**~~ ✅ fechada 2026-08-27 | `arch64.Aarch64Feature` (enum) + `arch64.Aarch64Architecture` (presets `ARMV8_0_A`...`ARMV8_x_A`, `ARMV9_0_A`...), mesmo padrão de `EnumSet<Aarch64Feature>`/`has()`/`extending()` do lado 32-bit. SEM plugar em lugar nenhum ainda — só a estrutura, testada isoladamente (mesmo padrão de B10.1: fundação primeiro) | — |
 | **B11.2** | Overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` + threading da arquitetura para `Aarch64Decoder` (que hoje é instanciado sem args em `Ir64BlockExecutor`/`StandardIr64BlockLifter` — precisa passar a receber a arquitetura do `Aarch64Core` dono). Construtor antigo vira `this(memory, Aarch64Architecture.ARMV8_0_A)` (ou o preset que corresponder ao estado atual 100% do decoder) | B11.1 |
 | **B11.3** | Auditoria: mapear TODAS as instruções/registradores já implementados no A64 para a versão/feature ARM real que os introduziu (muito trabalho já foi feito em `docs/isa-nao-aplicavel.tsv`, que já cita `FEAT_*`/versão para tudo excluído — esta task inverte a lógica: em vez de só excluir o que falta, marca cada linha IMPLEMENTADA com a feature real) — sem isso, `Aarch64Architecture` não sabe o que gatear | B11.1 |
 | **B11.4** | Primeiro gate real: escolher 1-2 features já mapeadas em B11.3 que tenham decode isolado o bastante para gatear sem tocar o resto (candidato natural: `FEAT_RDM`/`SQRDMLAH`-`SQRDMLSH`, já isolado desde B8.8/B8.19) — prova de conceito ponta a ponta (decode recusa se `!has(FEATURE)`, aceita se `has`) | B11.2, B11.3 |
@@ -100,3 +100,40 @@ extensão A64 (SVE/SME/FP16/etc.) já nasce gateada, não mais "implementada e p
 obrigatório em toda task — ver `tasks/README.md`. **G3 é crítico nesta escada inteira**: B11.2 em
 particular NUNCA pode mudar o comportamento observável de `virtual-arm-box` (o preset default tem
 que ser bit-a-bit idêntico ao "tudo incondicional" de hoje).
+
+## Resultado — B11.1 (2026-08-27)
+
+Pacote novo `arch64` (mirror exato de `arch`, mesma disciplina de nunca misturar os dois mundos):
+
+- `Aarch64Feature` (enum, 19 valores): cada uma é uma extensão `FEAT_*` real ARMv8.1-A..ARMv9.5-A
+  já catalogada em `docs/isa-nao-aplicavel.tsv` (RDM, FP16, DOT_PRODUCT,
+  FP16_FUSED_MULTIPLY_ADD_LONG, SHA512, SM3, SM4, JAVASCRIPT_CONVERT, COMPLEX_NUMBER_ARITHMETIC,
+  POINTER_AUTHENTICATION, DIRECTED_ROUNDING_TO_INTEGRAL, MEMORY_TAGGING, BFLOAT16,
+  INT8_MATRIX_MULTIPLY, MEMORY_COPY_SET, COMMON_SHORT_SEQUENCE_COMPRESSION,
+  SCALABLE_MATRIX_EXTENSION, FP_ABSOLUTE_MAX_MIN, GUARDED_CONTROL_STACK, COMPARE_AND_BRANCH).
+  Não é a auditoria completa (isso é B11.3) — é o conjunto que já tinha fonte real catalogada,
+  suficiente para provar a estrutura. `SVE` propriamente dito (mandatório em ARMv9.0-A real) fica
+  de fora de propósito: nenhuma instrução SVE decodifica hoje, então não há o que gatear ainda —
+  candidata a task própria quando o decode SVE começar.
+- `Aarch64Architecture` (mesmos métodos `of`/`extending`/`has`/`name`/`toString` de
+  `ArmArchitecture`, SEM `DecoderExtension`/`decoderExtensions()` — esse mecanismo não existe no
+  pipeline A64 ainda, fica para quando/se B11.2+ precisar dele): presets `ARMV8_0_A` (baseline,
+  zero features extras — representa o estado 100% incondicional de hoje) até `ARMV8_9_A`, e
+  `ARMV9_0_A` até `ARMV9_5_A`. **Achado de projeto, confirmado no manual ARM (introdução da
+  arquitetura ARMv9-A, ARM DDI 0487)**: toda ARMv9.x-A tem como baseline mandatório (fora
+  SVE/SME) exatamente o conjunto de features da ARMv8.(x+4)-A correspondente — por isso
+  `ARMV9_0_A` estende `ARMV8_5_A`, `ARMV9_1_A` estende `ARMV8_6_A`, etc., em vez de serem
+  declarados do zero.
+- **Zero wiring**: nenhum decoder/executor A64 consulta `Aarch64Architecture`/`has()` ainda —
+  `Aarch64Core`/`Aarch64Decoder` continuam exatamente como estavam (G3, comportamento idêntico).
+  Isso é B11.2 (thread da arquitetura no `Aarch64Core`/`Aarch64Decoder`) em diante.
+- `Aarch64ArchitectureTest` novo (10 testes): cobre herança de features através da cadeia
+  ARMv8.x, a correspondência de baseline ARMv9.x↔ARMv8.(x+4), imutabilidade da base em
+  `extending`/`of`, e que `ARMV8_0_A` não liga nenhuma feature.
+- `mvn -o test` verde (core 2513, +10) + `mvn -o install`; G5 completo nos 5 consumidores
+  (gbaemu 5 jogos ✅, ndsemu ✅, virtual-arm-box ✅, n3dsemu ✅, armbox 47/47 ✅ — nenhuma falha
+  pré-existente reproduzida desta vez, `Armv7TortureTest`/`Thumb2TortureTest` passam limpos).
+  `docs/COBERTURA-ISA.md` não regenerado (sem mudança de decode observável, nada a medir).
+  **Próximo da escada**: B11.2 (overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` +
+  fiação no `Aarch64Decoder`, ainda sem gatear nada de verdade) ou B11.3 (auditoria de versão de
+  cada instrução A64 já implementada), que podem rodar em paralelo — cabe ao usuário priorizar.
