@@ -287,15 +287,26 @@ public final class ArmArchitecture {
     /// barreiras `DMB`/`DSB`/`ISB` e `MRS`/`MSR` (SYSm) — todos cobertos por `Thumb2MiscDecoder`.
     /// Ninguém deve "consertar" isto plugando os decoders largos depois. `WAIT_HINTS` habilita
     /// `WFI`/`WFE`/`SEV`; `MEMORY_BARRIERS`, as barreiras. Sem `M_FAULT_MASKING`: `BASEPRI`/
-    /// `FAULTMASK` e `CPS f` viram UNDEFINED (v6-M só tem `PRIMASK`).
+    /// `FAULTMASK` e `CPS f` viram UNDEFINED (v6-M só tem `PRIMASK`). `BYTE_REVERSE` (`REV`/
+    /// `REV16`/`REVSH`, formas de 16 bits) É real em ARMv6-M — confirmado no `ARMv6-M Architecture
+    /// Reference Manual` (ARM DDI 0419C), seção A3.3.3: lista `REV`/`REVSH`/`REV16` como as
+    /// instruções de reversão de bytes que a arquitetura fornece (achado de cobertura de ISA,
+    /// B9.10 — a task B7.4 original não incluiu esta feature no preset).
     private static final ArmArchitecture ARMV6M_FEATURES = of("ARMv6-M",
             ArmFeature.THUMB2, ArmFeature.M_PROFILE, ArmFeature.WAIT_HINTS, ArmFeature.MEMORY_BARRIERS,
-            ArmFeature.BREAKPOINT);
+            ArmFeature.BREAKPOINT, ArmFeature.BYTE_REVERSE);
 
+    /// `Thumb2BranchDecoder` (`B.W`/`TBB`/`TBH`) **NÃO** é anexado aqui (achado de cobertura de
+    /// ISA, B9.10): o mesmo `ARMv6-M Architecture Reference Manual` (ARM DDI 0419C), seção A3.3.1,
+    /// afirma que "ARMv6-M supports the 16-bit Thumb instructions from ARMv7-M, in addition to the
+    /// 32-bit BL, DMB, DSB, ISB, MRS and MSR instructions" — uma lista fechada de SEIS encodings de
+    /// 32 bits que não inclui `B.W`/`TBB`/`TBH`. A task B7.4 original anexou este decoder por
+    /// engano (ele não aparece na enumeração do javadoc logo acima, que já dizia "BL... barreiras
+    /// ... MRS/MSR — todos cobertos por Thumb2MiscDecoder"): sem esta correção, `ARMV6M` aceitava
+    /// silenciosamente `B.W`/`TBB`/`TBH`, que a arquitetura real rejeita (G8).
     public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
             .withThumb32DecoderExtensions(List.of(
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder()));
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES)));
 
     /// Cortex-M3/M4 — **ARMv7-M** (B7.4): Thumb-2 largo completo + divide + bitfield + os
     /// registradores de mascaramento de falha ({@link ArmFeature#M_FAULT_MASKING}: `BASEPRI`/

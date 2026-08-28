@@ -87,6 +87,35 @@ class ArmArchitectureMProfilePresetsTest {
         assertEquals(InstructionKind.CPS, decode16(ArmArchitecture.ARMV6K_THUMB2, 0xB672).kind());
     }
 
+    // ── B9.10: v6-M tem REV/REV16/REVSH (16 bits, ARM DDI 0419C A3.3.3) mas NÃO tem B.W/TBB/TBH
+    // (32 bits, fora da lista fechada de 6 encodings da mesma seção A3.3.1) ───────────────────
+
+    @Test
+    void armv6mHasByteReverseButRejectsWideBranchAndTableBranch() {
+        // rev r0,r1 = 0xBA08 (16 bits, ARM DDI 0419C A3.3.3: ARMv6-M FORNECE REV/REV16/REVSH).
+        assertEquals(InstructionKind.BYTE_REVERSE, decode16(ArmArchitecture.ARMV6M, 0xBA08).kind(),
+                "ARMv6-M tem REV (A3.3.3)");
+        assertEquals(InstructionKind.BYTE_REVERSE, decode16(ArmArchitecture.ARMV7M, 0xBA08).kind());
+
+        // B.W incondicional = 0xF000 0xB800 (target irrelevante); v6-M não tem B.W (só os 6
+        // encodings de 32 bits de A3.3.1: BL/DMB/DSB/ISB/MRS/MSR).
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode32(ArmArchitecture.ARMV6M, 0xF000, 0xB800).kind(),
+                "ARMv6-M não tem B.W");
+        assertEquals(InstructionKind.BRANCH, decode32(ArmArchitecture.ARMV7M, 0xF000, 0xB800).kind(),
+                "ARMv7-M decodifica B.W");
+
+        // TBB [r1,r2] = 0xE8D1 0xF002; v6-M não tem TBB/TBH.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode32(ArmArchitecture.ARMV6M, 0xE8D1, 0xF002).kind(),
+                "ARMv6-M não tem TBB");
+        assertEquals(InstructionKind.TABLE_BRANCH, decode32(ArmArchitecture.ARMV7M, 0xE8D1, 0xF002).kind(),
+                "ARMv7-M decodifica TBB");
+
+        // BL continua funcionando em v6-M (nativo do ThumbDecoder, independente do
+        // Thumb2BranchDecoder removido do preset — ver Javadoc de ARMV6M).
+        assertEquals(InstructionKind.LONG_BRANCH_32, decode32(ArmArchitecture.ARMV6M, 0xF000, 0xF800).kind(),
+                "ARMv6-M continua tendo BL");
+    }
+
     // ── SVC em ARMV6M entra pela exceção M (não pelo SwiDispatcher) ──────────────────────────
 
     @Test
@@ -132,6 +161,7 @@ class ArmArchitectureMProfilePresetsTest {
     void mProfilePresetsHaveExpectedFeatureComposition() {
         assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.M_PROFILE));
         assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.THUMB2));
+        assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.BYTE_REVERSE), "v6-M tem REV/REV16/REVSH (B9.10)");
         assertFalse(ArmArchitecture.ARMV6M.has(ArmFeature.M_FAULT_MASKING), "v6-M não tem BASEPRI/FAULTMASK");
         assertFalse(ArmArchitecture.ARMV6M.has(ArmFeature.VFPV2), "sem VFP");
 

@@ -47,7 +47,16 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B12.5)
+## Onde estamos (atualizado 2026-08-28, após B9.10)
+
+`B9.10` (`trilha-b-arquiteturas/b9.10-t32-armv6m-triagem.md`) fechou: `v6-M` era a pior cobertura do
+projeto (24%) por ter um denominador errado (211 células que a arquitetura real não tem) mais 2
+gaps/bugs reais pequenos (`REV`-family faltando, `B.W`/`TBB`/`TBH` decodificando indevidamente) —
+agora **52%**, denominador correto. Achado colateral não corrigido (candidata a task própria):
+`ERET`/`TT`/`UDF`/uma forma de `SUB_rri` ainda decodificam sob `ARMV6M` via `Thumb2MiscDecoder` sem
+gate — mesma categoria de bug do achado principal, mas decoder compartilhado com `ARMV7M` (fix mais
+delicado). Ver `INDICE.md` da trilha B, linha B9.10.
+
 
 A escada `B11` (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`, torna o A64 componível
 por versão/feature) está com B11.1-B11.12 ✅ — **completa, as 9 features de B11.5 todas gateadas** —
