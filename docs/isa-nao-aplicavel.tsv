@@ -313,13 +313,39 @@ GMI	A64	ARMv8.5-A/FEAT_MTE2
 IRG	A64	ARMv8.5-A/FEAT_MTE2
 SUBP	A64	ARMv8.5-A/FEAT_MTE2
 SUBPS	A64	ARMv8.5-A/FEAT_MTE2
-SETGP	A64	ARMv8.5-A/FEAT_MTE2 (`SET*` com tag — diferente de `SETP`/`SETM`/`SETE` sem tag, ARMv8.8, já ✅)
+SETGP	A64	ARMv8.5-A/FEAT_MTE2 (`SET*` com tag — diferente de `SETP`/`SETM`/`SETE` sem tag, ARMv8.8)
 SETGM	A64	ARMv8.5-A/FEAT_MTE2
 SETGE	A64	ARMv8.5-A/FEAT_MTE2
 GCSSTR	A64	ARMv9.4-A/FEAT_GCS (Guarded Control Stack), bem posterior ao MTE
-CPYE	A64	ARMv8.8-A/FEAT_MOPS (memcpy) — achado: `SETP`/`SETM`/`SETE` (memset, mesma FEAT_MOPS) já decodificam ✅ via um caminho genérico existente; `CPY*` não passa por esse mesmo caminho, candidata a investigar junto (não feito nesta sessão)
+CPYE	A64	ARMv8.8-A/FEAT_MOPS (memcpy)
 CPYM	A64	ARMv8.8-A/FEAT_MOPS
 CPYP	A64	ARMv8.8-A/FEAT_MOPS
+
+# ── A64 (B11.3, auditoria de versão): `SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE` (`FEAT_MOPS`,
+# ── ARMv8.8-A) e `LDCLRP`/`LDSETP`/`SWPP` (128-bit atomics, `FEAT_LSE128`) apareciam ✅ na tabela —
+# ── achado real (confirmado por probe direto no `Aarch64Decoder`): eram misdecodificados como `LDR
+# ── (literal)` (bug de decode corrigido nesta sessão, `LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`,
+# ── `Aarch64Decoder`/G8) — nenhum tinha semântica real implementada. `LDAPR_i` (`LDAPUR`,
+# ── `FEAT_LRCPC2`/ARMv8.4-A) caía no MESMO bug, mesma correção.
+SETP	A64	ARMv8.8-A/FEAT_MOPS (memset) — mesma família de CPYE/CPYM/CPYP acima
+SETM	A64	ARMv8.8-A/FEAT_MOPS
+SETE	A64	ARMv8.8-A/FEAT_MOPS
+CPYFP	A64	ARMv8.8-A/FEAT_MOPS (memcpy forward-only)
+CPYFM	A64	ARMv8.8-A/FEAT_MOPS
+CPYFE	A64	ARMv8.8-A/FEAT_MOPS
+LDCLRP	A64	ARMv8.9-A/FEAT_LSE128 (128-bit atomics)
+LDSETP	A64	ARMv8.9-A/FEAT_LSE128
+SWPP	A64	ARMv8.9-A/FEAT_LSE128
+LDAPR_i	A64	ARMv8.4-A/FEAT_LRCPC2 ("LDAPUR", load-acquire RCpc com offset imediato)
+STLR_i	A64	ARMv8.4-A/FEAT_LRCPC2 ("STLUR", store-release RCpc com offset imediato — mesma família de LDAPR_i)
+
+# ── A64 (B11.3): `LDRA` ("LDRAA"/"LDRAB", load com autenticação de ponteiro) — mesmo bug de decode
+# ── acima, mas em `decodeLoadStoreSingle` (bit21=1 com idx=POST_INDEX/PRE_INDEX não checado,
+# ── colidia com STR/STUR). `PACIA1716`/`PACIASP`/etc. (hint-space, RES NOP mesmo sem FEAT_PAuth) já
+# ── decodificam ✅ desde B6.6.7 — `LDRA` é uma instrução dedicada real, não hint-space, e não tinha
+# ── semântica implementada.
+LDRA	A64	ARMv8.3-A/FEAT_PAuth ("LDRAA"/"LDRAB", load com autenticação de ponteiro)
+
 SDOT_v	A64	ARMv8.2-A/FEAT_DotProd
 SDOT_vi	A64	ARMv8.2-A/FEAT_DotProd
 UDOT_v	A64	ARMv8.2-A/FEAT_DotProd

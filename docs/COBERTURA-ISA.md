@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **76%** — 2889 de 3761 células aplicáveis decodificam.
+> **76%** — 2872 de 3744 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **98%** (647/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **61%** (234/383) |
-| A64 | **81%** (824/1011) |
+| A64 | **81%** (807/994) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 81% (824/1011) |
+| A64 — AArch64 | 1161 | A64 81% (807/994) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1875,17 +1875,17 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDUMIN` | ❌ |
 | `SWP` | ❌ |
 | `LDAPR` | ❌ |
-| `LDCLRP` | ✅ |
-| `LDSETP` | ✅ |
-| `SWPP` | ✅ |
-| `LDRA` | ✅ |
-| `STLR_i` | ✅ |
-| `LDAPR_i` | ✅ |
-| `LDAPR_i` | ✅ |
-| `LDAPR_i` | ✅ |
-| `LDAPR_i` | ✅ |
-| `LDAPR_i` | ✅ |
-| `LDAPR_i` | ✅ |
+| `LDCLRP` | · |
+| `LDSETP` | · |
+| `SWPP` | · |
+| `LDRA` | · |
+| `STLR_i` | · |
+| `LDAPR_i` | · |
+| `LDAPR_i` | · |
+| `LDAPR_i` | · |
+| `LDAPR_i` | · |
+| `LDAPR_i` | · |
+| `LDAPR_i` | · |
 | `GCSSTR` | · |
 | `ST_mult` | ✅ |
 | `ST_mult` | ✅ |
@@ -1926,15 +1926,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `STZ2G` | · |
 | `STZ2G` | · |
 | `STZ2G` | · |
-| `SETP` | ✅ |
-| `SETM` | ✅ |
-| `SETE` | ✅ |
+| `SETP` | · |
+| `SETM` | · |
+| `SETE` | · |
 | `SETGP` | · |
 | `SETGM` | · |
 | `SETGE` | · |
-| `CPYFP` | ✅ |
-| `CPYFM` | ✅ |
-| `CPYFE` | ✅ |
+| `CPYFP` | · |
+| `CPYFM` | · |
+| `CPYFE` | · |
 | `CPYP` | · |
 | `CPYM` | · |
 | `CPYE` | · |

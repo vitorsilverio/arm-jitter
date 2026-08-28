@@ -659,6 +659,16 @@ public final class Aarch64Decoder {
     private static final int SUBCLASS_PAIR = 0b10;
     private static final int SUBCLASS_SINGLE = 0b11;
 
+    // ── B11.3 (auditoria de versão A64): dentro de SUBCLASS_LITERAL, `LDR (literal)`/`LDRSW ────
+    // ── (literal)`/`PRFM (literal)` reais exigem bit24=0 (ARM DDI 0487 C4.1.3, `@ldlit`/`LD_lit` do
+    // ── `a64.decode` real do QEMU) — bit24=1 no mesmo bucket é o espaço "Memory Copy and Memory
+    // ── Set"/"Atomic 128-bit memory operations" (FEAT_MOPS/FEAT_LSE128, `CPYFP`/`CPYFM`/`CPYFE`/
+    // ── `SETP`/`SETM`/`SETE`/`LDCLRP`/`LDSETP`/`SWPP`), que `decodeLoadLiteral` não modela — sem
+    // ── este bit checado, esses 9 mnemônicos eram silenciosamente misdecodificados como `LDR
+    // ── (literal)` (bug real achado auditando `docs/COBERTURA-ISA.md`, confirmado por probe direto
+    // ── no decoder). G8: recusar em vez de confundir.
+    private static final int LITERAL_SUBCLASS_RESERVED_BIT_SHIFT = 24;
+
     // ── AdvSIMD load/store multiple/single structures (`LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R`, ────
     // ── B8.6): V=1 dentro da classe Loads-and-Stores, bit31 fixo=0, bit30=Q, bits[29:24] fixo ─────
     // ── "001100"(múltiplas)/"001101"(única) — fatos conferidos contra `a64.decode`/ ───────────────
@@ -1418,6 +1428,12 @@ public final class Aarch64Decoder {
                 default -> throw unsupported(word, address);
             };
         }
+        if (subclass == SUBCLASS_LITERAL
+                && ((word >>> LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) & 1) != 0) {
+            // `CPYFP`/`CPYFM`/`CPYFE`/`SETP`/`SETM`/`SETE`/`LDCLRP`/`LDSETP`/`SWPP` (ver comentário
+            // de LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) — G8.
+            throw unsupported(word, address);
+        }
         return switch (subclass) {
             case SUBCLASS_LITERAL -> decodeLoadLiteral(word, address);
             case SUBCLASS_PAIR -> decodeLoadStorePair(word, address);
@@ -1738,8 +1754,18 @@ public final class Aarch64Decoder {
             // atômico).
             throw unsupported(word, address);
         }
+        if (bit21) {
+            // `idx==POST_INDEX`/`PRE_INDEX` com bit21=1 (B11.3, achado real): os formatos
+            // `@ldst_imm`/`@ldst_imm_post`/`@ldst_imm_pre`/`@ldst_imm_user` reais (`a64.decode` do
+            // QEMU) exigem bit21=0 — bit21=1 nesse espaço é `LDRA`/`LDRAB` ("Load/store register
+            // (pointer authentication)"), que reaproveita os MESMOS bits `idx`/`imm9` com semântica
+            // diferente. Sem esta checagem, `LDRA*` era silenciosamente misdecodificado como
+            // `STR`/`LDUR` de um `Rn` que na verdade é a chave de modificador do PAC (probe direto
+            // no decoder confirmou). G8: recusar.
+            throw unsupported(word, address);
+        }
         Ir64AddressingMode addressingMode = switch (idx) {
-            // bit21=1 já foi tratado acima para os dois casos em que existe; aqui só sobra
+            // bit21=1 já foi tratado acima para os três casos em que existe; aqui só sobra
             // bit21=0: idx=00 é LDUR/STUR, idx=10 é a forma "unprivileged" LDTR/STTR — mesmo
             // endereçamento funcional de LDUR/STUR (este emulador não modela EL0/EL1 de um jeito
             // que distinga o modo de acesso, mesma simplificação documentada para LDAR/STLR em
@@ -1833,6 +1859,12 @@ public final class Aarch64Decoder {
         if (idx == IDX_UNSCALED && bit21) {
             // Espaço atômico/LSE (mesmo bit de decodeLoadStoreSingle) — SIMD&FP não tem forma
             // atômica no hardware real (LSE é só GPR); recusar em vez de confundir com LDUR/STUR.
+            throw unsupported(word, address);
+        }
+        if (bit21) {
+            // idx=POST_INDEX/PRE_INDEX com bit21=1 (mesmo achado de B11.3 de decodeLoadStoreSingle,
+            // aplicado por simetria): fora do espaço `@ldst_imm*` real (SIMD&FP não tem forma de
+            // pointer authentication, então isso é sempre reservado neste lado) — G8: recusar.
             throw unsupported(word, address);
         }
         Ir64AddressingMode addressingMode = switch (idx) {

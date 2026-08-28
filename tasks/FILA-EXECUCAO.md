@@ -621,6 +621,34 @@ automaticamente**: `B11.3` (auditoria de versão de cada instrução A64 já imp
 de `1.4.0` (reservada para 100% de cobertura). **Fila automática vazia de novo** — próxima
 priorização cabe ao usuário.
 
+✅ **B11.3 fechada 2026-08-28** (`trilha-b-arquiteturas/b11.3-auditoria-versao-a64.md`, task spec
+escrita e executada na mesma sessão, priorizada pelo usuário entre B11.3/B11.4/lacunas A64
+pequenas/B12.1) — auditoria dos 528 mnemônicos A64 ✅ únicos de `docs/COBERTURA-ISA.md` contra a
+versão/feature ARM real que os introduziu. **Achado principal, bug real de decode (G8)**: 10
+mnemônicos apareciam ✅ mas não tinham NENHUM código implementando-os — `CPYFP`/`CPYFM`/`CPYFE`/
+`SETP`/`SETM`/`SETE` (`FEAT_MOPS`, ARMv8.8-A), `LDCLRP`/`LDSETP`/`SWPP` (128-bit atomics,
+`FEAT_LSE128`) e `LDAPR_i`/`STLR_i` ("LDAPUR"/"STLUR", `FEAT_LRCPC2`, ARMv8.4-A) eram
+silenciosamente misdecodificados como `LDR (literal)` (`decodeLoadsAndStores` não checava bit24
+dentro do bucket `SUBCLASS_LITERAL`); `LDRA` (`LDRAA`/`LDRAB`, `FEAT_PAuth`, ARMv8.3-A) caía como
+`STR`/`STUR` (`decodeLoadStoreSingle` não checava bit21 para `idx=POST_INDEX`/`PRE_INDEX`).
+Confirmado por probe direto no `Aarch64Decoder` antes de corrigir. Corrigido com 2 checagens novas
++ `Aarch64LoadStoreRegisterReservedSpaceDecoderTest` (11 testes: 6 negativos + 5 de não-regressão);
+`docs/isa-nao-aplicavel.tsv` ganhou as 10 linhas correspondentes. **Achado secundário**: ~15
+mnemônicos ✅ legítimos não são baseline ARMv8.0-A — `CAS`/`CASP` (`FEAT_LSE`, ARMv8.1), `RMIF`/
+`SETF8`/`SETF16` (`FEAT_FlagM`, ARMv8.4), `AXFLAG`/`XAFLAG` (`FEAT_FlagM2`, ARMv8.5), `WFET`/`WFIT`
+(`FEAT_WFxT`, ARMv8.7), `PAN`/`UAO`/`DIT`/`SSBS`/`TCO`/`ALLINT` via `MSR` (ARMv8.1/8.2/8.4/8.0-opc/
+8.5/8.8), `SHA512*`/`SM3*`/`SM4*`/`RAX1`/`XAR`/`BCAX`/`EOR3` (ARMv8.2, achado novo — B8.11b não
+tinha citado a versão). `AES*`/`PMULL*`/`SHA1*`/`SHA256*` confirmados extensão OPCIONAL desde
+ARMv8.0-A; `ESB`/`GCSB`/`CHKFEAT` confirmados hint-space (RES NOP correto sem a feature, mesmo
+padrão de `PACIA1716`/etc.). `mvn -o test` verde (core+truffle) + `install`; G5 completo nos 5
+consumidores ✅. `docs/COBERTURA-ISA.md`: A64 81%→81% (824/1011→807/994), global 76%→76%
+(2889/3761→2872/3744) — sem gatilho de release (suspenso até 100%). Ver **Resultado** na task.
+**Candidatas restantes, não pegas automaticamente**: `B11.4` (primeiro gate real), `B11.5`
+(medidor por versão), adicionar os ~15 features achados a `Aarch64Feature` (decisão de B11.4),
+lacunas A64 pequenas (`SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice, `REV16_v`/`REV32_v`/
+`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`), `B12.1`/`B12.3`, publicação de `1.4.0`
+(reservada para 100%). **Fila automática vazia de novo** — próxima priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
