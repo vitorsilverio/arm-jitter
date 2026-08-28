@@ -569,9 +569,24 @@ consumidores diferentes dos que estamos fazendo" — "nenhum consumidor NOSSO pe
 argumento para descartar/adiar uma feature ARM real (só para sequenciar). Escada B11.1-B11.5+
 definida na task (fundação → threading no core/decoder sem quebrar G3 → auditoria de versão por
 instrução já implementada → prova de conceito com 1 feature isolada → medidor `COBERTURA-ISA.md`
-por versão de A64, não mais uma coluna monolítica). **B11.1 é a próxima candidata pegável** (sem
-dependência), mas não pega automaticamente — cabe ao usuário confirmar prioridade frente às outras
-candidatas já registradas (`SQDMULL`/etc. sem índice, `REV16_v`/etc.).
+por versão de A64, não mais uma coluna monolítica).
+
+✅ **B11.1 fechada 2026-08-27** (priorizada pelo usuário entre B11.1/publicar 1.4.0/lacunas A64
+pequenas restantes) — `arch64.Aarch64Feature` (enum, 19 `FEAT_*` reais ARMv8.1-A..ARMv9.5-A já
+catalogados em `docs/isa-nao-aplicavel.tsv`) + `arch64.Aarch64Architecture` (mesmo padrão
+`of`/`extending`/`has` de `ArmArchitecture`, sem `DecoderExtension` — mecanismo que não existe no
+pipeline A64 ainda), presets `ARMV8_0_A`..`ARMV8_9_A`/`ARMV9_0_A`..`ARMV9_5_A`. Achado confirmado
+no manual ARM: toda ARMv9.x-A tem como baseline mandatório (fora SVE/SME) o conjunto de features
+da ARMv8.(x+4)-A correspondente — presets `ARMV9_x_A` estendem o `ARMV8_(x+4)_A` equivalente.
+**Zero wiring**: nenhum decoder/executor A64 consulta a arquitetura nova ainda (G3, comportamento
+idêntico) — isso é B11.2. `mvn -o test` verde (core 2513, +10) + `install`; G5 completo nos 5
+consumidores (gbaemu/ndsemu/virtual-arm-box/n3dsemu ✅, armbox 47/47 ✅, sem a falha pré-existente
+de sessões anteriores reproduzida desta vez). Ver **Resultado** em
+`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`. **Próximo da escada, não pego
+automaticamente**: B11.2 (fiação no `Aarch64Core`/`Aarch64Decoder`) ou B11.3 (auditoria de versão
+de cada instrução A64 já implementada) — cabe ao usuário priorizar. Candidatas restantes de
+sessões anteriores continuam de pé: publicar `1.4.0`, `SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem
+índice, `REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`.
 
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
