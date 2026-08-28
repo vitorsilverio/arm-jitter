@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
@@ -1566,25 +1567,42 @@ class Aarch64DecoderCorpusTest {
         // POSITIVA: as 8 combinações do campo `form` (bits[23:21]), cruzadas com bit31 onde ele
         // desambigua (STXP/LDXP vs. CASP), decodificam sem lançar — nenhuma sobra sem tratamento
         // no subgrupo SUBCLASS_EXCLUSIVE_ATOMIC.
-        int ldxrWordFormCleared = 0x885f7c20 & ~(0b111 << 21);
-        int[] allForms = {
+        // B11.11: as formas CAS/CASP passaram a exigir FEAT_LSE — testadas aqui com um decoder
+        // ARMV8_1_A (que tem a feature); as formas não-atômicas seguem no DECODER default.
+        // bit31 zerado explicitamente (a base 0x885f7c20 TEM bit31=1) para que as formas CASP
+        // (bit31=0 é o que as distingue de STXP/LDXP) fiquem corretas — ver
+        // EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT em Aarch64Decoder.
+        int ldxrWordFormCleared = 0x885f7c20 & ~(0b111 << 21) & ~(1 << 31);
+        int[] baselineForms = {
                 ldxrWordFormCleared | (0b000 << 21), // STXR
-                ldxrWordFormCleared | (0b001 << 21), // CASP (bit31=0 na base)
                 ldxrWordFormCleared | (0b010 << 21), // LDXR
-                ldxrWordFormCleared | (0b011 << 21), // CASP (bit31=0 na base)
                 ldxrWordFormCleared | (0b100 << 21), // STLR
-                ldxrWordFormCleared | (0b101 << 21), // CAS
                 ldxrWordFormCleared | (0b110 << 21), // LDAR
-                ldxrWordFormCleared | (0b111 << 21), // CAS
                 ldxrWordFormCleared | (1 << 31) | (0b001 << 21), // STXP (bit31=1)
                 ldxrWordFormCleared | (1 << 31) | (0b011 << 21), // LDXP (bit31=1)
         };
-        for (int encoding : allForms) {
+        for (int encoding : baselineForms) {
             TestAddressSpace raw = new TestAddressSpace(4);
             raw.put32(0, encoding);
             AddressSpace64 scratch = AddressSpace64.wrapping(raw);
             assertDoesNotThrow(() -> DECODER.decode(scratch, 0),
                     () -> "0x" + Integer.toHexString(encoding) + " deveria decodificar (B8.1)");
+        }
+        int[] lseForms = {
+                ldxrWordFormCleared | (0b001 << 21), // CASP (bit31=0)
+                ldxrWordFormCleared | (0b011 << 21), // CASP (bit31=0)
+                ldxrWordFormCleared | (0b101 << 21), // CAS
+                ldxrWordFormCleared | (0b111 << 21), // CAS
+        };
+        Aarch64Decoder lseDecoder = new Aarch64Decoder(Aarch64Architecture.ARMV8_1_A);
+        for (int encoding : lseForms) {
+            TestAddressSpace raw = new TestAddressSpace(4);
+            raw.put32(0, encoding);
+            AddressSpace64 scratch = AddressSpace64.wrapping(raw);
+            assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0),
+                    () -> "0x" + Integer.toHexString(encoding) + " deveria rejeitar sem FEAT_LSE (B11.11)");
+            assertDoesNotThrow(() -> lseDecoder.decode(scratch, 0),
+                    () -> "0x" + Integer.toHexString(encoding) + " deveria decodificar com FEAT_LSE (B11.11)");
         }
     }
 
@@ -3296,50 +3314,39 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void casWord() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x518);
-        assertEquals(0, op.rs());
-        assertEquals(1, op.rt());
-        assertEquals(2, op.rn());
-        assertEquals(Ir64MemSize.WORD, op.size());
+        // B11.11: FEAT_LSE (ARMv8.1-A) agora é gateada — o decoder DEFAULT (ARMv8.0-A) rejeita.
+        // Decodificação bem-sucedida com ARMV8_1_A: ver Aarch64FeatureGateLseDecoderTest.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x518));
     }
 
     @Test
     void casDoubleword() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x51c);
-        assertEquals(3, op.rs());
-        assertEquals(4, op.rt());
-        assertEquals(5, op.rn());
-        assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
+        // B11.11: mesmo gate de #casWord.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x51c));
     }
 
     @Test
     void casbByte() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x520);
-        assertEquals(Ir64MemSize.BYTE, op.size());
+        // B11.11: mesmo gate de #casWord.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x520));
     }
 
     @Test
     void cashHalf() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) DECODER.decode(memory, 0x524);
-        assertEquals(Ir64MemSize.HALF, op.size());
+        // B11.11: mesmo gate de #casWord.
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x524));
     }
 
     @Test
     void caspWordPair() {
-        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) DECODER.decode(memory, 0x528);
-        assertEquals(12, op.rs());
-        assertEquals(14, op.rt());
-        assertEquals(16, op.rn());
-        assertFalse(op.wide());
+        // B11.11: mesmo gate de #casWord (CASP).
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x528));
     }
 
     @Test
     void caspaDoublewordPair() {
-        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) DECODER.decode(memory, 0x52c);
-        assertEquals(18, op.rs());
-        assertEquals(20, op.rt());
-        assertEquals(22, op.rn());
-        assertTrue(op.wide());
+        // B11.11: mesmo gate de #casWord (CASP).
+        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(memory, 0x52c));
     }
 
     // ── B8.2 ──────────────────────────────────────────────────────────────────────────────────

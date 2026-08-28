@@ -1471,6 +1471,8 @@ public final class Aarch64Decoder {
     /// plano `b7-plano-cobertura-isa.md`: só `CAS`/`CASP` foram pedidos, apesar de todos serem da
     /// mesma extensão) — não alcançáveis por este método porque `form`+bit31 já esgotam o espaço
     /// de `CAS`/`CASP`/`STXR`/`LDXR`/`STXP`/`LDXP`/`STLR`/`LDAR` nas 8 combinações do campo.
+    /// `CAS`/`CASP` (B11.11): gateadas por {@link Aarch64Feature#LSE} (`ARMv8.1-A`) — os demais
+    /// ramos (`STXR`/`LDXR`/`STLR`/`LDAR`/`STXP`/`LDXP`) continuam baseline, sem gate.
     private Ir64Op decodeExclusive(int word, long address) {
         int form = (word >>> EXCLUSIVE_FORM_SHIFT) & EXCLUSIVE_FORM_MASK;
         if (form == EXCLUSIVE_FORM_STXR) {
@@ -1492,10 +1494,18 @@ public final class Aarch64Decoder {
                 boolean pairLoad = (form & EXCLUSIVE_FORM_PAIR_LOAD_BIT) != 0;
                 return decodeExclusivePair(word, pairLoad);
             }
+            // B11.11: FEAT_LSE (ARMv8.1-A) — um Cortex-A53 (ARMv8.0-A) não tem CASP.
+            if (!architecture.has(Aarch64Feature.LSE)) {
+                throw unsupported(word, address);
+            }
             return decodeCompareAndSwapPair(word);
         }
         // formIgnoringL == EXCLUSIVE_FORM_CAS: as 8 combinações do campo de 3 bits já foram
         // esgotadas pelos ramos acima (000/010/100/110/001/011), só resta 101/111 = CAS.
+        // B11.11: FEAT_LSE (ARMv8.1-A) — um Cortex-A53 (ARMv8.0-A) não tem CAS.
+        if (!architecture.has(Aarch64Feature.LSE)) {
+            throw unsupported(word, address);
+        }
         return decodeCompareAndSwap(word);
     }
 
