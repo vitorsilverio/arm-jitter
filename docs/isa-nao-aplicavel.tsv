@@ -206,21 +206,24 @@ SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
 # ── `arm11mpcore_initfn` do QEMU: só `ARM_FEATURE_V6K`, nunca `ARM_FEATURE_THUMB2`) — já uma
 # ── decisão registrada em `b5.2` (`ARM11_MPCORE` preset, "Sem Thumb-2"). Já implementadas em
 # ── `ARMV7A` desde B3.1 (`ArmFeature.MOVW_MOVT`/`MLS_MULTIPLY`/`BIT_FIELD`/`BIT_REVERSE`).
-MOVW	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
-MOVT	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
-MLS	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), MPCore/v6K reais não têm Thumb-2
-SBFX	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), MPCore/v6K reais não têm Thumb-2
-UBFX	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), MPCore/v6K reais não têm Thumb-2
-BFCI	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_BFCI = BFC/BFI), MPCore/v6K reais não têm Thumb-2
-RBIT	v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_RBIT), MPCore/v6K reais não têm Thumb-2
+# ── B9.12 (2026-08-28): mesma razão-versão também exclui v4T/v5TE — ARMv6T2 é posterior aos dois
+# ── (ARMv4T ~1994, ARMv5TE ~1999, ARMv6T2 ~2003), nenhum tem Thumb-2.
+MOVW	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+MOVT	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+MLS	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+SBFX	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+UBFX	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, op_bfx), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+BFCI	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_BFCI = BFC/BFI), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
+RBIT	v4T,v5TE,v6K,MPCore	ARMv6T2 (ENABLE_ARCH_6T2, trans_RBIT), v4T/v5TE/MPCore/v6K reais não têm Thumb-2
 
 # ── A32 (B9.2): SDIV/UDIV — CONFERIDO contra `op_div`/`trans_SDIV`/`trans_UDIV` reais do QEMU:
 # ── gateadas por `dc_isar_feature(aa32_arm_div, s)` — a extensão OPCIONAL de divisão inteira do
 # ── ARMv7-A/R (nem existe o bit ISAR antes da v7), mais nova ainda que ARMv6T2. Não pertence ao
 # ── ARM11 MPCore/ARMv6K por nenhuma leitura. Já implementada em `ARMV7A` desde B3.1
-# ── (`ArmFeature.DIVIDE`, mesma nota "core que a possui, como o Cortex-A15/A7").
-SDIV	v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v6K
-UDIV	v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v6K
+# ── (`ArmFeature.DIVIDE`, mesma nota "core que a possui, como o Cortex-A15/A7"). B9.12
+# ── (2026-08-28): mesma razão-versão também exclui v4T/v5TE, mais antigos ainda que v6K.
+SDIV	v4T,v5TE,v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v4T/v5TE/v6K
+UDIV	v4T,v5TE,v6K,MPCore	extensão opcional de divisão do ARMv7-A/R (aa32_arm_div), posterior a v4T/v5TE/v6K
 
 # ── VFP (B9.6): VFMA/VFMS/VFNMA/VFNMS (multiplicação-acumulação FUNDIDA) — CONFERIDO contra
 # ── `target/arm/tcg/translate-vfp.c` real do QEMU (`do_vfm_sp`/`do_vfm_dp`, comentário literal
@@ -563,3 +566,96 @@ UXTAB16	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 
 UXTAH	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 VCTP	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 WLS	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
+
+# ── B9.12 (2026-08-28): v4T/v5TE mostravam dezenas de células `❌` que na verdade são ARMv5T/
+# ── ARMv5TE/ARMv6/ARMv6K genuínos — todos POSTERIORES ao próprio ARMv4T (~1994/95)/ARMv5TE
+# ── (~1999/2000). Prova: cada mnemônico abaixo já está `✅` em `v6K`/`MPCore` (ou `v5TE`, no lote
+# ── ARMv5T-only) — implementado a partir da versão certa, só faltava a linha de exclusão para as
+# ── versões anteriores. CONFERIDO contra `target/isa-decode/a32.decode` vendorizado (linhas citadas
+# ── por família) e contra o mesmo padrão já usado por B9.2/B9.10 (mesma instrução, mesma versão).
+# ── `MCR`/`MRC` sob `v4T` NÃO entram aqui — são ARMv3+ genuínas, aplicáveis por construção; a
+# ── célula `❌` é um gap real de decode (candidata a task própria), não curadoria. Os hints T16
+# ── (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`/`IT`/`CBZ`) também ficam de fora — mostram `❌` em `v6K`/
+# ── `MPCore` também, não é só denominador de v4T/v5TE.
+
+# ── ARMv5T (a32.decode ~106-108): CLZ/BLX_r, exclui só v4T (v5TE já os tem).
+CLZ	v4T	ARMv5T, anterior ao ARMv4T (ARM7TDMI)
+BLX_r	v4T	ARMv5T, anterior ao ARMv4T (ARM7TDMI)
+
+# ── ARMv5TE (a32.decode ~115-146, 546-549): LDRD/STRD (par de registrador) + MCRR/MRRC
+# ── (transferência dupla de coprocessador), exclui só v4T (v5TE já os tem — extensão "E" do nome).
+LDRD_rr	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+STRD_rr	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+LDRD_ri_a32	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+STRD_ri_a32	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+MCRR	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+MRRC	v4T	ARMv5TE (extensão "E"), anterior ao ARMv4T
+
+# ── ARMv6/ARMv6K (a32.decode ~148-500): DSP/media, aritmética paralela, exclusivos, hints, SMC —
+# ── exclui v4T e v5TE, ambos anteriores ao ARMv6 (2001+).
+UMAAL	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+USADA8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SMC	v4T,v5TE	ARMv6K (Security Extensions/TrustZone), anterior ao ARMv4T/ARMv5TE — já implementada via `ArmFeature.SECURE_MONITOR_CALL` (B9.8.3)
+SADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SSAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SSUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SSUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QSAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QSUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+QSUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHSAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHSUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+SHSUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+USAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+USUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+USUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQSAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQSUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UQSUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHADD16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHASX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHSAX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHSUB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHADD8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+UHSUB8	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE (aritmética paralela)
+PKH	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SSAT	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+USAT	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SSAT16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+USAT16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SXTAB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SXTAB	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SXTAH	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+UXTAB16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+UXTAB	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+UXTAH	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+SEL	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+REV	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+REV16	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+REVSH	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+STREX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+STREXD_a32	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+STREXB	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+STREXH	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+LDREX	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+LDREXD_a32	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+LDREXB	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+LDREXH	v4T,v5TE	ARMv6K, anterior ao ARMv4T/ARMv5TE
+WFI	v4T,v5TE	ARMv6K (hint instructions), anterior ao ARMv4T/ARMv5TE
+SETEND	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+CPS	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+CPS_v7m	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE

@@ -47,7 +47,17 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.11)
+## Onde estamos (atualizado 2026-08-28, após B9.12)
+
+`B9.12` (`trilha-b-arquiteturas/b9.12-v4t-v5te-curadoria-denominador.md`) fechou: v4T e v5TE eram os
+piores números do 32 bits depois de v6-M (64%/70%) pelo mesmo motivo já visto na B9.10 — dezenas de
+células `❌` eram instruções ARMv5T/ARMv5TE/ARMv6/ARMv6K/ARMv6T2/ARMv7 genuínas (todas posteriores
+ao próprio ARMv4T/ARMv5TE), só faltava a curadoria em `isa-nao-aplicavel.tsv`. Medição: v4T 64%→93%,
+v5TE 70%→95%, global 81%→82% (marco de release continua suspenso). Zero mudança de código de
+produção — G5 (gbaemu/ndsemu/armbox) verde. Achados colaterais NÃO resolvidos, documentados na task:
+`MCR`/`MRC` sob `v4T` (gap real de decode, ARMv3+ deveria decodificar) e os hints T16 (`YIELD`/`WFE`/
+`WFI`/`SEV`/`NOP`/`IT`/`CBZ`, que também mostram `❌` em `v6K`/`MPCore` — gap real, não denominador).
+Ambos candidatos a task própria.
 
 `B9.10` (`trilha-b-arquiteturas/b9.10-t32-armv6m-triagem.md`) fechou: `v6-M` era a pior cobertura do
 projeto (24%) por ter um denominador errado (211 células que a arquitetura real não tem) mais 2
