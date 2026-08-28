@@ -938,6 +938,9 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_SCALAR_ESZ = 3;
     /// `Rm` fixo="00000" — "two-register miscellaneous" (`ABS`/`NEG`/`CM**0`/`SADDLP`/...).
     private static final int ADVSIMD_INT_RM_TWO_REG_MISC = 0b0_0000;
+    /// B8.18: opcode (bits[15:11]) compartilhado por `CNT`/`NOT`/`RBIT` dentro do slot
+    /// "two-register miscellaneous" — ver {@link #decodeVectorUnaryByteOnlyOpcode}.
+    private static final int ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE = 0b0_1011;
     /// `Rm` fixo="00001" — narrow/widen unário (`SQXTN`/...), fora de escopo (B8.8).
     private static final int ADVSIMD_INT_RM_NARROW_UNARY = 0b0_0001;
     /// `Rm[4:1]` fixo="1000" (`Rm=0b10000`/`0b10001`, bit0 livre) — "across lanes" (`ADDV`/...)/
@@ -2567,6 +2570,20 @@ public final class Aarch64Decoder {
             }
         }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
+            // B8.18: `CNT`/`NOT`/`RBIT` compartilham o MESMO opcode (`0b0_1011`) neste slot — o
+            // campo que para o resto desta tabela é `esz` aqui só desambigua as 3 mnemônicas entre
+            // si (byte a byte sempre, arranjo `.8B`/`.16B` fixo no encoding real; NUNCA um tamanho
+            // de elemento livre), então precisam de despacho próprio ANTES do genérico abaixo, com
+            // `esz` forçado a `0` no record — devolver o `esz` cru quebraria `RBIT` (que reverte
+            // bits por BYTE, não pelo tamanho que o campo pareceria indicar). Sem forma escalar
+            // real (G8: `scalar` cai no `throw` genérico do fim deste bloco).
+            if (!scalar && opcode == ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE) {
+                Ir64VectorUnaryOp byteOp = decodeVectorUnaryByteOnlyOpcode(u, esz);
+                if (byteOp != null) {
+                    return new Ir64Op.VectorArithmeticUnary(byteOp, false, q, 0, rd, rn);
+                }
+                throw unsupported(word, address);
+            }
             Ir64VectorUnaryOp op = decodeVectorUnaryOpcode(u, opcode, scalar);
             if (op != null) {
                 validateScalarUnaryEsz(word, address, scalar, op, esz);
@@ -2801,6 +2818,18 @@ public final class Aarch64Decoder {
     /// D-only).
     private Ir64Op decodeAdvancedSimdThreeSameShape(int word, long address, boolean scalar, boolean q, int esz,
             boolean u, int opcode, int rn, int rd, int rm) {
+        // B8.18: "AdvSIMD three same" LÓGICO (`AND`/`BIC`/`ORR`/`ORN`/`EOR`/`BSL`/`BIT`/`BIF`) vive
+        // no MESMO opcode fixo (`ADVSIMD_THREE_SAME_LOGICAL_OPCODE`) deste slot, mas o campo que
+        // para o resto da tabela é `esz` aqui é só mais opcode (bitwise não distingue lane; `esz=0`
+        // fixo no record, ver {@link #decodeVectorLogicalOpcode}). Sem forma escalar real (G8:
+        // `scalar` cai no `throw unsupported` do fim deste método).
+        if (!scalar && opcode == ADVSIMD_THREE_SAME_LOGICAL_OPCODE) {
+            Ir64VectorThreeSameOp logicalOp = decodeVectorLogicalOpcode(u, esz);
+            if (logicalOp != null) {
+                return new Ir64Op.VectorArithmeticThreeSame(logicalOp, false, q, 0, rd, rn, rm);
+            }
+            throw unsupported(word, address);
+        }
         Ir64VectorThreeSameOp threeSameOp = decodeVectorThreeSameOpcode(u, opcode);
         if (threeSameOp != null) {
             if (scalar) {
@@ -2968,6 +2997,35 @@ public final class Aarch64Decoder {
         };
     }
 
+    /// B8.18: opcode fixo (bits[15:11]) compartilhado por toda a família "AdvSIMD three same
+    /// (lógico)" — ver {@link #decodeVectorLogicalOpcode}.
+    private static final int ADVSIMD_THREE_SAME_LOGICAL_OPCODE = 0b0_0011;
+
+    /// `AND`/`BIC`/`ORR`/`ORN` (`u=0`)/`EOR`/`BSL`/`BIT`/`BIF` (`u=1`) — B8.18. O campo que para o
+    /// resto de {@link #decodeVectorThreeSameOpcode} é `esz` (bits[23:22]) aqui é a ÚNICA coisa que
+    /// distingue as 4 mnemônicas de cada `u` (conferido bit a bit contra `a64.decode` real do QEMU:
+    /// `AND_v`=`u0,size00`; `BIC_v`=`u0,size01`; `ORR_v`=`u0,size10`; `ORN_v`=`u0,size11`;
+    /// `EOR_v`=`u1,size00`; `BSL_v`=`u1,size01`; `BIT_v`=`u1,size10`; `BIF_v`=`u1,size11`) — nenhuma
+    /// combinação de `(u,esz)` neste opcode é reservada, `default` nunca dispara de verdade.
+    private static Ir64VectorThreeSameOp decodeVectorLogicalOpcode(boolean u, int esz) {
+        if (!u) {
+            return switch (esz) {
+                case 0 -> Ir64VectorThreeSameOp.AND;
+                case 1 -> Ir64VectorThreeSameOp.BIC;
+                case 2 -> Ir64VectorThreeSameOp.ORR;
+                case 3 -> Ir64VectorThreeSameOp.ORN;
+                default -> null;
+            };
+        }
+        return switch (esz) {
+            case 0 -> Ir64VectorThreeSameOp.EOR;
+            case 1 -> Ir64VectorThreeSameOp.BSL;
+            case 2 -> Ir64VectorThreeSameOp.BIT;
+            case 3 -> Ir64VectorThreeSameOp.BIF;
+            default -> null;
+        };
+    }
+
     private static Ir64VectorPairwiseOp decodeVectorPairwiseOpcode(boolean u, int opcode) {
         return switch (opcode) {
             case 0b1_0111 -> u ? null : Ir64VectorPairwiseOp.ADD;
@@ -2987,6 +3045,11 @@ public final class Aarch64Decoder {
             case 0b0_1101 -> u ? Ir64VectorUnaryOp.UADALP : Ir64VectorUnaryOp.SADALP;
             // B8.8: acumulação saturante — `SUQADD`/`USQADD`.
             case 0b0_0111 -> u ? Ir64VectorUnaryOp.USQADD : Ir64VectorUnaryOp.SUQADD;
+            // B8.18: `SQABS`/`SQNEG` (MESMO slot de `ABS`/`NEG` acima, opcode diferente) e
+            // `CLS`/`CLZ` vetoriais — os dois aceitam `esz` livre (`0`-`3`), sem restrição
+            // adicional além da já aplicada pelo resto desta tabela.
+            case 0b0_1111 -> u ? Ir64VectorUnaryOp.SQNEG : Ir64VectorUnaryOp.SQABS;
+            case 0b0_1001 -> u ? Ir64VectorUnaryOp.CLZ : Ir64VectorUnaryOp.CLS;
             default -> null;
         };
         if (scalar && op != null && (op == Ir64VectorUnaryOp.SADDLP || op == Ir64VectorUnaryOp.UADDLP
@@ -2995,6 +3058,23 @@ public final class Aarch64Decoder {
             return null;
         }
         return op;
+    }
+
+    /// `CNT`/`NOT`/`RBIT` (B8.18) — MESMO opcode (`ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE`) dentro
+    /// do slot "two-register miscellaneous", discriminados por `(u, esz)`: `esz` aqui NÃO é
+    /// tamanho de elemento (as 3 só existem no arranjo byte), é só o resto do campo real que
+    /// desambigua as mnemônicas — conferido bit a bit contra `a64.decode` real do QEMU
+    /// (`CNT_v`=`u0,size00`; `NOT_v`=`u1,size00`; `RBIT_v`=`u1,size01`; `size1x` com qualquer `u`
+    /// é reservado).
+    private static Ir64VectorUnaryOp decodeVectorUnaryByteOnlyOpcode(boolean u, int esz) {
+        if (!u) {
+            return esz == 0 ? Ir64VectorUnaryOp.CNT : null;
+        }
+        return switch (esz) {
+            case 0 -> Ir64VectorUnaryOp.NOT;
+            case 1 -> Ir64VectorUnaryOp.RBIT;
+            default -> null;
+        };
     }
 
     /// `esz` mínimo/máximo aceito por cada subconjunto ESCALAR de "two-register miscellaneous"
@@ -3010,12 +3090,15 @@ public final class Aarch64Decoder {
                     throw unsupported(word, address);
                 }
             }
-            case SUQADD, USQADD -> {
-                // Aceitam B/H/S/D — sem restrição adicional.
+            case SUQADD, USQADD, SQABS, SQNEG -> {
+                // Aceitam B/H/S/D — sem restrição adicional (B8.18: `SQABS_s`/`SQNEG_s` seguem a
+                // mesma regra de `SUQADD_s`/`USQADD_s`, `@rr_e` real).
             }
             default ->
                 // `SADDLP`/`UADDLP`/`SADALP`/`UADALP` já voltam `null` de
-                // `decodeVectorUnaryOpcode` antes de chegar aqui quando `scalar`.
+                // `decodeVectorUnaryOpcode` antes de chegar aqui quando `scalar`. `CLS`/`CLZ`/
+                // `CNT`/`NOT`/`RBIT` (B8.18) não têm forma escalar real — cair aqui é o
+                // comportamento CORRETO (G8) para uma tentativa de `scalar` inválida.
                 throw unsupported(word, address);
         }
     }

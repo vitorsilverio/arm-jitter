@@ -93,5 +93,25 @@ public enum Ir64VectorThreeSameOp {
     /// esize)` — só `esz` `1`(H)/`2`(S) — B8.8. Forma escalar aceita `H`/`S`.
     SQDMULH,
     /// Como {@link #SQDMULH}, com ARREDONDAMENTO antes do deslocamento — B8.8.
-    SQRDMULH
+    SQRDMULH,
+    /// `a & b` (B8.18) — AdvSIMD "three same" LÓGICO: vive no MESMO slot `bit10=1` deste enum, mas
+    /// discriminado pelo campo que para o resto da tabela é `esz` (aqui não é tamanho de elemento —
+    /// lógico bit a bit não distingue lane, sempre executado a `esz=0`, ver
+    /// {@link Ir64Op.VectorArithmeticThreeSame#esz}). Sem forma escalar real.
+    AND,
+    /// `a & ~b` (B8.18).
+    BIC,
+    /// `a | b` (B8.18).
+    ORR,
+    /// `a | ~b` (B8.18).
+    ORN,
+    /// `a ^ b` (B8.18).
+    EOR,
+    /// "Bitwise select": `(Rd_atual & a) | (~Rd_atual & b)` — `Rd` é a MÁSCARA de controle, lida
+    /// ATUAL (B8.18, mesma disciplina RMW de {@link #SABA}/{@link #MLA}).
+    BSL,
+    /// "Bitwise insert if true": `(a & b) | (Rd_atual & ~b)` — `b`(`Rm`) é a máscara (B8.18).
+    BIT,
+    /// "Bitwise insert if false": `(a & ~b) | (Rd_atual & b)` — `b`(`Rm`) é a máscara (B8.18).
+    BIF
 }

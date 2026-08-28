@@ -57,6 +57,31 @@ final class Ir64VectorArithmeticExecutor {
         return condition ? elementMask(esz) : 0L;
     }
 
+    /// Conta zeros à esquerda de `pattern` (já zero-extendido/mascarado a `widthBits` bits por
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#element}) DENTRO de
+    /// `widthBits`, não dos 64 bits inteiros do `long` — B8.18 (`CLZ_v`).
+    private static long leadingZerosInWidth(long pattern, int widthBits) {
+        if (widthBits == 64) {
+            return Long.numberOfLeadingZeros(pattern);
+        }
+        return Long.numberOfLeadingZeros(pattern) - (64 - widthBits);
+    }
+
+    /// `CLS_v` (B8.18): bits à esquerda IGUAIS ao bit de sinal, sem contar o próprio bit de sinal —
+    /// equivalente a `leadingZerosInWidth` do padrão (inverte se negativo) menos 1.
+    private static long countLeadingSignBits(long a, long sa, int esz) {
+        long pattern = sa < 0 ? (~a) & elementMask(esz) : a;
+        return leadingZerosInWidth(pattern, 8 << esz) - 1;
+    }
+
+    /// `RBIT_v` (B8.18): inverte a ordem dos bits dentro do BYTE baixo de `a` (sempre byte, arranjo
+    /// fixo — ver {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder#decodeVectorUnaryByteOnlyOpcode}).
+    /// `Integer.reverse` inverte os 32 bits inteiros; os 8 bits mais altos do resultado são
+    /// exatamente o byte baixo original invertido.
+    private static long reverseBitsInByte(long a) {
+        return (Integer.reverse((int) a) >>> 24) & 0xFFL;
+    }
+
     private static int elementsPerRegister(boolean q, int esz) {
         return (q ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES) >> esz;
     }
@@ -298,6 +323,17 @@ final class Ir64VectorArithmeticExecutor {
                 case UQRSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, true);
                 case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
                 case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
+                // B8.18: lógico — sempre `esz=0` (ver {@link Ir64Op.VectorArithmeticThreeSame}),
+                // `BSL`/`BIT`/`BIF` leem o `Rd` ATUAL como máscara de controle (RMW, mesmo padrão
+                // de {@link Ir64VectorThreeSameOp#SABA}/{@link Ir64VectorThreeSameOp#MLA} acima).
+                case AND -> a & b;
+                case BIC -> a & ~b;
+                case ORR -> a | b;
+                case ORN -> a | ~b;
+                case EOR -> a ^ b;
+                case BSL -> (fp.element(op.rd(), i, esz) & a) | (~fp.element(op.rd(), i, esz) & b);
+                case BIT -> (a & b) | (fp.element(op.rd(), i, esz) & ~b);
+                case BIF -> (a & ~b) | (fp.element(op.rd(), i, esz) & b);
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
@@ -504,6 +540,16 @@ final class Ir64VectorArithmeticExecutor {
                 case USQADD -> unsignedAccumulateSaturating(fp.element(op.rd(), i, esz), sa, esz);
                 case SADDLP, UADDLP, SADALP, UADALP ->
                         throw new IllegalStateException("tratado no ramo widening acima");
+                // B8.18: MESMO slot de `ABS`/`NEG` (opcode diferente) — `esz` livre.
+                case SQABS -> saturateToElement(BigInteger.valueOf(sa).abs(), esz, true);
+                case SQNEG -> saturateToElement(BigInteger.valueOf(sa).negate(), esz, true);
+                case CLS -> countLeadingSignBits(a, sa, esz);
+                case CLZ -> leadingZerosInWidth(a, 8 << esz);
+                // `CNT`/`NOT`/`RBIT` (B8.18): sempre `esz=0` (byte), forçado pelo decoder — ver
+                // {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder#decodeVectorUnaryByteOnlyOpcode}.
+                case CNT -> (long) Long.bitCount(a);
+                case NOT -> ~a;
+                case RBIT -> reverseBitsInByte(a);
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }

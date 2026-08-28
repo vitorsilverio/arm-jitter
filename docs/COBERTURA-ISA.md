@@ -26,7 +26,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **74%** — 2818 de 3777 células aplicáveis decodificam.
+> **75%** — 2835 de 3777 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,7 +39,7 @@ Por arquitetura:
 | v7-A | **98%** (647/659) |
 | v6-M | **24%** (93/383) |
 | v7-M | **61%** (234/383) |
-| A64 | **73%** (753/1027) |
+| A64 | **74%** (770/1027) |
 
 ## Resumo
 
@@ -55,7 +55,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | A64 73% (753/1027) |
+| A64 — AArch64 | 1161 | A64 74% (770/1027) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2176,14 +2176,14 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SMINP_v` | ✅ |
 | `UMAXP_v` | ✅ |
 | `UMINP_v` | ✅ |
-| `AND_v` | ❌ |
-| `BIC_v` | ❌ |
-| `ORR_v` | ❌ |
-| `ORN_v` | ❌ |
-| `EOR_v` | ❌ |
-| `BSL_v` | ❌ |
-| `BIT_v` | ❌ |
-| `BIF_v` | ❌ |
+| `AND_v` | ✅ |
+| `BIC_v` | ✅ |
+| `ORR_v` | ✅ |
+| `ORN_v` | ✅ |
+| `EOR_v` | ✅ |
+| `BSL_v` | ✅ |
+| `BIT_v` | ✅ |
+| `BIF_v` | ✅ |
 | `SQADD_v` | ✅ |
 | `UQADD_v` | ✅ |
 | `SQSUB_v` | ✅ |
@@ -2599,8 +2599,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SQRSHRUN_si` | ✅ |
 | `SQRSHRUN_si` | ✅ |
 | `SQRSHRUN_si` | ✅ |
-| `SQABS_s` | ❌ |
-| `SQNEG_s` | ❌ |
+| `SQABS_s` | ✅ |
+| `SQNEG_s` | ✅ |
 | `ABS_s` | ✅ |
 | `NEG_s` | ✅ |
 | `CMGT0_s` | ✅ |
@@ -2664,15 +2664,15 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTZU_f` | ❌ |
 | `FCVTZU_f` | ❌ |
 | `FCVTZU_f` | ❌ |
-| `SQABS_v` | ❌ |
-| `SQNEG_v` | ❌ |
+| `SQABS_v` | ✅ |
+| `SQNEG_v` | ✅ |
 | `ABS_v` | ✅ |
 | `NEG_v` | ✅ |
-| `CLS_v` | ❌ |
-| `CLZ_v` | ❌ |
-| `CNT_v` | ❌ |
-| `NOT_v` | ❌ |
-| `RBIT_v` | ❌ |
+| `CLS_v` | ✅ |
+| `CLZ_v` | ✅ |
+| `CNT_v` | ✅ |
+| `NOT_v` | ✅ |
+| `RBIT_v` | ✅ |
 | `CMGT0_v` | ✅ |
 | `CMGE0_v` | ✅ |
 | `CMEQ0_v` | ✅ |

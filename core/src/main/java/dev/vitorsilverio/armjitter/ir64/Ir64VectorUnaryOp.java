@@ -33,5 +33,28 @@ public enum Ir64VectorUnaryOp {
     /// `UnsignedSaturate(zext(Rd_atual) + sext(Rn))` (B8.8, "unsigned saturating accumulate of
     /// signed value") — satura em `0` por baixo se `Rn` for bem negativo. Forma escalar aceita
     /// qualquer `esz`.
-    USQADD
+    USQADD,
+    /// `SignedSaturate(|sext(Rn)|)` (B8.18) — MESMO slot de {@link #ABS}, opcode diferente. Forma
+    /// escalar aceita qualquer `esz` (mesma observação de {@link #SUQADD}).
+    SQABS,
+    /// `SignedSaturate(-sext(Rn))` (B8.18) — MESMO slot de {@link #NEG}. Forma escalar aceita
+    /// qualquer `esz`.
+    SQNEG,
+    /// `CLS` vetorial (B8.18) — conta bits à esquerda IGUAIS ao bit de sinal de cada elemento, SEM
+    /// contar o próprio bit de sinal (mesma semântica do `CLS` escalar de registrador geral, B8.2,
+    /// mas por lane). Sem forma escalar real.
+    CLS,
+    /// `CLZ` vetorial (B8.18) — conta zeros à esquerda de cada elemento, sem sinal envolvido. Sem
+    /// forma escalar real.
+    CLZ,
+    /// `CNT` vetorial (B8.18) — população de bits setados por BYTE (arranjo `.8B`/`.16B` fixo — o
+    /// campo que para o resto desta tabela seria `esz` aqui só distingue `CNT`/`NOT`/`RBIT` entre
+    /// si, nunca tamanho de elemento real; sempre executado a `esz=0`). Sem forma escalar real.
+    CNT,
+    /// `NOT`/`MVN` vetorial (B8.18) — complemento bit a bit do registrador inteiro (mesmo slot de
+    /// {@link #CNT}, `U` diferente). Sem forma escalar real.
+    NOT,
+    /// `RBIT` vetorial (B8.18) — inverte a ordem dos BITS dentro de cada BYTE (mesmo slot de
+    /// {@link #CNT}/{@link #NOT}, discriminado pelo mesmo campo). Sem forma escalar real.
+    RBIT
 }

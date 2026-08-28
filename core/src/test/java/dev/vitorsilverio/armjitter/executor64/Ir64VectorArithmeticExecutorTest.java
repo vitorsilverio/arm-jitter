@@ -810,4 +810,210 @@ class Ir64VectorArithmeticExecutorTest {
 
         assertEquals(0x00FFL, fp.element(0, 0, 1), "zext(0xFF)<<0 = 0x00FF, NÃO 0xFFFF (sem sinal)");
     }
+
+    // ── B8.18: AdvSIMD "three same" lógico ──────────────────────────────────────────────────────
+
+    @Test
+    void andOrrEorBitwise() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0b1100);
+        fp.setElement(2, 0, 0, 0b1010);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.AND, false, false, 0, 0, 1, 2));
+        assertEquals(0b1000, fp.element(0, 0, 0));
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.ORR, false, false, 0, 0, 1, 2));
+        assertEquals(0b1110, fp.element(0, 0, 0));
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.EOR, false, false, 0, 0, 1, 2));
+        assertEquals(0b0110, fp.element(0, 0, 0));
+    }
+
+    @Test
+    void bicAndOrnClearOrSetBitsFromComplement() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0xFF);
+        fp.setElement(2, 0, 0, 0x0F);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.BIC, false, false, 0, 0, 1, 2));
+        assertEquals(0xF0, fp.element(0, 0, 0), "0xFF & ~0x0F = 0xF0");
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.ORN, false, false, 0, 0, 1, 2));
+        assertEquals(0xFF, fp.element(0, 0, 0), "0xFF | ~0x0F trunca para 0xFF");
+    }
+
+    @Test
+    void bslSelectsByCurrentRdMask() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 0, 0b1100_0011); // Rd = máscara de controle
+        fp.setElement(1, 0, 0, 0b1111_0000); // Rn
+        fp.setElement(2, 0, 0, 0b0000_1111); // Rm
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.BSL, false, false, 0, 0, 1, 2));
+
+        // bit=1 na máscara -> vem de Rn; bit=0 -> vem de Rm: 1100_0011 -> Rn(1111_0000) nos bits
+        // 7,6,1,0 + Rm(0000_1111) nos bits 5,4,3,2 = 1100_1100
+        assertEquals(0b1100_1100, fp.element(0, 0, 0));
+    }
+
+    @Test
+    void bitInsertsWhereRmMaskIsTrue() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 0, 0b1111_1111); // Rd atual
+        fp.setElement(1, 0, 0, 0b0000_0000); // Rn
+        fp.setElement(2, 0, 0, 0b1111_0000); // Rm = máscara
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.BIT, false, false, 0, 0, 1, 2));
+
+        // onde Rm=1: vem de Rn (0); onde Rm=0: preserva Rd (1) -> 0000_1111
+        assertEquals(0b0000_1111, fp.element(0, 0, 0));
+    }
+
+    @Test
+    void bifInsertsWhereRmMaskIsFalse() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 0, 0b1111_1111); // Rd atual
+        fp.setElement(1, 0, 0, 0b0000_0000); // Rn
+        fp.setElement(2, 0, 0, 0b1111_0000); // Rm = máscara
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+                Ir64VectorThreeSameOp.BIF, false, false, 0, 0, 1, 2));
+
+        // onde Rm=0: vem de Rn (0); onde Rm=1: preserva Rd (1) -> 1111_0000
+        assertEquals(0b1111_0000, fp.element(0, 0, 0));
+    }
+
+    // ── B8.18: resto de "two-register miscellaneous" inteiro ───────────────────────────────────
+
+    @Test
+    void sqabsSaturatesAtIntMin() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0x80); // byte -128 (Byte.MIN_VALUE)
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.SQABS, false, false, 0, 0, 1));
+
+        assertEquals(0x7F, fp.element(0, 0, 0), "|(-128)| satura em 127, não vira -128 de novo");
+    }
+
+    @Test
+    void sqnegSaturatesAtIntMin() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0x80); // byte -128
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.SQNEG, false, false, 0, 0, 1));
+
+        assertEquals(0x7F, fp.element(0, 0, 0), "-(-128) satura em 127");
+    }
+
+    @Test
+    void clzCountsLeadingZerosPerElement() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, 0x0000_0001); // word, só bit0 setado
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.CLZ, false, false, 2, 0, 1));
+
+        assertEquals(31, fp.element(0, 0, 2));
+    }
+
+    @Test
+    void clzOfZeroIsElementWidth() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 1, 0); // halfword zero
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.CLZ, false, false, 1, 0, 1));
+
+        assertEquals(16, fp.element(0, 0, 1));
+    }
+
+    @Test
+    void clsCountsBitsMatchingSignExcludingSignBit() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 1, 0b0111_1111_1111_1110); // halfword positivo, 1 bit não-sinal difere
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.CLS, false, false, 1, 0, 1));
+
+        assertEquals(0, fp.element(0, 0, 1), "bit logo após o sinal já difere: 0 bits repetidos");
+    }
+
+    @Test
+    void clsOfAllZerosIsWidthMinusOne() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0); // byte zero
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.CLS, false, false, 0, 0, 1));
+
+        assertEquals(7, fp.element(0, 0, 0), "todos os 7 bits não-sinal repetem o sinal (0)");
+    }
+
+    @Test
+    void cntPopulationCountPerByte() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0b1011_0110);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.CNT, false, false, 0, 0, 1));
+
+        assertEquals(5, fp.element(0, 0, 0));
+    }
+
+    @Test
+    void notComplementsEveryBit() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0b1111_0000);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.NOT, false, false, 0, 0, 1));
+
+        assertEquals(0b0000_1111, fp.element(0, 0, 0));
+    }
+
+    @Test
+    void rbitReversesBitOrderWithinByte() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0b1000_0001);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.RBIT, false, false, 0, 0, 1));
+
+        assertEquals(0b1000_0001, fp.element(0, 0, 0), "palíndromo, reversão não muda");
+    }
+
+    @Test
+    void rbitOfAsymmetricByte() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 0, 0b0000_0001);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+                Ir64VectorUnaryOp.RBIT, false, false, 0, 0, 1));
+
+        assertEquals(0b1000_0000, fp.element(0, 0, 0));
+    }
 }
