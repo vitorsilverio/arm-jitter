@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.core64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -203,11 +204,32 @@ public final class Aarch64Core {
     /// (genérico o bastante, mesma disciplina de `ExecutionThreshold` em B6.4 PR1); só
     /// {@code RUNNING}/{@code HALTED} têm consumidor aqui (sem "parada profunda" modelada).
     private CpuSleepState sleepState = CpuSleepState.RUNNING;
+    /// Arquitetura A64 deste core (B11.2) — ainda sem efeito observável (nenhum decoder/executor
+    /// consulta {@link #architecture} de dentro deste core; quem precisa dela hoje é o dono do
+    /// {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder}, construído separadamente com a
+    /// MESMA arquitetura, ver `tasks/trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`).
+    /// Exposta para esse dono conseguir configurar o decoder certo sem duplicar a escolha de
+    /// arquitetura em dois lugares.
+    private final Aarch64Architecture architecture;
 
-    /// Cria um core conectado a uma memória de 64 bits. Estado inicial: todos os registradores
-    /// zerados, `PC = 0`, `PSTATE` zerado.
+    /// Cria um core conectado a uma memória de 64 bits, para {@link Aarch64Architecture#ARMV8_0_A}
+    /// — equivalente ao comportamento deste core antes de B11.2. Estado inicial: todos os
+    /// registradores zerados, `PC = 0`, `PSTATE` zerado.
     public Aarch64Core(AddressSpace64 memory) {
+        this(memory, Aarch64Architecture.ARMV8_0_A);
+    }
+
+    /// Cria um core conectado a uma memória de 64 bits, para a arquitetura informada (B11.2). Sem
+    /// efeito observável ainda — ver o Javadoc de {@link #architecture}. Estado inicial: todos os
+    /// registradores zerados, `PC = 0`, `PSTATE` zerado.
+    public Aarch64Core(AddressSpace64 memory, Aarch64Architecture architecture) {
         this.memory = Objects.requireNonNull(memory, "memory");
+        this.architecture = Objects.requireNonNull(architecture, "architecture");
+    }
+
+    /// Retorna a arquitetura configurada para este core (B11.2).
+    public Aarch64Architecture architecture() {
+        return architecture;
     }
 
     /// Lê um registrador geral pelo índice de encoding (`0`-`31`). O índice `31` é sempre `XZR`

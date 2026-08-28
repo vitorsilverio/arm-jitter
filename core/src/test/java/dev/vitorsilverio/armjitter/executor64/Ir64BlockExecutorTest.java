@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -20,6 +21,29 @@ class Ir64BlockExecutorTest {
 
     private static void putWord(Aarch64Core core, long address, int word) {
         core.memory().write32(address, word);
+    }
+
+    /// B11.2: o construtor com arquitetura explícita ainda não gateia nenhum decode (isso é
+    /// B11.4) — o resultado da execução deve ser IDÊNTICO ao do construtor sem argumento
+    /// (zero-diff, G3).
+    @Test
+    void executionIsIdenticalRegardlessOfArchitecture() {
+        Aarch64Core coreDefault = newCore(16);
+        Aarch64Core coreArmv9_5A = newCore(16);
+        // movz x0, #0x1234 — mesmo encoding nos dois cores.
+        putWord(coreDefault, 0, 0xd2824680);
+        putWord(coreArmv9_5A, 0, 0xd2824680);
+
+        new Ir64BlockExecutor().step(coreDefault);
+        new Ir64BlockExecutor(Aarch64Architecture.ARMV9_5_A).step(coreArmv9_5A);
+
+        assertEquals(coreDefault.x(0), coreArmv9_5A.x(0));
+        assertEquals(coreDefault.pc(), coreArmv9_5A.pc());
+    }
+
+    @Test
+    void constructorRejectsNullArchitecture() {
+        assertThrows(NullPointerException.class, () -> new Ir64BlockExecutor(null));
     }
 
     @Test

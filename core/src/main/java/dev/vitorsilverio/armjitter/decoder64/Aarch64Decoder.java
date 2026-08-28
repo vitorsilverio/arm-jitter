@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
@@ -41,6 +42,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
+import java.util.Objects;
+
 /// Decodifica instruções AArch64 (A64) para {@link Ir64Op} — fatia B6.1 + B6.2 + B6.3.1 + B6.3.2 +
 /// B6.3.3 + B6.3.4: os grupos `data-processing immediate` (`ADD`/`SUB`/`AND`/`ORR`/`EOR`/`ANDS`
 /// imediato, `MOVZ`/`MOVN`/`MOVK`, `ADR`/`ADRP`, `SBFM`/`BFM`/`UBFM` — B6.3.2), `data-processing
@@ -62,7 +65,32 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 /// `LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R` (AdvSIMD load/store multiple/single structures) — ver
 /// {@link Ir64Op.VectorLoadStoreMultiple}/{@link Ir64Op.VectorLoadStoreSingle}/
 /// {@link Ir64Op.VectorLoadSingleReplicate}.
+///
+/// B11.2: recebe uma {@link Aarch64Architecture} no construtor, mesmo padrão dos decoders de
+/// extensão de 32 bits (ex. `Thumb2DataProcessingDecoder(ArmArchitecture)`) — {@link #architecture}
+/// ainda não gateia NENHUM encoding (zero-diff comportamental, G3): é só fiação, o primeiro gate de
+/// decode real é B11.4. O construtor sem argumento (preservado por compatibilidade) usa
+/// {@link Aarch64Architecture#ARMV8_0_A}, que representa exatamente o que este decoder já
+/// implementa incondicionalmente hoje.
 public final class Aarch64Decoder {
+    private final Aarch64Architecture architecture;
+
+    /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
+    /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
+    public Aarch64Decoder() {
+        this(Aarch64Architecture.ARMV8_0_A);
+    }
+
+    /// Cria um decoder para a arquitetura informada. Ainda sem efeito observável (B11.2 é só
+    /// fiação) — ver o Javadoc da classe.
+    public Aarch64Decoder(Aarch64Architecture architecture) {
+        this.architecture = Objects.requireNonNull(architecture, "architecture");
+    }
+
+    /// Retorna a arquitetura configurada para este decoder (B11.2).
+    public Aarch64Architecture architecture() {
+        return architecture;
+    }
     // ── Classe top-level (ARM DDI 0487 C4.1): prefixo fixo de 3 bits em bits[28:26] (o 4º bit
     // do op0 nominal do manual, bit25, é wildcard dentro da classe e tratado nos sub-decoders) ─
     private static final int TOP_LEVEL_CLASS_SHIFT = 26;

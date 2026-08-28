@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.core64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,27 @@ import static org.junit.jupiter.api.Assertions.*;
 class Aarch64CoreTest {
     private static Aarch64Core newCore() {
         return new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)));
+    }
+
+    /// B11.2: construtor sem arquitetura explícita deve continuar equivalente ao comportamento
+    /// pré-B11.2 (G3) — {@link Aarch64Architecture#ARMV8_0_A} é exatamente o que este core já
+    /// implementava incondicionalmente.
+    @Test
+    void noArgConstructorDefaultsToArmv8_0A() {
+        assertEquals(Aarch64Architecture.ARMV8_0_A, newCore().architecture());
+    }
+
+    @Test
+    void explicitArchitectureIsExposed() {
+        Aarch64Core core = new Aarch64Core(
+                AddressSpace64.wrapping(new TestAddressSpace(16)), Aarch64Architecture.ARMV9_5_A);
+        assertEquals(Aarch64Architecture.ARMV9_5_A, core.architecture());
+    }
+
+    @Test
+    void twoArgConstructorRejectsNullArchitecture() {
+        AddressSpace64 memory = AddressSpace64.wrapping(new TestAddressSpace(16));
+        assertThrows(NullPointerException.class, () -> new Aarch64Core(memory, null));
     }
 
     @Test

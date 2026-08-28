@@ -67,7 +67,7 @@ de existir no ARM.
 | Task | Escopo | Depende de |
 |---|---|---|
 | ~~**B11.1**~~ ✅ fechada 2026-08-27 | `arch64.Aarch64Feature` (enum) + `arch64.Aarch64Architecture` (presets `ARMV8_0_A`...`ARMV8_x_A`, `ARMV9_0_A`...), mesmo padrão de `EnumSet<Aarch64Feature>`/`has()`/`extending()` do lado 32-bit. SEM plugar em lugar nenhum ainda — só a estrutura, testada isoladamente (mesmo padrão de B10.1: fundação primeiro) | — |
-| **B11.2** | Overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` + threading da arquitetura para `Aarch64Decoder` (que hoje é instanciado sem args em `Ir64BlockExecutor`/`StandardIr64BlockLifter` — precisa passar a receber a arquitetura do `Aarch64Core` dono). Construtor antigo vira `this(memory, Aarch64Architecture.ARMV8_0_A)` (ou o preset que corresponder ao estado atual 100% do decoder) | B11.1 |
+| ~~**B11.2**~~ ✅ fechada 2026-08-28 — overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` + threading da arquitetura para `Aarch64Decoder`/`Ir64BlockExecutor`/`StandardIr64BlockLifter` | B11.1 ✅ |
 | **B11.3** | Auditoria: mapear TODAS as instruções/registradores já implementados no A64 para a versão/feature ARM real que os introduziu (muito trabalho já foi feito em `docs/isa-nao-aplicavel.tsv`, que já cita `FEAT_*`/versão para tudo excluído — esta task inverte a lógica: em vez de só excluir o que falta, marca cada linha IMPLEMENTADA com a feature real) — sem isso, `Aarch64Architecture` não sabe o que gatear | B11.1 |
 | **B11.4** | Primeiro gate real: escolher 1-2 features já mapeadas em B11.3 que tenham decode isolado o bastante para gatear sem tocar o resto (candidato natural: `FEAT_RDM`/`SQRDMLAH`-`SQRDMLSH`, já isolado desde B8.8/B8.19) — prova de conceito ponta a ponta (decode recusa se `!has(FEATURE)`, aceita se `has`) | B11.2, B11.3 |
 | **B11.5** | `gerar-cobertura-isa.sh`/`IsaCoverageReport`: A64 passa a ter uma linha por versão ARM (mesma UX de v4T/v5TE/... hoje), usando o mapeamento de B11.3 | B11.3 |
@@ -137,3 +137,39 @@ Pacote novo `arch64` (mirror exato de `arch`, mesma disciplina de nunca misturar
   **Próximo da escada**: B11.2 (overload `Aarch64Core(AddressSpace64, Aarch64Architecture)` +
   fiação no `Aarch64Decoder`, ainda sem gatear nada de verdade) ou B11.3 (auditoria de versão de
   cada instrução A64 já implementada), que podem rodar em paralelo — cabe ao usuário priorizar.
+
+## Resultado — B11.2 (2026-08-28)
+
+Fiação pura, sem nenhum gate de decode real (isso continua sendo B11.4) — mesmo padrão dos
+decoders 32-bit que recebem `ArmArchitecture` no construtor (`Thumb2DataProcessingDecoder`, etc.):
+
+- `Aarch64Decoder` ganhou um campo `architecture` (`Aarch64Architecture`) + construtor
+  `Aarch64Decoder(Aarch64Architecture)` + accessor `architecture()`. O construtor sem argumento
+  (preservado) delega para `this(Aarch64Architecture.ARMV8_0_A)` — G3: comportamento de decode
+  IDÊNTICO, provado por teste (`decodeIsIdenticalRegardlessOfArchitecture`).
+- `Aarch64Core` ganhou o overload pedido pela task, `Aarch64Core(AddressSpace64,
+  Aarch64Architecture)`, mais o accessor `architecture()`. O construtor antigo delega para
+  `this(memory, Aarch64Architecture.ARMV8_0_A)`.
+- `Ir64BlockExecutor`/`StandardIr64BlockLifter` (os dois pontos que a task cita como "hoje
+  instanciados sem args") ganharam o mesmo padrão: construtor com `Aarch64Architecture` que
+  repassa para o `Aarch64Decoder` interno, construtor sem argumento delegando para
+  `ARMV8_0_A`. **Achado de projeto**: `decode()` não recebe o `Aarch64Core` (só
+  `AddressSpace64`+endereço), e um `Ir64BlockExecutor`/`StandardIr64BlockLifter` pode processar
+  vários cores ao longo da vida (ver `JitRuntime64`, que os cria uma vez só) — por isso "a
+  arquitetura do `Aarch64Core` dono" não é lida dinamicamente do core a cada chamada; é o
+  MESMO valor configurado nos três pontos (core, executor, lifter) pelo código que os monta,
+  exatamente como o lado 32-bit já faz (`ArmArchitecture` fixada na composição do `JitRuntime`,
+  nunca lida de volta do `ArmCore`). `JitRuntime64` não precisou mudar — seu construtor de
+  componentes explícitos já aceita um `Ir64BlockExecutor`/`Ir64BlockLifter` prontos, então quem
+  quiser uma arquitetura não-default monta os três (core, executor, lifter) com o mesmo preset,
+  sem precisar de uma 4ª sobrecarga.
+- 4 suítes de teste novas/estendidas, todas com o mesmo formato "decode/lift/execução idêntico
+  independente da arquitetura passada" + rejeição de `null` (`NullPointerException`):
+  `Aarch64DecoderArchitectureWiringTest` (novo, 4 testes), `Aarch64CoreTest` (+3),
+  `StandardIr64BlockLifterTest` (+2), `Ir64BlockExecutorTest` (+2).
+- `mvn -o test` verde (core+truffle, 2524) + `mvn -o install`; G5 completo nos 5 consumidores
+  (gbaemu 240 ✅, ndsemu 183 ✅, virtual-arm-box 87 ✅ — único consumidor A64 real, sem diferença
+  observável —, n3dsemu 221 ✅, armbox 47/47 ✅, sem a falha pré-existente reproduzida). Sem
+  mudança em `docs/COBERTURA-ISA.md` (zero-diff de decode, nada novo a medir). **Próximo da
+  escada, não pego automaticamente**: B11.3 (auditoria de versão de cada instrução A64 já
+  implementada) ou B11.4 (primeiro gate real, candidato natural `FEAT_RDM`).

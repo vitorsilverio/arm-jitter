@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,25 @@ class StandardIr64BlockLifterTest {
 
     private static void putWord(AddressSpace64 memory, long address, int word) {
         memory.write32(address, word);
+    }
+
+    /// B11.2: o construtor com arquitetura explícita ainda não gateia nenhum decode (isso é
+    /// B11.4) — o bloco liftado deve ser IDÊNTICO ao do construtor sem argumento (zero-diff, G3).
+    @Test
+    void liftIsIdenticalRegardlessOfArchitecture() {
+        AddressSpace64 memory = newMemory(16);
+        putWord(memory, 0, MOVZ_X0_1);
+
+        Ir64Block fromDefault = new StandardIr64BlockLifter().lift(memory, 0, 1);
+        Ir64Block fromArmv9_5A = new StandardIr64BlockLifter(Aarch64Architecture.ARMV9_5_A)
+                .lift(memory, 0, 1);
+
+        assertEquals(fromDefault.operations(), fromArmv9_5A.operations());
+    }
+
+    @Test
+    void constructorRejectsNullArchitecture() {
+        assertThrows(NullPointerException.class, () -> new StandardIr64BlockLifter(null));
     }
 
     @Test

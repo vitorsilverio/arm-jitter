@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
@@ -25,6 +26,7 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
 import java.math.BigInteger;
+import java.util.Objects;
 
 /// Interpretador mínimo para AArch64 — fatia B6.1: SEM cache de blocos, SEM JIT, um `step()`/
 /// `run()` direto sobre {@link Aarch64Core}. O pipeline tiered/compilado chega em B6.4 (ver
@@ -83,7 +85,21 @@ public final class Ir64BlockExecutor {
     /// Máscara dos 64 bits baixos como {@link BigInteger} — ver {@link #TWO_POW_64}.
     private static final BigInteger MASK_64_BITS = TWO_POW_64.subtract(BigInteger.ONE);
 
-    private final Aarch64Decoder decoder = new Aarch64Decoder();
+    private final Aarch64Decoder decoder;
+
+    /// Cria um executor para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
+    /// deste executor antes de B11.2 (tudo que está implementado, incondicional).
+    public Ir64BlockExecutor() {
+        this(Aarch64Architecture.ARMV8_0_A);
+    }
+
+    /// Cria um executor para a arquitetura informada (B11.2) — fia a mesma arquitetura no
+    /// {@link Aarch64Decoder} usado internamente. Ainda sem efeito observável (zero-diff, G3): o
+    /// decoder não gateia nenhum encoding por arquitetura ainda, ver o Javadoc de
+    /// {@link Aarch64Decoder}.
+    public Ir64BlockExecutor(Aarch64Architecture architecture) {
+        this.decoder = new Aarch64Decoder(Objects.requireNonNull(architecture, "architecture"));
+    }
 
     /// Executa uma única instrução no PC atual do core e avança o PC (a menos que a própria
     /// instrução já tenha alterado o PC — um desvio tomado).

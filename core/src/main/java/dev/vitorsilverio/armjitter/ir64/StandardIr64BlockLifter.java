@@ -1,7 +1,10 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
+
+import java.util.Objects;
 
 /// Lifter linear de blocos A64 — espelho estrutural de
 /// {@link dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter} (32 bits), mas mais simples porque
@@ -11,17 +14,35 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 /// Cada instrução contribui exatamente 3 ops ao bloco, na ordem `[Fetch, Cycle, op]` — mesma
 /// disciplina G4 (`Fetch`/`Cycle` nunca ganham guard condicional) já seguida por
 /// {@link dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor#step}.
+///
+/// B11.2: recebe uma {@link Aarch64Architecture} no construtor, fiada no {@link Aarch64Decoder}
+/// criado a cada {@link #lift}; o construtor sem argumento (preservado por compatibilidade) usa
+/// {@link Aarch64Architecture#ARMV8_0_A} — zero-diff comportamental, mesmo padrão de
+/// {@link dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor}.
 public final class StandardIr64BlockLifter implements Ir64BlockLifter {
     /// Ciclos internos atribuídos a cada instrução — mesmo valor de
     /// {@link dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor}.
     private static final int CYCLES_PER_INSTRUCTION = 1;
+    private final Aarch64Architecture architecture;
+
+    /// Cria um lifter para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
+    /// deste lifter antes de B11.2.
+    public StandardIr64BlockLifter() {
+        this(Aarch64Architecture.ARMV8_0_A);
+    }
+
+    /// Cria um lifter para a arquitetura informada (B11.2). Ainda sem efeito observável — ver o
+    /// Javadoc da classe.
+    public StandardIr64BlockLifter(Aarch64Architecture architecture) {
+        this.architecture = Objects.requireNonNull(architecture, "architecture");
+    }
 
     @Override
     public Ir64Block lift(AddressSpace64 memory, long startPc, int maxInstructions) {
         if (maxInstructions <= 0) {
             throw new IllegalArgumentException("maxInstructions must be positive");
         }
-        Aarch64Decoder decoder = new Aarch64Decoder();
+        Aarch64Decoder decoder = new Aarch64Decoder(architecture);
         Ir64Block.Builder block = Ir64Block.builder(startPc);
         long pc = startPc;
         int instructionSizeBytes = Aarch64Decoder.instructionSizeBytes();

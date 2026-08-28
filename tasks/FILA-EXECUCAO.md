@@ -607,6 +607,20 @@ automaticamente**: `B12.1` (Cortex-A/X/Neoverse ARMv8.0-A→ARMv8.2-A, maior mas
 esforço) ou `B12.3` (equivalente 32-bit) — cabe ao usuário priorizar frente às candidatas de B11
 acima.
 
+✅ **B11.2 fechada 2026-08-28** (`trilha-b-arquiteturas/b11-plano-aarch64-feature-gating.md`,
+usuário escolheu entre B11.2/B11.3/lacunas A64 pequenas) — `Aarch64Core`/`Aarch64Decoder`/
+`Ir64BlockExecutor`/`StandardIr64BlockLifter` ganharam overload aceitando `Aarch64Architecture`
+(construtor antigo delega para `ARMV8_0_A`, zero-diff comportamental provado por teste, G3). Ainda
+NENHUM gate de decode real (isso é B11.4). `mvn -o test` verde (core+truffle 2524, +11) +
+`install`; G5 completo nos 5 consumidores ✅ (gbaemu 240, ndsemu 183, virtual-arm-box 87, n3dsemu
+221, armbox 47/47, sem falha pré-existente). Sem marco de release (zero-diff, nada mudou em
+`docs/COBERTURA-ISA.md`). Ver **Resultado** na task. **Candidatas restantes, não pegas
+automaticamente**: `B11.3` (auditoria de versão de cada instrução A64 já implementada), `B11.4`
+(primeiro gate real), lacunas A64 pequenas (`SQDMULL`/`SQDMLAL`/`SQDMLSL` escalares sem índice,
+`REV16_v`/`REV32_v`/`REV64_v`, `XTN`/`SHLL_v`/`URECPE_v`/`URSQRTE_v`), `B12.1`/`B12.3`, publicação
+de `1.4.0` (reservada para 100% de cobertura). **Fila automática vazia de novo** — próxima
+priorização cabe ao usuário.
+
 ## Onda 3 — fila ATUAL (executar de cima para baixo)
 
 Mesmas regras de sempre: 1 sessão = 1 task (ou 1 PR); **ordem dentro do mesmo
