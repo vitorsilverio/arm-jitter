@@ -240,3 +240,34 @@ B12.x fica para depois de um épico de perfil R.
 Nenhum consumidor real (`gbaemu`/`ndsemu`/`armbox`/`virtual-arm-box`/`n3dsemu`) usa este catálogo
 ainda — é infraestrutura nova, aditiva, sem consumidor interno. G5 continua obrigatório mesmo assim
 (mudança em `core`, compartilhado por todos). Push obrigatório em toda task — ver `tasks/README.md`.
+
+## Resultado (B12.1, 2026-08-28)
+
+`arch64.Aarch64Processor` criado — enum com 11 constantes cobrindo a família Cortex-A/X/Neoverse
+`ARMv8.0-A`→`ARMv8.2-A` (a fatia do inventário da tabela "Cortex-A 64-bit"/"Cortex-X"/"Neoverse"
+deste arquivo que já resolve para preset existente, zero trabalho de arquitetura novo — só a tabela
+nome→`Aarch64Architecture`, conforme a especificação de implementação acima):
+
+- `ARMV8_0_A`: `CORTEX_A34`, `CORTEX_A35`, `CORTEX_A53` (primeira entrada, núcleo real do
+  `virtual-arm-box`/raspi3-64), `CORTEX_A57`, `CORTEX_A72`, `CORTEX_A73`.
+- `ARMV8_2_A`: `CORTEX_A55`, `CORTEX_A75`, `CORTEX_X1`, `NEOVERSE_N1`, `NEOVERSE_E1`.
+
+Cada constante recebe `(String displayName, Aarch64Architecture architecture)` no construtor, com
+getters `architecture()`/`displayName()` e `toString()` retornando o `displayName` — mesmo padrão de
+`Aarch64Architecture`. Nenhum núcleo `ARMv8.1-A` "puro" aparece na tabela de origem (Wikipedia não
+lista nenhum core mapeado só para essa versão), então o preset `ARMV8_1_A` fica sem entrada nesta
+sub-task — não é uma lacuna, é reflexo do inventário real.
+
+**Sem uso ainda em `Aarch64Core`** (G3, conforme a especificação do épico) — só a tabela de
+resolução nova, aditiva, sem mudança de comportamento observável em nenhum decoder/executor
+existente.
+
+Testes novos: `Aarch64ProcessorTest` (6 casos — resolução por família, `displayName()`, `toString()`,
+unicidade de nome comercial, round-trip de `valueOf`/`name()`), espelhando a disciplina de
+`Aarch64ArchitectureTest`. `mvn -o test` verde (suíte inteira do `arm-jitter`, JBR 25) + `install`
+local; G5 nos 3 consumidores relevantes ao Java (`gbaemu`, `ndsemu`, `armbox`) verde — nenhum diff de
+comportamento esperado (catálogo sem consumidor interno ainda).
+
+Próximo da escada: B12.2 (restante `ARMv8.4-A`→`ARMv9.5-A` — Neoverse V1/N2/V2/N3/V3,
+Cortex-A510+/X2+/A320+, C-Series) ou B12.3 (`arch.ArmProcessor`, lado 32-bit — ver a "Ordem
+sugerida" acima).
