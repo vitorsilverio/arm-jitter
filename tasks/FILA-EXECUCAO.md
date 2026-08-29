@@ -77,6 +77,11 @@ escreveu **mais 4 épicos**, fechando o mapa:
 | [B21](trilha-b-arquiteturas/b21-plano-arm-26-bits.md) | **ARMv1-ARMv3**, modelo de 26 bits (`R15`=PC+PSR) | inventário ainda não existe (QEMU não traz) |
 | [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) | **Resíduos** ❌/⚠️ dos presets de 32 bits que já existem | 61 células (29 delas bloqueadas no usuário) |
 
+🆕 **2026-08-29 — o usuário desbloqueou `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`** ("serão
+implementados sim"), revertendo a exclusão registrada em B9.15/B9.16/B9.17: virou a
+**[B22.5](trilha-b-arquiteturas/b22.5-eret-hvc-smc-banked.md)** (⬜, spec completa), 29 células, e
+com ela **nenhuma célula da tabela depende mais de decisão do usuário**.
+
 **Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. **B19 e B22 são pegáveis em paralelo a
 qualquer momento** e não dependem de nenhum deles — B19 é o maior salto de cobertura global
 disponível hoje, e B22.2 (`VMOV_half`) é a única violação de G8 viva na tabela (`⚠️` = decodifica

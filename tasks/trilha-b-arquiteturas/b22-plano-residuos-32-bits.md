@@ -28,8 +28,10 @@ auditoria, e a razão de o épico existir em vez de uma task só:
    `IT`/`CBZ` em v4T/v5TE, `BKPT` em v4T, `SETEND` em perfil M, o par legado `BL`/`BLX` onde
    `THUMB2` já o substituiu por `LONG_BRANCH_32`.
 
-E um quarto grupo que **não é decisão do agente**: os 29 `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`,
-mantidos `❌` por decisão explícita do usuário (registrada em B9.15/B9.16/B9.17). Ver B22.5.
+E um quarto grupo, que era decisão do usuário e **deixou de ser**: os 29
+`ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`, mantidos `❌` desde sempre (registrado em B9.15/B9.16/
+B9.17) — **o usuário decidiu em 2026-08-29 que serão implementados**. Viraram a B22.5, com spec
+completa e sem bloqueio.
 
 ## Escada
 
@@ -39,13 +41,14 @@ mantidos `❌` por decisão explícita do usuário (registrada em B9.15/B9.16/B9
 | **B22.2** | **`VMOV_half`** — hoje `⚠️`, isto é, **decodifica como OUTRA COISA** (cai no caminho genérico de coprocessador `MCR`/`CDP`, que ocupa o mesmo espaço `cp10`/`cp11`). É violação de **G8** viva na tabela, e o único `⚠️` que sobrou no projeto: transferência de meia precisão entre registrador ARM e `S`, gate `FEAT_FP16`/VFPv3-HP. Casa com **B19.5** (o `FEAT_FP16` do lado A64) e com **B14** | 2 | — |
 | **B22.3** | **Gating de `BLX_r` no perfil M** (v6-M/v7-M): ARMv6-M **tem** `BLX` registrador; o preset não declara a feature que o `ThumbDecoder` exige. Espelho exato da B9.16 — conferir se `BLX` é a única (auditar o preset inteiro contra o ARM ARM do perfil M antes de mexer) | 4 | — |
 | **B22.4** | **Curadoria de denominador** em `isa-nao-aplicavel.tsv`, com a versão que introduziu cada uma: hints `YIELD`/`WFE`/`SEV`/`NOP` e `IT` (ARMv6K/ARMv6T2) e `CBZ` (ARMv6T2) em v4T/v5TE; `BKPT` (ARMv5T) em v4T; `SETEND` em perfil M (não existe); `BLX_suffix`/`BL_BLX_prefix`/`BL_suffix` onde `THUMB2` já os substituiu por `LONG_BRANCH_32` (B2.6 — a linha legada é INALCANÇÁVEL por decisão de decode, não por falta dela). Usar as colunas `grupo`/`ocorrencia` (B9.15/B9.17) para não apagar cobertura real | ~19 | — |
-| **B22.5** | 🧑 **BLOQUEADA NO USUÁRIO** — os 29 `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`. Não há trabalho técnico pendente: o decode existe (B9.8.x) e o gate funciona. O que falta é a decisão de qual dos dois caminhos seguir, e ela já foi tomada uma vez no sentido de "deixar `❌`": (a) declarar as features nos presets que REALMENTE as têm no hardware (v7-A com extensões de virtualização opcionais) e curar as demais como posteriores; (b) manter como está e aceitar que a tabela nunca chega a 100% nessas linhas. **O agente não pega esta task** | 29 | usuário |
-| **B22.6** | **Fechamento**: remedir, atualizar `docs/VALIDACAO-ARQUITETURAS.md` e registrar o estado final do lado de 32 bits | 0 | B22.1-B22.4 |
+| **[B22.5](b22.5-eret-hvc-smc-banked.md)** | ✅ **DESBLOQUEADA — o usuário decidiu em 2026-08-29 que serão implementadas** (spec completa escrita). As 29 células de `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`, com as 3 causas medidas: (1) **incoerência real** em `ARMV7A`, que declara `HYPERVISOR_CALL` mas não `VIRTUALIZATION_EXTENSIONS` — no ARM real são a MESMA extensão, e é isso que mantém `ERET`/`MRS_bank`/`MSR_bank` `❌` num preset que já tem `HVC`; (2) pré-v7 (v4T/v5TE/v6K/MPCore): posteriores, curadoria com fonte; (3) perfil M: não existem em NENHUM perfil M (fonte interna: B9.11). Aceite exige teste de EXECUÇÃO (entrar/retornar de Hyp, banco correto), não só decode | 29 | — |
+| **B22.6** | **Fechamento**: remedir, atualizar `docs/VALIDACAO-ARQUITETURAS.md` e registrar o estado final do lado de 32 bits | 0 | B22.1-B22.5 |
 
 ## Meta
 
-Zero células `⚠️` no projeto (hoje 2) e zero `❌` de 32 bits fora das 29 que dependem de decisão do
-usuário — o lado A32/T16/T32/VFP fica em 100% do que é decidível pelo agente.
+Zero células `⚠️` no projeto (hoje 2) e **zero `❌` no lado de 32 bits** — A32/T16/T32/VFP em 100%.
+Com a decisão do usuário de 2026-08-29 (B22.5 desbloqueada), não sobra nenhuma exclusão por decisão:
+tudo aqui é trabalho executável.
 
 ## Invariantes específicos deste épico
 

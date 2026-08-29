@@ -47,8 +47,10 @@ Consequências práticas, obrigatórias para toda sessão:
   disponível hoje), **B20** (perfil R inteiro: PMSA/MPU, ARMv7-R e ARMv8-R), **B21** (ARMv1/ARMv2/
   ARMv2a/ARMv3, o modelo de 26 bits) e **B22** (os resíduos ❌/⚠️ dos presets de 32 bits que já
   existem). Com eles, **não há mais nenhuma superfície ARM medida sem spec escrita** — o que falta é
-  execução, e a única coisa ainda bloqueada em decisão do usuário são as 29 células
-  `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank` (B22.5).
+  execução. **E não há mais nenhuma exclusão por decisão**: as 29 células
+  `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`, que ficavam `❌` por escolha registrada em B9.15/B9.16/
+  B9.17, foram desbloqueadas pelo usuário em 2026-08-29 ("serão implementados sim") e viraram a
+  **B22.5**, com spec completa.
 - **A biblioteca não tem "consumidor único".** O `arm-jitter` está publicado no Maven Central:
   qualquer pessoa pode construir sobre ele. "Nenhum projeto deste workspace usa X hoje" é fato
   sobre QUAIS REGRESSÕES TESTAR (G5) — nunca argumento para adiar ou reduzir escopo.
