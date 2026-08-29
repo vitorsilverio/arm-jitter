@@ -30,7 +30,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **82%** — 15185 de 18360 células aplicáveis decodificam.
+> **82%** — 15195 de 18356 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -38,8 +38,8 @@ Por arquitetura:
 |---|---|
 | v4T | **94%** (207/220) |
 | v5TE | **95%** (222/233) |
-| v6K | **96%** (307/319) |
-| MPCore | **95%** (357/374) |
+| v6K | **98%** (312/317) |
+| MPCore | **97%** (362/372) |
 | v7-A | **98%** (647/659) |
 | v6-M | **47%** (81/172) |
 | v7-M | **60%** (232/383) |
@@ -65,7 +65,7 @@ Por arquitetura:
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 97% (145/149) · v5TE 97% (157/161) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
-| T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 90% (75/83) · MPCore 90% (75/83) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
+| T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 98% (80/81) · MPCore 98% (80/81) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
 | T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 9% (8/82) · v7-M 52% (153/289) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 90% (50/55) · v7-A 92% (58/63) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
@@ -426,16 +426,16 @@ Inventário: `t16.decode` · 86 instruções.
 | `REV` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REV16` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REVSH` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `YIELD` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| `WFE` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| `WFI` | · | · | ❌ | ❌ | ✅ | ✅ | ✅ |
-| `SEV` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| `YIELD` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `WFE` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `WFI` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SEV` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SEVL` | · | · | · | · | · | · | · |
-| `NOP` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| `IT` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| `NOP` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `IT` | ❌ | ❌ | · | · | ✅ | ✅ | ✅ |
 | `HLT` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `BKPT` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `CBZ` | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| `CBZ` | ❌ | ❌ | · | · | ✅ | ✅ | ✅ |
 | `STM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `LDM_t16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `UDF` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

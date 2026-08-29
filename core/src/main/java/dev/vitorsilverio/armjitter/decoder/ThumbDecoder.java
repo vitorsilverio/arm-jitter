@@ -29,8 +29,12 @@ public final class ThumbDecoder implements InstructionDecoder {
 
     /// `1011 1111 hint#4 mask#4` (B2.5/B2.4, ARM DDI 0406C A6.2.9/A6.7): mesmo opcode de 16 bits
     /// que a instrução `IT` — `mask==0000` é a forma "hint" (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`,
-    /// B2.5), qualquer `mask` != 0 é `IT` (B2.4). Ambas as formas só existem a partir de ARMv6T2,
-    /// então o gate desta task é {@link ArmFeature#THUMB2} (não Thumb-1).
+    /// B2.5), qualquer `mask` != 0 é `IT` (B2.4). **Os dois gates são DIFERENTES** (achado B9.14,
+    /// corrige a premissa antiga deste comentário): a sub-forma hint exige só
+    /// {@link ArmFeature#WAIT_HINTS} — o QEMU real (`translate.c`, `trans_YIELD`/`trans_SEV`/
+    /// `trans_WFE`/`trans_WFI`) gateia por `ARM_FEATURE_V6K || ARM_FEATURE_M`, nunca por Thumb-2 —
+    /// já presente em `ARMV6K`/`ARM11_MPCORE` mesmo sem Thumb-2. Só `IT` (mask!=0000) exige
+    /// {@link ArmFeature#THUMB2} de verdade (ARMv6T2+, sem gate `V6K` equivalente no QEMU).
     private static final int HINT_OR_IT_MASK = 0xFF00;
     private static final int HINT_OR_IT_VALUE = 0xBF00;
     private static final int HINT_MASK_FIELD = 0xF;
@@ -533,16 +537,16 @@ public final class ThumbDecoder implements InstructionDecoder {
                     InstructionKind.EXTEND, rd, -1, rm, packed, false, false, false);
         }
 
-        // Hints Thumb-2 de 16 bits (B2.5): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é
-        // `IT` (B2.4).
-        if (architecture.has(ArmFeature.THUMB2) && (raw & HINT_OR_IT_MASK) == HINT_OR_IT_VALUE) {
+        // Hints T16 de 16 bits (B2.5/B9.14): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é
+        // `IT` (B2.4). Gates DIFERENTES por sub-forma — ver javadoc de HINT_OR_IT_MASK acima.
+        if ((raw & HINT_OR_IT_MASK) == HINT_OR_IT_VALUE) {
             int mask = raw & HINT_MASK_FIELD;
             if (mask == 0) {
+                if (!architecture.has(ArmFeature.WAIT_HINTS)) {
+                    return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+                }
                 int hintSelector = (raw >>> HINT_SELECTOR_SHIFT) & HINT_SELECTOR_MASK;
                 if (hintSelector == HINT_WFI) {
-                    if (!architecture.has(ArmFeature.WAIT_HINTS)) {
-                        return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
-                    }
                     return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
                             InstructionKind.WAIT_FOR_INTERRUPT, -1, -1, -1, 0, false, false, false);
                 }
@@ -552,13 +556,17 @@ public final class ThumbDecoder implements InstructionDecoder {
                 return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL, InstructionKind.MSR,
                         0, -1, -1, 0, true, false, false);
             }
-            // `IT firstcond,mask` (B2.4, ARM DDI 0406C A6.7 `IT`): `firstcond` = bits[7:4],
-            // `mask` (já extraído acima) = bits[3:0]. `firstcond==0b1111` (NV) é CONSTRAINED
-            // UNPREDICTABLE, normalizado para AL (0b1110) — ver ItState#normalizeFirstCond e o
-            // item 2 dos "Fatos de referência" da spec desta task. O `immediate` carrega o
-            // ITSTATE de ENTRADA já montado (`firstcond:mask`); o LIFTER (não este decoder,
-            // stateless) consome esse valor para semear/threading o estado local das até 4
-            // instruções seguintes (D1).
+            // `IT firstcond,mask` (B2.4, ARM DDI 0406C A6.7 `IT`): exige Thumb-2 de verdade
+            // (ARMv6T2+) — `ARMV6K`/`ARM11_MPCORE` nunca tiveram `IT`, ao contrário da sub-forma
+            // hint acima (achado B9.14). `firstcond` = bits[7:4], `mask` (já extraído acima) =
+            // bits[3:0]. `firstcond==0b1111` (NV) é CONSTRAINED UNPREDICTABLE, normalizado para AL
+            // (0b1110) — ver ItState#normalizeFirstCond e o item 2 dos "Fatos de referência" da
+            // spec desta task. O `immediate` carrega o ITSTATE de ENTRADA já montado
+            // (`firstcond:mask`); o LIFTER (não este decoder, stateless) consome esse valor para
+            // semear/threading o estado local das até 4 instruções seguintes (D1).
+            if (!architecture.has(ArmFeature.THUMB2)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
             int firstCond = (raw >>> HINT_SELECTOR_SHIFT) & HINT_SELECTOR_MASK;
             int normalizedFirstCond = ItState.normalizeFirstCond(firstCond);
             int itStateEntry = ItState.entryState(normalizedFirstCond, mask);

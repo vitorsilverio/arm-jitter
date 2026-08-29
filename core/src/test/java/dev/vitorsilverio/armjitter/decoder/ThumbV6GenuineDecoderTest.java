@@ -176,4 +176,82 @@ class ThumbV6GenuineDecoderTest {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xB662 | (1 << 3));
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
+
+    // ── B9.14: hints T16 (NOP/YIELD/WFE/WFI/SEV) exigem só WAIT_HINTS (ARMv6K/MPCore já têm, sem
+    // ── Thumb-2) — achado colateral da B9.12/B9.13, gate antigo exigia THUMB2 por engano. `IT` e
+    // ── `CBZ` continuam exigindo THUMB2 de verdade (ARMv6T2+, curados em isa-nao-aplicavel.tsv). ─
+
+    @Test
+    void nopDecodesOnArmv6kWithoutThumb2() {
+        DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF00); // NOP
+        assertEquals(InstructionKind.MSR, instruction.kind());
+    }
+
+    @Test
+    void yieldDecodesOnArmv6kWithoutThumb2() {
+        DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF10); // YIELD
+        assertEquals(InstructionKind.MSR, instruction.kind());
+    }
+
+    @Test
+    void wfeDecodesOnArmv6kWithoutThumb2() {
+        DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF20); // WFE
+        assertEquals(InstructionKind.MSR, instruction.kind());
+    }
+
+    @Test
+    void wfiDecodesAsWaitForInterruptOnArmv6kWithoutThumb2() {
+        DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF30); // WFI
+        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, instruction.kind());
+    }
+
+    @Test
+    void sevDecodesOnArmv6kWithoutThumb2() {
+        DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF40); // SEV
+        assertEquals(InstructionKind.MSR, instruction.kind());
+    }
+
+    @Test
+    void hintsDecodeOnArm11MpCoreWithoutThumb2() {
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF00).kind());
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF10).kind());
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF20).kind());
+        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, decode(ArmArchitecture.ARM11_MPCORE, 0xBF30).kind());
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF40).kind());
+    }
+
+    @Test
+    void hintsStayUndefinedOnArmv4tAndArmv5teWithoutWaitHints() {
+        int[] encodings = {0xBF00, 0xBF10, 0xBF20, 0xBF30, 0xBF40};
+        for (int raw : encodings) {
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV4T, raw).kind(),
+                    () -> "ARMv4T deve manter UNDEFINED: 0x" + Integer.toHexString(raw));
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV5TE, raw).kind(),
+                    () -> "ARMv5TE deve manter UNDEFINED: 0x" + Integer.toHexString(raw));
+        }
+    }
+
+    @Test
+    void itStaysUndefinedOnArmv6kAndMpCoreWithoutThumb2() {
+        int itEncoding = 0xBF18; // IT EQ (firstcond=0b1110? mask!=0000 — qualquer mask!=0)
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV6K, itEncoding).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, itEncoding).kind());
+    }
+
+    @Test
+    void cbzStaysUndefinedOnArmv6kAndMpCoreWithoutThumb2() {
+        int cbzEncoding = 0xB100; // CBZ r0, +0
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV6K, cbzEncoding).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, cbzEncoding).kind());
+    }
+
+    @Test
+    void hintsAndItAndCbzKeepWorkingOnArchitecturesWithThumb2() {
+        DecodedInstruction nop = decode(ArmArchitecture.ARMV7A, 0xBF00);
+        assertEquals(InstructionKind.MSR, nop.kind());
+        DecodedInstruction it = decode(ArmArchitecture.ARMV7A, 0xBF18);
+        assertEquals(InstructionKind.IT, it.kind());
+        DecodedInstruction cbz = decode(ArmArchitecture.ARMV7A, 0xB100);
+        assertEquals(InstructionKind.COMPARE_BRANCH_ZERO, cbz.kind());
+    }
 }

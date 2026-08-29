@@ -575,9 +575,20 @@ WLS	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 b
 # ── por família) e contra o mesmo padrão já usado por B9.2/B9.10 (mesma instrução, mesma versão).
 # ── `MCR`/`MRC` sob `v4T` NÃO entram aqui — são ARMv3+ genuínas, aplicáveis por construção; o gap
 # ── real de decode que a célula `❌` apontava foi FECHADO pela B9.13 (`CoprocessorRegisterDecoder`
-# ── anexado a `ARMV4T`), não é curadoria. Os hints T16 (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`/`IT`/`CBZ`)
-# ── continuam de fora — mostram `❌` em `v6K`/`MPCore` também, não é só denominador de v4T/v5TE;
-# ── candidatos a task própria.
+# ── anexado a `ARMV4T`), não é curadoria. Os hints T16 (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`) sob
+# ── `v6K`/`MPCore` também eram gap real de decode (gate errado por `THUMB2` em vez de
+# ── `WAIT_HINTS`), FECHADO pela B9.14. `IT`/`CBZ` (mesmo achado colateral) SÃO curadoria de
+# ── verdade — ver bloco próprio abaixo (B9.14).
+
+# ── B9.14 (2026-08-28): `IT`/`CBZ`/`CBNZ` (T16, ARM DDI 0406C A6.7) exigem Thumb-2 de verdade
+# ── (ARMv6T2+) — ao contrário dos hints (NOP/YIELD/WFE/WFI/SEV) do mesmo opcode `1011 1111`, que só
+# ── exigem ARMv6K (`ArmFeature.WAIT_HINTS`, fechado por código nesta mesma task). Confirmado contra
+# ── o QEMU real (`target/arm/tcg/translate.c`): `trans_YIELD`/`trans_SEV`/`trans_WFE`/`trans_WFI`
+# ── gateiam por `ARM_FEATURE_V6K || ARM_FEATURE_M`; não há gate `ARM_FEATURE_V6K` equivalente para
+# ── IT/CBZ — só `ENABLE_ARCH_6T2` (`ARM_FEATURE_THUMB2`). `ARMV6K`/`ARM11_MPCORE` nunca tiveram
+# ── Thumb-2, logo nunca tiveram `IT`/`CBZ`/`CBNZ` — arquiteturalmente ausentes, não pendência.
+IT	v6K,MPCore	ARMv6T2 (Thumb-2), ausente do ARMv6K/MPCore (sem Thumb-2)
+CBZ	v6K,MPCore	ARMv6T2 (Thumb-2), ausente do ARMv6K/MPCore (sem Thumb-2)
 
 # ── ARMv5T (a32.decode ~106-108): CLZ/BLX_r, exclui só v4T (v5TE já os tem).
 CLZ	v4T	ARMv5T, anterior ao ARMv4T (ARM7TDMI)
