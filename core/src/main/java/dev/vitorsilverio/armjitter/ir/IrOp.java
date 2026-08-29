@@ -1267,6 +1267,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             int armRegister,
             /// Registrador `S` envolvido.
             int vn,
+            /// `VMOV_half` (B22.2, `ArmFeature.HALF_PRECISION_FP`): transferência de **16 bits**.
+            /// `toArmRegister` → `Rt = ZeroExtend(Sn[15:0], 32)`; senão → `Sn[15:0] = Rt[15:0]`
+            /// e `Sn[31:16]` fica **inalterado** (ao contrário da forma de 32 bits, que escreve o
+            /// `S` inteiro). `false` para `VMOV_single`/`VMOV_to_gp`/`VMOV_from_gp` (32 bits).
+            boolean halfWidth,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_CORE_TRANSFER; }

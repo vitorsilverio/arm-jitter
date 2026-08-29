@@ -326,8 +326,8 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpCoreTransfer(true, 0, 1, condition),  // Sn -> Rt
-                    new IrOp.VfpCoreTransfer(false, 2, 3, condition)); // Rt -> Sn
+                    new IrOp.VfpCoreTransfer(true, 0, 1, false, condition),  // Sn -> Rt
+                    new IrOp.VfpCoreTransfer(false, 2, 3, false, condition)); // Rt -> Sn
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setS(1, 0xCAFEBABE);
                 core.setRegister(2, 0xDEADBEEF);
@@ -421,7 +421,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
                 new IrOp.VfpStore(false, 0, 13, -1, 0, Condition.AL),
                 new IrOp.VfpLoad(false, 1, 13, -1, 0, Condition.AL),
                 new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 2, true, false, Condition.AL),
-                new IrOp.VfpCoreTransfer(true, 0, 1, Condition.AL),
+                new IrOp.VfpCoreTransfer(true, 0, 1, false, Condition.AL),
                 new IrOp.VfpCorePairTransfer(true, 0, 1, 2, Condition.AL),
                 new IrOp.VfpSystemTransfer(true, 15, Condition.AL));
         assertTrue(perOpEmitter.isNativeSupported(ir));

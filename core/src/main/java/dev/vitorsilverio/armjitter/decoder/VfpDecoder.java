@@ -13,9 +13,14 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// O espaço VFP inteiro (CP10/CP11) é `bits[27:24] ∈ {1100,1101,1110}` (o mesmo espaço genérico de
 /// coprocessador `LDC`/`STC`/`CDP`/`MCR`/`MRC` do ARM clássico) com `bits[11:8] ∈ {1010,1011}` (o
 /// campo de coprocessador clássico, aqui reaproveitado pelo VFP como seletor de precisão: `1010`
-/// single, `1011` double — `1001`, meia precisão, fica FORA do escopo desta task e portanto fora do
-/// gate abaixo, então nunca chega ao corpo de {@link #tryDecode}). Como {@link #isVfpCoprocessorSpace}
-/// só olha `bits[27:24]`/`bits[11:8]` (nunca `bits[31:28]`), a MESMA lógica decodifica tanto o `raw`
+/// single, `1011` double). `bits[11:8] == 1001` (meia precisão) NÃO passa por
+/// {@link #isVfpCoprocessorSpace} — mas a B22.2 acrescentou o reconhecimento explícito de
+/// `VMOV_half` ({@link #isVmovHalfEncoding}), checado ANTES daquele gate: sem
+/// {@link ArmFeature#HALF_PRECISION_FP} o encoding é recusado com `UNIMPLEMENTED` (nunca mais um
+/// `MCR`/`MRC` genérico espúrio para o {@link CoprocessorDecoder} — a violação de G8 que a B22.2
+/// fechou, o único `⚠️` que a tabela de cobertura tinha). Como {@link #isVfpCoprocessorSpace} e
+/// {@link #isVmovHalfEncoding} só olham `bits[27:24]`/`bits[11:8]`/campos internos (nunca
+/// `bits[31:28]`), a MESMA lógica decodifica tanto o `raw`
 /// ARM (`bits[31:28]`=condição real) quanto o `raw32` Thumb-2 (`bits[31:28]` sempre `1110`, prefixo
 /// fixo do hw1 — QEMU confirma layout idêntico em `t32.decode`, seção coprocessor) — por isso esta
 /// classe sempre marca {@link InstructionSet#ARM}; {@link Thumb2VfpDecoder} é a casca fina que a
@@ -60,7 +65,13 @@ public final class VfpDecoder implements DecoderExtension {
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
-        if (!architecture.has(ArmFeature.VFPV2) || !isVfpCoprocessorSpace(raw)) {
+        if (!claimsThisDecoder(raw)) {
+            return null;
+        }
+        if (isVmovHalfEncoding(raw)) {
+            return decodeVmovHalf(raw, address, condition);
+        }
+        if (!isVfpCoprocessorSpace(raw)) {
             return null;
         }
         int bits2724 = (raw >>> COPROCESSOR_SPACE_SHIFT) & COPROCESSOR_SPACE_MASK;
@@ -77,6 +88,16 @@ public final class VfpDecoder implements DecoderExtension {
 
     @Override
     public boolean claimsEncodingSpace(int raw) {
+        return claimsThisDecoder(raw);
+    }
+
+    private boolean claimsThisDecoder(int raw) {
+        if (isVmovHalfEncoding(raw)) {
+            // B22.2: `VMOV_half` mora fora do gate `isVfpCoprocessorSpace` (`bits[11:8]=1001`).
+            // Reivindicar mesmo SEM `HALF_PRECISION_FP` (recusa explícita, G8) — basta o núcleo
+            // ter VFP. `|| HALF_PRECISION_FP` cobre um preset hipotético de meia precisão sem VFPv2.
+            return architecture.has(ArmFeature.VFPV2) || architecture.has(ArmFeature.HALF_PRECISION_FP);
+        }
         return architecture.has(ArmFeature.VFPV2) && isVfpCoprocessorSpace(raw);
     }
 
@@ -85,6 +106,35 @@ public final class VfpDecoder implements DecoderExtension {
         boolean coprocessorSpace = bits2724 == 0xC || bits2724 == 0xD || bits2724 == 0xE;
         int size = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
         return coprocessorSpace && (size == SIZE_SINGLE || size == SIZE_DOUBLE);
+    }
+
+    // ── B22.2: VMOV_half (`---- 1110 000 l:1 .... rt:4 1001 . 001 0000`, vn=%vn_sp) ──
+    // Oráculo: `target/isa-decode/vfp.decode`. Transferência CRUA de 16 bits entre `Rt` e `Sn[15:0]`
+    // (não interpreta o float). Exige a extensão de meia precisão (VFPv3-HP / `FEAT_FP16`); nenhum
+    // preset a declara — o encoding é reconhecido só para ser RECUSADO (G8), matando o único `⚠️`
+    // do projeto (a tabela media MPCore/v7-A decodificando isto como `MCR`/`MRC` genérico para cp9).
+    private static final int VMOV_HALF_MASK = 0x0FE0_0F7F;
+    private static final int VMOV_HALF_VALUE = 0x0E00_0910;
+
+    private static boolean isVmovHalfEncoding(int raw) {
+        return (raw & VMOV_HALF_MASK) == VMOV_HALF_VALUE;
+    }
+
+    /// `VMOV_half`: `l=1` → `Rt = ZeroExtend(Sn[15:0], 32)`; `l=0` → `Sn[15:0] = Rt[15:0]` com
+    /// `Sn[31:16]` inalterado. Reaproveita {@link InstructionKind#VFP_CORE_TRANSFER} (mesma
+    /// transferência crua de `VMOV_single`, só que 16 bits) marcando `immediate=1` — o
+    /// {@link dev.vitorsilverio.armjitter.ir.StandardIrBuilder} traduz isso para
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.VfpCoreTransfer#halfWidth}. Sem
+    /// {@link ArmFeature#HALF_PRECISION_FP} → `UNIMPLEMENTED` explícito.
+    private DecodedInstruction decodeVmovHalf(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.HALF_PRECISION_FP)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+        boolean load = (raw & BIT20_MASK) != 0; // l=1: Sn[15:0] -> Rt; l=0: Rt[15:0] -> Sn[15:0].
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, false);
+        int rt = (raw >>> VD_NIBBLE_SHIFT) & NIBBLE_MASK;
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CORE_TRANSFER,
+                rt, vn, -1, 1, false, false, load);
     }
 
     // ── bits[27:24]=1110: CDP-shape (bit4=0, aritmética/imediato/2-operando/compare/convert) ──

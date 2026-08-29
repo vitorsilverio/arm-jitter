@@ -141,7 +141,9 @@ public final class AsmNativePolicy {
             case IrOp.VfpLoad ignored -> true;
             case IrOp.VfpStore ignored -> true;
             case IrOp.VfpMultipleTransfer ignored -> true;
-            case IrOp.VfpCoreTransfer ignored -> true;
+            // B22.2: a forma de 16 bits (`VMOV_half`) não tem emissão nativa — cai no interpretado
+            // por `AsmFallbackPolicy.PER_OP` (caminho inerte hoje, nenhum preset tem `HALF_PRECISION_FP`).
+            case IrOp.VfpCoreTransfer transfer -> !transfer.halfWidth();
             case IrOp.VfpCorePairTransfer ignored -> true;
             case IrOp.VfpSystemTransfer ignored -> true;
             // VMOV_64_sp/VCVT_fix (B9.5): sem emissao nativa ainda, cai no interpretado por

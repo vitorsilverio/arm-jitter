@@ -376,13 +376,21 @@ public final class IrVfpExecutor {
         }
     }
 
-    /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bits crus, sem conversão de tipo.
+    private static final int HALF_MASK = 0xFFFF;
+
+    /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bits crus, sem conversão de tipo. Com
+    /// {@link IrOp.VfpCoreTransfer#halfWidth} (`VMOV_half`, B22.2) a transferência é de 16 bits:
+    /// leitura zero-estende `Sn[15:0]`; escrita altera só `Sn[15:0]`, preservando `Sn[31:16]`.
     public void executeVfpCoreTransfer(ArmCore core, IrOp.VfpCoreTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
         if (op.toArmRegister()) {
-            core.setRegister(op.armRegister(), core.vfp().s(op.vn()));
+            int value = core.vfp().s(op.vn());
+            core.setRegister(op.armRegister(), op.halfWidth() ? value & HALF_MASK : value);
+        } else if (op.halfWidth()) {
+            int current = core.vfp().s(op.vn());
+            core.vfp().setS(op.vn(), (current & ~HALF_MASK) | (core.register(op.armRegister()) & HALF_MASK));
         } else {
             core.vfp().setS(op.vn(), core.register(op.armRegister()));
         }

@@ -492,6 +492,9 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
+                    // B22.2: `immediate == 1` marca `VMOV_half` (16 bits); `VMOV_single`/
+                    // `VMOV_to_gp`/`VMOV_from_gp` passam `0` (32 bits). Ver `VfpDecoder`.
+                    instruction.immediate() != 0,
                     instruction.condition()));
             case VFP_CORE_PAIR_TRANSFER -> block.add(new IrOp.VfpCorePairTransfer(
                     instruction.link(),

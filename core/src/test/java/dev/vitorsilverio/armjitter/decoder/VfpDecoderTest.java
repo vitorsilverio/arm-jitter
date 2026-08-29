@@ -47,6 +47,15 @@ class VfpDecoderTest {
     private static final ArmArchitecture VFP_D32_TEST_ARCH = VFP_D32_TEST_FEATURES
             .withDecoderExtensions(List.of(new VfpDecoder(VFP_D32_TEST_FEATURES), new CoprocessorDecoder()));
 
+    /// B22.2: mesma base de {@link #VFP_TEST_ARCH}, mais {@link ArmFeature#HALF_PRECISION_FP} — só
+    /// para provar que `VMOV_half` decodifica e executa COM a feature. Nenhum preset real a declara;
+    /// {@link #VFP_TEST_ARCH} (sem a feature) recusa `VMOV_half` com `UNIMPLEMENTED` (não mais um
+    /// `IrOp.Coprocessor` espúrio — a violação de G8 que a B22.2 fechou).
+    private static final ArmArchitecture VFP_HALF_TEST_FEATURES =
+            ArmArchitecture.extending(VFP_TEST_FEATURES, "ARMv7-TestVfpHalf", ArmFeature.HALF_PRECISION_FP);
+    private static final ArmArchitecture VFP_HALF_TEST_ARCH = VFP_HALF_TEST_FEATURES
+            .withDecoderExtensions(List.of(new VfpDecoder(VFP_HALF_TEST_FEATURES), new CoprocessorDecoder()));
+
     private static List<DecoderExtension> thumb32ExtensionsWithVfpFirst() {
         List<DecoderExtension> extensions = new ArrayList<>();
         extensions.add(new Thumb2VfpDecoder(VFP_TEST_FEATURES));
@@ -545,10 +554,10 @@ class VfpDecoderTest {
     @Test
     void coreTransferSingleBothDirections() {
         IrOp toArm = liftSingleOp(decodeArm(vfpCoreTransferWord(true, 2, 5)));
-        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, Condition.AL), toArm);
+        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, false, Condition.AL), toArm);
 
         IrOp toVfp = liftSingleOp(decodeArm(vfpCoreTransferWord(false, 2, 5)));
-        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, Condition.AL), toVfp);
+        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, false, Condition.AL), toVfp);
     }
 
     @Test
@@ -681,11 +690,64 @@ class VfpDecoderTest {
 
     @Test
     void vmovImmHalfPrecisionIsOutOfVfpSpaceEntirely() {
-        // size=1001 (CP9, meia precisão) não é sequer reivindicado pelo VfpDecoder (fora do gate
-        // coproc ∈ {1010,1011}) — cai direto no UNDEFINED genérico (nenhum decoder reivindica CP9
-        // nesta arquitetura de teste).
+        // size=1001 (CP9) com bits[23,21] setados NÃO é o encoding de `VMOV_half` (B22.2 só
+        // reivindica `---- 1110 000 l .... rt 1001 . 001 0000`) — este padrão fica fora do gate
+        // coproc ∈ {1010,1011} e cai no UNDEFINED genérico (nenhum decoder reivindica CP9 aqui).
         int word = (COND_AL << 28) | 0x0E00_0000 | (1 << 23) | (1 << 21) | (1 << 20) | (0x9 << 8);
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(word).kind());
+    }
+
+    // ── 6b. B22.2: VMOV_half — mata o único `⚠️` do projeto (violação de G8 viva) ────────────
+
+    /// `VMOV_half` (`VMOV Sn,Rt`/`VMOV Rt,Sn` de 16 bits): `---- 1110 000 l vn(4) rt(4) 1001 . 001
+    /// 0000` — idêntico a {@link #vfpCoreTransferWord}, só `size=1001` (não `1010`).
+    private static int vmovHalfWord(boolean load, int rt, int vn) {
+        int word = (COND_AL << 28) | (0xE << 24) | (load ? 1 : 0) << 20;
+        word |= nibbleOf(vn, false) << 16;
+        word |= rt << 12;
+        word |= 0x9 << 8;
+        word |= extOf(vn, false) << 7;
+        word |= 0b0010000;
+        return word;
+    }
+
+    @Test
+    void vmovHalfWithoutFeatureIsUnimplementedNotCoprocessor() {
+        // Sem HALF_PRECISION_FP o VfpDecoder REIVINDICA o encoding e o recusa — antes da B22.2 isto
+        // caía no CoprocessorDecoder como `MCR`/`MRC` genérico para cp9 (o `⚠️` da tabela, G8).
+        DecodedInstruction decoded = decodeArm(vmovHalfWord(true, 2, 5));
+        assertEquals(InstructionKind.UNIMPLEMENTED, decoded.kind());
+    }
+
+    @Test
+    void vmovHalfWithFeatureDecodesToHalfWidthCoreTransfer() {
+        IrOp toArm = liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
+                .decode(wordAsMemory(vmovHalfWord(true, 2, 5)), 0));
+        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, true, Condition.AL), toArm);
+
+        IrOp toVfp = liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
+                .decode(wordAsMemory(vmovHalfWord(false, 2, 5)), 0));
+        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, true, Condition.AL), toVfp);
+    }
+
+    @Test
+    void vmovHalfExecutionIsRawSixteenBitCopy() {
+        ArmCore core = new ArmCore(new TestAddressSpace(64), SwiDispatcher.empty(), VFP_HALF_TEST_ARCH);
+        IrBlockExecutor executor = new IrBlockExecutor(VFP_HALF_TEST_ARCH);
+
+        // l=1: Rt = ZeroExtend(Sn[15:0], 32).
+        core.vfp().setS(5, 0xDEAD_BEEF);
+        core.setRegister(2, 0x1111_2222);
+        executor.executeOp(core, liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
+                .decode(wordAsMemory(vmovHalfWord(true, 2, 5)), 0)), 0);
+        assertEquals(0x0000_BEEF, core.register(2));
+
+        // l=0: Sn[15:0] = Rt[15:0], Sn[31:16] preservado.
+        core.vfp().setS(5, 0xCAFE_0000);
+        core.setRegister(3, 0x9999_1234);
+        executor.executeOp(core, liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
+                .decode(wordAsMemory(vmovHalfWord(false, 3, 5)), 0)), 0);
+        assertEquals(0xCAFE_1234, core.vfp().s(5));
     }
 
     // ── 7. B9.5: VMOV_64_sp, VMOV_to_gp/from_gp (word) e VCVT_fix ──────────────────────────
@@ -760,10 +822,10 @@ class VfpDecoderTest {
     void vmovScalarGpWordFormReusesCoreTransfer() {
         // vn=3 (D combinado), index=1 -> S(2*3+1)=S7.
         IrOp toArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(true, 1, 2, 3)));
-        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 7, Condition.AL), toArm);
+        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 7, false, Condition.AL), toArm);
 
         IrOp fromArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(false, 0, 2, 3)));
-        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 6, Condition.AL), fromArm);
+        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 6, false, Condition.AL), fromArm);
     }
 
     @Test

@@ -107,6 +107,12 @@ VCVT_f64_f16	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+
 VCVT_f16_f64	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
 VCVT_b16_f32	MPCore,v7-A	ARMv8.6-A BFloat16 (aa32_bf16)
 VCVT_hp_int	MPCore,v7-A	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
+# -- B22.2: VMOV_half (VMOV Sn,Rt / VMOV Rt,Sn de 16 bits) exige a extensao de meia precisao
+# -- (VFPv3-HP / FEAT_FP16, ARM DDI 0487) -- nenhum preset a declara (ArmFeature.HALF_PRECISION_FP
+# -- existe mas fica sem consumidor ate B14). O VfpDecoder passou a REIVINDICAR o encoding e a
+# -- recusa-lo (UNIMPLEMENTED explicito, G8) em vez de deixar cair no CoprocessorDecoder como
+# -- MCR/MRC generico para cp9 -- era o unico `warning` (decodifica como outra coisa) da tabela.
+VMOV_half	MPCore,v7-A	VFPv3 half-precision / FEAT_FP16 (ARM DDI 0487) -- extensao opcional nao declarada por nenhum preset	vfp.decode
 
 # -- VFP (B9.17, revisa a limitacao documentada pela B9.5): VMOV_to_gp/VMOV_from_gp formas
 # -- byte/halfword (size=0/1 do encoding NEON, 1a/2a linha de cada mnemonico em vfp.decode) sao

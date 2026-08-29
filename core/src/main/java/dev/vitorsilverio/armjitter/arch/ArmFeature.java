@@ -246,5 +246,16 @@ public enum ArmFeature {
     /// A32/T32 (B13.5). Feature à parte de {@link #ADVANCED_SIMD}: sem ela, o encoding dessas duas
     /// instruções (frame 3-reg-same já reconhecido) vira `UNIMPLEMENTED` explícito, não `null` (G8).
     /// **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
-    ADVANCED_SIMD_RDM
+    ADVANCED_SIMD_RDM,
+
+    // ---- Onda 6, B22.2 (mata o único `⚠️` do projeto — `VMOV_half`) ----
+    /// **Meia precisão de ponto flutuante** (VFPv3-HP / `FEAT_FP16`): por ora só `VMOV_half`
+    /// (`VMOV Sn, Rt` / `VMOV Rt, Sn` de 16 bits — transferência crua entre um registrador ARM e a
+    /// metade baixa de um `S`, sem interpretar o float), e no futuro a aritmética `_hp`
+    /// (`VADD_hp`/`VMUL_hp`/`VCVT` f16↔f32, task própria). Casa com o `FEAT_FP16` do lado A64
+    /// (B19.5) e com o preset ARMv8-A de 32 bits (B14). **Nenhum preset a declara** — sem esta
+    /// feature, {@link dev.vitorsilverio.armjitter.decoder.VfpDecoder} reivindica o encoding de
+    /// `VMOV_half` e o recusa (`UNIMPLEMENTED` explícito, nunca mais um `MCR`/`MRC` genérico
+    /// espúrio para o `CoprocessorBus` — a violação de G8 que esta feature fecha).
+    HALF_PRECISION_FP
 }

@@ -30,7 +30,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **88%** — 16125 de 18199 células aplicáveis decodificam.
+> **88%** — 16125 de 18197 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,8 +39,8 @@ Por arquitetura:
 | v4T | **95%** (207/216) |
 | v5TE | **96%** (222/229) |
 | v6K | **99%** (312/313) |
-| MPCore | **99%** (362/364) |
-| v7-A | **99%** (652/655) |
+| MPCore | **99%** (362/363) |
+| v7-A | **99%** (652/654) |
 | v6-M | **82%** (81/98) |
 | v7-M | **95%** (321/336) |
 | ARMv8.0-A | **87%** (839/960) |
@@ -67,7 +67,7 @@ Por arquitetura:
 | A32 — instruções ARM de 32 bits | 266 | v4T 100% (145/145) · v5TE 100% (157/157) · v6K 100% (232/232) · MPCore 100% (232/232) · v7-A 100% (245/245) |
 | T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 98% (80/81) · MPCore 98% (80/81) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
 | T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) |
-| VFP — ponto flutuante (condicional) | 101 | MPCore 98% (50/51) · v7-A 98% (58/59) |
+| VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
 | NEON — load/store | 5 | não se aplica a nenhum preset atual |
@@ -781,7 +781,7 @@ Inventário: `vfp.decode` · 101 instruções.
 | `VMOV_from_gp` | · | · | · | ✅ | ✅ | · | · |
 | `VDUP` | · | · | · | · | · | · | · |
 | `VMSR_VMRS` | · | · | · | ✅ | ✅ | · | · |
-| `VMOV_half` | · | · | · | ⚠️ | ⚠️ | · | · |
+| `VMOV_half` | · | · | · | · | · | · | · |
 | `VMOV_single` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_64_sp` | · | · | · | ✅ | ✅ | · | · |
 | `VMOV_64_dp` | · | · | · | ✅ | ✅ | · | · |
