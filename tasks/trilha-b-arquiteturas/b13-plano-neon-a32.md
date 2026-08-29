@@ -1,0 +1,144 @@
+# B13 — NEON / Advanced SIMD de 32 bits (A32 + T32): épico
+
+**Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** 📋 plano
+
+Documento MESTRE do épico. Nasce de uma cobrança direta do usuário (2026-08-28): por que
+`docs/COBERTURA-ISA.md` tem grupos inteiros marcados "não se aplica a nenhum preset atual" —
+NEON, MVE, SVE, SME — se a regra máxima do `tasks/README.md` diz que o alvo é ARM inteiro?
+
+**Resposta honesta: "não se aplica a nenhum preset atual" nunca foi uma decisão de escopo — é
+uma descrição factual de uma lacuna de infraestrutura**, exatamente como o B11 diagnosticou para o
+lado A64 ("isso nunca foi uma escolha de escopo do usuário — é uma lacuna de infraestrutura"). O
+`IsaCoverageReport` marca esses grupos com `NOT_IN_ANY_PRESET` porque nenhum `ArmArchitecture`
+declara a extensão; não porque alguém decidiu não implementar. A correção de rumo do usuário
+registrada no B11 vale integralmente aqui, e foi repetida com todas as letras nesta sessão:
+
+> o `arm-jitter` é publicado no Maven Central como **biblioteca ARM** — qualquer pessoa pode
+> construir um projeto sobre ela. "Nenhum projeto meu usa NEON hoje" é fato sobre REGRESSÃO A
+> TESTAR (G5), nunca argumento para adiar. Uma extensão ARM real não precisa de consumidor interno
+> pedindo — precisa só de existir no ARM.
+
+## O número (medido nesta sessão, `target/isa-decode/`)
+
+| Grupo | Arquivo | Encodings | Cobertura hoje |
+|---|---|---:|---|
+| NEON — processamento de dados | `neon-dp.decode` | 297 | 0% (`NOT_IN_ANY_PRESET`) |
+| NEON — load/store | `neon-ls.decode` | 5 | 0% (`NOT_IN_ANY_PRESET`) |
+| NEON — formas compartilhadas VFP/NEON | `neon-shared.decode` | 23 | 0% (`NOT_IN_ANY_PRESET`) |
+| **Total deste épico** | | **325** | |
+
+Quebra medida de `neon-dp.decode` por família de encoding (as próprias seções `#####` do arquivo):
+
+| Família | Linhas do `.decode` | Encodings |
+|---|---|---:|
+| 3-reg-same (`1111 001 U 0 D sz Vn Vd opc N Q M op Vm`) | 35-184 | 84 |
+| 2-reg-and-shift (shift por imediato, narrowing, long, `VCVT` fixo↔float) | 185-363 | 94 |
+| 1-reg-and-modified-immediate (`VMOV`/`VORR`/`VBIC`/`VMVN` imediato) | 364-385 | 1 |
+| two-reg-misc / 3-reg-different-lengths / 2-reg-scalar / `VEXT` / `VTBL` / dup-scalar | 386-621 | 118 |
+
+## O que falta de infraestrutura (investigado no código, não suposto)
+
+1. **`ArmFeature` não tem NENHUMA feature de Advanced SIMD.** O enum vai de `BLX` a
+   `VIRTUALIZATION_EXTENSIONS` (39 constantes) e tem `VFPV2` e
+   `VFP_FUSED_MULTIPLY_ACCUMULATE` — nada de NEON. Não é uma feature "desligada": não existe.
+2. **O banco de registradores não comporta NEON.** `core/VfpRegisters.java` é
+   `private final int[] s = new int[32]` (`SINGLE_COUNT = 32`), e `d(index)`/`setD(index)` montam o
+   `D` a partir de DOIS `S` — ou seja, só **D0-D15** são endereçáveis. NEON exige **D0-D31**
+   (VFPv3-D32) com vista **Q0-Q15** de 128 bits. `VfpDecoder#validDoubleRegister` já rejeita
+   D16-D31 explicitamente, com o comentário `"D16-D31 não existem neste projeto (sem VFPv3-D32/
+   NEON)"` — a lacuna está documentada no próprio código.
+3. **Nenhum preset declara NEON**, logo `IsaCoverageReport` marca os 3 grupos como
+   `NOT_IN_ANY_PRESET` e eles nem entram no denominador global.
+
+Isto é **o mesmo problema que a B8.6 resolveu do lado A64** ("estendeu `Aarch64FpRegisters` para
+128 bits reais — reabre B6.5.1 D4, decisão explícita do usuário: pré-requisito de toda a escada
+AdvSIMD, não só daquela task"). O precedente existe, funcionou, e dá o formato da fundação aqui.
+
+## A decisão de arquitetura que este épico precisa tomar primeiro (B13.2)
+
+O projeto já implementou **quase toda a superfície AdvSIMD do A64** (B8.6-B8.20: three-same,
+shift-by-immediate, FP vetorial, permute/reduce/table, copy, indexed-element, cripto — ~500
+encodings), com IR e executor no pipeline de 64 bits (`ir64`/`executor64`). NEON de 32 bits é, em
+grande parte, **a mesma semântica vetorial** com outro encoding — o próprio QEMU compartilha os
+helpers entre A32 NEON e A64 AdvSIMD (é o motivo do comentário `_rev` em `neon-dp.decode`:
+"...call Neon helper functions that are **shared with AArch64**").
+
+Existem duas saídas, e escolher errado custa o épico inteiro:
+
+- **(a) espelhar** — criar `IrOp`s vetoriais próprios no pipeline de 32 bits, como B6.5.x espelhou
+  B3.x para FP escalar. Simples, isolado, respeita a disciplina "nunca misturar os dois mundos" do
+  B6 — mas duplica ~500 encodings de semântica já escrita e testada, e cria duas fontes de verdade
+  para o mesmo comportamento ARM (risco de divergência exatamente do tipo que o G1 existe para
+  evitar).
+- **(b) extrair o núcleo vetorial** — mover a semântica de lane (largura de elemento, saturação,
+  arredondamento, narrow/widen) para um módulo compartilhado que os dois pipelines chamam,
+  mantendo `IrOp`/`Ir64Op` separados como hoje. Mais trabalho de fundação, mas uma fonte de verdade.
+
+**B13.2 é uma RFC** (mesmo formato de `docs/RFC-SOFTMMU.md` e `docs/RFC-M-PROFILE.md`) que decide
+isso com o código na mão, ANTES de qualquer decode novo. Nenhuma task de B13.3 em diante deve ser
+pega antes da RFC fechar — é a diferença entre 12 sessões e 25.
+
+## Escada (refinar em spec própria quando cada degrau for pego)
+
+| Task | Escopo | Encodings | Depende de |
+|---|---|---:|---|
+| **B13.1** | Fundação do banco: `VfpRegisters` cresce para D0-D31 (64 bits reais, `S0-S31` viram vista dos 16 `D` baixos) + vista `Q0-Q15` de 128 bits; `ArmFeature.ADVANCED_SIMD` + `ArmFeature.VFPV3_D32` novos; `saveState`/`loadState`/`snapshot` acompanham (⚠️ formato de save-state dos consumidores). SEM decode novo — espelho direto de B8.6 | 0 | — |
+| **B13.2** | **RFC**: reuso do núcleo vetorial A64 (B8.6-B8.20) pelo pipeline de 32 bits vs espelhamento. Decide (a)/(b) acima, com protótipo de uma família só (`VADD`/`VSUB` inteiro) para medir o custo real | 0 | B13.1 |
+| **B13.3** | NEON load/store: `VLDST_multiple`/`VLD_all_lanes`/`VLDST_single` (`VLD1`-`VLD4`/`VST1`-`VST4`, multiple + single-lane + all-lanes) — espelho de B8.6 | 5 | B13.2 |
+| **B13.4** | 3-reg-same **inteiro**: aritmética/comparação/lógica (`VADD`/`VSUB`/`VMUL`/`VAND`/`VORR`/`VEOR`/`VBSL`/`VCGE`/`VCGT`/`VMAX`/`VMIN`/`VABD`/`VHADD`/`VRHADD`/`VTST`/`VPADD`/`VPMAX`/`VPMIN`) | ~50 | B13.2 |
+| **B13.5** | 3-reg-same **saturante/deslocamento** (`VQADD`/`VQSUB`/`VSHL`/`VRSHL`/`VQSHL`/`VQRSHL`/`VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`) | ~20 | B13.4 |
+| **B13.6** | 3-reg-same **ponto flutuante** (`VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VMLA_fp`/`VFMA_fp`/`VCEQ_fp`/`VCGE_fp`/`VACGE`/`VMAX_fp`/`VRECPS`/`VRSQRTS`/`VPADD_fp`/`VMAXNM_fp`) — inclui as formas `_hp` (gate `FEAT_FP16` próprio) | ~14 | B13.4 |
+| **B13.7** | 2-reg-and-shift: deslocamento por imediato (`VSHR`/`VSRA`/`VRSHR`/`VRSRA`/`VSHL`/`VSLI`/`VSRI`/`VQSHL`/`VQSHLU`) | ~50 | B13.4 |
+| **B13.8** | 2-reg-and-shift: estreitamento/alargamento (`VSHRN`/`VRSHRN`/`VQSHRN`/`VQRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VSHLL`) + `VCVT` fixo↔float vetorial | ~44 | B13.7 |
+| **B13.9** | 1-reg-and-modified-immediate (`Vimm_1r`: `VMOV`/`VORR`/`VBIC`/`VMVN` imediato — `cmode`/`op` conferidos na função de trans, não no decodetree) | 1 | B13.4 |
+| **B13.10** | 3-reg-different-lengths: alargando (`VADDL`/`VSUBL`/`VADDW`/`VSUBW`/`VMULL`/`VABAL`/`VABDL`/`VMLAL`/`VMLSL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/`VMULL_P`) e estreitando (`VADDHN`/`VSUBHN`/`VRADDHN`/`VRSUBHN`) | ~35 | B13.4 |
+| **B13.11** | 2-reg-and-scalar (`VMLA_2sc`/`VMLS_2sc`/`VMUL_2sc`/`VMLAL_2sc`/`VMLSL_2sc`/`VMULL_2sc`/`VQDMLAL_2sc`/`VQDMLSL_2sc`/`VQDMULL_2sc`/`VQDMULH_2sc`/`VQRDMULH_2sc`/`VQRDMLAH_2sc`/`VQRDMLSH_2sc` + formas `_F_`) — espelho de B8.19 (indexed element) | ~24 | B13.10 |
+| **B13.12** | two-register miscellaneous: `VREV16`/`VREV32`/`VREV64`/`VCLS`/`VCLZ`/`VCNT`/`VMVN`/`VNEG`/`VABS`/`VQABS`/`VQNEG`/`VPADDL`/`VPADAL`/`VCEQ0`/`VCGE0`/`VCGT0`/`VCLE0`/`VCLT0`/`VMOVN`/`VQMOVN`/`VQMOVUN`/`VSHLL`/`VRECPE`/`VRSQRTE`/`VSWP` — espelho de B8.18/B8.20 | ~45 | B13.4 |
+| **B13.13** | two-reg-misc de conversão: `VCVT_F16_F32`/`VCVT_F32_F16`/`VCVT_B16_F32`/`VCVT_{FS,FU,SF,UF}`/`VCVTA{S,U}`/`VCVTN`/`VCVTP`/`VCVTM` + `VRINT{A,N,P,M,X,Z}` vetoriais | ~25 | B13.12 |
+| **B13.14** | permutação/tabela: `VEXT`/`VTBL`/`VTBX`/`VDUP_scalar`/`VTRN`/`VUZP`/`VZIP` — espelho de B8.10 | ~10 | B13.4 |
+| **B13.15** | Cripto no espaço NEON de 32 bits: `AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/`SHA1SU1`/`SHA256SU0` + formas de 3 registradores `SHA1C/P/M`/`SHA256H` — semântica JÁ existe (B8.11/B8.11b), só o encoding A32 é novo; gate `ArmFeature.CRYPTO` novo | ~15 | B13.12 |
+| **B13.16** | **T32**: encodings Thumb-2 de tudo acima. O `neon-dp.decode` diz que o T32 é transformação simples do A32 (`0b1111_001p_...` → `0b111p_1111_...`) — provável UMA task de "transformar e delegar", não uma re-implementação | (mesmas 297) | B13.14 |
+| **B13.17** | `neon-shared.decode`: `VCMLA`/`VCADD` (`FEAT_FCMA`, ARMv8.3-A) | 4 | B13.6 |
+| **B13.18** | `neon-shared.decode`: `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT` + `_scalar` (`FEAT_DotProd` ARMv8.2-A / `FEAT_I8MM` para as formas mistas) | 7 | B13.4 |
+| **B13.19** | `neon-shared.decode`: `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM`, ARMv8.6-A) | 3 | B13.18 |
+| **B13.20** | `neon-shared.decode`: `VFML`/`VFML_scalar` (`FEAT_FHM`, ARMv8.2-A) | 4 | B13.6 |
+| **B13.21** | `neon-shared.decode`: `VDOT_b16`/`VFMA_b16`/`VMMLA_b16` + `_scal` (`FEAT_BF16`, ARMv8.6-A) | 5 | B13.19 |
+| **B13.22** | **Fechamento**: presets públicos com NEON (`ARMV7A_NEON`, ARMv8-A 32-bit) + entradas de `ArmProcessor` que hoje não existem por falta de NEON (Cortex-A8/A9/A5/A7/A15/A17…); `IsaCoverageReport` troca `NOT_IN_ANY_PRESET` por `ADVANCED_SIMD` nos 3 grupos — **é esta task que faz "não se aplica a nenhum preset atual" sumir da tabela** | 0 | B13.16, B13.21 |
+
+## Meta
+
+Os 3 grupos NEON deixam de ser `NOT_IN_ANY_PRESET` em `IsaCoverageReport#GROUPS` e passam a ser
+medidos de verdade contra um preset que declara `ADVANCED_SIMD` — com as 325 células entrando no
+denominador global e sendo ✅.
+
+## Invariantes específicos deste épico
+
+- **G2 continua valendo**: NEON NÃO existe em `ARMV4T`/`ARMV5TE`/`ARMV6K`/`ARM11_MPCORE`. É extensão
+  OPCIONAL do ARMv7-A (e do ARMv8-A 32 bits). O ARM11 MPCore do 3DS não tem NEON — `n3dsemu` não
+  pode passar a ver essas instruções decodificando.
+- **G3 (sem breaking change)**: `VfpRegisters` cresce de forma aditiva; o preset `ARMV7A` atual
+  continua SEM NEON (preset novo `ARMV7A_NEON` para quem quiser). Os 5 consumidores não podem ver
+  diferença nenhuma até optarem pelo preset novo.
+- **G8**: cada família nova fecha o seu espaço de encoding — o que sobra tem que cair em
+  `UNIMPLEMENTED`, nunca virar outra instrução. O espaço NEON de 32 bits é o **espaço
+  incondicional** (`cond=0b1111`), que `docs/COBERTURA-ISA.md` já registra como mal decodificado
+  historicamente (o achado do `0xF2000000`/`VHADD` decodificando como `AND`, task E6) — esta escada
+  é o que finalmente fecha esse buraco.
+- **Save-state**: `VfpRegisters#saveState`/`loadState` são serializados pelos save-states de
+  `gbaemu`/`ndsemu`. Crescer o banco muda o formato — B13.1 precisa versionar, não quebrar
+  arquivos `.ss` existentes.
+
+## Armadilhas conhecidas (do próprio inventário)
+
+- **Operandos invertidos (`_rev`)**: o `neon-dp.decode` documenta que nos deslocamentos `Vn`/`Vm`
+  aparecem trocados em relação à sintaxe do manual da ARM ("The `_rev` suffix indicates that Vn and
+  Vm are reversed"). Copiar o padrão do decodetree sem ler esse comentário produz shift com os
+  operandos ao contrário — bug silencioso, não erro de decode.
+- **`size` das formas FP não é tamanho**: mesma armadilha que a B8.9 achou no A64 ("bits[23:22] NÃO
+  é tamanho puro nas formas FP") — aqui o `.decode` avisa: "For FP insns the high bit of 'size' is
+  used as part of opcode decode".
+- **`Q` faz parte do opcode** em narrowing/long shifts ("here the Q bit is part of the opcode
+  decode"), não é só seletor de largura — mesmo achado que B8.8 teve no A64.
+- **`Vimm_1r` é uma linha só de decodetree para 4 instruções** (`VORR`/`VBIC`/`VMOV`/`VMVN`): o
+  `cmode`/`op` é conferido na função de tradução, não no padrão. O medidor conta 1 célula; a
+  implementação tem 4 comportamentos.

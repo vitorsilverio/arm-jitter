@@ -47,7 +47,35 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.17)
+## Onde estamos (atualizado 2026-08-28, após a rodada de spec B13-B18)
+
+🆕 **Rodada de spec 2026-08-28 (pedido direto do usuário)**: os 7 grupos que
+`docs/COBERTURA-ISA.md` marcava "não se aplica a nenhum preset atual" **nunca foram decisão de
+escopo** — eram lacuna de infraestrutura, exatamente como o B11 diagnosticou para o A64. O usuário
+reafirmou o princípio: *"é uma biblioteca ARM que vai implementar ARM 100% para todos os
+processadores, independente de eu fazer um projeto ou não — já está publicada no Maven Central,
+qualquer um pode fazer um projeto"*. Foram escritos 6 épicos cobrindo os **2246 encodings**
+represados, com escada medida contra o inventário real:
+
+| Épico | O que | Encodings | Bloqueio de infra achado |
+|---|---|---:|---|
+| [B13](trilha-b-arquiteturas/b13-plano-neon-a32.md) | NEON/AdvSIMD 32 bits (A32+T32) | 325 | `ArmFeature` sem feature SIMD; `VfpRegisters` é `int[32]` (só D0-D15) |
+| [B14](trilha-b-arquiteturas/b14-plano-vfp-armv8-32bit.md) | VFP incondicional ARMv8-A 32 bits | 17 | sem preset ARMv8-A de 32 bits (mesmo bloqueio de B12.6/`Cortex-A32`) |
+| [B15](trilha-b-arquiteturas/b15-plano-armv8m.md) | ARMv7E-M / ARMv8-M / ARMv8.1-M | 11 (`m-nocp`, a 0%) | sem preset ARMv8-M (mesmo bloqueio de B12.4, 10 Cortex-M fora do catálogo) |
+| [B16](trilha-b-arquiteturas/b16-plano-mve-helium.md) | MVE / Helium | 352 | depende de B15 (ARMv8.1-M) + banco Q de B13.1 |
+| [B17](trilha-b-arquiteturas/b17-plano-sve.md) | SVE / SVE2 | 929 | `Aarch64Feature` sem NENHUMA constante SVE; sem modelo `Z`/`P`/`FFR` |
+| [B18](trilha-b-arquiteturas/b18-plano-sme.md) | SME / SME2 | 623 | `SCALABLE_MATRIX_EXTENSION` é placeholder confesso; sem `ZA`/`SVCR` real |
+
+**Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. B13 e B14 compartilham pipeline e dão o
+maior retorno prático (binário ARMv7-A/ARMv8-A real emite NEON o tempo todo); B15 destrava
+pendências que JÁ estavam registradas (B12.4/B12.6); B17/B18 são os maiores e ficam por último.
+
+**Próxima task executável: [B13.1](trilha-b-arquiteturas/b13.1-banco-vetorial-32bit.md)** (⬜,
+spec completa escrita) — banco D0-D31/Q0-Q15, espelho da B8.6, zero-diff por construção. Depois
+dela, **B13.2 é uma RFC** e exige sessão de modelo forte (decide reuso do núcleo vetorial A64 vs
+espelhamento — escolher errado custa o épico inteiro).
+
+
 
 `B9.17` (`trilha-b-arquiteturas/b9.17-vfp-scalar-mov-byte-halfword-ocorrencia.md`) fechou o
 candidato "VFP condicional em MPCore/v7-A" citado abaixo: as 4 células `❌` eram `VMOV_to_gp`/

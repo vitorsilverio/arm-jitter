@@ -32,6 +32,17 @@ Consequências práticas, obrigatórias para toda sessão:
   enorme (ex.: um perfil inteiro, um modo de exceção completo, uma extensão SIMD grande) — a reação
   correta é **quebrar em tasks menores e enfileirar**, nunca excluir. Documentar o tamanho é
   informação; decidir não fazer não é uma opção disponível para o agente sozinho.
+- **"Não se aplica a nenhum preset atual" NÃO é uma exclusão** (regra explicitada em 2026-08-28,
+  depois de o usuário cobrar por que NEON/MVE/SVE/SME apareciam assim na tabela). Esse rótulo é o
+  `NOT_IN_ANY_PRESET` de `IsaCoverageReport` e significa apenas *"nenhum `ArmArchitecture`/
+  `Aarch64Architecture` declara esta extensão AINDA"* — é diagnóstico de lacuna de
+  infraestrutura, exatamente como o B11 concluiu para o A64. Todo grupo nesse estado tem que ter
+  um épico com escada; hoje todos têm: **B13** (NEON 32 bits), **B14** (VFP incondicional
+  ARMv8-A), **B15** (perfil M moderno), **B16** (MVE/Helium), **B17** (SVE/SVE2), **B18**
+  (SME/SME2). Nenhum grupo pode voltar a ficar sem épico correspondente.
+- **A biblioteca não tem "consumidor único".** O `arm-jitter` está publicado no Maven Central:
+  qualquer pessoa pode construir sobre ele. "Nenhum projeto deste workspace usa X hoje" é fato
+  sobre QUAIS REGRESSÕES TESTAR (G5) — nunca argumento para adiar ou reduzir escopo.
 
 ## 🔒 Congelamento de subprojetos até 100% de cobertura (decisão do usuário, 2026-08-27 — NUNCA reabrir sem ele)
 
@@ -199,7 +210,7 @@ tem histórico registrado.
 | Trilha | Tema | Tasks | Índice completo |
 |--------|------|-------|------------------|
 | A | Truffle | 10 | [trilha-a-truffle/INDICE.md](trilha-a-truffle/INDICE.md) |
-| B | Arquiteturas | 66 | [trilha-b-arquiteturas/INDICE.md](trilha-b-arquiteturas/INDICE.md) |
+| B | Arquiteturas | 73 | [trilha-b-arquiteturas/INDICE.md](trilha-b-arquiteturas/INDICE.md) |
 | C | Performance | 16 | [trilha-c-perf/INDICE.md](trilha-c-perf/INDICE.md) |
 | D | Compatibilidade | 6 | [trilha-d-compat/INDICE.md](trilha-d-compat/INDICE.md) |
 | E | Manutenção | 4 | [trilha-e-manutencao/INDICE.md](trilha-e-manutencao/INDICE.md) |
@@ -244,6 +255,10 @@ Registradas para não virarem tasks vagas; um agente comum NÃO deve tentá-las:
    quebrado); precisa de RFC própria antes de virar task.
 5. **Rodadas de spec futuras**: B4.1.x em arquivos próprios quando B4.1.1 começar;
    B6.3+ quando B6.2 fechar (escopos já fixados nos épicos).
+5b. **RFC B13.2** (reuso do núcleo vetorial A64 pelo pipeline de 32 bits vs espelhamento) e
+   **RFC B17.2** (comprimento de vetor SVE: fixo em 128 bits vs configurável). São as duas
+   decisões que definem o custo total de B13/B16 e de B17/B18 — escolher errado custa o épico
+   inteiro, e nenhuma sub-task depois delas deve ser pega antes de fecharem.
 6. **Divergência ASM×interpretador no JUS** (achada durante a re-medição da C11 fase 2,
    2026-07-16: `asmcheck` a partir de `roms/JUS.ss`, ~300 chunks, diverge em `r1` no
    `block@0x1ff8f44` — diferença de 0x38 num registrador só, resto idêntico). NÃO é
