@@ -105,10 +105,18 @@ nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, 
 `executeAtomicMemoryOp` interpretado; `LDAPR` reaproveita `Load64`). Global 83%→84%, A64
 `ARMv8.1-A` 82%→83%. Zero-diff nos 5 consumidores.
 
-**Próxima task executável do épico B19: [B19.2](trilha-b-arquiteturas/b19-plano-a64-gap-remanescente.md)**
-(AdvSIMD FP escalar "three same" + pairwise escalar, 28 linhas) — **precisa de rodada de spec própria**
-antes de ser pega (só o épico B19 está escrito; B19.2-B19.9 ainda não têm spec detalhada). B19 e B22
-seguem pegáveis em paralelo a qualquer momento.
+**B19.2 (RFC/spec) ✅ (2026-08-29)** — spec detalhada escrita:
+[`b19.2-a64-advsimd-fp-scalar-three-same-pairwise.md`](trilha-b-arquiteturas/b19.2-a64-advsimd-fp-scalar-three-same-pairwise.md).
+Escopo cortado para as **14 linhas `_sd`** (AdvSIMD FP escalar "three same" `FMULX_s`/`FCMEQ_s`/…/
+`FRSQRTS_s` + pairwise escalar `FADDP_s`/…/`FMINNMP_s`); as 14 `_h` (`FEAT_FP16`) ficam para B19.5,
+que herda escopo. É espelho escalar de B8.9 (`boolean scalar` nos 2 records + `finishScalarAwareWrite`,
+infra já no `Ir64VectorFpArithmeticExecutor`) + 1 tabela de decode nova para a classe "AdvSIMD scalar
+pairwise". **Sem gate de feature — ISA base ARMv8.0-A, NÃO é zero-diff** (G5 = suítes verdes). É a
+**próxima task executável** (⬜, pegável já).
+
+**Próximo degrau depois de B19.2: B19.3** (AdvSIMD FP escalar "two-reg-misc" + conversões escalares
+int↔FP, ~45 linhas) — ainda **precisa de rodada de spec própria** (B19.3-B19.9 sem spec detalhada).
+B19 e B22 seguem pegáveis em paralelo a qualquer momento.
 
 Achado aberto da RFC B13.2 que vale como task própria a qualquer momento: o backend **Truffle quebra
 com QUALQUER op de VFP** (`IrOpNodeFactory` não tem casos VFP e `TruffleCodeEmitter#supports` devolve
