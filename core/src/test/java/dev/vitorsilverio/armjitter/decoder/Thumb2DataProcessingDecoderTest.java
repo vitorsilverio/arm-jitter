@@ -472,6 +472,20 @@ class Thumb2DataProcessingDecoderTest extends BlockEquivalenceTest {
         assertEquals(0xAAAA_BBBB, thumb2Core.register(0));
     }
 
+    /// B9.16 — mesmo encoding do teste acima, mas via `ArmArchitecture.ARMV7M` (preset real) em
+    /// vez do `PKH_ARCH` sintético, confirmando que o gate novo (`ArmFeature.PACK_SATURATE`) chega
+    /// ao preset de verdade.
+    @Test
+    void pkhBtDecodesUnderArmv7mPreset() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7M);
+        core.cpsr().setThumbMode(true);
+        core.setRegister(1, 0xFFFF_BBBB);
+        core.setRegister(2, 0xAAAA_FFFF);
+        runBitField(core, 0xEAC1, 0x0002); // PKHBT r0,r1,r2 (imm5=0,tb=0)
+
+        assertEquals(0xAAAA_BBBB, core.register(0));
+    }
+
     @Test
     void pkhTbWithShiftSixteenMatchesArmClassicEquivalent() {
         // PKH r0, r1, r2, ASR #16 (TB): Rd = Rn[31:16] | (Rm ASR #16)[15:0] -> r0 = 0xFFFF0000 | 0x0000AAAA.

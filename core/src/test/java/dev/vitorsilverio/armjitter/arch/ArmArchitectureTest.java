@@ -21,6 +21,20 @@ class ArmArchitectureTest {
         }
     }
 
+    /// B9.16 — `ARMV7M` ganhou o bundle DSP completo (achado de cobertura de ISA: os decoders
+    /// Thumb-2 já tinham decode+IR+executor prontos, só faltava o preset pedir as features).
+    @Test
+    void armv7mHasTheFullDspExtensionBundle() {
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.CLZ));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.LDRD_STRD));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.PRELOAD_HINTS));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.PACK_SATURATE));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.PARALLEL_SIMD));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.SIGNED_MULTIPLY_MEDIA));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.DSP_MULTIPLY));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.UMAAL));
+    }
+
     @Test
     void armv5teHasTheArmv5FeatureSetButNotThumb2() {
         assertTrue(ArmArchitecture.ARMV5TE.has(ArmFeature.BLX));

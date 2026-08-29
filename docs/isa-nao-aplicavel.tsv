@@ -168,25 +168,25 @@ FCVTZU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
 # ── T32 (B9.7): MVE (Helium) "long shift" — ARMv8.1-M, exigem `@mve_sh_ri`/`@mve_shl_ri`/ ──────
 # ── `@mve_sh_rr`/`@mve_shl_rr` (t32.decode), espaço reservado em ARMv7-A puro. CONFERIDO: o ────
 # ── grupo inteiro só existe sob `ARM_FEATURE_MVE`/`ARM_FEATURE_V8_1M` no QEMU. ──────────────────
-UQSHL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-LSLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-UQSHLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-URSHR_ri	v7-A	ARMv8.1-M/MVE (Helium)
-LSRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-URSHRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-SRSHR_ri	v7-A	ARMv8.1-M/MVE (Helium)
-ASRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-SRSHRL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-SQSHL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-SQSHLL_ri	v7-A	ARMv8.1-M/MVE (Helium)
-UQRSHL_rr	v7-A	ARMv8.1-M/MVE (Helium)
-LSLL_rr	v7-A	ARMv8.1-M/MVE (Helium)
-UQRSHLL64_rr	v7-A	ARMv8.1-M/MVE (Helium)
-SQRSHR_rr	v7-A	ARMv8.1-M/MVE (Helium)
-ASRL_rr	v7-A	ARMv8.1-M/MVE (Helium)
-SQRSHRL64_rr	v7-A	ARMv8.1-M/MVE (Helium)
-UQRSHLL48_rr	v7-A	ARMv8.1-M/MVE (Helium)
-SQRSHRL48_rr	v7-A	ARMv8.1-M/MVE (Helium)
+UQSHL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+LSLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+UQSHLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+URSHR_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+LSRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+URSHRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SRSHR_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+ASRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SRSHRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SQSHL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SQSHLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+UQRSHL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+LSLL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+UQRSHLL64_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SQRSHR_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+ASRL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SQRSHRL64_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+UQRSHLL48_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+SQRSHRL48_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
 
 # ── T32 (B9.7): CLRM — QEMU t32.decode comentário explícito "M-profile CLRM uses that encoding" ─
 # ── (mesmo bit-pattern de LDM_t32 com Rn=1111, que em A/R-profile é UNDEFINED — Rn=PC não pode ──
@@ -735,3 +735,17 @@ WFI	v4T,v5TE	ARMv6K (hint instructions), anterior ao ARMv4T/ARMv5TE
 SETEND	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
 CPS	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
 CPS_v7m	v4T,v5TE	ARMv6, anterior ao ARMv4T/ARMv5TE
+BF	v7-M	ARMv8-M mainline (Low Overhead Branch extension), posterior a ARMv7-M	t32.decode
+DLS	v7-M	ARMv8-M mainline (Low Overhead Branch extension), posterior a ARMv7-M	t32.decode
+LE	v7-M	ARMv8-M mainline (Low Overhead Branch extension), posterior a ARMv7-M	t32.decode
+WLS	v7-M	ARMv8-M mainline (Low Overhead Branch extension), posterior a ARMv7-M	t32.decode
+CLRM	v7-M	ARMv8-M mainline (register clearing/TrustZone hardening), posterior a ARMv7-M	t32.decode
+SG	v7-M	ARMv8-M Security Extension (TrustZone), posterior a ARMv7-M	t32.decode
+VCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
+LCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
+BLX_i	v7-M	M-profile é Thumb-only por construção — nunca tem estado de execução ARM	t32.decode
+BXJ	v7-M	M-profile rejeita Jazelle (QEMU trans_BXJ: arm_dc_feature ARM_FEATURE_M ⇒ UNDEFINED)	t32.decode
+RFE	v7-M	modelo de exceção A/R-profile (retorno com writeback de SP banco); M-profile usa EXC_RETURN via BX/POP	t32.decode
+SRS	v7-M	modelo de exceção A/R-profile (stack de exceção manual); M-profile empilha automaticamente via hardware	t32.decode
+SB	v7-M	ARMv8.0-A/FEAT_SB (Speculation Barrier), posterior a ARMv7-M	t32.decode
+SUB_rri	v7-M	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem essa forma (B9.11), M-profile usa EXC_RETURN via BX/POP	t32.decode

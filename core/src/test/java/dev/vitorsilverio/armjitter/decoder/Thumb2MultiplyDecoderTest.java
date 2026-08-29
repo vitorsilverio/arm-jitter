@@ -392,6 +392,37 @@ class Thumb2MultiplyDecoderTest {
         }
     }
 
+    /// B9.16 — mesmo encoding de `smladAndSmladxMatchArmClassicForBothExchangeValues`, mas via
+    /// `ArmArchitecture.ARMV7M` (preset real) em vez do `THUMB2_ARCH` sintético, confirmando que o
+    /// gate novo (`ArmFeature.SIGNED_MULTIPLY_MEDIA`) chega ao preset de verdade.
+    @Test
+    void smladDecodesUnderArmv7mPreset() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7M);
+        core.cpsr().setThumbMode(true);
+        core.setRegister(1, 0x0002_0003);
+        core.setRegister(2, 0x0005_0007);
+        core.setRegister(3, 100); // Ra
+        runThumb2(core, hi(0x2, 1), lo(3, 0, 0, 2)); // SMLAD r0,r1,r2,r3
+
+        assertEquals(100 + 2 * 5 + 3 * 7, core.register(0));
+    }
+
+    /// B9.16 — idem para `UMAAL` (`ArmFeature.UMAAL`), sob o preset `ARMV7M` real.
+    @Test
+    void umaalDecodesUnderArmv7mPreset() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7M);
+        core.cpsr().setThumbMode(true);
+        core.setRegister(1, 6);
+        core.setRegister(3, 7);
+        core.setRegister(2, 100);
+        core.setRegister(4, 9);
+        runThumb2(core, hi(0xE, 1), lo(2, 4, 0x6, 3)); // UMAAL r2,r4,r1,r3
+
+        long expected = 6L * 7L + Integer.toUnsignedLong(100) + Integer.toUnsignedLong(9);
+        long actual = Integer.toUnsignedLong(core.register(2)) | (Integer.toUnsignedLong(core.register(4)) << 32);
+        assertEquals(expected, actual);
+    }
+
     @Test
     void smusadAliasWithoutAccumulatorMatchesArmClassic() {
         // Ra=1111: alias sem acumulador (SMUAD), mesmo encoding.

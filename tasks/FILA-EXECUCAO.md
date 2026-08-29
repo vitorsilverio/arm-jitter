@@ -47,7 +47,21 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.15)
+## Onde estamos (atualizado 2026-08-28, após B9.16)
+
+`B9.16` (`trilha-b-arquiteturas/b9.16-t32-v7m-dsp-gate.md`) fechou a maior lacuna absoluta de 32
+bits (T32 `v7-M`, era 52%): não era curadoria, era gate real — `ARMV7M_FEATURES` nunca ganhou os 8
+`ArmFeature`s da extensão DSP + base (`CLZ`/`LDRD_STRD`/`PRELOAD_HINTS`/`PACK_SATURATE`/
+`PARALLEL_SIMD`/`SIGNED_MULTIPLY_MEDIA`/`DSP_MULTIPLY`/`UMAAL`) desde que o preset foi criado (B7.4,
+2026-07-23), embora os decoders Thumb-2 já tivessem decode+IR+executor completos havia sessões
+(B1.3/B1.4/B2.7/B3.1/B3.2/B9.1/B9.7) — zero decode novo, só gating + curadoria TSV dos 14
+mnemônicos genuinamente N/A a M-profile. T32 v7-M 52%→94%, global 82%→83%. `ERET`/`HVC`/`SMC`/
+`MRS_bank`/`MSR_bank` continuam `❌` por decisão do usuário (mesmos 5 de sempre, não excluídos).
+
+**Próxima sessão de cobertura de ISA**: candidatos abertos que restam medidos — VFP condicional em
+`MPCore`/`v7-A` (90%/92%); A64 com ~18-19% de gap achatado em todas as versões (ARMv8.0-A 82%,
+796/970); v6-M T32 ainda em 72% (8/11, só `ERET`/`MRS_bank`/`MSR_bank`, mesmos 3 de sempre — não é
+mais candidato de verdade, só sobra a mesma pendência intencional). Nenhum desses foi triado ainda.
 
 `B9.15` (`trilha-b-arquiteturas/b9.15-t32-v6m-curadoria-nome-por-grupo.md`) achou e resolveu a
 causa raiz de por que `T32 v6-M` ainda estava em 9% (8/82) mesmo depois da B9.10: não era falta de
@@ -60,12 +74,6 @@ a exclusão a um `.decode` específico; as 48 linhas entraram escopadas a `t32.d
 9%→72% (só `ERET`/`MRS_bank`/`MSR_bank`, gaps reais não relacionados, continuam `❌`); T16 v6-M
 inalterado (zero colateral); v6-M global 47%→80%; global 82%→83%. Zero mudança em
 `core/src/main` (só ferramenta de teste + docs), G5 verde.
-
-**Próxima sessão de cobertura de ISA**: candidatos abertos e MEDIDOS nesta sessão (ver
-`docs/COBERTURA-ISA.md`) — `v7-M` T32 ainda em 52% (153/289, a maior lacuna absoluta de 32 bits
-hoje); VFP condicional em `MPCore`/`v7-A` (90%/92%); A64 com ~18% de gap achatado em todas as
-versões (796/970 em ARMv8.0-A) — nenhum desses foi triado ainda nesta rodada. `ERET`/`MRS_bank`/
-`MSR_bank` (T32, gaps reais, não curadoria) documentados como candidatos pequenos e independentes.
 
 `B9.13` (`trilha-b-arquiteturas/b9.13-mcr-mrc-armv4t.md`) fechou o achado colateral da B9.12: `MCR`/
 `MRC` sob `ARMV4T` era gap real (ARMv3+, não curadoria) — `CoprocessorDecoder` só estava anexado a

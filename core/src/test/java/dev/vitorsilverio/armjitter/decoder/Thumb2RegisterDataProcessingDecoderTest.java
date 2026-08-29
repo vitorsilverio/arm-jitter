@@ -420,6 +420,20 @@ class Thumb2RegisterDataProcessingDecoderTest {
         }
     }
 
+    /// B9.16 — mesmo encoding de `SADD8` usado em `parallelAluSampleMatchesArmClassic`, mas via
+    /// `ArmArchitecture.ARMV7M` (preset real) em vez do `THUMB2_ARCH` sintético, confirmando que o
+    /// gate novo (`ArmFeature.PARALLEL_SIMD`) chega ao preset de verdade.
+    @Test
+    void sadd8DecodesUnderArmv7mPreset() {
+        ArmCore core = new ArmCore(new TestAddressSpace(512), SwiDispatcher.empty(), ArmArchitecture.ARMV7M);
+        core.cpsr().setThumbMode(true);
+        core.setRegister(1, 0x0102_0304); // rn
+        core.setRegister(2, 0x0001_0001); // rm
+        runThumb2(core, twoSourceHi(0x8, 1), twoSourceLo(0, 0x0, 2)); // SADD8 r0,r1,r2
+
+        assertEquals(0x0103_0305, core.register(0));
+    }
+
     @Test
     void parallelAluIsUndefinedWithoutParallelSimdFeature() {
         ArmArchitecture noParallel = ArmArchitecture.extending(ArmArchitecture.ARMV5TE, "NoParallel2", ArmFeature.THUMB2)

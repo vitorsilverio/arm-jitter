@@ -323,19 +323,32 @@ public final class ArmArchitecture {
             .withThumb32DecoderExtensions(List.of(
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES)));
 
-    /// Cortex-M3/M4 — **ARMv7-M** (B7.4): Thumb-2 largo completo + divide + bitfield + os
-    /// registradores de mascaramento de falha ({@link ArmFeature#M_FAULT_MASKING}: `BASEPRI`/
-    /// `BASEPRI_MAX`/`FAULTMASK` + `CPS f`). **Sem VFP** (a extensão FP do Cortex-M4F está fora do
-    /// escopo — "Não inclui" da B7.4), por isso nenhum `Thumb2VfpDecoder`/`VFPV2` aqui. Herda o
-    /// perfil M (`M_PROFILE`/`WAIT_HINTS`/`MEMORY_BARRIERS`) de {@link #ARMV6M_FEATURES} e acrescenta
-    /// o inteiro largo. Mesmo quebra-cabeça ovo-e-galinha dos outros presets: as features primeiro
+    /// Cortex-M4/M7 (extensão DSP) — **ARMv7-M** (B7.4, features DSP completadas pela B9.16): Thumb-2
+    /// largo completo + divide + bitfield + os registradores de mascaramento de falha
+    /// ({@link ArmFeature#M_FAULT_MASKING}: `BASEPRI`/`BASEPRI_MAX`/`FAULTMASK` + `CPS f`) + a
+    /// extensão DSP inteira (`ArmFeature.PACK_SATURATE`/`PARALLEL_SIMD`/`SIGNED_MULTIPLY_MEDIA`/
+    /// `DSP_MULTIPLY`/`UMAAL` — aritmética paralela `SADD16`-família, `SEL`, `PKH`, `SSAT`/`USAT`/
+    /// `SSAT16`/`USAT16`, `USAD8`/`USADA8`, `SMLAD`/`SMLSD`/`SMLALD`/`SMLSLD`/`SMMLA`/`SMMLS`,
+    /// `SMLA<x><y>`/`SMLAW<y>`/`SMUL<x><y>`/`SMULW<y>`, `UMAAL`) + o resto da base ARMv7-M que já
+    /// existia antes de qualquer DSP (`ArmFeature.CLZ`, `LDRD_STRD`, `PRELOAD_HINTS`) — achado de
+    /// cobertura de ISA, B9.16: `Thumb2MultiplyDecoder`/`Thumb2DataProcessingDecoder`/
+    /// `Thumb2RegisterDataProcessingDecoder` já tinham decode+IR+executor completos para tudo isso
+    /// (B1.3/B1.4/B2.7/B3.1/B3.2/B9.1/B9.7, todos POSTERIORES à B7.4 que criou este preset em
+    /// 2026-07-23), mas o preset nunca foi atualizado com as features correspondentes — zero decode
+    /// novo, só gating. **Sem VFP** (a extensão FP do Cortex-M4F está fora do escopo — "Não inclui"
+    /// da B7.4), por isso nenhum `Thumb2VfpDecoder`/`VFPV2` aqui. Herda o perfil M (`M_PROFILE`/
+    /// `WAIT_HINTS`/`MEMORY_BARRIERS`) de {@link #ARMV6M_FEATURES} e acrescenta o inteiro largo.
+    /// Mesmo quebra-cabeça ovo-e-galinha dos outros presets: as features primeiro
     /// ({@code ARMV7M_FEATURES}), porque `Thumb2*Decoder` recebem a arquitetura no construtor.
     private static final ArmArchitecture ARMV7M_FEATURES = extending(ARMV6M_FEATURES, "ARMv7-M",
             ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE,
             ArmFeature.EXCLUSIVE_WORD, ArmFeature.EXCLUSIVE_SIZED,
             ArmFeature.MOVW_MOVT, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
             ArmFeature.MLS_MULTIPLY, ArmFeature.DIVIDE, ArmFeature.SATURATING,
-            ArmFeature.M_FAULT_MASKING, ArmFeature.M_PROFILE_WIDE_MISC_CONTROL);
+            ArmFeature.M_FAULT_MASKING, ArmFeature.M_PROFILE_WIDE_MISC_CONTROL,
+            ArmFeature.CLZ, ArmFeature.LDRD_STRD, ArmFeature.PRELOAD_HINTS,
+            ArmFeature.PACK_SATURATE, ArmFeature.PARALLEL_SIMD, ArmFeature.SIGNED_MULTIPLY_MEDIA,
+            ArmFeature.DSP_MULTIPLY, ArmFeature.UMAAL);
 
     public static final ArmArchitecture ARMV7M = ARMV7M_FEATURES
             .withThumb32DecoderExtensions(List.of(
