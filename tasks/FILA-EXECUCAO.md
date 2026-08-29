@@ -76,8 +76,8 @@ EXTRAÇÃO de um núcleo vetorial compartilhado, no nível da palavra de 64 bits
 muda como cada família é implementada: migrar a operação para `advsimd/AdvSimdLanes` em vez de
 reescrever a semântica, e decodificar entregando o `IrOp` pronto via `DecodedInstruction#liftedOp`).
 
-**Próxima task executável: B13.3** (NEON load/store, `VLD1`-`VLD4`/`VST1`-`VST4`) — spec própria
-ainda a escrever, escopo fixado no épico B13. Achado aberto da RFC que vale como task própria a
+**Próxima task executável: [B13.3](trilha-b-arquiteturas/b13.3-neon-load-store.md)** (⬜, spec
+completa escrita em 2026-08-29) — NEON load/store A32, as 5 linhas de `neon-ls.decode`. Achado aberto da RFC que vale como task própria a
 qualquer momento: o backend **Truffle quebra com QUALQUER op de VFP** (`IrOpNodeFactory` não tem
 casos VFP e `TruffleCodeEmitter#supports` devolve `true` sempre) — pré-existente, verificado, e
 bloqueia NEON no Truffle assim que algum preset declarar `ADVANCED_SIMD`.
