@@ -260,11 +260,14 @@ class ArmDecoderTest {
 
     // ── ERET (B9.8.4, A32, ARM DDI 0406C B9.3.3) ────────────────────────────────────────────
 
-    // ArmFeature#VIRTUALIZATION_EXTENSIONS não é habilitada em nenhum preset ainda (nenhum
-    // consumidor real modela V7VE) — precisa de um preset ad-hoc, mesmo padrão já usado por
-    // outros testes desta suíte (ArmV7MediaDecoderTest/Thumb2DataProcessingDecoderTest).
+    // B22.5: ArmFeature#VIRTUALIZATION_EXTENSIONS agora É habilitada em ARMV7A (era incoerência
+    // ter HYPERVISOR_CALL sem ela). Este alias continua == ARMV7A (extending é idempotente para
+    // feature já presente) e é mantido só para não reescrever as dezenas de referências abaixo.
     private static final ArmArchitecture ARMV7VE = ArmArchitecture.extending(
             ArmArchitecture.ARMV7A, "ARMv7VE", ArmFeature.VIRTUALIZATION_EXTENSIONS);
+    // Preset pré-v7 que genuinamente NÃO tem V7VE — usado pelos testes de gating G8 (o espaço
+    // ERET/MRS_bank/MSR_bank é real, tem que virar UNIMPLEMENTED explícito sem a feature).
+    private static final ArmArchitecture WITHOUT_VIRTUALIZATION = ArmArchitecture.ARMV6K;
 
     @Test
     void decodesArmEretWithVirtualizationExtensionsFeature() {
@@ -282,9 +285,9 @@ class ArmDecoderTest {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE160_006E);
 
-        // ARMV7A puro não tem VIRTUALIZATION_EXTENSIONS (feature nova, sem preset habilitando
-        // ainda) — o espaço é real (não UDF fixo), só não implementado nesta arquitetura (G8).
-        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+        // ARMv6K não tem VIRTUALIZATION_EXTENSIONS (posterior) — o espaço é real (não UDF fixo),
+        // só não implementado nesta arquitetura (G8).
+        DecodedInstruction instruction = new ArmDecoder(WITHOUT_VIRTUALIZATION).decode(memory, 0);
 
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.ERET, instruction.kind());
@@ -299,6 +302,55 @@ class ArmDecoderTest {
 
         assertEquals(InstructionKind.SMC, instruction.kind());
         assertNotEquals(InstructionKind.ERET, instruction.kind());
+    }
+
+    // ── B22.5: o PRESET público ARMV7A (não só o alias de teste) decodifica os 3 encodings ──────
+
+    @Test
+    void armv7aPresetDecodesEretMrsBankAndMsrBank() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        ArmDecoder decoder = new ArmDecoder(ArmArchitecture.ARMV7A);
+
+        memory.put32(0, 0xE160_006E); // ERET
+        assertEquals(InstructionKind.ERET, decoder.decode(memory, 0).kind());
+
+        memory.put32(0, 0xE100_0200); // MRS r0, R8_usr
+        assertEquals(InstructionKind.MRS_BANK, decoder.decode(memory, 0).kind());
+
+        memory.put32(0, 0xE125_F200); // MSR SP_usr, r0
+        assertEquals(InstructionKind.MSR_BANK, decoder.decode(memory, 0).kind());
+    }
+
+    @Test
+    void armv7aPresetExecutesEretReturningFromHypMode() {
+        ArmCore core = new ArmCore(new TestAddressSpace(16), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.switchMode(CpuMode.HYP);
+        core.setElrHyp(0x9000);
+        core.setSpsr(CpuMode.HYP, (core.cpsr().get() & ~0x1F) | CpuMode.SUPERVISOR.bits());
+        core.memory().write32(0, 0xE160_006E); // ERET
+
+        core.step();
+
+        assertEquals(CpuMode.SUPERVISOR, core.mode());
+        assertEquals(0x9000, core.programCounter());
+    }
+
+    @Test
+    void armv7aPresetExecutesMrsBankAndMsrBankAgainstAnotherModesBank() {
+        ArmCore core = new ArmCore(new TestAddressSpace(32), SwiDispatcher.empty(), ArmArchitecture.ARMV7A);
+        core.switchMode(CpuMode.SYSTEM); // SP_usr/SP_sys compartilhado
+        core.setRegister(13, 0x1234);
+        core.switchMode(CpuMode.SUPERVISOR);
+        core.setRegister(1, 0x5678);
+        core.memory().write32(0, 0xE105_0200); // MRS r0, SP_usr
+        core.memory().write32(4, 0xE125_F201); // MSR SP_usr, r1
+
+        core.step(); // MRS
+        assertEquals(0x1234, core.register(0));
+
+        core.step(); // MSR
+        assertEquals(0x5678, core.bankedRegister(CpuMode.SYSTEM, 13));
+        assertEquals(CpuMode.SUPERVISOR, core.mode(), "acesso bancado não troca o modo ativo");
     }
 
     @Test
@@ -391,7 +443,7 @@ class ArmDecoderTest {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE100_0200);
 
-        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+        DecodedInstruction instruction = new ArmDecoder(WITHOUT_VIRTUALIZATION).decode(memory, 0);
 
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.MRS_BANK, instruction.kind());
@@ -483,7 +535,7 @@ class ArmDecoderTest {
         TestAddressSpace memory = new TestAddressSpace(16);
         memory.put32(0, 0xE125_F200);
 
-        DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV7A).decode(memory, 0);
+        DecodedInstruction instruction = new ArmDecoder(WITHOUT_VIRTUALIZATION).decode(memory, 0);
 
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
         assertNotEquals(InstructionKind.MSR_BANK, instruction.kind());

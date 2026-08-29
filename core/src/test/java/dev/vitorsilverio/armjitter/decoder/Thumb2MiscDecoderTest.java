@@ -669,11 +669,11 @@ class Thumb2MiscDecoderTest {
 
     // ── MRS/MSR bancado (B9.8.5, T32, ARM DDI 0406C A8.8.64/A8.8.66) ────────────────────────
 
-    /// `ARMV7A` (base do resto desta suíte para `HVC`/`SMC`) não tem `VIRTUALIZATION_EXTENSIONS`
-    /// habilitada — precisa de um preset dedicado, mesmo padrão de `THUMB2_ARCH`/`noSmcThumb2`
-    /// acima: o `Thumb2MiscDecoder` interno precisa da MESMA feature, não só o preset externo
-    /// (`ArmArchitecture#extending` preserva a LISTA de extensões, mas cada extensão guarda sua
-    /// própria referência de arquitetura para gating interno).
+    /// B22.5: `ARMV7A` passou a declarar `VIRTUALIZATION_EXTENSIONS` (o `Thumb2MiscDecoder` interno
+    /// dele é construído com `ARMV7A_FEATURES`, que agora tem a feature). Este preset dedicado vira
+    /// redundante mas é mantido (== `ARMV7A` + feature idempotente) para não reescrever as
+    /// referências abaixo; a cobertura do preset público real está em
+    /// {@code armv7aPresetDecodesBankedMrsAndMsrT32}.
     private static final ArmArchitecture ARMV7VE_THUMB2 = ArmArchitecture.extending(
                     ArmArchitecture.ARMV7A, "ARMv7VE-Thumb2", ArmFeature.VIRTUALIZATION_EXTENSIONS)
             .withThumb32DecoderExtensions(List.of(new Thumb2MiscDecoder(
@@ -682,6 +682,21 @@ class Thumb2MiscDecoderTest {
 
     private static ArmCore newVirtualizationCore() {
         return newCore(ARMV7VE_THUMB2);
+    }
+
+    @Test
+    void armv7aPresetDecodesBankedMrsAndMsrT32() {
+        ThumbDecoder decoder = new ThumbDecoder(ArmArchitecture.ARMV7A);
+
+        TestAddressSpace mrs = new TestAddressSpace(16);
+        mrs.put16(0, 0xF3E0); // MRS r0, R8_usr
+        mrs.put16(2, 0x8020);
+        assertEquals(InstructionKind.MRS_BANK, decoder.decode(mrs, 0).kind());
+
+        TestAddressSpace msr = new TestAddressSpace(16);
+        msr.put16(0, 0xF380); // MSR SP_usr, r0 (encoding real, ver msrBankWDecodesWith...)
+        msr.put16(2, 0x8520);
+        assertEquals(InstructionKind.MSR_BANK, decoder.decode(msr, 0).kind());
     }
 
     @Test

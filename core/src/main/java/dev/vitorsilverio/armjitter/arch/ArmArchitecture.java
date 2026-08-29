@@ -246,7 +246,14 @@ public final class ArmArchitecture {
             ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE,
             // B9.8.2: HVC (ARMv7 base, qualquer perfil A/R — ver Javadoc da feature). NÃO herdada
             // por ARMV7M (perfil M não tem HVC, confirmado no QEMU real) nem por presets pré-v7.
-            ArmFeature.HYPERVISOR_CALL);
+            ArmFeature.HYPERVISOR_CALL,
+            // B22.5: Virtualization Extensions (ERET/MRS_bank/MSR_bank A32 e T32). No ARM real
+            // `HVC`, `ERET` e `MRS`/`MSR` (banked) são A MESMA extensão (ARMv7-A Virtualization
+            // Extensions) — um core que tem `HVC` (Cortex-A15/A7, citados no Javadoc deste preset)
+            // tem os três. Declarar `HYPERVISOR_CALL` sem esta era incoerência arquitetural (as
+            // 29 células `ERET`/`MRS_bank`/`MSR_bank` que ficavam `❌` em v7-A). NÃO herdada por
+            // ARMV7M (sem Hyp mode / banco por modo) nem por presets pré-v7 (posterior ao ARMv6K).
+            ArmFeature.VIRTUALIZATION_EXTENSIONS);
 
     public static final ArmArchitecture ARMV7A = ARMV7A_FEATURES
             .withDecoderExtensions(List.of(

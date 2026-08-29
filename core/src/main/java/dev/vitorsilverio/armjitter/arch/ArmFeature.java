@@ -181,7 +181,8 @@ public enum ArmFeature {
     /// (ARMv7 base, QUALQUER perfil A/R) `&amp;&amp; !ARM_FEATURE_M` — **não** exige
     /// `ARM_FEATURE_V7VE` (Virtualization Extensions), ao contrário do que se poderia supor por
     /// analogia com `ERET`. Presente só no preset {@code ARMV7A} (não em {@code ARMV7M}, perfil M
-    /// — nem em presets pré-v7).
+    /// — nem em presets pré-v7), junto de {@link #VIRTUALIZATION_EXTENSIONS} (B22.5 — as duas são
+    /// a mesma extensão no ARM real).
     HYPERVISOR_CALL,
 
     /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20, formas A32 e T32): entra em Monitor mode. Confirmado
@@ -192,15 +193,17 @@ public enum ArmFeature {
     /// {@code ARMV7A}.
     SECURE_MONITOR_CALL,
 
-    /// `ERET` A32 (B9.8.4, ARM DDI 0406C B9.3.3): retorna de exceção lendo `ELR_hyp` em Hyp mode
-    /// (em vez de `LR`). Confirmado contra `target/arm/tcg/{translate.c,a32.decode}` reais do QEMU
-    /// (`trans_ERET`): gate real é `ARM_FEATURE_V7VE` (Virtualization Extensions) — MAIS ESTRITO
-    /// que {@link #HYPERVISOR_CALL} (`ENABLE_ARCH_7`) e {@link #SECURE_MONITOR_CALL}
-    /// (`ENABLE_ARCH_6K`), ao contrário do que a analogia com as duas sugeriria. Nenhum preset deste
-    /// projeto modela `V7VE` como conceito à parte de `ARMV7A` base hoje — esta feature NÃO é
-    /// habilitada em preset nenhum (aditivo puro, sem consumidor real ainda, mesmo padrão de
-    /// `TTBR0_EL2`/`TTBR0_EL3` na escada `B10.6b`/`B10.6c`); a instrução decodifica e executa
-    /// corretamente assim que algum preset futuro ligar esta feature.
+    /// Virtualization Extensions do ARMv7-A: `ERET` (B9.8.4, ARM DDI 0406C B9.3.3 — retorna de
+    /// exceção lendo `ELR_hyp` em Hyp mode em vez de `LR`) e `MRS`/`MSR` bancados (B9.8.5, A8.8.64/
+    /// A8.8.66). Confirmado contra `target/arm/tcg/{translate.c,a32.decode}` reais do QEMU
+    /// (`trans_ERET`): gate real é `ARM_FEATURE_V7VE` — MAIS ESTRITO que {@link #HYPERVISOR_CALL}
+    /// (`ENABLE_ARCH_7`) e {@link #SECURE_MONITOR_CALL} (`ENABLE_ARCH_6K`), ao contrário do que a
+    /// analogia com as duas sugeriria.
+    ///
+    /// **B22.5**: habilitada em {@code ARMV7A}. No ARM real `HVC`/`ERET`/`MRS`/`MSR` (banked) são a
+    /// MESMA extensão (Cortex-A15/A7 têm as três) — declarar {@link #HYPERVISOR_CALL} sem esta era
+    /// incoerência. NÃO herdada por {@code ARMV7M} (perfil M não tem Hyp mode nem banco por modo)
+    /// nem por presets pré-v7 (posterior ao ARMv6K).
     VIRTUALIZATION_EXTENSIONS,
 
     // ---- Onda 5, B9.11 (achado colateral da B9.10 — auditoria de Thumb2MiscDecoder sob v6-M) ----

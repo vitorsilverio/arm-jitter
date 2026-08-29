@@ -208,12 +208,32 @@ CLRM	v7-A	ARMv8-M mainline (perfil M, não A/R-profile)
 # ── posterior a v7-A (backport arquitetural, não faz parte do ARMv7-A base). ────────────────────
 SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
 
-# ── T32 (B9.7): MRS_bank/MSR_bank/ERET/SMC/HVC NÃO entram aqui — regra do usuário (2026-08-23,
-# ── ver memória `feedback-nunca-excluir-instrucao-arm`): são instruções REAIS do ARMv7VE/Security
-# ── Extensions, mesma versão de arquitetura-alvo (v7-A), só optativas — não "posteriores". O
-# ── precedente é EL1/EL2 no AArch64 (B10): construir Hyp/Monitor mode, não excluir. Ficam ❌
-# ── na tabela até uma escada própria (Hyp mode + Monitor mode de 32 bits) — ver nota em
-# ── `trilha-b-arquiteturas/b9.7-t32-thumb2.md`.
+# ── B22.5 (2026-08-29): ERET/HVC/MRS_bank/MSR_bank — a exclusão "por decisão do usuário" das
+# ── tasks B9.7/B9.15/B9.16/B9.17 FOI REVERTIDA. Em v7-A as 5 agora decodificam e executam
+# ── (`ARMV7A` passou a declarar `ArmFeature.VIRTUALIZATION_EXTENSIONS`, junto do `HYPERVISOR_CALL`
+# ── que já tinha — no ARM real são a mesma extensão). O que entra aqui são só as curadorias
+# ── legítimas "posterior" (pré-v7) e "não existe neste perfil" (perfil M), com fonte por linha.
+#
+# ── T32 perfil M (v6-M, v7-M): ERET/HVC/SMC/MRS_bank/MSR_bank NÃO existem em NENHUM perfil M —
+# ── não há Hyp mode, Monitor mode nem banco de registrador por modo. Medido pela B9.11 ("não
+# ── existe em NENHUM perfil M, nem v7-M") e pelos ARMs de referência (ARM DDI 0419C p/ ARMv6-M,
+# ── ARM DDI 0403E p/ ARMv7-M). Escopado a `t32.decode` (os mesmos mnemônicos existem em
+# ── `a32.decode`, onde v7-A acabou de virar ✅ — B9.15).
+# ── (HVC/SMC em v6-M já estavam curados acima, sem `grupo`; aqui só o que faltava.)
+ERET	v6-M,v7-M	perfil M não tem Hyp mode nem exception-return por ELR (ARM DDI 0419C/0403E; B9.11)	t32.decode
+MRS_bank	v6-M,v7-M	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
+MSR_bank	v6-M,v7-M	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
+SMC	v7-M	perfil M não tem Monitor mode/Security Extensions (ARM DDI 0403E; B9.11)	t32.decode
+HVC	v7-M	perfil M não tem Hyp mode (ARM DDI 0403E; B9.11)	t32.decode
+
+# ── A32 pré-v7 (v4T, v5TE, v6K, ARM11 MPCore): ERET/HVC/MRS_bank/MSR_bank são das Virtualization
+# ── Extensions do ARMv7-A (`trans_ERET` = `ARM_FEATURE_V7VE`; `trans_HVC` = `ENABLE_ARCH_7`),
+# ── POSTERIORES ao ARMv4T/ARMv5TE/ARMv6K — reclassificação por degrau cronológico, não descarte
+# ── (a instrução é ✅ em v7-A). Escopado a `a32.decode` (mesmos nomes em `t32.decode`).
+ERET	v4T,v5TE,v6K,MPCore	ARMv7-A Virtualization Extensions (trans_ERET = ARM_FEATURE_V7VE), posterior a v4T/v5TE/v6K	a32.decode
+HVC	v4T,v5TE,v6K,MPCore	ARMv7-A (trans_HVC = ENABLE_ARCH_7), posterior a v4T/v5TE/v6K	a32.decode
+MRS_bank	v4T,v5TE,v6K,MPCore	ARMv7-A Virtualization Extensions, posterior a v4T/v5TE/v6K	a32.decode
+MSR_bank	v4T,v5TE,v6K,MPCore	ARMv7-A Virtualization Extensions, posterior a v4T/v5TE/v6K	a32.decode
 
 # ── A32 (B9.2): MOVW/MOVT/MLS/SBFX/UBFX/BFCI/RBIT — CONFERIDO contra `target/arm/tcg/translate.c`
 # ── real do QEMU: todas gateadas por `ENABLE_ARCH_6T2` (`#define ENABLE_ARCH_6T2

@@ -30,19 +30,19 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **83%** — 15284 de 18235 células aplicáveis decodificam.
+> **83%** — 15289 de 18211 células aplicáveis decodificam.
 
 Por arquitetura:
 
 | Arquitetura | Cobertura |
 |---|---|
-| v4T | **94%** (207/220) |
-| v5TE | **95%** (222/233) |
-| v6K | **98%** (312/317) |
-| MPCore | **98%** (362/368) |
-| v7-A | **98%** (647/655) |
-| v6-M | **80%** (81/101) |
-| v7-M | **94%** (321/341) |
+| v4T | **95%** (207/216) |
+| v5TE | **96%** (222/229) |
+| v6K | **99%** (312/313) |
+| MPCore | **99%** (362/364) |
+| v7-A | **99%** (652/655) |
+| v6-M | **82%** (81/98) |
+| v7-M | **95%** (321/336) |
 | ARMv8.0-A | **82%** (796/970) |
 | ARMv8.1-A | **82%** (811/985) |
 | ARMv8.2-A | **81%** (816/996) |
@@ -64,9 +64,9 @@ Por arquitetura:
 
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
-| A32 — instruções ARM de 32 bits | 266 | v4T 97% (145/149) · v5TE 97% (157/161) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
+| A32 — instruções ARM de 32 bits | 266 | v4T 100% (145/145) · v5TE 100% (157/157) · v6K 100% (232/232) · MPCore 100% (232/232) · v7-A 100% (245/245) |
 | T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 98% (80/81) · MPCore 98% (80/81) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
-| T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 72% (8/11) · v7-M 97% (242/247) |
+| T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 98% (50/51) · v7-A 98% (58/59) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
@@ -179,18 +179,18 @@ Inventário: `a32.decode` · 266 instruções.
 | `CRC32CB` | · | · | · | · | · | · | · |
 | `CRC32CH` | · | · | · | · | · | · | · |
 | `CRC32CW` | · | · | · | · | · | · | · |
-| `MRS_bank` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
-| `MSR_bank` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
+| `MRS_bank` | · | · | · | · | ✅ | · | · |
+| `MSR_bank` | · | · | · | · | ✅ | · | · |
 | `MRS_reg` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `MSR_reg` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `BX` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `BXJ` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `BLX_r` | · | ✅ | ✅ | ✅ | ✅ | · | · |
 | `CLZ` | · | ✅ | ✅ | ✅ | ✅ | · | · |
-| `ERET` | ❌ | ❌ | ❌ | ❌ | ❌ | · | · |
+| `ERET` | · | · | · | · | ✅ | · | · |
 | `HLT` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `BKPT` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
-| `HVC` | ❌ | ❌ | ❌ | ❌ | ✅ | · | · |
+| `HVC` | · | · | · | · | ✅ | · | · |
 | `SMC` | · | · | ✅ | ✅ | ✅ | · | · |
 | `STRH_rr` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `STRH_rr` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
@@ -589,17 +589,17 @@ Inventário: `t32.decode` · 310 instruções.
 | `DMB` | · | · | · | · | ✅ | ✅ | ✅ |
 | `ISB` | · | · | · | · | ✅ | ✅ | ✅ |
 | `SB` | · | · | · | · | · | · | · |
-| `MRS_bank` | · | · | · | · | ❌ | ❌ | ❌ |
+| `MRS_bank` | · | · | · | · | ✅ | · | · |
 | `MRS_reg` | · | · | · | · | ✅ | ✅ | ✅ |
 | `MRS_v7m` | · | · | · | · | ✅ | ✅ | ✅ |
-| `MSR_bank` | · | · | · | · | ❌ | ❌ | ❌ |
+| `MSR_bank` | · | · | · | · | ✅ | · | · |
 | `MSR_reg` | · | · | · | · | ✅ | ✅ | ✅ |
 | `MSR_v7m` | · | · | · | · | ✅ | ✅ | ✅ |
 | `BXJ` | · | · | · | · | ✅ | · | · |
-| `ERET` | · | · | · | · | ✅ | ❌ | ❌ |
+| `ERET` | · | · | · | · | ✅ | · | · |
 | `SUB_rri` | · | · | · | · | ✅ | · | · |
-| `SMC` | · | · | · | · | ✅ | · | ❌ |
-| `HVC` | · | · | · | · | ✅ | · | ❌ |
+| `SMC` | · | · | · | · | ✅ | · | · |
+| `HVC` | · | · | · | · | ✅ | · | · |
 | `UDF` | · | · | · | · | ✅ | · | ✅ |
 | `B_cond_thumb` | · | · | · | · | ✅ | · | ✅ |
 | `STRB_rr` | · | · | · | · | ✅ | · | ✅ |
