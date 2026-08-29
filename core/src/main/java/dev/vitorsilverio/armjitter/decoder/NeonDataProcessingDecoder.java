@@ -9,9 +9,10 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Decodifica o espaço NEON/Advanced SIMD de processamento de dados do encoding A32, seção
-/// **"3-reg-same"** — a parte INTEIRA não saturante (aritmética / comparação / lógica / pairwise),
-/// B13.4. Oráculo: QEMU `target/arm/tcg/neon-dp.decode` seção "3-reg-same" + `translate-neon.c`;
-/// ARM DDI 0406C A7.4.5.
+/// **"3-reg-same"** — a parte INTEIRA (aritmética / comparação / lógica / pairwise, B13.4) e as
+/// famílias **saturantes / de deslocamento por registrador** (`VQADD`/`VQSUB`/`VSHL`/`VQSHL`/
+/// `VRSHL`/`VQRSHL`/`VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`, B13.5). Oráculo: QEMU
+/// `target/arm/tcg/neon-dp.decode` seção "3-reg-same" + `translate-neon.c`; ARM DDI 0406C A7.4.5.
 ///
 /// Layout: `1111 001 U 0 D sz:2 Vn:4 Vd:4 opc:4 N Q M op Vm:4`. O frame do grupo é
 /// `(raw & 0xFE80_0000) == 0xF200_0000` (bits[31:25]=`1111001`, bit23=0) — EXCLUSIVO desta seção
@@ -19,13 +20,19 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// reivindica o frame INTEIRO: devolve um `IrOp` OU `UNIMPLEMENTED` explícito, nunca `null` (G8) —
 /// o espaço incondicional NEON é o historicamente mal decodificado (achado E6).
 ///
-/// Fora de escopo (viram `UNIMPLEMENTED` aqui, com destino registrado): saturantes/deslocamento
-/// (`VQADD`/`VSHL`/`VQDMULH`/... → B13.5), cripto (`SHA1*`/`SHA256*` → B13.15), ponto flutuante
-/// (`VADD_fp`/... → B13.6). T32 é B13.16.
+/// As 4 famílias de deslocamento (`opc=0100`/`0101`) usam o encoding `@3same_rev` do QEMU: `Vn` e
+/// `Vm` ficam TROCADOS em relação à posição usual (o VALOR deslocado é `Vm`, a QUANTIDADE vem de
+/// `Vn`). O núcleo compartilhado `AdvSimdLanes.threeSame` espera valor=`Rn`/quantidade=`Rm` (o A64
+/// não tem essa inversão), então este decoder monta o record com `vn`↔`vm` trocados.
 ///
-/// Gate único: {@link ArmFeature#ADVANCED_SIMD}. **Nenhum preset a declara** (B13.22 é quem fecha
-/// isso), então sem a feature o frame volta a cair no `UNIMPLEMENTED` de
-/// `ArmDecoder#decodeUnconditional` (zero-diff).
+/// Fora de escopo (viram `UNIMPLEMENTED` aqui, com destino registrado): cripto (`SHA1*`/`SHA256*`
+/// → B13.15), ponto flutuante (`VADD_fp`/`VFMA_fp`/... → B13.6). T32 é B13.16. `FPSCR.QC`/`FPSR.QC`
+/// (bit cumulativo de saturação) NÃO é modelado (paridade com o A64) — task futura própria.
+///
+/// Gates: {@link ArmFeature#ADVANCED_SIMD} (todo o frame) e, ADEMAIS,
+/// {@link ArmFeature#ADVANCED_SIMD_RDM} para `VQRDMLAH`/`VQRDMLSH` (`FEAT_RDM`). **Nenhum preset os
+/// declara** (B13.22 é quem fecha isso), então sem a feature o frame volta a cair no
+/// `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonDataProcessingDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -87,10 +94,17 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         if (threeSame == null) {
             return unimplemented(address, raw, condition);
         }
+        // `VQRDMLAH`/`VQRDMLSH` exigem `FEAT_RDM` ALÉM de `ADVANCED_SIMD` — sem ela viram
+        // `UNIMPLEMENTED` (o frame já bateu, não é `null`).
+        if ((threeSame == AdvSimdThreeSameOp.SQRDMLAH || threeSame == AdvSimdThreeSameOp.SQRDMLSH)
+                && !architecture.has(ArmFeature.ADVANCED_SIMD_RDM)) {
+            return unimplemented(address, raw, condition);
+        }
         boolean logical = opc == 0b0001 && op == 1;
-        // Só `VADD`/`VSUB` (`.i64`) e a família lógica (onde `sz` é discriminador, não largura)
-        // aceitam `size==3`; todo o resto do inteiro é 8/16/32 (ARM DDI 0406C, tabelas de datatype).
-        if (size == DOUBLEWORD_SIZE && !logical && !(opc == 0b1000 && op == 0)) {
+        // `VADD`/`VSUB` (`.i64`), a família lógica (`sz` discriminador, não largura) e as famílias
+        // saturantes/de deslocamento por registrador de B13.5 (`VQADD`/`VQSUB`/`VSHL`/`VQSHL`/
+        // `VRSHL`/`VQRSHL`) aceitam `size==3`; o resto do inteiro é 8/16/32 (ARM DDI 0406C).
+        if (size == DOUBLEWORD_SIZE && !logical && !allowsDoublewordElement(opc, op)) {
             return unimplemented(address, raw, condition);
         }
         // Forma `Q`: os 3 registradores nomeiam pares `D<2n>`/`D<2n+1>` — índice ímpar é UNDEFINED.
@@ -99,27 +113,58 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         }
         // Lógica: `sz` é discriminador, o elemento é sempre byte (`esz=0`).
         int esz = logical ? 0 : size;
+        // `@3same_rev` (`opc=0100`/`0101`): valor = `Vm`, quantidade = `Vn`. O núcleo espera
+        // valor=`Rn`/quantidade=`Rm`, então troca-se `vn`↔`vm` ao montar o record.
+        boolean reversed = opc == 0b0100 || opc == 0b0101;
+        int recordVn = reversed ? vm : vn;
+        int recordVm = reversed ? vn : vm;
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonThreeSame(threeSame, quad, esz, vd, vn, vm));
+                new IrOp.NeonThreeSame(threeSame, quad, esz, vd, recordVn, recordVm));
+    }
+
+    /// `size==3` (doubleword) só é válido para `VADD`/`VSUB` (`opc=1000 op=0`, `.i64`) e para as
+    /// famílias de B13.5 que o ARM permite em 64 bits: `VQADD`/`VQSUB` (`opc=0000`/`0010 op=1`) e
+    /// os 4 deslocamentos por registrador (`opc=0100`/`0101`). A lógica (`opc=0001 op=1`) é tratada
+    /// à parte no chamador. `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` são H/S apenas — já filtrados
+    /// por {@link #threeSameOperation}.
+    private static boolean allowsDoublewordElement(int opc, int op) {
+        return switch (opc) {
+            case 0b1000 -> op == 0;
+            case 0b0000, 0b0010 -> op == 1;
+            case 0b0100, 0b0101 -> true;
+            default -> false;
+        };
     }
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
-    /// Mapeia `(opc, op, U)` para a operação "three same" INTEIRA de B13.4, ou `null` quando o
-    /// encoding está fora de escopo (saturante/deslocamento/cripto/FP → outras sub-tasks) — o
-    /// chamador transforma `null` em `UNIMPLEMENTED`.
+    /// Mapeia `(opc, op, U, size)` para a operação "three same" de B13.4 (inteira) ou B13.5
+    /// (saturante / deslocamento por registrador), ou `null` quando o encoding está fora de escopo
+    /// (cripto/FP → outras sub-tasks; `VPADD` → tratado por {@link #pairwiseOperation}) — o chamador
+    /// transforma `null` em `UNIMPLEMENTED`.
     private static AdvSimdThreeSameOp threeSameOperation(int opc, int op, int u, int size) {
         return switch (opc) {
-            case 0b0000 -> op == 0 ? (u == 0 ? AdvSimdThreeSameOp.SHADD : AdvSimdThreeSameOp.UHADD) : null;
+            case 0b0000 -> op == 0
+                    ? (u == 0 ? AdvSimdThreeSameOp.SHADD : AdvSimdThreeSameOp.UHADD)
+                    : (u == 0 ? AdvSimdThreeSameOp.SQADD : AdvSimdThreeSameOp.UQADD);
             case 0b0001 -> op == 0
                     ? (u == 0 ? AdvSimdThreeSameOp.SRHADD : AdvSimdThreeSameOp.URHADD)
                     : logicalOperation(u, size);
-            case 0b0010 -> op == 0 ? (u == 0 ? AdvSimdThreeSameOp.SHSUB : AdvSimdThreeSameOp.UHSUB) : null;
+            case 0b0010 -> op == 0
+                    ? (u == 0 ? AdvSimdThreeSameOp.SHSUB : AdvSimdThreeSameOp.UHSUB)
+                    : (u == 0 ? AdvSimdThreeSameOp.SQSUB : AdvSimdThreeSameOp.UQSUB);
             case 0b0011 -> op == 0
                     ? (u == 0 ? AdvSimdThreeSameOp.CMGT : AdvSimdThreeSameOp.CMHI)
                     : (u == 0 ? AdvSimdThreeSameOp.CMGE : AdvSimdThreeSameOp.CMHS);
+            // `@3same_rev` — a troca `vn`↔`vm` é feita no chamador, não aqui.
+            case 0b0100 -> op == 0
+                    ? (u == 0 ? AdvSimdThreeSameOp.SSHL : AdvSimdThreeSameOp.USHL)
+                    : (u == 0 ? AdvSimdThreeSameOp.SQSHL : AdvSimdThreeSameOp.UQSHL);
+            case 0b0101 -> op == 0
+                    ? (u == 0 ? AdvSimdThreeSameOp.SRSHL : AdvSimdThreeSameOp.URSHL)
+                    : (u == 0 ? AdvSimdThreeSameOp.SQRSHL : AdvSimdThreeSameOp.UQRSHL);
             case 0b0110 -> op == 0
                     ? (u == 0 ? AdvSimdThreeSameOp.SMAX : AdvSimdThreeSameOp.UMAX)
                     : (u == 0 ? AdvSimdThreeSameOp.SMIN : AdvSimdThreeSameOp.UMIN);
@@ -133,8 +178,25 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
                     ? (u == 0 ? AdvSimdThreeSameOp.MLA : AdvSimdThreeSameOp.MLS)
                     // `VMUL.P` só existe em byte (`translate-neon.c` só tem fn para MO_8).
                     : (u == 0 ? AdvSimdThreeSameOp.MUL : (size == 0 ? AdvSimdThreeSameOp.PMUL : null));
+            // `opc=1011 op=1 u=0` é `VPADD` (pairwise, já resolvido antes); as demais combinações
+            // são as multiplicações dobradas — só `esz` `1`(H)/`2`(S).
+            case 0b1011 -> switch ((op << 1) | u) {
+                case 0b00 -> halfOrWord(size, AdvSimdThreeSameOp.SQDMULH);
+                case 0b01 -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMULH);
+                case 0b11 -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMLAH);
+                default -> null;
+            };
+            // `opc=1100 op=0` é cripto (`SHA1*`/`SHA256*` → B13.15); `op=1 u=0` é `VFMA_fp` (B13.6);
+            // só `op=1 u=1` é desta task (`VQRDMLSH`, H/S apenas).
+            case 0b1100 -> (op == 1 && u == 1) ? halfOrWord(size, AdvSimdThreeSameOp.SQRDMLSH) : null;
             default -> null;
         };
+    }
+
+    /// `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` existem só em halfword (`size==1`) e word
+    /// (`size==2`); `size` `0`(B)/`3`(D) é UNDEFINED (ARM DDI 0406C).
+    private static AdvSimdThreeSameOp halfOrWord(int size, AdvSimdThreeSameOp operation) {
+        return (size == 1 || size == 2) ? operation : null;
     }
 
     /// `opc=0001 op=1`: família lógica, onde `sz` (2 bits) é o discriminador — `@3same_logic`

@@ -196,40 +196,10 @@ final class Ir64VectorArithmeticExecutor {
         return saturateToElement(BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1), wideEsz, true);
     }
 
-    /// Deslocamento por REGISTRADOR (`SSHL`/`USHL`/`SQSHL`/`UQSHL`/...): a quantidade é o BYTE
-    /// BAIXO do elemento `Rm`, sempre — nunca `sext(Rm,esz)` (`ARM DDI 0487`, pseudocódigo de
-    /// `SSHL`: `shift = SInt(Elem[m,e,8])`). `>=0` desloca à esquerda; `<0` desloca à direita com a
-    /// MAGNITUDE (`-shift`).
-    private static int registerShiftAmount(long rmElement) {
-        return (byte) rmElement;
-    }
-
-    private static long shiftByRegister(long value, int amount, boolean signed) {
-        if (amount >= 0) {
-            return safeShiftLeft(value, amount);
-        }
-        int magnitude = -amount;
-        return signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude);
-    }
-
-    private static long roundingShiftByRegister(long value, int amount, boolean signed) {
-        if (amount >= 0) {
-            return safeShiftLeft(value, amount);
-        }
-        return roundingShiftRight(value, -amount, signed);
-    }
-
-    /// `SQSHL`/`UQSHL`/`SQRSHL`/`UQRSHL` por registrador: só o lado ESQUERDO (`amount>=0`) satura;
-    /// o lado direito (`amount<0`) é um deslocamento comum (com ou sem arredondamento conforme
-    /// {@code rounding}), NUNCA satura (a magnitude só encolhe).
-    private static long saturatingShiftByRegister(long value, int amount, int esz, boolean signed, boolean rounding) {
-        if (amount >= 0) {
-            return saturatingShiftLeft(value, amount, esz, signed);
-        }
-        int magnitude = -amount;
-        return rounding ? roundingShiftRight(value, magnitude, signed)
-                : (signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude));
-    }
+    // `registerShiftAmount`/`shiftByRegister`/`roundingShiftByRegister`/`saturatingShiftByRegister`
+    // (deslocamento por registrador de `SSHL`/`USHL`/`SRSHL`/`URSHL`/`SQSHL`/`UQSHL`/`SQRSHL`/
+    // `UQRSHL`) migraram para o núcleo COMPARTILHADO `advsimd/AdvSimdLanes` em B13.5 — as 16
+    // operações que os usavam agora vivem só lá (ver `sharedThreeSameOp`).
 
     /// "Shift Left and Insert" (`SLI`): desloca `source` à esquerda por `shift` e insere no `Rd`
     /// ATUAL, preservando os `shift` bits BAIXOS de `Rd` (o deslocamento já traz zeros nos bits
@@ -275,12 +245,12 @@ final class Ir64VectorArithmeticExecutor {
         }
     }
 
-    /// RFC B13.2 (D1, reuso do núcleo vetorial): mapeia a operação inteira "three same" para o
-    /// núcleo COMPARTILHADO {@link AdvSimdLanes} — `null` SÓ para as 16 saturantes/de deslocamento
-    /// por registrador, que continuam no `switch` local de {@link #executeThreeSame} até B13.5
-    /// migrá-las. Todo valor que devolve `null` aqui TEM que ter um `case` explícito lá; todo o
-    /// resto é resolvido por este mapa (o `default -> throw` do `switch` documenta esse contrato).
-    /// Cada operação existe em exatamente UM dos dois lugares.
+    /// RFC B13.2 (D1, reuso do núcleo vetorial): mapeia TODA operação "three same" para o núcleo
+    /// COMPARTILHADO {@link AdvSimdLanes}. A B13.4 migrou o subconjunto inteiro não saturante/lógico
+    /// e a B13.5 migrou as 16 saturantes / de deslocamento por registrador (`SQADD`..`SQRDMLSH`) —
+    /// desde então NENHUMA operação fica no `switch` local; {@link #executeThreeSame} só delega. O
+    /// `default -> throw` documenta o contrato (todo valor de {@link Ir64VectorThreeSameOp} TEM que
+    /// ter entrada aqui). Cada operação existe em exatamente UM lugar: o núcleo.
     private static AdvSimdThreeSameOp sharedThreeSameOp(Ir64VectorThreeSameOp op) {
         return switch (op) {
             case ADD -> AdvSimdThreeSameOp.ADD;
@@ -317,7 +287,23 @@ final class Ir64VectorArithmeticExecutor {
             case BSL -> AdvSimdThreeSameOp.BSL;
             case BIT -> AdvSimdThreeSameOp.BIT;
             case BIF -> AdvSimdThreeSameOp.BIF;
-            default -> null;
+            // B13.5 — saturantes / deslocamento por registrador (migradas do `switch` local):
+            case SQADD -> AdvSimdThreeSameOp.SQADD;
+            case UQADD -> AdvSimdThreeSameOp.UQADD;
+            case SQSUB -> AdvSimdThreeSameOp.SQSUB;
+            case UQSUB -> AdvSimdThreeSameOp.UQSUB;
+            case SSHL -> AdvSimdThreeSameOp.SSHL;
+            case USHL -> AdvSimdThreeSameOp.USHL;
+            case SRSHL -> AdvSimdThreeSameOp.SRSHL;
+            case URSHL -> AdvSimdThreeSameOp.URSHL;
+            case SQSHL -> AdvSimdThreeSameOp.SQSHL;
+            case UQSHL -> AdvSimdThreeSameOp.UQSHL;
+            case SQRSHL -> AdvSimdThreeSameOp.SQRSHL;
+            case UQRSHL -> AdvSimdThreeSameOp.UQRSHL;
+            case SQDMULH -> AdvSimdThreeSameOp.SQDMULH;
+            case SQRDMULH -> AdvSimdThreeSameOp.SQRDMULH;
+            case SQRDMLAH -> AdvSimdThreeSameOp.SQRDMLAH;
+            case SQRDMLSH -> AdvSimdThreeSameOp.SQRDMLSH;
         };
     }
 
@@ -325,51 +311,12 @@ final class Ir64VectorArithmeticExecutor {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        AdvSimdThreeSameOp shared = sharedThreeSameOp(op.op());
-        if (shared != null) {
-            AdvSimdLanes.threeSame(fp, shared, esz, elements,
-                    op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
-                    op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
-                    op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
-            finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
-            return false;
-        }
-        for (int i = 0; i < elements; i++) {
-            long a = fp.element(op.rn(), i, esz);
-            long b = fp.element(op.rm(), i, esz);
-            long sa = signExtend(a, esz);
-            long sb = signExtend(b, esz);
-            long result = switch (op.op()) {
-                case SQADD -> signedSaturatingAdd(sa, sb, esz);
-                case UQADD -> unsignedSaturatingAdd(a, b, esz);
-                case SQSUB -> signedSaturatingSub(sa, sb, esz);
-                case UQSUB -> unsignedSaturatingSub(a, b, esz);
-                case SSHL -> shiftByRegister(sa, registerShiftAmount(b), true);
-                case USHL -> shiftByRegister(a, registerShiftAmount(b), false);
-                case SRSHL -> roundingShiftByRegister(sa, registerShiftAmount(b), true);
-                case URSHL -> roundingShiftByRegister(a, registerShiftAmount(b), false);
-                case SQSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, false);
-                case UQSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, false);
-                case SQRSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, true);
-                case UQRSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, true);
-                case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
-                case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
-                // B11.4 (`FEAT_RDM`): acumula/subtrai a MESMA multiplicação dobrada arredondada de
-                // `SQRDMULH` sobre o `Rd` ATUAL, sign-extendido (mesma disciplina de {@link #SABA}
-                // acima — NÃO o padrão sem sign-extend de `SQDMLAL`/`SQDMLSL`, que é de outro
-                // executor/família).
-                case SQRDMLAH -> signedSaturatingAdd(signExtend(fp.element(op.rd(), i, esz), esz),
-                        doublingMultiplyHigh(sa, sb, esz, true), esz);
-                case SQRDMLSH -> signedSaturatingSub(signExtend(fp.element(op.rd(), i, esz), esz),
-                        doublingMultiplyHigh(sa, sb, esz, true), esz);
-                // Todas as demais (`ADD`/`SUB`/`CM**`/`AND`/`BSL`/`MUL`/`SABA`/... — inteiro não
-                // saturante e lógico) migraram para o núcleo COMPARTILHADO em B13.4 e são
-                // resolvidas pelo early return via `sharedThreeSameOp` acima.
-                default -> throw new IllegalStateException(
-                        "Ir64VectorThreeSameOp não saturante deve ser resolvida por sharedThreeSameOp: " + op.op());
-            };
-            fp.setElement(op.rd(), i, esz, truncate(result, esz));
-        }
+        // Toda operação "three same" vive no núcleo COMPARTILHADO desde B13.5 (nada mais no `switch`
+        // local). A escrita destrutiva de `[127:64]`/escalar continua sendo do lado A64.
+        AdvSimdLanes.threeSame(fp, sharedThreeSameOp(op.op()), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }

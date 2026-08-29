@@ -238,5 +238,13 @@ public enum ArmFeature {
     /// banco de 32 `D`). Nenhum encoding NEON decodifica ainda (B13.3+) e **nenhum preset a
     /// declara** (B13.1 é só a fundação de estado; o grupo sai de `NOT_IN_ANY_PRESET` só na
     /// B13.22).
-    ADVANCED_SIMD
+    ADVANCED_SIMD,
+
+    // ---- Onda 6, B13.5 (NEON 3-reg-same saturante / deslocamento por registrador) ----
+    /// **Rounding Double Multiply Accumulate** (`FEAT_RDM`, ARMv8.1) — `VQRDMLAH`/`VQRDMLSH` NEON de
+    /// 32 bits. Mirror de {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#RDM} para o lado
+    /// A32/T32 (B13.5). Feature à parte de {@link #ADVANCED_SIMD}: sem ela, o encoding dessas duas
+    /// instruções (frame 3-reg-same já reconhecido) vira `UNIMPLEMENTED` explícito, não `null` (G8).
+    /// **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    ADVANCED_SIMD_RDM
 }

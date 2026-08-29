@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.advsimd;
 
+import java.math.BigInteger;
+
 /// Núcleo vetorial COMPARTILHADO pelos dois pipelines (AArch64 `ir64`/`executor64` e o pipeline de
 /// 32 bits `ir`/`codegen.executor`) — RFC B13.2, decisão D1 (reuso, não espelhamento).
 ///
@@ -63,6 +65,132 @@ public final class AdvSimdLanes {
         return result;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Aritmética de SATURAÇÃO e deslocamento por registrador — B13.5 (migração D1 da RFC B13.2).
+    // Cópias VERBATIM dos helpers homônimos de `executor64/Ir64VectorArithmeticExecutor` (B8.8/
+    // B11.4): as 16 operações `SQADD`..`SQRDMLSH` que a B13.4 tinha deixado no `switch` A64 agora
+    // vivem SÓ aqui. Nenhuma modela `FPSCR.QC`/`FPSR.QC` (só o VALOR saturado é observável —
+    // paridade consciente com o A64, que nunca modelou o bit cumulativo). Toda a aritmética larga
+    // usa {@link BigInteger} deliberadamente: estas ops caem no interpretador (nenhum `Kind`
+    // vetorial entra em política ASM nativa), então exatidão pesa mais que velocidade.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// Reinterpreta um `long` java (que pode ser negativo) como o inteiro NÃO ASSINADO de 64 bits
+    /// que ele representa em complemento de dois — `esz=3` (doubleword) é o único tamanho em que um
+    /// elemento não assinado pode ultrapassar {@link Long#MAX_VALUE}.
+    private static BigInteger unsignedBig(long value) {
+        return value >= 0 ? BigInteger.valueOf(value) : BigInteger.valueOf(value).add(BigInteger.ONE.shiftLeft(64));
+    }
+
+    /// Satura `value` (matemático, sem wraparound) ao intervalo representável por um elemento de
+    /// `esz` bytes, assinado ou não.
+    private static long saturateToElement(BigInteger value, int esz, boolean signed) {
+        int bits = 8 << esz;
+        BigInteger max = signed
+                ? BigInteger.ONE.shiftLeft(bits - 1).subtract(BigInteger.ONE)
+                : BigInteger.ONE.shiftLeft(bits).subtract(BigInteger.ONE);
+        BigInteger min = signed ? max.negate().subtract(BigInteger.ONE) : BigInteger.ZERO;
+        if (value.compareTo(max) > 0) {
+            return max.longValue();
+        }
+        if (value.compareTo(min) < 0) {
+            return min.longValue();
+        }
+        return value.longValue();
+    }
+
+    private static long signedSaturatingAdd(long sa, long sb, int esz) {
+        return saturateToElement(BigInteger.valueOf(sa).add(BigInteger.valueOf(sb)), esz, true);
+    }
+
+    private static long signedSaturatingSub(long sa, long sb, int esz) {
+        return saturateToElement(BigInteger.valueOf(sa).subtract(BigInteger.valueOf(sb)), esz, true);
+    }
+
+    private static long unsignedSaturatingAdd(long a, long b, int esz) {
+        return saturateToElement(unsignedBig(a).add(unsignedBig(b)), esz, false);
+    }
+
+    private static long unsignedSaturatingSub(long a, long b, int esz) {
+        return saturateToElement(unsignedBig(a).subtract(unsignedBig(b)), esz, false);
+    }
+
+    /// Deslocamento à esquerda seguro: Java `<<`/`>>>`/`>>` usam o deslocamento MOD 64 para `long`
+    /// (`x << 64` == `x << 0`, não `0`) — guarda-corpo para quando o deslocamento pode chegar a 64
+    /// (`esz=3`) ou, por registrador, a qualquer magnitude de um byte assinado.
+    private static long safeShiftLeft(long value, int shift) {
+        return shift >= 64 ? 0L : value << shift;
+    }
+
+    private static long logicalShiftRight(long value, int shift) {
+        return shift >= 64 ? 0L : value >>> shift;
+    }
+
+    private static long arithmeticShiftRight(long value, int shift) {
+        return shift >= 64 ? (value < 0 ? -1L : 0L) : value >> shift;
+    }
+
+    /// Deslocamento à direita com ARREDONDAMENTO (`round = 1 << (shift-1)` somado antes de deslocar)
+    /// — em {@link BigInteger} para não lidar manualmente com o transbordo de 64 bits.
+    private static long roundingShiftRight(long value, int shift, boolean signed) {
+        if (shift <= 0) {
+            return value;
+        }
+        BigInteger v = signed ? BigInteger.valueOf(value) : unsignedBig(value);
+        BigInteger round = BigInteger.ONE.shiftLeft(shift - 1);
+        return v.add(round).shiftRight(shift).longValue();
+    }
+
+    /// Deslocamento à esquerda por quantidade VARIÁVEL com saturação ao tamanho do elemento.
+    private static long saturatingShiftLeft(long value, int shift, int esz, boolean signed) {
+        BigInteger v = signed ? BigInteger.valueOf(value) : unsignedBig(value);
+        return saturateToElement(v.shiftLeft(shift), esz, signed);
+    }
+
+    /// Multiplicação dobrada de alta ordem saturante (`SQDMULH`/`SQRDMULH`) — `esize = 8<<esz`.
+    private static long doublingMultiplyHigh(long sa, long sb, int esz, boolean rounding) {
+        int esize = 8 << esz;
+        BigInteger product = BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1);
+        if (rounding) {
+            product = product.add(BigInteger.ONE.shiftLeft(esize - 1));
+        }
+        return saturateToElement(product.shiftRight(esize), esz, true);
+    }
+
+    /// Deslocamento por REGISTRADOR (`SSHL`/`USHL`/`SQSHL`/`UQSHL`/...): a quantidade é o BYTE BAIXO
+    /// do elemento `Rm`, sempre — nunca `sext(Rm,esz)` (`ARM DDI 0487`, pseudocódigo de `SSHL`:
+    /// `shift = SInt(Elem[m,e,8])`). `>=0` desloca à esquerda; `<0` desloca à direita com a
+    /// MAGNITUDE.
+    private static int registerShiftAmount(long rmElement) {
+        return (byte) rmElement;
+    }
+
+    private static long shiftByRegister(long value, int amount, boolean signed) {
+        if (amount >= 0) {
+            return safeShiftLeft(value, amount);
+        }
+        int magnitude = -amount;
+        return signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude);
+    }
+
+    private static long roundingShiftByRegister(long value, int amount, boolean signed) {
+        if (amount >= 0) {
+            return safeShiftLeft(value, amount);
+        }
+        return roundingShiftRight(value, -amount, signed);
+    }
+
+    /// `SQSHL`/`UQSHL`/`SQRSHL`/`UQRSHL` por registrador: só o lado ESQUERDO (`amount>=0`) satura;
+    /// o lado direito (`amount<0`) é um deslocamento comum (com ou sem arredondamento), NUNCA satura.
+    private static long saturatingShiftByRegister(long value, int amount, int esz, boolean signed, boolean rounding) {
+        if (amount >= 0) {
+            return saturatingShiftLeft(value, amount, esz, signed);
+        }
+        int magnitude = -amount;
+        return rounding ? roundingShiftRight(value, magnitude, signed)
+                : (signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude));
+    }
+
     /// Lê a lane `lane` (elemento de `1 << esz` bytes, lane `0` = bits menos significativos) do
     /// operando que começa na palavra `baseWord`, com zero-extend em um `long`.
     public static long element(AdvSimdRegisterWords regs, int baseWord, int lane, int esz) {
@@ -98,8 +226,9 @@ public final class AdvSimdLanes {
             long b = element(regs, baseRm, i, esz);
             long sa = signExtend(a, esz);
             long sb = signExtend(b, esz);
-            // `d` só é lido pelas operações RMW (`SABA`/`UABA`/`MLA`/`MLS`/`BSL`/`BIT`/`BIF`),
-            // elemento a elemento — mesmo comportamento arquitetural do executor A64.
+            // `d` só é lido pelas operações RMW (`SABA`/`UABA`/`MLA`/`MLS`/`BSL`/`BIT`/`BIF` e,
+            // desde B13.5, `SQRDMLAH`/`SQRDMLSH`), elemento a elemento — mesmo comportamento
+            // arquitetural do executor A64.
             long d = element(regs, baseRd, i, esz);
             long result = switch (op) {
                 case ADD -> a + b;
@@ -136,6 +265,25 @@ public final class AdvSimdLanes {
                 case BSL -> (d & a) | (~d & b);
                 case BIT -> (a & b) | (d & ~b);
                 case BIF -> (a & ~b) | (d & b);
+                // B13.5 — saturantes / deslocamento por registrador (verbatim do A64):
+                case SQADD -> signedSaturatingAdd(sa, sb, esz);
+                case UQADD -> unsignedSaturatingAdd(a, b, esz);
+                case SQSUB -> signedSaturatingSub(sa, sb, esz);
+                case UQSUB -> unsignedSaturatingSub(a, b, esz);
+                case SSHL -> shiftByRegister(sa, registerShiftAmount(b), true);
+                case USHL -> shiftByRegister(a, registerShiftAmount(b), false);
+                case SRSHL -> roundingShiftByRegister(sa, registerShiftAmount(b), true);
+                case URSHL -> roundingShiftByRegister(a, registerShiftAmount(b), false);
+                case SQSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, false);
+                case UQSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, false);
+                case SQRSHL -> saturatingShiftByRegister(sa, registerShiftAmount(b), esz, true, true);
+                case UQRSHL -> saturatingShiftByRegister(a, registerShiftAmount(b), esz, false, true);
+                case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
+                case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
+                // RMW: acumula/subtrai a MESMA multiplicação dobrada arredondada de `SQRDMULH` sobre
+                // o `Rd` ATUAL sign-extendido, com DUAS saturações independentes.
+                case SQRDMLAH -> signedSaturatingAdd(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
+                case SQRDMLSH -> signedSaturatingSub(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
             };
             setElement(regs, baseRd, i, esz, truncate(result, esz));
         }

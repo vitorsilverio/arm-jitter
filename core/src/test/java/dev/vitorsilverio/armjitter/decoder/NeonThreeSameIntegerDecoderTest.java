@@ -248,16 +248,13 @@ class NeonThreeSameIntegerDecoderTest {
 
     @Test
     void outOfScopeEncodingsAreUnimplementedNotMisdecoded() {
-        // VQADD (opc=0000 op=1) / VQSUB (opc=0010 op=1) — B13.5
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b0000, 1, false, 0, 1, 2)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b0010, 1, false, 0, 1, 2)).kind());
-        // shifts VSHL/VQSHL/VRSHL/VQRSHL (opc=0100/0101) — B13.5
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b0100, 0, false, 0, 1, 2)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b0101, 1, false, 0, 1, 2)).kind());
-        // VQDMULH/VQRDMULH (opc=1011 op=0) / VQRDMLAH (opc=1011 op=1 U=1) — B13.5
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 1, 0b1011, 0, false, 0, 1, 2)).kind());
+        // VQADD/VQSUB/shifts/VQDMULH/VQRDMULH/VQRDMLAH/VQRDMLSH passaram a decodificar em B13.5 —
+        // ver NeonThreeSameSaturatingDecoderTest. Aqui só o que continua fora de escopo nesta arch
+        // (que NÃO declara ADVANCED_SIMD_RDM):
+        // VQRDMLAH (opc=1011 op=1 U=1) / VQRDMLSH (opc=1100 op=1 U=1) sem FEAT_RDM → UNIMPLEMENTED
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1011, 1, false, 0, 1, 2)).kind());
-        // opc=1100 (cripto / VFMA_fp / VQRDMLSH) — B13.15 / B13.6 / B13.5
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1100, 1, false, 0, 1, 2)).kind());
+        // opc=1100 cripto (op=0) / VFMA_fp (op=1 U=0) — B13.15 / B13.6
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1100, 0, false, 0, 1, 2)).kind());
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1100, 1, false, 0, 1, 2)).kind());
         // FP three-same (opc=1101/1110/1111) — B13.6

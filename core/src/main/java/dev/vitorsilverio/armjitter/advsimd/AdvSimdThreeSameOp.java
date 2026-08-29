@@ -4,12 +4,12 @@ package dev.vitorsilverio.armjitter.advsimd;
 /// do núcleo vetorial COMPARTILHADO entre AArch64 (`ADD_v`/`SUB_v`/`CM**_v`/..., B8.7) e NEON de
 /// 32 bits (`VADD`/`VSUB`/`VCGT`/`VAND`/..., B13.4) — RFC B13.2, decisão D1.
 ///
-/// Cobre o subconjunto **inteiro não saturante, sem deslocamento por registrador** de
-/// {@link dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp} (mesmos nomes). As 16 operações
-/// saturantes/de deslocamento (`SQADD`..`SQRDMLSH`) NÃO estão aqui: a migração delas é B13.5, e
-/// enquanto isso o executor A64 as resolve no `switch` local
-/// (`Ir64VectorArithmeticExecutor#sharedThreeSameOp` devolve `null` para elas). Cada operação
-/// existe em exatamente UM lugar — o que está aqui saiu do `switch` A64.
+/// Cobre TODO o conjunto "three same" de {@link dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp}
+/// (mesmos nomes): o subconjunto inteiro não saturante veio de B13.4 e as 16 operações saturantes /
+/// de deslocamento por registrador (`SQADD`..`SQRDMLSH`) vieram de B13.5. Cada operação existe em
+/// exatamente UM lugar — o núcleo compartilhado; o `switch` de
+/// `Ir64VectorArithmeticExecutor#executeThreeSame` ficou vazio (só o `default -> throw` de
+/// contrato) e `sharedThreeSameOp` mapeia todas.
 public enum AdvSimdThreeSameOp {
     /// `a + b` truncado ao tamanho do elemento (`ADD_v` / `VADD` inteiro).
     ADD,
@@ -85,5 +85,47 @@ public enum AdvSimdThreeSameOp {
     BIT,
     /// "Bitwise insert if false": `(a & ~b) | (Rd_atual & b)` — `b`(`Rm`) é a máscara — `BIF_v` /
     /// `VBIF`.
-    BIF
+    BIF,
+    /// `SignedSaturate(sext(a)+sext(b))` — `SQADD_v` / `VQADD.S`. Só o VALOR saturado é observável;
+    /// o bit cumulativo `FPSCR.QC`/`FPSR.QC` NÃO é modelado (paridade com o A64 — B13.5).
+    SQADD,
+    /// `UnsignedSaturate(a+b)` — `UQADD_v` / `VQADD.U`.
+    UQADD,
+    /// `SignedSaturate(sext(a)-sext(b))` — `SQSUB_v` / `VQSUB.S`.
+    SQSUB,
+    /// `UnsignedSaturate(a-b)` (satura em `0` por baixo) — `UQSUB_v` / `VQSUB.U`.
+    UQSUB,
+    /// Deslocamento por REGISTRADOR, assinado, truncando (`Elem[m,e,8]` como quantidade — só o BYTE
+    /// BAIXO de `b`; `>=0` desloca à esquerda, `<0` à direita aritmética) — `SSHL_v` / `VSHL.S`
+    /// (encoding `@3same_rev`: valor = `Vm`, quantidade = `Vn`).
+    SSHL,
+    /// Como {@link #SSHL}, não assinado (deslocamento à direita lógico) — `USHL_v` / `VSHL.U`.
+    USHL,
+    /// Como {@link #SSHL}, com ARREDONDAMENTO no deslocamento à direita (`>=0` é deslocamento à
+    /// esquerda puro) — `SRSHL_v` / `VRSHL.S`.
+    SRSHL,
+    /// Como {@link #SRSHL}, não assinado — `URSHL_v` / `VRSHL.U`.
+    URSHL,
+    /// Deslocamento por REGISTRADOR com SATURAÇÃO quando `>=0` (esquerda); `<0` comporta-se como
+    /// {@link #SSHL} (direita, sem saturar) — `SQSHL_v` / `VQSHL.S`.
+    SQSHL,
+    /// Como {@link #SQSHL}, não assinado — `UQSHL_v` / `VQSHL.U`.
+    UQSHL,
+    /// Como {@link #SQSHL}, mas o lado `<0` (direita) usa ARREDONDAMENTO (como {@link #SRSHL}) —
+    /// `SQRSHL_v` / `VQRSHL.S`.
+    SQRSHL,
+    /// Como {@link #SQRSHL}, não assinado — `UQRSHL_v` / `VQRSHL.U`.
+    UQRSHL,
+    /// Multiplicação dobrada de alta ordem, saturante: `SignedSaturate((2*sext(a)*sext(b)) >> esize)`
+    /// — só `esz` `1`(H)/`2`(S) — `SQDMULH_v` / `VQDMULH`.
+    SQDMULH,
+    /// Como {@link #SQDMULH}, com ARREDONDAMENTO antes do deslocamento — `SQRDMULH_v` / `VQRDMULH`.
+    SQRDMULH,
+    /// `SignedSaturate(Rd + RoundingDoublingMultiplyHigh(sext(a), sext(b)))` — `FEAT_RDM`
+    /// (`ArmFeature.ADVANCED_SIMD_RDM`, `ARMv8.1`). RMW (lê o `Rd` ATUAL, mesma disciplina de
+    /// {@link #MLA}/{@link #SABA}), com DUAS saturações independentes (a de {@link #SQRDMULH} interna
+    /// e a da soma final). Só `esz` `1`(H)/`2`(S) — `SQRDMLAH_v` / `VQRDMLAH`.
+    SQRDMLAH,
+    /// Como {@link #SQRDMLAH}, mas SUBTRAI do `Rd` ATUAL — `SQRDMLSH_v` / `VQRDMLSH`.
+    SQRDMLSH
 }
