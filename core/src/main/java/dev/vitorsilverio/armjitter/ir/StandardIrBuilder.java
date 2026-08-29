@@ -416,6 +416,9 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.secondSourceRegister(),
                     instruction.signedAccess(),
                     instruction.condition()));
+            // Escape hatch de lifting (RFC B13.2): o decoder já construiu o `IrOp` — nada a
+            // traduzir aqui. Ver `InstructionKind.LIFTED_IR_OP`.
+            case LIFTED_IR_OP -> block.add(instruction.liftedOp());
             // VFP (B3.5): `signedAccess` carrega `doublePrecision`, `link` carrega a direção da
             // transferência — ver o javadoc de cada `InstructionKind` VFP_*.
             case VFP_ALU -> block.add(new IrOp.VfpAlu(

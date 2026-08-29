@@ -111,6 +111,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.BIT_FIELD_INSERT -> alu.executeBitFieldInsert(core, (IrOp.BitFieldInsert) op);
                 case IrOp.Kind.BIT_REVERSE -> alu.executeBitReverse(core, (IrOp.BitReverse) op);
                 case IrOp.Kind.DIVIDE -> alu.executeDivide(core, (IrOp.Divide) op);
+                case IrOp.Kind.NEON_THREE_SAME -> vfp.executeNeonThreeSame(core, (IrOp.NeonThreeSame) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -244,6 +245,7 @@ public final class IrBlockExecutor {
             case IrOp.BitFieldInsert bfi -> { alu.executeBitFieldInsert(core, bfi); yield false; }
             case IrOp.BitReverse rbit -> { alu.executeBitReverse(core, rbit); yield false; }
             case IrOp.Divide div -> { alu.executeDivide(core, div); yield false; }
+            case IrOp.NeonThreeSame neon -> { vfp.executeNeonThreeSame(core, neon); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

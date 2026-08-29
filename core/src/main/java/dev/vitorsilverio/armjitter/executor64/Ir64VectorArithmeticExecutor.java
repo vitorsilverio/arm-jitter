@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -272,10 +274,31 @@ final class Ir64VectorArithmeticExecutor {
         }
     }
 
+    /// RFC B13.2 (D1, reuso do núcleo vetorial): operações cuja semântica de lane já mora no
+    /// núcleo COMPARTILHADO {@link AdvSimdLanes} — `null` para as que ainda vivem só no `switch`
+    /// abaixo. Cada operação existe em exatamente UM dos dois lugares; a migração das restantes é
+    /// o primeiro passo de B13.4.
+    private static AdvSimdThreeSameOp sharedThreeSameOp(Ir64VectorThreeSameOp op) {
+        return switch (op) {
+            case ADD -> AdvSimdThreeSameOp.ADD;
+            case SUB -> AdvSimdThreeSameOp.SUB;
+            default -> null;
+        };
+    }
+
     static boolean executeThreeSame(Aarch64Core core, Ir64Op.VectorArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
+        AdvSimdThreeSameOp shared = sharedThreeSameOp(op.op());
+        if (shared != null) {
+            AdvSimdLanes.threeSame(fp, shared, esz, elements,
+                    op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                    op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                    op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+            finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+            return false;
+        }
         for (int i = 0; i < elements; i++) {
             long a = fp.element(op.rn(), i, esz);
             long b = fp.element(op.rm(), i, esz);

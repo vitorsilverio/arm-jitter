@@ -165,7 +165,11 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     VFP_CORE_PAIR_TRANSFER_SINGLE, VFP_CONVERT_FIXED,
                     // MRS/MSR SYSm do perfil M (B7.4): nunca tocam o PC (nem via CONTROL.SPSEL, que só
                     // troca qual SP está ativo, não o fluxo). MSR PSP/MSP também não são terminais.
-                    MPROFILE_MRS, MPROFILE_MSR -> false;
+                    MPROFILE_MRS, MPROFILE_MSR,
+                    // Escape hatch de lifting (B13.2): hoje só famílias vetoriais NEON, que nunca
+                    // tocam o PC. Um `IrOp` que trocasse o PC não poderia entrar por aqui sem
+                    // revisitar esta linha.
+                    LIFTED_IR_OP -> false;
         };
     }
 

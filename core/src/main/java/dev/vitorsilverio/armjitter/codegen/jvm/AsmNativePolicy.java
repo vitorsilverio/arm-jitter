@@ -127,6 +127,9 @@ public final class AsmNativePolicy {
             // direto (caminho quente); VfpCompare/VfpConvert/VfpMultipleTransfer/
             // VfpCorePairTransfer/VfpSystemTransfer chamam um helper estático em
             // AsmRuntimeHelpers (ver AsmBlockCompiler#emitVfpAlu e vizinhos).
+            // NEON "three same" (B13.2): interpretado, como todo `Kind` vetorial novo desde B8.4/
+            // B8.6 do lado A64 — a emissão nativa é task própria, depois que a escada B13 fechar.
+            case IrOp.NeonThreeSame ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

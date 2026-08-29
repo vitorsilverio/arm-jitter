@@ -355,5 +355,12 @@ public enum InstructionKind {
     /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou
     /// `SPSR` de outro modo via `IrOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
     /// `sourceRegister` = `Rn`; `immediate` = valor empacotado de `BankedRegisterSysm#resolve`.
-    MSR_BANK
+    MSR_BANK,
+    /// **Escape hatch de lifting** (RFC B13.2): a instrução já traz sua própria operação de IR em
+    /// {@link DecodedInstruction#liftedOp} — `StandardIrBuilder` apenas a adiciona ao bloco, sem
+    /// traduzir campo nenhum. Existe para as famílias vetoriais (NEON, e depois MVE), cuja forma de
+    /// operando (operação + tamanho de elemento + largura do arranjo + índice de lane +
+    /// deslocamento) não cabe nos campos neutros de `DecodedInstruction`. Nenhum campo neutro é
+    /// significativo neste kind.
+    LIFTED_IR_OP
 }

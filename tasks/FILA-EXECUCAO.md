@@ -70,10 +70,17 @@ represados, com escada medida contra o inventário real:
 maior retorno prático (binário ARMv7-A/ARMv8-A real emite NEON o tempo todo); B15 destrava
 pendências que JÁ estavam registradas (B12.4/B12.6); B17/B18 são os maiores e ficam por último.
 
-**Próxima task executável: [B13.1](trilha-b-arquiteturas/b13.1-banco-vetorial-32bit.md)** (⬜,
-spec completa escrita) — banco D0-D31/Q0-Q15, espelho da B8.6, zero-diff por construção. Depois
-dela, **B13.2 é uma RFC** e exige sessão de modelo forte (decide reuso do núcleo vetorial A64 vs
-espelhamento — escolher errado custa o épico inteiro).
+**B13.1 ✅ (2026-08-28)** — banco D0-D31/Q0-Q15 pronto. **B13.2 (RFC) ✅ (2026-08-29)**: venceu a
+EXTRAÇÃO de um núcleo vetorial compartilhado, no nível da palavra de 64 bits — ler
+`docs/RFC-NEON-NUCLEO-VETORIAL.md` INTEIRA antes de pegar qualquer task de B13.3 em diante (ela
+muda como cada família é implementada: migrar a operação para `advsimd/AdvSimdLanes` em vez de
+reescrever a semântica, e decodificar entregando o `IrOp` pronto via `DecodedInstruction#liftedOp`).
+
+**Próxima task executável: B13.3** (NEON load/store, `VLD1`-`VLD4`/`VST1`-`VST4`) — spec própria
+ainda a escrever, escopo fixado no épico B13. Achado aberto da RFC que vale como task própria a
+qualquer momento: o backend **Truffle quebra com QUALQUER op de VFP** (`IrOpNodeFactory` não tem
+casos VFP e `TruffleCodeEmitter#supports` devolve `true` sempre) — pré-existente, verificado, e
+bloqueia NEON no Truffle assim que algum preset declarar `ADVANCED_SIMD`.
 
 
 

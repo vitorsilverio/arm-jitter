@@ -17,7 +17,7 @@ package dev.vitorsilverio.armjitter.core;
 /// Sempre armazena BITS crus IEEE 754/inteiros: float/double são apenas *views* de conveniência,
 /// nunca o tipo primário — garante save-state/snapshot bit-exatos, incluindo NaN payloads, que
 /// aritmética em `float`/`double` do Java poderia canonicalizar.
-public final class VfpRegisters {
+public final class VfpRegisters implements dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords {
     /// Quantidade de registradores `S` (single-precision) endereçáveis — vista de 32 bits de
     /// `D0`-`D15`. A arquitetura ARM tem exatamente 32 `S`; `D16`-`D31` NÃO têm vista `S`.
     public static final int SINGLE_COUNT = 32;
@@ -144,6 +144,25 @@ public final class VfpRegisters {
             d[(index << 1) + 1] = 0;
         }
     }
+
+    /// Vista plana em palavras de 64 bits (RFC B13.2): a palavra `n` É o `D<n>` — o banco de 32
+    /// bits já é literalmente um `long[32]`. Base de um operando de 64 bits (`D<n>`) = `n`; base de
+    /// um operando de 128 bits (`Q<n>`) = `n * `{@link #WORDS_PER_QUAD}. É por isso que NEON
+    /// consegue endereçar `D` ÍMPAR como operando de 64 bits, coisa que a API `Q`-indexada
+    /// ({@link #element}) não expressa.
+    @Override
+    public long word(int index) {
+        return d[index];
+    }
+
+    /// Grava uma palavra da vista plana (ver {@link #word}), sem afetar nenhum outro `D`.
+    @Override
+    public void setWord(int index, long value) {
+        d[index] = value;
+    }
+
+    /// Palavras de 64 bits por registrador `Q` na vista plana (`Q<n>` = `D<2n>` + `D<2n+1>`).
+    public static final int WORDS_PER_QUAD = 2;
 
     /// View `float` de `S<index>` (mesmos bits, sem aritmética).
     public float sFloat(int index) {

@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -91,6 +91,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int ERET = 63;
         public static final int MRS_BANK = 64;
         public static final int MSR_BANK = 65;
+        public static final int NEON_THREE_SAME = 66;
     }
 
     /// Operacao ALU generica.
@@ -1361,5 +1362,32 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.M_PROFILE_SYSTEM_REGISTER; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, forma "three same" (B13.2/B13.4): `Vd[i] = op(Vn[i], Vm[i])`
+    /// para cada lane de `1 << esz` bytes do arranjo. Espelho de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticThreeSame} no ENCODING/IR, mas
+    /// a SEMÂNTICA de lane é a mesma dos dois lados: ambos os executores chamam
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSame} (RFC B13.2, D1).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`), então a condição é sempre
+    /// {@link Condition#AL} — não há forma condicional desta instrução.
+    record NeonThreeSame(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`, bit `Q` do encoding),
+            /// `false` para o de 64 bits (`D<d>`/`D<n>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
+            /// `3`=doubleword.
+            int esz,
+            /// Registrador de destino, SEMPRE em índice de `D` (`0`-`31`) — na forma `quad` é o
+            /// `D` par que inicia o `Q` (é assim que o encoding NEON nomeia os registradores).
+            int vd,
+            /// Registrador fonte 1, em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_THREE_SAME; }
     }
 }

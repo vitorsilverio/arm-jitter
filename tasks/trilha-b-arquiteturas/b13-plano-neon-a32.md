@@ -78,6 +78,16 @@ Existem duas saídas, e escolher errado custa o épico inteiro:
 isso com o código na mão, ANTES de qualquer decode novo. Nenhuma task de B13.3 em diante deve ser
 pega antes da RFC fechar — é a diferença entre 12 sessões e 25.
 
+✅ **RFC FECHADA em 2026-08-29: `docs/RFC-NEON-NUCLEO-VETORIAL.md` — venceu a opção (b), EXTRAÇÃO**,
+no nível da PALAVRA de 64 bits (`advsimd/AdvSimdRegisterWords` + `AdvSimdLanes`); leitura
+obrigatória antes de pegar qualquer task de B13.3 em diante. Duas consequências que mudam as
+sub-tasks abaixo: (1) cada família migra suas operações para o núcleo COMPARTILHADO em vez de
+reescrever a semântica — o que já existe testado no A64 vale para os dois lados; (2) o decoder
+vetorial de 32 bits entrega o `IrOp` PRONTO pelo escape hatch `DecodedInstruction#liftedOp`
+(`InstructionKind.LIFTED_IR_OP`), nunca espremendo a forma do operando nos campos neutros. Ver
+também os "Achados abertos" da RFC — em especial que o backend Truffle hoje quebra com qualquer
+`Kind` de VFP/vetorial (`IrOpNodeFactory`).
+
 ## Escada (refinar em spec própria quando cada degrau for pego)
 
 | Task | Escopo | Encodings | Depende de |

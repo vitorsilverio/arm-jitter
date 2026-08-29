@@ -44,7 +44,51 @@ public record DecodedInstruction(
         /// deve ler/escrever usando a permissão de modo `USER`, mesmo que o CPU esteja executando
         /// em modo privilegiado. Só significativo para `InstructionKind.LOAD`/`STORE`; qualquer
         /// outro kind sempre passa `false`.
-        boolean unprivileged) {
+        boolean unprivileged,
+        /// **Escape hatch de lifting** (RFC B13.2, decisão D2): operação de IR JÁ PRONTA, produzida
+        /// pelo próprio decoder, para famílias cuja forma de operando não cabe nos campos neutros
+        /// acima — NEON/MVE precisam de operação, tamanho de elemento, largura do arranjo, índice
+        /// de lane e deslocamento ao mesmo tempo, e o VFP só coube aqui porque empacota um ordinal
+        /// em {@link #immediate}. Só é lido quando {@link #kind} é
+        /// {@link InstructionKind#LIFTED_IR_OP}; `null` em todo o resto (comportamento anterior à
+        /// B13.2 preservado byte a byte, G3).
+        dev.vitorsilverio.armjitter.ir.IrOp liftedOp) {
+
+    /// Construtor com a lista de campos anterior à B13.2 (sem {@link #liftedOp}) — mantido para
+    /// que nenhum chamador existente precise mudar (G3); equivale a passar `liftedOp = null`.
+    public DecodedInstruction(
+            int address,
+            int raw,
+            InstructionSet instructionSet,
+            Condition condition,
+            InstructionKind kind,
+            int destinationRegister,
+            int sourceRegister,
+            int secondSourceRegister,
+            int immediate,
+            boolean immediateOperand,
+            boolean setFlags,
+            boolean link,
+            int accessSizeBytes,
+            boolean signedAccess,
+            boolean writeback,
+            boolean postIndexed,
+            BlockTransferMode blockTransferMode,
+            boolean emptyRegisterList,
+            boolean unprivileged) {
+        this(address, raw, instructionSet, condition, kind, destinationRegister, sourceRegister, secondSourceRegister,
+                immediate, immediateOperand, setFlags, link, accessSizeBytes, signedAccess, writeback, postIndexed,
+                blockTransferMode, emptyRegisterList, unprivileged, null);
+    }
+
+    /// Cria uma instrução que já traz sua própria operação de IR pronta (ver {@link #liftedOp}) —
+    /// usado pelos decoders de famílias vetoriais, que constroem o `IrOp` diretamente em vez de
+    /// espremer a forma do operando nos campos neutros.
+    public static DecodedInstruction lifted(int address, int raw, InstructionSet instructionSet, Condition condition,
+            dev.vitorsilverio.armjitter.ir.IrOp op) {
+        return new DecodedInstruction(address, raw, instructionSet, condition, InstructionKind.LIFTED_IR_OP,
+                -1, -1, -1, 0, false, false, false, 0, false, false, false, BlockTransferMode.IA, false, false, op);
+    }
 
     /// Construtor compacto para instruções sem acesso de memória.
     public DecodedInstruction(
@@ -196,7 +240,7 @@ public record DecodedInstruction(
         return new DecodedInstruction(address, raw, instructionSet, newCondition, kind, destinationRegister,
                 sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
                 accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList,
-                unprivileged);
+                unprivileged, liftedOp);
     }
 
     /// Cria uma cópia com o conjunto de instruções substituído, preservando todos os outros
@@ -207,6 +251,6 @@ public record DecodedInstruction(
         return new DecodedInstruction(address, raw, newInstructionSet, condition, kind, destinationRegister,
                 sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
                 accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList,
-                unprivileged);
+                unprivileged, liftedOp);
     }
 }

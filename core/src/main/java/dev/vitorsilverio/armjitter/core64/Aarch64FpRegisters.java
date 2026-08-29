@@ -13,9 +13,14 @@ package dev.vitorsilverio.armjitter.core64;
 /// nunca o tipo primário — garante save-state/snapshot bit-exatos, incluindo NaN payloads, que
 /// aritmética em `float`/`double` do Java poderia canonicalizar (mesma disciplina de
 /// `VfpRegisters`).
-public final class Aarch64FpRegisters {
+public final class Aarch64FpRegisters implements dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords {
     /// Quantidade de registradores V (0-31).
     public static final int V_REGISTER_COUNT = 32;
+
+    /// Palavras de 64 bits por registrador `V` na vista plana
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords} (RFC B13.2): `V<n>` ocupa
+    /// as palavras `2n` (bits 63:0) e `2n+1` (bits 127:64).
+    public static final int WORDS_PER_REGISTER = 2;
 
     /// Largura de um registrador Q (128 bits) em bytes.
     public static final int QUADWORD_BYTES = 16;
@@ -129,6 +134,24 @@ public final class Aarch64FpRegisters {
         }
         if (!quad) {
             hi[index] = 0;
+        }
+    }
+
+    /// Vista plana em palavras de 64 bits (RFC B13.2): palavra PAR = bits 63:0 de `V<index/2>`,
+    /// palavra ÍMPAR = bits 127:64. Base de `V<n>` = `n * `{@link #WORDS_PER_REGISTER}.
+    @Override
+    public long word(int index) {
+        return (index & 1) == 0 ? lo[index >> 1] : hi[index >> 1];
+    }
+
+    /// Grava uma palavra da vista plana (ver {@link #word}) SEM a semântica "zera o resto" de
+    /// {@link #setS}/{@link #setD} — quem zera é o executor, depois de escrever todas as lanes.
+    @Override
+    public void setWord(int index, long value) {
+        if ((index & 1) == 0) {
+            lo[index >> 1] = value;
+        } else {
+            hi[index >> 1] = value;
         }
     }
 
