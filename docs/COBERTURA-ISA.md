@@ -30,13 +30,13 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **82%** — 15183 de 18360 células aplicáveis decodificam.
+> **82%** — 15185 de 18360 células aplicáveis decodificam.
 
 Por arquitetura:
 
 | Arquitetura | Cobertura |
 |---|---|
-| v4T | **93%** (205/220) |
+| v4T | **94%** (207/220) |
 | v5TE | **95%** (222/233) |
 | v6K | **96%** (307/319) |
 | MPCore | **95%** (357/374) |
@@ -64,7 +64,7 @@ Por arquitetura:
 
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
-| A32 — instruções ARM de 32 bits | 266 | v4T 95% (143/149) · v5TE 97% (157/161) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
+| A32 — instruções ARM de 32 bits | 266 | v4T 97% (145/149) · v5TE 97% (157/161) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
 | T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 90% (75/83) · MPCore 90% (75/83) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
 | T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 9% (8/82) · v7-M 52% (153/289) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 90% (50/55) · v7-A 92% (58/63) |
@@ -349,8 +349,8 @@ Inventário: `a32.decode` · 266 instruções.
 | `BL` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `MCRR` | · | ✅ | ✅ | ✅ | ✅ | · | · |
 | `MRRC` | · | ✅ | ✅ | ✅ | ✅ | · | · |
-| `MCR` | ❌ | ✅ | ✅ | ✅ | ✅ | · | · |
-| `MRC` | ❌ | ✅ | ✅ | ✅ | ✅ | · | · |
+| `MCR` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
+| `MRC` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `SVC` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 
 ## T16 — Thumb clássico

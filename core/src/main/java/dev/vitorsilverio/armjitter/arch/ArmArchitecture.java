@@ -12,8 +12,14 @@ import java.util.Objects;
 /// grupos de instruções realmente novos, fornecer uma {@link DecoderExtension}) — o pipeline compartilhado
 /// nunca é bifurcado.
 public final class ArmArchitecture {
-    /// ARM7TDMI — a CPU do GBA (também o ARM7 do NDS). O conjunto base: sem features extras.
-    public static final ArmArchitecture ARMV4T = of("ARMv4T");
+    /// ARM7TDMI — a CPU do GBA (também o ARM7 do NDS). O conjunto base: sem features extras. O
+    /// decoder de transferência SIMPLES de coprocessador (`MCR`/`MRC`) é anexado aqui (B9.13):
+    /// são ARMv3+, mais antigas que o próprio ARMv4T — ao contrário de `MCRR`/`MRRC`
+    /// (ARMv5TE/extensão "E", só em {@link #ARMV5TE}+), que ficariam de fora se
+    /// {@link dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder} completo fosse anexado aqui
+    /// (violaria G2).
+    public static final ArmArchitecture ARMV4T = of("ARMv4T")
+            .withDecoderExtensions(List.of(new dev.vitorsilverio.armjitter.decoder.CoprocessorRegisterDecoder()));
 
     /// ARM9 — a CPU principal do NDS. ARMv4T mais o conjunto de features ARMv5TE (sem Thumb-2). O
     /// decoder de coprocessador é anexado aqui para que apenas cores ARMv5 decodifiquem `MCR`/`MRC` (CP15).

@@ -47,7 +47,16 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.12)
+## Onde estamos (atualizado 2026-08-28, após B9.13)
+
+`B9.13` (`trilha-b-arquiteturas/b9.13-mcr-mrc-armv4t.md`) fechou o achado colateral da B9.12: `MCR`/
+`MRC` sob `ARMV4T` era gap real (ARMv3+, não curadoria) — `CoprocessorDecoder` só estava anexado a
+`ARMV5TE`+. Extraída `CoprocessorRegisterDecoder` (só o espaço simples `MCR`/`MRC`) e anexada a
+`ARMV4T`, mantendo `MCRR`/`MRRC` (ARMv5TE) fora dela (G2). v4T 93%→94%, global 82% (+2 células).
+Zero mudança de runtime; G5 (gbaemu/ndsemu/armbox) verde. Resta o outro achado colateral da B9.12:
+hints T16 (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`/`IT`/`CBZ`) sob `v6K`/`MPCore`, candidato à próxima
+sessão de cobertura de ISA.
+
 
 `B9.12` (`trilha-b-arquiteturas/b9.12-v4t-v5te-curadoria-denominador.md`) fechou: v4T e v5TE eram os
 piores números do 32 bits depois de v6-M (64%/70%) pelo mesmo motivo já visto na B9.10 — dezenas de

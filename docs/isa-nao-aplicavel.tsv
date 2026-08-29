@@ -573,10 +573,11 @@ WLS	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 b
 # ── ARMv5T-only) — implementado a partir da versão certa, só faltava a linha de exclusão para as
 # ── versões anteriores. CONFERIDO contra `target/isa-decode/a32.decode` vendorizado (linhas citadas
 # ── por família) e contra o mesmo padrão já usado por B9.2/B9.10 (mesma instrução, mesma versão).
-# ── `MCR`/`MRC` sob `v4T` NÃO entram aqui — são ARMv3+ genuínas, aplicáveis por construção; a
-# ── célula `❌` é um gap real de decode (candidata a task própria), não curadoria. Os hints T16
-# ── (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`/`IT`/`CBZ`) também ficam de fora — mostram `❌` em `v6K`/
-# ── `MPCore` também, não é só denominador de v4T/v5TE.
+# ── `MCR`/`MRC` sob `v4T` NÃO entram aqui — são ARMv3+ genuínas, aplicáveis por construção; o gap
+# ── real de decode que a célula `❌` apontava foi FECHADO pela B9.13 (`CoprocessorRegisterDecoder`
+# ── anexado a `ARMV4T`), não é curadoria. Os hints T16 (`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`/`IT`/`CBZ`)
+# ── continuam de fora — mostram `❌` em `v6K`/`MPCore` também, não é só denominador de v4T/v5TE;
+# ── candidatos a task própria.
 
 # ── ARMv5T (a32.decode ~106-108): CLZ/BLX_r, exclui só v4T (v5TE já os tem).
 CLZ	v4T	ARMv5T, anterior ao ARMv4T (ARM7TDMI)
