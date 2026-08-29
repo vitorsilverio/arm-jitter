@@ -40,6 +40,15 @@ Consequências práticas, obrigatórias para toda sessão:
   um épico com escada; hoje todos têm: **B13** (NEON 32 bits), **B14** (VFP incondicional
   ARMv8-A), **B15** (perfil M moderno), **B16** (MVE/Helium), **B17** (SVE/SVE2), **B18**
   (SME/SME2). Nenhum grupo pode voltar a ficar sem épico correspondente.
+- **A regra acima vale para TODA lacuna medida, não só para os grupos `NOT_IN_ANY_PRESET`**
+  (auditoria de 2026-08-29, a pedido do usuário: "escrever a spec de todas as extensões ainda
+  faltantes"). As quatro superfícies que ainda estavam sem plano ganharam épico: **B19** (as 174
+  células `❌` remanescentes do A64 — gap dentro de um preset REAL, o maior salto de cobertura
+  disponível hoje), **B20** (perfil R inteiro: PMSA/MPU, ARMv7-R e ARMv8-R), **B21** (ARMv1/ARMv2/
+  ARMv2a/ARMv3, o modelo de 26 bits) e **B22** (os resíduos ❌/⚠️ dos presets de 32 bits que já
+  existem). Com eles, **não há mais nenhuma superfície ARM medida sem spec escrita** — o que falta é
+  execução, e a única coisa ainda bloqueada em decisão do usuário são as 29 células
+  `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank` (B22.5).
 - **A biblioteca não tem "consumidor único".** O `arm-jitter` está publicado no Maven Central:
   qualquer pessoa pode construir sobre ele. "Nenhum projeto deste workspace usa X hoje" é fato
   sobre QUAIS REGRESSÕES TESTAR (G5) — nunca argumento para adiar ou reduzir escopo.

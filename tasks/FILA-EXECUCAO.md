@@ -66,7 +66,21 @@ represados, com escada medida contra o inventário real:
 | [B17](trilha-b-arquiteturas/b17-plano-sve.md) | SVE / SVE2 | 929 | `Aarch64Feature` sem NENHUMA constante SVE; sem modelo `Z`/`P`/`FFR` |
 | [B18](trilha-b-arquiteturas/b18-plano-sme.md) | SME / SME2 | 623 | `SCALABLE_MATRIX_EXTENSION` é placeholder confesso; sem `ZA`/`SVCR` real |
 
-**Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. B13 e B14 compartilham pipeline e dão o
+🆕 **Auditoria de 2026-08-29 (pedido do usuário: "spec de todas as extensões ainda faltantes")**:
+os 6 épicos acima cobriam só os grupos `NOT_IN_ANY_PRESET`. A auditoria mediu o que sobrava e
+escreveu **mais 4 épicos**, fechando o mapa:
+
+| Épico | O que | Tamanho medido |
+|---|---|---|
+| [B19](trilha-b-arquiteturas/b19-plano-a64-gap-remanescente.md) | Gap remanescente do **A64** (preset REAL, não `NOT_IN_ANY_PRESET`) | 174 células `❌`/119 mnemônicos, ~18% em todas as 16 versões |
+| [B20](trilha-b-arquiteturas/b20-plano-perfil-r.md) | **Perfil R** (PMSA/MPU, ARMv7-R + ARMv8-R) | 0 de decode; falta o modelo de sistema inteiro |
+| [B21](trilha-b-arquiteturas/b21-plano-arm-26-bits.md) | **ARMv1-ARMv3**, modelo de 26 bits (`R15`=PC+PSR) | inventário ainda não existe (QEMU não traz) |
+| [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) | **Resíduos** ❌/⚠️ dos presets de 32 bits que já existem | 61 células (29 delas bloqueadas no usuário) |
+
+**Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. **B19 e B22 são pegáveis em paralelo a
+qualquer momento** e não dependem de nenhum deles — B19 é o maior salto de cobertura global
+disponível hoje, e B22.2 (`VMOV_half`) é a única violação de G8 viva na tabela (`⚠️` = decodifica
+como outra coisa). B20 e B21 são épicos de modelo, não de decode, e o usuário decide quando abrir. B13 e B14 compartilham pipeline e dão o
 maior retorno prático (binário ARMv7-A/ARMv8-A real emite NEON o tempo todo); B15 destrava
 pendências que JÁ estavam registradas (B12.4/B12.6); B17/B18 são os maiores e ficam por último.
 
