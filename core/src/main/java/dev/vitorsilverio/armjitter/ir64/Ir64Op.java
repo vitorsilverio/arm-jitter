@@ -2050,11 +2050,16 @@ public sealed interface Ir64Op permits
     /// AdvSIMD "three same" de ponto flutuante (`FADD_v`/`FSUB_v`/`FMUL_v`/.../`FRSQRTS_v`, B8.9) —
     /// os 3 operandos (`Rd`/`Rn`/`Rm`) têm o MESMO tamanho de elemento {@link #esz}, sempre `2`
     /// (simples) ou `3` (dupla) — meia-precisão (`FEAT_FP16`) fica fora (`docs/isa-nao-aplicavel.tsv`).
-    /// Só a forma VETORIAL — ver {@link Ir64VectorFpThreeSameOp}.
+    /// Cobre a forma VETORIAL (B8.9) e a forma ESCALAR (`FMULX_s`/`FCMEQ_s`/`FCMGE_s`/`FCMGT_s`/
+    /// `FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s`, B19.2) — ver {@link #scalar} e
+    /// {@link Ir64VectorFpThreeSameOp}.
     record VectorFpArithmeticThreeSame(
             /// Operação a executar.
             Ir64VectorFpThreeSameOp op,
-            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            /// `true` para a forma ESCALAR AdvSIMD — processa só o elemento `0` e {@link #q} é
+            /// ignorado, mesma disciplina de {@link VectorFpArithmeticThreeSameByElement#scalar}.
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
             boolean q,
             /// `log2` do tamanho do elemento em bytes: sempre `2` (single, 32 bits) ou `3`
             /// (double, 64 bits).
@@ -2097,11 +2102,17 @@ public sealed interface Ir64Op permits
 
     /// AdvSIMD "three same" de ponto flutuante, pareado (`FADDP_v`/`FMAXP_v`/`FMINP_v`/
     /// `FMAXNMP_v`/`FMINNMP_v`, B8.9) — concatena `Rn:Rm` e combina pares adjacentes, mesmo esquema
-    /// de {@link VectorArithmeticPairwise} (inteiro).
+    /// de {@link VectorArithmeticPairwise} (inteiro). A forma ESCALAR (`FADDP_s`/`FMAXP_s`/`FMINP_s`/
+    /// `FMAXNMP_s`/`FMINNMP_s`, B19.2, classe "AdvSIMD scalar pairwise") reduz os DOIS elementos de
+    /// tamanho {@link #esz} de `Rn` (lanes `0` e `1`) a um único escalar em `Rd` lane `0`; `Rm` é
+    /// ignorado — ver {@link #scalar}.
     record VectorFpArithmeticPairwise(
             /// Operação a executar.
             Ir64VectorFpPairwiseOp op,
-            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            /// `true` para a forma ESCALAR — reduz `Rn` lanes `0`/`1` a `Rd` lane `0`; {@link #rm}
+            /// e {@link #q} ignorados.
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
             boolean q,
             /// `log2` do tamanho do elemento em bytes (`2` ou `3`).
             int esz,

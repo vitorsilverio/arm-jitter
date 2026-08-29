@@ -163,7 +163,7 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         assertEquals(Ir64VectorFpUnaryOp.RSQRTE, ((Ir64Op.VectorFpArithmeticUnary) decodeWord(0x6ea1d820)).op());
     }
 
-    // ── Fora de escopo: meia-precisão (FEAT_FP16) e formas escalares AdvSIMD ────────────────────
+    // ── Fora de escopo: meia-precisão (FEAT_FP16) ──────────────────────────────────────────────
 
     @Test
     void halfPrecisionThreeSameIsUnimplemented() {
@@ -173,10 +173,84 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4e421420));
     }
 
+    // ── B19.2: AdvSIMD FP ESCALAR "three same" + pairwise escalar (golden devkitA64) ────────────
+
+    private static Ir64Op.VectorFpArithmeticThreeSame scalarThreeSame(int word) {
+        Ir64Op.VectorFpArithmeticThreeSame op = (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(word);
+        assertEquals(true, op.scalar(), "forma escalar");
+        assertEquals(false, op.q());
+        return op;
+    }
+
     @Test
-    void scalarFpThreeSameIsUnimplemented() {
-        // FMULX_s (AdvSIMD scalar, prefixo bit30=1/bit28=1): fora de escopo desta task (só
-        // vetorial) — deve continuar UNIMPLEMENTED, não ser confundido com a forma vetorial.
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e22dc20));
+    void scalarThreeSameSd() {
+        // s=single (floatEsz 2) / d=double (floatEsz 3), golden aarch64-none-elf-as
+        assertEquals(Ir64VectorFpThreeSameOp.MULX, scalarThreeSame(0x5e22dc20).op()); // fmulx s0,s1,s2
+        assertEquals(3, scalarThreeSame(0x5e62dc20).esz());                            // fmulx d0,d1,d2
+        assertEquals(2, scalarThreeSame(0x5e22dc20).esz());
+        assertEquals(Ir64VectorFpThreeSameOp.CMEQ, scalarThreeSame(0x5e22e420).op());  // fcmeq s
+        assertEquals(Ir64VectorFpThreeSameOp.CMGE, scalarThreeSame(0x7e22e420).op());  // fcmge s
+        assertEquals(Ir64VectorFpThreeSameOp.CMGT, scalarThreeSame(0x7ea2e420).op());  // fcmgt s
+        assertEquals(Ir64VectorFpThreeSameOp.FACGE, scalarThreeSame(0x7e22ec20).op()); // facge s
+        assertEquals(Ir64VectorFpThreeSameOp.FACGT, scalarThreeSame(0x7ea2ec20).op()); // facgt s
+        assertEquals(Ir64VectorFpThreeSameOp.ABD, scalarThreeSame(0x7ea2d420).op());   // fabd s
+        assertEquals(Ir64VectorFpThreeSameOp.RECPS, scalarThreeSame(0x5e22fc20).op()); // frecps s
+        assertEquals(Ir64VectorFpThreeSameOp.RSQRTS, scalarThreeSame(0x5ea2fc20).op());// frsqrts s
+        // double variants of the compares/steps
+        assertEquals(Ir64VectorFpThreeSameOp.CMEQ, scalarThreeSame(0x5e62e420).op());  // fcmeq d
+        assertEquals(Ir64VectorFpThreeSameOp.ABD, scalarThreeSame(0x7ee2d420).op());   // fabd d
+        assertEquals(Ir64VectorFpThreeSameOp.RSQRTS, scalarThreeSame(0x5ee2fc20).op());// frsqrts d
+    }
+
+    private static Ir64Op.VectorFpArithmeticPairwise scalarPairwise(int word) {
+        Ir64Op.VectorFpArithmeticPairwise op = (Ir64Op.VectorFpArithmeticPairwise) decodeWord(word);
+        assertEquals(true, op.scalar(), "forma escalar");
+        assertEquals(false, op.q());
+        return op;
+    }
+
+    @Test
+    void scalarPairwiseSd() {
+        assertEquals(Ir64VectorFpPairwiseOp.ADD, scalarPairwise(0x7e30d820).op());   // faddp s0,v1.2s
+        assertEquals(2, scalarPairwise(0x7e30d820).esz());
+        assertEquals(Ir64VectorFpPairwiseOp.ADD, scalarPairwise(0x7e70d820).op());   // faddp d0,v1.2d
+        assertEquals(3, scalarPairwise(0x7e70d820).esz());
+        assertEquals(Ir64VectorFpPairwiseOp.MAX, scalarPairwise(0x7e30f820).op());   // fmaxp s
+        assertEquals(Ir64VectorFpPairwiseOp.MIN, scalarPairwise(0x7eb0f820).op());   // fminp s
+        assertEquals(Ir64VectorFpPairwiseOp.MAXNM, scalarPairwise(0x7e30c820).op()); // fmaxnmp s
+        assertEquals(Ir64VectorFpPairwiseOp.MINNM, scalarPairwise(0x7eb0c820).op()); // fminnmp s
+        assertEquals(Ir64VectorFpPairwiseOp.MIN, scalarPairwise(0x7ef0f820).op());   // fminp d
+    }
+
+    @Test
+    void scalarPairwiseKeepsAddpSInteger() {
+        // ADDP_s D0,V1.2D (0x5ef1b820) continua VectorScalarPairwiseAdd — o ramo FP novo vem DEPOIS.
+        assertEquals(Ir64Op.VectorScalarPairwiseAdd.class, decodeWord(0x5ef1b820).getClass());
+    }
+
+    // ── B19.2 regressão negativa: meia-precisão (_h, FEAT_FP16) recusada pela ESTRUTURA ────────
+
+    @Test
+    void halfPrecisionScalarThreeSameIsUnimplemented() {
+        // fmulx h0,h1,h2 (0x5e421c20): bit21=0 no encoding "_h" ⇒ nem chega no dispatch three-same.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e421c20));
+    }
+
+    @Test
+    void halfPrecisionScalarPairwiseIsUnimplemented() {
+        // faddp h0,v1.2h (0x5e30d820): U=0 no encoding "_h" ⇒ decodeVectorFpScalarPairwiseOpcode
+        // devolve null (só U=1 é _sd).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e30d820));
+    }
+
+    // ── B19.2 G8: operação vetorial-only com prefixo escalar / (u,a,opcode) reservado ─────────
+
+    @Test
+    void scalarPrefixWithVectorOnlyOpIsUnimplemented() {
+        // prefixo escalar + opcode 0b11010 / (u=0,a=0) = FADD (só vetorial) ⇒ unsupported, nunca
+        // vira VectorFpArithmeticThreeSame nem cai na forma vetorial.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e22d420));
+        // reservado: opcode 0b11011 (slot MUL/MULX) com (u=0,a=1) não mapeia nada.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5ea2dc20));
     }
 }

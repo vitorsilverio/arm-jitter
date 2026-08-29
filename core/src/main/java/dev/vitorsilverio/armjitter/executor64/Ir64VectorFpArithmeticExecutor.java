@@ -69,7 +69,7 @@ final class Ir64VectorFpArithmeticExecutor {
     static boolean executeThreeSame(Aarch64Core core, Ir64Op.VectorFpArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        int elements = elementsPerRegister(op.q(), esz);
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
         for (int i = 0; i < elements; i++) {
             long resultBits;
             if (esz == 2) {
@@ -127,7 +127,7 @@ final class Ir64VectorFpArithmeticExecutor {
             }
             fp.setElement(op.rd(), i, esz, resultBits);
         }
-        finishDestructiveWrite(fp, op.rd(), op.q());
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 
@@ -183,36 +183,50 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// Combina um par de elementos FP de tamanho `esz` (`2`/`3`) segundo `op` — mesma semântica nas
+    /// formas vetorial e escalar de {@link Ir64Op.VectorFpArithmeticPairwise}: `MAX`/`MIN` propagam
+    /// `NaN` (`Math.max`/`Math.min`), `MAXNM`/`MINNM` só quando os DOIS são `NaN`, `ADD` é `+` IEEE.
+    private static long combinePair(Ir64VectorFpPairwiseOp op, long aBits, long bBits, int esz) {
+        if (esz == 2) {
+            float a = Float.intBitsToFloat((int) aBits);
+            float b = Float.intBitsToFloat((int) bBits);
+            return switch (op) {
+                case ADD -> floatBits(a + b);
+                case MAX -> floatBits(Math.max(a, b));
+                case MIN -> floatBits(Math.min(a, b));
+                case MAXNM -> floatBits(Ir64FpExecutor.maxNum(a, b));
+                case MINNM -> floatBits(Ir64FpExecutor.minNum(a, b));
+            };
+        }
+        double a = Double.longBitsToDouble(aBits);
+        double b = Double.longBitsToDouble(bBits);
+        return switch (op) {
+            case ADD -> doubleBits(a + b);
+            case MAX -> doubleBits(Math.max(a, b));
+            case MIN -> doubleBits(Math.min(a, b));
+            case MAXNM -> doubleBits(Ir64FpExecutor.maxNum(a, b));
+            case MINNM -> doubleBits(Ir64FpExecutor.minNum(a, b));
+        };
+    }
+
     static boolean executePairwise(Aarch64Core core, Ir64Op.VectorFpArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
+        if (op.scalar()) {
+            // B19.2: `FADDP_s`/`FMAXP_s`/... — reduz `Rn` lanes `0`/`1` a `Rd` lane `0`.
+            long result = combinePair(op.op(), fp.element(op.rn(), 0, esz), fp.element(op.rn(), 1, esz), esz);
+            fp.setElement(op.rd(), 0, esz, result);
+            finishScalarAwareWrite(fp, op.rd(), true, false, esz);
+            return false;
+        }
         int elements = elementsPerRegister(op.q(), esz);
         int half = elements / 2;
         long[] results = new long[elements];
         for (int i = 0; i < elements; i++) {
             int register = i < half ? op.rn() : op.rm();
             int pairBase = (i < half ? i : i - half) * 2;
-            if (esz == 2) {
-                float a = Float.intBitsToFloat((int) fp.element(register, pairBase, esz));
-                float b = Float.intBitsToFloat((int) fp.element(register, pairBase + 1, esz));
-                results[i] = switch (op.op()) {
-                    case ADD -> floatBits(a + b);
-                    case MAX -> floatBits(Math.max(a, b));
-                    case MIN -> floatBits(Math.min(a, b));
-                    case MAXNM -> floatBits(Ir64FpExecutor.maxNum(a, b));
-                    case MINNM -> floatBits(Ir64FpExecutor.minNum(a, b));
-                };
-            } else {
-                double a = Double.longBitsToDouble(fp.element(register, pairBase, esz));
-                double b = Double.longBitsToDouble(fp.element(register, pairBase + 1, esz));
-                results[i] = switch (op.op()) {
-                    case ADD -> doubleBits(a + b);
-                    case MAX -> doubleBits(Math.max(a, b));
-                    case MIN -> doubleBits(Math.min(a, b));
-                    case MAXNM -> doubleBits(Ir64FpExecutor.maxNum(a, b));
-                    case MINNM -> doubleBits(Ir64FpExecutor.minNum(a, b));
-                };
-            }
+            results[i] = combinePair(op.op(), fp.element(register, pairBase, esz),
+                    fp.element(register, pairBase + 1, esz), esz);
         }
         for (int i = 0; i < elements; i++) {
             fp.setElement(op.rd(), i, esz, results[i]);

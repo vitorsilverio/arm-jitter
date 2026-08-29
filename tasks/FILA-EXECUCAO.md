@@ -105,18 +105,17 @@ nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, 
 `executeAtomicMemoryOp` interpretado; `LDAPR` reaproveita `Load64`). Global 83%→84%, A64
 `ARMv8.1-A` 82%→83%. Zero-diff nos 5 consumidores.
 
-**B19.2 (RFC/spec) ✅ (2026-08-29)** — spec detalhada escrita:
-[`b19.2-a64-advsimd-fp-scalar-three-same-pairwise.md`](trilha-b-arquiteturas/b19.2-a64-advsimd-fp-scalar-three-same-pairwise.md).
-Escopo cortado para as **14 linhas `_sd`** (AdvSIMD FP escalar "three same" `FMULX_s`/`FCMEQ_s`/…/
-`FRSQRTS_s` + pairwise escalar `FADDP_s`/…/`FMINNMP_s`); as 14 `_h` (`FEAT_FP16`) ficam para B19.5,
-que herda escopo. É espelho escalar de B8.9 (`boolean scalar` nos 2 records + `finishScalarAwareWrite`,
-infra já no `Ir64VectorFpArithmeticExecutor`) + 1 tabela de decode nova para a classe "AdvSIMD scalar
-pairwise". **Sem gate de feature — ISA base ARMv8.0-A, NÃO é zero-diff** (G5 = suítes verdes). É a
-**próxima task executável** (⬜, pegável já).
+**B19.2 ✅ (2026-08-29)** — as 14 linhas `_sd` (AdvSIMD FP escalar "three same" `FMULX_s`/…/
+`FRSQRTS_s` + pairwise escalar `FADDP_s`/…/`FMINNMP_s`) decodificam e executam, golden devkitA64.
+`boolean scalar` nos 2 records; `fpThreeSameOpHasScalarForm` restringe o three-same escalar a 9 ops
+(G8); `decodeVectorFpScalarPairwiseOpcode` nova; executor `combinePair` extraído. `_h` recusada pela
+ESTRUTURA (regressão negativa), **não** na TSV — **B19.5 herda as 14 `_h`**. A64 v8.0 82%→84%,
+global 84%→86%; marco de release segue suspenso. G5 verde nos 5 consumidores. Ver `## Resultado`.
 
-**Próximo degrau depois de B19.2: B19.3** (AdvSIMD FP escalar "two-reg-misc" + conversões escalares
-int↔FP, ~45 linhas) — ainda **precisa de rodada de spec própria** (B19.3-B19.9 sem spec detalhada).
-B19 e B22 seguem pegáveis em paralelo a qualquer momento.
+**Próximo degrau na escada B19: B19.3** (AdvSIMD FP escalar "two-reg-misc" + conversões escalares
+int↔FP, ~45 linhas) — **precisa de rodada de spec própria** (B19.3-B19.9 sem spec detalhada). Sem
+próximo degrau B19 com spec pronta. **B19 e B22 seguem pegáveis em paralelo** — B22.2 (`VMOV_half`)
+é a única violação de G8 viva na tabela.
 
 Achado aberto da RFC B13.2 que vale como task própria a qualquer momento: o backend **Truffle quebra
 com QUALQUER op de VFP** (`IrOpNodeFactory` não tem casos VFP e `TruffleCodeEmitter#supports` devolve

@@ -3,10 +3,10 @@ package dev.vitorsilverio.armjitter.ir64;
 /// Operação de {@link Ir64Op.VectorFpArithmeticThreeSame} (AdvSIMD "three same" de ponto
 /// flutuante, B8.9) — só as formas de precisão SIMPLES/DUPLA (`esz` `2`/`3`, "sd" no
 /// `a64.decode` real do QEMU); meia-precisão (`esz=1`, "h") é `FEAT_FP16`, fora do Cortex-A53 do
-/// `virtual-arm-box` — ver `docs/isa-nao-aplicavel.tsv`. Só a forma VETORIAL: a forma ESCALAR
-/// destas mesmas operações (`FMULX_s`/`FCMEQ_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s`/...) vive num
-/// encoding "AdvSIMD scalar" à parte (mesmo truque de prefixo de
-/// {@link Ir64Op.VectorArithmeticThreeSame}), mas fica fora desta task — candidata a task própria.
+/// `virtual-arm-box` — ver `docs/isa-nao-aplicavel.tsv`. Cobre a forma VETORIAL (B8.9) e a forma
+/// ESCALAR AdvSIMD (`FMULX_s`/`FCMEQ_s`/`FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/
+/// `FRSQRTS_s`, B19.2 — `scalar=true` no record, subconjunto de 9 ops; as demais NÃO têm forma
+/// AdvSIMD-escalar real, G8).
 public enum Ir64VectorFpThreeSameOp {
     /// `a + b` (IEEE 754).
     ADD,

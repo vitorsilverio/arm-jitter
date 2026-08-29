@@ -2995,6 +2995,15 @@ public final class Aarch64Decoder {
                 if (!u && rm == 0b1_0001 && opcode == 0b1_0111 && esz == ADVSIMD_INT_SCALAR_ESZ) {
                     return new Ir64Op.VectorScalarPairwiseAdd(rd, rn);
                 }
+                // B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/
+                // `FMINNMP_s`) vive neste MESMO espaço (`rm`=`0b1_0000` fixo, `bit10=0`), ao lado do
+                // `ADDP_s` inteiro. `esz` bits[23:22] → `a`(bit23, discriminador)/`sz`(bit22).
+                boolean fpA = ((esz >>> 1) & 1) != 0;
+                int fpFloatEsz = 2 + (esz & 1);
+                Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpScalarPairwiseOpcode(u, fpA, opcode);
+                if (fpPairwiseOp != null) {
+                    return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
+                }
                 throw unsupported(word, address);
             }
             Ir64VectorAcrossLanesOp op = decodeVectorAcrossLanesOpcode(u, rm, opcode);
@@ -3245,19 +3254,29 @@ public final class Aarch64Decoder {
         // B8.9: "AdvSIMD three same (FP)"/"three same pairwise (FP)" — MESMO prefixo/bit10 do
         // inteiro, opcodes NUNCA colidem com a tabela inteira (conferido exaustivamente contra
         // `a64.decode` real: os opcodes FP começam sempre em `0b11000`, acima do maior opcode
-        // inteiro desta tabela). Só forma VETORIAL (`scalar` fica de fora — ver javadoc de
-        // {@link Ir64VectorFpThreeSameOp}); `esz` aqui é ainda o valor cru bits[23:22], que para FP
-        // precisa ser desmontado em `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
-        if (!scalar) {
-            boolean a = ((esz >>> 1) & 1) != 0;
-            int floatEsz = 2 + (esz & 1);
-            Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
-            if (fpOp != null) {
-                return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, q, floatEsz, rd, rn, rm);
+        // inteiro desta tabela). `esz` aqui é ainda o valor cru bits[23:22], que para FP precisa
+        // ser desmontado em `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
+        boolean a = ((esz >>> 1) & 1) != 0;
+        int floatEsz = 2 + (esz & 1);
+        // B19.2: a forma "three same (FP)" TAMBÉM tem forma AdvSIMD-escalar (`FMULX_s`/`FCMEQ_s`/
+        // `FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s`) — MESMO triplo
+        // `(u,a,opcode)` da vetorial (conferido contra corpus real devkitA64). As demais entradas de
+        // `decodeVectorFpThreeSameOpcode` (`ADD`/`SUB`/`DIV`/`MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/
+        // `MLS`) NÃO têm forma escalar real: com prefixo escalar, esses encodings são reservados ⇒
+        // `unsupported` (G8), nunca `VectorFpArithmeticThreeSame` nem a forma vetorial.
+        Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
+        if (fpOp != null) {
+            if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {
+                throw unsupported(word, address);
             }
+            return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, scalar, q, floatEsz, rd, rn, rm);
+        }
+        // A "three same pairwise (FP)" vetorial NÃO tem forma escalar aqui — a `FADDP_s`/etc mora na
+        // classe "AdvSIMD scalar pairwise" (`bit10=0`), tratada em {@link #decodeAdvancedSimdInteger}.
+        if (!scalar) {
             Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpPairwiseOpcode(u, a, opcode);
             if (fpPairwiseOp != null) {
-                return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, q, floatEsz, rd, rn, rm);
+                return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, false, q, floatEsz, rd, rn, rm);
             }
         }
         throw unsupported(word, address);
@@ -3328,6 +3347,35 @@ public final class Aarch64Decoder {
             case 0b1_1010 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
             case 0b1_1110 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
             case 0b1_1000 -> a ? Ir64VectorFpPairwiseOp.MINNM : Ir64VectorFpPairwiseOp.MAXNM;
+            default -> null;
+        };
+    }
+
+    /// B19.2: quais operações de {@link #decodeVectorFpThreeSameOpcode} têm forma AdvSIMD-ESCALAR
+    /// real (`ARM DDI 0487`, "Advanced SIMD scalar three same FP"). As de fora (`ADD`/`SUB`/`DIV`/
+    /// `MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/`MLS`) só existem vetoriais — um encoding escalar que
+    /// case uma delas é reservado ⇒ `unsupported` (G8).
+    private static boolean fpThreeSameOpHasScalarForm(Ir64VectorFpThreeSameOp op) {
+        return switch (op) {
+            case MULX, ABD, RECPS, RSQRTS, CMEQ, CMGE, CMGT, FACGE, FACGT -> true;
+            case ADD, SUB, MUL, DIV, MAX, MIN, MAXNM, MINNM, MLA, MLS -> false;
+        };
+    }
+
+    /// B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/`FMINNMP_s`,
+    /// `ARM DDI 0487` C4.1.95 `01 U 11110 0 sz 11000 opcode 10 Rn Rd`). Classe PRÓPRIA — `opcode`
+    /// (bits[15:11]) tem valores diferentes de {@link #decodeVectorFpPairwiseOpcode} (não-pareada),
+    /// então tabela separada. `U = 1` sempre nos `_sd` (é `U = 0` que seleciona os `_h`, `FEAT_FP16`)
+    /// ⇒ `!u` devolve `null` e exclui `_h` de graça. `a` é o bit23 (`FMAXP`/`FMAXNMP` → `a=0`,
+    /// `FMINP`/`FMINNMP` → `a=1`). Conferido bit a bit contra corpus real (devkitA64).
+    private static Ir64VectorFpPairwiseOp decodeVectorFpScalarPairwiseOpcode(boolean u, boolean a, int opcode) {
+        if (!u) {
+            return null;
+        }
+        return switch (opcode) {
+            case 0b1_1011 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
+            case 0b1_1111 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
+            case 0b1_1001 -> a ? Ir64VectorFpPairwiseOp.MINNM : Ir64VectorFpPairwiseOp.MAXNM;
             default -> null;
         };
     }
