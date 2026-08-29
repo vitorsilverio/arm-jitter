@@ -106,9 +106,10 @@ ops + pairwise). `AdvSimdThreeSameOp` de 2→34; as 34 ops inteiras não saturan
 cresceu do protótipo B13.2 para o frame inteiro (`(raw & 0xFE80_0000) == 0xF200_0000`, G8 fecha o
 resto). Zero-diff: `COBERTURA-ISA.md` byte-idêntica (grupo segue `NOT_IN_ANY_PRESET` até B13.22),
 suíte A64 sem alteração, G5 verde. **Próximo degrau da escada B13: B13.5** (3-reg-same
-saturante/deslocamento — `VQADD`/`VSHL`/`VQDMULH`/`VQRDMLAH`/...) — **precisa de rodada de spec
-própria** (a RFC deixa em aberto como `FPSCR.QC` de saturação NEON chega ao núcleo; é a 1ª decisão
-de B13.5). Sem próximo degrau B13 com spec pronta.
+saturante/deslocamento — `VQADD`/`VSHL`/`VQDMULH`/`VQRDMLAH`/...) — **spec pronta (2026-08-29,
+`b13.5-neon-3reg-same-saturating-shift.md`)**: a decisão que a RFC deixou em aberto (como `FPSCR.QC`
+chega ao núcleo) foi tomada na spec = **NÃO modelar `FPSCR.QC`** (paridade com o A64, que nunca
+modelou FPSR.QC apesar de ter todas essas 16 ops). B13.5 é pegável.
 
 **B19.1 ✅ (2026-08-29)** — A64 atômicos `FEAT_LSE` (`LDADD`…`SWP`) + `LDAPR` (`FEAT_LRCPC`, feature
 nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, `decodeAtomicMemoryOp`,
@@ -123,9 +124,20 @@ ESTRUTURA (regressão negativa), **não** na TSV — **B19.5 herda as 14 `_h`**.
 global 84%→86%; marco de release segue suspenso. G5 verde nos 5 consumidores. Ver `## Resultado`.
 
 **Próximo degrau na escada B19: B19.3** (AdvSIMD FP escalar "two-reg-misc" + conversões escalares
-int↔FP, ~45 linhas) — **precisa de rodada de spec própria** (B19.3-B19.9 sem spec detalhada). Sem
-próximo degrau B19 com spec pronta. **B19 e B22 seguem pegáveis em paralelo** — B22.2 (`VMOV_half`)
-é a única violação de G8 viva na tabela.
+int↔FP, 29 linhas `_sd`/`_s`) — **spec pronta (2026-08-29,
+`b19.3-a64-advsimd-fp-scalar-two-reg-misc-convert.md`)**: decisão da spec = record NOVO
+`Ir64Op.VectorFpConvertFixedPoint` (Kind 94) para as formas `@fcvt_fixed` com `#fbits`, escalar
+aqui / vetorial em B19.4; `FRECPX`/`FCVTXN` novos em `Ir64VectorFpUnaryOp` com semântica de
+arredondamento real (não a simplificação de `RECPE`). B19.3 é pegável. B19.4-B19.9 ainda sem spec.
+**B19 e B22 seguem pegáveis em paralelo.**
+
+🆕 **Rodada de spec 2026-08-29 (pedido do usuário, "criar todos os specs necessários"):** além de
+B13.5 e B19.3 acima, o **cluster B22 ganhou 4 specs** (`b22.1-hlt.md`, `b22.2-vmov-half.md`,
+`b22.3-blx-register-m-profile.md`, `b22.4-curadoria-denominador-32-bits.md`) — todos ⬜ pegáveis,
+independentes entre si (B22.4 recomendada depois de B22.3). B22.2 (`VMOV_half`, o único `⚠️` do
+projeto) e B22.3 trazem decisões de design já resolvidas na spec (feature `HALF_PRECISION_FP`;
+separação `BLX`/`BLX_IMMEDIATE`). Só B13.5 e B19.3 são de código no `arm-jitter`; B22.1-B22.4 são
+pequenas (feature nascente + curadoria TSV). **Sonnet executa; 1 sessão = 1 task.**
 
 Achado aberto da RFC B13.2 que vale como task própria a qualquer momento: o backend **Truffle quebra
 com QUALQUER op de VFP** (`IrOpNodeFactory` não tem casos VFP e `TruffleCodeEmitter#supports` devolve
