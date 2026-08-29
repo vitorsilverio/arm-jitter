@@ -6,7 +6,8 @@ import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
-public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame {
+public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
+        IrOp.NeonLoadAllLanes {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -92,6 +93,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int MRS_BANK = 64;
         public static final int MSR_BANK = 65;
         public static final int NEON_THREE_SAME = 66;
+        public static final int NEON_LOAD_STORE_MULTIPLE = 67;
+        public static final int NEON_LOAD_STORE_SINGLE = 68;
+        public static final int NEON_LOAD_ALL_LANES = 69;
     }
 
     /// Operacao ALU generica.
@@ -1389,5 +1393,105 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_THREE_SAME; }
+    }
+
+    /// `VLD1`-`VLD4`/`VST1`-`VST4` NEON A32, forma "multiple structures" (B13.3) — transfere
+    /// {@link #nregs} repetições de {@link #interleave} registradores `D` para/de memória
+    /// CONSECUTIVA, com os elementos de uma estrutura ENTRELAÇADOS quando `interleave > 1`
+    /// ("array of structures"). Cada registrador tocado tem `8 >> esz` elementos de `1 << esz`
+    /// bytes; o registrador `D` acessado é `vd + reg + stride * xs` (`reg` em `0..nregs`, `xs` em
+    /// `0..interleave`), exatamente o `tt` de `trans_VLDST_multiple` do QEMU real
+    /// (`target/arm/tcg/translate-neon.c`).
+    ///
+    /// Espelho estrutural de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadStoreMultiple}, mas com
+    /// diferenças reais: NEON de 32 bits tem `stride` ("double spacing", inexistente no A64), NÃO
+    /// faz wrap-around módulo 32 (registrador além de `D31` é UNDEFINED, recusado no decoder) e
+    /// nunca escreve destrutivamente fora do `D` nomeado (VFP32 não zera bits altos).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonLoadStoreMultiple(
+            /// `true` para `VLD1`-`VLD4`, `false` para `VST1`-`VST4`.
+            boolean load,
+            /// Primeiro registrador `D` transferido (índice `0`-`31`).
+            int vd,
+            /// Registrador base ARM (índice `0`-`14`; `15`/PC é recusado no decoder).
+            int rn,
+            /// Campo `rm` CRU do encoding: `15` = sem escrita de volta; `13` = escrita de volta
+            /// IMEDIATA (`Rn += nregs * interleave * 8` bytes); qualquer outro valor = registrador
+            /// ARM cujo conteúdo é somado a `Rn` depois da transferência.
+            int rm,
+            /// `log2` do tamanho de cada elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
+            /// `3`=doubleword (só válido quando `interleave == 1 && stride == 1`).
+            int esz,
+            /// Quantas vezes o grupo de {@link #interleave} registradores se repete (`1`-`4`).
+            int nregs,
+            /// Quantos registradores `D` compõem UMA estrutura entrelaçada (`1`=`VLD1`/`VST1`, ...,
+            /// `4`=`VLD4`/`VST4`).
+            int interleave,
+            /// Espaçamento entre registradores `D` de uma estrutura (`1` = consecutivos, `2` =
+            /// "double spacing", `D<n>`, `D<n+2>`, ...).
+            int stride) implements IrOp {
+        @Override public int kind() { return Kind.NEON_LOAD_STORE_MULTIPLE; }
+    }
+
+    /// `VLD1`-`VLD4`/`VST1`-`VST4` NEON A32, forma "single structure to one lane" (B13.3) —
+    /// transfere UM elemento de `1 << esz` bytes para/de a lane {@link #index} de cada um dos
+    /// {@link #selem} registradores `vd + stride * xs` (`xs` em `0..selem`), SEM afetar nenhum
+    /// outro bit desses registradores. Espelho de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadStoreSingle} (mesmas diferenças
+    /// que {@link NeonLoadStoreMultiple}). {@link #condition()} sempre {@link Condition#AL}.
+    record NeonLoadStoreSingle(
+            /// `true` para `VLD1`-`VLD4`, `false` para `VST1`-`VST4`.
+            boolean load,
+            /// Primeiro registrador `D` transferido (índice `0`-`31`).
+            int vd,
+            /// Registrador base ARM (índice `0`-`14`; `15`/PC é recusado no decoder).
+            int rn,
+            /// Campo `rm` CRU do encoding, mesma convenção de {@link NeonLoadStoreMultiple#rm}
+            /// (escrita de volta imediata avança `selem << esz` bytes).
+            int rm,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; não há forma doubleword de lane
+            /// única).
+            int esz,
+            /// Quantos registradores `D` consecutivos (por {@link #stride}) recebem/fornecem o
+            /// elemento (`1`=`VLD1`/`VST1`, ..., `4`=`VLD4`/`VST4`).
+            int selem,
+            /// Espaçamento entre registradores `D` (`1` ou `2`), ver
+            /// {@link NeonLoadStoreMultiple#stride}.
+            int stride,
+            /// Índice da lane que recebe/fornece o elemento (faixa depende de `esz`: `0`-`7`
+            /// byte, `0`-`3` halfword, `0`-`1` word).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_LOAD_STORE_SINGLE; }
+    }
+
+    /// `VLD1R`-`VLD4R` NEON A32, forma "single structure to all lanes" (B13.3) — lê UM elemento
+    /// de `1 << esz` bytes por registrador (mesmo padrão de endereçamento de
+    /// {@link NeonLoadStoreSingle}, `selem` registradores por {@link #stride}) e REPLICA esse
+    /// valor por todas as lanes do `D`; quando {@link #quad}, replica também no `D` seguinte do
+    /// par (`selem` é sempre `1` nesse caso). Não existe forma `VST`. Espelho de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadSingleReplicate}.
+    /// {@link #condition()} sempre {@link Condition#AL}.
+    record NeonLoadAllLanes(
+            /// Primeiro registrador `D` preenchido (índice `0`-`31`).
+            int vd,
+            /// Registrador base ARM (índice `0`-`14`; `15`/PC é recusado no decoder).
+            int rn,
+            /// Campo `rm` CRU do encoding, mesma convenção de {@link NeonLoadStoreMultiple#rm}
+            /// (escrita de volta imediata avança `selem << esz` bytes).
+            int rm,
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Quantos registradores `D` são preenchidos (`1`=`VLD1R`, ..., `4`=`VLD4R`).
+            int selem,
+            /// Espaçamento entre registradores `D` (`1` ou `2`), ver
+            /// {@link NeonLoadStoreMultiple#stride}.
+            int stride,
+            /// `true` (só possível quando `selem == 1`) para replicar também no `D` seguinte
+            /// (`bit t` do encoding, arranjo de 128 bits nomeado por DOIS `D`).
+            boolean quad) implements IrOp {
+        @Override public int kind() { return Kind.NEON_LOAD_ALL_LANES; }
     }
 }

@@ -147,6 +147,110 @@ final class IrExecutionSupport {
         core.notifyOrdinaryWrite(address, 4);
     }
 
+    // ── Acesso de ELEMENTO vetorial (NEON load/store, task B13.3) ─────────────────────────────
+    // Diferente de `read16Arm7`/`read32Arm7`: um elemento NEON NUNCA rotaciona num endereço
+    // desalinhado (o quirk de rotação de acesso desalinhado do ARM7 é semântica de `LDR`/`LDRH`,
+    // não de elemento vetorial — ARM DDI 0406C A7.7 / QEMU `translate-neon.c`). Num endereço
+    // alinhado ao elemento, o acesso vai direto por `read8`/`read16`/`read32` do `AddressSpace`
+    // (decompor um acesso alinhado em `read8` quebra periférico MMIO com registrador esparso — o
+    // achado real da F3, ver Javadoc de `readWordForLoad`); genuinamente desalinhado, compõe/
+    // decompõe byte a byte little-endian. A regra de endianness de dados (`CPSR.E`/BE8) é a mesma
+    // do caminho VFP: byte é invariante, halfword/word trocam quando `E=1`, doubleword troca cada
+    // metade de 32 bits.
+
+    /// Máscara de byte sem sinal, para compor/decompor elementos desalinhados.
+    private static final int VECTOR_BYTE_MASK = 0xFF;
+    /// Bits por byte, idem.
+    private static final int VECTOR_BITS_PER_BYTE = 8;
+
+    /// Lê um elemento vetorial de `1 << esz` bytes (`esz` `0`-`3`) em `address`, zero-extendido
+    /// num `long`, contabilizando ciclos e aplicando a endianness de dados de `CPSR.E`.
+    long readVectorElement(ArmCore core, int address, int esz) {
+        return switch (esz) {
+            case 0 -> {
+                int value = core.memory().read8(address) & VECTOR_BYTE_MASK;
+                core.addMemoryCycles(address, 1, MemoryAccessType.DATA_READ);
+                yield value;
+            }
+            case 1 -> {
+                int raw;
+                if ((address & 1) == 0) {
+                    raw = core.memory().read16(address) & 0xFFFF;
+                } else {
+                    raw = (core.memory().read8(address) & VECTOR_BYTE_MASK)
+                            | ((core.memory().read8(address + 1) & VECTOR_BYTE_MASK) << VECTOR_BITS_PER_BYTE);
+                }
+                core.addMemoryCycles(address, 2, MemoryAccessType.DATA_READ);
+                yield applyDataEndiannessHalfword(core, raw) & 0xFFFFL;
+            }
+            case 2 -> Integer.toUnsignedLong(readVectorWord(core, address));
+            case 3 -> {
+                long low = Integer.toUnsignedLong(readVectorWord(core, address));
+                long high = Integer.toUnsignedLong(readVectorWord(core, address + 4));
+                yield low | (high << 32);
+            }
+            default -> throw new IllegalArgumentException("esz de elemento vetorial inválido: " + esz);
+        };
+    }
+
+    /// Escreve um elemento vetorial de `1 << esz` bytes (`esz` `0`-`3`) em `address` — a partir
+    /// dos bits baixos de `value`. NÃO chama `notifyOrdinaryWrite` (o executor NEON o faz uma vez
+    /// por elemento, como o executor A64), só contabiliza ciclos e aplica a endianness de dados.
+    void writeVectorElement(ArmCore core, int address, int esz, long value) {
+        switch (esz) {
+            case 0 -> {
+                core.memory().write8(address, (int) value);
+                core.addMemoryCycles(address, 1, MemoryAccessType.DATA_WRITE);
+            }
+            case 1 -> {
+                int swapped = applyDataEndiannessHalfword(core, (int) value & 0xFFFF);
+                if ((address & 1) == 0) {
+                    core.memory().write16(address, swapped);
+                } else {
+                    core.memory().write8(address, swapped);
+                    core.memory().write8(address + 1, swapped >>> VECTOR_BITS_PER_BYTE);
+                }
+                core.addMemoryCycles(address, 2, MemoryAccessType.DATA_WRITE);
+            }
+            case 2 -> writeVectorWord(core, address, (int) value);
+            case 3 -> {
+                writeVectorWord(core, address, (int) value);
+                writeVectorWord(core, address + 4, (int) (value >>> 32));
+            }
+            default -> throw new IllegalArgumentException("esz de elemento vetorial inválido: " + esz);
+        }
+    }
+
+    /// Lê 32 bits para um elemento vetorial (ver {@link #readVectorElement}): direto quando
+    /// alinhado a word, byte a byte little-endian quando não.
+    private int readVectorWord(ArmCore core, int address) {
+        int raw;
+        if ((address & 3) == 0) {
+            raw = core.memory().read32(address);
+        } else {
+            raw = (core.memory().read8(address) & VECTOR_BYTE_MASK)
+                    | ((core.memory().read8(address + 1) & VECTOR_BYTE_MASK) << VECTOR_BITS_PER_BYTE)
+                    | ((core.memory().read8(address + 2) & VECTOR_BYTE_MASK) << (2 * VECTOR_BITS_PER_BYTE))
+                    | ((core.memory().read8(address + 3) & VECTOR_BYTE_MASK) << (3 * VECTOR_BITS_PER_BYTE));
+        }
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_READ);
+        return applyDataEndiannessWord(core, raw);
+    }
+
+    /// Escreve 32 bits de um elemento vetorial (ver {@link #writeVectorElement}).
+    private void writeVectorWord(ArmCore core, int address, int value) {
+        int swapped = applyDataEndiannessWord(core, value);
+        if ((address & 3) == 0) {
+            core.memory().write32(address, swapped);
+        } else {
+            core.memory().write8(address, swapped);
+            core.memory().write8(address + 1, swapped >>> VECTOR_BITS_PER_BYTE);
+            core.memory().write8(address + 2, swapped >>> (2 * VECTOR_BITS_PER_BYTE));
+            core.memory().write8(address + 3, swapped >>> (3 * VECTOR_BITS_PER_BYTE));
+        }
+        core.addMemoryCycles(address, 4, MemoryAccessType.DATA_WRITE);
+    }
+
     /// Tamanho em bytes de um acesso de word, usado para custear em ciclos os acessos
     /// atravessados de {@link ArmFeature#UNALIGNED_ACCESS} (uma leitura/escrita larga, como o
     /// caminho legado — ver a task B1.7).

@@ -23,34 +23,19 @@ public final class IrVfpExecutor {
     private static final int APSR_NZCV_ENCODING = 15;
 
     private final IrExecutionSupport support;
+    private final IrNeonExecutor neon;
 
-    IrVfpExecutor(IrExecutionSupport support) {
+    IrVfpExecutor(IrExecutionSupport support, IrNeonExecutor neon) {
         this.support = support;
+        this.neon = neon;
     }
 
-    /// NEON "three same" (`VADD`/`VSUB` inteiro no protótipo da RFC B13.2): a semântica de lane é
-    /// a do núcleo COMPARTILHADO
-    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSame}) — a MESMA função que o
-    /// executor A64 chama para `ADD_v`/`SUB_v`, não uma segunda implementação (é o que a decisão
-    /// D1 da RFC compra).
-    ///
-    /// O que fica aqui é só o que é do mundo de 32 bits: NEON nomeia registradores por índice de
-    /// `D`, e a base de palavra de um operando é o próprio índice de `D` (arranjo de 64 bits) —
-    /// nenhuma escrita destrutiva depois do laço, ao contrário do A64 (VFP32 nunca zera bits fora
-    /// do registrador escrito).
+    /// NEON "three same" (`VADD`/`VSUB` inteiro): DELEGA a {@link IrNeonExecutor} — B13.3 extraiu
+    /// a execução vetorial de 32 bits para lá. O método público continua existindo (G3): o
+    /// dispatch de {@link IrBlockExecutor} para `NEON_THREE_SAME` ainda entra por aqui.
     public void executeNeonThreeSame(ArmCore core, IrOp.NeonThreeSame op) {
-        VfpRegisters vfp = core.vfp();
-        int esz = op.esz();
-        int elementBytes = 1 << esz;
-        int lanes = (op.quad() ? QUAD_BYTES : DOUBLE_BYTES) / elementBytes;
-        dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.threeSame(vfp, op.op(), esz, lanes,
-                op.vd(), op.vn(), op.vm());
+        neon.executeNeonThreeSame(core, op);
     }
-
-    /// Bytes de um arranjo NEON de 64 bits (`D<n>`).
-    private static final int DOUBLE_BYTES = 8;
-    /// Bytes de um arranjo NEON de 128 bits (`Q<n>`).
-    private static final int QUAD_BYTES = 16;
 
     /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/`VABS`/`VSQRT`/`VMOV` registrador.
     public void executeVfpAlu(ArmCore core, IrOp.VfpAlu op) {

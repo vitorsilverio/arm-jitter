@@ -19,6 +19,7 @@ public final class IrBlockExecutor {
     private final IrSystemExecutor system;
     private final IrCycleExecutor cycle;
     private final IrVfpExecutor vfp;
+    private final IrNeonExecutor neon;
 
     /// Cria um executor para a arquitetura informada.
     public IrBlockExecutor(ArmArchitecture architecture) {
@@ -29,7 +30,8 @@ public final class IrBlockExecutor {
         this.transfer = new IrTransferExecutor(support);
         this.system = new IrSystemExecutor(support);
         this.cycle = new IrCycleExecutor();
-        this.vfp = new IrVfpExecutor(support);
+        this.neon = new IrNeonExecutor(support);
+        this.vfp = new IrVfpExecutor(support, neon);
     }
 
     /// Interpreta um bloco IR e devolve os ciclos internos (`IrOp.Cycle`) consumidos.
@@ -112,6 +114,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.BIT_REVERSE -> alu.executeBitReverse(core, (IrOp.BitReverse) op);
                 case IrOp.Kind.DIVIDE -> alu.executeDivide(core, (IrOp.Divide) op);
                 case IrOp.Kind.NEON_THREE_SAME -> vfp.executeNeonThreeSame(core, (IrOp.NeonThreeSame) op);
+                case IrOp.Kind.NEON_LOAD_STORE_MULTIPLE -> neon.executeNeonLoadStoreMultiple(core, (IrOp.NeonLoadStoreMultiple) op);
+                case IrOp.Kind.NEON_LOAD_STORE_SINGLE -> neon.executeNeonLoadStoreSingle(core, (IrOp.NeonLoadStoreSingle) op);
+                case IrOp.Kind.NEON_LOAD_ALL_LANES -> neon.executeNeonLoadAllLanes(core, (IrOp.NeonLoadAllLanes) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -245,7 +250,10 @@ public final class IrBlockExecutor {
             case IrOp.BitFieldInsert bfi -> { alu.executeBitFieldInsert(core, bfi); yield false; }
             case IrOp.BitReverse rbit -> { alu.executeBitReverse(core, rbit); yield false; }
             case IrOp.Divide div -> { alu.executeDivide(core, div); yield false; }
-            case IrOp.NeonThreeSame neon -> { vfp.executeNeonThreeSame(core, neon); yield false; }
+            case IrOp.NeonThreeSame op3 -> { vfp.executeNeonThreeSame(core, op3); yield false; }
+            case IrOp.NeonLoadStoreMultiple lsm -> { neon.executeNeonLoadStoreMultiple(core, lsm); yield false; }
+            case IrOp.NeonLoadStoreSingle lss -> { neon.executeNeonLoadStoreSingle(core, lss); yield false; }
+            case IrOp.NeonLoadAllLanes lal -> { neon.executeNeonLoadAllLanes(core, lal); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }
