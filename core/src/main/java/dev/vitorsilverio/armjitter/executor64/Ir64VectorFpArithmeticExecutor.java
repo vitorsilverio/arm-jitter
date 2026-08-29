@@ -276,10 +276,23 @@ final class Ir64VectorFpArithmeticExecutor {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         boolean wide = esz == 3;
-        int elements = elementsPerRegister(op.q(), esz);
+        // B19.3: `FCVTXN` (só forma escalar nesta task) tem `esz` de ENTRADA (`f64`) ≠ `esz` de
+        // SAÍDA (`f32`) — leitura, escrita e finalização PRÓPRIAS, fora do laço comum (Armadilha 3
+        // da task: não deixar a finalização geral rodar de novo com o `esz` do record).
+        if (op.op() == Ir64VectorFpUnaryOp.FCVTXN) {
+            long narrowed = fcvtxnRoundToOdd(Double.longBitsToDouble(fp.element(op.rn(), 0, 3)));
+            fp.setElement(op.rd(), 0, FCVTXN_OUTPUT_ESZ, narrowed);
+            finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), FCVTXN_OUTPUT_ESZ);
+            return false;
+        }
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
         for (int i = 0; i < elements; i++) {
             long inputBits = fp.element(op.rn(), i, esz);
             long resultBits = switch (op.op()) {
+                case FRECPX -> esz == 2
+                        ? floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
+                        : doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
+                case FCVTXN -> throw new IllegalStateException("FCVTXN tratado fora do laço");
                 case SCVTF, UCVTF -> {
                     boolean signed = op.op() == Ir64VectorFpUnaryOp.SCVTF;
                     double asDouble;
@@ -335,7 +348,124 @@ final class Ir64VectorFpArithmeticExecutor {
             };
             fp.setElement(op.rd(), i, esz, resultBits);
         }
-        finishDestructiveWrite(fp, op.rd(), op.q());
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
+    /// `esz` de saída de {@link Ir64VectorFpUnaryOp#FCVTXN} — sempre `f32` (2), independente do
+    /// `esz` de entrada (`f64`, 3) que viaja no record.
+    private static final int FCVTXN_OUTPUT_ESZ = 2;
+
+    /// `FPRecpX` (`ARM DDI 0487`, B19.3) para `float` — sinal preservado, mantissa zerada,
+    /// expoente refletido `newExp = maxExp - exp` (biased; `maxExp` para `exp==0`/subnormal, com
+    /// `maxExp = 2^8 - 2`). NaN → NaN default; `±0` → `±Infinito`; `±Infinito` → `±0`. EXATO, sem
+    /// `FPCR`.
+    private static float frecpx(float a) {
+        int bits = Float.floatToRawIntBits(a);
+        int sign = bits & 0x8000_0000;
+        int exp = (bits >>> 23) & 0xFF;
+        int mant = bits & 0x007F_FFFF;
+        if (exp == 0xFF) {
+            // NaN → NaN default (quiet, mantissa mínima); Infinito → zero do mesmo sinal.
+            return mant != 0 ? Float.intBitsToFloat(0x7FC0_0000) : Float.intBitsToFloat(sign);
+        }
+        if (exp == 0 && mant == 0) {
+            return Float.intBitsToFloat(sign | (0xFF << 23));
+        }
+        int maxExp = 0xFE;
+        int newExp = exp == 0 ? maxExp : maxExp - exp;
+        return Float.intBitsToFloat(sign | (newExp << 23));
+    }
+
+    /// `FPRecpX` (`ARM DDI 0487`, B19.3) para `double` — idêntico a {@link #frecpx(float)} com
+    /// `maxExp = 2^11 - 2` e campo de expoente de 11 bits.
+    private static double frecpx(double a) {
+        long bits = Double.doubleToRawLongBits(a);
+        long sign = bits & Long.MIN_VALUE;
+        int exp = (int) ((bits >>> 52) & 0x7FF);
+        long mant = bits & 0x000F_FFFF_FFFF_FFFFL;
+        if (exp == 0x7FF) {
+            return mant != 0 ? Double.longBitsToDouble(0x7FF8_0000_0000_0000L) : Double.longBitsToDouble(sign);
+        }
+        if (exp == 0 && mant == 0) {
+            return Double.longBitsToDouble(sign | (0x7FFL << 52));
+        }
+        int maxExp = 0x7FE;
+        int newExp = exp == 0 ? maxExp : maxExp - exp;
+        return Double.longBitsToDouble(sign | ((long) newExp << 52));
+    }
+
+    /// `FCVTXN` (`ARM DDI 0487`, B19.3) — `f64` → `f32` com arredondamento "round to odd"
+    /// (jamming): converte por truncamento em magnitude e, se a conversão perdeu informação, força
+    /// o bit menos significativo da mantissa do `f32` a `1` (indo para o vizinho de maior
+    /// magnitude quando já era `0`). Impede o arredondamento duplo de `(float) d`. Devolve os 32
+    /// bits do `f32` (zero-estendidos). `NaN` → NaN default; `±Infinito` → `±Infinito`;
+    /// `±0` → `±0`.
+    private static long fcvtxnRoundToOdd(double d) {
+        if (Double.isNaN(d)) {
+            return 0x7FC0_0000L;
+        }
+        if (Double.isInfinite(d)) {
+            return d > 0 ? 0x7F80_0000L : 0xFF80_0000L;
+        }
+        float truncated = truncateToFloatTowardZero(d);
+        if ((double) truncated == d) {
+            return Float.floatToRawIntBits(truncated) & 0xFFFF_FFFFL;
+        }
+        int bits = Float.floatToRawIntBits(truncated);
+        if ((bits & 1) == 0) {
+            // Vizinho de MAIOR magnitude — que tem LSB `1` (representáveis consecutivos alternam
+            // paridade de LSB).
+            truncated = truncated >= 0f ? Math.nextUp(truncated) : Math.nextDown(truncated);
+        }
+        return Float.floatToRawIntBits(truncated) & 0xFFFF_FFFFL;
+    }
+
+    /// `double` → `float` truncado em MAGNITUDE (toward-zero): `(float) d` arredonda para o mais
+    /// próximo; se estourou para longe de zero, recua um `ulp`.
+    private static float truncateToFloatTowardZero(double d) {
+        float nearest = (float) d;
+        if (Math.abs((double) nearest) <= Math.abs(d)) {
+            return nearest;
+        }
+        return d >= 0 ? Math.nextDown(nearest) : Math.nextUp(nearest);
+    }
+
+    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma AdvSIMD FP↔ponto fixo (`@fcvt_fixed`, B19.3) —
+    /// reaproveita {@link Ir64FpExecutor#roundToIntegralForConversion}/
+    /// {@link Ir64FpExecutor#saturateToInteger}/{@link Ir64FpExecutor#unsignedLongToDouble}
+    /// (IDÊNTICO ao que {@link #executeUnary} faz nas conversões `_vi`), só com o fator de escala
+    /// `2^fractionBits` a mais. Nesta task `op.scalar()` é sempre `true` (`elements == 1`); a B19.4
+    /// usará `!scalar`.
+    static boolean executeConvertFixedPoint(Aarch64Core core, Ir64Op.VectorFpConvertFixedPoint op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        boolean wide = esz == 3;
+        double scale = Math.scalb(1.0, op.fractionBits());
+        int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
+        for (int i = 0; i < elements; i++) {
+            long inputBits = fp.element(op.rn(), i, esz);
+            long resultBits;
+            if (op.toFloat()) {
+                double asDouble;
+                if (wide) {
+                    asDouble = op.signed() ? (double) inputBits : Ir64FpExecutor.unsignedLongToDouble(inputBits);
+                } else {
+                    asDouble = op.signed() ? (double) (int) inputBits : (double) inputBits;
+                }
+                double scaled = asDouble / scale;
+                resultBits = esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
+            } else {
+                double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
+                double scaled = value * scale;
+                double rounded = Ir64FpExecutor.roundToIntegralForConversion(scaled,
+                        Ir64Op.Fp64RoundingDirection.TOWARD_ZERO);
+                long converted = Ir64FpExecutor.saturateToInteger(rounded, op.signed(), wide);
+                resultBits = converted & (wide ? -1L : 0xFFFF_FFFFL);
+            }
+            fp.setElement(op.rd(), i, esz, resultBits);
+        }
+        finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 

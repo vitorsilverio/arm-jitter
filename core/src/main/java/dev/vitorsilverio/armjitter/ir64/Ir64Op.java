@@ -52,7 +52,7 @@ public sealed interface Ir64Op permits
         Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64,
         Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
         Ir64Op.VectorFpArithmeticThreeSameByElement, Ir64Op.CryptoSha3FourRegister,
-        Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp {
+        Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -267,6 +267,10 @@ public sealed interface Ir64Op permits
         /// (`FEAT_LSE`) — ver {@link AtomicMemoryOp}. `LDAPR` (`FEAT_LRCPC`) reaproveita
         /// {@link Load64}, sem `Kind` próprio.
         public static final int ATOMIC_MEMORY_OP = 93;
+        /// B19.3: `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma AdvSIMD FP↔ponto fixo (`@fcvt_fixed`,
+        /// com campo `#fbits`) — ver {@link VectorFpConvertFixedPoint}. Escalar nesta task; a forma
+        /// vetorial (`_vf`) chega em B19.4 reaproveitando o record.
+        public static final int VECTOR_FP_CONVERT_FIXED_POINT = 94;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2129,23 +2133,62 @@ public sealed interface Ir64Op permits
     /// `FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`FCM**0_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/`FCVTxU_vi`,
     /// B8.9) — um único operando de origem (`Rn`). Vive em DOIS slots de encoding diferentes do
     /// mesmo grupo (achado da triagem — ver {@link Ir64VectorFpUnaryOp}), resolvido pelo decoder,
-    /// transparente para este record: sempre `Rd`/`Rn`/`esz`/`q`.
+    /// transparente para este record: sempre `Rd`/`Rn`/`esz`/`q`. Cobre também a forma
+    /// AdvSIMD-ESCALAR genuína (B19.3) — ver {@link #scalar}.
     record VectorFpArithmeticUnary(
             /// Operação a executar.
             Ir64VectorFpUnaryOp op,
-            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            /// `true` para a forma ESCALAR AdvSIMD — processa só o elemento `0`; {@link #q} é
+            /// ignorado; a escrita zera TODO o `Rd` acima do `esz` de saída (mesma disciplina de
+            /// {@link VectorFpArithmeticThreeSame#scalar}).
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
             boolean q,
             /// `log2` do tamanho do elemento em bytes (`2` ou `3`) — para
             /// {@link Ir64VectorFpUnaryOp#SCVTF}/{@link Ir64VectorFpUnaryOp#UCVTF}, é o tamanho do
             /// elemento INTEIRO de entrada (mesmo tamanho do resultado FP); para as demais
             /// `FCVTxS`/`FCVTxU`, é o tamanho do elemento FP de entrada (mesmo tamanho do inteiro
-            /// de saída).
+            /// de saída); para {@link Ir64VectorFpUnaryOp#FCVTXN}, é o tamanho da ENTRADA
+            /// (`3`/`f64`) — a saída é sempre `f32`.
             int esz,
             /// Registrador `V` de destino.
             int rd,
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_UNARY; }
+    }
+
+    /// AdvSIMD conversão FP↔ponto fixo (`@fcvt_fixed`, B19.3) — `SCVTF`/`UCVTF` (inteiro→FP) e
+    /// `FCVTZS`/`FCVTZU` (FP→inteiro, sempre arredondando para zero). Difere de
+    /// {@link VectorFpArithmeticUnary} (formas `@icvt`, sem escala) por carregar
+    /// {@link #fractionBits}: o resultado é escalado por `2^fractionBits` (dividido na direção
+    /// inteiro→FP, multiplicado na direção FP→inteiro). Difere de {@link Fp64IntegerConvert}
+    /// (forma registrador-geral, `Wn`/`Xn` ↔ `Sn`/`Dn`) por operar `V`↔`V`. Nesta task só a forma
+    /// ESCALAR ({@link #scalar} sempre `true`); a forma vetorial `_vf` chega em B19.4 reaproveitando
+    /// este record com `scalar=false`/`q` real.
+    record VectorFpConvertFixedPoint(
+            /// `true` para a forma ESCALAR — processa só o elemento `0`; {@link #q} ignorado; a
+            /// escrita zera TODO o `Rd` acima de {@link #esz}.
+            boolean scalar,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits (ignorado se {@link #scalar}).
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: `2` (`s`, inteiro/FP de 32 bits) ou `3`
+            /// (`d`, 64 bits). Meia precisão (`1`) é `FEAT_FP16` — B19.5.
+            int esz,
+            /// Número de bits fracionários (`#fbits` do encoding): `1`-`32` para `s`, `1`-`64` para
+            /// `d`. O fator de escala é `2^fractionBits`.
+            int fractionBits,
+            /// `true` → `SCVTF`/`UCVTF` (inteiro `esz`-wide → FP `esz`-wide, depois `/ 2^fbits`);
+            /// `false` → `FCVTZS`/`FCVTZU` (FP `* 2^fbits`, arredonda para zero, satura → inteiro).
+            boolean toFloat,
+            /// `true` para as variantes assinadas (`SCVTF`/`FCVTZS`), `false` para as não
+            /// assinadas (`UCVTF`/`FCVTZU`).
+            boolean signed,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_CONVERT_FIXED_POINT; }
     }
 
     /// `EXT` (AdvSIMD extract, B8.10) — concatena `Rm:Rn` (`Rn` ocupa os bits BAIXOS, `Rm` os

@@ -377,6 +377,8 @@ public final class Ir64BlockExecutor {
                     Ir64VectorFpArithmeticExecutor.executePairwise(core, (Ir64Op.VectorFpArithmeticPairwise) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_UNARY ->
                     Ir64VectorFpArithmeticExecutor.executeUnary(core, (Ir64Op.VectorFpArithmeticUnary) op);
+            case Ir64Op.Kind.VECTOR_FP_CONVERT_FIXED_POINT ->
+                    Ir64VectorFpArithmeticExecutor.executeConvertFixedPoint(core, (Ir64Op.VectorFpConvertFixedPoint) op);
             case Ir64Op.Kind.VECTOR_EXTRACT ->
                     Ir64VectorArithmeticExecutor.executeExtract(core, (Ir64Op.VectorExtract) op);
             case Ir64Op.Kind.VECTOR_PERMUTE ->

@@ -5,11 +5,13 @@ package dev.vitorsilverio.armjitter.ir64;
 /// DOIS slots de encoding diferentes do mesmo grupo "two-register misc" (`Rm=00000`, o mesmo slot
 /// do inteiro {@link Ir64VectorUnaryOp}, para {@link #ABS}/{@link #NEG}/as comparações-contra-zero;
 /// `Rm=00001`, o mesmo slot do inteiro {@link Ir64VectorNarrowUnaryOp}, para o resto) — achado real
-/// da triagem desta task, o decoder resolve isso, não o executor. Não cobre a forma escalar
-/// (`FABS_s`/`FSQRT_s`/... não existem — `FABS`/`FNEG`/`FSQRT` escalares já são {@link
-/// Ir64Op.Fp64Alu} desde B8.4; mas `FCMGT0_s`/`FRECPE_s`/`FRECPX_s`/`FRSQRTE_s`/conversão
-/// inteiro↔float escalar via registrador `V`, que SÃO formas AdvSIMD-scalar genuínas, ficam fora
-/// desta task).
+/// da triagem desta task, o decoder resolve isso, não o executor. Cobre a forma VETORIAL (B8.9) e
+/// — via {@link Ir64Op.VectorFpArithmeticUnary#scalar} — a forma AdvSIMD-ESCALAR genuína (B19.3):
+/// as 5 comparações-contra-zero `FCMGT0_s`/`FCMGE0_s`/`FCMEQ0_s`/`FCMLE0_s`/`FCMLT0_s`, os
+/// recíprocos {@link #RECPE}/{@link #RSQRTE}/{@link #FRECPX}, o estreitamento {@link #FCVTXN} e as
+/// 12 conversões escalares int↔FP `@icvt` ({@link #SCVTF}/{@link #UCVTF}/`FCVT{N,P,M,Z,A}{S,U}`).
+/// `FABS_s`/`FSQRT_s`/`FRINTx_s` NÃO existem neste encoding (os escalares já são
+/// {@link Ir64Op.Fp64Alu}/{@link Ir64Op.Fp64Round} desde B8.4/B8.5).
 public enum Ir64VectorFpUnaryOp {
     /// `|Rn|` — manipula o bit de sinal direto (nunca `Math.abs` double/float, mesma armadilha de
     /// `ABS` em {@link Ir64Op.Fp64Operation}).
@@ -75,5 +77,17 @@ public enum Ir64VectorFpUnaryOp {
     /// `FPToFixed`, arredondamento "mais próximo, afasta de zero" (ties-away), assinado.
     FCVTAS,
     /// `FPToFixed`, "mais próximo, afasta de zero", não assinado.
-    FCVTAU
+    FCVTAU,
+    /// `FPRecpX` (`ARM DDI 0487`, `FPRecpX()`, B19.3) — só forma AdvSIMD-escalar real. Resultado
+    /// com o MESMO sinal de `Rn`, mantissa toda `0` e expoente REFLETIDO
+    /// `newExp = (2*bias - exp)` (biased; `2*bias` para `exp==0`/subnormal). Casos especiais:
+    /// `Rn` NaN → NaN default; `Rn` `±0` → `±Infinito`; `Rn` `±Infinito` → `±0`. É
+    /// EXATO/determinístico, SEM `FPCR` — NÃO é a simplificação `1.0/Rn` de {@link #RECPE}.
+    FRECPX,
+    /// `FCVTXN` (`ARM DDI 0487`, B19.3) — converte `f64` → `f32` com arredondamento "round to odd"
+    /// (jamming / von Neumann): impede arredondamento duplo forçando o bit menos significativo da
+    /// mantissa do `f32` a `1` sempre que a conversão perder informação. Determinística, SEM
+    /// `FPCR`. Nesta task só a forma ESCALAR (`FCVTXN_v` vetorial é B19.4); `esz` do record é o da
+    /// ENTRADA (`3`/`f64`), a escrita usa o `esz` de SAÍDA (`2`/`f32`).
+    FCVTXN
 }

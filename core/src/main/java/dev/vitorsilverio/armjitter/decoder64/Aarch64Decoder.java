@@ -1020,6 +1020,20 @@ public final class Aarch64Decoder {
     /// colide na aparência, nunca no valor real (`URECPE`/`URSQRTE` exigem `esz=`
     /// {@link #ADVSIMD_ESZ_WORD}, `a=1`, conferido contra corpus real).
     private static final int ADVSIMD_URECPE_URSQRTE_OPCODE = 0b1_1001;
+    /// B19.3: opcode (bits[15:11]) de `FRECPX_s` dentro do slot narrow/widen (`Rm=00001`) — só
+    /// forma AdvSIMD-escalar real. MESMO valor que `SQRT` vetorial (`decodeVectorFpUnaryRmOneOpcode`,
+    /// `key==0b11`), por isso tratado com `if` EXPLÍCITO no ramo `scalar`, NUNCA pela tabela
+    /// compartilhada (senão um encoding vetorial `0b1_1111`/`a=1` decodificaria sem executor — G8).
+    private static final int ADVSIMD_FRECPX_OPCODE = 0b1_1111;
+    /// B19.3: opcode (bits[15:11]) de `FCVTXN_s` dentro do slot narrow/widen (`Rm=00001`, `U=1`) —
+    /// MESMO opcode que `SQXTN`-família (`decodeVectorNarrowUnaryOpcode` devolve `null` aqui);
+    /// tratado com `if` EXPLÍCITO no ramo `scalar` (`FCVTXN_v` vetorial é B19.4).
+    private static final int ADVSIMD_FCVTXN_OPCODE = 0b0_1101;
+    /// B19.3: opcodes (bits[15:11]) da classe "AdvSIMD shift by immediate" que na verdade são
+    /// conversão FP↔ponto fixo (`@fcvt_fixed`): `0b1_1100` = `SCVTF`/`UCVTF` (int→FP),
+    /// `0b1_1111` = `FCVTZS`/`FCVTZU` (FP→int). `u` (bit29) distingue assinado/não.
+    private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE = 0b1_1100;
+    private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE = 0b1_1111;
     /// `Rm[4:1]` fixo="1000" (`Rm=0b10000`/`0b10001`, bit0 livre) — "across lanes" (`ADDV`/...)/
     /// `ADDP_s`. E8: só bit4 setado NÃO basta (`Rm=0b11000`/`0b11000+` também tem bit4 setado e é um
     /// registrador livre válido de "three different" — ver o achado de bit11 em
@@ -2922,18 +2936,20 @@ public final class Aarch64Decoder {
                 validateVectorUnaryEsz(word, address, op, esz);
                 return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
             }
-            // B8.9: `FABS_v`/`FNEG_v`/`FCM**0_v` vivem no MESMO slot `Rm=00000` do inteiro
-            // (achado real da triagem — ver javadoc de {@link Ir64VectorFpUnaryOp}). Só vetorial
-            // (a forma escalar destas mesmas operações É uma instrução `AdvSIMD scalar` real —
-            // `FABS`/`FNEG`/`FSQRT` escalares já são {@link Ir64Op.Fp64Alu} desde B8.4, um
-            // encoding TOTALMENTE diferente; `FCM**0_s` fica fora desta task).
-            if (!scalar) {
-                boolean a = ((esz >>> 1) & 1) != 0;
-                int floatEsz = 2 + (esz & 1);
-                Ir64VectorFpUnaryOp fpOp = decodeVectorFpUnaryRmZeroOpcode(u, a, opcode);
-                if (fpOp != null) {
-                    return new Ir64Op.VectorFpArithmeticUnary(fpOp, q, floatEsz, rd, rn);
+            // B8.9 (vetorial: `FABS_v`/`FNEG_v`/`FCM**0_v`) + B19.3 (escalar: só as 5
+            // comparações-contra-zero `FCMGT0_s`/`FCMGE0_s`/`FCMEQ0_s`/`FCMLE0_s`/`FCMLT0_s`) —
+            // MESMO slot `Rm=00000` do inteiro (achado real da triagem, ver javadoc de
+            // {@link Ir64VectorFpUnaryOp}). `FABS`/`FNEG` FP NÃO têm forma escalar aqui (os
+            // escalares já são {@link Ir64Op.Fp64Alu} desde B8.4) ⇒ com prefixo escalar são
+            // reservados ⇒ `unsupported` (G8, via {@link #fpUnaryOpHasScalarForm}).
+            boolean fpRmZeroA = ((esz >>> 1) & 1) != 0;
+            int fpRmZeroEsz = 2 + (esz & 1);
+            Ir64VectorFpUnaryOp fpRmZeroOp = decodeVectorFpUnaryRmZeroOpcode(u, fpRmZeroA, opcode);
+            if (fpRmZeroOp != null) {
+                if (scalar && !fpUnaryOpHasScalarForm(fpRmZeroOp)) {
+                    throw unsupported(word, address);
                 }
+                return new Ir64Op.VectorFpArithmeticUnary(fpRmZeroOp, scalar, q, fpRmZeroEsz, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -2969,19 +2985,33 @@ public final class Aarch64Decoder {
                 Ir64VectorUnaryOp recipOp = u ? Ir64VectorUnaryOp.URSQRTE : Ir64VectorUnaryOp.URECPE;
                 return new Ir64Op.VectorArithmeticUnary(recipOp, false, q, esz, rd, rn);
             }
-            // B8.9: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/`UCVTF_vi`/`FCVTxS_vi`/
-            // `FCVTxU_vi` vivem no MESMO slot `Rm=00001` do inteiro narrow-unário — a
-            // `FCVTXN`/conversão narrow de precisão FP (bit10=0 real do encoding, DIFERENTE de
-            // `narrowOp` acima) continua fora de escopo (candidata a task própria, ver "Não
-            // inclui"). Só vetorial (`FCVTXN_s`/`FRECPE_s`/`FRECPX_s`/`FRSQRTE_s`/conversão
-            // escalar via `V` ficam fora desta task).
-            if (!scalar) {
-                boolean a = ((esz >>> 1) & 1) != 0;
-                int floatEsz = 2 + (esz & 1);
-                Ir64VectorFpUnaryOp fpOp = decodeVectorFpUnaryRmOneOpcode(u, a, opcode);
-                if (fpOp != null) {
-                    return new Ir64Op.VectorFpArithmeticUnary(fpOp, q, floatEsz, rd, rn);
+            // B19.3: `FRECPX_s` — só forma AdvSIMD-escalar; colide de opcode com `SQRT` vetorial
+            // (`decodeVectorFpUnaryRmOneOpcode`, `key==0b11`) ⇒ `if` EXPLÍCITO ANTES da tabela
+            // compartilhada, NUNCA nela (Armadilha 2 da task).
+            if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
+                return new Ir64Op.VectorFpArithmeticUnary(
+                        Ir64VectorFpUnaryOp.FRECPX, true, false, 2 + (esz & 1), rd, rn);
+            }
+            // B19.3: `FCVTXN_s` — `f64`→`f32` round-to-odd; só escalar (`FCVTXN_v` é B19.4).
+            // `esz` do record = ENTRADA `f64` (doubleword); os `bits[23:22]` crus do encoding
+            // `@rr_s` valem `01` e NÃO representam tamanho aqui.
+            if (scalar && u && opcode == ADVSIMD_FCVTXN_OPCODE) {
+                return new Ir64Op.VectorFpArithmeticUnary(
+                        Ir64VectorFpUnaryOp.FCVTXN, true, false, ADVSIMD_INT_SCALAR_ESZ, rd, rn);
+            }
+            // B8.9 (vetorial: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/...) + B19.3
+            // (escalar: `RECPE`/`RSQRTE` + as 12 conversões `@icvt` int↔FP escala 0). `SQRT`/
+            // `FRINTx` FP NÃO têm forma escalar aqui (os escalares já são {@link Ir64Op.Fp64Alu}/
+            // {@link Ir64Op.Fp64Round} desde B8.4/B8.5) ⇒ com prefixo escalar são reservados ⇒
+            // `unsupported` (G8, via {@link #fpUnaryOpHasScalarForm}).
+            boolean fpRmOneA = ((esz >>> 1) & 1) != 0;
+            int fpRmOneEsz = 2 + (esz & 1);
+            Ir64VectorFpUnaryOp fpRmOneOp = decodeVectorFpUnaryRmOneOpcode(u, fpRmOneA, opcode);
+            if (fpRmOneOp != null) {
+                if (scalar && !fpUnaryOpHasScalarForm(fpRmOneOp)) {
+                    throw unsupported(word, address);
                 }
+                return new Ir64Op.VectorFpArithmeticUnary(fpRmOneOp, scalar, q, fpRmOneEsz, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -3359,6 +3389,23 @@ public final class Aarch64Decoder {
         return switch (op) {
             case MULX, ABD, RECPS, RSQRTS, CMEQ, CMGE, CMGT, FACGE, FACGT -> true;
             case ADD, SUB, MUL, DIV, MAX, MIN, MAXNM, MINNM, MLA, MLS -> false;
+        };
+    }
+
+    /// B19.3: quais operações de {@link #decodeVectorFpUnaryRmZeroOpcode}/
+    /// {@link #decodeVectorFpUnaryRmOneOpcode} têm forma AdvSIMD-ESCALAR real ("two-register
+    /// miscellaneous" escalar + conversões `@icvt` escalares). As de fora (`ABS`/`NEG` FP,
+    /// `SQRT`, `RINTx`) só existem vetoriais — ou já são {@link Ir64Op.Fp64Alu}/
+    /// {@link Ir64Op.Fp64Round} escalares por outro encoding — então um encoding escalar que
+    /// case uma delas é reservado ⇒ `unsupported` (G8). `FRECPX`/`FCVTXN` NUNCA passam por aqui
+    /// (têm `if` explícito no decoder), logo `false`.
+    private static boolean fpUnaryOpHasScalarForm(Ir64VectorFpUnaryOp op) {
+        return switch (op) {
+            case CMGT0, CMGE0, CMEQ0, CMLE0, CMLT0,
+                 RECPE, RSQRTE,
+                 SCVTF, UCVTF,
+                 FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> true;
+            case ABS, NEG, SQRT, RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI, FRECPX, FCVTXN -> false;
         };
     }
 
@@ -3991,6 +4038,25 @@ public final class Aarch64Decoder {
             default -> null;
         };
         if (op == null) {
+            // B19.3: `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma FP↔ponto fixo (`@fcvt_fixed`,
+            // com `#fbits`) moram nesta MESMA classe "shift by immediate" (`bit10=1`),
+            // discriminadas pelos opcodes `0b1_1100`/`0b1_1111` que a tabela acima devolve `null`.
+            // Só forma ESCALAR nesta task — a vetorial `_vf` é B19.4.
+            if (opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE
+                    || opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE) {
+                if (!scalar) {
+                    throw unsupported(word, address);
+                }
+                if (esz != ADVSIMD_ESZ_WORD && esz != ADVSIMD_INT_SCALAR_ESZ) {
+                    // `esz==1` (meia precisão) → `FEAT_FP16`, B19.5; `esz==0` não é conversão FP↔
+                    // fixo (G8).
+                    throw unsupported(word, address);
+                }
+                boolean toFloat = opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE;
+                // `rightShift` (`2*esize - immh:immb`, já calculado) é EXATAMENTE o `#fbits` do
+                // `@fcvt_fixed` (faixa `1..esize`); `!u` = variante assinada (`SCVTF`/`FCVTZS`).
+                return new Ir64Op.VectorFpConvertFixedPoint(true, false, esz, rightShift, toFloat, !u, rd, rn);
+            }
             throw unsupported(word, address);
         }
         boolean isRightShift = op == Ir64VectorShiftOp.SSHR || op == Ir64VectorShiftOp.USHR

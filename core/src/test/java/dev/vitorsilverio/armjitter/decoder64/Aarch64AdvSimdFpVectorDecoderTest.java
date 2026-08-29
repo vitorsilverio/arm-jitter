@@ -253,4 +253,124 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         // reservado: opcode 0b11011 (slot MUL/MULX) com (u=0,a=1) não mapeia nada.
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5ea2dc20));
     }
+
+    // ── B19.3: AdvSIMD FP ESCALAR "two-register misc" + conversões escalares (golden devkitA64) ──
+
+    private static Ir64Op.VectorFpArithmeticUnary scalarUnary(int word) {
+        Ir64Op.VectorFpArithmeticUnary op = (Ir64Op.VectorFpArithmeticUnary) decodeWord(word);
+        assertEquals(true, op.scalar(), "forma escalar");
+        assertEquals(false, op.q());
+        return op;
+    }
+
+    @Test
+    void scalarCompareAgainstZero() {
+        // s (floatEsz 2) / d (floatEsz 3), golden aarch64-none-elf-as `.arch armv8-a`
+        assertEquals(Ir64VectorFpUnaryOp.CMGT0, scalarUnary(0x5ea0c820).op()); // fcmgt s0,s1,#0.0
+        assertEquals(2, scalarUnary(0x5ea0c820).esz());
+        assertEquals(Ir64VectorFpUnaryOp.CMGT0, scalarUnary(0x5ee0c820).op()); // fcmgt d0,d1,#0.0
+        assertEquals(3, scalarUnary(0x5ee0c820).esz());
+        assertEquals(Ir64VectorFpUnaryOp.CMGE0, scalarUnary(0x7ea0c820).op()); // fcmge s
+        assertEquals(Ir64VectorFpUnaryOp.CMGE0, scalarUnary(0x7ee0c820).op()); // fcmge d
+        assertEquals(Ir64VectorFpUnaryOp.CMEQ0, scalarUnary(0x5ea0d820).op()); // fcmeq s
+        assertEquals(Ir64VectorFpUnaryOp.CMEQ0, scalarUnary(0x5ee0d820).op()); // fcmeq d
+        assertEquals(Ir64VectorFpUnaryOp.CMLE0, scalarUnary(0x7ea0d820).op()); // fcmle s
+        assertEquals(Ir64VectorFpUnaryOp.CMLE0, scalarUnary(0x7ee0d820).op()); // fcmle d
+        assertEquals(Ir64VectorFpUnaryOp.CMLT0, scalarUnary(0x5ea0e820).op()); // fcmlt s
+        assertEquals(Ir64VectorFpUnaryOp.CMLT0, scalarUnary(0x5ee0e820).op()); // fcmlt d
+    }
+
+    @Test
+    void scalarReciprocalsAndNarrow() {
+        assertEquals(Ir64VectorFpUnaryOp.RECPE, scalarUnary(0x5ea1d820).op());  // frecpe s
+        assertEquals(Ir64VectorFpUnaryOp.RECPE, scalarUnary(0x5ee1d820).op());  // frecpe d
+        assertEquals(Ir64VectorFpUnaryOp.RSQRTE, scalarUnary(0x7ea1d820).op()); // frsqrte s
+        assertEquals(Ir64VectorFpUnaryOp.RSQRTE, scalarUnary(0x7ee1d820).op()); // frsqrte d
+        Ir64Op.VectorFpArithmeticUnary frecpxS = scalarUnary(0x5ea1f820);      // frecpx s0,s1
+        assertEquals(Ir64VectorFpUnaryOp.FRECPX, frecpxS.op());
+        assertEquals(2, frecpxS.esz());
+        assertEquals(3, scalarUnary(0x5ee1f820).esz());                        // frecpx d0,d1
+        Ir64Op.VectorFpArithmeticUnary fcvtxn = scalarUnary(0x7e616820);      // fcvtxn s0,d1
+        assertEquals(Ir64VectorFpUnaryOp.FCVTXN, fcvtxn.op());
+        assertEquals(3, fcvtxn.esz(), "esz do record = ENTRADA f64");
+    }
+
+    @Test
+    void scalarIcvtConversions() {
+        assertEquals(Ir64VectorFpUnaryOp.SCVTF, scalarUnary(0x5e21d820).op());  // scvtf s0,s1
+        assertEquals(2, scalarUnary(0x5e21d820).esz());
+        assertEquals(Ir64VectorFpUnaryOp.SCVTF, scalarUnary(0x5e61d820).op());  // scvtf d0,d1
+        assertEquals(3, scalarUnary(0x5e61d820).esz());
+        assertEquals(Ir64VectorFpUnaryOp.UCVTF, scalarUnary(0x7e21d820).op());  // ucvtf s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNS, scalarUnary(0x5e21a820).op()); // fcvtns s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNU, scalarUnary(0x7e21a820).op()); // fcvtnu s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPS, scalarUnary(0x5ea1a820).op()); // fcvtps s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPU, scalarUnary(0x7ea1a820).op()); // fcvtpu s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMS, scalarUnary(0x5e21b820).op()); // fcvtms s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMU, scalarUnary(0x7e21b820).op()); // fcvtmu s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZS, scalarUnary(0x5ea1b820).op()); // fcvtzs s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZU, scalarUnary(0x7ea1b820).op()); // fcvtzu s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAS, scalarUnary(0x5e21c820).op()); // fcvtas s
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAU, scalarUnary(0x7e21c820).op()); // fcvtau s
+        // uma variante double para provar o floatEsz
+        assertEquals(3, scalarUnary(0x5ee1b820).esz());                        // fcvtzs d0,d1
+    }
+
+    private static Ir64Op.VectorFpConvertFixedPoint scalarFixed(int word) {
+        Ir64Op.VectorFpConvertFixedPoint op = (Ir64Op.VectorFpConvertFixedPoint) decodeWord(word);
+        assertEquals(true, op.scalar(), "forma escalar");
+        assertEquals(false, op.q());
+        return op;
+    }
+
+    @Test
+    void scalarFcvtFixedConversions() {
+        Ir64Op.VectorFpConvertFixedPoint scvtfS = scalarFixed(0x5f3ce420); // scvtf s0,s1,#4
+        assertEquals(true, scvtfS.toFloat());
+        assertEquals(true, scvtfS.signed());
+        assertEquals(2, scvtfS.esz());
+        assertEquals(4, scvtfS.fractionBits());
+        Ir64Op.VectorFpConvertFixedPoint scvtfD = scalarFixed(0x5f5fe420); // scvtf d0,d1,#33
+        assertEquals(3, scvtfD.esz());
+        assertEquals(33, scvtfD.fractionBits());
+        Ir64Op.VectorFpConvertFixedPoint ucvtfS = scalarFixed(0x7f3ce420); // ucvtf s0,s1,#4
+        assertEquals(true, ucvtfS.toFloat());
+        assertEquals(false, ucvtfS.signed());
+        Ir64Op.VectorFpConvertFixedPoint fcvtzsS = scalarFixed(0x5f3cfc20); // fcvtzs s0,s1,#4
+        assertEquals(false, fcvtzsS.toFloat());
+        assertEquals(true, fcvtzsS.signed());
+        assertEquals(4, fcvtzsS.fractionBits());
+        Ir64Op.VectorFpConvertFixedPoint fcvtzuD = scalarFixed(0x7f5ffc20); // fcvtzu d0,d1,#33
+        assertEquals(false, fcvtzuD.toFloat());
+        assertEquals(false, fcvtzuD.signed());
+        assertEquals(3, fcvtzuD.esz());
+        assertEquals(33, fcvtzuD.fractionBits());
+    }
+
+    // ── B19.3 regressão negativa: meia-precisão (_h, FEAT_FP16) recusada pela ESTRUTURA ─────────
+
+    @Test
+    void halfPrecisionScalarTwoRegMiscAndConvertUnimplemented() {
+        // fcmgt h0,h1,#0.0 (0x5ef8c820): Rm≠00000/00001 no encoding "_h" ⇒ não chega no dispatch FP.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5ef8c820));
+        // frecpx h0,h1 (0x5ef9f820): idem.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5ef9f820));
+        // scvtf h0,h1 (0x5e79d820): idem (@icvt_h).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5e79d820));
+        // scvtf h0,h1,#4 (0x5f1ce420): @fcvt_fixed_h ⇒ esz==1 recusado pelo check esz∈{2,3}.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5f1ce420));
+    }
+
+    // ── B19.3 G8: op vetorial-only com prefixo escalar / opcode reservado ──────────────────────
+
+    @Test
+    void scalarPrefixWithVectorOnlyFpUnaryOpIsUnimplemented() {
+        // prefixo escalar, Rm=00001, opcode 0b1_1111, (u=1,a=1) = SQRT (só vetorial) ⇒ unsupported.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x7ee1f820));
+        // prefixo escalar, Rm=00000, opcode 0b1_1101, u=1 = (u,a,opcode) reservado ⇒ unsupported.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x7ea0e820));
+        // classe "shift by immediate" escalar, bit10=1, opcode 0b1_1101 (não é shift nem conversão
+        // FP↔fixo) ⇒ unsupported.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5f3cec20));
+    }
 }
