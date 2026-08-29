@@ -189,6 +189,17 @@ public final class IsaCoverageReport {
     static {
         AARCH64_VERSION_REQUIREMENTS.put("CAS", Aarch64Feature.LSE);
         AARCH64_VERSION_REQUIREMENTS.put("CASP", Aarch64Feature.LSE);
+        // B19.1: atômicos de memória `FEAT_LSE` (ARMv8.1-A) + `LDAPR` `FEAT_LRCPC` (ARMv8.3-A).
+        AARCH64_VERSION_REQUIREMENTS.put("LDADD", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDCLR", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDEOR", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDSET", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDSMAX", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDSMIN", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDUMAX", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDUMIN", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("SWP", Aarch64Feature.LSE);
+        AARCH64_VERSION_REQUIREMENTS.put("LDAPR", Aarch64Feature.LRCPC);
         AARCH64_VERSION_REQUIREMENTS.put("MSR_i_PAN", Aarch64Feature.PAN);
         AARCH64_VERSION_REQUIREMENTS.put("MSR_i_UAO", Aarch64Feature.UAO);
         AARCH64_VERSION_REQUIREMENTS.put("MSR_i_DIT", Aarch64Feature.DIT);

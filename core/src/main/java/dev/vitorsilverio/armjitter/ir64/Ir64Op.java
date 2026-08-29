@@ -52,7 +52,7 @@ public sealed interface Ir64Op permits
         Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64,
         Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
         Ir64Op.VectorFpArithmeticThreeSameByElement, Ir64Op.CryptoSha3FourRegister,
-        Ir64Op.CryptoSha3TwoSourceRotate {
+        Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -263,6 +263,10 @@ public sealed interface Ir64Op permits
         /// B11.12: `RAX1`/`XAR` (`FEAT_SHA3`, "Cryptographic three-register, imm2") — ver
         /// {@link CryptoSha3TwoSourceRotate}.
         public static final int CRYPTO_SHA3_TWO_SOURCE_ROTATE = 92;
+        /// B19.1: `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP`
+        /// (`FEAT_LSE`) — ver {@link AtomicMemoryOp}. `LDAPR` (`FEAT_LRCPC`) reaproveita
+        /// {@link Load64}, sem `Kind` próprio.
+        public static final int ATOMIC_MEMORY_OP = 93;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -991,6 +995,36 @@ public sealed interface Ir64Op permits
             /// `true` para o par de 64 bits (`X`); `false` para o par de 32 bits (`W`).
             boolean wide) implements Ir64Op {
         @Override public int kind() { return Kind.COMPARE_AND_SWAP_PAIR; }
+    }
+
+    /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`ARM DDI 0487
+    /// C6.2.{LDADD…SWP}`, B19.1, extensão LSE ARMv8.1 — completa a extensão que a B8.1 tinha
+    /// implementado pela metade, só `CAS`/`CASP`). Semântica RMW atômica do ponto de vista do
+    /// guest: lê `[Rn]` (`size`), calcula `<operation>(old, Rs)`, escreve o resultado de volta e
+    /// grava `old` (zero-estendido) em `Rt`. `Rt==31` (`XZR`) é o alias `ST<op>` — descarta o
+    /// resultado lido, o RMW acontece igual. Interpretador single-thread por construção: não
+    /// precisa de RMW real de host (mesma nota de {@link CompareAndSwap}). `acquire`/`release`
+    /// (bits `A`/`R` do encoding) são NOP observável — carregados no record só para um futuro
+    /// emissor nativo, mesmo espírito de {@link LoadExclusive#acquireRelease}. `Rs==31` é `XZR`
+    /// (lê `0`); `Rn==31` é `SP`.
+    record AtomicMemoryOp(
+            /// Registrador com o operando da operação (índice `0`-`31`; `31`=`XZR`, lê `0`).
+            int rs,
+            /// Registrador de destino do valor antigo lido (índice `0`-`31`; `31`=`XZR`, descarta —
+            /// alias `ST<op>`).
+            int rt,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP` — ver {@link Load64#rn}).
+            int rn,
+            /// Tamanho da transferência de memória e da operação (byte/half/word/doubleword). A
+            /// largura do registrador (`W`/`X`) é derivada: `X` sse `DOUBLEWORD`.
+            Ir64MemSize size,
+            /// Operação de leitura-modificação-escrita a aplicar.
+            Ir64AtomicOp operation,
+            /// `true` para as formas `LD<op>A`/`LD<op>AL` (bit `A`=1) — NOP observável.
+            boolean acquire,
+            /// `true` para as formas `LD<op>L`/`LD<op>AL` (bit `R`=1) — NOP observável.
+            boolean release) implements Ir64Op {
+        @Override public int kind() { return Kind.ATOMIC_MEMORY_OP; }
     }
 
     /// `MRS`/`MSR (register)` (`ARM DDI 0487 C5.2.3`, B6.6.1) — leitura/escrita de um registrador

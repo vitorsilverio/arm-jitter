@@ -58,6 +58,14 @@ public enum Aarch64Feature {
     /// hardware real quando `FEAT_PAuth` está ausente) — só as formas com efeito real de
     /// autenticação exigem esta feature. ARMv8.3-A.
     POINTER_AUTHENTICATION,
+    /// `FEAT_LRCPC` — "Load-Acquire RCpc" (`LDAPR`/`LDAPRB`/`LDAPRH`, forma registrador `[Rn]`),
+    /// semântica de aquisição RCpc (release-consistent processor-consistent), mais fraca que a
+    /// aquisição RCsc de `LDAR`. ARMv8.3-A. B19.1: primeiro degrau do épico B19 (fechar o gap
+    /// remanescente do A64) — a ordenação RCpc é NOP observável neste interpretador single-thread
+    /// (mesma simplificação de `LDAR`/`acquireRelease`), a feature existe só para o gate por
+    /// versão. A forma com offset imediato (`LDAPUR`, `FEAT_LRCPC2`/ARMv8.4-A) é outra extensão,
+    /// fora do escopo de B19.1.
+    LRCPC,
     /// `FEAT_FlagM` — `RMIF`/`SETF8`/`SETF16` (manipulação de flags NZCV). ARMv8.4-A. **Achado de
     /// B11.3**: já implementado sem gate desde B8.2 (mesmo padrão de {@link #LSE}).
     FLAG_MANIPULATION,

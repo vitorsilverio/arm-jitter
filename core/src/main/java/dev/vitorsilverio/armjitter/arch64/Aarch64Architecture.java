@@ -50,12 +50,13 @@ public final class Aarch64Architecture {
             Aarch64Feature.SHA3,
             Aarch64Feature.UAO);
 
-    /// ARMv8.3-A: acrescenta conversão com semântica Javascript, aritmética de número complexo e
-    /// autenticação de ponteiro real.
+    /// ARMv8.3-A: acrescenta conversão com semântica Javascript, aritmética de número complexo,
+    /// autenticação de ponteiro real e `FEAT_LRCPC` (`LDAPR`, B19.1).
     public static final Aarch64Architecture ARMV8_3_A = extending(ARMV8_2_A, "ARMv8.3-A",
             Aarch64Feature.JAVASCRIPT_CONVERT,
             Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC,
-            Aarch64Feature.POINTER_AUTHENTICATION);
+            Aarch64Feature.POINTER_AUTHENTICATION,
+            Aarch64Feature.LRCPC);
 
     /// ARMv8.4-A: acrescenta `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`) e `FEAT_DIT` (B11.5: os dois
     /// já eram implementados sem gate desde B8.2/B8.3).

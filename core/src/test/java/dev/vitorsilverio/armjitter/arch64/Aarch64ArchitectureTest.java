@@ -44,6 +44,12 @@ class Aarch64ArchitectureTest {
     }
 
     @Test
+    void armv83aAddsLrcpc() {
+        assertTrue(Aarch64Architecture.ARMV8_3_A.has(Aarch64Feature.LRCPC));
+        assertFalse(Aarch64Architecture.ARMV8_2_A.has(Aarch64Feature.LRCPC), "só entra em ARMv8.3-A");
+    }
+
+    @Test
     void armv84aAddsFlagManipulationAndDit() {
         Aarch64Architecture armv84a = Aarch64Architecture.ARMV8_4_A;
         assertTrue(armv84a.has(Aarch64Feature.FLAG_MANIPULATION));

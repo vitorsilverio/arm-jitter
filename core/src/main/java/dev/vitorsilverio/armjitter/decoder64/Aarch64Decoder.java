@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
@@ -851,6 +852,27 @@ public final class Aarch64Decoder {
     private static final int OPTION_SXTX = 0b111;
     private static final int SINGLE_SHIFT_FLAG_SHIFT = 12;
 
+    // ── Atomic memory operations (ARM DDI 0487 C3.2.5, B19.1): sub-espaço de `decodeLoadStoreSingle`
+    // ── em `idx`(bits[11:10])==00 & bit21==1 & bit24==0. `size`/`Rs`/`Rn`/`Rt` reaproveitam os
+    // ── shifts genéricos (SINGLE_SIZE_SHIFT / SINGLE_RM_SHIFT / RN_SHIFT / REGISTER_FIELD_MASK).
+    private static final int ATOMIC_ACQUIRE_SHIFT = 23; // `A`
+    private static final int ATOMIC_RELEASE_SHIFT = 22; // `R`
+    private static final int ATOMIC_O3_SHIFT = 15;
+    private static final int ATOMIC_OPC_SHIFT = 12;
+    private static final int ATOMIC_OPC_MASK = 0b111;
+    private static final int ATOMIC_OPC_LDADD = 0b000;
+    private static final int ATOMIC_OPC_LDCLR = 0b001;
+    private static final int ATOMIC_OPC_LDEOR = 0b010;
+    private static final int ATOMIC_OPC_LDSET = 0b011;
+    private static final int ATOMIC_OPC_LDSMAX = 0b100;
+    private static final int ATOMIC_OPC_LDSMIN = 0b101;
+    private static final int ATOMIC_OPC_LDUMAX = 0b110;
+    private static final int ATOMIC_OPC_LDUMIN = 0b111;
+    private static final int ATOMIC_O3_OPC_SWP = 0b000;
+    private static final int ATOMIC_O3_OPC_LDAPR = 0b100;
+    /// `LDAPR` (forma registrador) exige `Rs`=`11111` (`XZR`), `A`=1, `R`=0 fixos no encoding.
+    private static final int ATOMIC_LDAPR_RS_FIXED = 0b1_1111;
+
     // ── Data Processing — Register (ARM DDI 0487 C4.1, B6.3.1): bit27 fixo=1, bit25 fixo=1 ────
     // ── (mesma ambiguidade dos bits[28:26] que Loads-and-Stores já resolveu com bit25 fora do ──
     // ── switch de 3 bits — Fatos de referência #1 da task; distingue de Loads-and-Stores só ───
@@ -1610,6 +1632,69 @@ public final class Aarch64Decoder {
         return new Ir64Op.CompareAndSwap(rs, rt, rn, size);
     }
 
+    /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`FEAT_LSE`,
+    /// ARMv8.1-A) + `LDAPR`/`LDAPRB`/`LDAPRH` forma registrador (`FEAT_LRCPC`, ARMv8.3-A) — B19.1,
+    /// sub-espaço "Atomic memory operations" de {@link #decodeLoadStoreSingle} (`ARM DDI 0487
+    /// C3.2.5`, `target/isa-decode/a64.decode` linhas 548-561). Layout: `size`(bits[31:30]),
+    /// `A`(bit23), `R`(bit22), `bit21`=1, `Rs`(bits[20:16]), `o3`(bit15), `opc`(bits[14:12]),
+    /// bits[11:10]=00, `Rn`(bits[9:5]), `Rt`(bits[4:0]). As 9 operações LSE gateadas por
+    /// {@link Aarch64Feature#LSE}; `LDAPR` (`o3`=1, `opc`=100, `Rs`=`XZR`, `A`=1, `R`=0) por
+    /// {@link Aarch64Feature#LRCPC} e reaproveita {@link Ir64Op.Load64} (endereçamento
+    /// {@code OFFSET}, imediato `0`), como `LDAR` em {@link #decodeOrderedSingle}. Todo o resto do
+    /// espaço `o3`:`opc` (`LD64B`/`ST64B` de `FEAT_LS64`, reservados, `LDAPR` malformado) →
+    /// {@code UNSUPPORTED} explícito (G8).
+    private Ir64Op decodeAtomicMemoryOp(int word, long address) {
+        Ir64MemSize size = decodeExclusiveSize(word); // bits[31:30], as 4 larguras B/H/W/X
+        boolean acquire = ((word >>> ATOMIC_ACQUIRE_SHIFT) & 1) != 0;
+        boolean release = ((word >>> ATOMIC_RELEASE_SHIFT) & 1) != 0;
+        boolean o3 = ((word >>> ATOMIC_O3_SHIFT) & 1) != 0;
+        int opc = (word >>> ATOMIC_OPC_SHIFT) & ATOMIC_OPC_MASK;
+        int rs = (word >>> SINGLE_RM_SHIFT) & REGISTER_FIELD_MASK; // bits[20:16], 31 => XZR
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;        // bits[9:5],  31 => SP
+        int rt = word & REGISTER_FIELD_MASK;                       // bits[4:0],  31 => XZR
+
+        if (!o3) {
+            Ir64AtomicOp operation = switch (opc) {
+                case ATOMIC_OPC_LDADD -> Ir64AtomicOp.ADD;
+                case ATOMIC_OPC_LDCLR -> Ir64AtomicOp.CLR;
+                case ATOMIC_OPC_LDEOR -> Ir64AtomicOp.EOR;
+                case ATOMIC_OPC_LDSET -> Ir64AtomicOp.SET;
+                case ATOMIC_OPC_LDSMAX -> Ir64AtomicOp.SMAX;
+                case ATOMIC_OPC_LDSMIN -> Ir64AtomicOp.SMIN;
+                case ATOMIC_OPC_LDUMAX -> Ir64AtomicOp.UMAX;
+                case ATOMIC_OPC_LDUMIN -> Ir64AtomicOp.UMIN;
+                default -> throw new IllegalStateException("unreachable"); // opc é 3 bits, 8 casos
+            };
+            if (!architecture.has(Aarch64Feature.LSE)) {
+                throw unsupported(word, address);
+            }
+            return new Ir64Op.AtomicMemoryOp(rs, rt, rn, size, operation, acquire, release);
+        }
+        // o3 == 1
+        if (opc == ATOMIC_O3_OPC_SWP) {
+            if (!architecture.has(Aarch64Feature.LSE)) {
+                throw unsupported(word, address);
+            }
+            return new Ir64Op.AtomicMemoryOp(rs, rt, rn, size, Ir64AtomicOp.SWP, acquire, release);
+        }
+        if (opc == ATOMIC_O3_OPC_LDAPR) {
+            // `LDAPR` exige `Rs`=`XZR`, `A`=1, `R`=0 fixos — qualquer outra combinação neste
+            // slot não é `LDAPR` nem nada (G8, não confundir com `LDUR`/`STUR`).
+            if (rs != ATOMIC_LDAPR_RS_FIXED || !acquire || release) {
+                throw unsupported(word, address);
+            }
+            if (!architecture.has(Aarch64Feature.LRCPC)) {
+                throw unsupported(word, address);
+            }
+            boolean wide = size == Ir64MemSize.DOUBLEWORD;
+            return new Ir64Op.Load64(rt, rn, size, false, wide,
+                    Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+        }
+        // `o3`=1 com `opc` em {001,010,011} = `LD64B`/`ST64B`/`LD64BV`/`ST64BV0` (`FEAT_LS64`,
+        // fora do escopo de B19.1); {101,110,111} = reservado. G8: recusar.
+        throw unsupported(word, address);
+    }
+
     private static Ir64MemSize decodeExclusiveSize(int word) {
         return switch ((word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK) {
             case SIZE_BYTE -> Ir64MemSize.BYTE;
@@ -1781,6 +1866,16 @@ public final class Aarch64Decoder {
     private Ir64Op decodeLoadStoreSingle(int word, long address) {
         int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
         int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        // Atomic memory operations (LSE `LDADD`/.../`SWP` + `LDAPR`, B19.1): `idx`==UNSCALED &
+        // bit21==1, fora da forma "unsigned offset" (bit24==0). Interceptado ANTES do caso PRFM
+        // abaixo — senão `LDADDA`/`SWPA`/... de largura `X` (`size`=11, `A`=1, `R`=0) casariam
+        // `sizeField==DOUBLEWORD && opcField==OPC_LOAD_SIGN_EXTEND_TO_X` e virariam PRFM (G8).
+        boolean unsignedOffset = ((word >>> SINGLE_SCALED_OFFSET_BIT_SHIFT) & 1) != 0;
+        if (!unsignedOffset
+                && ((word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK) == IDX_UNSCALED
+                && ((word >>> SINGLE_BIT21_SHIFT) & 1) != 0) {
+            return decodeAtomicMemoryOp(word, address);
+        }
         if (sizeField == SIZE_DOUBLEWORD && opcField == OPC_LOAD_SIGN_EXTEND_TO_X) {
             // PRFM (B8.1, as 3 formas de endereçamento): hint puro, `Rt` codifica um `prfop` em
             // vez de um registrador real — NOP observável, este emulador não modela cache. Tinha
@@ -1816,12 +1911,9 @@ public final class Aarch64Decoder {
             return buildSingle(form, rt, rn, Ir64AddressingMode.REGISTER_OFFSET, 0, rm, extendType, shiftAmount);
         }
         if (idx == IDX_UNSCALED && bit21) {
-            // Atomic memory operations (LDADD/LDCLR/LDEOR/LDSET/LDSMAX/LDSMIN/LDUMAX/LDUMIN/SWP,
-            // extensão LSE ARMv8.1): fora do escopo da B8.1 (mesma decisão de decodeExclusive
-            // para CAS/CASP) — G8: recusar explicitamente em vez de cair no ramo LDUR/STUR
-            // abaixo, que ATÉ esta task ignorava bit21 (bug real: qualquer atomic memory op era
-            // silenciosamente decodificada como LDUR/STUR de um `Rs` que na verdade é o opcode
-            // atômico).
+            // Atomic memory operations (LDADD/.../SWP + LDAPR): já interceptadas no topo deste
+            // método (B19.1), antes do caso PRFM. Este ramo fica como defesa (G8) caso a ordem
+            // dos checks acima mude — nunca deve ser alcançado hoje.
             throw unsupported(word, address);
         }
         if (bit21) {

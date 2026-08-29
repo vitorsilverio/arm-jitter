@@ -297,6 +297,8 @@ public final class Ir64BlockExecutor {
                     executeCompareAndSwap(core, (Ir64Op.CompareAndSwap) op);
             case Ir64Op.Kind.COMPARE_AND_SWAP_PAIR ->
                     executeCompareAndSwapPair(core, (Ir64Op.CompareAndSwapPair) op);
+            case Ir64Op.Kind.ATOMIC_MEMORY_OP ->
+                    executeAtomicMemoryOp(core, (Ir64Op.AtomicMemoryOp) op);
             case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
                     executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
@@ -1117,6 +1119,39 @@ public final class Ir64BlockExecutor {
         }
         core.setXForWidth(op.rs(), currentLow, op.wide());
         core.setXForWidth(rs2, currentHigh, op.wide());
+        return false;
+    }
+
+    /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`FEAT_LSE`,
+    /// B19.1) — RMW atômico do ponto de vista do guest (interpretador single-thread, não precisa
+    /// de RMW real de host, ver javadoc de {@link Ir64Op.AtomicMemoryOp}): lê `[Rn]`, calcula
+    /// `<operation>(old, Rs)`, escreve de volta e grava `old` (zero-estendido) em `Rt`. Ao
+    /// contrário de `CAS` (store condicional), o store aqui é INCONDICIONAL — por isso o
+    /// {@link Aarch64Core#notifyOrdinaryWrite} SEMPRE dispara (derruba reserva `LDXR`/`LDAXR`
+    /// pendente e invalida bloco de JIT em código automodificável). O monitor de exclusividade
+    /// não é setado nem checado (LSE atômico não é exclusivo). `Rt==31` (`XZR`) é o alias
+    /// `ST<op>`: RMW acontece, só a escrita em `X[31]` vira no-op. `acquire`/`release` NOP.
+    private boolean executeAtomicMemoryOp(Aarch64Core core, Ir64Op.AtomicMemoryOp op) {
+        long address = readBaseRegister(core, op.rn());
+        boolean wide = op.size() == Ir64MemSize.DOUBLEWORD;
+        long old = readMemory(core, address, op.size()); // já zero-truncado a size
+        long rsValue = zeroTruncateToSize(core.xForWidth(op.rs(), wide), op.size()); // 31 => XZR => 0
+        long newValue = switch (op.operation()) {
+            case ADD -> old + rsValue;
+            case CLR -> old & ~rsValue;
+            case EOR -> old ^ rsValue;
+            case SET -> old | rsValue;
+            // SMAX/SMIN: comparar COM sinal a partir de `size` bits; o valor cru é regravado —
+            // `writeMemory(size)` re-mascara (não pré-mascarar, perderia o sinal na comparação).
+            case SMAX -> Math.max(signExtendFromSize(old, op.size()), signExtendFromSize(rsValue, op.size()));
+            case SMIN -> Math.min(signExtendFromSize(old, op.size()), signExtendFromSize(rsValue, op.size()));
+            case UMAX -> Long.compareUnsigned(old, rsValue) >= 0 ? old : rsValue;
+            case UMIN -> Long.compareUnsigned(old, rsValue) <= 0 ? old : rsValue;
+            case SWP -> rsValue;
+        };
+        writeMemory(core, address, op.size(), newValue);
+        core.notifyOrdinaryWrite(address, op.size().bytes());
+        core.setXForWidth(op.rt(), old, wide); // 31 => XZR, descarta (alias ST<op>)
         return false;
     }
 

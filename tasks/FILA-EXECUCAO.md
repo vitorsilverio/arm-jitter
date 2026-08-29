@@ -95,11 +95,25 @@ EXTRAÇÃO de um núcleo vetorial compartilhado, no nível da palavra de 64 bits
 muda como cada família é implementada: migrar a operação para `advsimd/AdvSimdLanes` em vez de
 reescrever a semântica, e decodificar entregando o `IrOp` pronto via `DecodedInstruction#liftedOp`).
 
-**Próxima task executável: [B13.3](trilha-b-arquiteturas/b13.3-neon-load-store.md)** (⬜, spec
-completa escrita em 2026-08-29) — NEON load/store A32, as 5 linhas de `neon-ls.decode`. Achado aberto da RFC que vale como task própria a
-qualquer momento: o backend **Truffle quebra com QUALQUER op de VFP** (`IrOpNodeFactory` não tem
-casos VFP e `TruffleCodeEmitter#supports` devolve `true` sempre) — pré-existente, verificado, e
-bloqueia NEON no Truffle assim que algum preset declarar `ADVANCED_SIMD`.
+**B13.3 ✅ (2026-08-29)** — NEON load/store A32 fechada (`NeonLoadStoreDecoder` + `IrNeonExecutor`,
+as 5 linhas de `neon-ls.decode`). **B22.5 ✅ (2026-08-29)** — `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`
+(as 29 células que estavam `❌` "por decisão do usuário" foram implementadas). Com isso a escada B13
+fica sem próximo degrau com spec pronta (B13.4 precisa de rodada de spec própria).
+
+**B19.1 ✅ (2026-08-29)** — A64 atômicos `FEAT_LSE` (`LDADD`…`SWP`) + `LDAPR` (`FEAT_LRCPC`, feature
+nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, `decodeAtomicMemoryOp`,
+`executeAtomicMemoryOp` interpretado; `LDAPR` reaproveita `Load64`). Global 83%→84%, A64
+`ARMv8.1-A` 82%→83%. Zero-diff nos 5 consumidores.
+
+**Próxima task executável do épico B19: [B19.2](trilha-b-arquiteturas/b19-plano-a64-gap-remanescente.md)**
+(AdvSIMD FP escalar "three same" + pairwise escalar, 28 linhas) — **precisa de rodada de spec própria**
+antes de ser pega (só o épico B19 está escrito; B19.2-B19.9 ainda não têm spec detalhada). B19 e B22
+seguem pegáveis em paralelo a qualquer momento.
+
+Achado aberto da RFC B13.2 que vale como task própria a qualquer momento: o backend **Truffle quebra
+com QUALQUER op de VFP** (`IrOpNodeFactory` não tem casos VFP e `TruffleCodeEmitter#supports` devolve
+`true` sempre) — pré-existente, verificado, e bloqueia NEON no Truffle assim que algum preset
+declarar `ADVANCED_SIMD`.
 
 
 
