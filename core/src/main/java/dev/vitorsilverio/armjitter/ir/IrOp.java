@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
-        IrOp.NeonLoadAllLanes {
+        IrOp.NeonLoadAllLanes, IrOp.NeonPairwise {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -96,6 +96,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_LOAD_STORE_MULTIPLE = 67;
         public static final int NEON_LOAD_STORE_SINGLE = 68;
         public static final int NEON_LOAD_ALL_LANES = 69;
+        public static final int NEON_PAIRWISE = 70;
     }
 
     /// Operacao ALU generica.
@@ -1493,5 +1494,31 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// (`bit t` do encoding, arranjo de 128 bits nomeado por DOIS `D`).
             boolean quad) implements IrOp {
         @Override public int kind() { return Kind.NEON_LOAD_ALL_LANES; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, forma "pairwise" (B13.4): `VPADD`/`VPMAX`/`VPMIN`. Concatena
+    /// `Vn:Vm` (`Vn` primeiro), combina pares de elementos ADJACENTES nessa sequência de
+    /// `2 * (8 >> esz)` elementos e grava `8 >> esz` resultados em `Vd` (metade baixa vinda de
+    /// `Vn`, metade alta de `Vm`). Só forma `D` no encoding A32 (`@3same_q0`), por isso não há
+    /// campo `quad`.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticPairwise} no
+    /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#pairwise}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonPairwise(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp op,
+            /// `log2` do tamanho do elemento em bytes: `0`=byte, `1`=halfword, `2`=word.
+            int esz,
+            /// Registrador de destino, índice de `D` (`0`-`31`).
+            int vd,
+            /// Registrador fonte 1 (metade baixa do resultado), índice de `D`.
+            int vn,
+            /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_PAIRWISE; }
     }
 }

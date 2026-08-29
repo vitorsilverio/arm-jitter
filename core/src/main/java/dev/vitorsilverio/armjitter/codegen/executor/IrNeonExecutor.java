@@ -39,6 +39,17 @@ public final class IrNeonExecutor {
         AdvSimdLanes.threeSame(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
     }
 
+    /// NEON "pairwise" (`VPADD`/`VPMAX`/`VPMIN`, B13.4): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#pairwise}) — a MESMA função que o executor A64 chama para
+    /// `ADDP_v`/`SMAXP_v`/... Só forma `D` (8 bytes); nenhuma escrita destrutiva depois (VFP32
+    /// nunca zera bits fora do registrador escrito).
+    public void executeNeonPairwise(ArmCore core, IrOp.NeonPairwise op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int lanes = DOUBLEWORD_BYTES >> esz;
+        AdvSimdLanes.pairwise(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

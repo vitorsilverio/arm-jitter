@@ -117,6 +117,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_LOAD_STORE_MULTIPLE -> neon.executeNeonLoadStoreMultiple(core, (IrOp.NeonLoadStoreMultiple) op);
                 case IrOp.Kind.NEON_LOAD_STORE_SINGLE -> neon.executeNeonLoadStoreSingle(core, (IrOp.NeonLoadStoreSingle) op);
                 case IrOp.Kind.NEON_LOAD_ALL_LANES -> neon.executeNeonLoadAllLanes(core, (IrOp.NeonLoadAllLanes) op);
+                case IrOp.Kind.NEON_PAIRWISE -> neon.executeNeonPairwise(core, (IrOp.NeonPairwise) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -254,6 +255,7 @@ public final class IrBlockExecutor {
             case IrOp.NeonLoadStoreMultiple lsm -> { neon.executeNeonLoadStoreMultiple(core, lsm); yield false; }
             case IrOp.NeonLoadStoreSingle lss -> { neon.executeNeonLoadStoreSingle(core, lss); yield false; }
             case IrOp.NeonLoadAllLanes lal -> { neon.executeNeonLoadAllLanes(core, lal); yield false; }
+            case IrOp.NeonPairwise pw -> { neon.executeNeonPairwise(core, pw); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

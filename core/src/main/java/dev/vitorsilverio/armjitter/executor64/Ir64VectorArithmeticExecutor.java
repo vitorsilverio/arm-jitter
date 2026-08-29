@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
@@ -274,14 +275,48 @@ final class Ir64VectorArithmeticExecutor {
         }
     }
 
-    /// RFC B13.2 (D1, reuso do núcleo vetorial): operações cuja semântica de lane já mora no
-    /// núcleo COMPARTILHADO {@link AdvSimdLanes} — `null` para as que ainda vivem só no `switch`
-    /// abaixo. Cada operação existe em exatamente UM dos dois lugares; a migração das restantes é
-    /// o primeiro passo de B13.4.
+    /// RFC B13.2 (D1, reuso do núcleo vetorial): mapeia a operação inteira "three same" para o
+    /// núcleo COMPARTILHADO {@link AdvSimdLanes} — `null` SÓ para as 16 saturantes/de deslocamento
+    /// por registrador, que continuam no `switch` local de {@link #executeThreeSame} até B13.5
+    /// migrá-las. Todo valor que devolve `null` aqui TEM que ter um `case` explícito lá; todo o
+    /// resto é resolvido por este mapa (o `default -> throw` do `switch` documenta esse contrato).
+    /// Cada operação existe em exatamente UM dos dois lugares.
     private static AdvSimdThreeSameOp sharedThreeSameOp(Ir64VectorThreeSameOp op) {
         return switch (op) {
             case ADD -> AdvSimdThreeSameOp.ADD;
             case SUB -> AdvSimdThreeSameOp.SUB;
+            case CMGT -> AdvSimdThreeSameOp.CMGT;
+            case CMHI -> AdvSimdThreeSameOp.CMHI;
+            case CMGE -> AdvSimdThreeSameOp.CMGE;
+            case CMHS -> AdvSimdThreeSameOp.CMHS;
+            case CMTST -> AdvSimdThreeSameOp.CMTST;
+            case CMEQ -> AdvSimdThreeSameOp.CMEQ;
+            case SHADD -> AdvSimdThreeSameOp.SHADD;
+            case UHADD -> AdvSimdThreeSameOp.UHADD;
+            case SHSUB -> AdvSimdThreeSameOp.SHSUB;
+            case UHSUB -> AdvSimdThreeSameOp.UHSUB;
+            case SRHADD -> AdvSimdThreeSameOp.SRHADD;
+            case URHADD -> AdvSimdThreeSameOp.URHADD;
+            case SMAX -> AdvSimdThreeSameOp.SMAX;
+            case UMAX -> AdvSimdThreeSameOp.UMAX;
+            case SMIN -> AdvSimdThreeSameOp.SMIN;
+            case UMIN -> AdvSimdThreeSameOp.UMIN;
+            case SABD -> AdvSimdThreeSameOp.SABD;
+            case UABD -> AdvSimdThreeSameOp.UABD;
+            case SABA -> AdvSimdThreeSameOp.SABA;
+            case UABA -> AdvSimdThreeSameOp.UABA;
+            case MUL -> AdvSimdThreeSameOp.MUL;
+            case PMUL -> AdvSimdThreeSameOp.PMUL;
+            case MLA -> AdvSimdThreeSameOp.MLA;
+            case MLS -> AdvSimdThreeSameOp.MLS;
+            case AND -> AdvSimdThreeSameOp.AND;
+            case BIC -> AdvSimdThreeSameOp.BIC;
+            case ORR -> AdvSimdThreeSameOp.ORR;
+            case ORN -> AdvSimdThreeSameOp.ORN;
+            case EOR -> AdvSimdThreeSameOp.EOR;
+            case BSL -> AdvSimdThreeSameOp.BSL;
+            case BIT -> AdvSimdThreeSameOp.BIT;
+            case BIF -> AdvSimdThreeSameOp.BIF;
             default -> null;
         };
     }
@@ -305,33 +340,6 @@ final class Ir64VectorArithmeticExecutor {
             long sa = signExtend(a, esz);
             long sb = signExtend(b, esz);
             long result = switch (op.op()) {
-                case ADD -> a + b;
-                case SUB -> a - b;
-                case CMGT -> boolMask(sa > sb, esz);
-                case CMHI -> boolMask(Long.compareUnsigned(a, b) > 0, esz);
-                case CMGE -> boolMask(sa >= sb, esz);
-                case CMHS -> boolMask(Long.compareUnsigned(a, b) >= 0, esz);
-                case CMTST -> boolMask((a & b) != 0, esz);
-                case CMEQ -> boolMask(a == b, esz);
-                case SHADD -> (sa + sb) >> 1;
-                case UHADD -> (a + b) >>> 1;
-                case SHSUB -> (sa - sb) >> 1;
-                case UHSUB -> (a - b) >>> 1;
-                case SRHADD -> (sa + sb + 1) >> 1;
-                case URHADD -> (a + b + 1) >>> 1;
-                case SMAX -> Math.max(sa, sb);
-                case UMAX -> Long.compareUnsigned(a, b) >= 0 ? a : b;
-                case SMIN -> Math.min(sa, sb);
-                case UMIN -> Long.compareUnsigned(a, b) <= 0 ? a : b;
-                case SABD -> Math.abs(sa - sb);
-                case UABD -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
-                case SABA -> signExtend(fp.element(op.rd(), i, esz), esz) + Math.abs(sa - sb);
-                case UABA -> fp.element(op.rd(), i, esz)
-                        + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
-                case MUL -> a * b;
-                case PMUL -> polynomialMultiply8(a, b);
-                case MLA -> fp.element(op.rd(), i, esz) + a * b;
-                case MLS -> fp.element(op.rd(), i, esz) - a * b;
                 case SQADD -> signedSaturatingAdd(sa, sb, esz);
                 case UQADD -> unsignedSaturatingAdd(a, b, esz);
                 case SQSUB -> signedSaturatingSub(sa, sb, esz);
@@ -354,17 +362,11 @@ final class Ir64VectorArithmeticExecutor {
                         doublingMultiplyHigh(sa, sb, esz, true), esz);
                 case SQRDMLSH -> signedSaturatingSub(signExtend(fp.element(op.rd(), i, esz), esz),
                         doublingMultiplyHigh(sa, sb, esz, true), esz);
-                // B8.18: lógico — sempre `esz=0` (ver {@link Ir64Op.VectorArithmeticThreeSame}),
-                // `BSL`/`BIT`/`BIF` leem o `Rd` ATUAL como máscara de controle (RMW, mesmo padrão
-                // de {@link Ir64VectorThreeSameOp#SABA}/{@link Ir64VectorThreeSameOp#MLA} acima).
-                case AND -> a & b;
-                case BIC -> a & ~b;
-                case ORR -> a | b;
-                case ORN -> a | ~b;
-                case EOR -> a ^ b;
-                case BSL -> (fp.element(op.rd(), i, esz) & a) | (~fp.element(op.rd(), i, esz) & b);
-                case BIT -> (a & b) | (fp.element(op.rd(), i, esz) & ~b);
-                case BIF -> (a & ~b) | (fp.element(op.rd(), i, esz) & b);
+                // Todas as demais (`ADD`/`SUB`/`CM**`/`AND`/`BSL`/`MUL`/`SABA`/... — inteiro não
+                // saturante e lógico) migraram para o núcleo COMPARTILHADO em B13.4 e são
+                // resolvidas pelo early return via `sharedThreeSameOp` acima.
+                default -> throw new IllegalStateException(
+                        "Ir64VectorThreeSameOp não saturante deve ser resolvida por sharedThreeSameOp: " + op.op());
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
@@ -372,44 +374,29 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    /// Multiplicação polinomial (`GF(2)`, `PMUL_v`, sempre `byte`): XOR de `a<<i` para cada bit `i`
-    /// setado de `b`, sem carry — conferido contra a definição real de `PolynomialMult` do manual.
-    private static long polynomialMultiply8(long a, long b) {
-        long result = 0;
-        for (int i = 0; i < 8; i++) {
-            if (((b >>> i) & 1) != 0) {
-                result ^= a << i;
-            }
-        }
-        return result;
-    }
-
     static boolean executePairwise(Aarch64Core core, Ir64Op.VectorArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
-        int half = elements / 2;
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            int register = i < half ? op.rn() : op.rm();
-            int pairBase = (i < half ? i : i - half) * 2;
-            long a = fp.element(register, pairBase, esz);
-            long b = fp.element(register, pairBase + 1, esz);
-            long sa = signExtend(a, esz);
-            long sb = signExtend(b, esz);
-            results[i] = switch (op.op()) {
-                case ADD -> a + b;
-                case SMAX -> Math.max(sa, sb);
-                case UMAX -> Long.compareUnsigned(a, b) >= 0 ? a : b;
-                case SMIN -> Math.min(sa, sb);
-                case UMIN -> Long.compareUnsigned(a, b) <= 0 ? a : b;
-            };
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), i, esz, truncate(results[i], esz));
-        }
+        // RFC B13.2 (D1): a redução pairwise vive no núcleo COMPARTILHADO — a MESMA função que o
+        // NEON de 32 bits chama para `VPADD`/`VPMAX`/`VPMIN` (B13.4). A escrita destrutiva de
+        // `[127:64]` continua sendo do lado A64.
+        AdvSimdLanes.pairwise(fp, sharedPairwiseOp(op.op()), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishDestructiveWrite(fp, op.rd(), op.q());
         return false;
+    }
+
+    private static AdvSimdPairwiseOp sharedPairwiseOp(Ir64VectorPairwiseOp op) {
+        return switch (op) {
+            case ADD -> AdvSimdPairwiseOp.ADD;
+            case SMAX -> AdvSimdPairwiseOp.SMAX;
+            case UMAX -> AdvSimdPairwiseOp.UMAX;
+            case SMIN -> AdvSimdPairwiseOp.SMIN;
+            case UMIN -> AdvSimdPairwiseOp.UMIN;
+        };
     }
 
     static boolean executeWidening(Aarch64Core core, Ir64Op.VectorArithmeticWidening op) {
@@ -1015,9 +1002,10 @@ final class Ir64VectorArithmeticExecutor {
     }
 
     /// `PMULL`/`PMULL2` (`p8`/`p64`, B8.11) — multiplicação polinomial `GF(2)` alargando, SEM
-    /// redução (diferente de `PMUL`, que trunca — {@link #polynomialMultiply8}). `p8`: 8 lanes de
-    /// byte→halfword, reaproveita {@link #polynomialMultiply8} sem truncar o resultado de 15 bits.
-    /// `p64`: um único elemento de 64 bits→128 bits, {@link #polynomialMultiply64}.
+    /// redução (diferente de `PMUL`, que trunca — {@link AdvSimdLanes#polynomialMultiply8}). `p8`:
+    /// 8 lanes de byte→halfword, reaproveita {@link AdvSimdLanes#polynomialMultiply8} sem truncar o
+    /// resultado de 15 bits. `p64`: um único elemento de 64 bits→128 bits,
+    /// {@link #polynomialMultiply64}.
     static boolean executePolynomialMultiplyLong(Aarch64Core core, Ir64Op.VectorPolynomialMultiplyLong op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.p64()) {
@@ -1034,7 +1022,7 @@ final class Ir64VectorArithmeticExecutor {
             int lane = laneOffset + i;
             long a = fp.element(op.rn(), lane, 0);
             long b = fp.element(op.rm(), lane, 0);
-            fp.setElement(op.rd(), i, 1, polynomialMultiply8(a, b));
+            fp.setElement(op.rd(), i, 1, AdvSimdLanes.polynomialMultiply8(a, b));
         }
         return false;
     }

@@ -133,6 +133,7 @@ public final class AsmNativePolicy {
             case IrOp.NeonLoadStoreMultiple ignored -> false;
             case IrOp.NeonLoadStoreSingle ignored -> false;
             case IrOp.NeonLoadAllLanes ignored -> false;
+            case IrOp.NeonPairwise ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

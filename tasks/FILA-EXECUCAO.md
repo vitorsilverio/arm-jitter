@@ -97,8 +97,18 @@ reescrever a semântica, e decodificar entregando o `IrOp` pronto via `DecodedIn
 
 **B13.3 ✅ (2026-08-29)** — NEON load/store A32 fechada (`NeonLoadStoreDecoder` + `IrNeonExecutor`,
 as 5 linhas de `neon-ls.decode`). **B22.5 ✅ (2026-08-29)** — `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`
-(as 29 células que estavam `❌` "por decisão do usuário" foram implementadas). Com isso a escada B13
-fica sem próximo degrau com spec pronta (B13.4 precisa de rodada de spec própria).
+(as 29 células que estavam `❌` "por decisão do usuário" foram implementadas).
+
+**B13.4 ✅ (2026-08-29)** — NEON 3-reg-same INTEIRO A32 (aritmética/comparação/lógica/pairwise, ~34
+ops + pairwise). `AdvSimdThreeSameOp` de 2→34; as 34 ops inteiras não saturantes MIGRARAM do
+`switch` do executor A64 para `AdvSimdLanes` (D1 da RFC — A64 ficou só com as 16 saturantes/shift +
+`default -> throw`); `AdvSimdPairwiseOp`/`IrOp.NeonPairwise` novos; `NeonDataProcessingDecoder`
+cresceu do protótipo B13.2 para o frame inteiro (`(raw & 0xFE80_0000) == 0xF200_0000`, G8 fecha o
+resto). Zero-diff: `COBERTURA-ISA.md` byte-idêntica (grupo segue `NOT_IN_ANY_PRESET` até B13.22),
+suíte A64 sem alteração, G5 verde. **Próximo degrau da escada B13: B13.5** (3-reg-same
+saturante/deslocamento — `VQADD`/`VSHL`/`VQDMULH`/`VQRDMLAH`/...) — **precisa de rodada de spec
+própria** (a RFC deixa em aberto como `FPSCR.QC` de saturação NEON chega ao núcleo; é a 1ª decisão
+de B13.5). Sem próximo degrau B13 com spec pronta.
 
 **B19.1 ✅ (2026-08-29)** — A64 atômicos `FEAT_LSE` (`LDADD`…`SWP`) + `LDAPR` (`FEAT_LRCPC`, feature
 nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, `decodeAtomicMemoryOp`,
