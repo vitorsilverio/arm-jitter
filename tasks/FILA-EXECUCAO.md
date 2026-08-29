@@ -47,20 +47,25 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.14)
+## Onde estamos (atualizado 2026-08-28, após B9.15)
 
-`B9.14` (`trilha-b-arquiteturas/b9.14-t16-hints-v6k-mpcore.md`) fechou o último achado colateral
-pendente da B9.12/B9.13: hints T16 (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`) sob `v6K`/`MPCore` eram gap
-REAL de gate (não curadoria) — `ThumbDecoder` exigia `ArmFeature.THUMB2` para a forma hint de 16
-bits, mas o QEMU real (`trans_YIELD`/`trans_SEV`/`trans_WFE`/`trans_WFI`) gateia só por
-`ARM_FEATURE_V6K`/`ARM_FEATURE_M` (já modelado como `ArmFeature.WAIT_HINTS`, presente em
-`ARMV6K`/`ARM11_MPCORE` mesmo sem Thumb-2). `IT`/`CBZ` (mesmo achado colateral, mask≠0000/encoding
-separado) foram CONFIRMADOS como curadoria de verdade (ARMv6T2+ genuínas, sem gate V6K no QEMU) —
-2 linhas novas em `isa-nao-aplicavel.tsv`. v6K 96%→98%, MPCore 95%→97%, global 82% (+10 células).
-G5 (gbaemu/ndsemu/armbox) verde. **A trilha B9 (triagem/curadoria de cobertura) não tem mais
-nenhum achado colateral pendente registrado** — próxima sessão de cobertura de ISA precisa achar
-novo candidato (ver `docs/COBERTURA-ISA.md` por células `❌` ainda abertas nas arquiteturas com
-maior gap).
+`B9.15` (`trilha-b-arquiteturas/b9.15-t32-v6m-curadoria-nome-por-grupo.md`) achou e resolveu a
+causa raiz de por que `T32 v6-M` ainda estava em 9% (8/82) mesmo depois da B9.10: não era falta de
+triagem, era uma LIMITAÇÃO DA FERRAMENTA — `isa-nao-aplicavel.tsv` casava exclusão só por nome do
+mnemônico, e ~48 nomes existem em `t16.decode` E `t32.decode` como encodings distintos (`REV`/
+`NOP`/`UDF`/`B_cond_thumb`/`ADD_rri`/...), então excluí-los apagaria cobertura real de 16 bits —
+a B9.10 tinha deixado esses de fora deliberadamente por esse motivo, documentado no próprio tsv.
+`IsaCoverageReport` ganhou uma coluna `grupo` opcional (4ª coluna TSV, retrocompatível) que escopa
+a exclusão a um `.decode` específico; as 48 linhas entraram escopadas a `t32.decode`. T32 v6-M
+9%→72% (só `ERET`/`MRS_bank`/`MSR_bank`, gaps reais não relacionados, continuam `❌`); T16 v6-M
+inalterado (zero colateral); v6-M global 47%→80%; global 82%→83%. Zero mudança em
+`core/src/main` (só ferramenta de teste + docs), G5 verde.
+
+**Próxima sessão de cobertura de ISA**: candidatos abertos e MEDIDOS nesta sessão (ver
+`docs/COBERTURA-ISA.md`) — `v7-M` T32 ainda em 52% (153/289, a maior lacuna absoluta de 32 bits
+hoje); VFP condicional em `MPCore`/`v7-A` (90%/92%); A64 com ~18% de gap achatado em todas as
+versões (796/970 em ARMv8.0-A) — nenhum desses foi triado ainda nesta rodada. `ERET`/`MRS_bank`/
+`MSR_bank` (T32, gaps reais, não curadoria) documentados como candidatos pequenos e independentes.
 
 `B9.13` (`trilha-b-arquiteturas/b9.13-mcr-mrc-armv4t.md`) fechou o achado colateral da B9.12: `MCR`/
 `MRC` sob `ARMV4T` era gap real (ARMv3+, não curadoria) — `CoprocessorDecoder` só estava anexado a

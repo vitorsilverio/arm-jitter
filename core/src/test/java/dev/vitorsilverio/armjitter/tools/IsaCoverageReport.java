@@ -271,8 +271,14 @@ public final class IsaCoverageReport {
     private static int totalSupported;
     private static int totalApplicable;
 
-    private record Exclusion(String pattern, List<String> architectures, String reason) {
-        boolean matches(String instruction, String column) {
+    /// `grupo` restringe a exclusão a um `Group#decodeFile()` específico (ex.: `t32.decode`) —
+    /// necessário porque um mnemônico pode existir em MAIS de um arquivo `.decode` com o MESMO
+    /// nome (ex.: `REV`/`NOP`/`B_cond_thumb` existem tanto em `t16.decode` quanto em `t32.decode`,
+    /// como formas de 16 e 32 bits distintas). Sem essa coluna, a exclusão casa por nome sozinho e
+    /// excluiria as duas formas juntas — ver B9.15. `null`/vazio = casa em QUALQUER grupo (formato
+    /// legado, 3 colunas, mantido para as ~640 linhas existentes).
+    private record Exclusion(String pattern, List<String> architectures, String reason, String grupo) {
+        boolean matches(String instruction, String column, String decodeFile) {
             boolean nameMatches = pattern.endsWith("*")
                     ? instruction.startsWith(pattern.substring(0, pattern.length() - 1))
                     : pattern.startsWith("*")
@@ -280,7 +286,8 @@ public final class IsaCoverageReport {
                         : instruction.equals(pattern);
             boolean columnMatches = architectures.contains("*") || architectures.contains(column)
                     || (architectures.contains("A64") && isAarch64VersionColumn(column));
-            return nameMatches && columnMatches;
+            boolean groupMatches = grupo.isEmpty() || grupo.equals(decodeFile);
+            return nameMatches && columnMatches && groupMatches;
         }
     }
 
@@ -297,12 +304,13 @@ public final class IsaCoverageReport {
                 continue;
             }
             EXCLUSIONS.add(new Exclusion(columns[0].trim(),
-                    List.of(columns[1].trim().split(",")), columns[2].trim()));
+                    List.of(columns[1].trim().split(",")), columns[2].trim(),
+                    columns.length > 3 ? columns[3].trim() : ""));
         }
     }
 
-    private static boolean isExcluded(String instruction, String column) {
-        return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column));
+    private static boolean isExcluded(String instruction, String column, String decodeFile) {
+        return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column, decodeFile));
     }
 
     public static void main(String[] args) throws IOException {
@@ -419,7 +427,7 @@ public final class IsaCoverageReport {
                                 ? isApplicableToAarch64Version(instruction.name(), aarch64Architecture)
                                 : group.applicability() != NOT_IN_ANY_PRESET)
                         : group.applicability().appliesTo(architecture);
-                if (!applicable || isExcluded(instruction.name(), column)) {
+                if (!applicable || isExcluded(instruction.name(), column, group.decodeFile())) {
                     rows.append(" · |");
                     continue;
                 }

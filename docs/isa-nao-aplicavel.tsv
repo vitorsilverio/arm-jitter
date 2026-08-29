@@ -5,10 +5,16 @@
 # ARM11 MPCore instruções que esse núcleo nunca teve, o denominador fica errado e a meta de
 # "tudo ✅" vira inalcançável por construção.
 #
-# Formato (separado por TAB):   instrução <TAB> arquiteturas <TAB> motivo
+# Formato (separado por TAB):   instrução <TAB> arquiteturas <TAB> motivo [<TAB> grupo]
 #   - `instrução`     é o mnemônico exatamente como no inventário; `*` no fim casa por prefixo.
 #   - `arquiteturas`  é `*` (todas) ou uma lista separada por vírgula (`MPCore,v6K`).
 #   - `motivo`        TEM que citar a versão de arquitetura que introduziu a instrução.
+#   - `grupo`         OPCIONAL (B9.15): restringe a exclusão a um único arquivo `.decode`
+#     (`t16.decode`, `t32.decode`, ...). Necessário quando o MESMO mnemônico existe em dois
+#     arquivos `.decode` diferentes como encodings distintos (ex.: `REV`/`NOP`/`B_cond_thumb` têm
+#     forma de 16 bits em `t16.decode` E forma de 32 bits em `t32.decode`) — sem a coluna, a
+#     exclusão casaria por nome só e apagaria a cobertura real da forma que NÃO é o alvo da
+#     exclusão. Ausente/vazio = casa em qualquer grupo (formato legado, retrocompatível).
 #
 # Esta lista é CURADA À MÃO e cresce por triagem: cada task de cobertura que encontrar uma
 # instrução fora da arquitetura-alvo acrescenta a linha com a justificativa. Só entram aqui casos
@@ -385,8 +391,10 @@ FCMLA_vi	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
 # definição, POSTERIOR/inaplicável a ARMv6-M — lista fechada, sem exceção. Nomes que também
 # aparecem no `t16.decode` (mesmo texto, encoding de 16 bits) foram DELIBERADAMENTE deixados de
 # fora desta lista (ex.: REV/REV16/REVSH/UDF/SUB_rri/B_cond_thumb/ADD_rri/...) — a exclusão do
-# medidor casa por NOME, não por tabela/arquivo de origem, e excluir esses nomes aqui apagaria a
-# cobertura real de suas formas de 16 bits (✅ genuínos).
+# medidor casava por NOME, não por tabela/arquivo de origem, e excluir esses nomes aqui apagaria a
+# cobertura real de suas formas de 16 bits (✅ genuínos). **Resolvido pela B9.15** (coluna `grupo`
+# nova, ver cabeçalho do arquivo): esses ~48 nomes agora entram no bloco abaixo, escopados a
+# `t32.decode`, sem tocar a cobertura de `t16.decode`.
 ADC_rri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 AND_rri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 ASRL_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
@@ -566,6 +574,62 @@ UXTAB16	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 
 UXTAH	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 VCTP	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
 WLS	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits
+
+# ── T32 (B9.15): completa a curadoria da B9.10 para os mnemônicos que também existem em
+# ── `t16.decode` — a B9.10 tinha deixado esses ~48 de fora deliberadamente (ver nota acima) para
+# ── não apagar a cobertura real da forma de 16 bits, já que a exclusão casava só por nome. A
+# ── coluna `grupo` nova (ver cabeçalho do arquivo) resolve isso: escopada a `t32.decode`, a
+# ── exclusão só atinge a forma de 32 bits, deixando `t16.decode` intocado. Mesma fonte da B9.10
+# ── (ARM DDI 0419C A3.3.1) — nenhuma instrução nova, só a lacuna que a limitação da ferramenta
+# ── tinha bloqueado.
+ADC_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+ADD_rri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+ADD_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+ADR	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+AND_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+B	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+BIC_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+B_cond_thumb	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+CMN_xrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+CMP_xri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+CMP_xrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+CPS	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+EOR_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+ESB	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRB_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRB_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRH_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRH_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRSB_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDRSH_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDR_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+LDR_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+MOV_rxi	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+MOV_rxri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+MOV_rxrr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+MUL	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+MVN_rxri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+NOP	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+ORR_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+REV	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+REV16	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+REVSH	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+RSB_rri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+SBC_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+SEV	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STRB_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STRB_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STRH_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STRH_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STR_ri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+STR_rr	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+SUB_rri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+SUB_rrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+TST_xrri	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+UDF	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+WFE	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+WFI	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
+YIELD	v6-M	ARMv6-M (ARM DDI 0419C A3.3.1): só BL/DMB/DSB/ISB/MRS/MSR são de 32 bits	t32.decode
 
 # ── B9.12 (2026-08-28): v4T/v5TE mostravam dezenas de células `❌` que na verdade são ARMv5T/
 # ── ARMv5TE/ARMv6/ARMv6K genuínos — todos POSTERIORES ao próprio ARMv4T (~1994/95)/ARMv5TE
