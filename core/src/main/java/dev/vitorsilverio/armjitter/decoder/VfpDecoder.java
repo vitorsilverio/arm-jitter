@@ -467,10 +467,16 @@ public final class VfpDecoder implements DecoderExtension {
     private static final int MAX_D16_REGISTER = 15;
 
     /// VFPv2/VFPv3-d16 só têm 16 registradores `D` (`D0`-`D15`) — um `D:Vd` combinado > 15 exige
-    /// VFPv3-D32 (fora do escopo do épico) e é UNDEFINED aqui, não um `D16`+ silencioso. Sempre
-    /// `true` para registradores `S` (32 deles, `0`-`31`, cabem inteiros nos 5 bits do campo).
-    private static boolean validDoubleRegister(int combined, boolean doublePrecision) {
-        return !doublePrecision || combined <= MAX_D16_REGISTER;
+    /// {@link ArmFeature#VFPV3_D32} (banco `D0`-`D31`, B13.1). Sem essa feature o encoding é
+    /// UNDEFINED aqui, não um `D16`+ silencioso (G8). Sempre `true` para registradores `S` (32
+    /// deles, `0`-`31`, cabem inteiros nos 5 bits do campo). Como nenhum preset declara
+    /// `VFPV3_D32` ainda (B13.1 é só a fundação), o comportamento observável é idêntico ao de
+    /// antes — o gate só fica no lugar certo para a escada NEON.
+    private boolean validDoubleRegister(int combined, boolean doublePrecision) {
+        if (!doublePrecision || combined <= MAX_D16_REGISTER) {
+            return true;
+        }
+        return architecture.has(ArmFeature.VFPV3_D32);
     }
 
     /// Combina o nibble de 4 bits (em `nibbleShift`) com o bit de extensão (em `extensionBit`) no

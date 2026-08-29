@@ -214,5 +214,26 @@ public enum ArmFeature {
     /// para este subgrupo antes desta task — G8, mesma categoria do achado principal da B9.10 para
     /// `B.W`/`TBB`/`TBH`). Não confundir com {@link #WAIT_HINTS}/{@link #MODE_CHANGE_INSTRUCTIONS}
     /// (essas continuam controlando as formas de 16 bits equivalentes, que v6-M TEM).
-    M_PROFILE_WIDE_MISC_CONTROL
+    M_PROFILE_WIDE_MISC_CONTROL,
+
+    // ---- Onda 6, B13.1 (fundação NEON / Advanced SIMD de 32 bits) ----
+    /// Banco `D` estendido para **32 registradores** (`D0`-`D31`) com vista `Q0`-`Q15` de 128
+    /// bits — VFPv3-D32. VFPv2 e VFPv3-D16 têm só 16 `D` (`D0`-`D15`); com esta feature ausente,
+    /// {@link dev.vitorsilverio.armjitter.decoder.VfpDecoder} recusa qualquer `D:Vd`/`D:Vn`/`D:Vm`
+    /// combinado acima de `15` (UNDEFINED, nunca um `D16`+ silencioso — G8). O armazenamento em
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters} já é sempre o banco completo (B13.1);
+    /// esta feature só governa a *disponibilidade* no decode. Extensão OPCIONAL do ARMv7-A —
+    /// implicada por {@link #ADVANCED_SIMD}. **Nenhum preset a declara ainda** (B13.1 é só a
+    /// fundação; o preset entra na B13.22).
+    VFPV3_D32,
+
+    /// **Advanced SIMD (NEON)** de 32 bits propriamente dita: registradores vetoriais `Q0`-`Q15`/
+    /// `D0`-`D31`, aritmética/permutação/carga-estruturada por lane (`neon-dp`/`neon-ls`/
+    /// `neon-shared` em `docs/COBERTURA-ISA.md`). Extensão **OPCIONAL** do ARMv7-A — **não existe**
+    /// em ARMv4T/ARMv5TE/ARMv6K/ARM11 MPCore (G2: o ARM11 MPCore do 3DS não tem NEON; se
+    /// `n3dsemu` começar a decodificar NEON, é bug). Implica {@link #VFPV3_D32} (NEON exige o
+    /// banco de 32 `D`). Nenhum encoding NEON decodifica ainda (B13.3+) e **nenhum preset a
+    /// declara** (B13.1 é só a fundação de estado; o grupo sai de `NOT_IN_ANY_PRESET` só na
+    /// B13.22).
+    ADVANCED_SIMD
 }

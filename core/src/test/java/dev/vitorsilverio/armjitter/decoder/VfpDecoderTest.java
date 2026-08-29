@@ -38,6 +38,15 @@ class VfpDecoderTest {
     private static final ArmArchitecture VFP_FUSED_TEST_ARCH = VFP_FUSED_TEST_FEATURES
             .withDecoderExtensions(List.of(new VfpDecoder(VFP_FUSED_TEST_FEATURES), new CoprocessorDecoder()));
 
+    /// B13.1: mesma base de {@link #VFP_TEST_ARCH}, mais {@link ArmFeature#VFPV3_D32} — só para
+    /// provar que o gate de `D16`-`D31` de {@link VfpDecoder#validDoubleRegister} ABRE com a
+    /// feature. Nenhum preset real a declara ainda; {@link #VFP_TEST_ARCH} (sem a feature) segue
+    /// recusando `D16`+, comportamento idêntico ao anterior à B13.1.
+    private static final ArmArchitecture VFP_D32_TEST_FEATURES =
+            ArmArchitecture.extending(VFP_TEST_FEATURES, "ARMv7-TestVfpD32", ArmFeature.VFPV3_D32);
+    private static final ArmArchitecture VFP_D32_TEST_ARCH = VFP_D32_TEST_FEATURES
+            .withDecoderExtensions(List.of(new VfpDecoder(VFP_D32_TEST_FEATURES), new CoprocessorDecoder()));
+
     private static List<DecoderExtension> thumb32ExtensionsWithVfpFirst() {
         List<DecoderExtension> extensions = new ArrayList<>();
         extensions.add(new Thumb2VfpDecoder(VFP_TEST_FEATURES));
@@ -291,6 +300,24 @@ class VfpDecoderTest {
     @Test
     void divWithBit6SetIsUndefined() {
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b100, true, false, 6, 0, 1)).kind());
+    }
+
+    // ── B13.1: gate de D16-D31 (VFPV3_D32) ──
+
+    @Test
+    void doublePrecisionRegisterAboveD15IsUndefinedWithoutVfpv3D32() {
+        // VADD.F64 D16, D0, D1 — sem a feature, comportamento idêntico ao anterior à B13.1.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(vfpAluWord(0b011, false, true, 16, 0, 1)).kind());
+    }
+
+    @Test
+    void doublePrecisionRegisterAboveD15DecodesWithVfpv3D32() {
+        TestAddressSpace memory = new TestAddressSpace(4);
+        memory.put32(0, vfpAluWord(0b011, false, true, 16, 0, 1));
+        DecodedInstruction decoded = new ArmDecoder(VFP_D32_TEST_ARCH).decode(memory, 0);
+        assertEquals(InstructionKind.VFP_ALU, decoded.kind());
+        IrOp op = liftSingleOp(decoded);
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, true, 16, 0, 1, Condition.AL), op);
     }
 
     // ── B9.6: VFMA/VFMS/VFNMA/VFNMS (fundidas, VFPv4) — mesmo espaço `op1` de VMLA/VDIV acima ──
