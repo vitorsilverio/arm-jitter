@@ -275,10 +275,17 @@ public final class IsaCoverageReport {
     /// necessário porque um mnemônico pode existir em MAIS de um arquivo `.decode` com o MESMO
     /// nome (ex.: `REV`/`NOP`/`B_cond_thumb` existem tanto em `t16.decode` quanto em `t32.decode`,
     /// como formas de 16 e 32 bits distintas). Sem essa coluna, a exclusão casa por nome sozinho e
-    /// excluiria as duas formas juntas — ver B9.15. `null`/vazio = casa em QUALQUER grupo (formato
-    /// legado, 3 colunas, mantido para as ~640 linhas existentes).
-    private record Exclusion(String pattern, List<String> architectures, String reason, String grupo) {
-        boolean matches(String instruction, String column, String decodeFile) {
+    /// excluiria as duas formas juntas — ver B9.15.
+    ///
+    /// `ocorrencia` restringe a exclusão a uma linha ESPECÍFICA entre várias com o MESMO nome no
+    /// MESMO arquivo (ex.: `VMOV_to_gp`/`VMOV_from_gp` em `vfp.decode` têm 3 linhas cada — byte/
+    /// halfword/word — todas com o mesmo mnemônico; `grupo` sozinho não distingue porque as 3 estão
+    /// no mesmo `.decode`, ver B9.17). Valor é a posição 1-based da linha entre as de mesmo nome+
+    /// arquivo, na ordem em que aparecem no `.decode`. `null`/vazio = casa em QUALQUER ocorrência
+    /// (formato legado, mantido para as linhas existentes que não precisam distinguir).
+    private record Exclusion(String pattern, List<String> architectures, String reason, String grupo,
+                              String ocorrencia) {
+        boolean matches(String instruction, String column, String decodeFile, int occurrence) {
             boolean nameMatches = pattern.endsWith("*")
                     ? instruction.startsWith(pattern.substring(0, pattern.length() - 1))
                     : pattern.startsWith("*")
@@ -287,7 +294,8 @@ public final class IsaCoverageReport {
             boolean columnMatches = architectures.contains("*") || architectures.contains(column)
                     || (architectures.contains("A64") && isAarch64VersionColumn(column));
             boolean groupMatches = grupo.isEmpty() || grupo.equals(decodeFile);
-            return nameMatches && columnMatches && groupMatches;
+            boolean occurrenceMatches = ocorrencia.isEmpty() || ocorrencia.equals(Integer.toString(occurrence));
+            return nameMatches && columnMatches && groupMatches && occurrenceMatches;
         }
     }
 
@@ -305,12 +313,13 @@ public final class IsaCoverageReport {
             }
             EXCLUSIONS.add(new Exclusion(columns[0].trim(),
                     List.of(columns[1].trim().split(",")), columns[2].trim(),
-                    columns.length > 3 ? columns[3].trim() : ""));
+                    columns.length > 3 ? columns[3].trim() : "",
+                    columns.length > 4 ? columns[4].trim() : ""));
         }
     }
 
-    private static boolean isExcluded(String instruction, String column, String decodeFile) {
-        return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column, decodeFile));
+    private static boolean isExcluded(String instruction, String column, String decodeFile, int occurrence) {
+        return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column, decodeFile, occurrence));
     }
 
     public static void main(String[] args) throws IOException {
@@ -417,7 +426,9 @@ public final class IsaCoverageReport {
         });
 
         StringBuilder rows = new StringBuilder();
+        Map<String, Integer> occurrenceCounts = new LinkedHashMap<>();
         for (DecodeTreeSpec.Instruction instruction : instructions) {
+            int occurrence = occurrenceCounts.merge(instruction.name(), 1, Integer::sum);
             rows.append("| `").append(instruction.name()).append("` |");
             for (String column : columns) {
                 ArmArchitecture architecture = aarch64 ? null : ARM_ARCHITECTURES.get(column);
@@ -427,7 +438,7 @@ public final class IsaCoverageReport {
                                 ? isApplicableToAarch64Version(instruction.name(), aarch64Architecture)
                                 : group.applicability() != NOT_IN_ANY_PRESET)
                         : group.applicability().appliesTo(architecture);
-                if (!applicable || isExcluded(instruction.name(), column, group.decodeFile())) {
+                if (!applicable || isExcluded(instruction.name(), column, group.decodeFile(), occurrence)) {
                     rows.append(" · |");
                     continue;
                 }

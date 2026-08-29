@@ -47,7 +47,19 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-08-28, após B9.16)
+## Onde estamos (atualizado 2026-08-28, após B9.17)
+
+`B9.17` (`trilha-b-arquiteturas/b9.17-vfp-scalar-mov-byte-halfword-ocorrencia.md`) fechou o
+candidato "VFP condicional em MPCore/v7-A" citado abaixo: as 4 células `❌` eram `VMOV_to_gp`/
+`VMOV_from_gp` byte/halfword — NEON de verdade (fora de escopo, decisão já tomada pela B9.5), mas
+a ferramenta não conseguia excluir só essas 2 das 3 linhas de cada mnemônico porque todas moram no
+MESMO arquivo `vfp.decode` (a coluna `grupo` da B9.15 só resolve duplicação ENTRE arquivos
+diferentes). `IsaCoverageReport` ganhou uma coluna `ocorrencia` opcional (5ª coluna TSV, requer
+`grupo`) que casa pela posição 1-based da linha entre as de mesmo nome+arquivo. VFP MPCore
+90%→98%, v7-A 92%→98% — a célula que sobra em cada coluna (`VMOV_half`, `⚠️`) é achado
+pré-existente não relacionado. Zero mudança em `core/src/main`, G5 verde.
+
+
 
 `B9.16` (`trilha-b-arquiteturas/b9.16-t32-v7m-dsp-gate.md`) fechou a maior lacuna absoluta de 32
 bits (T32 `v7-M`, era 52%): não era curadoria, era gate real — `ARMV7M_FEATURES` nunca ganhou os 8
@@ -58,10 +70,12 @@ bits (T32 `v7-M`, era 52%): não era curadoria, era gate real — `ARMV7M_FEATUR
 mnemônicos genuinamente N/A a M-profile. T32 v7-M 52%→94%, global 82%→83%. `ERET`/`HVC`/`SMC`/
 `MRS_bank`/`MSR_bank` continuam `❌` por decisão do usuário (mesmos 5 de sempre, não excluídos).
 
-**Próxima sessão de cobertura de ISA**: candidatos abertos que restam medidos — VFP condicional em
-`MPCore`/`v7-A` (90%/92%); A64 com ~18-19% de gap achatado em todas as versões (ARMv8.0-A 82%,
-796/970); v6-M T32 ainda em 72% (8/11, só `ERET`/`MRS_bank`/`MSR_bank`, mesmos 3 de sempre — não é
-mais candidato de verdade, só sobra a mesma pendência intencional). Nenhum desses foi triado ainda.
+**Próxima sessão de cobertura de ISA**: candidatos abertos que restam medidos — A64 com ~18-19% de
+gap achatado em todas as versões (ARMv8.0-A 82%, 796/970); v6-M T32 ainda em 72% (8/11, só
+`ERET`/`MRS_bank`/`MSR_bank`, mesmos 3 de sempre — não é mais candidato de verdade, só sobra a
+mesma pendência intencional); VFP condicional em `MPCore`/`v7-A` também não é mais candidato — só
+sobra `VMOV_half` (`⚠️`, achado pré-existente não relacionado, ver B9.17). Nenhum dos restantes
+foi triado ainda.
 
 `B9.15` (`trilha-b-arquiteturas/b9.15-t32-v6m-curadoria-nome-por-grupo.md`) achou e resolveu a
 causa raiz de por que `T32 v6-M` ainda estava em 9% (8/82) mesmo depois da B9.10: não era falta de

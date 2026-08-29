@@ -30,7 +30,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **83%** — 15284 de 18243 células aplicáveis decodificam.
+> **83%** — 15284 de 18235 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -39,8 +39,8 @@ Por arquitetura:
 | v4T | **94%** (207/220) |
 | v5TE | **95%** (222/233) |
 | v6K | **98%** (312/317) |
-| MPCore | **97%** (362/372) |
-| v7-A | **98%** (647/659) |
+| MPCore | **98%** (362/368) |
+| v7-A | **98%** (647/655) |
 | v6-M | **80%** (81/101) |
 | v7-M | **94%** (321/341) |
 | ARMv8.0-A | **82%** (796/970) |
@@ -67,7 +67,7 @@ Por arquitetura:
 | A32 — instruções ARM de 32 bits | 266 | v4T 97% (145/149) · v5TE 97% (157/161) · v6K 98% (232/236) · MPCore 98% (232/236) · v7-A 98% (242/245) |
 | T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 98% (80/81) · MPCore 98% (80/81) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
 | T32 — Thumb-2 | 310 | v7-A 99% (266/268) · v6-M 72% (8/11) · v7-M 97% (242/247) |
-| VFP — ponto flutuante (condicional) | 101 | MPCore 90% (50/55) · v7-A 92% (58/63) |
+| VFP — ponto flutuante (condicional) | 101 | MPCore 98% (50/51) · v7-A 98% (58/59) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
 | NEON — load/store | 5 | não se aplica a nenhum preset atual |
@@ -773,11 +773,11 @@ Inventário: `vfp.decode` · 101 instruções.
 
 | Instrução | v4T | v5TE | v6K | MPCore | v7-A | v6-M | v7-M |
 |---|---|---|---|---|---|---|---|
-| `VMOV_to_gp` | · | · | · | ❌ | ❌ | · | · |
-| `VMOV_to_gp` | · | · | · | ❌ | ❌ | · | · |
+| `VMOV_to_gp` | · | · | · | · | · | · | · |
+| `VMOV_to_gp` | · | · | · | · | · | · | · |
 | `VMOV_to_gp` | · | · | · | ✅ | ✅ | · | · |
-| `VMOV_from_gp` | · | · | · | ❌ | ❌ | · | · |
-| `VMOV_from_gp` | · | · | · | ❌ | ❌ | · | · |
+| `VMOV_from_gp` | · | · | · | · | · | · | · |
+| `VMOV_from_gp` | · | · | · | · | · | · | · |
 | `VMOV_from_gp` | · | · | · | ✅ | ✅ | · | · |
 | `VDUP` | · | · | · | · | · | · | · |
 | `VMSR_VMRS` | · | · | · | ✅ | ✅ | · | · |

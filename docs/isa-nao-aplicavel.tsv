@@ -5,7 +5,7 @@
 # ARM11 MPCore instruções que esse núcleo nunca teve, o denominador fica errado e a meta de
 # "tudo ✅" vira inalcançável por construção.
 #
-# Formato (separado por TAB):   instrução <TAB> arquiteturas <TAB> motivo [<TAB> grupo]
+# Formato (separado por TAB):   instrução <TAB> arquiteturas <TAB> motivo [<TAB> grupo [<TAB> ocorrência]]
 #   - `instrução`     é o mnemônico exatamente como no inventário; `*` no fim casa por prefixo.
 #   - `arquiteturas`  é `*` (todas) ou uma lista separada por vírgula (`MPCore,v6K`).
 #   - `motivo`        TEM que citar a versão de arquitetura que introduziu a instrução.
@@ -15,6 +15,12 @@
 #     forma de 16 bits em `t16.decode` E forma de 32 bits em `t32.decode`) — sem a coluna, a
 #     exclusão casaria por nome só e apagaria a cobertura real da forma que NÃO é o alvo da
 #     exclusão. Ausente/vazio = casa em qualquer grupo (formato legado, retrocompatível).
+#   - `ocorrência`    OPCIONAL (B9.17): posição 1-based da linha entre as de MESMO nome+`grupo`,
+#     na ordem em que aparecem no `.decode`. Necessário quando o MESMO mnemônico tem VÁRIAS linhas
+#     de encoding DISTINTAS no MESMO arquivo (ex.: `VMOV_to_gp`/`VMOV_from_gp` em `vfp.decode` têm
+#     3 linhas cada — byte/halfword/word — `grupo` sozinho não distingue porque as 3 estão no
+#     mesmo arquivo). Requer `grupo` preenchido (a ordem só faz sentido dentro de um arquivo).
+#     Ausente/vazio = casa em qualquer ocorrência (formato legado, retrocompatível).
 #
 # Esta lista é CURADA À MÃO e cresce por triagem: cada task de cobertura que encontrar uma
 # instrução fora da arquitetura-alvo acrescenta a linha com a justificativa. Só entram aqui casos
@@ -102,14 +108,18 @@ VCVT_f16_f64	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+
 VCVT_b16_f32	MPCore,v7-A	ARMv8.6-A BFloat16 (aa32_bf16)
 VCVT_hp_int	MPCore,v7-A	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
 
-# -- VFP (B9.5): VMOV_to_gp/VMOV_from_gp formas byte/halfword (size=0/1 do encoding NEON) sao
+# -- VFP (B9.17, revisa a limitacao documentada pela B9.5): VMOV_to_gp/VMOV_from_gp formas
+# -- byte/halfword (size=0/1 do encoding NEON, 1a/2a linha de cada mnemonico em vfp.decode) sao
 # -- Advanced SIMD de verdade (QEMU translate-vfp.c: insn_is_neon = size != MO_32, exige
-# -- ARM_FEATURE_NEON), so a forma word (size=2) e VFPv2 genuina (aa32_fpsp_v2) e foi
-# -- implementada. NAO adicionadas aqui: o inventario usa o MESMO mnemonico "VMOV_to_gp"/
-# -- "VMOV_from_gp" para as 3 formas (byte/halfword/word), e a curadoria deste arquivo casa por
-# -- NOME, sem distinguir sub-encoding -- excluir aqui apagaria tambem a forma word ja
-# -- implementada. Ficam como falso-negativo conhecido (2 das 3 linhas de cada mnemonico
-# -- continuam ❌), documentado em vez de "corrigido incorretamente" -- ver Resultado da B9.5.
+# -- ARM_FEATURE_NEON), so a forma word (size=2, 3a linha) e VFPv2 genuina (aa32_fpsp_v2) e foi
+# -- implementada. A B9.5 nao conseguia excluir so as 2 primeiras linhas porque a curadoria casava
+# -- so por NOME+grupo, sem saber qual das 3 linhas identicas em nome era -- a coluna `ocorrencia`
+# -- nova (5a coluna, IsaCoverageReport) resolve isso contando a posicao 1-based de cada linha
+# -- entre as de mesmo nome+arquivo, na ordem do .decode.
+VMOV_to_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte	vfp.decode	1
+VMOV_to_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword	vfp.decode	2
+VMOV_from_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte	vfp.decode	1
+VMOV_from_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword	vfp.decode	2
 
 # -- B9.1: "Signed multiply, signed and unsigned divide" (ARM DDI 0406C A5.2.6) e ARMv6 --
 # -- confirmado contra op_smlad/op_smlald/op_smmla reais em target/arm/tcg/translate.c do QEMU,
