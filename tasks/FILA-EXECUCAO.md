@@ -116,8 +116,17 @@ delegando, `sharedThreeSameOp` mapeia as 50. `ArmFeature.ADVANCED_SIMD_RDM` novo
 `@3same_rev`, `esz∈{1,2}` nas 4 doubling, `size==3` liberado p/ `VQADD`/`VQSUB`/shifts. **`FPSCR.QC`
 NÃO modelado** (paridade com o A64 — task futura própria nos dois lados). Zero-diff: `COBERTURA-ISA.md`
 byte-idêntica (`NOT_IN_ANY_PRESET` até B13.22), suíte A64 (84 + `Aarch64AdvSimd*DecoderTest`) sem
-alteração, G5 verde nos 5. **Próximo degrau da escada B13: B13.6** (3-reg-same FP — `VADD_fp`/
-`VFMA_fp`/`VRECPS`/... — ainda sem spec).
+alteração, G5 verde nos 5.
+
+**B13.6 spec ⬜ (2026-08-29, `b13.6-neon-3reg-same-fp.md`)** — 3-reg-same **ponto flutuante** A32
+(F32): `VFMA`/`VFMS` (fundido) · `VADD`/`VSUB`/`VABD`/`VMUL` · `VMLA`/`VMLS` (NÃO fundido) · `VCEQ`/
+`VCGE`/`VCGT`/`VACGE`/`VACGT` · `VMAX`/`VMIN`/`VMAXNM`/`VMINNM`/`VRECPS`/`VRSQRTS` · pairwise `VPADD`/
+`VPMAX`/`VPMIN` (22 linhas). **3 decisões já resolvidas na spec**: (1) formas F16 (`sz=1`) →
+`UNIMPLEMENTED`, task futura irmã da B19.5 (paridade com A64: núcleo não tem caminho F16); (2) migra
+o FP three-same/pairwise do A64 (B8.9) para `AdvSimdLanes` — 1º caminho FP do núcleo, D1 da RFC; (3)
+`VMLA_fp`/`VMLS_fp` NEON são NÃO fundidos (dois arredondamentos), `VFMA`/`VFMS` fundidos → 4
+constantes `MLA`/`MLS`/`FMLA`/`FMLS` no `AdvSimdFpThreeSameOp` novo. `IrOp.NeonFpThreeSame`/
+`NeonFpPairwise` (`Kind` 71/72). **Pegável — próximo degrau da escada B13.** B13.7+ ainda sem spec.
 
 **B19.1 ✅ (2026-08-29)** — A64 atômicos `FEAT_LSE` (`LDADD`…`SWP`) + `LDAPR` (`FEAT_LRCPC`, feature
 nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, `decodeAtomicMemoryOp`,
@@ -131,21 +140,21 @@ nova em `ARMV8_3_A`) fechada (`Ir64AtomicOp` + `Ir64Op.AtomicMemoryOp` Kind 93, 
 ESTRUTURA (regressão negativa), **não** na TSV — **B19.5 herda as 14 `_h`**. A64 v8.0 82%→84%,
 global 84%→86%; marco de release segue suspenso. G5 verde nos 5 consumidores. Ver `## Resultado`.
 
-**Próximo degrau na escada B19: B19.3** (AdvSIMD FP escalar "two-reg-misc" + conversões escalares
-int↔FP, 29 linhas `_sd`/`_s`) — **spec pronta (2026-08-29,
-`b19.3-a64-advsimd-fp-scalar-two-reg-misc-convert.md`)**: decisão da spec = record NOVO
-`Ir64Op.VectorFpConvertFixedPoint` (Kind 94) para as formas `@fcvt_fixed` com `#fbits`, escalar
-aqui / vetorial em B19.4; `FRECPX`/`FCVTXN` novos em `Ir64VectorFpUnaryOp` com semântica de
-arredondamento real (não a simplificação de `RECPE`). B19.3 é pegável. B19.4-B19.9 ainda sem spec.
-**B19 e B22 seguem pegáveis em paralelo.**
+**B19.3 ✅ (2026-08-29)** — AdvSIMD FP escalar "two-reg-misc" + conversões escalares int↔FP (29
+linhas `_sd`/`_s`); `Ir64Op.VectorFpConvertFixedPoint` (Kind 94) novo, `FRECPX`/`FCVTXN` com
+arredondamento real. A64 v8.0 84%→87%, global 86%→88%. `_h` → B19.5. **B19.4-B19.9 ainda sem spec.**
 
-🆕 **Rodada de spec 2026-08-29 (pedido do usuário, "criar todos os specs necessários"):** além de
-B13.5 (✅ acima) e B19.3, o **cluster B22 ganhou 4 specs** (`b22.1-hlt.md`, `b22.2-vmov-half.md`,
-`b22.3-blx-register-m-profile.md`, `b22.4-curadoria-denominador-32-bits.md`) — todos ⬜ pegáveis,
-independentes entre si (B22.4 recomendada depois de B22.3). B22.2 (`VMOV_half`, o único `⚠️` do
-projeto) e B22.3 trazem decisões de design já resolvidas na spec (feature `HALF_PRECISION_FP`;
-separação `BLX`/`BLX_IMMEDIATE`). B19.3 é de código no `arm-jitter`; B22.1-B22.4 são pequenas
-(feature nascente + curadoria TSV). **Sonnet executa; 1 sessão = 1 task.**
+**B22.1-B22.5 ✅ (2026-08-29)** — `HLT` (B22.1), `VMOV_half` deixa de decodificar como coprocessador
+(B22.2, mata o único `⚠️` do projeto), `BLX_r` no perfil M / separação `BLX`↔`BLX_IMMEDIATE`
+(B22.3), curadoria de denominador T16 (B22.4, T16 chega a 100% em todas as 7 colunas), e
+`ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank` (B22.5, as 29 células desbloqueadas). **B22.6 (fechamento
+do épico B22) ainda sem spec.** Achado colateral de B22.3, candidato a task própria: `ARMV6M_FEATURES`
+não declara `EXTEND_ROTATE` (`SXTB`/`SXTH`/`UXTB`/`UXTH` T16 são base do ARMv6-M, hoje mascaradas por
+curadoria TSV sem `grupo`).
+
+**Estado da fila (2026-08-29)**: a rodada de execução fechou B13.5, B19.1-B19.3 e B22.1-B22.5. O
+único ⬜ com spec agora é **B13.6** (acima). Os próximos degraus (B13.7+, B19.4+, B22.6) precisam de
+rodada de spec. **Sonnet executa; 1 sessão = 1 task.**
 
 Achado aberto da RFC B13.2 que vale como task própria a qualquer momento: o backend **Truffle quebra
 com QUALQUER op de VFP** (`IrOpNodeFactory` não tem casos VFP e `TruffleCodeEmitter#supports` devolve
