@@ -320,4 +320,194 @@ public final class AdvSimdLanes {
             setElement(regs, baseRd, i, esz, truncate(results[i], esz));
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // PONTO FLUTUANTE — B13.6 (migração D1 da RFC B13.2). Primeiro caminho FP do núcleo. As ops
+    // "three same"/"pairwise" de FP do A64 (B8.9) vivem SÓ aqui a partir desta task; o
+    // `Ir64VectorFpArithmeticExecutor` só delega. Sem modelo de `FPSCR`/`FPCR` (RMode/FZ/exceções)
+    // — paridade consciente com o escalar (B3.8/B8.5) e com o inteiro saturante acima (`QC`).
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// Bits crus (zero-estendidos a 64) de um `float` — usado para gravar uma lane F32.
+    public static long floatBits(float value) {
+        return Float.floatToRawIntBits(value) & 0xFFFF_FFFFL;
+    }
+
+    /// Bits crus de um `double` — usado para gravar uma lane F64.
+    public static long doubleBits(double value) {
+        return Double.doubleToRawLongBits(value);
+    }
+
+    /// `FPMulX` (`ARM DDI 0487`): `0 * Infinito`/`Infinito * 0` devolve `2.0` com o sinal do
+    /// produto dos operandos, em vez do `NaN` que a multiplicação IEEE normal produziria — único
+    /// desvio de {@code a * b}.
+    public static float mulX(float a, float b) {
+        if ((a == 0f && Float.isInfinite(b)) || (Float.isInfinite(a) && b == 0f)) {
+            int sign = (Float.floatToRawIntBits(a) ^ Float.floatToRawIntBits(b)) & Integer.MIN_VALUE;
+            return Float.intBitsToFloat(sign | Float.floatToRawIntBits(2.0f));
+        }
+        return a * b;
+    }
+
+    /// @see #mulX(float, float)
+    public static double mulX(double a, double b) {
+        if ((a == 0.0 && Double.isInfinite(b)) || (Double.isInfinite(a) && b == 0.0)) {
+            long sign = (Double.doubleToRawLongBits(a) ^ Double.doubleToRawLongBits(b)) & Long.MIN_VALUE;
+            return Double.longBitsToDouble(sign | Double.doubleToRawLongBits(2.0));
+        }
+        return a * b;
+    }
+
+    /// `FPMaxNum` (`ARM DDI 0487`): se exatamente um operando é `NaN`, devolve o OUTRO; se os dois
+    /// são `NaN`, devolve `NaN`; senão, `Math.max` normal (mesma semântica de sinal de zero do
+    /// `MAX`). `Ir64FpExecutor` (escalar) delega a este método.
+    public static float maxNum(float a, float b) {
+        if (Float.isNaN(a)) {
+            return Float.isNaN(b) ? a : b;
+        }
+        return Float.isNaN(b) ? a : Math.max(a, b);
+    }
+
+    /// @see #maxNum(float, float)
+    public static double maxNum(double a, double b) {
+        if (Double.isNaN(a)) {
+            return Double.isNaN(b) ? a : b;
+        }
+        return Double.isNaN(b) ? a : Math.max(a, b);
+    }
+
+    /// `FPMinNum` — espelho de {@link #maxNum(float, float)} com `Math.min`.
+    public static float minNum(float a, float b) {
+        if (Float.isNaN(a)) {
+            return Float.isNaN(b) ? a : b;
+        }
+        return Float.isNaN(b) ? a : Math.min(a, b);
+    }
+
+    /// @see #minNum(float, float)
+    public static double minNum(double a, double b) {
+        if (Double.isNaN(a)) {
+            return Double.isNaN(b) ? a : b;
+        }
+        return Double.isNaN(b) ? a : Math.min(a, b);
+    }
+
+    /// Executa uma operação "three same" de PONTO FLUTUANTE sobre `lanes` elementos de `1 << esz`
+    /// bytes (`esz` `2` = F32, `3` = F64): cada lane de `baseRd` recebe `op` aplicada às lanes
+    /// correspondentes de `baseRn`/`baseRm` (e do próprio `baseRd` para as formas RMW
+    /// `MLA`/`MLS`/`FMLA`/`FMLS`). Os três `base*` são índices de PALAVRA.
+    ///
+    /// Nada aqui zera bits fora das lanes escritas: a escrita destrutiva do A64 é do chamador.
+    /// Sem escrita destrutiva DENTRO do laço tampouco.
+    public static void fpThreeSame(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm) {
+        for (int i = 0; i < lanes; i++) {
+            long resultBits;
+            if (esz == 2) {
+                float a = Float.intBitsToFloat((int) element(regs, baseRn, i, esz));
+                float b = Float.intBitsToFloat((int) element(regs, baseRm, i, esz));
+                float current = Float.intBitsToFloat((int) element(regs, baseRd, i, esz));
+                resultBits = switch (op) {
+                    case ADD -> floatBits(a + b);
+                    case SUB -> floatBits(a - b);
+                    case MUL -> floatBits(a * b);
+                    case DIV -> floatBits(a / b);
+                    case MAX -> floatBits(Math.max(a, b));
+                    case MIN -> floatBits(Math.min(a, b));
+                    case MAXNM -> floatBits(maxNum(a, b));
+                    case MINNM -> floatBits(minNum(a, b));
+                    case MULX -> floatBits(mulX(a, b));
+                    // NÃO fundido (dois arredondamentos) — `VMLA.F32`/`VMLS.F32` NEON.
+                    case MLA -> floatBits(a * b + current);
+                    case MLS -> floatBits(current - a * b);
+                    // FUNDIDO (arredondamento único) — `VFMA.F32`/`VFMS.F32` e `FMLA_v`/`FMLS_v` A64.
+                    case FMLA -> floatBits(Math.fma(a, b, current));
+                    case FMLS -> floatBits(Math.fma(-a, b, current));
+                    case CMEQ -> boolMask(a == b, esz);
+                    case CMGE -> boolMask(a >= b, esz);
+                    case CMGT -> boolMask(a > b, esz);
+                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
+                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
+                    case ABD -> floatBits(Math.abs(a - b));
+                    case RECPS -> floatBits(2.0f - a * b);
+                    case RSQRTS -> floatBits((3.0f - a * b) / 2.0f);
+                };
+            } else {
+                double a = Double.longBitsToDouble(element(regs, baseRn, i, esz));
+                double b = Double.longBitsToDouble(element(regs, baseRm, i, esz));
+                double current = Double.longBitsToDouble(element(regs, baseRd, i, esz));
+                resultBits = switch (op) {
+                    case ADD -> doubleBits(a + b);
+                    case SUB -> doubleBits(a - b);
+                    case MUL -> doubleBits(a * b);
+                    case DIV -> doubleBits(a / b);
+                    case MAX -> doubleBits(Math.max(a, b));
+                    case MIN -> doubleBits(Math.min(a, b));
+                    case MAXNM -> doubleBits(maxNum(a, b));
+                    case MINNM -> doubleBits(minNum(a, b));
+                    case MULX -> doubleBits(mulX(a, b));
+                    case MLA -> doubleBits(a * b + current);
+                    case MLS -> doubleBits(current - a * b);
+                    case FMLA -> doubleBits(Math.fma(a, b, current));
+                    case FMLS -> doubleBits(Math.fma(-a, b, current));
+                    case CMEQ -> boolMask(a == b, esz);
+                    case CMGE -> boolMask(a >= b, esz);
+                    case CMGT -> boolMask(a > b, esz);
+                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
+                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
+                    case ABD -> doubleBits(Math.abs(a - b));
+                    case RECPS -> doubleBits(2.0 - a * b);
+                    case RSQRTS -> doubleBits((3.0 - a * b) / 2.0);
+                };
+            }
+            setElement(regs, baseRd, i, esz, resultBits);
+        }
+    }
+
+    /// Executa uma operação "pairwise" de PONTO FLUTUANTE (ver {@link AdvSimdFpPairwiseOp}):
+    /// concatena `baseRn` com `baseRm`, combina pares de elementos ADJACENTES nessa sequência e
+    /// grava `lanes` resultados a partir de `baseRd` (os `lanes/2` primeiros vindos de `baseRn`, os
+    /// demais de `baseRm`). Resultados calculados num buffer ANTES de qualquer escrita — `baseRd`
+    /// pode coincidir com `baseRn`/`baseRm`. Sem escrita destrutiva: é do chamador.
+    public static void fpPairwise(AdvSimdRegisterWords regs, AdvSimdFpPairwiseOp op, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm) {
+        int half = lanes / 2;
+        long[] results = new long[lanes];
+        for (int i = 0; i < lanes; i++) {
+            int base = i < half ? baseRn : baseRm;
+            int pairBase = (i < half ? i : i - half) * 2;
+            results[i] = fpCombinePair(op, element(regs, base, pairBase, esz),
+                    element(regs, base, pairBase + 1, esz), esz);
+        }
+        for (int i = 0; i < lanes; i++) {
+            setElement(regs, baseRd, i, esz, results[i]);
+        }
+    }
+
+    /// Combina um par de elementos FP de tamanho `esz` (`2`/`3`) segundo `op` — mesma semântica nas
+    /// formas vetorial e escalar: `MAX`/`MIN` propagam `NaN` (`Math.max`/`Math.min`), `MAXNM`/
+    /// `MINNM` só quando os DOIS são `NaN`, `ADD` é `+` IEEE. Público para a forma ESCALAR do A64
+    /// (`FADDP_s`/... , B19.2) reusar sem duplicar.
+    public static long fpCombinePair(AdvSimdFpPairwiseOp op, long aBits, long bBits, int esz) {
+        if (esz == 2) {
+            float a = Float.intBitsToFloat((int) aBits);
+            float b = Float.intBitsToFloat((int) bBits);
+            return switch (op) {
+                case ADD -> floatBits(a + b);
+                case MAX -> floatBits(Math.max(a, b));
+                case MIN -> floatBits(Math.min(a, b));
+                case MAXNM -> floatBits(maxNum(a, b));
+                case MINNM -> floatBits(minNum(a, b));
+            };
+        }
+        double a = Double.longBitsToDouble(aBits);
+        double b = Double.longBitsToDouble(bBits);
+        return switch (op) {
+            case ADD -> doubleBits(a + b);
+            case MAX -> doubleBits(Math.max(a, b));
+            case MIN -> doubleBits(Math.min(a, b));
+            case MAXNM -> doubleBits(maxNum(a, b));
+            case MINNM -> doubleBits(minNum(a, b));
+        };
+    }
 }

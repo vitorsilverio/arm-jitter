@@ -50,6 +50,29 @@ public final class IrNeonExecutor {
         AdvSimdLanes.pairwise(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
     }
 
+    /// NEON "three same" de PONTO FLUTUANTE (`VADD.F32`/`VMUL.F32`/`VFMA.F32`/`VMAX.F32`/... , B13.6):
+    /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSame}) — a MESMA função que o
+    /// executor A64 chama para `FADD_v`/`FMUL_v`/... NEON nomeia registradores por índice de `D`, e
+    /// a base de palavra de um operando de 64 bits é o próprio índice de `D`; nenhuma escrita
+    /// destrutiva depois do laço (VFP32 nunca zera bits fora do registrador escrito).
+    public void executeNeonFpThreeSame(ArmCore core, IrOp.NeonFpThreeSame op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.fpThreeSame(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
+    }
+
+    /// NEON "pairwise" de PONTO FLUTUANTE (`VPADD.F32`/`VPMAX.F32`/`VPMIN.F32`, B13.6): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#fpPairwise}). Só forma `D` (8 bytes); nenhuma
+    /// escrita destrutiva depois (VFP32 nunca zera bits fora do registrador escrito).
+    public void executeNeonFpPairwise(ArmCore core, IrOp.NeonFpPairwise op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int lanes = DOUBLEWORD_BYTES >> esz;
+        AdvSimdLanes.fpPairwise(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

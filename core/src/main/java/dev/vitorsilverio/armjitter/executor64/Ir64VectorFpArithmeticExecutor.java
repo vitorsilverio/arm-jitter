@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -32,101 +35,54 @@ final class Ir64VectorFpArithmeticExecutor {
         }
     }
 
-    private static long floatBits(float value) {
-        return Float.floatToRawIntBits(value) & 0xFFFF_FFFFL;
+    /// Mapeia a operação FP do record A64 para a do núcleo COMPARTILHADO. O multiply-accumulate do
+    /// A64 (`MLA`/`MLS` vetorial) é sempre FUNDIDO → {@link AdvSimdFpThreeSameOp#FMLA}/{@code FMLS}
+    /// (as constantes NÃO fundidas do núcleo só o NEON A32 produz).
+    private static AdvSimdFpThreeSameOp sharedFpThreeSameOp(Ir64VectorFpThreeSameOp op) {
+        return switch (op) {
+            case ADD -> AdvSimdFpThreeSameOp.ADD;
+            case SUB -> AdvSimdFpThreeSameOp.SUB;
+            case MUL -> AdvSimdFpThreeSameOp.MUL;
+            case DIV -> AdvSimdFpThreeSameOp.DIV;
+            case MAX -> AdvSimdFpThreeSameOp.MAX;
+            case MIN -> AdvSimdFpThreeSameOp.MIN;
+            case MAXNM -> AdvSimdFpThreeSameOp.MAXNM;
+            case MINNM -> AdvSimdFpThreeSameOp.MINNM;
+            case MULX -> AdvSimdFpThreeSameOp.MULX;
+            case MLA -> AdvSimdFpThreeSameOp.FMLA;
+            case MLS -> AdvSimdFpThreeSameOp.FMLS;
+            case CMEQ -> AdvSimdFpThreeSameOp.CMEQ;
+            case CMGE -> AdvSimdFpThreeSameOp.CMGE;
+            case CMGT -> AdvSimdFpThreeSameOp.CMGT;
+            case FACGE -> AdvSimdFpThreeSameOp.FACGE;
+            case FACGT -> AdvSimdFpThreeSameOp.FACGT;
+            case ABD -> AdvSimdFpThreeSameOp.ABD;
+            case RECPS -> AdvSimdFpThreeSameOp.RECPS;
+            case RSQRTS -> AdvSimdFpThreeSameOp.RSQRTS;
+        };
     }
 
-    private static long doubleBits(double value) {
-        return Double.doubleToRawLongBits(value);
-    }
-
-    private static long boolMask(boolean condition, int esz) {
-        if (!condition) {
-            return 0L;
-        }
-        return esz == 2 ? 0xFFFF_FFFFL : -1L;
-    }
-
-    /// `FPMulX` (`ARM DDI 0487`): `0 * Infinito`/`Infinito * 0` devolve `2.0` com o sinal do
-    /// produto dos operandos, em vez do `NaN` que a multiplicação IEEE normal produziria — único
-    /// desvio de {@code a * b}.
-    private static float mulX(float a, float b) {
-        if ((a == 0f && Float.isInfinite(b)) || (Float.isInfinite(a) && b == 0f)) {
-            int sign = (Float.floatToRawIntBits(a) ^ Float.floatToRawIntBits(b)) & Integer.MIN_VALUE;
-            return Float.intBitsToFloat(sign | Float.floatToRawIntBits(2.0f));
-        }
-        return a * b;
-    }
-
-    private static double mulX(double a, double b) {
-        if ((a == 0.0 && Double.isInfinite(b)) || (Double.isInfinite(a) && b == 0.0)) {
-            long sign = (Double.doubleToRawLongBits(a) ^ Double.doubleToRawLongBits(b)) & Long.MIN_VALUE;
-            return Double.longBitsToDouble(sign | Double.doubleToRawLongBits(2.0));
-        }
-        return a * b;
+    private static AdvSimdFpPairwiseOp sharedFpPairwiseOp(Ir64VectorFpPairwiseOp op) {
+        return switch (op) {
+            case ADD -> AdvSimdFpPairwiseOp.ADD;
+            case MAX -> AdvSimdFpPairwiseOp.MAX;
+            case MIN -> AdvSimdFpPairwiseOp.MIN;
+            case MAXNM -> AdvSimdFpPairwiseOp.MAXNM;
+            case MINNM -> AdvSimdFpPairwiseOp.MINNM;
+        };
     }
 
     static boolean executeThreeSame(Aarch64Core core, Ir64Op.VectorFpArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        for (int i = 0; i < elements; i++) {
-            long resultBits;
-            if (esz == 2) {
-                float a = Float.intBitsToFloat((int) fp.element(op.rn(), i, esz));
-                float b = Float.intBitsToFloat((int) fp.element(op.rm(), i, esz));
-                float current = Float.intBitsToFloat((int) fp.element(op.rd(), i, esz));
-                resultBits = switch (op.op()) {
-                    case ADD -> floatBits(a + b);
-                    case SUB -> floatBits(a - b);
-                    case MUL -> floatBits(a * b);
-                    case DIV -> floatBits(a / b);
-                    case MAX -> floatBits(Math.max(a, b));
-                    case MIN -> floatBits(Math.min(a, b));
-                    case MAXNM -> floatBits(Ir64FpExecutor.maxNum(a, b));
-                    case MINNM -> floatBits(Ir64FpExecutor.minNum(a, b));
-                    case MULX -> floatBits(mulX(a, b));
-                    // FMLA/FMLS: multiply-accumulate FUNDIDO (arredondamento único) — mesma
-                    // decisão de {@link Ir64Op.Fp64MultiplyAdd}, `Math.fma`.
-                    case MLA -> floatBits(Math.fma(a, b, current));
-                    case MLS -> floatBits(Math.fma(-a, b, current));
-                    case CMEQ -> boolMask(a == b, esz);
-                    case CMGE -> boolMask(a >= b, esz);
-                    case CMGT -> boolMask(a > b, esz);
-                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
-                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
-                    case ABD -> floatBits(Math.abs(a - b));
-                    case RECPS -> floatBits(2.0f - a * b);
-                    case RSQRTS -> floatBits((3.0f - a * b) / 2.0f);
-                };
-            } else {
-                double a = Double.longBitsToDouble(fp.element(op.rn(), i, esz));
-                double b = Double.longBitsToDouble(fp.element(op.rm(), i, esz));
-                double current = Double.longBitsToDouble(fp.element(op.rd(), i, esz));
-                resultBits = switch (op.op()) {
-                    case ADD -> doubleBits(a + b);
-                    case SUB -> doubleBits(a - b);
-                    case MUL -> doubleBits(a * b);
-                    case DIV -> doubleBits(a / b);
-                    case MAX -> doubleBits(Math.max(a, b));
-                    case MIN -> doubleBits(Math.min(a, b));
-                    case MAXNM -> doubleBits(Ir64FpExecutor.maxNum(a, b));
-                    case MINNM -> doubleBits(Ir64FpExecutor.minNum(a, b));
-                    case MULX -> doubleBits(mulX(a, b));
-                    case MLA -> doubleBits(Math.fma(a, b, current));
-                    case MLS -> doubleBits(Math.fma(-a, b, current));
-                    case CMEQ -> boolMask(a == b, esz);
-                    case CMGE -> boolMask(a >= b, esz);
-                    case CMGT -> boolMask(a > b, esz);
-                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
-                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
-                    case ABD -> doubleBits(Math.abs(a - b));
-                    case RECPS -> doubleBits(2.0 - a * b);
-                    case RSQRTS -> doubleBits((3.0 - a * b) / 2.0);
-                };
-            }
-            fp.setElement(op.rd(), i, esz, resultBits);
-        }
+        // Toda a semântica de lane FP vive no núcleo COMPARTILHADO desde B13.6 (D1 da RFC B13.2) —
+        // a MESMA função que o NEON de 32 bits chama. A escrita destrutiva de `[127:64]`/escalar
+        // continua sendo do lado A64.
+        AdvSimdLanes.fpThreeSame(fp, sharedFpThreeSameOp(op.op()), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
@@ -157,10 +113,10 @@ final class Ir64VectorFpArithmeticExecutor {
                 float b = Float.intBitsToFloat((int) fp.element(op.rm(), op.index(), esz));
                 float current = Float.intBitsToFloat((int) fp.element(op.rd(), i, esz));
                 resultBits = switch (op.op()) {
-                    case MUL -> floatBits(a * b);
-                    case MULX -> floatBits(mulX(a, b));
-                    case MLA -> floatBits(Math.fma(a, b, current));
-                    case MLS -> floatBits(Math.fma(-a, b, current));
+                    case MUL -> AdvSimdLanes.floatBits(a * b);
+                    case MULX -> AdvSimdLanes.floatBits(AdvSimdLanes.mulX(a, b));
+                    case MLA -> AdvSimdLanes.floatBits(Math.fma(a, b, current));
+                    case MLS -> AdvSimdLanes.floatBits(Math.fma(-a, b, current));
                     default -> throw new IllegalStateException(
                             "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
                 };
@@ -169,10 +125,10 @@ final class Ir64VectorFpArithmeticExecutor {
                 double b = Double.longBitsToDouble(fp.element(op.rm(), op.index(), esz));
                 double current = Double.longBitsToDouble(fp.element(op.rd(), i, esz));
                 resultBits = switch (op.op()) {
-                    case MUL -> doubleBits(a * b);
-                    case MULX -> doubleBits(mulX(a, b));
-                    case MLA -> doubleBits(Math.fma(a, b, current));
-                    case MLS -> doubleBits(Math.fma(-a, b, current));
+                    case MUL -> AdvSimdLanes.doubleBits(a * b);
+                    case MULX -> AdvSimdLanes.doubleBits(AdvSimdLanes.mulX(a, b));
+                    case MLA -> AdvSimdLanes.doubleBits(Math.fma(a, b, current));
+                    case MLS -> AdvSimdLanes.doubleBits(Math.fma(-a, b, current));
                     default -> throw new IllegalStateException(
                             "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
                 };
@@ -183,54 +139,24 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
-    /// Combina um par de elementos FP de tamanho `esz` (`2`/`3`) segundo `op` — mesma semântica nas
-    /// formas vetorial e escalar de {@link Ir64Op.VectorFpArithmeticPairwise}: `MAX`/`MIN` propagam
-    /// `NaN` (`Math.max`/`Math.min`), `MAXNM`/`MINNM` só quando os DOIS são `NaN`, `ADD` é `+` IEEE.
-    private static long combinePair(Ir64VectorFpPairwiseOp op, long aBits, long bBits, int esz) {
-        if (esz == 2) {
-            float a = Float.intBitsToFloat((int) aBits);
-            float b = Float.intBitsToFloat((int) bBits);
-            return switch (op) {
-                case ADD -> floatBits(a + b);
-                case MAX -> floatBits(Math.max(a, b));
-                case MIN -> floatBits(Math.min(a, b));
-                case MAXNM -> floatBits(Ir64FpExecutor.maxNum(a, b));
-                case MINNM -> floatBits(Ir64FpExecutor.minNum(a, b));
-            };
-        }
-        double a = Double.longBitsToDouble(aBits);
-        double b = Double.longBitsToDouble(bBits);
-        return switch (op) {
-            case ADD -> doubleBits(a + b);
-            case MAX -> doubleBits(Math.max(a, b));
-            case MIN -> doubleBits(Math.min(a, b));
-            case MAXNM -> doubleBits(Ir64FpExecutor.maxNum(a, b));
-            case MINNM -> doubleBits(Ir64FpExecutor.minNum(a, b));
-        };
-    }
-
     static boolean executePairwise(Aarch64Core core, Ir64Op.VectorFpArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
+        AdvSimdFpPairwiseOp shared = sharedFpPairwiseOp(op.op());
         if (op.scalar()) {
-            // B19.2: `FADDP_s`/`FMAXP_s`/... — reduz `Rn` lanes `0`/`1` a `Rd` lane `0`.
-            long result = combinePair(op.op(), fp.element(op.rn(), 0, esz), fp.element(op.rn(), 1, esz), esz);
+            // B19.2: `FADDP_s`/`FMAXP_s`/... — reduz `Rn` lanes `0`/`1` a `Rd` lane `0`. Usa
+            // `fpCombinePair` (núcleo) para não duplicar a semântica de `NaN`/sinal-de-zero.
+            long result = AdvSimdLanes.fpCombinePair(shared,
+                    fp.element(op.rn(), 0, esz), fp.element(op.rn(), 1, esz), esz);
             fp.setElement(op.rd(), 0, esz, result);
             finishScalarAwareWrite(fp, op.rd(), true, false, esz);
             return false;
         }
         int elements = elementsPerRegister(op.q(), esz);
-        int half = elements / 2;
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            int register = i < half ? op.rn() : op.rm();
-            int pairBase = (i < half ? i : i - half) * 2;
-            results[i] = combinePair(op.op(), fp.element(register, pairBase, esz),
-                    fp.element(register, pairBase + 1, esz), esz);
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), i, esz, results[i]);
-        }
+        AdvSimdLanes.fpPairwise(fp, shared, esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishDestructiveWrite(fp, op.rd(), op.q());
         return false;
     }
@@ -290,8 +216,8 @@ final class Ir64VectorFpArithmeticExecutor {
             long inputBits = fp.element(op.rn(), i, esz);
             long resultBits = switch (op.op()) {
                 case FRECPX -> esz == 2
-                        ? floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
-                        : doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
+                        ? AdvSimdLanes.floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
+                        : AdvSimdLanes.doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
                 case FCVTXN -> throw new IllegalStateException("FCVTXN tratado fora do laço");
                 case SCVTF, UCVTF -> {
                     boolean signed = op.op() == Ir64VectorFpUnaryOp.SCVTF;
@@ -301,7 +227,7 @@ final class Ir64VectorFpArithmeticExecutor {
                     } else {
                         asDouble = signed ? (double) (int) inputBits : (double) inputBits;
                     }
-                    yield esz == 2 ? floatBits((float) asDouble) : doubleBits(asDouble);
+                    yield esz == 2 ? AdvSimdLanes.floatBits((float) asDouble) : AdvSimdLanes.doubleBits(asDouble);
                 }
                 case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> {
                     double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
@@ -313,35 +239,35 @@ final class Ir64VectorFpArithmeticExecutor {
                     if (esz == 2) {
                         float a = Float.intBitsToFloat((int) inputBits);
                         yield switch (op.op()) {
-                            case ABS -> floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
-                            case NEG -> floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
-                            case SQRT -> floatBits((float) Math.sqrt(a));
-                            case RECPE -> floatBits(1.0f / a);
-                            case RSQRTE -> floatBits((float) (1.0 / Math.sqrt(a)));
-                            case CMGT0 -> boolMask(a > 0f, esz);
-                            case CMGE0 -> boolMask(a >= 0f, esz);
-                            case CMEQ0 -> boolMask(a == 0f, esz);
-                            case CMLE0 -> boolMask(a <= 0f, esz);
-                            case CMLT0 -> boolMask(a < 0f, esz);
+                            case ABS -> AdvSimdLanes.floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
+                            case NEG -> AdvSimdLanes.floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
+                            case SQRT -> AdvSimdLanes.floatBits((float) Math.sqrt(a));
+                            case RECPE -> AdvSimdLanes.floatBits(1.0f / a);
+                            case RSQRTE -> AdvSimdLanes.floatBits((float) (1.0 / Math.sqrt(a)));
+                            case CMGT0 -> AdvSimdLanes.boolMask(a > 0f, esz);
+                            case CMGE0 -> AdvSimdLanes.boolMask(a >= 0f, esz);
+                            case CMEQ0 -> AdvSimdLanes.boolMask(a == 0f, esz);
+                            case CMLE0 -> AdvSimdLanes.boolMask(a <= 0f, esz);
+                            case CMLT0 -> AdvSimdLanes.boolMask(a < 0f, esz);
                             case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
-                                    floatBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
+                                    AdvSimdLanes.floatBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
                             default -> throw new IllegalStateException("tratado no ramo de conversão acima");
                         };
                     }
                     double a = Double.longBitsToDouble(inputBits);
                     yield switch (op.op()) {
-                        case ABS -> doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
-                        case NEG -> doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
-                        case SQRT -> doubleBits(Math.sqrt(a));
-                        case RECPE -> doubleBits(1.0 / a);
-                        case RSQRTE -> doubleBits(1.0 / Math.sqrt(a));
-                        case CMGT0 -> boolMask(a > 0.0, esz);
-                        case CMGE0 -> boolMask(a >= 0.0, esz);
-                        case CMEQ0 -> boolMask(a == 0.0, esz);
-                        case CMLE0 -> boolMask(a <= 0.0, esz);
-                        case CMLT0 -> boolMask(a < 0.0, esz);
+                        case ABS -> AdvSimdLanes.doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
+                        case NEG -> AdvSimdLanes.doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
+                        case SQRT -> AdvSimdLanes.doubleBits(Math.sqrt(a));
+                        case RECPE -> AdvSimdLanes.doubleBits(1.0 / a);
+                        case RSQRTE -> AdvSimdLanes.doubleBits(1.0 / Math.sqrt(a));
+                        case CMGT0 -> AdvSimdLanes.boolMask(a > 0.0, esz);
+                        case CMGE0 -> AdvSimdLanes.boolMask(a >= 0.0, esz);
+                        case CMEQ0 -> AdvSimdLanes.boolMask(a == 0.0, esz);
+                        case CMLE0 -> AdvSimdLanes.boolMask(a <= 0.0, esz);
+                        case CMLT0 -> AdvSimdLanes.boolMask(a < 0.0, esz);
                         case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
-                                doubleBits(Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
+                                AdvSimdLanes.doubleBits(Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
                         default -> throw new IllegalStateException("tratado no ramo de conversão acima");
                     };
                 }
@@ -454,7 +380,7 @@ final class Ir64VectorFpArithmeticExecutor {
                     asDouble = op.signed() ? (double) (int) inputBits : (double) inputBits;
                 }
                 double scaled = asDouble / scale;
-                resultBits = esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
+                resultBits = esz == 2 ? AdvSimdLanes.floatBits((float) scaled) : AdvSimdLanes.doubleBits(scaled);
             } else {
                 double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
                 double scaled = value * scale;

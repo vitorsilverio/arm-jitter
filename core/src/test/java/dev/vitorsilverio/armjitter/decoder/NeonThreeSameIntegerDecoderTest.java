@@ -254,13 +254,14 @@ class NeonThreeSameIntegerDecoderTest {
         // VQRDMLAH (opc=1011 op=1 U=1) / VQRDMLSH (opc=1100 op=1 U=1) sem FEAT_RDM → UNIMPLEMENTED
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1011, 1, false, 0, 1, 2)).kind());
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1100, 1, false, 0, 1, 2)).kind());
-        // opc=1100 cripto (op=0) / VFMA_fp (op=1 U=0) — B13.15 / B13.6
+        // opc=1100 cripto (op=0) → B13.15, ainda fora de escopo.
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1100, 0, false, 0, 1, 2)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1100, 1, false, 0, 1, 2)).kind());
-        // FP three-same (opc=1101/1110/1111) — B13.6
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1101, 0, false, 0, 1, 2)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1110, 0, false, 0, 1, 2)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 0, 0b1111, 1, false, 0, 1, 2)).kind());
+        // VFMA_fp (opc=1100 op=1 U=0) e o resto do FP (opc=1101/1110/1111) passaram a decodificar
+        // em B13.6 — ver NeonThreeSameFpDecoderTest.
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(neon3s(0, 0, 0b1100, 1, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(neon3s(0, 0, 0b1101, 0, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(neon3s(0, 0, 0b1110, 0, false, 0, 1, 2)).kind());
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(neon3s(0, 0, 0b1111, 1, false, 0, 1, 2)).kind());
     }
 
     // ── Execução: núcleo compartilhado com o A64 ──

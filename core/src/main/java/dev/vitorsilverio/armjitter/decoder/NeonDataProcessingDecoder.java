@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -25,9 +27,13 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `Vn`). O núcleo compartilhado `AdvSimdLanes.threeSame` espera valor=`Rn`/quantidade=`Rm` (o A64
 /// não tem essa inversão), então este decoder monta o record com `vn`↔`vm` trocados.
 ///
+/// A seção de PONTO FLUTUANTE (`@3same_fp`/`@3same_fp_q0`: `VADD_fp`/`VFMA_fp`/`VMLA_fp`/`VCEQ_fp`/
+/// `VMAX_fp`/`VRECPS`/`VPADD_fp`/... , B13.6) também é decodificada aqui, forma F32 apenas — F16
+/// (`FEAT_FP16`) vira `UNIMPLEMENTED` (task futura irmã da B19.5).
+///
 /// Fora de escopo (viram `UNIMPLEMENTED` aqui, com destino registrado): cripto (`SHA1*`/`SHA256*`
-/// → B13.15), ponto flutuante (`VADD_fp`/`VFMA_fp`/... → B13.6). T32 é B13.16. `FPSCR.QC`/`FPSR.QC`
-/// (bit cumulativo de saturação) NÃO é modelado (paridade com o A64) — task futura própria.
+/// → B13.15). T32 é B13.16. `FPSCR.QC`/`FPSR.QC` (bit cumulativo de saturação) e `FPSCR.RMode`/`FZ`
+/// NÃO são modelados (paridade com o A64) — task futura própria.
 ///
 /// Gates: {@link ArmFeature#ADVANCED_SIMD} (todo o frame) e, ADEMAIS,
 /// {@link ArmFeature#ADVANCED_SIMD_RDM} para `VQRDMLAH`/`VQRDMLSH` (`FEAT_RDM`). **Nenhum preset os
@@ -56,6 +62,11 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
     private static final int U_BIT = 24;
     private static final int SIZE_SHIFT = 20;
     private static final int SIZE_MASK = 0x3;
+    // Subespaço FP (B13.6): bit21 (`a`) discrimina sub-opcode, bit20 (`sz`) é a largura
+    // (`0`=F32/`esz=2`, `1`=F16 → recusado). NÃO confundir `a` com largura (Armadilha 1).
+    private static final int FP_A_BIT = 21;
+    private static final int FP_SZ_BIT = 20;
+    private static final int FP_ELEMENT_ESZ_F32 = 2;
     private static final int OPC_SHIFT = 8;
     private static final int OPC_MASK = 0xF;
     private static final int OP_BIT = 4;
@@ -79,6 +90,12 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
         int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
         int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+
+        // Subespaço de ponto flutuante (B13.6) — reivindicado ANTES do fluxo inteiro (que trata
+        // `opc` `1101`/`1110`/`1111` como `null`→`UNIMPLEMENTED` e `opc=1100 op=1 u=0` idem).
+        if (isFloatingPoint(opc, op, u)) {
+            return decodeFloatingPoint(raw, address, condition, u, opc, op, quad, vd, vn, vm);
+        }
 
         AdvSimdPairwiseOp pairwise = pairwiseOperation(opc, op, u);
         if (pairwise != null) {
@@ -138,6 +155,96 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+    }
+
+    // ─────────────────────────── Ponto flutuante (B13.6) ───────────────────────────
+
+    /// O subespaço FP de "3-reg-same" (`@3same_fp`/`@3same_fp_q0` do `neon-dp.decode`): `opc` em
+    /// `{1101, 1110, 1111}` (todas as combinações são FP) OU `opc=1100` só na forma `VFMA`/`VFMS`
+    /// (`op=1 u=0`) — `opc=1100 op=0` é cripto (B13.15) e `opc=1100 op=1 u=1` é `VQRDMLSH` (B13.5).
+    private static boolean isFloatingPoint(int opc, int op, int u) {
+        if (opc == 0b1101 || opc == 0b1110 || opc == 0b1111) {
+            return true;
+        }
+        return opc == 0b1100 && op == 1 && u == 0;
+    }
+
+    /// Decodifica as 22 linhas F32 de `@3same_fp`/`@3same_fp_q0`. F16 (`sz`=bit20=1) → `unimplemented`
+    /// (decisão 1 da task: `FEAT_FP16` é task futura, paridade com o A64). `sz`=0 → `esz=2` (F32).
+    private static DecodedInstruction decodeFloatingPoint(int raw, int address, Condition condition,
+            int u, int opc, int op, boolean quad, int vd, int vn, int vm) {
+        int sz = (raw >>> FP_SZ_BIT) & 1;
+        if (sz == 1) {
+            return unimplemented(address, raw, condition); // F16 → task futura (irmã da B19.5)
+        }
+        int a = (raw >>> FP_A_BIT) & 1;
+        int esz = FP_ELEMENT_ESZ_F32;
+
+        AdvSimdFpPairwiseOp pairwise = fpPairwiseOperation(opc, op, u, a);
+        if (pairwise != null) {
+            // `@3same_fp_q0`: pairwise FP A32 é só forma `D` (`Q` forçado a 0 no encoding).
+            if (quad) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonFpPairwise(pairwise, esz, vd, vn, vm));
+        }
+
+        AdvSimdFpThreeSameOp threeSame = fpThreeSameOperation(opc, op, u, a);
+        if (threeSame == null) {
+            return unimplemented(address, raw, condition); // combinação FP não alocada (G8)
+        }
+        // Forma `Q`: os 3 registradores nomeiam pares `D<2n>`/`D<2n+1>` — índice ímpar é UNDEFINED.
+        if (quad && ((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonFpThreeSame(threeSame, quad, esz, vd, vn, vm));
+    }
+
+    /// Os 3 pairwise FP (`@3same_fp_q0`): `VPADD.F32` (`u1 a0 opc1101 op0`), `VPMAX.F32`
+    /// (`u1 a0 opc1111 op0`), `VPMIN.F32` (`u1 a1 opc1111 op0`). `null` para o resto (cai em
+    /// {@link #fpThreeSameOperation}).
+    private static AdvSimdFpPairwiseOp fpPairwiseOperation(int opc, int op, int u, int a) {
+        if (op != 0 || u != 1) {
+            return null;
+        }
+        if (opc == 0b1101 && a == 0) {
+            return AdvSimdFpPairwiseOp.ADD;
+        }
+        if (opc == 0b1111 && a == 0) {
+            return AdvSimdFpPairwiseOp.MAX;
+        }
+        if (opc == 0b1111 && a == 1) {
+            return AdvSimdFpPairwiseOp.MIN;
+        }
+        return null;
+    }
+
+    /// Mapeia `(opc, op, u, a)` para a operação FP "three same" (tabela do Escopo da B13.6), ou
+    /// `null` para as combinações FP não alocadas — o chamador transforma `null` em `UNIMPLEMENTED`
+    /// (G8). As entradas pairwise (`VPADD`/`VPMAX`/`VPMIN`) já foram tratadas por
+    /// {@link #fpPairwiseOperation} e não chegam aqui.
+    private static AdvSimdFpThreeSameOp fpThreeSameOperation(int opc, int op, int u, int a) {
+        return switch (opc) {
+            // `VFMA`/`VFMS` (FUNDIDO) — só `op=1 u=0` chega aqui (garantido por isFloatingPoint).
+            case 0b1100 -> a == 0 ? AdvSimdFpThreeSameOp.FMLA : AdvSimdFpThreeSameOp.FMLS;
+            case 0b1101 -> op == 0
+                    ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.ADD : AdvSimdFpThreeSameOp.SUB)
+                             : (a == 1 ? AdvSimdFpThreeSameOp.ABD : null))
+                    // `op=1`: NÃO fundido (`VMLA.F32`/`VMLS.F32`, dois arredondamentos).
+                    : (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.MLA : AdvSimdFpThreeSameOp.MLS)
+                             : (a == 0 ? AdvSimdFpThreeSameOp.MUL : null));
+            case 0b1110 -> op == 0
+                    ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.CMEQ : null)
+                             : (a == 0 ? AdvSimdFpThreeSameOp.CMGE : AdvSimdFpThreeSameOp.CMGT))
+                    : (u == 1 ? (a == 0 ? AdvSimdFpThreeSameOp.FACGE : AdvSimdFpThreeSameOp.FACGT) : null);
+            case 0b1111 -> op == 0
+                    ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.MAX : AdvSimdFpThreeSameOp.MIN) : null)
+                    : (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.RECPS : AdvSimdFpThreeSameOp.RSQRTS)
+                             : (a == 0 ? AdvSimdFpThreeSameOp.MAXNM : AdvSimdFpThreeSameOp.MINNM));
+            default -> null;
+        };
     }
 
     /// Mapeia `(opc, op, U, size)` para a operação "three same" de B13.4 (inteira) ou B13.5

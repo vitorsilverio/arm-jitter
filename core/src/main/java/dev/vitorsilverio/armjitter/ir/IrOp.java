@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
-        IrOp.NeonLoadAllLanes, IrOp.NeonPairwise {
+        IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -97,6 +97,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_LOAD_STORE_SINGLE = 68;
         public static final int NEON_LOAD_ALL_LANES = 69;
         public static final int NEON_PAIRWISE = 70;
+        public static final int NEON_FP_THREE_SAME = 71;
+        public static final int NEON_FP_PAIRWISE = 72;
     }
 
     /// Operacao ALU generica.
@@ -1525,5 +1527,63 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_PAIRWISE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "3-reg-same" de PONTO FLUTUANTE (B13.6): `VADD.F32`/
+    /// `VSUB.F32`/`VMUL.F32`/`VMLA.F32`/`VMLS.F32`/`VFMA.F32`/`VFMS.F32`/`VABD.F32`/`VMAX.F32`/
+    /// `VMIN.F32`/`VMAXNM.F32`/`VMINNM.F32`/`VCEQ.F32`/`VCGE.F32`/`VCGT.F32`/`VACGE.F32`/
+    /// `VACGT.F32`/`VRECPS.F32`/`VRSQRTS.F32`. Só a forma F32 (`esz=2`) — F16 (`FEAT_FP16`) é
+    /// recusada no decoder (task futura).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSame} no
+    /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}), RFC B13.2 D1. A
+    /// distinção fundido × NÃO fundido do multiply-accumulate (`VFMA` vs `VMLA`) está na
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp} escolhida pelo decoder.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFpThreeSame(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`, bit `Q` do encoding),
+            /// `false` para o de 64 bits (`D<d>`/`D<n>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32) nesta task.
+            int esz,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1, em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FP_THREE_SAME; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "pairwise" de PONTO FLUTUANTE (B13.6): `VPADD.F32`/
+    /// `VPMAX.F32`/`VPMIN.F32`. Concatena `Vn:Vm` (`Vn` primeiro), combina pares de elementos
+    /// ADJACENTES nessa sequência de `2 * (8 >> esz)` elementos e grava `8 >> esz` resultados em
+    /// `Vd` (metade baixa vinda de `Vn`, metade alta de `Vm`). Só forma `D` no encoding A32
+    /// (`@3same_fp_q0`), por isso não há campo `quad`.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticPairwise} no
+    /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpPairwise}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFpPairwise(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp op,
+            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32) nesta task.
+            int esz,
+            /// Registrador de destino, índice de `D` (`0`-`31`).
+            int vd,
+            /// Registrador fonte 1 (metade baixa do resultado), índice de `D`.
+            int vn,
+            /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FP_PAIRWISE; }
     }
 }

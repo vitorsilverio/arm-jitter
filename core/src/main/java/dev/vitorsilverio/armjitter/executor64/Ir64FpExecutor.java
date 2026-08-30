@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -71,35 +72,24 @@ final class Ir64FpExecutor {
         };
     }
 
-    /// `FPMaxNum` (`ARM DDI 0487`): se exatamente um operando é NaN, devolve o OUTRO; se os dois
-    /// são NaN, devolve NaN; senão, `Math.max` normal (mesma semântica de sinal de zero do `MAX`).
+    /// `FPMaxNum`/`FPMinNum` (`ARM DDI 0487`) — a lógica vive em {@link AdvSimdLanes} desde B13.6
+    /// (o núcleo vetorial compartilhado precisa dela para `FMAXNMP`/`FMINNMP`); estes 4 métodos
+    /// continuam como ponto de entrada `package` do pacote `executor64` (`FMAXNM_s`/`FMINNM_s`
+    /// escalares e `FMAXNMV`/`FMINNMV`).
     static float maxNum(float a, float b) {
-        if (Float.isNaN(a)) {
-            return Float.isNaN(b) ? a : b;
-        }
-        return Float.isNaN(b) ? a : Math.max(a, b);
+        return AdvSimdLanes.maxNum(a, b);
     }
 
     static double maxNum(double a, double b) {
-        if (Double.isNaN(a)) {
-            return Double.isNaN(b) ? a : b;
-        }
-        return Double.isNaN(b) ? a : Math.max(a, b);
+        return AdvSimdLanes.maxNum(a, b);
     }
 
-    /// `FPMinNum` — espelho de {@link #maxNum(float, float)} com `Math.min`.
     static float minNum(float a, float b) {
-        if (Float.isNaN(a)) {
-            return Float.isNaN(b) ? a : b;
-        }
-        return Float.isNaN(b) ? a : Math.min(a, b);
+        return AdvSimdLanes.minNum(a, b);
     }
 
     static double minNum(double a, double b) {
-        if (Double.isNaN(a)) {
-            return Double.isNaN(b) ? a : b;
-        }
-        return Double.isNaN(b) ? a : Math.min(a, b);
+        return AdvSimdLanes.minNum(a, b);
     }
 
     /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (B8.4): multiplicação-acumulação fundida com
