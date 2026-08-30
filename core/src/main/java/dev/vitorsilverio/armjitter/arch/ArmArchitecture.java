@@ -25,6 +25,7 @@ public final class ArmArchitecture {
     /// decoder de coprocessador é anexado aqui para que apenas cores ARMv5 decodifiquem `MCR`/`MRC` (CP15).
     public static final ArmArchitecture ARMV5TE = of("ARMv5TE",
             ArmFeature.BLX,
+            ArmFeature.BLX_IMMEDIATE,
             ArmFeature.CLZ,
             ArmFeature.DSP_MULTIPLY,
             ArmFeature.SATURATING,
@@ -305,9 +306,15 @@ public final class ArmArchitecture {
     /// Reference Manual` (ARM DDI 0419C), seção A3.3.3: lista `REV`/`REVSH`/`REV16` como as
     /// instruções de reversão de bytes que a arquitetura fornece (achado de cobertura de ISA,
     /// B9.10 — a task B7.4 original não incluiu esta feature no preset).
+    ///
+    /// `BLX` (sem `BLX_IMMEDIATE`): o ARMv6-M tem `BLX` **registrador** (`BLX Rm`, ARM DDI 0419C
+    /// A6.7.10) mas nunca teve `BLX` imediato (não há troca para ARM state em perfil M). A feature
+    /// {@link ArmFeature#BLX} foi separada de {@link ArmFeature#BLX_IMMEDIATE} exatamente para
+    /// este preset (B22.3) — declarar `BLX` cru ligaria também o `BLX` imediato T32, que a
+    /// arquitetura não possui.
     private static final ArmArchitecture ARMV6M_FEATURES = of("ARMv6-M",
             ArmFeature.THUMB2, ArmFeature.M_PROFILE, ArmFeature.WAIT_HINTS, ArmFeature.MEMORY_BARRIERS,
-            ArmFeature.BREAKPOINT, ArmFeature.BYTE_REVERSE);
+            ArmFeature.BREAKPOINT, ArmFeature.BYTE_REVERSE, ArmFeature.BLX);
 
     /// `Thumb2BranchDecoder` (`B.W`/`TBB`/`TBH`) **NÃO** é anexado aqui (achado de cobertura de
     /// ISA, B9.10): o mesmo `ARMv6-M Architecture Reference Manual` (ARM DDI 0419C), seção A3.3.1,

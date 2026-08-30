@@ -901,7 +901,7 @@ public final class ArmDecoder implements InstructionDecoder {
         // BLX (imediato): `1111 101H <offset de 24 bits>`. Sempre linka e sempre troca para
         // Thumb; o alvo carrega o bit 0 setado para a troca reconhecer.
         if ((raw & 0xFE00_0000) == 0xFA00_0000) {
-            if (!architecture.has(ArmFeature.BLX)) {
+            if (!architecture.has(ArmFeature.BLX_IMMEDIATE)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
             int halfword = (raw >>> 24) & 1;

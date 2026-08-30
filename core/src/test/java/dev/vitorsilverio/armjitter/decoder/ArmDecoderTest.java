@@ -123,6 +123,28 @@ class ArmDecoderTest {
         assertTrue(instruction.link());
     }
 
+    // ── B22.3: split de ArmFeature.BLX (registrador) / BLX_IMMEDIATE — zero-diff nos presets A/R
+    // que tinham BLX (ambas as metades declaradas, as duas formas continuam decodificando) ────
+
+    @Test
+    void blxBothFormsStillDecodeOnArmProfilePresetsAfterFeatureSplit() {
+        for (ArmArchitecture arch : new ArmArchitecture[]{
+                ArmArchitecture.ARMV5TE, ArmArchitecture.ARMV6K, ArmArchitecture.ARM11_MPCORE,
+                ArmArchitecture.ARMV7A}) {
+            TestAddressSpace imm = new TestAddressSpace(16);
+            imm.put32(0, 0xFA00_0001); // BLX imediato (cond=1111)
+            DecodedInstruction blxImm = new ArmDecoder(arch).decode(imm, 0);
+            assertEquals(InstructionKind.BRANCH_EXCHANGE, blxImm.kind(), arch + " decodifica BLX imediato");
+            assertTrue(blxImm.link(), arch + ": BLX imediato linka");
+
+            TestAddressSpace reg = new TestAddressSpace(16);
+            reg.put32(0, 0xE12F_FF33); // BLX r3
+            DecodedInstruction blxReg = new ArmDecoder(arch).decode(reg, 0);
+            assertEquals(InstructionKind.BRANCH_EXCHANGE, blxReg.kind(), arch + " decodifica BLX Rm");
+            assertTrue(blxReg.link(), arch + ": BLX Rm linka");
+        }
+    }
+
     // ── HVC (B9.8.2, ARM DDI 0406C A8.8.65) ─────────────────────────────────────────────────
 
     @Test

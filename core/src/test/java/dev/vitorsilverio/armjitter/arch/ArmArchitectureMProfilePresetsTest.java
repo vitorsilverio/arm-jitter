@@ -116,6 +116,27 @@ class ArmArchitectureMProfilePresetsTest {
                 "ARMv6-M continua tendo BL");
     }
 
+    // ── B22.3: BLX registrador existe em perfil M; BLX imediato não ─────────────────────────
+
+    @Test
+    void blxRegisterDecodesInMProfileButBlxImmediateDoesNot() {
+        // BLX r3 (T16) = 0100 0111 1 0011 000 = 0x4798.
+        for (ArmArchitecture arch : new ArmArchitecture[]{ArmArchitecture.ARMV6M, ArmArchitecture.ARMV7M}) {
+            DecodedInstruction blxr = decode16(arch, 0x4798);
+            assertEquals(InstructionKind.BRANCH_EXCHANGE, blxr.kind(), arch + " decodifica BLX Rm");
+            assertTrue(blxr.link(), arch + ": BLX Rm linka (não é BX)");
+
+            // BLX imediato de 32 bits = 0xF000 0xE800 (hw2[12]=0). O perfil M nunca teve —
+            // segue UNIMPLEMENTED (agora gateado por BLX_IMMEDIATE, não por BLX).
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode32(arch, 0xF000, 0xE800).kind(),
+                    arch + " não tem BLX imediato");
+        }
+        // BX (sem link) inalterado: 0x4718 = BX r3.
+        DecodedInstruction bx = decode16(ArmArchitecture.ARMV6M, 0x4718);
+        assertEquals(InstructionKind.BRANCH_EXCHANGE, bx.kind());
+        assertFalse(bx.link(), "BX não linka");
+    }
+
     // ── SVC em ARMV6M entra pela exceção M (não pelo SwiDispatcher) ──────────────────────────
 
     @Test
@@ -150,8 +171,17 @@ class ArmArchitectureMProfilePresetsTest {
             assertFalse(arch.has(ArmFeature.M_PROFILE), arch + " não deve ter M_PROFILE");
             assertFalse(arch.has(ArmFeature.M_FAULT_MASKING), arch + " não deve ter M_FAULT_MASKING");
         }
-        // Amostras de que as features antigas seguem intactas.
-        assertTrue(ArmArchitecture.ARMV5TE.has(ArmFeature.BLX));
+        // Amostras de que as features antigas seguem intactas. B22.3 dividiu BLX em BLX
+        // (registrador) + BLX_IMMEDIATE — todo preset A/R que tinha BLX ganhou as duas
+        // (ARMv4T/ARM7TDMI nunca teve BLX, fica de fora).
+        for (ArmArchitecture arch : new ArmArchitecture[]{
+                ArmArchitecture.ARMV5TE, ArmArchitecture.ARMV6K, ArmArchitecture.ARMV6K_THUMB2,
+                ArmArchitecture.ARMV7A, ArmArchitecture.ARM11_MPCORE}) {
+            assertTrue(arch.has(ArmFeature.BLX), arch + " tem BLX registrador");
+            assertTrue(arch.has(ArmFeature.BLX_IMMEDIATE), arch + " tem BLX imediato");
+        }
+        assertFalse(ArmArchitecture.ARMV4T.has(ArmFeature.BLX), "ARMv4T nunca teve BLX");
+        assertFalse(ArmArchitecture.ARMV4T.has(ArmFeature.BLX_IMMEDIATE), "ARMv4T nunca teve BLX imediato");
         assertTrue(ArmArchitecture.ARMV6K.has(ArmFeature.WAIT_HINTS));
         assertTrue(ArmArchitecture.ARMV7A.has(ArmFeature.DIVIDE));
         assertTrue(ArmArchitecture.ARMV7A.has(ArmFeature.VFPV2));
@@ -162,11 +192,15 @@ class ArmArchitectureMProfilePresetsTest {
         assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.M_PROFILE));
         assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.THUMB2));
         assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.BYTE_REVERSE), "v6-M tem REV/REV16/REVSH (B9.10)");
+        assertTrue(ArmArchitecture.ARMV6M.has(ArmFeature.BLX), "v6-M tem BLX registrador (B22.3)");
+        assertFalse(ArmArchitecture.ARMV6M.has(ArmFeature.BLX_IMMEDIATE), "v6-M não tem BLX imediato");
         assertFalse(ArmArchitecture.ARMV6M.has(ArmFeature.M_FAULT_MASKING), "v6-M não tem BASEPRI/FAULTMASK");
         assertFalse(ArmArchitecture.ARMV6M.has(ArmFeature.VFPV2), "sem VFP");
 
         assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.M_PROFILE));
         assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.M_FAULT_MASKING));
+        assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.BLX), "v7-M tem BLX registrador (B22.3)");
+        assertFalse(ArmArchitecture.ARMV7M.has(ArmFeature.BLX_IMMEDIATE), "v7-M não tem BLX imediato");
         assertTrue(ArmArchitecture.ARMV7M.has(ArmFeature.DIVIDE));
         assertFalse(ArmArchitecture.ARMV7M.has(ArmFeature.VFPV2), "Cortex-M3 sem FP (fora de escopo B7.4)");
     }

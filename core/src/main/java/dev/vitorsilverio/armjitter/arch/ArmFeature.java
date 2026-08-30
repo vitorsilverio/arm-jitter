@@ -8,8 +8,14 @@ package dev.vitorsilverio.armjitter.arch;
 /// as notas `gba-vs-nds-rules` do gbaemu para entender o que cada uma implica em ARMv4T vs ARMv5.
 public enum ArmFeature {
     // ---- Disponibilidade de instrução (gates de decoder) ----
-    /// `BLX` (branch with link and exchange), formas imediata e por registrador. ARMv5+.
+    /// `BLX` (branch with link and exchange), **só a forma por registrador** (`BLX Rm`). Presente
+    /// em todo perfil a partir de ARMv5T (perfis A/R) e de ARMv6-M (perfil M) — o perfil M nunca
+    /// teve estado de execução ARM, mas tem `BLX` registrador. A forma com alvo imediato é a
+    /// {@link #BLX_IMMEDIATE} à parte.
     BLX,
+    /// `BLX` com alvo imediato + troca para ARM state (ARMv5T, perfis A/R apenas). O perfil M
+    /// nunca teve — `BLX` **registrador** é {@link #BLX}.
+    BLX_IMMEDIATE,
     /// `CLZ` (count leading zeros). ARMv5+.
     CLZ,
     /// Multiplicações DSP (SMUL\<x>\<y>, SMLA\<x>\<y>, SMLAW, SMULW, SMLAL\<x>\<y>). ARMv5TE+.

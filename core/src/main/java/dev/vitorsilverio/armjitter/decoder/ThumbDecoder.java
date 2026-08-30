@@ -48,7 +48,7 @@ public final class ThumbDecoder implements InstructionDecoder {
     private static final int BRANCH_WITH_LINK_MASK = 0xC000;
 
     /// `BL`/`BLX` imediato Thumb-2 de 32 bits (B2.6, ARM DDI 0406C A8.8.25): `hw2[12]` distingue
-    /// `BL` (`1`) de `BLX` imediato (`0`, gateado por {@link ArmFeature#BLX}) — o mesmo bit que já
+    /// `BL` (`1`) de `BLX` imediato (`0`, gateado por {@link ArmFeature#BLX_IMMEDIATE}) — o mesmo bit que já
     /// distingue os sufixos legados `0xF800-0xFFFF` (BL, `top5=0b11111`) de `0xE800-0xEFFF` (BLX,
     /// `top5=0b11101`): os dois `top5` só diferem no 4º bit do nibble alto, que é `bit12`.
     /// `hw2[15:14]` já é checado por {@link #BRANCH_WITH_LINK_MASK} antes de chegar aqui.
@@ -628,7 +628,7 @@ public final class ThumbDecoder implements InstructionDecoder {
 
         // Sufixo BLX (H=01): a segunda metade de um branch longo que troca para ARM (ARMv5T+).
         if ((raw & 0xF800) == 0xE800) {
-            if (!architecture.has(ArmFeature.BLX)) {
+            if (!architecture.has(ArmFeature.BLX_IMMEDIATE)) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
             }
             int lowOffset = (raw & 0x7FF) << 1;
@@ -704,11 +704,11 @@ public final class ThumbDecoder implements InstructionDecoder {
     /// campos de `DecodedInstruction` não carregam o offset/link — `StandardIrBuilder` recomputa
     /// tudo a partir de `raw` (os dois halfwords), reproduzindo exatamente o par
     /// `ThumbBlPrefix`+`ThumbBlSuffix` que o caminho legado de dois halfwords já produzia.
-    /// `BLX` imediato (`hw2[14]==0`) é gateado por {@link ArmFeature#BLX}, igual ao sufixo
-    /// `0xE800` legado.
+    /// `BLX` imediato (`hw2[14]==0`) é gateado por {@link ArmFeature#BLX_IMMEDIATE}, igual ao
+    /// sufixo `0xE800` legado.
     private DecodedInstruction decodeLongBranch32(int address, int hi, int lo, int raw32) {
         boolean isBlx = (lo & BL_VS_BLX_BIT) == 0;
-        if (isBlx && !architecture.has(ArmFeature.BLX)) {
+        if (isBlx && !architecture.has(ArmFeature.BLX_IMMEDIATE)) {
             return DecodedInstruction.unimplemented(address, raw32, InstructionSet.THUMB, Condition.AL);
         }
         return new DecodedInstruction(address, raw32, InstructionSet.THUMB, Condition.AL,
