@@ -128,6 +128,15 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int SMC_VALUE = 0x0160_0070;
     private static final int SMC_IMM_MASK = 0xF;
 
+    /// `HLT` (B22.1, ARM DDI 0487 — Halting debug, ARMv8-A): `cccc 0001 0000 iiii iiii iiii 0111
+    /// iiii` — `imm16` = bits\[19:8\]<<4 | bits\[3:0\] (mesmo formato `@i16` de `HVC`). Confirmado
+    /// contra `target/arm/tcg/a32.decode` real do QEMU (`HLT .... 0001 0000 .... .... .... 0111
+    /// ....`). Mesmo espaço condicional "Miscellaneous instructions" de `BKPT` (`0001 0010`)/`HVC`
+    /// (`0001 0100`)/`SMC` (`0001 0110`) — difere só em bits\[22:21\] (`00`); a máscara `0x0FF000F0`
+    /// isola só o `0001 0000 ... 0111`, sem tocar os vizinhos.
+    private static final int HLT_MASK = 0x0FF0_00F0;
+    private static final int HLT_VALUE = 0x0100_0070;
+
     /// `ERET` (B9.8.4, ARM DDI 0406C B9.3.3): `cccc 0001 0110 0000 0000 0000 0110 1110` — encoding
     /// TOTALMENTE fixo (sem imediato), MESMO prefixo de `SMC` (bits\[27:8\] idênticos), distinguido
     /// só pelos 4 bits baixos (`SMC`: `0111 iiii`; `ERET`: `0110 1110`). Confirmado contra
@@ -223,6 +232,22 @@ public final class ArmDecoder implements InstructionDecoder {
             int imm4 = raw & SMC_IMM_MASK;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.SMC,
                     -1, -1, -1, imm4, false, false, false);
+        }
+
+        // HLT (B22.1): mesmo padrão de HVC/SMC acima — checado ANTES do dispatch condicional
+        // genérico, senão o espaço `0001 0000 ... 0111` (que o ARM ARM reserva para
+        // "Miscellaneous instructions") é lido por engano como um data-processing `TST` com S=0.
+        // Sem `ArmFeature.HALT` (nenhum preset a declara — ARMv8, posterior a todos os presets de
+        // 32 bits atuais) → UNIMPLEMENTED explícito (G8). Um preset ARMv8-A de 32 bits (B14) liga
+        // o decode real sem trabalho novo.
+        if ((raw & HLT_MASK) == HLT_VALUE) {
+            if (!architecture.has(ArmFeature.HALT)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            int imm16 = (((raw >>> HVC_IMM_HI_SHIFT) & HVC_IMM_HI_MASK) << HVC_IMM_LO_SHIFT_IN_IMM16)
+                    | (raw & HVC_IMM_LO_MASK);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.HALT,
+                    -1, -1, -1, imm16, false, false, false);
         }
 
         // WFI (ARMv6K hint): `cccc 0011 0010 0000 1111 0000 0000 0011`. No hardware real,

@@ -257,5 +257,19 @@ public enum ArmFeature {
     /// feature, {@link dev.vitorsilverio.armjitter.decoder.VfpDecoder} reivindica o encoding de
     /// `VMOV_half` e o recusa (`UNIMPLEMENTED` explícito, nunca mais um `MCR`/`MRC` genérico
     /// espúrio para o `CoprocessorBus` — a violação de G8 que esta feature fecha).
-    HALF_PRECISION_FP
+    HALF_PRECISION_FP,
+
+    // ---- Onda 6, B22.1 (`HLT` — Halting debug) ----
+    /// `HLT #imm` (Halting debug, **ARMv8-A** no perfil A / **ARMv8-M** no perfil M, ARM DDI
+    /// 0487) — para o core e entrega ao debugger externo. Introduzida bem depois de todos os
+    /// presets de 32 bits que o projeto mede hoje (v4T..v7-A, v6-M, v7-M), portanto **nenhum
+    /// preset a declara**. Sem esta feature, {@link
+    /// dev.vitorsilverio.armjitter.decoder.ThumbDecoder}/{@link
+    /// dev.vitorsilverio.armjitter.decoder.ArmDecoder} reconhecem o encoding (`0xBA80`/`0xFFC0`
+    /// no T16; `.... 0001 0000 .... .... .... 0111 ....` no A32) e o recusam com `UNIMPLEMENTED`
+    /// explícito — nunca mais um fallthrough para o `UNDEFINED` genérico (T16) nem um misdecode
+    /// como ALU (A32), que é a higiene de G8. Quando um preset ARMv8-A de 32 bits (B14) declarar
+    /// `HALT`, o mesmo encoding passa a decodificar como {@link
+    /// dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT} sem trabalho novo de decode.
+    HALT
 }

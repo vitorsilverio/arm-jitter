@@ -30,19 +30,19 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **88%** — 16125 de 18197 células aplicáveis decodificam.
+> **88%** — 16120 de 18185 células aplicáveis decodificam.
 
 Por arquitetura:
 
 | Arquitetura | Cobertura |
 |---|---|
-| v4T | **95%** (207/216) |
-| v5TE | **96%** (222/229) |
-| v6K | **99%** (312/313) |
-| MPCore | **99%** (362/363) |
-| v7-A | **99%** (652/654) |
-| v6-M | **82%** (81/98) |
-| v7-M | **95%** (321/336) |
+| v4T | **96%** (206/214) |
+| v5TE | **97%** (221/227) |
+| v6K | **100%** (311/311) |
+| MPCore | **100%** (361/361) |
+| v7-A | **99%** (651/652) |
+| v6-M | **83%** (81/97) |
+| v7-M | **95%** (321/335) |
 | ARMv8.0-A | **87%** (839/960) |
 | ARMv8.1-A | **87%** (863/984) |
 | ARMv8.2-A | **87%** (868/995) |
@@ -64,8 +64,8 @@ Por arquitetura:
 
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
-| A32 — instruções ARM de 32 bits | 266 | v4T 100% (145/145) · v5TE 100% (157/157) · v6K 100% (232/232) · MPCore 100% (232/232) · v7-A 100% (245/245) |
-| T16 — Thumb clássico | 86 | v4T 87% (62/71) · v5TE 90% (65/72) · v6K 98% (80/81) · MPCore 98% (80/81) · v7-A 97% (81/83) · v6-M 92% (73/79) · v7-M 95% (79/83) |
+| A32 — instruções ARM de 32 bits | 266 | v4T 100% (144/144) · v5TE 100% (156/156) · v6K 100% (231/231) · MPCore 100% (231/231) · v7-A 100% (244/244) |
+| T16 — Thumb clássico | 86 | v4T 88% (62/70) · v5TE 91% (65/71) · v6K 100% (80/80) · MPCore 100% (80/80) · v7-A 98% (81/82) · v6-M 93% (73/78) · v7-M 96% (79/82) |
 | T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
@@ -188,7 +188,7 @@ Inventário: `a32.decode` · 266 instruções.
 | `BLX_r` | · | ✅ | ✅ | ✅ | ✅ | · | · |
 | `CLZ` | · | ✅ | ✅ | ✅ | ✅ | · | · |
 | `ERET` | · | · | · | · | ✅ | · | · |
-| `HLT` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
+| `HLT` | · | · | · | · | · | · | · |
 | `BKPT` | ✅ | ✅ | ✅ | ✅ | ✅ | · | · |
 | `HVC` | · | · | · | · | ✅ | · | · |
 | `SMC` | · | · | ✅ | ✅ | ✅ | · | · |
@@ -433,7 +433,7 @@ Inventário: `t16.decode` · 86 instruções.
 | `SEVL` | · | · | · | · | · | · | · |
 | `NOP` | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `IT` | ❌ | ❌ | · | · | ✅ | ✅ | ✅ |
-| `HLT` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `HLT` | · | · | · | · | · | · | · |
 | `BKPT` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `CBZ` | ❌ | ❌ | · | · | ✅ | ✅ | ✅ |
 | `STM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

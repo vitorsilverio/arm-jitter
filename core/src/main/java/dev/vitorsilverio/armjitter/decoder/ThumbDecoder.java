@@ -415,6 +415,23 @@ public final class ThumbDecoder implements InstructionDecoder {
                     InstructionKind.BREAKPOINT, -1, -1, -1, immediate, false, false, false);
         }
 
+        // `HLT #imm6` (B22.1, ARM DDI 0487 — Halting debug, ARMv8-A / ARMv8-M): `1011 1010 10 imm6`
+        // (`0xBA80`, máscara `0xFFC0`). Ocupa o buraco `..10..` da família `REV`/`REV16`/`REVSH`
+        // (`1011 1010 xx` — `BYTE_REVERSE16_*` casa os três valores explícitos `0xBA00`/`0xBA40`/
+        // `0xBAC0`; `0xBA80` nunca era reconhecido e caía no `UNDEFINED` de fallthrough). Precede o
+        // bloco de `REV` (mais abaixo) por segurança de ordem, embora não haja sobreposição de
+        // máscara. Nenhum preset declara `ArmFeature.HALT` (ARMv8, posterior a todos os presets de
+        // 32 bits atuais) → recusa explícita (G8); um preset ARMv8-A de 32 bits (B14) liga o
+        // decode real sem trabalho novo.
+        if ((raw & 0xFFC0) == 0xBA80) {
+            if (!architecture.has(ArmFeature.HALT)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
+            }
+            int immediate = raw & 0x3F;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.HALT, -1, -1, -1, immediate, false, false, false);
+        }
+
         if ((raw & 0xF000) == 0xD000 && (raw & 0x0F00) != 0x0F00) {
             Condition condition = ArmDecoder.decodeCondition((raw >>> 8) & 0xF);
             int offset = signExtend(raw & 0xFF, 8) << 1;

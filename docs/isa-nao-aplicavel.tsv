@@ -60,6 +60,12 @@ BLXNS	*	ARMv8-M Security Extension
 
 # ── ARMv8-A ─────────────────────────────────────────────────────────────────────────────────
 SEVL	*	ARMv8-A (hint "send event local")
+# ── B22.1: `HLT` (Halting debug) é ARMv8-A (perfil A) / ARMv8-M (perfil M), ARM DDI 0487 — ────
+# ── posterior a TODOS os presets de 32 bits atuais (v4T..v7-A, v6-M, v7-M). O decoder passa a
+# ── reconhecer o encoding e a recusá-lo por gate (`ArmFeature.HALT`, sem preset); `grupo`
+# ── escopa a exclusão a cada `.decode` porque `HLT` também existe em `a64.decode` (já ✅, B8.3).
+HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bits atuais	t16.decode
+HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bits atuais	a32.decode
 
 # ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
 VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje

@@ -258,6 +258,70 @@ class ArmDecoderTest {
         assertNotEquals(CpuMode.MONITOR, core.mode());
     }
 
+    // ── HLT (B22.1, ARM DDI 0487 — Halting debug, ARMv8-A) ──────────────────────────────────
+    // `cccc 0001 0000 imm12 0111 imm4`. Mesmo espaço "Miscellaneous instructions" de BKPT
+    // (`0001 0010`)/HVC (`0001 0100`)/SMC (`0001 0110`) — difere só em bits[22:21] (`00`).
+    // Nenhum preset atual declara ArmFeature#HALT; o encoding é RECONHECIDO e recusado (G8, em
+    // vez do misdecode como ALU `TST` que o espaço tinha antes).
+
+    private static final ArmArchitecture ARM_WITH_HALT =
+            ArmArchitecture.extending(ArmArchitecture.ARMV7A, "ARMv8A32-TestHalt", ArmFeature.HALT);
+
+    @Test
+    void decodesArmHltWithHaltFeature() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0xE101_2374); // HLT #0x1234 (imm16 = bits[19:8]<<4 | bits[3:0])
+
+        DecodedInstruction instruction = new ArmDecoder(ARM_WITH_HALT).decode(memory, 0);
+
+        assertEquals(InstructionKind.HALT, instruction.kind());
+        assertEquals(Condition.AL, instruction.condition());
+        assertEquals(0x1234, instruction.immediate());
+    }
+
+    @Test
+    void armHltDecodeAcceptsAnyConditionField() {
+        TestAddressSpace memory = new TestAddressSpace(16);
+        memory.put32(0, 0x1101_2374); // cond=NE sobre o mesmo padrão (UNPREDICTABLE no HW, decode aceita)
+
+        DecodedInstruction instruction = new ArmDecoder(ARM_WITH_HALT).decode(memory, 0);
+
+        assertEquals(InstructionKind.HALT, instruction.kind());
+        assertEquals(Condition.NE, instruction.condition());
+        assertEquals(0x1234, instruction.immediate());
+    }
+
+    @Test
+    void armHltIsUnimplementedOnEveryCurrentPreset() {
+        for (ArmArchitecture architecture : new ArmArchitecture[]{
+                ArmArchitecture.ARMV4T, ArmArchitecture.ARMV5TE, ArmArchitecture.ARMV6K,
+                ArmArchitecture.ARM11_MPCORE, ArmArchitecture.ARMV7A}) {
+            TestAddressSpace memory = new TestAddressSpace(16);
+            memory.put32(0, 0xE101_2374);
+
+            DecodedInstruction instruction = new ArmDecoder(architecture).decode(memory, 0);
+
+            assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind(),
+                    "HLT deve ser recusada explicitamente em " + architecture.name());
+        }
+    }
+
+    @Test
+    void armHltDoesNotDisturbHvcOrSmcNeighbours() {
+        TestAddressSpace hvc = new TestAddressSpace(16);
+        hvc.put32(0, 0xE141_2374); // HVC #0x1234
+        assertEquals(InstructionKind.HVC, new ArmDecoder(ARM_WITH_HALT).decode(hvc, 0).kind());
+
+        TestAddressSpace smc = new TestAddressSpace(16);
+        smc.put32(0, 0xE160_0075); // SMC #5
+        assertEquals(InstructionKind.SMC, new ArmDecoder(ARM_WITH_HALT).decode(smc, 0).kind());
+
+        // BKPT A32 (`0001 0010`) não deve ser engolido pela máscara de HLT.
+        TestAddressSpace bkpt = new TestAddressSpace(16);
+        bkpt.put32(0, 0xE120_0070);
+        assertNotEquals(InstructionKind.HALT, new ArmDecoder(ARM_WITH_HALT).decode(bkpt, 0).kind());
+    }
+
     // ── ERET (B9.8.4, A32, ARM DDI 0406C B9.3.3) ────────────────────────────────────────────
 
     // B22.5: ArmFeature#VIRTUALIZATION_EXTENSIONS agora É habilitada em ARMV7A (era incoerência
