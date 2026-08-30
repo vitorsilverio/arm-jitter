@@ -791,3 +791,46 @@ RFE	v7-M	modelo de exceção A/R-profile (retorno com writeback de SP banco); M-
 SRS	v7-M	modelo de exceção A/R-profile (stack de exceção manual); M-profile empilha automaticamente via hardware	t32.decode
 SB	v7-M	ARMv8.0-A/FEAT_SB (Speculation Barrier), posterior a ARMv7-M	t32.decode
 SUB_rri	v7-M	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem essa forma (B9.11), M-profile usa EXC_RETURN via BX/POP	t32.decode
+
+# ── B22.4 (2026-08-29): curadoria de denominador da coluna T16 — células ❌ de instruções que a
+# ── arquitetura da coluna NÃO tem (posteriores a ela, ou inexistentes naquele perfil, ou
+# ── inalcançáveis por decisão de decode já tomada). Mesma classe de B9.10/B9.12/B9.14/B9.15/B9.17.
+# ── `grupo=t16.decode` em TODAS (YIELD/WFE/SEV/NOP/IT/CBZ/BKPT/SETEND/BLX_suffix/BL_suffix/
+# ── BL_BLX_prefix também têm forma de 32 bits em t32.decode — sem o `grupo` a exclusão casaria por
+# ── nome e apagaria a forma de 32 bits, ver B9.15). Cada mnemônico tem 1 única linha em t16.decode
+# ── (conferido), então `ocorrencia` não é necessária. Zero mudança em core/src/main.
+#
+# ── Hints T16 dedicados (opcode 1011 1111 ....): YIELD/WFE/SEV são ARMv6K (ARM DDI 0406C A6.7;
+# ── QEMU trans_YIELD/trans_SEV/trans_WFE = ARM_FEATURE_V6K || ARM_FEATURE_M; decoder gate
+# ── ArmFeature.WAIT_HINTS, B9.14) — posteriores a ARMv4T/ARMv5TE. WFI (v4T,v5TE) já curado acima.
+YIELD	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_YIELD = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
+WFE	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_WFE = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
+SEV	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_SEV = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
+# ── NOP encoding hint dedicado T16 (1011 1111 ---- 0000): ARMv6T2. Antes disso NOP é o alias
+# ── `MOV r8,r8`, encoding DISTINTO (decodifica como MOV_rxrr, já ✅ em v4T/v5TE — não afetado).
+NOP	v4T,v5TE	ARMv6T2 (encoding hint dedicado 1011 1111 ---- 0000, ARM DDI 0406C A6.7); antes é o alias MOV r8,r8 (encoding distinto, coberto por MOV_rxrr), posterior a v4T/v5TE	t16.decode
+# ── IT / CBZ / CBNZ (T16, ARM DDI 0406C A6.7): exigem Thumb-2 de verdade (ARMv6T2+) — decoder gate
+# ── ArmFeature.THUMB2 (ThumbDecoder linhas 584/600). Já curados para v6K/MPCore (B9.14); aqui as
+# ── colunas ainda mais antigas v4T/v5TE, mesmo motivo.
+IT	v4T,v5TE	ARMv6T2 (Thumb-2), ausente do ARMv4T/ARMv5TE (sem Thumb-2)	t16.decode
+CBZ	v4T,v5TE	ARMv6T2 (Thumb-2), ausente do ARMv4T/ARMv5TE (sem Thumb-2)	t16.decode
+# ── BKPT T16 (1011 1110 imm8): ARMv5T — decoder gate ArmFeature.BREAKPOINT (ThumbDecoder linha
+# ── 410). v5TE+ já o tem (✅); exclui SÓ v4T (ARM7TDMI).
+BKPT	v4T	ARMv5T (ARM DDI 0100I), anterior ao ARMv4T (ARM7TDMI)	t16.decode
+# ── SETEND T16 (1011 0110 010 1 E 000): o perfil M NÃO tem instrução de endianness — endianness é
+# ── fixa (CPSR.E RES0 / AIRCR.ENDIANNESS somente-leitura), ARM DDI 0419C (ARMv6-M) / ARM DDI 0403E
+# ── (ARMv7-M). Categoria "não existe neste perfil", NÃO "posterior" (B22.5). v4T/v5TE já curados
+# ── acima ("ARMv6, anterior"). Decoder gate ArmFeature.SETEND_BIG_ENDIAN_DATA (ThumbDecoder 497),
+# ── que nenhum preset M declara.
+SETEND	v6-M,v7-M	perfil M não tem instrução de endianness (endianness fixa; ARM DDI 0419C / 0403E)	t16.decode
+# ── Par legado BL/BLX de meio-halfword (Thumb-1 split: BLX_suffix=0xE800, BL_BLX_prefix=0xF000,
+# ── BL_suffix=0xF800). Em v4T: BLX não existe (ARMv5T). Nos presets com ArmFeature.THUMB2
+# ── (v7-A, v6-M, v7-M): INALCANÇÁVEL por decisão de decode (B2.6) — ThumbDecoder.decode:170
+# ── intercepta top5 ∈ {0b11101,0b11110,0b11111} e resolve o par BL/BLX como UMA instrução de 32
+# ── bits (LONG_BRANCH_32) em tryDecodeThumb32 ANTES das linhas legadas de 16 bits (ThumbDecoder
+# ── 611-637); o próprio t16.decode do QEMU comenta que estes padrões só valem para CPU sem
+# ── Thumb-2. BL/BLX de 32 bits (LONG_BRANCH_32) seguem ✅ em v7-A/v6-M/v7-M — não são afetados.
+BLX_suffix	v4T	ARMv5T (BLX não existe em ARMv4T), anterior ao ARMv4T	t16.decode
+BLX_suffix	v7-A,v6-M,v7-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
+BL_BLX_prefix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
+BL_suffix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
