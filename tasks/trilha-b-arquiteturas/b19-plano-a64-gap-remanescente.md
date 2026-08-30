@@ -10,7 +10,7 @@ do `armbox`/`virtual-arm-box` aarch64). Era a única superfície grande do proje
 
 ## O número (medido nesta sessão a partir de `docs/COBERTURA-ISA.md`)
 
-| Métrica | Valor |
+| Métrica | Valor (medição original, 2026-08-29) |
 |---|---:|
 | Células `❌` em `ARMv8.0-A` | **174** (de 970 aplicáveis) |
 | Mnemônicos distintos envolvidos | **119** |
@@ -20,7 +20,29 @@ Método: join da seção `## A64 — AArch64` da tabela com as linhas de `target
 Vários mnemônicos têm 2-5 linhas de encoding e só ALGUMAS faltam (ex.: `FADD_v` tem `@qrrr_h` ❌ e
 `@qrrr_sd` ✅) — por isso o épico é organizado por **linha de encoding**, não por mnemônico.
 
+### ⚠️ Remedição de 2026-08-29 (rodada de spec pós-B19.3) — a escada original estava mal dimensionada
+
+Depois de B19.1-B19.3 fecharem 53 linhas, o join foi refeito **classificando cada célula `❌` pelo
+TEMPLATE da sua linha de encoding** (`@qrr_h` vs `@qrr_sd`, `@icvt_h` vs `@icvt_sd`, …), o que a
+medição original não fez. Resultado (121 células `❌` restantes em `ARMv8.0-A`):
+
+| Degrau | Linhas `❌` REAIS | Estimativa original | Por quê a diferença |
+|---|---:|---:|---|
+| **B19.4** | **11** | ~40 | A **B8.9 já implementou todas as formas `_sd` vetoriais** de "two-reg-misc"; o que restava nesses mnemônicos é a linha `_h` (⇒ B19.5). Sobram só `FCVTL_v`/`FCVTN_v`/`FCVTXN_v` + 8 de ponto fixo vetorial |
+| **B19.5** (`FEAT_FP16`) | **84** | 13 | É o degrau **MAIOR** do épico, não o menor: acumulou as `_h` herdadas de B8.9 (vetoriais), B19.2 (14 escalares), B19.3 (16) e B19.4 (4). Precisa de decomposição própria — ver abaixo |
+| B19.6 (diversos) | 10 | ~10 | ✔ |
+| B19.7 (BF16/FP8) | 12 | ~12 | ✔ |
+| B19.8 (`FEAT_LUT`) | 4 | 4 | ✔ |
+
+**Consequência de sequenciamento**: B19.5 deixa de ser "um degrau" e passa a exigir **rodada de spec
+própria** que a decomponha (esboço abaixo, marcado `[REFINAR]`). B19.4 virou o degrau barato e é o
+próximo pegável.
+
 ## Clusters (é a escada)
+
+> ⚠️ **Os números desta tabela são a medição ORIGINAL de 2026-08-29, antes da remedição por
+> template** (ver seção anterior). Os clusters "FP vetorial" e "`FEAT_FP16`" estão dimensionados
+> errado aqui — use a tabela de remedição e a escada abaixo, não esta.
 
 | Cluster | O que | Linhas `❌` |
 |---|---|---:|
@@ -40,17 +62,39 @@ Vários mnemônicos têm 2-5 linhas de encoding e só ALGUMAS faltam (ex.: `FADD
 | **B19.1** | Atômicos `FEAT_LSE` (`LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP`, com as 4 combinações `A`/`R` de aquisição/liberação e as larguras `B`/`H`/`W`/`X`) + `LDAPR` (`FEAT_LRCPC`). `CAS`/`CASP` JÁ existem — este degrau completa a extensão pela metade | 10 | — |
 | **B19.2** | AdvSIMD FP escalar "three same" + pairwise escalar — espelho do que `Ir64VectorFpArithmeticExecutor` já faz na forma VETORIAL; a forma escalar reaproveita os mesmos records (padrão de B8.8) | 28 | — |
 | **B19.3** | AdvSIMD FP escalar "two-reg-misc" + conversões escalares int↔FP (incluindo ponto fixo) | ~45 | B19.2 |
-| **B19.4** | AdvSIMD FP vetorial "two-reg-misc" + conversões vetoriais (incluindo ponto fixo, `FCVTL`/`FCVTN`/`FCVTXN`) | ~40 | B19.3 |
-| **B19.5** | **`FEAT_FP16`**: acrescentar a linha `_h` a TODA família FP que hoje só tem `_sd`, com `ArmFeature`/`Aarch64Feature` própria e gate por versão (`FEAT_FP16` é ARMv8.2-A) | 13 | B19.4 |
+| **[B19.4](b19.4-a64-advsimd-fp-vetorial-convert.md)** | Conversões de PRECISÃO vetoriais (`FCVTL_v`/`FCVTN_v`/`FCVTXN_v`) + conversões vetoriais FP↔ponto fixo (`SCVTF_vf`/`UCVTF_vf`/`FCVTZS_vf`/`FCVTZU_vf`, formas `s`/`d`). **Spec escrita 2026-08-29.** Introduz o formato `binary16` (só CONVERSÃO — `Float.float16ToFloat`/`floatToFloat16` do JDK 20+), que é ISA base ARMv8.0-A e não `FEAT_FP16` | **11** | B19.3 |
+| **B19.5** `[REFINAR]` | **`FEAT_FP16`** (aritmética de meia precisão): a linha `_h` de TODA família FP que hoje só tem `_sd`, com `Aarch64Feature` própria e gate por versão (ARMv8.2-A). **84 linhas — precisa de rodada de spec que decomponha** (esboço abaixo) | **84** | B19.4 |
 | **B19.6** | Diversos: `SYS` (⚠️ ver Armadilhas — pode ser medição, não gap), `NOP` restante, `PACGA` (`FEAT_PAuth`), `ABS` inteiro (`FEAT_CSSC`), `DUP_element_s`, `FMOV_xu`/`FMOV_ux`, `FMOVI_v_h`, `Vimm` | ~10 | — |
 | **B19.7** | BF16 (`BFMLAL`/`BFCVTN`) e FP8 (`FCVTN_bh`/`FCVTN_bs`/`FMLAL_hb`/`FMLALL_sb`/`F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`), com as features `FEAT_BF16`/`FEAT_FP8` e gate por versão | ~12 | B19.5 |
 | **B19.8** | `FEAT_LUT` (`LUTI2`/`LUTI4`, ARMv9.5) — tabela de consulta por lane | 4 | B19.4 |
 | **B19.9** | **Fechamento**: remedir, curar em `docs/isa-nao-aplicavel.tsv` o que for genuinamente posterior à versão da coluna, e registrar o A64 na matriz `docs/VALIDACAO-ARQUITETURAS.md` | 0 | B19.1-B19.8 |
 
+## Esboço de decomposição da B19.5 `[REFINAR]` (escrito na remedição de 2026-08-29)
+
+Não executar direto — é material para a próxima rodada de spec. As 84 linhas `_h` se agrupam por
+**onde moram no decoder**, e todas compartilham UM pré-requisito: um caminho de meia precisão no
+núcleo vetorial (`advsimd/AdvSimdLanes`) e no `Ir64VectorFp*Executor`.
+
+| Sub | Escopo provável | Linhas |
+|---|---|---:|
+| **B19.5.1** | **Fundação, sem decode novo**: `Aarch64Feature.FEAT_FP16` (ARMv8.2-A) + caminho `esz=1` em `AdvSimdLanes.fpThreeSame`/`fpPairwise`/`fpCombinePair` e no executor unário, sobre `Float.float16ToFloat`/`floatToFloat16` (que a **B19.4** já terá trazido para o projeto). Zero-diff | 0 |
+| **B19.5.2** | `_h` de "three same" + pairwise, **vetorial e escalar** (`FADD_v`/`FSUB_v`/`FMAX_v`/`FMIN_v`/`FCMEQ_v` + as 14 escalares que a B19.2 recusou) | ~19 |
+| **B19.5.3** | `_h` de "two-reg-misc" **vetorial e escalar** (`FABS_v`/`FNEG_v`/`FSQRT_v`/`FRINTx_v`/`FCM**0_v`/`FRECPE_v`/`FRSQRTE_v` + as 8 escalares de B19.3) | ~25 |
+| **B19.5.4** | `_h` das conversões: `@icvt_h` (vetorial `_vi` + escalar `_f`), `@fcvt_fixed_h` (escalar) e `@fcvtq_h` (vetorial) | ~28 |
+| **B19.5.5** | `_h` das formas INDEXADAS (`@qrrx_h`: `FMUL_si`/`FMLA_si`/`FMLS_si`/`FMULX_si` + `_vi`) | ~8 |
+
+**Task irmã, fora do épico B19**: "NEON FP16 AArch32 / `FEAT_FP16`" — registrada pela **B13.6** no
+`## Resultado` dela (as formas `sz=1` das 22 linhas de 3-reg-same FP A32 viram `UNIMPLEMENTED` hoje).
+Ela depende da MESMA fundação de B19.5.1 e deve ser sequenciada junto, não separada — foi
+exatamente para não criar assimetria entre os dois lados que a B13.6 recusou F16.
+
 ## Meta
 
 A64 sai de **82%** para ~100% em todas as 16 versões medidas — é o maior salto isolado de cobertura
 global disponível hoje (~174 células × 16 colunas no denominador global).
+
+**Progresso real** (medido): 174 → **121** células `❌` depois de B19.1 (10), B19.2 (28) e B19.3 (29).
+A64 `ARMv8.0-A` 82% → **87%**; global 83% → **88%**.
 
 ## Invariantes específicos deste épico
 
