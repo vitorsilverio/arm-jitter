@@ -217,8 +217,62 @@ sessões simultâneas no mesmo checkout (regra 6 acima). B22.6 é a mais curta e
    hoje, mas é corrupção silenciosa esperando o primeiro (que seria justamente o FP16). A B19.5.1
    fecha com dispatch explícito + `default -> throw`.
 
-**Ainda precisam de rodada de spec** (nenhuma pegável hoje): B13.9+, B19.5.2-B19.5.6, B19.6-B19.9,
-a task irmã "NEON FP16 AArch32", e os épicos em `📋 plano` — B14, B15, B16, B17, B18, B20, B21.
+## 🗺️ Rodada de 2026-09-02 (segunda): o MAPA para 100% — [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md)
+
+Pedido do usuário: *"faça as specs de tudo que ainda falta para chegarmos a 100% da arquitetura ARM
+implementada e todos os processadores terem todas as features que devem ter, ainda temos um grande
+trabalho depois para fazer o jit de tudo e o truffle realmente funcionar"*.
+
+A medição mostrou que **o mapa estava incompleto de um jeito que não aparecia**: os épicos B13-B22
+cobrem DECODE, e havia consenso implícito de que "falta só isso". São **4 dimensões**, e duas não
+tinham épico nenhum:
+
+| # | Dimensão | Media-se? | Estado | Épico |
+|---|---|---|---|---|
+| 1 | Decode + interpretado | ✅ `COBERTURA-ISA.md` | **88%** | B13-B22 |
+| 2 | **Emissão JIT nativa** | ❌ **não** | ASM32 **46/73** · ASM64 **24/95** | **[C12](trilha-c-perf/c12-plano-jit-nativo.md)** 🆕 |
+| 3 | **Truffle** | ❌ **não** | **40/73** e **QUEBRA** · A64 **0** | **[A10](trilha-a-truffle/a10-plano-truffle-completo.md)** 🆕 |
+| 4 | Catálogo de processadores | parcial | downstream de 1 | B12 (+ task de fechamento futura) |
+
+**Um `✅` em `COBERTURA-ISA.md` não significa que algum backend compile a instrução.**
+
+### Os dois achados que mudam a prioridade
+
+1. **O backend Truffle não degrada — ele QUEBRA.** `TruffleCodeEmitter#supports` é literalmente
+   `return true;` e `IrOpNodeFactory` lança `IllegalStateException` em 33 dos 73 `Kind`. Qualquer
+   binário ARM com uma instrução de **ponto flutuante** mata o backend. Nunca apareceu porque a
+   superfície quebrada nunca foi exercitada (gbaemu=`ARMV4T`, ndsemu=`ARMV5TE`, sem VFP; armbox não
+   usa Truffle por padrão). O conserto — **[A10.1](trilha-a-truffle/a10.1-truffle-supports-honesto.md)** —
+   é **pequeno**: o campo `fallback`, o contador e o `if (!supports(block))` já existem e já estão
+   fiados, só nunca são `false`.
+2. **O Javadoc de `Ir64NativePolicy` afirma cobertura nativa exaustiva** — era verdade na B6.5.4
+   (24 Kinds). Hoje são 95, e os 71 que faltam incluem **toda a AdvSIMD do AArch64**. Como a política
+   é `WHOLE_BLOCK`, **uma** op não suportada derruba o **bloco inteiro** para o interpretador. Quem
+   ler o Javadoc conclui que não há trabalho ali — **[C12.1](trilha-c-perf/c12.1-cobertura-jit-medida.md)**
+   cria `docs/COBERTURA-JIT.md` por medição e corrige o texto.
+
+### Specs novas desta rodada (2 pegáveis + 2 épicos + o mapa)
+
+| Item | O que | Pegável? |
+|---|---|---|
+| [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md) | O mapa medido das 4 dimensões + ordem recomendada | — (documento) |
+| [C12](trilha-c-perf/c12-plano-jit-nativo.md) | ÉPICO emissão JIT nativa, escada C12.1-C12.9 | — (plano) |
+| [A10](trilha-a-truffle/a10-plano-truffle-completo.md) | ÉPICO Truffle, escada A10.1-A10.9 | — (plano) |
+| **[A10.1](trilha-a-truffle/a10.1-truffle-supports-honesto.md)** | Truffle: crash → fallback | ✅ **urgente e pequena** |
+| **[C12.1](trilha-c-perf/c12.1-cobertura-jit-medida.md)** | `docs/COBERTURA-JIT.md` medido + Javadoc corrigido | ✅ |
+
+### ⚠️ O que esta rodada NÃO fez
+
+**Não decompôs os 106 degraus restantes.** As escadas somam **126 degraus** (B13=22, B14=7, B15=7,
+B16=14, B17=26, B18=13, B19=9+6, B20=9, B21=8, B22=6) e **20 têm spec**. Escrever as outras 106 exige
+medição instrução a instrução contra `target/isa-decode/` — no ritmo estabelecido (≈3 specs por
+sessão, cada uma medida contra o oráculo real E contra o código), é trabalho de **dezenas de
+sessões**. Escrever spec sem medir é exatamente o erro que a remedição do B19 pegou (6× de
+diferença). A ordem recomendada para as próximas rodadas está no `ROADMAP-100-ARM.md`.
+
+**Ainda precisam de spec**: B13.9+, B19.5.2-B19.5.6, B19.6-B19.9, a task irmã "NEON FP16 AArch32",
+C12.2-C12.9, A10.2-A10.9, a task de fechamento do catálogo de processadores, e os épicos em
+`📋 plano` — B14, B15, B16, B17, B18, B20, B21.
 
 **Sonnet executa; 1 sessão = 1 task.**
 

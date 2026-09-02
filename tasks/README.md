@@ -206,6 +206,24 @@ Casos que **não** viram task (ainda):
 **Nunca duplique o corpo.** A issue é o sintoma; a task é a solução; cada uma referencia a
 outra por link.
 
+## 🗺️ O mapa para 100% — [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md)
+
+**Antes de planejar qualquer trabalho de cobertura, leia
+[`tasks/ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md)** (escrito em 2026-09-02, a pedido do usuário:
+*"faça as specs de tudo que ainda falta para chegarmos a 100%"*). Ele mede as **4 dimensões** que
+separam o projeto de "ARM 100%", e a descoberta que o motivou é que só a primeira era medida:
+
+1. **Decode + execução interpretada** — `docs/COBERTURA-ISA.md`, hoje **88%**. É a única que a
+   tabela mede, e era tratada implicitamente como "o que falta".
+2. **Emissão JIT nativa** — não se media. ASM 32 bits **46/73**, ASM 64 bits **24/95** (toda a
+   AdvSIMD do AArch64 é interpretada). Épico **C12**, novo.
+3. **Truffle** — não se media. **40/73** e o backend **quebra** (não degrada) em 33 `Kind`; zero
+   suporte a AArch64. Épico **A10**, novo.
+4. **Catálogo de processadores** — todas as pendências do B12 são downstream das outras três.
+
+Uma instrução só está **realmente** implementada quando as quatro estão verdes. `✅` em
+`docs/COBERTURA-ISA.md` não significa que algum backend a compile.
+
 ## Índice e dependências
 
 O título, dependências e status de cada task vivem no `INDICE.md` de cada trilha, não
