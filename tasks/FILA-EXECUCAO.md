@@ -174,15 +174,51 @@ Esta rodada mediu o que sobrou e escreveu **3 specs pegáveis**:
    fez — as 121 células `❌` restantes do A64 se distribuem assim: **B19.4 = 11** (não ~40: a B8.9 já
    fizera todas as `_sd` vetoriais de two-reg-misc), **B19.5 = 84** (não 13 — é o MAIOR degrau do
    épico, acumulou as `_h` de B8.9/B19.2/B19.3/B19.4), B19.6 = 10, B19.7 = 12, B19.8 = 4. **B19.5
-   deixou de ser um degrau e virou `[REFINAR]`**, com esboço de decomposição B19.5.1-B19.5.5 escrito
-   no épico — precisa de rodada de spec própria antes de ser pega.
+   deixou de ser um degrau e virou `[REFINAR]`** — ✅ **decomposta na rodada de 2026-09-02**
+   (`b19.5-plano-fp16.md`, escada B19.5.1-B19.5.6).
 2. **O lado de 32 bits já atingiu a meta do épico B22**: A32/T16/T32/VFP com **0 `❌` e 0 `⚠️`**, e
    **zero `⚠️` no projeto inteiro** (eram 2). O que falta nas colunas `v6-M`/`v7-M` (88%/96%) é
    `m-nocp`, território da **B15**. ⚠️ **Isso NÃO descongela os subprojetos** — o congelamento é
    sobre a cobertura TOTAL e o A64 sozinho tem 2020 células `❌`.
 
-**Ainda precisam de rodada de spec** (nenhuma é pegável hoje): B13.8+, **B19.5** (decompor),
-B19.6-B19.9, e os épicos em `📋 plano` — B14, B15, B16, B17, B18, B20, B21.
+## 🆕 Rodada de spec de 2026-09-02 (terceira; nada foi executado entre ela e a anterior)
+
+As 3 specs da rodada anterior seguiam ⬜ intactas, então esta rodada **escreveu o próximo lote** em
+vez de remedir. Agora há **5 tasks pegáveis** e 1 plano novo:
+
+| Task | O que | Tamanho medido | Pegável? |
+|---|---|---:|---|
+| [B13.7](trilha-b-arquiteturas/b13.7-neon-2reg-shift-imediato.md) | NEON 2-reg-and-shift: deslocamento por imediato | 56 linhas | ✅ |
+| [B13.8](trilha-b-arquiteturas/b13.8-neon-2reg-shift-narrow-widen-vcvt.md) | NEON estreitamento/alargamento + `VCVT` fixo↔float F32 — **fecha a seção "2-reg-and-shift"** | 34 (+4 F16 adiadas) | ✅ **depois de B13.7** |
+| [B19.4](trilha-b-arquiteturas/b19.4-a64-advsimd-fp-vetorial-convert.md) | A64 `FCVTL_v`/`FCVTN_v`/`FCVTXN_v` + conversões vetoriais FP↔ponto fixo | 11 linhas | ✅ |
+| [B19.5.1](trilha-b-arquiteturas/b19.5.1-nucleo-meia-precisao.md) | **Fundação binary16** do núcleo vetorial (`esz=1` em `AdvSimdLanes`) | 0 de decode | ✅ **depois de B19.4** |
+| [B22.6](trilha-b-arquiteturas/b22.6-fechamento-32-bits.md) | Fechamento do épico B22 | 0 de decode | ✅ |
+
+Novo **plano** (não é task): [B19.5](trilha-b-arquiteturas/b19.5-plano-fp16.md) — escada
+B19.5.1-B19.5.6 do `FEAT_FP16`.
+
+⚠️ **B13.8 e B19.4 tocam `executeConvertFixedPoint`** — não rodar as duas na mesma sessão nem em
+sessões simultâneas no mesmo checkout (regra 6 acima). B22.6 é a mais curta e não colide com nada.
+
+### Os três achados desta rodada
+
+1. **`Aarch64Feature.FP16` já é declarada em `ARMV8_2_A` e NENHUM ponto de `core/src/main` a
+   consulta** (`grep` devolve só a declaração e o enum). O preset **anuncia hoje uma extensão que o
+   decoder recusa inteira** — mesma classe de achado que o B11 fez para o A64 e o B18 registra para
+   `SCALABLE_MATRIX_EXTENSION`. B19.5 não é "acrescentar feature", é tornar real uma promessa.
+2. **A curadoria de versão A64 é por MNEMÔNICO e `FEAT_FP16` é por LINHA.**
+   `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS` é `Map<String, Aarch64Feature>`; `FADD_v` tem
+   `_h` (v8.2) e `_sd` (ISA base). Marcar por nome derrubaria a `_sd`, hoje ✅. É a limitação que a
+   **B9.17** resolveu em 32 bits com a coluna `ocorrencia` — precisa do espelho A64. Efeito atual:
+   **168 células com denominador errado** (as 84 `_h` contam `❌` em v8.0/v8.1, onde a feature nem
+   existe). Virou B19.5.2 e vem ANTES do decode.
+3. **`AdvSimdLanes.fpThreeSame`/`fpCombinePair` computam `esz` `0`/`1` SILENCIOSAMENTE como
+   binary64** — são `if (esz == 2) { … } else { <double> }`. Nenhum chamador passa esses valores
+   hoje, mas é corrupção silenciosa esperando o primeiro (que seria justamente o FP16). A B19.5.1
+   fecha com dispatch explícito + `default -> throw`.
+
+**Ainda precisam de rodada de spec** (nenhuma pegável hoje): B13.9+, B19.5.2-B19.5.6, B19.6-B19.9,
+a task irmã "NEON FP16 AArch32", e os épicos em `📋 plano` — B14, B15, B16, B17, B18, B20, B21.
 
 **Sonnet executa; 1 sessão = 1 task.**
 

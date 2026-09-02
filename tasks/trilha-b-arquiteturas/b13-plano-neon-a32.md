@@ -98,8 +98,8 @@ também os "Achados abertos" da RFC — em especial que o backend Truffle hoje q
 | **B13.4** | 3-reg-same **inteiro**: aritmética/comparação/lógica (`VADD`/`VSUB`/`VMUL`/`VAND`/`VORR`/`VEOR`/`VBSL`/`VCGE`/`VCGT`/`VMAX`/`VMIN`/`VABD`/`VHADD`/`VRHADD`/`VTST`/`VPADD`/`VPMAX`/`VPMIN`) | ~50 | B13.2 |
 | **B13.5** | 3-reg-same **saturante/deslocamento** (`VQADD`/`VQSUB`/`VSHL`/`VRSHL`/`VQSHL`/`VQRSHL`/`VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`) | ~20 | B13.4 |
 | **B13.6** | 3-reg-same **ponto flutuante** (`VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VMLA_fp`/`VFMA_fp`/`VCEQ_fp`/`VCGE_fp`/`VACGE`/`VMAX_fp`/`VRECPS`/`VRSQRTS`/`VPADD_fp`/`VMAXNM_fp`) — inclui as formas `_hp` (gate `FEAT_FP16` próprio) | ~14 | B13.4 |
-| **B13.7** | 2-reg-and-shift: deslocamento por imediato (`VSHR`/`VSRA`/`VRSHR`/`VRSRA`/`VSHL`/`VSLI`/`VSRI`/`VQSHL`/`VQSHLU`) | ~50 | B13.4 |
-| **B13.8** | 2-reg-and-shift: estreitamento/alargamento (`VSHRN`/`VRSHRN`/`VQSHRN`/`VQRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VSHLL`) + `VCVT` fixo↔float vetorial | ~44 | B13.7 |
+| **[B13.7](b13.7-neon-2reg-shift-imediato.md)** | 2-reg-and-shift: deslocamento por imediato (`VSHR`/`VSRA`/`VRSHR`/`VRSRA`/`VSHL`/`VSLI`/`VSRI`/`VQSHL`/`VQSHLU`). **Spec 2026-08-29** | **56** (medido; era "~50") | B13.4 |
+| **[B13.8](b13.8-neon-2reg-shift-narrow-widen-vcvt.md)** | 2-reg-and-shift: estreitamento/alargamento (`VSHRN`/`VRSHRN`/`VQSHRN`/`VQRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VSHLL`) + `VCVT` fixo↔float **F32**. **Spec 2026-09-02**; as 4 linhas `VCVT` **F16** ficam para a task irmã "NEON FP16 AArch32" (depende de B19.5.1) | **34** + 4 adiadas (era "~44") | B13.7 |
 | **B13.9** | 1-reg-and-modified-immediate (`Vimm_1r`: `VMOV`/`VORR`/`VBIC`/`VMVN` imediato — `cmode`/`op` conferidos na função de trans, não no decodetree) | 1 | B13.4 |
 | **B13.10** | 3-reg-different-lengths: alargando (`VADDL`/`VSUBL`/`VADDW`/`VSUBW`/`VMULL`/`VABAL`/`VABDL`/`VMLAL`/`VMLSL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/`VMULL_P`) e estreitando (`VADDHN`/`VSUBHN`/`VRADDHN`/`VRSUBHN`) | ~35 | B13.4 |
 | **B13.11** | 2-reg-and-scalar (`VMLA_2sc`/`VMLS_2sc`/`VMUL_2sc`/`VMLAL_2sc`/`VMLSL_2sc`/`VMULL_2sc`/`VQDMLAL_2sc`/`VQDMLSL_2sc`/`VQDMULL_2sc`/`VQDMULH_2sc`/`VQRDMULH_2sc`/`VQRDMLAH_2sc`/`VQRDMLSH_2sc` + formas `_F_`) — espelho de B8.19 (indexed element) | ~24 | B13.10 |
@@ -114,6 +114,24 @@ também os "Achados abertos" da RFC — em especial que o backend Truffle hoje q
 | **B13.20** | `neon-shared.decode`: `VFML`/`VFML_scalar` (`FEAT_FHM`, ARMv8.2-A) | 4 | B13.6 |
 | **B13.21** | `neon-shared.decode`: `VDOT_b16`/`VFMA_b16`/`VMMLA_b16` + `_scal` (`FEAT_BF16`, ARMv8.6-A) | 5 | B13.19 |
 | **B13.22** | **Fechamento**: presets públicos com NEON (`ARMV7A_NEON`, ARMv8-A 32-bit) + entradas de `ArmProcessor` que hoje não existem por falta de NEON (Cortex-A8/A9/A5/A7/A15/A17…); `IsaCoverageReport` troca `NOT_IN_ANY_PRESET` por `ADVANCED_SIMD` nos 3 grupos — **é esta task que faz "não se aplica a nenhum preset atual" sumir da tabela** | 0 | B13.16, B13.21 |
+
+### Task irmã fora da escada: **NEON FP16 AArch32**
+
+Não tem número B13.x porque **atravessa vários degraus** e depende de fundação de outro épico. As
+formas de MEIA PRECISÃO do NEON A32 vão sendo recusadas (`UNIMPLEMENTED` explícito) degrau a degrau,
+com destino registrado, e serão fechadas de uma vez quando a fundação existir:
+
+| Origem | O que ficou de fora | Linhas |
+|---|---|---:|
+| **B13.6** (`## Resultado`) | formas `sz=1` das 22 linhas de 3-reg-same FP | 22 |
+| **B13.8** (decisão da spec) | `VCVT_SH`/`VCVT_UH`/`VCVT_HS`/`VCVT_HU` (`@2reg_vcvt_f16`) | 4 |
+| B13.13 (previsto) | `VCVT_F16_F32`/`VCVT_F32_F16` e conversões two-reg-misc | a medir |
+
+**Depende de [B19.5.1](b19.5.1-nucleo-meia-precisao.md)** (caminho `esz=1`/binary16 em
+`advsimd/AdvSimdLanes`) — a MESMA fundação que o `FEAT_FP16` do lado A64 usa. Foi exatamente para não
+criar assimetria entre os dois lados que a B13.6 recusou F16 em vez de implementá-la só em A32; a
+fundação compartilhada é o que torna essa recusa uma decisão de sequenciamento, não uma exclusão
+(regra máxima do `tasks/README.md`).
 
 ## Meta
 

@@ -63,29 +63,33 @@ próximo pegável.
 | **B19.2** | AdvSIMD FP escalar "three same" + pairwise escalar — espelho do que `Ir64VectorFpArithmeticExecutor` já faz na forma VETORIAL; a forma escalar reaproveita os mesmos records (padrão de B8.8) | 28 | — |
 | **B19.3** | AdvSIMD FP escalar "two-reg-misc" + conversões escalares int↔FP (incluindo ponto fixo) | ~45 | B19.2 |
 | **[B19.4](b19.4-a64-advsimd-fp-vetorial-convert.md)** | Conversões de PRECISÃO vetoriais (`FCVTL_v`/`FCVTN_v`/`FCVTXN_v`) + conversões vetoriais FP↔ponto fixo (`SCVTF_vf`/`UCVTF_vf`/`FCVTZS_vf`/`FCVTZU_vf`, formas `s`/`d`). **Spec escrita 2026-08-29.** Introduz o formato `binary16` (só CONVERSÃO — `Float.float16ToFloat`/`floatToFloat16` do JDK 20+), que é ISA base ARMv8.0-A e não `FEAT_FP16` | **11** | B19.3 |
-| **B19.5** `[REFINAR]` | **`FEAT_FP16`** (aritmética de meia precisão): a linha `_h` de TODA família FP que hoje só tem `_sd`, com `Aarch64Feature` própria e gate por versão (ARMv8.2-A). **84 linhas — precisa de rodada de spec que decomponha** (esboço abaixo) | **84** | B19.4 |
+| **[B19.5](b19.5-plano-fp16.md)** | **`FEAT_FP16`** (aritmética de meia precisão): a linha `_h` de TODA família FP que hoje só tem `_sd`. **84 linhas — decomposta em plano próprio (2026-08-29), escada B19.5.1-B19.5.6.** Achado: `Aarch64Feature.FP16` já é declarada em `ARMV8_2_A` e ninguém a consulta | **84** | B19.4 |
 | **B19.6** | Diversos: `SYS` (⚠️ ver Armadilhas — pode ser medição, não gap), `NOP` restante, `PACGA` (`FEAT_PAuth`), `ABS` inteiro (`FEAT_CSSC`), `DUP_element_s`, `FMOV_xu`/`FMOV_ux`, `FMOVI_v_h`, `Vimm` | ~10 | — |
 | **B19.7** | BF16 (`BFMLAL`/`BFCVTN`) e FP8 (`FCVTN_bh`/`FCVTN_bs`/`FMLAL_hb`/`FMLALL_sb`/`F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`), com as features `FEAT_BF16`/`FEAT_FP8` e gate por versão | ~12 | B19.5 |
 | **B19.8** | `FEAT_LUT` (`LUTI2`/`LUTI4`, ARMv9.5) — tabela de consulta por lane | 4 | B19.4 |
 | **B19.9** | **Fechamento**: remedir, curar em `docs/isa-nao-aplicavel.tsv` o que for genuinamente posterior à versão da coluna, e registrar o A64 na matriz `docs/VALIDACAO-ARQUITETURAS.md` | 0 | B19.1-B19.8 |
 
-## Esboço de decomposição da B19.5 `[REFINAR]` (escrito na remedição de 2026-08-29)
+## Decomposição da B19.5 → plano próprio ✅
 
-Não executar direto — é material para a próxima rodada de spec. As 84 linhas `_h` se agrupam por
-**onde moram no decoder**, e todas compartilham UM pré-requisito: um caminho de meia precisão no
-núcleo vetorial (`advsimd/AdvSimdLanes`) e no `Ir64VectorFp*Executor`.
+O esboço que esta seção continha foi **substituído por um plano medido** em 2026-08-29:
+**[`b19.5-plano-fp16.md`](b19.5-plano-fp16.md)**, com o inventário das 84 linhas por template, as
+**3 barreiras estruturais** encontradas no decoder e a escada **B19.5.1-B19.5.6** ordenada por custo
+estrutural crescente. Ler o plano, não este resumo.
 
-| Sub | Escopo provável | Linhas |
-|---|---|---:|
-| **B19.5.1** | **Fundação, sem decode novo**: `Aarch64Feature.FEAT_FP16` (ARMv8.2-A) + caminho `esz=1` em `AdvSimdLanes.fpThreeSame`/`fpPairwise`/`fpCombinePair` e no executor unário, sobre `Float.float16ToFloat`/`floatToFloat16` (que a **B19.4** já terá trazido para o projeto). Zero-diff | 0 |
-| **B19.5.2** | `_h` de "three same" + pairwise, **vetorial e escalar** (`FADD_v`/`FSUB_v`/`FMAX_v`/`FMIN_v`/`FCMEQ_v` + as 14 escalares que a B19.2 recusou) | ~19 |
-| **B19.5.3** | `_h` de "two-reg-misc" **vetorial e escalar** (`FABS_v`/`FNEG_v`/`FSQRT_v`/`FRINTx_v`/`FCM**0_v`/`FRECPE_v`/`FRSQRTE_v` + as 8 escalares de B19.3) | ~25 |
-| **B19.5.4** | `_h` das conversões: `@icvt_h` (vetorial `_vi` + escalar `_f`), `@fcvt_fixed_h` (escalar) e `@fcvtq_h` (vetorial) | ~28 |
-| **B19.5.5** | `_h` das formas INDEXADAS (`@qrrx_h`: `FMUL_si`/`FMLA_si`/`FMLS_si`/`FMULX_si` + `_vi`) | ~8 |
+Dois achados do plano que valem para o épico inteiro:
 
-**Task irmã, fora do épico B19**: "NEON FP16 AArch32 / `FEAT_FP16`" — registrada pela **B13.6** no
-`## Resultado` dela (as formas `sz=1` das 22 linhas de 3-reg-same FP A32 viram `UNIMPLEMENTED` hoje).
-Ela depende da MESMA fundação de B19.5.1 e deve ser sequenciada junto, não separada — foi
+1. **`Aarch64Feature.FP16` já é declarada em `ARMV8_2_A` e nenhum ponto de `core/src/main` a
+   consulta** — o preset anuncia hoje uma extensão que o decoder recusa por completo. B19.5 não é
+   "acrescentar uma feature", é tornar real uma que o projeto já promete.
+2. **`IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS` casa por MNEMÔNICO, e `FEAT_FP16` é por
+   LINHA** (`FADD_v` tem `_h` de v8.2 e `_sd` de ISA base). É a mesma limitação que a **B9.17**
+   resolveu no lado de 32 bits com a coluna `ocorrencia`. Enquanto não for resolvida, as 84 linhas
+   contam como `❌` em `ARMv8.0-A`/`ARMv8.1-A`, onde a feature nem existe: **168 células com
+   denominador errado**. Vira a B19.5.2 e vem ANTES do decode.
+
+**Task irmã, fora do épico B19**: "NEON FP16 AArch32" — as formas `sz=1` do NEON A32, recusadas pela
+**B13.6** (22 linhas de 3-reg-same FP) e pela **B13.8** (4 linhas de `VCVT`), com destino registrado
+nas duas. Depende da MESMA fundação de **B19.5.1** e deve ser sequenciada junto, não separada — foi
 exatamente para não criar assimetria entre os dois lados que a B13.6 recusou F16.
 
 ## Meta
