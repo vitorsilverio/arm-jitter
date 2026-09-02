@@ -75,17 +75,18 @@ escreveu **mais 4 épicos**, fechando o mapa:
 | [B19](trilha-b-arquiteturas/b19-plano-a64-gap-remanescente.md) | Gap remanescente do **A64** (preset REAL, não `NOT_IN_ANY_PRESET`) | 174 células `❌`/119 mnemônicos, ~18% em todas as 16 versões |
 | [B20](trilha-b-arquiteturas/b20-plano-perfil-r.md) | **Perfil R** (PMSA/MPU, ARMv7-R + ARMv8-R) | 0 de decode; falta o modelo de sistema inteiro |
 | [B21](trilha-b-arquiteturas/b21-plano-arm-26-bits.md) | **ARMv1-ARMv3**, modelo de 26 bits (`R15`=PC+PSR) | inventário ainda não existe (QEMU não traz) |
-| [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) | **Resíduos** ❌/⚠️ dos presets de 32 bits que já existem | 61 células (29 delas bloqueadas no usuário) |
+| [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) ✅ **FECHADO 2026-09-02** | **Resíduos** ❌/⚠️ dos presets de 32 bits que já existem | 61 células (B22.1-B22.6 todas ✅; A32/T16/T32/VFP em `0 ❌`/`0 ⚠️`) |
 
 🆕 **2026-08-29 — o usuário desbloqueou `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`** ("serão
 implementados sim"), revertendo a exclusão registrada em B9.15/B9.16/B9.17: virou a
 **[B22.5](trilha-b-arquiteturas/b22.5-eret-hvc-smc-banked.md)** (✅ 2026-08-29), 29 células, e
 com ela **nenhuma célula da tabela depende mais de decisão do usuário**.
 
-**Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. **B19 e B22 são pegáveis em paralelo a
-qualquer momento** e não dependem de nenhum deles — B19 é o maior salto de cobertura global
-disponível hoje. (~~B22.2 (`VMOV_half`) é a única violação de G8 viva~~ — **fechada em 2026-08-29**;
-o projeto está com **zero `⚠️`**.) B20 e B21 são épicos de modelo, não de decode, e o usuário decide quando abrir. B13 e B14 compartilham pipeline e dão o
+**Ordem recomendada**: B13 → B14 → B15 → B16 → B17 → B18. **B19 é pegável em paralelo a qualquer
+momento** e não depende de nenhum deles — é o maior salto de cobertura global disponível hoje.
+(~~B22.2 (`VMOV_half`) é a única violação de G8 viva~~ — **fechada em 2026-08-29**; o projeto está
+com **zero `⚠️`**. **O épico B22 inteiro fechou em 2026-09-02 pela B22.6** — A32/T16/T32/VFP com
+`0 ❌`/`0 ⚠️`; NÃO descongela subprojetos.) B20 e B21 são épicos de modelo, não de decode, e o usuário decide quando abrir. B13 e B14 compartilham pipeline e dão o
 maior retorno prático (binário ARMv7-A/ARMv8-A real emite NEON o tempo todo); B15 destrava
 pendências que JÁ estavam registradas (B12.4/B12.6); B17/B18 são os maiores e ficam por último.
 
@@ -146,11 +147,14 @@ linhas `_sd`/`_s`); `Ir64Op.VectorFpConvertFixedPoint` (Kind 94) novo, `FRECPX`/
 arredondamento real. A64 v8.0 84%→87%, global 86%→88%. `_h` → B19.5. **B19.4 ganhou spec na rodada
 de 2026-08-29 (11 linhas, remedida); B19.5 virou `[REFINAR]` (84 linhas); B19.6-B19.9 sem spec.**
 
-**B22.1-B22.5 ✅ (2026-08-29)** — `HLT` (B22.1), `VMOV_half` deixa de decodificar como coprocessador
-(B22.2, mata o único `⚠️` do projeto), `BLX_r` no perfil M / separação `BLX`↔`BLX_IMMEDIATE`
-(B22.3), curadoria de denominador T16 (B22.4, T16 chega a 100% em todas as 7 colunas), e
-`ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank` (B22.5, as 29 células desbloqueadas). **B22.6 (fechamento
-do épico B22) ganhou spec na rodada de 2026-08-29.** Achado colateral de B22.3, candidato a task própria: `ARMV6M_FEATURES`
+**B22.1-B22.6 ✅ — ÉPICO B22 CONCLUÍDO (2026-09-02)** — `HLT` (B22.1), `VMOV_half` deixa de
+decodificar como coprocessador (B22.2, mata o único `⚠️` do projeto), `BLX_r` no perfil M /
+separação `BLX`↔`BLX_IMMEDIATE` (B22.3), curadoria de denominador T16 (B22.4, T16 chega a 100% em
+todas as 7 colunas), `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank` (B22.5, as 29 células desbloqueadas)
+e o fechamento (B22.6, 2026-09-02): `./gerar-cobertura-isa.sh` byte-idêntica, medição confirma
+A32/T16/T32/VFP com `0 ❌`/`0 ⚠️` e `⚠️` zero no projeto inteiro; `docs/VALIDACAO-ARQUITETURAS.md`
+redatada. **Colunas `v6-M`/`v7-M` param em 88%/96% por `m-nocp` (B15), A64 tem 2020 `❌` (B19) —
+fechar B22 NÃO descongela subprojetos.** Achado colateral de B22.3, candidato a task própria: `ARMV6M_FEATURES`
 não declara `EXTEND_ROTATE` (`SXTB`/`SXTH`/`UXTB`/`UXTH` T16 são base do ARMv6-M, hoje mascaradas por
 curadoria TSV sem `grupo`).
 
@@ -163,9 +167,9 @@ Esta rodada mediu o que sobrou e escreveu **3 specs pegáveis**:
 |---|---|---:|---|
 | [B13.7](trilha-b-arquiteturas/b13.7-neon-2reg-shift-imediato.md) | NEON 2-reg-and-shift: deslocamento por IMEDIATO (A32) | **56 linhas** | ✅ agora |
 | [B19.4](trilha-b-arquiteturas/b19.4-a64-advsimd-fp-vetorial-convert.md) | A64 `FCVTL_v`/`FCVTN_v`/`FCVTXN_v` + conversões vetoriais FP↔ponto fixo | **11 linhas** | ✅ agora |
-| [B22.6](trilha-b-arquiteturas/b22.6-fechamento-32-bits.md) | Fechamento do épico B22 (remedir + `VALIDACAO-ARQUITETURAS.md`) | 0 de decode | ✅ agora |
+| [B22.6](trilha-b-arquiteturas/b22.6-fechamento-32-bits.md) | Fechamento do épico B22 (remedir + `VALIDACAO-ARQUITETURAS.md`) | 0 de decode | ✅ **FEITA 2026-09-02** |
 
-**Os 3 são independentes entre si** — qualquer ordem serve, e B22.6 é a mais curta.
+**Os 3 são independentes entre si** — qualquer ordem serve, e B22.6 é a mais curta. **B22.6 ✅ 2026-09-02.**
 
 ### Os dois achados de medição desta rodada (mudam decisões, não são cosméticos)
 
@@ -192,13 +196,13 @@ vez de remedir. Agora há **5 tasks pegáveis** e 1 plano novo:
 | [B13.8](trilha-b-arquiteturas/b13.8-neon-2reg-shift-narrow-widen-vcvt.md) | NEON estreitamento/alargamento + `VCVT` fixo↔float F32 — **fecha a seção "2-reg-and-shift"** | 34 (+4 F16 adiadas) | ✅ **depois de B13.7** |
 | [B19.4](trilha-b-arquiteturas/b19.4-a64-advsimd-fp-vetorial-convert.md) | A64 `FCVTL_v`/`FCVTN_v`/`FCVTXN_v` + conversões vetoriais FP↔ponto fixo | 11 linhas | ✅ |
 | [B19.5.1](trilha-b-arquiteturas/b19.5.1-nucleo-meia-precisao.md) | **Fundação binary16** do núcleo vetorial (`esz=1` em `AdvSimdLanes`) | 0 de decode | ✅ **depois de B19.4** |
-| [B22.6](trilha-b-arquiteturas/b22.6-fechamento-32-bits.md) | Fechamento do épico B22 | 0 de decode | ✅ |
+| ~~[B22.6](trilha-b-arquiteturas/b22.6-fechamento-32-bits.md)~~ | Fechamento do épico B22 | 0 de decode | ✅ **FEITA 2026-09-02 — épico B22 fechado** |
 
 Novo **plano** (não é task): [B19.5](trilha-b-arquiteturas/b19.5-plano-fp16.md) — escada
 B19.5.1-B19.5.6 do `FEAT_FP16`.
 
 ⚠️ **B13.8 e B19.4 tocam `executeConvertFixedPoint`** — não rodar as duas na mesma sessão nem em
-sessões simultâneas no mesmo checkout (regra 6 acima). B22.6 é a mais curta e não colide com nada.
+sessões simultâneas no mesmo checkout (regra 6 acima). ~~B22.6 é a mais curta e não colide com nada.~~ (B22.6 já feita.)
 
 ### Os três achados desta rodada
 

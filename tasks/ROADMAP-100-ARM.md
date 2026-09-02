@@ -135,7 +135,8 @@ depende de features que ainda não existem.
 
 Critério: **destravar dimensões inteiras primeiro**, depois volume.
 
-1. **B22.6** — fecha o épico B22 (o lado de 32 bits já está em 0 `❌`/0 `⚠️`; falta só registrar).
+1. ~~**B22.6** — fecha o épico B22~~ ✅ **FEITA 2026-09-02** (A32/T16/T32/VFP em 0 `❌`/0 `⚠️`,
+   `⚠️` zero no projeto; `VALIDACAO-ARQUITETURAS.md` redatada). Épico B22 fechado.
 2. **A10.1** — fazer o `TruffleCodeEmitter#supports` dizer a verdade. É uma correção **pequena** que
    troca "quebra com exceção" por "cai no fallback", e é a única coisa entre o Truffle e a
    honestidade. Antes de qualquer expansão de cobertura Truffle.

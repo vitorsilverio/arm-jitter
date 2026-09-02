@@ -1,6 +1,6 @@
 # B22 — Resíduos de 32 bits: as últimas células ❌/⚠️ dos presets que já existem: épico
 
-**Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** 📋 plano
+**Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** ✅ (2026-09-02, fechado pela B22.6)
 
 Documento MESTRE do épico. Escrito na auditoria de 2026-08-29 ("escrever a spec de todas as
 extensões ainda faltantes"). Os épicos B13-B21 cobrem extensões e arquiteturas INTEIRAS que faltam;
@@ -44,11 +44,34 @@ completa e sem bloqueio.
 | **[B22.5](b22.5-eret-hvc-smc-banked.md)** | ✅ **DESBLOQUEADA — o usuário decidiu em 2026-08-29 que serão implementadas** (spec completa escrita). As 29 células de `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`, com as 3 causas medidas: (1) **incoerência real** em `ARMV7A`, que declara `HYPERVISOR_CALL` mas não `VIRTUALIZATION_EXTENSIONS` — no ARM real são a MESMA extensão, e é isso que mantém `ERET`/`MRS_bank`/`MSR_bank` `❌` num preset que já tem `HVC`; (2) pré-v7 (v4T/v5TE/v6K/MPCore): posteriores, curadoria com fonte; (3) perfil M: não existem em NENHUM perfil M (fonte interna: B9.11). Aceite exige teste de EXECUÇÃO (entrar/retornar de Hyp, banco correto), não só decode | 29 | — |
 | **B22.6** | **Fechamento**: remedir, atualizar `docs/VALIDACAO-ARQUITETURAS.md` e registrar o estado final do lado de 32 bits | 0 | B22.1-B22.5 |
 
-## Meta
+## Meta — ATINGIDA (medição da B22.6, 2026-09-02)
 
-Zero células `⚠️` no projeto (hoje 2) e **zero `❌` no lado de 32 bits** — A32/T16/T32/VFP em 100%.
-Com a decisão do usuário de 2026-08-29 (B22.5 desbloqueada), não sobra nenhuma exclusão por decisão:
-tudo aqui é trabalho executável.
+Medição reproduzível sobre `docs/COBERTURA-ISA.md` (contagem de células por seção,
+`./gerar-cobertura-isa.sh` produz a tabela byte a byte idêntica à versionada):
+
+| Seção | `❌` | `⚠️` |
+|---|---:|---:|
+| `## A32 — instruções ARM de 32 bits` | **0** | **0** |
+| `## T16 — Thumb clássico` | **0** | **0** |
+| `## T32 — Thumb-2` | **0** | **0** |
+| `## VFP — ponto flutuante (condicional)` | **0** | **0** |
+
+**`⚠️` = 0 no projeto INTEIRO** (eram 2, `VMOV_half` em MPCore/v7-A, mortos pela B22.2 — era a
+violação de G8 viva mais cara da tabela).
+
+**Delimitação obrigatória** (escrever "32 bits em 100%" sem isto engana a próxima sessão):
+
+- As COLUNAS `v6-M` (88%, 82/93) e `v7-M` (96%, 322/333) **não** chegam a 100%, e é correto: as
+  11 células que faltam em cada uma são o grupo `## ARMv7-M — coprocessador ausente` (`m-nocp`:
+  `NOCP`/`VLLDM`/`VSCCLRM`/`VLDR_sysreg`), território da **B15** (ARMv7E-M/ARMv8-M/ARMv8.1-M) — o
+  único grupo a 0% num preset REAL. **Não é resíduo de B22.**
+- `## VFP — formas incondicionais (ARMv8-A)` (17 encodings) e os 3 grupos NEON são
+  `NOT_IN_ANY_PRESET` — nem entram no denominador — e são **B14** / **B13**.
+- Fechar B22 **NÃO descongela os subprojetos**: o congelamento (`tasks/README.md`) é sobre a
+  cobertura TOTAL, e o A64 sozinho tem 2020 células `❌` (**B19**).
+
+Com a decisão do usuário de 2026-08-29 (B22.5 desbloqueada), não sobrou nenhuma exclusão por
+decisão: tudo neste épico foi trabalho executável, e foi executado (B22.1-B22.6 ✅).
 
 ## Invariantes específicos deste épico
 

@@ -9,7 +9,13 @@ Javadoc dessa classe para o comando e para a questão de licença do inventário
 |---|---|
 | ✅ | o decoder reconhece o encoding |
 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
-| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
+| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
+| ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
+
+**`⚠️` hoje não ocorre em nenhuma célula** — as ocorrências antigas (`VMOV_half`
+em MPCore/v7-A) foram eliminadas pela B22.2. O símbolo permanece documentado
+de propósito: nomear esse estado é o que o invariante G8 exige, e ele pode voltar a
+acontecer ao abrir um novo espaço de encoding.
 
 **O que ✅ NÃO significa:** que a semântica está certa. `STREX` (E3) e `LDR/STR` alinhado
 (F3) decodificavam e estavam errados. Esta tabela elimina "não suporta" da lista de
