@@ -7,7 +7,8 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
-        IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise {
+        IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise,
+        IrOp.NeonShiftImmediate {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -99,6 +100,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_PAIRWISE = 70;
         public static final int NEON_FP_THREE_SAME = 71;
         public static final int NEON_FP_PAIRWISE = 72;
+        public static final int NEON_SHIFT_IMMEDIATE = 73;
     }
 
     /// Operacao ALU generica.
@@ -1585,5 +1587,39 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_FP_PAIRWISE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por IMEDIATO (B13.7):
+    /// `VSHR`/`VSRA`/`VRSHR`/`VRSRA`/`VSRI`/`VSHL`/`VSLI`/`VQSHL`/`VQSHLU` (as 14 famílias, `esz`
+    /// `0`-`3`). `Vd[i] = op(Vm[i], #shift)` — e, para `VSRA`/`VRSRA`/`VSRI`/`VSLI`, ACUMULA ou
+    /// INSERE no `Vd[i]` ATUAL (o campo {@link #vd} é destino E fonte nessas famílias). O
+    /// deslocamento já vem resolvido do encoding (`immh:immb`), NUNCA recalculado no executor.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftImmediate} no
+    /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftImmediate}), RFC B13.2 D1.
+    /// **Não há `Vn`** — é forma de 2 registradores: {@link #vm} é a FONTE do valor deslocado.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonShiftImmediate(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`, bit `Q` do encoding), `false`
+            /// para o de 64 bits (`D<d>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: `0`=byte, `1`=halfword, `2`=word,
+            /// `3`=doubleword.
+            int esz,
+            /// Quantidade de deslocamento já resolvida (`1..esize` para os à direita, `0..esize-1`
+            /// para os à esquerda).
+            int shift,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`. Também é FONTE nas famílias que acumulam/inserem
+            /// (`VSRA`/`VRSRA`/`VSRI`/`VSLI`).
+            int vd,
+            /// Registrador fonte do valor deslocado, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_SHIFT_IMMEDIATE; }
     }
 }

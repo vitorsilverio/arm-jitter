@@ -73,6 +73,21 @@ public final class IrNeonExecutor {
         AdvSimdLanes.fpPairwise(vfp, op.op(), esz, lanes, op.vd(), op.vn(), op.vm());
     }
 
+    /// NEON "2-reg-and-shift" com deslocamento por IMEDIATO (`VSHR`/`VSRA`/`VRSHR`/`VRSRA`/`VSRI`/
+    /// `VSHL`/`VSLI`/`VQSHL`/`VQSHLU`, B13.7): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftImmediate}) — a MESMA função que o executor A64 chama para
+    /// `SSHR`/`SHL`/... `Vm` é a FONTE do valor deslocado (não há `Vn` nesta forma). NEON nomeia
+    /// registradores por índice de `D`, e a base de palavra de um operando de 64 bits é o próprio
+    /// índice de `D`; nenhuma escrita destrutiva depois do laço (VFP32 nunca zera bits fora do
+    /// registrador escrito).
+    public void executeNeonShiftImmediate(ArmCore core, IrOp.NeonShiftImmediate op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.shiftImmediate(vfp, op.op(), esz, op.shift(), lanes, op.vd(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

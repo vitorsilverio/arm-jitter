@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
@@ -199,26 +200,8 @@ final class Ir64VectorArithmeticExecutor {
     // `registerShiftAmount`/`shiftByRegister`/`roundingShiftByRegister`/`saturatingShiftByRegister`
     // (deslocamento por registrador de `SSHL`/`USHL`/`SRSHL`/`URSHL`/`SQSHL`/`UQSHL`/`SQRSHL`/
     // `UQRSHL`) migraram para o núcleo COMPARTILHADO `advsimd/AdvSimdLanes` em B13.5 — as 16
-    // operações que os usavam agora vivem só lá (ver `sharedThreeSameOp`).
-
-    /// "Shift Left and Insert" (`SLI`): desloca `source` à esquerda por `shift` e insere no `Rd`
-    /// ATUAL, preservando os `shift` bits BAIXOS de `Rd` (o deslocamento já traz zeros nos bits
-    /// baixos, então basta unir com a máscara dos bits preservados de `current`).
-    private static long insertShiftLeft(long current, long source, int shift) {
-        long shifted = safeShiftLeft(source, shift);
-        long preserveMask = shift <= 0 ? 0L : (shift >= 64 ? -1L : (1L << shift) - 1);
-        return (current & preserveMask) | shifted;
-    }
-
-    /// "Shift Right and Insert" (`SRI`): desloca `source` à direita por `shift` e insere no `Rd`
-    /// ATUAL, preservando os `shift` bits ALTOS de `Rd` dentro da largura do elemento.
-    private static long insertShiftRight(long current, long source, int shift, int esz) {
-        long shifted = logicalShiftRight(source, shift);
-        int esize = 8 << esz;
-        long mask = elementMask(esz);
-        long preserveMask = shift >= esize ? mask : (mask & ~((1L << (esize - shift)) - 1));
-        return (current & preserveMask) | shifted;
-    }
+    // operações que os usavam agora vivem só lá (ver `sharedThreeSameOp`). B13.7 fez o mesmo com
+    // `insertShiftLeft`/`insertShiftRight` (`SLI`/`SRI`): vivem só em `AdvSimdLanes.shiftImmediate`.
 
     /// Escrita "SIMD&FP destructive": zera os bits altos de `rd` quando `!q` — a forma vetorial
     /// com `q=false` só escreveu os 64 bits baixos; a forma escalar (`esz=3`/`q=false` reaproveitado,
@@ -755,41 +738,41 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
+    /// RFC B13.2 (D1, reuso do núcleo vetorial): mapeia toda operação "shift by immediate" para o
+    /// núcleo COMPARTILHADO {@link AdvSimdLanes}. Nomes homônimos 1:1 com {@link Ir64VectorShiftOp},
+    /// sem `default` — o `switch` cobre as 14. B13.7 migrou a semântica (o `switch` de
+    /// {@link #executeShiftImmediate} e os helpers `insertShiftLeft`/`insertShiftRight`) para lá.
+    private static AdvSimdShiftImmediateOp sharedShiftOp(Ir64VectorShiftOp op) {
+        return switch (op) {
+            case SSHR -> AdvSimdShiftImmediateOp.SSHR;
+            case USHR -> AdvSimdShiftImmediateOp.USHR;
+            case SRSHR -> AdvSimdShiftImmediateOp.SRSHR;
+            case URSHR -> AdvSimdShiftImmediateOp.URSHR;
+            case SSRA -> AdvSimdShiftImmediateOp.SSRA;
+            case USRA -> AdvSimdShiftImmediateOp.USRA;
+            case SRSRA -> AdvSimdShiftImmediateOp.SRSRA;
+            case URSRA -> AdvSimdShiftImmediateOp.URSRA;
+            case SRI -> AdvSimdShiftImmediateOp.SRI;
+            case SHL -> AdvSimdShiftImmediateOp.SHL;
+            case SLI -> AdvSimdShiftImmediateOp.SLI;
+            case SQSHL -> AdvSimdShiftImmediateOp.SQSHL;
+            case UQSHL -> AdvSimdShiftImmediateOp.UQSHL;
+            case SQSHLU -> AdvSimdShiftImmediateOp.SQSHLU;
+        };
+    }
+
     /// `SSHR`/`USHR`/`SRSHR`/`URSHR`/`SSRA`/`USRA`/`SRSRA`/`URSRA`/`SRI`/`SHL`/`SLI`/`SQSHL`/
     /// `UQSHL`/`SQSHLU` (B8.8, "shift by immediate" não-largo/não-estreito), vetorial e escalar.
+    /// Desde B13.7 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftImmediate}) — a
+    /// MESMA função que o NEON de 32 bits chama; a escrita destrutiva de `[127:64]`/escalar
+    /// continua sendo do lado A64.
     static boolean executeShiftImmediate(Aarch64Core core, Ir64Op.VectorShiftImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        int shift = op.shift();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        for (int i = 0; i < elements; i++) {
-            long a = fp.element(op.rn(), i, esz);
-            long sa = signExtend(a, esz);
-            long current = fp.element(op.rd(), i, esz);
-            long result = switch (op.op()) {
-                case SSHR -> arithmeticShiftRight(sa, shift);
-                case USHR -> logicalShiftRight(a, shift);
-                case SRSHR -> roundingShiftRight(sa, shift, true);
-                case URSHR -> roundingShiftRight(a, shift, false);
-                case SSRA -> signExtend(current, esz) + arithmeticShiftRight(sa, shift);
-                case USRA -> current + logicalShiftRight(a, shift);
-                case SRSRA -> signExtend(current, esz) + roundingShiftRight(sa, shift, true);
-                case URSRA -> current + roundingShiftRight(a, shift, false);
-                case SRI -> insertShiftRight(current, a, shift, esz);
-                case SHL -> safeShiftLeft(a, shift);
-                case SLI -> insertShiftLeft(current, a, shift);
-                case SQSHL -> saturatingShiftLeft(sa, shift, esz, true);
-                case UQSHL -> saturatingShiftLeft(a, shift, esz, false);
-                // `SQSHLU`: fonte ASSINADA (desloca como `sa`, não `a`) mas saturação NÃO
-                // assinada — `saturatingShiftLeft` não serve aqui porque seu único parâmetro
-                // `signed` governa as DUAS coisas (interpretação do deslocamento E sinal da
-                // saturação), que para `SQSHLU` divergem de propósito (achado real ao testar:
-                // `unsignedBig(sa=-1)` trataria `-1` como quase `2^64`, produzindo lixo em vez de
-                // saturar em `0`).
-                case SQSHLU -> saturateToElement(BigInteger.valueOf(sa).shiftLeft(shift), esz, false);
-            };
-            fp.setElement(op.rd(), i, esz, truncate(result, esz));
-        }
+        AdvSimdLanes.shiftImmediate(fp, sharedShiftOp(op.op()), esz, op.shift(), elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }

@@ -147,6 +147,27 @@ public final class AdvSimdLanes {
         return saturateToElement(v.shiftLeft(shift), esz, signed);
     }
 
+    /// "Shift Left and Insert" (`SLI`): desloca `source` à esquerda por `shift` e insere no `Rd`
+    /// ATUAL, preservando os `shift` bits BAIXOS de `Rd` (o deslocamento já traz zeros nos bits
+    /// baixos, então basta unir com a máscara dos bits preservados de `current`). Movido VERBATIM de
+    /// `executor64/Ir64VectorArithmeticExecutor` em B13.7 (D1 da RFC B13.2).
+    private static long insertShiftLeft(long current, long source, int shift) {
+        long shifted = safeShiftLeft(source, shift);
+        long preserveMask = shift <= 0 ? 0L : (shift >= 64 ? -1L : (1L << shift) - 1);
+        return (current & preserveMask) | shifted;
+    }
+
+    /// "Shift Right and Insert" (`SRI`): desloca `source` à direita por `shift` e insere no `Rd`
+    /// ATUAL, preservando os `shift` bits ALTOS de `Rd` dentro da largura do elemento. Movido
+    /// VERBATIM de `executor64/Ir64VectorArithmeticExecutor` em B13.7 (D1 da RFC B13.2).
+    private static long insertShiftRight(long current, long source, int shift, int esz) {
+        long shifted = logicalShiftRight(source, shift);
+        int esize = 8 << esz;
+        long mask = elementMask(esz);
+        long preserveMask = shift >= esize ? mask : (mask & ~((1L << (esize - shift)) - 1));
+        return (current & preserveMask) | shifted;
+    }
+
     /// Multiplicação dobrada de alta ordem saturante (`SQDMULH`/`SQRDMULH`) — `esize = 8<<esz`.
     private static long doublingMultiplyHigh(long sa, long sb, int esz, boolean rounding) {
         int esize = 8 << esz;
@@ -318,6 +339,49 @@ public final class AdvSimdLanes {
         }
         for (int i = 0; i < lanes; i++) {
             setElement(regs, baseRd, i, esz, truncate(results[i], esz));
+        }
+    }
+
+    /// Executa uma operação "shift by immediate" (ver {@link AdvSimdShiftImmediateOp}) sobre
+    /// `lanes` elementos de `1 << esz` bytes: cada lane de `baseRd` recebe `op` aplicada à lane
+    /// correspondente de `baseRn` (e do próprio `baseRd` para as formas RMW `SSRA`/`USRA`/`SRSRA`/
+    /// `URSRA`/`SRI`/`SLI`, que ACUMULAM ou INSEREM no destino atual). `shift` já vem resolvido do
+    /// decoder (`immh:immb`), na faixa `1..esize` para os deslocamentos à direita e `0..esize-1`
+    /// para os à esquerda. Os `base*` são índices de PALAVRA (ver {@link AdvSimdRegisterWords}).
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeShiftImmediate` (B8.8) em
+    /// B13.7 (D1 da RFC B13.2) — inclusive o tratamento especial de `SQSHLU` (fonte assinada,
+    /// saturação NÃO assinada). Nada aqui zera bits fora das lanes escritas: a escrita destrutiva
+    /// do A64 é do chamador.
+    public static void shiftImmediate(AdvSimdRegisterWords regs, AdvSimdShiftImmediateOp op,
+            int esz, int shift, int lanes, int baseRd, int baseRn) {
+        for (int i = 0; i < lanes; i++) {
+            long a = element(regs, baseRn, i, esz);
+            long sa = signExtend(a, esz);
+            long current = element(regs, baseRd, i, esz);
+            long result = switch (op) {
+                case SSHR -> arithmeticShiftRight(sa, shift);
+                case USHR -> logicalShiftRight(a, shift);
+                case SRSHR -> roundingShiftRight(sa, shift, true);
+                case URSHR -> roundingShiftRight(a, shift, false);
+                case SSRA -> signExtend(current, esz) + arithmeticShiftRight(sa, shift);
+                case USRA -> current + logicalShiftRight(a, shift);
+                case SRSRA -> signExtend(current, esz) + roundingShiftRight(sa, shift, true);
+                case URSRA -> current + roundingShiftRight(a, shift, false);
+                case SRI -> insertShiftRight(current, a, shift, esz);
+                case SHL -> safeShiftLeft(a, shift);
+                case SLI -> insertShiftLeft(current, a, shift);
+                case SQSHL -> saturatingShiftLeft(sa, shift, esz, true);
+                case UQSHL -> saturatingShiftLeft(a, shift, esz, false);
+                // `SQSHLU`: fonte ASSINADA (desloca como `sa`, não `a`) mas saturação NÃO
+                // assinada — `saturatingShiftLeft` não serve aqui porque seu único parâmetro
+                // `signed` governa as DUAS coisas (interpretação do deslocamento E sinal da
+                // saturação), que para `SQSHLU` divergem de propósito (achado real ao testar:
+                // `unsignedBig(sa=-1)` trataria `-1` como quase `2^64`, produzindo lixo em vez de
+                // saturar em `0`).
+                case SQSHLU -> saturateToElement(BigInteger.valueOf(sa).shiftLeft(shift), esz, false);
+            };
+            setElement(regs, baseRd, i, esz, truncate(result, esz));
         }
     }
 

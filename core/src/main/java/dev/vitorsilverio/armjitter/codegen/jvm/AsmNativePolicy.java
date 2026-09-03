@@ -136,6 +136,8 @@ public final class AsmNativePolicy {
             case IrOp.NeonPairwise ignored -> false;
             case IrOp.NeonFpThreeSame ignored -> false;
             case IrOp.NeonFpPairwise ignored -> false;
+            // NEON "2-reg shift by immediate" (B13.7): interpretado, como todo `Kind` vetorial.
+            case IrOp.NeonShiftImmediate ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

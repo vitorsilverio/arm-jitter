@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
@@ -30,7 +31,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada um dos 73 `IrOp.Kind`, monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (74 desde B13.7), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -43,7 +44,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(73, kinds.size(), "IrOp.Kind deve ter 73 constantes contíguas");
+        assertEquals(74, kinds.size(), "IrOp.Kind deve ter 74 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -60,16 +61,17 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     }
 
     @Test
-    void the33UncoveredKindsAreExactlyTheKnownList() {
+    void theUncoveredKindsAreExactlyTheKnownList() {
         List<Integer> uncovered = new ArrayList<>();
         for (int kind : allKindConstants()) {
             if (!IrOpNodeFactory.supports(sampleOp(kind))) {
                 uncovered.add(kind);
             }
         }
-        // Os 33 Kinds sem nó Truffle na A10.1 (VFP/coprocessador, NEON, DSP dual/top-word,
-        // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M).
-        assertEquals(33, uncovered.size(), "a A10.1 mediu 33 Kinds descobertos: " + uncovered);
+        // Os Kinds sem nó Truffle (VFP/coprocessador, NEON, DSP dual/top-word,
+        // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na
+        // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE (NEON também não tem nó Truffle).
+        assertEquals(34, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.BIT_FIELD_EXTRACT, IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE,
                         IrOp.Kind.DIVIDE, IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
@@ -82,8 +84,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.ERET, IrOp.Kind.MRS_BANK, IrOp.Kind.MSR_BANK, IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
-                        IrOp.Kind.NEON_FP_PAIRWISE)),
-                "lista dos 33 Kinds descobertos mudou: " + uncovered);
+                        IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE)),
+                "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
     private static List<Integer> allKindConstants() {
@@ -184,6 +186,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_PAIRWISE -> new IrOp.NeonPairwise(AdvSimdPairwiseOp.ADD, 2, 0, 1, 2);
             case IrOp.Kind.NEON_FP_THREE_SAME -> new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.ADD, false, 2, 0, 1, 2);
             case IrOp.Kind.NEON_FP_PAIRWISE -> new IrOp.NeonFpPairwise(AdvSimdFpPairwiseOp.ADD, 2, 0, 1, 2);
+            case IrOp.Kind.NEON_SHIFT_IMMEDIATE ->
+                    new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SSHR, false, 0, 1, 0, 1);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }
