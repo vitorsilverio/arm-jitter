@@ -3,6 +3,8 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
@@ -777,59 +779,56 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
+    /// RFC B13.2 (D1): mapeia `Ir64VectorShiftNarrowOp` → {@link AdvSimdShiftNarrowOp} do núcleo
+    /// COMPARTILHADO 1:1, sem `default` (o `switch` cobre as 8). B13.8 migrou a semântica para lá.
+    private static AdvSimdShiftNarrowOp sharedNarrowOp(Ir64VectorShiftNarrowOp op) {
+        return switch (op) {
+            case SHRN -> AdvSimdShiftNarrowOp.SHRN;
+            case RSHRN -> AdvSimdShiftNarrowOp.RSHRN;
+            case SQSHRN -> AdvSimdShiftNarrowOp.SQSHRN;
+            case UQSHRN -> AdvSimdShiftNarrowOp.UQSHRN;
+            case SQSHRUN -> AdvSimdShiftNarrowOp.SQSHRUN;
+            case SQRSHRN -> AdvSimdShiftNarrowOp.SQRSHRN;
+            case UQRSHRN -> AdvSimdShiftNarrowOp.UQRSHRN;
+            case SQRSHRUN -> AdvSimdShiftNarrowOp.SQRSHRUN;
+        };
+    }
+
+    /// RFC B13.2 (D1): mapeia `Ir64VectorShiftWidenOp` → {@link AdvSimdShiftWidenOp} 1:1.
+    private static AdvSimdShiftWidenOp sharedWidenOp(Ir64VectorShiftWidenOp op) {
+        return switch (op) {
+            case SSHLL -> AdvSimdShiftWidenOp.SSHLL;
+            case USHLL -> AdvSimdShiftWidenOp.USHLL;
+        };
+    }
+
     /// `SHRN`/`RSHRN`/`SQSHRN`/`UQSHRN`/`SQSHRUN`/`SQRSHRN`/`UQRSHRN`/`SQRSHRUN` (B8.8, "shift by
-    /// immediate" estreitando).
+    /// immediate" estreitando). Desde B13.8 só delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftNarrowImmediate}) — a MESMA função que o NEON de 32 bits chama; a
+    /// escrita destrutiva de `[127:64]`/escalar continua sendo do lado A64.
     static boolean executeShiftNarrowImmediate(Aarch64Core core, Ir64Op.VectorShiftNarrowImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        int wideEsz = esz + 1;
-        int shift = op.shift();
-        int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
+        int elements = op.scalar() ? 1 : elementsPerRegister(true, esz + 1);
         int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
-        // E10: buffer — mesma razão de `executeNarrow` (forma `q=1` com `Rd`==`Rn`).
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            long wide = fp.element(op.rn(), i, wideEsz);
-            long signedWide = signExtend(wide, wideEsz);
-            long narrow = switch (op.op()) {
-                case SHRN -> logicalShiftRight(wide, shift);
-                case RSHRN -> roundingShiftRight(wide, shift, false);
-                case SQSHRN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, true);
-                case UQSHRN -> saturateToElement(BigInteger.valueOf(logicalShiftRight(wide, shift)), esz, false);
-                case SQSHRUN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, false);
-                case SQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, true);
-                case UQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(wide, shift, false)), esz, false);
-                case SQRSHRUN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, false);
-            };
-            results[i] = truncate(narrow, esz);
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
-        }
+        AdvSimdLanes.shiftNarrowImmediate(fp, sharedNarrowOp(op.op()), esz, op.shift(), elements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 
     /// `SSHLL`/`USHLL` (B8.8, "shift by immediate" alargando) — sempre preenche os 128 bits
-    /// inteiros de `Rd`, sem saturar (o valor alargado sempre cabe no container maior).
+    /// inteiros de `Rd`, sem saturar. Desde B13.8 só delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftWidenImmediate}).
     static boolean executeShiftWidenImmediate(Aarch64Core core, Ir64Op.VectorShiftWidenImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        int wideEsz = esz + 1;
-        int shift = op.shift();
-        int outputElements = elementsPerRegister(true, wideEsz);
+        int outputElements = elementsPerRegister(true, esz + 1);
         int laneOffset = op.q() ? outputElements : 0;
-        // E10 (achado da B19.4): buffer — com `Rd`==`Rn` e `q=0`, escrever a lane larga `i` cobre as
-        // lanes estreitas `2i`/`2i+1`, ainda não lidas.
-        long[] results = new long[outputElements];
-        for (int i = 0; i < outputElements; i++) {
-            long narrow = fp.element(op.rn(), laneOffset + i, esz);
-            long extended = op.op() == Ir64VectorShiftWidenOp.SSHLL ? signExtend(narrow, esz) : narrow;
-            results[i] = truncate(safeShiftLeft(extended, shift), wideEsz);
-        }
-        for (int i = 0; i < outputElements; i++) {
-            fp.setElement(op.rd(), i, wideEsz, results[i]);
-        }
+        AdvSimdLanes.shiftWidenImmediate(fp, sharedWidenOp(op.op()), esz, op.shift(), outputElements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         return false;
     }
 

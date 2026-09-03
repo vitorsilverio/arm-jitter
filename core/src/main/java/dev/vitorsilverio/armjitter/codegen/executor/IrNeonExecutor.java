@@ -88,6 +88,41 @@ public final class IrNeonExecutor {
         AdvSimdLanes.shiftImmediate(vfp, op.op(), esz, op.shift(), lanes, op.vd(), op.vm());
     }
 
+    /// NEON "2-reg-and-shift" ESTREITANTE (`VSHRN`/`VRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VQSHRN`/`VQRSHRN`,
+    /// B13.8): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftNarrowImmediate}) — a MESMA
+    /// função que o executor A64 chama para `SHRN`/... A fonte é o `Q` nomeado por {@link
+    /// IrOp.NeonShiftNarrowImmediate#vm} (`D<vm>`:`D<vm+1>`), o destino é o `D` nomeado por `vd`
+    /// (`8 >> esz` lanes estreitas). A32 não tem forma "2": `laneOffset` é sempre `0`. Índice de `D`
+    /// = índice de palavra no banco VFP32; nenhuma escrita destrutiva depois.
+    public void executeNeonShiftNarrowImmediate(ArmCore core, IrOp.NeonShiftNarrowImmediate op) {
+        VfpRegisters vfp = core.vfp();
+        int elements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.shiftNarrowImmediate(vfp, op.op(), op.esz(), op.shift(), elements, 0, op.vd(), op.vm());
+    }
+
+    /// NEON "2-reg-and-shift" ALARGANTE (`VSHLL`, B13.8): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftWidenImmediate}) — a MESMA função que o executor A64 chama para
+    /// `SSHLL`/`USHLL`. A fonte é o `D` nomeado por {@link IrOp.NeonShiftWidenImmediate#vm}, o
+    /// destino é o `Q` nomeado por `vd` (`D<vd>`:`D<vd+1>`, `8 >> esz` lanes largas). A32 não tem
+    /// forma "2": `laneOffset` é sempre `0`.
+    public void executeNeonShiftWidenImmediate(ArmCore core, IrOp.NeonShiftWidenImmediate op) {
+        VfpRegisters vfp = core.vfp();
+        int outputElements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.shiftWidenImmediate(vfp, op.op(), op.esz(), op.shift(), outputElements, 0, op.vd(), op.vm());
+    }
+
+    /// NEON "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#convertFixedPoint}) — a MESMA função que o executor A64 chama para
+    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma `@fcvt_fixed`. `4` lanes na forma `Q`, `2` na `D`;
+    /// leitura e escrita na mesma largura (`esz=2`), sem escrita destrutiva depois.
+    public void executeNeonConvertFixedPoint(ArmCore core, IrOp.NeonConvertFixedPoint op) {
+        VfpRegisters vfp = core.vfp();
+        int elementBytes = 1 << op.esz();
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.convertFixedPoint(vfp, op.esz(), op.fractionBits(), op.toFloat(), op.signed(),
+                lanes, op.vd(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

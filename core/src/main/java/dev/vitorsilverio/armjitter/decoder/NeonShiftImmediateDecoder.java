@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
@@ -30,11 +32,19 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// frame. Este decoder devolve **`null`** nesse caso (deixa o espaço livre para a B13.9), NÃO
 /// `unimplemented` — é a ÚNICA exceção à regra "dentro do frame nunca devolvo `null`".
 ///
-/// Fora de escopo (viram `UNIMPLEMENTED` explícito aqui, G8): estreitamento/alargamento
-/// (`opc=1000`/`1001`/`1010`) e `VCVT` fixo↔float (`opc=1100`-`1111`) → **B13.8**; os 3 slots
-/// UNALLOCATED reais (`opc=0100 U=0`, `opc=0110 U=0`, `opc=1011`); forma `Q` com registrador ímpar;
-/// T32 → B13.16. `FPSCR.QC` (bit cumulativo de saturação de `VQSHL`/`VQSHLU`) NÃO é modelado —
-/// paridade com o A64 e com B13.5, task futura própria.
+/// **B13.8** acrescentou o ESTREITAMENTO (`opc=1000`/`1001` — `VSHRN`/`VRSHRN`/`VQSHRUN`/
+/// `VQRSHRUN`/`VQSHRN`/`VQRSHRN`), o ALARGAMENTO (`opc=1010` — `VSHLL`) e o `VCVT` fixo↔float **F32**
+/// (`opc=1110`/`1111`), todos migrados para o núcleo COMPARTILHADO
+/// ({@code AdvSimdLanes.shiftNarrowImmediate}/`shiftWidenImmediate`/`convertFixedPoint}).
+///
+/// Fora de escopo (viram `UNIMPLEMENTED` explícito aqui, G8): `VCVT` fixo↔float **F16**
+/// (`opc=1100`/`1101`) → task irmã "NEON FP16 AArch32" (depende de B19.5.1); os slots UNALLOCATED
+/// reais (`opc=0100 U=0`, `opc=0110 U=0`, `opc=1011`, `opc=1010` com `Q=1`); forma `Q` com
+/// registrador ímpar; T32 → B13.16. `FPSCR.QC` (bit cumulativo de saturação de `VQSHL`/`VQSHLU`/
+/// `VQSHRN`/...) NÃO é modelado — paridade com o A64 e com B13.5, task futura própria.
+/// `FPSCR.RMode`: `VCVT` para inteiro arredonda SEMPRE toward-zero (o encoding desta forma não tem
+/// variante de direção), `VCVT` para float usa round-to-nearest-even — mesma simplificação de
+/// B8.5/B19.3.
 ///
 /// Gate único: {@link ArmFeature#ADVANCED_SIMD}. **Nenhum preset a declara** (B13.22 é quem fecha
 /// isso), então sem a feature {@link #tryDecode} devolve `null` e o espaço continua caindo no
@@ -88,9 +98,9 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         int opc = (raw >>> OPC_SHIFT) & OPC_MASK;
         AdvSimdShiftImmediateOp op = shiftOperation(opc, u);
         if (op == null) {
-            // opc de B13.8 (estreitando/alargando/`VCVT`) ou UNALLOCATED real (`opc=0100 U=0`,
-            // `opc=0110 U=0`, `opc=1011`).
-            return unimplemented(address, raw, condition);
+            // ou é a seção "shift by immediate" estreitando/alargando/`VCVT` (B13.8), ou um slot
+            // UNALLOCATED real (`opc=0100 U=0`, `opc=0110 U=0`, `opc=1011`).
+            return decodeNarrowWidenConvert(raw, address, condition, u, immh, immL, opc);
         }
         boolean quad = ((raw >>> Q_BIT) & 1) != 0;
         int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
@@ -123,6 +133,82 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
             case 0b0111 -> u == 0 ? AdvSimdShiftImmediateOp.SQSHL : AdvSimdShiftImmediateOp.UQSHL;
             default -> null;
         };
+    }
+
+    /// Seção "2-reg-and-shift" ESTREITANTE / ALARGANTE / `VCVT` fixo↔float (B13.8) — os `opc` que
+    /// {@link #shiftOperation} devolve `null`. A aritmética do deslocamento é a MESMA de B13.7
+    /// (`combined = immh:immb`, direita `2*esize-combined`, esquerda `combined-esize`), só que aqui
+    /// `esz` é o lado ESTREITO (destino no estreitamento, fonte no alargamento) e `L` (bit7) é
+    /// sempre `0`, então `esz==3` ⇒ o encoding não existe no `.decode` (UNALLOCATED).
+    private DecodedInstruction decodeNarrowWidenConvert(int raw, int address, Condition condition,
+            int u, int immh, int immL, int opc) {
+        int esz = highestSetImmhBit(immh);
+        int esize = 8 << esz;
+        int combined = (immh << 3) | immL;
+        int rightShift = 2 * esize - combined;
+        int leftShift = combined - esize;
+        int q = (raw >>> Q_BIT) & 1;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        return switch (opc) {
+            case 0b1000, 0b1001 -> decodeNarrowing(raw, address, condition, opc, u, q, esz, rightShift, vd, vm);
+            case 0b1010 -> decodeWidening(raw, address, condition, u, q, esz, leftShift, vd, vm);
+            case 0b1110, 0b1111 -> decodeConvertFixedF32(raw, address, condition, opc, u, esz, rightShift, q, vd, vm);
+            // `opc=1100`/`1101` = `VCVT` F16 (task irmã, depende de B19.5.1); `opc=1011` = UNALLOCATED.
+            default -> unimplemented(address, raw, condition);
+        };
+    }
+
+    /// `opc=1000`/`1001` — estreitamento. Fonte `Q` (elementos de `esz+1`), destino `D` (elementos
+    /// de `esz`). O bit `Q` (bit6) é OPCODE, não largura (`.decode`: "here the Q bit is part of the
+    /// opcode decode"). `esz==3` ⇒ `L=1`, sem linha no `.decode` ⇒ UNALLOCATED. Fonte `Q` ímpar ⇒
+    /// UNDEFINED.
+    private DecodedInstruction decodeNarrowing(int raw, int address, Condition condition, int opc,
+            int u, int q, int esz, int rightShift, int vd, int vm) {
+        if (esz == 3 || (vm & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        AdvSimdShiftNarrowOp op = narrowOperation(opc, u, q);
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonShiftNarrowImmediate(op, esz, rightShift, vd, vm));
+    }
+
+    /// `opc=1010` — alargamento (`VSHLL`). Fonte `D` (elementos de `esz`), destino `Q` (elementos
+    /// de `esz+1`). `Q=1` é UNALLOCATED (não existe no `.decode`). `esz==3` (`L=1`) idem. Destino
+    /// `Q` ímpar ⇒ UNDEFINED. `U` escolhe assinado (`SSHLL`) × não assinado (`USHLL`).
+    private DecodedInstruction decodeWidening(int raw, int address, Condition condition,
+            int u, int q, int esz, int leftShift, int vd, int vm) {
+        if (q != 0 || esz == 3 || (vd & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        AdvSimdShiftWidenOp op = u == 0 ? AdvSimdShiftWidenOp.SSHLL : AdvSimdShiftWidenOp.USHLL;
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonShiftWidenImmediate(op, esz, leftShift, vd, vm));
+    }
+
+    /// `opc=1110`/`1111` — `VCVT` fixo↔float **F32**. `@2reg_vcvt` fixa bit21=1 ⇒ `esz==2`; qualquer
+    /// outro `immH` (ou `L=1`) ⇒ UNALLOCATED. `Q` (bit6) é largura REAL aqui. `fractionBits =
+    /// 2*32 - combined` (faixa `1..32`). `toFloat = (opc == 1110)`, `signed = (U == 0)`.
+    private DecodedInstruction decodeConvertFixedF32(int raw, int address, Condition condition,
+            int opc, int u, int esz, int rightShift, int q, int vd, int vm) {
+        boolean quad = q != 0;
+        if (esz != 2 || (quad && ((vd | vm) & 1) != 0)) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonConvertFixedPoint(quad, 2, rightShift, opc == 0b1110, u == 0, vd, vm));
+    }
+
+    /// `(opc, U, Q)` → família de estreitamento (tabela do Escopo da B13.8). `opc∈{1000,1001}`.
+    private static AdvSimdShiftNarrowOp narrowOperation(int opc, int u, int q) {
+        if (opc == 0b1000) {
+            return u == 0
+                    ? (q == 0 ? AdvSimdShiftNarrowOp.SHRN : AdvSimdShiftNarrowOp.RSHRN)
+                    : (q == 0 ? AdvSimdShiftNarrowOp.SQSHRUN : AdvSimdShiftNarrowOp.SQRSHRUN);
+        }
+        return u == 0
+                ? (q == 0 ? AdvSimdShiftNarrowOp.SQSHRN : AdvSimdShiftNarrowOp.SQRSHRN)
+                : (q == 0 ? AdvSimdShiftNarrowOp.UQSHRN : AdvSimdShiftNarrowOp.UQRSHRN);
     }
 
     /// As 9 famílias de deslocamento à DIREITA (mesmo conjunto de `Aarch64Decoder`): usam

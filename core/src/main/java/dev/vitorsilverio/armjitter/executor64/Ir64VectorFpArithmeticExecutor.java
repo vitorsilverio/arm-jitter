@@ -358,40 +358,18 @@ final class Ir64VectorFpArithmeticExecutor {
         return d >= 0 ? Math.nextDown(nearest) : Math.nextUp(nearest);
     }
 
-    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma AdvSIMD FP↔ponto fixo (`@fcvt_fixed`, B19.3) —
-    /// reaproveita {@link Ir64FpExecutor#roundToIntegralForConversion}/
-    /// {@link Ir64FpExecutor#saturateToInteger}/{@link Ir64FpExecutor#unsignedLongToDouble}
-    /// (IDÊNTICO ao que {@link #executeUnary} faz nas conversões `_vi`), só com o fator de escala
-    /// `2^fractionBits` a mais. Serve tanto a forma ESCALAR (B19.3, `op.scalar()`) quanto a VETORIAL
-    /// `_vf` (B19.4, `!op.scalar()`, `q` real) — a única diferença é `elements` e a finalização.
+    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma AdvSIMD FP↔ponto fixo (`@fcvt_fixed`, B19.3).
+    /// Desde B13.8 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#convertFixedPoint}) — a
+    /// MESMA função que o NEON de 32 bits (`VCVT` fixo↔float) chama. Serve tanto a forma ESCALAR
+    /// (B19.3, `op.scalar()`) quanto a VETORIAL `_vf` (B19.4, `!op.scalar()`, `q` real) — a única
+    /// diferença é `elements` e a finalização destrutiva, ambas do lado A64.
     static boolean executeConvertFixedPoint(Aarch64Core core, Ir64Op.VectorFpConvertFixedPoint op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        boolean wide = esz == 3;
-        double scale = Math.scalb(1.0, op.fractionBits());
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        for (int i = 0; i < elements; i++) {
-            long inputBits = fp.element(op.rn(), i, esz);
-            long resultBits;
-            if (op.toFloat()) {
-                double asDouble;
-                if (wide) {
-                    asDouble = op.signed() ? (double) inputBits : Ir64FpExecutor.unsignedLongToDouble(inputBits);
-                } else {
-                    asDouble = op.signed() ? (double) (int) inputBits : (double) inputBits;
-                }
-                double scaled = asDouble / scale;
-                resultBits = esz == 2 ? AdvSimdLanes.floatBits((float) scaled) : AdvSimdLanes.doubleBits(scaled);
-            } else {
-                double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
-                double scaled = value * scale;
-                double rounded = Ir64FpExecutor.roundToIntegralForConversion(scaled,
-                        Ir64Op.Fp64RoundingDirection.TOWARD_ZERO);
-                long converted = Ir64FpExecutor.saturateToInteger(rounded, op.signed(), wide);
-                resultBits = converted & (wide ? -1L : 0xFFFF_FFFFL);
-            }
-            fp.setElement(op.rd(), i, esz, resultBits);
-        }
+        AdvSimdLanes.convertFixedPoint(fp, esz, op.fractionBits(), op.toFloat(), op.signed(), elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }

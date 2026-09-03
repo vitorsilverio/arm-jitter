@@ -385,6 +385,65 @@ public final class AdvSimdLanes {
         }
     }
 
+    /// Executa uma operação "shift by immediate" ESTREITANTE (ver {@link AdvSimdShiftNarrowOp})
+    /// sobre `elements` elementos: cada lane de saída (`esz` bytes) vem da lane correspondente de
+    /// `baseRn` (elementos de `esz + 1` bytes) deslocada à direita por `shift` e, conforme a
+    /// família, arredondada e/ou saturada. As lanes de saída são escritas a partir de
+    /// `laneOffset` (o A64 usa `laneOffset` para a forma "2"/`q=1`; o NEON de 32 bits passa sempre
+    /// `0`). Os `base*` são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeShiftNarrowImmediate`
+    /// (B8.8) em B13.8 (D1 da RFC B13.2). Resultados calculados num buffer ANTES de qualquer
+    /// escrita — `baseRd` pode coincidir com `baseRn` e ao estreitar a escrita de uma lane larga
+    /// cobriria lanes estreitas ainda não lidas. A escrita destrutiva do A64 é do chamador.
+    public static void shiftNarrowImmediate(AdvSimdRegisterWords regs, AdvSimdShiftNarrowOp op,
+            int esz, int shift, int elements, int laneOffset, int baseRd, int baseRn) {
+        int wideEsz = esz + 1;
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long wide = element(regs, baseRn, i, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow = switch (op) {
+                case SHRN -> logicalShiftRight(wide, shift);
+                case RSHRN -> roundingShiftRight(wide, shift, false);
+                case SQSHRN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, true);
+                case UQSHRN -> saturateToElement(BigInteger.valueOf(logicalShiftRight(wide, shift)), esz, false);
+                case SQSHRUN -> saturateToElement(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz, false);
+                case SQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, true);
+                case UQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(wide, shift, false)), esz, false);
+                case SQRSHRUN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, false);
+            };
+            results[i] = truncate(narrow, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, laneOffset + i, esz, results[i]);
+        }
+    }
+
+    /// Executa uma operação "shift by immediate" ALARGANTE (ver {@link AdvSimdShiftWidenOp}) sobre
+    /// `outputElements` elementos: cada lane de saída (`esz + 1` bytes) vem da lane de `baseRn`
+    /// (elementos de `esz` bytes, lida a partir de `laneOffset` — a forma "2"/`q=1` do A64; o NEON
+    /// de 32 bits passa sempre `0`) sinal/zero-estendida e deslocada à esquerda por `shift`. Nunca
+    /// satura — o valor alargado sempre cabe. Os `base*` são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeShiftWidenImmediate` (B8.8,
+    /// já bufferizado pela E10) em B13.8 (D1 da RFC B13.2). Resultados num buffer ANTES de escrever
+    /// — `baseRd` pode ser `baseRn` e a escrita de uma lane larga cobriria lanes estreitas ainda
+    /// não lidas. A escrita destrutiva do A64 é do chamador.
+    public static void shiftWidenImmediate(AdvSimdRegisterWords regs, AdvSimdShiftWidenOp op,
+            int esz, int shift, int outputElements, int laneOffset, int baseRd, int baseRn) {
+        int wideEsz = esz + 1;
+        long[] results = new long[outputElements];
+        for (int i = 0; i < outputElements; i++) {
+            long narrow = element(regs, baseRn, laneOffset + i, esz);
+            long extended = op == AdvSimdShiftWidenOp.SSHLL ? signExtend(narrow, esz) : narrow;
+            results[i] = truncate(safeShiftLeft(extended, shift), wideEsz);
+        }
+        for (int i = 0; i < outputElements; i++) {
+            setElement(regs, baseRd, i, wideEsz, results[i]);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     // PONTO FLUTUANTE — B13.6 (migração D1 da RFC B13.2). Primeiro caminho FP do núcleo. As ops
     // "three same"/"pairwise" de FP do A64 (B8.9) vivem SÓ aqui a partir daquela task; o
@@ -665,5 +724,105 @@ public final class AdvSimdLanes {
             }
             default -> throw new IllegalArgumentException("esz inválido para FP pairwise: " + esz);
         };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // CONVERSÃO FP ↔ PONTO FIXO — B13.8 (migração D1 da RFC B13.2). `SCVTF`/`UCVTF`/`FCVTZS`/
+    // `FCVTZU` na forma AdvSIMD com fator de escala `2^fractionBits` (`VCVT` fixo↔float F32 no NEON
+    // de 32 bits; `@fcvt_fixed` escalar/vetorial no A64). O arredondamento é SEMPRE toward-zero
+    // (é o que o encoding desta forma define nos dois lados — não há variante de direção), e a
+    // saturação usa os mesmos helpers do escalar (`saturateToInteger`), movidos para cá em vez de
+    // duplicados. Sem modelo de `FPSCR`/`FPCR`.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// Executa `SCVTF`/`UCVTF` (`toFloat=true`: inteiro `esz`-wide → FP `esz`-wide, depois
+    /// `/ 2^fractionBits`) ou `FCVTZS`/`FCVTZU` (`toFloat=false`: FP `* 2^fractionBits`, arredonda
+    /// para zero, satura → inteiro) sobre `lanes` elementos de `1 << esz` bytes (`esz` `2` = 32
+    /// bits, `3` = 64 bits). `signed` escolhe a variante assinada. Os `base*` são índices de
+    /// PALAVRA; a leitura e a escrita são na MESMA largura (`esz`), então não há buffer — nenhuma
+    /// lane escrita cobre uma ainda não lida. A escrita destrutiva do A64 é do chamador.
+    ///
+    /// Corpo movido VERBATIM de `Ir64VectorFpArithmeticExecutor#executeConvertFixedPoint` (B19.3/
+    /// B19.4) em B13.8.
+    public static void convertFixedPoint(AdvSimdRegisterWords regs, int esz, int fractionBits,
+            boolean toFloat, boolean signed, int lanes, int baseRd, int baseRn) {
+        boolean wide = esz == 3;
+        double scale = Math.scalb(1.0, fractionBits);
+        for (int i = 0; i < lanes; i++) {
+            long inputBits = element(regs, baseRn, i, esz);
+            long resultBits;
+            if (toFloat) {
+                double asDouble;
+                if (wide) {
+                    asDouble = signed ? (double) inputBits : unsignedLongToDouble(inputBits);
+                } else {
+                    asDouble = signed ? (double) (int) inputBits : (double) inputBits;
+                }
+                double scaled = asDouble / scale;
+                resultBits = esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
+            } else {
+                double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
+                double scaled = value * scale;
+                double rounded = roundTowardZeroForConversion(scaled);
+                long converted = saturateToInteger(rounded, signed, wide);
+                resultBits = converted & (wide ? -1L : 0xFFFF_FFFFL);
+            }
+            setElement(regs, baseRd, i, esz, resultBits);
+        }
+    }
+
+    /// Arredonda `value` na direção do zero, deixando `NaN`/infinito INTACTOS (quem chama —
+    /// {@link #saturateToInteger} — precisa deles para saturar corretamente: `NaN`→`0`,
+    /// infinito→limite da largura). Equivale a `Ir64FpExecutor.roundToIntegralForConversion(value,
+    /// TOWARD_ZERO)`: esta forma de `VCVT`/`@fcvt_fixed` só arredonda para zero, então a direção é
+    /// fixa e o `enum` do pipeline `ir64` não precisa ser importado aqui.
+    private static double roundTowardZeroForConversion(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return value;
+        }
+        return value < 0 ? Math.ceil(value) : Math.floor(value);
+    }
+
+    /// Converte um `long` de 64 bits SEM SINAL (bit mais alto pode estar setado) para o `double`
+    /// mais próximo — truque padrão (deslocar 1 bit sem sinal, escalar de volta, somar o bit
+    /// perdido) já que `(double) long` do Java sempre assume sinal. Vive aqui desde B13.8 (era de
+    /// `Ir64FpExecutor`, que agora delega); usado pelas conversões inteiro→FP dos dois pipelines.
+    public static double unsignedLongToDouble(long value) {
+        if (value >= 0) {
+            return (double) value;
+        }
+        return ((double) (value >>> 1)) * 2.0 + (value & 1L);
+    }
+
+    /// `FPToFixed` (`ARM DDI 0487`): arredonda+satura `rounded` (já na direção certa) para a
+    /// largura/sinal pedida. `NaN`→`0`; fora da faixa→o limite mais próximo. Vive aqui desde B13.8
+    /// (era de `Ir64FpExecutor`, que agora delega); fonte ÚNICA da saturação FP→int dos dois
+    /// pipelines.
+    public static long saturateToInteger(double rounded, boolean signed, boolean wide) {
+        if (Double.isNaN(rounded)) {
+            return 0L;
+        }
+        int bits = wide ? 64 : 32;
+        double minValue = signed ? -Math.scalb(1.0, bits - 1) : 0.0;
+        double maxValue = signed ? Math.scalb(1.0, bits - 1) - 1.0 : Math.scalb(1.0, bits) - 1.0;
+        double clamped = Math.max(minValue, Math.min(maxValue, rounded));
+        if (wide && !signed) {
+            return doubleToUnsignedLongBits(clamped);
+        }
+        // signed64: o cast (double->long) do Java já satura em Long.MIN/MAX_VALUE (JLS 5.1.3);
+        // signed32/unsigned32 cabem folgados na faixa de `long`, o chamador mascara os 32 bits
+        // altos ao escrever.
+        return (long) clamped;
+    }
+
+    /// `clamped` já está em `[0, 2^64-1]` — para a metade superior (`>= 2^63`) o cast direto
+    /// `(long)` do Java satura em `Long.MAX_VALUE` em vez de produzir o padrão de bits sem sinal;
+    /// desloca para baixo de `2^63`, converte e soma de volta em complemento de dois.
+    private static long doubleToUnsignedLongBits(double clamped) {
+        double twoToThe63 = Math.scalb(1.0, 63);
+        if (clamped < twoToThe63) {
+            return (long) clamped;
+        }
+        return Long.MIN_VALUE + (long) (clamped - twoToThe63);
     }
 }

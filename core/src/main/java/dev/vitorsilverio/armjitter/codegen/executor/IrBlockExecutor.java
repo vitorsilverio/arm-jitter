@@ -121,6 +121,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_FP_THREE_SAME -> neon.executeNeonFpThreeSame(core, (IrOp.NeonFpThreeSame) op);
                 case IrOp.Kind.NEON_FP_PAIRWISE -> neon.executeNeonFpPairwise(core, (IrOp.NeonFpPairwise) op);
                 case IrOp.Kind.NEON_SHIFT_IMMEDIATE -> neon.executeNeonShiftImmediate(core, (IrOp.NeonShiftImmediate) op);
+                case IrOp.Kind.NEON_SHIFT_NARROW_IMMEDIATE -> neon.executeNeonShiftNarrowImmediate(core, (IrOp.NeonShiftNarrowImmediate) op);
+                case IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE -> neon.executeNeonShiftWidenImmediate(core, (IrOp.NeonShiftWidenImmediate) op);
+                case IrOp.Kind.NEON_CONVERT_FIXED_POINT -> neon.executeNeonConvertFixedPoint(core, (IrOp.NeonConvertFixedPoint) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -262,6 +265,9 @@ public final class IrBlockExecutor {
             case IrOp.NeonFpThreeSame fp3 -> { neon.executeNeonFpThreeSame(core, fp3); yield false; }
             case IrOp.NeonFpPairwise fppw -> { neon.executeNeonFpPairwise(core, fppw); yield false; }
             case IrOp.NeonShiftImmediate si -> { neon.executeNeonShiftImmediate(core, si); yield false; }
+            case IrOp.NeonShiftNarrowImmediate sni -> { neon.executeNeonShiftNarrowImmediate(core, sni); yield false; }
+            case IrOp.NeonShiftWidenImmediate swi -> { neon.executeNeonShiftWidenImmediate(core, swi); yield false; }
+            case IrOp.NeonConvertFixedPoint cfp -> { neon.executeNeonConvertFixedPoint(core, cfp); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

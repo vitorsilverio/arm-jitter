@@ -9,6 +9,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
@@ -31,7 +33,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (74 desde B13.7), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (77 desde B13.8), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -44,7 +46,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(74, kinds.size(), "IrOp.Kind deve ter 74 constantes contíguas");
+        assertEquals(77, kinds.size(), "IrOp.Kind deve ter 77 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -70,8 +72,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         }
         // Os Kinds sem nó Truffle (VFP/coprocessador, NEON, DSP dual/top-word,
         // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na
-        // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE (NEON também não tem nó Truffle).
-        assertEquals(34, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
+        // NEON_SHIFT_WIDEN_IMMEDIATE, NEON_CONVERT_FIXED_POINT (NEON também não tem nó Truffle).
+        assertEquals(37, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.BIT_FIELD_EXTRACT, IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE,
                         IrOp.Kind.DIVIDE, IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
@@ -84,7 +87,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.ERET, IrOp.Kind.MRS_BANK, IrOp.Kind.MSR_BANK, IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
-                        IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE)),
+                        IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE,
+                        IrOp.Kind.NEON_SHIFT_NARROW_IMMEDIATE, IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE,
+                        IrOp.Kind.NEON_CONVERT_FIXED_POINT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -188,6 +193,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_FP_PAIRWISE -> new IrOp.NeonFpPairwise(AdvSimdFpPairwiseOp.ADD, 2, 0, 1, 2);
             case IrOp.Kind.NEON_SHIFT_IMMEDIATE ->
                     new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SSHR, false, 0, 1, 0, 1);
+            case IrOp.Kind.NEON_SHIFT_NARROW_IMMEDIATE ->
+                    new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SHRN, 0, 1, 0, 2);
+            case IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE ->
+                    new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.SSHLL, 0, 0, 0, 2);
+            case IrOp.Kind.NEON_CONVERT_FIXED_POINT ->
+                    new IrOp.NeonConvertFixedPoint(false, 2, 1, true, true, 0, 1);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

@@ -315,46 +315,18 @@ final class Ir64FpExecutor {
         return roundToIntegral(value, direction);
     }
 
-    /// Converte um `long` de 64 bits SEM SINAL (bit mais alto pode estar setado) para o `double`
-    /// mais próximo — truque padrão (deslocar 1 bit sem sinal, escalar de volta, somar o bit
-    /// perdido) já que `(double) long` do Java sempre assume sinal.
+    /// `long` sem sinal → `double` mais próximo. A lógica vive em {@link AdvSimdLanes} desde B13.8
+    /// (fonte única, reusada pelo NEON de 32 bits); este método delega por compatibilidade da API
+    /// `package` de `executor64` (G3).
     static double unsignedLongToDouble(long value) {
-        if (value >= 0) {
-            return (double) value;
-        }
-        return ((double) (value >>> 1)) * 2.0 + (value & 1L);
+        return AdvSimdLanes.unsignedLongToDouble(value);
     }
 
-    /// `FPToFixed`: arredonda+satura `rounded` (já na direção certa) para a largura/sinal pedida.
-    /// `NaN`→`0`; fora da faixa→o limite mais próximo (mesma convenção de
-    /// {@code IrVfpExecutor#doubleToFixed}, o precedente VFP32 desta mesma técnica).
+    /// `FPToFixed` — arredonda+satura para a largura/sinal pedida. A lógica vive em
+    /// {@link AdvSimdLanes} desde B13.8 (fonte única, reusada pelo NEON de 32 bits); este método
+    /// delega por compatibilidade da API `package` de `executor64` (G3).
     static long saturateToInteger(double rounded, boolean signed, boolean wide) {
-        if (Double.isNaN(rounded)) {
-            return 0L;
-        }
-        int bits = wide ? 64 : 32;
-        double minValue = signed ? -Math.scalb(1.0, bits - 1) : 0.0;
-        double maxValue = signed ? Math.scalb(1.0, bits - 1) - 1.0 : Math.scalb(1.0, bits) - 1.0;
-        double clamped = Math.max(minValue, Math.min(maxValue, rounded));
-        if (wide && !signed) {
-            return doubleToUnsignedLongBits(clamped);
-        }
-        // signed64: o cast (double->long) do Java já satura em Long.MIN/MAX_VALUE por JLS 5.1.3 —
-        // signed32/unsigned32 cabem folgados na faixa de `long`, {@link
-        // Aarch64Core#setXForWidth} zera/mascara os 32 bits altos ao escrever.
-        return (long) clamped;
-    }
-
-    /// `clamped` já está em `[0, 2^64-1]` — para a metade superior (`>= 2^63`), o cast direto
-    /// `(long)` do Java satura em `Long.MAX_VALUE` (não produz o padrão de bits sem sinal
-    /// correto); desloca para baixo de `2^63` primeiro, converte, e soma de volta em aritmética de
-    /// complemento de dois (que "dá a volta" corretamente para o padrão de bits desejado).
-    private static long doubleToUnsignedLongBits(double clamped) {
-        double twoToThe63 = Math.scalb(1.0, 63);
-        if (clamped < twoToThe63) {
-            return (long) clamped;
-        }
-        return Long.MIN_VALUE + (long) (clamped - twoToThe63);
+        return AdvSimdLanes.saturateToInteger(rounded, signed, wide);
     }
 
     /// `FMOV` registrador-geral↔FP escalar (B8.5) — cópia CRUA de bits, sem conversão de valor.

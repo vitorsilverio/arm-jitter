@@ -8,7 +8,8 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
         IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise,
-        IrOp.NeonShiftImmediate {
+        IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
+        IrOp.NeonConvertFixedPoint {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -101,6 +102,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_FP_THREE_SAME = 71;
         public static final int NEON_FP_PAIRWISE = 72;
         public static final int NEON_SHIFT_IMMEDIATE = 73;
+        public static final int NEON_SHIFT_NARROW_IMMEDIATE = 74;
+        public static final int NEON_SHIFT_WIDEN_IMMEDIATE = 75;
+        public static final int NEON_CONVERT_FIXED_POINT = 76;
     }
 
     /// Operacao ALU generica.
@@ -1621,5 +1625,96 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte do valor deslocado, em índice de `D` (ver {@link #vd}).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_SHIFT_IMMEDIATE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por imediato ESTREITANTE
+    /// (B13.8): `VSHRN`/`VRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VQSHRN`/`VQRSHRN` (as 8 famílias). A fonte é
+    /// um `Q` (128 bits, elementos de `esz + 1` bytes), o destino é um `D` (64 bits, elementos de
+    /// `esz` bytes) — `Vd[i] = narrow(op(Vm[i], #shift))`, deslocamento à direita já resolvido do
+    /// encoding. **Sem campo `quad`**: a fonte é sempre `Q` e o destino sempre `D`; o bit `Q` do
+    /// encoding faz parte do OPCODE (escolhe entre `VSHRN`/`VRSHRN`, etc.), não da largura.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftNarrowImmediate} no
+    /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftNarrowImmediate}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonShiftNarrowImmediate(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp op,
+            /// `log2` do tamanho do elemento de DESTINO (lado ESTREITO) em bytes: `0`=byte,
+            /// `1`=halfword, `2`=word. A fonte tem elementos de `esz + 1`.
+            int esz,
+            /// Quantidade de deslocamento à direita já resolvida (`1..8<<esz`).
+            int shift,
+            /// Registrador de destino (`D`, 64 bits), em índice de `D` (`0`-`31`).
+            int vd,
+            /// Registrador fonte (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_SHIFT_NARROW_IMMEDIATE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por imediato ALARGANTE
+    /// (B13.8): `VSHLL` (fonte assinada → `SSHLL`, fonte não assinada → `USHLL`). A fonte é um `D`
+    /// (64 bits, elementos de `esz` bytes), o destino é um `Q` (128 bits, elementos de `esz + 1`
+    /// bytes) — `Vd[i] = ext(Vm[i]) << #shift`, nunca satura. **Sem campo `quad`** pelo mesmo
+    /// motivo de {@link NeonShiftNarrowImmediate}: fonte `D`, destino `Q` fixos; o bit `Q` do
+    /// encoding faz parte do OPCODE.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftWidenImmediate} no
+    /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftWidenImmediate}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonShiftWidenImmediate(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp op,
+            /// `log2` do tamanho do elemento de FONTE (lado ESTREITO) em bytes: `0`=byte,
+            /// `1`=halfword, `2`=word. O destino tem elementos de `esz + 1`.
+            int esz,
+            /// Quantidade de deslocamento à esquerda já resolvida (`0..(8<<esz)-1`).
+            int shift,
+            /// Registrador de destino (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte (`D`, 64 bits), em índice de `D` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_SHIFT_WIDEN_IMMEDIATE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8):
+    /// `VCVT.F32.S32`/`VCVT.F32.U32` (`toFloat`, inteiro fixo `* 2^-fractionBits` → F32) e
+    /// `VCVT.S32.F32`/`VCVT.U32.F32` (`!toFloat`, F32 `* 2^fractionBits`, arredonda para zero,
+    /// satura → inteiro). Elementos de 32 bits nos dois lados (mesma largura), `4` ou `2` lanes
+    /// conforme {@link #quad}.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpConvertFixedPoint} no
+    /// ENCODING/IR (menos o campo `scalar`, que não existe em NEON A32); a SEMÂNTICA vem do núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPoint}),
+    /// RFC B13.2 D1. A forma de MEIA PRECISÃO (`VCVT` F16) é task irmã (depende de B19.5.1).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonConvertFixedPoint(
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`, bit `Q` do encoding), `false` para
+            /// o de 64 bits (`D<d>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32/32 bits) nesta task.
+            int esz,
+            /// Número de bits fracionários (`#fbits` do encoding, `1..32`). Fator de escala
+            /// `2^fractionBits`.
+            int fractionBits,
+            /// `true` → `SCVTF`/`UCVTF` (inteiro → FP, depois `/ 2^fbits`); `false` → `FCVTZS`/
+            /// `FCVTZU` (FP `* 2^fbits`, arredonda para zero, satura → inteiro).
+            boolean toFloat,
+            /// `true` para as variantes assinadas (`.S32`), `false` para as não assinadas (`.U32`).
+            boolean signed,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_CONVERT_FIXED_POINT; }
     }
 }
