@@ -48,14 +48,14 @@ exercitada** — é bug latente, não regressão.
 | Task | Escopo | Depende de |
 |---|---|---|
 | **A10.1** | **Parar de mentir** (correção, não feature): `TruffleCodeEmitter#supports` passa a consultar a factory de verdade — um `IrOpNodeFactory.supports(IrOp)` novo (o mesmo `switch`, devolvendo `boolean`), e blocos com Kind não coberto vão para o `fallback` que já existe e já está fiado. Troca **exceção** por **degradação correta**. Teste: um bloco com `VfpAlu` executa certo no backend `TRUFFLE` (via fallback) e `fallbackBlockCount` incrementa | — |
-| **A10.2** | **Medir**: coluna Truffle em `docs/COBERTURA-JIT.md` (o relatório que a **C12.1** cria). Sem isso a cobertura Truffle volta a apodrecer em silêncio — foi exatamente o que aconteceu de A6 até aqui | C12.1, A10.1 |
-| **A10.3** | Nós de **VFP** (14 Kinds) — `VfpOpNode` novo, delegando a `executor.vfpExecutor()`, no padrão das 7 categorias da A6 | A10.1 |
-| **A10.4** | Nós de **bitfield/aritmética v7** (`BIT_FIELD_EXTRACT`/`BIT_FIELD_INSERT`/`BIT_REVERSE`/`DIVIDE`) — provavelmente cabem no `AluOpNode` existente | A10.1 |
-| **A10.5** | Nós de **sistema restante** (`HVC`/`SMC`/`ERET`/`MRS_BANK`/`MSR_BANK`/`BREAKPOINT`/`M_PROFILE_SYSTEM_REGISTER`) — provavelmente cabem no `SystemOpNode` | A10.1 |
-| **A10.6** | Nós de **DSP** (`DSP_DUAL_MULTIPLY`/`DSP_TOP_WORD_MULTIPLY`) — provavelmente cabem no `MultiplyOpNode` | A10.1 |
-| **A10.7** `[REFINAR]` | Nós de **NEON** (7 Kinds e crescendo com B13). Mesma pergunta em aberto da **C12.6**: nó por lane vs nó que chama `AdvSimdLanes`. Decidir junto, não em separado | A10.3, C12.6 |
-| **A10.8** `[REFINAR]` | **Truffle para AArch64** — não existe nada. Épico dentro do épico: espelhar `IrOpNode`/factory/emitter para `Ir64Op` (95 Kinds). Precisa de RFC própria: vale a pena, ou o backend ASM 64 (C12) já cobre o caso de uso? | A10.7, C12.9 |
-| **A10.9** | **Fechamento**: remedir, atualizar `docs/VALIDACAO-ARQUITETURAS.md` | A10.1-A10.8 |
+| ~~**A10.2**~~ | **ABSORVIDA pela C12.1** (2026-09-03): ela entregou as DUAS colunas Truffle de `docs/COBERTURA-JIT.md` (32 bits 40/77, 64 bits 0/96) medidas por reflexão, mais o teste de guarda que era o ponto da task. Auditado: sem resíduo | C12.1, A10.1 |
+| **[A10.3](a10.3-nos-vfp.md)** | Nós de **VFP** (14 `Kind`) — `VfpOpNode` novo delegando ao executor, no padrão das 7 categorias da A6. O maior bloco: qualquer binário com ponto flutuante usava o fallback inteiro | A10.1 |
+| **[A10.4](a10.4-nos-bitfield-divide.md)** | Nós de **bitfield/`RBIT`/divisão** (4 `Kind`) — provavelmente cabem no `AluOpNode`. Armadilha real: `SDIV` por zero é 0 no ARM e exceção em Java | A10.1 |
+| **[A10.5](a10.5-nos-sistema.md)** | Nós de **sistema** (`Hvc`/`Smc`/`Eret`/`MrsBank`/`MsrBank`/`Breakpoint`, 6 `Kind`) — provavelmente no `SystemOpNode`. **4 transferem controle por exceção**: é a superfície que a A10.1 descobriu quebrada, e vale o cuidado da **E7** | A10.1 |
+| **[A10.6](a10.6-nos-dsp.md)** | Nós de **DSP** (2 `Kind`) — no `MultiplyOpNode`, onde `DspMultiply` já está. O menor degrau do épico | A10.1 |
+| **[A10.7](a10.7-nos-neon.md)** `[REFINAR]` | Nós de **NEON** (11 hoje, crescendo com B13). **Aguarda a RFC da C12.6** — a pergunta (nó por lane × nó que chama `AdvSimdLanes` × não fazer) é a mesma dos dois lados e decide-se uma vez só | A10.3, C12.6 |
+| **[A10.8](a10.8-truffle-aarch64-rfc.md)** `[RFC]` | **Truffle para AArch64** — 0 de 96: o backend NÃO EXISTE. RFC com medição em HotSpot **e** GraalVM (o `docs/TRUFFLE-BACKEND.md` registra um caso em que o Truffle foi 5,24× PIOR), comparando contra o ASM 64 pós-C12.9. Rota (c) "não construir" é legítima se medida | A10.7, C12.9 |
+| **[A10.9](a10.9-fechamento.md)** | **Fechamento**: remedir as 2 colunas Truffle, medir os contadores `nativeBlockCount`/`fallbackBlockCount` em workload real, e responder honestamente se o backend ganha de algo. Coordena com a **C12.9** (mesmo arquivo) | A10.3-A10.8 |
 
 **A10.1 é a única task URGENTE do épico** — é uma correção pequena que troca um crash por
 comportamento correto, e não depende de nada. Todo o resto é expansão de cobertura e pode esperar.

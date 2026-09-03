@@ -53,13 +53,14 @@ emitem uma linha de bytecode novo — são instrumentação e verdade.
 |---|---|---|---|
 | **C12.1** | **Medir e não mentir**: relatório de cobertura de emissão nativa (`docs/COBERTURA-JIT.md`, gerado por medição como o `IsaCoverageReport` faz para ISA — 3 colunas: interpretado / ASM 32 / ASM 64 / Truffle). Corrigir o Javadoc de `Ir64NativePolicy`. **Sem isso, todo degrau seguinte é adivinhação** | não | — |
 | **C12.2** | **Política `PER_OP` no pipeline de 64 bits**: hoje é `WHOLE_BLOCK` (uma op derruba o bloco). O lado 32 bits já tem o precedente. Ganho imediato SEM emitir nada novo: blocos mistos param de cair inteiros | não | C12.1 |
-| **C12.3** | A64 — o **inteiro** ainda interpretado: `LOGICAL_SHIFTED_REGISTER`, `CONDITIONAL_COMPARE`, `SHIFT_VARIABLE`, `ALU_WITH_CARRY`, `EXTRACT`, `DATA_PROCESSING_1_SOURCE`, `MULTIPLY_ACCUMULATE_LONG`, `MULTIPLY_HIGH`, `COMPARE_AND_SWAP`(+`_PAIR`), `LOAD`/`STORE_EXCLUSIVE_PAIR`, `ATOMIC_MEMORY_OP` | sim | C12.1 |
-| **C12.4** | A64 — **FP escalar** restante: `FP64_MULTIPLY_ADD`, `FP64_CONDITIONAL_SELECT`, `FP64_CONDITIONAL_COMPARE`, `FP64_ROUND`, `FP64_INTEGER_CONVERT`, `FP64_GENERAL_REGISTER_MOVE` | sim | C12.3 |
-| **C12.5** | A64 — **load/store FP/SIMD**: `FP_LOAD64`, `FP_STORE64`, `FP_LOAD_STORE_PAIR`, `FP_LOAD_LITERAL64`, `VECTOR_LOAD_STORE_*` | sim | C12.4 |
-| **C12.6** `[REFINAR]` | A64 — **AdvSIMD aritmético** (~30 Kinds `VECTOR_*`/`CRYPTO_*`). O maior bloco, e o que precisa de RFC: emitir lane a lane em bytecode é volumoso e pode não pagar. **Decidir com medição** (ver "A pergunta em aberto") | talvez | C12.5, C12.1 |
-| **C12.7** | 32 bits — os 27 records `-> false`: sistema (`CPS`/`SETEND`/`SRS`/`RFE`/`WFI`), `Swap`, `SetItState`, `TableBranch`, `CompareBranchZero`, `VfpConvertFixed`, `VfpCorePairTransferSingle`, DSP dual/top-word, `Breakpoint`, `MProfileSystemRegister`, `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank` | sim | C12.1 |
-| **C12.8** | 32 bits — os **NEON** (`NEON_*`, 7 Kinds hoje e crescendo com B13) | talvez | C12.6, B13.22 |
-| **C12.9** | **Fechamento**: remedir, atualizar `docs/COBERTURA-JIT.md` e `docs/VALIDACAO-ARQUITETURAS.md` | não | C12.1-C12.8 |
+| **[C12.3](c12.3-a64-inteiro-nativo.md)** | A64 — o **inteiro** ainda interpretado. **Remedido 2026-09-03: são 16 `Kind`**, não a lista do plano: os 13 previstos MAIS `EVALUATE_INTO_FLAGS`/`ROTATE_INTO_FLAGS`/`CONVERT_FLAGS` (`FEAT_FlagM`/`FlagM2`), que não estavam listados | sim | C12.1 |
+| **[C12.4](c12.4-a64-fp-escalar-nativo.md)** | A64 — **FP escalar** restante (6 `Kind`). A B6.5.4 já emitiu 4; extensão direta do padrão dela | sim | C12.3 |
+| **[C12.5](c12.5-a64-loadstore-fp-simd-nativo.md)** | A64 — **load/store FP/SIMD** (7 `Kind`). Os 4 escalares por emissão real; as 3 formas estruturadas (`LD1`-`LD4`) por helper, como o precedente de `LDM`/`STM` de 32 bits | sim | C12.4 |
+| **[C12.6](c12.6-a64-advsimd-nativo-rfc.md)** `[RFC]` | A64 — **AdvSIMD aritmético**: **35 `Kind`** medidos (quase metade dos 72 que faltam). RFC com protótipo medido entre 3 rotas: lane a lane × chamada a `AdvSimdLanes` × não emitir. **Decide junto com a A10.7** | talvez | C12.5, C12.1 |
+| **[C12.7](c12.7-32bits-records-restantes.md)** | 32 bits — os records `❌` **sem NEON**: **20** medidos (o plano dizia 27; 31 `❌` menos 11 de NEON). ⚠️ único pipeline com cache de registradores E com `gbaemu`/`ndsemu` em produção | sim | C12.1 |
+| **[C12.8](c12.8-32bits-neon-nativo.md)** | 32 bits — os `Kind` de **NEON** (11 hoje, crescendo com B13). Aplica a decisão da C12.6; sem B13.22 não há preset com NEON e nada a validar com guest | talvez | C12.6, C12.7, B13.22 |
+| **[C12.9](c12.9-fechamento.md)** | **Fechamento**: remedir as 4 colunas, decidir os defaults de política com número e workload real, enumerar o que sobrou. Coordena com a **A10.9** (mesmo arquivo) | não | C12.2-C12.8, C12.10 |
+| **[C12.10](c12.10-a64-sistema-nativo.md)** 🆕 | A64 — os **8 `Kind` de sistema** que a escada original não tinha: `SYSTEM_REGISTER`/`SYSTEM_INSTRUCTION`/`EXCEPTION_RETURN`/`PRIVILEGED_CALL`/`INTERRUPT_MASK`/`BREAKPOINT`/`UNDEFINED_INSTRUCTION_TRAP`/`ADDRESS_TRANSLATE`. Kernel os executa em caminho quente; 4 deles transferem controle por exceção (cuidado da **E7**) | sim | C12.3 |
 
 ## A pergunta em aberto (RFC dentro da C12.6)
 
