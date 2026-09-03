@@ -29,6 +29,8 @@ suspeitos; não prova o resto.
 só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode`/`sme.decode`
 continuam uma coluna monolítica `A64` (nada decodifica ainda).
 
+> **Inventário medido contra a revisão do QEMU `2931a675e9d3fcddedf673509fe9759955fc616d`** — fixada em `gerar-cobertura-isa.sh` (variável `QEMU_REV`). A tabela só é reproduzível contra ESSA revisão; um bump de `QEMU_REV` é um commit próprio, com o diff lido linha a linha (ver o cabeçalho do script).
+
 <!--CORPO-->
 ## Progresso global
 
@@ -36,7 +38,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **89%** — 16298 de 18164 células aplicáveis decodificam.
+> **89%** — 16303 de 18169 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -44,11 +46,11 @@ Por arquitetura:
 |---|---|
 | v4T | **100%** (206/206) |
 | v5TE | **100%** (221/221) |
-| v6K | **100%** (311/311) |
-| MPCore | **100%** (361/361) |
-| v7-A | **100%** (651/651) |
-| v6-M | **88%** (82/93) |
-| v7-M | **96%** (322/333) |
+| v6K | **100%** (312/312) |
+| MPCore | **100%** (362/362) |
+| v7-A | **100%** (652/652) |
+| v6-M | **88%** (83/94) |
+| v7-M | **96%** (323/334) |
 | ARMv8.0-A | **88%** (850/960) |
 | ARMv8.1-A | **88%** (874/984) |
 | ARMv8.2-A | **88%** (879/995) |
@@ -71,7 +73,7 @@ Por arquitetura:
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 100% (144/144) · v5TE 100% (156/156) · v6K 100% (231/231) · MPCore 100% (231/231) · v7-A 100% (244/244) |
-| T16 — Thumb clássico | 86 | v4T 100% (62/62) · v5TE 100% (65/65) · v6K 100% (80/80) · MPCore 100% (80/80) · v7-A 100% (81/81) · v6-M 100% (74/74) · v7-M 100% (80/80) |
+| T16 — Thumb clássico | 87 | v4T 100% (62/62) · v5TE 100% (65/65) · v6K 100% (81/81) · MPCore 100% (81/81) · v7-A 100% (82/82) · v6-M 100% (75/75) · v7-M 100% (81/81) |
 | T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
@@ -361,7 +363,7 @@ Inventário: `a32.decode` · 266 instruções.
 
 ## T16 — Thumb clássico
 
-Inventário: `t16.decode` · 86 instruções.
+Inventário: `t16.decode` · 87 instruções.
 
 | Instrução | v4T | v5TE | v6K | MPCore | v7-A | v6-M | v7-M |
 |---|---|---|---|---|---|---|---|
@@ -432,6 +434,7 @@ Inventário: `t16.decode` · 86 instruções.
 | `REV` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REV16` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REVSH` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MAYBE_UNDEF_T1_HINT` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `YIELD` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `WFE` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `WFI` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |

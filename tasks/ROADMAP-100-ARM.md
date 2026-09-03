@@ -56,7 +56,7 @@ Nenhum `ArmArchitecture`/`Aarch64Architecture` declara a extensão, então nem e
 |---|---|---|---:|---:|
 | A64 remanescente | **121 linhas** × 16 colunas de versão | [B19](trilha-b-arquiteturas/b19-plano-a64-gap-remanescente.md) | 9 (+6 de B19.5) | **6** |
 | `m-nocp` (perfil M moderno) | 11 encodings × 2 colunas | [B15](trilha-b-arquiteturas/b15-plano-armv8m.md) | 7 | **0** |
-| Resíduos de 32 bits | ✅ **fechado** (0 `❌`, 0 `⚠️`) | [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) | 6 | **6** |
+| Resíduos de 32 bits | ✅ **fechado** (0 `❌`, 0 `⚠️` contra `QEMU_REV` fixado — E11) | [B22](trilha-b-arquiteturas/b22-plano-residuos-32-bits.md) | 6 | **6** |
 
 ### 1c. Arquiteturas/perfis nunca modelados
 
@@ -136,7 +136,10 @@ depende de features que ainda não existem.
 Critério: **destravar dimensões inteiras primeiro**, depois volume.
 
 1. ~~**B22.6** — fecha o épico B22~~ ✅ **FEITA 2026-09-02** (A32/T16/T32/VFP em 0 `❌`/0 `⚠️`,
-   `⚠️` zero no projeto; `VALIDACAO-ARQUITETURAS.md` redatada). Épico B22 fechado.
+   `⚠️` zero no projeto; `VALIDACAO-ARQUITETURAS.md` redatada). Épico B22 fechado. **E11
+   (2026-09-03)** ancorou a manchete numa revisão fixada do QEMU (`QEMU_REV` no script) — o
+   resultado "0 `❌`" agora é reproduzível, e a linha nova `MAYBE_UNDEF_T1_HINT` do inventário foi
+   curada (v4T/v5TE) / virou a task E13 (gating v6K/MPCore).
 2. **A10.1** — fazer o `TruffleCodeEmitter#supports` dizer a verdade. É uma correção **pequena** que
    troca "quebra com exceção" por "cai no fallback", e é a única coisa entre o Truffle e a
    honestidade. Antes de qualquer expansão de cobertura Truffle.

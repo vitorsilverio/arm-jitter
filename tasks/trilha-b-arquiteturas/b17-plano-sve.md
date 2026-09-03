@@ -15,7 +15,10 @@ arquitetura real oferece.
 
 ## O número (medido, `target/isa-decode/sve.decode`)
 
-**929 encodings.** As 68 seções `###` do inventário agrupam-se assim:
+**929 encodings** — contra a revisão do QEMU fixada pela E11 (`QEMU_REV` em
+`gerar-cobertura-isa.sh`, hoje `2931a675e9d3…`). Uma rodada de spec que baixou `master` em
+2026-09-03 viu 947; ao fixar a revisão o número volta a 929. Se um bump de `QEMU_REV` mexer neste
+total, refazer a escada contra o novo inventário. As 68 seções `###` agrupam-se assim:
 
 | Bloco | Encodings (soma das seções) |
 |---|---:|

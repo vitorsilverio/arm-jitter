@@ -1,7 +1,7 @@
 # E11 — Fixar a revisão do inventário do QEMU (a tabela de cobertura mede um alvo móvel)
 
 **Trilha:** E · **Repo:** arm-jitter · **Depende de:** —
-**Status:** ⬜
+**Status:** ✅ (2026-09-03) — ver `## Resultado`. Item 4 → task nova **E13**.
 
 ## Contexto
 
@@ -212,3 +212,78 @@ Documentar no cabeçalho do script (e no `## Resultado`) o procedimento:
 - Não implementar instrução nova.
 - Não automatizar o bump.
 - Não fechar com o item 4 sem veredito.
+
+## Resultado
+
+Executado 2026-09-03 (JBR 25).
+
+### 1 — Revisão fixada + invalidação de cache (`gerar-cobertura-isa.sh`)
+
+- `QEMU_REV="2931a675e9d3fcddedf673509fe9759955fc616d"` no topo, com comentário do que é, quando
+  foi escolhido e o **rito de bump** (trocar o SHA → rodar → ler o diff linha a linha → commit
+  separado). `BASE_URL` passou a interpolar `${QEMU_REV}` — **`master` saiu**.
+- Invalidação por `target/isa-decode/.rev`: o script lê o SHA gravado; se não bater com `QEMU_REV`
+  (ou não existir), `rm -f "$DECODE_DIR"/*.decode` e rebaixa tudo. Se bater, baixa só o que falta
+  (retoma download interrompido). Ao final, grava `QEMU_REV` no `.rev`. Testado: `.rev` com
+  `deadbeef…` → `"cache do inventário é da revisão deadbeef…, esperada 2931a675e9d3… — rebaixando
+  tudo"` + 13 downloads + `.rev` atualizado; tabela byte-idêntica à commitada nas duas pontas.
+- `IsaCoverageReport` recebe a revisão como 4º argumento (ou lê `<dir>/.rev`, ou `"desconhecida"`)
+  e escreve no cabeçalho de `docs/COBERTURA-ISA.md`:
+  `> **Inventário medido contra a revisão do QEMU `2931a675e9d3…`** — …`.
+
+### 2 — Deriva absorvida (contra a revisão FIXADA, não `master`)
+
+**O delta desta spec foi medido contra `qemu/master` de 2026-09-03. Fixando em `2931a675e9d3…`
+(2026-08-21), o único delta real é `t16` 86→87.** `sve` fica **929** e `sme` fica **623** — o
++18/+28 que a spec previu vem de commits POSTERIORES ao SHA fixado. Isso é o comportamento
+desejado: a revisão fixada captura exatamente a linha com efeito semântico (`MAYBE_UNDEF_T1_HINT`)
+e nada mais. ⇒ **os números de B17 (929) e B18 (623) já estavam certos** — não mudaram; só ganharam
+uma nota de âncora ("vale contra `QEMU_REV`; se um bump mexer no total, refazer a escada").
+
+`docs/COBERTURA-ISA.md` regenerada: `t16.decode` 86→87 · global 89% (16303/18169, era 16298/18164)
+· `v6K` 312/312 · `MPCore` 362/362 · `v7-A` 652/652 · `v6-M` 83/94 · `v7-M` 323/334. **`v4T`/`v5TE`
+seguem 100%** (206/206, 221/221) — a queda para 99% que a spec previu era SEM a curadoria do item 3.
+
+### 3 — `MAYBE_UNDEF_T1_HINT` curado (`docs/isa-nao-aplicavel.tsv`)
+
+Linha nova: `MAYBE_UNDEF_T1_HINT  v4T,v5TE  … (QEMU 2931a675e9d3, trans_MAYBE_UNDEF_T1_HINT: UNDEF
+sem ARM_FEATURE_M nem ARM_FEATURE_THUMB2); v4T/v5TE são anteriores  t16.decode`. Fonte = o próprio
+commit + a mensagem dele ("the hint space is in a range that used to UNDEF in Armv5"). Efeito:
+`v4T`/`v5TE` → `·` (ficariam `❌`); `v6K`/`MPCore`/`v7-A`/`v6-M`/`v7-M` → `✅` (o catch-all decodifica
+como NOP/espaço de hint — `mask==0000`). Comentário do bloco de hints T16 logo abaixo atualizado
+apontando para a E13.
+
+### 4 — VEREDITO: task nova aberta (**E13**)
+
+O commit `2931a675e9d3…` não é só uma linha nova de inventário: `trans_MAYBE_UNDEF_T1_HINT` cobre
+**todo** o espaço `1011 1111 ---- 0000` (YIELD/WFE/WFI/SEV/NOP incluídos) e é checado **antes**
+deles; para perfil A sem Thumb-2 (v4T, v5TE, v6, **v6K**, **ARM11 MPCore**) o efeito é UNDEF do
+espaço inteiro. Isso **reverte a decisão da B9.14** (que tornou os 5 hints `✅` em v6K/MPCore com
+base no gate `ARM_FEATURE_V6K` do `trans_YIELD` — que vale para a forma **A32**, não a T1 de 16
+bits).
+
+Aplicando a regra de decisão do item 4: o conserto é um gate por `ArmFeature` existente
+(`THUMB2 || M_PROFILE`), MAS (a) muda 14 células em 2 colunas, (b) **reverte uma decisão explícita
+de outra task**, (c) toca `core/src/main` (`ThumbDecoder`) e (d) tem **risco real de regressão no
+n3dsemu** (único consumidor em ARMv6K/ARM11 MPCore — a Aceite da E11 assumia "nenhum consumidor é
+ARMv6K com hints Thumb", o que não se confirma). ⇒ **PARE e abra task própria**, conforme
+`## Armadilhas` 5. Criada **[E13](e13-t16-hint-space-undef-antes-v6t2.md)** com a medição, o gate
+proposto, a reversão dos testes da B9.14 e o passo de G5 do n3dsemu com plano de contingência.
+
+### 5 — Afirmações "0 `❌` em 32 bits" qualificadas
+
+Todas ganharam a âncora "contra a revisão do inventário fixada (`QEMU_REV`, hoje `2931a675e9d3…`)":
+`tasks/FILA-EXECUCAO.md` (achado #1 reescrito como RESOLVIDO + E11 movida de "pegáveis" para
+"fechou recentemente" + E13 adicionada), `tasks/trilha-b-arquiteturas/b22-plano-residuos-32-bits.md`
+(`## Meta`), `docs/VALIDACAO-ARQUITETURAS.md` (nota de cobertura de decode),
+`tasks/ROADMAP-100-ARM.md` (tabela 1b + ordem recomendada). T16 continua com **0 `❌`** após a
+curadoria — a manchete da B22.6 permanece verdadeira, agora ancorada.
+
+### Aceite
+
+Reprodutibilidade: `rm -rf target/isa-decode` + 2 execuções → `docs/COBERTURA-ISA.md` byte a byte
+idêntica nas duas e à versionada ✅. Cache obsoleto detectado ✅. Revisão no cabeçalho ✅.
+`MAYBE_UNDEF_T1_HINT` resolvido com fonte ✅. Item 4 com veredito (E13) ✅. B17/B18 conferidos
+(inalterados, anotados) ✅. Nenhuma afirmação "0 `❌`" sem qualificação ✅. `mvn -o -pl core test`
+verde (2954, 0 falhas) ✅. **`core/src/main` byte-idêntico** (o gate ficou na E13) ⇒ G5 dos 5
+consumidores não é afetado por esta task — a superfície publicada do arm-jitter não muda.

@@ -8,7 +8,10 @@ discussão do rótulo.
 
 ## O número (medido, `target/isa-decode/sme.decode`)
 
-**623 encodings**, em 18 seções `###`:
+**623 encodings** — contra a revisão do QEMU fixada pela E11 (`QEMU_REV` em
+`gerar-cobertura-isa.sh`, hoje `2931a675e9d3…`). Uma rodada de spec que baixou `master` em
+2026-09-03 viu 651; ao fixar a revisão o número volta a 623. Se um bump de `QEMU_REV` mexer neste
+total, refazer a escada contra o novo inventário. Em 18 seções `###`:
 
 | Bloco | Encodings |
 |---|---:|

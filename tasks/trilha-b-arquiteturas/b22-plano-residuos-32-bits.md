@@ -44,10 +44,19 @@ completa e sem bloqueio.
 | **[B22.5](b22.5-eret-hvc-smc-banked.md)** | ✅ **DESBLOQUEADA — o usuário decidiu em 2026-08-29 que serão implementadas** (spec completa escrita). As 29 células de `ERET`/`HVC`/`SMC`/`MRS_bank`/`MSR_bank`, com as 3 causas medidas: (1) **incoerência real** em `ARMV7A`, que declara `HYPERVISOR_CALL` mas não `VIRTUALIZATION_EXTENSIONS` — no ARM real são a MESMA extensão, e é isso que mantém `ERET`/`MRS_bank`/`MSR_bank` `❌` num preset que já tem `HVC`; (2) pré-v7 (v4T/v5TE/v6K/MPCore): posteriores, curadoria com fonte; (3) perfil M: não existem em NENHUM perfil M (fonte interna: B9.11). Aceite exige teste de EXECUÇÃO (entrar/retornar de Hyp, banco correto), não só decode | 29 | — |
 | **B22.6** | **Fechamento**: remedir, atualizar `docs/VALIDACAO-ARQUITETURAS.md` e registrar o estado final do lado de 32 bits | 0 | B22.1-B22.5 |
 
-## Meta — ATINGIDA (medição da B22.6, 2026-09-02)
+## Meta — ATINGIDA (medição da B22.6, 2026-09-02; revalidada pela E11, 2026-09-03)
 
 Medição reproduzível sobre `docs/COBERTURA-ISA.md` (contagem de células por seção,
-`./gerar-cobertura-isa.sh` produz a tabela byte a byte idêntica à versionada):
+`./gerar-cobertura-isa.sh` produz a tabela byte a byte idêntica à versionada).
+
+**Qualificação da E11 (2026-09-03):** este resultado vale **contra a revisão do inventário do
+QEMU fixada** por `gerar-cobertura-isa.sh` (variável `QEMU_REV`, hoje
+`2931a675e9d3fcddedf673509fe9759955fc616d`). Antes da E11 o script baixava de `master` e o
+resultado dependia de quando cada máquina baixou os `.decode` — a manchete "0 `❌`" era um fato
+sem âncora. Essa revisão introduz a linha `MAYBE_UNDEF_T1_HINT` em `t16.decode` (86→87 linhas),
+que a E11 curou para v4T/v5TE (fonte: o próprio commit); T16 continua com **0 `❌`**. Um bump de
+`QEMU_REV` pode reintroduzir `❌` — é trabalho novo descoberto, não regressão. A questão de
+gating dos hints T16 em v6K/MPCore que esse commit levanta é a task **E13**, não resíduo de B22.
 
 | Seção | `❌` | `⚠️` |
 |---|---:|---:|

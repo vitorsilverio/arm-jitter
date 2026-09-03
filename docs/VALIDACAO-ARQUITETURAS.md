@@ -34,7 +34,12 @@ verde.** N1/N2 = "implementada". N4 = "provada em produção".
 > *execução provada* por arquitetura. `docs/COBERTURA-ISA.md` mede uma pergunta diferente:
 > se cada encoding do inventário QEMU é RECONHECIDO pelo decoder. Nessa métrica, o lado de
 > **32 bits está fechado** — A32, T16, T32 e VFP condicional com **0 `❌` e 0 `⚠️`** (épico
-> B22, fechado em 2026-09-02 pela B22.6), e **zero `⚠️` no projeto inteiro**. Ressalvas
+> B22, fechado em 2026-09-02 pela B22.6), e **zero `⚠️` no projeto inteiro**. **Isto vale
+> contra a revisão do inventário fixada pela E11** (`QEMU_REV` em `gerar-cobertura-isa.sh`,
+> hoje `2931a675e9d3…`); o inventário do QEMU cresce, e um bump de `QEMU_REV` pode introduzir
+> `❌` novos (trabalho novo descoberto, não regressão — ver o rito no cabeçalho do script). A
+> E11 já absorveu a linha nova `MAYBE_UNDEF_T1_HINT` de `t16.decode`, curada para v4T/v5TE;
+> a questão de v6K/MPCore virou a task **E13**. Ressalvas
 > obrigatórias: as colunas `v6-M`/`v7-M` param em 88%/96% porque o grupo `m-nocp`
 > (`NOCP`/`VLLDM`/`VSCCLRM`/`VLDR_sysreg`) é território da **B15** (ARMv7E-M/ARMv8-M), não
 > resíduo de B22; VFP incondicional ARMv8-A (**B14**) e NEON/MVE/SVE/SME (**B13**/**B16**/

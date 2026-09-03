@@ -56,12 +56,19 @@ import java.util.Map;
 /// aqui. O relatório os baixa para `target/isa-decode/` (ignorado pelo git) na primeira execução.
 /// O que fica versionado é só a tabela gerada — mnemônicos e status, fatos do manual da ARM.
 ///
+/// ## Reprodutibilidade (E11)
+///
+/// O inventário é medido contra uma **revisão fixada** do QEMU (um SHA de commit, não `master`),
+/// definida por `QEMU_REV` em `gerar-cobertura-isa.sh` e gravada em `target/isa-decode/.rev`. A
+/// revisão usada é recebida como 4º argumento (ou lida do `.rev`) e escrita no cabeçalho de
+/// `docs/COBERTURA-ISA.md`, para toda sessão saber contra o que a tabela vigente foi medida.
+///
 /// ## Uso
 ///
 /// ```
 /// mvn -o -pl core test-compile
 /// java -cp core/target/classes;core/target/test-classes \
-///      dev.vitorsilverio.armjitter.tools.IsaCoverageReport <dir-com-os-.decode> docs/COBERTURA-ISA.md
+///      dev.vitorsilverio.armjitter.tools.IsaCoverageReport <dir-com-os-.decode> docs/COBERTURA-ISA.md [<tsv>] [<qemu-rev>]
 /// ```
 public final class IsaCoverageReport {
 
@@ -281,6 +288,9 @@ public final class IsaCoverageReport {
     private static final Map<String, int[]> globalPerArchitecture = new LinkedHashMap<>();
     private static int totalSupported;
     private static int totalApplicable;
+    /// Revisão do inventário do QEMU contra a qual esta execução mede (E11) — 4º argumento de
+    /// {@link #main}, ou lida de `<dir>/.rev`, ou `"desconhecida"` se nenhum dos dois existir.
+    private static String inventoryRevision = "desconhecida";
 
     /// `grupo` restringe a exclusão a um `Group#decodeFile()` específico (ex.: `t32.decode`) —
     /// necessário porque um mnemônico pode existir em MAIS de um arquivo `.decode` com o MESMO
@@ -343,6 +353,7 @@ public final class IsaCoverageReport {
         globalPerArchitecture.clear();
         totalSupported = 0;
         totalApplicable = 0;
+        inventoryRevision = resolveInventoryRevision(args, decodeDirectory);
         loadExclusions(Path.of(args.length > 2 ? args[2] : "docs/isa-nao-aplicavel.tsv"));
         StringBuilder report = new StringBuilder();
         appendHeader(report);
@@ -385,6 +396,26 @@ public final class IsaCoverageReport {
         System.out.println("escrito: " + output.toAbsolutePath());
     }
 
+    /// A revisão do inventário: 4º argumento se presente, senão o conteúdo de `<dir>/.rev`
+    /// (gravado por `gerar-cobertura-isa.sh`), senão `"desconhecida"`.
+    private static String resolveInventoryRevision(String[] args, Path decodeDirectory) {
+        if (args.length > 3 && !args[3].isBlank()) {
+            return args[3].trim();
+        }
+        Path revFile = decodeDirectory.resolve(".rev");
+        if (Files.exists(revFile)) {
+            try {
+                String content = Files.readString(revFile, StandardCharsets.UTF_8).trim();
+                if (!content.isEmpty()) {
+                    return content;
+                }
+            } catch (IOException ignored) {
+                // sem `.rev` legível: cai no default abaixo.
+            }
+        }
+        return "desconhecida";
+    }
+
     private static void appendHeader(StringBuilder report) {
         if (report.length() > 0) {
             return;
@@ -421,8 +452,13 @@ public final class IsaCoverageReport {
                 só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode`/`sme.decode`
                 continuam uma coluna monolítica `A64` (nada decodifica ainda).
 
-                <!--CORPO-->
                 """);
+        report.append("> **Inventário medido contra a revisão do QEMU `")
+                .append(inventoryRevision)
+                .append("`** — fixada em `gerar-cobertura-isa.sh` (variável `QEMU_REV`). ")
+                .append("A tabela só é reproduzível contra ESSA revisão; um bump de `QEMU_REV` ")
+                .append("é um commit próprio, com o diff lido linha a linha (ver o cabeçalho do script).\n\n");
+        report.append("<!--CORPO-->\n");
     }
 
     private static String appendGroup(StringBuilder report, Group group,

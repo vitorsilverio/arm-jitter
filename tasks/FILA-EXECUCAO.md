@@ -72,9 +72,9 @@ Nenhuma dependência aberta.
 
 | Task | O que | Tamanho |
 |---|---|---|
-| **[E11](trilha-e-manutencao/e11-inventario-qemu-fixado.md)** | Fixar a revisão do inventário do QEMU | 0 de decode |
 | **[E12](trilha-e-manutencao/e12-tsv-a64-esconde-trabalho.md)** | A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE (102 de 123 linhas) | 0 de decode |
 | **[B19.5.2](trilha-b-arquiteturas/b19.5.2-curadoria-versao-por-ocorrencia-a64.md)** | Requisito de versão A64 por **ocorrência** + curadoria de 96 linhas | 0 de decode |
+| **[E13](trilha-e-manutencao/e13-t16-hint-space-undef-antes-v6t2.md)** | Espaço de hint T1 (Thumb 16b) UNDEF antes de v6T2 em perfil A — reverte B9.14 p/ v6K/MPCore (commit QEMU `2931a675e9d3…`). Gate `THUMB2\|\|M_PROFILE`, 14 células, código + testes. **Risco de regressão no n3dsemu (ARM11 MPCore)** — G5 dele é obrigatório | 14 células, 1 decoder |
 | **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
 | **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
 | **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode |
@@ -82,11 +82,13 @@ Nenhuma dependência aberta.
 | **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
 | **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
 
-**Ordem sugerida**: **E11 → E12 → B19.5.2** primeiro — as três consertam a MEDIÇÃO, e qualquer task
-de cobertura executada antes delas mede contra um denominador errado. Depois, qualquer uma.
+**Ordem sugerida**: **E12 → B19.5.2** primeiro — as duas consertam a MEDIÇÃO, e qualquer task
+de cobertura executada antes delas mede contra um denominador errado. Depois, qualquer uma. **E11
+FECHADA 2026-09-03** (revisão do QEMU fixada em `2931a675e9d3…`; ver `## Resultado` na task).
 
-⚠️ **E11, E12 e B19.5.2 tocam as três `docs/COBERTURA-ISA.md`** — não rodar na mesma sessão nem em
-sessões simultâneas no mesmo checkout (regra 6).
+⚠️ **E12 e B19.5.2 tocam as três `docs/COBERTURA-ISA.md`** — não rodar na mesma sessão nem em
+sessões simultâneas no mesmo checkout (regra 6). **E13** também regenera `COBERTURA-ISA.md` (mesma
+regra).
 
 ### As 4 dimensões (o mapa: [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md))
 
@@ -101,13 +103,15 @@ Um `✅` em `docs/COBERTURA-ISA.md` **não** significa que algum backend compile
 
 ### Os achados desta rodada que mudam decisões
 
-1. **A tabela de cobertura mede um alvo MÓVEL.** `gerar-cobertura-isa.sh` baixa de `qemu/master` e
-   **só baixa se o arquivo não existir** — e `target/` é gitignored, então o resultado depende de
-   quando aquela máquina baixou. Medido: com download fresco e **sem tocar em `core/`**, `t16` vai
-   de 86 para 87 linhas, `sve` 929→947, `sme` 623→651, e **v4T/v5TE caem de 100% para 99%**. Isso
-   **invalida a manchete da B22.6** ("A32/T16/T32/VFP com 0 ❌"). ⇒ **E11**, que também investiga um
-   possível gap de *gating* real que o inventário novo expôs (o espaço de hint T16 mede `✅` em
-   v6K/MPCore, mas é **v6T2+**).
+1. ~~**A tabela de cobertura mede um alvo MÓVEL.**~~ **RESOLVIDO pela E11 (2026-09-03).**
+   `gerar-cobertura-isa.sh` agora fixa `QEMU_REV` num SHA (`2931a675e9d3…`), invalida o cache por
+   `target/isa-decode/.rev`, e a revisão aparece no cabeçalho de `docs/COBERTURA-ISA.md`. Contra a
+   revisão FIXADA o único delta é `t16` 86→87 (`MAYBE_UNDEF_T1_HINT`); `sve`/`sme` ficam 929/623 (o
+   +18/+28 que a rodada de spec viu era de commits POSTERIORES ao SHA — B17/B18 seguem corretos).
+   `MAYBE_UNDEF_T1_HINT` curado para v4T/v5TE ⇒ **v4T/v5TE seguem 100%** e T16 segue com **0 `❌`**;
+   a manchete da B22.6 continua verdadeira, agora ancorada na revisão. O gap de *gating* que o
+   commit expôs (espaço de hint T1 INTEIRO é v6T2+ em perfil A — reverte a B9.14 para v6K/MPCore)
+   virou a task **E13**.
 2. **A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE.** `isAarch64VersionColumn` faz
    TODA linha com arquitetura `A64` casar as 16 colunas de versão; **102 das 123** citam uma versão
    ≥ ARMv8.1-A. É por isso que BF16 (6 de 8), I8MM (6 de 6), FHM (8 de 8) e cripto (7 de 13) estão
@@ -137,7 +141,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 ### O que fechou recentemente (detalhe no `INDICE.md` de cada trilha, nunca aqui)
 
-`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `E10` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
+`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `E10` · `E11` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 

@@ -800,9 +800,19 @@ SUB_rri	v7-M	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem es
 # ── nome e apagaria a forma de 32 bits, ver B9.15). Cada mnemônico tem 1 única linha em t16.decode
 # ── (conferido), então `ocorrencia` não é necessária. Zero mudança em core/src/main.
 #
+# ── E11 (2026-09-03): `MAYBE_UNDEF_T1_HINT` (1011 1111 ---- 0000) — linha NOVA no inventário,
+# ── do commit QEMU `2931a675e9d3fcddedf673509fe9759955fc616d` (2026-08-21, "target/arm: Make
+# ── Thumb T1 hint space UNDEF before v6T2"). A mensagem do commit: "the hint space is in a range
+# ── that used to UNDEF in Armv5, and so the hint insns and the NOP region must all UNDEF before
+# ── v6T2". Aqui só a curadoria INEQUÍVOCA: v4T/v5TE são pré-v6T2 sem perfil M — a linha não se
+# ── aplica (mesma razão-versão de YIELD/WFE/SEV logo abaixo). A questão do MESMO commit para
+# ── v6K/MPCore (o espaço INTEIRO — YIELD/WFE/WFI/SEV/NOP incluídos — UNDEF antes de v6T2 em
+# ── perfil A, revertendo a leitura da B9.14) é gap de GATING e está na task E13, não aqui.
+MAYBE_UNDEF_T1_HINT	v4T,v5TE	espaço de hint T1 do Thumb só existe a partir do ARMv6T2 em perfil A (QEMU 2931a675e9d3, trans_MAYBE_UNDEF_T1_HINT: UNDEF sem ARM_FEATURE_M nem ARM_FEATURE_THUMB2); v4T/v5TE são anteriores	t16.decode
 # ── Hints T16 dedicados (opcode 1011 1111 ....): YIELD/WFE/SEV são ARMv6K (ARM DDI 0406C A6.7;
 # ── QEMU trans_YIELD/trans_SEV/trans_WFE = ARM_FEATURE_V6K || ARM_FEATURE_M; decoder gate
-# ── ArmFeature.WAIT_HINTS, B9.14) — posteriores a ARMv4T/ARMv5TE. WFI (v4T,v5TE) já curado acima.
+# ── ArmFeature.WAIT_HINTS, B9.14 — ver E13, que reabre isto à luz do commit 2931a675e9d3) —
+# ── posteriores a ARMv4T/ARMv5TE. WFI (v4T,v5TE) já curado acima.
 YIELD	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_YIELD = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
 WFE	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_WFE = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
 SEV	v4T,v5TE	ARMv6K (hint T16, ARM DDI 0406C A6.7; QEMU trans_SEV = ARM_FEATURE_V6K || ARM_FEATURE_M), posterior a v4T/v5TE	t16.decode
