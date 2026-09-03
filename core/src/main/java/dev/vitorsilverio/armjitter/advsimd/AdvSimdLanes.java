@@ -387,9 +387,18 @@ public final class AdvSimdLanes {
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     // PONTO FLUTUANTE — B13.6 (migração D1 da RFC B13.2). Primeiro caminho FP do núcleo. As ops
-    // "three same"/"pairwise" de FP do A64 (B8.9) vivem SÓ aqui a partir desta task; o
+    // "three same"/"pairwise" de FP do A64 (B8.9) vivem SÓ aqui a partir daquela task; o
     // `Ir64VectorFpArithmeticExecutor` só delega. Sem modelo de `FPSCR`/`FPCR` (RMode/FZ/exceções)
     // — paridade consciente com o escalar (B3.8/B8.5) e com o inteiro saturante acima (`QC`).
+    //
+    // MEIA PRECISÃO (`esz=1`, binary16) — B19.5.1. Java não tem tipo `binary16`; o caminho `esz=1`
+    // calcula em `float` e estreita o resultado UMA vez com round-to-nearest-even
+    // ({@link #halfBits}). Para `+`/`-`/`*`/`/`/`√` isso é correto por construção (regra do
+    // arredondamento duplo inócuo: binary32 tem `2·11+2 = 24` bits de significando), verificado por
+    // teste diferencial. `VMLA.F16`/`VMLS.F16` NÃO fundidos são a exceção: como `f16 × f16` cabe
+    // exato em binary32, "estreitar em float e somar" colapsaria no valor FUNDIDO — por isso o
+    // produto é explicitamente estreitado a binary16 ANTES do acumulador (dois arredondamentos F16,
+    // como o hardware).
     // ─────────────────────────────────────────────────────────────────────────────────────────────
 
     /// Bits crus (zero-estendidos a 64) de um `float` — usado para gravar uma lane F32.
@@ -400,6 +409,21 @@ public final class AdvSimdLanes {
     /// Bits crus de um `double` — usado para gravar uma lane F64.
     public static long doubleBits(double value) {
         return Double.doubleToRawLongBits(value);
+    }
+
+    /// Bits binary16 (16 bits, zero-estendidos a 64) de `value`, arredondado round-to-nearest-even
+    /// — usado para gravar uma lane F16 (`FEAT_FP16` no A64, `VADD.F16`/... no NEON A32). A máscara
+    /// `& 0xFFFF` é OBRIGATÓRIA: {@link Float#floatToFloat16(float)} devolve `short` e a promoção a
+    /// `long` sign-estende, corrompendo as lanes vizinhas na escrita quando o bit 15 está setado
+    /// (qualquer negativo, todo `NaN`).
+    public static long halfBits(float value) {
+        return Float.floatToFloat16(value) & 0xFFFFL;
+    }
+
+    /// `float` (conversão exata — binary16 ⊂ binary32) a partir dos 16 bits binary16 crus em
+    /// `bits` (bits acima do 15 são ignorados).
+    public static float halfToFloat(long bits) {
+        return Float.float16ToFloat((short) bits);
     }
 
     /// `FPMulX` (`ARM DDI 0487`): `0 * Infinito`/`Infinito * 0` devolve `2.0` com o sinal do
@@ -457,75 +481,125 @@ public final class AdvSimdLanes {
     }
 
     /// Executa uma operação "three same" de PONTO FLUTUANTE sobre `lanes` elementos de `1 << esz`
-    /// bytes (`esz` `2` = F32, `3` = F64): cada lane de `baseRd` recebe `op` aplicada às lanes
-    /// correspondentes de `baseRn`/`baseRm` (e do próprio `baseRd` para as formas RMW
+    /// bytes (`esz` `1` = F16, `2` = F32, `3` = F64): cada lane de `baseRd` recebe `op` aplicada às
+    /// lanes correspondentes de `baseRn`/`baseRm` (e do próprio `baseRd` para as formas RMW
     /// `MLA`/`MLS`/`FMLA`/`FMLS`). Os três `base*` são índices de PALAVRA.
     ///
     /// Nada aqui zera bits fora das lanes escritas: a escrita destrutiva do A64 é do chamador.
-    /// Sem escrita destrutiva DENTRO do laço tampouco.
+    /// Sem escrita destrutiva DENTRO do laço tampouco. `esz` fora de `{1,2,3}` é
+    /// {@link IllegalArgumentException} (antes de B19.5.1 um `esz` inválido era calculado
+    /// SILENCIOSAMENTE como binary64).
     public static void fpThreeSame(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz, int lanes,
             int baseRd, int baseRn, int baseRm) {
         for (int i = 0; i < lanes; i++) {
-            long resultBits;
-            if (esz == 2) {
-                float a = Float.intBitsToFloat((int) element(regs, baseRn, i, esz));
-                float b = Float.intBitsToFloat((int) element(regs, baseRm, i, esz));
-                float current = Float.intBitsToFloat((int) element(regs, baseRd, i, esz));
-                resultBits = switch (op) {
-                    case ADD -> floatBits(a + b);
-                    case SUB -> floatBits(a - b);
-                    case MUL -> floatBits(a * b);
-                    case DIV -> floatBits(a / b);
-                    case MAX -> floatBits(Math.max(a, b));
-                    case MIN -> floatBits(Math.min(a, b));
-                    case MAXNM -> floatBits(maxNum(a, b));
-                    case MINNM -> floatBits(minNum(a, b));
-                    case MULX -> floatBits(mulX(a, b));
-                    // NÃO fundido (dois arredondamentos) — `VMLA.F32`/`VMLS.F32` NEON.
-                    case MLA -> floatBits(a * b + current);
-                    case MLS -> floatBits(current - a * b);
-                    // FUNDIDO (arredondamento único) — `VFMA.F32`/`VFMS.F32` e `FMLA_v`/`FMLS_v` A64.
-                    case FMLA -> floatBits(Math.fma(a, b, current));
-                    case FMLS -> floatBits(Math.fma(-a, b, current));
-                    case CMEQ -> boolMask(a == b, esz);
-                    case CMGE -> boolMask(a >= b, esz);
-                    case CMGT -> boolMask(a > b, esz);
-                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
-                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
-                    case ABD -> floatBits(Math.abs(a - b));
-                    case RECPS -> floatBits(2.0f - a * b);
-                    case RSQRTS -> floatBits((3.0f - a * b) / 2.0f);
-                };
-            } else {
-                double a = Double.longBitsToDouble(element(regs, baseRn, i, esz));
-                double b = Double.longBitsToDouble(element(regs, baseRm, i, esz));
-                double current = Double.longBitsToDouble(element(regs, baseRd, i, esz));
-                resultBits = switch (op) {
-                    case ADD -> doubleBits(a + b);
-                    case SUB -> doubleBits(a - b);
-                    case MUL -> doubleBits(a * b);
-                    case DIV -> doubleBits(a / b);
-                    case MAX -> doubleBits(Math.max(a, b));
-                    case MIN -> doubleBits(Math.min(a, b));
-                    case MAXNM -> doubleBits(maxNum(a, b));
-                    case MINNM -> doubleBits(minNum(a, b));
-                    case MULX -> doubleBits(mulX(a, b));
-                    case MLA -> doubleBits(a * b + current);
-                    case MLS -> doubleBits(current - a * b);
-                    case FMLA -> doubleBits(Math.fma(a, b, current));
-                    case FMLS -> doubleBits(Math.fma(-a, b, current));
-                    case CMEQ -> boolMask(a == b, esz);
-                    case CMGE -> boolMask(a >= b, esz);
-                    case CMGT -> boolMask(a > b, esz);
-                    case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), esz);
-                    case FACGT -> boolMask(Math.abs(a) > Math.abs(b), esz);
-                    case ABD -> doubleBits(Math.abs(a - b));
-                    case RECPS -> doubleBits(2.0 - a * b);
-                    case RSQRTS -> doubleBits((3.0 - a * b) / 2.0);
-                };
-            }
+            long anBits = element(regs, baseRn, i, esz);
+            long bmBits = element(regs, baseRm, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfThreeSame(op, anBits, bmBits, dBits);
+                case 2 -> singleThreeSame(op, anBits, bmBits, dBits);
+                case 3 -> doubleThreeSame(op, anBits, bmBits, dBits);
+                default -> throw new IllegalArgumentException("esz inválido para FP three-same: " + esz);
+            };
             setElement(regs, baseRd, i, esz, resultBits);
         }
+    }
+
+    /// Ramo F16 (`esz=1`) de {@link #fpThreeSame}: calcula em `float` e estreita uma vez
+    /// ({@link #halfBits}). `MLA`/`MLS` estreitam o produto a binary16 ANTES do acumulador (dois
+    /// arredondamentos F16, NÃO fundido); `FMLA`/`FMLS` são fundidos ({@link Math#fma(float,float,float)}).
+    private static long halfThreeSame(AdvSimdFpThreeSameOp op, long anBits, long bmBits, long dBits) {
+        float a = halfToFloat(anBits);
+        float b = halfToFloat(bmBits);
+        float current = halfToFloat(dBits);
+        return switch (op) {
+            case ADD -> halfBits(a + b);
+            case SUB -> halfBits(a - b);
+            case MUL -> halfBits(a * b);
+            case DIV -> halfBits(a / b);
+            case MAX -> halfBits(Math.max(a, b));
+            case MIN -> halfBits(Math.min(a, b));
+            case MAXNM -> halfBits(maxNum(a, b));
+            case MINNM -> halfBits(minNum(a, b));
+            case MULX -> halfBits(mulX(a, b));
+            // NÃO fundido: produto estreitado a binary16, depois acumula/subtrai (dois
+            // arredondamentos F16) — `VMLA.F16`/`VMLS.F16` NEON.
+            case MLA -> halfBits(current + halfToFloat(halfBits(a * b)));
+            case MLS -> halfBits(current - halfToFloat(halfBits(a * b)));
+            // FUNDIDO (arredondamento binary16 único) — `VFMA.F16`/`VFMS.F16` e `FMLA_h`/`FMLS_h` A64.
+            case FMLA -> halfBits(Math.fma(a, b, current));
+            case FMLS -> halfBits(Math.fma(-a, b, current));
+            case CMEQ -> boolMask(a == b, 1);
+            case CMGE -> boolMask(a >= b, 1);
+            case CMGT -> boolMask(a > b, 1);
+            case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), 1);
+            case FACGT -> boolMask(Math.abs(a) > Math.abs(b), 1);
+            case ABD -> halfBits(Math.abs(a - b));
+            case RECPS -> halfBits(2.0f - a * b);
+            case RSQRTS -> halfBits((3.0f - a * b) / 2.0f);
+        };
+    }
+
+    /// Ramo F32 (`esz=2`) de {@link #fpThreeSame} — movido VERBATIM de B13.6.
+    private static long singleThreeSame(AdvSimdFpThreeSameOp op, long anBits, long bmBits, long dBits) {
+        float a = Float.intBitsToFloat((int) anBits);
+        float b = Float.intBitsToFloat((int) bmBits);
+        float current = Float.intBitsToFloat((int) dBits);
+        return switch (op) {
+            case ADD -> floatBits(a + b);
+            case SUB -> floatBits(a - b);
+            case MUL -> floatBits(a * b);
+            case DIV -> floatBits(a / b);
+            case MAX -> floatBits(Math.max(a, b));
+            case MIN -> floatBits(Math.min(a, b));
+            case MAXNM -> floatBits(maxNum(a, b));
+            case MINNM -> floatBits(minNum(a, b));
+            case MULX -> floatBits(mulX(a, b));
+            // NÃO fundido (dois arredondamentos) — `VMLA.F32`/`VMLS.F32` NEON.
+            case MLA -> floatBits(a * b + current);
+            case MLS -> floatBits(current - a * b);
+            // FUNDIDO (arredondamento único) — `VFMA.F32`/`VFMS.F32` e `FMLA_v`/`FMLS_v` A64.
+            case FMLA -> floatBits(Math.fma(a, b, current));
+            case FMLS -> floatBits(Math.fma(-a, b, current));
+            case CMEQ -> boolMask(a == b, 2);
+            case CMGE -> boolMask(a >= b, 2);
+            case CMGT -> boolMask(a > b, 2);
+            case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), 2);
+            case FACGT -> boolMask(Math.abs(a) > Math.abs(b), 2);
+            case ABD -> floatBits(Math.abs(a - b));
+            case RECPS -> floatBits(2.0f - a * b);
+            case RSQRTS -> floatBits((3.0f - a * b) / 2.0f);
+        };
+    }
+
+    /// Ramo F64 (`esz=3`) de {@link #fpThreeSame} — movido VERBATIM de B13.6.
+    private static long doubleThreeSame(AdvSimdFpThreeSameOp op, long anBits, long bmBits, long dBits) {
+        double a = Double.longBitsToDouble(anBits);
+        double b = Double.longBitsToDouble(bmBits);
+        double current = Double.longBitsToDouble(dBits);
+        return switch (op) {
+            case ADD -> doubleBits(a + b);
+            case SUB -> doubleBits(a - b);
+            case MUL -> doubleBits(a * b);
+            case DIV -> doubleBits(a / b);
+            case MAX -> doubleBits(Math.max(a, b));
+            case MIN -> doubleBits(Math.min(a, b));
+            case MAXNM -> doubleBits(maxNum(a, b));
+            case MINNM -> doubleBits(minNum(a, b));
+            case MULX -> doubleBits(mulX(a, b));
+            case MLA -> doubleBits(a * b + current);
+            case MLS -> doubleBits(current - a * b);
+            case FMLA -> doubleBits(Math.fma(a, b, current));
+            case FMLS -> doubleBits(Math.fma(-a, b, current));
+            case CMEQ -> boolMask(a == b, 3);
+            case CMGE -> boolMask(a >= b, 3);
+            case CMGT -> boolMask(a > b, 3);
+            case FACGE -> boolMask(Math.abs(a) >= Math.abs(b), 3);
+            case FACGT -> boolMask(Math.abs(a) > Math.abs(b), 3);
+            case ABD -> doubleBits(Math.abs(a - b));
+            case RECPS -> doubleBits(2.0 - a * b);
+            case RSQRTS -> doubleBits((3.0 - a * b) / 2.0);
+        };
     }
 
     /// Executa uma operação "pairwise" de PONTO FLUTUANTE (ver {@link AdvSimdFpPairwiseOp}):
@@ -548,30 +622,48 @@ public final class AdvSimdLanes {
         }
     }
 
-    /// Combina um par de elementos FP de tamanho `esz` (`2`/`3`) segundo `op` — mesma semântica nas
-    /// formas vetorial e escalar: `MAX`/`MIN` propagam `NaN` (`Math.max`/`Math.min`), `MAXNM`/
-    /// `MINNM` só quando os DOIS são `NaN`, `ADD` é `+` IEEE. Público para a forma ESCALAR do A64
-    /// (`FADDP_s`/... , B19.2) reusar sem duplicar.
+    /// Combina um par de elementos FP de tamanho `esz` (`1` = F16, `2` = F32, `3` = F64) segundo
+    /// `op` — mesma semântica nas formas vetorial e escalar: `MAX`/`MIN` propagam `NaN`
+    /// (`Math.max`/`Math.min`), `MAXNM`/`MINNM` só quando os DOIS são `NaN`, `ADD` é `+` IEEE.
+    /// Público para a forma ESCALAR do A64 (`FADDP_s`/... , B19.2) reusar sem duplicar. `esz` fora
+    /// de `{1,2,3}` é {@link IllegalArgumentException} (antes de B19.5.1 qualquer `esz != 2` era
+    /// tratado como binary64).
     public static long fpCombinePair(AdvSimdFpPairwiseOp op, long aBits, long bBits, int esz) {
-        if (esz == 2) {
-            float a = Float.intBitsToFloat((int) aBits);
-            float b = Float.intBitsToFloat((int) bBits);
-            return switch (op) {
-                case ADD -> floatBits(a + b);
-                case MAX -> floatBits(Math.max(a, b));
-                case MIN -> floatBits(Math.min(a, b));
-                case MAXNM -> floatBits(maxNum(a, b));
-                case MINNM -> floatBits(minNum(a, b));
-            };
-        }
-        double a = Double.longBitsToDouble(aBits);
-        double b = Double.longBitsToDouble(bBits);
-        return switch (op) {
-            case ADD -> doubleBits(a + b);
-            case MAX -> doubleBits(Math.max(a, b));
-            case MIN -> doubleBits(Math.min(a, b));
-            case MAXNM -> doubleBits(maxNum(a, b));
-            case MINNM -> doubleBits(minNum(a, b));
+        return switch (esz) {
+            case 1 -> {
+                float a = halfToFloat(aBits);
+                float b = halfToFloat(bBits);
+                yield switch (op) {
+                    case ADD -> halfBits(a + b);
+                    case MAX -> halfBits(Math.max(a, b));
+                    case MIN -> halfBits(Math.min(a, b));
+                    case MAXNM -> halfBits(maxNum(a, b));
+                    case MINNM -> halfBits(minNum(a, b));
+                };
+            }
+            case 2 -> {
+                float a = Float.intBitsToFloat((int) aBits);
+                float b = Float.intBitsToFloat((int) bBits);
+                yield switch (op) {
+                    case ADD -> floatBits(a + b);
+                    case MAX -> floatBits(Math.max(a, b));
+                    case MIN -> floatBits(Math.min(a, b));
+                    case MAXNM -> floatBits(maxNum(a, b));
+                    case MINNM -> floatBits(minNum(a, b));
+                };
+            }
+            case 3 -> {
+                double a = Double.longBitsToDouble(aBits);
+                double b = Double.longBitsToDouble(bBits);
+                yield switch (op) {
+                    case ADD -> doubleBits(a + b);
+                    case MAX -> doubleBits(Math.max(a, b));
+                    case MIN -> doubleBits(Math.min(a, b));
+                    case MAXNM -> doubleBits(maxNum(a, b));
+                    case MINNM -> doubleBits(minNum(a, b));
+                };
+            }
+            default -> throw new IllegalArgumentException("esz inválido para FP pairwise: " + esz);
         };
     }
 }

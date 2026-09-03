@@ -1,8 +1,10 @@
 package dev.vitorsilverio.armjitter.advsimd;
 
 /// Operação "three same" de PONTO FLUTUANTE do núcleo vetorial COMPARTILHADO — os 3 operandos
-/// (`Rd`/`Rn`/`Rm`) têm o mesmo tamanho de elemento (`esz` `2` = F32 ou `3` = F64; meia-precisão
-/// fica fora, `FEAT_FP16`). Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp}
+/// (`Rd`/`Rn`/`Rm`) têm o mesmo tamanho de elemento (`esz` `1` = F16, `2` = F32 ou `3` = F64).
+/// O caminho F16 existe no núcleo desde B19.5.1 ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}),
+/// mas nenhum decoder A32/A64 o alimenta ainda (`FEAT_FP16` no A64 = B19.5.3+; "NEON FP16 AArch32" =
+/// task irmã da B13.6). Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp}
 /// (A64 `FADD_v`/`FMUL_v`/.../`FRSQRTS_v`, B8.9) MAIS a distinção fundido × NÃO fundido do
 /// multiply-accumulate, que só o NEON de 32 bits (A32) tem: `VMLA.F32`/`VMLS.F32` fazem dois
 /// arredondamentos ({@link #MLA}/{@link #MLS}), `VFMA.F32`/`VFMS.F32` um só ({@link #FMLA}/
