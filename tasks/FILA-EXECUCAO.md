@@ -47,29 +47,46 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (reescrito 2026-09-03, na rodada de spec que esvaziou a fila anterior)
+## Onde estamos (reescrito 2026-09-03, após a rodada "spec de tudo")
 
-**A fila anterior estava DRENADA e não dizia isso.** Uma sessão de 2026-09-03 abriu este arquivo,
-leu "5 tasks pegáveis", foi conferir uma a uma e achou **todas ✅** — o texto listava B13.7, B13.8,
-B19.4, B19.5.1, A10.1 e C12.1 como pegáveis depois de elas terem fechado. Pior: o cabeçalho
-`**Status:**` dentro de **13 arquivos de task** ainda dizia `⬜` (o status real vive no `INDICE.md`
-da trilha, mas ninguém confia num arquivo que se contradiz). **Os 13 cabeçalhos foram corrigidos** e
-esta seção passa a ser curta de propósito: a fonte da verdade é o `INDICE.md` de cada trilha, e aqui
-fica só o que uma sessão nova precisa para escolher em 2 minutos.
+A fila anterior estava **drenada e não dizia isso** (listava 6 tasks já fechadas como pegáveis, e 13
+arquivos de task ainda tinham `**Status:** ⬜` no cabeçalho — todos corrigidos). Depois disso, uma
+rodada de spec longa escreveu **45 specs**, todas medidas contra `target/isa-decode/` **e** contra o
+código.
 
-### ✅ Pegáveis AGORA — as 4 têm spec medida e são independentes entre si
+**Resultado: os quatro épicos que tinham escada medida estão INTEIRAMENTE especificados.**
 
-| Task | O que | Tamanho | Por que agora |
-|---|---|---|---|
-| **[B19.5.2](trilha-b-arquiteturas/b19.5.2-curadoria-versao-por-ocorrencia-a64.md)** | Requisito de versão A64 por **ocorrência** + curadoria de 96 linhas de meia precisão | 0 de decode | **Pré-requisito de MEDIÇÃO de B19.5.3-B19.5.6** — enquanto as `_h` contarem `❌` onde `FEAT_FP16` nem existe, o progresso dos degraus seguintes fica ilegível. Maior salto de número da fila: A64 v8.0/v8.1 **88% → 98%**, global **89% → 90%** |
-| **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` **imediato** (A32) | 1 linha de decodetree, 4 famílias | Fecha o buraco que a B13.7 deixou de propósito dentro do frame dela; e entrega o `AdvSIMDExpandImm` compartilhado que a **B19.6** vai precisar |
-| **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode | Único degrau do C12 que dá ganho **sem emitir bytecode novo**: hoje 1 op fora da política derruba o bloco inteiro, com só 24 de 96 `Kind` nativos |
-| **[E11](trilha-e-manutencao/e11-inventario-qemu-fixado.md)** | Fixar a revisão do inventário do QEMU | 0 de decode | A tabela de cobertura mede um alvo móvel — ver o achado 1 abaixo. Quanto mais tarde, mais medições ficam suspeitas |
+| Épico | Dimensão | Estado da especificação |
+|---|---|---|
+| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **completo** — B19.1-B19.4 feitas; B19.5.2-B19.5.6 e B19.6-B19.13 com spec |
+| **B13** — NEON/AdvSIMD 32 bits | 1 (decode) | ✅ **completo** — B13.1-B13.8 feitas; B13.9-B13.22 com spec |
+| **C12** — emissão JIT nativa | 2 | ✅ **completo** — C12.1 feita; C12.2-C12.10 com spec |
+| **A10** — Truffle | 3 | ✅ **completo** — A10.1 feita, A10.2 absorvida; A10.3-A10.9 com spec |
 
-**Ordem sugerida**: E11 primeiro (torna toda medição posterior confiável e reprodutível), depois
-B19.5.2 (que depende de medição correta), depois B13.9 e C12.2 em qualquer ordem.
-⚠️ **B19.5.2 e E11 tocam as duas a tabela `docs/COBERTURA-ISA.md`** — não rodar na mesma sessão nem
-em sessões simultâneas no mesmo checkout (regra 6).
+O que **não** foi especificado são os 7 épicos ainda em `📋 plano`, que nunca tiveram escada medida —
+ver "O que ainda precisa de spec".
+
+### ✅ Pegáveis AGORA
+
+Nenhuma dependência aberta.
+
+| Task | O que | Tamanho |
+|---|---|---|
+| **[E11](trilha-e-manutencao/e11-inventario-qemu-fixado.md)** | Fixar a revisão do inventário do QEMU | 0 de decode |
+| **[E12](trilha-e-manutencao/e12-tsv-a64-esconde-trabalho.md)** | A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE (102 de 123 linhas) | 0 de decode |
+| **[B19.5.2](trilha-b-arquiteturas/b19.5.2-curadoria-versao-por-ocorrencia-a64.md)** | Requisito de versão A64 por **ocorrência** + curadoria de 96 linhas | 0 de decode |
+| **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
+| **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
+| **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode |
+| **[C12.3](trilha-c-perf/c12.3-a64-inteiro-nativo.md)** | Emissão nativa A64 do inteiro (16 `Kind`) | 24/96 → 40/96 |
+| **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
+| **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
+
+**Ordem sugerida**: **E11 → E12 → B19.5.2** primeiro — as três consertam a MEDIÇÃO, e qualquer task
+de cobertura executada antes delas mede contra um denominador errado. Depois, qualquer uma.
+
+⚠️ **E11, E12 e B19.5.2 tocam as três `docs/COBERTURA-ISA.md`** — não rodar na mesma sessão nem em
+sessões simultâneas no mesmo checkout (regra 6).
 
 ### As 4 dimensões (o mapa: [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md))
 
@@ -78,56 +95,74 @@ Um `✅` em `docs/COBERTURA-ISA.md` **não** significa que algum backend compile
 | # | Dimensão | Onde se mede | Estado |
 |---|---|---|---|
 | 1 | Decode + interpretado | `docs/COBERTURA-ISA.md` | **89%** · A64 `ARMv8.0-A` 88% (850/960) |
-| 2 | Emissão JIT nativa | `docs/COBERTURA-JIT.md` (C12.1 ✅) | ASM 32 **37 ✅ + 9 ⚠️ / 77** · ASM 64 **24/96** |
+| 2 | Emissão JIT nativa | `docs/COBERTURA-JIT.md` | ASM 32 **37 ✅ + 9 ⚠️ / 77** · ASM 64 **24/96** |
 | 3 | Truffle | `docs/COBERTURA-JIT.md` | 32 bits **40/77** · 64 bits **0/96** (não existe) |
 | 4 | Catálogo de processadores | — | downstream de 1 |
 
-### Os 3 achados desta rodada (mudam decisões — não são cosméticos)
+### Os achados desta rodada que mudam decisões
 
-1. **A tabela de cobertura mede um alvo MÓVEL, e nada registra qual.** `gerar-cobertura-isa.sh` baixa
-   os `.decode` de `qemu/master` e **só baixa se o arquivo não existir** — e `target/` é gitignored.
-   Logo o resultado depende de quando aquela máquina baixou pela primeira vez. Medido: com download
-   fresco em 2026-09-03, **sem tocar em `core/`**, `t16.decode` vai de 86 para 87 instruções,
-   `sve.decode` de 929 para 947, `sme.decode` de 623 para 651, e **v4T/v5TE caem de 100% para 99%**.
-   ⚠️ **Isso invalida a manchete da B22.6** ("A32/T16/T32/VFP com `0 ❌`"), repetida abaixo e no plano
-   B22 — não é regressão do arm-jitter, é o ARM que cresceu. Vira a **E11**, que também investiga um
-   possível gap de gating real que o inventário novo expôs (o espaço de hint T16 mede `✅` em
+1. **A tabela de cobertura mede um alvo MÓVEL.** `gerar-cobertura-isa.sh` baixa de `qemu/master` e
+   **só baixa se o arquivo não existir** — e `target/` é gitignored, então o resultado depende de
+   quando aquela máquina baixou. Medido: com download fresco e **sem tocar em `core/`**, `t16` vai
+   de 86 para 87 linhas, `sve` 929→947, `sme` 623→651, e **v4T/v5TE caem de 100% para 99%**. Isso
+   **invalida a manchete da B22.6** ("A32/T16/T32/VFP com 0 ❌"). ⇒ **E11**, que também investiga um
+   possível gap de *gating* real que o inventário novo expôs (o espaço de hint T16 mede `✅` em
    v6K/MPCore, mas é **v6T2+**).
-2. **`_h` no nome do template ≠ meia precisão** — e o inventário da B19.5 estava errado nos dois
-   sentidos. Das 157 linhas de template `_h` em `a64.decode`, **45 já são `✅`** (ali `_h` é
-   "elemento halfword INTEIRO": `MUL_vi`, `SMULL_vi`, `SQDMULL_v`…). Das 112 `❌`, só **96** são
-   FP16/FHM — o resto é BF16 (3), FP8 (8), `CRC32` (2) e 3 sem constante de feature. E o total de
-   FP16 é **88, não 84**: faltavam as 4 reduções across-lanes (`FMAXNMV_h`/`FMINNMV_h`/`FMAXV_h`/
-   `FMINV_h`). Uma regra por padrão de nome corromperia a tabela nos dois sentidos — a curadoria
-   **tem** que ser enumerada.
-3. **`AdvSIMDExpandImm` não existe no projeto, e falta nos DOIS lados.** `Vimm_1r` (A32, B13.9) e
-   `Vimm` (A64, atribuída à B19.6) são a mesma função pseudocódigo, ambas `❌`. Quem fizer primeiro
-   define se o projeto terá uma implementação ou duas — por isso a spec da B13.9 põe o algoritmo no
-   núcleo `advsimd/` desde o início (D1 da RFC B13.2 aplicada **antes** da duplicação, não depois).
+2. **A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE.** `isAarch64VersionColumn` faz
+   TODA linha com arquitetura `A64` casar as 16 colunas de versão; **102 das 123** citam uma versão
+   ≥ ARMv8.1-A. É por isso que BF16 (6 de 8), I8MM (6 de 6), FHM (8 de 8) e cripto (7 de 13) estão
+   invisíveis hoje. Quase todas as features já têm constante. ⇒ **E12**.
+3. **A escada do B19 tinha 4 grupos sem dono**, achados ao classificar as 116 linhas `❌`: cripto
+   SHA-512/SM3/SM4 (13, no MESMO prefixo `0xCE` que a B11.12 abriu e deixou pela metade), `FEAT_FP8`
+   (12, a única sem constante em `Aarch64Feature`), `FEAT_I8MM` (6) e `FEAT_FHM` (8, feature própria
+   e **não** `FEAT_FP16`). ⇒ B19.10-B19.13.
+4. **A escada do C12 tinha 8 `Kind` de sistema sem dono** — a conta 16+6+7+35+**8**=72 só fecha com
+   eles. ⇒ **C12.10**.
+5. **`VUZP`/`VTRN`/`VZIP` do A32 escrevem DOIS registradores** e não são as `UZP1`/`UZP2`/`TRN1`/…
+   do A64 (seis instruções de UM destino). Mapear 1:1 pelo nome produziria metade do resultado.
+6. **T32 é transformação mecânica do A32** (`1111_001p_q…` ↔ `111p_1111_q…`, 24 bits baixos
+   idênticos) ⇒ B13.16 é um adaptador que delega. E **`neon-shared` dispensa a B13.16**: seu
+   encoding já é o mesmo para os dois.
+7. **`AdvSIMDExpandImm` não existe no projeto e falta nos DOIS lados** (`Vimm_1r` A32 / `Vimm` A64)
+   ⇒ a spec da B13.9 põe o algoritmo no núcleo desde o início, e a B19.6 o reusa.
+8. **A pergunta do SIMD nos backends é UMA só** (emitir lane a lane × chamar `AdvSimdLanes` × não
+   fazer): **C12.6 é a RFC, A10.7 aplica**. Idem C12.9 ↔ A10.9, que remedem o mesmo arquivo.
 
-**Achado menor, já resolvido**: a **A10.2** ("medir a cobertura Truffle") foi **absorvida pela
-C12.1**, que entregou as duas colunas Truffle e o teste de guarda. Auditado: sem resíduo. Registrado
-no `INDICE.md` da trilha A; a escada do Truffle segue em **A10.3**.
+### Correção de número importante (B19.5.2)
+
+A primeira versão daquela spec dizia "+192 células". **Errado**: 12 das 96 linhas a curar já são `·`
+— mas pela curadoria grossa da TSV. O efeito real são **168 `❌→·`** (v8.0/v8.1) **e 168 `·→❌`**
+(v8.2..v9.5, trabalho revelado). **O global fica inalterado em 89%**: a task não infla o número,
+torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 ### O que fechou recentemente (detalhe no `INDICE.md` de cada trilha, nunca aqui)
 
-`B13.7` · `B13.8` (fecham a seção "2-reg-and-shift" do NEON A32, exceto 4 `VCVT` F16) · `B19.4` ·
-`B19.5.1` (fundação binary16 do núcleo) · `E10` (aliasing `Rd==Rn` em 6 famílias AdvSIMD) ·
-`A10.1` (Truffle: crash → fallback) · `C12.1` (`docs/COBERTURA-JIT.md` medido) · **épico `B22`
-inteiro** (B22.1-B22.6).
+`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `E10` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
 
-### O que AINDA precisa de spec (ordem no `ROADMAP-100-ARM.md`)
+### O que AINDA precisa de spec
 
-As escadas somam **126 degraus**; **23 têm spec**. Faltam: B13.10-B13.22, B19.5.3-B19.5.6,
-B19.6-B19.9, a task irmã "NEON FP16 AArch32", C12.3-C12.9, A10.3-A10.9, o fechamento do catálogo de
-processadores, e os épicos ainda em `📋 plano` — **B14** (VFP incondicional ARMv8-A 32 bits),
-**B15** (ARMv8-M), **B16** (MVE/Helium), **B17** (SVE/SVE2), **B18** (SME/SME2), **B20** (perfil R),
-**B21** (ARM de 26 bits).
+Os **7 épicos em `📋 plano`**, que nunca tiveram escada medida — **~84 degraus**:
 
-**Escrever spec sem medir é o erro que a remedição do B19 pegou** (a escada original errava por 6×) e
-que esta rodada pegou de novo (o inventário FP16 errava por 4 linhas e misturava 5 features). Cada
-spec custa medição instrução a instrução contra `target/isa-decode/` **e** contra o código — no ritmo
-estabelecido (≈3-4 specs por sessão), o que falta é trabalho de dezenas de sessões.
+| Épico | O que | Degraus |
+|---|---|---:|
+| [B14](trilha-b-arquiteturas/b14-plano-vfp-armv8-32bit.md) | VFP incondicional ARMv8-A de 32 bits | 7 |
+| [B15](trilha-b-arquiteturas/b15-plano-armv8m.md) | ARMv7E-M / ARMv8-M / ARMv8.1-M | 7 |
+| [B16](trilha-b-arquiteturas/b16-plano-mve-helium.md) | MVE / Helium | 14 |
+| [B17](trilha-b-arquiteturas/b17-plano-sve.md) | SVE / SVE2 | 26 |
+| [B18](trilha-b-arquiteturas/b18-plano-sme.md) | SME / SME2 | 13 |
+| [B20](trilha-b-arquiteturas/b20-plano-perfil-r.md) | Perfil R (PMSA/MPU) | 9 |
+| [B21](trilha-b-arquiteturas/b21-plano-arm-26-bits.md) | ARMv1-ARMv3, modelo de 26 bits | 8 |
+
+Mais: a task irmã **"NEON FP16 AArch32"** (registrada por B13.6/B13.8/B13.11/B13.13), os grupos que a
+**E12** vai revelar (`FEAT_PAuth`, `FEAT_MTE2`, `FEAT_MOPS`, `FEAT_FRINTTS`, `FEAT_CSSC`, …), os
+**9 `⚠️` condicionais** de 32 bits (registrados pela C12.7), o **cache de registradores do
+`Ir64BlockCompiler`** (dívida da B6.4) e a task de fechamento do catálogo de processadores.
+
+**Escrever spec sem medir é o erro que esta rodada pegou três vezes** (o inventário FP16 errava por 4
+linhas e misturava 5 features; a escada do B19 tinha 4 grupos sem dono; a do C12, 8 `Kind`). Cada
+spec custa medição instrução a instrução contra o oráculo **e** contra o código — os 7 épicos acima
+são trabalho de várias sessões, e **B17/B18 sozinhos somam 39 degraus sobre inventários de 947 e 651
+linhas**.
 
 **Sonnet executa; 1 sessão = 1 task.**
 
@@ -136,9 +171,8 @@ estabelecido (≈3-4 specs por sessão), o que falta é trabalho de dezenas de s
 - **`B4.0.5`** (armbox fase 3: fork/execve/pipes) — tem spec, está ⬜, e é **bloqueada pelo
   congelamento de subprojetos** acima. Não pegar até 100% de cobertura de ISA.
 - **`B6.5.1`** (banco FP escalar A64) — consta ⬜ no `INDICE.md` da trilha B, mas é **resíduo de
-  bookkeeping, não trabalho pendente**: o entregável existe
-  (`core64/Aarch64FpRegisters.java`, depois alargado para 128 bits pela B8.6) e B6.5.2-B6.5.4
-  fecharam em cima dele. A task nunca ganhou `## Resultado` nem linha `**Status:**`. Não pegar.
+  bookkeeping**: o entregável existe (`core64/Aarch64FpRegisters.java`, depois alargado pela B8.6) e
+  B6.5.2-B6.5.4 fecharam em cima dele. Não pegar.
 
 ## 🧑 Bloqueadas no usuário (agente NÃO pega; planejar presença)
 
