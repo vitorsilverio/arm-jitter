@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
@@ -372,5 +373,121 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         // classe "shift by immediate" escalar, bit10=1, opcode 0b1_1101 (não é shift nem conversão
         // FP↔fixo) ⇒ unsupported.
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5f3cec20));
+    }
+
+    // ── B19.4: conversões de PRECISÃO vetoriais (FCVTL/FCVTN/FCVTXN) ────────────────────────────
+    // Golden: aarch64-none-elf-as/objdump (devkitA64, .arch armv8-a).
+
+    private static Ir64Op.VectorFpConvertPrecision precision(int word) {
+        return (Ir64Op.VectorFpConvertPrecision) decodeWord(word);
+    }
+
+    @Test
+    void fcvtlVector() {
+        // fcvtl v0.4s, v1.4h (0x0e217820): f16 -> f32, esz(estreito)=1, q=false
+        Ir64Op.VectorFpConvertPrecision l4h = precision(0x0e217820);
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTL, l4h.op());
+        assertEquals(1, l4h.esz());
+        assertEquals(false, l4h.q());
+        assertEquals(0, l4h.rd());
+        assertEquals(1, l4h.rn());
+        // fcvtl2 v0.4s, v1.8h (0x4e217820): q=true, esz ainda 1
+        Ir64Op.VectorFpConvertPrecision l8h = precision(0x4e217820);
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTL, l8h.op());
+        assertEquals(1, l8h.esz());
+        assertEquals(true, l8h.q());
+        // fcvtl v0.2d, v1.2s (0x0e617820): f32 -> f64, esz(estreito)=2
+        assertEquals(2, precision(0x0e617820).esz());
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTL, precision(0x0e617820).op());
+        // fcvtl2 v0.2d, v1.4s (0x4e617820): q=true, esz=2
+        assertEquals(true, precision(0x4e617820).q());
+        assertEquals(2, precision(0x4e617820).esz());
+    }
+
+    @Test
+    void fcvtnVector() {
+        // fcvtn v0.4h, v1.4s (0x0e216820): f32 -> f16, esz(estreito)=1, q=false
+        Ir64Op.VectorFpConvertPrecision n4h = precision(0x0e216820);
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTN, n4h.op());
+        assertEquals(1, n4h.esz());
+        assertEquals(false, n4h.q());
+        // fcvtn2 v0.8h, v1.4s (0x4e216820): q=true
+        assertEquals(true, precision(0x4e216820).q());
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTN, precision(0x4e216820).op());
+        // fcvtn v0.2s, v1.2d (0x0e616820): f64 -> f32, esz(estreito)=2
+        assertEquals(2, precision(0x0e616820).esz());
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTN, precision(0x0e616820).op());
+        // fcvtn2 v0.4s, v1.2d (0x4e616820)
+        assertEquals(true, precision(0x4e616820).q());
+        assertEquals(2, precision(0x4e616820).esz());
+    }
+
+    @Test
+    void fcvtxnVector() {
+        // fcvtxn v0.2s, v1.2d (0x2e616820): f64 -> f32 round-to-odd, esz=2, q=false
+        Ir64Op.VectorFpConvertPrecision xn = precision(0x2e616820);
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTXN, xn.op());
+        assertEquals(2, xn.esz());
+        assertEquals(false, xn.q());
+        // fcvtxn2 v0.4s, v1.2d (0x6e616820): q=true
+        assertEquals(true, precision(0x6e616820).q());
+        assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTXN, precision(0x6e616820).op());
+    }
+
+    private static Ir64Op.VectorFpConvertFixedPoint vectorFixed(int word) {
+        Ir64Op.VectorFpConvertFixedPoint op = (Ir64Op.VectorFpConvertFixedPoint) decodeWord(word);
+        assertEquals(false, op.scalar(), "forma vetorial");
+        return op;
+    }
+
+    @Test
+    void fcvtFixedPointVector() {
+        // scvtf v0.4s, v1.4s, #4 (0x4f3ce420)
+        Ir64Op.VectorFpConvertFixedPoint scvtf4s = vectorFixed(0x4f3ce420);
+        assertEquals(true, scvtf4s.toFloat());
+        assertEquals(true, scvtf4s.signed());
+        assertEquals(2, scvtf4s.esz());
+        assertEquals(4, scvtf4s.fractionBits());
+        assertEquals(true, scvtf4s.q());
+        // ucvtf v0.4s, v1.4s, #4 (0x6f3ce420)
+        assertEquals(false, vectorFixed(0x6f3ce420).signed());
+        assertEquals(true, vectorFixed(0x6f3ce420).toFloat());
+        // scvtf v0.2s, v1.2s, #4 (0x0f3ce420): q=false
+        assertEquals(false, vectorFixed(0x0f3ce420).q());
+        assertEquals(2, vectorFixed(0x0f3ce420).esz());
+        // scvtf v0.2d, v1.2d, #33 (0x4f5fe420): esz=3, q=true, fbits=33
+        Ir64Op.VectorFpConvertFixedPoint scvtf2d = vectorFixed(0x4f5fe420);
+        assertEquals(3, scvtf2d.esz());
+        assertEquals(33, scvtf2d.fractionBits());
+        assertEquals(true, scvtf2d.q());
+        // fcvtzs v0.4s, v1.4s, #4 (0x4f3cfc20)
+        Ir64Op.VectorFpConvertFixedPoint fcvtzs = vectorFixed(0x4f3cfc20);
+        assertEquals(false, fcvtzs.toFloat());
+        assertEquals(true, fcvtzs.signed());
+        // fcvtzu v0.2d, v1.2d, #8 (0x6f78fc20): esz=3, fbits=8, unsigned
+        Ir64Op.VectorFpConvertFixedPoint fcvtzu = vectorFixed(0x6f78fc20);
+        assertEquals(false, fcvtzu.toFloat());
+        assertEquals(false, fcvtzu.signed());
+        assertEquals(3, fcvtzu.esz());
+        assertEquals(8, fcvtzu.fractionBits());
+        assertEquals(true, fcvtzu.q());
+        // fcvtzu v0.2d, v1.2d, #33 (0x6f5ffc20)
+        assertEquals(33, vectorFixed(0x6f5ffc20).fractionBits());
+    }
+
+    // ── B19.4 regressão negativa (G8) ─────────────────────────────────────────────────────────────
+
+    @Test
+    void b194NegativeRegressions() {
+        // bfcvtn v0.4h, v1.4s (0x0ea16820): opcode 0b0_1101, !u, a=1 ⇒ B19.7 ⇒ unsupported.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x0ea16820));
+        // F*CVTL/BF*CVTL: opcode 0b0_1111, u=1 ⇒ B19.7 ⇒ unsupported (formula: 0x0e217820 | U bit).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x2e217820));
+        // scvtf v0.4h, v1.4h, #2 (0x0f1ee420): @fcvtq_h ⇒ esz==1 ⇒ meia precisão (B19.5) ⇒ unsupported.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x0f1ee420));
+        // fcvtzs v0.8h, v1.8h, #3 (0x4f1dfc20): idem.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4f1dfc20));
+        // fcvtzu ...2d... com Q=0 (0x2f78fc20 = 0x6f78fc20 sem bit30): immh<3>==1 && Q==0 ⇒ UNDEFINED.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x2f78fc20));
     }
 }

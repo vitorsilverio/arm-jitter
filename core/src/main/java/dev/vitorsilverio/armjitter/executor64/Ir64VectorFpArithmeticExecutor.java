@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
@@ -361,8 +362,8 @@ final class Ir64VectorFpArithmeticExecutor {
     /// reaproveita {@link Ir64FpExecutor#roundToIntegralForConversion}/
     /// {@link Ir64FpExecutor#saturateToInteger}/{@link Ir64FpExecutor#unsignedLongToDouble}
     /// (IDÊNTICO ao que {@link #executeUnary} faz nas conversões `_vi`), só com o fator de escala
-    /// `2^fractionBits` a mais. Nesta task `op.scalar()` é sempre `true` (`elements == 1`); a B19.4
-    /// usará `!scalar`.
+    /// `2^fractionBits` a mais. Serve tanto a forma ESCALAR (B19.3, `op.scalar()`) quanto a VETORIAL
+    /// `_vf` (B19.4, `!op.scalar()`, `q` real) — a única diferença é `elements` e a finalização.
     static boolean executeConvertFixedPoint(Aarch64Core core, Ir64Op.VectorFpConvertFixedPoint op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
@@ -392,6 +393,52 @@ final class Ir64VectorFpArithmeticExecutor {
             fp.setElement(op.rd(), i, esz, resultBits);
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
+        return false;
+    }
+
+    /// `FCVTL`/`FCVTN`/`FCVTXN` (AdvSIMD conversão de PRECISÃO vetorial, B19.4). {@code op.esz()} é
+    /// sempre o lado ESTREITO; o largo é `op.esz() + 1`. Espelha o par
+    /// {@link Ir64VectorArithmeticExecutor#executeShiftWidenImmediate}/`executeShiftNarrowImmediate`
+    /// (B8.8), incluindo a convenção de {@code laneOffset} (na FONTE ao alargar, no DESTINO ao
+    /// estreitar) e a finalização (só ao estreitar — alargar escreve os 128 bits inteiros). Os
+    /// resultados são bufferizados num `long[]` antes de qualquer escrita, porque `Rd` pode ser `Rn`
+    /// e ao alargar a escrita de `Rd[0]` (largo) cobre `Rn[0]` E `Rn[1]` (estreitos).
+    static boolean executeConvertPrecision(Aarch64Core core, Ir64Op.VectorFpConvertPrecision op) {
+        Aarch64FpRegisters fp = core.fp();
+        int narrowEsz = op.esz();
+        int wideEsz = narrowEsz + 1;
+        if (op.op() == Ir64VectorFpConvertPrecisionOp.FCVTL) {
+            int outputElements = elementsPerRegister(true, wideEsz);
+            int laneOffset = op.q() ? outputElements : 0;
+            long[] widened = new long[outputElements];
+            for (int i = 0; i < outputElements; i++) {
+                long src = fp.element(op.rn(), laneOffset + i, narrowEsz);
+                widened[i] = narrowEsz == 1
+                        ? AdvSimdLanes.floatBits(Float.float16ToFloat((short) src))
+                        : AdvSimdLanes.doubleBits((double) Float.intBitsToFloat((int) src));
+            }
+            for (int i = 0; i < outputElements; i++) {
+                fp.setElement(op.rd(), i, wideEsz, widened[i]);
+            }
+            return false;
+        }
+        int elements = elementsPerRegister(false, narrowEsz);
+        int laneOffset = op.q() ? elements : 0;
+        long[] narrowed = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long src = fp.element(op.rn(), i, wideEsz);
+            narrowed[i] = switch (op.op()) {
+                case FCVTN -> narrowEsz == 1
+                        ? (Float.floatToFloat16(Float.intBitsToFloat((int) src)) & 0xFFFFL)
+                        : AdvSimdLanes.floatBits((float) Double.longBitsToDouble(src));
+                case FCVTXN -> fcvtxnRoundToOdd(Double.longBitsToDouble(src));
+                case FCVTL -> throw new IllegalStateException("FCVTL tratado no ramo que alarga");
+            };
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), laneOffset + i, narrowEsz, narrowed[i]);
+        }
+        finishScalarAwareWrite(fp, op.rd(), false, op.q(), narrowEsz);
         return false;
     }
 

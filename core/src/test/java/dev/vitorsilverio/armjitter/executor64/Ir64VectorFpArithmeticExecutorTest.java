@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
@@ -555,5 +556,173 @@ class Ir64VectorFpArithmeticExecutorTest {
         fp.setElement(1, 0, 3, 1L << 34);
         EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 3, 33, true, true, 0, 1));
         assertEquals(2.0, Double.longBitsToDouble(fp.element(0, 0, 3)));
+    }
+
+    // ── B19.4: conversões de PRECISÃO vetoriais ───────────────────────────────────────────────────
+
+    private static Ir64Op.VectorFpConvertPrecision precision(
+            Ir64VectorFpConvertPrecisionOp op, boolean q, int esz) {
+        return new Ir64Op.VectorFpConvertPrecision(op, q, esz, 0, 1);
+    }
+
+    @Test
+    void fcvtlHalfToSingle() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L); // sujeira em todo o Rd
+        fp.setElement(1, 0, 1, Float.floatToFloat16(1.0f) & 0xFFFFL);
+        fp.setElement(1, 1, 1, 0x0001L); // menor subnormal f16 = 2^-24
+        fp.setElement(1, 2, 1, 0x7C00L); // +Inf f16
+        fp.setElement(1, 3, 1, 0x7E00L); // NaN f16
+
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTL, false, 1));
+
+        assertEquals(1.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
+        assertEquals(Math.scalb(1.0f, -24), Float.intBitsToFloat((int) fp.element(0, 1, 2)), "subnormal exato");
+        assertEquals(Float.POSITIVE_INFINITY, Float.intBitsToFloat((int) fp.element(0, 2, 2)));
+        assertTrue(Float.isNaN(Float.intBitsToFloat((int) fp.element(0, 3, 2))), "NaN -> NaN");
+    }
+
+    @Test
+    void fcvtl2ReadsHighHalf() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // metade baixa: 2.0h em todas; metade alta: 4.0h nas lanes 4..7
+        for (int lane = 0; lane < 4; lane++) {
+            fp.setElement(1, lane, 1, Float.floatToFloat16(2.0f) & 0xFFFFL);
+            fp.setElement(1, lane + 4, 1, Float.floatToFloat16(4.0f) & 0xFFFFL);
+        }
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTL, true, 1));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(4.0f, Float.intBitsToFloat((int) fp.element(0, lane, 2)), "FCVTL2 lê a metade ALTA");
+        }
+    }
+
+    @Test
+    void fcvtlSingleToDoubleExact() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 2, Float.floatToRawIntBits(3.5f) & 0xFFFF_FFFFL);
+        fp.setElement(1, 1, 2, Float.floatToRawIntBits(-0.25f) & 0xFFFF_FFFFL);
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTL, false, 2));
+        assertEquals(3.5, Double.longBitsToDouble(fp.element(0, 0, 3)));
+        assertEquals(-0.25, Double.longBitsToDouble(fp.element(0, 1, 3)));
+    }
+
+    @Test
+    void fcvtnSingleToHalf() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L);
+        float rounds = 1.0f + Math.scalb(1.0f, -11); // entre dois f16 ⇒ ties-to-even ⇒ 1.0h
+        fp.setElement(1, 0, 2, Float.floatToRawIntBits(rounds) & 0xFFFF_FFFFL);
+        fp.setElement(1, 1, 2, Float.floatToRawIntBits(1.0e30f) & 0xFFFF_FFFFL); // overflow ⇒ +Inf
+
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTN, false, 1));
+
+        assertEquals(Float.floatToFloat16(rounds) & 0xFFFFL, fp.element(0, 0, 1),
+                "round-to-nearest-even, conferido contra Float.floatToFloat16");
+        assertEquals(0x7C00L, fp.element(0, 1, 1), "overflow -> +Inf f16");
+        assertEquals(0L, fp.high64(0), "FCVTN q=0 zera Rd[127:64]");
+        assertEquals(0L, fp.low64(0) >>> 32, "e o resto de Rd[63:32]");
+    }
+
+    @Test
+    void fcvtn2PreservesLowHalf() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, 0x1111_2222_3333_4444L, 0xDEAD_BEEF_DEAD_BEEFL);
+        for (int lane = 0; lane < 4; lane++) {
+            fp.setElement(1, lane, 2, Float.floatToRawIntBits(2.0f) & 0xFFFF_FFFFL);
+        }
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTN, true, 1));
+        assertEquals(0x1111_2222_3333_4444L, fp.low64(0), "FCVTN2 q=1 PRESERVA Rd[63:0]");
+        for (int lane = 4; lane < 8; lane++) {
+            assertEquals(Float.floatToFloat16(2.0f) & 0xFFFFL, fp.element(0, lane, 1), "escreve a metade ALTA");
+        }
+    }
+
+    @Test
+    void fcvtnDoubleToSingle() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(1, 0, 3, Double.doubleToRawLongBits(3.25));
+        fp.setElement(1, 1, 3, Double.doubleToRawLongBits(1.0e300)); // overflow ⇒ +Inf f32
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTN, false, 2));
+        assertEquals(3.25f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
+        assertEquals(Float.POSITIVE_INFINITY, Float.intBitsToFloat((int) fp.element(0, 1, 2)));
+    }
+
+    @Test
+    void fcvtxnVectorRoundToOdd() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        double halfway = 1.0 + Math.scalb(1.0, -24); // meio entre 1.0f (mantissa PAR) e o próximo
+        fp.setElement(1, 0, 3, Double.doubleToRawLongBits(halfway));
+        fp.setElement(1, 1, 3, Double.doubleToRawLongBits(1.5)); // exato em f32
+
+        EXECUTOR.executeOp(core, precision(Ir64VectorFpConvertPrecisionOp.FCVTXN, false, 2));
+
+        int lane0 = (int) fp.element(0, 0, 2);
+        assertEquals(1, lane0 & 1, "round-to-odd força o LSB a 1");
+        assertTrue(Float.floatToRawIntBits((float) halfway) != lane0, "difere de (float) d");
+        assertEquals(Float.floatToRawIntBits(1.5f), (int) fp.element(0, 1, 2), "valor exato = (float) d");
+    }
+
+    @Test
+    void fcvtlAndFcvtnAliasRdRn() {
+        // Rd == Rn — prova do buffer (Armadilha 4).
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        for (int lane = 0; lane < 4; lane++) {
+            fp.setElement(5, lane, 1, Float.floatToFloat16(lane + 1.0f) & 0xFFFFL);
+        }
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertPrecision(
+                Ir64VectorFpConvertPrecisionOp.FCVTL, false, 1, 5, 5));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(lane + 1.0f, Float.intBitsToFloat((int) fp.element(5, lane, 2)),
+                    "FCVTL com Rd==Rn não corrompe fontes ainda não lidas");
+        }
+
+        Aarch64Core core2 = newCore();
+        Aarch64FpRegisters fp2 = core2.fp();
+        for (int lane = 0; lane < 4; lane++) {
+            fp2.setElement(6, lane, 2, Float.floatToRawIntBits(lane + 1.0f) & 0xFFFF_FFFFL);
+        }
+        EXECUTOR.executeOp(core2, new Ir64Op.VectorFpConvertPrecision(
+                Ir64VectorFpConvertPrecisionOp.FCVTN, false, 1, 6, 6));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(Float.floatToFloat16(lane + 1.0f) & 0xFFFFL, fp2.element(6, lane, 1),
+                    "FCVTN com Rd==Rn correto");
+        }
+    }
+
+    @Test
+    void fcvtFixedPointVectorExecution() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L);
+        // SCVTF v0.4s, v1.4s, #4: 32 -> 2.0f em todas as 4 lanes
+        for (int lane = 0; lane < 4; lane++) {
+            fp.setElement(1, lane, 2, 32L);
+        }
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(false, true, 2, 4, true, true, 0, 1));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(2.0f, Float.intBitsToFloat((int) fp.element(0, lane, 2)), "32 / 2^4");
+        }
+
+        // FCVTZU v0.2d, v1.2d, #8, q=false ⇒ zera a metade alta
+        Aarch64Core core2 = newCore();
+        Aarch64FpRegisters fp2 = core2.fp();
+        fp2.setQ(0, -1L, -1L);
+        fp2.setElement(1, 0, 3, Double.doubleToRawLongBits(1.5));
+        EXECUTOR.executeOp(core2, new Ir64Op.VectorFpConvertFixedPoint(false, false, 3, 8, false, false, 0, 1));
+        assertEquals(384L, fp2.element(0, 0, 3), "1.5 * 2^8");
+        assertEquals(0L, fp2.high64(0), "q=false zera Rd[127:64]");
+
+        // FCVTZU de -1.0 satura em 0
+        fp2.setElement(1, 0, 3, Double.doubleToRawLongBits(-1.0));
+        EXECUTOR.executeOp(core2, new Ir64Op.VectorFpConvertFixedPoint(false, false, 3, 0, false, false, 0, 1));
+        assertEquals(0L, fp2.element(0, 0, 3), "saturação preservada");
     }
 }

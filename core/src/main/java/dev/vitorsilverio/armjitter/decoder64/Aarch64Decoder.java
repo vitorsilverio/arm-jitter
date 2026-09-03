@@ -28,6 +28,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
@@ -1025,10 +1026,16 @@ public final class Aarch64Decoder {
     /// `key==0b11`), por isso tratado com `if` EXPLÍCITO no ramo `scalar`, NUNCA pela tabela
     /// compartilhada (senão um encoding vetorial `0b1_1111`/`a=1` decodificaria sem executor — G8).
     private static final int ADVSIMD_FRECPX_OPCODE = 0b1_1111;
-    /// B19.3: opcode (bits[15:11]) de `FCVTXN_s` dentro do slot narrow/widen (`Rm=00001`, `U=1`) —
-    /// MESMO opcode que `SQXTN`-família (`decodeVectorNarrowUnaryOpcode` devolve `null` aqui);
-    /// tratado com `if` EXPLÍCITO no ramo `scalar` (`FCVTXN_v` vetorial é B19.4).
+    /// B19.3: opcode (bits[15:11]) de `FCVTN`/`FCVTXN`/`BFCVTN` dentro do slot narrow/widen
+    /// (`Rm=00001`) — MESMO opcode que `SQXTN`-família (`decodeVectorNarrowUnaryOpcode` devolve
+    /// `null` aqui); tratado com `if` EXPLÍCITO, NUNCA pela tabela compartilhada (poluí-la faria um
+    /// encoding escalar decodificar para um op sem executor escalar). B19.3 usa este valor para
+    /// `FCVTXN_s`; B19.4 o reaproveita para as formas VETORIAIS `FCVTN_v`/`FCVTXN_v` (`bit23`=`a`
+    /// separa de `BFCVTN_v`).
     private static final int ADVSIMD_FCVTXN_OPCODE = 0b0_1101;
+    /// B19.4: opcode (bits[15:11]) de `FCVTL`/`BF*CVTL`/`F*CVTL` dentro do slot narrow/widen
+    /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = variantes FP8/BF16 (B19.7), recusadas aqui.
+    private static final int ADVSIMD_FCVTL_OPCODE = 0b0_1111;
     /// B19.3: opcodes (bits[15:11]) da classe "AdvSIMD shift by immediate" que na verdade são
     /// conversão FP↔ponto fixo (`@fcvt_fixed`): `0b1_1100` = `SCVTF`/`UCVTF` (int→FP),
     /// `0b1_1111` = `FCVTZS`/`FCVTZU` (FP→int). `u` (bit29) distingue assinado/não.
@@ -2999,6 +3006,32 @@ public final class Aarch64Decoder {
                 return new Ir64Op.VectorFpArithmeticUnary(
                         Ir64VectorFpUnaryOp.FCVTXN, true, false, ADVSIMD_INT_SCALAR_ESZ, rd, rn);
             }
+            // B19.4: `FCVTN_v`/`FCVTXN_v`/`FCVTL_v` — conversões de PRECISÃO vetoriais (`f16`↔`f32`↔
+            // `f64`). MESMO slot/opcode que `SQXTN`-família; `if`s EXPLÍCITOS ANTES da tabela
+            // compartilhada, NUNCA nela (Armadilha 3 da task). `bit23` é o discriminador `a` (NÃO
+            // tamanho): separa `FCVTN_v`(a=0) de `BFCVTN_v`(a=1) e `FCVTL_v`(!u) das 4 variantes
+            // FP8/BF16 (u). `esz` do record = lado ESTREITO (`1 + sz`), convenção idêntica a
+            // `VectorShiftNarrow/WidenImmediate` (B8.8) — o `.decode` dá o DESTINO, que é estreito em
+            // `FCVTN`/`FCVTXN` e LARGO em `FCVTL` (Armadilha 2).
+            if (!scalar && (opcode == ADVSIMD_FCVTXN_OPCODE || opcode == ADVSIMD_FCVTL_OPCODE)) {
+                int precisionA = (esz >>> 1) & 1;
+                int precisionSz = esz & 1;
+                if (opcode == ADVSIMD_FCVTXN_OPCODE && !u && precisionA == 0) {
+                    return new Ir64Op.VectorFpConvertPrecision(
+                            Ir64VectorFpConvertPrecisionOp.FCVTN, q, 1 + precisionSz, rd, rn);
+                }
+                if (opcode == ADVSIMD_FCVTXN_OPCODE && u && precisionA == 0 && precisionSz == 1) {
+                    return new Ir64Op.VectorFpConvertPrecision(
+                            Ir64VectorFpConvertPrecisionOp.FCVTXN, q, ADVSIMD_ESZ_WORD, rd, rn);
+                }
+                if (opcode == ADVSIMD_FCVTL_OPCODE && !u && precisionA == 0) {
+                    return new Ir64Op.VectorFpConvertPrecision(
+                            Ir64VectorFpConvertPrecisionOp.FCVTL, q, 1 + precisionSz, rd, rn);
+                }
+                // `BFCVTN_v` (`!u && a==1`), `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`u`, opcode
+                // `0b0_1111`) e toda combinação restante ⇒ B19.7 / reservado ⇒ `unsupported` (G8).
+                throw unsupported(word, address);
+            }
             // B8.9 (vetorial: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/...) + B19.3
             // (escalar: `RECPE`/`RSQRTE` + as 12 conversões `@icvt` int↔FP escala 0). `SQRT`/
             // `FRINTx` FP NÃO têm forma escalar aqui (os escalares já são {@link Ir64Op.Fp64Alu}/
@@ -4044,18 +4077,21 @@ public final class Aarch64Decoder {
             // Só forma ESCALAR nesta task — a vetorial `_vf` é B19.4.
             if (opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE
                     || opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE) {
-                if (!scalar) {
-                    throw unsupported(word, address);
-                }
                 if (esz != ADVSIMD_ESZ_WORD && esz != ADVSIMD_INT_SCALAR_ESZ) {
                     // `esz==1` (meia precisão) → `FEAT_FP16`, B19.5; `esz==0` não é conversão FP↔
                     // fixo (G8).
                     throw unsupported(word, address);
                 }
+                // B19.4: a forma VETORIAL (`_vf`, `!scalar`) reaproveita o MESMO record com `q` real.
+                // `immh<3>==1 && Q==0` (`esz==3 && !q`) é UNDEFINED nesta classe (ARM DDI 0487) — não
+                // há arranjo `.1d` de elemento de 64 bits (G8).
+                if (!scalar && esz == ADVSIMD_INT_SCALAR_ESZ && !q) {
+                    throw unsupported(word, address);
+                }
                 boolean toFloat = opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE;
                 // `rightShift` (`2*esize - immh:immb`, já calculado) é EXATAMENTE o `#fbits` do
-                // `@fcvt_fixed` (faixa `1..esize`); `!u` = variante assinada (`SCVTF`/`FCVTZS`).
-                return new Ir64Op.VectorFpConvertFixedPoint(true, false, esz, rightShift, toFloat, !u, rd, rn);
+                // `@fcvt_fixed`/`@fcvtq_{s,d}` (faixa `1..esize`); `!u` = variante assinada.
+                return new Ir64Op.VectorFpConvertFixedPoint(scalar, q, esz, rightShift, toFloat, !u, rd, rn);
             }
             throw unsupported(word, address);
         }

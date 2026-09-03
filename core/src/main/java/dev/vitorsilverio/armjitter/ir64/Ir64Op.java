@@ -52,7 +52,8 @@ public sealed interface Ir64Op permits
         Ir64Op.FpLoad64, Ir64Op.FpStore64, Ir64Op.FpLoadStorePair, Ir64Op.FpLoadLiteral64,
         Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
         Ir64Op.VectorFpArithmeticThreeSameByElement, Ir64Op.CryptoSha3FourRegister,
-        Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint {
+        Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint,
+        Ir64Op.VectorFpConvertPrecision {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -271,6 +272,9 @@ public sealed interface Ir64Op permits
         /// com campo `#fbits`) — ver {@link VectorFpConvertFixedPoint}. Escalar nesta task; a forma
         /// vetorial (`_vf`) chega em B19.4 reaproveitando o record.
         public static final int VECTOR_FP_CONVERT_FIXED_POINT = 94;
+        /// B19.4: `FCVTL`/`FCVTN`/`FCVTXN` (AdvSIMD conversão de PRECISÃO vetorial, entre `f16`/`f32`/
+        /// `f64`) — ver {@link VectorFpConvertPrecision}.
+        public static final int VECTOR_FP_CONVERT_PRECISION = 95;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2189,6 +2193,30 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_FIXED_POINT; }
+    }
+
+    /// AdvSIMD conversão de PRECISÃO vetorial (`FCVTL`/`FCVTN`/`FCVTXN`, B19.4) — origem e destino
+    /// têm larguras de elemento DIFERENTES. Record separado (não {@link VectorFpArithmeticUnary}) pela
+    /// MESMA razão que {@link VectorShiftNarrowImmediate}/{@link VectorShiftWidenImmediate} são
+    /// separados de {@link VectorShiftImmediate}: duas larguras + deslocamento de lane. Cobre `f16`↔
+    /// `f32` — conversão de meia precisão é ISA base ARMv8.0-A (a ARITMÉTICA em meia precisão,
+    /// `FEAT_FP16`, é B19.5).
+    record VectorFpConvertPrecision(
+            /// Operação a executar.
+            Ir64VectorFpConvertPrecisionOp op,
+            /// Seleciona a METADE, NÃO a largura do registrador: em {@link
+            /// Ir64VectorFpConvertPrecisionOp#FCVTL} `false`=lê a metade baixa de `Rn`/`true`=lê a
+            /// alta (forma `FCVTL2`); nas que estreitam `false`=escreve a metade baixa de `Rd` e zera
+            /// a alta/`true`=escreve a metade alta e preserva a baixa (forma `*2`).
+            boolean q,
+            /// `log2` do tamanho, em bytes, do elemento ESTREITO (`1`=`f16`, `2`=`f32`). O lado largo
+            /// usa `esz + 1`. Para `FCVTL`/`FCVTN` ∈ {1,2}; para `FCVTXN` sempre `2`.
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_CONVERT_PRECISION; }
     }
 
     /// `EXT` (AdvSIMD extract, B8.10) — concatena `Rm:Rn` (`Rn` ocupa os bits BAIXOS, `Rm` os
