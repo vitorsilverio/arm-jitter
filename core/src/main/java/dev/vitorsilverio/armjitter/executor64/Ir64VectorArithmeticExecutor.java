@@ -354,6 +354,9 @@ final class Ir64VectorArithmeticExecutor {
         // sem metade de registrador (mesmo padrão de {@link #executeWideningByElement}).
         int outputElements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = (!op.scalar() && op.q()) ? outputElements : 0;
+        // E10: buffer OBRIGATÓRIO — `Rd` pode ser `Rn`/`Rm`, e escrever a lane LARGA `i` cobre as
+        // lanes estreitas `2i`/`2i+1` da fonte, ainda não lidas.
+        long[] results = new long[outputElements];
         for (int i = 0; i < outputElements; i++) {
             int lane = laneOffset + i;
             long a = fp.element(op.rn(), lane, esz);
@@ -361,7 +364,7 @@ final class Ir64VectorArithmeticExecutor {
             long sa = signExtend(a, esz);
             long sb = signExtend(b, esz);
             long current = fp.element(op.rd(), i, wideEsz);
-            long result = switch (op.op()) {
+            results[i] = switch (op.op()) {
                 case SMULL -> sa * sb;
                 case UMULL -> a * b;
                 case SMLAL -> current + sa * sb;
@@ -383,7 +386,9 @@ final class Ir64VectorArithmeticExecutor {
                 case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
                 case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
             };
-            fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+        }
+        for (int i = 0; i < outputElements; i++) {
+            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
         }
         if (op.scalar()) {
             finishScalarAwareWrite(fp, op.rd(), true, false, wideEsz);
@@ -438,11 +443,14 @@ final class Ir64VectorArithmeticExecutor {
         long sb = signExtend(b, esz);
         int outputElements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = (!op.scalar() && op.q()) ? outputElements : 0;
+        // E10: mesmo buffer de `executeWidening` — `Rd` pode ser `Rn` (o elemento de `Rm` já é lido
+        // uma única vez fora do laço, logo não sofre aliasing).
+        long[] results = new long[outputElements];
         for (int i = 0; i < outputElements; i++) {
             long a = fp.element(op.rn(), laneOffset + i, esz);
             long sa = signExtend(a, esz);
             long current = fp.element(op.rd(), i, wideEsz);
-            long result = switch (op.op()) {
+            results[i] = switch (op.op()) {
                 case SMULL -> sa * sb;
                 case UMULL -> a * b;
                 case SMLAL -> current + sa * sb;
@@ -455,7 +463,9 @@ final class Ir64VectorArithmeticExecutor {
                 default -> throw new IllegalStateException(
                         "Ir64VectorWideningOp não suportado em by-element: " + op.op());
             };
-            fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+        }
+        for (int i = 0; i < outputElements; i++) {
+            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
         }
         if (op.scalar()) {
             finishScalarAwareWrite(fp, op.rd(), true, false, wideEsz);
@@ -469,6 +479,10 @@ final class Ir64VectorArithmeticExecutor {
         int wideEsz = esz + 1;
         int elements = elementsPerRegister(true, wideEsz);
         int laneOffset = op.q() ? elements : 0;
+        // E10: buffer — `Rd` pode ser `Rm` (o operando ESTREITO), e escrever a lane larga `i` cobre
+        // as lanes estreitas `2i`/`2i+1` ainda não lidas. (`Rd`==`Rn` é seguro: mesma lane, mesma
+        // largura, lida antes de escrita — mas o buffer cobre os dois de graça.)
+        long[] results = new long[elements];
         for (int i = 0; i < elements; i++) {
             long wide = fp.element(op.rn(), i, wideEsz);
             long narrow = fp.element(op.rm(), laneOffset + i, esz);
@@ -476,11 +490,13 @@ final class Ir64VectorArithmeticExecutor {
                 case SADDW, SSUBW -> signExtend(narrow, esz);
                 case UADDW, USUBW -> narrow;
             };
-            long result = switch (op.op()) {
+            results[i] = switch (op.op()) {
                 case SADDW, UADDW -> wide + extended;
                 case SSUBW, USUBW -> wide - extended;
             };
-            fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
         }
         return false;
     }
@@ -493,6 +509,9 @@ final class Ir64VectorArithmeticExecutor {
         int elements = elementsPerRegister(true, wideEsz);
         int laneOffset = op.q() ? elements : 0;
         long rounding = 1L << (narrowBits - 1);
+        // E10: buffer — na forma `q=1` (`ADDHN2`…) a escrita da lane estreita `elements+i` cobre a
+        // lane LARGA `(elements+i)/2`, sempre maior que `i` (ainda não lida) quando `Rd`==`Rn`/`Rm`.
+        long[] results = new long[elements];
         for (int i = 0; i < elements; i++) {
             long a = fp.element(op.rn(), i, wideEsz);
             long b = fp.element(op.rm(), i, wideEsz);
@@ -502,7 +521,10 @@ final class Ir64VectorArithmeticExecutor {
                 case SUBHN -> a - b;
                 case RSUBHN -> a - b + rounding;
             };
-            fp.setElement(op.rd(), laneOffset + i, esz, truncate(sum >>> narrowBits, esz));
+            results[i] = truncate(sum >>> narrowBits, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
         }
         finishDestructiveWrite(fp, op.rd(), op.q());
         return false;
@@ -711,6 +733,8 @@ final class Ir64VectorArithmeticExecutor {
         int wideEsz = esz + 1;
         int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
+        // E10: buffer — mesma razão de `executeNarrow` (forma `q=1` com `Rd`==`Rn`).
+        long[] results = new long[elements];
         for (int i = 0; i < elements; i++) {
             long wide = fp.element(op.rn(), i, wideEsz);
             long signedWide = signExtend(wide, wideEsz);
@@ -718,11 +742,14 @@ final class Ir64VectorArithmeticExecutor {
                 case SQXTN -> saturateToElement(BigInteger.valueOf(signedWide), esz, true);
                 case SQXTUN -> saturateToElement(BigInteger.valueOf(signedWide), esz, false);
                 case UQXTN -> saturateToElement(unsignedBig(wide), esz, false);
-                // B8.20: `XTN` — SEM saturação, truncamento puro (`fp.setElement` abaixo já trunca
-                // para `esz` bytes).
+                // B8.20: `XTN` — SEM saturação, truncamento puro (`truncate` abaixo já corta para
+                // `esz` bytes).
                 case XTN -> wide;
             };
-            fp.setElement(op.rd(), laneOffset + i, esz, truncate(narrow, esz));
+            results[i] = truncate(narrow, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
@@ -776,6 +803,8 @@ final class Ir64VectorArithmeticExecutor {
         int shift = op.shift();
         int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
+        // E10: buffer — mesma razão de `executeNarrow` (forma `q=1` com `Rd`==`Rn`).
+        long[] results = new long[elements];
         for (int i = 0; i < elements; i++) {
             long wide = fp.element(op.rn(), i, wideEsz);
             long signedWide = signExtend(wide, wideEsz);
@@ -789,7 +818,10 @@ final class Ir64VectorArithmeticExecutor {
                 case UQRSHRN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(wide, shift, false)), esz, false);
                 case SQRSHRUN -> saturateToElement(BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, false);
             };
-            fp.setElement(op.rd(), laneOffset + i, esz, truncate(narrow, esz));
+            results[i] = truncate(narrow, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
@@ -804,11 +836,16 @@ final class Ir64VectorArithmeticExecutor {
         int shift = op.shift();
         int outputElements = elementsPerRegister(true, wideEsz);
         int laneOffset = op.q() ? outputElements : 0;
+        // E10 (achado da B19.4): buffer — com `Rd`==`Rn` e `q=0`, escrever a lane larga `i` cobre as
+        // lanes estreitas `2i`/`2i+1`, ainda não lidas.
+        long[] results = new long[outputElements];
         for (int i = 0; i < outputElements; i++) {
             long narrow = fp.element(op.rn(), laneOffset + i, esz);
             long extended = op.op() == Ir64VectorShiftWidenOp.SSHLL ? signExtend(narrow, esz) : narrow;
-            long result = safeShiftLeft(extended, shift);
-            fp.setElement(op.rd(), i, wideEsz, truncate(result, wideEsz));
+            results[i] = truncate(safeShiftLeft(extended, shift), wideEsz);
+        }
+        for (int i = 0; i < outputElements; i++) {
+            fp.setElement(op.rd(), i, wideEsz, results[i]);
         }
         return false;
     }

@@ -1246,4 +1246,158 @@ class Ir64VectorArithmeticExecutorTest {
 
         assertEquals(20010L, fp.element(0, 0, 2), "10 + 2*100*100 = 20010, MESMA lógica da forma vetorial");
     }
+
+    // ── E10: aliasing `Rd`==`Rn`/`Rm` nas famílias de LARGURA MISTA ─────────────────────────────
+    // O pseudocódigo do ARM lê os operandos INTEIROS antes de escrever `V[d]`; com larguras
+    // diferentes dos dois lados, escrever uma lane cobre bytes de outra lane que ainda será lida.
+    // Cada teste abaixo falha se o executor escrever dentro do laço de leitura.
+
+    /// Preenche `1..count` nas lanes `[first, first+count)` de `reg`, no tamanho `esz`.
+    private static void fillLanes(Aarch64FpRegisters fp, int reg, int first, int count, int esz, long scale) {
+        for (int i = 0; i < count; i++) {
+            fp.setElement(reg, first + i, esz, (i + 1) * scale);
+        }
+    }
+
+    @Test
+    void ushllWithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fillLanes(fp, 0, 0, 8, 0, 1); // v0.8b = {1..8}
+
+        // USHLL v0.8h, v0.8b, #0 — `Rd` == `Rn`: escrever a halfword 0 cobre os bytes 0 E 1.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+                Ir64VectorShiftWidenOp.USHLL, false, 0, 0, 0, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, i, 1), "lane larga " + i + " = byte original " + i);
+        }
+    }
+
+    @Test
+    void ushll2WithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fillLanes(fp, 0, 8, 8, 0, 1); // metade ALTA de v0.16b = {1..8}
+
+        // USHLL2 v0.8h, v0.16b, #1 — lê a metade alta, escreve os 128 bits inteiros.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+                Ir64VectorShiftWidenOp.USHLL, true, 0, 1, 0, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals((i + 1) * 2, fp.element(0, i, 1), "lane larga " + i + " = byte alto " + i + " << 1");
+        }
+    }
+
+    @Test
+    void wideningWithDestinationAliasingEitherSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fillLanes(fp, 0, 0, 8, 0, 1); // v0.8b = {1..8}
+        fillLanes(fp, 1, 0, 8, 0, 0); // v1.8b = {0,...}: a soma preserva o valor de v0
+
+        // UADDL v0.8h, v0.8b, v1.8b — `Rd` == `Rn`.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+                Ir64VectorWideningOp.UADDL, false, false, 0, 0, 0, 1));
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, i, 1), "Rd==Rn: lane larga " + i);
+        }
+
+        fillLanes(fp, 0, 0, 8, 0, 1);
+        // UADDL v0.8h, v1.8b, v0.8b — `Rd` == `Rm` (mesmo defeito pelo outro operando).
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+                Ir64VectorWideningOp.UADDL, false, false, 0, 0, 1, 0));
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, i, 1), "Rd==Rm: lane larga " + i);
+        }
+    }
+
+    @Test
+    void wideningByElementWithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fillLanes(fp, 0, 0, 8, 0, 1); // v0.8b = {1..8}
+        fp.setElement(1, 0, 0, 2); // v1.b[0] = 2
+
+        // UMULL v0.8h, v0.8b, v1.b[0] — `Rd` == `Rn` (o elemento de `Rm` já é lido fora do laço).
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWideningByElement(
+                Ir64VectorWideningOp.UMULL, false, false, 0, 0, 0, 1, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals((i + 1) * 2, fp.element(0, i, 1), "lane larga " + i + " = byte " + i + " * 2");
+        }
+    }
+
+    @Test
+    void wideWithDestinationAliasingNarrowSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fillLanes(fp, 0, 0, 8, 0, 1); // v0.8b (operando ESTREITO) = {1..8}
+        for (int i = 0; i < 8; i++) {
+            fp.setElement(1, i, 1, 0x100); // v1.8h = {0x100,...}
+        }
+
+        // UADDW v0.8h, v1.8h, v0.8b — `Rd` == `Rm`, o operando estreito.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWide(
+                Ir64VectorWideOp.UADDW, false, 0, 0, 1, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals(0x100 + i + 1, fp.element(0, i, 1), "lane larga " + i);
+        }
+    }
+
+    @Test
+    void narrowHighHalfWithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        for (int i = 0; i < 8; i++) {
+            fp.setElement(0, i, 1, (i + 1) << 8); // v0.8h = {0x100, 0x200, ...}
+            fp.setElement(1, i, 1, 0); // v1.8h = 0
+        }
+        long originalLow = fp.low64(0);
+
+        // ADDHN2 v0.16b, v0.8h, v1.8h — `Rd` == `Rn` com `q=1`: a escrita da lane estreita
+        // `8+i` cobre a lane LARGA `(8+i)/2`, sempre maior que `i` (ainda não lida).
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrow(
+                Ir64VectorNarrowOp.ADDHN, true, 0, 0, 0, 1));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, 8 + i, 0), "byte alto " + i);
+        }
+        assertEquals(originalLow, fp.low64(0), "q=1 preserva a metade baixa de Rd");
+    }
+
+    @Test
+    void narrowUnaryHighHalfWithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        for (int i = 0; i < 8; i++) {
+            fp.setElement(0, i, 1, 0xAB00 | (i + 1)); // v0.8h, byte baixo = i+1
+        }
+
+        // XTN2 v0.16b, v0.8h — `Rd` == `Rn` com `q=1`.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+                Ir64VectorNarrowUnaryOp.XTN, false, true, 0, 0, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, 8 + i, 0), "byte alto " + i);
+        }
+    }
+
+    @Test
+    void shiftNarrowHighHalfWithDestinationAliasingSource() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        for (int i = 0; i < 8; i++) {
+            fp.setElement(0, i, 1, (i + 1) << 4); // v0.8h = {0x10, 0x20, ...}
+        }
+
+        // SHRN2 v0.16b, v0.8h, #4 — `Rd` == `Rn` com `q=1`.
+        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+                Ir64VectorShiftNarrowOp.SHRN, false, true, 0, 4, 0, 0));
+
+        for (int i = 0; i < 8; i++) {
+            assertEquals(i + 1, fp.element(0, 8 + i, 0), "byte alto " + i);
+        }
+    }
 }
