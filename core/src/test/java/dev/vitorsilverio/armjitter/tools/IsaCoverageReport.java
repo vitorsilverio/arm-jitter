@@ -191,7 +191,14 @@ public final class IsaCoverageReport {
     /// inclui gatear — só `FEAT_RDM`, via B11.4, é consultado de verdade pelo `Aarch64Decoder`):
     /// serve só para decidir em qual COLUNA de versão esta instrução é aplicável/contada, igual à
     /// curadoria de `docs/isa-nao-aplicavel.tsv` para as arquiteturas de 32 bits.
-    private static final Map<String, Aarch64Feature> AARCH64_VERSION_REQUIREMENTS = new LinkedHashMap<>();
+    ///
+    /// Este mapa casa pelo NOME do mnemônico — vale quando TODAS as linhas do mnemônico exigem a
+    /// mesma feature (`CAS`/`LDADD`/`RMIF`/…). Quando um mesmo nome tem uma linha de feature e
+    /// outra de ISA base (o caso de `FEAT_FP16`: `FADD_v` `_h` é ARMv8.2-A, `FADD_v` `_sd` é
+    /// baseline), o requisito precisa ser por LINHA — ver
+    /// {@link #AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE} (B19.5.2, espelho A64 da coluna
+    /// `ocorrencia` que a B9.17 acrescentou ao lado de 32 bits).
+    static final Map<String, Aarch64Feature> AARCH64_VERSION_REQUIREMENTS = new LinkedHashMap<>();
 
     static {
         AARCH64_VERSION_REQUIREMENTS.put("CAS", Aarch64Feature.LSE);
@@ -246,12 +253,101 @@ public final class IsaCoverageReport {
         AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_si", Aarch64Feature.RDM);
     }
 
+    /// Requisito de versão A64 casado por **(NOME, OCORRÊNCIA)** — a chave é `"NOME#n"`, onde `n` é
+    /// a posição 1-based da linha entre as de mesmo nome no inventário `a64.decode` (a MESMA
+    /// ocorrência que {@link #appendGroup} já computa para as exclusões da TSV). É o espelho A64 da
+    /// coluna `ocorrencia` que a B9.17 acrescentou à `docs/isa-nao-aplicavel.tsv` do lado de 32
+    /// bits, e resolve a limitação de {@link #AARCH64_VERSION_REQUIREMENTS}: um mesmo mnemônico
+    /// pode ter uma linha `_h` de meia precisão (ARMv8.2-A/`FEAT_FP16`) e uma linha `_sd`/`_s` de
+    /// ISA base — marcar por nome derrubaria a linha base, que hoje é `✅`.
+    ///
+    /// **`_h` de TEMPLATE ≠ meia precisão** (B19.5.2, medido): das 157 linhas cujo template termina
+    /// em `_h` (`@rr_h`/`@rrr_h`/`@rrx_h`/`@qrr_h`/`@qrrr_h`/`@qrrx_h`/`@icvt_h`/`@fcvt_fixed_h`/
+    /// `@fcvtq_h`), **45 já são `✅`** porque ali `_h` significa "elemento halfword INTEIRO"
+    /// (`MUL_vi`, `SMULL_vi`, `SQDMULH_vi`, `SQDMULL_v`…), não `binary16`. Uma regra por
+    /// `endsWith("_h")` corromperia a tabela nos dois sentidos: apagaria as 45 já implementadas e
+    /// marcaria como v8.2 linhas que na verdade são `FEAT_BF16`/FP8/v9. Por isso a lista abaixo é
+    /// **enumerada**, linha a linha, e não derivada de um padrão de nome.
+    static final Map<String, Aarch64Feature> AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE = new LinkedHashMap<>();
+
+    /// Registra o requisito de versão da `occurrence`-ésima linha de `name` (1-based).
+    private static void requireAtOccurrence(String name, int occurrence, Aarch64Feature feature) {
+        AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.put(name + "#" + occurrence, feature);
+    }
+
+    /// Como todas as linhas curadas por B19.5.2 são a **1ª** ocorrência do nome (exceção: as 4 de
+    /// `@fcvt_fixed_h`, que são a 3ª), este helper cobre o caso comum sem repetir `1`.
+    private static void requireFirst(Aarch64Feature feature, String... names) {
+        for (String name : names) {
+            requireAtOccurrence(name, 1, feature);
+        }
+    }
+
+    static {
+        // ── B19.5.2 — `FEAT_FP16` (aritmética de meia precisão), 88 linhas ──────────────────────
+        // Ver a tabela "As 96 linhas" da task; a ordem/agrupamento aqui espelha os templates de
+        // `a64.decode`. Todas occ=1 salvo as 4 de `@fcvt_fixed_h` (occ=3).
+        // @rrr_h — three-same FP escalar (bit21=0)
+        requireFirst(Aarch64Feature.FP16, "FMULX_s", "FCMEQ_s", "FCMGE_s", "FCMGT_s", "FACGE_s",
+                "FACGT_s", "FABD_s", "FRECPS_s", "FRSQRTS_s");
+        // @rr_h — pairwise escalar (U=0)
+        requireFirst(Aarch64Feature.FP16, "FADDP_s", "FMAXP_s", "FMINP_s", "FMAXNMP_s", "FMINNMP_s");
+        // @rr_h — two-register-miscellaneous escalar
+        requireFirst(Aarch64Feature.FP16, "FCMGT0_s", "FCMGE0_s", "FCMEQ0_s", "FCMLE0_s", "FCMLT0_s",
+                "FRECPE_s", "FRECPX_s", "FRSQRTE_s");
+        // @qrrr_h — three-same FP vetorial (bit21=0)
+        requireFirst(Aarch64Feature.FP16, "FADD_v", "FSUB_v", "FMAX_v", "FMIN_v", "FCMEQ_v");
+        // @qrr_h — reduções across-lanes de meia precisão (U=0; hoje escondidas pela TSV)
+        requireFirst(Aarch64Feature.FP16, "FMAXNMV_h", "FMINNMV_h", "FMAXV_h", "FMINV_h");
+        // @qrr_h — two-register-miscellaneous vetorial (unário)
+        requireFirst(Aarch64Feature.FP16, "FABS_v", "FNEG_v", "FSQRT_v", "FRINTN_v", "FRINTM_v",
+                "FRINTP_v", "FRINTZ_v", "FRINTA_v", "FRINTX_v", "FRINTI_v");
+        // @qrr_h — conversões int↔FP vetoriais
+        requireFirst(Aarch64Feature.FP16, "SCVTF_vi", "UCVTF_vi", "FCVTNS_vi", "FCVTNU_vi",
+                "FCVTPS_vi", "FCVTPU_vi", "FCVTMS_vi", "FCVTMU_vi", "FCVTZS_vi", "FCVTZU_vi",
+                "FCVTAS_vi", "FCVTAU_vi");
+        // @qrr_h — comparação-com-zero vetorial + recíprocos
+        requireFirst(Aarch64Feature.FP16, "FCMGT0_v", "FCMGE0_v", "FCMEQ0_v", "FCMLE0_v", "FCMLT0_v",
+                "FRECPE_v", "FRSQRTE_v");
+        // @icvt_h — conversões int↔FP escalares
+        requireFirst(Aarch64Feature.FP16, "SCVTF_f", "UCVTF_f", "FCVTNS_f", "FCVTNU_f", "FCVTPS_f",
+                "FCVTPU_f", "FCVTMS_f", "FCVTMU_f", "FCVTZS_f", "FCVTZU_f", "FCVTAS_f", "FCVTAU_f");
+        // @rrx_h — indexadas escalares
+        requireFirst(Aarch64Feature.FP16, "FMUL_si", "FMLA_si", "FMLS_si", "FMULX_si");
+        // @qrrx_h — indexadas vetoriais
+        requireFirst(Aarch64Feature.FP16, "FMUL_vi", "FMLA_vi", "FMLS_vi", "FMULX_vi");
+        // @fcvt_fixed_h — ponto fixo escalar (3ª ocorrência: occ=1 é @icvt_h acima, occ=2 é @icvt_sd)
+        requireAtOccurrence("SCVTF_f", 3, Aarch64Feature.FP16);
+        requireAtOccurrence("UCVTF_f", 3, Aarch64Feature.FP16);
+        requireAtOccurrence("FCVTZS_f", 3, Aarch64Feature.FP16);
+        requireAtOccurrence("FCVTZU_f", 3, Aarch64Feature.FP16);
+        // @fcvtq_h — ponto fixo vetorial
+        requireFirst(Aarch64Feature.FP16, "SCVTF_vf", "UCVTF_vf", "FCVTZS_vf", "FCVTZU_vf");
+
+        // ── B19.5.2 — `FEAT_FHM` (`FMLAL`/`FMLSL` "FP16 fused multiply-add long"), 8 linhas ──────
+        // Feature PRÓPRIA (`Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG`), não `FEAT_FP16`, embora
+        // as duas sejam ARMv8.2-A. Hoje escondidas em TODAS as colunas pela TSV (removida junto).
+        // @qrrr_h
+        requireFirst(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG, "FMLAL_v", "FMLSL_v", "FMLAL2_v",
+                "FMLSL2_v");
+        // @qrrx_h
+        requireFirst(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG, "FMLAL_vi", "FMLSL_vi", "FMLAL2_vi",
+                "FMLSL2_vi");
+    }
+
     /// `docs/COBERTURA-ISA.md` pré-B11.5 tratava A64 como uma única coluna chamada `A64` — vários
     /// `docs/isa-nao-aplicavel.tsv` legados usam essa string. Para não reescrever essas linhas,
     /// uma exclusão `A64` casa com QUALQUER coluna de versão A64 nova (uma extensão sem entrada em
     /// {@link #AARCH64_VERSION_REQUIREMENTS} — ainda não mapeada por versão real — fica de fora de
     /// toda a tabela por versão, igual ficava fora da coluna monolítica antiga).
-    private static boolean isAarch64VersionColumn(String column) {
+    ///
+    /// **Curadoria de versão A64 POR LINHA não passa mais por aqui** (B19.5.2): quando uma linha
+    /// específica de um mnemônico exige uma feature (o caso `_h`/`FEAT_FP16`), o requisito vive em
+    /// {@link #AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE}, que deriva as colunas via
+    /// `architecture.has(feature)` e continua correto sozinho quando uma coluna de versão nova é
+    /// acrescentada — ao contrário de uma linha `A64` na TSV, que fica `·` até em versões que nem
+    /// existiam quando foi escrita.
+    static boolean isAarch64VersionColumn(String column) {
         return AARCH64_ARCHITECTURES.containsKey(column);
     }
 
@@ -283,7 +379,7 @@ public final class IsaCoverageReport {
 
     /// Exclusões curadas (`docs/isa-nao-aplicavel.tsv`): instrução → arquiteturas em que ela NÃO
     /// existe. Ver o cabeçalho daquele arquivo para o formato e a regra de curadoria.
-    private static final List<Exclusion> EXCLUSIONS = new ArrayList<>();
+    static final List<Exclusion> EXCLUSIONS = new ArrayList<>();
     /// Acumulador do progresso global: arquitetura → `{suportadas, aplicáveis}`.
     private static final Map<String, int[]> globalPerArchitecture = new LinkedHashMap<>();
     private static int totalSupported;
@@ -320,7 +416,7 @@ public final class IsaCoverageReport {
         }
     }
 
-    private static void loadExclusions(Path file) throws IOException {
+    static void loadExclusions(Path file) throws IOException {
         if (!Files.exists(file)) {
             return;
         }
@@ -339,7 +435,7 @@ public final class IsaCoverageReport {
         }
     }
 
-    private static boolean isExcluded(String instruction, String column, String decodeFile, int occurrence) {
+    static boolean isExcluded(String instruction, String column, String decodeFile, int occurrence) {
         return EXCLUSIONS.stream().anyMatch(exclusion -> exclusion.matches(instruction, column, decodeFile, occurrence));
     }
 
@@ -488,7 +584,7 @@ public final class IsaCoverageReport {
                 Aarch64Architecture aarch64Architecture = aarch64Versioned ? AARCH64_ARCHITECTURES.get(column) : null;
                 boolean applicable = aarch64
                         ? (aarch64Versioned
-                                ? isApplicableToAarch64Version(instruction.name(), aarch64Architecture)
+                                ? isApplicableToAarch64Version(instruction.name(), occurrence, aarch64Architecture)
                                 : group.applicability() != NOT_IN_ANY_PRESET)
                         : group.applicability().appliesTo(architecture);
                 if (!applicable || isExcluded(instruction.name(), column, group.decodeFile(), occurrence)) {
@@ -641,8 +737,16 @@ public final class IsaCoverageReport {
     /// Aplicabilidade curada por versão A64 (B11.5, ver {@link #AARCH64_VERSION_REQUIREMENTS}):
     /// um mnemônico sem entrada é ARMv8.0-A baseline (aplicável a toda coluna); um mnemônico
     /// mapeado só é aplicável a partir da versão que introduziu a feature real que ele exige.
-    private static boolean isApplicableToAarch64Version(String instruction, Aarch64Architecture architecture) {
-        Aarch64Feature required = AARCH64_VERSION_REQUIREMENTS.get(instruction);
+    ///
+    /// Consulta primeiro o requisito por **(nome, ocorrência)** (B19.5.2,
+    /// {@link #AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE}) — o mais específico vence — e só então
+    /// o requisito por nome. `occurrence` é a posição 1-based desta linha entre as de mesmo nome.
+    static boolean isApplicableToAarch64Version(String instruction, int occurrence,
+                                                        Aarch64Architecture architecture) {
+        Aarch64Feature required = AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.get(instruction + "#" + occurrence);
+        if (required == null) {
+            required = AARCH64_VERSION_REQUIREMENTS.get(instruction);
+        }
         return required == null || architecture.has(required);
     }
 

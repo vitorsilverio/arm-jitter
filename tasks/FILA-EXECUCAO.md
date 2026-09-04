@@ -58,7 +58,7 @@ código.
 
 | Épico | Dimensão | Estado da especificação |
 |---|---|---|
-| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **completo** — B19.1-B19.4 feitas; B19.5.2-B19.5.6 e B19.6-B19.13 com spec |
+| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **completo** — B19.1-B19.4 + B19.5.2 feitas; B19.5.3-B19.5.6 e B19.6-B19.13 com spec |
 | **B13** — NEON/AdvSIMD 32 bits | 1 (decode) | ✅ **completo** — B13.1-B13.8 feitas; B13.9-B13.22 com spec |
 | **C12** — emissão JIT nativa | 2 | ✅ **completo** — C12.1 feita; C12.2-C12.10 com spec |
 | **A10** — Truffle | 3 | ✅ **completo** — A10.1 feita, A10.2 absorvida; A10.3-A10.9 com spec |
@@ -72,8 +72,7 @@ Nenhuma dependência aberta.
 
 | Task | O que | Tamanho |
 |---|---|---|
-| **[E12](trilha-e-manutencao/e12-tsv-a64-esconde-trabalho.md)** | A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE (102 de 123 linhas) | 0 de decode |
-| **[B19.5.2](trilha-b-arquiteturas/b19.5.2-curadoria-versao-por-ocorrencia-a64.md)** | Requisito de versão A64 por **ocorrência** + curadoria de 96 linhas | 0 de decode |
+| **[E12](trilha-e-manutencao/e12-tsv-a64-esconde-trabalho.md)** | A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE (~90 linhas restantes; B19.5.2 já desfez 12) | 0 de decode |
 | **[E13](trilha-e-manutencao/e13-t16-hint-space-undef-antes-v6t2.md)** | Espaço de hint T1 (Thumb 16b) UNDEF antes de v6T2 em perfil A — reverte B9.14 p/ v6K/MPCore (commit QEMU `2931a675e9d3…`). Gate `THUMB2\|\|M_PROFILE`, 14 células, código + testes. **Risco de regressão no n3dsemu (ARM11 MPCore)** — G5 dele é obrigatório | 14 células, 1 decoder |
 | **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
 | **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
@@ -82,13 +81,14 @@ Nenhuma dependência aberta.
 | **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
 | **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
 
-**Ordem sugerida**: **E12 → B19.5.2** primeiro — as duas consertam a MEDIÇÃO, e qualquer task
-de cobertura executada antes delas mede contra um denominador errado. Depois, qualquer uma. **E11
-FECHADA 2026-09-03** (revisão do QEMU fixada em `2931a675e9d3…`; ver `## Resultado` na task).
+**Ordem sugerida**: **E12** primeiro — conserta a MEDIÇÃO (a curadoria `A64` grossa da TSV), e
+qualquer task de cobertura executada antes dela mede contra um denominador errado. Depois, qualquer
+uma. **B19.5.2 FECHADA 2026-09-04** (mecanismo de versão por ocorrência + 96 linhas `_h` curadas +
+12 exclusões grossas removidas; ver `## Resultado` na task). **E11 FECHADA 2026-09-03** (revisão do
+QEMU fixada em `2931a675e9d3…`).
 
-⚠️ **E12 e B19.5.2 tocam as três `docs/COBERTURA-ISA.md`** — não rodar na mesma sessão nem em
-sessões simultâneas no mesmo checkout (regra 6). **E13** também regenera `COBERTURA-ISA.md` (mesma
-regra).
+⚠️ **E12 regenera `docs/COBERTURA-ISA.md`** — não rodar em sessões simultâneas no mesmo checkout
+(regra 6). **E13** também regenera `COBERTURA-ISA.md` (mesma regra).
 
 ### As 4 dimensões (o mapa: [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md))
 
@@ -141,7 +141,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 ### O que fechou recentemente (detalhe no `INDICE.md` de cada trilha, nunca aqui)
 
-`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `E10` · `E11` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
+`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 

@@ -300,16 +300,13 @@ VFNMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificaç�
 # ── SQDMULH/SQRDMULH (SEM o "L" de acumulação) são ARMv8.0 genuínos e FORAM implementados.
 
 # ── A64 (B8.9): extensões opcionais de AdvSIMD FP vetorial, todas posteriores ao Cortex-A53
-# ── (ARMv8.0-A) do raspi3. NÃO inclui as linhas de meia-precisão (`FEAT_FP16`) de `FADD_v`/
-# ── `FSUB_v`/`FMUL_v`/.../`FMINNMP_v` — essas instruções aparecem DUAS VEZES no inventário do QEMU
-# ── (uma linha "h"/meia-precisão, uma linha "sd"/simples-dupla, MESMO mnemônico `a64.decode`) e a
-# ── curadoria deste arquivo casa por NOME, não por linha — TSV-ar essas duas suprimiria também a
-# ── linha "sd" que a B8.9 IMPLEMENTOU. A linha "h" de cada uma fica ❌ deliberadamente (ver a task
-# ── `b8.9-a64-advsimd-fp-vetorial.md`, seção Armadilhas), sem entrada aqui.
-FMLAL_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm, "FP16 fused multiply-add long"), posterior ao Cortex-A53
-FMLSL_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
-FMLAL2_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
-FMLSL2_v	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+# ── (ARMv8.0-A) do raspi3. As linhas de MEIA PRECISÃO (`_h`/`FEAT_FP16`) e as de `FEAT_FHM`
+# ── (`FMLAL_v`/`FMLSL_v`/`FMLAL2_v`/`FMLSL2_v` e as `_vi` mais abaixo) NÃO ficam aqui: um mesmo
+# ── mnemônico tem uma linha `_h`/`_v` de feature e uma `_sd`/`_s` de ISA base, e este arquivo casa
+# ── por NOME — TSV-ar apagaria a linha base, que a B8.9 IMPLEMENTOU. Desde B19.5.2 o requisito de
+# ── versão dessas linhas vive em `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE`
+# ── (por nome+ocorrência), que as mede `·` em v8.0/v8.1 e `❌` de v8.2 em diante — trabalho
+# ── pendente no degrau cronológico certo (épico B19.5), não escondido.
 FCADD_90	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma, "complex number FP add"), posterior ao Cortex-A53
 FCADD_270	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
 FCMLA_v	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
@@ -321,17 +318,13 @@ FAMAX	A64	ARMv9.4-A/FEAT_FAMINMAX ("floating-point absolute max/min"), muito pos
 FAMIN	A64	ARMv9.4-A/FEAT_FAMINMAX, muito posterior ao Cortex-A53
 FSCALE	A64	extensão FP recente (SVE2.1/FEAT_FP8, ~ARMv9.x), muito posterior ao Cortex-A53
 
-# ── A64 (B8.10): meia-precisão (`FEAT_FP16`) de `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — aqui SEM o
-# ── problema de colisão de nome de B8.9 (`FMAXV_h`/`FMAXV_s` são mnemônicos DISTINTOS no
-# ── inventário, não o mesmo nome duas vezes), então podem entrar na TSV sem suprimir a forma "s"
-# ── implementada. ⚠️ `LUTI2`/`LUTI4` (table lookup indexado, `FEAT_LUT`/ARMv9.4-A) NÃO entram mais
-# ── aqui — decisão do usuário 2026-08-24: ARMv9 passa a ser alvo real do `virtual-arm-box`, não
-# ── "posterior ao Cortex-A53"; ficam `❌`, trabalho pendente (ver `ROADMAP.md` Trilha B, nota
-# ── atualizada). Reabre a triagem de toda exclusão ARMv8.1+/ARMv9.x anterior (ver tasks/README.md).
-FMAXNMV_h	A64	ARMv8.2-A/FEAT_FP16 (meia-precisão) — mantido excluído por ora (FP16 é opcional mesmo em núcleos ARMv9; reconferir junto com a triagem geral pós-2026-08-24)
-FMINNMV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
-FMAXV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
-FMINV_h	A64	ARMv8.2-A/FEAT_FP16 — mantido excluído por ora, ver acima
+# ── A64 (B8.10 → B19.5.2): as reduções across-lanes de meia precisão `FMAXNMV_h`/`FMINNMV_h`/
+# ── `FMAXV_h`/`FMINV_h` estavam aqui como `A64` (casava TODA coluna de versão), o que as escondia
+# ── inclusive em ARMv9.5-A. Movidas por B19.5.2 para
+# ── `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE` (`FEAT_FP16`, ARMv8.2-A):
+# ── medem `·` em v8.0/v8.1 e `❌` de v8.2 em diante. ⚠️ `LUTI2`/`LUTI4` (`FEAT_LUT`/ARMv9.4-A)
+# ── também não entram aqui — decisão do usuário 2026-08-24: ARMv9 é alvo real do `virtual-arm-box`;
+# ── ficam `❌`, trabalho pendente (ver `ROADMAP.md` Trilha B).
 
 # ── B8.11 (cripto/PAC/MTE/CPY-SET/XAR): triagem de "extensões opcionais" do plano mestre
 # ── (`b7-plano-cobertura-isa.md`). AES/SHA1/SHA256/PMULL (ARMv8-A Cryptographic Extension base,
@@ -419,10 +412,9 @@ FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
 # ── distintos no `a64.decode` real do QEMU, `_vi`/`_si`). SQRDMLAH_vi/SQRDMLSH_vi/SQRDMLAH_si/
 # ── SQRDMLSH_si: mesmo achado de B8.8 acima — implementadas e gateadas por B11.4, exclusão TSV
 # ── removida em B11.5 (o medidor por versão já sabe que são ARMv8.1-A/FEAT_RDM).
-FMLAL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
-FMLSL_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
-FMLAL2_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
-FMLSL2_vi	A64	ARMv8.2-A/FEAT_FHM (aa64_fhm), posterior ao Cortex-A53
+# ── `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` (`FEAT_FHM`) foram movidas por B19.5.2 para
+# ── `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE` (ARMv8.2-A): `·` em v8.0/v8.1,
+# ── `❌` de v8.2 em diante — o mesmo tratamento das formas `_v` mais acima.
 BFMLAL_vi	A64	ARMv8.6-A/FEAT_BF16
 FCMLA_vi	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
 
