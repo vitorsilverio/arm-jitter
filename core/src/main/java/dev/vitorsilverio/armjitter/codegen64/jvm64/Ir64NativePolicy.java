@@ -19,8 +19,11 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// **nenhum tem emissão nativa**. Os 72 que faltam — incluindo 100% do SIMD/FP vetorial — caem no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter}.
 ///
-/// Agrava porque a política é `WHOLE_BLOCK` (único modo — sem `PER_OP`/`FAIL_FAST` ainda, ver
-/// C12.2): **UMA op não suportada derruba o BLOCO INTEIRO** para o interpretador.
+/// Agravava porque a política padrão do {@code Asm64CodeEmitter} era `WHOLE_BLOCK`: **UMA op não
+/// suportada derrubava o BLOCO INTEIRO** para o interpretador. A task C12.2 deu ao emissor um
+/// segundo modo, `PER_OP` (`Asm64FallbackPolicy`), que compila as ops nativas e despacha só as
+/// demais ao interpretado — mas o DEFAULT continua `WHOLE_BLOCK` (G3), e nenhuma linha desta
+/// política passou a ser suportada nativamente por causa disso (C12.2 não move `docs/COBERTURA-JIT.md`).
 ///
 /// A escada que fecha esse gap é **C12.3-C12.6** (`tasks/trilha-c-perf/c12-plano-jit-nativo.md`);
 /// a lista medida vive em `docs/COBERTURA-JIT.md` (gerado por `./gerar-cobertura-jit.sh`), com

@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen64.jvm64;
 
+import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.jit64.CompiledBlock64;
@@ -28,6 +29,12 @@ import org.objectweb.asm.Opcodes;
 /// chamada real (o custo de acesso à memória é dinâmico). Isto NÃO inlina aritmética em locais de
 /// registrador — ver a Armadilha "não confundir backend ASM funcionando com backend ASM rápido"
 /// na spec: o ganho de performance de verdade fica para uma PR futura de registrador-cache.
+///
+/// **PER_OP (task C12.2)**: {@link #compilePerOp} compila o MESMO corpo, mas ops fora de
+/// {@link Ir64NativePolicy} despacham ao interpretado via {@link Ir64OpInterop#executeInterpreted}
+/// em vez de {@code throw}. Sem flush/reload de cache em volta da chamada — ao contrário do
+/// precedente 32-bit ({@link dev.vitorsilverio.armjitter.codegen.jvm.AsmBlockCompiler}), esta
+/// classe não tem cache de registradores (ver Javadoc acima), então não há nada para invalidar.
 public final class Ir64BlockCompiler {
     private static final String COMPILED_BLOCK_64 = "dev/vitorsilverio/armjitter/jit64/CompiledBlock64";
     private static final String AARCH64_CORE = Aarch64GuestToHostMapper.AARCH64_CORE;
@@ -36,6 +43,9 @@ public final class Ir64BlockCompiler {
     private static final String IR64_OP_REF = "L" + IR64_OP + ";";
     private static final String IR64_RUNTIME_HELPERS =
             "dev/vitorsilverio/armjitter/codegen64/jvm64/Ir64AsmRuntimeHelpers";
+    /// Alvo de `INVOKESTATIC` do ramo PER_OP (task C12.2) — ver {@link Ir64OpInterop}.
+    private static final String IR64_OP_INTEROP =
+            "dev/vitorsilverio/armjitter/codegen64/jvm64/Ir64OpInterop";
     private static final String EXECUTE_DESCRIPTOR = "(" + AARCH64_CORE_REF + ")I";
     /// As 5 exceções de controle que {@code Ir64AsmRuntimeHelpers#executeOp}/{@link #emitFetch}
     /// podem lançar — MESMO conjunto capturado por {@code Ir64BlockExecutor#executeBlock} (G1: o
@@ -74,14 +84,46 @@ public final class Ir64BlockCompiler {
     /// Referência da exceção capturada por um dos 5 handlers (`ASTORE`), usada só ali.
     private static final int LOCAL_FAULT_EXCEPTION = 6;
 
-    /// Compila `block` para uma classe que implementa {@link CompiledBlock64}.
+    /// Executor registrado com cada op de fallback PER_OP (task C12.2) — ver {@link Ir64OpInterop}
+    /// e a Armadilha 3 da spec (multiarquitetura: nunca um executor estático global).
+    private final Ir64BlockExecutor perOpExecutor;
+
+    /// Cria um compilador cujo fallback PER_OP roda sob {@link Ir64BlockExecutor#Ir64BlockExecutor()}
+    /// (arquitetura padrão) — irrelevante hoje para {@link #compile}/{@link #compilePerOp}, que não
+    /// consultam arquitetura nenhuma, mas espelha o construtor multiarquitetura do precedente
+    /// 32-bit ({@link dev.vitorsilverio.armjitter.codegen.jvm.AsmBlockCompiler}).
+    public Ir64BlockCompiler() {
+        this(new Ir64BlockExecutor());
+    }
+
+    /// Cria um compilador cujo fallback PER_OP usa o executor informado — ver {@link Ir64OpInterop}.
+    public Ir64BlockCompiler(Ir64BlockExecutor perOpExecutor) {
+        this.perOpExecutor = perOpExecutor;
+    }
+
+    /// Compila `block` para uma classe que implementa {@link CompiledBlock64}. Todas as ops devem
+    /// passar {@link Ir64NativePolicy#supports(Ir64Block)} (não verificado aqui; é responsabilidade
+    /// do chamador, mesma disciplina do 32-bit) — use {@link #compilePerOp} quando isso não vale.
     ///
     /// @param internalName nome interno (formato ASM, `a/b/C`) da classe gerada
-    /// @param block bloco IR a compilar — TODAS as ops devem passar
-    ///              {@link Ir64NativePolicy#supports(Ir64Block)} (não verificado aqui; é
-    ///              responsabilidade do chamador, mesma disciplina do 32-bit)
+    /// @param block bloco IR a compilar
     /// @return bytecode da classe gerada
     public byte[] compile(String internalName, Ir64Block block) {
+        return compile(internalName, block, false);
+    }
+
+    /// Compila `block` no modo PER_OP (task C12.2): ops fora de {@link Ir64NativePolicy} são
+    /// despachadas ao interpretado via {@link Ir64OpInterop#executeInterpreted} inline no bytecode,
+    /// em vez de exigir que TODAS as ops do bloco sejam nativas.
+    ///
+    /// @param internalName nome interno (formato ASM, `a/b/C`) da classe gerada
+    /// @param block bloco IR a compilar — pode conter ops fora de {@link Ir64NativePolicy}
+    /// @return bytecode da classe gerada
+    public byte[] compilePerOp(String internalName, Ir64Block block) {
+        return compile(internalName, block, true);
+    }
+
+    private byte[] compile(String internalName, Ir64Block block, boolean perOpFallback) {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         writer.visit(
                 Opcodes.V21,
@@ -102,7 +144,7 @@ public final class Ir64BlockCompiler {
         MethodVisitor method = writer.visitMethod(
                 Opcodes.ACC_PUBLIC, "execute", EXECUTE_DESCRIPTOR, null, null);
         method.visitCode();
-        emitBody(method, block);
+        emitBody(method, block, perOpFallback);
         method.visitMaxs(0, 0);
         method.visitEnd();
 
@@ -110,7 +152,7 @@ public final class Ir64BlockCompiler {
         return writer.toByteArray();
     }
 
-    private void emitBody(MethodVisitor mv, Ir64Block block) {
+    private void emitBody(MethodVisitor mv, Ir64Block block, boolean perOpFallback) {
         mv.visitInsn(Opcodes.ICONST_0);
         mv.visitVarInsn(Opcodes.ISTORE, LOCAL_CYCLES);
 
@@ -148,7 +190,14 @@ public final class Ir64BlockCompiler {
                     lastFetchAddress = fetch.address();
                     lastFetchSizeBytes = fetch.sizeBytes();
                 }
-                default -> emitOp(mv, op, lastFetchAddress + lastFetchSizeBytes);
+                default -> {
+                    long nextPc = lastFetchAddress + lastFetchSizeBytes;
+                    if (perOpFallback && !Ir64NativePolicy.supports(op)) {
+                        emitPerOpFallback(mv, op, nextPc);
+                    } else {
+                        emitOp(mv, op, nextPc);
+                    }
+                }
             }
         }
         mv.visitLabel(tryEnd);
@@ -249,6 +298,26 @@ public final class Ir64BlockCompiler {
         constructOp(mv, op);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, IR64_RUNTIME_HELPERS, "executeOp",
                 "(" + AARCH64_CORE_REF + IR64_OP_REF + ")Z", false);
+        emitSetProgramCounterUnlessChanged(mv, nextPc);
+    }
+
+    /// Task C12.2: `Ir64OpInterop.executeInterpreted(core, opId)` para uma op fora de
+    /// {@link Ir64NativePolicy} — mesmo contrato de saída de {@link #emitOp} (nativo): se `false`
+    /// (PC não mudou), `core.setProgramCounter(nextPc)`. Registra a op com {@link #perOpExecutor}
+    /// (Armadilha 3: nunca um executor estático global — ver {@link Ir64OpInterop}).
+    private void emitPerOpFallback(MethodVisitor mv, Ir64Op op, long nextPc) {
+        int opId = Ir64OpInterop.register(op, perOpExecutor);
+        mv.visitVarInsn(Opcodes.ALOAD, LOCAL_CORE);
+        mv.visitLdcInsn(opId);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, IR64_OP_INTEROP, "executeInterpreted",
+                "(" + AARCH64_CORE_REF + "I)Z", false);
+        emitSetProgramCounterUnlessChanged(mv, nextPc);
+    }
+
+    /// Desempilha o `boolean pcChanged` deixado por {@link #emitOp}/{@link #emitPerOpFallback} e,
+    /// se falso, materializa `core.setProgramCounter(nextPc)` — mesmo contrato do interpretador
+    /// (`Ir64BlockExecutor#executeBlock`, ramo `default`, `:237-238`).
+    private void emitSetProgramCounterUnlessChanged(MethodVisitor mv, long nextPc) {
         Label afterSetPc = new Label();
         mv.visitJumpInsn(Opcodes.IFNE, afterSetPc);
         var setProgramCounterBinding = Aarch64GuestToHostMapper.setProgramCounter();
