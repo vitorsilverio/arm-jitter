@@ -72,7 +72,6 @@ Nenhuma dependência aberta.
 
 | Task | O que | Tamanho |
 |---|---|---|
-| **[E13](trilha-e-manutencao/e13-t16-hint-space-undef-antes-v6t2.md)** | Espaço de hint T1 (Thumb 16b) UNDEF antes de v6T2 em perfil A — reverte B9.14 p/ v6K/MPCore (commit QEMU `2931a675e9d3…`). Gate `THUMB2\|\|M_PROFILE`, 14 células, código + testes. **Risco de regressão no n3dsemu (ARM11 MPCore)** — G5 dele é obrigatório | 14 células, 1 decoder |
 | **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
 | **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
 | **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode |
@@ -80,11 +79,10 @@ Nenhuma dependência aberta.
 | **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
 | **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
 
-**Ordem sugerida**: qualquer uma. **E12 FECHADA 2026-09-04** — era a que consertava a MEDIÇÃO, e o
-denominador agora é honesto (ver abaixo). **B19.5.2 FECHADA 2026-09-04**, **E11 FECHADA 2026-09-03**.
-
-⚠️ **E13 regenera `docs/COBERTURA-ISA.md`** — não rodar em sessões simultâneas no mesmo checkout
-(regra 6).
+**Ordem sugerida**: qualquer uma. **E13 FECHADA 2026-09-04** — 12 células `✅`→`·` em `v6K`/`MPCore`
+(não 14, correção de número da spec), G5 verde nos 5 consumidores incl. n3dsemu (ARM11 MPCore, sem
+regressão). **E12 FECHADA 2026-09-04** — era a que consertava a MEDIÇÃO, e o denominador agora é
+honesto (ver abaixo). **B19.5.2 FECHADA 2026-09-04**, **E11 FECHADA 2026-09-03**.
 
 ### ⚠️ A E12 mudou o denominador: números anteriores a 2026-09-04 estão obsoletos
 
