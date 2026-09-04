@@ -253,6 +253,103 @@ public final class IsaCoverageReport {
         AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_si", Aarch64Feature.RDM);
     }
 
+    /// Registra o requisito de versão de vários mnemônicos de uma vez (E12). Recusa registrar o
+    /// MESMO nome com features DIFERENTES — seria um erro de curadoria silencioso, e a última
+    /// chamada venceria sem ninguém perceber.
+    private static void require(Aarch64Feature feature, String... names) {
+        for (String name : names) {
+            Aarch64Feature previous = AARCH64_VERSION_REQUIREMENTS.put(name, feature);
+            if (previous != null && previous != feature) {
+                throw new IllegalStateException(
+                        "requisito conflitante para " + name + ": " + previous + " vs " + feature);
+            }
+        }
+    }
+
+    // ── E12 — a curadoria de versão A64 que vivia em `docs/isa-nao-aplicavel.tsv` ────────────────
+    //
+    // As 111 linhas com arquitetura `A64` daquele arquivo mediam `·` nas 16 colunas de versão,
+    // inclusive naquelas em que a feature EXISTE e a instrução é trabalho PENDENTE — porque a TSV
+    // nasceu quando o A64 era uma coluna monolítica e `isAarch64VersionColumn` (removido por esta
+    // task) fazia `A64` casar com qualquer coluna nova. Elas cobriam 134 linhas da tabela.
+    //
+    // Aqui o requisito deriva as colunas via `architecture.has(feature)`, então continua correto
+    // sozinho quando uma coluna de versão nova é acrescentada — que é a razão de esta ser a única
+    // fonte da verdade para versão A64 (mesma decisão da B19.5.2, agora aplicada ao resto).
+    //
+    // Casar por NOME é seguro para TODAS estas linhas — medido pela E12: nenhuma tem irmã de mesmo
+    // nome com célula `✅` que seria apagada, e nenhuma usava a coluna `ocorrencia` da TSV. NÃO é
+    // uma regra geral: a B19.5.2 precisou de OCORRÊNCIA porque 84 das 96 linhas `_h` dela TÊM irmã
+    // `✅` (ver `AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE`). Se esta lista mudar, remedir.
+    //
+    // `SHA512SU0`/`SM3SS1`/`SM3TT1A`/`SM3TT1B`/`SM3TT2A`/`SM3TT2B`/`SM4E` NÃO aparecem abaixo: já
+    // estavam no mapa acima, e a linha TSV correspondente era pura redundância (removida).
+    static {
+        // FEAT_CRC32 (ARMv8.1-A) — checksum CRC-32/CRC-32C sobre GPR (E12: estava escondida por uma linha `*`)
+        require(Aarch64Feature.CRC32, "CRC32", "CRC32C");
+        // FEAT_FP16 (ARMv8.2-A) — meia precisão FORA do escopo `_h` da B19.5.2 (FMOV/FCVT escalares)
+        require(Aarch64Feature.FP16, "FMOV_xh", "FMOV_hx", "FCVT_s_hs", "FCVT_s_hd", "FCVT_s_sh",
+                "FCVT_s_dh");
+        // FEAT_DotProd (ARMv8.2-A) — produto escalar SDOT/UDOT
+        require(Aarch64Feature.DOT_PRODUCT, "SDOT_v", "SDOT_vi", "UDOT_v", "UDOT_vi");
+        // FEAT_JSCVT (ARMv8.3-A) — FJCVTZS (conversão com semântica de Javascript)
+        require(Aarch64Feature.JAVASCRIPT_CONVERT, "FJCVTZS");
+        // FEAT_FCMA (ARMv8.3-A) — aritmética de número complexo (FCADD/FCMLA)
+        require(Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC, "FCADD_90", "FCADD_270", "FCMLA_v", "FCMLA_vi");
+        // FEAT_PAuth (ARMv8.3-A) — autenticação de ponteiro (formas com efeito REAL; as hint-space
+        // `PACIASP`/`AUTDZA`/… são RES NOP sem a feature e já decodificam desde B6.6.7)
+        require(Aarch64Feature.POINTER_AUTHENTICATION, "BRAZ", "BLRAZ", "RETA", "BRA", "BLRA", "ERETA",
+                "AUTDA", "XPACD", "XPACI", "LDRA");
+        // FEAT_LRCPC2 (ARMv8.4-A) — LDAPUR/STLUR (RCpc com offset imediato). `LDAPR_i` tem 6 linhas
+        // no inventário e todas as 6 são desta feature — por isso casar por nome está certo aqui.
+        require(Aarch64Feature.LRCPC2, "LDAPR_i", "STLR_i");
+        // FEAT_FRINTTS (ARMv8.5-A) — arredondamento dirigido p/ inteiro de 32/64 bits
+        require(Aarch64Feature.DIRECTED_ROUNDING_TO_INTEGRAL, "FRINT32Z_s", "FRINT32X_s", "FRINT64Z_s",
+                "FRINT64X_s", "FRINT32Z_v", "FRINT32X_v", "FRINT64Z_v", "FRINT64X_v");
+        // FEAT_MTE2 (ARMv8.5-A) — Memory Tagging Extension
+        require(Aarch64Feature.MEMORY_TAGGING, "STG", "LDG", "STZG", "ST2G", "STZ2G", "STGM", "LDGM",
+                "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS", "SETGP", "SETGM", "SETGE");
+        // FEAT_BF16 (ARMv8.6-A) — bfloat16
+        require(Aarch64Feature.BFLOAT16, "BFCVT_s", "BFDOT_v", "BFDOT_vi", "BFMMLA", "BFMLAL_vi");
+        // FEAT_I8MM (ARMv8.6-A) — matriz inteira de 8 bits
+        require(Aarch64Feature.INT8_MATRIX_MULTIPLY, "USDOT_v", "USDOT_vi", "SUDOT_vi", "SMMLA", "UMMLA",
+                "USMMLA");
+        // FEAT_MOPS (ARMv8.8-A) — memcpy/memset acelerados
+        require(Aarch64Feature.MEMORY_COPY_SET, "CPYE", "CPYM", "CPYP", "SETP", "SETM", "SETE", "CPYFP",
+                "CPYFM", "CPYFE");
+        // FEAT_CSSC (ARMv8.9-A) — Common Short Sequence Compression
+        require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "SMAX", "SMIN", "UMAX", "UMIN");
+        // FEAT_SME (ARMv9.2-A) — MSR SVCR (estado streaming-SVE/ZA)
+        require(Aarch64Feature.SCALABLE_MATRIX_EXTENSION, "MSR_i_SVCR");
+        // FEAT_GCS (ARMv9.4-A) — Guarded Control Stack
+        require(Aarch64Feature.GUARDED_CONTROL_STACK, "GCSSTR");
+        // FEAT_FAMINMAX (ARMv9.4-A) — máximo/mínimo de valor absoluto
+        require(Aarch64Feature.FP_ABSOLUTE_MAX_MIN, "FAMAX", "FAMIN");
+        // FEAT_LSE128 (Armv9.4-A) — atômicos de 128 bits. ⚠️ a TSV dizia `ARMv8.9-A`: ERRADO, e a
+        // diferença é observável porque `ARMV9_4_A` estende `ARMV8_9_A`.
+        require(Aarch64Feature.LSE128, "LDCLRP", "LDSETP", "SWPP");
+        // FEAT_FP8 (Armv9.5-A) — conversão/escala fp8. `FSCALE` tem 2 linhas (`@qrrr_h`/`@qrrr_sd`),
+        // as duas desta feature.
+        require(Aarch64Feature.FP8, "FSCALE");
+        // FEAT_FP8DOT2 (Armv9.5-A) — produto escalar fp8 2 vias → f16 (a TSV dizia `FEAT_F8DP2`,
+        // nome inventado)
+        require(Aarch64Feature.FP8_DOT_PRODUCT_2WAY, "FDOT_hb_v", "FDOT_hb_vi");
+        // FEAT_FP8DOT4 (Armv9.5-A) — produto escalar fp8 4 vias → f32 (a TSV dizia `FEAT_F8DP4`)
+        require(Aarch64Feature.FP8_DOT_PRODUCT_4WAY, "FDOT_sb_v", "FDOT_sb_vi");
+        // FEAT_CMPBR (ARMv9.5-A) — CB<cc> compare-and-branch condicional
+        require(Aarch64Feature.COMPARE_AND_BRANCH, "CB_cond", "CB_cond_imm");
+        // FEAT_FPRCVT (Armv9.6-A) — conversão FP↔int só em registrador SIMD&FP escalar. Nenhum
+        // preset declara esta feature (a tabela vai até ARMv9.5-A) ⇒ `·` nas 16 colunas, pelo
+        // mecanismo certo: viram `❌` sozinhas quando existir uma coluna ARMv9.6-A.
+        require(Aarch64Feature.FP_INTEGER_CONVERT_SCALAR, "SCVTF_simd", "UCVTF_simd", "FCVTAS_g_simd",
+                "FCVTAU_g_simd", "FCVTMS_g_simd", "FCVTMU_g_simd", "FCVTNS_g_simd", "FCVTNU_g_simd",
+                "FCVTPS_g_simd", "FCVTPU_g_simd", "FCVTZS_g_simd", "FCVTZU_g_simd");
+        // FEAT_F8F16MM (Armv9.6-A) — matriz fp8 → f16 (a TSV dizia `FEAT_F8MM8`, nome inventado)
+        require(Aarch64Feature.FP8_MATRIX_MULTIPLY_FP16, "FMMLA_hb");
+        // FEAT_F8F32MM (Armv9.6-A) — matriz fp8 → f32 (a TSV dizia `FEAT_F8MM4`, nome inventado)
+        require(Aarch64Feature.FP8_MATRIX_MULTIPLY_FP32, "FMMLA_sb");
+    }
+
     /// Requisito de versão A64 casado por **(NOME, OCORRÊNCIA)** — a chave é `"NOME#n"`, onde `n` é
     /// a posição 1-based da linha entre as de mesmo nome no inventário `a64.decode` (a MESMA
     /// ocorrência que {@link #appendGroup} já computa para as exclusões da TSV). É o espelho A64 da
@@ -335,22 +432,6 @@ public final class IsaCoverageReport {
                 "FMLSL2_vi");
     }
 
-    /// `docs/COBERTURA-ISA.md` pré-B11.5 tratava A64 como uma única coluna chamada `A64` — vários
-    /// `docs/isa-nao-aplicavel.tsv` legados usam essa string. Para não reescrever essas linhas,
-    /// uma exclusão `A64` casa com QUALQUER coluna de versão A64 nova (uma extensão sem entrada em
-    /// {@link #AARCH64_VERSION_REQUIREMENTS} — ainda não mapeada por versão real — fica de fora de
-    /// toda a tabela por versão, igual ficava fora da coluna monolítica antiga).
-    ///
-    /// **Curadoria de versão A64 POR LINHA não passa mais por aqui** (B19.5.2): quando uma linha
-    /// específica de um mnemônico exige uma feature (o caso `_h`/`FEAT_FP16`), o requisito vive em
-    /// {@link #AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE}, que deriva as colunas via
-    /// `architecture.has(feature)` e continua correto sozinho quando uma coluna de versão nova é
-    /// acrescentada — ao contrário de uma linha `A64` na TSV, que fica `·` até em versões que nem
-    /// existiam quando foi escrita.
-    static boolean isAarch64VersionColumn(String column) {
-        return AARCH64_ARCHITECTURES.containsKey(column);
-    }
-
     /// Campos que são NÚMERO DE REGISTRADOR: preenchidos com valores baixos e distintos para não
     /// cair em `r15`/`UNPREDICTABLE`, que muitos encodings rejeitam legitimamente.
     private static final List<String> REGISTER_FIELDS = List.of(
@@ -402,14 +483,25 @@ public final class IsaCoverageReport {
     /// (formato legado, mantido para as linhas existentes que não precisam distinguir).
     private record Exclusion(String pattern, List<String> architectures, String reason, String grupo,
                               String ocorrencia) {
+        /// **A porta que a E12 fechou**: até ela, uma exclusão com arquitetura `A64` casava com
+        /// QUALQUER uma das 16 colunas de versão A64 (via um `isAarch64VersionColumn` que existia só
+        /// por compatibilidade com a tabela monolítica pré-B11.5). O efeito era esconder trabalho
+        /// pendente exatamente nas versões em que a feature EXISTE — 134 linhas da tabela. Hoje
+        /// `A64` casa apenas a coluna monolítica LITERAL `A64`, que é o que `sve.decode`/
+        /// `sme.decode` usam (grupos `NOT_IN_ANY_PRESET`, nada decodifica ainda).
+        ///
+        /// Curadoria de versão A64 vive em {@link #AARCH64_VERSION_REQUIREMENTS} (por nome) e em
+        /// {@link #AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE} (por linha) — nunca aqui. O
+        /// `IsaCoverageReportA64CurationGuardTest` falha se uma linha de TSV nova voltar a excluir
+        /// um mnemônico de `a64.decode` numa coluna de versão, por `A64` **ou por `*`** (os dois
+        /// mecanismos que a E12 encontrou).
         boolean matches(String instruction, String column, String decodeFile, int occurrence) {
             boolean nameMatches = pattern.endsWith("*")
                     ? instruction.startsWith(pattern.substring(0, pattern.length() - 1))
                     : pattern.startsWith("*")
                         ? instruction.endsWith(pattern.substring(1))
                         : instruction.equals(pattern);
-            boolean columnMatches = architectures.contains("*") || architectures.contains(column)
-                    || (architectures.contains("A64") && isAarch64VersionColumn(column));
+            boolean columnMatches = architectures.contains("*") || architectures.contains(column);
             boolean groupMatches = grupo.isEmpty() || grupo.equals(decodeFile);
             boolean occurrenceMatches = ocorrencia.isEmpty() || ocorrencia.equals(Integer.toString(occurrence));
             return nameMatches && columnMatches && groupMatches && occurrenceMatches;
@@ -531,10 +623,16 @@ public final class IsaCoverageReport {
                 | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
                 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
 
-                **`⚠️` hoje não ocorre em nenhuma célula** — as ocorrências antigas (`VMOV_half`
-                em MPCore/v7-A) foram eliminadas pela B22.2. O símbolo permanece documentado
-                de propósito: nomear esse estado é o que o invariante G8 exige, e ele pode voltar a
-                acontecer ao abrir um novo espaço de encoding.
+                **`⚠️` voltou a ocorrer na E12**, e a previsão de que ele voltaria "ao abrir um novo
+                espaço de encoding" se cumpriu de um jeito inesperado: não por encoding novo, mas por
+                **parar de esconder** encodings que o decoder A64 já reivindicava errado. 10 linhas
+                (`LDRA`, `SETGP`/`SETGM`/`SETGE`, `CPYP`/`CPYM`/`CPYE`, `FAMAX`/`FAMIN`/`FSCALE`)
+                estavam em `docs/isa-nao-aplicavel.tsv` medindo `·` nas 16 colunas; ao migrar a
+                curadoria para o mapa de versão elas mediriam `✅`, e a sondagem direta mostrou que o
+                decoder devolve OUTRA instrução (`FpLoadLiteral64`, `SystemInstruction[NOP_HINT]`,
+                `VectorInsert*`). São dívida do invariante **G8**, listadas em
+                `IsaCoverageReport.AARCH64_MISDECODED`. As ocorrências antigas de 32 bits
+                (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
 
                 **O que ✅ NÃO significa:** que a semântica está certa. `STREX` (E3) e `LDR/STR` alinhado
                 (F3) decodificavam e estavam errados. Esta tabela elimina "não suporta" da lista de
@@ -595,7 +693,7 @@ public final class IsaCoverageReport {
                 globalPerArchitecture.computeIfAbsent(column, unused -> new int[2])[1]++;
                 totalApplicable++;
                 Status status = aarch64
-                        ? probeAarch64(instruction, aarch64Architecture)
+                        ? probeAarch64(instruction, occurrence, aarch64Architecture)
                         : probeArm(instruction, architecture, group);
                 if (status == Status.SUPPORTED) {
                     supportedPerColumn.merge(column, 1, Integer::sum);
@@ -714,10 +812,52 @@ public final class IsaCoverageReport {
         }
     }
 
+    /// Linhas do inventário A64 cujo encoding o `Aarch64Decoder` REIVINDICA mas decodifica como
+    /// **outra instrução** — dívida do invariante **G8**, medida pela E12. Chave `"NOME#ocorrência"`.
+    ///
+    /// Elas medem `⚠️`, não `✅`: o símbolo existe desde a E5 exatamente para isto ("decodifica como
+    /// OUTRA coisa … não é suporte — é o decoder não sabendo recusar"), e o cabeçalho da tabela já
+    /// previa que ele voltasse a ocorrer "ao abrir um novo espaço de encoding". `⚠️` conta no
+    /// denominador e NÃO no numerador, igual a `❌` — é trabalho pendente.
+    ///
+    /// **Como a E12 as encontrou**: as 10 estavam em `docs/isa-nao-aplicavel.tsv` com arquitetura
+    /// `A64`, medindo `·` nas 16 colunas. Ao migrar a curadoria para o mapa de versão, elas
+    /// passariam a medir `✅` — um falso positivo PIOR que o `·` anterior, porque afirmaria trabalho
+    /// concluído. A sondagem direta mostrou o que o decoder devolve de verdade (a classe citada em
+    /// cada linha abaixo).
+    ///
+    /// **Isto NÃO é uma exclusão** (regra máxima do `tasks/README.md`): a instrução continua contando
+    /// como falta, e a entrada some sozinha do relatório quando alguém consertar o decoder —
+    /// `IsaCoverageReportA64CurationGuardTest` falha se uma destas voltar a decodificar de verdade,
+    /// obrigando a remover a linha.
+    static final Map<String, String> AARCH64_MISDECODED = new LinkedHashMap<>();
+
+    static {
+        // `FEAT_PAuth` (ARMv8.3-A): `LDRAA`/`LDRAB` caem no catch-all de hint-space.
+        AARCH64_MISDECODED.put("LDRA#1", "SystemInstruction[NOP_HINT]");
+        // `FEAT_MTE2` (ARMv8.5-A) e `FEAT_MOPS` (ARMv8.8-A): mesma classe de bug que a B11.3
+        // corrigiu para o `LDR (literal)` INTEIRO (`LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`) — sobrou
+        // o caminho de literal de PONTO FLUTUANTE.
+        AARCH64_MISDECODED.put("SETGP#1", "FpLoadLiteral64");
+        AARCH64_MISDECODED.put("SETGM#1", "FpLoadLiteral64");
+        AARCH64_MISDECODED.put("SETGE#1", "FpLoadLiteral64");
+        AARCH64_MISDECODED.put("CPYP#1", "FpLoadLiteral64");
+        AARCH64_MISDECODED.put("CPYM#1", "FpLoadLiteral64");
+        AARCH64_MISDECODED.put("CPYE#1", "FpLoadLiteral64");
+        // `FEAT_FAMINMAX` (ARMv9.4-A) e `FEAT_FP8` (Armv9.5-A): a 1ª ocorrência colide com o espaço
+        // de `INS`/`MOV` vetorial. A 2ª ocorrência de cada uma já mede `❌` honestamente.
+        AARCH64_MISDECODED.put("FAMAX#1", "VectorInsertGeneral");
+        AARCH64_MISDECODED.put("FAMIN#1", "VectorInsertElement");
+        AARCH64_MISDECODED.put("FSCALE#1", "VectorInsertElement");
+    }
+
     /// `architecture` é `null` para os grupos A64 não versionados ainda (`sve.decode`/
     /// `sme.decode`, ver {@link #appendGroup}) — nesse caso usa o decoder default (B11.2:
     /// equivalente a `ARMV8_0_A`, mesmo comportamento de antes de B11.5).
-    private static Status probeAarch64(DecodeTreeSpec.Instruction instruction, Aarch64Architecture architecture) {
+    ///
+    /// `occurrence` serve só para consultar {@link #AARCH64_MISDECODED} — ver o Javadoc de lá.
+    private static Status probeAarch64(DecodeTreeSpec.Instruction instruction, int occurrence,
+                                        Aarch64Architecture architecture) {
         Aarch64Decoder decoder = architecture == null ? new Aarch64Decoder() : new Aarch64Decoder(architecture);
         for (int[] strategy : FILL_STRATEGIES) {
             int word = encode(instruction, strategy);
@@ -725,7 +865,9 @@ public final class IsaCoverageReport {
                 TestAddressSpace raw = new TestAddressSpace(8);
                 raw.put32(0, word);
                 if (decoder.decode(AddressSpace64.wrapping(raw), 0) != null) {
-                    return Status.SUPPORTED;
+                    return AARCH64_MISDECODED.containsKey(instruction.name() + "#" + occurrence)
+                            ? Status.FALLBACK
+                            : Status.SUPPORTED;
                 }
             } catch (RuntimeException e) {
                 // `unsupported`: encoding fora da fatia implementada — tenta a próxima estratégia.

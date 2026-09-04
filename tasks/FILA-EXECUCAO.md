@@ -72,7 +72,6 @@ Nenhuma dependência aberta.
 
 | Task | O que | Tamanho |
 |---|---|---|
-| **[E12](trilha-e-manutencao/e12-tsv-a64-esconde-trabalho.md)** | A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE (~90 linhas restantes; B19.5.2 já desfez 12) | 0 de decode |
 | **[E13](trilha-e-manutencao/e13-t16-hint-space-undef-antes-v6t2.md)** | Espaço de hint T1 (Thumb 16b) UNDEF antes de v6T2 em perfil A — reverte B9.14 p/ v6K/MPCore (commit QEMU `2931a675e9d3…`). Gate `THUMB2\|\|M_PROFILE`, 14 células, código + testes. **Risco de regressão no n3dsemu (ARM11 MPCore)** — G5 dele é obrigatório | 14 células, 1 decoder |
 | **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
 | **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
@@ -81,14 +80,24 @@ Nenhuma dependência aberta.
 | **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
 | **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
 
-**Ordem sugerida**: **E12** primeiro — conserta a MEDIÇÃO (a curadoria `A64` grossa da TSV), e
-qualquer task de cobertura executada antes dela mede contra um denominador errado. Depois, qualquer
-uma. **B19.5.2 FECHADA 2026-09-04** (mecanismo de versão por ocorrência + 96 linhas `_h` curadas +
-12 exclusões grossas removidas; ver `## Resultado` na task). **E11 FECHADA 2026-09-03** (revisão do
-QEMU fixada em `2931a675e9d3…`).
+**Ordem sugerida**: qualquer uma. **E12 FECHADA 2026-09-04** — era a que consertava a MEDIÇÃO, e o
+denominador agora é honesto (ver abaixo). **B19.5.2 FECHADA 2026-09-04**, **E11 FECHADA 2026-09-03**.
 
-⚠️ **E12 regenera `docs/COBERTURA-ISA.md`** — não rodar em sessões simultâneas no mesmo checkout
-(regra 6). **E13** também regenera `COBERTURA-ISA.md` (mesma regra).
+⚠️ **E13 regenera `docs/COBERTURA-ISA.md`** — não rodar em sessões simultâneas no mesmo checkout
+(regra 6).
+
+### ⚠️ A E12 mudou o denominador: números anteriores a 2026-09-04 estão obsoletos
+
+A E12 tirou de `docs/isa-nao-aplicavel.tsv` 111 linhas que escondiam **134 linhas da tabela A64** nas
+16 colunas de versão, e reescopou 2 linhas `*` que escondiam mais 9. O denominador global cresceu
+**1240 células** e o **global caiu de 89% para 84%** — revelação de trabalho, não regressão
+(precedentes B9.11 e B19.5.2). Duas consequências para quem for planejar:
+
+1. **`⚠️` voltou a existir na tabela** (66 células): ao parar de esconder, descobriu-se que 10
+   mnemônicos que mediriam `✅` na verdade **misdecodificam** (G8) — `CPY*`/`SETG*` viram
+   `FpLoadLiteral64`, `LDRA` vira `NOP_HINT`, `FAMAX`/`FAMIN`/`FSCALE` viram `VectorInsert*`. Isso
+   virou **task nova** (ver "O que ainda precisa de spec").
+2. **`SEVL` ganhou 16 células `✅`** que a TSV apagava — a tabela também estava SUB-reportando.
 
 ### As 4 dimensões (o mapa: [`ROADMAP-100-ARM.md`](ROADMAP-100-ARM.md))
 
@@ -96,7 +105,7 @@ Um `✅` em `docs/COBERTURA-ISA.md` **não** significa que algum backend compile
 
 | # | Dimensão | Onde se mede | Estado |
 |---|---|---|---|
-| 1 | Decode + interpretado | `docs/COBERTURA-ISA.md` | **89%** · A64 `ARMv8.0-A` 88% (850/960) |
+| 1 | Decode + interpretado | `docs/COBERTURA-ISA.md` | **84%** (pós-E12) · A64 `ARMv8.0-A` 97% (851/877) · `ARMv9.5-A` 77% (891/1146) |
 | 2 | Emissão JIT nativa | `docs/COBERTURA-JIT.md` | ASM 32 **37 ✅ + 9 ⚠️ / 77** · ASM 64 **24/96** |
 | 3 | Truffle | `docs/COBERTURA-JIT.md` | 32 bits **40/77** · 64 bits **0/96** (não existe) |
 | 4 | Catálogo de processadores | — | downstream de 1 |
@@ -112,10 +121,15 @@ Um `✅` em `docs/COBERTURA-ISA.md` **não** significa que algum backend compile
    a manchete da B22.6 continua verdadeira, agora ancorada na revisão. O gap de *gating* que o
    commit expôs (espaço de hint T1 INTEIRO é v6T2+ em perfil A — reverte a B9.14 para v6K/MPCore)
    virou a task **E13**.
-2. **A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE.** `isAarch64VersionColumn` faz
-   TODA linha com arquitetura `A64` casar as 16 colunas de versão; **102 das 123** citam uma versão
-   ≥ ARMv8.1-A. É por isso que BF16 (6 de 8), I8MM (6 de 6), FHM (8 de 8) e cripto (7 de 13) estão
-   invisíveis hoje. Quase todas as features já têm constante. ⇒ **E12**.
+2. ~~**A curadoria `A64` da TSV esconde trabalho onde a feature EXISTE.**~~ **RESOLVIDO pela E12
+   (2026-09-04)** — e a spec da E12 estava **errada em 3 pontos**, corrigidos por re-medição antes de
+   executar: eram **111** linhas `A64` (não 123) atingindo **134** da tabela; **8** features sem
+   constante (não 2); e havia um **segundo mecanismo** de esconderijo que a spec não citava (linhas
+   com arquitetura `*`, que apagavam até 16 células `✅` REAIS de `SEVL`). `isAarch64VersionColumn`
+   foi removido e `IsaCoverageReportA64CurationGuardTest` fecha as duas portas. **Lição registrada**:
+   a spec v1 mediu por amostragem do TEXTO das justificativas em vez de contra a tabela — é o mesmo
+   erro que o rodapé desta seção já alertava ("escrever spec sem medir"), e a sessão de execução
+   acertou ao PARAR e reportar em vez de forçar os números.
 3. **A escada do B19 tinha 4 grupos sem dono**, achados ao classificar as 116 linhas `❌`: cripto
    SHA-512/SM3/SM4 (13, no MESMO prefixo `0xCE` que a B11.12 abriu e deixou pela metade), `FEAT_FP8`
    (12, a única sem constante em `Aarch64Feature`), `FEAT_I8MM` (6) e `FEAT_FHM` (8, feature própria
@@ -141,7 +155,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 ### O que fechou recentemente (detalhe no `INDICE.md` de cada trilha, nunca aqui)
 
-`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
+`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11` · `E12` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 
@@ -157,10 +171,25 @@ Os **7 épicos em `📋 plano`**, que nunca tiveram escada medida — **~84 degr
 | [B20](trilha-b-arquiteturas/b20-plano-perfil-r.md) | Perfil R (PMSA/MPU) | 9 |
 | [B21](trilha-b-arquiteturas/b21-plano-arm-26-bits.md) | ARMv1-ARMv3, modelo de 26 bits | 8 |
 
-Mais: a task irmã **"NEON FP16 AArch32"** (registrada por B13.6/B13.8/B13.11/B13.13), os grupos que a
-**E12** vai revelar (`FEAT_PAuth`, `FEAT_MTE2`, `FEAT_MOPS`, `FEAT_FRINTTS`, `FEAT_CSSC`, …), os
-**9 `⚠️` condicionais** de 32 bits (registrados pela C12.7), o **cache de registradores do
-`Ir64BlockCompiler`** (dívida da B6.4) e a task de fechamento do catálogo de processadores.
+Mais: a task irmã **"NEON FP16 AArch32"** (registrada por B13.6/B13.8/B13.11/B13.13), os **9 `⚠️`
+condicionais** de 32 bits (registrados pela C12.7), o **cache de registradores do `Ir64BlockCompiler`**
+(dívida da B6.4) e a task de fechamento do catálogo de processadores.
+
+**Duas tasks NOVAS que a E12 mediu e não executou** (ela era zero-decode):
+
+1. **Misdecode A64 / dívida G8** — 10 linhas, 66 células `⚠️`, repro determinístico em
+   `IsaCoverageReport.AARCH64_MISDECODED`: `CPYP`/`CPYM`/`CPYE`/`SETGP`/`SETGM`/`SETGE` decodificam
+   como `FpLoadLiteral64` (a **mesma classe de bug que a B11.3 corrigiu** para o `LDR (literal)`
+   INTEIRO — sobrou o caminho de ponto flutuante), `LDRA` cai no catch-all de hint-space, e
+   `FAMAX`/`FAMIN`/`FSCALE` colidem com o espaço de `INS`/`MOV` vetorial.
+2. **Coluna `ARMv9.6-A`** — `FEAT_FPRCVT`, `FEAT_F8F16MM` e `FEAT_F8F32MM` já existem como constante
+   (14 linhas do inventário) e nenhum preset as declara. Criar a coluna exige auditar TODAS as
+   features contra a v9.6 e muda o denominador global.
+
+**Os grupos que a E12 revelou** e seguem sem degrau no B19: `FEAT_MTE2` (26 linhas), `FEAT_PAuth`
+(10), `FEAT_MOPS` (9), `FEAT_CRC32` (8, novo), `FEAT_FRINTTS` (8), `FEAT_LRCPC2` (7), família FP8 (7),
+`FEAT_FCMA` (6), `FEAT_I8MM` (6), `FEAT_BF16` (5), `FEAT_CSSC` (5), `FEAT_CMPBR` (5), `FEAT_DotProd`
+(4), `FEAT_LSE128` (3).
 
 **Escrever spec sem medir é o erro que esta rodada pegou três vezes** (o inventário FP16 errava por 4
 linhas e misturava 5 features; a escada do B19 tinha 4 grupos sem dono; a do C12, 8 `Kind`). Cada

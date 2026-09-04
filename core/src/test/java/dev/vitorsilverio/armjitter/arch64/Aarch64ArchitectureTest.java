@@ -15,14 +15,50 @@ class Aarch64ArchitectureTest {
     }
 
     @Test
-    void armv81aAddsRdmLseAndPan() {
+    void armv81aAddsRdmLseePanAndCrc32() {
         assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.RDM));
         assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.LSE));
         assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.PAN));
+        // E12: `FEAT_CRC32` é opcional em ARMv8.0-A e obrigatória aqui — mesmo padrão de `FEAT_LSE`.
+        assertTrue(Aarch64Architecture.ARMV8_1_A.has(Aarch64Feature.CRC32));
+        assertFalse(Aarch64Architecture.ARMV8_0_A.has(Aarch64Feature.CRC32), "opcional em ARMv8.0-A");
         for (Aarch64Feature feature : Aarch64Feature.values()) {
-            if (feature != Aarch64Feature.RDM && feature != Aarch64Feature.LSE && feature != Aarch64Feature.PAN) {
+            if (feature != Aarch64Feature.RDM && feature != Aarch64Feature.LSE
+                    && feature != Aarch64Feature.PAN && feature != Aarch64Feature.CRC32) {
                 assertFalse(Aarch64Architecture.ARMV8_1_A.has(feature), feature + " must not be on ARMv8.1-A yet");
             }
+        }
+    }
+
+    /// E12: `FEAT_LSE128` é **Armv9.4-A**, não `ARMv8.9-A` como `docs/isa-nao-aplicavel.tsv`
+    /// afirmava. Como `ARMV9_4_A` estende `ARMV8_9_A`, a diferença é observável.
+    @Test
+    void armv94aAddsLse128WhichArmv89aDoesNotHave() {
+        assertTrue(Aarch64Architecture.ARMV9_4_A.has(Aarch64Feature.LSE128));
+        assertFalse(Aarch64Architecture.ARMV8_9_A.has(Aarch64Feature.LSE128),
+                "a TSV dizia ARMv8.9-A; a versão real é Armv9.4-A");
+    }
+
+    /// E12: a família FP8 (`FEAT_FP8`/`FEAT_FP8DOT2`/`FEAT_FP8DOT4`) entra em Armv9.5-A.
+    @Test
+    void armv95aAddsTheFp8Family() {
+        assertTrue(Aarch64Architecture.ARMV9_5_A.has(Aarch64Feature.FP8));
+        assertTrue(Aarch64Architecture.ARMV9_5_A.has(Aarch64Feature.FP8_DOT_PRODUCT_2WAY));
+        assertTrue(Aarch64Architecture.ARMV9_5_A.has(Aarch64Feature.FP8_DOT_PRODUCT_4WAY));
+        assertFalse(Aarch64Architecture.ARMV9_4_A.has(Aarch64Feature.FP8));
+    }
+
+    /// E12: as 3 features Armv9.6-A existem como constante mas NENHUM preset as declara — a tabela
+    /// de cobertura vai só até `ARMv9.5-A`. Elas medem `·` nas 16 colunas pelo mecanismo certo, e
+    /// viram `❌` sozinhas no dia em que existir uma coluna `ARMv9.6-A`.
+    @Test
+    void armv96aFeaturesAreDeclaredByNoArchitectureYet() {
+        for (Aarch64Feature feature : new Aarch64Feature[] {
+                Aarch64Feature.FP_INTEGER_CONVERT_SCALAR,
+                Aarch64Feature.FP8_MATRIX_MULTIPLY_FP16,
+                Aarch64Feature.FP8_MATRIX_MULTIPLY_FP32}) {
+            assertFalse(Aarch64Architecture.ARMV9_5_A.has(feature),
+                    feature + " é Armv9.6-A: nenhum preset modelado pode declará-la");
         }
     }
 

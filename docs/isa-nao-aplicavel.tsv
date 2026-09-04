@@ -25,6 +25,30 @@
 # Esta lista é CURADA À MÃO e cresce por triagem: cada task de cobertura que encontrar uma
 # instrução fora da arquitetura-alvo acrescenta a linha com a justificativa. Só entram aqui casos
 # com fonte — na dúvida, a instrução fica como ❌ e vira trabalho, que é o lado seguro do erro.
+#
+# ⚠️ REGRA NOVA (E12, 2026-09-04) — CURADORIA DE VERSÃO A64 NÃO VIVE MAIS AQUI.
+#
+#   Este arquivo diz "esta instrução NÃO PERTENCE a esta arquitetura". A tabela A64 tem 16 colunas
+#   de VERSÃO (`ARMv8.0-A`...`ARMv9.5-A`), e uma linha daqui não sabe derivar "existe a partir da
+#   versão X" — ela simplesmente apaga a instrução das colunas que casa. O resultado era esconder
+#   trabalho pendente exatamente nas versões em que a feature EXISTE:
+#
+#     * 111 linhas usavam a arquitetura `A64`, que casava com TODAS as 16 colunas (134 linhas da
+#       tabela ficavam `·` até em `ARMv9.5-A`);
+#     * 2 linhas usavam `*` e alcançavam as colunas A64 por tabela — inclusive apagando 16 células
+#       `✅` REAIS de `SEVL`, que o A64 já implementa.
+#
+#   Hoje o requisito de versão A64 vive em `IsaCoverageReport`, que deriva cada coluna via
+#   `architecture.has(feature)` e continua correto sozinho quando uma versão nova é acrescentada:
+#     - `AARCH64_VERSION_REQUIREMENTS`               — por NOME de mnemônico;
+#     - `AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE` — por (nome, ocorrência), quando um mesmo
+#       mnemônico tem uma linha de feature e outra de ISA base (o caso `_h`/`FEAT_FP16`, B19.5.2).
+#
+#   Uma linha com arquitetura `A64` casa APENAS a coluna monolítica literal `A64` (a de
+#   `sve.decode`/`sme.decode`). `IsaCoverageReportA64CurationGuardTest` FALHA se uma linha nova
+#   voltar a excluir um mnemônico de `a64.decode` numa das 16 colunas de versão, por qualquer um
+#   dos dois mecanismos. Para curar uma instrução A64 por versão, acrescente a feature em
+#   `Aarch64Feature`/`Aarch64Architecture` e a entrada no mapa — não uma linha aqui.
 
 # ── ARMv8-A: instruções de aquisição/liberação (load-acquire / store-release) ─────────────────
 LDA	*	ARMv8-A (load-acquire); não existe em ARMv4T..ARMv7-A
@@ -43,7 +67,7 @@ STLEXH	*	ARMv8-A (store-release exclusive)
 STLEXD*	*	ARMv8-A (store-release exclusive); `*` casa também `STLEXD_t32` (inventário do t32.decode)
 
 # ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
-CRC32*	*	ARMv8-A; não existe em ARMv4T..ARMv7-A
+CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
 VRINTR*	*	ARMv8-A (VFP)
@@ -59,7 +83,7 @@ BXNS	*	ARMv8-M Security Extension
 BLXNS	*	ARMv8-M Security Extension
 
 # ── ARMv8-A ─────────────────────────────────────────────────────────────────────────────────
-SEVL	*	ARMv8-A (hint "send event local")
+SEVL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (hint "send event local"). E12: arquitetura era `*` e alcançava as 16 colunas A64, onde SEVL é ISA BASE e JÁ É IMPLEMENTADO (Aarch64Decoder, B6.6.7/B8.3) — a linha apagava 16 células ✅ reais
 # ── B22.1: `HLT` (Halting debug) é ARMv8-A (perfil A) / ARMv8-M (perfil M), ARM DDI 0487 — ────
 # ── posterior a TODOS os presets de 32 bits atuais (v4T..v7-A, v6-M, v7-M). O decoder passa a
 # ── reconhecer o encoding e a recusá-lo por gate (`ArmFeature.HALT`, sem preset); `grupo`
@@ -71,32 +95,18 @@ HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bit
 VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje
 
 # ── A64, "Data-processing (1/2 source)": FEAT_CSSC (ARMv8.9-A) — posterior ao escopo da B8.2 ──
-CTZ	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (1 source)")
-SMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
-SMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
-UMAX	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
-UMIN	A64	ARMv8.9-A/FEAT_CSSC (forma escalar GPR, "Data-processing (2 source)")
 
 # ── A64, "Branch/Exception/System" (B8.3): FEAT_CMPBR (Armv9.5-A) — compare-and-branch ────────
 # ── condicional, posterior ao Cortex-A53 do raspi3 (Armv8.0-A, alvo primário desta frente).
-CB_cond	A64	Armv9.5-A/FEAT_CMPBR ("CB<cc>", compare and branch condicional)
-CB_cond_imm	A64	Armv9.5-A/FEAT_CMPBR ("CB<cc>", compare-immediate and branch condicional)
 
 # ── A64, "Branch/Exception/System" (B8.3): FEAT_PAuth (ARMv8.3-A) — formas de branch com ──────
 # ── autenticação de ponteiro, posterior ao Cortex-A53 do raspi3 (ARMv8.0-A). As formas "hint"
 # ── (PACIA1716/PACIASP/...) já decodificam como NOP desde B6.6.7 (RES NOP mesmo sem FEAT_PAuth,
 # ── ARM DDI 0487 C6.2.132) — só as formas de BRANCH REAL ficam de fora aqui.
-BRAZ	A64	ARMv8.3-A/FEAT_PAuth ("BRAAZ"/"BRABZ", branch com chave de autenticação zero)
-BLRAZ	A64	ARMv8.3-A/FEAT_PAuth ("BLRAAZ"/"BLRABZ", branch-and-link com chave de autenticação zero)
-RETA	A64	ARMv8.3-A/FEAT_PAuth ("RETAA"/"RETAB", return com autenticação)
-BRA	A64	ARMv8.3-A/FEAT_PAuth ("BRAA"/"BRAB", branch com registrador modificador)
-BLRA	A64	ARMv8.3-A/FEAT_PAuth ("BLRAA"/"BLRAB", branch-and-link com registrador modificador)
-ERETA	A64	ARMv8.3-A/FEAT_PAuth ("ERETAA"/"ERETAB", exception return com autenticação)
 
 # ── A64, "System" (B8.3): FEAT_SME — `SVCR` controla o estado de streaming-SVE/ZA, que não ────
 # ── existe sem SME nenhum implementado (mesma decisão já registrada para o grupo SVE/SME
 # ── inteiro em docs/COBERTURA-ISA.md, "não se aplica a nenhum preset atual").
-MSR_i_SVCR	A64	ARMv9.2-A/FEAT_SME ("MSR SVCR, #imm" — controla estado de streaming-SVE/ZA)
 
 # -- VFP (B9.5): conversao de/para meia precisao (extensao opcional de VFPv3, aa32_fp16_spconv/
 # -- aa32_fp16_dpconv no QEMU real) e BFloat16 (ARMv8.6). Conferido em
@@ -153,39 +163,15 @@ SMMLSR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 # ── extensão OPCIONAL (ARMv8.2-A), CONFERIDA em `fp_access_check_scalar_hsd` real do QEMU ─────
 # ── (`translate-a64.c`: qualquer operando `MO_16` exige `dc_isar_feature(aa64_fp16, s)`), o ───
 # ── Cortex-A53 do Raspberry Pi 3 não a tem.
-FMOV_xh	A64	ARMv8.2-A/FEAT_FP16 (move Xd<-Vn meia-precisão)
-FMOV_hx	A64	ARMv8.2-A/FEAT_FP16 (move Vd<-Xn meia-precisão)
-FCVT_s_hs	A64	ARMv8.2-A/FEAT_FP16 (FCVT single->half)
-FCVT_s_hd	A64	ARMv8.2-A/FEAT_FP16 (FCVT double->half)
-FCVT_s_sh	A64	ARMv8.2-A/FEAT_FP16 (FCVT half->single)
-FCVT_s_dh	A64	ARMv8.2-A/FEAT_FP16 (FCVT half->double)
 
 # ── A64, "Floating-point data-processing (1 source)" (B8.5): extensões opcionais POSTERIORES, ──
 # ── CONFERIDAS contra `translate-a64.c` real (`TRANS_FEAT(..., aa64_bf16/aa64_frint, ...)`). ──
-BFCVT_s	A64	ARMv8.6-A/FEAT_BF16 (FCVT para bfloat16)
-FRINT32Z_s	A64	ARMv8.5-A/FEAT_FRINTTS
-FRINT32X_s	A64	ARMv8.5-A/FEAT_FRINTTS
-FRINT64Z_s	A64	ARMv8.5-A/FEAT_FRINTTS
-FRINT64X_s	A64	ARMv8.5-A/FEAT_FRINTTS
 
 # ── A64, "Conversion between floating-point and integer" (B8.5): FJCVTZS é FEAT_JSCVT ─────────
 # ── (ARMv8.3-A, CONFERIDO via `dc_isar_feature(aa64_jscvt, s)` em `trans_FJCVTZS`); as formas ──
 # ── "_g_simd"/"_simd" (mesmo opcode(21:16) de SCVTF/UCVTF/FCVTxS/FCVTxU "de verdade", só o bit ──
 # ── `op0` de nível superior muda) são FEAT_FPRCVT (ARMv9.x, `ID_AA64ISAR3.FPRCVT`, CONFERIDO ───
 # ── via `TRANS_FEAT(..., aa64_fprcvt, ...)`) — nenhum Cortex-A53 as tem.
-FJCVTZS	A64	ARMv8.3-A/FEAT_JSCVT (Javascript convert)
-SCVTF_simd	A64	ARMv9.x/FEAT_FPRCVT
-UCVTF_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTAS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTAU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTMS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTMU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTNS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTNU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTPS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTPU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTZS_g_simd	A64	ARMv9.x/FEAT_FPRCVT
-FCVTZU_g_simd	A64	ARMv9.x/FEAT_FPRCVT
 
 # ── T32 (B9.7): MVE (Helium) "long shift" — ARMv8.1-M, exigem `@mve_sh_ri`/`@mve_shl_ri`/ ──────
 # ── `@mve_sh_rr`/`@mve_shl_rr` (t32.decode), espaço reservado em ARMv7-A puro. CONFERIDO: o ────
@@ -307,16 +293,6 @@ VFNMS_dp	MPCore	VFPv4 (aa32_simdfmac), ARM11 MPCore é anterior à especificaç�
 # ── versão dessas linhas vive em `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE`
 # ── (por nome+ocorrência), que as mede `·` em v8.0/v8.1 e `❌` de v8.2 em diante — trabalho
 # ── pendente no degrau cronológico certo (épico B19.5), não escondido.
-FCADD_90	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma, "complex number FP add"), posterior ao Cortex-A53
-FCADD_270	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
-FCMLA_v	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
-FRINT32Z_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT32Z_s (escalar, tabela A64 "·" desde a rodada anterior)
-FRINT32X_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT32X_s (escalar)
-FRINT64Z_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT64Z_s (escalar)
-FRINT64X_v	A64	ARMv8.5-A/FEAT_FRINTTS (aa64_frint), posterior ao Cortex-A53 — mesma exclusão já aplicada a FRINT64X_s (escalar)
-FAMAX	A64	ARMv9.4-A/FEAT_FAMINMAX ("floating-point absolute max/min"), muito posterior ao Cortex-A53
-FAMIN	A64	ARMv9.4-A/FEAT_FAMINMAX, muito posterior ao Cortex-A53
-FSCALE	A64	extensão FP recente (SVE2.1/FEAT_FP8, ~ARMv9.x), muito posterior ao Cortex-A53
 
 # ── A64 (B8.10 → B19.5.2): as reduções across-lanes de meia precisão `FMAXNMV_h`/`FMINNMV_h`/
 # ── `FMAXV_h`/`FMINV_h` estavam aqui como `A64` (casava TODA coluna de versão), o que as escondia
@@ -332,36 +308,6 @@ FSCALE	A64	extensão FP recente (SVE2.1/FEAT_FP8, ~ARMv9.x), muito posterior ao 
 # ── `VectorPolynomialMultiplyLong`. O resto abaixo são versões REALMENTE posteriores (conferido
 # ── contra `a64.decode` real do QEMU) — pendência de sequenciamento, não exclusão definitiva
 # ── (regra máxima do `tasks/README.md`, 2026-08-24).
-SHA512SU0	A64	ARMv8.2-A/FEAT_SHA512
-SM3SS1	A64	ARMv8.2-A/FEAT_SM3
-SM3TT1A	A64	ARMv8.2-A/FEAT_SM3
-SM3TT1B	A64	ARMv8.2-A/FEAT_SM3
-SM3TT2A	A64	ARMv8.2-A/FEAT_SM3
-SM3TT2B	A64	ARMv8.2-A/FEAT_SM3
-SM4E	A64	ARMv8.2-A/FEAT_SM4
-AUTDA	A64	ARMv8.3-A/FEAT_PAuth (forma "data processing 1 source" real, registrador modificador livre — diferente da forma hint-space `AUTDZA`, que já cai no catch-all genérico de hints/NOP)
-XPACD	A64	ARMv8.3-A/FEAT_PAuth
-XPACI	A64	ARMv8.3-A/FEAT_PAuth
-STG	A64	ARMv8.5-A/FEAT_MTE2 (Memory Tagging Extension)
-LDG	A64	ARMv8.5-A/FEAT_MTE2
-STZG	A64	ARMv8.5-A/FEAT_MTE2
-ST2G	A64	ARMv8.5-A/FEAT_MTE2
-STZ2G	A64	ARMv8.5-A/FEAT_MTE2
-STGM	A64	ARMv8.5-A/FEAT_MTE2
-LDGM	A64	ARMv8.5-A/FEAT_MTE2
-STZGM	A64	ARMv8.5-A/FEAT_MTE2
-STGP	A64	ARMv8.5-A/FEAT_MTE2
-GMI	A64	ARMv8.5-A/FEAT_MTE2
-IRG	A64	ARMv8.5-A/FEAT_MTE2
-SUBP	A64	ARMv8.5-A/FEAT_MTE2
-SUBPS	A64	ARMv8.5-A/FEAT_MTE2
-SETGP	A64	ARMv8.5-A/FEAT_MTE2 (`SET*` com tag — diferente de `SETP`/`SETM`/`SETE` sem tag, ARMv8.8)
-SETGM	A64	ARMv8.5-A/FEAT_MTE2
-SETGE	A64	ARMv8.5-A/FEAT_MTE2
-GCSSTR	A64	ARMv9.4-A/FEAT_GCS (Guarded Control Stack), bem posterior ao MTE
-CPYE	A64	ARMv8.8-A/FEAT_MOPS (memcpy)
-CPYM	A64	ARMv8.8-A/FEAT_MOPS
-CPYP	A64	ARMv8.8-A/FEAT_MOPS
 
 # ── A64 (B11.3, auditoria de versão): `SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE` (`FEAT_MOPS`,
 # ── ARMv8.8-A) e `LDCLRP`/`LDSETP`/`SWPP` (128-bit atomics, `FEAT_LSE128`) apareciam ✅ na tabela —
@@ -369,44 +315,13 @@ CPYP	A64	ARMv8.8-A/FEAT_MOPS
 # ── (literal)` (bug de decode corrigido nesta sessão, `LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`,
 # ── `Aarch64Decoder`/G8) — nenhum tinha semântica real implementada. `LDAPR_i` (`LDAPUR`,
 # ── `FEAT_LRCPC2`/ARMv8.4-A) caía no MESMO bug, mesma correção.
-SETP	A64	ARMv8.8-A/FEAT_MOPS (memset) — mesma família de CPYE/CPYM/CPYP acima
-SETM	A64	ARMv8.8-A/FEAT_MOPS
-SETE	A64	ARMv8.8-A/FEAT_MOPS
-CPYFP	A64	ARMv8.8-A/FEAT_MOPS (memcpy forward-only)
-CPYFM	A64	ARMv8.8-A/FEAT_MOPS
-CPYFE	A64	ARMv8.8-A/FEAT_MOPS
-LDCLRP	A64	ARMv8.9-A/FEAT_LSE128 (128-bit atomics)
-LDSETP	A64	ARMv8.9-A/FEAT_LSE128
-SWPP	A64	ARMv8.9-A/FEAT_LSE128
-LDAPR_i	A64	ARMv8.4-A/FEAT_LRCPC2 ("LDAPUR", load-acquire RCpc com offset imediato)
-STLR_i	A64	ARMv8.4-A/FEAT_LRCPC2 ("STLUR", store-release RCpc com offset imediato — mesma família de LDAPR_i)
 
 # ── A64 (B11.3): `LDRA` ("LDRAA"/"LDRAB", load com autenticação de ponteiro) — mesmo bug de decode
 # ── acima, mas em `decodeLoadStoreSingle` (bit21=1 com idx=POST_INDEX/PRE_INDEX não checado,
 # ── colidia com STR/STUR). `PACIA1716`/`PACIASP`/etc. (hint-space, RES NOP mesmo sem FEAT_PAuth) já
 # ── decodificam ✅ desde B6.6.7 — `LDRA` é uma instrução dedicada real, não hint-space, e não tinha
 # ── semântica implementada.
-LDRA	A64	ARMv8.3-A/FEAT_PAuth ("LDRAA"/"LDRAB", load com autenticação de ponteiro)
 
-SDOT_v	A64	ARMv8.2-A/FEAT_DotProd
-SDOT_vi	A64	ARMv8.2-A/FEAT_DotProd
-UDOT_v	A64	ARMv8.2-A/FEAT_DotProd
-UDOT_vi	A64	ARMv8.2-A/FEAT_DotProd
-USDOT_v	A64	ARMv8.6-A/FEAT_I8MM
-USDOT_vi	A64	ARMv8.6-A/FEAT_I8MM
-SUDOT_vi	A64	ARMv8.6-A/FEAT_I8MM
-SMMLA	A64	ARMv8.6-A/FEAT_I8MM
-UMMLA	A64	ARMv8.6-A/FEAT_I8MM
-USMMLA	A64	ARMv8.6-A/FEAT_I8MM
-BFDOT_v	A64	ARMv8.6-A/FEAT_BF16
-BFDOT_vi	A64	ARMv8.6-A/FEAT_BF16
-BFMMLA	A64	ARMv8.6-A/FEAT_BF16
-FDOT_hb_v	A64	ARMv9.x/FEAT_F8DP2 (dot-product `fp8`), extensão recente
-FDOT_hb_vi	A64	ARMv9.x/FEAT_F8DP2
-FDOT_sb_v	A64	ARMv9.x/FEAT_F8DP4
-FDOT_sb_vi	A64	ARMv9.x/FEAT_F8DP4
-FMMLA_hb	A64	ARMv9.x/FEAT_F8MM8
-FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
 # ── A64 (B8.19): "vector/scalar × indexed element" — mesmas features opcionais já excluídas acima
 # ── para as formas "three same"/"three different" genéricas, agora nas formas POR ÍNDICE (nomes
 # ── distintos no `a64.decode` real do QEMU, `_vi`/`_si`). SQRDMLAH_vi/SQRDMLSH_vi/SQRDMLAH_si/
@@ -415,8 +330,6 @@ FMMLA_sb	A64	ARMv9.x/FEAT_F8MM4
 # ── `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` (`FEAT_FHM`) foram movidas por B19.5.2 para
 # ── `IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE` (ARMv8.2-A): `·` em v8.0/v8.1,
 # ── `❌` de v8.2 em diante — o mesmo tratamento das formas `_v` mais acima.
-BFMLAL_vi	A64	ARMv8.6-A/FEAT_BF16
-FCMLA_vi	A64	ARMv8.3-A/FEAT_FCMA (aa64_fcma), posterior ao Cortex-A53
 
 # ── T32 (B9.10): ARMv6-M só tem 6 encodings de 32 bits, ponto final ──────────────────────────
 # `ARMv6-M Architecture Reference Manual` (ARM DDI 0419C), secão A3.3.1: "ARMv6-M supports the

@@ -30,12 +30,14 @@ public final class Aarch64Architecture {
     /// implementadas (ver `docs/isa-nao-aplicavel.tsv`).
     public static final Aarch64Architecture ARMV8_0_A = of("ARMv8.0-A");
 
-    /// ARMv8.1-A: acrescenta {@link Aarch64Feature#RDM}, `FEAT_LSE` (`CAS`/`CASP`) e `FEAT_PAN`
-    /// (B11.5, auditoria de B11.3: os dois últimos já eram implementados sem gate desde B8.1/B8.3).
+    /// ARMv8.1-A: acrescenta {@link Aarch64Feature#RDM}, `FEAT_LSE` (`CAS`/`CASP`), `FEAT_PAN`
+    /// (B11.5, auditoria de B11.3: os dois últimos já eram implementados sem gate desde B8.1/B8.3)
+    /// e `FEAT_CRC32` (E12 — opcional em ARMv8.0-A, obrigatória aqui, mesmo padrão de `FEAT_LSE`).
     public static final Aarch64Architecture ARMV8_1_A = extending(ARMV8_0_A, "ARMv8.1-A",
             Aarch64Feature.RDM,
             Aarch64Feature.LSE,
-            Aarch64Feature.PAN);
+            Aarch64Feature.PAN,
+            Aarch64Feature.CRC32);
 
     /// ARMv8.2-A: acrescenta meia-precisão, dot-product, FHM, as 4 famílias de criptografia
     /// adicionadas nesta versão (SHA-512/SM3/SM4/SHA3) e `FEAT_UAO` (B11.5: as 4 últimas já eram
@@ -58,11 +60,13 @@ public final class Aarch64Architecture {
             Aarch64Feature.POINTER_AUTHENTICATION,
             Aarch64Feature.LRCPC);
 
-    /// ARMv8.4-A: acrescenta `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`) e `FEAT_DIT` (B11.5: os dois
-    /// já eram implementados sem gate desde B8.2/B8.3).
+    /// ARMv8.4-A: acrescenta `FEAT_FlagM` (`RMIF`/`SETF8`/`SETF16`), `FEAT_DIT` (B11.5: os dois
+    /// já eram implementados sem gate desde B8.2/B8.3) e `FEAT_LRCPC2` (E12 — as formas `LDAPUR`/
+    /// `STLUR` com offset imediato; opcional desde ARMv8.2-A, obrigatória aqui).
     public static final Aarch64Architecture ARMV8_4_A = extending(ARMV8_3_A, "ARMv8.4-A",
             Aarch64Feature.FLAG_MANIPULATION,
-            Aarch64Feature.DIT);
+            Aarch64Feature.DIT,
+            Aarch64Feature.LRCPC2);
 
     /// ARMv8.5-A: acrescenta arredondamento dirigido para inteiro de 32/64 bits, a Memory Tagging
     /// Extension e `FEAT_FlagM2` (`AXFLAG`/`XAFLAG`, B11.5: já implementada sem gate desde B8.2).
@@ -107,14 +111,30 @@ public final class Aarch64Architecture {
     public static final Aarch64Architecture ARMV9_3_A = extending(ARMV8_8_A, "ARMv9.3-A");
 
     /// ARMv9.4-A: baseline mandatório = ARMv8.9-A, mais máximo/mínimo de valor absoluto em ponto
-    /// flutuante e a Guarded Control Stack (introduzidas nesta versão).
+    /// flutuante, a Guarded Control Stack e os atômicos de 128 bits `FEAT_LSE128` (introduzidas
+    /// nesta versão).
+    ///
+    /// ⚠️ `FEAT_LSE128` entra AQUI, não em `ARMv8.9-A` como `docs/isa-nao-aplicavel.tsv` afirmava —
+    /// erro de fato corrigido pela E12 (ver {@link Aarch64Feature#LSE128}). Como `ARMV9_4_A` estende
+    /// `ARMV8_9_A`, a diferença é observável na tabela de cobertura.
     public static final Aarch64Architecture ARMV9_4_A = extending(ARMV8_9_A, "ARMv9.4-A",
             Aarch64Feature.FP_ABSOLUTE_MAX_MIN,
-            Aarch64Feature.GUARDED_CONTROL_STACK);
+            Aarch64Feature.GUARDED_CONTROL_STACK,
+            Aarch64Feature.LSE128);
 
-    /// ARMv9.5-A: acrescenta `FEAT_CMPBR` (`CB<cc>`) sobre a ARMv9.4-A.
+    /// ARMv9.5-A: acrescenta `FEAT_CMPBR` (`CB<cc>`) e a família FP8 — `FEAT_FP8` (conversão/escala
+    /// `fp8`, inclui `FSCALE`) e os produtos escalares `FEAT_FP8DOT2`/`FEAT_FP8DOT4` (E12) — sobre a
+    /// ARMv9.4-A.
+    ///
+    /// As features Armv9.6-A ({@link Aarch64Feature#FP_INTEGER_CONVERT_SCALAR},
+    /// {@link Aarch64Feature#FP8_MATRIX_MULTIPLY_FP16}, {@link Aarch64Feature#FP8_MATRIX_MULTIPLY_FP32})
+    /// NÃO são declaradas por nenhum preset — esta é a última versão modelada. Ver o bloco de
+    /// comentário no fim de {@link Aarch64Feature}.
     public static final Aarch64Architecture ARMV9_5_A = extending(ARMV9_4_A, "ARMv9.5-A",
-            Aarch64Feature.COMPARE_AND_BRANCH);
+            Aarch64Feature.COMPARE_AND_BRANCH,
+            Aarch64Feature.FP8,
+            Aarch64Feature.FP8_DOT_PRODUCT_2WAY,
+            Aarch64Feature.FP8_DOT_PRODUCT_4WAY);
 
     private final String name;
     private final EnumSet<Aarch64Feature> features;
