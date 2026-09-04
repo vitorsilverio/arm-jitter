@@ -1,11 +1,14 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -331,6 +334,36 @@ final class Ir64VectorArithmeticExecutor {
         };
     }
 
+    /// RFC B13.2 (D1): mapeia `Ir64VectorWideningOp` → {@link AdvSimdWideningOp} 1:1 (sem `default`
+    /// — o `switch` cobre as 16; {@link AdvSimdWideningOp#PMULL} não tem par aqui, é exclusivo do
+    /// `VMULL.P8` do NEON A32). B13.10 migrou a semântica para lá.
+    private static AdvSimdWideningOp sharedWideningOp(Ir64VectorWideningOp op) {
+        return switch (op) {
+            case SMULL -> AdvSimdWideningOp.SMULL;
+            case UMULL -> AdvSimdWideningOp.UMULL;
+            case SMLAL -> AdvSimdWideningOp.SMLAL;
+            case UMLAL -> AdvSimdWideningOp.UMLAL;
+            case SMLSL -> AdvSimdWideningOp.SMLSL;
+            case UMLSL -> AdvSimdWideningOp.UMLSL;
+            case SADDL -> AdvSimdWideningOp.SADDL;
+            case UADDL -> AdvSimdWideningOp.UADDL;
+            case SSUBL -> AdvSimdWideningOp.SSUBL;
+            case USUBL -> AdvSimdWideningOp.USUBL;
+            case SABAL -> AdvSimdWideningOp.SABAL;
+            case UABAL -> AdvSimdWideningOp.UABAL;
+            case SABDL -> AdvSimdWideningOp.SABDL;
+            case UABDL -> AdvSimdWideningOp.UABDL;
+            case SQDMULL -> AdvSimdWideningOp.SQDMULL;
+            case SQDMLAL -> AdvSimdWideningOp.SQDMLAL;
+            case SQDMLSL -> AdvSimdWideningOp.SQDMLSL;
+        };
+    }
+
+    /// `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/`SADDL`/`UADDL`/`SSUBL`/`USUBL`/`SABAL`/
+    /// `UABAL`/`SABDL`/`UABDL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL` (B8.7/B8.8/B8.20, "three different"
+    /// alargando). Desde B13.10 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#widening}) —
+    /// a MESMA função que o NEON de 32 bits chama para `VADDL`/`VMULL`/`VMLAL`/...; a escrita
+    /// destrutiva de `[127:64]`/escalar continua sendo do lado A64.
     static boolean executeWidening(Aarch64Core core, Ir64Op.VectorArithmeticWidening op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
@@ -339,42 +372,10 @@ final class Ir64VectorArithmeticExecutor {
         // sem metade de registrador (mesmo padrão de {@link #executeWideningByElement}).
         int outputElements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = (!op.scalar() && op.q()) ? outputElements : 0;
-        // E10: buffer OBRIGATÓRIO — `Rd` pode ser `Rn`/`Rm`, e escrever a lane LARGA `i` cobre as
-        // lanes estreitas `2i`/`2i+1` da fonte, ainda não lidas.
-        long[] results = new long[outputElements];
-        for (int i = 0; i < outputElements; i++) {
-            int lane = laneOffset + i;
-            long a = fp.element(op.rn(), lane, esz);
-            long b = fp.element(op.rm(), lane, esz);
-            long sa = signExtend(a, esz);
-            long sb = signExtend(b, esz);
-            long current = fp.element(op.rd(), i, wideEsz);
-            results[i] = switch (op.op()) {
-                case SMULL -> sa * sb;
-                case UMULL -> a * b;
-                case SMLAL -> current + sa * sb;
-                case UMLAL -> current + a * b;
-                case SMLSL -> current - sa * sb;
-                case UMLSL -> current - a * b;
-                case SADDL -> sa + sb;
-                case UADDL -> a + b;
-                case SSUBL -> sa - sb;
-                case USUBL -> a - b;
-                case SABAL -> signExtend(current, wideEsz) + Math.abs(sa - sb);
-                case UABAL -> current + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
-                case SABDL -> Math.abs(sa - sb);
-                case UABDL -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
-                // `SQDMULL`/`SQDMLAL`/`SQDMLSL` (B8.8): a MULTIPLICAÇÃO satura primeiro
-                // (`SignedSaturate(2*sext(Rn)*sext(Rm))`), DEPOIS a soma/subtração satura de novo
-                // — duas saturações independentes, conferido contra o pseudocódigo real.
-                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
-                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-            };
-        }
-        for (int i = 0; i < outputElements; i++) {
-            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
-        }
+        AdvSimdLanes.widening(fp, sharedWideningOp(op.op()), esz, outputElements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         if (op.scalar()) {
             finishScalarAwareWrite(fp, op.rd(), true, false, wideEsz);
         }
@@ -458,59 +459,58 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
+    /// RFC B13.2 (D1): mapeia `Ir64VectorWideOp` → {@link AdvSimdWideOp} 1:1 (sem `default` — o
+    /// `switch` cobre as 4). B13.10 migrou a semântica para lá.
+    private static AdvSimdWideOp sharedWideOp(Ir64VectorWideOp op) {
+        return switch (op) {
+            case SADDW -> AdvSimdWideOp.SADDW;
+            case UADDW -> AdvSimdWideOp.UADDW;
+            case SSUBW -> AdvSimdWideOp.SSUBW;
+            case USUBW -> AdvSimdWideOp.USUBW;
+        };
+    }
+
+    /// `SADDW`/`UADDW`/`SSUBW`/`USUBW` (B8.7, "three different" larga). Desde B13.10 só delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#wide}) — a MESMA função que o NEON de 32 bits chama
+    /// para `VADDW`/`VSUBW`.
     static boolean executeWide(Aarch64Core core, Ir64Op.VectorArithmeticWide op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
         int elements = elementsPerRegister(true, wideEsz);
         int laneOffset = op.q() ? elements : 0;
-        // E10: buffer — `Rd` pode ser `Rm` (o operando ESTREITO), e escrever a lane larga `i` cobre
-        // as lanes estreitas `2i`/`2i+1` ainda não lidas. (`Rd`==`Rn` é seguro: mesma lane, mesma
-        // largura, lida antes de escrita — mas o buffer cobre os dois de graça.)
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            long wide = fp.element(op.rn(), i, wideEsz);
-            long narrow = fp.element(op.rm(), laneOffset + i, esz);
-            long extended = switch (op.op()) {
-                case SADDW, SSUBW -> signExtend(narrow, esz);
-                case UADDW, USUBW -> narrow;
-            };
-            results[i] = switch (op.op()) {
-                case SADDW, UADDW -> wide + extended;
-                case SSUBW, USUBW -> wide - extended;
-            };
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
-        }
+        AdvSimdLanes.wide(fp, sharedWideOp(op.op()), esz, elements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         return false;
     }
 
+    /// RFC B13.2 (D1): mapeia `Ir64VectorNarrowOp` → {@link AdvSimdNarrowOp} 1:1 (sem `default` — o
+    /// `switch` cobre as 4). B13.10 migrou a semântica para lá.
+    private static AdvSimdNarrowOp sharedHalfNarrowOp(Ir64VectorNarrowOp op) {
+        return switch (op) {
+            case ADDHN -> AdvSimdNarrowOp.ADDHN;
+            case RADDHN -> AdvSimdNarrowOp.RADDHN;
+            case SUBHN -> AdvSimdNarrowOp.SUBHN;
+            case RSUBHN -> AdvSimdNarrowOp.RSUBHN;
+        };
+    }
+
+    /// `ADDHN`/`RADDHN`/`SUBHN`/`RSUBHN` (B8.7, "three different" estreitando/"half narrowing").
+    /// Desde B13.10 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrow}) — a MESMA
+    /// função que o NEON de 32 bits chama para `VADDHN`/`VSUBHN`; a escrita destrutiva de
+    /// `[127:64]` continua sendo do lado A64.
     static boolean executeNarrow(Aarch64Core core, Ir64Op.VectorArithmeticNarrow op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
-        int narrowBits = 8 << esz;
         int elements = elementsPerRegister(true, wideEsz);
         int laneOffset = op.q() ? elements : 0;
-        long rounding = 1L << (narrowBits - 1);
-        // E10: buffer — na forma `q=1` (`ADDHN2`…) a escrita da lane estreita `elements+i` cobre a
-        // lane LARGA `(elements+i)/2`, sempre maior que `i` (ainda não lida) quando `Rd`==`Rn`/`Rm`.
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            long a = fp.element(op.rn(), i, wideEsz);
-            long b = fp.element(op.rm(), i, wideEsz);
-            long sum = switch (op.op()) {
-                case ADDHN -> a + b;
-                case RADDHN -> a + b + rounding;
-                case SUBHN -> a - b;
-                case RSUBHN -> a - b + rounding;
-            };
-            results[i] = truncate(sum >>> narrowBits, esz);
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
-        }
+        AdvSimdLanes.narrow(fp, sharedHalfNarrowOp(op.op()), esz, elements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishDestructiveWrite(fp, op.rd(), op.q());
         return false;
     }

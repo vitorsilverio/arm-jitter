@@ -125,6 +125,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE -> neon.executeNeonShiftWidenImmediate(core, (IrOp.NeonShiftWidenImmediate) op);
                 case IrOp.Kind.NEON_CONVERT_FIXED_POINT -> neon.executeNeonConvertFixedPoint(core, (IrOp.NeonConvertFixedPoint) op);
                 case IrOp.Kind.NEON_MODIFIED_IMMEDIATE -> neon.executeNeonModifiedImmediate(core, (IrOp.NeonModifiedImmediate) op);
+                case IrOp.Kind.NEON_WIDENING -> neon.executeNeonWidening(core, (IrOp.NeonWidening) op);
+                case IrOp.Kind.NEON_WIDE -> neon.executeNeonWide(core, (IrOp.NeonWide) op);
+                case IrOp.Kind.NEON_NARROW -> neon.executeNeonNarrow(core, (IrOp.NeonNarrow) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -270,6 +273,9 @@ public final class IrBlockExecutor {
             case IrOp.NeonShiftWidenImmediate swi -> { neon.executeNeonShiftWidenImmediate(core, swi); yield false; }
             case IrOp.NeonConvertFixedPoint cfp -> { neon.executeNeonConvertFixedPoint(core, cfp); yield false; }
             case IrOp.NeonModifiedImmediate nmi -> { neon.executeNeonModifiedImmediate(core, nmi); yield false; }
+            case IrOp.NeonWidening nw -> { neon.executeNeonWidening(core, nw); yield false; }
+            case IrOp.NeonWide nwide -> { neon.executeNeonWide(core, nwide); yield false; }
+            case IrOp.NeonNarrow nn -> { neon.executeNeonNarrow(core, nn); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

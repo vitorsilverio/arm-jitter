@@ -8,11 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.Condition;
@@ -47,7 +50,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(78, kinds.size(), "IrOp.Kind deve ter 78 constantes contíguas");
+        assertEquals(81, kinds.size(), "IrOp.Kind deve ter 81 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -75,8 +78,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na
         // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
         // NEON_SHIFT_WIDEN_IMMEDIATE, NEON_CONVERT_FIXED_POINT; B13.9 acrescentou
-        // NEON_MODIFIED_IMMEDIATE (NEON também não tem nó Truffle).
-        assertEquals(38, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_MODIFIED_IMMEDIATE; B13.10 acrescentou NEON_WIDENING, NEON_WIDE, NEON_NARROW (NEON
+        // também não tem nó Truffle).
+        assertEquals(41, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.BIT_FIELD_EXTRACT, IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE,
                         IrOp.Kind.DIVIDE, IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
@@ -91,7 +95,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
                         IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE,
                         IrOp.Kind.NEON_SHIFT_NARROW_IMMEDIATE, IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE,
-                        IrOp.Kind.NEON_CONVERT_FIXED_POINT, IrOp.Kind.NEON_MODIFIED_IMMEDIATE)),
+                        IrOp.Kind.NEON_CONVERT_FIXED_POINT, IrOp.Kind.NEON_MODIFIED_IMMEDIATE,
+                        IrOp.Kind.NEON_WIDENING, IrOp.Kind.NEON_WIDE, IrOp.Kind.NEON_NARROW)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -203,6 +208,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.NeonConvertFixedPoint(false, 2, 1, true, true, 0, 1);
             case IrOp.Kind.NEON_MODIFIED_IMMEDIATE ->
                     new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFFL, 0);
+            case IrOp.Kind.NEON_WIDENING -> new IrOp.NeonWidening(AdvSimdWideningOp.SADDL, 0, 0, 1, 2);
+            case IrOp.Kind.NEON_WIDE -> new IrOp.NeonWide(AdvSimdWideOp.SADDW, 0, 0, 2, 1);
+            case IrOp.Kind.NEON_NARROW -> new IrOp.NeonNarrow(AdvSimdNarrowOp.ADDHN, 0, 0, 2, 4);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

@@ -147,6 +147,38 @@ public final class IrNeonExecutor {
         vfp.setD(word, result);
     }
 
+    /// NEON "three-reg-different-lengths", forma **Long** ALARGANDO (`VADDL`/`VSUBL`/`VABAL`/
+    /// `VABDL`/`VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/`VMULL.P8`, B13.10): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#widening}) — a MESMA função que o executor A64
+    /// chama para `SADDL`/`SMULL`/... `Vn`/`Vm` são `D` (fonte, `8 >> esz` lanes), `Vd` é `Q` (mesma
+    /// contagem de lanes, largura dobrada). A32 não tem forma "2": `laneOffset` é sempre `0`.
+    public void executeNeonWidening(ArmCore core, IrOp.NeonWidening op) {
+        VfpRegisters vfp = core.vfp();
+        int outputElements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.widening(vfp, op.op(), op.esz(), outputElements, 0, op.vd(), op.vn(), op.vm());
+    }
+
+    /// NEON "three-reg-different-lengths", forma **Wide** (`VADDW`/`VSUBW`, B13.10): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#wide}) — a MESMA função que o executor A64 chama
+    /// para `SADDW`/`SSUBW`/... `Vd`/`Vn` são `Q` (`8 >> esz` lanes largas), `Vm` é `D` (mesma
+    /// contagem, estreito). A32 não tem forma "2": `laneOffset` é sempre `0`.
+    public void executeNeonWide(ArmCore core, IrOp.NeonWide op) {
+        VfpRegisters vfp = core.vfp();
+        int elements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.wide(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vn(), op.vm());
+    }
+
+    /// NEON "three-reg-different-lengths", forma **Narrow**/"half narrowing" (`VADDHN`/`VRADDHN`/
+    /// `VSUBHN`/`VRSUBHN`, B13.10): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrow}) —
+    /// a MESMA função que o executor A64 chama para `ADDHN`/`SUBHN`/... `Vn`/`Vm` são `Q` (`8 >>
+    /// esz` lanes largas), `Vd` é `D` (mesma contagem, estreito). A32 não tem forma "2":
+    /// `laneOffset` é sempre `0`.
+    public void executeNeonNarrow(ArmCore core, IrOp.NeonNarrow op) {
+        VfpRegisters vfp = core.vfp();
+        int elements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.narrow(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vn(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

@@ -178,6 +178,16 @@ public final class AdvSimdLanes {
         return saturateToElement(product.shiftRight(esize), esz, true);
     }
 
+    /// `2*sext(a)*sext(b)`, saturado ao tamanho `wideEsz` (LARGO — já é o `esz+1` do chamador) —
+    /// usado por `SQDMULL`/`SQDMLAL`/`SQDMLSL` (B13.10, migração D1 — cópia VERBATIM do homônimo
+    /// privado de `Ir64VectorArithmeticExecutor`, que continua com a própria cópia porque
+    /// `executeWideningByElement` — ainda não migrado — também precisa dela; mesma duplicação
+    /// mínima já aceita para `unsignedBig`/`saturateToElement`/`signedSaturatingAdd`/
+    /// `signedSaturatingSub` desde B13.5).
+    private static long saturatingDoublingProduct(long sa, long sb, int wideEsz) {
+        return saturateToElement(BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1), wideEsz, true);
+    }
+
     /// Deslocamento por REGISTRADOR (`SSHL`/`USHL`/`SQSHL`/`UQSHL`/...): a quantidade é o BYTE BAIXO
     /// do elemento `Rm`, sempre — nunca `sext(Rm,esz)` (`ARM DDI 0487`, pseudocódigo de `SSHL`:
     /// `shift = SInt(Elem[m,e,8])`). `>=0` desloca à esquerda; `<0` desloca à direita com a
@@ -441,6 +451,120 @@ public final class AdvSimdLanes {
         }
         for (int i = 0; i < outputElements; i++) {
             setElement(regs, baseRd, i, wideEsz, results[i]);
+        }
+    }
+
+    /// Executa uma operação AdvSIMD "three different" ALARGANDO (ver {@link AdvSimdWideningOp},
+    /// forma "Long") sobre `outputElements` elementos de `1 << (esz+1)` bytes: cada lane larga de
+    /// `baseRd` recebe `op` aplicada às lanes de {@code esz} bytes de `baseRn`/`baseRm` (lidas a
+    /// partir de `laneOffset` — a forma `*2` do A64; o NEON de 32 bits passa sempre `0`). As
+    /// famílias RMW (`*MLAL`/`*MLSL`/`*ABAL`) leem o `Rd` ATUAL, já largo, no elemento `i` (sem
+    /// `laneOffset` — o destino nunca tem forma "2" nesta função: quem seleciona metade ALTA/BAIXA
+    /// do DESTINO em `SMULL2`/etc é a escrita destrutiva do chamador, não este núcleo). Os `base*`
+    /// são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeWidening` (B8.7/B8.8/B8.20,
+    /// já com o buffer da E10) em B13.10 (D1 da RFC B13.2), mais {@link AdvSimdWideningOp#PMULL}
+    /// (`VMULL.P8` do NEON A32, que reusa {@link #polynomialMultiply8}). Resultados calculados num
+    /// buffer ANTES de qualquer escrita — `baseRd` pode coincidir com `baseRn`/`baseRm` (E10):
+    /// escrever a lane larga `i` cobre as lanes estreitas `2i`/`2i+1` da fonte, ainda não lidas
+    /// quando `laneOffset=0`. A escrita destrutiva do A64 (e a forma escalar) é do chamador.
+    public static void widening(AdvSimdRegisterWords regs, AdvSimdWideningOp op, int esz,
+            int outputElements, int laneOffset, int baseRd, int baseRn, int baseRm) {
+        int wideEsz = esz + 1;
+        long[] results = new long[outputElements];
+        for (int i = 0; i < outputElements; i++) {
+            int lane = laneOffset + i;
+            long a = element(regs, baseRn, lane, esz);
+            long b = element(regs, baseRm, lane, esz);
+            long sa = signExtend(a, esz);
+            long sb = signExtend(b, esz);
+            long current = element(regs, baseRd, i, wideEsz);
+            results[i] = switch (op) {
+                case SMULL -> sa * sb;
+                case UMULL -> a * b;
+                case SMLAL -> current + sa * sb;
+                case UMLAL -> current + a * b;
+                case SMLSL -> current - sa * sb;
+                case UMLSL -> current - a * b;
+                case SADDL -> sa + sb;
+                case UADDL -> a + b;
+                case SSUBL -> sa - sb;
+                case USUBL -> a - b;
+                case SABAL -> signExtend(current, wideEsz) + Math.abs(sa - sb);
+                case UABAL -> current + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
+                case SABDL -> Math.abs(sa - sb);
+                case UABDL -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
+                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
+                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+                case PMULL -> polynomialMultiply8(a, b);
+            };
+        }
+        for (int i = 0; i < outputElements; i++) {
+            setElement(regs, baseRd, i, wideEsz, truncate(results[i], wideEsz));
+        }
+    }
+
+    /// Executa uma operação AdvSIMD "three different" LARGA (ver {@link AdvSimdWideOp}, forma
+    /// "Wide") sobre `elements` elementos: `baseRn` já tem elementos LARGOS (`esz+1`), `baseRm` é
+    /// ESTREITO (`esz`, lido a partir de `laneOffset` — a forma `*2` do A64; o NEON de 32 bits passa
+    /// sempre `0`). Os `base*` são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeWide` (B8.7, já com o buffer
+    /// da E10) em B13.10 (D1 da RFC B13.2). Resultados calculados num buffer ANTES de qualquer
+    /// escrita — `baseRd` pode coincidir com `baseRm` (E10: `Rd`==`Rn` sempre foi seguro, mesma lane/
+    /// largura, mas o buffer cobre os dois de graça). A escrita destrutiva do A64 é do chamador.
+    public static void wide(AdvSimdRegisterWords regs, AdvSimdWideOp op, int esz,
+            int elements, int laneOffset, int baseRd, int baseRn, int baseRm) {
+        int wideEsz = esz + 1;
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long wide = element(regs, baseRn, i, wideEsz);
+            long narrow = element(regs, baseRm, laneOffset + i, esz);
+            long extended = switch (op) {
+                case SADDW, SSUBW -> signExtend(narrow, esz);
+                case UADDW, USUBW -> narrow;
+            };
+            results[i] = switch (op) {
+                case SADDW, UADDW -> wide + extended;
+                case SSUBW, USUBW -> wide - extended;
+            };
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, i, wideEsz, truncate(results[i], wideEsz));
+        }
+    }
+
+    /// Executa uma operação AdvSIMD "three different" ESTREITANDO ("half narrowing", ver
+    /// {@link AdvSimdNarrowOp}) sobre `elements` elementos: `baseRn`/`baseRm` têm elementos LARGOS
+    /// (`esz+1`), a lane estreita de saída `i` (`esz` bytes) é a metade ALTA da soma/diferença larga
+    /// correspondente, escrita a partir de `laneOffset` (a forma `*2` do A64; o NEON de 32 bits passa
+    /// sempre `0`). Os `base*` são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeNarrow` (B8.7, já com o
+    /// buffer da E10) em B13.10 (D1 da RFC B13.2). Resultados calculados num buffer ANTES de
+    /// qualquer escrita — na forma `laneOffset != 0` (`*2` do A64) `baseRd` pode coincidir com
+    /// `baseRn`/`baseRm` e a escrita da lane estreita `laneOffset+i` cobriria uma lane larga ainda
+    /// não lida. A escrita destrutiva do A64 é do chamador.
+    public static void narrow(AdvSimdRegisterWords regs, AdvSimdNarrowOp op, int esz,
+            int elements, int laneOffset, int baseRd, int baseRn, int baseRm) {
+        int narrowBits = 8 << esz;
+        long rounding = 1L << (narrowBits - 1);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long a = element(regs, baseRn, i, esz + 1);
+            long b = element(regs, baseRm, i, esz + 1);
+            long sum = switch (op) {
+                case ADDHN -> a + b;
+                case RADDHN -> a + b + rounding;
+                case SUBHN -> a - b;
+                case RSUBHN -> a - b + rounding;
+            };
+            results[i] = truncate(sum >>> narrowBits, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, laneOffset + i, esz, results[i]);
         }
     }
 

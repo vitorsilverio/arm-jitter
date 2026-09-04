@@ -9,7 +9,8 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
         IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise,
         IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
-        IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate {
+        IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
+        IrOp.NeonNarrow {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -106,6 +107,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_SHIFT_WIDEN_IMMEDIATE = 75;
         public static final int NEON_CONVERT_FIXED_POINT = 76;
         public static final int NEON_MODIFIED_IMMEDIATE = 77;
+        public static final int NEON_WIDENING = 78;
+        public static final int NEON_WIDE = 79;
+        public static final int NEON_NARROW = 80;
     }
 
     /// Operacao ALU generica.
@@ -1744,5 +1748,86 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// inicia o `Q`. Também é FONTE em `ORR`/`BIC` (leem `Vd` atual).
             int vd) implements IrOp {
         @Override public int kind() { return Kind.NEON_MODIFIED_IMMEDIATE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "two registers, or three registers of different lengths",
+    /// SUBGRUPO "three-reg-different-lengths" — forma **Long** ALARGANDO (B13.10): `VADDL`/`VSUBL`/
+    /// `VABAL`/`VABDL`/`VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/`VMULL.P8`. `Vn`/`Vm` são
+    /// `D` (elementos de {@link #esz} bytes), `Vd` é `Q` (elementos de `esz+1`, DOBRO — nomeado pelo
+    /// `D` par que inicia o `Q`, como o NEON encoda operandos de 128 bits). **Sem campo `quad`**: o
+    /// destino é SEMPRE `Q` nesta forma (não há "3-reg-different" com destino `D`).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWidening} no
+    /// ENCODING/IR (menos `scalar`/`q`, que não existem nesta seção do A32 — sem forma "2", sem
+    /// forma escalar real); a SEMÂNTICA vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#widening}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonWidening(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp op,
+            /// `log2` do tamanho do elemento ESTREITO (`Vn`/`Vm`) em bytes — `0`-`2` (byte/half/
+            /// word). `Vd` usa `esz+1`.
+            int esz,
+            /// Registrador de destino (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (`D`, 64 bits), em índice de `D` (`0`-`31`).
+            int vn,
+            /// Registrador fonte 2 (`D`, 64 bits), em índice de `D` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_WIDENING; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "three-reg-different-lengths", forma **Wide** (B13.10):
+    /// `VADDW`/`VSUBW`. `Vd`/`Vn` são `Q` (elementos de `esz+1`), `Vm` é `D` (elementos de
+    /// {@link #esz}). **Sem campo `quad`**: `Vd`/`Vn` são SEMPRE `Q`, `Vm` SEMPRE `D` nesta forma.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWide} no
+    /// ENCODING/IR (menos `q`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#wide}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonWide(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp op,
+            /// `log2` do tamanho do elemento ESTREITO (`Vm`) em bytes — `0`-`2`. `Vd`/`Vn` usam
+            /// `esz+1`.
+            int esz,
+            /// Registrador de destino (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (`Q`, 128 bits, já LARGO), em índice de `D` par que inicia o `Q`.
+            int vn,
+            /// Registrador fonte 2 (`D`, 64 bits, ESTREITO), em índice de `D` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_WIDE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "three-reg-different-lengths", forma **Narrow**/"half
+    /// narrowing" (B13.10): `VADDHN`/`VRADDHN`/`VSUBHN`/`VRSUBHN`. `Vn`/`Vm` são `Q` (elementos de
+    /// `esz+1`), `Vd` é `D` (elementos de {@link #esz}, a metade ALTA da soma/diferença larga).
+    /// **Sem campo `quad`**: `Vn`/`Vm` são SEMPRE `Q`, `Vd` SEMPRE `D` nesta forma (A32 não tem
+    /// forma "2" — `laneOffset` é sempre `0` no executor).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticNarrow} no
+    /// ENCODING/IR (menos `q`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#narrow}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonNarrow(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp op,
+            /// `log2` do tamanho do elemento ESTREITO (`Vd`) em bytes — `0`-`2`. `Vn`/`Vm` usam
+            /// `esz+1`.
+            int esz,
+            /// Registrador de destino (`D`, 64 bits, ESTREITO), em índice de `D` (`0`-`31`).
+            int vd,
+            /// Registrador fonte 1 (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
+            int vn,
+            /// Registrador fonte 2 (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_NARROW; }
     }
 }
