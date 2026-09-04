@@ -650,16 +650,17 @@ class Thumb2MiscDecoderTest {
     }
 
     @Test
-    void hint16SpaceDecodesOnArmv6kWithoutThumb2ButItDoesNot() {
-        // B9.14: achado real — a sub-forma "hint" (mask==0000) do opcode 0xBF00 exige só
-        // ArmFeature#WAIT_HINTS (ARMv6K já tem, sem Thumb-2; QEMU real gateia por
-        // ARM_FEATURE_V6K, não ARM_FEATURE_THUMB2). Só a sub-forma `IT` (mask!=0000, mesmo
-        // opcode) exige Thumb-2 de verdade — nome antigo deste teste ("...IsUndefinedWithoutThumb2")
-        // refletia a premissa errada, corrigida por esta task.
+    void hint16SpaceIsUndefinedWithoutThumb2AndWithoutMProfile() {
+        // E13: reverte a leitura da B9.14. O commit QEMU 2931a675e9d3
+        // (trans_MAYBE_UNDEF_T1_HINT) cobre TODO o espaço 1011 1111 ---- 0000 (hint E IT) com um
+        // catch-all checado ANTES dos hints nomeados, e UNDEFs sem ARM_FEATURE_M nem
+        // ARM_FEATURE_THUMB2. A forma ARMv6K sem Thumb-2 que a B9.14 assumiu era a forma A32
+        // (espaço da MSR imediata), não esta forma T16. `ARMV6K` (sem THUMB2 nem M_PROFILE) volta
+        // a rejeitar as duas sub-formas.
         TestAddressSpace hintMemory = new TestAddressSpace(16);
         hintMemory.put16(0, hint16(0x00));
         DecodedInstruction hint = new ThumbDecoder(ArmArchitecture.ARMV6K).decode(hintMemory, 0);
-        assertEquals(InstructionKind.MSR, hint.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, hint.kind());
 
         TestAddressSpace itMemory = new TestAddressSpace(16);
         itMemory.put16(0, hint16(0x0) | 0x8); // mask=1000 (!=0) -> IT

@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **84%** — 16319 de 19409 células aplicáveis decodificam.
+> **84%** — 16307 de 19397 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -52,8 +52,8 @@ Por arquitetura:
 |---|---|
 | v4T | **100%** (206/206) |
 | v5TE | **100%** (221/221) |
-| v6K | **100%** (312/312) |
-| MPCore | **100%** (362/362) |
+| v6K | **100%** (306/306) |
+| MPCore | **100%** (356/356) |
 | v7-A | **100%** (652/652) |
 | v6-M | **88%** (83/94) |
 | v7-M | **96%** (323/334) |
@@ -79,7 +79,7 @@ Por arquitetura:
 | Grupo | Instruções | Cobertura |
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 100% (144/144) · v5TE 100% (156/156) · v6K 100% (231/231) · MPCore 100% (231/231) · v7-A 100% (244/244) |
-| T16 — Thumb clássico | 87 | v4T 100% (62/62) · v5TE 100% (65/65) · v6K 100% (81/81) · MPCore 100% (81/81) · v7-A 100% (82/82) · v6-M 100% (75/75) · v7-M 100% (81/81) |
+| T16 — Thumb clássico | 87 | v4T 100% (62/62) · v5TE 100% (65/65) · v6K 100% (75/75) · MPCore 100% (75/75) · v7-A 100% (82/82) · v6-M 100% (75/75) · v7-M 100% (81/81) |
 | T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
@@ -440,13 +440,13 @@ Inventário: `t16.decode` · 87 instruções.
 | `REV` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REV16` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `REVSH` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `MAYBE_UNDEF_T1_HINT` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `YIELD` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `WFE` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `WFI` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `SEV` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MAYBE_UNDEF_T1_HINT` | · | · | · | · | ✅ | ✅ | ✅ |
+| `YIELD` | · | · | · | · | ✅ | ✅ | ✅ |
+| `WFE` | · | · | · | · | ✅ | ✅ | ✅ |
+| `WFI` | · | · | · | · | ✅ | ✅ | ✅ |
+| `SEV` | · | · | · | · | ✅ | ✅ | ✅ |
 | `SEVL` | · | · | · | · | · | · | · |
-| `NOP` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NOP` | · | · | · | · | ✅ | ✅ | ✅ |
 | `IT` | · | · | · | · | ✅ | ✅ | ✅ |
 | `HLT` | · | · | · | · | · | · | · |
 | `BKPT` | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

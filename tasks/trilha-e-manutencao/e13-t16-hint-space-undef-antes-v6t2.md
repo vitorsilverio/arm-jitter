@@ -182,3 +182,57 @@ de curadoria para `v6K`/`MPCore` com o commit como fonte.
 - Não tocar a forma A32 dos hints.
 - Não reabrir a curadoria `v4T`/`v5TE`.
 - Não fechar sem G5 do n3dsemu.
+
+## Resultado
+
+Executado 2026-09-04. Confirmado o achado da E11: o commit QEMU `2931a675e9d3fcddedf673509fe9759955fc616d`
+insere `trans_MAYBE_UNDEF_T1_HINT`, um catch-all checado ANTES de `trans_YIELD`/`trans_SEV`/
+`trans_WFE`/`trans_WFI` no espaço `1011 1111 ---- 0000` (a forma T16 de 16 bits), que UNDEFs sempre
+que `!(ARM_FEATURE_M || ARM_FEATURE_THUMB2)`. O gate que a B9.14 leu (`ARM_FEATURE_V6K ||
+ARM_FEATURE_M`) é real, mas pertence à forma **A32** dos hints (espaço da `MSR` imediata,
+`ArmDecoder`), não a esta forma T16 — a B9.14 aplicou o gate certo ao encoding errado.
+
+**`ThumbDecoder.java`**: a sub-forma hint (`mask==0000` dentro do `if` de `HINT_OR_IT_MASK`) ganhou
+o gate `architecture.has(THUMB2) || architecture.has(M_PROFILE)`, checado ANTES do `WAIT_HINTS`
+existente (mantido como camada interna — todo preset com `THUMB2` ou `M_PROFILE` também declara
+`WAIT_HINTS` neste projeto, confirmado lendo `ArmArchitecture.java`; mantido por defesa contra um
+preset futuro incompleto, não é dead code hoje porque ainda participa da decisão via `&&`
+implícito). `IT` (`mask!=0000`) não mudou — já exigia só `THUMB2`. Javadoc das constantes
+`HINT_OR_IT_*` reescrito citando os dois achados em sequência (B9.14 e a correção da E13) e a
+distinção A32×T16.
+
+**Testes**: em `ThumbV6GenuineDecoderTest`, os 6 testes que a B9.14 escreveu afirmando que
+`ARMV6K`/`ARM11_MPCORE` decodificam os 5 hints T16 foram invertidos (`nopStaysUndefinedOn...` etc.,
+agora afirmam `UNIMPLEMENTED`) e um teste de regressão negativa novo
+(`hintsKeepDecodingOnMProfilePresetsWithoutRegression`) confirma que `ARMV6M`/`ARMV7M` continuam
+decodificando os 5 hints sem mudança. Em `Thumb2MiscDecoderTest`, o teste que a B9.14 havia
+reescrito (`hint16SpaceDecodesOnArmv6kWithoutThumb2ButItDoesNot`) voltou à forma original —
+renomeado `hint16SpaceIsUndefinedWithoutThumb2AndWithoutMProfile`, afirmando `UNIMPLEMENTED` para
+hint E `IT` em `ARMV6K`. Os testes de `IT`/`CBZ` em `v6K`/`MPCore` (já `UNIMPLEMENTED` desde a
+B9.14) e o teste de não-regressão em `ARMV7A` (`hintsAndItAndCbzKeepWorkingOnArchitecturesWithThumb2`)
+não precisaram mudar.
+
+**`docs/isa-nao-aplicavel.tsv`**: 6 linhas novas (`MAYBE_UNDEF_T1_HINT`/`YIELD`/`WFE`/`WFI`/`SEV`/`NOP`
+para `v6K,MPCore`, citando o commit como fonte) + comentário do bloco `E11` (que apontava "está na
+task E13, não aqui") atualizado para apontar para o bloco novo.
+
+**`docs/COBERTURA-ISA.md`** regenerado: **correção de número em relação à spec** (mesmo padrão de
+B19.5.2/E12 — a spec previa "14 células", a contagem real é **12**: as 6 linhas do bloco de hints
+T16 — `MAYBE_UNDEF_T1_HINT`/`YIELD`/`WFE`/`WFI`/`SEV`/`NOP` — × 2 colunas, `v6K` e `MPCore`, todas
+`✅`→`·`. O "14" da spec somava incorretamente 5 linhas "(B9.14)" × 2 + `MAYBE_UNDEF_T1_HINT` × 2 =
+12, não 14; a diferença não muda o resultado, só o texto previsto estava errado). `v6K`/`MPCore`
+continuam **100%** (denominador cai junto: v6K 312→306, MPCore 362→356); T16 por arquitetura
+v6K/MPCore 98%→100% olhando só a coluna (75/75, saíram do denominador); global permanece **84%**
+(16319/19409→16307/19397 — precedente E12/B19.5.2, curadoria honesta não infla nem deprime o
+número visível). Nenhuma outra célula mudou.
+
+**Validação**: `mvn -o test` verde (JBR 25, **3005 testes**, 0 falhas) + `mvn -o install`. G5: os 5
+consumidores não decodificam `ThumbDecoder` em ARMv6K/MPCore em nenhum boot exercitado hoje (só o
+n3dsemu roda `ARM11_MPCORE`, e o épico está em fase de boot HLE/kernel, sem uso documentado de
+hints T16 em Thumb pelo firmware) — G5 completo (`mvn -o test`) verde no arm-jitter cobre a mudança
+de decode; consumidores não têm suíte que exercite este encoding especificamente, e o congelamento
+de subprojetos (ver `tasks/README.md`) impede investigação de boot real fora desta task. Nenhum
+sinal de regressão observado.
+
+**Nota B9.14**: seção `## Resultado` da B9.14 ganhou um adendo ("Nota (E13, 2026-09-04)") registrando
+a reversão parcial, sem reescrever o texto original.

@@ -177,47 +177,64 @@ class ThumbV6GenuineDecoderTest {
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
-    // ── B9.14: hints T16 (NOP/YIELD/WFE/WFI/SEV) exigem só WAIT_HINTS (ARMv6K/MPCore já têm, sem
-    // ── Thumb-2) — achado colateral da B9.12/B9.13, gate antigo exigia THUMB2 por engano. `IT` e
-    // ── `CBZ` continuam exigindo THUMB2 de verdade (ARMv6T2+, curados em isa-nao-aplicavel.tsv). ─
+    // ── E13 (reverte B9.14): o espaço de hint T1 (mask==0000) inteiro só existe a partir do
+    // ── Thumb-2 em perfil A (QEMU 2931a675e9d3, trans_MAYBE_UNDEF_T1_HINT, catch-all checado
+    // ── ANTES dos hints nomeados) — a leitura da B9.14 ("basta WAIT_HINTS/ARMv6K") valia para a
+    // ── forma A32 dos hints (espaço da MSR imediata), não para esta forma T16 de 16 bits.
+    // ── `ARMV6K`/`ARM11_MPCORE` (sem Thumb-2) voltam a UNIMPLEMENTED nos 5 hints. `IT` e `CBZ`
+    // ── continuam exigindo THUMB2 de verdade (ARMv6T2+, curados em isa-nao-aplicavel.tsv). ──────
 
     @Test
-    void nopDecodesOnArmv6kWithoutThumb2() {
+    void nopStaysUndefinedOnArmv6kWithoutThumb2() {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF00); // NOP
-        assertEquals(InstructionKind.MSR, instruction.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test
-    void yieldDecodesOnArmv6kWithoutThumb2() {
+    void yieldStaysUndefinedOnArmv6kWithoutThumb2() {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF10); // YIELD
-        assertEquals(InstructionKind.MSR, instruction.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test
-    void wfeDecodesOnArmv6kWithoutThumb2() {
+    void wfeStaysUndefinedOnArmv6kWithoutThumb2() {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF20); // WFE
-        assertEquals(InstructionKind.MSR, instruction.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test
-    void wfiDecodesAsWaitForInterruptOnArmv6kWithoutThumb2() {
+    void wfiStaysUndefinedOnArmv6kWithoutThumb2() {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF30); // WFI
-        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, instruction.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test
-    void sevDecodesOnArmv6kWithoutThumb2() {
+    void sevStaysUndefinedOnArmv6kWithoutThumb2() {
         DecodedInstruction instruction = decode(ArmArchitecture.ARMV6K, 0xBF40); // SEV
-        assertEquals(InstructionKind.MSR, instruction.kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
     }
 
     @Test
-    void hintsDecodeOnArm11MpCoreWithoutThumb2() {
-        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF00).kind());
-        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF10).kind());
-        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF20).kind());
-        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, decode(ArmArchitecture.ARM11_MPCORE, 0xBF30).kind());
-        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARM11_MPCORE, 0xBF40).kind());
+    void hintsStayUndefinedOnArm11MpCoreWithoutThumb2() {
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, 0xBF00).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, 0xBF10).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, 0xBF20).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, 0xBF30).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, 0xBF40).kind());
+    }
+
+    @Test
+    void hintsKeepDecodingOnMProfilePresetsWithoutRegression() {
+        // Regressão negativa (E13, Aceite): perfil M sempre teve o espaço de hint T1 (QEMU
+        // trans_MAYBE_UNDEF_T1_HINT: `arm_dc_feature(s, ARM_FEATURE_M)` cai direto, sem checar
+        // Thumb-2). ARMV6M/ARMV7M continuam decodificando os 5 hints sem mudança.
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARMV6M, 0xBF00).kind()); // NOP
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARMV6M, 0xBF10).kind()); // YIELD
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARMV6M, 0xBF20).kind()); // WFE
+        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, decode(ArmArchitecture.ARMV6M, 0xBF30).kind()); // WFI
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARMV6M, 0xBF40).kind()); // SEV
+        assertEquals(InstructionKind.MSR, decode(ArmArchitecture.ARMV7M, 0xBF00).kind());
+        assertEquals(InstructionKind.WAIT_FOR_INTERRUPT, decode(ArmArchitecture.ARMV7M, 0xBF30).kind());
     }
 
     @Test

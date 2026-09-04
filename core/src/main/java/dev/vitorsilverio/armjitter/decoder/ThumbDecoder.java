@@ -29,12 +29,21 @@ public final class ThumbDecoder implements InstructionDecoder {
 
     /// `1011 1111 hint#4 mask#4` (B2.5/B2.4, ARM DDI 0406C A6.2.9/A6.7): mesmo opcode de 16 bits
     /// que a instrução `IT` — `mask==0000` é a forma "hint" (`NOP`/`YIELD`/`WFE`/`WFI`/`SEV`,
-    /// B2.5), qualquer `mask` != 0 é `IT` (B2.4). **Os dois gates são DIFERENTES** (achado B9.14,
-    /// corrige a premissa antiga deste comentário): a sub-forma hint exige só
-    /// {@link ArmFeature#WAIT_HINTS} — o QEMU real (`translate.c`, `trans_YIELD`/`trans_SEV`/
-    /// `trans_WFE`/`trans_WFI`) gateia por `ARM_FEATURE_V6K || ARM_FEATURE_M`, nunca por Thumb-2 —
-    /// já presente em `ARMV6K`/`ARM11_MPCORE` mesmo sem Thumb-2. Só `IT` (mask!=0000) exige
-    /// {@link ArmFeature#THUMB2} de verdade (ARMv6T2+, sem gate `V6K` equivalente no QEMU).
+    /// B2.5), qualquer `mask` != 0 é `IT` (B2.4). **Os dois gates são DIFERENTES**, e o gate da
+    /// sub-forma hint mudou DUAS vezes: a B9.14 (2026-08-28) leu só `trans_YIELD`/`trans_SEV`/
+    /// `trans_WFE`/`trans_WFI` no QEMU (`ARM_FEATURE_V6K || ARM_FEATURE_M`) e concluiu que
+    /// `WAIT_HINTS` bastava; a **E13** (2026-09-04) achou o commit QEMU
+    /// `2931a675e9d3fcddedf673509fe9759955fc616d` ("Make Thumb T1 hint space UNDEF before v6T2"),
+    /// que insere `trans_MAYBE_UNDEF_T1_HINT` — um catch-all checado ANTES dos hints nomeados,
+    /// cobrindo o MESMO espaço `1011 1111 ---- 0000` inteiro — e UNDEFs sempre que
+    /// `!(ARM_FEATURE_M || ARM_FEATURE_THUMB2)`. Ou seja: a forma T1 (16 bits) do espaço de hint só
+    /// existe a partir do Thumb-2 (ARMv6T2+) em perfil A; a forma ARMv6K (`WAIT_HINTS`) sem
+    /// Thumb-2, que a B9.14 assumiu, era a forma **A32** (espaço da `MSR` imediata,
+    /// {@link ArmDecoder}), não esta. A sub-forma hint aqui exige portanto
+    /// {@link ArmFeature#THUMB2} **ou** {@link ArmFeature#M_PROFILE}, E {@link
+    /// ArmFeature#WAIT_HINTS} (perfil M sempre tem os dois; `ARMV6K`/`ARM11_MPCORE` não têm nenhum
+    /// dos dois agora — reversão da B9.14 para essas duas arquiteturas). `IT` (mask!=0000) segue
+    /// exigindo só {@link ArmFeature#THUMB2} de verdade, sem mudança.
     private static final int HINT_OR_IT_MASK = 0xFF00;
     private static final int HINT_OR_IT_VALUE = 0xBF00;
     private static final int HINT_MASK_FIELD = 0xF;
@@ -554,12 +563,19 @@ public final class ThumbDecoder implements InstructionDecoder {
                     InstructionKind.EXTEND, rd, -1, rm, packed, false, false, false);
         }
 
-        // Hints T16 de 16 bits (B2.5/B9.14): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo opcode) é
-        // `IT` (B2.4). Gates DIFERENTES por sub-forma — ver javadoc de HINT_OR_IT_MASK acima.
+        // Hints T16 de 16 bits (B2.5/B9.14/E13): NOP/YIELD/WFE/WFI/SEV. `mask!=0000` (mesmo
+        // opcode) é `IT` (B2.4). Gates DIFERENTES por sub-forma — ver javadoc de HINT_OR_IT_MASK
+        // acima.
         if ((raw & HINT_OR_IT_MASK) == HINT_OR_IT_VALUE) {
             int mask = raw & HINT_MASK_FIELD;
             if (mask == 0) {
-                if (!architecture.has(ArmFeature.WAIT_HINTS)) {
+                // E13: o espaço de hint T1 inteiro (QEMU MAYBE_UNDEF_T1_HINT) só existe a partir
+                // do Thumb-2 em perfil A; perfil M sempre tem. `WAIT_HINTS` continua exigido por
+                // trás (camada interna redundante hoje — todo preset com THUMB2 ou M_PROFILE
+                // também declara WAIT_HINTS — mantida por clareza/defesa contra preset futuro
+                // incompleto).
+                boolean hintSpaceExists = architecture.has(ArmFeature.THUMB2) || architecture.has(ArmFeature.M_PROFILE);
+                if (!hintSpaceExists || !architecture.has(ArmFeature.WAIT_HINTS)) {
                     return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, Condition.AL);
                 }
                 int hintSelector = (raw >>> HINT_SELECTOR_SHIFT) & HINT_SELECTOR_MASK;
