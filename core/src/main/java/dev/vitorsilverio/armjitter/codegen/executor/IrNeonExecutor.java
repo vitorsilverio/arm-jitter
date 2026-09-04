@@ -123,6 +123,30 @@ public final class IrNeonExecutor {
                 lanes, op.vd(), op.vm());
     }
 
+    /// NEON "1-reg-and-modified-immediate" (`VMOV`/`VMVN`/`VORR`/`VBIC` imediato, B13.9): `imm64`
+    /// já vem EXPANDIDO do decoder (núcleo COMPARTILHADO `AdvSimdModifiedImmediate`, RFC B13.2 D1).
+    /// `Q=0`: aplica a operação à palavra `vd`. `Q=1`: às palavras `vd` e `vd+1`. `ORR`/`BIC` LEEM a
+    /// palavra atual (mesma disciplina RMW de `VSRA`/`VSRI`, B13.7); `MOV`/`MVN` sobrescrevem. Sem
+    /// escrita destrutiva depois (VFP32 nunca zera bits fora do registrador escrito).
+    public void executeNeonModifiedImmediate(ArmCore core, IrOp.NeonModifiedImmediate op) {
+        VfpRegisters vfp = core.vfp();
+        applyModifiedImmediate(vfp, op, op.vd());
+        if (op.quad()) {
+            applyModifiedImmediate(vfp, op, op.vd() + 1);
+        }
+    }
+
+    private static void applyModifiedImmediate(VfpRegisters vfp, IrOp.NeonModifiedImmediate op, int word) {
+        long current = vfp.d(word);
+        long result = switch (op.op()) {
+            case MOV -> op.imm64();
+            case MVN -> ~op.imm64();
+            case ORR -> current | op.imm64();
+            case BIC -> current & ~op.imm64();
+        };
+        vfp.setD(word, result);
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

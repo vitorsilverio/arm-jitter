@@ -142,6 +142,8 @@ public final class AsmNativePolicy {
             case IrOp.NeonShiftNarrowImmediate ignored -> false;
             case IrOp.NeonShiftWidenImmediate ignored -> false;
             case IrOp.NeonConvertFixedPoint ignored -> false;
+            // NEON "1-reg-and-modified-immediate" (B13.9): idem.
+            case IrOp.NeonModifiedImmediate ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

@@ -31,18 +31,18 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 ## Progresso
 
-> **ASM 32 bits: 37 de 77** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 40 de 77** operações com nó especializado.
+> **ASM 32 bits: 37 de 78** operações emitidas nativamente (mais 9 condicionais).
+> **Truffle 32 bits: 40 de 78** operações com nó especializado.
 > **ASM 64 bits: 24 de 96** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 96** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
-> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `46/73` de ASM 32 bits daquele documento = as `37` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `4` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `24/96`.
+> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `46/73` de ASM 32 bits daquele documento = as `37` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `5` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `24/96`.
 
 ## Tabela A — pipeline de 32 bits
 
-Linhas = os 77 `record` de `IrOp`, na ordem do `Kind`.
+Linhas = os 78 `record` de `IrOp`, na ordem do `Kind`.
 
 | Operação | `Kind` | ASM (`AsmNativePolicy`) | Truffle (`IrOpNodeFactory`) |
 |---|---|---|---|
@@ -123,6 +123,7 @@ Linhas = os 77 `record` de `IrOp`, na ordem do `Kind`.
 | `NeonShiftNarrowImmediate` | `NEON_SHIFT_NARROW_IMMEDIATE` | ❌ | ❌ |
 | `NeonShiftWidenImmediate` | `NEON_SHIFT_WIDEN_IMMEDIATE` | ❌ | ❌ |
 | `NeonConvertFixedPoint` | `NEON_CONVERT_FIXED_POINT` | ❌ | ❌ |
+| `NeonModifiedImmediate` | `NEON_MODIFIED_IMMEDIATE` | ❌ | ❌ |
 
 ### Condicionais do lado 32 bits
 

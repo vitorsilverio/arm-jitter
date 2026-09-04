@@ -9,7 +9,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply, IrOp.Saturating, IrOp.DspMultiply, IrOp.ParallelAlu, IrOp.Sel, IrOp.Saturate, IrOp.AbsDiffSum, IrOp.PsrTransfer, IrOp.Load, IrOp.Store, IrOp.LoadExclusive, IrOp.StoreExclusive, IrOp.ClearExclusive, IrOp.DoubleTransfer, IrOp.Swap, IrOp.LoadLiteral, IrOp.MultipleTransfer, IrOp.Branch, IrOp.BranchExchange, IrOp.ThumbBlPrefix, IrOp.ThumbBlSuffix, IrOp.Push, IrOp.Pop, IrOp.Swi, IrOp.Coprocessor, IrOp.Undefined, IrOp.Cycle, IrOp.Fetch, IrOp.ChangeProcessorState, IrOp.SetEndianness, IrOp.StoreReturnState, IrOp.ReturnFromException, IrOp.WaitForInterrupt, IrOp.MoveTop, IrOp.MemoryBarrier, IrOp.SetItState, IrOp.TableBranch, IrOp.CompareBranchZero, IrOp.BitFieldExtract, IrOp.BitFieldInsert, IrOp.BitReverse, IrOp.Divide, IrOp.VfpAlu, IrOp.VfpMoveImmediate, IrOp.VfpCompare, IrOp.VfpConvert, IrOp.VfpLoad, IrOp.VfpStore, IrOp.VfpMultipleTransfer, IrOp.VfpCoreTransfer, IrOp.VfpCorePairTransfer, IrOp.VfpSystemTransfer, IrOp.MProfileSystemRegister, IrOp.Breakpoint, IrOp.CoprocessorDouble, IrOp.VfpCorePairTransferSingle, IrOp.VfpConvertFixed, IrOp.DspDualMultiply, IrOp.DspTopWordMultiply, IrOp.Hvc, IrOp.Smc, IrOp.Eret, IrOp.MrsBank, IrOp.MsrBank, IrOp.NeonThreeSame, IrOp.NeonLoadStoreMultiple, IrOp.NeonLoadStoreSingle,
         IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise,
         IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
-        IrOp.NeonConvertFixedPoint {
+        IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -105,6 +105,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_SHIFT_NARROW_IMMEDIATE = 74;
         public static final int NEON_SHIFT_WIDEN_IMMEDIATE = 75;
         public static final int NEON_CONVERT_FIXED_POINT = 76;
+        public static final int NEON_MODIFIED_IMMEDIATE = 77;
     }
 
     /// Operacao ALU generica.
@@ -1716,5 +1717,32 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte, em índice de `D` (ver {@link #vd}).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_CONVERT_FIXED_POINT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "1-reg-and-modified-immediate" (B13.9): `VMOV`/`VMVN`/`VORR`/
+    /// `VBIC` imediato — `cmode`/`op` discriminam as 4 famílias na função de trans (uma linha de
+    /// decodetree, `Vimm_1r`). **Não há `Vm`/`Vn`**: bits[3:0] são metade do imediato, não um
+    /// registrador.
+    ///
+    /// {@link #imm64} já vem EXPANDIDO pelo decoder (núcleo COMPARTILHADO
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate#expand}, RFC B13.2 D1,
+    /// aplicada ANTES da duplicação — o lado A64/`Vimm` da B19.6 reusa o MESMO núcleo). `MVN`
+    /// carrega o MESMO `imm64` de `MOV` (a inversão acontece na EXECUÇÃO — Decisão 2 da B13.9, não
+    /// dobrar `MVN` em `MOV` invertido).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonModifiedImmediate(
+            /// Operação a executar (`MOV`/`MVN`/`ORR`/`BIC`, já classificada pelo decoder).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`, bit `Q` do encoding), `false` para o de
+            /// 64 bits (`D<d>`).
+            boolean quad,
+            /// Imediato de 64 bits já EXPANDIDO (ver acima) — nunca recalculado no executor.
+            long imm64,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`. Também é FONTE em `ORR`/`BIC` (leem `Vd` atual).
+            int vd) implements IrOp {
+        @Override public int kind() { return Kind.NEON_MODIFIED_IMMEDIATE; }
     }
 }
