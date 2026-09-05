@@ -95,27 +95,34 @@ public final class AsmNativePolicy {
             case IrOp.Coprocessor ignored -> true;
             case IrOp.CoprocessorDouble ignored -> true;
             case IrOp.Undefined ignored -> true;
-            case IrOp.Swap ignored -> false;
+            // SWP/SWPB (C12.7): emitido nativamente desde a task C12.7 — via chamada ao
+            // interpretado (IrOpInterop, mesmo mecanismo do fallback PER_OP) cercada de
+            // flush/reload, mesmo argumento de PsrTransfer/Coprocessor acima: raro, mas não
+            // precisa mais derrubar o BLOCO inteiro.
+            case IrOp.Swap ignored -> true;
             case IrOp.Cycle ignored -> true;
             case IrOp.Fetch ignored -> true;
-            // Instruções de sistema ARMv6 da B1.5 (CPS/SETEND/SRS/RFE/WFI): interpretadas até a
-            // emissão nativa da B1.6, junto com as demais ops v6 de B1.2-B1.4.
-            case IrOp.ChangeProcessorState ignored -> false;
-            case IrOp.SetEndianness ignored -> false;
-            case IrOp.StoreReturnState ignored -> false;
-            case IrOp.ReturnFromException ignored -> false;
-            case IrOp.WaitForInterrupt ignored -> false;
+            // Instruções de sistema ARMv6 da B1.5 (CPS/SETEND/SRS/RFE/WFI): emitidas nativamente
+            // desde a task C12.7 — via chamada ao interpretado (IrOpInterop) cercada de
+            // flush/reload, mesmo argumento de PsrTransfer (mexem em CPSR/modo/banco, semântica
+            // já escrita e testada no executor; emitir bytecode direto duplicaria a lógica de
+            // troca de banco sem necessidade).
+            case IrOp.ChangeProcessorState ignored -> true;
+            case IrOp.SetEndianness ignored -> true;
+            case IrOp.StoreReturnState ignored -> true;
+            case IrOp.ReturnFromException ignored -> true;
+            case IrOp.WaitForInterrupt ignored -> true;
             // `MOVT` (Thumb-2, B2.2): emitido nativamente desde a task B3.6 (AND/OR direto,
             // preservando os 16 bits baixos existentes).
             case IrOp.MoveTop ignored -> true;
             // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável (ver IrOp.MemoryBarrier) — desde a task
             // B3.6 não emite nenhum bytecode além do Cycle/Fetch já emitidos separadamente no bloco.
             case IrOp.MemoryBarrier ignored -> true;
-            // IT block/branches Thumb-2 novos (B2.4): interpretados até uma task futura de emissão
-            // nativa, mesmo padrão de todo op novo B1.x/B2.x até B1.6/uma task dedicada.
-            case IrOp.SetItState ignored -> false;
-            case IrOp.TableBranch ignored -> false;
-            case IrOp.CompareBranchZero ignored -> false;
+            // IT block/branches Thumb-2 novos (B2.4): emitidas nativamente desde a task C12.7 —
+            // via IrOpInterop cercado de flush/reload, mesmo mecanismo dos demais desta task.
+            case IrOp.SetItState ignored -> true;
+            case IrOp.TableBranch ignored -> true;
+            case IrOp.CompareBranchZero ignored -> true;
             // Inteiro ARMv7 (B3.1): emitidas nativamente desde a task B3.6 (PR1), bytecode direto
             // sem helper — ver `emitBitFieldExtract`/`emitBitFieldInsert`/`emitBitReverse`/`emitDivide`.
             case IrOp.BitFieldExtract ignored -> true;
@@ -164,30 +171,32 @@ public final class AsmNativePolicy {
             case IrOp.VfpCoreTransfer transfer -> !transfer.halfWidth();
             case IrOp.VfpCorePairTransfer ignored -> true;
             case IrOp.VfpSystemTransfer ignored -> true;
-            // VMOV_64_sp/VCVT_fix (B9.5): sem emissao nativa ainda, cai no interpretado por
-            // AsmFallbackPolicy.PER_OP -- mesma simplificacao aceita por varias tasks B8.x/B9.x.
-            case IrOp.VfpCorePairTransferSingle ignored -> false;
-            case IrOp.VfpConvertFixed ignored -> false;
-            // MRS/MSR SYSm do perfil M (B7.4): interpretado, nunca nativo — mesmo padrão de toda op
-            // de sistema nova (delega ao MProfileExceptionModel via IrSystemExecutor).
-            case IrOp.MProfileSystemRegister ignored -> false;
-            // BKPT (B7.5): depende do BkptDispatcher do host (semihosting) — mesmo padrão de
-            // IrOp.Swi/IrOp.Coprocessor, mas sem emissão nativa ainda (op nova e rara).
-            case IrOp.Breakpoint ignored -> false;
-            // SMLAD/SMLSD/SMLALD/SMLSLD/SMMLA/SMMLS (B9.1): sem emissao nativa ainda, cai no
-            // interpretado por AsmFallbackPolicy.PER_OP -- mesma simplificacao de VfpConvertFixed.
-            case IrOp.DspDualMultiply ignored -> false;
-            case IrOp.DspTopWordMultiply ignored -> false;
-            // HVC (B9.8.2): sem emissao nativa ainda, cai no interpretado por AsmFallbackPolicy.PER_OP
-            // -- mesma simplificacao de Breakpoint/DspDualMultiply (op nova e rara).
-            case IrOp.Hvc ignored -> false;
-            // SMC (B9.8.3): mesma simplificação de Hvc.
-            case IrOp.Smc ignored -> false;
-            // ERET (B9.8.4): mesma simplificação de Hvc/Smc.
-            case IrOp.Eret ignored -> false;
-            // MRS_BANK/MSR_BANK (B9.8.5): mesma simplificação de Hvc/Smc/Eret.
-            case IrOp.MrsBank ignored -> false;
-            case IrOp.MsrBank ignored -> false;
+            // VMOV_64_sp/VCVT_fix (B9.5): emitidas nativamente desde a task C12.7 — via
+            // IrOpInterop cercado de flush/reload (mesmo mecanismo desta task inteira).
+            case IrOp.VfpCorePairTransferSingle ignored -> true;
+            case IrOp.VfpConvertFixed ignored -> true;
+            // MRS/MSR SYSm do perfil M (B7.4): emitido nativamente desde a task C12.7 — via
+            // IrOpInterop (delega ao MProfileExceptionModel via IrSystemExecutor, sem duplicar).
+            case IrOp.MProfileSystemRegister ignored -> true;
+            // BKPT (B7.5): emitido nativamente desde a task C12.7 — via IrOpInterop, mesmo
+            // mecanismo de IrOp.Swi/IrOp.Coprocessor (que usam helper dedicado) mas sem duplicar
+            // o BkptDispatcher no lado ASM.
+            case IrOp.Breakpoint ignored -> true;
+            // SMLAD/SMLSD/SMLALD/SMLSLD/SMMLA/SMMLS (B9.1): emitidas nativamente desde a task
+            // C12.7 — via IrOpInterop.
+            case IrOp.DspDualMultiply ignored -> true;
+            case IrOp.DspTopWordMultiply ignored -> true;
+            // HVC (B9.8.2): emitido nativamente desde a task C12.7 — via IrOpInterop cercado de
+            // flush/reload (a exceção de guest é lançada dentro do interpretado, exatamente como
+            // PsrTransfer/Coprocessor já fazem para outras trocas de estado do core).
+            case IrOp.Hvc ignored -> true;
+            // SMC (B9.8.3): mesmo mecanismo de Hvc.
+            case IrOp.Smc ignored -> true;
+            // ERET (B9.8.4): mesmo mecanismo de Hvc/Smc.
+            case IrOp.Eret ignored -> true;
+            // MRS_BANK/MSR_BANK (B9.8.5): mesmo mecanismo de Hvc/Smc/Eret.
+            case IrOp.MrsBank ignored -> true;
+            case IrOp.MsrBank ignored -> true;
         };
     }
 

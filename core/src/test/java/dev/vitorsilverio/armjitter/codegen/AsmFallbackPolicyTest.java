@@ -20,16 +20,19 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
                 .lift(memory, 0, count);
     }
 
-    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (SWP mantém
+    /// Bloco com uma op não suportada nativamente por motivo NÃO-condicional (LDRT mantém
     /// fallback) — exercita o fallback WHOLE_BLOCK/PER_OP/FAIL_FAST. (Condição ≠ AL,
-    /// ShiftedRegister sem flags e — desde a task C2 — flags lógicos com carry do shifter agora
-    /// SÃO emitidos nativamente, então não servem mais para este teste.)
+    /// ShiftedRegister sem flags, flags lógicos com carry do shifter [C2] e — desde a task
+    /// C12.7 — SWP/SWPB [Swap] agora são emitidos nativamente via IrOpInterop, então nenhum dos
+    /// dois serve mais para este teste; `Load#unprivileged` [LDRT/B9.9] segue interpretado —
+    /// precisa de `AddressSpace#withUnprivilegedAccess` ao redor do acesso, sem equivalente
+    /// nativo, fora do escopo de C12.7.)
     /// 0xE3A00064 = MOV r0, #100     (AL — nativo)
-    /// 0xE1031092 = SWP r1, r2, [r3] (Swap — não nativo)
+    /// 0xE4B21000 = LDRT r1, [r2]    (Load unprivileged — não nativo)
     private static TestAddressSpace buildMixedBlock() {
         TestAddressSpace memory = new TestAddressSpace(32);
         memory.put32(0, 0xE3A00064);  // MOV r0, #100     (AL — nativo)
-        memory.put32(4, 0xE1031092);  // SWP r1, r2, [r3] (Swap — não nativo)
+        memory.put32(4, 0xE4B21000);  // LDRT r1, [r2]    (Load unprivileged — não nativo)
         return memory;
     }
 
@@ -105,7 +108,7 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
 
         emitter.emit(block);
 
-        // 1 op não nativa (SWP — Swap) deve ser contada
+        // 1 op não nativa (LDRT — Load unprivileged) deve ser contada
         assertTrue(emitter.perOpFallbackOpCount() >= 1,
                 "Expected at least 1 per-op fallback; got " + emitter.perOpFallbackOpCount());
         assertEquals(1, emitter.nativeBlockCount());

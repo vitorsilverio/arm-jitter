@@ -31,14 +31,14 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 ## Progresso
 
-> **ASM 32 bits: 37 de 84** operações emitidas nativamente (mais 9 condicionais).
+> **ASM 32 bits: 57 de 84** operações emitidas nativamente (mais 9 condicionais).
 > **Truffle 32 bits: 66 de 84** operações com nó especializado.
 > **ASM 64 bits: 40 de 96** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 96** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
-> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `46/73` de ASM 32 bits daquele documento = as `37` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `11` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `40/96`.
+> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `11` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `40/96`.
 
 ## Tabela A — pipeline de 32 bits
 
@@ -55,7 +55,7 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `Load` | `LOAD` | ⚠️ | ✅ |
 | `Store` | `STORE` | ⚠️ | ✅ |
 | `DoubleTransfer` | `DOUBLE_TRANSFER` | ⚠️ | ✅ |
-| `Swap` | `SWAP` | ❌ | ✅ |
+| `Swap` | `SWAP` | ✅ | ✅ |
 | `LoadLiteral` | `LOAD_LITERAL` | ✅ | ✅ |
 | `MultipleTransfer` | `MULTIPLE_TRANSFER` | ✅ | ✅ |
 | `Branch` | `BRANCH` | ✅ | ✅ |
@@ -76,16 +76,16 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `LoadExclusive` | `LOAD_EXCLUSIVE` | ✅ | ✅ |
 | `StoreExclusive` | `STORE_EXCLUSIVE` | ✅ | ✅ |
 | `ClearExclusive` | `CLEAR_EXCLUSIVE` | ✅ | ✅ |
-| `ChangeProcessorState` | `CHANGE_PROCESSOR_STATE` | ❌ | ✅ |
-| `SetEndianness` | `SET_ENDIANNESS` | ❌ | ✅ |
-| `StoreReturnState` | `STORE_RETURN_STATE` | ❌ | ✅ |
-| `ReturnFromException` | `RETURN_FROM_EXCEPTION` | ❌ | ✅ |
-| `WaitForInterrupt` | `WAIT_FOR_INTERRUPT` | ❌ | ✅ |
+| `ChangeProcessorState` | `CHANGE_PROCESSOR_STATE` | ✅ | ✅ |
+| `SetEndianness` | `SET_ENDIANNESS` | ✅ | ✅ |
+| `StoreReturnState` | `STORE_RETURN_STATE` | ✅ | ✅ |
+| `ReturnFromException` | `RETURN_FROM_EXCEPTION` | ✅ | ✅ |
+| `WaitForInterrupt` | `WAIT_FOR_INTERRUPT` | ✅ | ✅ |
 | `MoveTop` | `MOVE_TOP` | ✅ | ✅ |
 | `MemoryBarrier` | `MEMORY_BARRIER` | ✅ | ✅ |
-| `SetItState` | `SET_IT_STATE` | ❌ | ✅ |
-| `TableBranch` | `TABLE_BRANCH` | ❌ | ✅ |
-| `CompareBranchZero` | `COMPARE_BRANCH_ZERO` | ❌ | ✅ |
+| `SetItState` | `SET_IT_STATE` | ✅ | ✅ |
+| `TableBranch` | `TABLE_BRANCH` | ✅ | ✅ |
+| `CompareBranchZero` | `COMPARE_BRANCH_ZERO` | ✅ | ✅ |
 | `BitFieldExtract` | `BIT_FIELD_EXTRACT` | ✅ | ✅ |
 | `BitFieldInsert` | `BIT_FIELD_INSERT` | ✅ | ✅ |
 | `BitReverse` | `BIT_REVERSE` | ✅ | ✅ |
@@ -100,18 +100,18 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `VfpCoreTransfer` | `VFP_CORE_TRANSFER` | ⚠️ | ✅ |
 | `VfpCorePairTransfer` | `VFP_CORE_PAIR_TRANSFER` | ✅ | ✅ |
 | `VfpSystemTransfer` | `VFP_SYSTEM_TRANSFER` | ✅ | ✅ |
-| `MProfileSystemRegister` | `M_PROFILE_SYSTEM_REGISTER` | ❌ | ✅ |
-| `Breakpoint` | `BREAKPOINT` | ❌ | ✅ |
+| `MProfileSystemRegister` | `M_PROFILE_SYSTEM_REGISTER` | ✅ | ✅ |
+| `Breakpoint` | `BREAKPOINT` | ✅ | ✅ |
 | `CoprocessorDouble` | `COPROCESSOR_DOUBLE` | ✅ | ✅ |
-| `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ❌ | ✅ |
-| `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ❌ | ✅ |
-| `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ❌ | ✅ |
-| `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ❌ | ✅ |
-| `Hvc` | `HVC` | ❌ | ✅ |
-| `Smc` | `SMC` | ❌ | ✅ |
-| `Eret` | `ERET` | ❌ | ✅ |
-| `MrsBank` | `MRS_BANK` | ❌ | ✅ |
-| `MsrBank` | `MSR_BANK` | ❌ | ✅ |
+| `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ✅ | ✅ |
+| `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ✅ | ✅ |
+| `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ✅ | ✅ |
+| `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ✅ | ✅ |
+| `Hvc` | `HVC` | ✅ | ✅ |
+| `Smc` | `SMC` | ✅ | ✅ |
+| `Eret` | `ERET` | ✅ | ✅ |
+| `MrsBank` | `MRS_BANK` | ✅ | ✅ |
+| `MsrBank` | `MSR_BANK` | ✅ | ✅ |
 | `NeonThreeSame` | `NEON_THREE_SAME` | ❌ | ❌ |
 | `NeonLoadStoreMultiple` | `NEON_LOAD_STORE_MULTIPLE` | ❌ | ❌ |
 | `NeonLoadStoreSingle` | `NEON_LOAD_STORE_SINGLE` | ❌ | ❌ |

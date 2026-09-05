@@ -305,6 +305,33 @@ public final class AsmBlockCompiler {
                 case IrOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
                 case IrOp.CoprocessorDouble cp -> emitSpilled(method, () -> emitCoprocessorDouble(method, cp));
                 case IrOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
+                // C12.7: os 20 records que a AsmNativePolicy passou a aceitar. Todos mexem em
+                // estado global (modo/banco/CPSR/IT/exceção de guest) ou são raros o bastante para
+                // não valerem bytecode direto dedicado — emitidos via IrOpInterop (o MESMO
+                // interpretado que já é o oráculo G1), cercados de flush/reload como qualquer
+                // outro helper desta classe (PsrTransfer/Coprocessor/Undefined acima). O ganho da
+                // task não é acelerar estas 20 ops — é parar de derrubar o BLOCO INTEIRO para o
+                // interpretado só por conterem uma delas (armadilha 6: emitir não é otimizar).
+                case IrOp.Swap interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.ChangeProcessorState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.SetEndianness interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.StoreReturnState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.ReturnFromException interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.WaitForInterrupt interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.SetItState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.TableBranch interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.CompareBranchZero interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.MProfileSystemRegister interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.VfpCorePairTransferSingle interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.VfpConvertFixed interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.DspDualMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.DspTopWordMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.Breakpoint interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.Hvc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.Smc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.Eret interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.MrsBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IrOp.MsrBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
                 case IrOp.BitFieldExtract bfx -> emitBitFieldExtract(method, bfx);
