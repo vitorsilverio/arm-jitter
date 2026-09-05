@@ -32,7 +32,7 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 ## Progresso
 
 > **ASM 32 bits: 37 de 84** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 40 de 84** operações com nó especializado.
+> **Truffle 32 bits: 42 de 84** operações com nó especializado.
 > **ASM 64 bits: 24 de 96** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 96** — o backend não existe (A10.8).
 
@@ -105,8 +105,8 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `CoprocessorDouble` | `COPROCESSOR_DOUBLE` | ✅ | ❌ |
 | `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ❌ | ❌ |
 | `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ❌ | ❌ |
-| `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ❌ | ❌ |
-| `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ❌ | ❌ |
+| `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ❌ | ✅ |
+| `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ❌ | ✅ |
 | `Hvc` | `HVC` | ❌ | ❌ |
 | `Smc` | `SMC` | ❌ | ❌ |
 | `Eret` | `ERET` | ❌ | ❌ |

@@ -74,14 +74,15 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                 uncovered.add(kind);
             }
         }
-        // Os Kinds sem nó Truffle (VFP/coprocessador, NEON, DSP dual/top-word,
-        // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na
-        // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
+        // Os Kinds sem nó Truffle (VFP/coprocessador, NEON, HVC/SMC/ERET/MRS_bank/MSR_bank,
+        // bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na A10.1; B13.7 acrescentou
+        // NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
         // NEON_SHIFT_WIDEN_IMMEDIATE, NEON_CONVERT_FIXED_POINT; B13.9 acrescentou
         // NEON_MODIFIED_IMMEDIATE; B13.10 acrescentou NEON_WIDENING, NEON_WIDE, NEON_NARROW; B13.11
         // acrescentou NEON_THREE_SAME_BY_ELEMENT, NEON_WIDENING_BY_ELEMENT,
-        // NEON_FP_THREE_SAME_BY_ELEMENT (NEON também não tem nó Truffle).
-        assertEquals(44, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_FP_THREE_SAME_BY_ELEMENT (NEON também não tem nó Truffle); A10.6 cobriu
+        // DSP_DUAL_MULTIPLY/DSP_TOP_WORD_MULTIPLY (−2).
+        assertEquals(42, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.BIT_FIELD_EXTRACT, IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE,
                         IrOp.Kind.DIVIDE, IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
@@ -90,7 +91,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VFP_CORE_PAIR_TRANSFER, IrOp.Kind.VFP_SYSTEM_TRANSFER,
                         IrOp.Kind.M_PROFILE_SYSTEM_REGISTER, IrOp.Kind.BREAKPOINT, IrOp.Kind.COPROCESSOR_DOUBLE,
                         IrOp.Kind.VFP_CORE_PAIR_TRANSFER_SINGLE, IrOp.Kind.VFP_CONVERT_FIXED,
-                        IrOp.Kind.DSP_DUAL_MULTIPLY, IrOp.Kind.DSP_TOP_WORD_MULTIPLY, IrOp.Kind.HVC, IrOp.Kind.SMC,
+                        IrOp.Kind.HVC, IrOp.Kind.SMC,
                         IrOp.Kind.ERET, IrOp.Kind.MRS_BANK, IrOp.Kind.MSR_BANK, IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,

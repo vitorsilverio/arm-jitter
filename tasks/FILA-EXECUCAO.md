@@ -77,9 +77,10 @@ Nenhuma dependência aberta.
 | **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode |
 | **[C12.3](trilha-c-perf/c12.3-a64-inteiro-nativo.md)** | Emissão nativa A64 do inteiro (16 `Kind`) | 24/96 → 40/96 |
 | **[C12.7](trilha-c-perf/c12.7-32bits-records-restantes.md)** | Emissão nativa 32 bits, 20 records (⚠️ pipeline em produção) | 37 → 57 de 77 |
-| **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** · **[A10.6](trilha-a-truffle/a10.6-nos-dsp.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6), DSP (2) | 40/77 → 66/77 |
+| **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6) | 42/84 → 66/84 |
 
-**Ordem sugerida**: qualquer uma. **E13 FECHADA 2026-09-04** — 12 células `✅`→`·` em `v6K`/`MPCore`
+**Ordem sugerida**: qualquer uma. **A10.6 FECHADA 2026-09-04** — Truffle 32 bits 40→42/84 (`DspDualMultiply`/`DspTopWordMultiply`
+no `MultiplyOpNode`). **E13 FECHADA 2026-09-04** — 12 células `✅`→`·` em `v6K`/`MPCore`
 (não 14, correção de número da spec), G5 verde nos 5 consumidores incl. n3dsemu (ARM11 MPCore, sem
 regressão). **E12 FECHADA 2026-09-04** — era a que consertava a MEDIÇÃO, e o denominador agora é
 honesto (ver abaixo). **B19.5.2 FECHADA 2026-09-04**, **E11 FECHADA 2026-09-03**.
