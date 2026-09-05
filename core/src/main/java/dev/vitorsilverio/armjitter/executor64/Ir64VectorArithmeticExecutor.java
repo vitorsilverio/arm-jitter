@@ -785,6 +785,44 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
+    /// `LUTI2`/`LUTI4` (B19.8) — ver {@link Ir64Op.VectorLookupTable}. `Rn` (mais `(Rn+1)%32`
+    /// quando `index` ultrapassa o tamanho de um registrador, único caso real `LUTI4_2h`) é a
+    /// tabela; `Rm`
+    /// guarda os índices EMPACOTADOS, `indexBits` (`2`=`LUTI2`/`4`=`LUTI4`) por elemento.
+    /// Confirmado bit a bit contra o fonte real do QEMU (`target/arm/tcg/vec_helper.c`,
+    /// `do_lut_b`/`do_lut_h`, commit `5fbdd62ee22f929400a623b4a1725dea83b6da70`): o elemento `e` do
+    /// grupo {@link Ir64Op.VectorLookupTable#idx} lê seu índice em `Rm` no deslocamento de bits
+    /// `(idx*elements + e) * indexBits` (nunca cruza a fronteira de 64 bits — `indexBits` sempre
+    /// divide `64`), e o valor correspondente vem do elemento `index` de `Rn`.
+    static boolean executeLookupTable(Aarch64Core core, Ir64Op.VectorLookupTable op) {
+        Aarch64FpRegisters fp = core.fp();
+        int elementBits = 8 << op.esz();
+        int elements = (Aarch64FpRegisters.QUADWORD_BYTES * 8) / elementBits;
+        int indexBits = op.four() ? 4 : 2;
+        long indexesLo = fp.low64(op.rm());
+        long indexesHi = fp.high64(op.rm());
+        long indexMask = (1L << indexBits) - 1;
+        int segmentBaseElement = op.idx() * elements;
+        long resultLo = 0L;
+        long resultHi = 0L;
+        for (int e = 0; e < elements; e++) {
+            int bitOffset = (segmentBaseElement + e) * indexBits;
+            long indexWord = bitOffset < 64 ? indexesLo : indexesHi;
+            int index = (int) ((indexWord >>> (bitOffset & 0x3F)) & indexMask);
+            int tableReg = (op.rn() + index / elements) % Aarch64FpRegisters.V_REGISTER_COUNT;
+            int lane = index % elements;
+            long value = fp.element(tableReg, lane, op.esz());
+            int destBitOffset = e * elementBits;
+            if (destBitOffset < 64) {
+                resultLo |= value << destBitOffset;
+            } else {
+                resultHi |= value << (destBitOffset - 64);
+            }
+        }
+        fp.setQ(op.rd(), resultLo, resultHi);
+        return false;
+    }
+
     /// `DUP` elemento vetorial (B8.12) — {@link Aarch64FpRegisters#replicateElement} já zera os
     /// bits altos quando `!q` (mesma disciplina de {@link #finishDestructiveWrite}).
     static boolean executeDuplicateElement(Aarch64Core core, Ir64Op.VectorDuplicateElement op) {

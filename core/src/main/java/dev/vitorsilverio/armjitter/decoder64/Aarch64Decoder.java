@@ -1142,6 +1142,44 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_COPY_SMOV = 0b0101;
     private static final int ADVSIMD_COPY_UMOV = 0b0111;
 
+    /// B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` vivem no MESMO espaço `bit21=0`/`u=0`/`bit10=0`/`bit15=0`
+    /// de {@link #decodeAdvancedSimdExtractPermuteTable} que `EXT`(`u=1`)/permute(`bit11=1`)/`TBL`
+    /// (`bit11=0`,`esz=00` fixo) — nunca colidem hoje: as 4 linhas caem em `esz!=0` dentro do ramo
+    /// `TBL` (bits[23:22] ∈ {`10`,`11`,`01`}, nunca `00`) e continuam `unsupported` sem a feature,
+    /// mesma prova de G3/G8 que a B11.4 já fez para `FEAT_RDM`. Discriminador: bits[23:21] (3 bits,
+    /// bit21 já é `0` pelo chamador) separa as 3 famílias; dentro de `LUTI4` (`0b010`), bits[14:10]
+    /// (`idx`+bits fixos, ver abaixo) separam `_1b` de `_2h`.
+    private static final int ADVSIMD_LUTI_HIGH_BITS_SHIFT = 21;
+    private static final int ADVSIMD_LUTI_HIGH_BITS_MASK = 0b111;
+    private static final int ADVSIMD_LUTI2_1B_PATTERN = 0b100;
+    private static final int ADVSIMD_LUTI2_1H_PATTERN = 0b110;
+    private static final int ADVSIMD_LUTI4_PATTERN = 0b010;
+    /// Campo bits[14:10] (5 bits): `idx` + os bits fixos que o encoding real intercala com ele —
+    /// ler como bloco único evita separar `idx` dos bits fixos do meio (armadilha 1 da task:
+    /// `LUTI4_1b`/`LUTI4_2h` só diferem aqui, nunca em bits[23:22]).
+    private static final int ADVSIMD_LUTI_LOW_FIELD_SHIFT = 10;
+    private static final int ADVSIMD_LUTI_LOW_FIELD_MASK = 0b1_1111;
+    /// `LUTI2_1b`: `idx`(2 bits, alto) + `100` fixo (3 bits, baixo) — `idx = low >>> 3`.
+    private static final int ADVSIMD_LUTI2_1B_FIXED_MASK = 0b111;
+    private static final int ADVSIMD_LUTI2_1B_FIXED_VALUE = 0b100;
+    private static final int ADVSIMD_LUTI2_1B_IDX_SHIFT = 3;
+    /// `LUTI2_1h`: `idx`(3 bits, alto) + `00` fixo (2 bits, baixo) — `idx = low >>> 2`.
+    private static final int ADVSIMD_LUTI2_1H_FIXED_MASK = 0b11;
+    private static final int ADVSIMD_LUTI2_1H_FIXED_VALUE = 0b00;
+    private static final int ADVSIMD_LUTI2_1H_IDX_SHIFT = 2;
+    /// `LUTI4_1b`: `idx`(1 bit, alto) + `1000` fixo (4 bits, baixo) — `idx = low >>> 4`.
+    private static final int ADVSIMD_LUTI4_1B_FIXED_MASK = 0b1111;
+    private static final int ADVSIMD_LUTI4_1B_FIXED_VALUE = 0b1000;
+    private static final int ADVSIMD_LUTI4_1B_IDX_SHIFT = 4;
+    /// `LUTI4_2h`: `idx`(2 bits, alto) + `100` fixo (3 bits, baixo) — `idx = low >>> 3` (MESMA
+    /// máscara/deslocamento fixo de `LUTI2_1b`, discriminados só pelo `ADVSIMD_LUTI4_PATTERN`
+    /// externo, nunca pelo campo baixo sozinho).
+    private static final int ADVSIMD_LUTI4_2H_FIXED_MASK = 0b111;
+    private static final int ADVSIMD_LUTI4_2H_FIXED_VALUE = 0b100;
+    private static final int ADVSIMD_LUTI4_2H_IDX_SHIFT = 3;
+    private static final int ADVSIMD_LUTI_ESZ_BYTE = 0;
+    private static final int ADVSIMD_LUTI_ESZ_HALFWORD = 1;
+
     // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
     // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
     // ── "two-register miscellaneous" acima ("01110"/"11110": bit24 é o único bit que muda,
@@ -3246,6 +3284,17 @@ public final class Aarch64Decoder {
         boolean bit15 = (opcode & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
         boolean bit11 = (opcode & 1) != 0;
         boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        // B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` checados ANTES do resto (EXT/permute/TBL/copy),
+        // mesmo padrão de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate} (B11.4) —
+        // sem a feature, os 4 padrões já caem em `unsupported` pelo fallback de `TBL` abaixo
+        // (`esz` nunca `0` para eles), então a ordem só evita trabalho à toa quando a feature ESTÁ
+        // presente.
+        if (architecture.has(Aarch64Feature.LOOKUP_TABLE) && !u && !bit10 && !bit15) {
+            Ir64Op lutiOp = decodeAdvancedSimdLookupTable(word, rm, rn, rd);
+            if (lutiOp != null) {
+                return lutiOp;
+            }
+        }
         if (bit10) {
             // B8.12: `bit10=1` é exatamente o espaço de "AdvSIMD copy" (`DUP`/`INS`/`SMOV`/
             // `UMOV`) — oposto de EXT/permute/TBL/TBX abaixo, que exigem `bit10=0`. Layout de
@@ -3302,6 +3351,45 @@ public final class Aarch64Decoder {
         int len = (opcode >>> 2) & 0b11;
         boolean tbx = ((opcode >>> 1) & 1) != 0;
         return new Ir64Op.VectorTableLookup(tbx, len, q, rd, rn, rm);
+    }
+
+    /// `LUTI2`/`LUTI4` (AdvSIMD lookup table, `FEAT_LUT`, B19.8) — chamado só quando `u=0`,
+    /// `bit10=0`, `bit15=0` (checado pelo chamador). Discrimina as 3 famílias por bits[23:21]
+    /// (`rn`/`rm`/`rd` já extraídos pelo chamador — layout idêntico ao resto de
+    /// {@link #decodeAdvancedSimdExtractPermuteTable}) e, dentro de `LUTI4`, as 2 formas por
+    /// bits[14:10] — ver as constantes `ADVSIMD_LUTI_*`. Retorna `null` (nunca decodifica errado,
+    /// G8) para qualquer combinação que não bata EXATAMENTE um dos 4 padrões reais.
+    private static Ir64Op decodeAdvancedSimdLookupTable(int word, int rm, int rn, int rd) {
+        int highBits = (word >>> ADVSIMD_LUTI_HIGH_BITS_SHIFT) & ADVSIMD_LUTI_HIGH_BITS_MASK;
+        int lowField = (word >>> ADVSIMD_LUTI_LOW_FIELD_SHIFT) & ADVSIMD_LUTI_LOW_FIELD_MASK;
+        return switch (highBits) {
+            case ADVSIMD_LUTI2_1B_PATTERN -> {
+                if ((lowField & ADVSIMD_LUTI2_1B_FIXED_MASK) != ADVSIMD_LUTI2_1B_FIXED_VALUE) {
+                    yield null;
+                }
+                int idx = lowField >>> ADVSIMD_LUTI2_1B_IDX_SHIFT;
+                yield new Ir64Op.VectorLookupTable(false, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
+            }
+            case ADVSIMD_LUTI2_1H_PATTERN -> {
+                if ((lowField & ADVSIMD_LUTI2_1H_FIXED_MASK) != ADVSIMD_LUTI2_1H_FIXED_VALUE) {
+                    yield null;
+                }
+                int idx = lowField >>> ADVSIMD_LUTI2_1H_IDX_SHIFT;
+                yield new Ir64Op.VectorLookupTable(false, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
+            }
+            case ADVSIMD_LUTI4_PATTERN -> {
+                if ((lowField & ADVSIMD_LUTI4_1B_FIXED_MASK) == ADVSIMD_LUTI4_1B_FIXED_VALUE) {
+                    int idx = lowField >>> ADVSIMD_LUTI4_1B_IDX_SHIFT;
+                    yield new Ir64Op.VectorLookupTable(true, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
+                }
+                if ((lowField & ADVSIMD_LUTI4_2H_FIXED_MASK) == ADVSIMD_LUTI4_2H_FIXED_VALUE) {
+                    int idx = lowField >>> ADVSIMD_LUTI4_2H_IDX_SHIFT;
+                    yield new Ir64Op.VectorLookupTable(true, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
+                }
+                yield null;
+            }
+            default -> null;
+        };
     }
 
     /// `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy, B8.12) — quarta família do prefixo vetorial

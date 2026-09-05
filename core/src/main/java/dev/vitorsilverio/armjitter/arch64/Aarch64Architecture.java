@@ -134,7 +134,8 @@ public final class Aarch64Architecture {
             Aarch64Feature.COMPARE_AND_BRANCH,
             Aarch64Feature.FP8,
             Aarch64Feature.FP8_DOT_PRODUCT_2WAY,
-            Aarch64Feature.FP8_DOT_PRODUCT_4WAY);
+            Aarch64Feature.FP8_DOT_PRODUCT_4WAY,
+            Aarch64Feature.LOOKUP_TABLE);
 
     private final String name;
     private final EnumSet<Aarch64Feature> features;

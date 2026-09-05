@@ -152,6 +152,13 @@ public enum Aarch64Feature {
     /// `FEAT_CMPBR` — `CB<cc>` (compare-and-branch condicional, formas registrador e imediato).
     /// ARMv9.5-A.
     COMPARE_AND_BRANCH,
+    /// `FEAT_LUT` — consulta de tabela por lane com índices EMPACOTADOS (`LUTI2`/`LUTI4`
+    /// AdvSIMD, B19.8). Introduzida em Armv9.5-A (confirmado contra o commit QEMU
+    /// `5fbdd62ee22f929400a623b4a1725dea83b6da70`, "target/arm: Implement LUTI2, LUTI4 for
+    /// AdvSIMD", gateado por `ID_AA64ISAR2_EL1.LUT`, parte da mesma série de patches que introduziu
+    /// o resto da Armv9.5-A/SME2p1/SVE2p1). Não confundir com o `LUTI` de SVE/SME (`FEAT_SME2`/
+    /// `FEAT_SVE2p1`, épicos B17/B18) — mesma ideia, encoding e registrador de estado diferentes.
+    LOOKUP_TABLE,
 
     // ── Armv9.6-A: features REAIS do ARM que NENHUM preset declara ainda ─────────────────────────
     // A tabela `docs/COBERTURA-ISA.md` vai só até `ARMv9.5-A`, e criar uma coluna `ARMv9.6-A` é

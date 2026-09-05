@@ -57,7 +57,7 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint,
         Ir64Op.VectorFpConvertPrecision, Ir64Op.PointerAuthGeneric, Ir64Op.AbsGeneral,
         Ir64Op.VectorDuplicateElementScalar, Ir64Op.Fp64HighHalfMove,
-        Ir64Op.AdvSimdModifiedImmediate64 {
+        Ir64Op.AdvSimdModifiedImmediate64, Ir64Op.VectorLookupTable {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -291,6 +291,9 @@ public sealed interface Ir64Op permits
         /// B19.6 bloco G: `MOVI`/`MVNI`/`ORR`/`BIC`/`FMOV` imediato AdvSIMD (`Vimm`/`FMOVI_v_h`) —
         /// ver {@link AdvSimdModifiedImmediate64}.
         public static final int ADV_SIMD_MODIFIED_IMMEDIATE_64 = 100;
+        /// B19.8: `LUTI2`/`LUTI4` (`FEAT_LUT`, consulta de tabela por lane com índices empacotados)
+        /// — ver {@link VectorLookupTable}.
+        public static final int VECTOR_LOOKUP_TABLE = 101;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2604,5 +2607,34 @@ public sealed interface Ir64Op permits
             /// Imediato de 64 bits já expandido (aplicado por METADE, não replicado cru).
             long imm64) implements Ir64Op {
         @Override public int kind() { return Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64; }
+    }
+
+    /// `LUTI2`/`LUTI4` (AdvSIMD lookup table, `FEAT_LUT`, B19.8) — consulta de tabela por lane com
+    /// índices EMPACOTADOS: cada elemento de `Rm` carrega vários índices de `2` (`LUTI2`) ou `4`
+    /// (`LUTI4`) bits, e {@link #idx} seleciona qual grupo empacotado usar. A tabela é `Rn` (mais
+    /// `(rn+1)%32` quando a tabela ocupa 2 registradores, forma `LUTI4_2h`) — **confirmado contra
+    /// o fonte real do QEMU** (`target/arm/tcg/vec_helper.c`, `HELPER(gvec_luti2_b)`/etc.: o
+    /// argumento `table` do helper recebe o operando `Rn`, `indexes` recebe `Rm`), MESMA convenção
+    /// já usada por {@link VectorTableLookup} (`TBL`/`TBX`, onde `Rn` é a tabela e `Rm` os
+    /// índices) — a task original invertia essa leitura ("índices em `Rn`, tabela em `Rm`"), erro
+    /// de transcrição corrigido nesta implementação (ver `## Resultado` da task).
+    record VectorLookupTable(
+            /// `true` para `LUTI4` (índice de 4 bits, tabela de 16 entradas), `false` para `LUTI2`
+            /// (índice de 2 bits, tabela de 4 entradas).
+            boolean four,
+            /// `log2` do tamanho do elemento em bytes: `0`=byte (`_1b`), `1`=halfword (`_2h`/`_1h`).
+            /// `LUTI4_2h` é o único caso com tabela de 2 registradores (`esz=1` e `four=true`).
+            int esz,
+            /// Seleciona qual grupo empacotado de índices usar dentro de {@link #rm} — largura
+            /// depende de {@link #four}/{@link #esz} (`LUTI2_1b`: 2 bits; `LUTI2_1h`: 3 bits;
+            /// `LUTI4_1b`: 1 bit; `LUTI4_2h`: 2 bits), já validada pelo decoder.
+            int idx,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro registrador `V` da tabela (o segundo, quando existir, é `(rn+1)%32`).
+            int rn,
+            /// Registrador `V` com os índices empacotados.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_LOOKUP_TABLE; }
     }
 }

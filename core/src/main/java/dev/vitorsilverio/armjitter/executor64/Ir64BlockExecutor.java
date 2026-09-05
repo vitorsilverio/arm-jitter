@@ -430,6 +430,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
             case Ir64Op.Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64 ->
                     executeAdvSimdModifiedImmediate64(core, (Ir64Op.AdvSimdModifiedImmediate64) op);
+            case Ir64Op.Kind.VECTOR_LOOKUP_TABLE ->
+                    Ir64VectorArithmeticExecutor.executeLookupTable(core, (Ir64Op.VectorLookupTable) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

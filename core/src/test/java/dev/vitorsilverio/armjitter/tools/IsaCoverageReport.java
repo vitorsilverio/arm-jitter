@@ -258,6 +258,11 @@ public final class IsaCoverageReport {
         AARCH64_VERSION_REQUIREMENTS.put("PACGA", Aarch64Feature.POINTER_AUTHENTICATION);
         AARCH64_VERSION_REQUIREMENTS.put("ABS", Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION);
         AARCH64_VERSION_REQUIREMENTS.put("FMOVI_v_h", Aarch64Feature.FP16);
+        // B19.8: `FEAT_LUT` (`LUTI2`/`LUTI4`, `ARMv9.5-A`).
+        AARCH64_VERSION_REQUIREMENTS.put("LUTI2_1b", Aarch64Feature.LOOKUP_TABLE);
+        AARCH64_VERSION_REQUIREMENTS.put("LUTI2_1h", Aarch64Feature.LOOKUP_TABLE);
+        AARCH64_VERSION_REQUIREMENTS.put("LUTI4_1b", Aarch64Feature.LOOKUP_TABLE);
+        AARCH64_VERSION_REQUIREMENTS.put("LUTI4_2h", Aarch64Feature.LOOKUP_TABLE);
     }
 
     /// Registra o requisito de versão de vários mnemônicos de uma vez (E12). Recusa registrar o

@@ -81,7 +81,6 @@ removidas).
 | **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
 | **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
 | **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
-| **[B19.8](trilha-b-arquiteturas/b19.8-a64-feat-lut.md)** | A64 `FEAT_LUT` (`LUTI2`/`LUTI4`, ARMv9.5-A) | 4 linhas |
 | **[B19.10](trilha-b-arquiteturas/b19.10-a64-cripto-sha512-sm3-sm4.md)** | A64 cripto SHA-512/SM3/SM4 — mesmo prefixo `0xCE` que a B11.12 abriu pela metade | 13 linhas |
 | **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
 
@@ -89,7 +88,14 @@ removidas).
 (depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/18-22 (depende de B13.12),
 B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
 
-**Ordem sugerida**: qualquer uma das dez acima. **C12.4 FECHADA 2026-09-05** — os 6 `Kind` de FP
+**Ordem sugerida**: qualquer uma das nove acima. **B19.8 FECHADA 2026-09-05** — `LUTI2`/`LUTI4`
+(`FEAT_LUT`) gateados como quinto caso real do padrão da B11.4 (feature checada antes de
+EXT/permute/TBL, zero colisão pré-existente); achado que corrige a spec original: a tabela é `Rn`
+e os índices são `Rm` (não o inverso), confirmado contra o fonte real do QEMU e contra a mesma
+convenção que `TBL`/`TBX` já usa neste projeto. `docs/COBERTURA-ISA.md` global 84%→85%,
+`ARMv9.5-A` 901→905/1146; `docs/COBERTURA-JIT.md` também regenerado (achado incidental: precisa de
+`mvn install` do `core` antes, senão o `exec:java` do `truffle` mede um jar velho). **C12.4 FECHADA
+2026-09-05** — os 6 `Kind` de FP
 escalar restante (`FMADD`/`FCSEL`/`FCCMP`/`FRINT*`/conversão geral/`FMOV` cru) via o MESMO
 mecanismo de reconstrução de record que B6.5.4/C12.3 (zero aritmética nova), ASM 64 bits 40→46 de
 96, G5 zero-diff nos 5 consumidores. **C12.7 FECHADA 2026-09-05** — os 20 records via `IrOpInterop`
@@ -172,7 +178,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 `B13.7` · `B13.8` · `B13.9` · `B13.10` · `B13.11` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11`
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
-`C12.4` · `C12.7` · **épico `B22` inteiro**.
+`C12.4` · `C12.7` · `B19.8` · **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 
