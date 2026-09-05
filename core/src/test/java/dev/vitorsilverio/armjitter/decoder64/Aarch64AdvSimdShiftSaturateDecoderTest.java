@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// AdvSIMD — deslocamento, saturação e estreitamento (B8.8): `SQ*`/`UQ*` (three same reaproveitado
 /// de B8.7), `SUQADD`/`USQADD` (two-register misc reaproveitado), `SQXTN`/`SQXTUN`/`UQXTN` (narrow
@@ -237,8 +238,13 @@ class Aarch64AdvSimdShiftSaturateDecoderTest {
     }
 
     @Test
-    void reservedImmhZeroThrows() {
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x0f000420));
+    void reservedImmhZeroFallsIntoModifiedImmediateNotThisClass() {
+        // B19.6: `immh=0000` NÃO é reservado de verdade — é exatamente onde `Vimm`/`FMOVI_v_h`
+        // moram ("1-reg-and-modified-immediate" reusa o MESMO prefixo "shift by immediate"). Este
+        // vetor específico (`bits[11:10]="01"`, `cmode=0000`) agora decodifica como `MOVI`; o
+        // subespaço GENUINAMENTE reservado dentro de `immh=0` é `bits[11:10]` fora de `{01,11}`,
+        // coberto por `Aarch64B196DiversosDecoderTest#reservedFixedTwoBitsWithinModifiedImmediateSpaceRejected`.
+        assertTrue(decodeWord(0x0f000420) instanceof Ir64Op.AdvSimdModifiedImmediate64);
     }
 
     // ── "Shift by immediate" estreitando: SHRN/RSHRN/SQ*SHRN*/UQ*SHRN* ──────────────────────────

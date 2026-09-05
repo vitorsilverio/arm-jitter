@@ -377,5 +377,15 @@ public enum Aarch64SystemRegisterId {
     DBGWVR0_EL1,
     /// `DBGWCR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=7`) — controle do watchpoint 0. Armazenamento
     /// puro.
-    DBGWCR0_EL1
+    DBGWCR0_EL1,
+
+    /// `SYS`/`SYSL` `op0=2` (B19.6, bloco A) fora do subconjunto nomeado de B10.7 acima (qualquer
+    /// `op1`/`CRn`/`CRm`/`op2` que não bata com `MDSCR_EL1`/`OSLAR_EL1`/`OSLSR_EL1`/
+    /// `DBG{B,W}{V,C}R0_EL1`) — MESMA disciplina "tolerante" de B10.7 ("não travar o guest"),
+    /// generalizada: um único escaninho de 64 bits COMPARTILHADO por toda essa região (não um por
+    /// registrador de debug real distinto), já que nenhum deles tem consumidor modelado neste
+    /// emulador — ler de volta exatamente o que o próprio guest escreveu ali (ou 0, se nada foi
+    /// escrito) evita tanto a exceção de decode (que travaria o boot em qualquer kernel com
+    /// suporte a debug) quanto fingir um registrador distinto por combinação.
+    DEBUG_UNMODELED
 }

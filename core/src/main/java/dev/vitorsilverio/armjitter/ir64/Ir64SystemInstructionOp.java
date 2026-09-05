@@ -46,5 +46,13 @@ public enum Ir64SystemInstructionOp {
     /// `CFINV`/`XAFLAG`/`AXFLAG`, que compartilhavam o mesmo `CRn` e foram encontradas colidindo
     /// por acaso com estas formas antes desta task — ver Armadilhas da task B8.3), mas não guarda
     /// estado nenhum.
-    PSTATE_FIELD_NOP
+    PSTATE_FIELD_NOP,
+    /// `SYS`/`SYSL` (`op0=1`) fora de TLBI/AT/manutenção de cache já nomeados — o resto do espaço
+    /// de manutenção do sistema (B19.6, bloco A: nenhum consumidor deste emulador modela cache/TLB
+    /// de verdade, então qualquer combinação `CRn`/`CRm`/`op1`/`op2` não reconhecida individualmente
+    /// é igualmente segura como NOP). **`DC ZVA` fica FORA** (ver {@link #CACHE_MAINTENANCE_NOP}) —
+    /// continua lançando, não cai aqui. Mesma disciplina de "sem hospedeiro, NOP explícito, nunca
+    /// exceção" já aplicada a {@link #CACHE_MAINTENANCE_NOP}/{@link #NOP_HINT}: uma instrução de
+    /// manutenção obrigatória em qualquer kernel real não pode travar o boot.
+    MAINTENANCE_UNMODELED_NOP
 }

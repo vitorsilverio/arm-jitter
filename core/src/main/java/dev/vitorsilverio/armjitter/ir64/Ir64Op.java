@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
+
 /// Operação de representação intermediária para AArch64 (A64) — espelho estrutural de
 /// {@link dev.vitorsilverio.armjitter.ir.IrOp}, mas um frontend IRMÃO e independente (Opção B da
 /// RFC-IR-64BIT.md, aprovada 2026-07-10): registradores de 64 bits (`X0`-`X30` + `SP`/`XZR`),
@@ -53,7 +55,9 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorArithmeticThreeSameByElement, Ir64Op.VectorArithmeticWideningByElement,
         Ir64Op.VectorFpArithmeticThreeSameByElement, Ir64Op.CryptoSha3FourRegister,
         Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint,
-        Ir64Op.VectorFpConvertPrecision {
+        Ir64Op.VectorFpConvertPrecision, Ir64Op.PointerAuthGeneric, Ir64Op.AbsGeneral,
+        Ir64Op.VectorDuplicateElementScalar, Ir64Op.Fp64HighHalfMove,
+        Ir64Op.AdvSimdModifiedImmediate64 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -275,6 +279,18 @@ public sealed interface Ir64Op permits
         /// B19.4: `FCVTL`/`FCVTN`/`FCVTXN` (AdvSIMD conversão de PRECISÃO vetorial, entre `f16`/`f32`/
         /// `f64`) — ver {@link VectorFpConvertPrecision}.
         public static final int VECTOR_FP_CONVERT_PRECISION = 95;
+        /// B19.6 bloco C: `PACGA` (`FEAT_PAuth`) — ver {@link PointerAuthGeneric}.
+        public static final int POINTER_AUTH_GENERIC = 96;
+        /// B19.6 bloco D: `ABS` de registrador geral (`FEAT_CSSC`) — ver {@link AbsGeneral}.
+        public static final int ABS_GENERAL = 97;
+        /// B19.6 bloco E: `DUP` escalar (`DUP_element_s`) — ver {@link VectorDuplicateElementScalar}.
+        public static final int VECTOR_DUPLICATE_ELEMENT_SCALAR = 98;
+        /// B19.6 bloco F: `FMOV` entre registrador geral e `Vn.D[1]` (metade ALTA) — ver
+        /// {@link Fp64HighHalfMove}.
+        public static final int FP64_HIGH_HALF_MOVE = 99;
+        /// B19.6 bloco G: `MOVI`/`MVNI`/`ORR`/`BIC`/`FMOV` imediato AdvSIMD (`Vimm`/`FMOVI_v_h`) —
+        /// ver {@link AdvSimdModifiedImmediate64}.
+        public static final int ADV_SIMD_MODIFIED_IMMEDIATE_64 = 100;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2502,5 +2518,91 @@ public sealed interface Ir64Op permits
             /// Índice do elemento fonte dentro de {@link #rn}.
             int index) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_MOVE_ELEMENT; }
+    }
+
+    /// `PACGA Xd, Xn, Xm` (`ARM DDI 0487 C6.2.232`, B19.6 bloco C, `FEAT_PAuth`) — autenticação de
+    /// ponteiro GENÉRICA (calcula um código de autenticação, não modifica um ponteiro como
+    /// `PACIA`/`PACDA`). Este emulador não modela autenticação de ponteiro de verdade (nenhum
+    /// `AUTG*`/`AUTIA`/... verifica o resultado) — decisão registrada na task: decodifica e executa
+    /// como placeholder DETERMINÍSTICO (`Xd = 0`, ver o executor), nunca lança.
+    record PointerAuthGeneric(
+            /// Registrador de destino (índice `0`-`31`; `31` é `XZR`).
+            int rd,
+            /// Primeiro operando (`Xn`, o ponteiro).
+            int rn,
+            /// Segundo operando (`Xm`, o modificador).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.POINTER_AUTH_GENERIC; }
+    }
+
+    /// `ABS Xd, Xn` (`ARM DDI 0487`, B19.6 bloco D, `FEAT_CSSC`) — valor absoluto de registrador
+    /// geral (diferente do `ABS` vetorial AdvSIMD, já `✅` desde B8.7 — mnemônico homônimo em classe
+    /// de encoding diferente). `INT_MIN` não satura: o resultado é o próprio `INT_MIN` (complemento
+    /// de dois).
+    record AbsGeneral(
+            /// Registrador de destino (índice `0`-`31`; `31` é `XZR`).
+            int rd,
+            /// Registrador de origem (índice `0`-`31`; `31` é `XZR`).
+            int rn,
+            /// `true` para `X` (64 bits), `false` para `W` (32, zero-estendido).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.ABS_GENERAL; }
+    }
+
+    /// `DUP <V><d>, <Vn>.<T>[<index>]` (`ARM DDI 0487`, B19.6 bloco E, "Advanced SIMD scalar copy")
+    /// — forma ESCALAR do {@link VectorDuplicateElement}: grava só o elemento no LANE `0` de
+    /// {@link #rd} e ZERA o resto do registrador de 128 bits (nunca replica pelas outras lanes,
+    /// diferente da forma vetorial, que é por isso um record separado em vez de reaproveitar
+    /// {@link VectorDuplicateElement} com um `boolean scalar` — a semântica de "zera tudo fora do
+    /// elemento" não é um simples `!q`).
+    record VectorDuplicateElementScalar(
+            /// `log2` do tamanho do elemento em bytes (`0`-`3`).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn,
+            /// Índice do elemento fonte dentro de {@link #rn}.
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR; }
+    }
+
+    /// `FMOV Xd, Vn.D[1]` / `FMOV Vd.D[1], Xn` (`ARM DDI 0487`, B19.6 bloco F) — move entre
+    /// registrador geral de 64 bits e a metade ALTA (bits `127:64`) de um registrador vetorial de
+    /// 128 bits. Diferente de {@link Fp64GeneralRegisterMove} (que sempre usa a metade BAIXA e, no
+    /// sentido GPR→FP, ZERA o resto do registrador): aqui o sentido FP→GPR simplesmente LÊ a
+    /// metade alta, e o sentido GPR→FP PRESERVA a metade baixa (exceção à escrita destrutiva normal
+    /// de A64 — ver Armadilhas da task).
+    record Fp64HighHalfMove(
+            /// `true`: `Xn` → `Vd.D[1]` (preserva `Vd.D[0]`). `false`: `Vn.D[1]` → `Xd`.
+            boolean toFloat,
+            /// Registrador FP (índice `0`-`31`, `V<n>`).
+            int fpReg,
+            /// Registrador geral (índice `0`-`31`).
+            int gpReg) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_HIGH_HALF_MOVE; }
+    }
+
+    /// `MOVI`/`MVNI`/`ORR`/`BIC` imediato AdvSIMD (`Vimm`) + `FMOV` de meia precisão imediato
+    /// (`FMOVI_v_h`, `FEAT_FP16`) — `ARM DDI 0487`, B19.6 bloco G, irmão A64 direto de
+    /// `IrOp.NeonModifiedImmediate` (B13.9, 32 bits): MESMO núcleo compartilhado
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate}, `imm64` já EXPANDIDO
+    /// pelo decoder (nunca recalculado na execução). Diferença real vs o irmão de 32 bits: escrita
+    /// SEMPRE destrutiva — {@link #q}{@code ==false} zera `Rd[127:64]` (A32 não tem esse conceito,
+    /// `D` é um registrador independente); `{@link #op}==MOV` com `cmode=1111,op=1` é `FMOV`
+    /// (imediato de 64 bits, reaproveita `Aarch64Decoder#expandFpImmediate` — combinação reservada
+    /// em AArch32, válida aqui).
+    record AdvSimdModifiedImmediate64(
+            /// Operação real (`MOV`/`MVN`/`ORR`/`BIC` — `FMOVI_v_h`/`FMOV` de 64 bits classificam
+            /// como `MOV`, mesmo padrão de {@code AdvSimdModifiedImmediate#classify}).
+            AdvSimdModifiedImmediateOp op,
+            /// `true` para arranjo de 128 bits (aplica a {@link #imm64} às DUAS metades, cada uma
+            /// independentemente), `false` para 64 (zera a metade alta).
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Imediato de 64 bits já expandido (aplicado por METADE, não replicado cru).
+            long imm64) implements Ir64Op {
+        @Override public int kind() { return Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64; }
     }
 }

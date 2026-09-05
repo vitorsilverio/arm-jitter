@@ -1755,14 +1755,17 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void syslFormThrows() {
-        // `sysl x0, #0, c8, c7, #0` (`L=1`, mesmos CRn/CRm/op2 do TLBI VMALLE1) — fora do escopo,
-        // esta task só reconhece a forma `SYS` (`L=0`) — encoding real via aarch64-none-elf-as.
+    void syslFormDecodesAsGenericMaintenanceNop() {
+        // `sysl x0, #0, c8, c7, #0` (`L=1`, mesmos CRn/CRm/op2 do TLBI VMALLE1) — B19.6 bloco A:
+        // o resto do espaço `SYS`/`SYSL` (`op0=1`) fora de TLBI/AT/manutenção de cache NOMEADOS
+        // agora decodifica como NOP genérico (`MAINTENANCE_UNMODELED_NOP`), não mais `unsupported`
+        // (uma instrução de manutenção que lança trava o boot de qualquer kernel real).
         int word = 0xd5288700;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        assertEquals(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP, op.opcode());
     }
 
     @Test
@@ -1792,14 +1795,17 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void systemRegisterOp0OneSysFormIsOutOfScope() {
+    void systemRegisterOp0OneSysFormDecodesAsGenericMaintenanceNop() {
         // op0=1 (SYS/SYSL — TLBI/IC/DC/AT) é uma família de instruções diferente de MRS/MSR de
-        // registrador nomeado; fora do escopo desta task (Fatos de referência #2).
+        // registrador nomeado. B19.6 bloco A: este CRn específico (não TLBI/AT/cache) agora
+        // decodifica como NOP genérico em vez de `unsupported` — ver
+        // `syslFormDecodesAsGenericMaintenanceNop` acima para o mesmo achado.
         int word = (0xd5381000 & ~(0b11 << 19)) | (0b01 << 19);
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        assertThrows(UnsupportedOperationException.class, () -> DECODER.decode(scratch, 0));
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        assertEquals(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP, op.opcode());
     }
 
     // ── B6.5.3: FADD/FSUB/FMUL/FDIV/FNEG/FABS/FMOV(reg)/FMOV(imm)/FCMP/FCMPE/FCVT ──────────────

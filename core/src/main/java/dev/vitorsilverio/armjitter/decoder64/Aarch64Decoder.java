@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
@@ -781,6 +783,7 @@ public final class Aarch64Decoder {
     private static final int LITERAL_OPC_32BIT = 0b00;
     private static final int LITERAL_OPC_64BIT = 0b01;
     private static final int LITERAL_OPC_LDRSW = 0b10;
+    private static final int LITERAL_OPC_PRFM = 0b11;
     private static final int LITERAL_IMM19_SHIFT = 5;
     private static final int LITERAL_IMM19_BITS = 19;
     private static final int LITERAL_BYTES_PER_UNIT = 4;
@@ -913,6 +916,10 @@ public final class Aarch64Decoder {
     private static final int FP_TYPE_MASK = 0b11;
     private static final int FP_TYPE_SINGLE = 0b00;
     private static final int FP_TYPE_DOUBLE = 0b01;
+    /// `type` fixo de `FMOV Vd.D[1],Xn`/`FMOV Xd,Vn.D[1]` (B19.6 bloco F) — não é meia-precisão
+    /// nem reservado nesta classe específica, ao contrário do que
+    /// {@link #decodeFpDoublePrecision} assume para o resto da classe.
+    private static final int FP_TYPE_HIGH_HALF_MOVE = 0b10;
 
     // ── Floating-point data-processing (2 source) — FADD/FSUB/FMUL/FDIV: bits[11:10] fixo="10",
     // ── opcode(15:12) 4 bits, Rm(20:16), Rn(9:5), Rd(4:0).
@@ -1057,6 +1064,10 @@ public final class Aarch64Decoder {
     /// contra corpus real).
     private static final int CRYPTO_SHA_THREE_REG_OPCODE_SHIFT = 10;
     private static final int CRYPTO_SHA_THREE_REG_OPCODE_MASK = 0b11_1111;
+    /// B19.6 bloco E: `DUP_element_s` (Advanced SIMD scalar copy) — MESMO campo `opcode` de 6 bits
+    /// do comentário acima, valor `0b000001` (bit10=1, único ponto do espaço "escalar bit21=0" com
+    /// esse bit setado — as 7 opcodes SHA reais são todas pares).
+    private static final int ADVSIMD_SCALAR_COPY_OPCODE = 0b00_0001;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -1146,6 +1157,22 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_SHIFT_IMMH_MASK = 0b1111;
     private static final int ADVSIMD_SHIFT_IMMB_SHIFT = 16;
     private static final int ADVSIMD_SHIFT_IMMB_MASK = 0b111;
+
+    // ── B19.6 bloco G: `Vimm`/`FMOVI_v_h` (`%abcdefgh` real do `a64.decode`: bits[18:16] = "abc" ────
+    // ── (topo de `imm8`), bits[9:5] = "defgh" (base) — MESMA posição que `immb`/`Rn` ocupariam se ────
+    // ── esta fosse mesmo uma instrução "shift by immediate" de verdade, achado que também vale do ───
+    // ── lado A32 para `Vimm_1r`, B13.7). ─────────────────────────────────────────────────────────
+    private static final int ADVSIMD_MODIFIED_IMM_TOP_SHIFT = 16;
+    private static final int ADVSIMD_MODIFIED_IMM_BOTTOM_SHIFT = 5;
+    /// bits[15:10] cru — `FMOVI_v_h` exige os 6 bits fixos em `1`; `Vimm` usa os 4 bits altos como
+    /// `cmode` e exige os 2 baixos fixos em `01` (checado separadamente, ver
+    /// {@link #ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT}).
+    private static final int ADVSIMD_MODIFIED_IMM_SUFFIX_SHIFT = 10;
+    private static final int ADVSIMD_MODIFIED_IMM_FMOVI_H_SUFFIX = 0b11_1111;
+    private static final int ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT = 10;
+    private static final int ADVSIMD_MODIFIED_IMM_FIXED2_PATTERN = 0b01;
+    private static final int ADVSIMD_MODIFIED_IMM_CMODE_SHIFT = 12;
+    private static final int ADVSIMD_MODIFIED_IMM_OP_SHIFT = 29;
 
     // ── "Advanced SIMD vector/scalar × indexed element" (B8.19): MESMO prefixo bits[28:24] de ────
     // ── "shift by immediate" acima ("01111"/"11111") — discriminados só por bit10 (`1`=shift-
@@ -1258,6 +1285,12 @@ public final class Aarch64Decoder {
     // ── {@link Ir64Op.Fp64GeneralRegisterMove}), então basta ler `sf` e ignorar `type`.
     private static final int FP_GP_MOVE_OPCODE_TO_FLOAT = 0b10_0111;
     private static final int FP_GP_MOVE_OPCODE_TO_GP = 0b10_0110;
+    /// `FMOV Vd.D[1],Xn`/`FMOV Xd,Vn.D[1]` (B19.6 bloco F) — MESMO campo `opcode`, valores
+    /// `0b101110`/`0b101111`; `type`(23:22) fixo em `0b10` para esta forma (ver
+    /// {@link #FP_TYPE_HIGH_HALF_MOVE}), medido bit a bit contra corpus real
+    /// (`aarch64-none-elf-as`, `.arch armv8.5-a`).
+    private static final int FP_GP_MOVE_OPCODE_HIGH_TO_FLOAT = 0b10_1111;
+    private static final int FP_GP_MOVE_OPCODE_HIGH_TO_GP = 0b10_1110;
 
     // ── B8.5: "Floating-point data-processing (1 source)" — `FRINTx`, opcode(20:15) 6 bits,
     // ── MESMO grupo/bits[14:10]="10000" de `FMOV`/`FABS`/`FNEG`/`FSQRT`/`FCVT` (F32<->F64) já
@@ -1344,6 +1377,13 @@ public final class Aarch64Decoder {
     private static final int DIVIDE_OPCODE_5BIT_MASK = 0b1_1111;
     private static final int DIVIDE_OPCODE_PATTERN = 0b0_0001;
 
+    // ── B19.6 bloco C: `PACGA` (`FEAT_PAuth`) — MESMO subgrupo "Data-processing (2 source)" de ────
+    // ── SDIV/UDIV/LSLV/.../CRC32* (opc2=00), opcode(15:10)=`0b001100`, fixo (`Rm`/`Rn`/`Rd` normais, ─
+    // ── `@rrr`). Medido bit a bit contra corpus real (`aarch64-none-elf-as`, `.arch armv8.3-a`). ────
+    private static final int PACGA_OPCODE_SHIFT = 10;
+    private static final int PACGA_OPCODE_6BIT_MASK = 0b11_1111;
+    private static final int PACGA_OPCODE_PATTERN = 0b00_1100;
+
     // ── LSLV/LSRV/ASRV/RORV, mesmo subgrupo "Data-processing (2 source)" de SDIV/UDIV (B6.11): ───
     // ── opcode(15:11)=00100(LSLV/LSRV) ou 00101(ASRV/RORV), bit10 distingue dentro do par ─────────
     // ── (0=esquerda/aritmético,1=direita/rotação) — CONFERIDO contra `a64.decode` real do QEMU ────
@@ -1395,6 +1435,9 @@ public final class Aarch64Decoder {
     private static final int ONE_SOURCE_OPCODE_CLZ = 0b00_0100;
     private static final int ONE_SOURCE_OPCODE_CLS = 0b00_0101;
     private static final int ONE_SOURCE_OPCODE_CNT = 0b00_0111;
+    /// `ABS` de registrador geral (B19.6 bloco D, `FEAT_CSSC`) — medido bit a bit contra corpus
+    /// real (`aarch64-none-elf-as`, `.arch armv8.9-a`).
+    private static final int ONE_SOURCE_OPCODE_ABS = 0b00_1000;
 
     // ── Data-processing (3 source), B8.2: SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH — mesmo campo ──
     // ── de 8 bits fixos em bits[28:21] de MADD/MSUB (MADD_MSUB_FIXED_PATTERN), mas com valores ────
@@ -1837,14 +1880,19 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeLoadLiteral(int word, long address) {
         int opc = (word >>> LITERAL_OPC_SHIFT) & LITERAL_OPC_MASK;
+        // `PRFM (literal)` (B19.6 bloco B): não escreve registrador — `Rt` codifica um `prfop`, não
+        // um destino real — mesma semântica NOP puro da forma registrador de `PRFM` (B8.1, linha
+        // 1906 acima: este emulador não modela cache nenhum).
+        if (opc == LITERAL_OPC_PRFM) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+        }
         boolean wide;
         boolean signExtend;
         switch (opc) {
             case LITERAL_OPC_32BIT -> { wide = false; signExtend = false; }
             case LITERAL_OPC_64BIT -> { wide = true; signExtend = false; }
             case LITERAL_OPC_LDRSW -> { wide = true; signExtend = true; }
-            // PRFM (literal, opc=11): não escreve registrador, fora da fatia B6.2.
-            default -> throw unsupported(word, address);
+            default -> throw new IllegalStateException("unreachable");
         }
         long imm19 = (word >>> LITERAL_IMM19_SHIFT) & bitMask(LITERAL_IMM19_BITS);
         long offset = signExtend(imm19, LITERAL_IMM19_BITS) * LITERAL_BYTES_PER_UNIT;
@@ -2332,7 +2380,8 @@ public final class Aarch64Decoder {
                 return decodeDataProcessing1Source(word, address);
             }
             if (opc2 != DP_SOURCE_OPC2_TWO_SOURCE) {
-                // `opc2` = `01`/`11`: SUBP/SUBPS/IRG/GMI/PACGA (MTE/PAC, fora de escopo).
+                // `opc2` = `01`/`11`: SUBP/SUBPS/IRG/GMI (MTE, fora de escopo) — `PACGA` mede
+                // `opc2=00`, tratada abaixo (B19.6 bloco C, achado desta task).
                 throw unsupported(word, address);
             }
             int divideOpcode = (word >>> DIVIDE_OPCODE_SHIFT) & DIVIDE_OPCODE_5BIT_MASK;
@@ -2343,8 +2392,17 @@ public final class Aarch64Decoder {
             if (shiftOpcode4 == SHIFT_VARIABLE_OPCODE_PATTERN) {
                 return decodeShiftVariable(word);
             }
-            // opcode != 00001/0010x: CRC32*/SMAX/SMIN/UMAX/UMIN (fora do escopo, ver
-            // isa-nao-aplicavel.tsv).
+            // B19.6 bloco C: `PACGA` (`FEAT_PAuth`) — MESMO subgrupo "Data-processing (2 source)"
+            // (opc2=00), opcode(15:10)=`0b001100` (bits[11:10]="00", diferente de SDIV/UDIV/LSLV/.../
+            // que exigem bit10=1 ou já foram checados acima). Medido bit a bit contra corpus real
+            // (`aarch64-none-elf-as`/`objdump`, devkitA64, `.arch armv8.3-a`) — o comentário antigo
+            // desta função ("opc2=01/11: SUBP/SUBPS/IRG/GMI/PACGA") estava ERRADO: `PACGA` mede
+            // `opc2=00` de verdade, não `01`/`11` (esses seguem MTE, fora de escopo).
+            int pacgaOpcode6 = (word >>> PACGA_OPCODE_SHIFT) & PACGA_OPCODE_6BIT_MASK;
+            if (pacgaOpcode6 == PACGA_OPCODE_PATTERN) {
+                return decodePacga(word, address);
+            }
+            // opcode restante: CRC32*/SMAX/SMIN/UMAX/UMIN (fora do escopo, ver isa-nao-aplicavel.tsv).
             throw unsupported(word, address);
         }
         if (muldivFixed8 == ADD_SUB_CARRY_FIXED_PATTERN) {
@@ -2371,11 +2429,35 @@ public final class Aarch64Decoder {
         return new Ir64Op.ShiftVariable(rd, rn, rm, shiftType, wide);
     }
 
+    /// `PACGA Xd, Xn, Xm` (B19.6 bloco C, `FEAT_PAuth`) — este emulador não modela autenticação de
+    /// ponteiro de verdade (ver javadoc de {@link Ir64Op.PointerAuthGeneric}); gateado do mesmo modo
+    /// que os outros primeiros gates reais de A64 (B11.4 em diante).
+    private Ir64Op decodePacga(int word, long address) {
+        if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.PointerAuthGeneric(rd, rn, rm);
+    }
+
     /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2, "Data-processing
     /// (1 source)" — só chega aqui depois do gate de `opc2` em {@link #decodeDataProcessingRegister}).
     private Ir64Op decodeDataProcessing1Source(int word, long address) {
         boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
         int opcode = (word >>> ONE_SOURCE_OPCODE_SHIFT) & ONE_SOURCE_OPCODE_MASK;
+        // B19.6 bloco D: `ABS Xd, Xn` (`FEAT_CSSC`) — MESMO subgrupo "Data-processing (1 source)",
+        // opcode=`0b001000`. Gateado ANTES do `switch` de `Ir64OneSourceOp` (record próprio, ver
+        // {@link Ir64Op.AbsGeneral} — não é o `ABS` vetorial AdvSIMD, já `✅` desde B8.7).
+        if (opcode == ONE_SOURCE_OPCODE_ABS) {
+            if (!architecture.has(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION)) {
+                throw unsupported(word, address);
+            }
+            int absRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int absRd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.AbsGeneral(absRd, absRn, wide);
+        }
         Ir64OneSourceOp op = switch (opcode) {
             case ONE_SOURCE_OPCODE_RBIT -> Ir64OneSourceOp.RBIT;
             case ONE_SOURCE_OPCODE_REV16 -> Ir64OneSourceOp.REV16;
@@ -2828,6 +2910,18 @@ public final class Aarch64Decoder {
                 int opcode = (word >>> CRYPTO_SHA_THREE_REG_OPCODE_SHIFT) & CRYPTO_SHA_THREE_REG_OPCODE_MASK;
                 int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 int rd = word & REGISTER_FIELD_MASK;
+                // B19.6 bloco E: `DUP_element_s` (Advanced SIMD scalar copy) vive no MESMO prefixo
+                // escalar, discriminada de SHA-three-register por `opcode==0b000001` (bit10=1 —
+                // todas as 7 opcodes SHA reais têm bit10=0, ver os valores pares de
+                // `decodeCryptoShaThreeRegisterOpcode`). `rm` aqui não é `Rm`: é `imm5` cru (bits
+                // [20:16], MESMA posição que {@link #decodeAdvancedSimdCopy} usa para a forma
+                // vetorial).
+                if (opcode == ADVSIMD_SCALAR_COPY_OPCODE) {
+                    Ir64Op dup = decodeAdvancedSimdScalarDuplicateElement(rm, rn, rd);
+                    if (dup != null) {
+                        return dup;
+                    }
+                }
                 Ir64CryptoShaThreeRegisterOp shaOp = decodeCryptoShaThreeRegisterOpcode(opcode);
                 if (shaOp != null) {
                     return new Ir64Op.CryptoShaThreeRegister(shaOp, rd, rn, rm);
@@ -3221,6 +3315,20 @@ public final class Aarch64Decoder {
     /// truque padrão do ARM DDI 0487 "AdvSIMD copy": `esz = LowestSetBit(imm5)`, `index =
     /// imm5 >>> (esz+1)` — `imm5==0` ou `esz>3` é reservado (G8). Encodings conferidos bit a bit
     /// contra corpus real (`aarch64-none-elf-as`/`objdump`, devkitA64).
+    /// `DUP <V><d>, <Vn>.<T>[<index>]` (B19.6 bloco E, "Advanced SIMD scalar copy") — MESMO truque
+    /// de `esz`/`index` de {@link #decodeAdvancedSimdCopy} (`esz = LowestSetBit(imm5)`, `index =
+    /// imm5 >>> (esz+1)`), mas nunca `esz==3` exige `Q` aqui (não existe conceito de `Q` na forma
+    /// escalar — todo `esz` é válido). `imm5==0` ou `esz>3` é reservado (`null`, G8 — o chamador
+    /// decide o que fazer, mesmo padrão de {@link #decodeAdvancedSimdExtractPermuteTable}).
+    private static Ir64Op decodeAdvancedSimdScalarDuplicateElement(int imm5, int rn, int rd) {
+        int esz = imm5 == 0 ? -1 : Integer.numberOfTrailingZeros(imm5);
+        if (esz < 0 || esz > ADVSIMD_INT_SCALAR_ESZ) {
+            return null;
+        }
+        int index = imm5 >>> (esz + 1);
+        return new Ir64Op.VectorDuplicateElementScalar(esz, rd, rn, index);
+    }
+
     private Ir64Op decodeAdvancedSimdCopy(int word, long address, boolean q) {
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
         int imm5 = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
@@ -4019,8 +4127,14 @@ public final class Aarch64Decoder {
         int immb = (word >>> ADVSIMD_SHIFT_IMMB_SHIFT) & ADVSIMD_SHIFT_IMMB_MASK;
         int esz = highestSetImmhBit(immh);
         if (esz < 0) {
-            // `immh=0000` — UNALLOCATED real (G8).
-            throw unsupported(word, address);
+            // B19.6 bloco G: `immh=0000` é EXATAMENTE onde `Vimm`/`FMOVI_v_h` moram (mesmo achado
+            // já registrado do lado A32, B13.7/B13.9: "1-reg-and-modified-immediate" reusa o MESMO
+            // prefixo "shift by immediate", `immh=0` é o marcador).
+            Ir64Op modifiedImmediate = decodeAdvSimdModifiedImmediate(word, address, scalar, q);
+            if (modifiedImmediate != null) {
+                return modifiedImmediate;
+            }
+            throw unsupported(word, address); // UNALLOCATED real (G8).
         }
         int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -4328,8 +4442,23 @@ public final class Aarch64Decoder {
     /// geral↔FP (B8.5) — MESMO sufixo bits[15:10]="000000", discriminados pelo opcode(21:16).
     private Ir64Op decodeFpIntegerConvertOrGeneralRegisterMove(int word, long address) {
         boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int opcode = (word >>> FP_FIXED_CONVERT_OPCODE_SHIFT) & FP_FIXED_CONVERT_OPCODE_MASK;
+        // B19.6 bloco F: `FMOV Xd,Vn.D[1]`/`FMOV Vd.D[1],Xn` — MESMO `opcode`(21:16) desta classe,
+        // mas `type`(23:22)="10" (que {@link #decodeFpDoublePrecision} trataria como UNDEFINED
+        // para TODO O RESTO da classe). Checar `opcode`+`type` ANTES de chamar
+        // `decodeFpDoublePrecision` — senão esta forma nunca decodificaria (G8). `sf=0` não existe
+        // nesta forma (só `X`/`V.D[1]`, achado medido contra corpus real).
+        if (opcode == FP_GP_MOVE_OPCODE_HIGH_TO_GP || opcode == FP_GP_MOVE_OPCODE_HIGH_TO_FLOAT) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            if (!wide || type != FP_TYPE_HIGH_HALF_MOVE) {
+                throw unsupported(word, address);
+            }
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int rd = word & REGISTER_FIELD_MASK;
+            boolean toFloat = opcode == FP_GP_MOVE_OPCODE_HIGH_TO_FLOAT;
+            return new Ir64Op.Fp64HighHalfMove(toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
+        }
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         if (opcode == FP_GP_MOVE_OPCODE_TO_FLOAT) {
@@ -4404,6 +4533,70 @@ public final class Aarch64Decoder {
         }
         long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
         return (high16 << 16) & 0xFFFF_FFFFL;
+    }
+
+    /// `MOVI`/`MVNI`/`ORR`/`BIC` imediato (`Vimm`) + `FMOV` de meia precisão imediato
+    /// (`FMOVI_v_h`, `FEAT_FP16`) — B19.6 bloco G, irmão A64 direto de `Vimm_1r`/B13.9. `imm8` é
+    /// remontado pelo `%abcdefgh` real do `a64.decode` (posição física diferente da usada por
+    /// {@link #decodeFpMoveImmediate}, MESMO valor semântico). Devolve `null` (nunca um encoding
+    /// ERRADO, G8) para os dois casos em que o chamador deve continuar tratando como UNALLOCATED:
+    /// forma escalar (Vimm/FMOVI_v_h só existem sob o prefixo vetorial) e `bits[11:10]` reservado
+    /// dentro deste subespaço.
+    private Ir64Op decodeAdvSimdModifiedImmediate(int word, long address, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        int imm8 = (((word >>> ADVSIMD_MODIFIED_IMM_TOP_SHIFT) & 0b111) << 5)
+                | ((word >>> ADVSIMD_MODIFIED_IMM_BOTTOM_SHIFT) & 0b1_1111);
+        int rd = word & REGISTER_FIELD_MASK;
+        int suffix6 = (word >>> ADVSIMD_MODIFIED_IMM_SUFFIX_SHIFT) & 0b11_1111;
+        if (suffix6 == ADVSIMD_MODIFIED_IMM_FMOVI_H_SUFFIX) {
+            // `FMOVI_v_h` (`FEAT_FP16`): imediato de meia precisão replicado por todas as lanes
+            // `H` de 64 bits (4 cópias) — igual à disciplina do MOV puro, nunca recalculado depois.
+            if (!architecture.has(Aarch64Feature.FP16)) {
+                throw unsupported(word, address);
+            }
+            long half16 = expandFpImmediateHalf(imm8);
+            long imm64 = half16 | (half16 << 16) | (half16 << 32) | (half16 << 48);
+            return new Ir64Op.AdvSimdModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
+        }
+        int fixedTwoBits = (word >>> ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT) & 0b11;
+        if (fixedTwoBits != ADVSIMD_MODIFIED_IMM_FIXED2_PATTERN) {
+            return null;
+        }
+        int cmode = (word >>> ADVSIMD_MODIFIED_IMM_CMODE_SHIFT) & 0b1111;
+        int op = (word >>> ADVSIMD_MODIFIED_IMM_OP_SHIFT) & 1;
+        if (AdvSimdModifiedImmediate.isReservedInAarch32(cmode, op)) {
+            // `cmode=1111,op=1`: reservado em AArch32, em AArch64 é `FMOV` (vector, immediate) de
+            // 64 bits — reaproveita {@link #expandFpImmediate} (MESMO algoritmo VFPExpandImm de
+            // {@link #decodeFpMoveImmediate}, só o `imm8` já reconstruído acima).
+            long imm64 = expandFpImmediate(imm8, true);
+            return new Ir64Op.AdvSimdModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
+        }
+        AdvSimdModifiedImmediate.Expanded expanded = AdvSimdModifiedImmediate.expand(imm8, cmode, op);
+        return new Ir64Op.AdvSimdModifiedImmediate64(expanded.op(), q, rd, expanded.imm64());
+    }
+
+    /// `VFPExpandImm`-equivalente de meia precisão (`FMOVI_v_h`, B19.6 bloco G) — mesmo pseudocódigo
+    /// geral do manual (`ARM DDI 0487`, `VFPExpandImm`) que {@link #expandFpImmediate} já aplica
+    /// para simples/dupla, generalizado para `binary16` (`E=5` bits de expoente, `F=10` de
+    /// mantissa): `exp = NOT(imm8<6>):Replicate(imm8<6>,E-3):imm8<5:4>`, `frac =
+    /// imm8<3:0>:Zeros(F-4)`. **Achado desta task**: a primeira versão desta função reusava
+    /// ERRADAMENTE os 6 bits inteiros de `imm8<5:0>` como mantissa (padrão válido só quando
+    /// `E-3` bits de replicação bastam para completar o expoente sozinhos, o que NÃO é o caso aqui
+    /// — `imm8<5:4>` completa o expoente, só `imm8<3:0>` é mantissa) — pego pelo teste diferencial
+    /// contra `#1.0` (`imm8=0x70`), que dava `1.75` em vez de `1.0` antes da correção.
+    private static long expandFpImmediateHalf(int imm8) {
+        boolean sign = (imm8 & 0x80) != 0;
+        boolean bit6 = (imm8 & 0x40) != 0;
+        long exponentReplicate = bit6 ? 0b11L : 0b00L;
+        int top2 = (imm8 >>> 4) & 0b11;
+        int bottom4 = imm8 & 0b1111;
+        return (sign ? 0x8000L : 0)
+                | (bit6 ? 0 : (1L << 14))
+                | (exponentReplicate << 12)
+                | ((long) top2 << 10)
+                | ((long) bottom4 << 6);
     }
 
     private Ir64Op decodeBranchExceptionSystem(int word, long address) {
@@ -4735,10 +4928,16 @@ public final class Aarch64Decoder {
             }
             throw unsupported(word, address);
         }
-        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && !isDataCacheZva(word)) {
+        if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN) {
+            if (isDataCacheZva(word)) {
+                throw unsupported(word, address);
+            }
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
-        throw unsupported(word, address);
+        // B19.6 bloco A: resto do espaço `SYS`/`SYSL` (`op0=1`) fora de TLBI/AT/manutenção de
+        // cache — sem hospedeiro que trate manutenções desconhecidas, NOP explícito (ver javadoc
+        // de Ir64SystemInstructionOp#MAINTENANCE_UNMODELED_NOP).
+        return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP);
     }
 
     /// Confere se `op1` é um dos 3 regimes de `TLBI` que este emulador aceita (B10.9): EL1&0, EL2
@@ -4857,7 +5056,12 @@ public final class Aarch64Decoder {
     private static Aarch64SystemRegisterId decodeSystemRegisterId(
             int op0, int op1, int crn, int crm, int op2) {
         if (op0 == SYSREG_OP0_DEBUG) {
-            return op1 == SYSREG_OP1_EL1 ? decodeDebugRegisterId(crn, crm, op2) : null;
+            Aarch64SystemRegisterId debugRegister =
+                    op1 == SYSREG_OP1_EL1 ? decodeDebugRegisterId(crn, crm, op2) : null;
+            // B19.6 bloco A: qualquer combinação `op0=2` fora do subconjunto nomeado de B10.7 cai
+            // no escaninho tolerante único (nunca `null` aqui — `null` viraria `throw unsupported`
+            // no chamador, o que travaria o boot de qualquer kernel real com suporte a debug).
+            return debugRegister != null ? debugRegister : Aarch64SystemRegisterId.DEBUG_UNMODELED;
         }
         if (op0 != SYSREG_OP0_EL1) {
             return null;

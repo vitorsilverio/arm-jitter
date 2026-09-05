@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64BreakpointException;
@@ -421,6 +422,14 @@ public final class Ir64BlockExecutor {
                     Ir64CryptoExecutor.executeSha3TwoSourceRotate(core, (Ir64Op.CryptoSha3TwoSourceRotate) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
+            case Ir64Op.Kind.POINTER_AUTH_GENERIC ->
+                    executePointerAuthGeneric(core, (Ir64Op.PointerAuthGeneric) op);
+            case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (Ir64Op.AbsGeneral) op);
+            case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
+                    executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
+            case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
+            case Ir64Op.Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64 ->
+                    executeAdvSimdModifiedImmediate64(core, (Ir64Op.AdvSimdModifiedImmediate64) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }
@@ -1214,13 +1223,81 @@ public final class Ir64BlockExecutor {
     private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
         switch (op.opcode()) {
             case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
-            case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP, PSTATE_FIELD_NOP -> {
+            case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP, PSTATE_FIELD_NOP, MAINTENANCE_UNMODELED_NOP -> {
                 /* NOP observável — sem cache/pipeline/event-stream/campo de PSTATE modelado. */
             }
             case WFI -> core.setSleepState(CpuSleepState.HALTED);
             case CLEAR_EXCLUSIVE -> core.clearExclusiveMonitor();
         }
         return false;
+    }
+
+    /// `PACGA` (B19.6 bloco C) — este emulador não modela autenticação de ponteiro de verdade (ver
+    /// javadoc de {@link Ir64Op.PointerAuthGeneric}); resultado placeholder determinístico `Xd = 0`
+    /// (decisão registrada na task: nenhum consumidor verifica o resultado, então qualquer valor
+    /// fixo e documentado é seguro).
+    private boolean executePointerAuthGeneric(Aarch64Core core, Ir64Op.PointerAuthGeneric op) {
+        core.setX(op.rd(), 0L);
+        return false;
+    }
+
+    /// `ABS Xd, Xn` (B19.6 bloco D) — `Math.abs` de `long`/`int` já satura `MIN_VALUE` para o
+    /// próprio `MIN_VALUE` (mesma convenção de complemento de dois documentada no javadoc de
+    /// {@link Ir64Op.AbsGeneral}), sem checagem extra.
+    private boolean executeAbsGeneral(Aarch64Core core, Ir64Op.AbsGeneral op) {
+        long value = core.xForWidth(op.rn(), op.wide());
+        long result = op.wide() ? Math.abs(value) : (int) Math.abs((int) value);
+        core.setXForWidth(op.rd(), result, op.wide());
+        return false;
+    }
+
+    /// `DUP` escalar (B19.6 bloco E) — grava só o elemento no lane `0` de {@link Ir64Op.VectorDuplicateElementScalar#rd}
+    /// e ZERA o resto do registrador de 128 bits ({@link Aarch64FpRegisters#setQ} com `hi=0` e `lo`
+    /// mascarado ao tamanho do elemento).
+    private boolean executeDuplicateElementScalar(Aarch64Core core, Ir64Op.VectorDuplicateElementScalar op) {
+        Aarch64FpRegisters fp = core.fp();
+        long value = fp.element(op.rn(), op.index(), op.esz());
+        int elementBits = 8 << op.esz();
+        long mask = elementBits == 64 ? -1L : (1L << elementBits) - 1;
+        fp.setQ(op.rd(), value & mask, 0L);
+        return false;
+    }
+
+    /// `FMOV Xd, Vn.D[1]` / `FMOV Vd.D[1], Xn` (B19.6 bloco F) — ver javadoc de
+    /// {@link Ir64Op.Fp64HighHalfMove}: sentido GPR→FP PRESERVA a metade baixa (exceção à escrita
+    /// destrutiva normal de A64).
+    private boolean executeFpHighHalfMove(Aarch64Core core, Ir64Op.Fp64HighHalfMove op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.toFloat()) {
+            fp.setQ(op.fpReg(), fp.word(op.fpReg() * 2), core.x(op.gpReg()));
+        } else {
+            core.setX(op.gpReg(), fp.word(op.fpReg() * 2 + 1));
+        }
+        return false;
+    }
+
+    /// `MOVI`/`MVNI`/`ORR`/`BIC`/`FMOV` imediato AdvSIMD de 64 bits (B19.6 bloco G) — `imm64` já
+    /// vem EXPANDIDO do decoder (núcleo compartilhado {@code AdvSimdModifiedImmediate}, ver javadoc
+    /// de {@link Ir64Op.AdvSimdModifiedImmediate64}). Aplica a MESMA operação a cada metade de 64
+    /// bits independentemente; `!q` zera a metade alta (escrita destrutiva normal de A64).
+    private boolean executeAdvSimdModifiedImmediate64(Aarch64Core core, Ir64Op.AdvSimdModifiedImmediate64 op) {
+        Aarch64FpRegisters fp = core.fp();
+        long currentLo = fp.word(op.rd() * 2);
+        long currentHi = op.q() ? fp.word(op.rd() * 2 + 1) : 0L;
+        long lo = applyAdvSimdModifiedImmediate(op.op(), currentLo, op.imm64());
+        long hi = op.q() ? applyAdvSimdModifiedImmediate(op.op(), currentHi, op.imm64()) : 0L;
+        fp.setQ(op.rd(), lo, hi);
+        return false;
+    }
+
+    private static long applyAdvSimdModifiedImmediate(
+            AdvSimdModifiedImmediateOp op, long current, long imm64) {
+        return switch (op) {
+            case MOV -> imm64;
+            case MVN -> ~imm64;
+            case ORR -> current | imm64;
+            case BIC -> current & ~imm64;
+        };
     }
 
     /// `MSR (immediate) DAIFSet`/`DAIFClr` (B8.3) — só o bit `I` de `DAIF` tem efeito neste

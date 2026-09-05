@@ -251,6 +251,13 @@ public final class IsaCoverageReport {
         AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_vi", Aarch64Feature.RDM);
         AARCH64_VERSION_REQUIREMENTS.put("SQRDMLAH_si", Aarch64Feature.RDM);
         AARCH64_VERSION_REQUIREMENTS.put("SQRDMLSH_si", Aarch64Feature.RDM);
+        // B19.6: `PACGA`/`ABS`(geral)/`FMOVI_v_h` — nomes ÚNICOS no `a64.decode` (nenhuma outra
+        // ocorrência com o mesmo nome — `ABS_v`/`ABS_s` são identificadores DIFERENTES da forma
+        // vetorial/escalar AdvSIMD, já `✅` sem gate), então o mapa por NOME basta aqui (não
+        // precisa de `AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE`).
+        AARCH64_VERSION_REQUIREMENTS.put("PACGA", Aarch64Feature.POINTER_AUTHENTICATION);
+        AARCH64_VERSION_REQUIREMENTS.put("ABS", Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION);
+        AARCH64_VERSION_REQUIREMENTS.put("FMOVI_v_h", Aarch64Feature.FP16);
     }
 
     /// Registra o requisito de versão de vários mnemônicos de uma vez (E12). Recusa registrar o
