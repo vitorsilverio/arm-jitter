@@ -179,6 +179,43 @@ public final class IrNeonExecutor {
         AdvSimdLanes.narrow(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vn(), op.vm());
     }
 
+    /// NEON "2-regs-plus-scalar", forma **mesma largura**/"doubling high half" (`VMLA`/`VMLS`/
+    /// `VMUL` inteiro e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`, B13.11): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#threeSameByElement}) — a MESMA função que o executor A64
+    /// chama para `MUL_vi`/`SQDMULH_vi`/... `Vd`/`Vn` são `D` ou `Q` conforme {@link
+    /// IrOp.NeonThreeSameByElement#quad}; nenhuma escrita destrutiva depois do laço (VFP32 nunca
+    /// zera bits fora do registrador escrito).
+    public void executeNeonThreeSameByElement(ArmCore core, IrOp.NeonThreeSameByElement op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.threeSameByElement(vfp, op.op(), esz, elements, op.vd(), op.vn(), op.vm(), op.index());
+    }
+
+    /// NEON "2-regs-plus-scalar", forma **alargando** (`VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/
+    /// `VQDMULL`, B13.11): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#wideningByElement}) —
+    /// a MESMA função que o executor A64 chama para `SMULL_vi`/... `Vn` é `D` (fonte, `8 >> esz`
+    /// lanes), `Vd` é `Q` (mesma contagem, largura dobrada). A32 não tem forma "2": `laneOffset` é
+    /// sempre `0`.
+    public void executeNeonWideningByElement(ArmCore core, IrOp.NeonWideningByElement op) {
+        VfpRegisters vfp = core.vfp();
+        int outputElements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.wideningByElement(vfp, op.op(), op.esz(), outputElements, 0, op.vd(), op.vn(), op.vm(), op.index());
+    }
+
+    /// NEON "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (`VMLA_F`/`VMLS_F`/`VMUL_F`, B13.11): delega
+    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameByElement}) — a MESMA função que o
+    /// executor A64 chama para `FMUL_vi`/... `MLA`/`MLS` chegam NÃO fundidos aqui (decisão 3 da
+    /// B13.6, já resolvida no decoder). `esz` é sempre `2` (F32, único tamanho real nesta forma A32).
+    public void executeNeonFpThreeSameByElement(ArmCore core, IrOp.NeonFpThreeSameByElement op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = 2;
+        int elementBytes = 1 << esz;
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.fpThreeSameByElement(vfp, op.op(), esz, elements, op.vd(), op.vn(), op.vm(), op.index());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

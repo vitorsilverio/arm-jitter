@@ -382,77 +382,39 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    /// B8.19: `MUL_vi`/`MLA_vi`/`MLS_vi`/`SQDMULH_{vi,si}`/`SQRDMULH_{vi,si}` — MESMA lógica por
-    /// elemento de {@link #executeThreeSame}, exceto que `b`/`sb` (de `Rm`) são calculados UMA VEZ
-    /// fora do laço, sempre no elemento {@link Ir64Op.VectorArithmeticThreeSameByElement#index}
-    /// (replicado), nunca `fp.element(op.rm(), i, esz)`.
+    /// B8.19: `MUL_vi`/`MLA_vi`/`MLS_vi`/`SQDMULH_{vi,si}`/`SQRDMULH_{vi,si}` — desde B13.11 só
+    /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#threeSameByElement}) — a MESMA função que
+    /// o NEON de 32 bits chama para `VMLA_2sc`/`VQDMULH_2sc`/... A escrita destrutiva de
+    /// `[127:64]`/escalar continua sendo do lado A64.
     static boolean executeThreeSameByElement(Aarch64Core core, Ir64Op.VectorArithmeticThreeSameByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        long b = fp.element(op.rm(), op.index(), esz);
-        long sb = signExtend(b, esz);
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        for (int i = 0; i < elements; i++) {
-            long a = fp.element(op.rn(), i, esz);
-            long sa = signExtend(a, esz);
-            long result = switch (op.op()) {
-                case MUL -> a * b;
-                case MLA -> fp.element(op.rd(), i, esz) + a * b;
-                case MLS -> fp.element(op.rd(), i, esz) - a * b;
-                case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
-                case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
-                case SQRDMLAH -> signedSaturatingAdd(signExtend(fp.element(op.rd(), i, esz), esz),
-                        doublingMultiplyHigh(sa, sb, esz, true), esz);
-                case SQRDMLSH -> signedSaturatingSub(signExtend(fp.element(op.rd(), i, esz), esz),
-                        doublingMultiplyHigh(sa, sb, esz, true), esz);
-                default -> throw new IllegalStateException(
-                        "Ir64VectorThreeSameOp não suportado em by-element: " + op.op());
-            };
-            fp.setElement(op.rd(), i, esz, truncate(result, esz));
-        }
+        AdvSimdLanes.threeSameByElement(fp, sharedThreeSameOp(op.op()), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
 
     /// B8.19: `SMULL_vi`/`UMULL_vi`/`SMLAL_vi`/`UMLAL_vi`/`SMLSL_vi`/`UMLSL_vi`/`SQDMULL_{vi,si}`/
-    /// `SQDMLAL_{vi,si}`/`SQDMLSL_{vi,si}` — MESMA lógica de {@link #executeWidening}, exceto que
-    /// `b`/`sb` são calculados UMA VEZ fora do laço, sempre no elemento
-    /// {@link Ir64Op.VectorArithmeticWideningByElement#index} (replicado). A forma ESCALAR
-    /// (`SQDMULL_si`/`SQDMLAL_si`/`SQDMLSL_si`) produz um ÚNICO elemento largo, com escrita
-    /// destrutiva ciente de tamanho ({@link #finishScalarAwareWrite}) — diferente de
-    /// {@link #executeWidening}, que sempre preenche os 128 bits inteiros.
+    /// `SQDMLAL_{vi,si}`/`SQDMLSL_{vi,si}` — desde B13.11 só delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#wideningByElement}) — a MESMA função que o NEON de 32 bits chama para
+    /// `VMLAL_2sc`/`VQDMULL_2sc`/... A forma ESCALAR (`SQDMULL_si`/`SQDMLAL_si`/`SQDMLSL_si`) produz
+    /// um ÚNICO elemento largo, com escrita destrutiva ciente de tamanho
+    /// ({@link #finishScalarAwareWrite}) — diferente de {@link #executeWidening}, que sempre
+    /// preenche os 128 bits inteiros.
     static boolean executeWideningByElement(Aarch64Core core, Ir64Op.VectorArithmeticWideningByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
-        long b = fp.element(op.rm(), op.index(), esz);
-        long sb = signExtend(b, esz);
         int outputElements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = (!op.scalar() && op.q()) ? outputElements : 0;
-        // E10: mesmo buffer de `executeWidening` — `Rd` pode ser `Rn` (o elemento de `Rm` já é lido
-        // uma única vez fora do laço, logo não sofre aliasing).
-        long[] results = new long[outputElements];
-        for (int i = 0; i < outputElements; i++) {
-            long a = fp.element(op.rn(), laneOffset + i, esz);
-            long sa = signExtend(a, esz);
-            long current = fp.element(op.rd(), i, wideEsz);
-            results[i] = switch (op.op()) {
-                case SMULL -> sa * sb;
-                case UMULL -> a * b;
-                case SMLAL -> current + sa * sb;
-                case UMLAL -> current + a * b;
-                case SMLSL -> current - sa * sb;
-                case UMLSL -> current - a * b;
-                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
-                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-                default -> throw new IllegalStateException(
-                        "Ir64VectorWideningOp não suportado em by-element: " + op.op());
-            };
-        }
-        for (int i = 0; i < outputElements; i++) {
-            fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
-        }
+        AdvSimdLanes.wideningByElement(fp, sharedWideningOp(op.op()), esz, outputElements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
         if (op.scalar()) {
             finishScalarAwareWrite(fp, op.rd(), true, false, wideEsz);
         }

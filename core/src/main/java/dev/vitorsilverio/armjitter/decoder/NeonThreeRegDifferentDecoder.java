@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -9,12 +11,23 @@ import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
-/// Decodifica a seção **"three-reg-different-lengths"** do espaço NEON/Advanced SIMD "two
-/// registers, or three registers of different lengths" do encoding A32 (task B13.10) —
-/// `VADDL`/`VSUBL`/`VABAL`/`VABDL`/`VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/
-/// `VMULL.P8` (forma **Long**), `VADDW`/`VSUBW` (forma **Wide**) e `VADDHN`/`VRADDHN`/`VSUBHN`/
-/// `VRSUBHN` (forma **Narrow**/"half narrowing") — 26 linhas de
-/// `target/isa-decode/neon-dp.decode:538-577`.
+/// Decodifica as seções **"three-reg-different-lengths"** (task B13.10) e **"2-regs-plus-scalar"**
+/// (task B13.11) do espaço NEON/Advanced SIMD "two registers, or three registers of different
+/// lengths" do encoding A32 — as duas compartilham o mesmo frame e discriminador (`size != 0b11`),
+/// diferindo só pelo {@link #LONG_FORM_BIT}, por isso UM decoder só (ver "Decisão" da B13.11).
+///
+/// **"three-reg-different-lengths"** (B13.10): `VADDL`/`VSUBL`/`VABAL`/`VABDL`/`VMLAL`/`VMLSL`/
+/// `VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/`VMULL.P8` (forma **Long**), `VADDW`/`VSUBW` (forma
+/// **Wide**) e `VADDHN`/`VRADDHN`/`VSUBHN`/`VRSUBHN` (forma **Narrow**/"half narrowing") — 26
+/// linhas de `target/isa-decode/neon-dp.decode:538-577`.
+///
+/// **"2-regs-plus-scalar"** (B13.11): `VMLA`/`VMLS`/`VMUL` inteiro (mesma largura, sem variante de
+/// sinal) e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` ("doubling high half"), `VMLAL`/`VMLSL`/
+/// `VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL` (forma **alargando**) e `VMLA_F`/`VMLS_F`/`VMUL_F` (F32,
+/// NÃO fundido) — 19 linhas de `target/isa-decode/neon-dp.decode:583-619`. O escalar é montado
+/// diferente do índice `H:L:M` do A64 (B8.19): `Vm` restrito a `D0`-`D7` (halfword, índice
+/// `M:Vm[3]`, 2 bits) ou `D0`-`D15` (word, índice `M`, 1 bit) — `size==0b00` não existe nesta
+/// classe (G8).
 ///
 /// Layout: `1111 001 U 1 D size:2 Vn:4 Vd:4 opc:4 N 0 M 0 Vm:4`. O comentário do `.decode`
 /// (`:387-398`) explica a estrutura: dentro do agrupamento "two regs or 3 diff length"
@@ -71,6 +84,16 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
     private static final int LONG_FORM_BIT = 6;
     private static final int UNALLOCATED_SIZE = 0x3;
     private static final int NIBBLE_MASK = 0xF;
+    /// `size==0b00` — não existe na classe "2-regs-plus-scalar" (B13.11, G8).
+    private static final int HALFWORD_SIZE_MISSING = 0x0;
+    /// `size==0b01` — escalar halfword (`Vm` restrito a `D0`-`D7`, índice `M:Vm[3]`).
+    private static final int HALFWORD_SIZE = 0x1;
+    /// `size==0b10` — escalar word/F32 (`Vm` restrito a `D0`-`D15`, índice `M`).
+    private static final int WORD_SIZE = 0x2;
+    /// Bit `M` do escalar do "2-regs-plus-scalar" (B13.11) — mesma posição de {@link
+    /// #VM_EXTENSION_BIT}, papel diferente (parte do ÍNDICE, não do registrador).
+    private static final int SCALAR_M_SHIFT = 5;
+    private static final int SCALAR_VM_NIBBLE_MASK = 0xF;
 
     private final ArmArchitecture architecture;
 
@@ -93,8 +116,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
             return null;
         }
         if (((raw >>> LONG_FORM_BIT) & 1) != 0) {
-            // "2-regs-plus-scalar" — B13.11, ainda sem dono.
-            return null;
+            return decodeTwoRegsPlusScalar(raw, address, condition, size);
         }
         // A partir daqui o frame é nosso: sempre `lifted` ou `unimplemented`, nunca `null`.
         int u = (raw >>> U_BIT) & 1;
@@ -169,6 +191,120 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
             case 0b0110 -> u == 0 ? AdvSimdNarrowOp.SUBHN : AdvSimdNarrowOp.RSUBHN;
             default -> null;
         };
+    }
+
+    /// "2-regs-plus-scalar" (B13.11) — entra já sabendo que o frame/`size` batem (`size` `1` ou `2`,
+    /// `size==0b11` já filtrado por {@link #tryDecode} antes de rotear aqui). Bit24 é **`Q`** para
+    /// as formas de mesma largura/"doubling high half" (nenhuma tem variante de sinal) e **`U`**
+    /// para a forma alargando — o `opc` decide qual tabela bate, nunca os dois ao mesmo tempo (as 16
+    /// combinações de `opc` são cobertas de forma EXCLUSIVA pelas 3 tabelas abaixo). A partir daqui o
+    /// espaço é nosso: sempre `lifted` ou `unimplemented`, nunca `null` (G8).
+    private DecodedInstruction decodeTwoRegsPlusScalar(int raw, int address, Condition condition, int size) {
+        if (size == HALFWORD_SIZE_MISSING) {
+            // `size==0b00` não existe nesta classe (G8) — só halfword(`1`)/word(`2`) têm forma real.
+            return unimplemented(address, raw, condition);
+        }
+        int opc = (raw >>> OPC_SHIFT) & OPC_MASK;
+        int bitQU = (raw >>> U_BIT) & 1;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int mBit = (raw >>> SCALAR_M_SHIFT) & 1;
+        int vmNibble = raw & SCALAR_VM_NIBBLE_MASK;
+        int vm = scalarRegister(size, vmNibble);
+        int index = scalarIndex(size, mBit, vmNibble);
+
+        AdvSimdWideningOp wideningOp = scalarWideningOperation(opc, bitQU);
+        if (wideningOp != null) {
+            if ((vd & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonWideningByElement(wideningOp, size, vd, vn, vm, index));
+        }
+        boolean quad = bitQU != 0;
+        AdvSimdThreeSameOp intOp = scalarThreeSameOperation(opc);
+        if (intOp != null) {
+            boolean requiresRdm = intOp == AdvSimdThreeSameOp.SQRDMLAH || intOp == AdvSimdThreeSameOp.SQRDMLSH;
+            if (requiresRdm && !architecture.has(ArmFeature.ADVANCED_SIMD_RDM)) {
+                return unimplemented(address, raw, condition);
+            }
+            if (quad && ((vd | vn) & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonThreeSameByElement(intOp, size, quad, vd, vn, vm, index));
+        }
+        AdvSimdFpThreeSameOp fpOp = scalarFpThreeSameOperation(opc);
+        if (fpOp != null) {
+            if (size != WORD_SIZE) {
+                // `size==0b01`: forma F16 (`sz=1`), fora de escopo — task irmã "NEON FP16 AArch32".
+                return unimplemented(address, raw, condition);
+            }
+            if (quad && ((vd | vn) & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonFpThreeSameByElement(fpOp, quad, vd, vn, vm, index));
+        }
+        // As 3 tabelas acima cobrem exaustivamente os 16 valores de `opc` — inalcançável, mas
+        // documenta o contrato (G8) caso uma tabela futura vire incompleta por engano.
+        return unimplemented(address, raw, condition);
+    }
+
+    /// `(opc, U)` → família **alargando** do "2-regs-plus-scalar" (`VMLAL`/`VMLSL`/`VMULL`/
+    /// `VQDMLAL`/`VQDMLSL`/`VQDMULL`) — `VQDMLAL`/`VQDMLSL`/`VQDMULL` só têm forma `U=0` (mesma regra
+    /// de {@link #longOperation}).
+    private static AdvSimdWideningOp scalarWideningOperation(int opc, int u) {
+        return switch (opc) {
+            case 0b0010 -> u == 0 ? AdvSimdWideningOp.SMLAL : AdvSimdWideningOp.UMLAL;
+            case 0b0011 -> u == 0 ? AdvSimdWideningOp.SQDMLAL : null;
+            case 0b0110 -> u == 0 ? AdvSimdWideningOp.SMLSL : AdvSimdWideningOp.UMLSL;
+            case 0b0111 -> u == 0 ? AdvSimdWideningOp.SQDMLSL : null;
+            case 0b1010 -> u == 0 ? AdvSimdWideningOp.SMULL : AdvSimdWideningOp.UMULL;
+            case 0b1011 -> u == 0 ? AdvSimdWideningOp.SQDMULL : null;
+            default -> null;
+        };
+    }
+
+    /// `opc` → família **mesma largura**/"doubling high half" INTEIRA do "2-regs-plus-scalar"
+    /// (`VMLA`/`VMLS`/`VMUL`/`VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`) — nenhuma tem variante de
+    /// sinal (bit24 é `Q`, não `U`, aqui). `VQRDMLAH`/`VQRDMLSH` exigem
+    /// {@link ArmFeature#ADVANCED_SIMD_RDM} (checado pelo chamador).
+    private static AdvSimdThreeSameOp scalarThreeSameOperation(int opc) {
+        return switch (opc) {
+            case 0b0000 -> AdvSimdThreeSameOp.MLA;
+            case 0b0100 -> AdvSimdThreeSameOp.MLS;
+            case 0b1000 -> AdvSimdThreeSameOp.MUL;
+            case 0b1100 -> AdvSimdThreeSameOp.SQDMULH;
+            case 0b1101 -> AdvSimdThreeSameOp.SQRDMULH;
+            case 0b1110 -> AdvSimdThreeSameOp.SQRDMLAH;
+            case 0b1111 -> AdvSimdThreeSameOp.SQRDMLSH;
+            default -> null;
+        };
+    }
+
+    /// `opc` → família **mesma largura** de PONTO FLUTUANTE F32 do "2-regs-plus-scalar"
+    /// (`VMLA_F`/`VMLS_F`/`VMUL_F`, NÃO fundido — decisão 3 da B13.6).
+    private static AdvSimdFpThreeSameOp scalarFpThreeSameOperation(int opc) {
+        return switch (opc) {
+            case 0b0001 -> AdvSimdFpThreeSameOp.MLA;
+            case 0b0101 -> AdvSimdFpThreeSameOp.MLS;
+            case 0b1001 -> AdvSimdFpThreeSameOp.MUL;
+            default -> null;
+        };
+    }
+
+    /// Registrador do ESCALAR do "2-regs-plus-scalar": `Vm[2:0]` (`D0`-`D7`) na forma halfword,
+    /// `Vm[3:0]` (`D0`-`D15`) na forma word — diferente do A64 (`H:L:M` com `Rm` estreitado a
+    /// `V0`-`V15`), que usa TODOS os bits de `Rm` como registrador e nenhum como índice.
+    private static int scalarRegister(int size, int vmNibble) {
+        return size == HALFWORD_SIZE ? (vmNibble & 0b111) : vmNibble;
+    }
+
+    /// Índice do elemento do "2-regs-plus-scalar": `M:Vm[3]` (2 bits) na forma halfword, `M` (1 bit)
+    /// na forma word.
+    private static int scalarIndex(int size, int mBit, int vmNibble) {
+        return size == HALFWORD_SIZE ? ((mBit << 1) | ((vmNibble >>> 3) & 1)) : mBit;
     }
 
     private static int doubleRegister(int raw, int nibbleShift, int extensionBit) {

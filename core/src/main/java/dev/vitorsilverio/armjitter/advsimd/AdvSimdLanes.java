@@ -320,6 +320,82 @@ public final class AdvSimdLanes {
         }
     }
 
+    /// Executa uma operação "vector/scalar × indexed element" (ver {@link AdvSimdThreeSameOp}) sobre
+    /// `elements` elementos de `1 << esz` bytes: cada lane de `baseRd` recebe `op` aplicada à lane
+    /// correspondente de `baseRn` e ao elemento FIXO `index` de `baseRm` (lido UMA VEZ, replicado
+    /// para toda a operação — nunca `element(regs, baseRm, i, esz)`). Os `base*` são índices de
+    /// PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeThreeSameByElement` (B8.19)
+    /// em B13.11 (D1 da RFC B13.2) — só as 7 operações que esta classe de encoding realmente produz
+    /// (`MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH`/`SQRDMLAH`/`SQRDMLSH`); qualquer outro
+    /// {@link AdvSimdThreeSameOp} é erro de chamador (G8 já filtrou no decoder). Nada aqui zera bits
+    /// fora das lanes escritas: a escrita destrutiva do A64 é do chamador.
+    public static void threeSameByElement(AdvSimdRegisterWords regs, AdvSimdThreeSameOp op, int esz,
+            int elements, int baseRd, int baseRn, int baseRm, int index) {
+        long b = element(regs, baseRm, index, esz);
+        long sb = signExtend(b, esz);
+        for (int i = 0; i < elements; i++) {
+            long a = element(regs, baseRn, i, esz);
+            long sa = signExtend(a, esz);
+            long d = element(regs, baseRd, i, esz);
+            long result = switch (op) {
+                case MUL -> a * b;
+                case MLA -> d + a * b;
+                case MLS -> d - a * b;
+                case SQDMULH -> doublingMultiplyHigh(sa, sb, esz, false);
+                case SQRDMULH -> doublingMultiplyHigh(sa, sb, esz, true);
+                case SQRDMLAH -> signedSaturatingAdd(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
+                case SQRDMLSH -> signedSaturatingSub(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
+                default -> throw new IllegalArgumentException(
+                        "AdvSimdThreeSameOp não suportado em by-element: " + op);
+            };
+            setElement(regs, baseRd, i, esz, truncate(result, esz));
+        }
+    }
+
+    /// Executa uma operação "vector/scalar × indexed element" ALARGANDO (ver {@link
+    /// AdvSimdWideningOp}) sobre `outputElements` elementos de `1 << (esz+1)` bytes: cada lane larga
+    /// de `baseRd` recebe `op` aplicada à lane de `esz` bytes de `baseRn` (lida a partir de
+    /// `laneOffset` — a forma `*2` do A64; o NEON de 32 bits passa sempre `0`) e ao elemento FIXO
+    /// `index` de `baseRm` (lido UMA VEZ, replicado). Os `base*` são índices de PALAVRA.
+    ///
+    /// `switch` movido VERBATIM de `Ir64VectorArithmeticExecutor#executeWideningByElement` (B8.19)
+    /// em B13.11 (D1 da RFC B13.2) — só as 9 operações que esta classe de encoding realmente produz
+    /// (`SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL`); `ABAL`/`ABDL`/
+    /// `ADDL`/`SUBL`/`PMULL` não têm forma indexada real (G8 já filtrou no decoder). Resultados num
+    /// buffer ANTES de qualquer escrita (mesmo motivo da E10 em {@link #widening}): `baseRd` pode
+    /// coincidir com `baseRn` (o elemento de `baseRm` já foi lido fora do laço). A escrita
+    /// destrutiva do A64 (e a forma escalar) é do chamador.
+    public static void wideningByElement(AdvSimdRegisterWords regs, AdvSimdWideningOp op, int esz,
+            int outputElements, int laneOffset, int baseRd, int baseRn, int baseRm, int index) {
+        int wideEsz = esz + 1;
+        long b = element(regs, baseRm, index, esz);
+        long sb = signExtend(b, esz);
+        long[] results = new long[outputElements];
+        for (int i = 0; i < outputElements; i++) {
+            long a = element(regs, baseRn, laneOffset + i, esz);
+            long sa = signExtend(a, esz);
+            long current = element(regs, baseRd, i, wideEsz);
+            results[i] = switch (op) {
+                case SMULL -> sa * sb;
+                case UMULL -> a * b;
+                case SMLAL -> current + sa * sb;
+                case UMLAL -> current + a * b;
+                case SMLSL -> current - sa * sb;
+                case UMLSL -> current - a * b;
+                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
+                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+                default -> throw new IllegalArgumentException(
+                        "AdvSimdWideningOp não suportado em by-element: " + op);
+            };
+        }
+        for (int i = 0; i < outputElements; i++) {
+            setElement(regs, baseRd, i, wideEsz, truncate(results[i], wideEsz));
+        }
+    }
+
     /// Executa uma operação "pairwise" (ver {@link AdvSimdPairwiseOp}): concatena o operando que
     /// começa em `baseRn` com o que começa em `baseRm`, combina pares de elementos ADJACENTES
     /// nessa sequência e grava `lanes` resultados a partir de `baseRd` (os `lanes/2` primeiros
@@ -783,6 +859,32 @@ public final class AdvSimdLanes {
             case RECPS -> doubleBits(2.0 - a * b);
             case RSQRTS -> doubleBits((3.0 - a * b) / 2.0);
         };
+    }
+
+    /// Executa uma operação "vector/scalar × indexed element" de PONTO FLUTUANTE (ver {@link
+    /// AdvSimdFpThreeSameOp}) sobre `elements` elementos de `1 << esz` bytes: cada lane de `baseRd`
+    /// recebe `op` aplicada à lane correspondente de `baseRn` e ao elemento FIXO `index` de
+    /// `baseRm` (lido UMA VEZ, replicado — nunca `element(regs, baseRm, i, esz)`). Os `base*` são
+    /// índices de PALAVRA.
+    ///
+    /// Reusa os mesmos ramos F16/F32/F64 de {@link #fpThreeSame} (`halfThreeSame`/
+    /// `singleThreeSame`/`doubleThreeSame`) — só `MUL`/`MLA`/`MLS`/`MULX` são válidas aqui (G8 já
+    /// filtra no decoder: nem A32 nem A64 produzem outro valor nesta classe). Nada aqui zera bits
+    /// fora das lanes escritas: a escrita destrutiva do A64 é do chamador.
+    public static void fpThreeSameByElement(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz,
+            int elements, int baseRd, int baseRn, int baseRm, int index) {
+        long bBits = element(regs, baseRm, index, esz);
+        for (int i = 0; i < elements; i++) {
+            long aBits = element(regs, baseRn, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfThreeSame(op, aBits, bBits, dBits);
+                case 2 -> singleThreeSame(op, aBits, bBits, dBits);
+                case 3 -> doubleThreeSame(op, aBits, bBits, dBits);
+                default -> throw new IllegalArgumentException("esz inválido para FP three-same: " + esz);
+            };
+            setElement(regs, baseRd, i, esz, resultBits);
+        }
     }
 
     /// Executa uma operação "pairwise" de PONTO FLUTUANTE (ver {@link AdvSimdFpPairwiseOp}):

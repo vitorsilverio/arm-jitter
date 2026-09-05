@@ -99,43 +99,21 @@ final class Ir64VectorFpArithmeticExecutor {
         }
     }
 
-    /// B8.19: `FMUL_{vi,si}`/`FMLA_{vi,si}`/`FMLS_{vi,si}`/`FMULX_{vi,si}` — MESMA lógica de
-    /// {@link #executeThreeSame}, exceto que `b` (de `Rm`) é lido UMA VEZ fora do laço, sempre no
-    /// elemento {@link Ir64Op.VectorFpArithmeticThreeSameByElement#index} (replicado), nunca
-    /// `fp.element(op.rm(), i, esz)`. A forma ESCALAR processa só o elemento `0`.
+    /// B8.19: `FMUL_{vi,si}`/`FMLA_{vi,si}`/`FMLS_{vi,si}`/`FMULX_{vi,si}` — desde B13.11 só delega
+    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameByElement}) — a MESMA função que o
+    /// NEON de 32 bits chama para `VMUL_F_2sc`/`VMLA_F_2sc`/... `MLA`/`MLS` aqui são FUNDIDOS
+    /// (`sharedFpThreeSameOp` mapeia para {@link AdvSimdFpThreeSameOp#FMLA}/{@link
+    /// AdvSimdFpThreeSameOp#FMLS}, mesma convenção de {@link #executeThreeSame}) — diferente do NEON
+    /// de 32 bits, que usa `MLA`/`MLS` NÃO fundido (decisão 3 da B13.6). A forma ESCALAR processa só
+    /// o elemento `0`.
     static boolean executeThreeSameByElement(Aarch64Core core, Ir64Op.VectorFpArithmeticThreeSameByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
-        for (int i = 0; i < elements; i++) {
-            long resultBits;
-            if (esz == 2) {
-                float a = Float.intBitsToFloat((int) fp.element(op.rn(), i, esz));
-                float b = Float.intBitsToFloat((int) fp.element(op.rm(), op.index(), esz));
-                float current = Float.intBitsToFloat((int) fp.element(op.rd(), i, esz));
-                resultBits = switch (op.op()) {
-                    case MUL -> AdvSimdLanes.floatBits(a * b);
-                    case MULX -> AdvSimdLanes.floatBits(AdvSimdLanes.mulX(a, b));
-                    case MLA -> AdvSimdLanes.floatBits(Math.fma(a, b, current));
-                    case MLS -> AdvSimdLanes.floatBits(Math.fma(-a, b, current));
-                    default -> throw new IllegalStateException(
-                            "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
-                };
-            } else {
-                double a = Double.longBitsToDouble(fp.element(op.rn(), i, esz));
-                double b = Double.longBitsToDouble(fp.element(op.rm(), op.index(), esz));
-                double current = Double.longBitsToDouble(fp.element(op.rd(), i, esz));
-                resultBits = switch (op.op()) {
-                    case MUL -> AdvSimdLanes.doubleBits(a * b);
-                    case MULX -> AdvSimdLanes.doubleBits(AdvSimdLanes.mulX(a, b));
-                    case MLA -> AdvSimdLanes.doubleBits(Math.fma(a, b, current));
-                    case MLS -> AdvSimdLanes.doubleBits(Math.fma(-a, b, current));
-                    default -> throw new IllegalStateException(
-                            "Ir64VectorFpThreeSameOp não suportado em by-element: " + op.op());
-                };
-            }
-            fp.setElement(op.rd(), i, esz, resultBits);
-        }
+        AdvSimdLanes.fpThreeSameByElement(fp, sharedFpThreeSameOp(op.op()), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }

@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (78 desde B13.9), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (84 desde B13.11), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -50,7 +50,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(81, kinds.size(), "IrOp.Kind deve ter 81 constantes contíguas");
+        assertEquals(84, kinds.size(), "IrOp.Kind deve ter 84 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -78,9 +78,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // HVC/SMC/ERET/MRS_bank/MSR_bank, bitfield/RBIT/SDIV, BKPT, sysreg do perfil M). Eram 33 na
         // A10.1; B13.7 acrescentou NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
         // NEON_SHIFT_WIDEN_IMMEDIATE, NEON_CONVERT_FIXED_POINT; B13.9 acrescentou
-        // NEON_MODIFIED_IMMEDIATE; B13.10 acrescentou NEON_WIDENING, NEON_WIDE, NEON_NARROW (NEON
-        // também não tem nó Truffle).
-        assertEquals(41, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_MODIFIED_IMMEDIATE; B13.10 acrescentou NEON_WIDENING, NEON_WIDE, NEON_NARROW; B13.11
+        // acrescentou NEON_THREE_SAME_BY_ELEMENT, NEON_WIDENING_BY_ELEMENT,
+        // NEON_FP_THREE_SAME_BY_ELEMENT (NEON também não tem nó Truffle).
+        assertEquals(44, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.BIT_FIELD_EXTRACT, IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE,
                         IrOp.Kind.DIVIDE, IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
@@ -96,7 +97,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE,
                         IrOp.Kind.NEON_SHIFT_NARROW_IMMEDIATE, IrOp.Kind.NEON_SHIFT_WIDEN_IMMEDIATE,
                         IrOp.Kind.NEON_CONVERT_FIXED_POINT, IrOp.Kind.NEON_MODIFIED_IMMEDIATE,
-                        IrOp.Kind.NEON_WIDENING, IrOp.Kind.NEON_WIDE, IrOp.Kind.NEON_NARROW)),
+                        IrOp.Kind.NEON_WIDENING, IrOp.Kind.NEON_WIDE, IrOp.Kind.NEON_NARROW,
+                        IrOp.Kind.NEON_THREE_SAME_BY_ELEMENT, IrOp.Kind.NEON_WIDENING_BY_ELEMENT,
+                        IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -211,6 +214,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_WIDENING -> new IrOp.NeonWidening(AdvSimdWideningOp.SADDL, 0, 0, 1, 2);
             case IrOp.Kind.NEON_WIDE -> new IrOp.NeonWide(AdvSimdWideOp.SADDW, 0, 0, 2, 1);
             case IrOp.Kind.NEON_NARROW -> new IrOp.NeonNarrow(AdvSimdNarrowOp.ADDHN, 0, 0, 2, 4);
+            case IrOp.Kind.NEON_THREE_SAME_BY_ELEMENT ->
+                    new IrOp.NeonThreeSameByElement(AdvSimdThreeSameOp.MUL, 1, false, 0, 1, 2, 3);
+            case IrOp.Kind.NEON_WIDENING_BY_ELEMENT ->
+                    new IrOp.NeonWideningByElement(AdvSimdWideningOp.SMULL, 1, 0, 1, 2, 3);
+            case IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT ->
+                    new IrOp.NeonFpThreeSameByElement(AdvSimdFpThreeSameOp.MUL, false, 0, 1, 2, 1);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

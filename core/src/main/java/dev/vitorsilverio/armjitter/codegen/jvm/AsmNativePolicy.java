@@ -148,6 +148,10 @@ public final class AsmNativePolicy {
             case IrOp.NeonWidening ignored -> false;
             case IrOp.NeonWide ignored -> false;
             case IrOp.NeonNarrow ignored -> false;
+            // NEON "2-regs-plus-scalar" (B13.11): idem.
+            case IrOp.NeonThreeSameByElement ignored -> false;
+            case IrOp.NeonWideningByElement ignored -> false;
+            case IrOp.NeonFpThreeSameByElement ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

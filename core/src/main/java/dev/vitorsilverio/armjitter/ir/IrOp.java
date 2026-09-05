@@ -10,7 +10,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonLoadAllLanes, IrOp.NeonPairwise, IrOp.NeonFpThreeSame, IrOp.NeonFpPairwise,
         IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
         IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
-        IrOp.NeonNarrow {
+        IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
+        IrOp.NeonFpThreeSameByElement {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -110,6 +111,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_WIDENING = 78;
         public static final int NEON_WIDE = 79;
         public static final int NEON_NARROW = 80;
+        /// B13.11: `VMLA`/`VMLS`/`VMUL` (inteiro, `2-regs-plus-scalar`, mesma largura) e
+        /// `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` — ver {@link NeonThreeSameByElement}.
+        public static final int NEON_THREE_SAME_BY_ELEMENT = 81;
+        /// B13.11: `VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL` (`2-regs-plus-scalar`,
+        /// alargando) — ver {@link NeonWideningByElement}.
+        public static final int NEON_WIDENING_BY_ELEMENT = 82;
+        /// B13.11: `VMLA_F`/`VMLS_F`/`VMUL_F` (`2-regs-plus-scalar`, ponto flutuante F32, NÃO
+        /// fundido) — ver {@link NeonFpThreeSameByElement}.
+        public static final int NEON_FP_THREE_SAME_BY_ELEMENT = 83;
     }
 
     /// Operacao ALU generica.
@@ -1829,5 +1839,117 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte 2 (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_NARROW; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar", forma **mesma largura**/"doubling high
+    /// half" (B13.11): `VMLA`/`VMLS`/`VMUL` inteiro (sem variante de sinal — mesmo padrão do
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp#MUL} "three same") e
+    /// `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` (`VQRDMLAH`/`VQRDMLSH` só sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#ADVANCED_SIMD_RDM}). `Vd`/`Vn` são `D` ou
+    /// `Q` conforme {@link #quad}; {@link #vm} é o registrador do ESCALAR já restrito à faixa REAL
+    /// do encoding A32 (`D0`-`D7` halfword / `D0`-`D15` word — diferente do índice `H:L:M` do A64,
+    /// que estreita `Rm` a `V0`-`V15`), e {@link #index} já extraído (`M:Vm[3]` halfword / `M`
+    /// word).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticThreeSameByElement}
+    /// no ENCODING/IR (índice montado diferente, sem `scalar`, que não existe nesta seção do A32); a
+    /// SEMÂNTICA vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameByElement}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonThreeSameByElement(
+            /// Operação a executar (núcleo compartilhado) — só `MUL`/`MLA`/`MLS`/`SQDMULH`/
+            /// `SQRDMULH`/`SQRDMLAH`/`SQRDMLSH` são válidas aqui (G8: o decoder nunca produz outro
+            /// valor).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp op,
+            /// `log2` do tamanho do elemento em bytes — `1` (halfword) ou `2` (word); `0`/`3` não
+            /// existem nesta classe (G8 no decoder).
+            int esz,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`).
+            boolean quad,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`. Também é FONTE em `MLA`/`MLS`/`SQRDMLAH`/`SQRDMLSH` (leem `Vd` atual).
+            int vd,
+            /// Registrador fonte 1, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vn,
+            /// Registrador do ESCALAR (`D0`-`D7` halfword / `D0`-`D15` word — já restrito pelo
+            /// decoder, nunca um índice de `D` de 5 bits completo).
+            int vm,
+            /// Índice do elemento dentro de {@link #vm} (`M:Vm[3]`, 2 bits, halfword / `M`, 1 bit,
+            /// word — já extraído pelo decoder).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_THREE_SAME_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar", forma **alargando** (B13.11):
+    /// `VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`. `Vd` é sempre `Q`, `Vn` é sempre `D`
+    /// (mesma disciplina de {@link NeonWidening} — sem forma "2", sem forma escalar real); {@link
+    /// #vm} é o registrador do ESCALAR já restrito à faixa real e {@link #index} já extraído (mesma
+    /// convenção de {@link NeonThreeSameByElement}).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWideningByElement}
+    /// no ENCODING/IR (índice montado diferente, sem `scalar`/`q`); a SEMÂNTICA vem do núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#wideningByElement}),
+    /// RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonWideningByElement(
+            /// Operação a executar (núcleo compartilhado) — só `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/
+            /// `SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL` são válidas aqui (G8).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp op,
+            /// `log2` do tamanho do elemento ESTREITO (`Vn`/escalar) em bytes — `1` ou `2`. `Vd` usa
+            /// `esz+1`.
+            int esz,
+            /// Registrador de destino (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte (`D`, 64 bits), em índice de `D` (`0`-`31`).
+            int vn,
+            /// Registrador do ESCALAR (`D0`-`D7` halfword / `D0`-`D15` word — já restrito pelo
+            /// decoder).
+            int vm,
+            /// Índice do elemento dentro de {@link #vm} (`M:Vm[3]` halfword / `M` word — já
+            /// extraído pelo decoder).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_WIDENING_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (B13.11):
+    /// `VMLA_F`/`VMLS_F`/`VMUL_F` — `MLA`/`MLS` NÃO fundidos (decisão 3 da B13.6: reusa
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp#MLA}/{@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp#MLS}, nunca `FMLA`/`FMLS`). `Vd`/
+    /// `Vn` são `D` ou `Q` conforme {@link #quad}; {@link #vm} é o registrador do ESCALAR
+    /// (`D0`-`D15`, sempre F32 — a forma F16/`size==0b01` é recusada no decoder, task irmã "NEON
+    /// FP16 AArch32") e {@link #index} (`M`, 1 bit) já extraídos.
+    ///
+    /// Espelho de {@link
+    /// dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSameByElement} no ENCODING/IR
+    /// (sem `scalar`/`esz`, que não existem nesta seção do A32 — sempre F32/vetorial); a SEMÂNTICA
+    /// vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameByElement}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFpThreeSameByElement(
+            /// Operação a executar (núcleo compartilhado) — só `MUL`/`MLA`/`MLS` são válidas aqui
+            /// (G8: o decoder nunca produz `MULX`/`FMLA`/`FMLS`/etc. nesta forma).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`).
+            boolean quad,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`. Também é FONTE em `MLA`/`MLS` (lê `Vd` atual).
+            int vd,
+            /// Registrador fonte, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vn,
+            /// Registrador do ESCALAR (`D0`-`D15` — já restrito pelo decoder).
+            int vm,
+            /// Índice do elemento dentro de {@link #vm} (`M`, 1 bit — já extraído pelo decoder).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FP_THREE_SAME_BY_ELEMENT; }
     }
 }
