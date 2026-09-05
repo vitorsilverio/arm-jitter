@@ -8,15 +8,16 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// {@link dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy} (32 bits), introduzido na task
 /// B6.4 (PR1).
 ///
-/// ## Cobertura — NÃO é exaustiva (medida em 2026-09-02 / C12.1)
+/// ## Cobertura — NÃO é exaustiva (medida em 2026-09-02 / C12.1; +16 pela C12.3)
 ///
-/// O `switch` abaixo cobre **24 dos 96 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
+/// O `switch` abaixo cobre **40 dos 96 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
 /// desvios), B6.2 (loads/stores + `Svc`), B6.3.1-B6.3.4 (registrador deslocado/estendido,
-/// `CSEL`, bitfield, `MADD`, `SDIV`, exclusivos) e B6.5.2-B6.5.4 (FP escalar `FP64_ALU`/
-/// `FP64_MOVE_IMMEDIATE`/`FP64_COMPARE`/`FP64_CONVERT`). Quando a B6.5.4 fechou, isso ERA tudo
-/// que existia — mas desde então **B6.6.x** (MMU/EL1), **B8.6-B8.20** (toda a AdvSIMD do
-/// AArch64), **B10** (EL2/EL3), **B11** (gating) e **B19.1-B19.4** acrescentaram ~72 `Kind`, e
-/// **nenhum tem emissão nativa**. Os 72 que faltam — incluindo 100% do SIMD/FP vetorial — caem no
+/// `CSEL`, bitfield, `MADD`, `SDIV`, exclusivos), B6.5.2-B6.5.4 (FP escalar `FP64_ALU`/
+/// `FP64_MOVE_IMMEDIATE`/`FP64_COMPARE`/`FP64_CONVERT`) e **C12.3** (inteiro restante: ALU de
+/// registrador, comparação condicional, 1-source/multiplicação, exclusivos/atômicos de par e
+/// manipulação de flags — 16 `Kind`, ver {@code c12.3-a64-inteiro-nativo.md}). Os 56 que ainda
+/// faltam — FP escalar restante (C12.4), load/store FP/SIMD (C12.5), AdvSIMD aritmético (C12.6) e
+/// sistema (C12.10) — caem no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter}.
 ///
 /// Agravava porque a política padrão do {@code Asm64CodeEmitter} era `WHOLE_BLOCK`: **UMA op não
@@ -68,7 +69,23 @@ public final class Ir64NativePolicy {
                  Ir64Op.Kind.FP64_ALU,
                  Ir64Op.Kind.FP64_MOVE_IMMEDIATE,
                  Ir64Op.Kind.FP64_COMPARE,
-                 Ir64Op.Kind.FP64_CONVERT -> true;
+                 Ir64Op.Kind.FP64_CONVERT,
+                 Ir64Op.Kind.CONDITIONAL_COMPARE,
+                 Ir64Op.Kind.LOGICAL_SHIFTED_REGISTER,
+                 Ir64Op.Kind.SHIFT_VARIABLE,
+                 Ir64Op.Kind.ALU_WITH_CARRY,
+                 Ir64Op.Kind.EXTRACT,
+                 Ir64Op.Kind.DATA_PROCESSING_1_SOURCE,
+                 Ir64Op.Kind.MULTIPLY_ACCUMULATE_LONG,
+                 Ir64Op.Kind.MULTIPLY_HIGH,
+                 Ir64Op.Kind.COMPARE_AND_SWAP,
+                 Ir64Op.Kind.COMPARE_AND_SWAP_PAIR,
+                 Ir64Op.Kind.LOAD_EXCLUSIVE_PAIR,
+                 Ir64Op.Kind.STORE_EXCLUSIVE_PAIR,
+                 Ir64Op.Kind.ATOMIC_MEMORY_OP,
+                 Ir64Op.Kind.EVALUATE_INTO_FLAGS,
+                 Ir64Op.Kind.ROTATE_INTO_FLAGS,
+                 Ir64Op.Kind.CONVERT_FLAGS -> true;
             default -> false;
         };
     }

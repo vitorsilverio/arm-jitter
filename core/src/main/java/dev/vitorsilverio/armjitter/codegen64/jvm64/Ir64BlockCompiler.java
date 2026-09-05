@@ -354,6 +354,25 @@ public final class Ir64BlockCompiler {
             case Ir64Op.Fp64MoveImmediate fp64MoveImmediate -> constructFp64MoveImmediate(mv, fp64MoveImmediate);
             case Ir64Op.Fp64Compare fp64Compare -> constructFp64Compare(mv, fp64Compare);
             case Ir64Op.Fp64Convert fp64Convert -> constructFp64Convert(mv, fp64Convert);
+            case Ir64Op.ConditionalCompare conditionalCompare -> constructConditionalCompare(mv, conditionalCompare);
+            case Ir64Op.LogicalShiftedRegister logicalShiftedRegister ->
+                    constructLogicalShiftedRegister(mv, logicalShiftedRegister);
+            case Ir64Op.ShiftVariable shiftVariable -> constructShiftVariable(mv, shiftVariable);
+            case Ir64Op.AluWithCarry aluWithCarry -> constructAluWithCarry(mv, aluWithCarry);
+            case Ir64Op.Extract extract -> constructExtract(mv, extract);
+            case Ir64Op.DataProcessing1Source dataProcessing1Source ->
+                    constructDataProcessing1Source(mv, dataProcessing1Source);
+            case Ir64Op.MultiplyAccumulateLong multiplyAccumulateLong ->
+                    constructMultiplyAccumulateLong(mv, multiplyAccumulateLong);
+            case Ir64Op.MultiplyHigh multiplyHigh -> constructMultiplyHigh(mv, multiplyHigh);
+            case Ir64Op.CompareAndSwap compareAndSwap -> constructCompareAndSwap(mv, compareAndSwap);
+            case Ir64Op.CompareAndSwapPair compareAndSwapPair -> constructCompareAndSwapPair(mv, compareAndSwapPair);
+            case Ir64Op.LoadExclusivePair loadExclusivePair -> constructLoadExclusivePair(mv, loadExclusivePair);
+            case Ir64Op.StoreExclusivePair storeExclusivePair -> constructStoreExclusivePair(mv, storeExclusivePair);
+            case Ir64Op.AtomicMemoryOp atomicMemoryOp -> constructAtomicMemoryOp(mv, atomicMemoryOp);
+            case Ir64Op.EvaluateIntoFlags evaluateIntoFlags -> constructEvaluateIntoFlags(mv, evaluateIntoFlags);
+            case Ir64Op.RotateIntoFlags rotateIntoFlags -> constructRotateIntoFlags(mv, rotateIntoFlags);
+            case Ir64Op.ConvertFlags convertFlags -> constructConvertFlags(mv, convertFlags);
             default -> throw new IllegalStateException(
                     "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
@@ -377,6 +396,10 @@ public final class Ir64BlockCompiler {
     private static final String IR64_BITFIELD_OP = "dev/vitorsilverio/armjitter/ir64/Ir64BitfieldOp";
     private static final String IR64_FP64_OPERATION = IR64_OP + "$Fp64Operation";
     private static final String IR64_FP64_CONVERSION = IR64_OP + "$Fp64Conversion";
+    private static final String IR64_LOGICAL_SHIFT_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64LogicalShiftType";
+    private static final String IR64_ONE_SOURCE_OP = "dev/vitorsilverio/armjitter/ir64/Ir64OneSourceOp";
+    private static final String IR64_ATOMIC_OP = "dev/vitorsilverio/armjitter/ir64/Ir64AtomicOp";
+    private static final String IR64_FLAG_CONVERSION_OP = "dev/vitorsilverio/armjitter/ir64/Ir64FlagConversionOp";
 
     private void constructAlu64(MethodVisitor mv, Ir64Op.Alu64 op) {
         String type = IR64_OP + "$Alu64";
@@ -679,6 +702,204 @@ public final class Ir64BlockCompiler {
         mv.visitLdcInsn(op.vm());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
                 "(L" + IR64_FP64_CONVERSION + ";II)V", false);
+    }
+
+    private void constructConditionalCompare(MethodVisitor mv, Ir64Op.ConditionalCompare op) {
+        String type = IR64_OP + "$ConditionalCompare";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
+        mv.visitLdcInsn(op.rn());
+        emitBoolean(mv, op.immediateForm());
+        mv.visitLdcInsn(op.rm());
+        mv.visitLdcInsn(op.immediate());
+        emitBoolean(mv, op.wide());
+        emitEnumConstant(mv, IR64_CONDITION, op.condition().name());
+        mv.visitLdcInsn(op.nzcv());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_ALU_OP + ";IZIIZL" + IR64_CONDITION + ";I)V", false);
+    }
+
+    private void constructLogicalShiftedRegister(MethodVisitor mv, Ir64Op.LogicalShiftedRegister op) {
+        String type = IR64_OP + "$LogicalShiftedRegister";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitEnumConstant(mv, IR64_LOGICAL_SHIFT_TYPE, op.shiftType().name());
+        mv.visitLdcInsn(op.shiftAmount());
+        emitBoolean(mv, op.invert());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.setFlags());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_ALU_OP + ";IIIL" + IR64_LOGICAL_SHIFT_TYPE + ";IZZZ)V", false);
+    }
+
+    private void constructShiftVariable(MethodVisitor mv, Ir64Op.ShiftVariable op) {
+        String type = IR64_OP + "$ShiftVariable";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitEnumConstant(mv, IR64_LOGICAL_SHIFT_TYPE, op.shiftType().name());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(III" + "L" + IR64_LOGICAL_SHIFT_TYPE + ";Z)V", false);
+    }
+
+    private void constructAluWithCarry(MethodVisitor mv, Ir64Op.AluWithCarry op) {
+        String type = IR64_OP + "$AluWithCarry";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.subtract());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.setFlags());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZZ)V", false);
+    }
+
+    private void constructExtract(MethodVisitor mv, Ir64Op.Extract op) {
+        String type = IR64_OP + "$Extract";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        mv.visitLdcInsn(op.lsb());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIIZ)V", false);
+    }
+
+    private void constructDataProcessing1Source(MethodVisitor mv, Ir64Op.DataProcessing1Source op) {
+        String type = IR64_OP + "$DataProcessing1Source";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_ONE_SOURCE_OP, op.opcode().name());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_ONE_SOURCE_OP + ";IIZ)V", false);
+    }
+
+    private void constructMultiplyAccumulateLong(MethodVisitor mv, Ir64Op.MultiplyAccumulateLong op) {
+        String type = IR64_OP + "$MultiplyAccumulateLong";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.subtract());
+        emitBoolean(mv, op.signed());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        mv.visitLdcInsn(op.accumulator());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZIIII)V", false);
+    }
+
+    private void constructMultiplyHigh(MethodVisitor mv, Ir64Op.MultiplyHigh op) {
+        String type = IR64_OP + "$MultiplyHigh";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.signed());
+        mv.visitLdcInsn(op.dst());
+        mv.visitLdcInsn(op.src1());
+        mv.visitLdcInsn(op.src2());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIII)V", false);
+    }
+
+    private void constructCompareAndSwap(MethodVisitor mv, Ir64Op.CompareAndSwap op) {
+        String type = IR64_OP + "$CompareAndSwap";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rs());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(III" + "L" + IR64_MEM_SIZE + ";)V", false);
+    }
+
+    private void constructCompareAndSwapPair(MethodVisitor mv, Ir64Op.CompareAndSwapPair op) {
+        String type = IR64_OP + "$CompareAndSwapPair";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rs());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitBoolean(mv, op.wide());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIZ)V", false);
+    }
+
+    private void constructLoadExclusivePair(MethodVisitor mv, Ir64Op.LoadExclusivePair op) {
+        String type = IR64_OP + "$LoadExclusivePair";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rt2());
+        mv.visitLdcInsn(op.rn());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.acquireRelease());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIZZ)V", false);
+    }
+
+    private void constructStoreExclusivePair(MethodVisitor mv, Ir64Op.StoreExclusivePair op) {
+        String type = IR64_OP + "$StoreExclusivePair";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rs());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rt2());
+        mv.visitLdcInsn(op.rn());
+        emitBoolean(mv, op.wide());
+        emitBoolean(mv, op.acquireRelease());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIIZZ)V", false);
+    }
+
+    private void constructAtomicMemoryOp(MethodVisitor mv, Ir64Op.AtomicMemoryOp op) {
+        String type = IR64_OP + "$AtomicMemoryOp";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rs());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_MEM_SIZE, op.size().name());
+        emitEnumConstant(mv, IR64_ATOMIC_OP, op.operation().name());
+        emitBoolean(mv, op.acquire());
+        emitBoolean(mv, op.release());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(III" + "L" + IR64_MEM_SIZE + ";L" + IR64_ATOMIC_OP + ";ZZ)V", false);
+    }
+
+    private void constructEvaluateIntoFlags(MethodVisitor mv, Ir64Op.EvaluateIntoFlags op) {
+        String type = IR64_OP + "$EvaluateIntoFlags";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rn());
+        mv.visitLdcInsn(op.sizeBits());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(II)V", false);
+    }
+
+    private void constructRotateIntoFlags(MethodVisitor mv, Ir64Op.RotateIntoFlags op) {
+        String type = IR64_OP + "$RotateIntoFlags";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rn());
+        mv.visitLdcInsn(op.shift());
+        mv.visitLdcInsn(op.mask());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(III)V", false);
+    }
+
+    private void constructConvertFlags(MethodVisitor mv, Ir64Op.ConvertFlags op) {
+        String type = IR64_OP + "$ConvertFlags";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_FLAG_CONVERSION_OP, op.opcode().name());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_FLAG_CONVERSION_OP + ";)V", false);
     }
 
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {

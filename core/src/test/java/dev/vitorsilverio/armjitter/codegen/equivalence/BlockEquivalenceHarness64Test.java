@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64SvcHandler;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
@@ -15,9 +16,12 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
+import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -655,5 +659,336 @@ class BlockEquivalenceHarness64Test {
             }));
             pc += 0x100;
         }
+    }
+
+    // ---- C12.3: inteiro restante (ALU registrador, comparação condicional, 1-source/
+    // multiplicação, exclusivos/atômicos de par, manipulação de flags) — 16 Kind ----
+
+    @Test
+    void listOfC123KindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.ConditionalCompare(Ir64AluOp.SUB, 0, false, 1, -1, true, Ir64Condition.EQ, 0),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.AND, 0, 1, 2, Ir64LogicalShiftType.LSL, 0, false, true, false),
+                new Ir64Op.ShiftVariable(0, 1, 2, Ir64LogicalShiftType.LSL, true),
+                new Ir64Op.AluWithCarry(false, 0, 1, 2, true, false),
+                new Ir64Op.Extract(0, 1, 2, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CLZ, 0, 1, true),
+                new Ir64Op.MultiplyAccumulateLong(false, false, 0, 1, 2, 3),
+                new Ir64Op.MultiplyHigh(false, 0, 1, 2),
+                new Ir64Op.CompareAndSwap(0, 1, 31, Ir64MemSize.WORD),
+                new Ir64Op.CompareAndSwapPair(0, 2, 31, true),
+                new Ir64Op.LoadExclusivePair(0, 1, 31, true, false),
+                new Ir64Op.StoreExclusivePair(0, 1, 2, 31, true, false),
+                new Ir64Op.AtomicMemoryOp(0, 1, 31, Ir64MemSize.WORD, Ir64AtomicOp.ADD, false, false),
+                new Ir64Op.EvaluateIntoFlags(0, 8),
+                new Ir64Op.RotateIntoFlags(0, 4, 0b1010),
+                new Ir64Op.ConvertFlags(Ir64FlagConversionOp.INVERT_CARRY));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    /// `CCMP`/`CCMN`: condição VERDADEIRA recalcula `NZCV` da comparação real; condição FALSA
+    /// escreve o `nzcv` imediato direto, sem ler `rn`/`rm` (Armadilha 4 da spec).
+    @Test
+    void conditionalCompareTrueRecomputesFalseWritesImmediateNzcv() {
+        Ir64Block conditionTrue = blockOf(0xC000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 5, 0, true), // Z=1 antes -> AL sempre verdadeiro
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 5, true, true, false, false), // força Z=1
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 5, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 3, 0, true),
+                new Ir64Op.ConditionalCompare(Ir64AluOp.SUB, 1, false, 2, -1, true, Ir64Condition.EQ, 0b0101));
+        harness.assertEquivalent(interpreted, asm, conditionTrue, pair());
+
+        Ir64Block conditionFalse = blockOf(0xC100,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 5, 0, true),
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 9, 0, 1, true, true, false, false), // Z=0
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 5, 0, true),
+                new Ir64Op.ConditionalCompare(Ir64AluOp.ADD, 1, true, -1, 7, true, Ir64Condition.EQ, 0b1001));
+        harness.assertEquivalent(interpreted, asm, conditionFalse, pair());
+    }
+
+    /// `LogicalShiftedRegister`: as 4 combinações de {@link Ir64LogicalShiftType} (incl. `ROR`,
+    /// exclusiva desta forma) e `invert` produzindo `BIC`/`ORN`/`EON` a partir do MESMO opcode.
+    @Test
+    void logicalShiftedRegisterAllShiftTypesAndInvert() {
+        Ir64Block block = blockOf(0xC200,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xFF00, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x00F0, 0, true),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.AND, 2, 0, 1, Ir64LogicalShiftType.LSL, 0, false, true, true),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.ORR, 3, 0, 1, Ir64LogicalShiftType.LSR, 4, false, true, false),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.EOR, 4, 0, 1, Ir64LogicalShiftType.ASR, 4, false, true, false),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.AND, 5, 0, 1, Ir64LogicalShiftType.ROR, 8, true, true, false), // BIC
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.ORR, 6, 0, 1, Ir64LogicalShiftType.LSL, 0, true, true, false), // ORN
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.EOR, 7, 0, 1, Ir64LogicalShiftType.LSL, 0, true, true, false)); // EON
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LSLV`/`LSRV`/`ASRV`/`RORV`: quantidade tomada de um REGISTRADOR (não imediato), incluindo o
+    /// mascaramento `mod regsize` quando o valor excede a largura (Aceite: deslocamento `>= 64`).
+    @Test
+    void shiftVariableAllTypesAndModuloMasking() {
+        Ir64Block block = blockOf(0xC300,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 65, 0, true), // 65 mod 64 == 1 (wide)
+                new Ir64Op.ShiftVariable(2, 0, 1, Ir64LogicalShiftType.LSL, true),
+                new Ir64Op.ShiftVariable(3, 0, 1, Ir64LogicalShiftType.LSR, true),
+                new Ir64Op.ShiftVariable(4, 0, 1, Ir64LogicalShiftType.ASR, true),
+                new Ir64Op.ShiftVariable(5, 0, 1, Ir64LogicalShiftType.ROR, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 6, 33, 0, true), // 33 mod 32 == 1 (narrow)
+                new Ir64Op.ShiftVariable(7, 0, 6, Ir64LogicalShiftType.LSL, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `ADC`/`SBC`: `C` de entrada `0` e `1` produzem resultados diferentes (Aceite explícito).
+    @Test
+    void aluWithCarryAdcAndSbcWithCarryInZeroAndOne() {
+        Ir64Block carryOut1 = blockOf(0xC400,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 0, 0, 0, true), // X0 = 0xFFFF...FFFF
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 1, 0, true),
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 9, 0, 1, true, true, false, false), // gera C=1
+                new Ir64Op.AluWithCarry(false, 2, 0, 1, true, true), // ADCS com C=1 de entrada
+                new Ir64Op.AluWithCarry(true, 3, 0, 1, true, true)); // SBCS com C=1 de entrada
+        harness.assertEquivalent(interpreted, asm, carryOut1, pair());
+
+        Ir64Block carryOut0 = blockOf(0xC500,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 1, 0, true),
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 5, true, true, false, false), // gera C=0
+                new Ir64Op.AluWithCarry(false, 2, 0, 1, true, false), // ADC sem flags, C=0 de entrada
+                new Ir64Op.AluWithCarry(true, 3, 0, 1, true, false));
+        harness.assertEquivalent(interpreted, asm, carryOut0, pair());
+    }
+
+    /// `EXTR`: janela nos dois extremos de `lsb` (`0` = resultado é exatamente `src2`; máximo válido
+    /// `63` para `wide`).
+    @Test
+    void extractLsbZeroAndMaximum() {
+        Ir64Block block = blockOf(0xC600,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1111, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVK, 0, 0x2222, 16, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x3333, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVK, 1, 0x4444, 16, true),
+                new Ir64Op.Extract(2, 0, 1, 0, true),
+                new Ir64Op.Extract(3, 0, 1, 63, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `DataProcessing1Source`: as 7 sub-operações de {@link Ir64OneSourceOp}.
+    @Test
+    void dataProcessing1SourceAllSubOperations() {
+        Ir64Block block = blockOf(0xC700,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1234, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVK, 0, 0x5678, 16, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.RBIT, 1, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.REV16, 2, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.REV32, 3, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.REV64, 4, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CLZ, 5, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CLS, 6, 0, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CNT, 7, 0, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` — com `Ra != XZR` (Aceite explícito).
+    @Test
+    void multiplyAccumulateLongSignedAndUnsigned() {
+        Ir64Block block = blockOf(0xC800,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 0, 5, 0, false), // W0 = -6 (negativo em W)
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 7, 0, false),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 1000, 0, true),
+                new Ir64Op.MultiplyAccumulateLong(false, true, 3, 0, 1, 2), // SMADDL
+                new Ir64Op.MultiplyAccumulateLong(true, true, 4, 0, 1, 2), // SMSUBL
+                new Ir64Op.MultiplyAccumulateLong(false, false, 5, 0, 1, 2), // UMADDL
+                new Ir64Op.MultiplyAccumulateLong(true, false, 6, 0, 1, 2)); // UMSUBL
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `SMULH`/`UMULH` no MESMO padrão de bits (Aceite explícito: assinado × não assinado diverge).
+    @Test
+    void multiplyHighSignedVersusUnsignedSameBitPattern() {
+        Ir64Block block = blockOf(0xC900,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 0, 0, 0, true), // X0 = -1 (todos os bits 1)
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 2, 0, true),
+                new Ir64Op.MultiplyHigh(true, 2, 0, 1), // SMULH: -1 * 2 = -2, high = -1
+                new Ir64Op.MultiplyHigh(false, 3, 0, 1)); // UMULH: valor grande sem sinal
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `CAS`: sucesso (comparação bate, escreve `Rt`, `Rs` recebe o valor antigo) E falha
+    /// (comparação não bate, memória intacta, `Rs` ainda recebe o valor antigo — Aceite explícito).
+    /// `rn=31` é sempre `SP` (Armadilha do índice 31 nesta forma).
+    @Test
+    void compareAndSwapSuccessAndFailure() {
+        Ir64Block success = blockOf(0xCA00,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x600, 0, true), // endereço em X5
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x11, 0, true),
+                new Ir64Op.Store64(1, 5, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0), // memória[0x600] = 0x11
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x11, 0, true), // Rs = 0x11 (bate)
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x22, 0, true), // Rt = 0x22 (novo valor)
+                new Ir64Op.CompareAndSwap(0, 2, 5, Ir64MemSize.WORD));
+        harness.assertEquivalent(interpreted, asm, success, pair());
+
+        Ir64Block failure = blockOf(0xCB00,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x610, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x33, 0, true),
+                new Ir64Op.Store64(1, 5, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0), // memória[0x610] = 0x33
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x99, 0, true), // Rs = 0x99 (NÃO bate)
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x44, 0, true),
+                new Ir64Op.CompareAndSwap(0, 2, 5, Ir64MemSize.WORD));
+        harness.assertEquivalent(interpreted, asm, failure, pair());
+    }
+
+    /// `CASP`: par de 64 bits, sucesso comparando `(Rs,Rs+1)` contra `[Rn]`/`[Rn+8]`.
+    @Test
+    void compareAndSwapPairRoundTrip() {
+        Ir64Block block = blockOf(0xCC00,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x620, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 10, 0xAA, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 11, 0xBB, 0, true),
+                new Ir64Op.LoadStorePair(false, 10, 11, 5, true, Ir64AddressingMode.OFFSET, 0, false),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xAA, 0, true), // Rs = 0xAA
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0xBB, 0, true), // Rs+1 = 0xBB
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0xCC, 0, true), // Rt
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0xDD, 0, true), // Rt+1
+                new Ir64Op.CompareAndSwapPair(0, 2, 5, true));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `LDXP`/`STXP`: round-trip de par com sucesso E `STXP` sem reserva prévia (falha) — mesmo
+    /// espírito de {@link #loadExclusiveThenStoreExclusiveSucceeds}/
+    /// {@link #storeExclusiveWithoutReservationFails}, para a forma de PAR.
+    @Test
+    void loadExclusivePairThenStoreExclusivePairSucceedsAndFailsWithoutReservation() {
+        Ir64Block success = blockOf(0xCD00,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x630, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 10, 0x100, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 11, 0x200, 0, true),
+                new Ir64Op.LoadExclusivePair(0, 1, 5, true, false),
+                new Ir64Op.StoreExclusivePair(2, 10, 11, 5, true, false));
+        harness.assertEquivalent(interpreted, asm, success, pair());
+
+        Ir64Block failure = blockOf(0xCE00,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x640, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 10, 0x300, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 11, 0x400, 0, true),
+                new Ir64Op.StoreExclusivePair(2, 10, 11, 5, true, false));
+        harness.assertEquivalent(interpreted, asm, failure, pair());
+    }
+
+    /// `AtomicMemoryOp`: cada uma das 9 {@link Ir64AtomicOp} E as variantes de ordenação (`A`/`R`,
+    /// Aceite explícito) — `Rt` grava o valor ANTIGO lido; a memória fica com o resultado do RMW.
+    @Test
+    void atomicMemoryOpEachOperationAndOrderingVariant() {
+        long pc = 0xD000;
+        Ir64AtomicOp[] operations = Ir64AtomicOp.values();
+        for (Ir64AtomicOp operation : operations) {
+            for (boolean acquire : new boolean[]{false, true}) {
+                for (boolean release : new boolean[]{false, true}) {
+                    long address = 0x700 + (pc & 0xFF);
+                    Ir64Block block = blockOf(pc,
+                            new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, (int) address, 0, true),
+                            new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 5, 0, true),
+                            new Ir64Op.Store64(1, 5, Ir64MemSize.WORD, false,
+                                    Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                            new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 3, 0, true),
+                            new Ir64Op.AtomicMemoryOp(0, 2, 5, Ir64MemSize.WORD, operation, acquire, release));
+                    harness.assertEquivalent(interpreted, asm, block, pair());
+                    pc += 0x10;
+                }
+            }
+        }
+    }
+
+    /// `SWP` (alias de `AtomicMemoryOp` com {@link Ir64AtomicOp#SWP}) com `Rt==XZR`: alias `ST<op>`
+    /// que descarta o valor antigo — cobre o caminho `rt=31`.
+    @Test
+    void atomicMemoryOpStAliasDiscardsOldValue() {
+        Ir64Block block = blockOf(0xE000,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 5, 0x800, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x77, 0, true),
+                new Ir64Op.Store64(1, 5, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x88, 0, true),
+                new Ir64Op.AtomicMemoryOp(0, 31, 5, Ir64MemSize.WORD, Ir64AtomicOp.SWP, false, false));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `SETF8`/`SETF16`: larguras `8` e `16` avaliando bytes diferentes do MESMO registrador.
+    @Test
+    void evaluateIntoFlagsSize8And16() {
+        Ir64Block block = blockOf(0xE100,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xFF80, 0, true),
+                new Ir64Op.EvaluateIntoFlags(0, 8),
+                new Ir64Op.EvaluateIntoFlags(0, 16));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `RMIF`: máscara PARCIAL (só alguns dos 4 flags atualizados; os demais permanecem
+    /// inalterados — Aceite "valores extremos").
+    @Test
+    void rotateIntoFlagsPartialMaskLeavesRestUnchanged() {
+        Ir64Block block = blockOf(0xE200,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 5, 0, true),
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 5, true, true, false, false), // NZCV inicial conhecido
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0b1011, 0, true), // candidato N:Z:C:V
+                new Ir64Op.RotateIntoFlags(1, 0, 0b0101), // só Z e V atualizados
+                new Ir64Op.RotateIntoFlags(1, 2, 0b1111)); // rotação != 0, todos os 4 atualizados
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `CFINV`/`XAFLAG`/`AXFLAG`: as 3 sub-operações de {@link Ir64FlagConversionOp}.
+    @Test
+    void convertFlagsAllThreeSubOperations() {
+        Ir64Block block = blockOf(0xE300,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 3, 0, true),
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 3, true, true, false, false),
+                new Ir64Op.ConvertFlags(Ir64FlagConversionOp.INVERT_CARRY),
+                new Ir64Op.ConvertFlags(Ir64FlagConversionOp.ARM_TO_EXTERNAL),
+                new Ir64Op.ConvertFlags(Ir64FlagConversionOp.EXTERNAL_TO_ARM));
+        harness.assertEquivalent(interpreted, asm, block, pair());
+    }
+
+    /// `XZR`/`SP` (Aceite explícito, classe de bug da B6.14): `dst=31` em ops de escrita descarta
+    /// (`XZR`), e `rn=31` nas formas de memória desta task é SEMPRE `SP` — nunca `XZR`.
+    @Test
+    void xzrAndStackPointerDistinctionAcrossC123Kinds() {
+        // dst=31 (XZR) descarta a escrita em ops de registrador puro.
+        Ir64Block discardsToXzr = blockOf(0xE400,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 5, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 7, 0, true),
+                new Ir64Op.LogicalShiftedRegister(
+                        Ir64AluOp.ORR, 31, 0, 1, Ir64LogicalShiftType.LSL, 0, false, true, false),
+                new Ir64Op.AluWithCarry(false, 31, 0, 1, true, false),
+                new Ir64Op.Extract(31, 0, 1, 4, true),
+                new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CLZ, 31, 0, true),
+                new Ir64Op.MultiplyAccumulateLong(false, false, 31, 0, 1, 0),
+                new Ir64Op.MultiplyHigh(false, 31, 0, 1));
+        harness.assertEquivalent(interpreted, asm, discardsToXzr, pair());
+
+        // rn=31 nas formas de memória é SEMPRE SP (nunca XZR) — usa o SP corrente do core.
+        Ir64Block rnIsAlwaysSp = blockOf(0xE500,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x42, 0, true),
+                new Ir64Op.Store64(1, 31, Ir64MemSize.WORD, false,
+                        Ir64AddressingMode.OFFSET, 0, -1, null, 0),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x42, 0, true),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 2, 0x43, 0, true),
+                new Ir64Op.CompareAndSwap(0, 2, 31, Ir64MemSize.WORD));
+        harness.assertEquivalent(interpreted, asm, rnIsAlwaysSp, () -> {
+            Aarch64Core reference = newCore();
+            reference.setSp(0x900L);
+            Aarch64Core candidate = newCore();
+            candidate.setSp(0x900L);
+            return new EquivalencePair64(reference, candidate);
+        });
     }
 }
