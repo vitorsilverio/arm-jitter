@@ -25,17 +25,16 @@ import java.util.concurrent.atomic.AtomicLong;
 /// PER_OP do ASM usam (invariante G1) — a mudança é estrutural (como o Graal enxerga a árvore),
 /// nenhuma semântica nova.
 ///
-/// <p>{@link IrOpNodeFactory} cobre um SUBCONJUNTO de `IrOp.Kind` — as 40 `Kind` das 7 categorias
-/// da taxonomia da A6. Os 33 `Kind` acrescentados por B1/B3/B7/B9/B13 DEPOIS da A6 (todo VFP,
-/// todo NEON, DSP dual/top-word, `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank`, bitfield/`RBIT`/
-/// `SDIV`/`UDIV`, `BKPT`, sysreg do perfil M) ainda não têm nó Truffle — cada categoria é fechada
-/// por uma task própria (A10.3 VFP · A10.4 bitfield/divide · A10.5 sistema · A10.6 DSP · A10.7
-/// NEON). Enquanto isso, {@link #supports} devolve `false` para qualquer bloco que contenha um
-/// desses `Kind`, e {@link #emit} o delega por inteiro ao {@link #fallback}
-/// ({@link InterpretedCodeEmitter}), contabilizando em {@link #fallbackBlockCount()} — o caminho
-/// real, não mais "inatingível na prática" como era na A3/A6. Antes desta correção (A10.1),
-/// `supports` era `return true` incondicional e um bloco com `Kind` não coberto **quebrava** com
-/// `IllegalStateException` em {@link IrOpNodeFactory#create} em vez de degradar.</p>
+/// <p>{@link IrOpNodeFactory} cobre um SUBCONJUNTO de `IrOp.Kind` — as 7 categorias da taxonomia
+/// da A6 mais VFP (A10.3). Os `Kind` restantes, acrescentados por B1/B7/B9/B13 DEPOIS da A6 (todo
+/// NEON, `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank`, `BKPT`), ainda não têm nó Truffle — cada
+/// categoria é fechada por uma task própria (A10.5 sistema · A10.7 NEON). Enquanto isso,
+/// {@link #supports} devolve `false` para qualquer bloco que contenha um desses `Kind`, e
+/// {@link #emit} o delega por inteiro ao {@link #fallback} ({@link InterpretedCodeEmitter}),
+/// contabilizando em {@link #fallbackBlockCount()} — o caminho real, não mais "inatingível na
+/// prática" como era na A3/A6. Antes desta correção (A10.1), `supports` era `return true`
+/// incondicional e um bloco com `Kind` não coberto **quebrava** com `IllegalStateException` em
+/// {@link IrOpNodeFactory#create} em vez de degradar.</p>
 public final class TruffleCodeEmitter implements CodeEmitter {
     private final IrBlockExecutor executor;
     private final CodeEmitter fallback;
@@ -84,9 +83,9 @@ public final class TruffleCodeEmitter implements CodeEmitter {
 
     /// `true` só quando TODA op do bloco tem um nó especializado em {@link IrOpNodeFactory}
     /// (consulta {@link IrOpNodeFactory#supports} por op — espelha
-    /// {@code AsmNativePolicy#supports(IrBlock)}). Um único `Kind` não coberto (VFP, NEON, DSP
-    /// dual/top-word, sistema de B9, bitfield/divide, `BKPT`, sysreg M) manda o bloco inteiro
-    /// para o {@link #fallback} — ver o Javadoc da classe e as tasks A10.3-A10.7.
+    /// {@code AsmNativePolicy#supports(IrBlock)}). Um único `Kind` não coberto (NEON, sistema de
+    /// B9, `BKPT`) manda o bloco inteiro para o {@link #fallback} — ver o Javadoc da classe e as
+    /// tasks A10.5/A10.7.
     private static boolean supports(IrBlock block) {
         for (IrOp op : block.operations()) {
             if (!IrOpNodeFactory.supports(op)) {

@@ -20,9 +20,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /// A10.1 — o backend Truffle NUNCA lança por `Kind` não coberto: um bloco com uma op sem nó
-/// especializado (aqui VFP, sob `ARMV7A`) é delegado por inteiro ao
-/// {@link InterpretedCodeEmitter} e produz estado de CPU idêntico ao interpretador (G1). Antes
-/// desta task, {@code emit} desse bloco quebrava com {@link IllegalStateException}.
+/// especializado (aqui `BKPT`, sem nó Truffle mesmo após a A10.3 cobrir VFP) é delegado por
+/// inteiro ao {@link InterpretedCodeEmitter} e produz estado de CPU idêntico ao interpretador
+/// (G1). Antes desta task, {@code emit} desse bloco quebrava com {@link IllegalStateException}.
 class TruffleCodeEmitterFallbackTest {
     private final BlockEquivalenceHarness harness = new BlockEquivalenceHarness();
     private final CodeEmitter referenceEmitter = new InterpretedCodeEmitter(ArmArchitecture.ARMV7A);
@@ -36,27 +36,27 @@ class TruffleCodeEmitterFallbackTest {
     }
 
     @Test
-    void blockWithUncoveredVfpOpFallsBackAndMatchesInterpreter() {
+    void blockWithUncoveredOpFallsBackAndMatchesInterpreter() {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV7A);
-        // VMOV.F32 S0, #1.5  — Kind VFP_MOVE_IMMEDIATE, sem nó Truffle (task A10.3).
+        // BKPT #0 — Kind BREAKPOINT, sem nó Truffle.
         IrBlock block = new IrBlock(0, 8, List.of(
-                new IrOp.VfpMoveImmediate(false, 0, Float.floatToRawIntBits(1.5f) & 0xFFFF_FFFFL, Condition.AL),
+                new IrOp.Breakpoint(0),
                 new IrOp.Cycle(1),
                 new IrOp.Fetch(0, 4)));
 
         harness.assertEquivalent(referenceEmitter, emitter, block, pairFactory());
 
-        assertEquals(0L, emitter.nativeBlockCount(), "bloco com VFP não pode compilar nativamente");
-        assertEquals(1L, emitter.fallbackBlockCount(), "bloco com VFP deve cair no fallback interpretado");
+        assertEquals(0L, emitter.nativeBlockCount(), "bloco com BKPT não pode compilar nativamente");
+        assertEquals(1L, emitter.fallbackBlockCount(), "bloco com BKPT deve cair no fallback interpretado");
     }
 
     @Test
     void mixedBlockWithOneUncoveredOpFallsBackWholeBlock() {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV7A);
-        // ADD r2, r0, r1  (coberto)  +  VCMP.F32 S0, #0.0  (NÃO coberto) -> bloco inteiro no fallback.
+        // ADD r2, r0, r1  (coberto)  +  BKPT #0  (NÃO coberto) -> bloco inteiro no fallback.
         IrBlock block = new IrBlock(0, 8, List.of(
                 new IrOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
-                new IrOp.VfpCompare(false, true, false, 0, 0, Condition.AL),
+                new IrOp.Breakpoint(0),
                 new IrOp.Cycle(1),
                 new IrOp.Fetch(0, 4)));
 

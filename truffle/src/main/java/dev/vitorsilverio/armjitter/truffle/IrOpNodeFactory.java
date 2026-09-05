@@ -9,14 +9,14 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// cada nó ainda há um `switch` pequeno sobre os poucos records daquela categoria, decisão
 /// explícita da especificação).
 ///
-/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 46 dos 73 `Kind` — as 7
+/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 60 dos 84 `Kind` — as 7
 /// categorias da taxonomia da A6 (ALU escalar, multiplicação, memória, transferência múltipla,
-/// branch, sistema, ciclo/fetch); a multiplicação inclui `DspDualMultiply`/`DspTopWordMultiply`
-/// desde a A10.6, e a ALU inclui bitfield/`RBIT`/`SDIV`/`UDIV` desde a A10.4. Os 27 `Kind`
-/// restantes (todo VFP/coprocessador, todo NEON, `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank`,
-/// `BKPT`, `MRS`/`MSR` SYSm do perfil M) foram acrescentados por B1/B3/B7/B9/B13 DEPOIS da A6 e
-/// ainda não têm nó Truffle especializado — cada categoria é fechada por uma task própria
-/// (A10.3 VFP, A10.5 sistema, A10.7 NEON). Enquanto isso,
+/// branch, sistema, ciclo/fetch) mais VFP (A10.3); a multiplicação inclui
+/// `DspDualMultiply`/`DspTopWordMultiply` desde a A10.6, e a ALU inclui bitfield/`RBIT`/`SDIV`/
+/// `UDIV` desde a A10.4. Os 24 `Kind` restantes (todo NEON, `HVC`/`SMC`/`ERET`/`MRS_bank`/
+/// `MSR_bank`, `BKPT`) foram acrescentados por B1/B7/B9/B13 DEPOIS da A6 e ainda não têm nó
+/// Truffle especializado — cada categoria é fechada por uma task própria (A10.5 sistema, A10.7
+/// NEON). Enquanto isso,
 /// {@link TruffleCodeEmitter} desvia os blocos que contêm um desses `Kind` para o
 /// {@link dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter} (via {@link #supports}), em
 /// vez de quebrar.</p>
@@ -36,7 +36,7 @@ final class IrOpNodeFactory {
     /// Categoria de nó da taxonomia da A6. Fonte única de verdade compartilhada por
     /// {@link #create} e {@link #supports}.
     private enum Category {
-        ALU, MULTIPLY, MEMORY, TRANSFER, BRANCH, SYSTEM, CYCLE_FETCH
+        ALU, MULTIPLY, MEMORY, TRANSFER, BRANCH, SYSTEM, CYCLE_FETCH, VFP
     }
 
     static IrOpNode create(IrOp op, IrBlockExecutor executor) {
@@ -52,6 +52,7 @@ final class IrOpNodeFactory {
             case BRANCH -> new BranchOpNode(op, executor.branchExecutor());
             case SYSTEM -> new SystemOpNode(op, executor.systemExecutor(), executor.transferExecutor());
             case CYCLE_FETCH -> new CycleFetchOpNode(op, executor.cycleExecutor());
+            case VFP -> new VfpOpNode(op, executor.vfpExecutor(), executor.systemExecutor());
         };
     }
 
@@ -85,6 +86,13 @@ final class IrOpNodeFactory {
                     IrOp.Kind.SET_IT_STATE ->
                     Category.SYSTEM;
             case IrOp.Kind.CYCLE, IrOp.Kind.FETCH -> Category.CYCLE_FETCH;
+            case IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
+                    IrOp.Kind.VFP_CONVERT, IrOp.Kind.VFP_LOAD, IrOp.Kind.VFP_STORE,
+                    IrOp.Kind.VFP_MULTIPLE_TRANSFER, IrOp.Kind.VFP_CORE_TRANSFER,
+                    IrOp.Kind.VFP_CORE_PAIR_TRANSFER, IrOp.Kind.VFP_SYSTEM_TRANSFER,
+                    IrOp.Kind.M_PROFILE_SYSTEM_REGISTER, IrOp.Kind.COPROCESSOR_DOUBLE,
+                    IrOp.Kind.VFP_CORE_PAIR_TRANSFER_SINGLE, IrOp.Kind.VFP_CONVERT_FIXED ->
+                    Category.VFP;
             default -> null;
         };
     }

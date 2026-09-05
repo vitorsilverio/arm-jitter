@@ -8,9 +8,9 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Nó Truffle base para uma única `IrOp` (task A6). Cada subclasse cobre UMA categoria da
 /// taxonomia da especificação (`AluOpNode`, `MultiplyOpNode`, `MemoryOpNode`, `TransferOpNode`,
-/// `BranchOpNode`, `SystemOpNode`, `CycleFetchOpNode`) e delega o cálculo real ao método de
-/// categoria correspondente em `codegen/executor` — a MESMA fonte de verdade usada pelo
-/// interpretador e pelo fallback PER_OP do ASM (invariante G1). NENHUMA subclasse reimplementa
+/// `BranchOpNode`, `SystemOpNode`, `CycleFetchOpNode`, mais `VfpOpNode` desde a A10.3) e delega o
+/// cálculo real ao método de categoria correspondente em `codegen/executor` — a MESMA fonte de
+/// verdade usada pelo interpretador e pelo fallback PER_OP do ASM (invariante G1). NENHUMA subclasse reimplementa
 /// regra de flags/UNPREDICTABLE/`ArmFeature`.
 ///
 /// <p>Substitui, na árvore montada por {@link TruffleCodeEmitter}, o `switch` exaustivo de 40
@@ -27,7 +27,8 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// reavalia a MESMA condição de qualquer forma (G1 — este nó nunca decide sozinho se a op deve
 /// rodar, só observa o resultado de uma chamada que já aconteceria).</p>
 abstract sealed class IrOpNode extends Node
-        permits AluOpNode, MultiplyOpNode, MemoryOpNode, TransferOpNode, BranchOpNode, SystemOpNode, CycleFetchOpNode {
+        permits AluOpNode, MultiplyOpNode, MemoryOpNode, TransferOpNode, BranchOpNode, SystemOpNode, CycleFetchOpNode,
+        VfpOpNode {
     private final Condition condition;
     private final ConditionProfile conditionTakenProfile = ConditionProfile.create();
 

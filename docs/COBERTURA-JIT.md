@@ -32,7 +32,7 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 ## Progresso
 
 > **ASM 32 bits: 37 de 84** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 46 de 84** operações com nó especializado.
+> **Truffle 32 bits: 60 de 84** operações com nó especializado.
 > **ASM 64 bits: 40 de 96** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 96** — o backend não existe (A10.8).
 
@@ -90,21 +90,21 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `BitFieldInsert` | `BIT_FIELD_INSERT` | ✅ | ✅ |
 | `BitReverse` | `BIT_REVERSE` | ✅ | ✅ |
 | `Divide` | `DIVIDE` | ✅ | ✅ |
-| `VfpAlu` | `VFP_ALU` | ✅ | ❌ |
-| `VfpMoveImmediate` | `VFP_MOVE_IMMEDIATE` | ✅ | ❌ |
-| `VfpCompare` | `VFP_COMPARE` | ✅ | ❌ |
-| `VfpConvert` | `VFP_CONVERT` | ✅ | ❌ |
-| `VfpLoad` | `VFP_LOAD` | ✅ | ❌ |
-| `VfpStore` | `VFP_STORE` | ✅ | ❌ |
-| `VfpMultipleTransfer` | `VFP_MULTIPLE_TRANSFER` | ✅ | ❌ |
-| `VfpCoreTransfer` | `VFP_CORE_TRANSFER` | ⚠️ | ❌ |
-| `VfpCorePairTransfer` | `VFP_CORE_PAIR_TRANSFER` | ✅ | ❌ |
-| `VfpSystemTransfer` | `VFP_SYSTEM_TRANSFER` | ✅ | ❌ |
-| `MProfileSystemRegister` | `M_PROFILE_SYSTEM_REGISTER` | ❌ | ❌ |
+| `VfpAlu` | `VFP_ALU` | ✅ | ✅ |
+| `VfpMoveImmediate` | `VFP_MOVE_IMMEDIATE` | ✅ | ✅ |
+| `VfpCompare` | `VFP_COMPARE` | ✅ | ✅ |
+| `VfpConvert` | `VFP_CONVERT` | ✅ | ✅ |
+| `VfpLoad` | `VFP_LOAD` | ✅ | ✅ |
+| `VfpStore` | `VFP_STORE` | ✅ | ✅ |
+| `VfpMultipleTransfer` | `VFP_MULTIPLE_TRANSFER` | ✅ | ✅ |
+| `VfpCoreTransfer` | `VFP_CORE_TRANSFER` | ⚠️ | ✅ |
+| `VfpCorePairTransfer` | `VFP_CORE_PAIR_TRANSFER` | ✅ | ✅ |
+| `VfpSystemTransfer` | `VFP_SYSTEM_TRANSFER` | ✅ | ✅ |
+| `MProfileSystemRegister` | `M_PROFILE_SYSTEM_REGISTER` | ❌ | ✅ |
 | `Breakpoint` | `BREAKPOINT` | ❌ | ❌ |
-| `CoprocessorDouble` | `COPROCESSOR_DOUBLE` | ✅ | ❌ |
-| `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ❌ | ❌ |
-| `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ❌ | ❌ |
+| `CoprocessorDouble` | `COPROCESSOR_DOUBLE` | ✅ | ✅ |
+| `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ❌ | ✅ |
+| `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ❌ | ✅ |
 | `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ❌ | ✅ |
 | `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ❌ | ✅ |
 | `Hvc` | `HVC` | ❌ | ❌ |
