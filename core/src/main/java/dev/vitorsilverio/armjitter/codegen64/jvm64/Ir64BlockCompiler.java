@@ -373,6 +373,15 @@ public final class Ir64BlockCompiler {
             case Ir64Op.EvaluateIntoFlags evaluateIntoFlags -> constructEvaluateIntoFlags(mv, evaluateIntoFlags);
             case Ir64Op.RotateIntoFlags rotateIntoFlags -> constructRotateIntoFlags(mv, rotateIntoFlags);
             case Ir64Op.ConvertFlags convertFlags -> constructConvertFlags(mv, convertFlags);
+            case Ir64Op.Fp64MultiplyAdd fp64MultiplyAdd -> constructFp64MultiplyAdd(mv, fp64MultiplyAdd);
+            case Ir64Op.Fp64ConditionalSelect fp64ConditionalSelect ->
+                    constructFp64ConditionalSelect(mv, fp64ConditionalSelect);
+            case Ir64Op.Fp64ConditionalCompare fp64ConditionalCompare ->
+                    constructFp64ConditionalCompare(mv, fp64ConditionalCompare);
+            case Ir64Op.Fp64Round fp64Round -> constructFp64Round(mv, fp64Round);
+            case Ir64Op.Fp64IntegerConvert fp64IntegerConvert -> constructFp64IntegerConvert(mv, fp64IntegerConvert);
+            case Ir64Op.Fp64GeneralRegisterMove fp64GeneralRegisterMove ->
+                    constructFp64GeneralRegisterMove(mv, fp64GeneralRegisterMove);
             default -> throw new IllegalStateException(
                     "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
@@ -396,6 +405,7 @@ public final class Ir64BlockCompiler {
     private static final String IR64_BITFIELD_OP = "dev/vitorsilverio/armjitter/ir64/Ir64BitfieldOp";
     private static final String IR64_FP64_OPERATION = IR64_OP + "$Fp64Operation";
     private static final String IR64_FP64_CONVERSION = IR64_OP + "$Fp64Conversion";
+    private static final String IR64_FP64_ROUNDING_DIRECTION = IR64_OP + "$Fp64RoundingDirection";
     private static final String IR64_LOGICAL_SHIFT_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64LogicalShiftType";
     private static final String IR64_ONE_SOURCE_OP = "dev/vitorsilverio/armjitter/ir64/Ir64OneSourceOp";
     private static final String IR64_ATOMIC_OP = "dev/vitorsilverio/armjitter/ir64/Ir64AtomicOp";
@@ -900,6 +910,86 @@ public final class Ir64BlockCompiler {
         emitEnumConstant(mv, IR64_FLAG_CONVERSION_OP, op.opcode().name());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
                 "(L" + IR64_FLAG_CONVERSION_OP + ";)V", false);
+    }
+
+    private void constructFp64MultiplyAdd(MethodVisitor mv, Ir64Op.Fp64MultiplyAdd op) {
+        String type = IR64_OP + "$Fp64MultiplyAdd";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.doublePrecision());
+        emitBoolean(mv, op.negateAddend());
+        emitBoolean(mv, op.negateProduct());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.vn());
+        mv.visitLdcInsn(op.vm());
+        mv.visitLdcInsn(op.va());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZZIIII)V", false);
+    }
+
+    private void constructFp64ConditionalSelect(MethodVisitor mv, Ir64Op.Fp64ConditionalSelect op) {
+        String type = IR64_OP + "$Fp64ConditionalSelect";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.doublePrecision());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.vn());
+        mv.visitLdcInsn(op.vm());
+        emitEnumConstant(mv, IR64_CONDITION, op.condition().name());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(ZIIIL" + IR64_CONDITION + ";)V", false);
+    }
+
+    private void constructFp64ConditionalCompare(MethodVisitor mv, Ir64Op.Fp64ConditionalCompare op) {
+        String type = IR64_OP + "$Fp64ConditionalCompare";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.doublePrecision());
+        emitBoolean(mv, op.signalOnQuietNaN());
+        mv.visitLdcInsn(op.vn());
+        mv.visitLdcInsn(op.vm());
+        emitEnumConstant(mv, IR64_CONDITION, op.condition().name());
+        mv.visitLdcInsn(op.nzcv());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(ZZIIL" + IR64_CONDITION + ";I)V", false);
+    }
+
+    private void constructFp64Round(MethodVisitor mv, Ir64Op.Fp64Round op) {
+        String type = IR64_OP + "$Fp64Round";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitEnumConstant(mv, IR64_FP64_ROUNDING_DIRECTION, op.direction().name());
+        emitBoolean(mv, op.doublePrecision());
+        mv.visitLdcInsn(op.vd());
+        mv.visitLdcInsn(op.vn());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(L" + IR64_FP64_ROUNDING_DIRECTION + ";ZII)V", false);
+    }
+
+    private void constructFp64IntegerConvert(MethodVisitor mv, Ir64Op.Fp64IntegerConvert op) {
+        String type = IR64_OP + "$Fp64IntegerConvert";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.toFloat());
+        emitBoolean(mv, op.signed());
+        emitEnumConstant(mv, IR64_FP64_ROUNDING_DIRECTION, op.rounding().name());
+        emitBoolean(mv, op.doublePrecision());
+        emitBoolean(mv, op.wide());
+        mv.visitLdcInsn(op.fixedPointFractionBits());
+        mv.visitLdcInsn(op.fpReg());
+        mv.visitLdcInsn(op.gpReg());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(ZZL" + IR64_FP64_ROUNDING_DIRECTION + ";ZZIII)V", false);
+    }
+
+    private void constructFp64GeneralRegisterMove(MethodVisitor mv, Ir64Op.Fp64GeneralRegisterMove op) {
+        String type = IR64_OP + "$Fp64GeneralRegisterMove";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.toFloat());
+        emitBoolean(mv, op.wide());
+        mv.visitLdcInsn(op.fpReg());
+        mv.visitLdcInsn(op.gpReg());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZII)V", false);
     }
 
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {

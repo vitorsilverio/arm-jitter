@@ -991,4 +991,233 @@ class BlockEquivalenceHarness64Test {
             return new EquivalencePair64(reference, candidate);
         });
     }
+
+    // ---- C12.4: FP escalar restante (FMADD/FCSEL/FCCMP/FRINT*/FCVT-geral/FMOV-cru) — 6 Kind ----
+
+    @Test
+    void listOfC124KindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.Fp64MultiplyAdd(true, false, false, 0, 1, 2, 3),
+                new Ir64Op.Fp64ConditionalSelect(true, 0, 1, 2, Ir64Condition.EQ),
+                new Ir64Op.Fp64ConditionalCompare(true, false, 0, 1, Ir64Condition.EQ, 0),
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, 0, 1),
+                new Ir64Op.Fp64IntegerConvert(
+                        false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 0, 0, 1),
+                new Ir64Op.Fp64GeneralRegisterMove(false, true, 0, 1));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB`: os 4 sinais (Aceite explícito), e um caso em que o
+    /// resultado FUNDIDO (`Math.fma`, arredondamento único) difere do NÃO fundido (`a*b+c`,
+    /// arredondamento duplo) — os valores são escolhidos e checados no PRÓPRIO teste (`assertNotEquals`
+    /// entre `Math.fma`/`a*b+c`) para nunca depender de "confiar" que a divergência existe.
+    @Test
+    void fp64MultiplyAddFusedDiffersFromUnfusedAndAllFourSigns() {
+        // `c` é definida como o produto ARREDONDADO negado — então o não-fundido `(a*b)+c` é
+        // SEMPRE exatamente 0.0 (a subtração cancela o mesmo valor arredondado bit a bit),
+        // enquanto o fundido `fma(a,b,c)` preserva o erro de arredondamento do produto EXATO
+        // (não-zero sempre que `a*b` não for exatamente representável — verdade para PI*E).
+        // Garante a divergência por construção, sem depender de "confiar" numa constante mágica.
+        double a = Math.PI;
+        double b = Math.E;
+        double c = -(a * b);
+        double fused = Math.fma(a, b, c);
+        double unfused = (a * b) + c;
+        assertNotEquals(unfused, fused,
+                "os valores escolhidos têm que revelar fused != unfused, senão o teste não prova nada");
+
+        Ir64Block block = blockOf(0xF000,
+                new Ir64Op.Fp64MultiplyAdd(true, false, false, 4, 0, 1, 2), // FMADD: fma(a,b,c)
+                new Ir64Op.Fp64MultiplyAdd(true, true, true, 5, 0, 1, 2),   // FNMADD: fma(-a,b,-c)
+                new Ir64Op.Fp64MultiplyAdd(true, false, true, 6, 0, 1, 2),  // FMSUB: fma(-a,b,c)
+                new Ir64Op.Fp64MultiplyAdd(true, true, false, 7, 0, 1, 2)); // FNMSUB: fma(a,b,-c)
+        Aarch64Core probe = newCore();
+        probe.fp().setDDouble(0, a);
+        probe.fp().setDDouble(1, b);
+        probe.fp().setDDouble(2, c);
+        harness.run(asm, block, probe);
+        assertEquals(fused, probe.fp().dDouble(4), "FMADD tem que usar Math.fma, não a*b+c");
+        assertEquals(Math.fma(-a, b, -c), probe.fp().dDouble(5));
+        assertEquals(Math.fma(-a, b, c), probe.fp().dDouble(6));
+        assertEquals(Math.fma(a, b, -c), probe.fp().dDouble(7));
+
+        harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+            core.fp().setDDouble(0, a);
+            core.fp().setDDouble(1, b);
+            core.fp().setDDouble(2, c);
+        }));
+    }
+
+    /// `FCSEL`: condição verdadeira escolhe `vn`, falsa escolhe `vm` — sem aritmética nenhuma.
+    @Test
+    void fp64ConditionalSelectTrueAndFalse() {
+        Ir64Block block = blockOf(0xF100,
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 0, true, true, false, false)); // Z=1 (AL, base p/ EQ)
+        Ir64Block full = blockOf(0xF200,
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 0, true, true, false, false),
+                new Ir64Op.Fp64ConditionalSelect(true, 2, 0, 1, Ir64Condition.EQ));  // EQ verdadeira -> vn
+        harness.assertEquivalent(interpreted, asm, full, fpPair(core -> {
+            core.fp().setDDouble(0, 11.0);
+            core.fp().setDDouble(1, 22.0);
+        }));
+
+        Ir64Block falseCase = blockOf(0xF300,
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 9, 0, 1, true, true, false, false), // Z=0
+                new Ir64Op.Fp64ConditionalSelect(false, 2, 0, 1, Ir64Condition.EQ)); // EQ falsa -> vm
+        harness.assertEquivalent(interpreted, asm, falseCase, fpPair(core -> {
+            core.fp().setSFloat(0, 33.0f);
+            core.fp().setSFloat(1, 44.0f);
+        }));
+    }
+
+    /// `FCCMP`/`FCCMPE`: condição VERDADEIRA recalcula NZCV comparando `vn`/`vm` de verdade;
+    /// FALSA escreve o `nzcv` imediato direto, sem ler `vn`/`vm` (mesma armadilha de `CCMP`/`CCMN`,
+    /// B6.8). `FCCMPE` com `NaN` sinaliza (mesma tabela "unordered" de `FCMP`, sem efeito adicional
+    /// observável neste core — precedente de `Fp64Compare#signalOnQuietNaN`).
+    @Test
+    void fp64ConditionalCompareTrueRecomputesFalseWritesImmediateNzcv() {
+        Ir64Block conditionTrue = blockOf(0xF400,
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 0, true, true, false, false), // Z=1 -> EQ verdadeira
+                new Ir64Op.Fp64ConditionalCompare(true, false, 0, 1, Ir64Condition.EQ, 0b0101));
+        harness.assertEquivalent(interpreted, asm, conditionTrue, fpPair(core -> {
+            core.fp().setDDouble(0, 1.0);
+            core.fp().setDDouble(1, 2.0); // vn < vm -> N=1,Z=0,C=0,V=0 (recomputado, não o imediato)
+        }));
+
+        Ir64Block conditionFalse = blockOf(0xF500,
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 9, 0, 1, true, true, false, false), // Z=0 -> EQ falsa
+                new Ir64Op.Fp64ConditionalCompare(true, false, 0, 1, Ir64Condition.EQ, 0b1001));
+        harness.assertEquivalent(interpreted, asm, conditionFalse, fpPair(core -> {
+            core.fp().setDDouble(0, 5.0);
+            core.fp().setDDouble(1, 5.0); // seriam iguais se recomputado — prova que NÃO recomputa
+        }));
+
+        // FCCMPE com NaN: condição verdadeira, comparação "unordered" (mesma tabela de FCMP).
+        Ir64Block signalOnNaN = blockOf(0xF600,
+                new Ir64Op.Alu64(Ir64AluOp.SUB, 9, 0, 0, true, true, false, false),
+                new Ir64Op.Fp64ConditionalCompare(false, true, 0, 1, Ir64Condition.EQ, 0));
+        harness.assertEquivalent(interpreted, asm, signalOnNaN, fpPair(core -> {
+            core.fp().setSFloat(0, Float.NaN);
+            core.fp().setSFloat(1, 1.0f);
+        }));
+    }
+
+    /// `FRINT*`: um valor `.5` (onde `NEAREST_TIES_EVEN` e `NEAREST_TIES_AWAY` divergem) e `-2.5`
+    /// (onde `TOWARD_POSITIVE_INFINITY`/`TOWARD_NEGATIVE_INFINITY`/`TOWARD_ZERO` também divergem
+    /// entre si) — Aceite explícito.
+    @Test
+    void fp64RoundDotFiveAndNegativeTwoDotFiveAcrossDirections() {
+        Ir64Op.Fp64RoundingDirection[] directions = Ir64Op.Fp64RoundingDirection.values();
+        long pc = 0xF700;
+        for (Ir64Op.Fp64RoundingDirection direction : directions) {
+            Ir64Block half = blockOf(pc, new Ir64Op.Fp64Round(direction, true, 1, 0));
+            harness.assertEquivalent(interpreted, asm, half, fpPair(core -> core.fp().setDDouble(0, 2.5)));
+            pc += 0x100;
+
+            Ir64Block negativeTwoAndHalf = blockOf(pc, new Ir64Op.Fp64Round(direction, true, 1, 0));
+            harness.assertEquivalent(interpreted, asm, negativeTwoAndHalf,
+                    fpPair(core -> core.fp().setDDouble(0, -2.5)));
+            pc += 0x100;
+        }
+    }
+
+    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU`: `NaN`→`0`, `+Inf`→máximo, `-Inf`→mínimo, um valor fora da
+    /// faixa (satura), assinado × não assinado, e largura `W` × `X` — todos os casos do Aceite.
+    @Test
+    void fp64IntegerConvertNanInfinityOutOfRangeSignedUnsignedWidthWAndX() {
+        // FCVTZS Wd, Dn — NaN -> 0.
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xF900, new Ir64Op.Fp64IntegerConvert(
+                        false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, false, 0, 0, 1)),
+                fpPair(core -> core.fp().setDDouble(0, Double.NaN)));
+
+        // FCVTZS Wd, Dn — +Inf -> Integer.MAX_VALUE.
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFA00, new Ir64Op.Fp64IntegerConvert(
+                        false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, false, 0, 0, 1)),
+                fpPair(core -> core.fp().setDDouble(0, Double.POSITIVE_INFINITY)));
+
+        // FCVTZS Xd, Dn — -Inf -> Long.MIN_VALUE.
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFB00, new Ir64Op.Fp64IntegerConvert(
+                        false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 0, 0, 1)),
+                fpPair(core -> core.fp().setDDouble(0, Double.NEGATIVE_INFINITY)));
+
+        // FCVTZU Wd, Dn — valor fora da faixa (negativo, não-assinado satura em 0).
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFC00, new Ir64Op.Fp64IntegerConvert(
+                        false, false, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, false, 0, 0, 1)),
+                fpPair(core -> core.fp().setDDouble(0, -5.0)));
+
+        // FCVTZU Xd, Dn — valor muito grande satura em 2^64-1 (bem acima de Long.MAX_VALUE em bits).
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFD00, new Ir64Op.Fp64IntegerConvert(
+                        false, false, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 0, 0, 1)),
+                fpPair(core -> core.fp().setDDouble(0, 1.0e30)));
+
+        // SCVTF Dd, Xn — sentido inteiro->float, assinado, largura X.
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFE00,
+                        new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 0, 0, 0, true), // X0 = -1
+                        new Ir64Op.Fp64IntegerConvert(
+                                true, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 0, 1, 0)),
+                pair());
+
+        // UCVTF Sd, Wn — sentido inteiro->float, não assinado, largura W.
+        harness.assertEquivalent(interpreted, asm,
+                blockOf(0xFF00,
+                        new Ir64Op.MoveWide(Ir64MoveWideOp.MOVN, 0, 0, 0, false), // W0 = 0xFFFFFFFF
+                        new Ir64Op.Fp64IntegerConvert(
+                                true, false, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 1, 0)),
+                pair());
+    }
+
+    /// `FMOV`: um `NaN` de SINALIZAÇÃO atravessa SEM canonizar — pega exatamente o erro clássico de
+    /// usar `doubleToLongBits`/`floatToIntBits` (que canonizam) em vez das versões RAW (Armadilha 2
+    /// da spec). Nos dois sentidos (`V`→`X` e `X`→`V`) e nas duas larguras.
+    @Test
+    void fp64GeneralRegisterMoveSignalingNanCrossesWithoutCanonicalizing() {
+        long signalingNanDoubleBits = 0x7FF0_0000_0000_0001L; // sinalização: expoente todo 1, mantissa != 0, MSB=0
+        Ir64Block vToX = blockOf(0x10000,
+                new Ir64Op.Fp64GeneralRegisterMove(false, true, 0, 1)); // Xd <- bits crus de Dn
+        Aarch64Core probeVToX = newCore();
+        probeVToX.fp().setD(0, signalingNanDoubleBits);
+        harness.run(asm, vToX, probeVToX);
+        assertEquals(signalingNanDoubleBits, probeVToX.x(1),
+                "doubleToRawLongBits, não doubleToLongBits — o segundo canonizaria o NaN de sinalização");
+        harness.assertEquivalent(interpreted, asm, vToX, fpPair(core -> core.fp().setD(0, signalingNanDoubleBits)));
+
+        int signalingNanFloatBits = 0x7F80_0001; // mesma forma em 32 bits
+        Ir64Block xToV = blockOf(0x10100,
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, signalingNanFloatBits & 0xFFFF, 0, false),
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVK, 0, (signalingNanFloatBits >>> 16) & 0xFFFF, 16, false),
+                new Ir64Op.Fp64GeneralRegisterMove(true, false, 1, 0)); // Sd <- bits crus de Wn
+        Aarch64Core probeXToV = newCore();
+        harness.run(asm, xToV, probeXToV);
+        assertEquals(signalingNanFloatBits, probeXToV.fp().s(1),
+                "floatToRawIntBits/cópia crua, não canonizar o NaN de sinalização");
+        harness.assertEquivalent(interpreted, asm, xToV, pair());
+    }
+
+    /// Escrita destrutiva (Aceite explícito): qualquer `Kind` de C12.4 que escreva `D<d>` tem que
+    /// ZERAR os bits 127:64 de `V<d>` — mesma disciplina de {@link Ir64Op.Fp64Alu}/etc. desde
+    /// B6.5.1. `setQ` deixa bits altos "sujos" de propósito antes da op rodar.
+    @Test
+    void fp64WriteToDRegisterZeroesHighBitsOfVectorRegister() {
+        Ir64Block block = blockOf(0x10200, new Ir64Op.Fp64Round(
+                Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, 0, 1));
+        harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+            core.fp().setQ(0, 0L, 0xDEAD_BEEFL);
+            core.fp().setDDouble(1, 2.5);
+        }));
+
+        Aarch64Core probe = newCore();
+        probe.fp().setQ(0, 0L, 0xDEAD_BEEFL);
+        probe.fp().setDDouble(1, 2.5);
+        harness.run(asm, block, probe);
+        assertEquals(0L, probe.fp().high64(0),
+                "escrever D<d> tem que zerar os bits 127:64 de V<d>");
+    }
 }

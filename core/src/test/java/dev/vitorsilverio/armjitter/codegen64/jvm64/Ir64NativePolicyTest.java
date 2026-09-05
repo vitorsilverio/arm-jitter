@@ -70,4 +70,21 @@ class Ir64NativePolicyTest {
         assertTrue(Ir64NativePolicy.supports(
                 new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, 0, 1)));
     }
+
+    @Test
+    void supportsC124FpOpSet() {
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64MultiplyAdd(true, false, false, 0, 1, 2, 3)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64ConditionalSelect(true, 0, 1, 2, Ir64Condition.EQ)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64ConditionalCompare(true, false, 0, 1, Ir64Condition.EQ, 0)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64Round(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, 0, 1)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64IntegerConvert(
+                        false, true, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 0, 0, 1)));
+        assertTrue(Ir64NativePolicy.supports(
+                new Ir64Op.Fp64GeneralRegisterMove(false, true, 0, 1)));
+    }
 }

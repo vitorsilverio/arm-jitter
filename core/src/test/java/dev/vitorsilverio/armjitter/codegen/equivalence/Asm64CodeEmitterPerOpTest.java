@@ -6,9 +6,9 @@ import dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
+import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
-import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -23,13 +23,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// Aceite da task C12.2: {@link Asm64FallbackPolicy#PER_OP} produz o MESMO
 /// {@link Aarch64CpuSnapshot}/ciclos que {@link InterpretedIr64CodeEmitter} (G1) para blocos MISTOS
 /// (ops nativas + pelo menos uma fora de {@link Ir64NativePolicy}), inclusive quando a op
-/// interpretada lança uma das 5 exceções de controle. {@link Ir64Op.Fp64ConditionalSelect}
-/// (`FCSEL`) é a op "fora da política" usada nos testes de fluxo normal — não suportada
-/// nativamente hoje (C12.4 é quem fecha esse gap, FP escalar restante), não lança, escreve um
-/// registrador só. **Achado da C12.3**: a versão original desta task usava
-/// {@link dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp#RBIT} (`DataProcessing1Source`) para
-/// isso — a C12.3 passou a suportar esse `Kind` nativamente, o que quebrou a premissa (ver o
-/// commentário original, que já previa isso); trocado por `Fp64ConditionalSelect`.
+/// interpretada lança uma das 5 exceções de controle. {@link Ir64Op.SystemRegister} (`MRS`
+/// `CURRENT_EL`) é a op "fora da política" usada nos testes de fluxo normal — não suportada
+/// nativamente hoje (nenhuma sub-task de C12 cobre `SYSTEM_REGISTER` ainda), não lança, escreve um
+/// registrador geral só. **Achado da C12.3, revalidado pela C12.4**: a versão original desta task
+/// usava {@link dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp#RBIT} (`DataProcessing1Source`)
+/// para isso — a C12.3 passou a suportar esse `Kind` nativamente, e a troca seguinte
+/// ({@link Ir64Op.Fp64ConditionalSelect}, `FCSEL`) quebrou de novo quando a C12.4 fechou FP
+/// escalar restante; trocado agora por `SystemRegister`, que nenhuma sub-task de C12 reivindica
+/// ainda (ver `c12.10-a64-sistema-nativo.md`).
 class Asm64CodeEmitterPerOpTest {
     private final BlockEquivalenceHarness64 harness = new BlockEquivalenceHarness64();
     private final InterpretedIr64CodeEmitter interpreted = new InterpretedIr64CodeEmitter();
@@ -59,21 +61,21 @@ class Asm64CodeEmitterPerOpTest {
     }
 
     @Test
-    void fp64ConditionalSelectIsNotNativelySupportedToday() {
-        // Ancora a premissa do arquivo: se C12.4 passar a suportar FP64_CONDITIONAL_SELECT, estes
-        // testes deixam de exercitar o caminho PER_OP e precisam trocar de op — falha aqui é
-        // sinal de que isso aconteceu.
+    void systemRegisterIsNotNativelySupportedToday() {
+        // Ancora a premissa do arquivo: se alguma sub-task de C12 passar a suportar
+        // SYSTEM_REGISTER, estes testes deixam de exercitar o caminho PER_OP e precisam trocar de
+        // op — falha aqui é sinal de que isso aconteceu.
         assertFalse(Ir64NativePolicy.supports(
-                new Ir64Op.Fp64ConditionalSelect(true, 1, 0, 0, Ir64Condition.EQ)));
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1)));
     }
 
     /// Op não suportada NO MEIO do bloco — prova que as ops nativas depois dela continuam corretas.
     @Test
     void unsupportedOpInTheMiddleThenNativeOpsContinueCorrectly() {
         Ir64Block block = blockOf(0x1000,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1234, 0, true),          // nativo: X0=0x1234
-                new Ir64Op.Fp64ConditionalSelect(true, 1, 0, 0, Ir64Condition.EQ),     // interpretado: FCSEL
-                new Ir64Op.Alu64(Ir64AluOp.ADD, 2, 1, 1, true, true, false, false));   // nativo: X2=X1+1, flags
+                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1234, 0, true),                // nativo: X0=0x1234
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1),      // interpretado: MRS
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 2, 1, 1, true, true, false, false));         // nativo: X2=X1+1, flags
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());
     }
 
@@ -82,7 +84,7 @@ class Asm64CodeEmitterPerOpTest {
     void unsupportedOpAtLastPosition() {
         Ir64Block block = blockOf(0x2000,
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0xABCD, 0, true),
-                new Ir64Op.Fp64ConditionalSelect(false, 4, 0, 0, Ir64Condition.NE));
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 4));
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());
     }
 
@@ -113,7 +115,7 @@ class Asm64CodeEmitterPerOpTest {
         Ir64Block.Builder builder = Ir64Block.builder(0x4000);
         builder.add(new Ir64Op.Fetch(0x4000, 4));
         builder.add(new Ir64Op.Cycle(3));
-        builder.add(new Ir64Op.Fp64ConditionalSelect(true, 0, 0, 0, Ir64Condition.EQ));
+        builder.add(new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0));
         builder.add(new Ir64Op.Fetch(0x4004, 4));
         builder.add(new Ir64Op.Cycle(5));
         builder.add(new Ir64Op.Alu64(Ir64AluOp.ADD, 1, 0, 1, true, false, false, false));
@@ -178,13 +180,13 @@ class Asm64CodeEmitterPerOpTest {
         Asm64CodeEmitter emitter = new Asm64CodeEmitter(Asm64FallbackPolicy.PER_OP);
         Ir64Block block = blockOf(0x7000,
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
-                new Ir64Op.Fp64ConditionalSelect(true, 1, 0, 0, Ir64Condition.EQ),
-                new Ir64Op.Fp64ConditionalSelect(false, 2, 0, 0, Ir64Condition.NE));
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1),
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 2));
         emitter.emit(block).execute(newCore());
 
         assertEquals(1, emitter.nativeBlockCount());
         assertEquals(0, emitter.fallbackBlockCount());
-        assertEquals(2, emitter.perOpFallbackOpCount(), "as 2 Fp64ConditionalSelect não suportadas");
+        assertEquals(2, emitter.perOpFallbackOpCount(), "as 2 SystemRegister não suportadas");
 
         emitter.resetCounters();
         assertEquals(0, emitter.nativeBlockCount());
@@ -198,7 +200,7 @@ class Asm64CodeEmitterPerOpTest {
         assertEquals(Asm64FallbackPolicy.WHOLE_BLOCK, emitter.policy());
         Ir64Block block = blockOf(0x7100,
                 new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
-                new Ir64Op.Fp64ConditionalSelect(true, 1, 0, 0, Ir64Condition.EQ));
+                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1));
         emitter.emit(block).execute(newCore());
 
         assertEquals(0, emitter.nativeBlockCount());
