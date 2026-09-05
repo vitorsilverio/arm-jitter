@@ -32,7 +32,7 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 ## Progresso
 
 > **ASM 32 bits: 37 de 84** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 60 de 84** operações com nó especializado.
+> **Truffle 32 bits: 66 de 84** operações com nó especializado.
 > **ASM 64 bits: 40 de 96** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 96** — o backend não existe (A10.8).
 
@@ -101,17 +101,17 @@ Linhas = os 84 `record` de `IrOp`, na ordem do `Kind`.
 | `VfpCorePairTransfer` | `VFP_CORE_PAIR_TRANSFER` | ✅ | ✅ |
 | `VfpSystemTransfer` | `VFP_SYSTEM_TRANSFER` | ✅ | ✅ |
 | `MProfileSystemRegister` | `M_PROFILE_SYSTEM_REGISTER` | ❌ | ✅ |
-| `Breakpoint` | `BREAKPOINT` | ❌ | ❌ |
+| `Breakpoint` | `BREAKPOINT` | ❌ | ✅ |
 | `CoprocessorDouble` | `COPROCESSOR_DOUBLE` | ✅ | ✅ |
 | `VfpCorePairTransferSingle` | `VFP_CORE_PAIR_TRANSFER_SINGLE` | ❌ | ✅ |
 | `VfpConvertFixed` | `VFP_CONVERT_FIXED` | ❌ | ✅ |
 | `DspDualMultiply` | `DSP_DUAL_MULTIPLY` | ❌ | ✅ |
 | `DspTopWordMultiply` | `DSP_TOP_WORD_MULTIPLY` | ❌ | ✅ |
-| `Hvc` | `HVC` | ❌ | ❌ |
-| `Smc` | `SMC` | ❌ | ❌ |
-| `Eret` | `ERET` | ❌ | ❌ |
-| `MrsBank` | `MRS_BANK` | ❌ | ❌ |
-| `MsrBank` | `MSR_BANK` | ❌ | ❌ |
+| `Hvc` | `HVC` | ❌ | ✅ |
+| `Smc` | `SMC` | ❌ | ✅ |
+| `Eret` | `ERET` | ❌ | ✅ |
+| `MrsBank` | `MRS_BANK` | ❌ | ✅ |
+| `MsrBank` | `MSR_BANK` | ❌ | ✅ |
 | `NeonThreeSame` | `NEON_THREE_SAME` | ❌ | ❌ |
 | `NeonLoadStoreMultiple` | `NEON_LOAD_STORE_MULTIPLE` | ❌ | ❌ |
 | `NeonLoadStoreSingle` | `NEON_LOAD_STORE_SINGLE` | ❌ | ❌ |

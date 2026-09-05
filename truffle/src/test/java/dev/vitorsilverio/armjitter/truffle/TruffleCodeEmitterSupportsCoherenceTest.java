@@ -74,20 +74,18 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                 uncovered.add(kind);
             }
         }
-        // Os Kinds sem nó Truffle (NEON, HVC/SMC/ERET/MRS_bank/MSR_bank, BKPT). Eram 33 na A10.1;
-        // B13.7 acrescentou NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
+        // Os Kinds sem nó Truffle (NEON). Eram 33 na A10.1; B13.7 acrescentou
+        // NEON_SHIFT_IMMEDIATE; B13.8 acrescentou NEON_SHIFT_NARROW_IMMEDIATE,
         // NEON_SHIFT_WIDEN_IMMEDIATE, NEON_CONVERT_FIXED_POINT; B13.9 acrescentou
         // NEON_MODIFIED_IMMEDIATE; B13.10 acrescentou NEON_WIDENING, NEON_WIDE, NEON_NARROW; B13.11
         // acrescentou NEON_THREE_SAME_BY_ELEMENT, NEON_WIDENING_BY_ELEMENT,
         // NEON_FP_THREE_SAME_BY_ELEMENT (NEON também não tem nó Truffle); A10.6 cobriu
         // DSP_DUAL_MULTIPLY/DSP_TOP_WORD_MULTIPLY (−2); A10.4 cobriu BIT_FIELD_EXTRACT,
         // BIT_FIELD_INSERT, BIT_REVERSE, DIVIDE (−4); A10.3 cobriu os 14 Kind de VFP/coprocessador
-        // duplo/sysreg do perfil M (−14).
-        assertEquals(24, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // duplo/sysreg do perfil M (−14); A10.5 cobriu HVC/SMC/ERET/MRS_BANK/MSR_BANK/BREAKPOINT (−6).
+        assertEquals(18, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
-                        IrOp.Kind.BREAKPOINT,
-                        IrOp.Kind.HVC, IrOp.Kind.SMC,
-                        IrOp.Kind.ERET, IrOp.Kind.MRS_BANK, IrOp.Kind.MSR_BANK, IrOp.Kind.NEON_THREE_SAME,
+                        IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
                         IrOp.Kind.NEON_FP_PAIRWISE, IrOp.Kind.NEON_SHIFT_IMMEDIATE,

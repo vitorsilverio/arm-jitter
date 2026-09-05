@@ -9,14 +9,13 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// cada nó ainda há um `switch` pequeno sobre os poucos records daquela categoria, decisão
 /// explícita da especificação).
 ///
-/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 60 dos 84 `Kind` — as 7
+/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 66 dos 84 `Kind` — as 7
 /// categorias da taxonomia da A6 (ALU escalar, multiplicação, memória, transferência múltipla,
 /// branch, sistema, ciclo/fetch) mais VFP (A10.3); a multiplicação inclui
-/// `DspDualMultiply`/`DspTopWordMultiply` desde a A10.6, e a ALU inclui bitfield/`RBIT`/`SDIV`/
-/// `UDIV` desde a A10.4. Os 24 `Kind` restantes (todo NEON, `HVC`/`SMC`/`ERET`/`MRS_bank`/
-/// `MSR_bank`, `BKPT`) foram acrescentados por B1/B7/B9/B13 DEPOIS da A6 e ainda não têm nó
-/// Truffle especializado — cada categoria é fechada por uma task própria (A10.5 sistema, A10.7
-/// NEON). Enquanto isso,
+/// `DspDualMultiply`/`DspTopWordMultiply` desde a A10.6, a ALU inclui bitfield/`RBIT`/`SDIV`/
+/// `UDIV` desde a A10.4, e o sistema inclui `Hvc`/`Smc`/`Eret`/`MrsBank`/`MsrBank`/`Breakpoint`
+/// desde a A10.5. Os 18 `Kind` restantes (todo NEON) foram acrescentados por B13 DEPOIS da A6 e
+/// ainda não têm nó Truffle especializado — fechado por task própria (A10.7). Enquanto isso,
 /// {@link TruffleCodeEmitter} desvia os blocos que contêm um desses `Kind` para o
 /// {@link dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter} (via {@link #supports}), em
 /// vez de quebrar.</p>
@@ -83,7 +82,10 @@ final class IrOpNodeFactory {
             case IrOp.Kind.PSR_TRANSFER, IrOp.Kind.SWI, IrOp.Kind.COPROCESSOR, IrOp.Kind.UNDEFINED,
                     IrOp.Kind.CHANGE_PROCESSOR_STATE, IrOp.Kind.SET_ENDIANNESS, IrOp.Kind.STORE_RETURN_STATE,
                     IrOp.Kind.RETURN_FROM_EXCEPTION, IrOp.Kind.WAIT_FOR_INTERRUPT, IrOp.Kind.MEMORY_BARRIER,
-                    IrOp.Kind.SET_IT_STATE ->
+                    IrOp.Kind.SET_IT_STATE,
+                    // A10.5: Hyp/Monitor de 32 bits (B9.8) + Virtualization Extensions (B22.5).
+                    IrOp.Kind.HVC, IrOp.Kind.SMC, IrOp.Kind.ERET, IrOp.Kind.MRS_BANK, IrOp.Kind.MSR_BANK,
+                    IrOp.Kind.BREAKPOINT ->
                     Category.SYSTEM;
             case IrOp.Kind.CYCLE, IrOp.Kind.FETCH -> Category.CYCLE_FETCH;
             case IrOp.Kind.VFP_ALU, IrOp.Kind.VFP_MOVE_IMMEDIATE, IrOp.Kind.VFP_COMPARE,
