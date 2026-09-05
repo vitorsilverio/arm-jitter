@@ -216,6 +216,48 @@ public final class IrNeonExecutor {
         AdvSimdLanes.fpThreeSameByElement(vfp, op.op(), esz, elements, op.vd(), op.vn(), op.vm(), op.index());
     }
 
+    /// NEON "two-register miscellaneous" INTEIRA, `size==0b11` (B13.12): `VREV64`/`VREV32`/
+    /// `VREV16`/`VPADDL`/`VPADAL`/`VCLS`/`VCLZ`/`VCNT`/`VMVN`/`VQABS`/`VQNEG`/as 5 comparações-com-
+    /// zero/`VABS`/`VNEG`/`VRECPE`/`VRSQRTE` (inteiros): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#unary}) — a MESMA função que o A64 chama para `REV64_v`/`SADDLP`/
+    /// `CLS_v`/`ABS_v`/`URECPE`/... `elements` é a contagem de lanes de ORIGEM (`esz` bytes); o
+    /// núcleo já calcula a metade para `VPADDL`/`VPADAL`. Sem escrita destrutiva depois (VFP32 nunca
+    /// zera bits fora do registrador escrito).
+    public void executeNeonUnary(ArmCore core, IrOp.NeonUnary op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.unary(vfp, op.op(), esz, elements, op.vd(), op.vm());
+    }
+
+    /// NEON "two-register miscellaneous" narrow unário, `size==0b11` (B13.12): `VMOVN`/`VQMOVUN`/
+    /// `VQMOVN_S`/`VQMOVN_U`: delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowUnary}) — a
+    /// MESMA função que o A64 chama para `XTN`/`SQXTN`/`SQXTUN`/`UQXTN`. `Vm` é `Q` (`8 >> esz`
+    /// lanes largas), `Vd` é `D` (mesma contagem, estreito). A32 não tem forma "2":
+    /// `laneOffset` é sempre `0`.
+    public void executeNeonNarrowUnary(ArmCore core, IrOp.NeonNarrowUnary op) {
+        VfpRegisters vfp = core.vfp();
+        int elements = DOUBLEWORD_BYTES >> op.esz();
+        AdvSimdLanes.narrowUnary(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vm());
+    }
+
+    /// NEON "two-register miscellaneous" de PONTO FLUTUANTE F32, `size==0b11` (B13.12): `VABS_F`/
+    /// `VNEG_F`/as 5 comparações-com-zero FP/`VRECPE_F`/`VRSQRTE_F`: delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpUnary}) — a MESMA função que o A64 chama para `FABS_v`/`FCM**0_v`/
+    /// `FRECPE_v`/`FRSQRTE_v`. Só F32 (`esz=2` fixo, F16 fora de escopo); nenhuma escrita destrutiva
+    /// depois (VFP32 nunca zera bits fora do registrador escrito).
+    public void executeNeonFpUnary(ArmCore core, IrOp.NeonFpUnary op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = 2;
+        int elementBytes = 1 << esz;
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        for (int i = 0; i < elements; i++) {
+            long inputBits = AdvSimdLanes.element(vfp, op.vm(), i, esz);
+            AdvSimdLanes.setElement(vfp, op.vd(), i, esz, AdvSimdLanes.fpUnary(op.op(), esz, inputBits));
+        }
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

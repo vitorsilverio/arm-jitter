@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
@@ -60,6 +61,25 @@ final class Ir64VectorFpArithmeticExecutor {
             case ABD -> AdvSimdFpThreeSameOp.ABD;
             case RECPS -> AdvSimdFpThreeSameOp.RECPS;
             case RSQRTS -> AdvSimdFpThreeSameOp.RSQRTS;
+        };
+    }
+
+    /// RFC B13.2 (D1): mapeia `Ir64VectorFpUnaryOp` → {@link AdvSimdFpUnaryOp} do núcleo
+    /// COMPARTILHADO — só para os 9 valores migrados na B13.12 (ver Javadoc de
+    /// {@link AdvSimdFpUnaryOp}); chamado só quando o `switch` de {@link #executeUnary} já garantiu
+    /// que `op` é um desses 9, por isso sem `default`.
+    private static AdvSimdFpUnaryOp sharedFpUnaryOp(Ir64VectorFpUnaryOp op) {
+        return switch (op) {
+            case ABS -> AdvSimdFpUnaryOp.ABS;
+            case NEG -> AdvSimdFpUnaryOp.NEG;
+            case CMGT0 -> AdvSimdFpUnaryOp.CMGT0;
+            case CMGE0 -> AdvSimdFpUnaryOp.CMGE0;
+            case CMEQ0 -> AdvSimdFpUnaryOp.CMEQ0;
+            case CMLE0 -> AdvSimdFpUnaryOp.CMLE0;
+            case CMLT0 -> AdvSimdFpUnaryOp.CMLT0;
+            case RECPE -> AdvSimdFpUnaryOp.RECPE;
+            case RSQRTE -> AdvSimdFpUnaryOp.RSQRTE;
+            default -> throw new IllegalStateException("op não migrado para o núcleo compartilhado: " + op);
         };
     }
 
@@ -194,6 +214,12 @@ final class Ir64VectorFpArithmeticExecutor {
         for (int i = 0; i < elements; i++) {
             long inputBits = fp.element(op.rn(), i, esz);
             long resultBits = switch (op.op()) {
+                // B13.12 (D1, RFC B13.2): ABS/NEG/comparações-com-zero/RECPE/RSQRTE migraram para
+                // o núcleo COMPARTILHADO ({@link AdvSimdLanes#fpUnary}) — a MESMA função que o NEON
+                // de 32 bits chama para `VABS_F`/`VCGT0_F`/`VRECPE_F`/... SQRT/RINT*/as conversões
+                // continuam abaixo (fora do escopo da B13.12, que não os produz).
+                case ABS, NEG, CMGT0, CMGE0, CMEQ0, CMLE0, CMLT0, RECPE, RSQRTE ->
+                        AdvSimdLanes.fpUnary(sharedFpUnaryOp(op.op()), esz, inputBits);
                 case FRECPX -> esz == 2
                         ? AdvSimdLanes.floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
                         : AdvSimdLanes.doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
@@ -218,36 +244,18 @@ final class Ir64VectorFpArithmeticExecutor {
                     if (esz == 2) {
                         float a = Float.intBitsToFloat((int) inputBits);
                         yield switch (op.op()) {
-                            case ABS -> AdvSimdLanes.floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
-                            case NEG -> AdvSimdLanes.floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
                             case SQRT -> AdvSimdLanes.floatBits((float) Math.sqrt(a));
-                            case RECPE -> AdvSimdLanes.floatBits(1.0f / a);
-                            case RSQRTE -> AdvSimdLanes.floatBits((float) (1.0 / Math.sqrt(a)));
-                            case CMGT0 -> AdvSimdLanes.boolMask(a > 0f, esz);
-                            case CMGE0 -> AdvSimdLanes.boolMask(a >= 0f, esz);
-                            case CMEQ0 -> AdvSimdLanes.boolMask(a == 0f, esz);
-                            case CMLE0 -> AdvSimdLanes.boolMask(a <= 0f, esz);
-                            case CMLT0 -> AdvSimdLanes.boolMask(a < 0f, esz);
                             case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
                                     AdvSimdLanes.floatBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
-                            default -> throw new IllegalStateException("tratado no ramo de conversão acima");
+                            default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
                         };
                     }
                     double a = Double.longBitsToDouble(inputBits);
                     yield switch (op.op()) {
-                        case ABS -> AdvSimdLanes.doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
-                        case NEG -> AdvSimdLanes.doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
                         case SQRT -> AdvSimdLanes.doubleBits(Math.sqrt(a));
-                        case RECPE -> AdvSimdLanes.doubleBits(1.0 / a);
-                        case RSQRTE -> AdvSimdLanes.doubleBits(1.0 / Math.sqrt(a));
-                        case CMGT0 -> AdvSimdLanes.boolMask(a > 0.0, esz);
-                        case CMGE0 -> AdvSimdLanes.boolMask(a >= 0.0, esz);
-                        case CMEQ0 -> AdvSimdLanes.boolMask(a == 0.0, esz);
-                        case CMLE0 -> AdvSimdLanes.boolMask(a <= 0.0, esz);
-                        case CMLT0 -> AdvSimdLanes.boolMask(a < 0.0, esz);
                         case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
                                 AdvSimdLanes.doubleBits(Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
-                        default -> throw new IllegalStateException("tratado no ramo de conversão acima");
+                        default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
                     };
                 }
             };

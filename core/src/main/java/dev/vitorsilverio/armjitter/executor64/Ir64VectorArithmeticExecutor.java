@@ -2,11 +2,13 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
@@ -64,23 +66,6 @@ final class Ir64VectorArithmeticExecutor {
     /// Máscara "todos-1" ou `0` para o resultado de uma comparação de elemento.
     private static long boolMask(boolean condition, int esz) {
         return condition ? elementMask(esz) : 0L;
-    }
-
-    /// Conta zeros à esquerda de `pattern` (já zero-extendido/mascarado a `widthBits` bits por
-    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#element}) DENTRO de
-    /// `widthBits`, não dos 64 bits inteiros do `long` — B8.18 (`CLZ_v`).
-    private static long leadingZerosInWidth(long pattern, int widthBits) {
-        if (widthBits == 64) {
-            return Long.numberOfLeadingZeros(pattern);
-        }
-        return Long.numberOfLeadingZeros(pattern) - (64 - widthBits);
-    }
-
-    /// `CLS_v` (B8.18): bits à esquerda IGUAIS ao bit de sinal, sem contar o próprio bit de sinal —
-    /// equivalente a `leadingZerosInWidth` do padrão (inverte se negativo) menos 1.
-    private static long countLeadingSignBits(long a, long sa, int esz) {
-        long pattern = sa < 0 ? (~a) & elementMask(esz) : a;
-        return leadingZerosInWidth(pattern, 8 << esz) - 1;
     }
 
     /// `RBIT_v` (B8.18): inverte a ordem dos bits dentro do BYTE baixo de `a` (sempre byte, arranjo
@@ -509,161 +494,83 @@ final class Ir64VectorArithmeticExecutor {
         return signed ? signExtend(value, esz) : value;
     }
 
+    /// RFC B13.2 (D1): mapeia `Ir64VectorUnaryOp` → {@link AdvSimdUnaryOp} do núcleo COMPARTILHADO,
+    /// ou `null` para {@code SUQADD}/{@code USQADD}/{@code RBIT} — os 3 valores sem encoding A32
+    /// correspondente neste grupo (B13.12 não os migrou, ver Javadoc de {@link AdvSimdUnaryOp}).
+    private static AdvSimdUnaryOp sharedUnaryOp(Ir64VectorUnaryOp op) {
+        return switch (op) {
+            case ABS -> AdvSimdUnaryOp.ABS;
+            case NEG -> AdvSimdUnaryOp.NEG;
+            case CMEQ0 -> AdvSimdUnaryOp.CMEQ0;
+            case CMGT0 -> AdvSimdUnaryOp.CMGT0;
+            case CMGE0 -> AdvSimdUnaryOp.CMGE0;
+            case CMLT0 -> AdvSimdUnaryOp.CMLT0;
+            case CMLE0 -> AdvSimdUnaryOp.CMLE0;
+            case SADDLP -> AdvSimdUnaryOp.SADDLP;
+            case UADDLP -> AdvSimdUnaryOp.UADDLP;
+            case SADALP -> AdvSimdUnaryOp.SADALP;
+            case UADALP -> AdvSimdUnaryOp.UADALP;
+            case SQABS -> AdvSimdUnaryOp.SQABS;
+            case SQNEG -> AdvSimdUnaryOp.SQNEG;
+            case CLS -> AdvSimdUnaryOp.CLS;
+            case CLZ -> AdvSimdUnaryOp.CLZ;
+            case CNT -> AdvSimdUnaryOp.CNT;
+            case NOT -> AdvSimdUnaryOp.NOT;
+            case REV64 -> AdvSimdUnaryOp.REV64;
+            case REV32 -> AdvSimdUnaryOp.REV32;
+            case REV16 -> AdvSimdUnaryOp.REV16;
+            case URECPE -> AdvSimdUnaryOp.URECPE;
+            case URSQRTE -> AdvSimdUnaryOp.URSQRTE;
+            case SUQADD, USQADD, RBIT -> null;
+        };
+    }
+
+    /// `REV64`/`REV32`/`REV16`/pareamento largo (`SADDLP`/...) fazem escrita DESTRUTIVA (zeram
+    /// `[127:64]` quando `!q`); o resto usa a finalização "scalar-aware" comum.
+    private static boolean isDestructiveOnlyUnary(Ir64VectorUnaryOp op) {
+        return switch (op) {
+            case REV64, REV32, REV16, SADDLP, UADDLP, SADALP, UADALP -> true;
+            default -> false;
+        };
+    }
+
     static boolean executeUnary(Aarch64Core core, Ir64Op.VectorArithmeticUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        // B8.20: `REV64`/`REV32`/`REV16` PERMUTAM a posição dos elementos (não transformam o VALOR
-        // de cada um individualmente) — não cabem no laço genérico abaixo, mesmo tratamento
-        // especial que `widening` já recebe.
-        if (op.op() == Ir64VectorUnaryOp.REV64 || op.op() == Ir64VectorUnaryOp.REV32
-                || op.op() == Ir64VectorUnaryOp.REV16) {
-            return executeReverseGroups(fp, op);
-        }
-        boolean widening = op.op() == Ir64VectorUnaryOp.SADDLP || op.op() == Ir64VectorUnaryOp.UADDLP
-                || op.op() == Ir64VectorUnaryOp.SADALP || op.op() == Ir64VectorUnaryOp.UADALP;
-        if (widening) {
-            int wideEsz = esz + 1;
-            int inputElements = elementsPerRegister(op.q(), esz);
-            int outputElements = inputElements / 2;
-            boolean signed = op.op() == Ir64VectorUnaryOp.SADDLP || op.op() == Ir64VectorUnaryOp.SADALP;
-            boolean accumulate = op.op() == Ir64VectorUnaryOp.SADALP || op.op() == Ir64VectorUnaryOp.UADALP;
-            long[] results = new long[outputElements];
-            for (int i = 0; i < outputElements; i++) {
-                long a = extendMaybe(fp.element(op.rn(), i * 2, esz), esz, signed);
-                long b = extendMaybe(fp.element(op.rn(), i * 2 + 1, esz), esz, signed);
-                long sum = a + b;
-                results[i] = accumulate
-                        ? extendMaybe(fp.element(op.rd(), i, wideEsz), wideEsz, signed) + sum
-                        : sum;
+        AdvSimdUnaryOp shared = sharedUnaryOp(op.op());
+        if (shared != null) {
+            // `op.scalar()` só é `true` para o resto (o decoder já nega forma escalar de
+            // REV*/pareamento largo — ver `Aarch64Decoder#decodeVectorUnaryOpcode`).
+            int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
+            AdvSimdLanes.unary(fp, shared, esz, elements,
+                    op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                    op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+            if (isDestructiveOnlyUnary(op.op())) {
+                finishDestructiveWrite(fp, op.rd(), op.q());
+            } else {
+                finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
             }
-            for (int i = 0; i < outputElements; i++) {
-                fp.setElement(op.rd(), i, wideEsz, truncate(results[i], wideEsz));
-            }
-            finishDestructiveWrite(fp, op.rd(), op.q());
             return false;
         }
+        // `SUQADD`/`USQADD`/`RBIT`: sem encoding A32 correspondente (B13.12 não os migrou) —
+        // continuam aqui, únicos sobreviventes do `switch` original.
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
         for (int i = 0; i < elements; i++) {
             long a = fp.element(op.rn(), i, esz);
             long sa = signExtend(a, esz);
             long result = switch (op.op()) {
-                case ABS -> Math.abs(sa);
-                case NEG -> -a;
-                case CMEQ0 -> boolMask(sa == 0, esz);
-                case CMGT0 -> boolMask(sa > 0, esz);
-                case CMGE0 -> boolMask(sa >= 0, esz);
-                case CMLT0 -> boolMask(sa < 0, esz);
-                case CMLE0 -> boolMask(sa <= 0, esz);
                 case SUQADD -> signedAccumulateSaturating(signExtend(fp.element(op.rd(), i, esz), esz), a, esz);
                 case USQADD -> unsignedAccumulateSaturating(fp.element(op.rd(), i, esz), sa, esz);
-                case SADDLP, UADDLP, SADALP, UADALP ->
-                        throw new IllegalStateException("tratado no ramo widening acima");
-                // B8.18: MESMO slot de `ABS`/`NEG` (opcode diferente) — `esz` livre.
-                case SQABS -> saturateToElement(BigInteger.valueOf(sa).abs(), esz, true);
-                case SQNEG -> saturateToElement(BigInteger.valueOf(sa).negate(), esz, true);
-                case CLS -> countLeadingSignBits(a, sa, esz);
-                case CLZ -> leadingZerosInWidth(a, 8 << esz);
-                // `CNT`/`NOT`/`RBIT` (B8.18): sempre `esz=0` (byte), forçado pelo decoder — ver
+                // `RBIT` (B8.18): sempre `esz=0` (byte), forçado pelo decoder — ver
                 // {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder#decodeVectorUnaryByteOnlyOpcode}.
-                case CNT -> (long) Long.bitCount(a);
-                case NOT -> ~a;
                 case RBIT -> reverseBitsInByte(a);
-                // B8.20: estimativas por tabela pura-inteira — `a` já é o elemento word cru
-                // (zero-extendido pelo `fp.element` acima, `esz` sempre {@code ADVSIMD_ESZ_WORD}).
-                case URECPE -> unsignedRecipEstimate32(a);
-                case URSQRTE -> unsignedRSqrtEstimate32(a);
-                case REV64, REV32, REV16 ->
-                        throw new IllegalStateException("tratado em executeReverseGroups acima");
+                default -> throw new IllegalStateException("tratado no ramo compartilhado acima: " + op.op());
             };
             fp.setElement(op.rd(), i, esz, truncate(result, esz));
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }
-
-    /// `REV64`/`REV32`/`REV16` (B8.20) — dentro de cada grupo consecutivo de {@code containerBits}
-    /// bits (64/32/16), inverte a ORDEM dos elementos de {@link Ir64Op.VectorArithmeticUnary#esz}
-    /// bytes (o VALOR de cada elemento não muda, só a posição) — conferido contra o pseudocódigo
-    /// real do manual (`Elem[]` por grupo). Sem forma escalar (filtrado no decoder).
-    private static boolean executeReverseGroups(Aarch64FpRegisters fp, Ir64Op.VectorArithmeticUnary op) {
-        int esz = op.esz();
-        int containerBits = switch (op.op()) {
-            case REV64 -> ADVSIMD_REV_GROUP_64_BITS;
-            case REV32 -> ADVSIMD_REV_GROUP_32_BITS;
-            case REV16 -> ADVSIMD_REV_GROUP_16_BITS;
-            default -> throw new IllegalStateException("op não é REV*: " + op.op());
-        };
-        int elementsPerContainer = containerBits / (8 << esz);
-        int elements = elementsPerRegister(op.q(), esz);
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            int containerBase = (i / elementsPerContainer) * elementsPerContainer;
-            int offsetWithinContainer = i % elementsPerContainer;
-            int sourceIndex = containerBase + (elementsPerContainer - 1 - offsetWithinContainer);
-            results[i] = fp.element(op.rn(), sourceIndex, esz);
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), i, esz, truncate(results[i], esz));
-        }
-        finishDestructiveWrite(fp, op.rd(), op.q());
-        return false;
-    }
-
-    private static final int ADVSIMD_REV_GROUP_16_BITS = 16;
-    private static final int ADVSIMD_REV_GROUP_32_BITS = 32;
-    private static final int ADVSIMD_REV_GROUP_64_BITS = 64;
-
-    /// `URECPE`/`UnsignedRecipEstimate` (B8.20) — algoritmo puro-inteiro do ARM DDI 0487, conferido
-    /// bit a bit contra `helper_recpe_u32`/`recip_estimate` do QEMU (`target/arm/tcg/vfp_helper.c`,
-    /// commit atual do `master` em 2026-08-28). `input`/`estimate` são campos de 9 bits (não 8 —
-    /// nome de variável do manual é enganoso), posicionados em `bits[31:23]` do resultado de 32
-    /// bits.
-    private static long unsignedRecipEstimate32(long a) {
-        if ((a & URECPE_TOP_BIT_MASK) == 0) {
-            return URECPE_ALL_ONES;
-        }
-        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
-        return ((long) recipEstimateTable(input)) << URECPE_FIELD_SHIFT;
-    }
-
-    /// `RecipEstimate` (ARM DDI 0487) — `input` em `[256,511)`, resultado em `[256,511)`.
-    private static int recipEstimateTable(int input) {
-        int a = (input * 2) + 1;
-        int b = (1 << 19) / a;
-        return (b + 1) >> 1;
-    }
-
-    /// `URSQRTE`/`UnsignedRSqrtEstimate` (B8.20) — mesma disciplina de {@link #unsignedRecipEstimate32},
-    /// conferido contra `helper_rsqrte_u32`/`do_recip_sqrt_estimate` do QEMU.
-    private static long unsignedRSqrtEstimate32(long a) {
-        if ((a & URSQRTE_TOP_BITS_MASK) == 0) {
-            return URECPE_ALL_ONES;
-        }
-        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
-        return ((long) rSqrtEstimateTable(input)) << URECPE_FIELD_SHIFT;
-    }
-
-    /// `RecipSqrtEstimate` (ARM DDI 0487) — `input` em `[128,512)`, resultado em `[256,511)`.
-    private static int rSqrtEstimateTable(int input) {
-        int a = input;
-        if (a < 256) {
-            a = (a * 2) + 1;
-        } else {
-            a = (a >> 1) << 1;
-            a = (a + 1) * 2;
-        }
-        int b = 512;
-        while ((long) a * (b + 1) * (b + 1) < (1L << 28)) {
-            b += 1;
-        }
-        return (b + 1) / 2;
-    }
-
-    private static final long URECPE_TOP_BIT_MASK = 0x8000_0000L;
-    private static final long URSQRTE_TOP_BITS_MASK = 0xC000_0000L;
-    private static final int URECPE_FIELD_SHIFT = 23;
-    private static final int URECPE_FIELD_MASK = 0x1FF;
-    private static final long URECPE_ALL_ONES = 0xFFFF_FFFFL;
 
     static boolean executeScalarPairwiseAdd(Aarch64Core core, Ir64Op.VectorScalarPairwiseAdd op) {
         Aarch64FpRegisters fp = core.fp();
@@ -674,30 +581,29 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `SQXTN`/`SQXTUN`/`UQXTN` (B8.8) — narrow unário saturante, vetorial e escalar (a forma
     /// escalar processa só o elemento `0`, ver {@link Ir64Op.VectorArithmeticNarrowUnary#scalar}).
+    /// RFC B13.2 (D1): mapeia `Ir64VectorNarrowUnaryOp` → {@link AdvSimdNarrowUnaryOp} do núcleo
+    /// COMPARTILHADO 1:1 (os 4 valores são os MESMOS nos dois lados, migrados na B13.12).
+    private static AdvSimdNarrowUnaryOp sharedNarrowUnaryOp(Ir64VectorNarrowUnaryOp op) {
+        return switch (op) {
+            case SQXTN -> AdvSimdNarrowUnaryOp.SQXTN;
+            case SQXTUN -> AdvSimdNarrowUnaryOp.SQXTUN;
+            case UQXTN -> AdvSimdNarrowUnaryOp.UQXTN;
+            case XTN -> AdvSimdNarrowUnaryOp.XTN;
+        };
+    }
+
+    /// `SQXTN`/`SQXTUN`/`UQXTN`/`XTN` (B8.8/B8.20) — narrow unário, vetorial e escalar (a forma
+    /// escalar processa só o elemento `0`). Desde B13.12 só delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#narrowUnary}) — a MESMA função que o NEON de 32 bits chama.
     static boolean executeNarrowUnary(Aarch64Core core, Ir64Op.VectorArithmeticNarrowUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
         int elements = op.scalar() ? 1 : elementsPerRegister(true, wideEsz);
         int laneOffset = op.scalar() ? 0 : (op.q() ? elements : 0);
-        // E10: buffer — mesma razão de `executeNarrow` (forma `q=1` com `Rd`==`Rn`).
-        long[] results = new long[elements];
-        for (int i = 0; i < elements; i++) {
-            long wide = fp.element(op.rn(), i, wideEsz);
-            long signedWide = signExtend(wide, wideEsz);
-            long narrow = switch (op.op()) {
-                case SQXTN -> saturateToElement(BigInteger.valueOf(signedWide), esz, true);
-                case SQXTUN -> saturateToElement(BigInteger.valueOf(signedWide), esz, false);
-                case UQXTN -> saturateToElement(unsignedBig(wide), esz, false);
-                // B8.20: `XTN` — SEM saturação, truncamento puro (`truncate` abaixo já corta para
-                // `esz` bytes).
-                case XTN -> wide;
-            };
-            results[i] = truncate(narrow, esz);
-        }
-        for (int i = 0; i < elements; i++) {
-            fp.setElement(op.rd(), laneOffset + i, esz, results[i]);
-        }
+        AdvSimdLanes.narrowUnary(fp, sharedNarrowUnaryOp(op.op()), esz, elements, laneOffset,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
     }

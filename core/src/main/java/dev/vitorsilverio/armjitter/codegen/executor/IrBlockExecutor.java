@@ -131,6 +131,9 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_THREE_SAME_BY_ELEMENT -> neon.executeNeonThreeSameByElement(core, (IrOp.NeonThreeSameByElement) op);
                 case IrOp.Kind.NEON_WIDENING_BY_ELEMENT -> neon.executeNeonWideningByElement(core, (IrOp.NeonWideningByElement) op);
                 case IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT -> neon.executeNeonFpThreeSameByElement(core, (IrOp.NeonFpThreeSameByElement) op);
+                case IrOp.Kind.NEON_UNARY -> neon.executeNeonUnary(core, (IrOp.NeonUnary) op);
+                case IrOp.Kind.NEON_NARROW_UNARY -> neon.executeNeonNarrowUnary(core, (IrOp.NeonNarrowUnary) op);
+                case IrOp.Kind.NEON_FP_UNARY -> neon.executeNeonFpUnary(core, (IrOp.NeonFpUnary) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -282,6 +285,9 @@ public final class IrBlockExecutor {
             case IrOp.NeonThreeSameByElement ntsbe -> { neon.executeNeonThreeSameByElement(core, ntsbe); yield false; }
             case IrOp.NeonWideningByElement nwbe -> { neon.executeNeonWideningByElement(core, nwbe); yield false; }
             case IrOp.NeonFpThreeSameByElement nftsbe -> { neon.executeNeonFpThreeSameByElement(core, nftsbe); yield false; }
+            case IrOp.NeonUnary nu -> { neon.executeNeonUnary(core, nu); yield false; }
+            case IrOp.NeonNarrowUnary nnu -> { neon.executeNeonNarrowUnary(core, nnu); yield false; }
+            case IrOp.NeonFpUnary nfu -> { neon.executeNeonFpUnary(core, nfu); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

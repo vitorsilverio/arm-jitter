@@ -159,6 +159,10 @@ public final class AsmNativePolicy {
             case IrOp.NeonThreeSameByElement ignored -> false;
             case IrOp.NeonWideningByElement ignored -> false;
             case IrOp.NeonFpThreeSameByElement ignored -> false;
+            // NEON "two-register miscellaneous" `size==0b11` (B13.12): idem.
+            case IrOp.NeonUnary ignored -> false;
+            case IrOp.NeonNarrowUnary ignored -> false;
+            case IrOp.NeonFpUnary ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

@@ -11,7 +11,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
         IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
         IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
-        IrOp.NeonFpThreeSameByElement {
+        IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -120,6 +120,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.11: `VMLA_F`/`VMLS_F`/`VMUL_F` (`2-regs-plus-scalar`, ponto flutuante F32, NÃO
         /// fundido) — ver {@link NeonFpThreeSameByElement}.
         public static final int NEON_FP_THREE_SAME_BY_ELEMENT = 83;
+        /// B13.12: `VREV64`/`VREV32`/`VREV16`/`VPADDL`/`VPADAL`/`VCLS`/`VCLZ`/`VCNT`/`VMVN`/
+        /// `VQABS`/`VQNEG`/as 5 comparações-com-zero inteiras/`VABS`/`VNEG`/`VRECPE`/`VRSQRTE`
+        /// (dois-registradores-misc, `size==0b11`) — ver {@link NeonUnary}.
+        public static final int NEON_UNARY = 84;
+        /// B13.12: `VMOVN`/`VQMOVUN`/`VQMOVN_S`/`VQMOVN_U` — ver {@link NeonNarrowUnary}.
+        public static final int NEON_NARROW_UNARY = 85;
+        /// B13.12: `VABS_F`/`VNEG_F`/as 5 comparações-com-zero FP/`VRECPE_F`/`VRSQRTE_F` — ver
+        /// {@link NeonFpUnary}.
+        public static final int NEON_FP_UNARY = 86;
     }
 
     /// Operacao ALU generica.
@@ -1951,5 +1960,90 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Índice do elemento dentro de {@link #vm} (`M`, 1 bit — já extraído pelo decoder).
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_FP_THREE_SAME_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" INTEIRA, sub-grupo `size==0b11`
+    /// (B13.12): `VREV64`/`VREV32`/`VREV16` (reversão de bytes), `VPADDL`/`VPADAL` (pareamento
+    /// largo, `S`/`U`, o segundo ACUMULA), `VCLS`/`VCLZ`/`VCNT`/`VMVN`, `VQABS`/`VQNEG`, as 5
+    /// comparações-com-zero (`VCGT0`/`VCGE0`/`VCEQ0`/`VCLE0`/`VCLT0`), `VABS`/`VNEG` e `VRECPE`/
+    /// `VRSQRTE` inteiros (estimativas puro-inteiras).
+    ///
+    /// **Layout PRÓPRIO deste sub-grupo** (diferente de B13.4-B13.11): `size` = bits[19:18]
+    /// (elemento de {@link #esz}), `opc1` = bits[17:16], `opc2` = bits[10:7], `q` = bit6 —
+    /// {@link #esz} neste record é o CAMPO `size`, não uma largura fixa por forma.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticUnary} no
+    /// ENCODING/IR (sem `scalar`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonUnary(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<m>`). Também é FONTE em `VPADAL` (lê `Vd` atual, já em `esz+1`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes — `0`-`2` (byte/half/word; `3` não existe
+            /// neste sub-grupo, G8 no decoder). Para `VPADDL`/`VPADAL`, é o tamanho ESTREITO
+            /// (`Vd` usa `esz+1`).
+            int esz,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_UNARY; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous", sub-grupo `size==0b11`
+    /// (B13.12): `VMOVN`/`VQMOVUN`/`VQMOVN_S`/`VQMOVN_U` — narrow unário. `Vm` é `Q` (elementos de
+    /// `esz+1`), `Vd` é `D` (elementos de {@link #esz}). **Sem campo `quad`**: fonte SEMPRE `Q`,
+    /// destino SEMPRE `D` (a forma "2-reg-misc" força `q=0` no encoding real, ver `neon-dp.decode`).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticNarrowUnary} no
+    /// ENCODING/IR (sem `scalar`/`q`); a SEMÂNTICA vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#narrowUnary}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonNarrowUnary(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp op,
+            /// `log2` do tamanho do elemento ESTREITO (`Vd`) em bytes — `0`-`2`. `Vm` usa `esz+1`.
+            int esz,
+            /// Registrador de destino (`D`, 64 bits, ESTREITO), em índice de `D` (`0`-`31`).
+            int vd,
+            /// Registrador fonte (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_NARROW_UNARY; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" de PONTO FLUTUANTE, sub-grupo
+    /// `size==0b11` (B13.12): `VABS_F`/`VNEG_F`, as 5 comparações-com-zero FP (`VCGT0_F`/`VCGE0_F`/
+    /// `VCEQ0_F`/`VCLE0_F`/`VCLT0_F`) e `VRECPE_F`/`VRSQRTE_F`. **Sem campo `esz`**: só F32
+    /// (`esz=2`) existe neste sub-grupo em A32 (F16 é `FEAT_FP16`, task futura irmã da B19.5) —
+    /// mesma convenção de {@link NeonFpThreeSameByElement}, que também fixa `esz=2` internamente.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticUnary} no
+    /// ENCODING/IR (sem `scalar`/`esz`); a SEMÂNTICA vem do núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpUnary}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFpUnary(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<m>`).
+            boolean quad,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FP_UNARY; }
     }
 }

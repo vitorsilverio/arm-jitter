@@ -1051,4 +1051,231 @@ public final class AdvSimdLanes {
         }
         return Long.MIN_VALUE + (long) (clamped - twoToThe63);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // "Two-register miscellaneous" INTEIRO/FP de um só operando — B13.12 (migração D1 da RFC
+    // B13.2). `switch`/helpers movidos VERBATIM de
+    // `executor64/Ir64VectorArithmeticExecutor#executeUnary`/`executeReverseGroups` (B8.7/B8.18/
+    // B8.20); `SUQADD`/`USQADD`/`RBIT` NÃO migram (sem encoding A32 correspondente neste grupo,
+    // mesma duplicação mínima já aceita para `saturateToElement`/`unsignedBig` desde B13.5) —
+    // continuam no `switch` local daquela classe.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    private static final int ADVSIMD_REV_GROUP_16_BITS = 16;
+    private static final int ADVSIMD_REV_GROUP_32_BITS = 32;
+    private static final int ADVSIMD_REV_GROUP_64_BITS = 64;
+    private static final long URECPE_TOP_BIT_MASK = 0x8000_0000L;
+    private static final long URSQRTE_TOP_BITS_MASK = 0xC000_0000L;
+    private static final int URECPE_FIELD_SHIFT = 23;
+    private static final int URECPE_FIELD_MASK = 0x1FF;
+    private static final long URECPE_ALL_ONES = 0xFFFF_FFFFL;
+
+    /// Executa uma operação AdvSIMD "two-register miscellaneous" inteira (ver {@link
+    /// AdvSimdUnaryOp}) sobre `elements` elementos de ORIGEM de `1 << esz` bytes (a contagem de
+    /// SAÍDA das formas de pareamento largo — {@link AdvSimdUnaryOp#SADDLP}/{@code UADDLP}/
+    /// {@code SADALP}/{@code UADALP} — é metade disso, calculada aqui dentro). `baseRd`/`baseRn` são
+    /// índices de PALAVRA; a escrita destrutiva de `[127:64]`/escalar é do chamador.
+    public static void unary(AdvSimdRegisterWords regs, AdvSimdUnaryOp op, int esz, int elements,
+            int baseRd, int baseRn) {
+        switch (op) {
+            case REV64 -> reverseGroups(regs, esz, ADVSIMD_REV_GROUP_64_BITS, elements, baseRd, baseRn);
+            case REV32 -> reverseGroups(regs, esz, ADVSIMD_REV_GROUP_32_BITS, elements, baseRd, baseRn);
+            case REV16 -> reverseGroups(regs, esz, ADVSIMD_REV_GROUP_16_BITS, elements, baseRd, baseRn);
+            case SADDLP, UADDLP, SADALP, UADALP -> widenPairwiseAdd(regs, op, esz, elements, baseRd, baseRn);
+            default -> generalUnary(regs, op, esz, elements, baseRd, baseRn);
+        }
+    }
+
+    /// `REV64`/`REV32`/`REV16`: dentro de cada grupo consecutivo de {@code containerBits} bits,
+    /// inverte a ORDEM dos elementos de `esz` bytes (o VALOR de cada elemento não muda, só a
+    /// posição).
+    private static void reverseGroups(AdvSimdRegisterWords regs, int esz, int containerBits, int elements,
+            int baseRd, int baseRn) {
+        int elementsPerContainer = containerBits / (8 << esz);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            int containerBase = (i / elementsPerContainer) * elementsPerContainer;
+            int offsetWithinContainer = i % elementsPerContainer;
+            int sourceIndex = containerBase + (elementsPerContainer - 1 - offsetWithinContainer);
+            results[i] = element(regs, baseRn, sourceIndex, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, i, esz, results[i]);
+        }
+    }
+
+    private static long extendMaybe(long value, int esz, boolean signed) {
+        return signed ? signExtend(value, esz) : value;
+    }
+
+    /// `SADDLP`/`UADDLP`/`SADALP`/`UADALP`: pareia elementos adjacentes de `inputElements` (`esz`
+    /// bytes), soma alargando para `esz+1`; a forma "ALP" ACUMULA no `Rd` ATUAL (já em `esz+1`) em
+    /// vez de sobrescrever.
+    private static void widenPairwiseAdd(AdvSimdRegisterWords regs, AdvSimdUnaryOp op, int esz,
+            int inputElements, int baseRd, int baseRn) {
+        int wideEsz = esz + 1;
+        int outputElements = inputElements / 2;
+        boolean signed = op == AdvSimdUnaryOp.SADDLP || op == AdvSimdUnaryOp.SADALP;
+        boolean accumulate = op == AdvSimdUnaryOp.SADALP || op == AdvSimdUnaryOp.UADALP;
+        long[] results = new long[outputElements];
+        for (int i = 0; i < outputElements; i++) {
+            long a = extendMaybe(element(regs, baseRn, i * 2, esz), esz, signed);
+            long b = extendMaybe(element(regs, baseRn, i * 2 + 1, esz), esz, signed);
+            long sum = a + b;
+            results[i] = accumulate
+                    ? extendMaybe(element(regs, baseRd, i, wideEsz), wideEsz, signed) + sum
+                    : sum;
+        }
+        for (int i = 0; i < outputElements; i++) {
+            setElement(regs, baseRd, i, wideEsz, truncate(results[i], wideEsz));
+        }
+    }
+
+    /// O resto de {@link AdvSimdUnaryOp}: um resultado por elemento de ORIGEM, mesma largura
+    /// `esz` no destino.
+    private static void generalUnary(AdvSimdRegisterWords regs, AdvSimdUnaryOp op, int esz, int elements,
+            int baseRd, int baseRn) {
+        for (int i = 0; i < elements; i++) {
+            long a = element(regs, baseRn, i, esz);
+            long sa = signExtend(a, esz);
+            long result = switch (op) {
+                case ABS -> Math.abs(sa);
+                case NEG -> -a;
+                case CMEQ0 -> boolMask(sa == 0, esz);
+                case CMGT0 -> boolMask(sa > 0, esz);
+                case CMGE0 -> boolMask(sa >= 0, esz);
+                case CMLT0 -> boolMask(sa < 0, esz);
+                case CMLE0 -> boolMask(sa <= 0, esz);
+                case SQABS -> saturateToElement(BigInteger.valueOf(sa).abs(), esz, true);
+                case SQNEG -> saturateToElement(BigInteger.valueOf(sa).negate(), esz, true);
+                case CLS -> countLeadingSignBits(a, sa, esz);
+                case CLZ -> leadingZerosInWidth(a, 8 << esz);
+                case CNT -> (long) Long.bitCount(a);
+                case NOT -> ~a;
+                case URECPE -> unsignedRecipEstimate32(a);
+                case URSQRTE -> unsignedRSqrtEstimate32(a);
+                case SADDLP, UADDLP, SADALP, UADALP, REV64, REV32, REV16 ->
+                        throw new IllegalStateException("tratado em unary() antes de generalUnary: " + op);
+            };
+            setElement(regs, baseRd, i, esz, truncate(result, esz));
+        }
+    }
+
+    /// Conta zeros à esquerda de `pattern` (já zero-extendido/mascarado a `widthBits` bits) DENTRO
+    /// de `widthBits`, não dos 64 bits inteiros do `long`.
+    private static long leadingZerosInWidth(long pattern, int widthBits) {
+        if (pattern == 0) {
+            return widthBits;
+        }
+        return Long.numberOfLeadingZeros(pattern) - (64 - widthBits);
+    }
+
+    /// `CLS`: conta bits à esquerda IGUAIS ao bit de sinal, sem contar o próprio bit de sinal —
+    /// equivalente a {@link #leadingZerosInWidth} do padrão (inverte se negativo) menos 1.
+    private static long countLeadingSignBits(long a, long sa, int esz) {
+        long pattern = sa < 0 ? (~a) & elementMask(esz) : a;
+        return leadingZerosInWidth(pattern, 8 << esz) - 1;
+    }
+
+    /// `URECPE`/`UnsignedRecipEstimate` (ARM DDI 0487) — `input`/`estimate` são campos de 9 bits,
+    /// posicionados em `bits[31:23]` do resultado de 32 bits.
+    private static long unsignedRecipEstimate32(long a) {
+        if ((a & URECPE_TOP_BIT_MASK) == 0) {
+            return URECPE_ALL_ONES;
+        }
+        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
+        return ((long) recipEstimateTable(input)) << URECPE_FIELD_SHIFT;
+    }
+
+    /// `RecipEstimate` (ARM DDI 0487) — `input` em `[256,511)`, resultado em `[256,511)`.
+    private static int recipEstimateTable(int input) {
+        int a = (input * 2) + 1;
+        int b = (1 << 19) / a;
+        return (b + 1) >> 1;
+    }
+
+    /// `URSQRTE`/`UnsignedRSqrtEstimate` — mesma disciplina de {@link #unsignedRecipEstimate32}.
+    private static long unsignedRSqrtEstimate32(long a) {
+        if ((a & URSQRTE_TOP_BITS_MASK) == 0) {
+            return URECPE_ALL_ONES;
+        }
+        int input = (int) ((a >>> URECPE_FIELD_SHIFT) & URECPE_FIELD_MASK);
+        return ((long) rSqrtEstimateTable(input)) << URECPE_FIELD_SHIFT;
+    }
+
+    /// `RecipSqrtEstimate` (ARM DDI 0487) — `input` em `[128,512)`, resultado em `[256,511)`.
+    private static int rSqrtEstimateTable(int input) {
+        int a = input;
+        if (a < 256) {
+            a = (a * 2) + 1;
+        } else {
+            a = (a >> 1) << 1;
+            a = (a + 1) * 2;
+        }
+        int b = 512;
+        while ((long) a * (b + 1) * (b + 1) < (1L << 28)) {
+            b += 1;
+        }
+        return (b + 1) / 2;
+    }
+
+    /// Executa uma operação AdvSIMD "narrow unary" (ver {@link AdvSimdNarrowUnaryOp}) sobre
+    /// `elements` elementos de SAÍDA de `esz` bytes, lidos de `baseRn` em elementos de `esz+1`
+    /// bytes a partir de `laneOffset` (o A64 usa `laneOffset` para a forma "2"/`q=1`; o NEON de 32
+    /// bits passa sempre `0`) e escritos em `baseRd` a partir de `laneOffset` também (mesma
+    /// convenção do A64: a forma "2" escreve na metade ALTA do MESMO registrador largo que a forma
+    /// "1" leu na metade baixa). Resultados calculados num buffer ANTES de qualquer escrita (E10).
+    public static void narrowUnary(AdvSimdRegisterWords regs, AdvSimdNarrowUnaryOp op, int esz,
+            int elements, int laneOffset, int baseRd, int baseRn) {
+        int wideEsz = esz + 1;
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long wide = element(regs, baseRn, i, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow = switch (op) {
+                case SQXTN -> saturateToElement(BigInteger.valueOf(signedWide), esz, true);
+                case SQXTUN -> saturateToElement(BigInteger.valueOf(signedWide), esz, false);
+                case UQXTN -> saturateToElement(unsignedBig(wide), esz, false);
+                case XTN -> wide;
+            };
+            results[i] = truncate(narrow, esz);
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, laneOffset + i, esz, results[i]);
+        }
+    }
+
+    /// Executa uma operação AdvSIMD "two-register miscellaneous" de PONTO FLUTUANTE (ver {@link
+    /// AdvSimdFpUnaryOp}) sobre um elemento de `esz` bytes (`2`=F32, `3`=F64) já lido de `baseRn` —
+    /// o chamador itera as lanes e chama esta função por elemento (mesma convenção de
+    /// {@link #fpCombinePair}, que também opera por par já extraído em vez de por registrador
+    /// inteiro).
+    public static long fpUnary(AdvSimdFpUnaryOp op, int esz, long inputBits) {
+        if (esz == 2) {
+            float a = Float.intBitsToFloat((int) inputBits);
+            return switch (op) {
+                case ABS -> floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
+                case NEG -> floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
+                case RECPE -> floatBits(1.0f / a);
+                case RSQRTE -> floatBits((float) (1.0 / Math.sqrt(a)));
+                case CMGT0 -> boolMask(a > 0f, esz);
+                case CMGE0 -> boolMask(a >= 0f, esz);
+                case CMEQ0 -> boolMask(a == 0f, esz);
+                case CMLE0 -> boolMask(a <= 0f, esz);
+                case CMLT0 -> boolMask(a < 0f, esz);
+            };
+        }
+        double a = Double.longBitsToDouble(inputBits);
+        return switch (op) {
+            case ABS -> doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
+            case NEG -> doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
+            case RECPE -> doubleBits(1.0 / a);
+            case RSQRTE -> doubleBits(1.0 / Math.sqrt(a));
+            case CMGT0 -> boolMask(a > 0.0, esz);
+            case CMGE0 -> boolMask(a >= 0.0, esz);
+            case CMEQ0 -> boolMask(a == 0.0, esz);
+            case CMLE0 -> boolMask(a <= 0.0, esz);
+            case CMLT0 -> boolMask(a < 0.0, esz);
+        };
+    }
 }
