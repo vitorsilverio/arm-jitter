@@ -9,14 +9,14 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// cada nó ainda há um `switch` pequeno sobre os poucos records daquela categoria, decisão
 /// explícita da especificação).
 ///
-/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 42 dos 73 `Kind` — as 7
+/// <p>Este mapeamento **NÃO é exaustivo** sobre `IrOp.Kind`: cobre 46 dos 73 `Kind` — as 7
 /// categorias da taxonomia da A6 (ALU escalar, multiplicação, memória, transferência múltipla,
 /// branch, sistema, ciclo/fetch); a multiplicação inclui `DspDualMultiply`/`DspTopWordMultiply`
-/// desde a A10.6. Os 31 `Kind` restantes (todo VFP/coprocessador, todo NEON,
-/// `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank`, bitfield/`RBIT`/`SDIV`/`UDIV`,
+/// desde a A10.6, e a ALU inclui bitfield/`RBIT`/`SDIV`/`UDIV` desde a A10.4. Os 27 `Kind`
+/// restantes (todo VFP/coprocessador, todo NEON, `HVC`/`SMC`/`ERET`/`MRS_bank`/`MSR_bank`,
 /// `BKPT`, `MRS`/`MSR` SYSm do perfil M) foram acrescentados por B1/B3/B7/B9/B13 DEPOIS da A6 e
 /// ainda não têm nó Truffle especializado — cada categoria é fechada por uma task própria
-/// (A10.3 VFP, A10.4 bitfield/divide, A10.5 sistema, A10.7 NEON). Enquanto isso,
+/// (A10.3 VFP, A10.5 sistema, A10.7 NEON). Enquanto isso,
 /// {@link TruffleCodeEmitter} desvia os blocos que contêm um desses `Kind` para o
 /// {@link dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter} (via {@link #supports}), em
 /// vez de quebrar.</p>
@@ -65,7 +65,8 @@ final class IrOpNodeFactory {
     private static Category category(IrOp op) {
         return switch (op.kind()) {
             case IrOp.Kind.ALU, IrOp.Kind.MOVE_TOP, IrOp.Kind.SEL, IrOp.Kind.SATURATE,
-                    IrOp.Kind.ABS_DIFF_SUM, IrOp.Kind.SATURATING ->
+                    IrOp.Kind.ABS_DIFF_SUM, IrOp.Kind.SATURATING, IrOp.Kind.BIT_FIELD_EXTRACT,
+                    IrOp.Kind.BIT_FIELD_INSERT, IrOp.Kind.BIT_REVERSE, IrOp.Kind.DIVIDE ->
                     Category.ALU;
             case IrOp.Kind.MULTIPLY, IrOp.Kind.LONG_MULTIPLY, IrOp.Kind.DSP_MULTIPLY, IrOp.Kind.PARALLEL_ALU,
                     IrOp.Kind.DSP_DUAL_MULTIPLY, IrOp.Kind.DSP_TOP_WORD_MULTIPLY ->
