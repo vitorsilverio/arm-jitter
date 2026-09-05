@@ -47,7 +47,7 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (reescrito 2026-09-03, após a rodada "spec de tudo")
+## Onde estamos (atualizado 2026-09-05, após C12.4/C12.7 fecharem)
 
 A fila anterior estava **drenada e não dizia isso** (listava 6 tasks já fechadas como pegáveis, e 13
 arquivos de task ainda tinham `**Status:** ⬜` no cabeçalho — todos corrigidos). Depois disso, uma
@@ -68,17 +68,31 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Nenhuma dependência aberta.
+Nenhuma dependência aberta. Lista revalidada em 2026-09-05 contra o `INDICE.md` de cada trilha
+(a versão anterior desta tabela listava B13.9/B13.10/C12.2/C12.3/A10.3-A10.5 — **todas já ✅**,
+removidas).
 
 | Task | O que | Tamanho |
 |---|---|---|
-| **[B13.9](trilha-b-arquiteturas/b13.9-neon-1reg-imediato-modificado.md)** | NEON `VMOV`/`VMVN`/`VORR`/`VBIC` imediato (A32) | 1 linha, 4 famílias |
-| **[B13.10](trilha-b-arquiteturas/b13.10-neon-3reg-different-lengths.md)** | NEON 3-reg-different-lengths — abre o 3º frame do épico | 26 linhas |
-| **[C12.2](trilha-c-perf/c12.2-per-op-64-bits.md)** | Política `PER_OP` no pipeline de 64 bits | 0 de decode |
-| **[C12.3](trilha-c-perf/c12.3-a64-inteiro-nativo.md)** | Emissão nativa A64 do inteiro (16 `Kind`) | 24/96 → 40/96 |
-| **[A10.3](trilha-a-truffle/a10.3-nos-vfp.md)** · **[A10.4](trilha-a-truffle/a10.4-nos-bitfield-divide.md)** · **[A10.5](trilha-a-truffle/a10.5-nos-sistema.md)** | Nós Truffle: VFP (14), bitfield/divide (4), sistema (6) | 42/84 → 66/84 |
+| **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
+| **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
+| **[B13.12](trilha-b-arquiteturas/b13.12-neon-two-reg-misc.md)** | NEON two-reg-misc A32 (`size==0b11`, layout de campos próprio) — abre o 4º frame do épico | ~36 linhas |
+| **[B13.17](trilha-b-arquiteturas/b13.17-neon-shared-fcma.md)** | `neon-shared`: `VCMLA`/`VCADD` (`FEAT_FCMA`) — cria o `NeonSharedDecoder` que B13.17-B13.21 compartilham | 4 linhas |
+| **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
+| **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
+| **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
+| **[B19.8](trilha-b-arquiteturas/b19.8-a64-feat-lut.md)** | A64 `FEAT_LUT` (`LUTI2`/`LUTI4`, ARMv9.5-A) | 4 linhas |
+| **[B19.10](trilha-b-arquiteturas/b19.10-a64-cripto-sha512-sm3-sm4.md)** | A64 cripto SHA-512/SM3/SM4 — mesmo prefixo `0xCE` que a B11.12 abriu pela metade | 13 linhas |
+| **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
 
-**Ordem sugerida**: qualquer uma. **C12.7 FECHADA 2026-09-05** — os 20 records via `IrOpInterop`
+**Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
+(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/18-22 (depende de B13.12),
+B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
+
+**Ordem sugerida**: qualquer uma das dez acima. **C12.4 FECHADA 2026-09-05** — os 6 `Kind` de FP
+escalar restante (`FMADD`/`FCSEL`/`FCCMP`/`FRINT*`/conversão geral/`FMOV` cru) via o MESMO
+mecanismo de reconstrução de record que B6.5.4/C12.3 (zero aritmética nova), ASM 64 bits 40→46 de
+96, G5 zero-diff nos 5 consumidores. **C12.7 FECHADA 2026-09-05** — os 20 records via `IrOpInterop`
 cercado de flush/reload (não helpers dedicados: 5 usam `IrExecutionSupport`, package-private, ver
 **Resultado** na task), ASM 32 bits 37→57 de 84, G5 zero-diff nos 5 consumidores. **A10.6 FECHADA
 2026-09-04** — Truffle 32 bits 40→42/84 (`DspDualMultiply`/`DspTopWordMultiply`
@@ -107,8 +121,8 @@ Um `✅` em `docs/COBERTURA-ISA.md` **não** significa que algum backend compile
 | # | Dimensão | Onde se mede | Estado |
 |---|---|---|---|
 | 1 | Decode + interpretado | `docs/COBERTURA-ISA.md` | **84%** (pós-E12) · A64 `ARMv8.0-A` 97% (851/877) · `ARMv9.5-A` 77% (891/1146) |
-| 2 | Emissão JIT nativa | `docs/COBERTURA-JIT.md` | ASM 32 **37 ✅ + 9 ⚠️ / 77** · ASM 64 **24/96** |
-| 3 | Truffle | `docs/COBERTURA-JIT.md` | 32 bits **40/77** · 64 bits **0/96** (não existe) |
+| 2 | Emissão JIT nativa | `docs/COBERTURA-JIT.md` | ASM 32 **57 ✅ + 9 ⚠️ / 84** (pós-C12.7) · ASM 64 **46/96** (pós-C12.4) |
+| 3 | Truffle | `docs/COBERTURA-JIT.md` | 32 bits **66/84** (pós-A10.5) · 64 bits **0/96** (não existe) |
 | 4 | Catálogo de processadores | — | downstream de 1 |
 
 ### Os achados desta rodada que mudam decisões
@@ -156,7 +170,9 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 ### O que fechou recentemente (detalhe no `INDICE.md` de cada trilha, nunca aqui)
 
-`B13.7` · `B13.8` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11` · `E12` · `A10.1` · `C12.1` · **épico `B22` inteiro**.
+`B13.7` · `B13.8` · `B13.9` · `B13.10` · `B13.11` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11`
+· `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
+`C12.4` · `C12.7` · **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 
