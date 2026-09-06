@@ -221,27 +221,50 @@ final class Ir64VectorFpArithmeticExecutor {
                 // continuam abaixo (fora do escopo da B13.12, que não os produz).
                 case ABS, NEG, CMGT0, CMGE0, CMEQ0, CMLE0, CMLT0, RECPE, RSQRTE ->
                         AdvSimdLanes.fpUnary(sharedFpUnaryOp(op.op()), esz, inputBits);
-                case FRECPX -> esz == 2
-                        ? AdvSimdLanes.floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
-                        : AdvSimdLanes.doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
+                // B19.5.4 (`FEAT_FP16`): `esz==1` opera direto nos 16 bits crus (`frecpxHalf`) — o
+                // expoente de `binary16` tem largura DIFERENTE (5 bits, viés 15) da de `float`, então
+                // não dá para passar por `halfToFloat`/`halfBits` sem mudar a largura do expoente
+                // refletido (Armadilha 6 da task).
+                case FRECPX -> esz == 1 ? frecpxHalf(inputBits)
+                        : esz == 2
+                                ? AdvSimdLanes.floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
+                                : AdvSimdLanes.doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
                 case FCVTXN -> throw new IllegalStateException("FCVTXN tratado fora do laço");
                 case SCVTF, UCVTF -> {
                     boolean signed = op.op() == Ir64VectorFpUnaryOp.SCVTF;
                     double asDouble;
                     if (wide) {
                         asDouble = signed ? (double) inputBits : Ir64FpExecutor.unsignedLongToDouble(inputBits);
+                    } else if (esz == 1) {
+                        // B19.5.4: `(int) inputBits` de 16 bits mascarados NÃO sign-estende (mesmo
+                        // achado da B19.5.3 para `convertFixedPoint`) — cast intermediário por `short`.
+                        asDouble = signed ? (double) (short) inputBits : (double) inputBits;
                     } else {
                         asDouble = signed ? (double) (int) inputBits : (double) inputBits;
                     }
-                    yield esz == 2 ? AdvSimdLanes.floatBits((float) asDouble) : AdvSimdLanes.doubleBits(asDouble);
+                    yield esz == 1 ? AdvSimdLanes.halfBits((float) asDouble)
+                            : esz == 2 ? AdvSimdLanes.floatBits((float) asDouble) : AdvSimdLanes.doubleBits(asDouble);
                 }
                 case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> {
-                    double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
+                    double value = esz == 1 ? AdvSimdLanes.halfToFloat(inputBits)
+                            : esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
                     double rounded = Ir64FpExecutor.roundToIntegralForConversion(value, FCVT_DIRECTION_BY_OP[op.op().ordinal()]);
-                    long converted = Ir64FpExecutor.saturateToInteger(rounded, !isUnsignedFcvt(op.op()), wide);
-                    yield converted & (wide ? -1L : 0xFFFF_FFFFL);
+                    boolean signed = !isUnsignedFcvt(op.op());
+                    long converted = esz == 1
+                            ? Ir64FpExecutor.saturateToHalfwordInteger(rounded, signed)
+                            : Ir64FpExecutor.saturateToInteger(rounded, signed, wide);
+                    yield converted & (wide ? -1L : esz == 1 ? 0xFFFFL : 0xFFFF_FFFFL);
                 }
                 default -> {
+                    if (esz == 1) {
+                        float a = AdvSimdLanes.halfToFloat(inputBits);
+                        yield switch (op.op()) {
+                            case SQRT -> AdvSimdLanes.halfBits((float) Math.sqrt(a));
+                            case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
+                                    AdvSimdLanes.halfBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
+                            default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
+                        };
+                    }
                     if (esz == 2) {
                         float a = Float.intBitsToFloat((int) inputBits);
                         yield switch (op.op()) {
@@ -307,6 +330,37 @@ final class Ir64VectorFpArithmeticExecutor {
         int maxExp = 0x7FE;
         int newExp = exp == 0 ? maxExp : maxExp - exp;
         return Double.longBitsToDouble(sign | ((long) newExp << 52));
+    }
+
+    /// Máscara/deslocamento do campo de mantissa de `binary16` (10 bits) — nomeada (G6) para
+    /// {@link #frecpxHalf}.
+    private static final long HALF_MANTISSA_BITS = 10;
+    private static final long HALF_MANTISSA_MASK = 0x03FFL;
+    private static final long HALF_EXPONENT_MASK = 0x1FL;
+    private static final long HALF_SIGN_MASK = 0x8000L;
+    /// `binary16` NaN default (`ARM DDI 0487`): sinal `0`, expoente todo-um, mantissa com só o bit
+    /// mais alto setado.
+    private static final long HALF_DEFAULT_NAN = 0x7E00L;
+
+    /// `FPRecpX` (B19.5.4) para `binary16` — MESMO algoritmo de {@link #frecpx(float)}, parametrizado
+    /// para o expoente de 5 bits/viés `2^5-2` de meia precisão (Armadilha 6 da task: o expoente de
+    /// `binary16` tem largura DIFERENTE do de `float`, então não dá para passar por `halfToFloat`/
+    /// `halfBits` sem mudar o campo refletido). Opera direto nos 16 bits crus (zero-estendidos em
+    /// `long`, mesma convenção de {@link Aarch64FpRegisters#element}).
+    private static long frecpxHalf(long halfBits) {
+        long sign = halfBits & HALF_SIGN_MASK;
+        long exp = (halfBits >>> HALF_MANTISSA_BITS) & HALF_EXPONENT_MASK;
+        long mant = halfBits & HALF_MANTISSA_MASK;
+        if (exp == HALF_EXPONENT_MASK) {
+            // NaN → NaN default; Infinito → zero do mesmo sinal.
+            return mant != 0 ? HALF_DEFAULT_NAN : sign;
+        }
+        if (exp == 0 && mant == 0) {
+            return sign | (HALF_EXPONENT_MASK << HALF_MANTISSA_BITS);
+        }
+        long maxExp = HALF_EXPONENT_MASK - 1;
+        long newExp = exp == 0 ? maxExp : maxExp - exp;
+        return sign | (newExp << HALF_MANTISSA_BITS);
     }
 
     /// `FCVTXN` (`ARM DDI 0487`, B19.3) — `f64` → `f32` com arredondamento "round to odd"

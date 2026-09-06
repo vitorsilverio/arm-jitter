@@ -854,4 +854,140 @@ class Ir64VectorFpArithmeticExecutorTest {
         }
         assertEquals(0L, fp.high64(0), "q=false zera Rd[127:64]");
     }
+
+    // ── B19.5.4: FEAT_FP16 — two-reg-misc + conversões escalares (`esz=1` no `executeUnary`) ──────
+
+    @Test
+    void halfPrecisionAbsNegSqrtQControlsLanes() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L);
+        for (int lane = 0; lane < 4; lane++) {
+            setHalf(fp, 1, lane, -2.5f);
+        }
+        // FABS v0.4h, v1.4h — q=false
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.ABS, false, false, 1, 0, 1));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(2.5f, readHalf(fp, 0, lane));
+        }
+        assertEquals(0L, fp.high64(0), "q=false (.4h) zera Rd[127:64]");
+
+        for (int lane = 0; lane < 8; lane++) {
+            setHalf(fp, 1, lane, -1.5f);
+        }
+        // FNEG v0.8h, v1.8h — q=true, as 8 lanes
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.NEG, false, true, 1, 0, 1));
+        for (int lane = 0; lane < 8; lane++) {
+            assertEquals(1.5f, readHalf(fp, 0, lane), "q=true (.8h) preenche as 8 lanes");
+        }
+
+        for (int lane = 0; lane < 4; lane++) {
+            setHalf(fp, 1, lane, 9.0f);
+        }
+        // FSQRT v0.4h, v1.4h
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.SQRT, false, false, 1, 0, 1));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(3.0f, readHalf(fp, 0, lane));
+        }
+    }
+
+    @Test
+    void halfPrecisionRintModesDifferOnHalfInteger() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // 2.5 é o valor onde RINTN (par mais próximo) e RINTA (afastar de zero) DIVERGEM.
+        setHalf(fp, 1, 0, 2.5f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.RINTN, false, false, 1, 0, 1));
+        assertEquals(2.0f, readHalf(fp, 0, 0), "RINTN: par mais próximo, 2.5 -> 2.0");
+
+        setHalf(fp, 1, 0, 2.5f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.RINTA, false, false, 1, 0, 1));
+        assertEquals(3.0f, readHalf(fp, 0, 0), "RINTA: afasta de zero, 2.5 -> 3.0");
+    }
+
+    @Test
+    void halfPrecisionFcvtTruncateVsRoundAndSaturation() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // FCVTZS trunca para zero, FCVTAS arredonda para o mais próximo — mesmo valor, resultados
+        // diferentes.
+        setHalf(fp, 1, 0, 2.7f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FCVTZS, false, false, 1, 0, 1));
+        assertEquals(2L, fp.element(0, 0, 1) & 0xFFFFL, "FCVTZS trunca: 2.7 -> 2");
+
+        setHalf(fp, 1, 0, 2.7f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FCVTAS, false, false, 1, 0, 1));
+        assertEquals(3L, fp.element(0, 0, 1) & 0xFFFFL, "FCVTAS arredonda: 2.7 -> 3");
+
+        // Saturação nos extremos de int16 — 65504 é o maior finito de binary16, bem acima de
+        // INT16_MAX (32767): a conversão tem de saturar em 16 bits, não fazer wrap.
+        setHalf(fp, 1, 0, 65504.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FCVTZS, false, false, 1, 0, 1));
+        assertEquals((short) 32767, (short) fp.element(0, 0, 1), "satura em INT16_MAX assinado, sem wrap");
+
+        setHalf(fp, 1, 0, -65504.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FCVTZU, false, false, 1, 0, 1));
+        assertEquals(0L, fp.element(0, 0, 1), "FCVTZU de negativo satura em 0");
+    }
+
+    @Test
+    void halfPrecisionCompareZeroMasksAndNegativeZero() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // -0.0: FCMEQ0 é verdadeiro (−0.0 == 0.0), FCMLT0 é falso (−0.0 não é < 0.0) — os dois
+        // usam a MESMA lane de entrada, provando que o sinal de zero é tratado certo em `halfToFloat`.
+        setHalf(fp, 1, 0, -0.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.CMEQ0, false, false, 1, 0, 1));
+        assertEquals(0xFFFFL, fp.element(0, 0, 1), "FCMEQ0(-0.0): máscara toda 1");
+
+        setHalf(fp, 1, 0, -0.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.CMLT0, false, false, 1, 0, 1));
+        assertEquals(0x0000L, fp.element(0, 0, 1), "FCMLT0(-0.0): máscara zerada");
+
+        setHalf(fp, 1, 0, 1.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.CMGT0, false, false, 1, 0, 1));
+        assertEquals(0xFFFFL, fp.element(0, 0, 1), "FCMGT0(1.0): máscara toda 1");
+    }
+
+    @Test
+    void halfPrecisionRecpeRsqrteScalarAndRecpxExponentReflection() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, 4.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.RECPE, true, false, 1, 0, 1));
+        assertEquals(0.25f, readHalf(fp, 0, 0), "RECPE_h escalar (modelo exato desta base)");
+
+        setHalf(fp, 1, 0, 4.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.RSQRTE, true, false, 1, 0, 1));
+        assertEquals(0.5f, readHalf(fp, 0, 0), "RSQRTE_h escalar");
+
+        // FRECPX_h: reflexão de expoente em torno do viés de 15 bits (Armadilha 6 da task — o
+        // viés/largura de expoente de `binary16` são DIFERENTES de `float`).
+        setHalf(fp, 1, 0, 1.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FRECPX, true, false, 1, 0, 1));
+        assertEquals(1.0f, readHalf(fp, 0, 0), "FRECPX_h(1.0): expoente no meio da faixa reflete nele mesmo");
+
+        setHalf(fp, 1, 0, 2.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FRECPX, true, false, 1, 0, 1));
+        assertEquals(0.5f, readHalf(fp, 0, 0), "FRECPX_h(2.0): aproximação do recíproco REAL (0.5)");
+
+        setHalf(fp, 1, 0, 0.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.FRECPX, true, false, 1, 0, 1));
+        assertTrue(Float.isInfinite(readHalf(fp, 0, 0)), "FRECPX_h(+0.0) = +Infinito");
+    }
+
+    @Test
+    void halfPrecisionScvtfUcvtfSameBitsSignedVsUnsigned() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        // 0x8000 = -32768 assinado / 32768 sem sinal — as duas magnitudes são potência de 2, exatas
+        // em binary16, então a diferença observada só pode vir do sinal da conversão.
+        fp.setElement(1, 0, 1, 0x8000L);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.SCVTF, true, false, 1, 0, 1));
+        assertEquals(-32768.0f, readHalf(fp, 0, 0), "SCVTF sign-estende os 16 bits (0x8000 = -32768)");
+
+        fp.setElement(1, 0, 1, 0x8000L);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(Ir64VectorFpUnaryOp.UCVTF, true, false, 1, 0, 1));
+        assertEquals(32768.0f, readHalf(fp, 0, 0), "UCVTF lê o MESMO padrão sem sinal (0x8000 = 32768)");
+    }
 }

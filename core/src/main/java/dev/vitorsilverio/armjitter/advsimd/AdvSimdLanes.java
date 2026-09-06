@@ -1254,8 +1254,10 @@ public final class AdvSimdLanes {
 
     /// {@link #saturateToInteger} satura para 32/64 bits (`wide`); `FCVTZS_f`/`FCVTZU_f` de meia
     /// precisão (`FEAT_FP16`, B19.5.3) precisam do limite de 16 bits, que aquele método não
-    /// expressa — variante dedicada em vez de sobrecarregar `wide` com um terceiro estado.
-    private static long saturateToHalfwordInteger(double rounded, boolean signed) {
+    /// expressa — variante dedicada em vez de sobrecarregar `wide` com um terceiro estado. `public`
+    /// desde a B19.5.4, que a reusa de `executor64` (via {@code Ir64FpExecutor}) para as conversões
+    /// `FCVTx{S,U}_{vi,f}` de meia precisão no slot narrow-unário do A64.
+    public static long saturateToHalfwordInteger(double rounded, boolean signed) {
         if (Double.isNaN(rounded)) {
             return 0L;
         }
@@ -1518,31 +1520,54 @@ public final class AdvSimdLanes {
     /// {@link #fpCombinePair}, que também opera por par já extraído em vez de por registrador
     /// inteiro).
     public static long fpUnary(AdvSimdFpUnaryOp op, int esz, long inputBits) {
-        if (esz == 2) {
-            float a = Float.intBitsToFloat((int) inputBits);
-            return switch (op) {
-                case ABS -> floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
-                case NEG -> floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
-                case RECPE -> floatBits(1.0f / a);
-                case RSQRTE -> floatBits((float) (1.0 / Math.sqrt(a)));
-                case CMGT0 -> boolMask(a > 0f, esz);
-                case CMGE0 -> boolMask(a >= 0f, esz);
-                case CMEQ0 -> boolMask(a == 0f, esz);
-                case CMLE0 -> boolMask(a <= 0f, esz);
-                case CMLT0 -> boolMask(a < 0f, esz);
-            };
-        }
-        double a = Double.longBitsToDouble(inputBits);
-        return switch (op) {
-            case ABS -> doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
-            case NEG -> doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
-            case RECPE -> doubleBits(1.0 / a);
-            case RSQRTE -> doubleBits(1.0 / Math.sqrt(a));
-            case CMGT0 -> boolMask(a > 0.0, esz);
-            case CMGE0 -> boolMask(a >= 0.0, esz);
-            case CMEQ0 -> boolMask(a == 0.0, esz);
-            case CMLE0 -> boolMask(a <= 0.0, esz);
-            case CMLT0 -> boolMask(a < 0.0, esz);
+        return switch (esz) {
+            // B19.5.4 (`FEAT_FP16`): mesmo algoritmo do ramo `esz==2`, computado em `float` via
+            // `halfToFloat`/`halfBits` — mesma disciplina de {@link #halfThreeSame} (B19.5.1): o
+            // `if(esz==2)…else<double>` da B8.9/B19.3 tratava `esz==1` SILENCIOSAMENTE como
+            // binary64 (mesmo achado que a B19.5.1 corrigiu em `fpThreeSame`/`fpCombinePair`).
+            case 1 -> {
+                float a = halfToFloat(inputBits);
+                yield switch (op) {
+                    case ABS -> halfBits(Math.abs(a));
+                    case NEG -> halfBits(-a);
+                    case RECPE -> halfBits(1.0f / a);
+                    case RSQRTE -> halfBits((float) (1.0 / Math.sqrt(a)));
+                    case CMGT0 -> boolMask(a > 0f, esz);
+                    case CMGE0 -> boolMask(a >= 0f, esz);
+                    case CMEQ0 -> boolMask(a == 0f, esz);
+                    case CMLE0 -> boolMask(a <= 0f, esz);
+                    case CMLT0 -> boolMask(a < 0f, esz);
+                };
+            }
+            case 2 -> {
+                float a = Float.intBitsToFloat((int) inputBits);
+                yield switch (op) {
+                    case ABS -> floatBits(Float.intBitsToFloat((int) inputBits & Integer.MAX_VALUE));
+                    case NEG -> floatBits(Float.intBitsToFloat((int) inputBits ^ Integer.MIN_VALUE));
+                    case RECPE -> floatBits(1.0f / a);
+                    case RSQRTE -> floatBits((float) (1.0 / Math.sqrt(a)));
+                    case CMGT0 -> boolMask(a > 0f, esz);
+                    case CMGE0 -> boolMask(a >= 0f, esz);
+                    case CMEQ0 -> boolMask(a == 0f, esz);
+                    case CMLE0 -> boolMask(a <= 0f, esz);
+                    case CMLT0 -> boolMask(a < 0f, esz);
+                };
+            }
+            case 3 -> {
+                double a = Double.longBitsToDouble(inputBits);
+                yield switch (op) {
+                    case ABS -> doubleBits(Double.longBitsToDouble(inputBits & Long.MAX_VALUE));
+                    case NEG -> doubleBits(Double.longBitsToDouble(inputBits ^ Long.MIN_VALUE));
+                    case RECPE -> doubleBits(1.0 / a);
+                    case RSQRTE -> doubleBits(1.0 / Math.sqrt(a));
+                    case CMGT0 -> boolMask(a > 0.0, esz);
+                    case CMGE0 -> boolMask(a >= 0.0, esz);
+                    case CMEQ0 -> boolMask(a == 0.0, esz);
+                    case CMLE0 -> boolMask(a <= 0.0, esz);
+                    case CMLT0 -> boolMask(a < 0.0, esz);
+                };
+            }
+            default -> throw new IllegalArgumentException("esz inválido para fpUnary: " + esz);
         };
     }
 

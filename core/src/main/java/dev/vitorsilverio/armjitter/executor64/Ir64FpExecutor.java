@@ -329,6 +329,13 @@ final class Ir64FpExecutor {
         return AdvSimdLanes.saturateToInteger(rounded, signed, wide);
     }
 
+    /// `FPToFixed` para 16 bits (`FEAT_FP16`, B19.5.4) — a lógica vive em {@link AdvSimdLanes} desde
+    /// a B19.5.3 (fonte única); este método delega por compatibilidade da API `package` de
+    /// `executor64` (G3).
+    static long saturateToHalfwordInteger(double rounded, boolean signed) {
+        return AdvSimdLanes.saturateToHalfwordInteger(rounded, signed);
+    }
+
     /// `FMOV` registrador-geral↔FP escalar (B8.5) — cópia CRUA de bits, sem conversão de valor.
     static boolean executeFpGeneralRegisterMove(Aarch64Core core, Ir64Op.Fp64GeneralRegisterMove op) {
         Aarch64FpRegisters fp = core.fp();

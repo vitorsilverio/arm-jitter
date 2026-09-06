@@ -647,4 +647,161 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         assertEquals(2, s.esz());
         assertEquals(true, s.scalar());
     }
+
+    // ── B19.5.4: FEAT_FP16 — two-reg-misc + conversões escalares (slots `Rm=0b1_1000`/`0b1_1001`,
+    // golden `aarch64-linux-gnu-as -march=armv8.2-a+fp16`) ─────────────────────────────────────────
+
+    private static Ir64Op.VectorFpArithmeticUnary unaryHalf(int word) {
+        return (Ir64Op.VectorFpArithmeticUnary) decodeWord(FP16_DECODER, word);
+    }
+
+    @Test
+    void halfPrecisionTwoRegMiscVectorDecodesUnderFp16() {
+        // fabs/fneg/fcmgt/fcmge/fcmeq/fcmle/fcmlt v0.8h,v1.8h,#0 — golden.
+        Ir64Op.VectorFpArithmeticUnary abs = unaryHalf(0x4ef8f820);
+        assertEquals(Ir64VectorFpUnaryOp.ABS, abs.op());
+        assertEquals(false, abs.scalar());
+        assertEquals(true, abs.q());
+        assertEquals(1, abs.esz());
+        assertEquals(0, abs.rd());
+        assertEquals(1, abs.rn());
+
+        assertEquals(Ir64VectorFpUnaryOp.NEG, unaryHalf(0x6ef8f820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMGT0, unaryHalf(0x4ef8c820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMGE0, unaryHalf(0x6ef8c820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMEQ0, unaryHalf(0x4ef8d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLE0, unaryHalf(0x6ef8d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLT0, unaryHalf(0x4ef8e820).op());
+
+        // q=0 (.4h): FABS_v continua com esz=HALFWORD, só `q` muda.
+        Ir64Op.VectorFpArithmeticUnary abs4h = unaryHalf(0x0ef8f820);
+        assertEquals(Ir64VectorFpUnaryOp.ABS, abs4h.op());
+        assertEquals(false, abs4h.q());
+        assertEquals(1, abs4h.esz());
+    }
+
+    @Test
+    void halfPrecisionTwoRegMiscScalarDecodesUnderFp16() {
+        // fcmgt/fcmge/fcmeq/fcmle/fcmlt h0,h1,#0 — golden. FABS/FNEG NÃO têm forma escalar aqui
+        // (G8, mesma restrição de {@link #fpUnaryOpHasScalarForm} dos `_sd`).
+        Ir64Op.VectorFpArithmeticUnary cmgt = unaryHalf(0x5ef8c820);
+        assertEquals(Ir64VectorFpUnaryOp.CMGT0, cmgt.op());
+        assertEquals(true, cmgt.scalar());
+        assertEquals(1, cmgt.esz());
+
+        assertEquals(Ir64VectorFpUnaryOp.CMGE0, unaryHalf(0x7ef8c820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMEQ0, unaryHalf(0x5ef8d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLE0, unaryHalf(0x7ef8d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.CMLT0, unaryHalf(0x5ef8e820).op());
+    }
+
+    @Test
+    void halfPrecisionTwoRegMiscUnsupportedBelowFp16() {
+        for (int word : new int[] {0x4ef8f820, 0x6ef8f820, 0x4ef8c820, 0x6ef8c820, 0x4ef8d820,
+                0x6ef8d820, 0x4ef8e820, 0x5ef8c820, 0x7ef8c820, 0x5ef8d820, 0x7ef8d820, 0x5ef8e820}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void halfPrecisionNarrowUnaryVectorDecodesUnderFp16() {
+        // fsqrt/frintn/frintm/frintp/frintz/frinta/frintx/frinti v0.8h,v1.8h — golden.
+        assertEquals(Ir64VectorFpUnaryOp.SQRT, unaryHalf(0x6ef9f820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTN, unaryHalf(0x4e798820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTM, unaryHalf(0x4e799820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTP, unaryHalf(0x4ef98820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTZ, unaryHalf(0x4ef99820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTA, unaryHalf(0x6e798820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTX, unaryHalf(0x6e799820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RINTI, unaryHalf(0x6ef99820).op());
+
+        // scvtf/ucvtf/fcvtns/fcvtnu/fcvtps/fcvtpu/fcvtms/fcvtmu/fcvtzs/fcvtzu/fcvtas/fcvtau (_vi) — golden.
+        assertEquals(Ir64VectorFpUnaryOp.SCVTF, unaryHalf(0x4e79d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.UCVTF, unaryHalf(0x6e79d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNS, unaryHalf(0x4e79a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNU, unaryHalf(0x6e79a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPS, unaryHalf(0x4ef9a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPU, unaryHalf(0x6ef9a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMS, unaryHalf(0x4e79b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMU, unaryHalf(0x6e79b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZS, unaryHalf(0x4ef9b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZU, unaryHalf(0x6ef9b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAS, unaryHalf(0x4e79c820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAU, unaryHalf(0x6e79c820).op());
+
+        assertEquals(Ir64VectorFpUnaryOp.RECPE, unaryHalf(0x4ef9d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.RSQRTE, unaryHalf(0x6ef9d820).op());
+
+        // q=0 (.4h) numa amostra de cada subfamília.
+        assertEquals(false, unaryHalf(0x0e798820).q());
+        assertEquals(false, unaryHalf(0x0ef9b820).q());
+        assertEquals(false, unaryHalf(0x0e79c820).q());
+    }
+
+    @Test
+    void halfPrecisionNarrowUnaryScalarDecodesUnderFp16() {
+        // frecpe/frsqrte/frecpx h0,h1 — golden.
+        Ir64Op.VectorFpArithmeticUnary recpe = unaryHalf(0x5ef9d820);
+        assertEquals(Ir64VectorFpUnaryOp.RECPE, recpe.op());
+        assertEquals(true, recpe.scalar());
+        assertEquals(1, recpe.esz());
+        assertEquals(Ir64VectorFpUnaryOp.RSQRTE, unaryHalf(0x7ef9d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FRECPX, unaryHalf(0x5ef9f820).op());
+
+        // scvtf/ucvtf/fcvtns/fcvtnu/fcvtps/fcvtpu/fcvtms/fcvtmu/fcvtzs/fcvtzu/fcvtas/fcvtau h0,h1
+        // (`@icvt_h`, MESMA tabela/`opcode` das formas `_vi`, só `scalar` muda) — golden.
+        assertEquals(Ir64VectorFpUnaryOp.SCVTF, unaryHalf(0x5e79d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.UCVTF, unaryHalf(0x7e79d820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNS, unaryHalf(0x5e79a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTNU, unaryHalf(0x7e79a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPS, unaryHalf(0x5ef9a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTPU, unaryHalf(0x7ef9a820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMS, unaryHalf(0x5e79b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTMU, unaryHalf(0x7e79b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZS, unaryHalf(0x5ef9b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTZU, unaryHalf(0x7ef9b820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAS, unaryHalf(0x5e79c820).op());
+        assertEquals(Ir64VectorFpUnaryOp.FCVTAU, unaryHalf(0x7e79c820).op());
+    }
+
+    @Test
+    void halfPrecisionNarrowUnaryUnsupportedBelowFp16() {
+        for (int word : new int[] {0x6ef9f820, 0x4e798820, 0x4e79d820, 0x6e79d820, 0x4e79a820,
+                0x5ef9d820, 0x7ef9d820, 0x5ef9f820, 0x5e79d820, 0x7e79d820, 0x5e79a820}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void halfPrecisionSiblingSdUnaffected() {
+        // As formas `_sd` irmãs (mesmos slots `Rm=0b0_0000`/`0b0_0001`) continuam idênticas com a
+        // feature FP16 presente — prova de que abrir os slots novos não mexeu nos antigos.
+        Ir64Op.VectorFpArithmeticUnary absS = (Ir64Op.VectorFpArithmeticUnary) decodeWord(FP16_DECODER, 0x4ea0f820);
+        assertEquals(Ir64VectorFpUnaryOp.ABS, absS.op());
+        assertEquals(2, absS.esz());
+        Ir64Op.VectorFpArithmeticUnary sqrtD = (Ir64Op.VectorFpArithmeticUnary) decodeWord(FP16_DECODER, 0x6ee1f820);
+        assertEquals(Ir64VectorFpUnaryOp.SQRT, sqrtD.op());
+        assertEquals(3, sqrtD.esz());
+    }
+
+    @Test
+    void halfPrecisionTwoRegMiscRegressionNegative() {
+        // G8: opcode inexistente no slot `Rm=0b1_1000` (mesma palavra de FABS_v com `opcode` zerado)
+        // e `Rm=0b1_1010` (fora dos dois slots FP16 e fora do padrão "across lanes") — os dois
+        // continuam `unsupported` MESMO com a feature ligada.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4ef80020));
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4efaf820));
+    }
+
+    @Test
+    void bfcvtnStaysInOriginalSlotUnaffectedByFp16Slots() {
+        // BFCVTN_v (B19.7, `FEAT_BF16`) vive no slot `Rm=0b0_0001` DE VERDADE (`opcode=0b0_1101`,
+        // `a=1`, medido bit a bit via `aarch64-linux-gnu-as -march=armv8.2-a+fp16+bf16`) — Rm
+        // inteiro DIFERENTE de `ADVSIMD_INT_RM_FP16_NARROW_UNARY` (`0b1_1001`), então não pode ser
+        // alcançado pelos blocos novos desta task (Armadilha 4). Sem `FEAT_BF16` (só FP16), continua
+        // `unsupported` — comportamento IDÊNTICO ao de antes desta task.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x0ea16820));
+    }
 }

@@ -1050,6 +1050,19 @@ public final class Aarch64Decoder {
     /// B19.4: opcode (bits[15:11]) de `FCVTL`/`BF*CVTL`/`F*CVTL` dentro do slot narrow/widen
     /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = variantes FP8/BF16 (B19.7), recusadas aqui.
     private static final int ADVSIMD_FCVTL_OPCODE = 0b0_1111;
+    /// B19.5.4 (`FEAT_FP16`): MESMO slot "two-register miscellaneous" de
+    /// {@link #ADVSIMD_INT_RM_TWO_REG_MISC} (`0b0_0000`), com `Rm[4:3]=0b11` em vez de `0b00` — o
+    /// encoding real fixa `bit22` em `1` para marcar o grupo de meia precisão (nos `_sd` irmãos,
+    /// `bit22` é o `sz` de tamanho; aqui não é tamanho nenhum, é só o discriminador do grupo — ver
+    /// Armadilha 2 da task). `Rm[2:0]` reproduz o slot original (`000`), por isso
+    /// `Rm_h = Rm_sd | 0b1_1000`. `FABS_v`/`FNEG_v`/`FCM**0_{v,s}` vivem aqui.
+    private static final int ADVSIMD_INT_RM_FP16_TWO_REG_MISC = 0b1_1000;
+    /// B19.5.4 (`FEAT_FP16`): MESMO slot narrow/widen de {@link #ADVSIMD_INT_RM_NARROW_UNARY}
+    /// (`0b0_0001`), com `Rm[4:3]=0b11` (`Rm_h = Rm_sd | 0b1_1000`, mesma relação do slot irmão
+    /// acima). `FSQRT_v`/`FRINTx_v`/`FRECPE`/`FRSQRTE`/`FRECPX_s`/`SCVTF`/`UCVTF`/as conversões
+    /// `@icvt` vivem aqui — `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`/`BFCVTN_v` (BF16/FP8, B19.7) moram
+    /// no slot `0b0_0001` de VERDADE, não neste (Armadilha 4 da task).
+    private static final int ADVSIMD_INT_RM_FP16_NARROW_UNARY = 0b1_1001;
     /// B19.3: opcodes (bits[15:11]) da classe "AdvSIMD shift by immediate" que na verdade são
     /// conversão FP↔ponto fixo (`@fcvt_fixed`): `0b1_1100` = `SCVTF`/`UCVTF` (int→FP),
     /// `0b1_1111` = `FCVTZS`/`FCVTZU` (FP→int). `u` (bit29) distingue assinado/não.
@@ -3363,6 +3376,50 @@ public final class Aarch64Decoder {
                     throw unsupported(word, address);
                 }
                 return new Ir64Op.VectorFpArithmeticUnary(fpRmOneOp, scalar, q, fpRmOneEsz, rd, rn);
+            }
+            throw unsupported(word, address);
+        }
+        if (rm == ADVSIMD_INT_RM_FP16_TWO_REG_MISC) {
+            // B19.5.4 (`FEAT_FP16`): MESMA tabela de opcode do slot `Rm=00000` (achado medido bit a
+            // bit contra `a64.decode`: `FABS_v` é `opcode=11111` nos dois, `FCMGT0_*` é `11001` nos
+            // dois, ...) — reaproveitada sem duplicar (item 3 de "Inclui" da task). `esz` do record
+            // é SEMPRE `ADVSIMD_ESZ_HALFWORD`: `bit22` aqui é fixo em `1` e NÃO é tamanho (Armadilha
+            // 2) — só `bit23` (`a`) continua real e é o que a tabela usa para desambiguar.
+            if (!architecture.has(Aarch64Feature.FP16)) {
+                throw unsupported(word, address);
+            }
+            boolean fpHalfZeroA = ((esz >>> 1) & 1) != 0;
+            Ir64VectorFpUnaryOp fpHalfZeroOp = decodeVectorFpUnaryRmZeroOpcode(u, fpHalfZeroA, opcode);
+            if (fpHalfZeroOp != null) {
+                if (scalar && !fpUnaryOpHasScalarForm(fpHalfZeroOp)) {
+                    throw unsupported(word, address);
+                }
+                return new Ir64Op.VectorFpArithmeticUnary(fpHalfZeroOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
+            }
+            throw unsupported(word, address);
+        }
+        if (rm == ADVSIMD_INT_RM_FP16_NARROW_UNARY) {
+            // B19.5.4 (`FEAT_FP16`): MESMO slot `Rm=00001`. `FRECPX_s` continua exigindo o `if`
+            // EXPLÍCITO antes da tabela compartilhada (mesma colisão de opcode com `SQRT`, U=0 x
+            // U=1, que a B19.3 documentou) — o resto (`FSQRT_v`/`FRINTx_v`/`FRECPE`/`FRSQRTE`/
+            // `SCVTF`/`UCVTF`/as 10 conversões `FCVTx{S,U}` vetoriais+escalares) reusa
+            // `decodeVectorFpUnaryRmOneOpcode` sem tabela nova. BF16/FP8 (`F1CVTL`/`F2CVTL`/
+            // `BF1CVTL`/`BF2CVTL`/`BFCVTN_v`) moram no slot `0b0_0001` de verdade (Armadilha 4) —
+            // este bloco nunca os alcança.
+            if (!architecture.has(Aarch64Feature.FP16)) {
+                throw unsupported(word, address);
+            }
+            if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
+                return new Ir64Op.VectorFpArithmeticUnary(
+                        Ir64VectorFpUnaryOp.FRECPX, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn);
+            }
+            boolean fpHalfOneA = ((esz >>> 1) & 1) != 0;
+            Ir64VectorFpUnaryOp fpHalfOneOp = decodeVectorFpUnaryRmOneOpcode(u, fpHalfOneA, opcode);
+            if (fpHalfOneOp != null) {
+                if (scalar && !fpUnaryOpHasScalarForm(fpHalfOneOp)) {
+                    throw unsupported(word, address);
+                }
+                return new Ir64Op.VectorFpArithmeticUnary(fpHalfOneOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
             }
             throw unsupported(word, address);
         }
