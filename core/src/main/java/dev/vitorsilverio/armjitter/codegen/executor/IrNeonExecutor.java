@@ -339,4 +339,33 @@ public final class IrNeonExecutor {
         int delta = rm == RM_IMMEDIATE_WRITEBACK ? transferBytes : core.register(rm);
         core.setRegister(rn, base + delta);
     }
+
+    /// `neon-shared`: `VCMLA`/`VCADD` (B13.17, `FEAT_FCMA`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpComplexAdd}/{@link AdvSimdLanes#fpComplexMultiplyAccumulate}) — a
+    /// MESMA função que o A64 reusará quando `FCMLA`/`FCADD` ganharem decoder. `lanes` conta
+    /// elementos de `1 << esz` bytes (pares reais/imaginários adjacentes); nenhuma escrita
+    /// destrutiva depois do laço (VFP32 nunca zera bits fora do registrador escrito).
+    public void executeNeonComplex(ArmCore core, IrOp.NeonComplex op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        if (op.multiplyAccumulate()) {
+            AdvSimdLanes.fpComplexMultiplyAccumulate(vfp, esz, lanes, op.vd(), op.vn(), op.vm(), op.rotation());
+        } else {
+            AdvSimdLanes.fpComplexAdd(vfp, esz, lanes, op.vd(), op.vn(), op.vm(), op.rotation());
+        }
+    }
+
+    /// `neon-shared`: `VCMLA_scalar` (B13.17, `FEAT_FCMA`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpComplexMultiplyAccumulateByElement}) — `vm` é sempre um `D` (nunca
+    /// combinado com {@link IrOp.NeonComplexByElement#quad}).
+    public void executeNeonComplexByElement(ArmCore core, IrOp.NeonComplexByElement op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.fpComplexMultiplyAccumulateByElement(
+                vfp, esz, lanes, op.vd(), op.vn(), op.vm(), op.index(), op.rotation());
+    }
 }

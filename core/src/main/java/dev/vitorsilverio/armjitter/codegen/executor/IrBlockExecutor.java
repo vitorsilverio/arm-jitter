@@ -134,6 +134,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_UNARY -> neon.executeNeonUnary(core, (IrOp.NeonUnary) op);
                 case IrOp.Kind.NEON_NARROW_UNARY -> neon.executeNeonNarrowUnary(core, (IrOp.NeonNarrowUnary) op);
                 case IrOp.Kind.NEON_FP_UNARY -> neon.executeNeonFpUnary(core, (IrOp.NeonFpUnary) op);
+                case IrOp.Kind.NEON_COMPLEX -> neon.executeNeonComplex(core, (IrOp.NeonComplex) op);
+                case IrOp.Kind.NEON_COMPLEX_BY_ELEMENT -> neon.executeNeonComplexByElement(core, (IrOp.NeonComplexByElement) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -288,6 +290,8 @@ public final class IrBlockExecutor {
             case IrOp.NeonUnary nu -> { neon.executeNeonUnary(core, nu); yield false; }
             case IrOp.NeonNarrowUnary nnu -> { neon.executeNeonNarrowUnary(core, nnu); yield false; }
             case IrOp.NeonFpUnary nfu -> { neon.executeNeonFpUnary(core, nfu); yield false; }
+            case IrOp.NeonComplex ncx -> { neon.executeNeonComplex(core, ncx); yield false; }
+            case IrOp.NeonComplexByElement ncxbe -> { neon.executeNeonComplexByElement(core, ncxbe); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

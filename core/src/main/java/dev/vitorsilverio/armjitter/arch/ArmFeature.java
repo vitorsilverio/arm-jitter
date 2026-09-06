@@ -277,5 +277,12 @@ public enum ArmFeature {
     /// como ALU (A32), que é a higiene de G8. Quando um preset ARMv8-A de 32 bits (B14) declarar
     /// `HALT`, o mesmo encoding passa a decodificar como {@link
     /// dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT} sem trabalho novo de decode.
-    HALT
+    HALT,
+
+    // ---- Onda 6, B13.17 (neon-shared: VCMLA/VCADD) ----
+    /// **Aritmética de número complexo** (`FEAT_FCMA`, ARMv8.3-A) — `VCMLA`/`VCADD` NEON de 32
+    /// bits (`neon-shared.decode`, mesmo encoding em A32 e T32). Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#COMPLEX_NUMBER_ARITHMETIC} para o
+    /// lado A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    COMPLEX_NUMBER_ARITHMETIC
 }

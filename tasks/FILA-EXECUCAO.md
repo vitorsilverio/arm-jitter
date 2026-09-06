@@ -77,7 +77,7 @@ removidas).
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
 | **[B13.12](trilha-b-arquiteturas/b13.12-neon-two-reg-misc.md)** | NEON two-reg-misc A32 (`size==0b11`, layout de campos próprio) — abre o 4º frame do épico | ~36 linhas |
-| **[B13.17](trilha-b-arquiteturas/b13.17-neon-shared-fcma.md)** | `neon-shared`: `VCMLA`/`VCADD` (`FEAT_FCMA`) — cria o `NeonSharedDecoder` que B13.17-B13.21 compartilham | 4 linhas |
+| **[B13.18](trilha-b-arquiteturas/b13.18-neon-shared-dotprod.md)** | `neon-shared`: `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT` (`FEAT_DotProd`/`FEAT_I8MM`) — usa o `NeonSharedDecoder` que a B13.17 criou | 7 linhas |
 | **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
 | **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
 | **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
@@ -85,10 +85,19 @@ removidas).
 | **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
 
 **Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
-(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/18-22 (depende de B13.12),
-B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
+(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/19-22 (depende de B13.12
+ou de B13.18), B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
 
-**Ordem sugerida**: qualquer uma das nove acima. **B19.8 FECHADA 2026-09-05** — `LUTI2`/`LUTI4`
+**Ordem sugerida**: qualquer uma das nove acima. **B13.17 FECHADA 2026-09-05** — `VCMLA`/`VCADD`
+(vetorial) + `VCMLA_scalar` (`FEAT_FCMA`), `ArmFeature.COMPLEX_NUMBER_ARITHMETIC` nova (nenhum
+preset a declara); cria o `NeonSharedDecoder` (devolve `null` para as 19 linhas ainda sem dono,
+B13.18-B13.21 completam o arquivo); núcleo `AdvSimdLanes.fpComplexAdd`/`fpComplexMultiplyAccumulate`
+NOVO (sem semântica A64 prévia para migrar — exceção do épico, A64 reusa quando `FCMLA`/`FCADD`
+ganharem decoder); layout medido byte a byte contra `arm-none-eabi-as -march=armv8.3-a` (devkitARM)
+e confirmado que A32/T32 produzem o MESMO `raw32` (dispensa a B13.16 para este arquivo, achado já
+esperado pela spec). `IrOp.Kind` 87→89. `docs/COBERTURA-ISA.md` byte a byte idêntica,
+`docs/COBERTURA-JIT.md` regenerado. G5 verde nos 5 consumidores. **B19.8 FECHADA 2026-09-05** —
+`LUTI2`/`LUTI4`
 (`FEAT_LUT`) gateados como quinto caso real do padrão da B11.4 (feature checada antes de
 EXT/permute/TBL, zero colisão pré-existente); achado que corrige a spec original: a tabela é `Rn`
 e os índices são `Rm` (não o inverso), confirmado contra o fonte real do QEMU e contra a mesma

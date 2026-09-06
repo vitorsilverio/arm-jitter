@@ -11,7 +11,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonShiftImmediate, IrOp.NeonShiftNarrowImmediate, IrOp.NeonShiftWidenImmediate,
         IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
         IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
-        IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary {
+        IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
+        IrOp.NeonComplex, IrOp.NeonComplexByElement {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -129,6 +130,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.12: `VABS_F`/`VNEG_F`/as 5 comparações-com-zero FP/`VRECPE_F`/`VRSQRTE_F` — ver
         /// {@link NeonFpUnary}.
         public static final int NEON_FP_UNARY = 86;
+        /// B13.17: `VCMLA`/`VCADD` (`neon-shared`, `FEAT_FCMA`) — ver {@link NeonComplex}.
+        public static final int NEON_COMPLEX = 87;
+        /// B13.17: `VCMLA_scalar` (`neon-shared`, `FEAT_FCMA`) — ver {@link NeonComplexByElement}.
+        public static final int NEON_COMPLEX_BY_ELEMENT = 88;
     }
 
     /// Operacao ALU generica.
@@ -2045,5 +2050,73 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// inicia o `Q`.
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_FP_UNARY; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VCMLA`/`VCADD` (B13.17, `FEAT_FCMA`): trata
+    /// pares de lanes ADJACENTES (par = parte real, ímpar = parte imaginária) como um número
+    /// complexo. `VCMLA` acumula em `vd` (lê e escreve); `VCADD` só escreve. Mesmo encoding em A32
+    /// e T32 (`neon-shared.decode`, cabeçalho do arquivo) — nenhuma task T32 própria necessária.
+    ///
+    /// Núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexAdd}/
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulate}), RFC
+    /// B13.2 D1 — **exceção do épico B13**: não há semântica A64 prévia para migrar (`FCMLA`/
+    /// `FCADD` do A64 também não existem ainda), a semântica nasce aqui para o A64 reusar depois.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonComplex(
+            /// `true` para `VCMLA` (multiply-accumulate, FUNDIDO, lê e escreve `vd`), `false` para
+            /// `VCADD` (só soma, só escreve `vd`).
+            boolean multiplyAccumulate,
+            /// Rotação em graus: `0`/`90`/`180`/`270` para `VCMLA`; só `90`/`270` para `VCADD`
+            /// (já convertido do campo cru de 1/2 bits do encoding — nunca recalculado aqui).
+            int rotation,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: `1`=F16 (`FEAT_FP16`), `2`=F32.
+            int esz,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (`a` = real/imaginária), em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (`b` = real/imaginária, rotacionado por {@link #rotation}), em
+            /// índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_COMPLEX; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VCMLA_scalar` (B13.17, `FEAT_FCMA`): como
+    /// {@link NeonComplex} com `multiplyAccumulate=true`, mas o operando `b` é um único número
+    /// complexo FIXO lido de `vm` no par de lanes `index`/`index+1` e replicado para cada par de
+    /// `vn`. **Não existe `VCADD_scalar`** (só `VCMLA` tem forma indexada).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulateByElement}),
+    /// RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonComplexByElement(
+            /// Rotação em graus: `0`/`90`/`180`/`270`.
+            int rotation,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`). `vm` é sempre um `D` (nunca `Q`), independente desta forma.
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes: `1`=F16 (`índice` de 1 bit, 2 complexos por
+            /// `D`), `2`=F32 (`índice` sempre `0`, 1 complexo ocupa o `D` inteiro).
+            int esz,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (`a`, varia por par), em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (`b`, FIXO, lido uma vez), em índice de `D` (`0`-`31`, **nunca**
+            /// combinado com {@link #quad}).
+            int vm,
+            /// Índice do par complexo dentro de {@link #vm}: `0`-`1` para F16, sempre `0` para F32.
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_COMPLEX_BY_ELEMENT; }
     }
 }

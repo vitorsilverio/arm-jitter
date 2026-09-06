@@ -952,6 +952,155 @@ public final class AdvSimdLanes {
         };
     }
 
+    /// Rotação de `90°` (`VCADD`/`FCADD` com `rotate=90`; `VCMLA`/`FCMLA` com `rotate=0`/`90`... —
+    /// ver os métodos que consomem esta constante para o mapeamento exato por instrução).
+    public static final int COMPLEX_ROTATE_0 = 0;
+    /// @see #COMPLEX_ROTATE_0
+    public static final int COMPLEX_ROTATE_90 = 90;
+    /// @see #COMPLEX_ROTATE_0
+    public static final int COMPLEX_ROTATE_180 = 180;
+    /// @see #COMPLEX_ROTATE_0
+    public static final int COMPLEX_ROTATE_270 = 270;
+
+    /// Executa `VCADD`/`FCADD` (`FEAT_FCMA`) sobre `lanes` elementos de `1 << esz` bytes (`esz` `1` =
+    /// F16, `2` = F32, `3` = F64): trata pares de lanes ADJACENTES (par = parte real, ímpar = parte
+    /// imaginária) do operando começando em `baseRd` como recebendo a soma complexa de `baseRn` com
+    /// `baseRm` ROTACIONADO por `rotation` (`90` ou `270`, ARM DDI 0487 `FComplexAddImpl`):
+    /// `rotation=90`: `re' = a_re - b_im`, `im' = a_im + b_re`;
+    /// `rotation=270`: `re' = a_re + b_im`, `im' = a_im - b_re`.
+    /// `lanes` PRECISA ser par. Nada aqui zera bits fora das lanes escritas.
+    public static void fpComplexAdd(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd, int baseRn,
+            int baseRm, int rotation) {
+        for (int pair = 0; pair < lanes; pair += 2) {
+            long aReBits = element(regs, baseRn, pair, esz);
+            long aImBits = element(regs, baseRn, pair + 1, esz);
+            long bReBits = element(regs, baseRm, pair, esz);
+            long bImBits = element(regs, baseRm, pair + 1, esz);
+            long reResult = complexAddPart(esz, aReBits, aImBits, bReBits, bImBits, rotation, true);
+            long imResult = complexAddPart(esz, aReBits, aImBits, bReBits, bImBits, rotation, false);
+            setElement(regs, baseRd, pair, esz, reResult);
+            setElement(regs, baseRd, pair + 1, esz, imResult);
+        }
+    }
+
+    private static long complexAddPart(int esz, long aReBits, long aImBits, long bReBits, long bImBits,
+            int rotation, boolean real) {
+        boolean rot90 = rotation == COMPLEX_ROTATE_90;
+        return switch (esz) {
+            case 1 -> {
+                float aRe = halfToFloat(aReBits), aIm = halfToFloat(aImBits);
+                float bRe = halfToFloat(bReBits), bIm = halfToFloat(bImBits);
+                yield halfBits(real ? (rot90 ? aRe - bIm : aRe + bIm) : (rot90 ? aIm + bRe : aIm - bRe));
+            }
+            case 2 -> {
+                float aRe = Float.intBitsToFloat((int) aReBits), aIm = Float.intBitsToFloat((int) aImBits);
+                float bRe = Float.intBitsToFloat((int) bReBits), bIm = Float.intBitsToFloat((int) bImBits);
+                yield floatBits(real ? (rot90 ? aRe - bIm : aRe + bIm) : (rot90 ? aIm + bRe : aIm - bRe));
+            }
+            case 3 -> {
+                double aRe = Double.longBitsToDouble(aReBits), aIm = Double.longBitsToDouble(aImBits);
+                double bRe = Double.longBitsToDouble(bReBits), bIm = Double.longBitsToDouble(bImBits);
+                yield doubleBits(real ? (rot90 ? aRe - bIm : aRe + bIm) : (rot90 ? aIm + bRe : aIm - bRe));
+            }
+            default -> throw new IllegalArgumentException("esz inválido para complex add: " + esz);
+        };
+    }
+
+    /// Executa `VCMLA`/`FCMLA` (`FEAT_FCMA`) sobre `lanes` elementos de `1 << esz` bytes: multiply-
+    /// accumulate complexo FUNDIDO (`Math.fma`, um arredondamento — mesma convenção `FMLA`/`FMLS` do
+    /// resto do núcleo) de pares de lanes ADJACENTES de `baseRn`/`baseRm` acumulando em `baseRd`
+    /// (lido E escrito). `rotation` (`0`/`90`/`180`/`270`, ARM DDI 0487 `FComplexMulAdd`) escolhe QUAL
+    /// parcela do produto complexo esta chamada contribui — duas chamadas com rotações
+    /// complementares (tipicamente `0`+`90`) completam um multiply-accumulate complexo cheio:
+    /// `0`:   `d_re += a_re*b_re`,   `d_im += a_re*b_im`
+    /// `90`:  `d_re -= a_im*b_im`,   `d_im += a_im*b_re`
+    /// `180`: `d_re -= a_re*b_re`,   `d_im -= a_re*b_im`
+    /// `270`: `d_re += a_im*b_im`,   `d_im -= a_im*b_re`
+    /// `lanes` PRECISA ser par. Nada aqui zera bits fora das lanes escritas.
+    public static void fpComplexMultiplyAccumulate(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd,
+            int baseRn, int baseRm, int rotation) {
+        for (int pair = 0; pair < lanes; pair += 2) {
+            long aReBits = element(regs, baseRn, pair, esz);
+            long aImBits = element(regs, baseRn, pair + 1, esz);
+            long bReBits = element(regs, baseRm, pair, esz);
+            long bImBits = element(regs, baseRm, pair + 1, esz);
+            long dReBits = element(regs, baseRd, pair, esz);
+            long dImBits = element(regs, baseRd, pair + 1, esz);
+            long reResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation, true);
+            long imResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation, false);
+            setElement(regs, baseRd, pair, esz, reResult);
+            setElement(regs, baseRd, pair + 1, esz, imResult);
+        }
+    }
+
+    /// Executa `VCMLA_scalar`/`FCMLA` (por elemento): como {@link #fpComplexMultiplyAccumulate}, mas
+    /// `b` é um único número complexo FIXO lido de `baseRm` no par `index`/`index+1` (lido UMA vez,
+    /// replicado), nunca `element(regs, baseRm, pair, esz)`.
+    public static void fpComplexMultiplyAccumulateByElement(AdvSimdRegisterWords regs, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm, int index, int rotation) {
+        long bReBits = element(regs, baseRm, index * 2, esz);
+        long bImBits = element(regs, baseRm, index * 2 + 1, esz);
+        for (int pair = 0; pair < lanes; pair += 2) {
+            long aReBits = element(regs, baseRn, pair, esz);
+            long aImBits = element(regs, baseRn, pair + 1, esz);
+            long dReBits = element(regs, baseRd, pair, esz);
+            long dImBits = element(regs, baseRd, pair + 1, esz);
+            long reResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation, true);
+            long imResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation, false);
+            setElement(regs, baseRd, pair, esz, reResult);
+            setElement(regs, baseRd, pair + 1, esz, imResult);
+        }
+    }
+
+    private static long complexMlaPart(int esz, long aReBits, long aImBits, long bReBits, long bImBits,
+            long dReBits, long dImBits, int rotation, boolean real) {
+        return switch (esz) {
+            case 1 -> {
+                float aRe = halfToFloat(aReBits), aIm = halfToFloat(aImBits);
+                float bRe = halfToFloat(bReBits), bIm = halfToFloat(bImBits);
+                float current = halfToFloat(real ? dReBits : dImBits);
+                yield halfBits(complexMlaFma(rotation, real, aRe, aIm, bRe, bIm, current));
+            }
+            case 2 -> {
+                float aRe = Float.intBitsToFloat((int) aReBits), aIm = Float.intBitsToFloat((int) aImBits);
+                float bRe = Float.intBitsToFloat((int) bReBits), bIm = Float.intBitsToFloat((int) bImBits);
+                float current = Float.intBitsToFloat((int) (real ? dReBits : dImBits));
+                yield floatBits(complexMlaFma(rotation, real, aRe, aIm, bRe, bIm, current));
+            }
+            case 3 -> {
+                double aRe = Double.longBitsToDouble(aReBits), aIm = Double.longBitsToDouble(aImBits);
+                double bRe = Double.longBitsToDouble(bReBits), bIm = Double.longBitsToDouble(bImBits);
+                double current = Double.longBitsToDouble(real ? dReBits : dImBits);
+                yield doubleBits(complexMlaFmaDouble(rotation, real, aRe, aIm, bRe, bIm, current));
+            }
+            default -> throw new IllegalArgumentException("esz inválido para complex multiply-accumulate: " + esz);
+        };
+    }
+
+    /// `FComplexMulAdd` (ramo `float`) — ver a tabela de {@link #fpComplexMultiplyAccumulate}.
+    private static float complexMlaFma(int rotation, boolean real, float aRe, float aIm, float bRe, float bIm,
+            float current) {
+        return switch (rotation) {
+            case COMPLEX_ROTATE_0 -> real ? Math.fma(aRe, bRe, current) : Math.fma(aRe, bIm, current);
+            case COMPLEX_ROTATE_90 -> real ? Math.fma(-aIm, bIm, current) : Math.fma(aIm, bRe, current);
+            case COMPLEX_ROTATE_180 -> real ? Math.fma(-aRe, bRe, current) : Math.fma(-aRe, bIm, current);
+            case COMPLEX_ROTATE_270 -> real ? Math.fma(aIm, bIm, current) : Math.fma(-aIm, bRe, current);
+            default -> throw new IllegalArgumentException("rotation inválido: " + rotation);
+        };
+    }
+
+    /// @see #complexMlaFma(int, boolean, float, float, float, float, float)
+    private static double complexMlaFmaDouble(int rotation, boolean real, double aRe, double aIm, double bRe,
+            double bIm, double current) {
+        return switch (rotation) {
+            case COMPLEX_ROTATE_0 -> real ? Math.fma(aRe, bRe, current) : Math.fma(aRe, bIm, current);
+            case COMPLEX_ROTATE_90 -> real ? Math.fma(-aIm, bIm, current) : Math.fma(aIm, bRe, current);
+            case COMPLEX_ROTATE_180 -> real ? Math.fma(-aRe, bRe, current) : Math.fma(-aRe, bIm, current);
+            case COMPLEX_ROTATE_270 -> real ? Math.fma(aIm, bIm, current) : Math.fma(-aIm, bRe, current);
+            default -> throw new IllegalArgumentException("rotation inválido: " + rotation);
+        };
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     // CONVERSÃO FP ↔ PONTO FIXO — B13.8 (migração D1 da RFC B13.2). `SCVTF`/`UCVTF`/`FCVTZS`/
     // `FCVTZU` na forma AdvSIMD com fator de escala `2^fractionBits` (`VCVT` fixo↔float F32 no NEON
