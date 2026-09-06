@@ -19,6 +19,9 @@ public final class IrNeonExecutor {
     private static final int RM_NO_WRITEBACK = 15;
     /// Campo `rm` que sinaliza "escrita de volta IMEDIATA" (`Rn += bytes transferidos`).
     private static final int RM_IMMEDIATE_WRITEBACK = 13;
+    /// Bytes de uma lane de produto escalar (B13.18) — sempre 32 bits, mesmo os operandos sendo
+    /// bytes.
+    private static final int DOT_PRODUCT_LANE_BYTES = 4;
 
     private final IrExecutionSupport support;
 
@@ -367,5 +370,26 @@ public final class IrNeonExecutor {
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
         AdvSimdLanes.fpComplexMultiplyAccumulateByElement(
                 vfp, esz, lanes, op.vd(), op.vn(), op.vm(), op.index(), op.rotation());
+    }
+
+    /// `neon-shared`: `VSDOT`/`VUDOT`/`VUSDOT` (B13.18, `FEAT_DotProd`/`FEAT_I8MM`): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#dotProduct}) — a MESMA função que o A64 reusará
+    /// quando `SDOT_v`/`UDOT_v`/`USDOT`/`SUDOT` ganharem decoder (B19.12). Lanes de 32 bits sempre
+    /// (o produto escalar nunca muda de largura); nenhuma escrita destrutiva depois do laço (VFP32
+    /// nunca zera bits fora do registrador escrito).
+    public void executeNeonDotProduct(ArmCore core, IrOp.NeonDotProduct op) {
+        VfpRegisters vfp = core.vfp();
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
+        AdvSimdLanes.dotProduct(vfp, op.signedN(), op.signedM(), lanes, op.vd(), op.vn(), op.vm());
+    }
+
+    /// `neon-shared`: `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (B13.18):
+    /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#dotProductByElement}) — `vm` é sempre um
+    /// `D` (nunca combinado com {@link IrOp.NeonDotProductByElement#quad}).
+    public void executeNeonDotProductByElement(ArmCore core, IrOp.NeonDotProductByElement op) {
+        VfpRegisters vfp = core.vfp();
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
+        AdvSimdLanes.dotProductByElement(
+                vfp, op.signedN(), op.signedM(), lanes, op.vd(), op.vn(), op.vm(), op.index());
     }
 }

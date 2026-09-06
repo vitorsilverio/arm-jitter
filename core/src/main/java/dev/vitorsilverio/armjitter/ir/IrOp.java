@@ -12,7 +12,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
         IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
-        IrOp.NeonComplex, IrOp.NeonComplexByElement {
+        IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -134,6 +134,12 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_COMPLEX = 87;
         /// B13.17: `VCMLA_scalar` (`neon-shared`, `FEAT_FCMA`) — ver {@link NeonComplexByElement}.
         public static final int NEON_COMPLEX_BY_ELEMENT = 88;
+        /// B13.18: `VSDOT`/`VUDOT`/`VUSDOT` (`neon-shared`, `FEAT_DotProd`/`FEAT_I8MM`) — ver
+        /// {@link NeonDotProduct}.
+        public static final int NEON_DOT_PRODUCT = 89;
+        /// B13.18: `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` — ver
+        /// {@link NeonDotProductByElement}.
+        public static final int NEON_DOT_PRODUCT_BY_ELEMENT = 90;
     }
 
     /// Operacao ALU generica.
@@ -2118,5 +2124,70 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Índice do par complexo dentro de {@link #vm}: `0`-`1` para F16, sempre `0` para F32.
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_COMPLEX_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSDOT`/`VUDOT`/`VUSDOT` (B13.18,
+    /// `FEAT_DotProd`/`FEAT_I8MM`): cada lane de 32 bits de {@link #vd} ACUMULA (wrap) a soma dos 4
+    /// produtos de byte de {@link #vn}/{@link #vm} na mesma lane. **Não existe `VSUDOT` vetorial**
+    /// (só `_scalar`) — este record nunca representa essa combinação de sinais na forma vetorial.
+    ///
+    /// Núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dotProduct}),
+    /// RFC B13.2 D1 — **exceção do épico**: nem `SDOT_v`/`UDOT_v` nem `USDOT`/`SUDOT` do A64 têm
+    /// decoder ainda, então não há semântica prévia a migrar; a semântica nasce aqui para a B19.12
+    /// (a task irmã A64 das formas mistas) reusar.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonDotProduct(
+            /// `true` se {@link #vn} é lido como assinado (`VSDOT`/`VSUDOT`), `false` se sem sinal
+            /// (`VUDOT`/`VUSDOT`).
+            boolean signedN,
+            /// `true` se {@link #vm} é lido como assinado (`VSDOT`/`VUSDOT`), `false` se sem sinal
+            /// (`VUDOT`/`VSUDOT`).
+            boolean signedM,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`/`D<m>`).
+            boolean quad,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1, em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_DOT_PRODUCT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSDOT_scalar`/`VUDOT_scalar`/
+    /// `VUSDOT_scalar`/`VSUDOT_scalar` (B13.18): como {@link NeonDotProduct}, mas o operando `b` é
+    /// uma única lane de 32 bits FIXA lida de {@link #vm} no {@link #index}, replicada para cada
+    /// lane de {@link #vn}. `VSUDOT` só existe nesta forma (não há `VSUDOT` vetorial).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dotProductByElement}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonDotProductByElement(
+            /// `true` se {@link #vn} é lido como assinado (`VSDOT_scalar`/`VSUDOT_scalar`), `false`
+            /// se sem sinal (`VUDOT_scalar`/`VUSDOT_scalar`).
+            boolean signedN,
+            /// `true` se {@link #vm} é lido como assinado (`VSDOT_scalar`/`VUSDOT_scalar`), `false`
+            /// se sem sinal (`VUDOT_scalar`/`VSUDOT_scalar`).
+            boolean signedM,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`). `vm` é sempre um `D` (nunca `Q`), independente desta forma.
+            boolean quad,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (varia por lane), em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (FIXO, lido uma vez), em índice de `D` (`0`-`15`, **nunca**
+            /// combinado com {@link #quad}).
+            int vm,
+            /// Índice da lane de 32 bits dentro de {@link #vm}: `0`-`1` (um `D` guarda 2 lanes).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT; }
     }
 }

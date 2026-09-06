@@ -1102,6 +1102,70 @@ public final class AdvSimdLanes {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // PRODUTO ESCALAR DE 8 BITS — B13.18 (`neon-shared`: `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT`,
+    // `FEAT_DotProd`/`FEAT_I8MM`). Semântica NOVA: nem `SDOT_v`/`UDOT_v` nem `USDOT`/`SUDOT` do A64
+    // têm decoder ainda (o comentário de `decodeAdvancedSimdIndexedElement` os exclui
+    // explicitamente), então não há nada para migrar — o núcleo nasce aqui para a B19.12 (a task
+    // irmã A64 das formas mistas) reusar.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// `log2` do tamanho de uma lane de produto escalar em bytes — sempre 32 bits (o resultado de
+    /// `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT` é sempre uma lane de 32 bits, mesmo os operandos sendo
+    /// bytes).
+    private static final int DOT_PRODUCT_ESZ = 2;
+
+    /// Bytes agrupados por lane de produto escalar: `Vd[i] += Σ Vn[4i+k]*Vm[4i+k]`, `k` `0`-`3`.
+    private static final int DOT_PRODUCT_BYTES_PER_LANE = 4;
+
+    /// Executa `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT` (B13.18) sobre `lanes` elementos de 32 bits: cada
+    /// lane de `baseRd` ACUMULA (lê e escreve, com WRAP — nunca satura, oposto da família `VQ*`) a
+    /// soma dos 4 produtos de byte de `baseRn`/`baseRm` na MESMA lane. `signedN`/`signedM` dão o
+    /// sinal de CADA operando independentemente (`VSDOT`=assinado/assinado,
+    /// `VUDOT`=sem-sinal/sem-sinal, `VUSDOT`=sem-sinal/assinado, `VSUDOT`=assinado/sem-sinal — o
+    /// chamador já decodificou qual é qual, nunca inferido aqui a partir do mnemônico). Os `base*`
+    /// são índices de PALAVRA. Nada aqui zera bits fora das lanes escritas.
+    public static void dotProduct(AdvSimdRegisterWords regs, boolean signedN, boolean signedM, int lanes,
+            int baseRd, int baseRn, int baseRm) {
+        for (int lane = 0; lane < lanes; lane++) {
+            long nWord = element(regs, baseRn, lane, DOT_PRODUCT_ESZ);
+            long mWord = element(regs, baseRm, lane, DOT_PRODUCT_ESZ);
+            long acc = element(regs, baseRd, lane, DOT_PRODUCT_ESZ);
+            acc += dotProductSum(nWord, mWord, signedN, signedM);
+            setElement(regs, baseRd, lane, DOT_PRODUCT_ESZ, truncate(acc, DOT_PRODUCT_ESZ));
+        }
+    }
+
+    /// Como {@link #dotProduct}, mas `b` é uma única lane de 32 bits FIXA lida de `baseRm` no
+    /// índice `index` (lida UMA vez, replicada para todas as `lanes` — nunca
+    /// `element(regs, baseRm, lane, DOT_PRODUCT_ESZ)`): `VSDOT_scalar`/`VUDOT_scalar`/
+    /// `VUSDOT_scalar`/`VSUDOT_scalar`.
+    public static void dotProductByElement(AdvSimdRegisterWords regs, boolean signedN, boolean signedM,
+            int lanes, int baseRd, int baseRn, int baseRm, int index) {
+        long mWord = element(regs, baseRm, index, DOT_PRODUCT_ESZ);
+        for (int lane = 0; lane < lanes; lane++) {
+            long nWord = element(regs, baseRn, lane, DOT_PRODUCT_ESZ);
+            long acc = element(regs, baseRd, lane, DOT_PRODUCT_ESZ);
+            acc += dotProductSum(nWord, mWord, signedN, signedM);
+            setElement(regs, baseRd, lane, DOT_PRODUCT_ESZ, truncate(acc, DOT_PRODUCT_ESZ));
+        }
+    }
+
+    /// Soma dos 4 produtos de byte de uma lane de 32 bits, cada operando sign/zero-estendido
+    /// INDEPENDENTEMENTE conforme `signedN`/`signedM` (`VUSDOT`/`VSUDOT` misturam os dois).
+    private static long dotProductSum(long nWord, long mWord, boolean signedN, boolean signedM) {
+        long sum = 0;
+        for (int b = 0; b < DOT_PRODUCT_BYTES_PER_LANE; b++) {
+            int shift = b * 8;
+            long byteN = (nWord >>> shift) & 0xFF;
+            long byteM = (mWord >>> shift) & 0xFF;
+            long sn = signedN ? (byte) byteN : byteN;
+            long sm = signedM ? (byte) byteM : byteM;
+            sum += sn * sm;
+        }
+        return sum;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
     // CONVERSÃO FP ↔ PONTO FIXO — B13.8 (migração D1 da RFC B13.2). `SCVTF`/`UCVTF`/`FCVTZS`/
     // `FCVTZU` na forma AdvSIMD com fator de escala `2^fractionBits` (`VCVT` fixo↔float F32 no NEON
     // de 32 bits; `@fcvt_fixed` escalar/vetorial no A64). O arredondamento é SEMPRE toward-zero

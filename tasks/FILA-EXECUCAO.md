@@ -77,7 +77,6 @@ removidas).
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
 | **[B13.12](trilha-b-arquiteturas/b13.12-neon-two-reg-misc.md)** | NEON two-reg-misc A32 (`size==0b11`, layout de campos próprio) — abre o 4º frame do épico | ~36 linhas |
-| **[B13.18](trilha-b-arquiteturas/b13.18-neon-shared-dotprod.md)** | `neon-shared`: `VSDOT`/`VUDOT`/`VUSDOT`/`VSUDOT` (`FEAT_DotProd`/`FEAT_I8MM`) — usa o `NeonSharedDecoder` que a B13.17 criou | 7 linhas |
 | **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
 | **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
 | **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
@@ -86,9 +85,18 @@ removidas).
 
 **Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
 (depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/19-22 (depende de B13.12
-ou de B13.18), B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
+ou de B13.18, ambas ✅), B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
 
-**Ordem sugerida**: qualquer uma das nove acima. **B13.17 FECHADA 2026-09-05** — `VCMLA`/`VCADD`
+**Ordem sugerida**: qualquer uma das sete acima. **B13.18 FECHADA 2026-09-05** — `VSDOT`/`VUDOT`/
+`VUSDOT` (vetorial) + as 4 formas `_scalar` (`FEAT_DotProd`/`FEAT_I8MM`, DUAS features), núcleo
+`AdvSimdLanes.dotProduct`/`dotProductByElement` NOVO (achado: nem `SDOT_v`/`UDOT_v` nem
+`USDOT`/`SUDOT` do A64 têm decoder ainda, ao contrário do que a spec da B19.12 registrava — não há
+semântica A64 para migrar). Achado colateral (pré-existente, não introduzido por esta task):
+`VUDOT_scalar`/`VSUDOT_scalar` colidem estruturalmente com `CoprocessorRegisterDecoder` — sem a
+feature, decodificam como `COPROCESSOR` (coprocessador 13, inerte), não `UNIMPLEMENTED`, mesmo
+comportamento de antes desta task. `IrOp.Kind` 89→91. `docs/COBERTURA-ISA.md` byte a byte idêntica
+(zero-diff, nenhum preset declara as features novas). G5 verde em gbaemu/ndsemu/armbox. **B13.17
+FECHADA 2026-09-05** — `VCMLA`/`VCADD`
 (vetorial) + `VCMLA_scalar` (`FEAT_FCMA`), `ArmFeature.COMPLEX_NUMBER_ARITHMETIC` nova (nenhum
 preset a declara); cria o `NeonSharedDecoder` (devolve `null` para as 19 linhas ainda sem dono,
 B13.18-B13.21 completam o arquivo); núcleo `AdvSimdLanes.fpComplexAdd`/`fpComplexMultiplyAccumulate`
@@ -187,7 +195,8 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 
 `B13.7` · `B13.8` · `B13.9` · `B13.10` · `B13.11` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11`
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
-`C12.4` · `C12.7` · `B19.8` · **épico `B22` inteiro**.
+`C12.4` · `C12.7` · `B19.8` · `B13.12` · `B13.17` · `B13.18` · `B19.5.3` · `B19.6` ·
+**épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
 

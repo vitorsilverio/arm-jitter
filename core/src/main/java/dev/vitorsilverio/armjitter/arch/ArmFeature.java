@@ -284,5 +284,19 @@ public enum ArmFeature {
     /// bits (`neon-shared.decode`, mesmo encoding em A32 e T32). Mirror de
     /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#COMPLEX_NUMBER_ARITHMETIC} para o
     /// lado A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
-    COMPLEX_NUMBER_ARITHMETIC
+    COMPLEX_NUMBER_ARITHMETIC,
+
+    // ---- Onda 6, B13.18 (neon-shared: VSDOT/VUDOT/VUSDOT/VSUDOT) ----
+    /// **Produto escalar de 8 bits, mesmo sinal** (`FEAT_DotProd`, ARMv8.2-A) — `VSDOT`/`VUDOT`
+    /// NEON de 32 bits (`neon-shared.decode`, mesmo encoding em A32 e T32). Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#DOT_PRODUCT} para o lado A32/T32.
+    /// **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    DOT_PRODUCT,
+
+    /// **Multiplicação de matriz inteira de 8 bits** (`FEAT_I8MM`, ARMv8.6-A) — aqui só as formas
+    /// MISTAS do produto escalar (`VUSDOT`/`VSUDOT`, um operando assinado e o outro sem sinal);
+    /// `VSMMLA`/`VUMMLA`/`VUSMMLA` (matriciais 2×8·8×2) ficam para a B13.19. Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#INT8_MATRIX_MULTIPLY} para o lado
+    /// A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    INT8_MATRIX_MULTIPLY
 }

@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (84 desde B13.11), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (91 desde B13.18), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -53,7 +53,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(89, kinds.size(), "IrOp.Kind deve ter 89 constantes contíguas");
+        assertEquals(91, kinds.size(), "IrOp.Kind deve ter 91 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -87,8 +87,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // BIT_FIELD_INSERT, BIT_REVERSE, DIVIDE (−4); A10.3 cobriu os 14 Kind de VFP/coprocessador
         // duplo/sysreg do perfil M (−14); A10.5 cobriu HVC/SMC/ERET/MRS_BANK/MSR_BANK/BREAKPOINT (−6);
         // B13.12 acrescentou NEON_UNARY, NEON_NARROW_UNARY, NEON_FP_UNARY (+3). B13.17 acrescentou
-        // NEON_COMPLEX, NEON_COMPLEX_BY_ELEMENT (+2).
-        assertEquals(23, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_COMPLEX, NEON_COMPLEX_BY_ELEMENT (+2). B13.18 acrescentou NEON_DOT_PRODUCT,
+        // NEON_DOT_PRODUCT_BY_ELEMENT (+2).
+        assertEquals(25, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
@@ -100,7 +101,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_THREE_SAME_BY_ELEMENT, IrOp.Kind.NEON_WIDENING_BY_ELEMENT,
                         IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT, IrOp.Kind.NEON_UNARY,
                         IrOp.Kind.NEON_NARROW_UNARY, IrOp.Kind.NEON_FP_UNARY,
-                        IrOp.Kind.NEON_COMPLEX, IrOp.Kind.NEON_COMPLEX_BY_ELEMENT)),
+                        IrOp.Kind.NEON_COMPLEX, IrOp.Kind.NEON_COMPLEX_BY_ELEMENT,
+                        IrOp.Kind.NEON_DOT_PRODUCT, IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -226,6 +228,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_FP_UNARY -> new IrOp.NeonFpUnary(AdvSimdFpUnaryOp.ABS, false, 0, 1);
             case IrOp.Kind.NEON_COMPLEX -> new IrOp.NeonComplex(true, 90, false, 2, 0, 1, 2);
             case IrOp.Kind.NEON_COMPLEX_BY_ELEMENT -> new IrOp.NeonComplexByElement(90, false, 2, 0, 1, 2, 0);
+            case IrOp.Kind.NEON_DOT_PRODUCT -> new IrOp.NeonDotProduct(true, true, false, 0, 1, 2);
+            case IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT ->
+                    new IrOp.NeonDotProductByElement(true, true, false, 0, 1, 2, 0);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }
