@@ -458,6 +458,20 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE ->
                     Ir64VectorArithmeticExecutor.executeIntegerMatrixMultiplyAccumulate(
                             core, (Ir64Op.VectorIntegerMatrixMultiplyAccumulate) op);
+            case Ir64Op.Kind.CRYPTO_SHA512_THREE_REGISTER ->
+                    Ir64CryptoExecutor.executeSha512ThreeRegister(core, (Ir64Op.CryptoSha512ThreeRegister) op);
+            case Ir64Op.Kind.CRYPTO_SHA512_TWO_REGISTER ->
+                    Ir64CryptoExecutor.executeSha512TwoRegister(core, (Ir64Op.CryptoSha512TwoRegister) op);
+            case Ir64Op.Kind.CRYPTO_SM3_THREE_REGISTER ->
+                    Ir64CryptoExecutor.executeSm3ThreeRegister(core, (Ir64Op.CryptoSm3ThreeRegister) op);
+            case Ir64Op.Kind.CRYPTO_SM3_FOUR_REGISTER ->
+                    Ir64CryptoExecutor.executeSm3FourRegister(core, (Ir64Op.CryptoSm3FourRegister) op);
+            case Ir64Op.Kind.CRYPTO_SM3_THREE_REGISTER_IMM2 ->
+                    Ir64CryptoExecutor.executeSm3ThreeRegisterImm2(core, (Ir64Op.CryptoSm3ThreeRegisterImm2) op);
+            case Ir64Op.Kind.CRYPTO_SM4_ENCRYPT ->
+                    Ir64CryptoExecutor.executeSm4Encrypt(core, (Ir64Op.CryptoSm4Encrypt) op);
+            case Ir64Op.Kind.CRYPTO_SM4_KEY_UPDATE ->
+                    Ir64CryptoExecutor.executeSm4KeyUpdate(core, (Ir64Op.CryptoSm4KeyUpdate) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

@@ -16,6 +16,9 @@ import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha512Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
@@ -1122,6 +1125,52 @@ public final class Aarch64Decoder {
     /// {@link Ir64Op.CryptoSha3TwoSourceRotate#rotateAmount()} (nunca lido pelo executor para esta
     /// operação, ver o javadoc do record).
     private static final int CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT = 0;
+
+    // ── B19.10 (`FEAT_SHA512`/`FEAT_SM3`/`FEAT_SM4`): as 13 linhas vizinhas que a B11.12 deixou no
+    // ── MESMO prefixo 0xCE, sem dono. `Op0` ganha 2 valores novos: `0b010` (`SM3SS1`, layout
+    // ── IDÊNTICO a `EOR3`/`BCAX` — 4 registradores com `Ra` de 4 bits — e `SM3TT1A/1B/2A/2B`,
+    // ── layout PRÓPRIO com `op`+`imm2`, discriminados por bits[15:14]) e `0b110` (`SHA512SU0`/
+    // ── `SM4E`, forma de 2 registradores com `Rm`(bits[20:16]) fixo em zero). `Op0=0b011` (já
+    // ── reivindicado por `RAX1`) ganha 6 vizinhos NOVOS no mesmo campo de opcode de 6 bits
+    // ── (bits[15:10]): `SHA512H`/`SHA512H2`/`SHA512SU1` e `SM3PARTW1`/`SM3PARTW2`/`SM4EKEY`.
+    private static final int CRYPTO_SHA3_OP0_SM3_MIX = 0b010;
+    private static final int CRYPTO_SHA3_OP0_TWO_REGISTER = 0b110;
+    /// Campo de opcode de 6 bits (bits[15:10]) dentro de `Op0=0b011` — MESMA posição/largura de
+    /// {@link #CRYPTO_SHA3_RAX1_BIT15_10_SHIFT}/{@link #CRYPTO_SHA3_RAX1_BIT15_10_MASK}, generalizada
+    /// aqui porque agora discrimina 7 operações, não só `RAX1`.
+    private static final int CRYPTO_THREE_REGISTER_OPCODE6_SHIFT = 10;
+    private static final int CRYPTO_THREE_REGISTER_OPCODE6_MASK = 0b11_1111;
+    private static final int CRYPTO_OPCODE6_SHA512H = 0b10_0000;
+    private static final int CRYPTO_OPCODE6_SHA512H2 = 0b10_0001;
+    private static final int CRYPTO_OPCODE6_SHA512SU1 = 0b10_0010;
+    private static final int CRYPTO_OPCODE6_SM3PARTW1 = 0b11_0000;
+    private static final int CRYPTO_OPCODE6_SM3PARTW2 = 0b11_0001;
+    private static final int CRYPTO_OPCODE6_SM4EKEY = 0b11_0010;
+    /// `Op0=0b110`: `Rm` (bits[20:16], normalmente o 3º registrador fonte) é fixo em zero — só 2
+    /// registradores reais (`Rn`/`Rd`), MESMO truque de `AESE`/`AESD` (B8.11) mas aqui o campo
+    /// sobra no encoding em vez de simplesmente não existir.
+    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_SHIFT = 16;
+    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_MASK = 0b1_1111;
+    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_PATTERN = 0;
+    /// Opcode de 6 bits (bits[15:10]) dentro de `Op0=0b110` — só 2 valores usados dos 64 possíveis.
+    private static final int CRYPTO_TWO_REGISTER_OPCODE6_SHIFT = 10;
+    private static final int CRYPTO_TWO_REGISTER_OPCODE6_MASK = 0b11_1111;
+    private static final int CRYPTO_OPCODE6_SHA512SU0 = 0b10_0000;
+    private static final int CRYPTO_OPCODE6_SM4E = 0b10_0001;
+    /// `Op0=0b010`: MESMO bits[15:14] de `EOR3`/`BCAX` (`CRYPTO_SHA3_FOUR_REG_BIT15_14_*`) — `00`
+    /// seleciona `SM3SS1` (forma de 4 registradores, `Ra` no mesmo campo de 4 bits); `10` seleciona
+    /// `SM3TT1A/1B/2A/2B` (forma própria, `op`+`imm2`).
+    private static final int CRYPTO_SM3_MIX_BIT15_14_SM3SS1 = 0b00;
+    private static final int CRYPTO_SM3_MIX_BIT15_14_SM3TT = 0b10;
+    /// `SM3TT*`: `op` (bits[11:10], seleciona a variante — `00`=`TT1A`, `01`=`TT1B`, `10`=`TT2A`,
+    /// `11`=`TT2B`) e `imm2` (bits[13:12], operando real da instrução — CAMPOS DIFERENTES, ver a
+    /// Armadilha 3 da task B19.10; confirmado empiricamente contra corpus real: `sm3tt1a v5,v6,v7[3]`
+    /// codifica bits[13:12]=`11` e bits[11:10]=`00` — se fosse o inverso, mudar só o `imm2` teria
+    /// trocado o MNEMÔNICO para `SM3TT2B`, o que o assembler nunca faria).
+    private static final int CRYPTO_SM3TT_OP_SHIFT = 10;
+    private static final int CRYPTO_SM3TT_OP_MASK = 0b11;
+    private static final int CRYPTO_SM3TT_IMM2_SHIFT = 12;
+    private static final int CRYPTO_SM3TT_IMM2_MASK = 0b11;
 
     /// B8.10: bit alto (bit15, único bit de {@link #ADVSIMD_INT_OPCODE_SHIFT} acima do campo de 4
     /// bits de `EXT`/permute/`TBL`/`TBX`) — quando setado (com `bit10=0`), o encoding é reservado
@@ -2879,19 +2928,21 @@ public final class Aarch64Decoder {
         throw unsupported(word, address);
     }
 
-    /// `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`, ARMv8.2-A, B11.12) — ver o comentário de
-    /// {@link #CRYPTO_SHA3_PREFIX_PATTERN}. Gateado por {@link Aarch64Feature#SHA3} (G3/G8: sem a
-    /// feature, `unsupported`, mesmo padrão de B11.4/6/7/8/9/10/11).
+    /// `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`, ARMv8.2-A, B11.12) e, desde a B19.10, os vizinhos que
+    /// moram no MESMO prefixo de 8 bits (`FEAT_SHA512`/`FEAT_SM3`/`FEAT_SM4`) — ver o comentário de
+    /// {@link #CRYPTO_SHA3_PREFIX_PATTERN}. Cada família tem seu PRÓPRIO gate (G3/G8: sem a feature
+    /// correta, `unsupported` — nunca uma checagem em bloco, ver o Aceite da B19.10 sobre
+    /// independência dos gates).
     private Ir64Op decodeCryptoSha3(int word, long address) {
-        if (!architecture.has(Aarch64Feature.SHA3)) {
-            throw unsupported(word, address);
-        }
         int op0 = (word >>> CRYPTO_SHA3_OP0_SHIFT) & CRYPTO_SHA3_OP0_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
         return switch (op0) {
             case CRYPTO_SHA3_OP0_EOR3, CRYPTO_SHA3_OP0_BCAX -> {
+                if (!architecture.has(Aarch64Feature.SHA3)) {
+                    throw unsupported(word, address);
+                }
                 int bit15_14 = (word >>> CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT) & CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK;
                 if (bit15_14 != 0) {
                     throw unsupported(word, address);
@@ -2900,17 +2951,105 @@ public final class Aarch64Decoder {
                 Ir64CryptoSha3Op op = op0 == CRYPTO_SHA3_OP0_EOR3 ? Ir64CryptoSha3Op.EOR3 : Ir64CryptoSha3Op.BCAX;
                 yield new Ir64Op.CryptoSha3FourRegister(op, rd, rn, rm, ra);
             }
-            case CRYPTO_SHA3_OP0_RAX1 -> {
-                int fixed = (word >>> CRYPTO_SHA3_RAX1_BIT15_10_SHIFT) & CRYPTO_SHA3_RAX1_BIT15_10_MASK;
-                if (fixed != CRYPTO_SHA3_RAX1_BIT15_10_PATTERN) {
-                    throw unsupported(word, address);
+            // B19.10: `SM3SS1` (4 registradores, MESMO layout de `EOR3`/`BCAX` — `Ra` de 4 bits) e
+            // `SM3TT1A/1B/2A/2B` (layout próprio) convivem em `op0=0b010`, discriminados por
+            // bits[15:14] — nenhum dos dois grupos existia antes da B19.10 (espaço inteiro `null`
+            // no `default` do switch antigo, aqui a primeira vez que é reivindicado).
+            case CRYPTO_SHA3_OP0_SM3_MIX -> {
+                int bit15_14 = (word >>> CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT) & CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK;
+                if (bit15_14 == CRYPTO_SM3_MIX_BIT15_14_SM3SS1) {
+                    if (!architecture.has(Aarch64Feature.SM3)) {
+                        throw unsupported(word, address);
+                    }
+                    int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
+                    yield new Ir64Op.CryptoSm3FourRegister(rd, rn, rm, ra);
                 }
-                yield new Ir64Op.CryptoSha3TwoSourceRotate(
-                        Ir64CryptoSha3Op.RAX1, rd, rn, rm, CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT);
+                if (bit15_14 == CRYPTO_SM3_MIX_BIT15_14_SM3TT) {
+                    if (!architecture.has(Aarch64Feature.SM3)) {
+                        throw unsupported(word, address);
+                    }
+                    int ttOp = (word >>> CRYPTO_SM3TT_OP_SHIFT) & CRYPTO_SM3TT_OP_MASK;
+                    int imm2 = (word >>> CRYPTO_SM3TT_IMM2_SHIFT) & CRYPTO_SM3TT_IMM2_MASK;
+                    Ir64CryptoSm3TtOp op = switch (ttOp) {
+                        case 0 -> Ir64CryptoSm3TtOp.TT1A;
+                        case 1 -> Ir64CryptoSm3TtOp.TT1B;
+                        case 2 -> Ir64CryptoSm3TtOp.TT2A;
+                        default -> Ir64CryptoSm3TtOp.TT2B;
+                    };
+                    yield new Ir64Op.CryptoSm3ThreeRegisterImm2(op, rd, rn, rm, imm2);
+                }
+                throw unsupported(word, address);
+            }
+            // B19.10: `op0=0b011` era só `RAX1` (`bits[15:10]="100011"`) — os outros 63 valores do
+            // mesmo campo de 6 bits caíam em `unsupported` porque nada mais existia. Agora 6
+            // vizinhos reais (SHA-512/SM3/SM4) usam o MESMO campo, cada um com feature própria.
+            case CRYPTO_SHA3_OP0_RAX1 -> {
+                int opcode6 = (word >>> CRYPTO_THREE_REGISTER_OPCODE6_SHIFT) & CRYPTO_THREE_REGISTER_OPCODE6_MASK;
+                if (opcode6 == CRYPTO_SHA3_RAX1_BIT15_10_PATTERN) {
+                    if (!architecture.has(Aarch64Feature.SHA3)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSha3TwoSourceRotate(
+                            Ir64CryptoSha3Op.RAX1, rd, rn, rm, CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT);
+                }
+                Ir64CryptoSha512Op sha512Op = switch (opcode6) {
+                    case CRYPTO_OPCODE6_SHA512H -> Ir64CryptoSha512Op.SHA512H;
+                    case CRYPTO_OPCODE6_SHA512H2 -> Ir64CryptoSha512Op.SHA512H2;
+                    case CRYPTO_OPCODE6_SHA512SU1 -> Ir64CryptoSha512Op.SHA512SU1;
+                    default -> null;
+                };
+                if (sha512Op != null) {
+                    if (!architecture.has(Aarch64Feature.SHA512)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSha512ThreeRegister(sha512Op, rd, rn, rm);
+                }
+                Ir64CryptoSm3Op sm3Op = switch (opcode6) {
+                    case CRYPTO_OPCODE6_SM3PARTW1 -> Ir64CryptoSm3Op.PARTW1;
+                    case CRYPTO_OPCODE6_SM3PARTW2 -> Ir64CryptoSm3Op.PARTW2;
+                    default -> null;
+                };
+                if (sm3Op != null) {
+                    if (!architecture.has(Aarch64Feature.SM3)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSm3ThreeRegister(sm3Op, rd, rn, rm);
+                }
+                if (opcode6 == CRYPTO_OPCODE6_SM4EKEY) {
+                    if (!architecture.has(Aarch64Feature.SM4)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSm4KeyUpdate(rd, rn, rm);
+                }
+                throw unsupported(word, address);
             }
             case CRYPTO_SHA3_OP0_XAR -> {
+                if (!architecture.has(Aarch64Feature.SHA3)) {
+                    throw unsupported(word, address);
+                }
                 int imm6 = (word >>> CRYPTO_SHA3_XAR_IMM6_SHIFT) & CRYPTO_SHA3_XAR_IMM6_MASK;
                 yield new Ir64Op.CryptoSha3TwoSourceRotate(Ir64CryptoSha3Op.XAR, rd, rn, rm, imm6);
+            }
+            // B19.10: `SHA512SU0`/`SM4E` — forma de 2 registradores, `Rm`(bits[20:16]) fixo em zero.
+            case CRYPTO_SHA3_OP0_TWO_REGISTER -> {
+                int rmFixed = (word >>> CRYPTO_TWO_REGISTER_RM_FIXED_SHIFT) & CRYPTO_TWO_REGISTER_RM_FIXED_MASK;
+                if (rmFixed != CRYPTO_TWO_REGISTER_RM_FIXED_PATTERN) {
+                    throw unsupported(word, address);
+                }
+                int opcode6 = (word >>> CRYPTO_TWO_REGISTER_OPCODE6_SHIFT) & CRYPTO_TWO_REGISTER_OPCODE6_MASK;
+                if (opcode6 == CRYPTO_OPCODE6_SHA512SU0) {
+                    if (!architecture.has(Aarch64Feature.SHA512)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSha512TwoRegister(rd, rn);
+                }
+                if (opcode6 == CRYPTO_OPCODE6_SM4E) {
+                    if (!architecture.has(Aarch64Feature.SM4)) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.CryptoSm4Encrypt(rd, rn);
+                }
+                throw unsupported(word, address);
             }
             default -> throw unsupported(word, address);
         };

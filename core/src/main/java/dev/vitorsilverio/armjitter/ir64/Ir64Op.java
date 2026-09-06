@@ -62,7 +62,10 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpDotProductBFloat16ByElement, Ir64Op.VectorFpMultiplyAddLongBFloat16,
         Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement,
         Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16, Ir64Op.VectorIntegerDotProduct,
-        Ir64Op.VectorIntegerDotProductByElement, Ir64Op.VectorIntegerMatrixMultiplyAccumulate {
+        Ir64Op.VectorIntegerDotProductByElement, Ir64Op.VectorIntegerMatrixMultiplyAccumulate,
+        Ir64Op.CryptoSha512ThreeRegister, Ir64Op.CryptoSha512TwoRegister, Ir64Op.CryptoSm3ThreeRegister,
+        Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
+        Ir64Op.CryptoSm4KeyUpdate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -321,6 +324,22 @@ public sealed interface Ir64Op permits
         /// B19.12: `SMMLA`/`UMMLA`/`USMMLA` (`FEAT_I8MM`) — ver
         /// {@link VectorIntegerMatrixMultiplyAccumulate}.
         public static final int VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE = 110;
+        /// B19.10: `SHA512H`/`SHA512H2`/`SHA512SU1` (`FEAT_SHA512`) — ver
+        /// {@link CryptoSha512ThreeRegister}.
+        public static final int CRYPTO_SHA512_THREE_REGISTER = 111;
+        /// B19.10: `SHA512SU0` (`FEAT_SHA512`) — ver {@link CryptoSha512TwoRegister}.
+        public static final int CRYPTO_SHA512_TWO_REGISTER = 112;
+        /// B19.10: `SM3PARTW1`/`SM3PARTW2` (`FEAT_SM3`) — ver {@link CryptoSm3ThreeRegister}.
+        public static final int CRYPTO_SM3_THREE_REGISTER = 113;
+        /// B19.10: `SM3SS1` (`FEAT_SM3`) — ver {@link CryptoSm3FourRegister}.
+        public static final int CRYPTO_SM3_FOUR_REGISTER = 114;
+        /// B19.10: `SM3TT1A`/`SM3TT1B`/`SM3TT2A`/`SM3TT2B` (`FEAT_SM3`) — ver
+        /// {@link CryptoSm3ThreeRegisterImm2}.
+        public static final int CRYPTO_SM3_THREE_REGISTER_IMM2 = 115;
+        /// B19.10: `SM4E` (`FEAT_SM4`) — ver {@link CryptoSm4Encrypt}.
+        public static final int CRYPTO_SM4_ENCRYPT = 116;
+        /// B19.10: `SM4EKEY` (`FEAT_SM4`) — ver {@link CryptoSm4KeyUpdate}.
+        public static final int CRYPTO_SM4_KEY_UPDATE = 117;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2464,6 +2483,112 @@ public sealed interface Ir64Op permits
             /// Quantidade de rotação à direita usada só por `XAR`, `0`-`63` (ver javadoc da classe).
             int rotateAmount) implements Ir64Op {
         @Override public int kind() { return Kind.CRYPTO_SHA3_TWO_SOURCE_ROTATE; }
+    }
+
+    /// "Cryptographic three-register SHA512" (`FEAT_SHA512`, ARMv8.2-A, B19.10) — `SHA512H`/
+    /// `SHA512H2`/`SHA512SU1`. Opera em elementos de **64 bits** ({@link #rd}/{@link #rn}/
+    /// {@link #rm} sempre os 128 bits inteiros, `2D`) — diferente de {@link CryptoShaThreeRegister}
+    /// (SHA1/SHA256, 32 bits). `Rd` é sempre lido E escrito (estado corrente do hash); `Rn`/`Rm`
+    /// nunca são escritos.
+    record CryptoSha512ThreeRegister(
+            /// Operação a executar.
+            Ir64CryptoSha512Op op,
+            /// Registrador `V` de destino (lido E escrito).
+            int rd,
+            /// Segundo operando (fonte, nunca modificado).
+            int rn,
+            /// Terceiro operando (fonte, nunca modificado).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA512_THREE_REGISTER; }
+    }
+
+    /// `SHA512SU0` (`FEAT_SHA512`, ARMv8.2-A, B19.10) — atualização de agenda de mensagem SHA-512,
+    /// forma de 2 registradores (irmã de `SHA256SU0`, ver {@link CryptoShaTwoRegister}, mas em
+    /// elementos de 64 bits). {@link #rd} é lido E escrito (acumula sobre o estado corrente).
+    record CryptoSha512TwoRegister(
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SHA512_TWO_REGISTER; }
+    }
+
+    /// "Cryptographic three-register SM3" (`FEAT_SM3`, ARMv8.2-A, B19.10) — `SM3PARTW1`/
+    /// `SM3PARTW2`, atualização de agenda de mensagem do hash SM3 (GB/T 32905-2016). Elementos de
+    /// 32 bits, `Rd` lido E escrito, `Rn`/`Rm` nunca modificados.
+    record CryptoSm3ThreeRegister(
+            /// Operação a executar.
+            Ir64CryptoSm3Op op,
+            /// Registrador `V` de destino (lido E escrito).
+            int rd,
+            /// Segundo operando (fonte, nunca modificado).
+            int rn,
+            /// Terceiro operando (fonte, nunca modificado).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SM3_THREE_REGISTER; }
+    }
+
+    /// `SM3SS1` (`FEAT_SM3`, ARMv8.2-A, B19.10) — função pura de {@link #rn}/{@link #rm}/
+    /// {@link #ra} (`Rd` atual nunca é lido); só a palavra ALTA (elemento `3`, bits[127:96]) de
+    /// cada operando participa da fórmula (`ARM DDI 0487`), e só a palavra alta de {@link #rd} é
+    /// escrita — as 3 palavras baixas são zeradas. {@link #ra} vem do MESMO campo de 4 bits
+    /// (bits[13:10], `V0`-`V15`) que {@link CryptoSha3FourRegister#ra}, MESMO layout de encoding
+    /// (`op0=0b010`, bits[15:14]="00").
+    record CryptoSm3FourRegister(
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro operando fonte.
+            int rn,
+            /// Segundo operando fonte.
+            int rm,
+            /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
+            int ra) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SM3_FOUR_REGISTER; }
+    }
+
+    /// "Cryptographic three-register SM3, imm2" (`FEAT_SM3`, ARMv8.2-A, B19.10) — `SM3TT1A`/
+    /// `SM3TT1B`/`SM3TT2A`/`SM3TT2B`. {@link #op} vem de bits[13:12] do encoding real (seleciona a
+    /// variante); {@link #imm2} vem de bits[11:10] (seleciona QUAL das 4 palavras de {@link #rm}
+    /// entra na fórmula) — os dois campos são DIFERENTES, ver a Armadilha 3 da task (nomes fáceis
+    /// de trocar). `Rd` é lido E escrito (estado corrente); `Rn`/`Rm` nunca modificados.
+    record CryptoSm3ThreeRegisterImm2(
+            /// Variante a executar (`TT1A`/`TT1B`/`TT2A`/`TT2B`).
+            Ir64CryptoSm3TtOp op,
+            /// Registrador `V` de destino (lido E escrito).
+            int rd,
+            /// Segundo operando (fonte, nunca modificado).
+            int rn,
+            /// Terceiro operando (fonte, nunca modificado — bloco de mensagem `W`).
+            int rm,
+            /// Seleciona qual das 4 palavras de {@link #rm} entra na fórmula (`0`-`3`).
+            int imm2) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SM3_THREE_REGISTER_IMM2; }
+    }
+
+    /// `SM4E` (`FEAT_SM4`, ARMv8.2-A, B19.10) — rodada de cifra SM4 (GB/T 32907-2016), forma de 2
+    /// registradores: {@link #rd} é o estado ATUAL do bloco cifrado (lido E escrito, mesmo padrão
+    /// destrutivo de `AESE`/`AESD`, ver {@link CryptoAes}), {@link #rn} carrega as 4 subchaves de
+    /// rodada (`rk[i..i+3]`) desta chamada — processa **4 rodadas** de uma vez.
+    record CryptoSm4Encrypt(
+            /// Registrador `V` de destino (e primeiro operando — estado atual do bloco).
+            int rd,
+            /// Registrador `V` fonte — as 4 subchaves de rodada.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SM4_ENCRYPT; }
+    }
+
+    /// `SM4EKEY` (`FEAT_SM4`, ARMv8.2-A, B19.10) — expansão de chave SM4, forma de 3 registradores:
+    /// função PURA de {@link #rn} (estado atual da chave, `K[i..i+3]`) e {@link #rm} (as 4
+    /// constantes de rodada `CK[i..i+3]`) — ao contrário de {@link CryptoSm4Encrypt}, `Rd` NUNCA é
+    /// lido. Processa **4 rodadas** de expansão de uma vez.
+    record CryptoSm4KeyUpdate(
+            /// Registrador `V` de destino.
+            int rd,
+            /// Primeiro operando fonte — estado atual da chave.
+            int rn,
+            /// Segundo operando fonte — as 4 constantes de rodada `CK`.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.CRYPTO_SM4_KEY_UPDATE; }
     }
 
     /// `DUP` (AdvSIMD copy, elemento vetorial, B8.12) — replica o elemento `esz` de `Vn[index]`

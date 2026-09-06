@@ -80,8 +80,15 @@ removidas).
 | **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
 | **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
 | **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
-| **[B19.10](trilha-b-arquiteturas/b19.10-a64-cripto-sha512-sm3-sm4.md)** | A64 cripto SHA-512/SM3/SM4 — mesmo prefixo `0xCE` que a B11.12 abriu pela metade | 13 linhas |
 | **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
+
+**B19.10 FECHADA 2026-09-06** — as 13 linhas de cripto A64 SHA-512/SM3/SM4 (mesmo prefixo `0xCE`
+que a B11.12 abriu pela metade para `FEAT_SHA3`); achado real que corrige a spec: o campo que
+separa `SM3TT1A/1B/2A/2B` é bits[11:10] (não bits[13:12] como a spec dizia) — confirmado via
+corpus real `aarch64-linux-gnu-as`. `docs/COBERTURA-ISA.md` global 87%→88%. Ver **Resultado** na
+task. **Nota**: esta tabela "Pegáveis AGORA" já estava parcialmente desatualizada antes desta
+sessão (B13.12/B19.5.3/B19.6/B19.7/B19.12 acima já constavam ✅ no `INDICE.md` da trilha B — não
+confie nela sem checar o índice real de cada trilha, mesmo aviso do topo deste arquivo).
 
 **Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
 (depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/19-22 (depende de B13.12
