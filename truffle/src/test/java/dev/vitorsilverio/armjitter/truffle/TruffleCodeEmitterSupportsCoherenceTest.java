@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
@@ -54,7 +56,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(95, kinds.size(), "IrOp.Kind deve ter 95 constantes contíguas");
+        assertEquals(97, kinds.size(), "IrOp.Kind deve ter 97 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -90,8 +92,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // B13.12 acrescentou NEON_UNARY, NEON_NARROW_UNARY, NEON_FP_UNARY (+3). B13.17 acrescentou
         // NEON_COMPLEX, NEON_COMPLEX_BY_ELEMENT (+2). B13.18 acrescentou NEON_DOT_PRODUCT,
         // NEON_DOT_PRODUCT_BY_ELEMENT (+2). B13.14 acrescentou NEON_SWAP_PERMUTE, NEON_EXTRACT,
-        // NEON_TABLE_LOOKUP, NEON_DUPLICATE_SCALAR (+4, NEON também não tem nó Truffle).
-        assertEquals(29, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_TABLE_LOOKUP, NEON_DUPLICATE_SCALAR (+4, NEON também não tem nó Truffle). B13.15
+        // acrescentou NEON_CRYPTO_AES, NEON_CRYPTO_SHA (+2, idem).
+        assertEquals(31, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
@@ -106,7 +109,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_COMPLEX, IrOp.Kind.NEON_COMPLEX_BY_ELEMENT,
                         IrOp.Kind.NEON_DOT_PRODUCT, IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT,
                         IrOp.Kind.NEON_SWAP_PERMUTE, IrOp.Kind.NEON_EXTRACT,
-                        IrOp.Kind.NEON_TABLE_LOOKUP, IrOp.Kind.NEON_DUPLICATE_SCALAR)),
+                        IrOp.Kind.NEON_TABLE_LOOKUP, IrOp.Kind.NEON_DUPLICATE_SCALAR,
+                        IrOp.Kind.NEON_CRYPTO_AES, IrOp.Kind.NEON_CRYPTO_SHA)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -239,6 +243,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_EXTRACT -> new IrOp.NeonExtract(false, 3, 0, 1, 2);
             case IrOp.Kind.NEON_TABLE_LOOKUP -> new IrOp.NeonTableLookup(false, 0, 0, 1, 2);
             case IrOp.Kind.NEON_DUPLICATE_SCALAR -> new IrOp.NeonDuplicateScalar(0, 3, false, 0, 1);
+            case IrOp.Kind.NEON_CRYPTO_AES -> new IrOp.NeonCryptoAes(AdvSimdCryptoAesOp.AESE, 0, 1);
+            case IrOp.Kind.NEON_CRYPTO_SHA -> new IrOp.NeonCryptoSha(AdvSimdCryptoShaOp.SHA1H, 0, 1);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

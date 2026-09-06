@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
@@ -27,24 +29,33 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// distinguem este layout de `VEXT`(bit24=`0`)/`VTBL`/`VDUP_scalar`(bit11=`1`), que vivem no MESMO
 /// `size==0b11` mas fora do sub-layout "2-reg-misc").
 ///
-/// **`size==0b11` hospeda QUATRO grupos** (B13.12-B13.15): este decoder reconhece só as 36 linhas
-/// do Escopo da B13.12 e devolve **`null`** (não `unimplemented`) para o resto do espaço
-/// "2-reg-misc" — conversões/arredondamento (`VRINT*`/`VCVT*`, B13.13) e cripto (`AESE`/`AESD`/
-/// `AESMC`/`AESIMC`/`SHA1H`/`SHA1SU1`/`SHA256SU0`, B13.15) — para que essas tasks possam registrar
-/// os próprios decoders depois. **Exceção deliberada à disciplina G8** (mesma de B13.7 para
-/// `Vimm_1r` e de B13.10 para `size==0b11`): quando B13.13/B13.15 fecharem, o último a chegar deve
-/// trocar o `null` por `unimplemented` neste frame.
+/// **`size==0b11` hospeda QUATRO grupos** (B13.12-B13.15). Este decoder reconhece as 36 linhas do
+/// Escopo da B13.12 **e**, desde a B13.15, as 7 de cripto (`AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/
+/// `SHA1SU1`/`SHA256SU0`, gate PRÓPRIO {@link ArmFeature#CRYPTO} — ver
+/// {@link #cryptoAesOperation}/{@link #cryptoShaOperation}); ainda devolve **`null`** (não
+/// `unimplemented`) para o que falta — conversões/arredondamento (`VRINT*`/`VCVT*`, B13.13, ainda
+/// não fechada nesta sessão) — para essa task poder registrar o próprio decoder depois.
+/// **Exceção deliberada à disciplina G8** (mesma de B13.7 para `Vimm_1r` e de B13.10 para
+/// `size==0b11`): quando B13.13 fechar (ÚLTIMO grupo pendente do sub-espaço), o `null` residual
+/// deve virar `unimplemented` neste frame — dívida que a B13.15 NÃO conseguiu pagar (B13.13 segue
+/// aberta), ver `## Resultado` da B13.15.
 ///
 /// A SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
-/// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}/{@code narrowUnary}/{@code fpUnary}),
-/// RFC B13.2 D1 — migração completa em B13.12 (ver Javadoc de {@link AdvSimdUnaryOp}/
-/// {@link AdvSimdFpUnaryOp}). `VSHLL` reaproveita 100% {@link IrOp.NeonShiftWidenImmediate}
+/// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}/{@code narrowUnary}/{@code fpUnary} e,
+/// desde B13.15, {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#aes}/
+/// {@code shaTwoRegister}), RFC B13.2 D1 — migração completa em B13.12/B13.15 (ver Javadoc de
+/// {@link AdvSimdUnaryOp}/{@link AdvSimdFpUnaryOp}/{@link AdvSimdCryptoAesOp}/
+/// {@link AdvSimdCryptoShaOp}). `VSHLL` reaproveita 100% {@link IrOp.NeonShiftWidenImmediate}
 /// (B13.8): desloca por `esize` FIXO (`8 << esz`), não por um imediato — mesmo mecanismo de `SHLL`
 /// do A64 (B8.20).
 ///
-/// Gate único: {@link ArmFeature#ADVANCED_SIMD}. **Nenhum preset a declara** (B13.22 fecha isso),
-/// então sem a feature {@link #tryDecode} devolve `null` e o espaço cai no `UNIMPLEMENTED` de
-/// `ArmDecoder#decodeUnconditional` (zero-diff, G3).
+/// Gate: {@link ArmFeature#ADVANCED_SIMD} (checado no topo de {@link #tryDecode}, comum a todo o
+/// decoder) **e**, só para as 7 de cripto, {@link ArmFeature#CRYPTO} À PARTE — um núcleo pode ter
+/// NEON sem a extensão cripto opcional (Armadilha 3 da B13.15), então essas 7 linhas ficam
+/// `UNIMPLEMENTED` explícito (não `null`) quando reconhecidas sem `CRYPTO`. **Nenhum preset declara
+/// nenhuma das duas** (B13.22 fecha isso), então sem `ADVANCED_SIMD` {@link #tryDecode} devolve
+/// `null` inteiro e o espaço cai no `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff,
+/// G3).
 ///
 /// `FPSCR.QC` (tocado por `VQABS`/`VQNEG`/`VQMOVN*`) NÃO é modelado — paridade com o A64 e com
 /// B13.5/B13.7/B13.8, task futura própria. F16 (`VCGT0_F`/... com `size==1`) e `size==3` (doubleword,
@@ -176,9 +187,65 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                     new IrOp.NeonUnary(intOp, quad, size, vd, vm));
         }
 
-        // Resto do sub-grupo `size==0b11` "2-reg-misc": conversões/arredondamento (B13.13) e
-        // cripto (B13.15) — `null` para não roubar o espaço delas (G8 não se aplica aqui, ver
-        // Javadoc da classe).
+        // `AESE`/`AESD`/`AESMC`/`AESIMC` (B13.15) — `size` fixo em `0b00` (QEMU `DO_2M_CRYPTO`:
+        // `a->size != 0` -> UNDEFINED), `Q` sempre `1` (confirmado via `arm-linux-gnueabihf-as -march
+        // =armv8-a+crypto`: `aese.8 q0,q1` -> `0xf3b00302`, nenhum sufixo de tamanho diferente de
+        // `.8` existe no assembler real).
+        AdvSimdCryptoAesOp aesOp = cryptoAesOperation(opc1, opc2, bit6);
+        if (aesOp != null) {
+            if (!architecture.has(ArmFeature.CRYPTO) || size != 0 || ((vd | vm) & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonCryptoAes(aesOp, vd, vm));
+        }
+
+        // `SHA1H`/`SHA1SU1`/`SHA256SU0` (B13.15) — `size` fixo em `0b10` (QEMU `DO_2M_CRYPTO`:
+        // `a->size != 2` -> UNDEFINED), `Q` sempre `1` (confirmado via `arm-linux-gnueabihf-as`:
+        // `sha1h.32 q0,q1` -> `0xf3b902c2`, `sha1su1.32 q0,q1` -> `0xf3ba0382`, `sha256su0.32 q0,q1`
+        // -> `0xf3ba03c2`).
+        AdvSimdCryptoShaOp shaOp = cryptoShaOperation(opc1, opc2, bit6);
+        if (shaOp != null) {
+            if (!architecture.has(ArmFeature.CRYPTO) || size != ESZ_WORD || ((vd | vm) & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonCryptoSha(shaOp, vd, vm));
+        }
+
+        // Resto do sub-grupo `size==0b11` "2-reg-misc": conversões/arredondamento (B13.13, ainda
+        // aberta) — `null` para não roubar o espaço dela (G8 não se aplica aqui, ver Javadoc da
+        // classe).
+        return null;
+    }
+
+    /// `(opc1, opc2, bit6)` → operação de {@link AdvSimdCryptoAesOp} — `opc1=00`, `opc2` `0110`
+    /// (`AESE`/`bit6=0`, `AESD`/`bit6=1`) ou `0111` (`AESMC`/`bit6=0`, `AESIMC`/`bit6=1`), confirmado
+    /// bit a bit contra o assembler real (ver comentário do chamador). `null` para o resto.
+    private static AdvSimdCryptoAesOp cryptoAesOperation(int opc1, int opc2, boolean bit6) {
+        if (opc1 != 0b00) {
+            return null;
+        }
+        return switch (opc2) {
+            case 0b0110 -> bit6 ? AdvSimdCryptoAesOp.AESD : AdvSimdCryptoAesOp.AESE;
+            case 0b0111 -> bit6 ? AdvSimdCryptoAesOp.AESIMC : AdvSimdCryptoAesOp.AESMC;
+            default -> null;
+        };
+    }
+
+    /// `(opc1, opc2, bit6)` → operação de {@link AdvSimdCryptoShaOp} — `SHA1H` vive em
+    /// `opc1=01`/`opc2=0101`/`bit6=1` (MESMO opc1 das comparações-com-zero inteiras, mas `opc2`
+    /// nunca colide: `0000`-`0100` são as 5 comparações/`ABS`/`NEG`, `0101` é só `SHA1H`);
+    /// `SHA1SU1`/`SHA256SU0` vivem em `opc1=10`/`opc2=0111` (MESMO `opc1` de `VSWP`-família/`VSHLL`/
+    /// `VMOVN`-família, discriminados ANTES de chegar aqui — nenhum deles usa `opc2=0111`),
+    /// discriminados entre si por `bit6` (`0`=`SHA1SU1`, `1`=`SHA256SU0`). `null` para o resto.
+    private static AdvSimdCryptoShaOp cryptoShaOperation(int opc1, int opc2, boolean bit6) {
+        if (opc1 == 0b01 && opc2 == 0b0101 && bit6) {
+            return AdvSimdCryptoShaOp.SHA1H;
+        }
+        if (opc1 == 0b10 && opc2 == 0b0111) {
+            return bit6 ? AdvSimdCryptoShaOp.SHA256SU0 : AdvSimdCryptoShaOp.SHA1SU1;
+        }
         return null;
     }
 
@@ -194,7 +261,8 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 case 0b0010 -> AdvSimdUnaryOp.REV16;
                 case 0b0100 -> AdvSimdUnaryOp.SADDLP;
                 case 0b0101 -> AdvSimdUnaryOp.UADDLP;
-                // `0110`/`0111`: `AESE`/`AESD`/`AESMC`/`AESIMC` — B13.15.
+                // `0110`/`0111`: `AESE`/`AESD`/`AESMC`/`AESIMC` — tratados ANTES de chegar aqui,
+                // ver {@link #cryptoAesOperation} (B13.15).
                 case 0b1000 -> AdvSimdUnaryOp.CLS;
                 case 0b1001 -> AdvSimdUnaryOp.CLZ;
                 case 0b1010 -> AdvSimdUnaryOp.CNT;
@@ -211,7 +279,8 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 case 0b0010 -> AdvSimdUnaryOp.CMEQ0;
                 case 0b0011 -> AdvSimdUnaryOp.CMLE0;
                 case 0b0100 -> AdvSimdUnaryOp.CMLT0;
-                // `0101`: `SHA1H` — B13.15.
+                // `0101`: `SHA1H` — tratado ANTES de chegar aqui, ver {@link #cryptoShaOperation}
+                // (B13.15).
                 case 0b0110 -> AdvSimdUnaryOp.ABS;
                 case 0b0111 -> AdvSimdUnaryOp.NEG;
                 // `1000`-`1111` (exceto `1101`, reservado): formas FP — {@link #fpUnaryOperation}.
@@ -224,8 +293,9 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 // ({@link #fpUnaryOperation}) e `VCVT_{FS,FU,SF,UF}` — B13.13.
                 default -> null;
             };
-            // `opc1=10`: `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14), `VMOVN`-família/`VSHLL` (tratados
-            // antes de chegar aqui) e `VRINT*`/`VCVT_F16_F32`/`SHA1SU1`/`SHA256SU0` (B13.13/B13.15).
+            // `opc1=10`: `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14), `VMOVN`-família/`VSHLL`,
+            // `SHA1SU1`/`SHA256SU0` (B13.15) — todos tratados ANTES de chegar aqui — e
+            // `VRINT*`/`VCVT_F16_F32` (B13.13, ainda aberta).
             default -> null;
         };
     }

@@ -172,6 +172,9 @@ public final class AsmNativePolicy {
             case IrOp.NeonExtract ignored -> false;
             case IrOp.NeonTableLookup ignored -> false;
             case IrOp.NeonDuplicateScalar ignored -> false;
+            // NEON "two-register miscellaneous" cripto, `size==0b11` (B13.15): idem.
+            case IrOp.NeonCryptoAes ignored -> false;
+            case IrOp.NeonCryptoSha ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;

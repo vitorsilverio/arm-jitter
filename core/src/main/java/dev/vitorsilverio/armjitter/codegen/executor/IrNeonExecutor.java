@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrOp;
@@ -439,5 +441,21 @@ public final class IrNeonExecutor {
         for (int i = 0; i < elements; i++) {
             AdvSimdLanes.setElement(vfp, op.vd(), i, esz, value);
         }
+    }
+
+    /// `AESE`/`AESD`/`AESMC`/`AESIMC` (B13.15): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdCrypto#aes}) — a MESMA função que o executor A64 chama desde esta task
+    /// (migração D1). `Vd`/`Vm` já são índice de `D` PAR que inicia o `Q` — em
+    /// {@link AdvSimdRegisterWords}, `D<n>` É a palavra `n`, então nenhuma conversão é necessária
+    /// (ao contrário do lado A64, que multiplica por `WORDS_PER_REGISTER`).
+    public void executeNeonCryptoAes(ArmCore core, IrOp.NeonCryptoAes op) {
+        AdvSimdCrypto.aes(core.vfp(), op.op(), op.vd(), op.vm());
+    }
+
+    /// `SHA1H`/`SHA1SU1`/`SHA256SU0` (B13.15): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdCrypto#shaTwoRegister}) — a MESMA função que o executor A64 chama desde esta
+    /// task (migração D1).
+    public void executeNeonCryptoSha(ArmCore core, IrOp.NeonCryptoSha op) {
+        AdvSimdCrypto.shaTwoRegister(core.vfp(), op.op(), op.vd(), op.vm());
     }
 }

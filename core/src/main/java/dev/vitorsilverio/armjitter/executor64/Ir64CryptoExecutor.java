@@ -1,116 +1,56 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 import java.util.HexFormat;
 
-/// Executa `AESE`/`AESD`/`AESMC`/`AESIMC` (B8.11, ARMv8-A Cryptographic Extension). Sibling de
-/// {@link Ir64VectorArithmeticExecutor}: sem estado próprio, métodos estáticos. É o oráculo
-/// semântico (G1) — `CRYPTO_AES` não entra em `Ir64NativePolicy`, mesma decisão de todo `Kind`
-/// novo desde B8.4/B8.6.
+/// Executa a ARMv8-A Cryptographic Extension. Sibling de {@link Ir64VectorArithmeticExecutor}: sem
+/// estado próprio, métodos estáticos. É o oráculo semântico (G1) — nenhum `Kind` desta classe entra
+/// em `Ir64NativePolicy`, mesma decisão de todo `Kind` novo desde B8.4/B8.6.
 ///
-/// A tabela S-box e as matrizes `MixColumns`/`InvMixColumns` NÃO são copiadas de nenhuma fonte —
-/// são DERIVADAS matematicamente a partir da definição pública do AES (FIPS PUB 197, um padrão
-/// aberto, não GPL): inverso multiplicativo em `GF(2^8)` (módulo `x^8+x^4+x^3+x+1`, `0x11B`)
-/// seguido da transformação afim (§5.1.1 do FIPS 197). Isso evita transcrever à mão uma tabela de
-/// 256 bytes (risco de erro) e é auto-verificável (o `S-box`/`InvS-box` gerados aqui batem com
-/// qualquer implementação de referência do AES).
+/// `AESE`/`AESD`/`AESMC`/`AESIMC` (B8.11) e `SHA1H`/`SHA1SU1`/`SHA256SU0` (B8.11b) foram MIGRADOS
+/// para o núcleo COMPARTILHADO {@link AdvSimdCrypto} na task B13.15 (RFC B13.2 D1, primeiro
+/// consumidor A32) — `mapAesOp`/`mapShaTwoRegisterOp` só traduzem o enum espelhado, a S-box e as
+/// matrizes `MixColumns`/`InvMixColumns` vivem só lá agora. As formas de TRÊS registradores
+/// continuam abaixo (sem encoding A32).
 final class Ir64CryptoExecutor {
     private Ir64CryptoExecutor() {
     }
 
-    /// Polinômio irredutível do `GF(2^8)` usado pelo AES (`x^8+x^4+x^3+x+1`).
-    private static final int AES_GF_MODULUS = 0x11B;
-
-    private static final byte[] S_BOX = new byte[256];
-    private static final byte[] INV_S_BOX = new byte[256];
-
-    static {
-        int[] inverse = new int[256];
-        inverse[0] = 0; // 0 não tem inverso multiplicativo em GF(2^8); AES define S-box(0)=affine(0).
-        for (int x = 1; x < 256; x++) {
-            for (int y = 1; y < 256; y++) {
-                if (gfMultiply(x, y) == 1) {
-                    inverse[x] = y;
-                    break;
-                }
-            }
-        }
-        for (int x = 0; x < 256; x++) {
-            int inv = inverse[x];
-            // Transformação afim (FIPS 197 §5.1.1): b'_i = b_i ^ b_(i+4) ^ b_(i+5) ^ b_(i+6) ^
-            // b_(i+7) (índices mod 8) ^ c_i, c=0x63.
-            int result = 0;
-            for (int bit = 0; bit < 8; bit++) {
-                int b = ((inv >>> bit) & 1)
-                        ^ ((inv >>> ((bit + 4) % 8)) & 1)
-                        ^ ((inv >>> ((bit + 5) % 8)) & 1)
-                        ^ ((inv >>> ((bit + 6) % 8)) & 1)
-                        ^ ((inv >>> ((bit + 7) % 8)) & 1)
-                        ^ ((0x63 >>> bit) & 1);
-                result |= b << bit;
-            }
-            S_BOX[x] = (byte) result;
-            INV_S_BOX[result] = (byte) x;
-        }
+    /// Mirror 1:1 de {@link Ir64CryptoAesOp} → {@link AdvSimdCryptoAesOp} (núcleo compartilhado).
+    private static AdvSimdCryptoAesOp mapAesOp(Ir64CryptoAesOp op) {
+        return switch (op) {
+            case AESE -> AdvSimdCryptoAesOp.AESE;
+            case AESD -> AdvSimdCryptoAesOp.AESD;
+            case AESMC -> AdvSimdCryptoAesOp.AESMC;
+            case AESIMC -> AdvSimdCryptoAesOp.AESIMC;
+        };
     }
 
-    /// Multiplicação em `GF(2^8)` módulo {@link #AES_GF_MODULUS} (`xtime` repetido, "peasant
-    /// multiplication" — mesma técnica didática do FIPS 197 §4.2.1).
-    private static int gfMultiply(int a, int b) {
-        int result = 0;
-        int x = a;
-        int y = b;
-        for (int i = 0; i < 8; i++) {
-            if ((y & 1) != 0) {
-                result ^= x;
-            }
-            boolean carry = (x & 0x80) != 0;
-            x = (x << 1) & 0xFF;
-            if (carry) {
-                x ^= AES_GF_MODULUS & 0xFF;
-            }
-            y >>>= 1;
-        }
-        return result;
+    /// Mirror 1:1 de {@link Ir64CryptoShaTwoRegisterOp} → {@link AdvSimdCryptoShaOp} (núcleo
+    /// compartilhado).
+    private static AdvSimdCryptoShaOp mapShaTwoRegisterOp(Ir64CryptoShaTwoRegisterOp op) {
+        return switch (op) {
+            case SHA1H -> AdvSimdCryptoShaOp.SHA1H;
+            case SHA1SU1 -> AdvSimdCryptoShaOp.SHA1SU1;
+            case SHA256SU0 -> AdvSimdCryptoShaOp.SHA256SU0;
+        };
     }
 
     static boolean executeAes(Aarch64Core core, Ir64Op.CryptoAes op) {
         Aarch64FpRegisters fp = core.fp();
-        byte[] state = new byte[16];
-        switch (op.op()) {
-            case AESE -> {
-                for (int i = 0; i < 16; i++) {
-                    state[i] = (byte) (fp.element(op.rd(), i, 0) ^ fp.element(op.rn(), i, 0));
-                }
-                subBytes(state, S_BOX);
-                shiftRows(state, false);
-            }
-            case AESD -> {
-                for (int i = 0; i < 16; i++) {
-                    state[i] = (byte) (fp.element(op.rd(), i, 0) ^ fp.element(op.rn(), i, 0));
-                }
-                invSubBytes(state);
-                shiftRows(state, true);
-            }
-            case AESMC -> {
-                for (int i = 0; i < 16; i++) {
-                    state[i] = (byte) fp.element(op.rn(), i, 0);
-                }
-                mixColumns(state, false);
-            }
-            case AESIMC -> {
-                for (int i = 0; i < 16; i++) {
-                    state[i] = (byte) fp.element(op.rn(), i, 0);
-                }
-                mixColumns(state, true);
-            }
-        }
-        writeState(fp, op.rd(), state);
+        AdvSimdCrypto.aes(fp, mapAesOp(op.op()),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         return false;
     }
 
@@ -127,17 +67,15 @@ final class Ir64CryptoExecutor {
         return (x & y) | ((x | y) & z);
     }
 
-    /// `Σ0`/`Σ1`/`σ0`/`σ1` do SHA256 (FIPS PUB 180-4 §4.1.2).
+    /// `Σ0`/`Σ1`/`σ1` do SHA256 (FIPS PUB 180-4 §4.1.2). `σ0` migrou para
+    /// {@link AdvSimdCrypto#shaTwoRegister} (B13.15, único consumidor era `SHA256SU0` de dois
+    /// registradores).
     private static int sha256BigSigma0(int x) {
         return Integer.rotateRight(x, 2) ^ Integer.rotateRight(x, 13) ^ Integer.rotateRight(x, 22);
     }
 
     private static int sha256BigSigma1(int x) {
         return Integer.rotateRight(x, 6) ^ Integer.rotateRight(x, 11) ^ Integer.rotateRight(x, 25);
-    }
-
-    private static int sha256SmallSigma0(int x) {
-        return Integer.rotateRight(x, 7) ^ Integer.rotateRight(x, 18) ^ (x >>> 3);
     }
 
     private static int sha256SmallSigma1(int x) {
@@ -236,30 +174,9 @@ final class Ir64CryptoExecutor {
 
     static boolean executeShaTwoRegister(Aarch64Core core, Ir64Op.CryptoShaTwoRegister op) {
         Aarch64FpRegisters fp = core.fp();
-        switch (op.op()) {
-            case SHA1H -> {
-                int m0 = (int) fp.element(op.rn(), 0, WORD_SIZE_LOG2);
-                writeWords(fp, op.rd(), new int[] {Integer.rotateRight(m0, 2), 0, 0, 0});
-            }
-            case SHA1SU1 -> {
-                int[] d = readWords(fp, op.rd());
-                int[] m = readWords(fp, op.rn());
-                int d0 = Integer.rotateLeft(d[0] ^ m[1], 1);
-                int d1 = Integer.rotateLeft(d[1] ^ m[2], 1);
-                int d2 = Integer.rotateLeft(d[2] ^ m[3], 1);
-                int d3 = Integer.rotateLeft(d[3] ^ d0, 1);
-                writeWords(fp, op.rd(), new int[] {d0, d1, d2, d3});
-            }
-            case SHA256SU0 -> {
-                int[] d = readWords(fp, op.rd());
-                int[] m = readWords(fp, op.rn());
-                d[0] += sha256SmallSigma0(d[1]);
-                d[1] += sha256SmallSigma0(d[2]);
-                d[2] += sha256SmallSigma0(d[3]);
-                d[3] += sha256SmallSigma0(m[0]);
-                writeWords(fp, op.rd(), d);
-            }
-        }
+        AdvSimdCrypto.shaTwoRegister(fp, mapShaTwoRegisterOp(op.op()),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         return false;
     }
 
@@ -527,62 +444,4 @@ final class Ir64CryptoExecutor {
         return false;
     }
 
-    private static void writeState(Aarch64FpRegisters fp, int rd, byte[] state) {
-        long lo = 0L;
-        long hi = 0L;
-        for (int i = 0; i < 16; i++) {
-            long b = state[i] & 0xFFL;
-            if (i < 8) {
-                lo |= b << (i * 8);
-            } else {
-                hi |= b << ((i - 8) * 8);
-            }
-        }
-        fp.setQ(rd, lo, hi);
-    }
-
-    private static void subBytes(byte[] state, byte[] table) {
-        for (int i = 0; i < 16; i++) {
-            state[i] = table[state[i] & 0xFF];
-        }
-    }
-
-    private static void invSubBytes(byte[] state) {
-        subBytes(state, INV_S_BOX);
-    }
-
-    /// `ShiftRows`/`InvShiftRows` — a linha `r` (`0`-`3`) é deslocada `r` posições à esquerda
-    /// (`ShiftRows`) ou à direita (`InvShiftRows`); estado organizado por COLUNA
-    /// (`state[r][c] = bytes[r + 4*c]`, convenção padrão do AES).
-    private static void shiftRows(byte[] state, boolean inverse) {
-        byte[] copy = state.clone();
-        for (int row = 0; row < 4; row++) {
-            for (int col = 0; col < 4; col++) {
-                int srcCol = inverse ? (col - row + 4) % 4 : (col + row) % 4;
-                state[row + 4 * col] = copy[row + 4 * srcCol];
-            }
-        }
-    }
-
-    /// `MixColumns`/`InvMixColumns` — cada coluna de 4 bytes é multiplicada pela matriz `GF(2^8)`
-    /// padrão do AES (FIPS 197 §5.1.3/§5.3.3).
-    private static void mixColumns(byte[] state, boolean inverse) {
-        int[][] matrix = inverse
-                ? new int[][] {{14, 11, 13, 9}, {9, 14, 11, 13}, {13, 9, 14, 11}, {11, 13, 9, 14}}
-                : new int[][] {{2, 3, 1, 1}, {1, 2, 3, 1}, {1, 1, 2, 3}, {3, 1, 1, 2}};
-        for (int col = 0; col < 4; col++) {
-            int a0 = state[4 * col] & 0xFF;
-            int a1 = state[4 * col + 1] & 0xFF;
-            int a2 = state[4 * col + 2] & 0xFF;
-            int a3 = state[4 * col + 3] & 0xFF;
-            int[] a = {a0, a1, a2, a3};
-            for (int row = 0; row < 4; row++) {
-                int sum = 0;
-                for (int k = 0; k < 4; k++) {
-                    sum ^= gfMultiply(matrix[row][k], a[k]);
-                }
-                state[4 * col + row] = (byte) sum;
-            }
-        }
-    }
 }

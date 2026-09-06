@@ -47,7 +47,7 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-05, após C12.4/C12.7 fecharem)
+## Onde estamos (atualizado 2026-09-06, após B13.15 fechar)
 
 A fila anterior estava **drenada e não dizia isso** (listava 6 tasks já fechadas como pegáveis, e 13
 arquivos de task ainda tinham `**Status:** ⬜` no cabeçalho — todos corrigidos). Depois disso, uma
@@ -68,18 +68,16 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Nenhuma dependência aberta. Lista revalidada em 2026-09-05 contra o `INDICE.md` de cada trilha
-(a versão anterior desta tabela listava B13.9/B13.10/C12.2/C12.3/A10.3-A10.5 — **todas já ✅**,
-removidas).
+Nenhuma dependência aberta. Lista revalidada em 2026-09-06 (sessão da B13.15) contra o
+`INDICE.md` das trilhas B/C — **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do
+escopo desta sessão), mantidos abaixo por não terem sido tocados; B13.12/B19.5.3/B19.6/B19.7 já
+✅ removidos (a nota de 2026-09-05 já avisava que estavam obsoletos).
 
 | Task | O que | Tamanho |
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B13.12](trilha-b-arquiteturas/b13.12-neon-two-reg-misc.md)** | NEON two-reg-misc A32 (`size==0b11`, layout de campos próprio) — abre o 4º frame do épico | ~36 linhas |
-| **[B19.5.3](trilha-b-arquiteturas/b19.5.3-fp16-decode-alcancavel.md)** | `FEAT_FP16`: as 17 linhas já alcançáveis (pairwise escalar, reduções across-lanes, ponto fixo) — 1º gate real de `Aarch64Feature.FP16` | 17 linhas |
-| **[B19.6](trilha-b-arquiteturas/b19.6-a64-diversos.md)** | A64 diversos (`SYS`/`SYSL`, `PRFM (literal)`, `PACGA`, `ABS` geral, `DUP` escalar, `FMOV` `Vn.D[1]`, `Vimm` — irmão A64 da B13.9) | 10 linhas |
-| **[B19.7](trilha-b-arquiteturas/b19.7-a64-bf16.md)** | A64 `FEAT_BF16` (8 linhas) — `bfloat16` não existe no JDK, conversão é código novo | 8 linhas |
+| **[B13.13](trilha-b-arquiteturas/b13.13-neon-two-reg-misc-conversoes.md)** | NEON two-reg-misc de conversão/arredondamento A32 (`VRINT*`/`VCVT*`) — fecha o `null` residual do sub-espaço `size==0b11` (única pendência, ver B13.15) | 21 linhas |
 | **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
 
 **B19.10 FECHADA 2026-09-06** — as 13 linhas de cripto A64 SHA-512/SM3/SM4 (mesmo prefixo `0xCE`
@@ -90,11 +88,23 @@ task. **Nota**: esta tabela "Pegáveis AGORA" já estava parcialmente desatualiz
 sessão (B13.12/B19.5.3/B19.6/B19.7/B19.12 acima já constavam ✅ no `INDICE.md` da trilha B — não
 confie nela sem checar o índice real de cada trilha, mesmo aviso do topo deste arquivo).
 
-**Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
-(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.13-B13.16/19-22 (depende de B13.12
-ou de B13.18, ambas ✅), B19.9/11/13 (fechamento/depende de sub-tasks ainda ⬜).
+**B13.15 FECHADA 2026-09-06** — as 7 linhas de cripto A32 (`AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/
+`SHA1SU1`/`SHA256SU0`, `ArmFeature.CRYPTO` nova, separada de `ADVANCED_SIMD`); migração D1 completa
+(`advsimd.AdvSimdCrypto` novo, A64 passou a delegar, zero-diff); achado que corrige a spec: o
+número do plano (~15) contava também as formas de 3 registradores, que **não existem** em
+`neon-dp.decode`. **Achado que revisa a premissa da própria task**: ela assumia ser "a última do
+sub-espaço `size==0b11`" e mandava trocar o `null` residual por `unimplemented` — mas **B13.13**
+(conversões `VRINT*`/`VCVT*`) segue `⬜`, então essa troca NÃO foi feita (ficaria sem espaço para
+B13.13 registrar seu decoder depois). `docs/COBERTURA-ISA.md` byte a byte idêntica (nenhum preset
+declara `CRYPTO`). G5 verde nos 5 consumidores. Ver **Resultado** na task.
 
-**Ordem sugerida**: qualquer uma das sete acima. **B13.18 FECHADA 2026-09-05** — `VSDOT`/`VUDOT`/
+**Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
+(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.16/19-22 (depende de B13.12/B13.15/
+B13.18, todas ✅, ou de B13.19/B13.21 ainda ⬜), B19.9/11/13 (fechamento/depende de sub-tasks
+ainda ⬜). **B13.13 agora é a única task que fecha o sub-espaço `size==0b11`** (dívida do `null`
+residual) — pegável, sem dependência aberta.
+
+**Ordem sugerida**: qualquer uma das três acima. **B13.18 FECHADA 2026-09-05** — `VSDOT`/`VUDOT`/
 `VUSDOT` (vetorial) + as 4 formas `_scalar` (`FEAT_DotProd`/`FEAT_I8MM`, DUAS features), núcleo
 `AdvSimdLanes.dotProduct`/`dotProductByElement` NOVO (achado: nem `SDOT_v`/`UDOT_v` nem
 `USDOT`/`SUDOT` do A64 têm decoder ainda, ao contrário do que a spec da B19.12 registrava — não há
@@ -203,7 +213,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 `B13.7` · `B13.8` · `B13.9` · `B13.10` · `B13.11` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11`
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
 `C12.4` · `C12.7` · `B19.8` · `B13.12` · `B13.17` · `B13.18` · `B19.5.3` · `B19.6` · `B19.7` ·
-`B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` ·
+`B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` · `B13.15` ·
 **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec

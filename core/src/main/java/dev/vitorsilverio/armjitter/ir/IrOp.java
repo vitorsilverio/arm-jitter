@@ -13,7 +13,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
         IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
-        IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar {
+        IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
+        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -149,6 +150,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_TABLE_LOOKUP = 93;
         /// B13.14: `VDUP` escalar (NEON, `Vd = Vm[index]` replicado) — ver {@link NeonDuplicateScalar}.
         public static final int NEON_DUPLICATE_SCALAR = 94;
+        /// B13.15: `AESE`/`AESD`/`AESMC`/`AESIMC` — ver {@link NeonCryptoAes}.
+        public static final int NEON_CRYPTO_AES = 95;
+        /// B13.15: `SHA1H`/`SHA1SU1`/`SHA256SU0` — ver {@link NeonCryptoSha}.
+        public static final int NEON_CRYPTO_SHA = 96;
     }
 
     /// Operacao ALU generica.
@@ -2306,5 +2311,50 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte, em índice de `D` (`0`-`31`).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_DUPLICATE_SCALAR; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `AESE`/`AESD`/`AESMC`/`AESIMC` (B13.15, ARMv8-A Cryptographic
+    /// Extension, `neon-dp.decode` "2-reg-misc" `opc1=0b00`/`opc2` `0110`/`0111`, `size` fixo em
+    /// `0b00`, `Q` fixo — sempre 128 bits). Gate: {@link
+    /// dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}, SEPARADO de `ADVANCED_SIMD` (um núcleo
+    /// pode ter NEON sem a extensão cripto opcional).
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoAes} no ENCODING/IR; a
+    /// SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#aes}), RFC B13.2 D1 — migração completa em
+    /// B13.15 (o A64 passou a delegar também).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonCryptoAes(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp op,
+            /// Registrador de destino (e, para `AESE`/`AESD`, primeiro operando), em índice de `D`
+            /// PAR que inicia o `Q` (`0`-`31`).
+            int vd,
+            /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_CRYPTO_AES; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `SHA1H`/`SHA1SU1`/`SHA256SU0` ("Cryptographic two-register
+    /// SHA", B13.15, MESMA extensão de {@link NeonCryptoAes}, `neon-dp.decode` "2-reg-misc"
+    /// `opc1=0b01`/`opc2=0b0101` ou `opc1=0b10`/`opc2=0b0111`, `size` fixo em `0b10`, `Q` fixo).
+    /// Gate: {@link dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoShaTwoRegister} no
+    /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#shaTwoRegister}), RFC B13.2 D1.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonCryptoSha(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp op,
+            /// Registrador de destino, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
+            int vd,
+            /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_CRYPTO_SHA; }
     }
 }

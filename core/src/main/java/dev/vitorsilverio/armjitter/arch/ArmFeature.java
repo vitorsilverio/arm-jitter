@@ -298,5 +298,16 @@ public enum ArmFeature {
     /// `VSMMLA`/`VUMMLA`/`VUSMMLA` (matriciais 2×8·8×2) ficam para a B13.19. Mirror de
     /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#INT8_MATRIX_MULTIPLY} para o lado
     /// A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
-    INT8_MATRIX_MULTIPLY
+    INT8_MATRIX_MULTIPLY,
+
+    // ---- Onda 6, B13.15 (NEON two-reg-misc: AESE/AESD/AESMC/AESIMC/SHA1H/SHA1SU1/SHA256SU0) ----
+    /// **ARMv8-A Cryptographic Extension** (AES + SHA1 + SHA256, base ARMv8.0) no espaço NEON de 32
+    /// bits — `AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/`SHA1SU1`/`SHA256SU0` (`neon-dp.decode`
+    /// "2-reg-misc", `size==0b11`). Extensão **OPCIONAL**, SEPARADA de {@link #ADVANCED_SIMD}: um
+    /// núcleo pode ter NEON sem esta extensão (por isso o gate é checado À PARTE, não implicado por
+    /// `ADVANCED_SIMD`). **Sem equivalente `Aarch64Feature`**: o lado A64 (B8.11/B8.11b) nunca
+    /// ganhou gate de feature (decodifica incondicionalmente) — achado pré-existente, fora do
+    /// escopo desta task (B13.15), não corrigido aqui. **Nenhum preset a declara** (a saída de
+    /// `NOT_IN_ANY_PRESET` é a B13.22).
+    CRYPTO
 }

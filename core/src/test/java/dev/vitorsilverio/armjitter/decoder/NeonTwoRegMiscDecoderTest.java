@@ -40,6 +40,15 @@ class NeonTwoRegMiscDecoderTest {
 
     private static final ArmArchitecture NEON_ARCH = NEON_FEATURES.withDecoderExtensions(neonFirst(NEON_FEATURES));
 
+    /// B13.15: `CRYPTO` é feature SEPARADA de `ADVANCED_SIMD` (Armadilha 3) — arquitetura própria
+    /// com as duas, para os testes de `AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/`SHA1SU1`/`SHA256SU0`.
+    private static final ArmArchitecture CRYPTO_FEATURES =
+            ArmArchitecture.extending(ArmArchitecture.ARMV7A, "ARMv7-TestNeonCrypto",
+                    ArmFeature.ADVANCED_SIMD, ArmFeature.VFPV3_D32, ArmFeature.CRYPTO);
+
+    private static final ArmArchitecture CRYPTO_ARCH =
+            CRYPTO_FEATURES.withDecoderExtensions(neonFirst(CRYPTO_FEATURES));
+
     private static List<DecoderExtension> neonFirst(ArmArchitecture features) {
         List<DecoderExtension> extensions = new ArrayList<>();
         extensions.add(new NeonTwoRegMiscDecoder(features));
@@ -88,6 +97,20 @@ class NeonTwoRegMiscDecoderTest {
 
     private static void run(ArmCore core, int word) {
         new IrBlockExecutor(NEON_ARCH).executeOp(core, liftSingleOp(decode(word)), 0);
+    }
+
+    private static IrOp liftedCryptoOf(int word) {
+        DecodedInstruction decoded = decode(CRYPTO_ARCH, word);
+        assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
+        return liftSingleOp(decoded);
+    }
+
+    private static ArmCore newCryptoCore() {
+        return new ArmCore(new TestAddressSpace(64), SwiDispatcher.empty(), CRYPTO_ARCH);
+    }
+
+    private static void runCrypto(ArmCore core, int word) {
+        new IrBlockExecutor(CRYPTO_ARCH).executeOp(core, liftSingleOp(decode(CRYPTO_ARCH, word)), 0);
     }
 
     // ── Encoding golden (assembler real, arm-none-eabi-as -mfpu=neon-vfpv4) ──
@@ -166,15 +189,14 @@ class NeonTwoRegMiscDecoderTest {
         assertNull(new NeonTwoRegMiscDecoder(ArmArchitecture.ARMV7A).tryDecode(word, 0, Condition.AL));
     }
 
-    // ── Espaço livre preservado: `VRINT*`(B13.13)/`VTBL`/`VDUP_scalar`(B13.14)/`AESE`/`SHA1H`
-    // (B13.15) caem em `null`, não `unimplemented` — para essas tasks poderem registrar depois ──
+    // ── Espaço livre preservado: `VRINT*`(B13.13)/`VTBL`/`VDUP_scalar`(B13.14) caem em `null`, não
+    // `unimplemented` — para essa task poder registrar o próprio decoder depois. `AESE`/`SHA1H`
+    // fecharam nesta task (B13.15) — ver os testes de cripto abaixo ──
 
     @Test
     void unrecognizedSpaceStaysNullForFutureSiblingTasks() {
         int[] wordsInsideFrame = {
                 0xf3ba0401, // vrintn.f32 d0,d1 (B13.13)
-                0xf3b00302, // aese.8 q0,q1 (B13.15)
-                0xf3b902c2, // sha1h.32 q0,q1 (B13.15)
         };
         for (int w : wordsInsideFrame) {
             assertNull(new NeonTwoRegMiscDecoder(NEON_FEATURES).tryDecode(w, 0, Condition.AL));
@@ -557,5 +579,205 @@ class NeonTwoRegMiscDecoderTest {
         assertEquals(coreTrn.vfp().d(1), coreUzp.vfp().d(1));
         assertEquals(coreTrn.vfp().d(0), coreZip.vfp().d(0));
         assertEquals(coreTrn.vfp().d(1), coreZip.vfp().d(1));
+    }
+
+    // ── B13.15: AESE/AESD/AESMC/AESIMC/SHA1H/SHA1SU1/SHA256SU0 (`CRYPTO`, SEPARADA de
+    // `ADVANCED_SIMD`) — mesmo frame "2-reg-misc", `opc1=0b00`+`opc2` 0110/0111 (AES, `size` fixo
+    // em `0b00`) e `opc1=01`/`opc2=0101` ou `opc1=10`/`opc2=0111` (SHA, `size` fixo em `0b10`) ──
+
+    @Test
+    void cryptoEncodingsMatchTheAssembler() {
+        // Confirmado via `arm-linux-gnueabihf-as -march=armv8-a+crypto` real (WSL/Ubuntu).
+        assertEquals(0xf3b00302, enc(0, 0b00, 0, 0b0110, 0, 2));  // aese.8 q0,q1
+        assertEquals(0xf3b04306, enc(0, 0b00, 4, 0b0110, 0, 6));  // aese.8 q2,q3
+        assertEquals(0xf3b00342, enc(0, 0b00, 0, 0b0110, 1, 2));  // aesd.8 q0,q1
+        assertEquals(0xf3b00382, enc(0, 0b00, 0, 0b0111, 0, 2));  // aesmc.8 q0,q1
+        assertEquals(0xf3b003c2, enc(0, 0b00, 0, 0b0111, 1, 2));  // aesimc.8 q0,q1
+        assertEquals(0xf3b902c2, enc(2, 0b01, 0, 0b0101, 1, 2));  // sha1h.32 q0,q1
+        assertEquals(0xf3ba0382, enc(2, 0b10, 0, 0b0111, 0, 2));  // sha1su1.32 q0,q1
+        assertEquals(0xf3ba03c2, enc(2, 0b10, 0, 0b0111, 1, 2));  // sha256su0.32 q0,q1
+    }
+
+    @Test
+    void cryptoRequiresItsOwnFeatureEvenWithAdvancedSimd() {
+        // `CRYPTO` é SEPARADA de `ADVANCED_SIMD` (Armadilha 3) — reconhecido (não `null`) mas
+        // `UNIMPLEMENTED` sem a feature, ainda que `NEON_ARCH` tenha `ADVANCED_SIMD`.
+        int[] words = {
+                enc(0, 0b00, 0, 0b0110, 0, 2),  // aese
+                enc(0, 0b00, 0, 0b0110, 1, 2),  // aesd
+                enc(0, 0b00, 0, 0b0111, 0, 2),  // aesmc
+                enc(0, 0b00, 0, 0b0111, 1, 2),  // aesimc
+                enc(2, 0b01, 0, 0b0101, 1, 2),  // sha1h
+                enc(2, 0b10, 0, 0b0111, 0, 2),  // sha1su1
+                enc(2, 0b10, 0, 0b0111, 1, 2),  // sha256su0
+        };
+        for (int w : words) {
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode(NEON_ARCH, w).kind());
+        }
+    }
+
+    @Test
+    void cryptoDecodesWithRightOpAndRegisters() {
+        IrOp.NeonCryptoAes aese = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0110, 0, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESE, aese.op());
+        assertEquals(0, aese.vd());
+        assertEquals(2, aese.vm());
+
+        IrOp.NeonCryptoAes aesd = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 4, 0b0110, 1, 6));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESD, aesd.op());
+        assertEquals(4, aesd.vd());
+        assertEquals(6, aesd.vm());
+
+        IrOp.NeonCryptoAes aesmc = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 0, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESMC, aesmc.op());
+
+        IrOp.NeonCryptoAes aesimc = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 1, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESIMC, aesimc.op());
+
+        IrOp.NeonCryptoSha sha1h = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b01, 0, 0b0101, 1, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA1H, sha1h.op());
+        assertEquals(0, sha1h.vd());
+        assertEquals(2, sha1h.vm());
+
+        IrOp.NeonCryptoSha sha1su1 = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 0, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA1SU1, sha1su1.op());
+
+        IrOp.NeonCryptoSha sha256su0 = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 1, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA256SU0, sha256su0.op());
+    }
+
+    @Test
+    void cryptoWrongSizeIsUnimplemented() {
+        // AES exige `size==0b00`; SHA exige `size==0b10` (QEMU `DO_2M_CRYPTO`).
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(1, 0b00, 0, 0b0110, 0, 2)).kind()); // aese com size=1
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(0, 0b01, 0, 0b0101, 1, 2)).kind()); // sha1h com size=0
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(1, 0b10, 0, 0b0111, 0, 2)).kind()); // sha1su1 com size=1
+    }
+
+    @Test
+    void cryptoOddRegisterIsUnimplemented() {
+        // `Q` é sempre fixo (as 7 operam em 128 bits) — `vd`/`vm` ímpar (D ímpar iniciando o par)
+        // é UNDEFINED.
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(0, 0b00, 1, 0b0110, 0, 2)).kind()); // aese, vd ímpar
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(0, 0b00, 0, 0b0110, 0, 3)).kind()); // aese, vm ímpar
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(CRYPTO_ARCH, enc(2, 0b01, 1, 0b0101, 1, 2)).kind()); // sha1h, vd ímpar
+    }
+
+    // ── Execução: valores públicos do FIPS 197 (AES) e reimplementação independente do FIPS
+    // PUB 180-4 (SHA) — MESMOS valores de referência de `Ir64CryptoExecutorTest`/
+    // `Ir64CryptoShaExecutorTest` (A64), já que a semântica é a MESMA função compartilhada ──
+
+    @Test
+    void aeseWithZeroInputProducesUniformSBoxOfZero() {
+        // Vd=Q0(D0:D1)=0, Vm=Q1(D2:D3)=0 -> XOR=0 -> SubBytes(0)=0x63 em todo byte (FIPS 197).
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(0, 0L);
+        core.vfp().setD(1, 0L);
+        core.vfp().setD(2, 0L);
+        core.vfp().setD(3, 0L);
+        runCrypto(core, enc(0, 0b00, 0, 0b0110, 0, 2)); // aese.8 q0,q1
+        assertEquals(0x6363636363636363L, core.vfp().d(0));
+        assertEquals(0x6363636363636363L, core.vfp().d(1));
+    }
+
+    @Test
+    void aesdWithZeroInputProducesUniformInverseSBoxOfZero() {
+        // FIPS 197, InvS-box(0x00)=0x52.
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(4, 0L);
+        core.vfp().setD(5, 0L);
+        core.vfp().setD(6, 0L);
+        core.vfp().setD(7, 0L);
+        runCrypto(core, enc(0, 0b00, 4, 0b0110, 1, 6)); // aesd.8 q2,q3
+        assertEquals(0x5252525252525252L, core.vfp().d(4));
+        assertEquals(0x5252525252525252L, core.vfp().d(5));
+    }
+
+    @Test
+    void aesdInvertsAeseWhenBothOperandsAreZeroKey() {
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(0, 0x0706050403020100L);
+        core.vfp().setD(1, 0x0F0E0D0C0B0A0908L);
+        core.vfp().setD(2, 0L);
+        core.vfp().setD(3, 0L); // "round key" zero (Q1)
+
+        runCrypto(core, enc(0, 0b00, 0, 0b0110, 0, 2)); // aese.8 q0,q1
+        runCrypto(core, enc(0, 0b00, 0, 0b0110, 1, 2)); // aesd.8 q0,q1
+
+        assertEquals(0x0706050403020100L, core.vfp().d(0));
+        assertEquals(0x0F0E0D0C0B0A0908L, core.vfp().d(1));
+    }
+
+    @Test
+    void aesmcAppliesFirstColumnOfRealMixColumnsMatrix() {
+        // Coluna 0 de Vm = (0x01,0,0,0); MixColumns real (FIPS 197 §5.1.3) -> coluna (02,01,01,03).
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(2, 0x0000000000000001L); // Q1 (Vm)
+        core.vfp().setD(3, 0L);
+        runCrypto(core, enc(0, 0b00, 0, 0b0111, 0, 2)); // aesmc.8 q0,q1
+        assertEquals(0x0000000003010102L, core.vfp().d(0));
+        assertEquals(0L, core.vfp().d(1));
+    }
+
+    @Test
+    void aesimcInvertsAesmc() {
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(2, 0x1122334455667788L); // Q1 (Vm original)
+        core.vfp().setD(3, 0x99AABBCCDDEEFF00L);
+
+        runCrypto(core, enc(0, 0b00, 4, 0b0111, 0, 2)); // aesmc.8 q2,q1 (Vd=Q2=D4:D5)
+        runCrypto(core, enc(0, 0b00, 6, 0b0111, 1, 4)); // aesimc.8 q3,q2 (Vd=Q3=D6:D7, Vm=Q2)
+
+        assertEquals(0x1122334455667788L, core.vfp().d(6));
+        assertEquals(0x99AABBCCDDEEFF00L, core.vfp().d(7));
+    }
+
+    private static long pack(int lowWord, int highWord) {
+        return (lowWord & 0xFFFFFFFFL) | ((highWord & 0xFFFFFFFFL) << 32);
+    }
+
+    private static void assertWords(ArmCore core, int vd, int w0, int w1, int w2, int w3) {
+        assertEquals(pack(w0, w1), core.vfp().d(vd));
+        assertEquals(pack(w2, w3), core.vfp().d(vd + 1));
+    }
+
+    @Test
+    void sha1hRotatesWordZeroRight2Bits() {
+        // MESMO caso golden de `Ir64CryptoShaExecutorTest#sha1h` — só a palavra 0 de Vm importa.
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(2, 0x12345678L);
+        core.vfp().setD(3, 0xFFFFFFFFFFFFFFFFL); // metade alta de Vm ignorada.
+        runCrypto(core, enc(2, 0b01, 0, 0b0101, 1, 2)); // sha1h.32 q0,q1
+        assertWords(core, 0, 0x048d159e, 0, 0, 0);
+    }
+
+    @Test
+    void sha1su1UpdatesMessageScheduleSecondHalf() {
+        // MESMO caso golden de `Ir64CryptoShaExecutorTest#sha1su1`.
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(0, pack(1, 2));
+        core.vfp().setD(1, pack(3, 4));
+        core.vfp().setD(2, pack(0x11111111, 0x22222222));
+        core.vfp().setD(3, pack(0x33333333, 0x44444444));
+        runCrypto(core, enc(2, 0b10, 0, 0b0111, 0, 2)); // sha1su1.32 q0,q1
+        assertWords(core, 0, 0x44444446, 0x66666662, 0x8888888e, 0x88888884);
+    }
+
+    @Test
+    void sha256su0UpdatesMessageScheduleFirstHalf() {
+        // MESMO caso golden de `Ir64CryptoShaExecutorTest#sha256su0`.
+        ArmCore core = newCryptoCore();
+        core.vfp().setD(0, pack(1, 2));
+        core.vfp().setD(1, pack(3, 4));
+        core.vfp().setD(2, pack(0x11111111, 0x22222222));
+        core.vfp().setD(3, pack(0x33333333, 0x44444444));
+        runCrypto(core, enc(2, 0b10, 0, 0b0111, 1, 2)); // sha256su0.32 q0,q1
+        assertWords(core, 0, 0x04008001, 0x0600c002, 0x08010003, 0x64444448);
     }
 }
