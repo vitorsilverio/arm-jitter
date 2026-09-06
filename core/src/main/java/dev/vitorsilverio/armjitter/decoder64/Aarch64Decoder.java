@@ -3193,11 +3193,21 @@ public final class Aarch64Decoder {
                 // B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/
                 // `FMINNMP_s`) vive neste MESMO espaço (`rm`=`0b1_0000` fixo, `bit10=0`), ao lado do
                 // `ADDP_s` inteiro. `esz` bits[23:22] → `a`(bit23, discriminador)/`sz`(bit22).
+                // B19.5.3 (`FEAT_FP16`): a MESMA tabela de opcodes vale para as formas `_h`
+                // (conferido bit a bit contra `a64.decode`) — só o `U` inverte (`_sd`→`u=1`,
+                // `_h`→`u=0`) e `esz` da forma `_h` é SEMPRE `HALFWORD` (o `sz`/bit22 lido acima
+                // não existe de verdade nesse encoding, é bit fixo em `0`).
                 boolean fpA = ((esz >>> 1) & 1) != 0;
-                int fpFloatEsz = 2 + (esz & 1);
-                Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpScalarPairwiseOpcode(u, fpA, opcode);
+                Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpScalarPairwiseOpcode(fpA, opcode);
                 if (fpPairwiseOp != null) {
-                    return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
+                    if (u) {
+                        int fpFloatEsz = 2 + (esz & 1);
+                        return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
+                    }
+                    if (architecture.has(Aarch64Feature.FP16)) {
+                        return new Ir64Op.VectorFpArithmeticPairwise(
+                                fpPairwiseOp, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn, rn);
+                    }
                 }
                 throw unsupported(word, address);
             }
@@ -3212,11 +3222,19 @@ public final class Aarch64Decoder {
             // B8.10: `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` vivem no MESMO slot `Rm[4]=1` do inteiro
             // "across lanes" — `U=1` sempre (nunca colide com os `U`s usados pelo inteiro acima,
             // conferido contra `a64.decode` real) e `Q=1` sempre (só existe arranjo `4S`, sem forma
-            // doubleword — meia-precisão usa `U=0`, fica de fora por não bater aqui, `FEAT_FP16`).
+            // doubleword). B19.5.3: as formas `_h` (`FEAT_FP16`) vivem no MESMO `if`, `U=0` — o
+            // MESMO `opcode`/`a` (bit23) do `decodeVectorFpAcrossLanesOpcode` acima, mas `Q` é
+            // LIVRE (arranjo `4H`/`8H`, ao contrário de `_s`, que só tem `4S`).
             if (u && q) {
                 Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
                 if (fpOp != null) {
-                    return new Ir64Op.VectorFpAcrossLanes(fpOp, rd, rn);
+                    return new Ir64Op.VectorFpAcrossLanes(fpOp, true, ADVSIMD_ESZ_WORD, rd, rn);
+                }
+            }
+            if (!u && architecture.has(Aarch64Feature.FP16)) {
+                Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
+                if (fpOp != null) {
+                    return new Ir64Op.VectorFpAcrossLanes(fpOp, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
                 }
             }
             throw unsupported(word, address);
@@ -3641,13 +3659,11 @@ public final class Aarch64Decoder {
     /// B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/`FMINNMP_s`,
     /// `ARM DDI 0487` C4.1.95 `01 U 11110 0 sz 11000 opcode 10 Rn Rd`). Classe PRÓPRIA — `opcode`
     /// (bits[15:11]) tem valores diferentes de {@link #decodeVectorFpPairwiseOpcode} (não-pareada),
-    /// então tabela separada. `U = 1` sempre nos `_sd` (é `U = 0` que seleciona os `_h`, `FEAT_FP16`)
-    /// ⇒ `!u` devolve `null` e exclui `_h` de graça. `a` é o bit23 (`FMAXP`/`FMAXNMP` → `a=0`,
-    /// `FMINP`/`FMINNMP` → `a=1`). Conferido bit a bit contra corpus real (devkitA64).
-    private static Ir64VectorFpPairwiseOp decodeVectorFpScalarPairwiseOpcode(boolean u, boolean a, int opcode) {
-        if (!u) {
-            return null;
-        }
+    /// então tabela separada. `a` é o bit23 (`FMAXP`/`FMAXNMP` → `a=0`, `FMINP`/`FMINNMP` → `a=1`).
+    /// Conferido bit a bit contra corpus real (devkitA64). **B19.5.3**: esta tabela vale IGUAL para
+    /// as formas `_h` (`FEAT_FP16`, `U=0`) — o `U` só distingue `_sd`/`_h`, nunca o `opcode`/`a`;
+    /// por isso o parâmetro `u` saiu da assinatura e o chamador decide o gate.
+    private static Ir64VectorFpPairwiseOp decodeVectorFpScalarPairwiseOpcode(boolean a, int opcode) {
         return switch (opcode) {
             case 0b1_1011 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
             case 0b1_1111 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
@@ -4279,9 +4295,14 @@ public final class Aarch64Decoder {
             // Só forma ESCALAR nesta task — a vetorial `_vf` é B19.4.
             if (opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE
                     || opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE) {
-                if (esz != ADVSIMD_ESZ_WORD && esz != ADVSIMD_INT_SCALAR_ESZ) {
-                    // `esz==1` (meia precisão) → `FEAT_FP16`, B19.5; `esz==0` não é conversão FP↔
-                    // fixo (G8).
+                // B19.5.3: `esz==1` (meia precisão) só é aceito com `FEAT_FP16` presente — sem a
+                // feature, byte a byte o `throw` de sempre (G3/zero-diff em v8.0/v8.1). `esz==0`
+                // continua UNDEFINED sempre (G8: não é conversão FP↔fixo real).
+                if (esz == ADVSIMD_ESZ_HALFWORD) {
+                    if (!architecture.has(Aarch64Feature.FP16)) {
+                        throw unsupported(word, address);
+                    }
+                } else if (esz != ADVSIMD_ESZ_WORD && esz != ADVSIMD_INT_SCALAR_ESZ) {
                     throw unsupported(word, address);
                 }
                 // B19.4: a forma VETORIAL (`_vf`, `!scalar`) reaproveita o MESMO record com `q` real.

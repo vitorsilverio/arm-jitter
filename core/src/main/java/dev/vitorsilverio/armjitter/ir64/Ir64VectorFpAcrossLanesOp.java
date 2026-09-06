@@ -1,10 +1,11 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorFpAcrossLanes} (`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV`, B8.10) —
-/// reduz os 4 elementos SIMPLES (`4S`, único arranjo real; não existe forma doubleword nem
-/// forma escalar D-only) de `Rn` a um único escalar simples em `Rd`. Irmã de
-/// {@link Ir64VectorAcrossLanesOp} (inteiro, B8.7) — família de encoding separada (`U`=1 fixo,
-/// `Q`=1 fixo), por isso um `Ir64Op`/enum próprios em vez de estender aquele.
+/// Operação de {@link Ir64Op.VectorFpAcrossLanes} (`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV`, B8.10 —
+/// formas `_s`; B19.5.3 — formas `_h`, `FEAT_FP16`). Reduz os elementos de `Rn` a um único
+/// escalar em `Rd`: `4S` é o único arranjo real de precisão simples (`U`=1/`Q`=1 fixos, sem forma
+/// doubleword nem escalar D-only), mas meia precisão tem `4H`/`8H` (`Q` livre). Irmã de
+/// {@link Ir64VectorAcrossLanesOp} (inteiro, B8.7) — família de encoding separada, por isso um
+/// `Ir64Op`/enum próprios em vez de estender aquele.
 public enum Ir64VectorFpAcrossLanesOp {
     /// Máximo entre todos os elementos, IEEE `FPMaxNum` (ignora `NaN` se algum operando é numérico).
     FMAXNMV,

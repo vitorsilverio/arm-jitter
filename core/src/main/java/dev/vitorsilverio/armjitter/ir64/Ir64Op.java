@@ -2306,15 +2306,22 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.VECTOR_TABLE_LOOKUP; }
     }
 
-    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (AdvSIMD across lanes de ponto flutuante, B8.10) —
-    /// reduz os 4 elementos SIMPLES de `Rn` (arranjo `4S`, único real; `Q`/`esz` sempre fixos,
-    /// diferente de {@link VectorAcrossLanes}) a um único escalar simples em `Rd`.
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (AdvSIMD across lanes de ponto flutuante) — reduz os
+    /// elementos de `Rn` a um único escalar em `Rd`. B8.10: forma `_s`, sempre `q=true`/
+    /// `esz=WORD` (arranjo `4S`, único real em precisão simples). B19.5.3: forma `_h`
+    /// (`FEAT_FP16`), `esz=HALFWORD` com `q` LIVRE (arranjo `4H` ou `8H`, ao contrário da `_s`).
     record VectorFpAcrossLanes(
             /// Operação a executar.
             Ir64VectorFpAcrossLanesOp op,
-            /// Registrador `V` de destino (escalar S).
+            /// `true` para reduzir as 8 lanes de `Rn` (`8H`, só existe em `_h`), `false` para as 4
+            /// baixas (`4H`/`4S`).
+            boolean q,
+            /// `log2` do tamanho de cada elemento em bytes — `1` (halfword, `_h`) ou `2` (word,
+            /// `_s`).
+            int esz,
+            /// Registrador `V` de destino (escalar).
             int rd,
-            /// Registrador `V` fonte (lido como `.4s`).
+            /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ACROSS_LANES; }
     }

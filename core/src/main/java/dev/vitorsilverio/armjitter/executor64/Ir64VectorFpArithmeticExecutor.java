@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
@@ -406,23 +407,46 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
-    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (B8.10) — reduz os 4 elementos SIMPLES de `Rn` a um
-    /// único escalar S em `Rd`. Só precisão simples (único arranjo real desta família, `esz`
-    /// sempre `2` — ver {@link Ir64Op.VectorFpAcrossLanes}), por isso sem o `switch` esz==2/3 do
-    /// resto desta classe.
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — reduz os elementos de `Rn` a um único escalar em
+    /// `Rd`. B8.10: precisão simples, `esz=2` fixo, sempre 4 elementos (`4S`, único arranjo real).
+    /// B19.5.3 (`FEAT_FP16`): `esz=1`, `elements` `4` ou `8` conforme {@link Ir64Op.VectorFpAcrossLanes#q()}
+    /// — daí o uso de {@link #elementsPerRegister} em vez do `4` fixo de antes desta task.
     static boolean executeFpAcrossLanes(Aarch64Core core, Ir64Op.VectorFpAcrossLanes op) {
         Aarch64FpRegisters fp = core.fp();
-        float result = Float.intBitsToFloat((int) fp.element(op.rn(), 0, 2));
-        for (int i = 1; i < 4; i++) {
-            float v = Float.intBitsToFloat((int) fp.element(op.rn(), i, 2));
-            result = switch (op.op()) {
-                case FMAXNMV -> Ir64FpExecutor.maxNum(result, v);
-                case FMINNMV -> Ir64FpExecutor.minNum(result, v);
-                case FMAXV -> Math.max(result, v);
-                case FMINV -> Math.min(result, v);
-            };
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        long resultBits = fp.element(op.rn(), 0, esz);
+        for (int i = 1; i < elements; i++) {
+            long bits = fp.element(op.rn(), i, esz);
+            resultBits = esz == 1 ? combineHalfAcrossLanes(op.op(), resultBits, bits)
+                    : combineSingleAcrossLanes(op.op(), resultBits, bits);
         }
-        fp.setS(op.rd(), Float.floatToRawIntBits(result));
+        fp.setElement(op.rd(), 0, esz, resultBits);
+        finishScalarAwareWrite(fp, op.rd(), true, false, esz);
         return false;
+    }
+
+    private static long combineSingleAcrossLanes(Ir64VectorFpAcrossLanesOp op, long aBits, long bBits) {
+        float a = Float.intBitsToFloat((int) aBits);
+        float b = Float.intBitsToFloat((int) bBits);
+        float result = switch (op) {
+            case FMAXNMV -> Ir64FpExecutor.maxNum(a, b);
+            case FMINNMV -> Ir64FpExecutor.minNum(a, b);
+            case FMAXV -> Math.max(a, b);
+            case FMINV -> Math.min(a, b);
+        };
+        return Float.floatToRawIntBits(result) & 0xFFFF_FFFFL;
+    }
+
+    private static long combineHalfAcrossLanes(Ir64VectorFpAcrossLanesOp op, long aBits, long bBits) {
+        float a = AdvSimdLanes.halfToFloat(aBits);
+        float b = AdvSimdLanes.halfToFloat(bBits);
+        float result = switch (op) {
+            case FMAXNMV -> AdvSimdLanes.maxNum(a, b);
+            case FMINNMV -> AdvSimdLanes.minNum(a, b);
+            case FMAXV -> Math.max(a, b);
+            case FMINV -> Math.min(a, b);
+        };
+        return AdvSimdLanes.halfBits(result);
     }
 }

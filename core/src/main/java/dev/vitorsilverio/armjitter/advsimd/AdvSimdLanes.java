@@ -1112,13 +1112,17 @@ public final class AdvSimdLanes {
 
     /// Executa `SCVTF`/`UCVTF` (`toFloat=true`: inteiro `esz`-wide → FP `esz`-wide, depois
     /// `/ 2^fractionBits`) ou `FCVTZS`/`FCVTZU` (`toFloat=false`: FP `* 2^fractionBits`, arredonda
-    /// para zero, satura → inteiro) sobre `lanes` elementos de `1 << esz` bytes (`esz` `2` = 32
-    /// bits, `3` = 64 bits). `signed` escolhe a variante assinada. Os `base*` são índices de
-    /// PALAVRA; a leitura e a escrita são na MESMA largura (`esz`), então não há buffer — nenhuma
-    /// lane escrita cobre uma ainda não lida. A escrita destrutiva do A64 é do chamador.
+    /// para zero, satura → inteiro) sobre `lanes` elementos de `1 << esz` bytes (`esz` `1` = 16
+    /// bits/`FEAT_FP16`, `2` = 32 bits, `3` = 64 bits). `signed` escolhe a variante assinada. Os
+    /// `base*` são índices de PALAVRA; a leitura e a escrita são na MESMA largura (`esz`), então
+    /// não há buffer — nenhuma lane escrita cobre uma ainda não lida. A escrita destrutiva do A64
+    /// é do chamador.
     ///
     /// Corpo movido VERBATIM de `Ir64VectorFpArithmeticExecutor#executeConvertFixedPoint` (B19.3/
-    /// B19.4) em B13.8.
+    /// B19.4) em B13.8. **Achado da B19.5.3**: o `esz==2` (`(int) inputBits` sign-estende
+    /// corretamente porque a largura de `int` já é 32 bits) não generaliza para `esz==1` — um
+    /// `(int) inputBits` de 16 bits mascarados NÃO sign-estende (o padrão `0x8000` viraria `32768`
+    /// em vez de `-32768`); precisa do cast intermediário por `short`.
     public static void convertFixedPoint(AdvSimdRegisterWords regs, int esz, int fractionBits,
             boolean toFloat, boolean signed, int lanes, int baseRd, int baseRn) {
         boolean wide = esz == 3;
@@ -1130,20 +1134,42 @@ public final class AdvSimdLanes {
                 double asDouble;
                 if (wide) {
                     asDouble = signed ? (double) inputBits : unsignedLongToDouble(inputBits);
+                } else if (esz == 1) {
+                    asDouble = signed ? (double) (short) inputBits : (double) inputBits;
                 } else {
                     asDouble = signed ? (double) (int) inputBits : (double) inputBits;
                 }
                 double scaled = asDouble / scale;
-                resultBits = esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
+                resultBits = esz == 1 ? halfBits((float) scaled) : esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
             } else {
-                double value = esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
+                double value = esz == 1 ? halfToFloat(inputBits)
+                        : esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
                 double scaled = value * scale;
                 double rounded = roundTowardZeroForConversion(scaled);
-                long converted = saturateToInteger(rounded, signed, wide);
-                resultBits = converted & (wide ? -1L : 0xFFFF_FFFFL);
+                long converted = esz == 1 ? saturateToHalfwordInteger(rounded, signed)
+                        : saturateToInteger(rounded, signed, wide);
+                resultBits = converted & (wide ? -1L : esz == 1 ? 0xFFFFL : 0xFFFF_FFFFL);
             }
             setElement(regs, baseRd, i, esz, resultBits);
         }
+    }
+
+    /// Limite superior/inferior de um inteiro de 16 bits assinado/sem sinal (G6 — nomeado em vez
+    /// de literal solto em {@link #saturateToHalfwordInteger}).
+    private static final double HALFWORD_SIGNED_MIN = -32768.0;
+    private static final double HALFWORD_SIGNED_MAX = 32767.0;
+    private static final double HALFWORD_UNSIGNED_MAX = 65535.0;
+
+    /// {@link #saturateToInteger} satura para 32/64 bits (`wide`); `FCVTZS_f`/`FCVTZU_f` de meia
+    /// precisão (`FEAT_FP16`, B19.5.3) precisam do limite de 16 bits, que aquele método não
+    /// expressa — variante dedicada em vez de sobrecarregar `wide` com um terceiro estado.
+    private static long saturateToHalfwordInteger(double rounded, boolean signed) {
+        if (Double.isNaN(rounded)) {
+            return 0L;
+        }
+        double minValue = signed ? HALFWORD_SIGNED_MIN : 0.0;
+        double maxValue = signed ? HALFWORD_SIGNED_MAX : HALFWORD_UNSIGNED_MAX;
+        return (long) Math.max(minValue, Math.min(maxValue, rounded));
     }
 
     /// Arredonda `value` na direção do zero, deixando `NaN`/infinito INTACTOS (quem chama —

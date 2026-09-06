@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
@@ -19,11 +21,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /// {@link Aarch64AdvSimdShiftSaturateDecoderTest} (B8.8). Cada `@Test` documenta os campos usados.
 class Aarch64AdvSimdFpVectorDecoderTest {
     private static final Aarch64Decoder DECODER = new Aarch64Decoder();
+    /// B19.5.3: `FEAT_FP16` — golden CONFERIDO com `aarch64-none-elf-as`/`objdump` (devkitA64, via
+    /// WSL, `.arch armv8.2-a+fp16`), ao contrário do resto do arquivo (que usa fórmula porque o
+    /// toolchain não estava disponível na sessão original).
+    private static final Aarch64Decoder FP16_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_2_A);
+    private static final Aarch64Decoder ARMV8_1_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_1_A);
 
     private static Ir64Op decodeWord(int word) {
+        return decodeWord(DECODER, word);
+    }
+
+    private static Ir64Op decodeWord(Aarch64Decoder decoder, int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return decoder.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     // ── Three same (FP): Q=1,Rn=1,Rm=2,Rd=0 ──────────────────────────────────────────────────────
@@ -489,5 +500,151 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x4f1dfc20));
         // fcvtzu ...2d... com Q=0 (0x2f78fc20 = 0x6f78fc20 sem bit30): immh<3>==1 && Q==0 ⇒ UNDEFINED.
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x2f78fc20));
+    }
+
+    // ── B19.5.3: FEAT_FP16 — pairwise escalar, across-lanes e ponto fixo _h (golden devkitA64) ──
+
+    @Test
+    void halfPrecisionScalarPairwiseDecodesUnderFp16() {
+        // faddp h0,v1.2h / fmaxp / fminp / fmaxnmp / fminnmp — golden devkitA64.
+        Ir64Op.VectorFpArithmeticPairwise add = (Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x5e30d820);
+        assertEquals(Ir64VectorFpPairwiseOp.ADD, add.op());
+        assertEquals(true, add.scalar());
+        assertEquals(false, add.q());
+        assertEquals(1, add.esz());
+        assertEquals(0, add.rd());
+        assertEquals(1, add.rn());
+
+        assertEquals(Ir64VectorFpPairwiseOp.MAX,
+                ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x5e30f820)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MIN,
+                ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x5eb0f820)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MAXNM,
+                ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x5e30c820)).op());
+        assertEquals(Ir64VectorFpPairwiseOp.MINNM,
+                ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x5eb0c820)).op());
+    }
+
+    @Test
+    void halfPrecisionScalarPairwiseUnsupportedBelowFp16() {
+        // Mesmas 5 palavras golden, sem a feature (ARMv8.0-A e ARMv8.1-A) — regressão negativa
+        // por linha (padrão B11.4-B11.12): a estrutura já recusava por `!u`, e continua recusando.
+        for (int word : new int[] {0x5e30d820, 0x5e30f820, 0x5eb0f820, 0x5e30c820, 0x5eb0c820}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void halfPrecisionScalarPairwiseSiblingSdUnaffected() {
+        // As formas _sd que compartilham o MESMO `if` continuam idênticas com a feature presente.
+        assertEquals(Ir64VectorFpPairwiseOp.ADD,
+                ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x7e30d820)).op());
+        assertEquals(2, ((Ir64Op.VectorFpArithmeticPairwise) decodeWord(FP16_DECODER, 0x7e30d820)).esz());
+    }
+
+    private static Ir64Op.VectorFpAcrossLanes acrossLanesHalf(int word) {
+        return (Ir64Op.VectorFpAcrossLanes) decodeWord(FP16_DECODER, word);
+    }
+
+    @Test
+    void halfPrecisionAcrossLanesDecodesUnderFp16() {
+        // fmaxnmv h0,v1.4h / fmaxnmv h0,v1.8h / fminnmv h0,v1.4h / fmaxv h0,v1.4h / fmaxv h0,v1.8h /
+        // fminv h0,v1.4h — golden devkitA64.
+        Ir64Op.VectorFpAcrossLanes maxnm4h = acrossLanesHalf(0x0e30c820);
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMAXNMV, maxnm4h.op());
+        assertEquals(false, maxnm4h.q());
+        assertEquals(1, maxnm4h.esz());
+        assertEquals(0, maxnm4h.rd());
+        assertEquals(1, maxnm4h.rn());
+
+        Ir64Op.VectorFpAcrossLanes maxnm8h = acrossLanesHalf(0x4e30c820);
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMAXNMV, maxnm8h.op());
+        assertEquals(true, maxnm8h.q());
+        assertEquals(1, maxnm8h.esz());
+
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMINNMV, acrossLanesHalf(0x0eb0c820).op());
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMAXV, acrossLanesHalf(0x0e30f820).op());
+        assertEquals(true, acrossLanesHalf(0x4e30f820).q());
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMAXV, acrossLanesHalf(0x4e30f820).op());
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMINV, acrossLanesHalf(0x0eb0f820).op());
+    }
+
+    @Test
+    void halfPrecisionAcrossLanesUnsupportedBelowFp16() {
+        for (int word : new int[] {0x0e30c820, 0x4e30c820, 0x0eb0c820, 0x0e30f820, 0x4e30f820, 0x0eb0f820}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void acrossLanesSiblingSUnaffected() {
+        // fmaxnmv s0,v1.4s (0x6e30c820) continua Q=true/esz=WORD com a feature presente.
+        Ir64Op.VectorFpAcrossLanes maxnmS = acrossLanesHalf(0x6e30c820);
+        assertEquals(Ir64VectorFpAcrossLanesOp.FMAXNMV, maxnmS.op());
+        assertEquals(true, maxnmS.q());
+        assertEquals(2, maxnmS.esz());
+    }
+
+    private static Ir64Op.VectorFpConvertFixedPoint fixedHalf(int word) {
+        return (Ir64Op.VectorFpConvertFixedPoint) decodeWord(FP16_DECODER, word);
+    }
+
+    @Test
+    void halfPrecisionScalarFixedPointDecodesUnderFp16() {
+        // scvtf h0,h1,#4 / ucvtf / fcvtzs / fcvtzu — golden devkitA64.
+        Ir64Op.VectorFpConvertFixedPoint scvtf = fixedHalf(0x5f1ce420);
+        assertEquals(true, scvtf.scalar());
+        assertEquals(true, scvtf.toFloat());
+        assertEquals(true, scvtf.signed());
+        assertEquals(1, scvtf.esz());
+        assertEquals(4, scvtf.fractionBits());
+
+        Ir64Op.VectorFpConvertFixedPoint ucvtf = fixedHalf(0x7f1ce420);
+        assertEquals(true, ucvtf.toFloat());
+        assertEquals(false, ucvtf.signed());
+
+        Ir64Op.VectorFpConvertFixedPoint fcvtzs = fixedHalf(0x5f1cfc20);
+        assertEquals(false, fcvtzs.toFloat());
+        assertEquals(true, fcvtzs.signed());
+
+        Ir64Op.VectorFpConvertFixedPoint fcvtzu = fixedHalf(0x7f1cfc20);
+        assertEquals(false, fcvtzu.toFloat());
+        assertEquals(false, fcvtzu.signed());
+    }
+
+    @Test
+    void halfPrecisionVectorFixedPointDecodesUnderFp16() {
+        // scvtf v0.4h,v1.4h,#3 / scvtf v0.8h,v1.8h,#3 / ucvtf v0.4h,#3 / fcvtzs v0.4h,#3 / fcvtzu v0.4h,#3.
+        Ir64Op.VectorFpConvertFixedPoint scvtf4h = fixedHalf(0x0f1de420);
+        assertEquals(false, scvtf4h.scalar());
+        assertEquals(false, scvtf4h.q());
+        assertEquals(1, scvtf4h.esz());
+        assertEquals(3, scvtf4h.fractionBits());
+
+        Ir64Op.VectorFpConvertFixedPoint scvtf8h = fixedHalf(0x4f1de420);
+        assertEquals(true, scvtf8h.q());
+
+        assertEquals(false, fixedHalf(0x2f1de420).signed());
+        assertEquals(false, fixedHalf(0x0f1dfc20).toFloat());
+        assertEquals(false, fixedHalf(0x2f1dfc20).signed());
+    }
+
+    @Test
+    void halfPrecisionFixedPointUnsupportedBelowFp16() {
+        for (int word : new int[] {0x5f1ce420, 0x7f1ce420, 0x5f1cfc20, 0x7f1cfc20,
+                0x0f1de420, 0x4f1de420, 0x2f1de420, 0x0f1dfc20, 0x2f1dfc20}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void fixedPointSiblingWordAndDoubleUnaffected() {
+        // As formas `_s`/`_d` (esz 2/3) continuam idênticas com a feature FP16 presente.
+        Ir64Op.VectorFpConvertFixedPoint s = (Ir64Op.VectorFpConvertFixedPoint) decodeWord(FP16_DECODER, 0x5f3ce420);
+        assertEquals(2, s.esz());
+        assertEquals(true, s.scalar());
     }
 }

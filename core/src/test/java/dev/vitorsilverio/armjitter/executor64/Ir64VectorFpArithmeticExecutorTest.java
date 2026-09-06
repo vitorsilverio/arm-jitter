@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -298,10 +299,10 @@ class Ir64VectorFpArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         setFourSingleElements(fp, 1, 1.0f, -5.0f, 3.5f, 2.0f);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, 0, 1));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, true, 2, 0, 1));
         assertEquals(3.5f, fp.sFloat(0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINV, 0, 1));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINV, true, 2, 0, 1));
         assertEquals(-5.0f, fp.sFloat(0));
     }
 
@@ -311,10 +312,10 @@ class Ir64VectorFpArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         setFourSingleElements(fp, 1, Float.NaN, 7.0f, 1.0f, 2.0f);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXNMV, 0, 1));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXNMV, true, 2, 0, 1));
         assertEquals(7.0f, fp.sFloat(0), "FMAXNMV ignora o NaN quando há operando numérico");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINNMV, 0, 1));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMINNMV, true, 2, 0, 1));
         assertEquals(1.0f, fp.sFloat(0), "FMINNMV ignora o NaN quando há operando numérico");
     }
 
@@ -324,7 +325,7 @@ class Ir64VectorFpArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         setFourSingleElements(fp, 1, Float.NaN, 7.0f, 1.0f, 2.0f);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, 0, 1));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, true, 2, 0, 1));
         assertEquals(true, Float.isNaN(fp.sFloat(0)), "FMAXV (sem NM) propaga NaN");
     }
 
@@ -724,5 +725,133 @@ class Ir64VectorFpArithmeticExecutorTest {
         fp2.setElement(1, 0, 3, Double.doubleToRawLongBits(-1.0));
         EXECUTOR.executeOp(core2, new Ir64Op.VectorFpConvertFixedPoint(false, false, 3, 0, false, false, 0, 1));
         assertEquals(0L, fp2.element(0, 0, 3), "saturação preservada");
+    }
+
+    // ── B19.5.3: FEAT_FP16 — pairwise/across-lanes/ponto fixo escalar+vetorial em meia precisão ──
+
+    private static void setHalf(Aarch64FpRegisters fp, int reg, int lane, float value) {
+        fp.setElement(reg, lane, 1, AdvSimdLanes.halfBits(value));
+    }
+
+    private static float readHalf(Aarch64FpRegisters fp, int reg, int lane) {
+        return AdvSimdLanes.halfToFloat(fp.element(reg, lane, 1));
+    }
+
+    @Test
+    void halfPrecisionScalarPairwiseAddAndPropagation() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L);
+        setHalf(fp, 1, 0, 1.25f);
+        setHalf(fp, 1, 1, 2.75f);
+
+        // FADDP h0, v1.2h
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.ADD, true, false, 1, 0, 1, 1));
+        assertEquals(4.0f, readHalf(fp, 0, 0), "V1[0]+V1[1] em binary16");
+        assertEquals(0L, fp.high64(0), "escrita escalar zera os 64 bits altos");
+        assertEquals(0L, fp.low64(0) >>> 16, "escrita escalar zera acima de H");
+
+        // FMINP propaga NaN de um só operando; FMINNMP não.
+        setHalf(fp, 1, 0, Float.NaN);
+        setHalf(fp, 1, 1, 3.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.MIN, true, false, 1, 0, 1, 1));
+        assertTrue(Float.isNaN(readHalf(fp, 0, 0)), "FMINP_h propaga NaN");
+
+        setHalf(fp, 1, 0, Float.NaN);
+        setHalf(fp, 1, 1, 3.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.MINNM, true, false, 1, 0, 1, 1));
+        assertEquals(3.0f, readHalf(fp, 0, 0), "FMINNMP_h ignora NaN de um operando");
+    }
+
+    @Test
+    void halfPrecisionAcrossLanesReadsQAndDistinguishesMaxFromMaxNm() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, 1.0f);
+        setHalf(fp, 1, 1, -5.0f);
+        setHalf(fp, 1, 2, 3.5f);
+        setHalf(fp, 1, 3, 2.0f);
+        setHalf(fp, 1, 4, 9.0f); // só lido se q=true (8h)
+        setHalf(fp, 1, 5, 9.0f);
+        setHalf(fp, 1, 6, 9.0f);
+        setHalf(fp, 1, 7, 9.0f);
+
+        // FMAXV h0, v1.4h — só as 4 lanes baixas
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, false, 1, 0, 1));
+        assertEquals(3.5f, readHalf(fp, 0, 0), "reduz só 4h quando q=false");
+
+        // FMAXV h0, v1.8h — as 8 lanes, Q lido de verdade (diferente da forma _s, que não tem essa liberdade)
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, true, 1, 0, 1));
+        assertEquals(9.0f, readHalf(fp, 0, 0), "reduz 8h quando q=true");
+
+        // FMAXNMV × FMAXV com um NaN entre as lanes: maxNum ignora, max propaga.
+        setHalf(fp, 1, 0, Float.NaN);
+        setHalf(fp, 1, 1, 7.0f);
+        setHalf(fp, 1, 2, 1.0f);
+        setHalf(fp, 1, 3, 2.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXNMV, false, 1, 0, 1));
+        assertEquals(7.0f, readHalf(fp, 0, 0), "FMAXNMV ignora o NaN quando há operando numérico");
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAcrossLanes(Ir64VectorFpAcrossLanesOp.FMAXV, false, 1, 0, 1));
+        assertTrue(Float.isNaN(readHalf(fp, 0, 0)), "FMAXV (sem NM) propaga NaN");
+    }
+
+    @Test
+    void halfPrecisionScalarFixedPointRoundTripAndSaturation() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+
+        // SCVTF h0, h1, #4: inteiro 32 (0x0020) / 2^4 = 2.0
+        fp.setElement(1, 0, 1, 0x0020L);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 4, true, true, 0, 1));
+        assertEquals(2.0f, readHalf(fp, 0, 0), "32 / 2^4 (fbits no meio da faixa 1..16)");
+
+        // UCVTF com um padrão que só é positivo SEM sinal (0x8000 = -32768 assinado / 32768 sem sinal)
+        fp.setElement(1, 0, 1, 0x8000L);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 1, true, false, 0, 1));
+        assertEquals(16384.0f, readHalf(fp, 0, 0), "32768 / 2^1, lido SEM sinal");
+
+        // SCVTF do MESMO padrão, assinado: -32768 / 2^1
+        fp.setElement(1, 0, 1, 0x8000L);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 1, true, true, 0, 1));
+        assertEquals(-16384.0f, readHalf(fp, 0, 0), "sign-extensão de 16 bits, achado da B19.5.3");
+
+        // FCVTZS h0,h1,#16 (fbits no limite superior da faixa 1..16): 0.25h * 2^16 = 16384, dentro
+        // da faixa de int16 assinado — prova que o fator de escala usa 2^16 (não 2^32, que daria um
+        // valor completamente diferente, a Armadilha 2 da task).
+        setHalf(fp, 1, 0, 0.25f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 16, false, true, 0, 1));
+        assertEquals((short) 16384, (short) fp.element(0, 0, 1), "0.25 * 2^16, fbits=16 (limite superior)");
+
+        // FCVTZS de valor fora da faixa de 16 bits satura em INT16_MIN, sem wrap para 32/64 bits
+        // (limite de {@link #saturateToInteger} sem a variante dedicada desta task).
+        setHalf(fp, 1, 0, -40000.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 0, false, true, 0, 1));
+        assertEquals((short) -32768, (short) fp.element(0, 0, 1), "satura em INT16_MIN, não faz wrap");
+
+        // FCVTZU de negativo satura em 0 (não em um padrão de bits grande por wraparound)
+        setHalf(fp, 1, 0, -5.0f);
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(true, false, 1, 0, false, false, 0, 1));
+        assertEquals(0L, fp.element(0, 0, 1), "FCVTZU satura em 0, não gera padrão de bits grande");
+    }
+
+    @Test
+    void halfPrecisionVectorFixedPointQZeroesUpperHalf() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L);
+        for (int lane = 0; lane < 4; lane++) {
+            setHalf(fp, 1, lane, 2.0f);
+        }
+
+        // SCVTF v0.4h, v1.4h, #3 (interpretando as lanes como inteiro): 2.0h bits=0x4000=16384, /2^3=2048
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFixedPoint(false, false, 1, 3, true, true, 0, 1));
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(2048.0f, readHalf(fp, 0, lane), "16384 / 2^3");
+        }
+        assertEquals(0L, fp.high64(0), "q=false zera Rd[127:64]");
     }
 }
