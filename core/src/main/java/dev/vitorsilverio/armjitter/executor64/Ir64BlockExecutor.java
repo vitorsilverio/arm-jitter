@@ -432,6 +432,23 @@ public final class Ir64BlockExecutor {
                     executeAdvSimdModifiedImmediate64(core, (Ir64Op.AdvSimdModifiedImmediate64) op);
             case Ir64Op.Kind.VECTOR_LOOKUP_TABLE ->
                     Ir64VectorArithmeticExecutor.executeLookupTable(core, (Ir64Op.VectorLookupTable) op);
+            case Ir64Op.Kind.FP64_CONVERT_TO_BF16 ->
+                    Ir64VectorFpArithmeticExecutor.executeConvertToBf16(core, (Ir64Op.Fp64ConvertToBf16) op);
+            case Ir64Op.Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16 ->
+                    Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16(
+                            core, (Ir64Op.VectorFpDotProductBFloat16) op);
+            case Ir64Op.Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT ->
+                    Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16ByElement(
+                            core, (Ir64Op.VectorFpDotProductBFloat16ByElement) op);
+            case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16 ->
+                    Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16(
+                            core, (Ir64Op.VectorFpMultiplyAddLongBFloat16) op);
+            case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT ->
+                    Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16ByElement(
+                            core, (Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement) op);
+            case Ir64Op.Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 ->
+                    Ir64VectorFpArithmeticExecutor.executeFpMatrixMultiplyAccumulateBFloat16(
+                            core, (Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

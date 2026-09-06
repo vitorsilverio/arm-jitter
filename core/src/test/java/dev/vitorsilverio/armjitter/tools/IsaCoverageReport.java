@@ -322,7 +322,8 @@ public final class IsaCoverageReport {
         require(Aarch64Feature.MEMORY_TAGGING, "STG", "LDG", "STZG", "ST2G", "STZ2G", "STGM", "LDGM",
                 "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS", "SETGP", "SETGM", "SETGE");
         // FEAT_BF16 (ARMv8.6-A) — bfloat16
-        require(Aarch64Feature.BFLOAT16, "BFCVT_s", "BFDOT_v", "BFDOT_vi", "BFMMLA", "BFMLAL_vi");
+        require(Aarch64Feature.BFLOAT16, "BFCVT_s", "BFCVTN_v", "BFDOT_v", "BFDOT_vi", "BFMMLA",
+                "BFMLAL_v", "BFMLAL_vi");
         // FEAT_I8MM (ARMv8.6-A) — matriz inteira de 8 bits
         require(Aarch64Feature.INT8_MATRIX_MULTIPLY, "USDOT_v", "USDOT_vi", "SUDOT_vi", "SMMLA", "UMMLA",
                 "USMMLA");

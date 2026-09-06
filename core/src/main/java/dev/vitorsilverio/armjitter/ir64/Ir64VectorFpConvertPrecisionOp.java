@@ -22,5 +22,11 @@ public enum Ir64VectorFpConvertPrecisionOp {
     /// `FCVTXN`/`FCVTXN2` — ESTREITA `f64`→`f32` com arredondamento "round to odd" (jamming), que
     /// impede o arredondamento duplo. Só `esz=2` (nunca há forma `f32`→`f16` deste mnemônico). Mesma
     /// disciplina de metade que {@link #FCVTN}.
-    FCVTXN
+    FCVTXN,
+    /// `BFCVTN`/`BFCVTN2` (`FEAT_BF16`, B19.7) — ESTREITA `f32`→`bf16` com arredondamento
+    /// round-to-nearest-even (ver {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bf16Bits}).
+    /// Só `esz=1` (`bf16` tem a mesma largura de `f16`, mas nunca há forma `f64`→`bf16`). MESMA
+    /// disciplina de metade que {@link #FCVTN} — vive no MESMO slot de encoding (`a==1` em vez de
+    /// `a==0`), não um mnemônico à parte.
+    BFCVTN
 }

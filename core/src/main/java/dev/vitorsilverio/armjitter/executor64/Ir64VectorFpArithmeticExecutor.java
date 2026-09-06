@@ -397,6 +397,7 @@ final class Ir64VectorFpArithmeticExecutor {
                         ? (Float.floatToFloat16(Float.intBitsToFloat((int) src)) & 0xFFFFL)
                         : AdvSimdLanes.floatBits((float) Double.longBitsToDouble(src));
                 case FCVTXN -> fcvtxnRoundToOdd(Double.longBitsToDouble(src));
+                case BFCVTN -> AdvSimdLanes.bf16Bits(Float.intBitsToFloat((int) src));
                 case FCVTL -> throw new IllegalStateException("FCVTL tratado no ramo que alarga");
             };
         }
@@ -448,5 +449,85 @@ final class Ir64VectorFpArithmeticExecutor {
             case FMINV -> Math.min(a, b);
         };
         return AdvSimdLanes.halfBits(result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // `FEAT_BF16` — B19.7. Toda a conversão/aritmética `bf16` vive no núcleo COMPARTILHADO
+    // ({@link AdvSimdLanes}, seção `bfloat16`) — aqui só a ponte registrador↔núcleo, MESMO padrão
+    // das seções anteriores desta classe.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// `BFCVT` (escalar `f32`→`bf16`, B19.7) — record próprio ({@link Ir64Op.Fp64ConvertToBf16}),
+    /// não {@link Ir64Op.Fp64Convert}: aquele assume larguras F32/F64 simétricas via
+    /// `setSFloat`/`setDDouble`; `bf16` não tem via de registrador nativa no banco, por isso usa
+    /// {@link Aarch64FpRegisters#setScalar} diretamente (zera o resto de `Vd`, mesma disciplina
+    /// "SIMD&FP destructive write").
+    static boolean executeConvertToBf16(Aarch64Core core, Ir64Op.Fp64ConvertToBf16 op) {
+        Aarch64FpRegisters fp = core.fp();
+        float value = fp.sFloat(op.vn());
+        fp.setScalar(op.vd(), 1, AdvSimdLanes.bf16Bits(value));
+        return false;
+    }
+
+    /// `BFDOT` vetorial (B19.7) — sempre `esz=2`/word (o resultado é sempre uma lane `f32`, mesma
+    /// convenção do produto escalar inteiro).
+    static boolean executeFpDotProductBFloat16(Aarch64Core core, Ir64Op.VectorFpDotProductBFloat16 op) {
+        Aarch64FpRegisters fp = core.fp();
+        int elements = elementsPerRegister(op.q(), 2);
+        AdvSimdLanes.bfDotProduct(fp, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `BFDOT` indexado (`BFDOT_vi`, B19.7).
+    static boolean executeFpDotProductBFloat16ByElement(
+            Aarch64Core core, Ir64Op.VectorFpDotProductBFloat16ByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        int elements = elementsPerRegister(op.q(), 2);
+        AdvSimdLanes.bfDotProductByElement(fp, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `BFMLALB`/`BFMLALT` (B19.7) — `Vd.4S` é SEMPRE 128 bits inteiros (nunca escrita destrutiva
+    /// parcial, `op.top()` seleciona par/ímpar em vez de largura — ver Javadoc de
+    /// {@link Ir64Op.VectorFpMultiplyAddLongBFloat16#top}).
+    static boolean executeFpMultiplyAddLongBFloat16(
+            Aarch64Core core, Ir64Op.VectorFpMultiplyAddLongBFloat16 op) {
+        Aarch64FpRegisters fp = core.fp();
+        AdvSimdLanes.bfMultiplyAddLong(fp, op.top(),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        return false;
+    }
+
+    /// `BFMLALB`/`BFMLALT` indexado (`BFMLAL_vi`, B19.7).
+    static boolean executeFpMultiplyAddLongBFloat16ByElement(
+            Aarch64Core core, Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        AdvSimdLanes.bfMultiplyAddLongByElement(fp, op.top(),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
+        return false;
+    }
+
+    /// `BFMMLA` (B19.7) — `Q` fixo em `1` no encoding (sem forma de 64 bits), mesma disciplina de
+    /// `SMMLA`/`UMMLA`/`USMMLA` (B19.12).
+    static boolean executeFpMatrixMultiplyAccumulateBFloat16(
+            Aarch64Core core, Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16 op) {
+        Aarch64FpRegisters fp = core.fp();
+        AdvSimdLanes.bfMatrixMultiplyAccumulate(fp,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        return false;
     }
 }

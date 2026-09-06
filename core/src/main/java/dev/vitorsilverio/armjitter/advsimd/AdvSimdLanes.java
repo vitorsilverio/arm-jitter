@@ -1517,4 +1517,145 @@ public final class AdvSimdLanes {
             case CMLT0 -> boolMask(a < 0.0, esz);
         };
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // `bfloat16` — B19.7 (`FEAT_BF16`). Formato de 16 bits: MESMO expoente de 8 bits/viés do
+    // `binary32`, mantissa truncada de 23 para 7 bits (`ARM DDI 0487`, `FPConvertBF`/`BFToFP`). O
+    // JDK não tem este tipo (ao contrário de `binary16`, que {@link #halfBits}/{@link #halfToFloat}
+    // já resolvem via `Float.floatToFloat16`) — a conversão é código próprio desta task.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// Máscara de 16 bits de um valor `bfloat16` já convertido (evita sign-extensão ao promover a
+    /// `long`, mesma armadilha documentada em {@link #halfBits}).
+    private static final long BFLOAT16_MASK = 0xFFFFL;
+
+    /// `bf16 → binary32` (`BFToFP`): EXATO — `bfloat16` é literalmente os 16 bits altos de um
+    /// `binary32`, então basta deslocar e reinterpretar (`bits acima do 15 são ignorados`, mesma
+    /// convenção de {@link #halfToFloat}).
+    public static float bf16ToFloat(long bits) {
+        return Float.intBitsToFloat(((int) bits & 0xFFFF) << 16);
+    }
+
+    /// `binary32 → bf16` (`FPConvertBF`): arredondamento round-to-nearest-even via "round to
+    /// nearest even by adding the rounding bias to the truncation point" (algoritmo padrão de
+    /// truncamento de mantissa, equivalente ao round-and-truncate do hardware) — usar `>>> 16` puro
+    /// erraria a metade dos casos (não arredonda) e destruiria `NaN`s cuja mantissa truncada zerasse
+    /// (viraria `Inf`), por isso o tratamento de `NaN` é separado ANTES do arredondamento genérico:
+    /// devolve um `NaN` quieto preservando o sinal, nunca deixa a rotina genérica decidir. Overflow
+    /// (`value` próximo do maior `binary32` finito) soma-se naturalmente ao campo de expoente e vira
+    /// `Inf` — mesmo comportamento do hardware, sem tratamento especial.
+    public static long bf16Bits(float value) {
+        int bits = Float.floatToRawIntBits(value);
+        if (Float.isNaN(value)) {
+            int sign = bits & Integer.MIN_VALUE;
+            int quietNan = 0x7FC0; // expoente todo-1 + bit de mantissa mais alto setado (quieto).
+            return ((sign >>> 16) | quietNan) & BFLOAT16_MASK;
+        }
+        int lsb = (bits >>> 16) & 1;
+        int rounded = bits + 0x7FFF + lsb;
+        return (rounded >>> 16) & BFLOAT16_MASK;
+    }
+
+    /// `BFDOT` (vetorial, B19.7): `Vd.<T>[e] += FPAdd(FPMul(bf16(Vn[2e]),bf16(Vm[2e])),
+    /// FPMul(bf16(Vn[2e+1]),bf16(Vm[2e+1])))`, cada operação com o arredondamento simples de
+    /// `binary32` do próprio Java (`float`) — sibling FP de {@link #dotProduct} (B13.18), mas sem
+    /// wrap/saturação (é soma em ponto flutuante, não inteiro). `lanes` elementos de 32 bits; os
+    /// `base*` são índices de PALAVRA.
+    public static void bfDotProduct(AdvSimdRegisterWords regs, int lanes, int baseRd, int baseRn, int baseRm) {
+        for (int lane = 0; lane < lanes; lane++) {
+            long nWord = element(regs, baseRn, lane, 2);
+            long mWord = element(regs, baseRm, lane, 2);
+            float sum = bfDotProductSum(nWord, mWord);
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, lane, 2));
+            setElement(regs, baseRd, lane, 2, floatBits(acc + sum));
+        }
+    }
+
+    /// Como {@link #bfDotProduct}, mas `b` é um ÚNICO par `bf16` de 32 bits fixo, lido de `baseRm`
+    /// no índice `index` (lido UMA vez, replicado para todas as `lanes`): `BFDOT_vi`.
+    public static void bfDotProductByElement(AdvSimdRegisterWords regs, int lanes, int baseRd,
+            int baseRn, int baseRm, int index) {
+        long mWord = element(regs, baseRm, index, 2);
+        for (int lane = 0; lane < lanes; lane++) {
+            long nWord = element(regs, baseRn, lane, 2);
+            float sum = bfDotProductSum(nWord, mWord);
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, lane, 2));
+            setElement(regs, baseRd, lane, 2, floatBits(acc + sum));
+        }
+    }
+
+    /// Soma dos 2 produtos `bf16` de um par de 32 bits (`ARM DDI 0487`: duas multiplicações e uma
+    /// soma independentes, cada uma arredondada a `binary32` — NÃO uma soma fundida de precisão
+    /// estendida, ao contrário do inteiro {@link #dotProductSum}).
+    private static float bfDotProductSum(long nWord, long mWord) {
+        float n0 = bf16ToFloat(nWord & BFLOAT16_MASK);
+        float n1 = bf16ToFloat((nWord >>> 16) & BFLOAT16_MASK);
+        float m0 = bf16ToFloat(mWord & BFLOAT16_MASK);
+        float m1 = bf16ToFloat((mWord >>> 16) & BFLOAT16_MASK);
+        return (n0 * m0) + (n1 * m1);
+    }
+
+    /// Elementos de `Vd.4S` de {@code BFMLALB}/{@code BFMLALT} — SEMPRE 4 (a instrução nunca tem
+    /// forma de 64 bits; o bit `Q` do encoding seleciona B/T, não largura, ver
+    /// {@link #bfMultiplyAddLong}).
+    private static final int BFLOAT16_MULTIPLY_ADD_LONG_LANES = 4;
+
+    /// `BFMLALB`/`BFMLALT` (B19.7): multiply-accumulate LONG — para cada uma das 4 lanes `e` de
+    /// `Vd.4S`, lê o elemento `bf16` de índice `2e+top` (`top=false`⇒`B`/PAR, `top=true`⇒`T`/ÍMPAR)
+    /// de `Vn`/`Vm`, multiplica em `binary32` e ACUMULA (soma simples, sem fusão) em `Vd[e]`. Os
+    /// `base*` são índices de PALAVRA; escreve os 128 bits inteiros de `Vd` (sempre `.4S`, nunca
+    /// escrita destrutiva parcial).
+    public static void bfMultiplyAddLong(AdvSimdRegisterWords regs, boolean top,
+            int baseRd, int baseRn, int baseRm) {
+        int t = top ? 1 : 0;
+        for (int e = 0; e < BFLOAT16_MULTIPLY_ADD_LONG_LANES; e++) {
+            int idx = 2 * e + t;
+            float n = bf16ToFloat(element(regs, baseRn, idx, 1));
+            float m = bf16ToFloat(element(regs, baseRm, idx, 1));
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, e, 2));
+            setElement(regs, baseRd, e, 2, floatBits(acc + n * m));
+        }
+    }
+
+    /// Como {@link #bfMultiplyAddLong}, mas `Vm` é um ÚNICO elemento `bf16` fixo (`baseRm`/`index`),
+    /// lido UMA vez e replicado para as 4 lanes: `BFMLALB_vi`/`BFMLALT_vi`.
+    public static void bfMultiplyAddLongByElement(AdvSimdRegisterWords regs, boolean top,
+            int baseRd, int baseRn, int baseRm, int index) {
+        int t = top ? 1 : 0;
+        float m = bf16ToFloat(element(regs, baseRm, index, 1));
+        for (int e = 0; e < BFLOAT16_MULTIPLY_ADD_LONG_LANES; e++) {
+            int idx = 2 * e + t;
+            float n = bf16ToFloat(element(regs, baseRn, idx, 1));
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, e, 2));
+            setElement(regs, baseRd, e, 2, floatBits(acc + n * m));
+        }
+    }
+
+    /// `BFMMLA` (B19.7): multiplicação de matriz `2×4 · 4×2` de pares `bf16`, acumulando em `f32`
+    /// (`ARM DDI 0487`, `BFMMLA`/`BFMMLA_dot`) — irmã de ponto flutuante do inteiro `SMMLA`/`UMMLA`/
+    /// `USMMLA` (B19.12/B13.19, `K=8`); aqui `K=4` porque cada bf16 ocupa 16 bits em vez de 8.
+    /// `Vn` é DUAS linhas de 4 elementos `bf16` (linha 0 = metade BAIXA de 64 bits, linha 1 = metade
+    /// ALTA); `Vm` são DUAS colunas na MESMA disposição (coluna 0 = metade baixa, coluna 1 = alta).
+    /// `Vd.4S[2·linha+coluna] += Σ_{k=0}^{3} bf16(Vn[4·linha+k]) · bf16(Vm[4·coluna+k])`. O somatório
+    /// de 4 produtos é acumulado em `double` (o `ARM DDI 0487` descreve o produto de matriz como um
+    /// único cálculo sem arredondamento intermediário) e arredondado UMA vez para `binary32` antes
+    /// da soma final com o acumulador — decisão registrada porque o manual não expõe uma referência
+    /// executável de bit a bit para o formato interno; com `bf16` (7 bits de mantissa) a soma de 4
+    /// produtos nunca perde precisão em `double`, então o resultado é bit-exato para qualquer valor
+    /// `bf16` real.
+    public static void bfMatrixMultiplyAccumulate(AdvSimdRegisterWords regs, int baseRd, int baseRn, int baseRm) {
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 2; col++) {
+                double dot = 0.0;
+                for (int k = 0; k < 4; k++) {
+                    float a = bf16ToFloat(element(regs, baseRn, row * 4 + k, 1));
+                    float b = bf16ToFloat(element(regs, baseRm, col * 4 + k, 1));
+                    dot += (double) a * (double) b;
+                }
+                int lane = row * 2 + col;
+                float acc = Float.intBitsToFloat((int) element(regs, baseRd, lane, 2));
+                setElement(regs, baseRd, lane, 2, floatBits(acc + (float) dot));
+            }
+        }
+    }
 }

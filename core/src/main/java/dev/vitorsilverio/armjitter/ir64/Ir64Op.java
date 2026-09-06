@@ -57,7 +57,11 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSha3TwoSourceRotate, Ir64Op.AtomicMemoryOp, Ir64Op.VectorFpConvertFixedPoint,
         Ir64Op.VectorFpConvertPrecision, Ir64Op.PointerAuthGeneric, Ir64Op.AbsGeneral,
         Ir64Op.VectorDuplicateElementScalar, Ir64Op.Fp64HighHalfMove,
-        Ir64Op.AdvSimdModifiedImmediate64, Ir64Op.VectorLookupTable {
+        Ir64Op.AdvSimdModifiedImmediate64, Ir64Op.VectorLookupTable,
+        Ir64Op.Fp64ConvertToBf16, Ir64Op.VectorFpDotProductBFloat16,
+        Ir64Op.VectorFpDotProductBFloat16ByElement, Ir64Op.VectorFpMultiplyAddLongBFloat16,
+        Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement,
+        Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -294,6 +298,19 @@ public sealed interface Ir64Op permits
         /// B19.8: `LUTI2`/`LUTI4` (`FEAT_LUT`, consulta de tabela por lane com índices empacotados)
         /// — ver {@link VectorLookupTable}.
         public static final int VECTOR_LOOKUP_TABLE = 101;
+        /// B19.7: `BFCVT` (`FEAT_BF16`, escalar `f32`→`bf16`) — ver {@link Fp64ConvertToBf16}.
+        public static final int FP64_CONVERT_TO_BF16 = 102;
+        /// B19.7: `BFDOT` vetorial (`FEAT_BF16`) — ver {@link VectorFpDotProductBFloat16}.
+        public static final int VECTOR_FP_DOT_PRODUCT_BFLOAT16 = 103;
+        /// B19.7: `BFDOT` indexado (`FEAT_BF16`) — ver {@link VectorFpDotProductBFloat16ByElement}.
+        public static final int VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT = 104;
+        /// B19.7: `BFMLALB`/`BFMLALT` (`FEAT_BF16`) — ver {@link VectorFpMultiplyAddLongBFloat16}.
+        public static final int VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16 = 105;
+        /// B19.7: `BFMLALB`/`BFMLALT` indexado (`FEAT_BF16`) — ver
+        /// {@link VectorFpMultiplyAddLongBFloat16ByElement}.
+        public static final int VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT = 106;
+        /// B19.7: `BFMMLA` (`FEAT_BF16`) — ver {@link VectorFpMatrixMultiplyAccumulateBFloat16}.
+        public static final int VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 = 107;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2643,5 +2660,101 @@ public sealed interface Ir64Op permits
             /// Registrador `V` com os índices empacotados.
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_LOOKUP_TABLE; }
+    }
+
+    /// `BFCVT` (`FEAT_BF16`, B19.7) — converte `Sn` (`binary32`) para `bf16` (16 bits) na metade
+    /// baixa de `Vd`, zerando o resto do registrador ("SIMD&FP destructive write", mesma disciplina
+    /// de {@link Fp64Convert}). Record PRÓPRIO em vez de estender {@link Fp64Convert}: aquele
+    /// assume larguras F32/F64 simétricas nos dois lados; `bf16` não tem via de registrador nativa.
+    record Fp64ConvertToBf16(
+            /// Registrador `V` de destino (`bf16`, 16 bits, resto zerado).
+            int vd,
+            /// Registrador `V` fonte (`Sn`, `binary32`).
+            int vn) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_CONVERT_TO_BF16; }
+    }
+
+    /// `BFDOT` vetorial (`FEAT_BF16`, B19.7) — produto escalar de PARES `bf16`, acumulando em `f32`
+    /// (`Vd.2S`/`Vd.4S`). Sibling FP do produto escalar inteiro
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dotProduct} (B13.18/B19.12) — núcleo
+    /// em {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfDotProduct}.
+    record VectorFpDotProductBFloat16(
+            /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (lido par a par de `bf16`).
+            int rn,
+            /// Registrador `V` fonte 2 (lido par a par de `bf16`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16; }
+    }
+
+    /// `BFDOT` indexado (`BFDOT_vi`, `FEAT_BF16`, B19.7) — como {@link VectorFpDotProductBFloat16},
+    /// mas {@link #rm} sempre contribui o MESMO par `bf16` (`Vm.2H[index]`, restrito a `V0`-`V15`,
+    /// mesma disciplina de índice halfword de B8.19/B19.12).
+    record VectorFpDotProductBFloat16ByElement(
+            /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1 (lido par a par de `bf16`).
+            int rn,
+            /// Registrador `V` fonte 2 — só o par `bf16` {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do par `bf16` de {@link #rm} usado em TODA a operação (`0`-`1`).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT; }
+    }
+
+    /// `BFMLALB`/`BFMLALT` (`FEAT_BF16`, B19.7) — multiply-accumulate LONG: lanes `bf16` de `Rn`/
+    /// `Rm` (pares/ímpares conforme {@link #top}) multiplicadas em `binary32` e ACUMULADAS (soma
+    /// simples, sem fusão) nas 4 lanes `f32` de `Rd`. `Vd.4S` é sempre 128 bits inteiros (nunca há
+    /// forma de 64 bits nesta família).
+    record VectorFpMultiplyAddLongBFloat16(
+            /// `false`=`BFMLALB` (elementos PARES de `Rn`/`Rm`, índice `2e`), `true`=`BFMLALT`
+            /// (ÍMPARES, índice `2e+1`) — o bit `Q` do encoding É este seletor aqui, NÃO largura/
+            /// metade (ao contrário de {@link VectorArithmeticWidening#q}): `Vd.4S` é sempre 128
+            /// bits nesta família.
+            boolean top,
+            /// Registrador `V` de destino (`Vd.4S`).
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.8H`, lido elemento a elemento).
+            int rn,
+            /// Registrador `V` fonte 2 (`Vm.8H`, lido elemento a elemento).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16; }
+    }
+
+    /// `BFMLALB`/`BFMLALT` indexado (`BFMLAL_vi`, `FEAT_BF16`, B19.7) — como
+    /// {@link VectorFpMultiplyAddLongBFloat16}, mas {@link #rm} sempre contribui o MESMO elemento
+    /// `bf16` {@link #index} (restrito a `V0`-`V15`, mesma disciplina de B8.19/B19.12).
+    record VectorFpMultiplyAddLongBFloat16ByElement(
+            /// `false`=`BFMLALB`, `true`=`BFMLALT` — ver {@link VectorFpMultiplyAddLongBFloat16#top}.
+            boolean top,
+            /// Registrador `V` de destino (`Vd.4S`).
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.8H`, lido elemento a elemento).
+            int rn,
+            /// Registrador `V` fonte 2 — só o elemento `bf16` {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do elemento `bf16` de {@link #rm} usado em TODA a operação (`0`-`7`).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT; }
+    }
+
+    /// `BFMMLA` (`FEAT_BF16`, B19.7) — multiplicação de matriz `2×4 · 4×2` de pares `bf16`,
+    /// acumulando em `f32`. Irmã de ponto flutuante de `SMMLA`/`UMMLA`/`USMMLA` (B19.12/B13.19,
+    /// `K=8` em vez de `K=4`). `Q` é FIXO em `1` no encoding — não há forma de 64 bits (mesma
+    /// disciplina de `SMMLA`).
+    record VectorFpMatrixMultiplyAccumulateBFloat16(
+            /// Registrador `V` de destino (`Vd.4S`, matriz `2×2` de acumuladores).
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.8H`, matriz `2×4` — linha `r` = elementos `4r..4r+3`).
+            int rn,
+            /// Registrador `V` fonte 2 (`Vm.8H`, matriz `4×2` na MESMA disposição de {@link #rn} —
+            /// coluna `c` = elementos `4c..4c+3`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
     }
 }

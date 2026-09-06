@@ -961,6 +961,10 @@ public final class Aarch64Decoder {
     /// B8.4: `FSQRT` — CONFERIDO contra `a64.decode` real do QEMU (`FSQRT_s`, opcode `000011`,
     /// mesmo grupo `@rr_hsd` de `FMOV`/`FABS`/`FNEG`/`FCVT`).
     private static final int FP_ONE_SOURCE_OPCODE_FSQRT = 0b00_0011;
+    /// B19.7 (`FEAT_BF16`): `BFCVT` — MESMO `opcode`(bits[20:15]) desta classe, mas `type`(23:22)
+    /// fixo em `FP_TYPE_DOUBLE` sem ser conversão double-real (mesmo padrão de `FMOV Vn.D[1]` em
+    /// B19.6: checar ANTES de {@link #decodeFpDoublePrecision}).
+    private static final int FP_ONE_SOURCE_OPCODE_BFCVT = 0b00_0110;
     // FCVT de/para meia-precisão (6/7), FRINTx (8+): fora de escopo, ver decodeFpOneSource.
 
     // ── Floating-point data-processing (3 source) — FMADD/FMSUB/FNMADD/FNMSUB, B8.4. ─────────────
@@ -1235,6 +1239,18 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INDEXED_L_SHIFT = 21;
     private static final int ADVSIMD_INDEXED_LM_SHIFT = 20;
     private static final int ADVSIMD_INDEXED_LM_MASK = 0b11;
+    /// B19.7 (`FEAT_BF16`): `opcode`(bits[15:12]) de `BFDOT_vi`/`BFMLAL_vi` — MESMO valor nos dois
+    /// `size` diferentes (`01`=`BFDOT_vi`, `11`=`BFMLAL_vi`), ver
+    /// {@link #decodeAdvancedSimdIndexedElement}.
+    private static final int ADVSIMD_BFLOAT16_INDEXED_OPCODE = 0b1111;
+
+    // ── B19.7 (`FEAT_BF16`): `BFDOT_v`/`BFMLAL_v`/`BFMMLA` vetorial/matricial (não-indexado) — ver
+    // ── {@link #decodeAdvancedSimdExtractPermuteTable}. Vivem no MESMO espaço `bit21=0` de EXT/
+    // ── permute/TBL/copy (`U`=1, `bit10`=1, `opcode`(bits[15:11], 5 bits) distinto).
+    private static final int ADVSIMD_BF16_OPCODE_DOT_OR_MLAL = 0b1_1111;
+    private static final int ADVSIMD_BFMMLA_OPCODE = 0b1_1101;
+    private static final int ADVSIMD_BF16_SIZE_HALFWORD = 0b01;
+    private static final int ADVSIMD_BF16_SIZE_DOUBLEWORD = 0b11;
 
     // ── Floating-point immediate — `FMOV Sd,#imm`/`FMOV Dd,#imm`: bits[12:5] fixo="10000000",
     // ── imm8(20:13) — CONFERIDO: campo contíguo em A64 (diferente do VFP32, que espalha imm8 em
@@ -3160,8 +3176,17 @@ public final class Aarch64Decoder {
                     return new Ir64Op.VectorFpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.FCVTL, q, 1 + precisionSz, rd, rn);
                 }
-                // `BFCVTN_v` (`!u && a==1`), `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`u`, opcode
-                // `0b0_1111`) e toda combinação restante ⇒ B19.7 / reservado ⇒ `unsupported` (G8).
+                // B19.7 (`FEAT_BF16`): `BFCVTN_v`/`BFCVTN2` — MESMO slot, `!u && a==1` (o caso que
+                // este `if` deixava cair no `unsupported` de baixo antes desta task). `esz` do
+                // record é sempre `1` (`bf16` tem a mesma largura de `f16`; não há forma `f64`→
+                // `bf16`, por isso `precisionSz` não entra na condição).
+                if (opcode == ADVSIMD_FCVTXN_OPCODE && !u && precisionA == 1
+                        && architecture.has(Aarch64Feature.BFLOAT16)) {
+                    return new Ir64Op.VectorFpConvertPrecision(
+                            Ir64VectorFpConvertPrecisionOp.BFCVTN, q, 1, rd, rn);
+                }
+                // `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`u`, opcode `0b0_1111`, `FEAT_FP8`) e toda
+                // combinação restante ⇒ B19.11 / reservado ⇒ `unsupported` (G8).
                 throw unsupported(word, address);
             }
             // B8.9 (vetorial: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/...) + B19.3
@@ -3311,6 +3336,29 @@ public final class Aarch64Decoder {
             Ir64Op lutiOp = decodeAdvancedSimdLookupTable(word, rm, rn, rd);
             if (lutiOp != null) {
                 return lutiOp;
+            }
+        }
+        // B19.7 (`FEAT_BF16`): `BFDOT_v`/`BFMLAL_v`/`BFMMLA` também vivem em `bit10=1` (MESMO
+        // espaço que "AdvSIMD copy" abaixo usa), discriminados por `U`=1 + `opcode`(bits[15:11])
+        // fixo — checados ANTES de `decodeAdvancedSimdCopy` (senão nunca seriam alcançados: `bit10`
+        // desviaria para lá primeiro). Sem a feature, ou sem bater `opcode`/`size`, cai no mesmo
+        // `unsupported` de sempre (G8) — `decodeAdvancedSimdCopy` já rejeitava estes bits antes
+        // desta task, então a ordem não regride nada.
+        if (u && bit10 && architecture.has(Aarch64Feature.BFLOAT16)) {
+            int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
+            if (opcode == ADVSIMD_BF16_OPCODE_DOT_OR_MLAL) {
+                if (size == ADVSIMD_BF16_SIZE_HALFWORD) {
+                    return new Ir64Op.VectorFpDotProductBFloat16(q, rd, rn, rm);
+                }
+                if (size == ADVSIMD_BF16_SIZE_DOUBLEWORD) {
+                    // `q` aqui é o seletor `B`/`T` (`top`) — `Vd.4S` é sempre 128 bits nesta
+                    // família, ver Javadoc de {@link Ir64Op.VectorFpMultiplyAddLongBFloat16#top}.
+                    return new Ir64Op.VectorFpMultiplyAddLongBFloat16(q, rd, rn, rm);
+                }
+            } else if (opcode == ADVSIMD_BFMMLA_OPCODE && size == ADVSIMD_BF16_SIZE_HALFWORD && q) {
+                // `Q` é FIXO em `1` no encoding real de `BFMMLA` (não há forma de 64 bits) —
+                // `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
+                return new Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16(rd, rn, rm);
             }
         }
         if (bit10) {
@@ -4095,6 +4143,32 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         boolean l = ((word >>> ADVSIMD_INDEXED_L_SHIFT) & 1) != 0;
         boolean h = ((word >>> ADVSIMD_INDEXED_H_SHIFT) & 1) != 0;
+        // B19.7 (`FEAT_BF16`): `BFDOT_vi`/`BFMLAL_vi` hijacham o MESMO `opcode`(bits[15:12])=`1111`
+        // em DOIS slots de `size` diferentes (`01`=`BFDOT_vi`, `11`=`BFMLAL_vi`) — checados ANTES
+        // do `switch` genérico porque cada um colide com um caso existente: `BFDOT_vi` cairia no
+        // `switch` inteiro de {@link #decodeAdvancedSimdIndexedInt} (que já devolve `null` para essa
+        // chave, sem risco, mas não é o lugar certo pra tratar FP) e `BFMLAL_vi` tem `L`(bit21)=`1`
+        // real, que o ramo `DOUBLEWORD` de baixo REJEITA explicitamente (`if (l) yield null`) por
+        // assumir a convenção FP `d` (`L` sempre `0`) — sem este intercepto, `BFMLAL_vi` nunca
+        // alcançaria um decoder, mesmo com a feature presente. Nenhuma das duas tem forma escalar.
+        if (!scalar && !u && opcode == ADVSIMD_BFLOAT16_INDEXED_OPCODE
+                && architecture.has(Aarch64Feature.BFLOAT16)) {
+            int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+            if (sizeField == ADVSIMD_INDEXED_SIZE_HALFWORD) {
+                // `BFDOT_vi`: `Vm.2H[index]` só tem 2 grupos — o índice é `L` sozinho (bit21); `H`
+                // (bit11) e `M` (bit20) são reservados/não usados nesta forma (medido contra corpus
+                // real, devkitA64 `.arch armv8.6-a+bf16`).
+                return new Ir64Op.VectorFpDotProductBFloat16ByElement(q, rd, rn, rmH, l ? 1 : 0);
+            }
+            if (sizeField == ADVSIMD_INDEXED_SIZE_DOUBLEWORD) {
+                // `BFMLAL_vi`: índice `H:L:M` completo (3 bits), MESMA fórmula do ramo `HALFWORD`
+                // abaixo — `q` aqui é o seletor `B`/`T` (`top`), NÃO largura (ver Javadoc de
+                // {@link Ir64Op.VectorFpMultiplyAddLongBFloat16#top}).
+                int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
+                int index = (h ? 0b100 : 0) | lm;
+                return new Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement(q, rd, rn, rmH, index);
+            }
+        }
         Ir64Op result = switch (sizeField) {
             // Doubleword: só ponto flutuante (`FMUL`/`FMLA`/`FMLS`/`FMULX` "d") — `Rm` de 5 bits,
             // índice = só `H` (`L`/bit21 é fixo `0` no encoding real, ver `@rrx_d`/`@qrrx_d`).
@@ -4416,8 +4490,20 @@ public final class Aarch64Decoder {
     /// opcode 6/7, sempre `FEAT_FP16` real, `docs/isa-nao-aplicavel.tsv` — `BFCVT_s`/
     /// `FRINT32*`/`FRINT64*`, extensões POSTERIORES) ficam fora, ver `isa-nao-aplicavel.tsv`.
     private Ir64Op decodeFpOneSource(int word, long address) {
-        boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int opcode = (word >>> FP_ONE_SOURCE_OPCODE_SHIFT) & FP_ONE_SOURCE_OPCODE_MASK;
+        // B19.7 (`FEAT_BF16`): `BFCVT` — `type`(23:22) EXIGE `FP_TYPE_DOUBLE` aqui, mas NÃO é
+        // double precision real (mesmo padrão de `FMOV Vn.D[1]`, B19.6 bloco F): checar ANTES de
+        // {@link #decodeFpDoublePrecision}, que trataria `type=01` como "double" genérico.
+        if (opcode == FP_ONE_SOURCE_OPCODE_BFCVT) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            if (type != FP_TYPE_DOUBLE || !architecture.has(Aarch64Feature.BFLOAT16)) {
+                throw unsupported(word, address);
+            }
+            int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int vd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.Fp64ConvertToBf16(vd, vn);
+        }
+        boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vd = word & REGISTER_FIELD_MASK;
         return switch (opcode) {
