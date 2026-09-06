@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
@@ -71,10 +72,16 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
     /// inteiros.
     private static final int ESZ_WORD = 2;
     private static final int ESZ_DOUBLEWORD = 3;
-    /// `opc1` de `VSHLL`/`VMOVN`-família (também hospeda `VSWP`/`VTRN`/`VUZP`/`VZIP`, B13.14, e
-    /// `VRINT*`/`VCVT_F16_F32`/..., B13.13 — este decoder só reconhece `opc2` `0100`-`0110`).
+    /// `opc1` de `VSHLL`/`VMOVN`-família **e** `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, `opc2` `0000`-
+    /// `0011`, reconhecidos por este decoder) **e** `VRINT*`/`VCVT_F16_F32`/... (B13.13, `opc2`
+    /// `1000`-`1111`, `null` — não reconhecidos aqui).
     private static final int OPC1_NARROW_SHLL = 0b10;
     private static final int OPC2_VSHLL = 0b0110;
+    /// `opc2` de `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14) — MESMO `opc1` de `VSHLL`/`VMOVN`-família.
+    private static final int OPC2_VSWP = 0b0000;
+    private static final int OPC2_VTRN = 0b0001;
+    private static final int OPC2_VUZP = 0b0010;
+    private static final int OPC2_VZIP_MAX = 0b0011;
 
     private final ArmArchitecture architecture;
 
@@ -107,6 +114,28 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
                     new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.USHLL, size, 8 << size, vd, vm));
+        }
+
+        if (opc1 == OPC1_NARROW_SHLL && opc2 <= OPC2_VZIP_MAX) {
+            // `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, MESMO `opc1=0b10` de `VSHLL`/`VMOVN`-família,
+            // discriminados por `opc2` 0-3) — sem equivalente A64 (ver Javadoc de
+            // `AdvSimdSwapPermuteOp`), `Vd`/`Vm` são fonte E destino.
+            AdvSimdSwapPermuteOp swapOp = switch (opc2) {
+                case OPC2_VSWP -> AdvSimdSwapPermuteOp.SWAP;
+                case OPC2_VTRN -> AdvSimdSwapPermuteOp.TRN;
+                case OPC2_VUZP -> AdvSimdSwapPermuteOp.UZP;
+                default -> AdvSimdSwapPermuteOp.ZIP;
+            };
+            // `VSWP` real sempre encodifica `size=00` (o campo é ignorado pela operação, mas
+            // qualquer outro valor é combinação reservada — confirmado contra `arm-none-eabi-as`
+            // real: `vswp` sem sufixo de tamanho só produz `size=00`). `VTRN`/`VUZP`/`VZIP` aceitam
+            // `size` 0-2 (`size==3` reservado, mesmo padrão do resto do sub-grupo).
+            boolean sizeValid = swapOp == AdvSimdSwapPermuteOp.SWAP ? size == 0 : size != ESZ_DOUBLEWORD;
+            if (!sizeValid || (bit6 && ((vd | vm) & 1) != 0)) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonSwapPermute(swapOp, bit6, size, vd, vm));
         }
 
         AdvSimdNarrowUnaryOp narrowOp = narrowUnaryOperation(opc1, opc2, bit6);

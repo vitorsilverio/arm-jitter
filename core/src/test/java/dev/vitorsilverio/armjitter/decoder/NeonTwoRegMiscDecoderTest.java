@@ -420,4 +420,142 @@ class NeonTwoRegMiscDecoderTest {
         run(core, enc(1, 0b00, 0, 0b0100, 0, 0));
         assertEquals(3L, core.vfp().d(0) & 0xFFFF_FFFFL);
     }
+
+    // ── B13.14: VSWP/VTRN/VUZP/VZIP (MESMO frame `opc1=0b10`, `opc2` 0-3) ──
+
+    @Test
+    void swapPermuteEncodingsMatchTheAssembler() {
+        assertEquals(0xf3b20001, enc(0, 0b10, 0, 0b0000, 0, 1));  // vswp       d0,d1
+        assertEquals(0xf3b20042, enc(0, 0b10, 0, 0b0000, 1, 2));  // vswp       q0,q1
+        assertEquals(0xf3b20081, enc(0, 0b10, 0, 0b0001, 0, 1));  // vtrn.8     d0,d1
+        assertEquals(0xf3b20101, enc(0, 0b10, 0, 0b0010, 0, 1));  // vuzp.8     d0,d1
+        assertEquals(0xf3b20181, enc(0, 0b10, 0, 0b0011, 0, 1));  // vzip.8     d0,d1
+        // Q=0/size=2 (word): o MNEMÔNICO `vuzp.32`/`vzip.32` do assembler real escolhe emitir o
+        // MESMO `opc2` de `VTRN` (0xf3ba0081, canonicalização de mnemônico) — mas os encodings
+        // CRUS com `opc2=0010`/`0011` continuam válidos e distintos (decodificados como UZP/ZIP
+        // explícitos); a EXECUÇÃO dos três produz o mesmo resultado nesta combinação, conferido em
+        // `qFormZeroSizeTwoDegenerateToTrnResult` abaixo — não a codificação.
+        assertEquals(0xf3ba0081, enc(2, 0b10, 0, 0b0001, 0, 1));  // vtrn.32    d0,d1
+    }
+
+    @Test
+    void swapPermuteDecodesWithRightOpEszQuadAndRegisters() {
+        IrOp.NeonSwapPermute swap = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 0, 0b0000, 1, 2));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.SWAP, swap.op());
+        assertTrue(swap.quad());
+        assertEquals(0, swap.vd());
+        assertEquals(2, swap.vm());
+
+        IrOp.NeonSwapPermute trn = (IrOp.NeonSwapPermute) liftedOf(enc(1, 0b10, 2, 0b0001, 0, 3));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.TRN, trn.op());
+        assertEquals(1, trn.esz());
+        assertEquals(2, trn.vd());
+        assertEquals(3, trn.vm());
+
+        IrOp.NeonSwapPermute uzp = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 4, 0b0010, 0, 5));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.UZP, uzp.op());
+
+        IrOp.NeonSwapPermute zip = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 6, 0b0011, 0, 7));
+        assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.ZIP, zip.op());
+    }
+
+    @Test
+    void swapWithNonZeroSizeStaysUnimplemented() {
+        // VSWP real só encodifica size=00 (arm-none-eabi-as confirma) — outro size é reservado.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(1, 0b10, 0, 0b0000, 0, 1)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(3, 0b10, 0, 0b0001, 0, 1)).kind()); // vtrn size=3
+    }
+
+    @Test
+    void swapPermuteQuadFormOddRegistersAreUndefined() {
+        int oddVd = enc(0, 0b10, 1, 0b0001, 1, 2); // vtrn.8 q form, vd ímpar
+        int oddVm = enc(0, 0b10, 0, 0b0001, 1, 3); // vtrn.8 q form, vm ímpar
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(oddVd).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(oddVm).kind());
+    }
+
+    @Test
+    void vswpExchangesTheTwoFullRegisters() {
+        ArmCore core = newCore();
+        core.vfp().setD(0, 0x1111_1111_1111_1111L);
+        core.vfp().setD(1, 0x2222_2222_2222_2222L);
+        run(core, enc(0, 0b10, 0, 0b0000, 0, 1)); // vswp d0,d1
+        assertEquals(0x2222_2222_2222_2222L, core.vfp().d(0));
+        assertEquals(0x1111_1111_1111_1111L, core.vfp().d(1));
+    }
+
+    // Valores de entrada compartilhados pelos 3 testes abaixo: Vd = byte `i+1` na lane `i`
+    // (01,02,...,08), Vm = byte `0x10+i+1` na lane `i` (11,12,...,18) — resultados esperados
+    // recalculados independentemente (script Node.js) a partir da definição ARM DDI 0406C de
+    // `VTRN`/`VUZP`/`VZIP`, não da implementação em teste.
+    private static final long TRANSPOSE_VD_INPUT = 0x0807_0605_0403_0201L;
+    private static final long TRANSPOSE_VM_INPUT = 0x1817_1615_1413_1211L;
+
+    @Test
+    void vtrnTransposesOddVdWithEvenVm() {
+        ArmCore core = newCore();
+        core.vfp().setD(0, TRANSPOSE_VD_INPUT);
+        core.vfp().setD(1, TRANSPOSE_VM_INPUT);
+        run(core, enc(0, 0b10, 0, 0b0001, 0, 1)); // vtrn.8 d0,d1
+        assertEquals(0x1707_1505_1303_1101L, core.vfp().d(0));
+        assertEquals(0x1808_1606_1404_1202L, core.vfp().d(1));
+    }
+
+    @Test
+    void vuzpDeinterleavesConcatenatedDAndM() {
+        ArmCore core = newCore();
+        core.vfp().setD(0, TRANSPOSE_VD_INPUT);
+        core.vfp().setD(1, TRANSPOSE_VM_INPUT);
+        run(core, enc(0, 0b10, 0, 0b0010, 0, 1)); // vuzp.8 d0,d1
+        assertEquals(0x1715_1311_0705_0301L, core.vfp().d(0));
+        assertEquals(0x1816_1412_0806_0402L, core.vfp().d(1));
+    }
+
+    @Test
+    void vzipInterleavesVdAndVm() {
+        ArmCore core = newCore();
+        core.vfp().setD(0, TRANSPOSE_VD_INPUT);
+        core.vfp().setD(1, TRANSPOSE_VM_INPUT);
+        run(core, enc(0, 0b10, 0, 0b0011, 0, 1)); // vzip.8 d0,d1
+        assertEquals(0x1404_1303_1202_1101L, core.vfp().d(0));
+        assertEquals(0x1808_1707_1606_1505L, core.vfp().d(1));
+    }
+
+    @Test
+    void vdEqualsVmIsWellDefinedNotSilentlyCorrupted() {
+        ArmCore core = newCore();
+        // Vd==Vm é UNPREDICTABLE no ARM; o núcleo bufferizado (E10) ainda produz um resultado
+        // DETERMINÍSTICO — decisão registrada no `## Resultado` da B13.14: como as duas metades do
+        // resultado são escritas na MESMA palavra, a segunda escrita (a metade "Vm") sempre vence
+        // por lane, nunca lixo/crash/não-determinismo. Valor recalculado independentemente (Node.js)
+        // a partir da definição de VTRN aplicada com `op1==op2`.
+        core.vfp().setD(0, 0x0807_0605_0403_0201L);
+        run(core, enc(0, 0b10, 0, 0b0001, 0, 0)); // vtrn.8 d0,d0
+        assertEquals(0x0808_0606_0404_0202L, core.vfp().d(0));
+    }
+
+    @Test
+    void qFormZeroSizeTwoDegenerateToTrnResult() {
+        // Q=0, size=2 (word): VTRN/VUZP/VZIP produzem o MESMO resultado (confirmado pelo encoding
+        // idêntico do assembler real, ver swapPermuteEncodingsMatchTheAssembler).
+        ArmCore coreTrn = newCore();
+        coreTrn.vfp().setD(0, 0x0000_0002_0000_0001L);
+        coreTrn.vfp().setD(1, 0x0000_0004_0000_0003L);
+        run(coreTrn, enc(2, 0b10, 0, 0b0001, 0, 1));
+
+        ArmCore coreUzp = newCore();
+        coreUzp.vfp().setD(0, 0x0000_0002_0000_0001L);
+        coreUzp.vfp().setD(1, 0x0000_0004_0000_0003L);
+        run(coreUzp, enc(2, 0b10, 0, 0b0010, 0, 1));
+
+        ArmCore coreZip = newCore();
+        coreZip.vfp().setD(0, 0x0000_0002_0000_0001L);
+        coreZip.vfp().setD(1, 0x0000_0004_0000_0003L);
+        run(coreZip, enc(2, 0b10, 0, 0b0011, 0, 1));
+
+        assertEquals(coreTrn.vfp().d(0), coreUzp.vfp().d(0));
+        assertEquals(coreTrn.vfp().d(1), coreUzp.vfp().d(1));
+        assertEquals(coreTrn.vfp().d(0), coreZip.vfp().d(0));
+        assertEquals(coreTrn.vfp().d(1), coreZip.vfp().d(1));
+    }
 }

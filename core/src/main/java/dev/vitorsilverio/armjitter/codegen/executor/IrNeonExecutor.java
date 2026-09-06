@@ -392,4 +392,52 @@ public final class IrNeonExecutor {
         AdvSimdLanes.dotProductByElement(
                 vfp, op.signedN(), op.signedM(), lanes, op.vd(), op.vn(), op.vm(), op.index());
     }
+
+    /// `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#swapPermute}) — sem equivalente A64, a semântica nasce aqui (exceção do
+    /// épico, mesma classe de {@link #executeNeonComplex}/{@link #executeNeonDotProduct}). `Vd`/`Vm`
+    /// são fonte E destino; o núcleo já faz o buffer (E10).
+    public void executeNeonSwapPermute(ArmCore core, IrOp.NeonSwapPermute op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
+        AdvSimdLanes.swapPermute(vfp, op.op(), esz, elements, op.vd(), op.vm());
+    }
+
+    /// `VEXT` (B13.14): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#extract}) — a MESMA
+    /// função que o executor A64 chama para `EXT` (migração D1). NEON nunca zera bits fora do
+    /// registrador escrito (ao contrário do A64, que zera `[127:64]` na forma `D` — disciplina do
+    /// CHAMADOR, aqui não se aplica).
+    public void executeNeonExtract(ArmCore core, IrOp.NeonExtract op) {
+        VfpRegisters vfp = core.vfp();
+        int datasizeBytes = op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES;
+        AdvSimdLanes.extract(vfp, datasizeBytes, op.imm(), op.vd(), op.vn(), op.vm());
+    }
+
+    /// `VTBL`/`VTBX` (B13.14): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#tableLookup}) —
+    /// a MESMA função que o executor A64 chama para `TBL`/`TBX` (migração D1). A tabela A32 é feita
+    /// de registradores `D` (`wordsPerTableRegister=1`, ao contrário do `V` de 128 bits do A64,
+    /// `=2`); sempre forma `D` (`indexCount=8`, sem forma `Q` neste encoding).
+    public void executeNeonTableLookup(ArmCore core, IrOp.NeonTableLookup op) {
+        VfpRegisters vfp = core.vfp();
+        AdvSimdLanes.tableLookup(vfp, op.tbx(), op.len(), DOUBLEWORD_BYTES,
+                1, VfpRegisters.DOUBLE_COUNT, op.vd(), op.vn(), op.vm());
+    }
+
+    /// `VDUP` escalar (B13.14, `VDUP_scalar`): lê o elemento {@link IrOp.NeonDuplicateScalar#index}
+    /// de `Vm` e replica por todas as lanes de `Vd` — mesma disciplina de leitura/escrita do núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#element}/{@link AdvSimdLanes#setElement}), mas sem
+    /// função própria em {@link AdvSimdLanes} (replicação é trivial demais para justificar um novo
+    /// símbolo compartilhado — nenhum consumidor A64 usaria esta assinatura, que é toda em índice de
+    /// `D`).
+    public void executeNeonDuplicateScalar(ArmCore core, IrOp.NeonDuplicateScalar op) {
+        VfpRegisters vfp = core.vfp();
+        int esz = op.esz();
+        long value = AdvSimdLanes.element(vfp, op.vm(), op.index(), esz);
+        int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / (1 << esz);
+        for (int i = 0; i < elements; i++) {
+            AdvSimdLanes.setElement(vfp, op.vd(), i, esz, value);
+        }
+    }
 }

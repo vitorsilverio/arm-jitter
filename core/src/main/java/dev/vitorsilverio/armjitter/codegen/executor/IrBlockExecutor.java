@@ -138,6 +138,10 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_COMPLEX_BY_ELEMENT -> neon.executeNeonComplexByElement(core, (IrOp.NeonComplexByElement) op);
                 case IrOp.Kind.NEON_DOT_PRODUCT -> neon.executeNeonDotProduct(core, (IrOp.NeonDotProduct) op);
                 case IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT -> neon.executeNeonDotProductByElement(core, (IrOp.NeonDotProductByElement) op);
+                case IrOp.Kind.NEON_SWAP_PERMUTE -> neon.executeNeonSwapPermute(core, (IrOp.NeonSwapPermute) op);
+                case IrOp.Kind.NEON_EXTRACT -> neon.executeNeonExtract(core, (IrOp.NeonExtract) op);
+                case IrOp.Kind.NEON_TABLE_LOOKUP -> neon.executeNeonTableLookup(core, (IrOp.NeonTableLookup) op);
+                case IrOp.Kind.NEON_DUPLICATE_SCALAR -> neon.executeNeonDuplicateScalar(core, (IrOp.NeonDuplicateScalar) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -296,6 +300,10 @@ public final class IrBlockExecutor {
             case IrOp.NeonComplexByElement ncxbe -> { neon.executeNeonComplexByElement(core, ncxbe); yield false; }
             case IrOp.NeonDotProduct ndp -> { neon.executeNeonDotProduct(core, ndp); yield false; }
             case IrOp.NeonDotProductByElement ndpbe -> { neon.executeNeonDotProductByElement(core, ndpbe); yield false; }
+            case IrOp.NeonSwapPermute nsp -> { neon.executeNeonSwapPermute(core, nsp); yield false; }
+            case IrOp.NeonExtract nex -> { neon.executeNeonExtract(core, nex); yield false; }
+            case IrOp.NeonTableLookup ntl -> { neon.executeNeonTableLookup(core, ntl); yield false; }
+            case IrOp.NeonDuplicateScalar nds -> { neon.executeNeonDuplicateScalar(core, nds); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }
             case IrOp.VfpCompare vfpCmp -> { vfp.executeVfpCompare(core, vfpCmp); yield false; }

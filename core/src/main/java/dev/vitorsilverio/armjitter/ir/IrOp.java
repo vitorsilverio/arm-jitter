@@ -12,7 +12,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonConvertFixedPoint, IrOp.NeonModifiedImmediate, IrOp.NeonWidening, IrOp.NeonWide,
         IrOp.NeonNarrow, IrOp.NeonThreeSameByElement, IrOp.NeonWideningByElement,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
-        IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement {
+        IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
+        IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -140,6 +141,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.18: `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` — ver
         /// {@link NeonDotProductByElement}.
         public static final int NEON_DOT_PRODUCT_BY_ELEMENT = 90;
+        /// B13.14: `VSWP`/`VTRN`/`VUZP`/`VZIP` — ver {@link NeonSwapPermute}.
+        public static final int NEON_SWAP_PERMUTE = 91;
+        /// B13.14: `VEXT` — ver {@link NeonExtract}.
+        public static final int NEON_EXTRACT = 92;
+        /// B13.14: `VTBL`/`VTBX` — ver {@link NeonTableLookup}.
+        public static final int NEON_TABLE_LOOKUP = 93;
+        /// B13.14: `VDUP` escalar (NEON, `Vd = Vm[index]` replicado) — ver {@link NeonDuplicateScalar}.
+        public static final int NEON_DUPLICATE_SCALAR = 94;
     }
 
     /// Operacao ALU generica.
@@ -2189,5 +2198,113 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Índice da lane de 32 bits dentro de {@link #vm}: `0`-`1` (um `D` guarda 2 lanes).
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, "2-reg-misc grouping"
+    /// `opc1=0b10` `opc2` `0000`-`0011` — MESMO frame/decoder de {@link NeonUnary} e companhia,
+    /// B13.12). **Exceção do épico**: sem equivalente A64 (`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`
+    /// são SEIS instruções de UM destino, não a mesma semântica — ver Javadoc de
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp}). {@link #vd}/{@link #vm}
+    /// são FONTE **e** DESTINO (troca no lugar) — núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#swapPermute}) usa buffer (E10).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonSwapPermute(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp op,
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<m>`).
+            boolean quad,
+            /// `log2` do tamanho do elemento em bytes — `0`-`2` (byte/half/word; `3` é reservado,
+            /// recusado pelo decoder). Ignorado por {@link #op}=`SWAP` (troca completa).
+            int esz,
+            /// Registrador FONTE e DESTINO 1, em índice de `D` (`0`-`31`); na forma `quad` é o `D`
+            /// par que inicia o `Q`.
+            int vd,
+            /// Registrador FONTE e DESTINO 2, em índice de `D` (`0`-`31`); na forma `quad` é o `D`
+            /// par que inicia o `Q`.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_SWAP_PERMUTE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `VEXT` (B13.14, fora do sub-layout "2-reg-misc": bit24=0
+    /// distingue do resto de `size==0b11`). Concatena `Vm:Vn` (`Vn` nos bytes BAIXOS) e extrai uma
+    /// janela de {@code datasize} bytes começando em {@link #imm} bytes — puramente reorganização de
+    /// bytes, sem aritmética. Migração D1 do MESMO algoritmo de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorExtract} (B8.10) — núcleo COMPARTILHADO
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#extract}.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonExtract(
+            /// `true` para arranjo de 128 bits (`imm` até `15`), `false` para 64 bits (`imm` até
+            /// `7`).
+            boolean quad,
+            /// Deslocamento em BYTES (não bits) dentro da janela concatenada.
+            int imm,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (metade BAIXA da concatenação), em índice de `D` (ver
+            /// {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (metade ALTA da concatenação), em índice de `D` (ver
+            /// {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_EXTRACT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `VTBL`/`VTBX` (B13.14, fora do sub-layout "2-reg-misc":
+    /// bit11=1 distingue do resto de `size==0b11`). Trata `Vn`, `Vn+1`, ..., `Vn+len` ({@link #len}
+    /// registradores `D` consecutivos, `Vn+len` não pode passar de `D31` — checado pelo decoder,
+    /// G8) como UMA tabela contígua de bytes, e substitui cada byte de {@link #vm} pelo byte da
+    /// tabela no índice que ele contém — índice fora da tabela produz `0` (`VTBL`) ou preserva o
+    /// byte ATUAL de {@link #vd} (`VTBX`, {@link #tbx}). Migração D1 do MESMO algoritmo de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorTableLookup} (B8.10) — núcleo
+    /// COMPARTILHADO {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#tableLookup}.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonTableLookup(
+            /// `true` para `VTBX` (índice fora da tabela preserva `Vd`), `false` para `VTBL`
+            /// (produz `0`).
+            boolean tbx,
+            /// Quantos registradores ALÉM de {@link #vn} compõem a tabela, MENOS `1` (`0`=`1`
+            /// registrador `D`, ..., `3`=`4` registradores) — nome espelha o campo `len` do encoding
+            /// real.
+            int len,
+            /// Registrador de destino, em índice de `D` (`0`-`31`).
+            int vd,
+            /// Primeiro registrador `D` da tabela (`0`-`31`); os demais são `(vn+1)`...`(vn+len)`.
+            int vn,
+            /// Registrador `D` com os índices (um por byte).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_TABLE_LOOKUP; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `VDUP` escalar (B13.14, `VDUP_scalar`, fora do sub-layout
+    /// "2-reg-misc": bit11=1 distingue do resto de `size==0b11`, MESMO espaço de `VTBL`/`VTBX`).
+    /// Replica o elemento {@link #index} de {@link #vm} (tamanho {@link #esz}) por todas as lanes de
+    /// {@link #vd}. **3 linhas de encoding, não campo `size` livre**: o tamanho vem do PADRÃO de
+    /// bits do imediato (posição do bit `1` mais baixo em `imm4`), decodificado ANTES de construir
+    /// este record — ver Javadoc do decoder.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonDuplicateScalar(
+            /// `log2` do tamanho do elemento em bytes — `0`-`2` (byte/half/word), vindo do PADRÃO de
+            /// bits do imediato, não de um campo `size` livre.
+            int esz,
+            /// Índice do elemento dentro de {@link #vm} a replicar.
+            int index,
+            /// `true` para o arranjo de 128 bits (`Q<d>`), `false` para o de 64 bits (`D<d>`).
+            boolean quad,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte, em índice de `D` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_DUPLICATE_SCALAR; }
     }
 }

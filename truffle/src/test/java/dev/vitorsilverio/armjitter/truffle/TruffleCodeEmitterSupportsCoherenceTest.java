@@ -15,6 +15,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
@@ -40,7 +41,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (91 desde B13.18), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (95 desde B13.14), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -53,7 +54,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(91, kinds.size(), "IrOp.Kind deve ter 91 constantes contíguas");
+        assertEquals(95, kinds.size(), "IrOp.Kind deve ter 95 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -88,8 +89,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // duplo/sysreg do perfil M (−14); A10.5 cobriu HVC/SMC/ERET/MRS_BANK/MSR_BANK/BREAKPOINT (−6);
         // B13.12 acrescentou NEON_UNARY, NEON_NARROW_UNARY, NEON_FP_UNARY (+3). B13.17 acrescentou
         // NEON_COMPLEX, NEON_COMPLEX_BY_ELEMENT (+2). B13.18 acrescentou NEON_DOT_PRODUCT,
-        // NEON_DOT_PRODUCT_BY_ELEMENT (+2).
-        assertEquals(25, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_DOT_PRODUCT_BY_ELEMENT (+2). B13.14 acrescentou NEON_SWAP_PERMUTE, NEON_EXTRACT,
+        // NEON_TABLE_LOOKUP, NEON_DUPLICATE_SCALAR (+4, NEON também não tem nó Truffle).
+        assertEquals(29, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
@@ -102,7 +104,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT, IrOp.Kind.NEON_UNARY,
                         IrOp.Kind.NEON_NARROW_UNARY, IrOp.Kind.NEON_FP_UNARY,
                         IrOp.Kind.NEON_COMPLEX, IrOp.Kind.NEON_COMPLEX_BY_ELEMENT,
-                        IrOp.Kind.NEON_DOT_PRODUCT, IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT)),
+                        IrOp.Kind.NEON_DOT_PRODUCT, IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT,
+                        IrOp.Kind.NEON_SWAP_PERMUTE, IrOp.Kind.NEON_EXTRACT,
+                        IrOp.Kind.NEON_TABLE_LOOKUP, IrOp.Kind.NEON_DUPLICATE_SCALAR)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -231,6 +235,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_DOT_PRODUCT -> new IrOp.NeonDotProduct(true, true, false, 0, 1, 2);
             case IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT ->
                     new IrOp.NeonDotProductByElement(true, true, false, 0, 1, 2, 0);
+            case IrOp.Kind.NEON_SWAP_PERMUTE -> new IrOp.NeonSwapPermute(AdvSimdSwapPermuteOp.TRN, false, 0, 0, 1);
+            case IrOp.Kind.NEON_EXTRACT -> new IrOp.NeonExtract(false, 3, 0, 1, 2);
+            case IrOp.Kind.NEON_TABLE_LOOKUP -> new IrOp.NeonTableLookup(false, 0, 0, 1, 2);
+            case IrOp.Kind.NEON_DUPLICATE_SCALAR -> new IrOp.NeonDuplicateScalar(0, 3, false, 0, 1);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

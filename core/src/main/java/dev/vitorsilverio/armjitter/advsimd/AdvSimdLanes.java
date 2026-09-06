@@ -1686,4 +1686,134 @@ public final class AdvSimdLanes {
             }
         }
     }
+
+    /// `EXT`/`VEXT` (A64 B8.10, A32 B13.14) — concatena `baseRm:baseRn` (`baseRn` ocupa os bytes
+    /// BAIXOS, `baseRm` os ALTOS) e extrai a janela de {@code datasizeBytes} bytes começando em
+    /// {@code imm}, byte a byte (sem aritmética). Resultado calculado num buffer ANTES de qualquer
+    /// escrita (E10) — aliasing `baseRd==baseRn`/`baseRd==baseRm` é seguro por construção. Nada aqui
+    /// zera bits fora de {@code datasizeBytes} bytes: a escrita destrutiva do A64 (zerar `[127:64]`
+    /// quando o arranjo é de 64 bits) é responsabilidade do chamador.
+    public static void extract(AdvSimdRegisterWords regs, int datasizeBytes, int imm,
+            int baseRd, int baseRn, int baseRm) {
+        long[] results = new long[datasizeBytes];
+        for (int i = 0; i < datasizeBytes; i++) {
+            int srcIndex = imm + i;
+            results[i] = srcIndex < datasizeBytes
+                    ? element(regs, baseRn, srcIndex, 0)
+                    : element(regs, baseRm, srcIndex - datasizeBytes, 0);
+        }
+        for (int i = 0; i < datasizeBytes; i++) {
+            setElement(regs, baseRd, i, 0, results[i]);
+        }
+    }
+
+    /// `TBL`/`TBX`/`VTBL`/`VTBX` (A64 B8.10, A32 B13.14) — trata os registradores de tabela que
+    /// começam em {@code baseRn} ({@code len+1} registradores consecutivos de
+    /// {@code bytesPerTableRegister} bytes cada, empacotados em {@code wordsPerTableRegister}
+    /// palavras) como UMA tabela contígua de bytes, e substitui cada byte de {@code baseRm} pelo
+    /// byte da tabela no índice que ele contém — índice fora da tabela produz `0` ({@code TBL},
+    /// {@code tbx=false}) ou preserva o byte ATUAL de {@code baseRd} ({@code TBX}, {@code tbx=true}).
+    /// O endereço de registrador de tabela envolve (`% registerCount`) no espaço de PALAVRAS
+    /// (`registerCount * wordsPerTableRegister`) — o A64 usa isso para os 32 `V<n>`; o A32 nunca
+    /// alcança o limite porque o decoder já recusa `Vn+len > D31` antes de chegar aqui (G8), mas o
+    /// wrap é inofensivo (mesmo espaço de 32 registradores `D`). Resultado calculado num buffer ANTES
+    /// de qualquer escrita (E10) — o valor "preservado" de `TBX` é lido do {@code baseRd} ORIGINAL,
+    /// mesmo se `baseRd` colidir com `baseRn`/`baseRm`.
+    public static void tableLookup(AdvSimdRegisterWords regs, boolean tbx, int len, int indexCount,
+            int wordsPerTableRegister, int registerCount, int baseRd, int baseRn, int baseRm) {
+        int bytesPerTableRegister = wordsPerTableRegister * (WORD_BITS / 8);
+        int tableBytes = (len + 1) * bytesPerTableRegister;
+        int totalWords = registerCount * wordsPerTableRegister;
+        long[] results = new long[indexCount];
+        for (int i = 0; i < indexCount; i++) {
+            int index = (int) element(regs, baseRm, i, 0);
+            long value;
+            if (index < tableBytes) {
+                int tableRegisterOffset = index / bytesPerTableRegister;
+                int byteInRegister = index % bytesPerTableRegister;
+                int tableBaseWord = (baseRn + tableRegisterOffset * wordsPerTableRegister) % totalWords;
+                value = element(regs, tableBaseWord, byteInRegister, 0);
+            } else if (tbx) {
+                value = element(regs, baseRd, i, 0);
+            } else {
+                value = 0L;
+            }
+            results[i] = value;
+        }
+        for (int i = 0; i < indexCount; i++) {
+            setElement(regs, baseRd, i, 0, results[i]);
+        }
+    }
+
+    /// `VSWP`/`VTRN`/`VUZP`/`VZIP` (A32 B13.14, `neon-dp.decode` "2-reg-misc grouping" `opc1=0b10`
+    /// `opc2` `0000`-`0011`) — **exceção do épico B13** (mesma classe de {@code fpComplexAdd}/
+    /// {@code dotProduct}): não existe semântica A64 prévia (`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/
+    /// `ZIP2` do A64 são SEIS instruções de UM destino, {@link #element}/{@link #setElement} não
+    /// servem — estas QUATRO trocam/reorganizam OS DOIS registradores {@code baseRd}/{@code baseRm}
+    /// no lugar). Resultado dos DOIS lados calculado num buffer ANTES de qualquer escrita (E10) —
+    /// obrigatório aqui porque são trocas: escrever `baseRd` antes de ler `baseRm` corromperia o
+    /// valor que `baseRm` ainda precisa ler (e vice-versa). `Vd==Vm` (UNPREDICTABLE no ARM) fica
+    /// bem definido por construção: como as duas leituras usam o MESMO conteúdo, o resultado é
+    /// determinístico (decisão registrada no `## Resultado` da task B13.14).
+    ///
+    /// - {@code SWAP} (`VSWP`): troca completa, ignora {@code elements}/{@code esz}.
+    /// - {@code TRN} (`VTRN`): troca os elementos ÍMPARES de `baseRd` com os PARES de `baseRm`
+    ///   (transposição 2×2).
+    /// - {@code UZP} (`VUZP`): de-intercala a concatenação `[baseRd, baseRm]` — pares vão para
+    ///   `baseRd`, ímpares para `baseRm`.
+    /// - {@code ZIP} (`VZIP`): intercala `baseRd`/`baseRm`; a metade BAIXA do resultado intercalado
+    ///   vai para `baseRd`, a ALTA para `baseRm`.
+    ///
+    /// Com `elements==2` (arranjo de 64 bits, elemento de 32 bits) as três degeneram para o MESMO
+    /// resultado que `TRN` — confirmado bit a bit contra `arm-none-eabi-as` real (o assembler
+    /// CANONICALIZA `vuzp.32`/`vzip.32` de forma `D` para o MESMO encoding de `vtrn.32`).
+    public static void swapPermute(AdvSimdRegisterWords regs, AdvSimdSwapPermuteOp op, int esz,
+            int elements, int baseRd, int baseRm) {
+        if (op == AdvSimdSwapPermuteOp.SWAP) {
+            long dLo = regs.word(baseRd);
+            long mLo = regs.word(baseRm);
+            regs.setWord(baseRd, mLo);
+            regs.setWord(baseRm, dLo);
+            return;
+        }
+        long[] dValues = new long[elements];
+        long[] mValues = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            dValues[i] = element(regs, baseRd, i, esz);
+            mValues[i] = element(regs, baseRm, i, esz);
+        }
+        long[] newD = new long[elements];
+        long[] newM = new long[elements];
+        switch (op) {
+            case TRN -> {
+                for (int pair = 0; pair < elements / 2; pair++) {
+                    newD[2 * pair] = dValues[2 * pair];
+                    newD[2 * pair + 1] = mValues[2 * pair];
+                    newM[2 * pair] = dValues[2 * pair + 1];
+                    newM[2 * pair + 1] = mValues[2 * pair + 1];
+                }
+            }
+            case UZP -> {
+                for (int i = 0; i < elements; i++) {
+                    int concatIndex = 2 * i;
+                    newD[i] = concatIndex < elements ? dValues[concatIndex] : mValues[concatIndex - elements];
+                    int concatIndexOdd = 2 * i + 1;
+                    newM[i] = concatIndexOdd < elements ? dValues[concatIndexOdd] : mValues[concatIndexOdd - elements];
+                }
+            }
+            case ZIP -> {
+                for (int i = 0; i < elements / 2; i++) {
+                    newD[2 * i] = dValues[i];
+                    newD[2 * i + 1] = mValues[i];
+                    newM[2 * i] = dValues[elements / 2 + i];
+                    newM[2 * i + 1] = mValues[elements / 2 + i];
+                }
+            }
+            case SWAP -> throw new IllegalStateException("tratado antes do buffer: " + op);
+        }
+        for (int i = 0; i < elements; i++) {
+            setElement(regs, baseRd, i, esz, newD[i]);
+            setElement(regs, baseRm, i, esz, newM[i]);
+        }
+    }
 }

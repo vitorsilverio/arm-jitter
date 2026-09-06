@@ -168,6 +168,10 @@ public final class AsmNativePolicy {
             case IrOp.NeonComplexByElement ignored -> false;
             case IrOp.NeonDotProduct ignored -> false;
             case IrOp.NeonDotProductByElement ignored -> false;
+            case IrOp.NeonSwapPermute ignored -> false;
+            case IrOp.NeonExtract ignored -> false;
+            case IrOp.NeonTableLookup ignored -> false;
+            case IrOp.NeonDuplicateScalar ignored -> false;
             case IrOp.VfpAlu ignored -> true;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;
