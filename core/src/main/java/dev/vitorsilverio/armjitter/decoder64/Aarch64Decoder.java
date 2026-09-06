@@ -1252,6 +1252,28 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_BF16_SIZE_HALFWORD = 0b01;
     private static final int ADVSIMD_BF16_SIZE_DOUBLEWORD = 0b11;
 
+    // ── B19.12 (`FEAT_I8MM`): `USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA` vetorial/matricial (não-indexado) —
+    // ── ver {@link #decodeAdvancedSimdExtractPermuteTable}. MESMO espaço `bit21=0` de EXT/permute/
+    // ── TBL/copy/`BFDOT_v`/`BFMLAL_v`/`BFMMLA` acima, mas com `U=0` (ao contrário do BF16, que usa
+    // ── `U=1`) — sem colisão, conferido bit a bit contra corpus real (`aarch64-linux-gnu-as
+    // ── -march=armv8.6-a+i8mm`). `size`(23:22) é sempre `10` ("S", o resultado é sempre uma lane
+    // ── `int32`) nas três; `Q` é livre em `USDOT_v` mas FIXO em `1` em `SMMLA`/`UMMLA`/`USMMLA`
+    // ── (não há forma de 64 bits, mesma disciplina de `BFMMLA`).
+    private static final int ADVSIMD_I8MM_OPCODE_USDOT = 0b1_0011;
+    private static final int ADVSIMD_I8MM_OPCODE_MMLA = 0b1_0100;
+    private static final int ADVSIMD_I8MM_OPCODE_USMMLA = 0b1_0101;
+    private static final int ADVSIMD_I8MM_SIZE_WORD = 0b10;
+
+    /// B19.12 (`FEAT_I8MM`): `opcode`(bits[15:12]) de `USDOT_vi`/`SUDOT_vi` — MESMO valor cru de
+    /// {@link #ADVSIMD_BFLOAT16_INDEXED_OPCODE} (nomeado à parte para não confundir as duas
+    /// features, que nunca colidem: BF16 usa `size` `01`/`11`, I8MM usa `00`/`10`). `U`(bit29) é
+    /// sempre `0` nas duas formas — **não** é o discriminador (ver {@link #ADVSIMD_I8MM_INDEXED_SIZE_SUDOT}).
+    private static final int ADVSIMD_I8MM_INDEXED_OPCODE = 0b1111;
+    /// `size`(23:22) de `SUDOT_vi` (`Rn` COM sinal, `Rm` SEM sinal) — `USDOT_vi` usa
+    /// {@link #ADVSIMD_I8MM_SIZE_WORD} (`10`). Discriminador real, CONFERIDO bit a bit contra corpus
+    /// real: os dois encodings têm `U=0` idêntico, só o `size` muda.
+    private static final int ADVSIMD_I8MM_INDEXED_SIZE_SUDOT = 0b00;
+
     // ── Floating-point immediate — `FMOV Sd,#imm`/`FMOV Dd,#imm`: bits[12:5] fixo="10000000",
     // ── imm8(20:13) — CONFERIDO: campo contíguo em A64 (diferente do VFP32, que espalha imm8 em
     // ── dois pedaços de 4 bits — b3.5-vfp-decoder.md); o algoritmo de expansão (VFPExpandImm) é
@@ -3361,6 +3383,32 @@ public final class Aarch64Decoder {
                 return new Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16(rd, rn, rm);
             }
         }
+        // B19.12 (`FEAT_I8MM`): `USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA` também vivem em `bit10=1` (MESMO
+        // espaço) — checados ANTES de `decodeAdvancedSimdCopy` pelo MESMO motivo do bloco `BFLOAT16`
+        // acima (senão `bit10` desviaria para lá primeiro). Ao contrário do BF16 (`U` fixo em `1`),
+        // aqui `U` varia por instrução: `USDOT`/`USMMLA` só existem com `U=0` (`U=1` no MESMO opcode
+        // seria `UDOT_v`/`FEAT_DotProd`, sem decoder neste projeto — B13.18 — e cai no fallback de
+        // sempre, G8), `UMMLA` é `U=1`, `SMMLA` é `U=0` no MESMO opcode de `UMMLA`.
+        if (bit10 && architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
+            int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
+            if (size == ADVSIMD_I8MM_SIZE_WORD) {
+                if (!u && opcode == ADVSIMD_I8MM_OPCODE_USDOT) {
+                    // `USDOT`: `Rn` sem sinal, `Rm` com sinal (não existe `SUDOT` vetorial).
+                    return new Ir64Op.VectorIntegerDotProduct(q, false, true, rd, rn, rm);
+                }
+                // `SMMLA`/`UMMLA`/`USMMLA`: `Q` FIXO em `1` no encoding real (sem forma de 64 bits)
+                // — `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
+                if (q && opcode == ADVSIMD_I8MM_OPCODE_MMLA) {
+                    // `U` distingue `SMMLA`(assinado/assinado, `u=0`) de `UMMLA`(sem sinal/sem
+                    // sinal, `u=1`).
+                    return new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(!u, !u, rd, rn, rm);
+                }
+                if (q && !u && opcode == ADVSIMD_I8MM_OPCODE_USMMLA) {
+                    // `USMMLA`: `Rn` sem sinal, `Rm` com sinal (não existe `SUMMLA`, `u=1` reservado).
+                    return new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(false, true, rd, rn, rm);
+                }
+            }
+        }
         if (bit10) {
             // B8.12: `bit10=1` é exatamente o espaço de "AdvSIMD copy" (`DUP`/`INS`/`SMOV`/
             // `UMOV`) — oposto de EXT/permute/TBL/TBX abaixo, que exigem `bit10=0`. Layout de
@@ -4131,9 +4179,10 @@ public final class Aarch64Decoder {
     /// (ponto flutuante, só simples/dupla). `SQRDMLAH`/`SQRDMLSH` (`FEAT_RDM`) decodificam desde
     /// B11.4, gateadas por {@link Aarch64Architecture#has} — ver
     /// {@link #decodeAdvancedSimdIndexedInt}. EXCLUI (posteriores ao Cortex-A53, candidatas a task
-    /// própria): meia-precisão (`FEAT_FP16`, `size=00`),
-    /// `SDOT`/`UDOT`/`SUDOT`/`USDOT`/`BFDOT` (`FEAT_DotProd`/`FEAT_BF16`), `FMLAL`/`FMLSL`/
-    /// `FMLAL2`/`FMLSL2`/`BFMLAL` (`FEAT_FHM`/`FEAT_BF16`), `FCMLA` (`FEAT_FCMA`).
+    /// própria): meia-precisão (`FEAT_FP16`, `size=00`), `SDOT`/`UDOT` (`FEAT_DotProd`, sem decoder
+    /// neste projeto — B13.18), `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`), `FCMLA`
+    /// (`FEAT_FCMA`). `USDOT`/`SUDOT` (`FEAT_I8MM`) e `BFDOT` (`FEAT_BF16`) decodificam desde
+    /// B19.12/B19.7 (interceptados ANTES do `switch` abaixo, ver os blocos correspondentes).
     private Ir64Op decodeAdvancedSimdIndexedElement(int word, long address, boolean scalar) {
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
@@ -4167,6 +4216,30 @@ public final class Aarch64Decoder {
                 int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
                 int index = (h ? 0b100 : 0) | lm;
                 return new Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement(q, rd, rn, rmH, index);
+            }
+        }
+        // B19.12 (`FEAT_I8MM`): `USDOT_vi`/`SUDOT_vi` hijacham o MESMO `opcode`(bits[15:12])=`1111`
+        // do bloco `BFLOAT16` acima, em DOIS slots de `size` diferentes (`10`=`USDOT_vi`,
+        // `00`=`SUDOT_vi` — sem colisão, BF16 usa `01`/`11`) — checados ANTES do `switch` genérico
+        // pelo MESMO motivo (`USDOT_vi` cairia no `switch` de {@link #decodeAdvancedSimdIndexedInt},
+        // sem risco mas sem tratamento; `size=00` nem alcança um `switch` real, cai direto no `case
+        // default -> null` de baixo). `Rm` restrito a 4 bits (`V0`-`V15`), índice = `H:L` (2 bits) —
+        // MESMA fórmula do ramo `WORD` de baixo, mas com `Rm` restrito em vez de 5 bits livres;
+        // `M`(bit20) é reservado/não usado nesta família — CONFERIDO bit a bit contra corpus real
+        // (`aarch64-linux-gnu-as -march=armv8.6-a+i8mm`). `U`(bit29) é sempre `0` nas duas formas —
+        // **não** é o discriminador (task B19.12, achado central): `USDOT_vi`×`SUDOT_vi` se separam
+        // só pelo `size`. Nenhuma das duas tem forma escalar real.
+        if (!scalar && !u && opcode == ADVSIMD_I8MM_INDEXED_OPCODE
+                && architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
+            int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+            int index = (h ? 0b10 : 0) | (l ? 0b01 : 0);
+            if (sizeField == ADVSIMD_I8MM_SIZE_WORD) {
+                // `USDOT_vi`: `Rn` sem sinal, `Rm` com sinal.
+                return new Ir64Op.VectorIntegerDotProductByElement(q, false, true, rd, rn, rmH, index);
+            }
+            if (sizeField == ADVSIMD_I8MM_INDEXED_SIZE_SUDOT) {
+                // `SUDOT_vi`: `Rn` com sinal, `Rm` sem sinal (só existe indexada — não há `SUDOT_v`).
+                return new Ir64Op.VectorIntegerDotProductByElement(q, true, false, rd, rn, rmH, index);
             }
         }
         Ir64Op result = switch (sizeField) {

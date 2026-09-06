@@ -1165,6 +1165,34 @@ public final class AdvSimdLanes {
         return sum;
     }
 
+    /// `SMMLA`/`UMMLA`/`USMMLA` (A64, `FEAT_I8MM`, B19.12): multiplicação de matriz `2×8 · 8×2` de
+    /// inteiros de 8 bits, acumulando em `int32` com WRAP (nunca satura — mesma disciplina de
+    /// {@link #dotProduct}). `Vn` é DUAS linhas de 8 elementos de 8 bits (linha 0 = metade BAIXA de
+    /// 64 bits, linha 1 = metade ALTA); `Vm` são DUAS colunas na MESMA disposição (coluna 0 = metade
+    /// baixa, coluna 1 = alta) — MESMA convenção de {@link #bfMatrixMultiplyAccumulate} (irmã de
+    /// ponto flutuante, `K=4` pares `bf16` em vez de `K=8` bytes aqui). `Vd.4S[2·linha+coluna] +=
+    /// Σ_{k=0}^{7} ext(Vn[8·linha+k]) · ext(Vm[8·coluna+k])`, cada operando estendido
+    /// INDEPENDENTEMENTE conforme `signedN`/`signedM` (reusa {@link #dotProductSum} em DOIS pedaços
+    /// de 4 bytes, já que uma linha/coluna de 8 bytes é exatamente duas lanes de produto escalar).
+    /// Os `base*` são índices de PALAVRA.
+    public static void matrixMultiplyAccumulate(AdvSimdRegisterWords regs, boolean signedN, boolean signedM,
+            int baseRd, int baseRn, int baseRm) {
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 2; col++) {
+                long dot = 0;
+                for (int chunk = 0; chunk < 2; chunk++) {
+                    long nWord = element(regs, baseRn, row * 2 + chunk, DOT_PRODUCT_ESZ);
+                    long mWord = element(regs, baseRm, col * 2 + chunk, DOT_PRODUCT_ESZ);
+                    dot += dotProductSum(nWord, mWord, signedN, signedM);
+                }
+                int lane = row * 2 + col;
+                long acc = element(regs, baseRd, lane, DOT_PRODUCT_ESZ);
+                acc += dot;
+                setElement(regs, baseRd, lane, DOT_PRODUCT_ESZ, truncate(acc, DOT_PRODUCT_ESZ));
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     // CONVERSÃO FP ↔ PONTO FIXO — B13.8 (migração D1 da RFC B13.2). `SCVTF`/`UCVTF`/`FCVTZS`/
     // `FCVTZU` na forma AdvSIMD com fator de escala `2^fractionBits` (`VCVT` fixo↔float F32 no NEON

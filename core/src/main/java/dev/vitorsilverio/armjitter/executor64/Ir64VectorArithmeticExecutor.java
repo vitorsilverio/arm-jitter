@@ -918,4 +918,45 @@ final class Ir64VectorArithmeticExecutor {
         }
         return new long[] {resultLo, resultHi};
     }
+
+    /// Elemento de 32 bits ("word") usado pelo produto escalar de 8 bits (`USDOT`, B19.12) — mesma
+    /// convenção de tamanho de lane de {@link AdvSimdLanes#dotProduct}.
+    private static final int DOT_PRODUCT_ESZ = 2;
+
+    /// `USDOT` vetorial (B19.12) — sempre `esz=2`/word (o resultado é sempre uma lane `int32`, mesma
+    /// convenção do produto escalar `bf16`, {@link Ir64VectorFpArithmeticExecutor} irmão).
+    static boolean executeIntegerDotProduct(Aarch64Core core, Ir64Op.VectorIntegerDotProduct op) {
+        Aarch64FpRegisters fp = core.fp();
+        int elements = elementsPerRegister(op.q(), DOT_PRODUCT_ESZ);
+        AdvSimdLanes.dotProduct(fp, op.signedN(), op.signedM(), elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `USDOT`/`SUDOT` indexados (B19.12).
+    static boolean executeIntegerDotProductByElement(Aarch64Core core, Ir64Op.VectorIntegerDotProductByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        int elements = elementsPerRegister(op.q(), DOT_PRODUCT_ESZ);
+        AdvSimdLanes.dotProductByElement(fp, op.signedN(), op.signedM(), elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `SMMLA`/`UMMLA`/`USMMLA` (B19.12) — `Q` fixo em `1` no encoding (sem forma de 64 bits), mesma
+    /// disciplina de `BFMMLA`.
+    static boolean executeIntegerMatrixMultiplyAccumulate(
+            Aarch64Core core, Ir64Op.VectorIntegerMatrixMultiplyAccumulate op) {
+        Aarch64FpRegisters fp = core.fp();
+        AdvSimdLanes.matrixMultiplyAccumulate(fp, op.signedN(), op.signedM(),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        return false;
+    }
 }

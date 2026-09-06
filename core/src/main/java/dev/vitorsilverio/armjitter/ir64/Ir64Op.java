@@ -61,7 +61,8 @@ public sealed interface Ir64Op permits
         Ir64Op.Fp64ConvertToBf16, Ir64Op.VectorFpDotProductBFloat16,
         Ir64Op.VectorFpDotProductBFloat16ByElement, Ir64Op.VectorFpMultiplyAddLongBFloat16,
         Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement,
-        Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16 {
+        Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16, Ir64Op.VectorIntegerDotProduct,
+        Ir64Op.VectorIntegerDotProductByElement, Ir64Op.VectorIntegerMatrixMultiplyAccumulate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -311,6 +312,15 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT = 106;
         /// B19.7: `BFMMLA` (`FEAT_BF16`) — ver {@link VectorFpMatrixMultiplyAccumulateBFloat16}.
         public static final int VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 = 107;
+        /// B19.12: `USDOT_v` (`FEAT_I8MM`, produto escalar MISTO vetorial) — ver
+        /// {@link VectorIntegerDotProduct}.
+        public static final int VECTOR_INTEGER_DOT_PRODUCT = 108;
+        /// B19.12: `USDOT_vi`/`SUDOT_vi` (`FEAT_I8MM`, produto escalar MISTO indexado) — ver
+        /// {@link VectorIntegerDotProductByElement}.
+        public static final int VECTOR_INTEGER_DOT_PRODUCT_BY_ELEMENT = 109;
+        /// B19.12: `SMMLA`/`UMMLA`/`USMMLA` (`FEAT_I8MM`) — ver
+        /// {@link VectorIntegerMatrixMultiplyAccumulate}.
+        public static final int VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE = 110;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2756,5 +2766,78 @@ public sealed interface Ir64Op permits
             /// coluna `c` = elementos `4c..4c+3`).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
+    }
+
+    /// `USDOT` vetorial (`FEAT_I8MM`, B19.12) — produto escalar de 4 bytes por lane com sinal POR
+    /// OPERANDO (`Rn` sem sinal, `Rm` com sinal — não existe `SUDOT` vetorial, só a forma indexada,
+    /// ver {@link VectorIntegerDotProductByElement}), acumulando em `int32` com WRAP (nunca satura).
+    /// Sibling inteiro do produto escalar `bf16`
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfDotProduct} — núcleo em
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dotProduct} (nasceu na B13.18 para o
+    /// `neon-shared` de 32 bits, sem semântica A64 prévia para migrar: nem `SDOT_v`/`UDOT_v` do A64
+    /// têm decoder ainda — fora do escopo desta task, `FEAT_DotProd`).
+    record VectorIntegerDotProduct(
+            /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
+            boolean q,
+            /// Sinal de `Rn` (`USDOT`: sempre `false`, sem sinal).
+            boolean signedN,
+            /// Sinal de `Rm` (`USDOT`: sempre `true`, com sinal).
+            boolean signedM,
+            /// Registrador `V` de destino (acumulador).
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_INTEGER_DOT_PRODUCT; }
+    }
+
+    /// `USDOT`/`SUDOT` indexados (`FEAT_I8MM`, B19.12) — como {@link VectorIntegerDotProduct}, mas
+    /// {@link #rm} sempre contribui o MESMO grupo de 4 bytes (`Vm.4B[index]`, restrito a `V0`-`V15`,
+    /// índice de 2 bits `H:L` — mesma disciplina de {@link VectorFpDotProductBFloat16ByElement},
+    /// embora aqui a família tenha 4 grupos em vez de 2). `USDOT_vi` (`Rn` sem sinal, `Rm` com
+    /// sinal) e `SUDOT_vi` (`Rn` com sinal, `Rm` sem sinal) se distinguem no ENCODING por
+    /// bits[23:22] (`10`×`00`), nunca pelo bit `U` (os dois têm `U=0`) — o decoder já resolveu isso
+    /// em {@link #signedN}/{@link #signedM}.
+    record VectorIntegerDotProductByElement(
+            /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
+            boolean q,
+            /// Sinal de `Rn` (`USDOT_vi`: sem sinal; `SUDOT_vi`: com sinal).
+            boolean signedN,
+            /// Sinal de `Rm` (`USDOT_vi`: com sinal; `SUDOT_vi`: sem sinal).
+            boolean signedM,
+            /// Registrador `V` de destino (acumulador).
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2 — só o grupo de 4 bytes {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do grupo de 4 bytes de {@link #rm} usado em TODA a operação (`0`-`3`).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_INTEGER_DOT_PRODUCT_BY_ELEMENT; }
+    }
+
+    /// `SMMLA`/`UMMLA`/`USMMLA` (`FEAT_I8MM`, B19.12) — multiplicação de matriz `2×8 · 8×2` de
+    /// inteiros de 8 bits, acumulando em `int32` com WRAP. Irmã inteira de `BFMMLA`
+    /// ({@link VectorFpMatrixMultiplyAccumulateBFloat16}, `K=8` bytes aqui em vez de `K=4` pares
+    /// `bf16`). `Q` é FIXO em `1` no encoding — não há forma de 64 bits. Não existe `SUMMLA`: a
+    /// combinação `Rn` assinado/`Rm` sem sinal não tem encoding real (assimetria intencional do
+    /// ISA). Núcleo em
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#matrixMultiplyAccumulate}.
+    record VectorIntegerMatrixMultiplyAccumulate(
+            /// Sinal de `Rn` — ver a tabela completa no Javadoc de {@link #signedM}.
+            boolean signedN,
+            /// Sinal de `Rm` (`SMMLA`: com sinal; `UMMLA`/`USMMLA`: sem sinal). Tabela completa:
+            /// `SMMLA`=(assinado,assinado), `UMMLA`=(sem sinal,sem sinal),
+            /// `USMMLA`=(sem sinal,assinado).
+            boolean signedM,
+            /// Registrador `V` de destino (`Vd.4S`, matriz `2×2` de acumuladores).
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.16B`, matriz `2×8` — linha `r` = elementos `8r..8r+7`).
+            int rn,
+            /// Registrador `V` fonte 2 (`Vm.16B`, matriz `8×2` na MESMA disposição de {@link #rn} —
+            /// coluna `c` = elementos `8c..8c+7`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE; }
     }
 }
