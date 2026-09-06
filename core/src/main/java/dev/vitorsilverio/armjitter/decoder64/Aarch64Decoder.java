@@ -1095,6 +1095,12 @@ public final class Aarch64Decoder {
     /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
     /// deriva só de `sz`, bit22).
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
+    /// B19.5.5 (`FEAT_FP16`): relação entre o `opcode` (bits[15:11]) da forma `_h` de "AdvSIMD three
+    /// same (FP)" e o da forma `_sd` já tabelada por {@link #decodeVectorFpThreeSameOpcode} —
+    /// `opcode_sd = opcode_h | 0b1_1000` (medido bit a bit contra `a64.decode`; MESMA relação
+    /// numérica de {@link #ADVSIMD_INT_RM_FP16_TWO_REG_MISC}, mas aplicada ao campo `opcode`, não a
+    /// `Rm` — por isso uma constante própria em vez de reusar aquela).
+    private static final int ADVSIMD_FP16_OPCODE_TO_SD_BIT = 0b1_1000;
 
     // ── B11.12 (`FEAT_SHA3`): `EOR3`/`BCAX` ("Cryptographic four-register") e `RAX1`/`XAR`
     // ── ("Cryptographic three-register, imm2") — espaço de encoding PRÓPRIO, nunca examinado por
@@ -3116,6 +3122,18 @@ public final class Aarch64Decoder {
                     return rdmOp;
                 }
             }
+            // B19.5.5 (`FEAT_FP16`): "AdvSIMD three same (FP)" de meia precisão vive no MESMO
+            // espaço `bit21=0`, assinatura `bit22=1 && bit10=1 && bit15=0` — checado DEPOIS do RDM
+            // (que compartilha os mesmos 3 bits e só se separa pelo `opcode`, ver o Javadoc do
+            // método) e ANTES de EXT/permute/copy/SHA (que exigem `bit22=0` ou `bit10=0`, nunca
+            // colidem). Sem a feature, o bloco é pulado inteiro — comportamento byte a byte o de
+            // hoje.
+            if (architecture.has(Aarch64Feature.FP16)) {
+                Ir64Op fp16ThreeSameOp = decodeAdvancedSimdFp16ThreeSame(word, scalar, q);
+                if (fp16ThreeSameOp != null) {
+                    return fp16ThreeSameOp;
+                }
+            }
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
             // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
@@ -3520,6 +3538,49 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.VectorArithmeticThreeSame(op, scalar, q, esz, rd, rn, rm);
+    }
+
+    /// B19.5.5 (`FEAT_FP16`): "AdvSIMD three same (FP)"/"AdvSIMD scalar three same (FP)" de meia
+    /// precisão (`FADD_v`/`FSUB_v`/`FMAX_v`/`FMIN_v`/`FCMEQ_v` vetoriais + `FMULX_s`/`FCMEQ_s`/
+    /// `FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s` escalares, 14 linhas)
+    /// — MESMO subespaço `bit21=0` de `FEAT_RDM`/EXT-permute-TBL/copy/cripto SHA (auditoria de
+    /// colisão medida bit a bit contra `a64.decode`, ver `## Contexto` da task): assinatura
+    /// `bit22=1 && bit10=1 && bit15=0`. Só `FEAT_RDM` compartilha os 3 primeiros bits (`esz` livre
+    /// em bits[23:22]) — separado exclusivamente pelo `opcode` (`bit15=1` no RDM, checado ANTES por
+    /// este método via {@link #ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK}); EXT/permute/TBL exigem
+    /// `bit10=0` e copy/SHA exigem `bit22=0`, nenhum alcança este método. Reusa a MESMA tabela de
+    /// opcode `(u,a,opcode)` da forma `_sd` ({@link #decodeVectorFpThreeSameOpcode}):
+    /// `opcode_sd = opcode_h | `{@link #ADVSIMD_FP16_OPCODE_TO_SD_BIT} (achado medido bit a bit
+    /// contra `a64.decode`, os 14 mnemônicos convertem sem exceção). `null` para qualquer
+    /// combinação fora das 14 linhas reais (G8) — o chamador decide o que fazer.
+    private Ir64Op decodeAdvancedSimdFp16ThreeSame(int word, boolean scalar, boolean q) {
+        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!bit22 || !bit10) {
+            return null;
+        }
+        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        boolean bit15 = (opcodeH & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
+        if (bit15) {
+            // `FEAT_RDM` (`SQRDMLAH`/`SQRDMLSH` de halfword, `esz=01`) — o vizinho perigoso, ver a
+            // "Armadilha 1" da task. Já foi tentado primeiro pelo chamador; aqui só garante que este
+            // método nunca o engole se a ordem de chamada mudar no futuro.
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
+        int opcodeSd = opcodeH | ADVSIMD_FP16_OPCODE_TO_SD_BIT;
+        Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcodeSd);
+        if (fpOp == null) {
+            return null;
+        }
+        if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {
+            return null;
+        }
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,

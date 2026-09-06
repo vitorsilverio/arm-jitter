@@ -424,6 +424,109 @@ class Ir64VectorFpArithmeticExecutorTest {
         assertEquals(3.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2)), "FMINNMP_s ignora NaN de um operando");
     }
 
+    // ── B19.5.5: FEAT_FP16 — "three same" vetorial/escalar em `esz=1`. MESMO record de B8.9/
+    // B19.2, nenhuma mudança de executor (o ramo `esz=1` já existia desde B19.5.1) — estes testes
+    // confirmam que a nova rota de DECODE chega no mesmo lugar de sempre.
+
+    @Test
+    void halfPrecisionAddSubVector4hAnd8h() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        for (int lane = 0; lane < 8; lane++) {
+            setHalf(fp, 1, lane, 1.0f + lane);
+            setHalf(fp, 2, lane, 2.0f);
+        }
+        fp.setQ(0, -1L, -1L); // sujeira pré-existente em Rd
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSame(
+                Ir64VectorFpThreeSameOp.ADD, false, false, 1, 0, 1, 2)); // q=false ⇒ .4h
+        for (int lane = 0; lane < 4; lane++) {
+            assertEquals(3.0f + lane, readHalf(fp, 0, lane));
+        }
+        assertEquals(0L, fp.high64(0), "q=false zera os 64 bits altos (destructive write)");
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSame(
+                Ir64VectorFpThreeSameOp.SUB, false, true, 1, 0, 1, 2)); // q=true ⇒ .8h
+        for (int lane = 0; lane < 8; lane++) {
+            assertEquals((1.0f + lane) - 2.0f, readHalf(fp, 0, lane));
+        }
+    }
+
+    @Test
+    void halfPrecisionMaxMinPropagateNaN() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, Float.NaN);
+        setHalf(fp, 2, 0, 5.0f);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSame(
+                Ir64VectorFpThreeSameOp.MAX, false, false, 1, 0, 1, 2));
+        assertEquals(true, Float.isNaN(readHalf(fp, 0, 0)), "MAX propaga NaN");
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSame(
+                Ir64VectorFpThreeSameOp.MIN, false, false, 1, 0, 1, 2));
+        assertEquals(true, Float.isNaN(readHalf(fp, 0, 0)), "MIN propaga NaN");
+    }
+
+    @Test
+    void halfPrecisionFcmeqHandlesNegativeZero() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, -0.0f);
+        setHalf(fp, 2, 0, 0.0f);
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSame(
+                Ir64VectorFpThreeSameOp.CMEQ, false, false, 1, 0, 1, 2));
+        assertEquals(0xFFFFL, fp.element(0, 0, 1), "-0.0 == +0.0 é verdadeiro");
+    }
+
+    @Test
+    void halfPrecisionScalarFmulxZeroTimesInfinity() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, -1L, -1L); // sujeira em todo Rd
+        setHalf(fp, 1, 0, 0.0f);
+        setHalf(fp, 2, 0, Float.POSITIVE_INFINITY);
+
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.MULX, 1));
+        assertEquals(2.0f, readHalf(fp, 0, 0), "FPMulX: 0*Inf = 2.0 (não NaN, ao contrário de FMUL)");
+        assertEquals(0L, fp.high64(0), "escrita escalar zera os 64 bits altos");
+        assertEquals(0L, fp.low64(0) >>> 16, "escrita escalar zera o resto do low64 (acima de H)");
+    }
+
+    @Test
+    void halfPrecisionScalarFabdAndFacgeFacgt() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, -5.0f);
+        setHalf(fp, 2, 0, 3.0f);
+
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.ABD, 1));
+        assertEquals(8.0f, readHalf(fp, 0, 0), "|-5 - 3| = 8");
+
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.FACGE, 1));
+        assertEquals(0xFFFFL, fp.element(0, 0, 1), "|-5| >= |3|");
+
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.FACGT, 1));
+        assertEquals(0xFFFFL, fp.element(0, 0, 1), "|-5| > |3|");
+    }
+
+    @Test
+    void halfPrecisionScalarFrecpsFrsqrtsNewtonRaphsonSteps() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        setHalf(fp, 1, 0, 2.0f);
+        setHalf(fp, 2, 0, 3.0f);
+
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.RECPS, 1));
+        assertEquals(2.0f - 2.0f * 3.0f, readHalf(fp, 0, 0), "2 - a*b");
+
+        setHalf(fp, 1, 0, 2.0f);
+        setHalf(fp, 2, 0, 3.0f);
+        EXECUTOR.executeOp(core, scalar3(Ir64VectorFpThreeSameOp.RSQRTS, 1));
+        assertEquals((3.0f - 2.0f * 3.0f) / 2.0f, readHalf(fp, 0, 0), "(3 - a*b)/2");
+    }
+
     // ── B19.3: AdvSIMD FP ESCALAR "two-register misc" + conversões ─────────────────────────────
 
     private static Ir64Op.VectorFpArithmeticUnary scalarUnary(Ir64VectorFpUnaryOp op, int esz) {

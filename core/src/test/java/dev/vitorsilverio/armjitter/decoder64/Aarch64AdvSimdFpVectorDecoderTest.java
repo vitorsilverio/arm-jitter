@@ -7,6 +7,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorPermuteOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -803,5 +805,123 @@ class Aarch64AdvSimdFpVectorDecoderTest {
         // alcançado pelos blocos novos desta task (Armadilha 4). Sem `FEAT_BF16` (só FP16), continua
         // `unsupported` — comportamento IDÊNTICO ao de antes desta task.
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x0ea16820));
+    }
+
+    // ── B19.5.5: FEAT_FP16 — "three same" vetorial/escalar (`bit22=1 && bit10=1 && bit15=0`,
+    // golden CONFERIDO com `aarch64-linux-gnu-as -march=armv8.2-a+fp16`, WSL) ──────────────────────
+
+    @Test
+    void halfPrecisionThreeSameVectorDecodesUnderFp16() {
+        // fadd v0.8h, v1.8h, v2.8h
+        Ir64Op.VectorFpArithmeticThreeSame add8h =
+                (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x4e421420);
+        assertEquals(Ir64VectorFpThreeSameOp.ADD, add8h.op());
+        assertEquals(false, add8h.scalar());
+        assertEquals(true, add8h.q());
+        assertEquals(1, add8h.esz());
+        assertEquals(0, add8h.rd());
+        assertEquals(1, add8h.rn());
+        assertEquals(2, add8h.rm());
+
+        // fadd v0.4h, v1.4h, v2.4h (Q=0)
+        Ir64Op.VectorFpArithmeticThreeSame add4h =
+                (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x0e421420);
+        assertEquals(Ir64VectorFpThreeSameOp.ADD, add4h.op());
+        assertEquals(false, add4h.q());
+
+        // fsub/fmax/fmin/fcmeq v0.8h, v1.8h, v2.8h — `bit23`(`a`) e `opcode` selecionam a operação,
+        // exatamente como nos `_sd` (Armadilha 3).
+        assertEquals(Ir64VectorFpThreeSameOp.SUB,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x4ec21420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MAX,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x4e423420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.MIN,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x4ec23420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.CMEQ,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x4e422420)).op());
+    }
+
+    @Test
+    void halfPrecisionThreeSameScalarDecodesUnderFp16() {
+        // fmulx h0, h1, h2
+        Ir64Op.VectorFpArithmeticThreeSame mulx =
+                (Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x5e421c20);
+        assertEquals(Ir64VectorFpThreeSameOp.MULX, mulx.op());
+        assertEquals(true, mulx.scalar());
+        assertEquals(1, mulx.esz());
+        assertEquals(0, mulx.rd());
+        assertEquals(1, mulx.rn());
+        assertEquals(2, mulx.rm());
+
+        // fcmeq/fcmge/fcmgt/facge/facgt/fabd/frecps/frsqrts h0, h1, h2
+        assertEquals(Ir64VectorFpThreeSameOp.CMEQ,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x5e422420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.CMGE,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x7e422420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.CMGT,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x7ec22420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.FACGE,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x7e422c20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.FACGT,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x7ec22c20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.ABD,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x7ec21420)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.RECPS,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x5e423c20)).op());
+        assertEquals(Ir64VectorFpThreeSameOp.RSQRTS,
+                ((Ir64Op.VectorFpArithmeticThreeSame) decodeWord(FP16_DECODER, 0x5ec23c20)).op());
+    }
+
+    @Test
+    void halfPrecisionThreeSameUnsupportedBelowFp16() {
+        // As mesmas 14 linhas continuam `unsupported` sem a feature — G8/Armadilha 7.
+        for (int word : new int[] {0x4e421420, 0x0e421420, 0x4ec21420, 0x4e423420, 0x4ec23420,
+                0x4e422420, 0x5e421c20, 0x5e422420, 0x7e422420, 0x7ec22420, 0x7e422c20, 0x7ec22c20,
+                0x7ec21420, 0x5e423c20, 0x5ec23c20}) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(DECODER, word));
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, word));
+        }
+    }
+
+    @Test
+    void halfPrecisionThreeSameRegressionNegativeRdm() {
+        // O teste mais importante da task: `sqrdmlah`/`sqrdmlsh v0.8h, v1.8h, v2.8h` (`esz=01`)
+        // continuam decodificando como RDM sob `ARMV8_2_A` (que tem `FEAT_RDM` E `FEAT_FP16`) — só
+        // `bit15` (dentro do `opcode`) separa os dois grupos (Armadilha 1).
+        Ir64Op.VectorArithmeticThreeSame sqrdmlah =
+                (Ir64Op.VectorArithmeticThreeSame) decodeWord(FP16_DECODER, 0x6e428420);
+        assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, sqrdmlah.op());
+        assertEquals(1, sqrdmlah.esz());
+        Ir64Op.VectorArithmeticThreeSame sqrdmlsh =
+                (Ir64Op.VectorArithmeticThreeSame) decodeWord(FP16_DECODER, 0x6e428c20);
+        assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, sqrdmlsh.op());
+    }
+
+    @Test
+    void halfPrecisionThreeSameRegressionNegativePermuteAndCopy() {
+        // `uzp1`/`zip1`/`tbl` (`bit10=0` no espaço deles) e `dup`/`umov` (`bit22=0`) continuam
+        // decodificando sob `FEAT_FP16` ligada — os vizinhos que a auditoria de colisão mediu como
+        // separados por bit FIXO (ver `## Contexto` da task).
+        assertEquals(Ir64VectorPermuteOp.UZP1,
+                ((Ir64Op.VectorPermute) decodeWord(FP16_DECODER, 0x4e421820)).op());
+        assertEquals(Ir64VectorPermuteOp.ZIP1,
+                ((Ir64Op.VectorPermute) decodeWord(FP16_DECODER, 0x4e423820)).op());
+        Ir64Op.VectorTableLookup tbl = (Ir64Op.VectorTableLookup) decodeWord(FP16_DECODER, 0x0e020020);
+        assertEquals(false, tbl.tbx());
+        Ir64Op.VectorDuplicateElement dup =
+                (Ir64Op.VectorDuplicateElement) decodeWord(FP16_DECODER, 0x4e0a0420);
+        assertEquals(1, dup.esz());
+        Ir64Op.VectorMoveElement umov =
+                (Ir64Op.VectorMoveElement) decodeWord(FP16_DECODER, 0x0e0a3c20);
+        assertEquals(false, umov.signed());
+    }
+
+    @Test
+    void halfPrecisionThreeSameDoesNotSwallowFhmNeighbor() {
+        // `fmlal`/`fmlsl v0.4s, v1.4h, v2.4h` (`FEAT_FHM`, também `@qrrr_h`) vivem em `bit21=1`
+        // (medido: `0x4e22ec20`/`0x4ea2ec20`), fora do subespaço `bit21=0` que esta task abriu —
+        // continuam `unsupported` sob `FEAT_FP16` sem `FEAT_FHM` (G8, "Não inclui" da task).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4e22ec20));
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4ea2ec20));
     }
 }
