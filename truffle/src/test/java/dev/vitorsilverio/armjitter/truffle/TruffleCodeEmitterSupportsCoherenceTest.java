@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (98 desde B13.13), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (99 desde B13.19), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(98, kinds.size(), "IrOp.Kind deve ter 98 constantes contíguas");
+        assertEquals(99, kinds.size(), "IrOp.Kind deve ter 99 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -95,10 +95,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // NEON_DOT_PRODUCT_BY_ELEMENT (+2). B13.14 acrescentou NEON_SWAP_PERMUTE, NEON_EXTRACT,
         // NEON_TABLE_LOOKUP, NEON_DUPLICATE_SCALAR (+4, NEON também não tem nó Truffle). B13.15
         // acrescentou NEON_CRYPTO_AES, NEON_CRYPTO_SHA (+2, idem). B13.13 acrescentou
-        // NEON_FP_CONVERT_PRECISION (+1, idem).
-        assertEquals(32, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_FP_CONVERT_PRECISION (+1, idem). B13.19 acrescentou NEON_MATRIX_MULTIPLY_ACCUMULATE
+        // (+1, idem).
+        assertEquals(33, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
+                        IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
@@ -250,6 +252,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_CRYPTO_SHA -> new IrOp.NeonCryptoSha(AdvSimdCryptoShaOp.SHA1H, 0, 1);
             case IrOp.Kind.NEON_FP_CONVERT_PRECISION ->
                     new IrOp.NeonFpConvertPrecision(AdvSimdFpConvertPrecisionOp.NARROW_F16, 0, 2);
+            case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE ->
+                    new IrOp.NeonMatrixMultiplyAccumulate(true, true, 0, 2, 4);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

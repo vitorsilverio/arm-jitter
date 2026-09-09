@@ -9,10 +9,11 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// Decodifica `neon-shared.decode` — encodings NEON cujo bit a bit é **idêntico** em A32 e T32
 /// (cabeçalho do arquivo QEMU real: *"Encodings for Neon instructions whose encoding is the same
 /// for both A32 and T32"*), 23 linhas ao todo. A **B13.17** implementou as 4 de `VCMLA`/`VCADD`/
-/// `VCMLA_scalar` (`FEAT_FCMA`); esta task (**B13.18**) implementa as **7** de `VSDOT`/`VUDOT`/
-/// `VUSDOT`/`VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (`FEAT_DotProd`/
-/// `FEAT_I8MM`); as **12** restantes (`VDOT_b16`/`VFML`/`VSMMLA`/`VUMMLA`/`VUSMMLA`/`VMMLA_b16`/
-/// `VFMA_b16` + as formas `_scalar`/`_scal` correspondentes, B13.19-B13.21) ainda não têm dono.
+/// `VCMLA_scalar` (`FEAT_FCMA`); a **B13.18** implementou as **7** de `VSDOT`/`VUDOT`/`VUSDOT`/
+/// `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (`FEAT_DotProd`/`FEAT_I8MM`); esta
+/// task (**B13.19**) implementa as **3** matriciais `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM`); as
+/// **9** restantes (`VDOT_b16`/`VFML`/`VMMLA_b16`/`VFMA_b16` + as formas `_scalar`/`_scal`
+/// correspondentes, B13.20-B13.21) ainda não têm dono.
 ///
 /// **Este decoder devolve `null` (não `unimplemented`) para o que ainda não tem dono** — decisão
 /// registrada na task B13.17: como o arquivo cresce ao longo de 5 tasks (B13.17-B13.21), reivindicar
@@ -30,17 +31,21 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// extensão — ver {@link #decodeComplexScalar}/{@link #decodeDotProductScalar}).
 ///
 /// Encodings golden conferidos com `arm-none-eabi-as -march=armv8.3-a -fpu neon-fp-armv8
-/// -mfpu=neon-fp-armv8 .arch_extension fp16` (`VCMLA`/`VCADD`, B13.17) e
+/// -mfpu=neon-fp-armv8 .arch_extension fp16` (`VCMLA`/`VCADD`, B13.17),
 /// `arm-none-eabi-as -march=armv8.2-a+i8mm -mfpu=neon-fp-armv8 .arch_extension dotprod` (`VSDOT`/
-/// `VUDOT`/`VUSDOT`/`VSUDOT`, B13.18, devkitARM) — ver `## Resultado` de cada task para o log.
+/// `VUDOT`/`VUSDOT`/`VSUDOT`, B13.18, devkitARM) e
+/// `arm-linux-gnueabihf-as -march=armv8.6-a+i8mm -mfpu=neon-fp-armv8` (`VSMMLA`/`VUMMLA`/
+/// `VUSMMLA`, B13.19, WSL — mesmo binutils/GNU assembler que a B13.18 já usara para `neon-shared`,
+/// `arm-none-eabi-as` indisponível neste ambiente) — ver `## Resultado` de cada task para o log.
 ///
 /// Gates: {@link ArmFeature#COMPLEX_NUMBER_ARITHMETIC} (`FEAT_FCMA`, B13.17),
 /// {@link ArmFeature#DOT_PRODUCT} (`FEAT_DotProd`, `VSDOT`/`VUDOT` + formas `_scalar`, B13.18) e
-/// {@link ArmFeature#INT8_MATRIX_MULTIPLY} (`FEAT_I8MM`, `VUSDOT` + `VUSDOT_scalar`/
-/// `VSUDOT_scalar`, B13.18 — **quatro versões de arquitetura depois de `FEAT_DotProd`, gatear as 7
-/// juntas seria factualmente errado**). **Nenhum preset declara nenhuma das três** (a saída de
-/// `NOT_IN_ANY_PRESET` é a B13.22), então sem a feature respectiva o encoding cai no
-/// `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
+/// {@link ArmFeature#INT8_MATRIX_MULTIPLY} (`FEAT_I8MM`, `VUSDOT`/`VUSDOT_scalar`/
+/// `VSUDOT_scalar`, B13.18, e agora `VSMMLA`/`VUMMLA`/`VUSMMLA`, B13.19 — **quatro versões de
+/// arquitetura depois de `FEAT_DotProd`, gatear junto com ele seria factualmente errado**).
+/// **Nenhum preset declara nenhuma das três** (a saída de `NOT_IN_ANY_PRESET` é a B13.22), então
+/// sem a feature respectiva o encoding cai no `UNIMPLEMENTED` de
+/// `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonSharedDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -99,6 +104,15 @@ public final class NeonSharedDecoder implements DecoderExtension {
     private static final int DOT_PRODUCT_SCALAR_SUDOT_VALUE = 0xFE80_0D10;
     private static final int DOT_PRODUCT_INDEX_BIT = 5;
 
+    // ── Matriz de inteiros de 8 bits (B13.19, `FEAT_I8MM`): `1111 1100 x.10 .... .... 1100 .1.0
+    // ....` (`x`=bit23 separa `VUSMMLA` das outras duas; bit4 separa `VUMMLA` de `VSMMLA`/
+    // `VUSMMLA`) — medida byte a byte contra `arm-linux-gnueabihf-as -march=armv8.6-a+i8mm`. Sempre
+    // 128 bits (bit6 fixo em 1, sem forma `D`). ──
+    private static final int MATRIX_MULTIPLY_MASK = 0xFFB0_0F50;
+    private static final int MATRIX_MULTIPLY_SMMLA_VALUE = 0xFC20_0C40;
+    private static final int MATRIX_MULTIPLY_UMMLA_VALUE = 0xFC20_0C50;
+    private static final int MATRIX_MULTIPLY_USMMLA_VALUE = 0xFCA0_0C40;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         if (architecture.has(ArmFeature.COMPLEX_NUMBER_ARITHMETIC)) {
@@ -136,8 +150,17 @@ public final class NeonSharedDecoder implements DecoderExtension {
             if ((raw & DOT_PRODUCT_MASK) == DOT_PRODUCT_SCALAR_SUDOT_VALUE) {
                 return decodeDotProductScalar(raw, address, condition, true, false);
             }
+            if ((raw & MATRIX_MULTIPLY_MASK) == MATRIX_MULTIPLY_SMMLA_VALUE) {
+                return decodeMatrixMultiply(raw, address, condition, true, true);
+            }
+            if ((raw & MATRIX_MULTIPLY_MASK) == MATRIX_MULTIPLY_UMMLA_VALUE) {
+                return decodeMatrixMultiply(raw, address, condition, false, false);
+            }
+            if ((raw & MATRIX_MULTIPLY_MASK) == MATRIX_MULTIPLY_USMMLA_VALUE) {
+                return decodeMatrixMultiply(raw, address, condition, false, true);
+            }
         }
-        // Ainda sem dono (B13.19-B13.21): devolve `null` de propósito, ver javadoc da classe.
+        // Ainda sem dono (B13.20-B13.21): devolve `null` de propósito, ver javadoc da classe.
         return null;
     }
 
@@ -228,6 +251,23 @@ public final class NeonSharedDecoder implements DecoderExtension {
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
                 new IrOp.NeonDotProductByElement(signedN, signedM, quad, vd, vn, vm, index));
+    }
+
+    /// `VSMMLA`/`VUMMLA`/`VUSMMLA` (B13.19): `signedN`/`signedM` já vêm decodificados pelo chamador
+    /// ({@link #tryDecode}, um `if` por instrução — nunca inferidos do `raw` aqui). **Sempre 128
+    /// bits** (não há forma `D`): `Vd`/`Vn`/`Vm` nomeiam pares `D<2n>`/`D<2n+1>` — índice ímpar em
+    /// qualquer um dos três é UNDEFINED (mesma disciplina de {@link #decodeDotProductVector}, mas
+    /// sem campo `quad` explícito porque a forma `D` não existe).
+    private DecodedInstruction decodeMatrixMultiply(int raw, int address, Condition condition,
+            boolean signedN, boolean signedM) {
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        if (((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonMatrixMultiplyAccumulate(signedN, signedM, vd, vn, vm));
     }
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {

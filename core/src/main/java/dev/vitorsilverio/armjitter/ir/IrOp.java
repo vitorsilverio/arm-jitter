@@ -14,7 +14,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
         IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
         IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
-        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision {
+        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision,
+        IrOp.NeonMatrixMultiplyAccumulate {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -157,6 +158,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.13: `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16` (conversão de precisão) — ver
         /// {@link NeonFpConvertPrecision}.
         public static final int NEON_FP_CONVERT_PRECISION = 97;
+        /// B13.19: `VSMMLA`/`VUMMLA`/`VUSMMLA` (`neon-shared`, `FEAT_I8MM`) — ver
+        /// {@link NeonMatrixMultiplyAccumulate}.
+        public static final int NEON_MATRIX_MULTIPLY_ACCUMULATE = 98;
     }
 
     /// Operacao ALU generica.
@@ -2232,6 +2236,38 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Índice da lane de 32 bits dentro de {@link #vm}: `0`-`1` (um `D` guarda 2 lanes).
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSMMLA`/`VUMMLA`/`VUSMMLA` (B13.19,
+    /// `FEAT_I8MM`, mesma feature de {@link NeonDotProduct}/{@link NeonDotProductByElement} para as
+    /// formas mistas): multiplicação de matriz `2×8 · 8×2` de inteiros de 8 bits, acumulando em
+    /// `int32` COM WRAP (nunca satura). **Sempre 128 bits** — não existe forma `D` (índice de
+    /// registrador ímpar em {@link #vd}/{@link #vn}/{@link #vm} é UNDEFINED, mesma disciplina das
+    /// formas `quad` das siblings deste arquivo, mas aqui sem campo `quad`: a forma `D` não existe).
+    /// **Não existe `VSUMMLA`** — a assimetria (`VUSMMLA` = `Vn` sem sinal/`Vm` assinado) é
+    /// intencional, espelhando o A64.
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#matrixMultiplyAccumulate}), criado
+    /// pela **B19.12** (a task irmã A64 de `SMMLA`/`UMMLA`/`USMMLA`) — reusado sem alteração.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonMatrixMultiplyAccumulate(
+            /// `true` se {@link #vn} é lido como assinado (`VSMMLA`/`VUSMMLA`), `false` se sem sinal
+            /// (`VUMMLA`).
+            boolean signedN,
+            /// `true` se {@link #vm} é lido como assinado (`VSMMLA`), `false` se sem sinal
+            /// (`VUMMLA`/`VUSMMLA`).
+            boolean signedM,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`) — o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (duas linhas de 8 bytes), em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (duas colunas de 8 bytes), em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, "2-reg-misc grouping"

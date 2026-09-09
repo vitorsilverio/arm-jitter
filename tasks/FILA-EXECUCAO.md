@@ -47,7 +47,15 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-09, após B19.5.6 fechar)
+## Onde estamos (atualizado 2026-09-09, após B13.19 fechar)
+
+**B13.19 FECHADA 2026-09-09** — `neon-shared`: `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM` matricial,
+3 linhas). A B19.12 (irmã A64, fechada 2026-09-06) já tinha posto a semântica matricial
+(`AdvSimdLanes.matrixMultiplyAccumulate`) no núcleo compartilhado — reusada aqui sem nenhuma
+mudança. Encoding derivado do padrão de bits da própria spec e confirmado byte a byte contra
+`arm-linux-gnueabihf-as -march=armv8.6-a+i8mm` (WSL, `arm-none-eabi-as` indisponível neste
+ambiente). `IrOp.Kind` 98→99. `docs/COBERTURA-ISA.md` byte a byte idêntica (nenhum preset declara
+`INT8_MATRIX_MULTIPLY`), `docs/COBERTURA-JIT.md` regenerado. Ver **Resultado** na task.
 
 **B19.5.6 FECHADA 2026-09-09** — as 8 linhas indexadas de `FEAT_FP16` (`FMUL_si`/`FMLA_si`/
 `FMLS_si`/`FMULX_si`/`FMUL_vi`/`FMLA_vi`/`FMLS_vi`/`FMULX_vi`), reusando 100% o esquema de índice
@@ -79,17 +87,24 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Nenhuma dependência aberta. Lista revalidada em 2026-09-06 (sessão da B13.15) contra o
+Nenhuma dependência aberta. Lista revalidada em 2026-09-09 (sessão da B13.19) contra o
 `INDICE.md` das trilhas B/C — **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do
-escopo desta sessão), mantidos abaixo por não terem sido tocados; B13.12/B19.5.3/B19.6/B19.7 já
-✅ removidos (a nota de 2026-09-05 já avisava que estavam obsoletos).
+escopo desta sessão), mantidos abaixo por não terem sido tocados; B13.13/B19.12 já ✅ removidos
+(estavam desatualizados desde antes desta sessão, ver nota da B19.5.6 acima). B13.20/B19.11/B19.13
+entram nesta rodada: dependências (B13.17, B19.7, B19.5.2/B19.5.4) todas ✅.
 
 | Task | O que | Tamanho |
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B13.13](trilha-b-arquiteturas/b13.13-neon-two-reg-misc-conversoes.md)** | NEON two-reg-misc de conversão/arredondamento A32 (`VRINT*`/`VCVT*`) — fecha o `null` residual do sub-espaço `size==0b11` (única pendência, ver B13.15) | 21 linhas |
-| **[B19.12](trilha-b-arquiteturas/b19.12-a64-i8mm.md)** | A64 `FEAT_I8MM` (`USDOT`/`SUDOT`/`SMMLA`/`UMMLA`/`USMMLA`) | 6 linhas |
+| **[B13.20](trilha-b-arquiteturas/b13.20-neon-shared-fhm.md)** | `neon-shared`: `VFML`/`VFML_scalar` (`FEAT_FHM`, f16→f32 fundido) — irmã da B19.13 | 4 linhas |
+| **[B19.11](trilha-b-arquiteturas/b19.11-a64-fp8.md)** | A64 `FEAT_FP8` (12 linhas) — única das três features (BF16/FP8/I8MM) sem constante em `Aarch64Feature` | 12 linhas |
+| **[B19.13](trilha-b-arquiteturas/b19.13-a64-fhm.md)** | A64 `FEAT_FHM` (`FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2`) — feature PRÓPRIA, não `FEAT_FP16` | 8 linhas |
+
+**B13.21 NÃO está pegável ainda apesar de a tabela de dependência formal listar só B13.19/B19.7 ✅**:
+sua própria spec diz "fecha o arquivo `neon-shared` e o `null` do decoder" (troca por
+`unimplemented`, G8) — isso só é seguro depois que **B13.20** (ainda ⬜) também tiver reivindicado
+seu espaço, senão a B13.21 fecharia a porta que a B13.20 ainda precisa. Pegar B13.20 antes.
 
 **B19.10 FECHADA 2026-09-06** — as 13 linhas de cripto A64 SHA-512/SM3/SM4 (mesmo prefixo `0xCE`
 que a B11.12 abriu pela metade para `FEAT_SHA3`); achado real que corrige a spec: o campo que
@@ -110,10 +125,12 @@ B13.13 registrar seu decoder depois). `docs/COBERTURA-ISA.md` byte a byte idênt
 declara `CRYPTO`). G5 verde nos 5 consumidores. Ver **Resultado** na task.
 
 **Bloqueadas por dependência aberta** (não pegar ainda): C12.6 (RFC, depende de C12.5), C12.8
-(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.16/19-22 (depende de B13.12/B13.15/
-B13.18, todas ✅, ou de B13.19/B13.21 ainda ⬜), B19.9/11/13 (fechamento/depende de sub-tasks
-ainda ⬜). **B13.13 agora é a única task que fecha o sub-espaço `size==0b11`** (dívida do `null`
-residual) — pegável, sem dependência aberta.
+(depende de C12.6+B13.22), A10.7 (depende da RFC C12.6), B13.16 (depende de B13.9-B13.15, todas ✅
+— formalmente pegável, mas é um adaptador T32 melhor deixado para depois que `neon-shared` fechar,
+ver B13.21), B13.21 (dependência formal B13.19 ✅/B19.7 ✅, mas sua spec pede fechar o arquivo
+inteiro — pegar só depois de B13.20), B13.22 (preset, depende do arquivo `neon-shared` fechado),
+B19.9 (fechamento do épico B19, depende de B19.10-B19.13 — B19.10/B19.12 ✅, B19.11/B19.13 ainda
+⬜).
 
 **Ordem sugerida**: qualquer uma das três acima. **B13.18 FECHADA 2026-09-05** — `VSDOT`/`VUDOT`/
 `VUSDOT` (vetorial) + as 4 formas `_scalar` (`FEAT_DotProd`/`FEAT_I8MM`, DUAS features), núcleo

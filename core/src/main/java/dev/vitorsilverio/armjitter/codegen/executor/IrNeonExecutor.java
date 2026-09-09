@@ -404,6 +404,16 @@ public final class IrNeonExecutor {
                 vfp, op.signedN(), op.signedM(), lanes, op.vd(), op.vn(), op.vm(), op.index());
     }
 
+    /// `neon-shared`: `VSMMLA`/`VUMMLA`/`VUSMMLA` (B13.19, `FEAT_I8MM`): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#matrixMultiplyAccumulate}) criado pela B19.12 (a task irmã
+    /// A64) — reusado sem alteração, mesmo `AdvSimdRegisterWords` que {@link VfpRegisters} já
+    /// implementa para {@link #executeNeonDotProduct}.
+    public void executeNeonMatrixMultiplyAccumulate(ArmCore core, IrOp.NeonMatrixMultiplyAccumulate op) {
+        VfpRegisters vfp = core.vfp();
+        AdvSimdLanes.matrixMultiplyAccumulate(
+                vfp, op.signedN(), op.signedM(), op.vd(), op.vn(), op.vm());
+    }
+
     /// `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#swapPermute}) — sem equivalente A64, a semântica nasce aqui (exceção do
     /// épico, mesma classe de {@link #executeNeonComplex}/{@link #executeNeonDotProduct}). `Vd`/`Vm`
