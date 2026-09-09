@@ -47,7 +47,18 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-06, após B13.15 fechar)
+## Onde estamos (atualizado 2026-09-09, após B19.5.6 fechar)
+
+**B19.5.6 FECHADA 2026-09-09** — as 8 linhas indexadas de `FEAT_FP16` (`FMUL_si`/`FMLA_si`/
+`FMLS_si`/`FMULX_si`/`FMUL_vi`/`FMLA_vi`/`FMLS_vi`/`FMULX_vi`), reusando 100% o esquema de índice
+`H:L:M`/estreitamento de `Rm` de `size=01` — zero `Kind`/record novo, zero mudança de executor.
+**Fecha a escada B19.5 inteira** (88 linhas `_h`: B19.5.1 fundação + B19.5.3 17 + B19.5.4 49 +
+B19.5.5 14 + B19.5.6 8). Achado que corrige a spec: `FMLAL_vi` (`FEAT_FHM`) não usa `size=00` de
+verdade (usa `size=10`, sem risco de colisão real). `docs/COBERTURA-ISA.md` global 92%→93%. Ver
+**Resultado** na task. **Nota**: esta sessão também achou que a tabela "Pegáveis AGORA" abaixo
+estava desatualizada — `B13.13` (fechada 2026-09-09, sessão anterior no mesmo dia) e `B19.12`
+(fechada 2026-09-06) já constavam ✅ no `INDICE.md` da trilha B antes desta sessão começar; não
+confie nesta tabela sem checar o índice real de cada trilha, mesmo aviso já repetido acima.
 
 A fila anterior estava **drenada e não dizia isso** (listava 6 tasks já fechadas como pegáveis, e 13
 arquivos de task ainda tinham `**Status:** ⬜` no cabeçalho — todos corrigidos). Depois disso, uma

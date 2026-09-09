@@ -1289,16 +1289,17 @@ public final class Aarch64Decoder {
     // ── immediate, `0`=indexed-element; conferido contra `a64.decode` real do QEMU, seção
     // ── "AdvSIMD {scalar,vector} x indexed element"). Campo `size`(23:22, MESMO
     // ── {@link #ADVSIMD_INT_SIZE_SHIFT}/{@link #ADVSIMD_INT_SIZE_MASK} de "three same") escolhe o
-    // ── tamanho do elemento: `01`=halfword (só inteiro), `10`=word (inteiro E ponto flutuante,
-    // ── discriminados pelo opcode nibble+`U`), `11`=doubleword (só ponto flutuante, `bit21` fixo
-    // ── em `0`); `00` é meia-precisão (`FEAT_FP16`), fora de escopo. `opcode`(15:12, 4 bits) +
-    // ── `U`(29, MESMO {@link #ADVSIMD_INT_U_SHIFT}) escolhem a operação — tabela própria, ver
-    // ── {@link #decodeAdvancedSimdIndexedFpOpcode}/{@link #decodeAdvancedSimdIndexedIntOpcode}.
+    // ── tamanho do elemento: `00`=meia-precisão (`FEAT_FP16`, só ponto flutuante — B19.5.6), `01`=
+    // ── halfword (só inteiro), `10`=word (inteiro E ponto flutuante, discriminados pelo opcode
+    // ── nibble+`U`), `11`=doubleword (só ponto flutuante, `bit21` fixo em `0`). `opcode`(15:12, 4
+    // ── bits) + `U`(29, MESMO {@link #ADVSIMD_INT_U_SHIFT}) escolhem a operação — tabela própria,
+    // ── ver {@link #decodeAdvancedSimdIndexedFpOpcode}/{@link #decodeAdvancedSimdIndexedIntOpcode}.
     // ── Índice do elemento de `Rm` é MONTADO a partir de bits espalhados (`H`=bit11 sempre;
-    // ── `L`=bit21 para word/doubleword; `L:M`=bits[21:20] para halfword, `M` também estreita `Rm`
-    // ── a `V0`-`V15`) — ver {@link #decodeAdvancedSimdIndexedElementIndex}.
+    // ── `L`=bit21 para word/doubleword; `L:M`=bits[21:20] para halfword E meia-precisão, `M`
+    // ── também estreita `Rm` a `V0`-`V15`) — ver {@link #decodeAdvancedSimdIndexedElementIndex}.
     private static final int ADVSIMD_INDEXED_OPCODE_SHIFT = 12;
     private static final int ADVSIMD_INDEXED_OPCODE_MASK = 0b1111;
+    private static final int ADVSIMD_INDEXED_SIZE_HALF_PRECISION = 0b00;
     private static final int ADVSIMD_INDEXED_SIZE_HALFWORD = 0b01;
     private static final int ADVSIMD_INDEXED_SIZE_WORD = 0b10;
     private static final int ADVSIMD_INDEXED_SIZE_DOUBLEWORD = 0b11;
@@ -4435,10 +4436,12 @@ public final class Aarch64Decoder {
     /// `SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL` (alargante) e `FMUL`/`FMLA`/`FMLS`/`FMULX`
     /// (ponto flutuante, só simples/dupla). `SQRDMLAH`/`SQRDMLSH` (`FEAT_RDM`) decodificam desde
     /// B11.4, gateadas por {@link Aarch64Architecture#has} — ver
-    /// {@link #decodeAdvancedSimdIndexedInt}. EXCLUI (posteriores ao Cortex-A53, candidatas a task
-    /// própria): meia-precisão (`FEAT_FP16`, `size=00`), `SDOT`/`UDOT` (`FEAT_DotProd`, sem decoder
-    /// neste projeto — B13.18), `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`), `FCMLA`
-    /// (`FEAT_FCMA`). `USDOT`/`SUDOT` (`FEAT_I8MM`) e `BFDOT` (`FEAT_BF16`) decodificam desde
+    /// {@link #decodeAdvancedSimdIndexedInt}. `FMUL`/`FMLA`/`FMLS`/`FMULX` de meia-precisão
+    /// (`FEAT_FP16`, `size=00`) decodificam desde B19.5.6, reusando 100% o esquema de índice
+    /// `H:L:M`/`Rm` estreitado de `size=01`. EXCLUI (posteriores ao Cortex-A53, candidatas a task
+    /// própria): `SDOT`/`UDOT` (`FEAT_DotProd`, sem decoder neste projeto — B13.18),
+    /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`), `FCMLA` (`FEAT_FCMA`). `USDOT`/`SUDOT`
+    /// (`FEAT_I8MM`) e `BFDOT` (`FEAT_BF16`) decodificam desde
     /// B19.12/B19.7 (interceptados ANTES do `switch` abaixo, ver os blocos correspondentes).
     private Ir64Op decodeAdvancedSimdIndexedElement(int word, long address, boolean scalar) {
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
@@ -4527,7 +4530,20 @@ public final class Aarch64Decoder {
                 int index = (h ? 0b100 : 0) | lm;
                 yield decodeAdvancedSimdIndexedInt(scalar, q, 1, u, opcode, rn, rd, rm, index);
             }
-            // `00`: meia-precisão (`FEAT_FP16`), fora de escopo (G8, ver javadoc acima).
+            // Meia-precisão (`FEAT_FP16`, B19.5.6): só ponto flutuante — MESMO esquema de índice e
+            // de estreitamento de `Rm` do ramo `HALFWORD` acima (`Rm` a 4 bits, `H:L:M`). Sem a
+            // feature, `yield null` cai no G8 de baixo — byte a byte o comportamento de antes desta
+            // task. Opcodes inteiros não existem em `size=00` (o inteiro de halfword é `size=01`) —
+            // `decodeAdvancedSimdIndexedFp` devolve `null` para eles, que também cai no G8 de baixo.
+            case ADVSIMD_INDEXED_SIZE_HALF_PRECISION -> {
+                if (!architecture.has(Aarch64Feature.FP16)) {
+                    yield null;
+                }
+                int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+                int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
+                int index = (h ? 0b100 : 0) | lm;
+                yield decodeAdvancedSimdIndexedFp(scalar, q, ADVSIMD_ESZ_HALFWORD, u, opcode, rn, rd, rm, index);
+            }
             default -> null;
         };
         if (result == null) {

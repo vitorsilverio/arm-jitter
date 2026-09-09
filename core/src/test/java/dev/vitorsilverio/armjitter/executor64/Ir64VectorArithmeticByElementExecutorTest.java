@@ -216,4 +216,37 @@ class Ir64VectorArithmeticByElementExecutorTest {
 
         assertEquals(3, fp.element(0, 0, 1), "5 - round(2*16384*3 >> 16) = 5 - 2 = 3");
     }
+
+    // ── B19.5.6: `FEAT_FP16` (`esz=1`) — confirma que o executor NÃO precisou de mudança (a
+    // ── fundação `esz=1` de {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}
+    // ── já existe desde a B19.5.1; esta família reusa o MESMO `fpThreeSameByElement`).
+
+    @Test
+    void fmlaByElementVectorHalfPrecisionFusedMultiplyAdd() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setElement(0, 0, 1, Float.floatToFloat16(1.0f) & 0xFFFF);
+        fp.setElement(1, 0, 1, Float.floatToFloat16(2.0f) & 0xFFFF);
+        fp.setElement(2, 1, 1, Float.floatToFloat16(3.0f) & 0xFFFF); // índice usado
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSameByElement(
+                Ir64VectorFpThreeSameOp.MLA, false, false, 1, 0, 1, 2, 1));
+
+        assertEquals(7.0f, Float.float16ToFloat((short) fp.element(0, 0, 1)), "1.0 + 2.0*3.0 = 7.0 (fma)");
+    }
+
+    @Test
+    void fmulxByElementScalarHalfPrecisionProcessesOnlyElementZero() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        fp.setQ(0, 0xFFFF_FFFF_FFFF_FFFFL, 0xFFFF_FFFF_FFFF_FFFFL);
+        fp.setElement(1, 0, 1, Float.floatToFloat16(0.0f) & 0xFFFF);
+        fp.setElement(2, 2, 1, Float.floatToFloat16(Float.POSITIVE_INFINITY) & 0xFFFF); // índice usado
+
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticThreeSameByElement(
+                Ir64VectorFpThreeSameOp.MULX, true, false, 1, 0, 1, 2, 2));
+
+        assertEquals(2.0f, Float.float16ToFloat((short) fp.element(0, 0, 1)), "FPMulX(0, +Inf) = 2.0");
+        assertEquals(0L, fp.high64(0), "forma escalar zera tudo acima do elemento (destructive write)");
+    }
 }

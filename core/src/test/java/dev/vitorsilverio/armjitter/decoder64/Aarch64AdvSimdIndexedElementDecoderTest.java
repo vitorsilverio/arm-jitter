@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
@@ -14,14 +15,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /// AdvSIMD "vector/scalar × indexed element" (B8.19) — `MUL`/`MLA`/`MLS`/`SQDMULH`/`SQRDMULH`
 /// (não-alargante), `SMULL`/`UMULL`/`SMLAL`/`UMLAL`/`SMLSL`/`UMLSL`/`SQDMULL`/`SQDMLAL`/`SQDMLSL`
 /// (alargante) e `FMUL`/`FMLA`/`FMLS`/`FMULX` (ponto flutuante). Corpus REAL via
-/// `aarch64-none-elf-as`/`objdump` (devkitA64, `.arch armv8-a`).
+/// `aarch64-none-elf-as`/`objdump` (devkitA64, `.arch armv8-a`). As formas de meia-precisão
+/// (`FEAT_FP16`, `size=00`, B19.5.6) estão numa seção própria mais abaixo, com o corpus real
+/// separado via `aarch64-linux-gnu-as -march=armv8.2-a+fp16` (WSL).
 class Aarch64AdvSimdIndexedElementDecoderTest {
     private static final Aarch64Decoder DECODER = new Aarch64Decoder();
+    private static final Aarch64Decoder FP16_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_2_A);
+    private static final Aarch64Decoder ARMV8_1_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_1_A);
 
     private static Ir64Op decodeWord(int word) {
+        return decodeWord(DECODER, word);
+    }
+
+    private static Ir64Op decodeWord(Aarch64Decoder decoder, int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return decoder.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     // ── Vetorial, não-alargante ─────────────────────────────────────────────────────────────────
@@ -387,10 +396,110 @@ class Aarch64AdvSimdIndexedElementDecoderTest {
     }
 
     @Test
-    void halfPrecisionSizeFieldIsUnsupported() {
-        // `size=00` (bits[23:22]) é meia-precisão (`FEAT_FP16`), fora de escopo desta task — MESMO
-        // resto do encoding de `fmul v0.2s,...` (0x0fa29820) com `size` zerado.
+    void halfPrecisionSizeFieldIsUnsupportedWithoutFeature() {
+        // `size=00` (bits[23:22]) é meia-precisão (`FEAT_FP16`, B19.5.6) — sem a feature (decoder
+        // default = `ARMV8_0_A`), continua recusado byte a byte como antes desta task. MESMO resto
+        // do encoding de `fmul v0.2s,...` (0x0fa29820) com `size` zerado.
         int halfPrecision = 0x0fa29820 & ~(0b11 << 22);
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(halfPrecision));
+    }
+
+    // ── B19.5.6: `FEAT_FP16` — MESMO esquema de índice/estreitamento de `Rm` de `size=01`, agora
+    // ── sob `size=00`. Corpus REAL via `aarch64-linux-gnu-as -march=armv8.2-a+fp16` (WSL).
+
+    @Test
+    void fmulScalarHalfPrecisionIndexSeven() {
+        // 5f329820: fmul h0, h1, v2.h[7] — índice máximo (H:L:M = 1:1:1), prova a ordem dos bits.
+        Ir64Op.VectorFpArithmeticThreeSameByElement op = (Ir64Op.VectorFpArithmeticThreeSameByElement)
+                decodeWord(FP16_DECODER, 0x5f329820);
+        assertEquals(Ir64VectorFpThreeSameOp.MUL, op.op());
+        assertEquals(true, op.scalar());
+        assertEquals(false, op.q());
+        assertEquals(1, op.esz());
+        assertEquals(0, op.rd());
+        assertEquals(1, op.rn());
+        assertEquals(2, op.rm());
+        assertEquals(7, op.index());
+    }
+
+    @Test
+    void fmlaVectorHalfPrecisionEightLanes() {
+        // 4f121820: fmla v0.8h, v1.8h, v2.h[5]
+        Ir64Op.VectorFpArithmeticThreeSameByElement op = (Ir64Op.VectorFpArithmeticThreeSameByElement)
+                decodeWord(FP16_DECODER, 0x4f121820);
+        assertEquals(Ir64VectorFpThreeSameOp.MLA, op.op());
+        assertEquals(false, op.scalar());
+        assertEquals(true, op.q());
+        assertEquals(1, op.esz());
+        assertEquals(5, op.index());
+        assertEquals(2, op.rm());
+    }
+
+    @Test
+    void fmlsScalarHalfPrecisionRmNarrowedToV15() {
+        // 5f0f5020: fmls h0, h1, v15.h[0] — `Rm=15` prova o estreitamento a `V0`-`V15` (M vira bit
+        // baixo do índice); `index=0` prova o outro extremo do teste anterior (`H` é o bit alto).
+        Ir64Op.VectorFpArithmeticThreeSameByElement op = (Ir64Op.VectorFpArithmeticThreeSameByElement)
+                decodeWord(FP16_DECODER, 0x5f0f5020);
+        assertEquals(Ir64VectorFpThreeSameOp.MLS, op.op());
+        assertEquals(15, op.rm());
+        assertEquals(0, op.index());
+    }
+
+    @Test
+    void fmulxVectorHalfPrecisionFourLanes() {
+        // 2f329020: fmulx v0.4h, v1.4h, v2.h[3]
+        Ir64Op.VectorFpArithmeticThreeSameByElement op = (Ir64Op.VectorFpArithmeticThreeSameByElement)
+                decodeWord(FP16_DECODER, 0x2f329020);
+        assertEquals(Ir64VectorFpThreeSameOp.MULX, op.op());
+        assertEquals(false, op.q());
+        assertEquals(1, op.esz());
+        assertEquals(3, op.index());
+    }
+
+    @Test
+    void mulVectorHalfwordIntegerStillDecodesUnderFp16Decoder() {
+        // 4f728020: mul v0.8h, v1.8h, v2.h[3] — `size=01` (halfword INTEIRO), regressão: continua
+        // decodificando idêntico mesmo com `FEAT_FP16` ligada (a feature não muda `size=01`).
+        Ir64Op.VectorArithmeticThreeSameByElement op =
+                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(FP16_DECODER, 0x4f728020);
+        assertEquals(Ir64VectorThreeSameOp.MUL, op.op());
+        assertEquals(true, op.q());
+        assertEquals(3, op.index());
+    }
+
+    @Test
+    void halfPrecisionRejectedUnderArmv80AndArmv81() {
+        // MESMO word de `fmul h0,...` (0x5f329820) sob decoders sem `FEAT_FP16` — recusado nos
+        // dois (a feature só entra em `ARMV8_2_A`).
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(0x5f329820));
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(ARMV8_1_DECODER, 0x5f329820));
+    }
+
+    @Test
+    void halfPrecisionIntegerOpcodeIsUnsupportedEvenWithFeature() {
+        // MESMO word de `mul v0.4h,...` (0x0f728020, `size=01`, opcode=`1000`) com `size` forçado
+        // para `00`: em meia-precisão só existem os 4 opcodes de ponto flutuante — `MUL` inteiro
+        // (`opcode=1000`) não bate em `decodeAdvancedSimdIndexedFp` (G8), mesmo sob `FEAT_FP16`.
+        int forcedHalfPrecision = 0x0f728020 & ~(1 << 22);
+        assertThrows(UnsupportedOperationException.class,
+                () -> decodeWord(FP16_DECODER, forcedHalfPrecision));
+    }
+
+    @Test
+    void sudotIndexedI8mmDoesNotLeakThroughHalfPrecisionSlot() {
+        // 4f22f820: sudot v0.4s, v1.16b, v2.4b[3] (`FEAT_I8MM`) também usa `size=00`, mas
+        // `opcode=1111` (interceptado ANTES do switch, B19.12) — nunca alcança a tabela de FP desta
+        // task (`MUL`/`MLA`/`MLS`/`MULX`=`1001`/`0001`/`0101`). Sob `FEAT_FP16` SEM `FEAT_I8MM`,
+        // continua recusado.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4f22f820));
+    }
+
+    @Test
+    void fmlalIndexedFeatFhmDoesNotLeakThroughHalfPrecisionSlot() {
+        // 4fb20020: fmlal v0.4s, v1.4h, v2.h[3] (`FEAT_FHM`) — achado que corrige a spec: NÃO usa
+        // `size=00` (usa `size=10`, `opcode=0000`, que não bate em nenhuma tabela) — recusado sob
+        // `FEAT_FP16` de qualquer forma, sem intersecção real com o slot desta task.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4fb20020));
     }
 }
