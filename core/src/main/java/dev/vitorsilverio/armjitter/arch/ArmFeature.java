@@ -309,5 +309,13 @@ public enum ArmFeature {
     /// ganhou gate de feature (decodifica incondicionalmente) — achado pré-existente, fora do
     /// escopo desta task (B13.15), não corrigido aqui. **Nenhum preset a declara** (a saída de
     /// `NOT_IN_ANY_PRESET` é a B13.22).
-    CRYPTO
+    CRYPTO,
+
+    // ---- Onda 6, B13.13 (NEON two-reg-misc: VCVT_B16_F32) ----
+    /// **Tipo `bfloat16`** (`FEAT_BF16`, ARMv8.6-A) no espaço NEON de 32 bits — só `VCVT_B16_F32`
+    /// (`neon-dp.decode` "2-reg-misc", `size==0b11`, MESMO opc1/opc2 de `VCVT_F16_F32`, discriminado
+    /// por `bit6`). Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#BFLOAT16} para o lado A32/T32.
+    /// **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    BFLOAT16
 }

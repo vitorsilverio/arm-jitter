@@ -263,6 +263,15 @@ public final class IrNeonExecutor {
         }
     }
 
+    /// NEON "two-register miscellaneous" de conversão de PRECISÃO, `size==0b11` (B13.13):
+    /// `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16`: delega ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#fpConvertPrecision}) — SEMPRE 4 elementos, sem forma `Q`/`quad` (o próprio
+    /// registrador `vd`/`vm` já indica qual lado é `D` e qual é `Q`, ver Javadoc de
+    /// {@link IrOp.NeonFpConvertPrecision}).
+    public void executeNeonFpConvertPrecision(ArmCore core, IrOp.NeonFpConvertPrecision op) {
+        AdvSimdLanes.fpConvertPrecision(core.vfp(), op.op(), op.vd(), op.vm());
+    }
+
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.

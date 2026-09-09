@@ -1515,11 +1515,16 @@ public final class AdvSimdLanes {
     }
 
     /// Executa uma operação AdvSIMD "two-register miscellaneous" de PONTO FLUTUANTE (ver {@link
-    /// AdvSimdFpUnaryOp}) sobre um elemento de `esz` bytes (`2`=F32, `3`=F64) já lido de `baseRn` —
-    /// o chamador itera as lanes e chama esta função por elemento (mesma convenção de
+    /// AdvSimdFpUnaryOp}) sobre um elemento de `esz` bytes (`1`=F16, `2`=F32, `3`=F64) já lido de
+    /// `baseRn` — o chamador itera as lanes e chama esta função por elemento (mesma convenção de
     /// {@link #fpCombinePair}, que também opera por par já extraído em vez de por registrador
-    /// inteiro).
+    /// inteiro). {@link AdvSimdFpUnaryOp#SCVTF}/{@link AdvSimdFpUnaryOp#UCVTF} (B13.13) são a ÚNICA
+    /// exceção: `inputBits` é um INTEIRO (não ponto flutuante) do mesmo `esz`, tratado ANTES do
+    /// `switch` por `esz` abaixo (que decodifica `inputBits` como FP para todo o resto).
     public static long fpUnary(AdvSimdFpUnaryOp op, int esz, long inputBits) {
+        if (op == AdvSimdFpUnaryOp.SCVTF || op == AdvSimdFpUnaryOp.UCVTF) {
+            return convertIntegerToFloat(op == AdvSimdFpUnaryOp.SCVTF, esz, inputBits);
+        }
         return switch (esz) {
             // B19.5.4 (`FEAT_FP16`): mesmo algoritmo do ramo `esz==2`, computado em `float` via
             // `halfToFloat`/`halfBits` — mesma disciplina de {@link #halfThreeSame} (B19.5.1): o
@@ -1537,6 +1542,10 @@ public final class AdvSimdLanes {
                     case CMEQ0 -> boolMask(a == 0f, esz);
                     case CMLE0 -> boolMask(a <= 0f, esz);
                     case CMLT0 -> boolMask(a < 0f, esz);
+                    case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX -> halfBits((float) roundForRint(op, a));
+                    case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU ->
+                            convertFloatToFixed(op, esz, a);
+                    case SCVTF, UCVTF -> throw new IllegalStateException("tratado antes do switch por esz");
                 };
             }
             case 2 -> {
@@ -1551,6 +1560,10 @@ public final class AdvSimdLanes {
                     case CMEQ0 -> boolMask(a == 0f, esz);
                     case CMLE0 -> boolMask(a <= 0f, esz);
                     case CMLT0 -> boolMask(a < 0f, esz);
+                    case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX -> floatBits((float) roundForRint(op, a));
+                    case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU ->
+                            convertFloatToFixed(op, esz, a);
+                    case SCVTF, UCVTF -> throw new IllegalStateException("tratado antes do switch por esz");
                 };
             }
             case 3 -> {
@@ -1565,10 +1578,147 @@ public final class AdvSimdLanes {
                     case CMEQ0 -> boolMask(a == 0.0, esz);
                     case CMLE0 -> boolMask(a <= 0.0, esz);
                     case CMLT0 -> boolMask(a < 0.0, esz);
+                    case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX -> doubleBits(roundForRint(op, a));
+                    case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU ->
+                            convertFloatToFixed(op, esz, a);
+                    case SCVTF, UCVTF -> throw new IllegalStateException("tratado antes do switch por esz");
                 };
             }
             default -> throw new IllegalArgumentException("esz inválido para fpUnary: " + esz);
         };
+    }
+
+    /// `SCVTF`/`UCVTF` (B13.13, migrado do executor A64): `inputBits` é um inteiro assinado/não
+    /// assinado de `esz` bytes → ponto flutuante do MESMO `esz`. Único caminho de {@link #fpUnary}
+    /// em que a entrada NÃO é decodificada como FP.
+    private static long convertIntegerToFloat(boolean signed, int esz, long inputBits) {
+        double value = switch (esz) {
+            // `(short)`/`(int)` sinal-estendem os bits truncados; a forma não assinada já chega
+            // mascarada ao tamanho de `esz` (convenção de {@link #element}), exceto o `long` inteiro
+            // (`esz==3`), que precisa de {@link #unsignedLongToDouble} (não cabe em `double` exato).
+            case 1 -> signed ? (double) (short) inputBits : (double) inputBits;
+            case 2 -> signed ? (double) (int) inputBits : (double) inputBits;
+            case 3 -> signed ? (double) inputBits : unsignedLongToDouble(inputBits);
+            default -> throw new IllegalArgumentException("esz inválido para convertIntegerToFloat: " + esz);
+        };
+        return switch (esz) {
+            case 1 -> halfBits((float) value);
+            case 2 -> floatBits((float) value);
+            case 3 -> doubleBits(value);
+            default -> throw new IllegalArgumentException("esz inválido para convertIntegerToFloat: " + esz);
+        };
+    }
+
+    /// Direção de arredondamento de {@link AdvSimdFpUnaryOp#RINTN}/{@code RINTM}/{@code RINTP}/
+    /// {@code RINTZ}/{@code RINTA}/{@code RINTX} (B13.13) — `NaN`/infinito passam intocados (não há
+    /// valor integral "mais próximo" de nenhum dos dois). `RINTX` é idêntico a `RINTN` neste
+    /// emulador (sem modelo de exceção de inexatidão, mesma decisão do A64/B8.5).
+    private static double roundForRint(AdvSimdFpUnaryOp op, double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return value;
+        }
+        return switch (op) {
+            case RINTN, RINTX -> Math.rint(value); // ties-to-even (IEEE 754 roundToIntegralTiesToEven).
+            case RINTP -> Math.ceil(value);
+            case RINTM -> Math.floor(value);
+            case RINTZ -> value < 0 ? Math.ceil(value) : Math.floor(value);
+            case RINTA -> roundTiesAway(value);
+            default -> throw new IllegalArgumentException("não é uma operação RINT: " + op);
+        };
+    }
+
+    /// "Mais próximo, empate afasta de zero" (`FPRoundInt` com `RMode`=`FPRounding_TIEAWAY`) —
+    /// `Math.round` NÃO serve (arredonda meio PARA CIMA sempre, não "para longe de zero": `Math
+    /// .round(-2.5)` devolve `-2`, não `-3`). Preserva o sinal de `-0.0` (só entra no ramo de
+    /// empate quando a fração é exatamente `0.5`; um valor já integral tem fração `0.0` e cai no
+    /// ramo `< 0.5`, devolvendo `floor` — que é o próprio valor).
+    private static double roundTiesAway(double value) {
+        double floor = Math.floor(value);
+        double fraction = value - floor;
+        if (fraction > 0.5) {
+            return floor + 1.0;
+        }
+        if (fraction < 0.5) {
+            return floor;
+        }
+        return value >= 0 ? floor + 1.0 : floor;
+    }
+
+    /// `VCVTA/N/P/M{S,U}`/`VCVT_{SF,UF,FS,FU}` (B13.13, migrado do executor A64): arredonda `value`
+    /// no modo do mnemônico e satura para inteiro de `esz` bytes, mascarado à largura de destino
+    /// (convenção de {@link #element}/{@link #setElement}).
+    private static long convertFloatToFixed(AdvSimdFpUnaryOp op, int esz, double value) {
+        boolean signed = !isUnsignedFcvt(op);
+        double rounded = switch (op) {
+            case FCVTNS, FCVTNU -> roundForConversion(value, RoundingMode.NEAREST_TIES_EVEN);
+            case FCVTPS, FCVTPU -> roundForConversion(value, RoundingMode.TOWARD_POSITIVE_INFINITY);
+            case FCVTMS, FCVTMU -> roundForConversion(value, RoundingMode.TOWARD_NEGATIVE_INFINITY);
+            case FCVTZS, FCVTZU -> roundForConversion(value, RoundingMode.TOWARD_ZERO);
+            case FCVTAS, FCVTAU -> roundForConversion(value, RoundingMode.NEAREST_TIES_AWAY);
+            default -> throw new IllegalArgumentException("não é uma operação FCVT-para-inteiro: " + op);
+        };
+        return switch (esz) {
+            case 1 -> saturateToHalfwordInteger(rounded, signed) & 0xFFFFL;
+            case 2 -> saturateToInteger(rounded, signed, false) & 0xFFFF_FFFFL;
+            case 3 -> saturateToInteger(rounded, signed, true);
+            default -> throw new IllegalArgumentException("esz inválido para convertFloatToFixed: " + esz);
+        };
+    }
+
+    private static boolean isUnsignedFcvt(AdvSimdFpUnaryOp op) {
+        return op == AdvSimdFpUnaryOp.FCVTNU || op == AdvSimdFpUnaryOp.FCVTPU
+                || op == AdvSimdFpUnaryOp.FCVTMU || op == AdvSimdFpUnaryOp.FCVTZU
+                || op == AdvSimdFpUnaryOp.FCVTAU;
+    }
+
+    /// As 5 direções de arredondamento usadas por {@link #convertFloatToFixed} — enum LOCAL (não o
+    /// `Ir64Op.Fp64RoundingDirection` do lado A64) para não criar dependência de {@code advsimd}
+    /// sobre {@code ir64} (este pacote é o núcleo COMPARTILHADO, independente de A32/A64).
+    private enum RoundingMode { NEAREST_TIES_EVEN, TOWARD_POSITIVE_INFINITY, TOWARD_NEGATIVE_INFINITY, TOWARD_ZERO, NEAREST_TIES_AWAY }
+
+    /// Mesma direção de {@link #roundForRint}, mas parametrizada por {@link RoundingMode} em vez de
+    /// {@link AdvSimdFpUnaryOp} (`FCVTZS`/`FCVTZU` compartilham a MESMA direção `TOWARD_ZERO`, por
+    /// exemplo) — `NaN`/infinito passam intocados, {@link #saturateToInteger}/
+    /// {@link #saturateToHalfwordInteger} precisam do valor intacto para saturar corretamente
+    /// (`FPToFixed`: `NaN`→`0`, infinito→limite da largura).
+    private static double roundForConversion(double value, RoundingMode direction) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return value;
+        }
+        return switch (direction) {
+            case NEAREST_TIES_EVEN -> Math.rint(value);
+            case TOWARD_POSITIVE_INFINITY -> Math.ceil(value);
+            case TOWARD_NEGATIVE_INFINITY -> Math.floor(value);
+            case TOWARD_ZERO -> value < 0 ? Math.ceil(value) : Math.floor(value);
+            case NEAREST_TIES_AWAY -> roundTiesAway(value);
+        };
+    }
+
+    /// Contagem FIXA de elementos de {@link #fpConvertPrecision} — as 3 formas do NEON de 32 bits
+    /// (B13.13) são SEMPRE `@2misc_q0` (um lado `D`, o outro `Q`, nunca duas formas `Q`/`Q` ou
+    /// `D`/`D`), então sempre 4 elementos de 32 bits / 4 de 16 bits, sem `laneOffset` (diferente de
+    /// `FCVTN`/`FCVTL` do A64, que têm forma "2"/metade-alta).
+    private static final int FP_CONVERT_PRECISION_ELEMENTS = 4;
+
+    /// Executa `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16` (B13.13) — ver {@link
+    /// AdvSimdFpConvertPrecisionOp}. `baseRd`/`baseRm` são bases de PALAVRA (mesma convenção de
+    /// {@link #element}/{@link #setElement}): na forma estreita, `baseRm` é o `Q` de 32 bits e
+    /// `baseRd` é o `D` de 16 bits/`bf16`; na forma larga, o inverso. Resultados calculados num
+    /// buffer ANTES de qualquer escrita (E10).
+    public static void fpConvertPrecision(AdvSimdRegisterWords regs, AdvSimdFpConvertPrecisionOp op,
+            int baseRd, int baseRm) {
+        long[] results = new long[FP_CONVERT_PRECISION_ELEMENTS];
+        for (int i = 0; i < FP_CONVERT_PRECISION_ELEMENTS; i++) {
+            results[i] = switch (op) {
+                case NARROW_F16 -> halfBits(Float.intBitsToFloat((int) element(regs, baseRm, i, 2)));
+                case NARROW_BF16 -> bf16Bits(Float.intBitsToFloat((int) element(regs, baseRm, i, 2)));
+                case WIDEN_F16 -> floatBits(halfToFloat(element(regs, baseRm, i, 1)));
+            };
+        }
+        int destEsz = op == AdvSimdFpConvertPrecisionOp.WIDEN_F16 ? 2 : 1;
+        for (int i = 0; i < FP_CONVERT_PRECISION_ELEMENTS; i++) {
+            setElement(regs, baseRd, i, destEsz, results[i]);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────

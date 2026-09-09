@@ -66,9 +66,11 @@ final class Ir64VectorFpArithmeticExecutor {
     }
 
     /// RFC B13.2 (D1): mapeia `Ir64VectorFpUnaryOp` → {@link AdvSimdFpUnaryOp} do núcleo
-    /// COMPARTILHADO — só para os 9 valores migrados na B13.12 (ver Javadoc de
-    /// {@link AdvSimdFpUnaryOp}); chamado só quando o `switch` de {@link #executeUnary} já garantiu
-    /// que `op` é um desses 9, por isso sem `default`.
+    /// COMPARTILHADO — os 9 valores migrados na B13.12 mais os 18 migrados na B13.13 (`VRINT*`/
+    /// `VCVTA/N/P/M{S,U}`/`SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU`, ver Javadoc de {@link AdvSimdFpUnaryOp}
+    /// para a lista completa); chamado só quando o `switch` de {@link #executeUnary} já garantiu que
+    /// `op` é um desses 27, por isso sem `default`. `RINTI`/`FRECPX`/`FCVTXN`/`SQRT` NÃO têm forma
+    /// equivalente no NEON de 32 bits e continuam tratados localmente.
     private static AdvSimdFpUnaryOp sharedFpUnaryOp(Ir64VectorFpUnaryOp op) {
         return switch (op) {
             case ABS -> AdvSimdFpUnaryOp.ABS;
@@ -80,6 +82,24 @@ final class Ir64VectorFpArithmeticExecutor {
             case CMLT0 -> AdvSimdFpUnaryOp.CMLT0;
             case RECPE -> AdvSimdFpUnaryOp.RECPE;
             case RSQRTE -> AdvSimdFpUnaryOp.RSQRTE;
+            case RINTN -> AdvSimdFpUnaryOp.RINTN;
+            case RINTM -> AdvSimdFpUnaryOp.RINTM;
+            case RINTP -> AdvSimdFpUnaryOp.RINTP;
+            case RINTZ -> AdvSimdFpUnaryOp.RINTZ;
+            case RINTA -> AdvSimdFpUnaryOp.RINTA;
+            case RINTX -> AdvSimdFpUnaryOp.RINTX;
+            case SCVTF -> AdvSimdFpUnaryOp.SCVTF;
+            case UCVTF -> AdvSimdFpUnaryOp.UCVTF;
+            case FCVTNS -> AdvSimdFpUnaryOp.FCVTNS;
+            case FCVTNU -> AdvSimdFpUnaryOp.FCVTNU;
+            case FCVTPS -> AdvSimdFpUnaryOp.FCVTPS;
+            case FCVTPU -> AdvSimdFpUnaryOp.FCVTPU;
+            case FCVTMS -> AdvSimdFpUnaryOp.FCVTMS;
+            case FCVTMU -> AdvSimdFpUnaryOp.FCVTMU;
+            case FCVTZS -> AdvSimdFpUnaryOp.FCVTZS;
+            case FCVTZU -> AdvSimdFpUnaryOp.FCVTZU;
+            case FCVTAS -> AdvSimdFpUnaryOp.FCVTAS;
+            case FCVTAU -> AdvSimdFpUnaryOp.FCVTAU;
             default -> throw new IllegalStateException("op não migrado para o núcleo compartilhado: " + op);
         };
     }
@@ -161,47 +181,9 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
-    private static final Ir64Op.Fp64RoundingDirection[] RINT_DIRECTION_BY_OP =
-            new Ir64Op.Fp64RoundingDirection[Ir64VectorFpUnaryOp.values().length];
-
-    static {
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTN.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTM.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTP.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTZ.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTA.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
-        // RINTX/RINTI: sem modelo de exceção de inexatidão/FPCR.RMode neste emulador — mesma
-        // decisão do escalar Fp64Round (B8.5) — caem no arredondamento "mais próximo, par".
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTX.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
-        RINT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.RINTI.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
-    }
-
-    private static final Ir64Op.Fp64RoundingDirection[] FCVT_DIRECTION_BY_OP =
-            new Ir64Op.Fp64RoundingDirection[Ir64VectorFpUnaryOp.values().length];
-
-    static {
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTNS.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTNU.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTPS.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTPU.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTMS.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTMU.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTZS.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTZU.ordinal()] = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTAS.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
-        FCVT_DIRECTION_BY_OP[Ir64VectorFpUnaryOp.FCVTAU.ordinal()] = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
-    }
-
-    private static boolean isUnsignedFcvt(Ir64VectorFpUnaryOp op) {
-        return op == Ir64VectorFpUnaryOp.FCVTNU || op == Ir64VectorFpUnaryOp.FCVTPU
-                || op == Ir64VectorFpUnaryOp.FCVTMU || op == Ir64VectorFpUnaryOp.FCVTZU
-                || op == Ir64VectorFpUnaryOp.FCVTAU;
-    }
-
     static boolean executeUnary(Aarch64Core core, Ir64Op.VectorFpArithmeticUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
-        boolean wide = esz == 3;
         // B19.3: `FCVTXN` (só forma escalar nesta task) tem `esz` de ENTRADA (`f64`) ≠ `esz` de
         // SAÍDA (`f32`) — leitura, escrita e finalização PRÓPRIAS, fora do laço comum (Armadilha 3
         // da task: não deixar a finalização geral rodar de novo com o `esz` do record).
@@ -215,11 +197,14 @@ final class Ir64VectorFpArithmeticExecutor {
         for (int i = 0; i < elements; i++) {
             long inputBits = fp.element(op.rn(), i, esz);
             long resultBits = switch (op.op()) {
-                // B13.12 (D1, RFC B13.2): ABS/NEG/comparações-com-zero/RECPE/RSQRTE migraram para
-                // o núcleo COMPARTILHADO ({@link AdvSimdLanes#fpUnary}) — a MESMA função que o NEON
-                // de 32 bits chama para `VABS_F`/`VCGT0_F`/`VRECPE_F`/... SQRT/RINT*/as conversões
-                // continuam abaixo (fora do escopo da B13.12, que não os produz).
-                case ABS, NEG, CMGT0, CMGE0, CMEQ0, CMLE0, CMLT0, RECPE, RSQRTE ->
+                // B13.12/B13.13 (D1, RFC B13.2): ABS/NEG/comparações-com-zero/RECPE/RSQRTE/RINT*/
+                // SCVTF/UCVTF/as 10 conversões FCVTxS/FCVTxU migraram para o núcleo COMPARTILHADO
+                // ({@link AdvSimdLanes#fpUnary}) — a MESMA função que o NEON de 32 bits chama para
+                // `VABS_F`/`VCGT0_F`/`VRECPE_F`/`VRINT*`/`VCVTA/N/P/M{S,U}`/`VCVT_{SF,UF,FS,FU}`.
+                // SQRT/RINTI/FRECPX/FCVTXN não têm forma A32 equivalente e continuam abaixo.
+                case ABS, NEG, CMGT0, CMGE0, CMEQ0, CMLE0, CMLT0, RECPE, RSQRTE,
+                        RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX,
+                        SCVTF, UCVTF, FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU ->
                         AdvSimdLanes.fpUnary(sharedFpUnaryOp(op.op()), esz, inputBits);
                 // B19.5.4 (`FEAT_FP16`): `esz==1` opera direto nos 16 bits crus (`frecpxHalf`) — o
                 // expoente de `binary16` tem largura DIFERENTE (5 bits, viés 15) da de `float`, então
@@ -230,58 +215,14 @@ final class Ir64VectorFpArithmeticExecutor {
                                 ? AdvSimdLanes.floatBits(frecpx(Float.intBitsToFloat((int) inputBits)))
                                 : AdvSimdLanes.doubleBits(frecpx(Double.longBitsToDouble(inputBits)));
                 case FCVTXN -> throw new IllegalStateException("FCVTXN tratado fora do laço");
-                case SCVTF, UCVTF -> {
-                    boolean signed = op.op() == Ir64VectorFpUnaryOp.SCVTF;
-                    double asDouble;
-                    if (wide) {
-                        asDouble = signed ? (double) inputBits : Ir64FpExecutor.unsignedLongToDouble(inputBits);
-                    } else if (esz == 1) {
-                        // B19.5.4: `(int) inputBits` de 16 bits mascarados NÃO sign-estende (mesmo
-                        // achado da B19.5.3 para `convertFixedPoint`) — cast intermediário por `short`.
-                        asDouble = signed ? (double) (short) inputBits : (double) inputBits;
-                    } else {
-                        asDouble = signed ? (double) (int) inputBits : (double) inputBits;
-                    }
-                    yield esz == 1 ? AdvSimdLanes.halfBits((float) asDouble)
-                            : esz == 2 ? AdvSimdLanes.floatBits((float) asDouble) : AdvSimdLanes.doubleBits(asDouble);
-                }
-                case FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> {
-                    double value = esz == 1 ? AdvSimdLanes.halfToFloat(inputBits)
-                            : esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
-                    double rounded = Ir64FpExecutor.roundToIntegralForConversion(value, FCVT_DIRECTION_BY_OP[op.op().ordinal()]);
-                    boolean signed = !isUnsignedFcvt(op.op());
-                    long converted = esz == 1
-                            ? Ir64FpExecutor.saturateToHalfwordInteger(rounded, signed)
-                            : Ir64FpExecutor.saturateToInteger(rounded, signed, wide);
-                    yield converted & (wide ? -1L : esz == 1 ? 0xFFFFL : 0xFFFF_FFFFL);
-                }
-                default -> {
-                    if (esz == 1) {
-                        float a = AdvSimdLanes.halfToFloat(inputBits);
-                        yield switch (op.op()) {
-                            case SQRT -> AdvSimdLanes.halfBits((float) Math.sqrt(a));
-                            case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
-                                    AdvSimdLanes.halfBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
-                            default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
-                        };
-                    }
-                    if (esz == 2) {
-                        float a = Float.intBitsToFloat((int) inputBits);
-                        yield switch (op.op()) {
-                            case SQRT -> AdvSimdLanes.floatBits((float) Math.sqrt(a));
-                            case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
-                                    AdvSimdLanes.floatBits((float) Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
-                            default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
-                        };
-                    }
-                    double a = Double.longBitsToDouble(inputBits);
-                    yield switch (op.op()) {
-                        case SQRT -> AdvSimdLanes.doubleBits(Math.sqrt(a));
-                        case RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI ->
-                                AdvSimdLanes.doubleBits(Ir64FpExecutor.roundToIntegral(a, RINT_DIRECTION_BY_OP[op.op().ordinal()]));
-                        default -> throw new IllegalStateException("tratado no ramo compartilhado/de conversão acima");
-                    };
-                }
+                // `RINTI`/`SQRT` não têm mnemônico A32 equivalente (Javadoc de
+                // {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp}) — `RINTI` é idêntico
+                // a `RINTN` neste emulador (sem `FPCR.RMode` modelado, mesma decisão do escalar
+                // `Fp64Round`, B8.5).
+                case SQRT -> esz == 1 ? AdvSimdLanes.halfBits((float) Math.sqrt(AdvSimdLanes.halfToFloat(inputBits)))
+                        : esz == 2 ? AdvSimdLanes.floatBits((float) Math.sqrt(Float.intBitsToFloat((int) inputBits)))
+                                : AdvSimdLanes.doubleBits(Math.sqrt(Double.longBitsToDouble(inputBits)));
+                case RINTI -> AdvSimdLanes.fpUnary(AdvSimdFpUnaryOp.RINTN, esz, inputBits);
             };
             fp.setElement(op.rd(), i, esz, resultBits);
         }

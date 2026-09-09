@@ -14,7 +14,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
         IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
         IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
-        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha {
+        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -154,6 +154,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_CRYPTO_AES = 95;
         /// B13.15: `SHA1H`/`SHA1SU1`/`SHA256SU0` — ver {@link NeonCryptoSha}.
         public static final int NEON_CRYPTO_SHA = 96;
+        /// B13.13: `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16` (conversão de precisão) — ver
+        /// {@link NeonFpConvertPrecision}.
+        public static final int NEON_FP_CONVERT_PRECISION = 97;
     }
 
     /// Operacao ALU generica.
@@ -2070,6 +2073,32 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// inicia o `Q`.
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_FP_UNARY; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" de PONTO FLUTUANTE, conversão de
+    /// PRECISÃO, sub-grupo `size==0b11` (B13.13): `VCVT_F16_F32`/`VCVT_B16_F32` (estreita, 4 lanes
+    /// F32 de `Vm` → 4 lanes F16/`bf16` de `Vd`) e `VCVT_F32_F16` (alarga, 4 lanes F16 de `Vm` → 4
+    /// lanes F32 de `Vd`). **Sem campo `quad`** (diferente de {@link NeonFpUnary}): o encoding real
+    /// é `@2misc_q0` — um dos dois lados é sempre `D` e o outro sempre `Q`, nunca as duas formas
+    /// D/D ou Q/Q.
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpConvertPrecision}), RFC B13.2 D1
+    /// — reaproveita `Float.floatToFloat16`/`float16ToFloat` (B19.4) e `bf16Bits`/`bf16ToFloat`
+    /// (B19.7) sem escrever conversão nova.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFpConvertPrecision(
+            /// Direção/formato da conversão.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpConvertPrecisionOp op,
+            /// Registrador de destino, em índice de `D` (`0`-`31`); nas formas estreitas é o `D`
+            /// único de saída, na forma larga (`WIDEN_F16`) é o `D` par que inicia o `Q` de saída.
+            int vd,
+            /// Registrador fonte, em índice de `D` (`0`-`31`); nas formas estreitas é o `D` par que
+            /// inicia o `Q` de entrada, na forma larga (`WIDEN_F16`) é o `D` único de entrada.
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FP_CONVERT_PRECISION; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VCMLA`/`VCADD` (B13.17, `FEAT_FCMA`): trata

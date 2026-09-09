@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
@@ -48,6 +49,15 @@ class NeonTwoRegMiscDecoderTest {
 
     private static final ArmArchitecture CRYPTO_ARCH =
             CRYPTO_FEATURES.withDecoderExtensions(neonFirst(CRYPTO_FEATURES));
+
+    /// B13.13: `BFLOAT16` é feature SEPARADA de `ADVANCED_SIMD` (mesma Armadilha 3 da B13.15) —
+    /// arquitetura própria com as duas, para os testes de `VCVT_B16_F32`.
+    private static final ArmArchitecture BFLOAT16_FEATURES =
+            ArmArchitecture.extending(ArmArchitecture.ARMV7A, "ARMv7-TestNeonBfloat16",
+                    ArmFeature.ADVANCED_SIMD, ArmFeature.VFPV3_D32, ArmFeature.BFLOAT16);
+
+    private static final ArmArchitecture BFLOAT16_ARCH =
+            BFLOAT16_FEATURES.withDecoderExtensions(neonFirst(BFLOAT16_FEATURES));
 
     private static List<DecoderExtension> neonFirst(ArmArchitecture features) {
         List<DecoderExtension> extensions = new ArrayList<>();
@@ -189,18 +199,12 @@ class NeonTwoRegMiscDecoderTest {
         assertNull(new NeonTwoRegMiscDecoder(ArmArchitecture.ARMV7A).tryDecode(word, 0, Condition.AL));
     }
 
-    // ── Espaço livre preservado: `VRINT*`(B13.13)/`VTBL`/`VDUP_scalar`(B13.14) caem em `null`, não
-    // `unimplemented` — para essa task poder registrar o próprio decoder depois. `AESE`/`SHA1H`
-    // fecharam nesta task (B13.15) — ver os testes de cripto abaixo ──
+    // ── Espaço livre preservado: `VTBL`/`VDUP_scalar`/`VEXT` (B13.14) caem em `null` porque o FRAME
+    // nem bate (vivem fora do sub-layout "2-reg-misc"). `VRINT*`/conversões (B13.13) e `AESE`/
+    // `SHA1H` (B13.15) fecharam o sub-espaço `size==0b11` — ver os testes dedicados abaixo ──
 
     @Test
     void unrecognizedSpaceStaysNullForFutureSiblingTasks() {
-        int[] wordsInsideFrame = {
-                0xf3ba0401, // vrintn.f32 d0,d1 (B13.13)
-        };
-        for (int w : wordsInsideFrame) {
-            assertNull(new NeonTwoRegMiscDecoder(NEON_FEATURES).tryDecode(w, 0, Condition.AL));
-        }
         // VTBL/VDUP_scalar/VEXT vivem no MESMO size==0b11 mas fora do sub-layout "2-reg-misc"
         // (bit11=1 ou bit24=0) — o frame nem bate.
         int[] wordsOutsideFrame = {
@@ -211,6 +215,17 @@ class NeonTwoRegMiscDecoderTest {
         for (int w : wordsOutsideFrame) {
             assertNull(new NeonTwoRegMiscDecoder(NEON_FEATURES).tryDecode(w, 0, Condition.AL));
         }
+    }
+
+    // ── B13.13: sub-espaço `size==0b11` fechado por completo — as duas lacunas verdadeiramente
+    // reservadas do encoding real viram `unimplemented` (G8), não mais `null` ──
+
+    @Test
+    void trulyReservedOpcodesAreUnimplementedNotNull() {
+        int reservedOpc1_00 = enc(0, 0b00, 0, 0b0011, 0, 1); // opc1=00,opc2=0011: reservado
+        int reservedOpc1_01 = enc(2, 0b01, 0, 0b1101, 0, 1); // opc1=01,opc2=1101: reservado
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(reservedOpc1_00).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(reservedOpc1_01).kind());
     }
 
     // ── Decodifica com op/esz/quad/registrador corretos ──
@@ -779,5 +794,209 @@ class NeonTwoRegMiscDecoderTest {
         core.vfp().setD(3, pack(0x33333333, 0x44444444));
         runCrypto(core, enc(2, 0b10, 0, 0b0111, 1, 2)); // sha256su0.32 q0,q1
         assertWords(core, 0, 0x04008001, 0x0600c002, 0x08010003, 0x64444448);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // B13.13 — conversões/arredondamento (VRINT*/VCVTA-N-P-M/VCVT_{SF,UF,FS,FU}/VCVT_F16_F32/
+    // VCVT_B16_F32/VCVT_F32_F16). Encodings golden conferidos com
+    // `arm-linux-gnueabihf-as -march=armv8.6-a` (WSL, GNU Binutils 2.46).
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    private static IrOp liftedOf(ArmArchitecture architecture, int word) {
+        DecodedInstruction decoded = decode(architecture, word);
+        assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
+        return liftSingleOp(decoded);
+    }
+
+    private static ArmCore newCore(ArmArchitecture architecture) {
+        return new ArmCore(new TestAddressSpace(64), SwiDispatcher.empty(), architecture);
+    }
+
+    private static void run(ArmArchitecture architecture, ArmCore core, int word) {
+        new IrBlockExecutor(architecture).executeOp(core, liftSingleOp(decode(architecture, word)), 0);
+    }
+
+    @Test
+    void precisionAndRoundingEncodingsMatchTheAssembler() {
+        assertEquals(0xf3ba0442, enc(2, 0b10, 0, 0b1000, 1, 2)); // vrintn.f32 q0,q1
+        assertEquals(0xf3ba04c2, enc(2, 0b10, 0, 0b1001, 1, 2)); // vrintx.f32 q0,q1
+        assertEquals(0xf3ba0542, enc(2, 0b10, 0, 0b1010, 1, 2)); // vrinta.f32 q0,q1
+        assertEquals(0xf3ba07c2, enc(2, 0b10, 0, 0b1111, 1, 2)); // vrintp.f32 q0,q1
+        assertEquals(0xf3ba06c2, enc(2, 0b10, 0, 0b1101, 1, 2)); // vrintm.f32 q0,q1
+        assertEquals(0xf3ba05c2, enc(2, 0b10, 0, 0b1011, 1, 2)); // vrintz.f32 q0,q1
+        assertEquals(0xf3b60602, enc(1, 0b10, 0, 0b1100, 0, 2)); // vcvt.f16.f32  d0,q1
+        assertEquals(0xf3b60701, enc(1, 0b10, 0, 0b1110, 0, 1)); // vcvt.f32.f16  q0,d1
+        assertEquals(0xf3b60642, enc(1, 0b10, 0, 0b1100, 1, 2)); // vcvt.bf16.f32 d0,q1
+        assertEquals(0xf3bb0042, enc(2, 0b11, 0, 0b0000, 1, 2)); // vcvta.s32.f32 q0,q1
+        assertEquals(0xf3bb00c2, enc(2, 0b11, 0, 0b0001, 1, 2)); // vcvta.u32.f32 q0,q1
+        assertEquals(0xf3bb0142, enc(2, 0b11, 0, 0b0010, 1, 2)); // vcvtn.s32.f32 q0,q1
+        assertEquals(0xf3bb01c2, enc(2, 0b11, 0, 0b0011, 1, 2)); // vcvtn.u32.f32 q0,q1
+        assertEquals(0xf3bb0242, enc(2, 0b11, 0, 0b0100, 1, 2)); // vcvtp.s32.f32 q0,q1
+        assertEquals(0xf3bb02c2, enc(2, 0b11, 0, 0b0101, 1, 2)); // vcvtp.u32.f32 q0,q1
+        assertEquals(0xf3bb0342, enc(2, 0b11, 0, 0b0110, 1, 2)); // vcvtm.s32.f32 q0,q1
+        assertEquals(0xf3bb03c2, enc(2, 0b11, 0, 0b0111, 1, 2)); // vcvtm.u32.f32 q0,q1
+        assertEquals(0xf3bb0642, enc(2, 0b11, 0, 0b1100, 1, 2)); // vcvt.f32.s32  q0,q1
+        assertEquals(0xf3bb06c2, enc(2, 0b11, 0, 0b1101, 1, 2)); // vcvt.f32.u32  q0,q1
+        assertEquals(0xf3bb0742, enc(2, 0b11, 0, 0b1110, 1, 2)); // vcvt.s32.f32  q0,q1
+        assertEquals(0xf3bb07c2, enc(2, 0b11, 0, 0b1111, 1, 2)); // vcvt.u32.f32  q0,q1
+    }
+
+    @Test
+    void rintDecodesWithRightOpAndQuad() {
+        IrOp.NeonFpUnary n = (IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1000, 1, 2));
+        assertEquals(AdvSimdFpUnaryOp.RINTN, n.op());
+        assertTrue(n.quad());
+        assertEquals(AdvSimdFpUnaryOp.RINTX, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1001, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTA, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1010, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTZ, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1011, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTM, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTP, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1111, 0, 1))).op());
+    }
+
+    @Test
+    void vcvtaNpmDecodesModeAndSignFromOpc2() {
+        assertEquals(AdvSimdFpUnaryOp.FCVTAS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0000, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTAU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0001, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTNS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0010, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTNU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0011, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTPS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0100, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTPU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTMS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0110, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTMU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0111, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.SCVTF, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1100, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.UCVTF, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTZS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1110, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTZU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1111, 0, 1))).op());
+    }
+
+    @Test
+    void precisionConvertDecodesNarrowAndWidenWithRightRegisters() {
+        IrOp.NeonFpConvertPrecision narrowF16 = (IrOp.NeonFpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1100, 0, 2));
+        assertEquals(AdvSimdFpConvertPrecisionOp.NARROW_F16, narrowF16.op());
+        assertEquals(0, narrowF16.vd());
+        assertEquals(2, narrowF16.vm());
+
+        IrOp.NeonFpConvertPrecision widen = (IrOp.NeonFpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1110, 0, 1));
+        assertEquals(AdvSimdFpConvertPrecisionOp.WIDEN_F16, widen.op());
+        assertEquals(0, widen.vd());
+        assertEquals(1, widen.vm());
+
+        IrOp.NeonFpConvertPrecision narrowBf16 =
+                (IrOp.NeonFpConvertPrecision) liftedOf(BFLOAT16_ARCH, enc(1, 0b10, 0, 0b1100, 1, 2));
+        assertEquals(AdvSimdFpConvertPrecisionOp.NARROW_BF16, narrowBf16.op());
+    }
+
+    @Test
+    void narrowBf16WithoutTheFeatureStaysUnimplementedButNarrowF16DoesNot() {
+        int bf16Word = enc(1, 0b10, 0, 0b1100, 1, 2); // vcvt.bf16.f32 d0,q1 (bit6=1)
+        int f16Word = enc(1, 0b10, 0, 0b1100, 0, 2);  // vcvt.f16.f32  d0,q1 (bit6=0, sem gate próprio)
+        // `NEON_ARCH` tem `ADVANCED_SIMD` mas NÃO `BFLOAT16` — só a forma `bf16` fica UNIMPLEMENTED.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(NEON_ARCH, bf16Word).kind());
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(NEON_ARCH, f16Word).kind());
+        // `BFLOAT16_ARCH` tem as duas features — ambas decodificam.
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(BFLOAT16_ARCH, bf16Word).kind());
+        assertEquals(InstructionKind.LIFTED_IR_OP, decode(BFLOAT16_ARCH, f16Word).kind());
+    }
+
+    @Test
+    void widenBit6SetIsUndefinedReservedEncoding() {
+        // `0xf3b60742`: MESMO opc2 (1110) de VCVT_F32_F16 mas com bit6=1 — `arm-linux-gnueabihf-as`
+        // real NÃO desmonta como nenhuma instrução (confirmado por experimento, ver Resultado).
+        int word = enc(1, 0b10, 0, 0b1110, 1, 2);
+        assertEquals(0xf3b60742, word);
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(word).kind());
+    }
+
+    @Test
+    void precisionConvertRequiresEvenQRegisterAndFixedSizeField() {
+        // `Vm`/`Vd` do lado `Q` têm que ser par.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(1, 0b10, 0, 0b1100, 0, 3)).kind()); // vm ímpar
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(1, 0b10, 1, 0b1110, 0, 1)).kind()); // vd ímpar
+        // `size` fixo em `01` — qualquer outro valor é reservado.
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(2, 0b10, 0, 0b1100, 0, 2)).kind());
+    }
+
+    @Test
+    void rintNRoundsHalfToEvenAndRintaRoundsHalfAwayFromZero() {
+        // 2.5 e -2.5: N(par)=2/-2, A(longe de zero)=3/-3, P(+inf)=3/-2, M(-inf)=2/-3, Z(zero)=2/-2.
+        ArmCore core = newCore();
+        core.vfp().setD(1, pack(Float.floatToIntBits(2.5f), Float.floatToIntBits(-2.5f)));
+
+        run(core, enc(2, 0b10, 0, 0b1000, 0, 1)); // vrintn.f32 d0,d1
+        assertEquals(2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        assertEquals(-2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) >>> 32)));
+
+        run(core, enc(2, 0b10, 0, 0b1010, 0, 1)); // vrinta.f32 d0,d1
+        assertEquals(3.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        assertEquals(-3.0f, Float.intBitsToFloat((int) (core.vfp().d(0) >>> 32)));
+
+        run(core, enc(2, 0b10, 0, 0b1111, 0, 1)); // vrintp.f32 d0,d1
+        assertEquals(3.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        assertEquals(-2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) >>> 32)));
+
+        run(core, enc(2, 0b10, 0, 0b1101, 0, 1)); // vrintm.f32 d0,d1
+        assertEquals(2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        assertEquals(-3.0f, Float.intBitsToFloat((int) (core.vfp().d(0) >>> 32)));
+
+        run(core, enc(2, 0b10, 0, 0b1011, 0, 1)); // vrintz.f32 d0,d1
+        assertEquals(2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        assertEquals(-2.0f, Float.intBitsToFloat((int) (core.vfp().d(0) >>> 32)));
+    }
+
+    @Test
+    void narrowF16RoundsAndOverflowsToInfinityWidenIsExact() {
+        ArmCore core = newCore();
+        // Lane 0 = 1.0005f (força arredondamento ao converter para F16); lane 1 = 70000.0f (maior
+        // que o F16 finito máximo 65504.0 -> estoura para +Infinito).
+        core.vfp().setD(2, pack(Float.floatToIntBits(1.0005f), Float.floatToIntBits(70000.0f)));
+        core.vfp().setD(3, pack(0, 0));
+        run(core, enc(1, 0b10, 0, 0b1100, 0, 2)); // vcvt.f16.f32 d0,q1
+        int lane0 = (int) (core.vfp().d(0) & 0xFFFFL);
+        int lane1 = (int) ((core.vfp().d(0) >>> 16) & 0xFFFFL);
+        assertEquals(Float.floatToFloat16(1.0005f) & 0xFFFF, lane0);
+        assertTrue(Float.isInfinite(Float.float16ToFloat((short) lane1))); // 70000 estoura F16.
+
+        int widenedLane0 = Float.floatToFloat16(1.5f) & 0xFFFF;
+        core.vfp().setD(1, pack(widenedLane0, 0));
+        run(core, enc(1, 0b10, 0, 0b1110, 0, 1)); // vcvt.f32.f16 q0,d1
+        assertEquals(1.5f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+    }
+
+    @Test
+    void vcvtaNpmProduceDifferentResultsOnTheSameFractionalValue() {
+        // 2.5: A(longe de zero)=3, N(par)=2, P(+inf)=3, M(-inf)=2 — quatro combinações possíveis,
+        // A/P concordam e N/M concordam aqui, mas por caminhos de arredondamento diferentes
+        // (a distinção real aparece no teste de VRINT* acima); aqui confirmamos que os 4 executam
+        // sem misturar sinal/modo.
+        ArmCore core = newCore();
+        core.vfp().setD(1, pack(Float.floatToIntBits(2.5f), 0));
+        run(core, enc(2, 0b11, 0, 0b0000, 0, 1)); // vcvtas.s32.f32 d0,d1
+        assertEquals(3, (int) (core.vfp().d(0) & 0xFFFF_FFFFL));
+        run(core, enc(2, 0b11, 0, 0b0010, 0, 1)); // vcvtns.s32.f32 d0,d1
+        assertEquals(2, (int) (core.vfp().d(0) & 0xFFFF_FFFFL));
+        run(core, enc(2, 0b11, 0, 0b0100, 0, 1)); // vcvtps.s32.f32 d0,d1
+        assertEquals(3, (int) (core.vfp().d(0) & 0xFFFF_FFFFL));
+        run(core, enc(2, 0b11, 0, 0b0110, 0, 1)); // vcvtms.s32.f32 d0,d1
+        assertEquals(2, (int) (core.vfp().d(0) & 0xFFFF_FFFFL));
+    }
+
+    @Test
+    void vcvtFsVersusFuSaturatesNegativeToZeroWhenUnsigned() {
+        ArmCore core = newCore();
+        core.vfp().setD(1, pack(Float.floatToIntBits(-4.0f), 0));
+        run(core, enc(2, 0b11, 0, 0b1110, 0, 1)); // vcvt.s32.f32 d0,d1 (VCVT_FS)
+        assertEquals(-4, (int) (core.vfp().d(0) & 0xFFFF_FFFFL));
+        run(core, enc(2, 0b11, 0, 0b1111, 0, 1)); // vcvt.u32.f32 d0,d1 (VCVT_FU)
+        assertEquals(0, (int) (core.vfp().d(0) & 0xFFFF_FFFFL)); // satura em 0, não sign-wrap.
+    }
+
+    @Test
+    void vcvtSfVersusUfInterpretsSignBitDifferently() {
+        ArmCore core = newCore();
+        core.vfp().setD(1, pack(0xFFFF_FFFF, 0)); // -1 assinado / 4294967295 sem sinal
+        run(core, enc(2, 0b11, 0, 0b1100, 0, 1)); // vcvt.f32.s32 d0,d1 (VCVT_SF)
+        assertEquals(-1.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
+        run(core, enc(2, 0b11, 0, 0b1101, 0, 1)); // vcvt.f32.u32 d0,d1 (VCVT_UF)
+        assertEquals(4294967295.0f, Float.intBitsToFloat((int) (core.vfp().d(0) & 0xFFFF_FFFFL)));
     }
 }

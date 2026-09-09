@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
@@ -29,31 +30,32 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// distinguem este layout de `VEXT`(bit24=`0`)/`VTBL`/`VDUP_scalar`(bit11=`1`), que vivem no MESMO
 /// `size==0b11` mas fora do sub-layout "2-reg-misc").
 ///
-/// **`size==0b11` hospeda QUATRO grupos** (B13.12-B13.15). Este decoder reconhece as 36 linhas do
-/// Escopo da B13.12 **e**, desde a B13.15, as 7 de cripto (`AESE`/`AESD`/`AESMC`/`AESIMC`/`SHA1H`/
-/// `SHA1SU1`/`SHA256SU0`, gate PRÓPRIO {@link ArmFeature#CRYPTO} — ver
-/// {@link #cryptoAesOperation}/{@link #cryptoShaOperation}); ainda devolve **`null`** (não
-/// `unimplemented`) para o que falta — conversões/arredondamento (`VRINT*`/`VCVT*`, B13.13, ainda
-/// não fechada nesta sessão) — para essa task poder registrar o próprio decoder depois.
-/// **Exceção deliberada à disciplina G8** (mesma de B13.7 para `Vimm_1r` e de B13.10 para
-/// `size==0b11`): quando B13.13 fechar (ÚLTIMO grupo pendente do sub-espaço), o `null` residual
-/// deve virar `unimplemented` neste frame — dívida que a B13.15 NÃO conseguiu pagar (B13.13 segue
-/// aberta), ver `## Resultado` da B13.15.
+/// **`size==0b11` hospedava QUATRO grupos** (B13.12-B13.15) — TODOS fechados desde B13.13. Este
+/// decoder reconhece as 36 linhas da B13.12, as 7 de cripto (`AESE`/`AESD`/`AESMC`/`AESIMC`/
+/// `SHA1H`/`SHA1SU1`/`SHA256SU0`, B13.15, gate PRÓPRIO {@link ArmFeature#CRYPTO} — ver
+/// {@link #cryptoAesOperation}/{@link #cryptoShaOperation}) e, desde B13.13, as 21 de conversão/
+/// arredondamento (`VRINT*`/`VCVTA/N/P/M{S,U}`/`VCVT_{SF,UF,FS,FU}` via {@link #fpUnaryOperation}
+/// estendido; `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16` em dois blocos dedicados em
+/// {@link #tryDecode}, gate PRÓPRIO {@link ArmFeature#BFLOAT16} só para `VCVT_B16_F32`).
+/// **Sub-espaço `size==0b11` COMPLETO**: o `null` que B13.12/
+/// B13.15 deixavam para B13.13 registrar seu próprio decoder virou `unimplemented` (G8), mesma
+/// disciplina de B13.7/B13.10 quando fecharam seus próprios espaços residuais.
 ///
 /// A SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
-/// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}/{@code narrowUnary}/{@code fpUnary} e,
-/// desde B13.15, {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#aes}/
-/// {@code shaTwoRegister}), RFC B13.2 D1 — migração completa em B13.12/B13.15 (ver Javadoc de
-/// {@link AdvSimdUnaryOp}/{@link AdvSimdFpUnaryOp}/{@link AdvSimdCryptoAesOp}/
-/// {@link AdvSimdCryptoShaOp}). `VSHLL` reaproveita 100% {@link IrOp.NeonShiftWidenImmediate}
-/// (B13.8): desloca por `esize` FIXO (`8 << esz`), não por um imediato — mesmo mecanismo de `SHLL`
-/// do A64 (B8.20).
+/// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}/{@code narrowUnary}/{@code fpUnary}/
+/// {@code fpConvertPrecision} e, desde B13.15, {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#aes}/
+/// {@code shaTwoRegister}), RFC B13.2 D1 — migração completa em B13.12/B13.13/B13.15 (ver Javadoc de
+/// {@link AdvSimdUnaryOp}/{@link AdvSimdFpUnaryOp}/{@link AdvSimdFpConvertPrecisionOp}/
+/// {@link AdvSimdCryptoAesOp}/{@link AdvSimdCryptoShaOp}). `VSHLL` reaproveita 100% {@link
+/// IrOp.NeonShiftWidenImmediate} (B13.8): desloca por `esize` FIXO (`8 << esz`), não por um
+/// imediato — mesmo mecanismo de `SHLL` do A64 (B8.20).
 ///
 /// Gate: {@link ArmFeature#ADVANCED_SIMD} (checado no topo de {@link #tryDecode}, comum a todo o
-/// decoder) **e**, só para as 7 de cripto, {@link ArmFeature#CRYPTO} À PARTE — um núcleo pode ter
-/// NEON sem a extensão cripto opcional (Armadilha 3 da B13.15), então essas 7 linhas ficam
-/// `UNIMPLEMENTED` explícito (não `null`) quando reconhecidas sem `CRYPTO`. **Nenhum preset declara
-/// nenhuma das duas** (B13.22 fecha isso), então sem `ADVANCED_SIMD` {@link #tryDecode} devolve
+/// decoder) **e**, só para as 7 de cripto, {@link ArmFeature#CRYPTO} À PARTE, **e**, só para
+/// `VCVT_B16_F32`, {@link ArmFeature#BFLOAT16} À PARTE — um núcleo pode ter NEON sem a extensão
+/// cripto/`bfloat16` opcional (Armadilha 3 da B13.15), então essas linhas ficam `UNIMPLEMENTED`
+/// explícito (não `null`) quando reconhecidas sem a feature própria. **Nenhum preset declara
+/// nenhuma das três** (B13.22 fecha isso), então sem `ADVANCED_SIMD` {@link #tryDecode} devolve
 /// `null` inteiro e o espaço cai no `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff,
 /// G3).
 ///
@@ -93,6 +95,18 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
     private static final int OPC2_VTRN = 0b0001;
     private static final int OPC2_VUZP = 0b0010;
     private static final int OPC2_VZIP_MAX = 0b0011;
+    /// `opc2` de `VCVT_F16_F32`/`VCVT_B16_F32` (B13.13, MESMO `opc1` de `VSHLL`/`VSWP`-família) —
+    /// discriminados entre si por `bit6` (`0`=`VCVT_F16_F32`, `1`=`VCVT_B16_F32`), não por `quad`
+    /// (Armadilha 3 da task: ambas as formas são `@2misc_q0`, `Vd`=`D` estreito, `Vm`=`Q` largo).
+    private static final int OPC2_VCVT_NARROW_PRECISION = 0b1100;
+    /// `opc2` de `VCVT_F32_F16` (B13.13) — só `bit6=0` existe (`Vd`=`Q` largo, `Vm`=`D` estreito);
+    /// `bit6=1` é reservado (confirmado via `arm-linux-gnueabihf-as`: `0xf3b60742` não desmonta como
+    /// nenhuma instrução real).
+    private static final int OPC2_VCVT_WIDEN_PRECISION = 0b1110;
+    /// Campo `size` (bits[19:18]) FIXO das 3 conversões de precisão (B13.13) — não é um seletor de
+    /// largura de elemento aqui (a largura já é implícita: F32↔F16/`bf16`), é parte da codificação
+    /// fixa da linha (`arm-linux-gnueabihf-as` real confirma `size=01` nas três).
+    private static final int SIZE_PRECISION_CONVERT = 0b01;
 
     private final ArmArchitecture architecture;
 
@@ -160,6 +174,30 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                     new IrOp.NeonNarrowUnary(narrowOp, size, vd, vm));
         }
 
+        if (opc1 == OPC1_NARROW_SHLL && opc2 == OPC2_VCVT_NARROW_PRECISION) {
+            // `VCVT_F16_F32`/`VCVT_B16_F32` (B13.13): `Vm` é o `Q` largo (F32) — precisa ser par.
+            if (size != SIZE_PRECISION_CONVERT || (vm & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            if (bit6 && !architecture.has(ArmFeature.BFLOAT16)) {
+                return unimplemented(address, raw, condition);
+            }
+            AdvSimdFpConvertPrecisionOp precisionOp = bit6
+                    ? AdvSimdFpConvertPrecisionOp.NARROW_BF16 : AdvSimdFpConvertPrecisionOp.NARROW_F16;
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonFpConvertPrecision(precisionOp, vd, vm));
+        }
+
+        if (opc1 == OPC1_NARROW_SHLL && opc2 == OPC2_VCVT_WIDEN_PRECISION) {
+            // `VCVT_F32_F16` (B13.13): `Vd` é o `Q` largo (F32) — precisa ser par; `bit6=1` é
+            // reservado (não existe forma "widen" de `bf16`).
+            if (size != SIZE_PRECISION_CONVERT || bit6 || (vd & 1) != 0) {
+                return unimplemented(address, raw, condition);
+            }
+            return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                    new IrOp.NeonFpConvertPrecision(AdvSimdFpConvertPrecisionOp.WIDEN_F16, vd, vm));
+        }
+
         boolean quad = bit6;
         AdvSimdFpUnaryOp fpOp = fpUnaryOperation(opc1, opc2);
         if (fpOp != null) {
@@ -213,10 +251,11 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                     new IrOp.NeonCryptoSha(shaOp, vd, vm));
         }
 
-        // Resto do sub-grupo `size==0b11` "2-reg-misc": conversões/arredondamento (B13.13, ainda
-        // aberta) — `null` para não roubar o espaço dela (G8 não se aplica aqui, ver Javadoc da
-        // classe).
-        return null;
+        // Sub-espaço `size==0b11` COMPLETO desde B13.13 (ver Javadoc da classe): o que sobra são as
+        // duas lacunas VERDADEIRAMENTE reservadas do encoding real (`opc1=00`/`opc2=0011` e
+        // `opc1=01`/`opc2=1101`, confirmadas contra o assembler real — nenhum mnemônico as produz)
+        // — G8 exige `unimplemented`, não `null`.
+        return unimplemented(address, raw, condition);
     }
 
     /// `(opc1, opc2, bit6)` → operação de {@link AdvSimdCryptoAesOp} — `opc1=00`, `opc2` `0110`
@@ -294,14 +333,15 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 default -> null;
             };
             // `opc1=10`: `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14), `VMOVN`-família/`VSHLL`,
-            // `SHA1SU1`/`SHA256SU0` (B13.15) — todos tratados ANTES de chegar aqui — e
-            // `VRINT*`/`VCVT_F16_F32` (B13.13, ainda aberta).
+            // `SHA1SU1`/`SHA256SU0` (B13.15), conversão de precisão (B13.13) — todos tratados ANTES
+            // de chegar aqui — e `VRINT*` (B13.13, {@link #fpUnaryOperation}).
             default -> null;
         };
     }
 
     /// `(opc1, opc2)` → operação FP de {@link AdvSimdFpUnaryOp} — `opc1=01` (comparações-com-zero/
-    /// `ABS`/`NEG`) e `opc1=11` (`RECPE`/`RSQRTE`). `null` para o resto.
+    /// `ABS`/`NEG`), `opc1=10` (B13.13, `VRINT*`) e `opc1=11` (`RECPE`/`RSQRTE` + B13.13,
+    /// `VCVTA/N/P/M{S,U}`/`VCVT_{SF,UF,FS,FU}`). `null` para o resto.
     private static AdvSimdFpUnaryOp fpUnaryOperation(int opc1, int opc2) {
         if (opc1 == 0b01) {
             return switch (opc2) {
@@ -316,10 +356,43 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 default -> null;
             };
         }
+        if (opc1 == OPC1_NARROW_SHLL) {
+            // B13.13: `VRINTN`/`VRINTX`/`VRINTA`/`VRINTZ`/`VRINTM`/`VRINTP` — confirmado bit a bit
+            // contra `arm-linux-gnueabihf-as` real (`vrintX.f32 qD,qM`); `opc2` 0000-0111 (VSHLL/
+            // VSWP-família/VMOVN-família/cripto SHA) e 1100/1110 (conversão de precisão) são
+            // tratados ANTES de chegar aqui, ver {@link #tryDecode}.
+            return switch (opc2) {
+                case 0b1000 -> AdvSimdFpUnaryOp.RINTN;
+                case 0b1001 -> AdvSimdFpUnaryOp.RINTX;
+                case 0b1010 -> AdvSimdFpUnaryOp.RINTA;
+                case 0b1011 -> AdvSimdFpUnaryOp.RINTZ;
+                case 0b1101 -> AdvSimdFpUnaryOp.RINTM;
+                case 0b1111 -> AdvSimdFpUnaryOp.RINTP;
+                default -> null;
+            };
+        }
         if (opc1 == 0b11) {
             return switch (opc2) {
                 case 0b1010 -> AdvSimdFpUnaryOp.RECPE;
                 case 0b1011 -> AdvSimdFpUnaryOp.RSQRTE;
+                // B13.13: `VCVTA/N/P/M{S,U}` — modo em `opc2[3:1]` (`A`=00,`N`=01,`P`=10,`M`=11),
+                // sinal em `opc2[0]` (`0`=`S`,`1`=`U`), confirmado bit a bit contra
+                // `arm-linux-gnueabihf-as` real.
+                case 0b0000 -> AdvSimdFpUnaryOp.FCVTAS;
+                case 0b0001 -> AdvSimdFpUnaryOp.FCVTAU;
+                case 0b0010 -> AdvSimdFpUnaryOp.FCVTNS;
+                case 0b0011 -> AdvSimdFpUnaryOp.FCVTNU;
+                case 0b0100 -> AdvSimdFpUnaryOp.FCVTPS;
+                case 0b0101 -> AdvSimdFpUnaryOp.FCVTPU;
+                case 0b0110 -> AdvSimdFpUnaryOp.FCVTMS;
+                case 0b0111 -> AdvSimdFpUnaryOp.FCVTMU;
+                // B13.13: `VCVT_SF`/`VCVT_UF`/`VCVT_FS`/`VCVT_FU` — modo de `FPSCR`; `VCVT_FS`/
+                // `VCVT_FU` (float→inteiro) SEMPRE truncam (ARM DDI 0406C: `VCVT` sem sufixo de
+                // modo NÃO consulta `FPSCR.RMode`), por isso mapeiam para `FCVTZS`/`FCVTZU`.
+                case 0b1100 -> AdvSimdFpUnaryOp.SCVTF;
+                case 0b1101 -> AdvSimdFpUnaryOp.UCVTF;
+                case 0b1110 -> AdvSimdFpUnaryOp.FCVTZS;
+                case 0b1111 -> AdvSimdFpUnaryOp.FCVTZU;
                 default -> null;
             };
         }

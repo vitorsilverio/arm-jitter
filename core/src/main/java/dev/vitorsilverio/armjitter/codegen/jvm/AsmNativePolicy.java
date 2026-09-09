@@ -163,6 +163,7 @@ public final class AsmNativePolicy {
             case IrOp.NeonUnary ignored -> false;
             case IrOp.NeonNarrowUnary ignored -> false;
             case IrOp.NeonFpUnary ignored -> false;
+            case IrOp.NeonFpConvertPrecision ignored -> false;
             // NEON `neon-shared` — `VCMLA`/`VCADD`/`VCMLA_scalar` (B13.17): idem.
             case IrOp.NeonComplex ignored -> false;
             case IrOp.NeonComplexByElement ignored -> false;
