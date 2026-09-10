@@ -33,8 +33,8 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 > **ASM 32 bits: 57 de 101** operações emitidas nativamente (mais 9 condicionais).
 > **Truffle 32 bits: 66 de 101** operações com nó especializado.
-> **ASM 64 bits: 46 de 118** `Kind` emitidos nativamente.
-> **Truffle 64 bits: 0 de 118** — o backend não existe (A10.8).
+> **ASM 64 bits: 46 de 120** `Kind` emitidos nativamente.
+> **Truffle 64 bits: 0 de 120** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
@@ -166,7 +166,7 @@ Cada `⚠️` acima recusa a emissão nativa só no caso listado; no resto é `�
 
 ## Tabela B — pipeline de 64 bits
 
-Linhas = os 118 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
+Linhas = os 120 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
 
 | `Kind` | ASM (`Ir64NativePolicy`) | Truffle |
 |---|---|---|
@@ -288,6 +288,8 @@ Linhas = os 118 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 | `CRYPTO_SM3_THREE_REGISTER_IMM2` | ❌ | ❌ |
 | `CRYPTO_SM4_ENCRYPT` | ❌ | ❌ |
 | `CRYPTO_SM4_KEY_UPDATE` | ❌ | ❌ |
+| `VECTOR_FP_MULTIPLY_ADD_LONG` | ❌ | ❌ |
+| `VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT` | ❌ | ❌ |
 
 ### `Kind` de 64 bits ainda interpretados
 
@@ -365,4 +367,6 @@ Entrada da escada C12.3-C12.6.
 - `CRYPTO_SM3_THREE_REGISTER_IMM2`
 - `CRYPTO_SM4_ENCRYPT`
 - `CRYPTO_SM4_KEY_UPDATE`
+- `VECTOR_FP_MULTIPLY_ADD_LONG`
+- `VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT`
 

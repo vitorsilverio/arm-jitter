@@ -1101,6 +1101,20 @@ public final class Aarch64Decoder {
     /// numérica de {@link #ADVSIMD_INT_RM_FP16_TWO_REG_MISC}, mas aplicada ao campo `opcode`, não a
     /// `Rm` — por isso uma constante própria em vez de reusar aquela).
     private static final int ADVSIMD_FP16_OPCODE_TO_SD_BIT = 0b1_1000;
+    /// B19.13 (`FEAT_FHM`): `opcode` (bits[15:11]) de "AdvSIMD three same (FP)" que `FMLAL_v`/
+    /// `FMLSL_v` (`u=0`) reaproveitam — medido bit a bit contra `a64.decode`/corpus real
+    /// (`arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml`).
+    private static final int ADVSIMD_FHM_THREE_SAME_OPCODE_LOW = 0b1_1101;
+    /// Idem, para `FMLAL2_v`/`FMLSL2_v` (`u=1`).
+    private static final int ADVSIMD_FHM_THREE_SAME_OPCODE_HIGH = 0b1_1001;
+    /// B19.13: bits[1:0] do `opcode` indexado (4 bits) reservados/sempre `0` em
+    /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` — qualquer valor fora de
+    /// `0000`/`0100`/`1000`/`1100` não é desta família.
+    private static final int ADVSIMD_FHM_INDEXED_OPCODE_RESERVED_MASK = 0b0011;
+    /// Bit3 do `opcode` indexado: `0`=`FMLAL_vi`/`FMLSL_vi`, `1`=`FMLAL2_vi`/`FMLSL2_vi`.
+    private static final int ADVSIMD_FHM_INDEXED_OPCODE_TOP_BIT = 0b1000;
+    /// Bit2 do `opcode` indexado: `0`=soma (`FMLAL*`), `1`=subtração (`FMLSL*`).
+    private static final int ADVSIMD_FHM_INDEXED_OPCODE_SUBTRACT_BIT = 0b0100;
 
     // ── B11.12 (`FEAT_SHA3`): `EOR3`/`BCAX` ("Cryptographic four-register") e `RAX1`/`XAR`
     // ── ("Cryptographic three-register, imm2") — espaço de encoding PRÓPRIO, nunca examinado por
@@ -3889,6 +3903,24 @@ public final class Aarch64Decoder {
         // ser desmontado em `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
         boolean a = ((esz >>> 1) & 1) != 0;
         int floatEsz = 2 + (esz & 1);
+        // B19.13 (`FEAT_FHM`): `FMLAL_v`/`FMLSL_v` (`opcode=0b1_1101`, `u=0`) e `FMLAL2_v`/
+        // `FMLSL2_v` (`opcode=0b1_1001`, `u=1`) reaproveitam o MESMO espaço "three same (FP)"
+        // normal, em chaves `(u,opcode)` que `decodeVectorFpThreeSameOpcode` não usa (conferido bit
+        // a bit: opcode `0b1_1101` só mapeia `key=0b100/0b110` = `FACGE`/`FACGT`, opcode `0b1_1001`
+        // só mapeia `key=0b000/0b010` = `MLA`/`MLS` — nenhum bate `key=0/0b010`/`0b100`/`0b110` nas
+        // combinações que `u`/`a` produzem aqui, sem colisão real). `a`(bit23) escolhe soma
+        // (`FMLAL`/`FMLAL2`) ou subtração (`FMLSL`/`FMLSL2`); `sz`(bit22, `esz&1`) é sempre `0` no
+        // encoding real — `1` é reservado (G8, cai no `throw` do fim deste método). Sem forma
+        // escalar real. `q` aqui controla largura de VERDADE (`Vd.2S`/`Vd.4S`), diferente de
+        // `BFMLALB`/`BFMLALT` (B19.7) — ver Javadoc de {@link Ir64Op.VectorFpMultiplyAddLong}.
+        if (!scalar && (esz & 1) == 0 && architecture.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
+            if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_LOW && !u) {
+                return new Ir64Op.VectorFpMultiplyAddLong(q, false, a, rd, rn, rm);
+            }
+            if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_HIGH && u) {
+                return new Ir64Op.VectorFpMultiplyAddLong(q, true, a, rd, rn, rm);
+            }
+        }
         // B19.2: a forma "three same (FP)" TAMBÉM tem forma AdvSIMD-escalar (`FMULX_s`/`FCMEQ_s`/
         // `FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s`) — MESMO triplo
         // `(u,a,opcode)` da vetorial (conferido contra corpus real devkitA64). As demais entradas de
@@ -4501,6 +4533,28 @@ public final class Aarch64Decoder {
                 // `SUDOT_vi`: `Rn` com sinal, `Rm` sem sinal (só existe indexada — não há `SUDOT_v`).
                 return new Ir64Op.VectorIntegerDotProductByElement(q, true, false, rd, rn, rmH, index);
             }
+        }
+        // B19.13 (`FEAT_FHM`): `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` hijacham o MESMO slot
+        // `sizeField=WORD` que `FMUL_vi`/`FMLA_vi`/`FMLS_vi`/`FMULX_vi`/`MUL_vi`/`MLA_vi`/`MLS_vi`
+        // usam no `switch` abaixo, mas com o layout `H:L:M`/`Rm` de 4 bits do ramo `HALFWORD`
+        // (MESMO truque de `BFMLAL_vi` acima, achado real: sem isto, `FMLAL_vi` cairia no `switch`
+        // de `WORD` com `Rm` de 5 bits/índice `H:L` errados) — checado ANTES do `switch` genérico
+        // por isso, não por colisão de `(u,opcode)` (os 4 valores abaixo não colidem com nenhuma
+        // chave de `decodeAdvancedSimdIndexedFp`/`Int` para `size=WORD`, conferido exaustivamente).
+        // `opcode`(bits[15:12]): `0000`=`FMLAL_vi`, `0100`=`FMLSL_vi`, `1000`=`FMLAL2_vi`,
+        // `1100`=`FMLSL2_vi` — bit3 é `top`, bit2 é `subtract`, bits[1:0] sempre `00` no encoding
+        // real (não checados como valor `U` separado: `U` sempre replica o bit `top`, achado medido
+        // contra corpus real, então basta o `opcode` cru). Sem forma escalar. Medido bit a bit
+        // contra `arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml` (WSL).
+        if (!scalar && sizeField == ADVSIMD_INDEXED_SIZE_WORD
+                && (opcode & ADVSIMD_FHM_INDEXED_OPCODE_RESERVED_MASK) == 0
+                && architecture.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
+            int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+            int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
+            int index = (h ? 0b100 : 0) | lm;
+            boolean top = (opcode & ADVSIMD_FHM_INDEXED_OPCODE_TOP_BIT) != 0;
+            boolean subtract = (opcode & ADVSIMD_FHM_INDEXED_OPCODE_SUBTRACT_BIT) != 0;
+            return new Ir64Op.VectorFpMultiplyAddLongByElement(q, top, subtract, rd, rn, rmH, index);
         }
         Ir64Op result = switch (sizeField) {
             // Doubleword: só ponto flutuante (`FMUL`/`FMLA`/`FMLS`/`FMULX` "d") — `Rm` de 5 bits,

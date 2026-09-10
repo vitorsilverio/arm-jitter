@@ -514,6 +514,34 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (B19.13) — ao contrário de `BFMLALB`/`BFMLALT` acima, `q`
+    /// aqui controla largura de VERDADE (`Vd.2S`/`Vd.4S`), não só a metade — escrita "destructive"
+    /// como o resto de {@link #executeThreeSame} quando `!q`.
+    static boolean executeFpMultiplyAddLong(Aarch64Core core, Ir64Op.VectorFpMultiplyAddLong op) {
+        Aarch64FpRegisters fp = core.fp();
+        int lanes = elementsPerRegister(op.q(), 2);
+        int laneOffset = op.top() ? lanes : 0;
+        AdvSimdLanes.fpFusedMultiplyAddLong(fp, op.subtract(), lanes,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER, laneOffset,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, laneOffset);
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` indexado (B19.13).
+    static boolean executeFpMultiplyAddLongByElement(Aarch64Core core, Ir64Op.VectorFpMultiplyAddLongByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        int lanes = elementsPerRegister(op.q(), 2);
+        int laneOffset = op.top() ? lanes : 0;
+        AdvSimdLanes.fpFusedMultiplyAddLongByElement(fp, op.subtract(), lanes,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER, laneOffset,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
     /// `BFMMLA` (B19.7) — `Q` fixo em `1` no encoding (sem forma de 64 bits), mesma disciplina de
     /// `SMMLA`/`UMMLA`/`USMMLA` (B19.12).
     static boolean executeFpMatrixMultiplyAccumulateBFloat16(

@@ -472,6 +472,12 @@ public final class Ir64BlockExecutor {
                     Ir64CryptoExecutor.executeSm4Encrypt(core, (Ir64Op.CryptoSm4Encrypt) op);
             case Ir64Op.Kind.CRYPTO_SM4_KEY_UPDATE ->
                     Ir64CryptoExecutor.executeSm4KeyUpdate(core, (Ir64Op.CryptoSm4KeyUpdate) op);
+            case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG ->
+                    Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLong(
+                            core, (Ir64Op.VectorFpMultiplyAddLong) op);
+            case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT ->
+                    Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongByElement(
+                            core, (Ir64Op.VectorFpMultiplyAddLongByElement) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

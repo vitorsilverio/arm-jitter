@@ -65,7 +65,7 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorIntegerDotProductByElement, Ir64Op.VectorIntegerMatrixMultiplyAccumulate,
         Ir64Op.CryptoSha512ThreeRegister, Ir64Op.CryptoSha512TwoRegister, Ir64Op.CryptoSm3ThreeRegister,
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
-        Ir64Op.CryptoSm4KeyUpdate {
+        Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -340,6 +340,12 @@ public sealed interface Ir64Op permits
         public static final int CRYPTO_SM4_ENCRYPT = 116;
         /// B19.10: `SM4EKEY` (`FEAT_SM4`) — ver {@link CryptoSm4KeyUpdate}.
         public static final int CRYPTO_SM4_KEY_UPDATE = 117;
+        /// B19.13: `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` vetorial (`FEAT_FHM`) — ver
+        /// {@link VectorFpMultiplyAddLong}.
+        public static final int VECTOR_FP_MULTIPLY_ADD_LONG = 118;
+        /// B19.13: `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` indexado (`FEAT_FHM`) — ver
+        /// {@link VectorFpMultiplyAddLongByElement}.
+        public static final int VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT = 119;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2876,6 +2882,58 @@ public sealed interface Ir64Op permits
             /// Índice do elemento `bf16` de {@link #rm} usado em TODA a operação (`0`-`7`).
             int index) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT; }
+    }
+
+    /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`, B19.13) — multiply-accumulate LONG FUNDIDO
+    /// (um único arredondamento, ao contrário de `BFMLALB`/`BFMLALT` acima): lanes `f16` de `Rn`/
+    /// `Rm` multiplicadas em `binary32` e acumuladas em `Vd`. Diferente de
+    /// {@link VectorFpMultiplyAddLongBFloat16}: aqui `Vd` NÃO é sempre `.4S` — `Vn`/`Rm` sempre
+    /// contribuem `lanes` elementos (`2` se `!q`, `4` se `q`) começando em {@link #top}`?lanes:0`
+    /// (bloco BAIXO/ALTO, mesma convenção de {@link Ir64VectorFpConvertPrecisionOp#FCVTN}
+    /// `2`-suffix), e `q` controla largura de VERDADE (`Vd.2S` ou `Vd.4S`), não a metade — medido
+    /// bit a bit contra `arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml` (WSL). Núcleo:
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpFusedMultiplyAddLong} (nasceu na
+    /// B13.20 para `VFML`/`VFMSL` de 32 bits, generalizada ali com `laneOffsetN`/`laneOffsetM`
+    /// independentes justamente para esta task reusar).
+    record VectorFpMultiplyAddLong(
+            /// `true` para `Vd.4S`/`Vn.4H`/`Vm.4H` (`lanes=4`), `false` para `Vd.2S`/`Vn.2H`/
+            /// `Vm.2H` (`lanes=2`).
+            boolean q,
+            /// `false`=`FMLAL`/`FMLSL` (bloco BAIXO de `Rn`/`Rm`), `true`=`FMLAL2`/`FMLSL2`
+            /// (bloco ALTO).
+            boolean top,
+            /// `false`=`FMLAL`/`FMLAL2` (soma), `true`=`FMLSL`/`FMLSL2` (subtração, acumula
+            /// `-a*b`).
+            boolean subtract,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG; }
+    }
+
+    /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` (`FEAT_FHM`, B19.13) — como
+    /// {@link VectorFpMultiplyAddLong}, mas {@link #rm} sempre contribui o MESMO elemento `f16`
+    /// {@link #index} (restrito a `V0`-`V15`, mesma disciplina de índice halfword de B8.19/B19.7/
+    /// B19.12).
+    record VectorFpMultiplyAddLongByElement(
+            /// Ver {@link VectorFpMultiplyAddLong#q}.
+            boolean q,
+            /// Ver {@link VectorFpMultiplyAddLong#top}.
+            boolean top,
+            /// Ver {@link VectorFpMultiplyAddLong#subtract}.
+            boolean subtract,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2 — só o elemento `f16` {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do elemento `f16` de {@link #rm} usado em TODA a operação (`0`-`7`).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT; }
     }
 
     /// `BFMMLA` (`FEAT_BF16`, B19.7) — multiplicação de matriz `2×4 · 4×2` de pares `bf16`,

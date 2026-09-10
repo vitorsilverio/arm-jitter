@@ -498,8 +498,15 @@ class Aarch64AdvSimdIndexedElementDecoderTest {
     @Test
     void fmlalIndexedFeatFhmDoesNotLeakThroughHalfPrecisionSlot() {
         // 4fb20020: fmlal v0.4s, v1.4h, v2.h[3] (`FEAT_FHM`) — achado que corrige a spec: NÃO usa
-        // `size=00` (usa `size=10`, `opcode=0000`, que não bate em nenhuma tabela) — recusado sob
-        // `FEAT_FP16` de qualquer forma, sem intersecção real com o slot desta task.
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4fb20020));
+        // `size=00` (usa `size=10`, `opcode=0000`), que não bate em nenhuma tabela DESTA task
+        // (B19.5.6, "AdvSIMD scalar/vector x indexed element" de meia precisão, `size=00`) — na
+        // época desta task o gate de `FEAT_FHM` ainda não existia, então continuava `unsupported`
+        // sob QUALQUER arquitetura. A **B19.13** implementou o gate no slot `size=10` PRÓPRIO (não
+        // no `size=00` que esta task abriu — sem intersecção real, exatamente como o comentário
+        // original media): `ARMV8_2_A` declara `FP16` E `FP16_FUSED_MULTIPLY_ADD_LONG` juntas (fato
+        // real do ARM), então a palavra agora DECODIFICA sob `FP16_DECODER`. Ver
+        // {@code Aarch64AdvSimdFhmDecoderTest} para a cobertura completa da B19.13.
+        Ir64Op fmlal = decodeWord(FP16_DECODER, 0x4fb20020);
+        assertEquals(Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT, fmlal.kind());
     }
 }

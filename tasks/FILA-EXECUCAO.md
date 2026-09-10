@@ -47,7 +47,26 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-09, após B13.20 fechar)
+## Onde estamos (atualizado 2026-09-09, após B19.13 fechar)
+
+**B19.13 FECHADA 2026-09-09** — A64 `FEAT_FHM` (`FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2`, vetorial +
+indexado, 8 linhas), gateadas por `Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG` (independente de
+`FP16`, testado). Reusou 100% `AdvSimdLanes.fpFusedMultiplyAddLong`/`fpFusedMultiplyAddLongByElement`
+que a **B13.20** deixou prontos — zero código novo no núcleo. **Achados de decode** (medidos via
+`arm-linux-gnu-as`/`objdump`, WSL, **e** via QEMU real `translate-a64.c`/`vec_helper.c` do commit
+fixado pela E11, buscados por `WebFetch` — sem toolchain devkitA64 nesta sessão): (1) a forma
+vetorial vive no espaço NORMAL de "three same (FP)" (`bit21=1`), não no subespaço de meia precisão
+que a B19.5.5 abriu, com `Q` sendo largura de VERDADE (não seletor de metade) e `top` vindo só de
+`U`; (2) a indexada vive em `sizeField=WORD` (não `size=00`) reaproveitando o layout `@qrrx_h` de
+`BFMLAL_vi`, interceptada ANTES do `switch` genérico; (3) `top` lê um BLOCO CONTÍGUO
+(`laneOffset=top?lanes:0`), não o padrão par/ímpar de `BFMLALB`/`BFMLALT` — confirma que a
+generalização `laneOffsetN`/`laneOffsetM` da B13.20 já era a certa. **Mesmo achado da B13.20 sobre
+o Aceite de fusão**: fundir×não-fundir nunca difere para `FMLAL`/`FMLSL` (produto de 2 lanes f16
+alargadas sempre exato em `float`) — testado diretamente em vez de forçar um caso impossível.
+Atualizou 2 testes pré-existentes (B19.5.5/B19.5.6) que assumiam `unsupported` sob `ARMV8_2_A` antes
+do gate existir. `Ir64Op.Kind` 117→119. `docs/COBERTURA-ISA.md` global 92%→93%,
+`docs/COBERTURA-JIT.md` regenerado (118→120 `Kind`, os 2 novos só interpretados). G5 verde nos 5
+consumidores. Ver **Resultado** na task.
 
 **B13.20 FECHADA 2026-09-09** — `neon-shared`: `VFML`/`VFMSL`/`VFML_scalar`/`VFMSL_scalar`
 (`FEAT_FHM`, 4 linhas). Nem esta nem a irmã A64 (**B19.13**, ainda ⬜) tinham semântica prévia —
@@ -101,17 +120,16 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Nenhuma dependência aberta. Lista revalidada em 2026-09-09 (sessão da B13.20) contra o
+Nenhuma dependência aberta. Lista revalidada em 2026-09-09 (sessão da B19.13) contra o
 `INDICE.md` das trilhas B/C — **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do
 escopo desta sessão), mantidos abaixo por não terem sido tocados; B13.13/B19.12 já ✅ removidos
-antes (ver nota da B19.5.6 acima). **B13.20 fechada nesta sessão, removida da lista.**
+antes (ver nota da B19.5.6 acima). **B19.13 fechada nesta sessão, removida da lista.**
 
 | Task | O que | Tamanho |
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
 | **[B19.11](trilha-b-arquiteturas/b19.11-a64-fp8.md)** | A64 `FEAT_FP8` (12 linhas) — única das três features (BF16/FP8/I8MM) sem constante em `Aarch64Feature` | 12 linhas |
-| **[B19.13](trilha-b-arquiteturas/b19.13-a64-fhm.md)** | A64 `FEAT_FHM` (`FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2`) — feature PRÓPRIA, não `FEAT_FP16`; pode reusar `AdvSimdLanes.fpFusedMultiplyAddLong`/`fpFusedMultiplyAddLongByElement` que a B13.20 deixou prontos | 8 linhas |
 | **[B13.21](trilha-b-arquiteturas/b13.21-neon-shared-bf16.md)** | `neon-shared`: `VDOT_b16`/`VFMA_b16`/`VMMLA_b16` + `_scal` (`FEAT_BF16`) — **fecha o arquivo** `neon-shared` (troca `null` por `unimplemented`, G8); B13.20 já reivindicou seu espaço, agora seguro | 5 linhas |
 
 **B13.21 já é pegável formalmente** (dependências B13.19 ✅/B19.7 ✅; **B13.20 fechou nesta sessão**,
@@ -141,7 +159,7 @@ declara `CRYPTO`). G5 verde nos 5 consumidores. Ver **Resultado** na task.
 — formalmente pegável, mas é um adaptador T32 melhor deixado para depois que `neon-shared` fechar,
 ver B13.21), B13.21 (dependência formal B13.19 ✅/B19.7 ✅, mas sua spec pede fechar o arquivo
 inteiro — pegar só depois de B13.20), B13.22 (preset, depende do arquivo `neon-shared` fechado),
-B19.9 (fechamento do épico B19, depende de B19.10-B19.13 — B19.10/B19.12 ✅, B19.11/B19.13 ainda
+B19.9 (fechamento do épico B19, depende de B19.10-B19.13 — B19.10/B19.12/B19.13 ✅, só B19.11 ainda
 ⬜).
 
 **Ordem sugerida**: qualquer uma das três acima. **B13.18 FECHADA 2026-09-05** — `VSDOT`/`VUDOT`/
@@ -253,7 +271,8 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 `B13.7` · `B13.8` · `B13.9` · `B13.10` · `B13.11` · `B19.4` · `B19.5.1` · `B19.5.2` · `E10` · `E11`
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
 `C12.4` · `C12.7` · `B19.8` · `B13.12` · `B13.17` · `B13.18` · `B19.5.3` · `B19.6` · `B19.7` ·
-`B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` · `B13.15` ·
+`B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` · `B13.15` · `B13.19` · `B13.20` · `B19.5.6` ·
+`B19.13` ·
 **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec

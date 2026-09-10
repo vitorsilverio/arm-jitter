@@ -919,9 +919,16 @@ class Aarch64AdvSimdFpVectorDecoderTest {
     @Test
     void halfPrecisionThreeSameDoesNotSwallowFhmNeighbor() {
         // `fmlal`/`fmlsl v0.4s, v1.4h, v2.4h` (`FEAT_FHM`, também `@qrrr_h`) vivem em `bit21=1`
-        // (medido: `0x4e22ec20`/`0x4ea2ec20`), fora do subespaço `bit21=0` que esta task abriu —
-        // continuam `unsupported` sob `FEAT_FP16` sem `FEAT_FHM` (G8, "Não inclui" da task).
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4e22ec20));
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP16_DECODER, 0x4ea2ec20));
+        // (medido: `0x4e22ec20`/`0x4ea2ec20`), fora do subespaço `bit21=0` que a B19.5.5 abriu —
+        // na época desta task (B19.5.5) o gate de `FEAT_FHM` ainda não existia, então continuavam
+        // `unsupported` sob QUALQUER arquitetura. A **B19.13** implementou o gate: `ARMV8_2_A`
+        // declara `FP16` E `FP16_FUSED_MULTIPLY_ADD_LONG` juntas (fato real do ARM, não escolha de
+        // teste), então as duas palavras agora DECODIFICAM sob `FP16_DECODER` — o que prova é que o
+        // subespaço `bit21=0` (FP16 comum) continua indiferente a elas, não mais que sejam
+        // rejeitadas. Ver {@code Aarch64AdvSimdFhmDecoderTest} para a cobertura completa da B19.13.
+        Ir64Op fmlal = decodeWord(FP16_DECODER, 0x4e22ec20);
+        assertEquals(Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG, fmlal.kind());
+        Ir64Op fmlsl = decodeWord(FP16_DECODER, 0x4ea2ec20);
+        assertEquals(Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG, fmlsl.kind());
     }
 }
