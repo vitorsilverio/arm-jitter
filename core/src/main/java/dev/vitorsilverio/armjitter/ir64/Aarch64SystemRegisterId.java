@@ -158,6 +158,21 @@ public enum Aarch64SystemRegisterId {
     /// ainda (nenhuma condição de exceção FP é detectada hoje) — o guest sempre lê o que ele mesmo
     /// escreveu, nunca um flag setado pelo hardware emulado.
     FPSR,
+    /// `FPMR` (`op0=3,op1=3,CRn=4,CRm=4,op2=2`, B19.11a, `FEAT_FPMR`) — Floating-point Mode
+    /// Register: MESMO `CRn`/`CRm` de {@link #FPCR}/{@link #FPSR} (só `op2` muda), mas **NÃO** é
+    /// "armazenamento puro" como eles — os campos são lidos DE VERDADE pelas 12 instruções de
+    /// `FEAT_FP8` (B19.11, que consome este registrador) para escolher formato (E4M3×E5M2) e fator
+    /// de escala em cada conversão. Confirmado byte a byte contra pseudocódigo real
+    /// (`developer.arm.com`/`scs.stanford.edu/~zyedidia/arm64`, ver `## Resultado` da task):
+    /// `LSCALE2[37:32]` (downscale do 2º stream FP8, só `[3:0]` consumidos por `F2CVTL`),
+    /// `NSCALE[31:24]` (escala COM SINAL ao converter PARA FP8, campo inteiro), `LSCALE[22:16]`
+    /// (downscale do 1º stream, só `[3:0]` consumidos por `F1CVTL`), `OSC[15]` (saturação de
+    /// overflow nas conversões FP8: `0`=Infinity/NaN, `1`=máximo normal), `OSM[14]` (idem para
+    /// multiplicação FP8, fora do escopo de B19.11/B19.11a), `F8D[8:6]` (formato de DESTINO ao
+    /// converter PARA FP8), `F8S2[5:3]`/`F8S1[2:0]` (formato do 2º/1º operando FP8; `0b000`=E5M2,
+    /// `0b001`=E4M3). Gateado pela mesma `Aarch64Feature.FP8` que `FEAT_FPMR` implica (não existe
+    /// preset/consumidor que precise de `FPMR` sem `FEAT_FP8` neste emulador).
+    FPMR,
     /// `CTR_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=1`) — Cache Type Register, somente leitura
     /// (`PL0_R` no hardware real). Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3
     /// (`0x84448004`, mesmo alvo de {@link #MIDR_EL1}, task B6.10) — apesar de viver no mesmo

@@ -144,6 +144,27 @@ public final class Aarch64Core {
     /// {@link Aarch64SystemRegisterId#DCZID_EL0}).
     private static final long DCZID_EL0_VALUE = 0x10L;
 
+    // ── B19.11a: campos de `FPMR` (`ARM DDI 0487`, confirmados byte a byte contra pseudocódigo
+    // ── real em `## Resultado` da task) — ver javadoc de {@link Aarch64SystemRegisterId#FPMR}.
+    private static final int FPMR_F8S1_SHIFT = 0;
+    private static final int FPMR_F8S2_SHIFT = 3;
+    private static final int FPMR_F8D_SHIFT = 6;
+    // `OSM[14]` (saturação de overflow na multiplicação FP8) fica sem getter — sem consumidor,
+    // `FMLAL`/`FDOT` continuam fora do escopo mesmo depois desta task (ver B19.11).
+    private static final int FPMR_OSC_BIT = 15;
+    private static final int FPMR_LSCALE_SHIFT = 16;
+    /// `F1CVTL` só consome os 4 bits BAIXOS de `LSCALE` (confirmado via pseudocódigo real: `2^-
+    /// UInt(FPMR.LSCALE[3:0])`), apesar do campo arquitetural ter 7 bits (`[22:16]`).
+    private static final long FPMR_LSCALE_CONSUMED_MASK = 0xFL;
+    private static final int FPMR_NSCALE_SHIFT = 24;
+    /// `NSCALE` é lido POR INTEIRO como inteiro COM SINAL de 8 bits (`SInt(FPMR.NSCALE)`,
+    /// confirmado via pseudocódigo real) — ao contrário de `LSCALE`/`LSCALE2`, não há truncamento.
+    private static final long FPMR_NSCALE_MASK = 0xFFL;
+    private static final int FPMR_LSCALE2_SHIFT = 32;
+    /// `F2CVTL` só consome os 4 bits BAIXOS de `LSCALE2` (`2^-UInt(FPMR.LSCALE2[3:0])`), mesma
+    /// disciplina de {@link #FPMR_LSCALE_CONSUMED_MASK}.
+    private static final long FPMR_LSCALE2_CONSUMED_MASK = 0xFL;
+
     private final long[] x = new long[GENERAL_REGISTER_COUNT];
     /// `SP_EL0` — pilha de EL0. Só usada por {@link #sp()}/{@link #setSp(long)} quando
     /// {@code !exceptionState.inEl1()}; dentro de um handler de abort (B6.6.4), as duas leem/
@@ -186,6 +207,11 @@ public final class Aarch64Core {
     /// {@link Aarch64SystemRegisterId#FPCR}/{@link Aarch64SystemRegisterId#FPSR}).
     private long fpcr;
     private long fpsr;
+    /// `FPMR` (B19.11a) — AO CONTRÁRIO de {@link #fpcr}/{@link #fpsr}, os campos deste registrador
+    /// são lidos DE VERDADE (ver getters abaixo) pela `FEAT_FP8` (B19.11) — não é armazenamento
+    /// decorativo. `RES0` fora dos campos documentados não é mascarado na escrita (só documentado,
+    /// mesma disciplina de {@link Aarch64SystemRegisterId#FPMR}).
+    private long fpmr;
     /// `DIT`/`SSBS`/`TCO`/`SPSel`/`PAN`/`UAO`/`ALLINT` (B8.17) — armazenamento puro, sem efeito
     /// real (ver javadoc de cada constante em {@link Aarch64SystemRegisterId}).
     private long dit;
@@ -424,8 +450,8 @@ public final class Aarch64Core {
                  ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
-                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN, UAO,
-                 ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED -> true;
+                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
+                 UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED -> true;
             default -> false;
         };
     }
@@ -463,6 +489,7 @@ public final class Aarch64Core {
             case TPIDRRO_EL0 -> tpidrRoEl0;
             case FPCR -> fpcr;
             case FPSR -> fpsr;
+            case FPMR -> fpmr;
             case NZCV -> pstate.toNzcvRegisterFormat();
             case DAIF -> pstate.toDaifRegisterFormat();
             case DIT -> dit;
@@ -493,6 +520,7 @@ public final class Aarch64Core {
             case TPIDRRO_EL0 -> tpidrRoEl0 = value;
             case FPCR -> fpcr = value;
             case FPSR -> fpsr = value;
+            case FPMR -> fpmr = value;
             case NZCV -> pstate.setFromNzcvRegisterFormat(value);
             case DAIF -> pstate.setFromDaifRegisterFormat(value);
             case DIT -> dit = value;
@@ -506,6 +534,59 @@ public final class Aarch64Core {
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }
+    }
+
+    /// `FPMR.F8S1` (B19.11a) — formato do PRIMEIRO operando/stream FP8 (`F1CVTL`/`BF1CVTL`
+    /// consultam este campo). Valores reservados (`0b010`-`0b111`) decodificados pelo bit 0, mesma
+    /// disciplina "tolerante" do resto deste core (ver javadoc de {@link Aarch64Fp8Format}).
+    public Aarch64Fp8Format fp8SourceFormat1() {
+        return decodeFp8Format(fpmr >>> FPMR_F8S1_SHIFT);
+    }
+
+    /// `FPMR.F8S2` (B19.11a) — formato do SEGUNDO operando/stream FP8 (`F2CVTL`/`BF2CVTL`
+    /// consultam este campo), mesma disciplina de {@link #fp8SourceFormat1()}.
+    public Aarch64Fp8Format fp8SourceFormat2() {
+        return decodeFp8Format(fpmr >>> FPMR_F8S2_SHIFT);
+    }
+
+    /// `FPMR.F8D` (B19.11a) — formato de DESTINO das conversões PARA FP8 (`FCVTN_bh`/`FCVTN_bs`
+    /// consultam este campo), mesma disciplina de {@link #fp8SourceFormat1()}.
+    public Aarch64Fp8Format fp8DestinationFormat() {
+        return decodeFp8Format(fpmr >>> FPMR_F8D_SHIFT);
+    }
+
+    private static Aarch64Fp8Format decodeFp8Format(long fieldShiftedToBit0) {
+        return (fieldShiftedToBit0 & 1) == 0 ? Aarch64Fp8Format.E5M2 : Aarch64Fp8Format.E4M3;
+    }
+
+    /// `FPMR.NSCALE` (B19.11a) — fator de escala COM SINAL aplicado ANTES de converter outro
+    /// formato PARA FP8 (`FCVTN_bh`/`FCVTN_bs`: `2^SInt(FPMR.NSCALE)`). Campo inteiro de 8 bits,
+    /// sem truncamento (ao contrário de {@link #fp8WidenScale()}/{@link #fp8WidenScale2()}) —
+    /// confirmado via pseudocódigo real, ver `## Resultado` da task.
+    public int fp8NarrowScale() {
+        return (byte) ((fpmr >>> FPMR_NSCALE_SHIFT) & FPMR_NSCALE_MASK);
+    }
+
+    /// `FPMR.LSCALE[3:0]` (B19.11a) — fator de downscale SEM SINAL aplicado DEPOIS de converter o
+    /// PRIMEIRO stream FP8 para outro formato (`F1CVTL`: `2^-UInt(FPMR.LSCALE[3:0])`). Só os 4 bits
+    /// baixos do campo arquitetural de 7 bits são consumidos (confirmado via pseudocódigo real —
+    /// ver Armadilha 2 da task B19.11a).
+    public int fp8WidenScale() {
+        return (int) ((fpmr >>> FPMR_LSCALE_SHIFT) & FPMR_LSCALE_CONSUMED_MASK);
+    }
+
+    /// `FPMR.LSCALE2[3:0]` (B19.11a) — mesmo papel de {@link #fp8WidenScale()}, mas para o
+    /// SEGUNDO stream FP8 (`F2CVTL`: `2^-UInt(FPMR.LSCALE2[3:0])`). Mapeamento `F1CVTL`→`LSCALE` ×
+    /// `F2CVTL`→`LSCALE2` confirmado via pseudocódigo real (Armadilha 3 da task B19.11a, resolvida
+    /// nesta sessão — ver `## Resultado`).
+    public int fp8WidenScale2() {
+        return (int) ((fpmr >>> FPMR_LSCALE2_SHIFT) & FPMR_LSCALE2_CONSUMED_MASK);
+    }
+
+    /// `FPMR.OSC` (B19.11a) — `true` quando overflow numa conversão PARA FP8 satura no máximo
+    /// normal do formato de destino, em vez do default arquitetural (`Infinity`/`NaN`).
+    public boolean fp8OverflowSaturatesToMaxNormal() {
+        return ((fpmr >>> FPMR_OSC_BIT) & 1) != 0;
     }
 
     /// Linha de IRQ nível-sensível (B6.6.7) — ver javadoc do campo {@link #interruptLine}.

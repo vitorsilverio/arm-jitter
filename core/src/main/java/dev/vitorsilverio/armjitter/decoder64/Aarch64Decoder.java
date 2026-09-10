@@ -496,6 +496,9 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_FPCR_FPSR = 4;
     private static final int SYSREG_OP2_FPCR = 0;
     private static final int SYSREG_OP2_FPSR = 1;
+    // B19.11a: FPMR reaproveita o MESMO CRn/CRm de FPCR/FPSR (só op2 muda) — `FEAT_FPMR`, que
+    // `FEAT_FP8` implica (gateado pela mesma feature, ver Aarch64SystemRegisterId#FPMR).
+    private static final int SYSREG_OP2_FPMR = 2;
     // B8.16: CNTVCT_EL0 reaproveita CRm=0 do timer físico (só op2 muda); CNTV_TVAL/CTL/CVAL_EL0
     // são o timer VIRTUAL, mesmo layout de CNTP_* (B6.6.7) em CRm=3 em vez de CRm=2.
     private static final int SYSREG_OP2_CNTVCT = 2;
@@ -5640,6 +5643,11 @@ public final class Aarch64Decoder {
         if (register == Aarch64SystemRegisterId.DIT && !architecture.has(Aarch64Feature.DIT)) {
             throw unsupported(word, address);
         }
+        // B19.11a: FPMR é FEAT_FPMR, que FEAT_FP8 implica — mesma feature que gateia as 12
+        // instruções de conversão da B19.11 (não há preset que precise de FPMR sem FEAT_FP8).
+        if (register == Aarch64SystemRegisterId.FPMR && !architecture.has(Aarch64Feature.FP8)) {
+            throw unsupported(word, address);
+        }
         return new Ir64Op.SystemRegister(read, register, rt);
     }
 
@@ -5835,6 +5843,9 @@ public final class Aarch64Decoder {
             }
             if (op2 == SYSREG_OP2_FPSR) {
                 return Aarch64SystemRegisterId.FPSR;
+            }
+            if (op2 == SYSREG_OP2_FPMR) {
+                return Aarch64SystemRegisterId.FPMR;
             }
             return null;
         }

@@ -47,7 +47,21 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-09, após B19.13 fechar)
+## Onde estamos (atualizado 2026-09-10, após B19.11a fechar)
+
+**B19.11a FECHADA 2026-09-10** — `FPMR` (Floating-point Mode Register) via `MRS`/`MSR`, gateado por
+`Aarch64Feature.FP8` (mesmo `CRn`/`CRm` de `FPCR`/`FPSR`, só `op2` muda). Nasceu de uma sessão
+anterior no MESMO dia que tentou executar a **B19.11** e mediu que TODAS as 12 linhas de
+`FEAT_FP8` (não só as de acumulação) leem campos de `FPMR` de verdade — ao contrário de
+`FPCR`/`FPSR` (B8.15, armazenamento puro), aqui os 7 getters de campo (`fp8SourceFormat1/2`,
+`fp8DestinationFormat`, `fp8NarrowScale`, `fp8WidenScale`/`fp8WidenScale2`,
+`fp8OverflowSaturatesToMaxNormal`) têm que decompor o valor corretamente, senão a B19.11 não
+destrava nada. As duas Armadilhas que a spec deixou em aberto (mapeamento `F1CVTL`→`LSCALE` ×
+`F2CVTL`→`LSCALE2`, e se `LSCALE`/`LSCALE2` usam só `[3:0]`) foram resolvidas por medição real
+(`WebSearch`/`WebFetch` contra pseudocódigo ARM), não por suposição. Encoding confirmado byte a
+byte via `aarch64-linux-gnu-as` real (WSL). `docs/COBERTURA-ISA.md` inalterado (MRS/MSR register é
+decode genérico, sem linha própria na tabela — mesmo achado de B8.15). **Destrava a B19.11**, agora
+pegável. Ver **Resultado** na task.
 
 **B19.13 FECHADA 2026-09-09** — A64 `FEAT_FHM` (`FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2`, vetorial +
 indexado, 8 linhas), gateadas por `Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG` (independente de
@@ -129,7 +143,7 @@ antes (ver nota da B19.5.6 acima). **B19.13 fechada nesta sessão, removida da l
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B19.11](trilha-b-arquiteturas/b19.11-a64-fp8.md)** | A64 `FEAT_FP8` (12 linhas) — única das três features (BF16/FP8/I8MM) sem constante em `Aarch64Feature` | 12 linhas |
+| **[B19.11](trilha-b-arquiteturas/b19.11-a64-fp8.md)** | A64 `FEAT_FP8` (12 linhas) — única das três features (BF16/FP8/I8MM) sem constante em `Aarch64Feature`. **Desbloqueada 2026-09-10 pela B19.11a** (getters reais de `FPMR` prontos) | 12 linhas |
 | **[B13.21](trilha-b-arquiteturas/b13.21-neon-shared-bf16.md)** | `neon-shared`: `VDOT_b16`/`VFMA_b16`/`VMMLA_b16` + `_scal` (`FEAT_BF16`) — **fecha o arquivo** `neon-shared` (troca `null` por `unimplemented`, G8); B13.20 já reivindicou seu espaço, agora seguro | 5 linhas |
 
 **B13.21 já é pegável formalmente** (dependências B13.19 ✅/B19.7 ✅; **B13.20 fechou nesta sessão**,
@@ -272,7 +286,7 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
 `C12.4` · `C12.7` · `B19.8` · `B13.12` · `B13.17` · `B13.18` · `B19.5.3` · `B19.6` · `B19.7` ·
 `B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` · `B13.15` · `B13.19` · `B13.20` · `B19.5.6` ·
-`B19.13` ·
+`B19.13` · `B19.11a` ·
 **épico `B22` inteiro**.
 
 ### O que AINDA precisa de spec
