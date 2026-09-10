@@ -47,6 +47,18 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-10, após B19.17 fechar)
+
+**B19.17 FECHADA 2026-09-10** — `FEAT_CRC32` (`CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}`, 8 células), o
+degrau mais barato do lote nomeado pela B19.9. Confirmado que **não existe núcleo de CRC-32 do
+lado 32 bits** (a spec cogitava reuso); implementado direto no executor A64 (algoritmo bit-a-bit
+refletido padrão, sem complemento de entrada/saída — quem chama fornece `Wn=~0` para reproduzir o
+CRC-32 "clássico"). Decode no MESMO subgrupo de `PACGA` (`opc2=00`), campo de 6 bits reaproveitado
+(`top4` distingue `CRC32`/`CRC32C`, `size` distingue B/H/W/`X`); `X` é a ÚNICA forma com `sf=1`,
+qualquer outra combinação é reservada (G8). Vetores golden clássicos batidos exatamente
+(`0xCBF43926` IEEE, `0xE3069283` Castagnoli). `docs/COBERTURA-ISA.md`: `ARMv8.1-A` 98%→99%.
+`Ir64Op.Kind` 121→122. G5 completo verde nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-10, após B19.9 fechar o épico B19)
 
 **B19.9 FECHADA 2026-09-10** — fechamento do épico B19 (zero decode). Remedição: `ARMv8.0-A`
@@ -186,7 +198,6 @@ além da própria B19.9 (✅) e, no caso da família FP8, de B19.11/B19.11a (✅
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B19.17](trilha-b-arquiteturas/b19.17-a64-crc32.md)** | `FEAT_CRC32` — puro cálculo, sem estado/aliasing, degrau mais barato do lote | 8 células |
 | **[B19.26](trilha-b-arquiteturas/b19.26-a64-fp16-residual.md)** | `FEAT_FP16` residual (`FMOV`/`FCVT` escalares h↔s/d) — reusa conversões já existentes | 6 células |
 | **[B19.11c](trilha-b-arquiteturas/b19.11c-a64-fp8-dot-2way.md)** / **[B19.11d](trilha-b-arquiteturas/b19.11d-a64-fp8-dot-4way.md)** | `FDOT_hb`/`FDOT_sb` (FP8 dot product 2-way/4-way) | 2+2 células |
 | demais degraus B19.14-B19.29/B19.11b/e | ver tabela completa abaixo | — |

@@ -1550,6 +1550,22 @@ public final class Aarch64Decoder {
     // ── B19.6 bloco C: `PACGA` (`FEAT_PAuth`) — MESMO subgrupo "Data-processing (2 source)" de ────
     // ── SDIV/UDIV/LSLV/.../CRC32* (opc2=00), opcode(15:10)=`0b001100`, fixo (`Rm`/`Rn`/`Rd` normais, ─
     // ── `@rrr`). Medido bit a bit contra corpus real (`aarch64-none-elf-as`, `.arch armv8.3-a`). ────
+    // ── B19.17: `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (`FEAT_CRC32`) — MESMO subgrupo "Data-processing
+    // ── (2 source)" (opc2=00). `top4` (bits[15:12], os 4 bits altos do campo opcode de 6 bits que
+    // ── PACGA já lê como `pacgaOpcode6`) distingue `CRC32`(`0b0100`) de `CRC32C`(`0b0101`); `size`
+    // ── (bits[11:10]) distingue B/H/W/`X`(sf=1). Medido bit a bit contra corpus real
+    // ── (`aarch64-linux-gnu-as -march=armv8.1-a`, WSL). ──────────────────────────────────────────
+    private static final int CRC32_TOP4_SHIFT = 2;
+    private static final int CRC32_TOP4_MASK = 0b1111;
+    private static final int CRC32_TOP4_PATTERN = 0b0100;
+    private static final int CRC32C_TOP4_PATTERN = 0b0101;
+    private static final int CRC32_SIZE_SHIFT = 10;
+    private static final int CRC32_SIZE_MASK = 0b11;
+    private static final int CRC32_SIZE_BYTE = 0b00;
+    private static final int CRC32_SIZE_HALFWORD = 0b01;
+    private static final int CRC32_SIZE_WORD = 0b10;
+    private static final int CRC32_SIZE_DOUBLEWORD = 0b11;
+
     private static final int PACGA_OPCODE_SHIFT = 10;
     private static final int PACGA_OPCODE_6BIT_MASK = 0b11_1111;
     private static final int PACGA_OPCODE_PATTERN = 0b00_1100;
@@ -2572,7 +2588,14 @@ public final class Aarch64Decoder {
             if (pacgaOpcode6 == PACGA_OPCODE_PATTERN) {
                 return decodePacga(word, address);
             }
-            // opcode restante: CRC32*/SMAX/SMIN/UMAX/UMIN (fora do escopo, ver isa-nao-aplicavel.tsv).
+            // B19.17: `CRC32*`/`CRC32C*` — `top4` reaproveita o MESMO campo `pacgaOpcode6` (bits
+            // [15:10]) que `PACGA` já lê acima; os 4 bits altos (`>>>2`) escolhem o polinômio.
+            int crc32Top4 = (pacgaOpcode6 >>> CRC32_TOP4_SHIFT) & CRC32_TOP4_MASK;
+            if (crc32Top4 == CRC32_TOP4_PATTERN || crc32Top4 == CRC32C_TOP4_PATTERN) {
+                return decodeCrc32(word, address, crc32Top4 == CRC32C_TOP4_PATTERN);
+            }
+            // opcode restante: SMAX/SMIN/UMAX/UMIN (`FEAT_CSSC`, fora do escopo desta task — ver
+            // B19.21).
             throw unsupported(word, address);
         }
         if (muldivFixed8 == ADD_SUB_CARRY_FIXED_PATTERN) {
@@ -2610,6 +2633,33 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.PointerAuthGeneric(rd, rn, rm);
+    }
+
+    /// `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (B19.17, `FEAT_CRC32`) — `size`(bits[11:10]) escolhe a
+    /// largura do DADO (`Rm`); a forma `X` (`size=0b11`) é a ÚNICA que exige `sf=1` (lê `Rm` como
+    /// `X`) — qualquer outra combinação `sf`/`size` é encoding reservado (G8: recusar, não
+    /// confundir com uma forma válida).
+    private Ir64Op decodeCrc32(int word, long address, boolean castagnoli) {
+        if (!architecture.has(Aarch64Feature.CRC32)) {
+            throw unsupported(word, address);
+        }
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int size = (word >>> CRC32_SIZE_SHIFT) & CRC32_SIZE_MASK;
+        int dataWidthBits = switch (size) {
+            case CRC32_SIZE_BYTE -> Byte.SIZE;
+            case CRC32_SIZE_HALFWORD -> Short.SIZE;
+            case CRC32_SIZE_WORD -> Integer.SIZE;
+            case CRC32_SIZE_DOUBLEWORD -> Long.SIZE;
+            default -> throw new AssertionError("size de 2 bits só tem 4 valores possíveis");
+        };
+        boolean doublewordForm = size == CRC32_SIZE_DOUBLEWORD;
+        if (wide != doublewordForm) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Crc32(rd, rn, rm, dataWidthBits, castagnoli);
     }
 
     /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2, "Data-processing

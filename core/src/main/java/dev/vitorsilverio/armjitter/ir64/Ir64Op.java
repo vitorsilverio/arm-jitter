@@ -66,7 +66,7 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSha512ThreeRegister, Ir64Op.CryptoSha512TwoRegister, Ir64Op.CryptoSm3ThreeRegister,
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
         Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
-        Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8 {
+        Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -352,6 +352,8 @@ public sealed interface Ir64Op permits
         /// B19.11: `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`FEAT_FP8`) — ver
         /// {@link VectorFpConvertFromFp8}.
         public static final int VECTOR_FP_CONVERT_FROM_FP8 = 121;
+        /// B19.17: `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (`FEAT_CRC32`) — ver {@link Crc32}.
+        public static final int CRC32 = 122;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2777,6 +2779,28 @@ public sealed interface Ir64Op permits
             /// `true` para `X` (64 bits), `false` para `W` (32, zero-estendido).
             boolean wide) implements Ir64Op {
         @Override public int kind() { return Kind.ABS_GENERAL; }
+    }
+
+    /// `CRC32{B,H,W,X} Wd, Wn, Rm` / `CRC32C{B,H,W,X} Wd, Wn, Rm` (`ARM DDI 0487 C6.2.75/76`,
+    /// B19.17, `FEAT_CRC32`) — checksum CRC-32 (polinômio IEEE 802.3) ou CRC-32C (Castagnoli, o
+    /// mesmo do iSCSI/`SSE4.2 CRC32C`) sobre registrador geral. `Wd`/`Wn` são SEMPRE `W` (32 bits) —
+    /// mesmo na forma `X`, cujo `sf=1` só amplia a LARGURA DO DADO lido de {@link #rm} (`Xm`
+    /// completo), não o acumulador nem o destino. A instrução em si não complementa entrada nem
+    /// saída (ao contrário do CRC-32 "clássico" de `zlib`/Ethernet) — quem chama fornece `Wn` já
+    /// invertido (tipicamente `~0`) se quiser reproduzir o checksum padrão bit a bit.
+    record Crc32(
+            /// Registrador de destino (índice `0`-`31`; `31` é `WZR`). Sempre 32 bits.
+            int rd,
+            /// Acumulador de entrada (`Wn`, índice `0`-`31`; `31` é `WZR`). Sempre 32 bits.
+            int rn,
+            /// Registrador de dado (`Rm`, índice `0`-`31`; `31` é `WZR`/`XZR`).
+            int rm,
+            /// Largura do dado lido de {@link #rm} em bits: `8`/`16`/`32` (formas `B`/`H`/`W`, `Rm`
+            /// lido como `W`) ou `64` (forma `X`, única que lê `Rm` como `X`).
+            int dataWidthBits,
+            /// `true` para o polinômio Castagnoli (`CRC32C*`), `false` para IEEE 802.3 (`CRC32*`).
+            boolean castagnoli) implements Ir64Op {
+        @Override public int kind() { return Kind.CRC32; }
     }
 
     /// `DUP <V><d>, <Vn>.<T>[<index>]` (`ARM DDI 0487`, B19.6 bloco E, "Advanced SIMD scalar copy")

@@ -429,6 +429,7 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.POINTER_AUTH_GENERIC ->
                     executePointerAuthGeneric(core, (Ir64Op.PointerAuthGeneric) op);
             case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (Ir64Op.AbsGeneral) op);
+            case Ir64Op.Kind.CRC32 -> executeCrc32(core, (Ir64Op.Crc32) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
                     executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
             case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
@@ -1300,6 +1301,34 @@ public final class Ir64BlockExecutor {
         long value = core.xForWidth(op.rn(), op.wide());
         long result = op.wide() ? Math.abs(value) : (int) Math.abs((int) value);
         core.setXForWidth(op.rd(), result, op.wide());
+        return false;
+    }
+
+    /// `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (B19.17) — polinômio REFLETIDO (o mesmo algoritmo
+    /// bit-a-bit de Ethernet/`zlib`/iSCSI, sem a complementação de entrada/saída que essas
+    /// convenções aplicam por cima), consumindo o dado byte a byte do menos para o mais
+    /// significativo (ordem little-endian do valor do registrador — ver javadoc de
+    /// {@link Ir64Op.Crc32}).
+    private static final int CRC32_POLY_IEEE_802_3_REFLECTED = 0xEDB88320;
+    private static final int CRC32C_POLY_CASTAGNOLI_REFLECTED = 0x82F63B78;
+
+    private boolean executeCrc32(Aarch64Core core, Ir64Op.Crc32 op) {
+        int poly = op.castagnoli() ? CRC32C_POLY_CASTAGNOLI_REFLECTED : CRC32_POLY_IEEE_802_3_REFLECTED;
+        int crc = (int) core.xForWidth(op.rn(), false);
+        long data = core.xForWidth(op.rm(), op.dataWidthBits() == Long.SIZE);
+        int byteCount = op.dataWidthBits() / Byte.SIZE;
+        for (int i = 0; i < byteCount; i++) {
+            int dataByte = (int) (data >>> (i * Byte.SIZE)) & 0xFF;
+            crc ^= dataByte;
+            for (int bit = 0; bit < Byte.SIZE; bit++) {
+                boolean lsbSet = (crc & 1) != 0;
+                crc >>>= 1;
+                if (lsbSet) {
+                    crc ^= poly;
+                }
+            }
+        }
+        core.setXForWidth(op.rd(), crc & 0xFFFFFFFFL, false);
         return false;
     }
 
