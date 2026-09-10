@@ -11,9 +11,10 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// for both A32 and T32"*), 23 linhas ao todo. A **B13.17** implementou as 4 de `VCMLA`/`VCADD`/
 /// `VCMLA_scalar` (`FEAT_FCMA`); a **B13.18** implementou as **7** de `VSDOT`/`VUDOT`/`VUSDOT`/
 /// `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (`FEAT_DotProd`/`FEAT_I8MM`); esta
-/// task (**B13.19**) implementa as **3** matriciais `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM`); as
-/// **9** restantes (`VDOT_b16`/`VFML`/`VMMLA_b16`/`VFMA_b16` + as formas `_scalar`/`_scal`
-/// correspondentes, B13.20-B13.21) ainda não têm dono.
+/// task (**B13.19**) implementou as **3** matriciais `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM`); esta
+/// task (**B13.20**) implementa as **4** de `VFML`/`VFMSL`/`VFML_scalar`/`VFMSL_scalar`
+/// (`FEAT_FHM`); as **5** restantes (`VDOT_b16`/`VMMLA_b16`/`VFMA_b16` + as formas `_scalar`/
+/// `_scal` correspondentes, B13.21) ainda não têm dono.
 ///
 /// **Este decoder devolve `null` (não `unimplemented`) para o que ainda não tem dono** — decisão
 /// registrada na task B13.17: como o arquivo cresce ao longo de 5 tasks (B13.17-B13.21), reivindicar
@@ -36,16 +37,19 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `VUDOT`/`VUSDOT`/`VSUDOT`, B13.18, devkitARM) e
 /// `arm-linux-gnueabihf-as -march=armv8.6-a+i8mm -mfpu=neon-fp-armv8` (`VSMMLA`/`VUMMLA`/
 /// `VUSMMLA`, B13.19, WSL — mesmo binutils/GNU assembler que a B13.18 já usara para `neon-shared`,
-/// `arm-none-eabi-as` indisponível neste ambiente) — ver `## Resultado` de cada task para o log.
+/// `arm-none-eabi-as` indisponível neste ambiente) e
+/// `arm-linux-gnueabihf-as -march=armv8.2-a+fp16fml -mfpu=neon-fp-armv8` (`VFML`/`VFMSL` +
+/// `_scalar`, B13.20, WSL) — ver `## Resultado` de cada task para o log.
 ///
 /// Gates: {@link ArmFeature#COMPLEX_NUMBER_ARITHMETIC} (`FEAT_FCMA`, B13.17),
-/// {@link ArmFeature#DOT_PRODUCT} (`FEAT_DotProd`, `VSDOT`/`VUDOT` + formas `_scalar`, B13.18) e
+/// {@link ArmFeature#DOT_PRODUCT} (`FEAT_DotProd`, `VSDOT`/`VUDOT` + formas `_scalar`, B13.18),
 /// {@link ArmFeature#INT8_MATRIX_MULTIPLY} (`FEAT_I8MM`, `VUSDOT`/`VUSDOT_scalar`/
-/// `VSUDOT_scalar`, B13.18, e agora `VSMMLA`/`VUMMLA`/`VUSMMLA`, B13.19 — **quatro versões de
-/// arquitetura depois de `FEAT_DotProd`, gatear junto com ele seria factualmente errado**).
-/// **Nenhum preset declara nenhuma das três** (a saída de `NOT_IN_ANY_PRESET` é a B13.22), então
-/// sem a feature respectiva o encoding cai no `UNIMPLEMENTED` de
-/// `ArmDecoder#decodeUnconditional` (zero-diff).
+/// `VSUDOT_scalar`, B13.18, e `VSMMLA`/`VUMMLA`/`VUSMMLA`, B13.19 — **quatro versões de
+/// arquitetura depois de `FEAT_DotProd`, gatear junto com ele seria factualmente errado**) e
+/// {@link ArmFeature#FP16_FUSED_MULTIPLY_ADD_LONG} (`FEAT_FHM`, `VFML`/`VFMSL` + formas `_scalar`,
+/// B13.20 — **não** `FEAT_FP16`, feature própria). **Nenhum preset declara nenhuma das quatro** (a
+/// saída de `NOT_IN_ANY_PRESET` é a B13.22), então sem a feature respectiva o encoding cai no
+/// `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonSharedDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -113,6 +117,27 @@ public final class NeonSharedDecoder implements DecoderExtension {
     private static final int MATRIX_MULTIPLY_UMMLA_VALUE = 0xFC20_0C50;
     private static final int MATRIX_MULTIPLY_USMMLA_VALUE = 0xFCA0_0C40;
 
+    // ── `VFML`/`VFMSL` (B13.20, `FEAT_FHM`), forma vetorial: `1111 1100 0010 .... .... 1000 . q . 1
+    // ....` — `s` (bit23, soma/subtração) e `q` (bit6, `S`+`S`→`D` ou `D`+`D`→`Q`) são DADOS, não
+    // fixos; `q` discrimina qual VALUE bate (mesmo truque de `DOT_PRODUCT_MASK`). Medido byte a byte
+    // contra `arm-linux-gnueabihf-as -march=armv8.2-a+fp16fml -mfpu=neon-fp-armv8` (WSL). ──
+    private static final int FUSED_MULTIPLY_ADD_LONG_MASK = 0xFF30_0F50;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SINGLE_VALUE = 0xFC20_0810;
+    private static final int FUSED_MULTIPLY_ADD_LONG_DOUBLE_VALUE = 0xFC20_0850;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SIGN_BIT = 23;
+
+    // ── `VFML_scalar`/`VFMSL_scalar` (B13.20): `1111 1110 00.0 .... .... 1000 . q . 1 . rm...` —
+    // `s` aqui é bit20 (posição DIFERENTE da forma vetorial, bit23 — conferido byte a byte). `rm`/
+    // `index` têm extratores próprios por `q`, ver {@link #decodeFusedMultiplyAddLongScalar}. ──
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_MASK = 0xFFA0_0F50;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_SINGLE_VALUE = 0xFE00_0810;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_DOUBLE_VALUE = 0xFE00_0850;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_SIGN_BIT = 20;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_RM_MASK = 0x7;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_SINGLE_RM_EXTENSION_BIT = 5;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_INDEX_BIT = 3;
+    private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_DOUBLE_INDEX_HIGH_BIT = 5;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         if (architecture.has(ArmFeature.COMPLEX_NUMBER_ARITHMETIC)) {
@@ -160,7 +185,21 @@ public final class NeonSharedDecoder implements DecoderExtension {
                 return decodeMatrixMultiply(raw, address, condition, false, true);
             }
         }
-        // Ainda sem dono (B13.20-B13.21): devolve `null` de propósito, ver javadoc da classe.
+        if (architecture.has(ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_MASK) == FUSED_MULTIPLY_ADD_LONG_SINGLE_VALUE) {
+                return decodeFusedMultiplyAddLong(raw, address, condition, false);
+            }
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_MASK) == FUSED_MULTIPLY_ADD_LONG_DOUBLE_VALUE) {
+                return decodeFusedMultiplyAddLong(raw, address, condition, true);
+            }
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_SCALAR_MASK) == FUSED_MULTIPLY_ADD_LONG_SCALAR_SINGLE_VALUE) {
+                return decodeFusedMultiplyAddLongScalar(raw, address, condition, false);
+            }
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_SCALAR_MASK) == FUSED_MULTIPLY_ADD_LONG_SCALAR_DOUBLE_VALUE) {
+                return decodeFusedMultiplyAddLongScalar(raw, address, condition, true);
+            }
+        }
+        // Ainda sem dono (B13.21): devolve `null` de propósito, ver javadoc da classe.
         return null;
     }
 
@@ -270,11 +309,70 @@ public final class NeonSharedDecoder implements DecoderExtension {
                 new IrOp.NeonMatrixMultiplyAccumulate(signedN, signedM, vd, vn, vm));
     }
 
+    /// `VFML`/`VFMSL` (B13.20, forma vetorial): `s` (bit23) escolhe soma (`0`, `VFMAL`) ou
+    /// subtração (`1`, `VFMSL`). `quad=false`: `Vn`/`Vm` são registradores `S` (`%vn_sp`/`%vm_sp` —
+    /// metade de 32 bits vista como par de f16), `Vd` é `D` (2 lanes f32). `quad=true`: `Vn`/`Vm`
+    /// são `D` (4 lanes f16), `Vd` é `Q` (`D<vd>`:`D<vd+1>`, 4 lanes f32) — índice ÍMPAR é UNDEFINED
+    /// (mesma disciplina do resto do arquivo).
+    private DecodedInstruction decodeFusedMultiplyAddLong(int raw, int address, Condition condition, boolean quad) {
+        boolean subtract = ((raw >>> FUSED_MULTIPLY_ADD_LONG_SIGN_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = quad
+                ? doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT)
+                : singleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = quad
+                ? doubleRegister(raw, 0, VM_EXTENSION_BIT)
+                : singleRegister(raw, 0, VM_EXTENSION_BIT);
+        if (quad && (vd & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonFusedMultiplyAddLong(subtract, quad, vd, vn, vm));
+    }
+
+    /// `VFML_scalar`/`VFMSL_scalar` (B13.20): `s` aqui é bit20 (posição DIFERENTE da forma
+    /// vetorial). `quad=false`: `Rm` é um `S` de 4 bits (`S0`-`S15`, SEM bit de extensão —
+    /// `%vfml_scalar_q0_rm = 0:3 5:1`, bits ESPALHADOS: `(bits[2:0] << 1) | bit5`) e `index` (1 bit,
+    /// bit3) escolhe qual das 2 lanes f16 de `Rm`. `quad=true`: `Rm` é um `D` de 3 bits (`D0`-`D7` —
+    /// `rm:3` literal em bits[2:0], SEM `%vm_dp`) e `index` (2 bits, `%vfml_scalar_q1_index = 5:1
+    /// 3:1`, ESPALHADOS: `(bit5 << 1) | bit3`) escolhe qual das 4 lanes f16. `Vn` segue a mesma
+    /// convenção `S`/`D` da forma vetorial — não há `Vm` "de verdade" aqui, só `Rm`.
+    private DecodedInstruction decodeFusedMultiplyAddLongScalar(int raw, int address, Condition condition,
+            boolean quad) {
+        boolean subtract = ((raw >>> FUSED_MULTIPLY_ADD_LONG_SCALAR_SIGN_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = quad
+                ? doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT)
+                : singleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int rm;
+        int index;
+        if (quad) {
+            rm = raw & FUSED_MULTIPLY_ADD_LONG_SCALAR_RM_MASK;
+            index = (((raw >>> FUSED_MULTIPLY_ADD_LONG_SCALAR_DOUBLE_INDEX_HIGH_BIT) & 1) << 1)
+                    | ((raw >>> FUSED_MULTIPLY_ADD_LONG_SCALAR_INDEX_BIT) & 1);
+        } else {
+            rm = ((raw & FUSED_MULTIPLY_ADD_LONG_SCALAR_RM_MASK) << 1)
+                    | ((raw >>> FUSED_MULTIPLY_ADD_LONG_SCALAR_SINGLE_RM_EXTENSION_BIT) & 1);
+            index = (raw >>> FUSED_MULTIPLY_ADD_LONG_SCALAR_INDEX_BIT) & 1;
+        }
+        if (quad && (vd & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonFusedMultiplyAddLongByElement(subtract, quad, vd, vn, rm, index));
+    }
+
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
     private static int doubleRegister(int raw, int nibbleShift, int extensionBit) {
         return (((raw >>> extensionBit) & 1) << 4) | ((raw >>> nibbleShift) & NIBBLE_MASK);
+    }
+
+    /// Número de registrador `S` (`0`-`31`, `Vx:extensão` — ordem INVERTIDA de {@link
+    /// #doubleRegister}, mesma convenção de `VfpDecoder#registerNumber` com `doublePrecision=false`).
+    private static int singleRegister(int raw, int nibbleShift, int extensionBit) {
+        return (((raw >>> nibbleShift) & NIBBLE_MASK) << 1) | ((raw >>> extensionBit) & 1);
     }
 }

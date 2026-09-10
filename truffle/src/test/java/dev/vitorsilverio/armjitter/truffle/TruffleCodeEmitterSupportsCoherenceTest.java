@@ -254,6 +254,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.NeonFpConvertPrecision(AdvSimdFpConvertPrecisionOp.NARROW_F16, 0, 2);
             case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE ->
                     new IrOp.NeonMatrixMultiplyAccumulate(true, true, 0, 2, 4);
+            case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG ->
+                    new IrOp.NeonFusedMultiplyAddLong(false, false, 0, 1, 2);
+            case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT ->
+                    new IrOp.NeonFusedMultiplyAddLongByElement(false, false, 0, 1, 2, 0);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

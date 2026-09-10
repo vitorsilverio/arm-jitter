@@ -15,7 +15,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
         IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
         IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision,
-        IrOp.NeonMatrixMultiplyAccumulate {
+        IrOp.NeonMatrixMultiplyAccumulate, IrOp.NeonFusedMultiplyAddLong,
+        IrOp.NeonFusedMultiplyAddLongByElement {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -161,6 +162,12 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.19: `VSMMLA`/`VUMMLA`/`VUSMMLA` (`neon-shared`, `FEAT_I8MM`) — ver
         /// {@link NeonMatrixMultiplyAccumulate}.
         public static final int NEON_MATRIX_MULTIPLY_ACCUMULATE = 98;
+        /// B13.20: `VFML`/`VFMSL` (`neon-shared`, `FEAT_FHM`) — ver
+        /// {@link NeonFusedMultiplyAddLong}.
+        public static final int NEON_FUSED_MULTIPLY_ADD_LONG = 99;
+        /// B13.20: `VFML_scalar`/`VFMSL_scalar` (`neon-shared`, `FEAT_FHM`) — ver
+        /// {@link NeonFusedMultiplyAddLongByElement}.
+        public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT = 100;
     }
 
     /// Operacao ALU generica.
@@ -2268,6 +2275,74 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte 2 (duas colunas de 8 bytes), em índice de `D` (ver {@link #vd}).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFML`/`VFMSL` (B13.20, `FEAT_FHM`, forma
+    /// vetorial): multiplica lanes de MEIA precisão de {@link #vn}/{@link #vm} e acumula (FUNDIDO,
+    /// um único arredondamento) em lanes de precisão SIMPLES de {@link #vd} (lido e escrito) —
+    /// largura mista, destino do dobro de lanes largas que fontes. **`quad=false`**: {@link #vn}/
+    /// {@link #vm} são registradores `S` (`0`-`31`, vista de 32 bits = 2 lanes f16), {@link #vd} é
+    /// `D` (2 lanes f32). **`quad=true`**: {@link #vn}/{@link #vm} são `D` (4 lanes f16), {@link
+    /// #vd} é o `D` par que inicia o `Q` (4 lanes f32) — índice ÍMPAR é UNDEFINED (mesma disciplina
+    /// das siblings deste arquivo). Ao contrário do `2`/laneOffset do A64 (`FMLAL2`/`FMLSL2`), o
+    /// NEON de 32 bits NÃO tem forma de metade alta — o executor sempre lê o registrador FONTE
+    /// inteiro (nenhum `laneOffset` além de `0`).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpFusedMultiplyAddLong}) — nasce
+    /// aqui (B13.20) porque nem esta nem a task irmã A64 (**B19.13**, `FMLAL`/`FMLSL`/`FMLAL2`/
+    /// `FMLSL2`) tinham semântica prévia; quem rodar primeiro põe no núcleo, a outra reusa.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFusedMultiplyAddLong(
+            /// `false` para `VFML`/`VFMAL` (soma), `true` para `VFMSL` (subtração — acumula `-a*b`).
+            boolean subtract,
+            /// `true` para a forma `Q0,D,D` (fontes `D`, destino `Q`), `false` para `D,S,S` (fontes
+            /// `S`, destino `D`) — ver Javadoc da classe.
+            boolean quad,
+            /// Registrador de destino/acumulador: índice de `D` (`quad=false`) ou o `D` par que
+            /// inicia o `Q` (`quad=true`).
+            int vd,
+            /// Registrador fonte 1: índice de `S` (`0`-`31`, `quad=false`) ou de `D` (`quad=true`).
+            int vn,
+            /// Registrador fonte 2: índice de `S` (`0`-`31`, `quad=false`) ou de `D` (`quad=true`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFML_scalar`/`VFMSL_scalar` (B13.20,
+    /// `FEAT_FHM`): como {@link NeonFusedMultiplyAddLong}, mas o operando `b` é uma única lane f16
+    /// FIXA, replicada para cada lane de {@link #vn}. **Os extratores de {@link #rm}/{@link #index}
+    /// diferem entre as duas formas** (bits espalhados, ver `NeonSharedDecoder`): `quad=false`:
+    /// {@link #rm} é um `S` de 4 bits (`S0`-`S15`, SEM bit de extensão) e {@link #index} (`0`-`1`)
+    /// escolhe qual das 2 lanes f16 de {@link #rm}; `quad=true`: {@link #rm} é um `D` de 3 bits
+    /// (`D0`-`D7`) e {@link #index} (`0`-`3`) escolhe qual das 4 lanes f16.
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpFusedMultiplyAddLongByElement}).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFusedMultiplyAddLongByElement(
+            /// `false` para `VFML`/`VFMAL` (soma), `true` para `VFMSL` (subtração — acumula `-a*b`).
+            boolean subtract,
+            /// `true` para a forma `Q0,D,D` (fonte `vn` `D`, destino `Q`), `false` para `D,S,S`
+            /// (fonte `vn` `S`, destino `D`) — ver Javadoc da classe.
+            boolean quad,
+            /// Registrador de destino/acumulador: índice de `D` (`quad=false`) ou o `D` par que
+            /// inicia o `Q` (`quad=true`).
+            int vd,
+            /// Registrador fonte 1 (varia por lane): índice de `S` (`0`-`31`, `quad=false`) ou de
+            /// `D` (`quad=true`).
+            int vn,
+            /// Registrador fonte 2 (FIXO, lido uma vez): `S0`-`S15` (`quad=false`) ou `D0`-`D7`
+            /// (`quad=true`) — ver Javadoc da classe.
+            int rm,
+            /// Índice da lane f16 dentro de {@link #rm}: `0`-`1` (`quad=false`) ou `0`-`3`
+            /// (`quad=true`).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, "2-reg-misc grouping"

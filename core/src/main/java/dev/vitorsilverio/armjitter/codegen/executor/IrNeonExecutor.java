@@ -414,6 +414,58 @@ public final class IrNeonExecutor {
                 vfp, op.signedN(), op.signedM(), op.vd(), op.vn(), op.vm());
     }
 
+    /// Lanes f32 do destino de `FMLAL`/`FMLSL` (B13.20): `2` na forma `D,S,S`, `4` na forma `Q,D,D`.
+    private static final int FUSED_MULTIPLY_ADD_LONG_SINGLE_LANES = 2;
+    private static final int FUSED_MULTIPLY_ADD_LONG_DOUBLE_LANES = 4;
+
+    /// `neon-shared`: `VFML`/`VFMSL` (B13.20, `FEAT_FHM`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpFusedMultiplyAddLong}) — a MESMA função que o A64 reusará quando
+    /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` ganharem decoder (B19.13). `quad=false`: {@link
+    /// IrOp.NeonFusedMultiplyAddLong#vn}/{@link IrOp.NeonFusedMultiplyAddLong#vm} são índices de `S`
+    /// (`0`-`31`) — convertidos para (palavra `D`, offset de lane f16) por {@link #singleWord}/
+    /// {@link #singleLaneOffset}, INDEPENDENTES entre `vn` e `vm` (podem ser metades diferentes de
+    /// `D`s diferentes). `quad=true`: já são índices de `D` (offset sempre `0`).
+    public void executeNeonFusedMultiplyAddLong(ArmCore core, IrOp.NeonFusedMultiplyAddLong op) {
+        VfpRegisters vfp = core.vfp();
+        boolean quad = op.quad();
+        int lanes = quad ? FUSED_MULTIPLY_ADD_LONG_DOUBLE_LANES : FUSED_MULTIPLY_ADD_LONG_SINGLE_LANES;
+        int baseRn = quad ? op.vn() : singleWord(op.vn());
+        int laneOffsetN = quad ? 0 : singleLaneOffset(op.vn());
+        int baseRm = quad ? op.vm() : singleWord(op.vm());
+        int laneOffsetM = quad ? 0 : singleLaneOffset(op.vm());
+        AdvSimdLanes.fpFusedMultiplyAddLong(
+                vfp, op.subtract(), lanes, op.vd(), baseRn, laneOffsetN, baseRm, laneOffsetM);
+    }
+
+    /// `neon-shared`: `VFML_scalar`/`VFMSL_scalar` (B13.20, `FEAT_FHM`): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#fpFusedMultiplyAddLongByElement}). `quad=false`: {@link
+    /// IrOp.NeonFusedMultiplyAddLongByElement#rm} é `S0`-`S15` (convertido por {@link #singleWord}/
+    /// {@link #singleLaneOffset}, `index` somado ao offset da metade); `quad=true`: `rm` já é
+    /// `D0`-`D7` (`index` é a lane direta, `0`-`3`).
+    public void executeNeonFusedMultiplyAddLongByElement(ArmCore core, IrOp.NeonFusedMultiplyAddLongByElement op) {
+        VfpRegisters vfp = core.vfp();
+        boolean quad = op.quad();
+        int lanes = quad ? FUSED_MULTIPLY_ADD_LONG_DOUBLE_LANES : FUSED_MULTIPLY_ADD_LONG_SINGLE_LANES;
+        int baseRn = quad ? op.vn() : singleWord(op.vn());
+        int laneOffsetN = quad ? 0 : singleLaneOffset(op.vn());
+        int baseRm = quad ? op.rm() : singleWord(op.rm());
+        int index = quad ? op.index() : singleLaneOffset(op.rm()) + op.index();
+        AdvSimdLanes.fpFusedMultiplyAddLongByElement(
+                vfp, op.subtract(), lanes, op.vd(), baseRn, laneOffsetN, baseRm, index);
+    }
+
+    /// Palavra `D` que contém o registrador `S<index>` (`S<2i>`/`S<2i+1>` = metade baixa/alta de
+    /// `D<i>`, ver {@link VfpRegisters#s}).
+    private static int singleWord(int sIndex) {
+        return sIndex >> 1;
+    }
+
+    /// Lane f16 (`esz=1`) de PARTIDA de `S<index>` dentro do `D` que o contém: `0` se `S` for a
+    /// metade BAIXA, `2` se for a metade ALTA (cada metade de 32 bits cabe 2 lanes f16).
+    private static int singleLaneOffset(int sIndex) {
+        return (sIndex & 1) * 2;
+    }
+
     /// `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#swapPermute}) — sem equivalente A64, a semântica nasce aqui (exceção do
     /// épico, mesma classe de {@link #executeNeonComplex}/{@link #executeNeonDotProduct}). `Vd`/`Vm`

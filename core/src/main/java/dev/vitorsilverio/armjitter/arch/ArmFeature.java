@@ -317,5 +317,14 @@ public enum ArmFeature {
     /// por `bit6`). Mirror de
     /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#BFLOAT16} para o lado A32/T32.
     /// **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
-    BFLOAT16
+    BFLOAT16,
+
+    // ---- Onda 6, B13.20 (neon-shared: VFML/VFML_scalar) ----
+    /// **"FP16 fused multiply-add long"** (`FEAT_FHM`, ARMv8.2-A) — `VFML`/`VFML_scalar` NEON de 32
+    /// bits (`neon-shared.decode`, mesmo encoding em A32 e T32): multiplica lanes de meia precisão
+    /// e acumula (FUNDIDO) em lanes de precisão simples, largura mista. **NÃO é**
+    /// {@link #HALF_PRECISION_FP} (aritmética de MESMA largura) — feature própria, independente. Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#FP16_FUSED_MULTIPLY_ADD_LONG} para o
+    /// lado A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
+    FP16_FUSED_MULTIPLY_ADD_LONG
 }

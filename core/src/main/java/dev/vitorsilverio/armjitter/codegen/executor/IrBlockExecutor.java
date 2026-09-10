@@ -146,6 +146,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_CRYPTO_SHA -> neon.executeNeonCryptoSha(core, (IrOp.NeonCryptoSha) op);
                 case IrOp.Kind.NEON_FP_CONVERT_PRECISION -> neon.executeNeonFpConvertPrecision(core, (IrOp.NeonFpConvertPrecision) op);
                 case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE -> neon.executeNeonMatrixMultiplyAccumulate(core, (IrOp.NeonMatrixMultiplyAccumulate) op);
+                case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG -> neon.executeNeonFusedMultiplyAddLong(core, (IrOp.NeonFusedMultiplyAddLong) op);
+                case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT -> neon.executeNeonFusedMultiplyAddLongByElement(core, (IrOp.NeonFusedMultiplyAddLongByElement) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -305,6 +307,8 @@ public final class IrBlockExecutor {
             case IrOp.NeonDotProduct ndp -> { neon.executeNeonDotProduct(core, ndp); yield false; }
             case IrOp.NeonDotProductByElement ndpbe -> { neon.executeNeonDotProductByElement(core, ndpbe); yield false; }
             case IrOp.NeonMatrixMultiplyAccumulate nmma -> { neon.executeNeonMatrixMultiplyAccumulate(core, nmma); yield false; }
+            case IrOp.NeonFusedMultiplyAddLong nfmal -> { neon.executeNeonFusedMultiplyAddLong(core, nfmal); yield false; }
+            case IrOp.NeonFusedMultiplyAddLongByElement nfmalbe -> { neon.executeNeonFusedMultiplyAddLongByElement(core, nfmalbe); yield false; }
             case IrOp.NeonSwapPermute nsp -> { neon.executeNeonSwapPermute(core, nsp); yield false; }
             case IrOp.NeonExtract nex -> { neon.executeNeonExtract(core, nex); yield false; }
             case IrOp.NeonTableLookup ntl -> { neon.executeNeonTableLookup(core, ntl); yield false; }

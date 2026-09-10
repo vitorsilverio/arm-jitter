@@ -1194,6 +1194,63 @@ public final class AdvSimdLanes {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // "FP16 FUSED MULTIPLY-ADD LONG" — B13.20 (`neon-shared`: `VFML`/`VFMSL`/`VFML_scalar`,
+    // `FEAT_FHM`). Semântica NOVA: nem a forma A32 nem a irmã A64 (`FMLAL`/`FMLSL`/`FMLAL2`/
+    // `FMLSL2`, B19.13) tinham decoder ainda quando esta task rodou — nasce aqui para a B19.13
+    // reusar (registrar qual rodou primeiro no `## Resultado` da task).
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// `log2` do tamanho de uma lane FONTE de `FMLAL`/`FMLSL` em bytes — sempre meia precisão
+    /// (`f16`), independente da largura do registrador fonte (`S` ou `D`).
+    private static final int FUSED_MULTIPLY_ADD_LONG_SOURCE_ESZ = 1;
+
+    /// `log2` do tamanho de uma lane DESTINO/acumulador de `FMLAL`/`FMLSL` em bytes — sempre
+    /// precisão simples (`f32`).
+    private static final int FUSED_MULTIPLY_ADD_LONG_DEST_ESZ = 2;
+
+    /// Executa `FMLAL`/`FMLSL` (`FEAT_FHM`) sobre `lanes` elementos de 32 bits: cada lane f32 de
+    /// `baseRd` (lida e escrita — RMW) recebe `Math.fma(a, b, acc)` (ou `Math.fma(-a, b, acc)` se
+    /// `subtract`) das lanes f16 correspondentes de `baseRn`/`baseRm`, convertidas para `float` SEM
+    /// arredondamento (largura binary16 ⊂ binary32, {@link #halfToFloat}) antes da multiplicação —
+    /// um único arredondamento no total (FUNDIDA), nunca dois. `laneOffsetN`/`laneOffsetM` são as
+    /// lanes f16 DE PARTIDA em `baseRn`/`baseRm` respectivamente — **independentes** (ao contrário
+    /// das famílias "widening" do A64, onde a mesma metade alta/baixa vale para os dois fontes, o
+    /// NEON de 32 bits pode combinar um `Sn` par com um `Sm` ímpar, offsets DIFERENTES; a forma `Q`
+    /// do A64 `FMLAL2`/`FMLSL2` passa o MESMO valor nos dois parâmetros). Resultados calculados num
+    /// buffer ANTES de qualquer escrita (E10): `baseRd` (lanes f32) pode coincidir com `baseRn`/
+    /// `baseRm` (lanes f16, largura mista) — escrever a lane larga `i` poderia cobrir lanes f16
+    /// estreitas ainda não lidas. Os `base*` são índices de PALAVRA.
+    public static void fpFusedMultiplyAddLong(AdvSimdRegisterWords regs, boolean subtract, int lanes,
+            int baseRd, int baseRn, int laneOffsetN, int baseRm, int laneOffsetM) {
+        long[] results = new long[lanes];
+        for (int i = 0; i < lanes; i++) {
+            float a = halfToFloat(element(regs, baseRn, laneOffsetN + i, FUSED_MULTIPLY_ADD_LONG_SOURCE_ESZ));
+            float b = halfToFloat(element(regs, baseRm, laneOffsetM + i, FUSED_MULTIPLY_ADD_LONG_SOURCE_ESZ));
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, i, FUSED_MULTIPLY_ADD_LONG_DEST_ESZ));
+            results[i] = floatBits(subtract ? Math.fma(-a, b, acc) : Math.fma(a, b, acc));
+        }
+        for (int i = 0; i < lanes; i++) {
+            setElement(regs, baseRd, i, FUSED_MULTIPLY_ADD_LONG_DEST_ESZ, results[i]);
+        }
+    }
+
+    /// Como {@link #fpFusedMultiplyAddLong}, mas `b` é uma única lane f16 FIXA lida de `baseRm` no
+    /// índice `index` (lida UMA vez, replicada para todas as `lanes`): `VFML_scalar`/`VFMSL_scalar`.
+    public static void fpFusedMultiplyAddLongByElement(AdvSimdRegisterWords regs, boolean subtract, int lanes,
+            int baseRd, int baseRn, int laneOffsetN, int baseRm, int index) {
+        float b = halfToFloat(element(regs, baseRm, index, FUSED_MULTIPLY_ADD_LONG_SOURCE_ESZ));
+        long[] results = new long[lanes];
+        for (int i = 0; i < lanes; i++) {
+            float a = halfToFloat(element(regs, baseRn, laneOffsetN + i, FUSED_MULTIPLY_ADD_LONG_SOURCE_ESZ));
+            float acc = Float.intBitsToFloat((int) element(regs, baseRd, i, FUSED_MULTIPLY_ADD_LONG_DEST_ESZ));
+            results[i] = floatBits(subtract ? Math.fma(-a, b, acc) : Math.fma(a, b, acc));
+        }
+        for (int i = 0; i < lanes; i++) {
+            setElement(regs, baseRd, i, FUSED_MULTIPLY_ADD_LONG_DEST_ESZ, results[i]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
     // CONVERSÃO FP ↔ PONTO FIXO — B13.8 (migração D1 da RFC B13.2). `SCVTF`/`UCVTF`/`FCVTZS`/
     // `FCVTZU` na forma AdvSIMD com fator de escala `2^fractionBits` (`VCVT` fixo↔float F32 no NEON
     // de 32 bits; `@fcvt_fixed` escalar/vetorial no A64). O arredondamento é SEMPRE toward-zero
