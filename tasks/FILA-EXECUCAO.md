@@ -166,7 +166,7 @@ código.
 
 | Épico | Dimensão | Estado da especificação |
 |---|---|---|
-| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **ÉPICO FECHADO** (B19.9, 2026-09-10) — B19.1-B19.13 todas ✅; 114 células remanescentes viraram 19 degraus novos nomeados (B19.14-B19.29, B19.11b-e), ainda sem spec própria |
+| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **ÉPICO FECHADO** (B19.9, 2026-09-10) — B19.1-B19.13 todas ✅; 114 células remanescentes viraram 19 degraus novos nomeados (B19.14-B19.29, B19.11b-e), **specs escritas 2026-09-10** (ver abaixo), todos pegáveis |
 | **B13** — NEON/AdvSIMD 32 bits | 1 (decode) | ✅ **completo** — B13.1-B13.8 feitas; B13.9-B13.22 com spec |
 | **C12** — emissão JIT nativa | 2 | ✅ **completo** — C12.1 feita; C12.2-C12.10 com spec |
 | **A10** — Truffle | 3 | ✅ **completo** — A10.1 feita, A10.2 absorvida; A10.3-A10.9 com spec |
@@ -176,29 +176,50 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Lista revalidada em 2026-09-10 (sessão da B19.9): **B19.11 e B13.21 fecharam mais cedo no mesmo
+Lista revalidada em 2026-09-10 (sessão pós-B19.9): **B19.11 e B13.21 fecharam mais cedo no mesmo
 dia, removidas da lista.** **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do escopo
-da B19.9), mantidos abaixo por não terem sido tocados.
+da B19.9), mantidos abaixo por não terem sido tocados. **Os 20 degraus nomeados pela B19.9 ganharam
+spec própria nesta sessão** (abaixo) e entram na lista de pegáveis — nenhum tem dependência aberta
+além da própria B19.9 (✅) e, no caso da família FP8, de B19.11/B19.11a (✅).
 
 | Task | O que | Tamanho |
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
+| **[B19.17](trilha-b-arquiteturas/b19.17-a64-crc32.md)** | `FEAT_CRC32` — puro cálculo, sem estado/aliasing, degrau mais barato do lote | 8 células |
+| **[B19.26](trilha-b-arquiteturas/b19.26-a64-fp16-residual.md)** | `FEAT_FP16` residual (`FMOV`/`FCVT` escalares h↔s/d) — reusa conversões já existentes | 6 células |
+| **[B19.11c](trilha-b-arquiteturas/b19.11c-a64-fp8-dot-2way.md)** / **[B19.11d](trilha-b-arquiteturas/b19.11d-a64-fp8-dot-4way.md)** | `FDOT_hb`/`FDOT_sb` (FP8 dot product 2-way/4-way) | 2+2 células |
+| demais degraus B19.14-B19.29/B19.11b/e | ver tabela completa abaixo | — |
 
-### ⚠️ Nomeadas pela B19.9, ainda SEM arquivo de spec — não pegar direto, primeiro rodada de spec
+### Specs novas 2026-09-10: os 20 degraus nomeados pela B19.9, todas com arquivo próprio agora
 
-A **B19.9** (fechamento do épico B19) enumerou **19 degraus novos** que cobrem as 114 células
-`❌`/`⚠️` remanescentes da tabela A64 — cada um já mapeado a um `Aarch64Feature` existente (decode
-puro, sem decisão de versão em aberto). Nenhum tem arquivo `tasks/trilha-b-arquiteturas/b19.NN-*.md`
-ainda — só nome/escopo/tamanho, no `## Resultado` da B19.9. Precisam de uma rodada de spec (como
-B19.10-B19.13 precisaram) antes de serem executáveis por uma sessão comum:
+A **B19.9** (fechamento do épico B19) tinha enumerado **19 degraus novos** (mais a já registrada
+B19.11b) cobrindo as 114 células `❌`/`⚠️` remanescentes da tabela A64 — cada um já mapeado a um
+`Aarch64Feature` existente (decode puro, sem decisão de versão em aberto). Nesta sessão, todas
+ganharam arquivo `tasks/trilha-b-arquiteturas/b19.NN-*.md` completo (Contexto/Objetivo/Inclui/Não
+inclui/Passos/Aceite/Armadilhas), no mesmo padrão de B19.10-B19.13 — **ainda não executadas**
+(`## Resultado` pendente em todas), mas prontas para uma sessão comum pegar:
 
-`B19.14` (MTE2, 26) · `B19.15` (PAuth, 10) · `B19.16` (MOPS, 9) · `B19.17` (CRC32, 8) ·
-`B19.18` (FRINTTS, 8) · `B19.19` (LRCPC2, 7) · `B19.20` (FCMA, 6) · `B19.21` (CSSC, 5) ·
-`B19.22` (CMPBR, 5) · `B19.23` (DotProd residual, 4) · `B19.24` (FAMINMAX, 4) · `B19.25` (LSE128, 3)
-· `B19.26` (FP16 residual, 6) · `B19.27` (GCS, 1) · `B19.28` (SME `MSR_i_SVCR`, 1) ·
-`B19.29` (JSCVT `FJCVTZS`, 1) · `B19.11c` (FP8_DOT_2WAY, 2) · `B19.11d` (FP8_DOT_4WAY, 2) ·
-`B19.11e` (FP8 `FSCALE` misdecode, 2) — mais a já registrada `B19.11b` (`FEAT_FP8FMA` nova, 4).
+`B19.14` (`b19.14-a64-mte2.md`, MTE2, 26) · `B19.15` (`b19.15-a64-pauth-residual.md`, PAuth, 10) ·
+`B19.16` (`b19.16-a64-mops.md`, MOPS, 9) · `B19.17` (`b19.17-a64-crc32.md`, CRC32, 8) ·
+`B19.18` (`b19.18-a64-frintts.md`, FRINTTS, 8) · `B19.19` (`b19.19-a64-lrcpc2.md`, LRCPC2, 7) ·
+`B19.20` (`b19.20-a64-fcma.md`, FCMA, 6) · `B19.21` (`b19.21-a64-cssc-residual.md`, CSSC, 5) ·
+`B19.22` (`b19.22-a64-cmpbr.md`, CMPBR, 5) · `B19.23` (`b19.23-a64-dotprod-residual.md`, DotProd residual, 4) ·
+`B19.24` (`b19.24-a64-faminmax.md`, FAMINMAX, 4) · `B19.25` (`b19.25-a64-lse128.md`, LSE128, 3) ·
+`B19.26` (`b19.26-a64-fp16-residual.md`, FP16 residual, 6) · `B19.27` (`b19.27-a64-gcs.md`, GCS, 1) ·
+`B19.28` (`b19.28-a64-sme-svcr.md`, SME `MSR_i_SVCR`, 1) · `B19.29` (`b19.29-a64-jscvt.md`, JSCVT `FJCVTZS`, 1) ·
+`B19.11b` (`b19.11b-a64-fp8-fma.md`, `FEAT_FP8FMA` nova, 4) ·
+`B19.11c` (`b19.11c-a64-fp8-dot-2way.md`, FP8_DOT_2WAY, 2) ·
+`B19.11d` (`b19.11d-a64-fp8-dot-4way.md`, FP8_DOT_4WAY, 2) ·
+`B19.11e` (`b19.11e-a64-fscale-misdecode.md`, FP8 `FSCALE` misdecode, 2).
+
+Achados de decode registrados nas próprias specs (confirmar na sessão de execução, não foram
+implementados): (1) `FEAT_PAuth` (B19.15) — não existe núcleo real de pointer authentication no
+projeto, `PACGA` é placeholder determinístico; (2) `FEAT_MOPS` (B19.16) — o Javadoc de
+`MEMORY_COPY_SET` afirma decode "via caminho genérico" para `SETP`/`SETM`/`SETE`, mas nenhum dos 9
+mnemônicos tem decoder de verdade (Javadoc a corrigir); (3) `FAMAX`/`FAMIN` (B19.24) e `FSCALE`
+(B19.11e) medem `⚠️` (misdecode), não `❌` puro — a task tem que achar a instrução vizinha que está
+roubando o encoding antes de corrigir.
 
 **B19.10 FECHADA 2026-09-06** — as 13 linhas de cripto A64 SHA-512/SM3/SM4 (mesmo prefixo `0xCE`
 que a B11.12 abriu pela metade para `FEAT_SHA3`); achado real que corrige a spec: o campo que
