@@ -16,7 +16,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
         IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision,
         IrOp.NeonMatrixMultiplyAccumulate, IrOp.NeonFusedMultiplyAddLong,
-        IrOp.NeonFusedMultiplyAddLongByElement {
+        IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
+        IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
+        IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16 {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -168,6 +170,18 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B13.20: `VFML_scalar`/`VFMSL_scalar` (`neon-shared`, `FEAT_FHM`) — ver
         /// {@link NeonFusedMultiplyAddLongByElement}.
         public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT = 100;
+        /// B13.21: `VDOT_b16` (`neon-shared`, `FEAT_BF16`) — ver {@link NeonDotProductBFloat16}.
+        public static final int NEON_DOT_PRODUCT_BFLOAT16 = 101;
+        /// B13.21: `VDOT_b16_scal` — ver {@link NeonDotProductByElementBFloat16}.
+        public static final int NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16 = 102;
+        /// B13.21: `VMMLA_b16` (`neon-shared`, `FEAT_BF16`) — ver
+        /// {@link NeonMatrixMultiplyAccumulateBFloat16}.
+        public static final int NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 = 103;
+        /// B13.21: `VFMA_b16` (`VFMAB`/`VFMAT`, `neon-shared`, `FEAT_BF16`) — ver
+        /// {@link NeonFusedMultiplyAddLongBFloat16}.
+        public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16 = 104;
+        /// B13.21: `VFMA_b16_scal` — ver {@link NeonFusedMultiplyAddLongByElementBFloat16}.
+        public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 = 105;
     }
 
     /// Operacao ALU generica.
@@ -2343,6 +2357,138 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// (`quad=true`).
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VDOT_b16` (B13.21, `FEAT_BF16`): produto
+    /// escalar de PARES `bf16`, acumulando em `f32`. Sibling FP de {@link NeonDotProduct} (que é
+    /// inteiro) — sem campos de sinal, o formato `bf16` não tem variante assinada/sem sinal.
+    ///
+    /// Núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfDotProduct}),
+    /// criado pela B19.7 (a task irmã A64 de `BFDOT`) — reusado sem nenhuma mudança.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonDotProductBFloat16(
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`/`D<m>`).
+            boolean quad,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1, em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BFLOAT16; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VDOT_b16_scal` (B13.21): como
+    /// {@link NeonDotProductBFloat16}, mas o operando `b` é um único par `bf16` de 32 bits FIXO
+    /// lido de {@link #vm} no {@link #index}, replicado para cada lane de {@link #vn}.
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfDotProductByElement}).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonDotProductByElementBFloat16(
+            /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
+            /// (`D<d>`/`D<n>`). `vm` é sempre um `D` (nunca `Q`), independente desta forma.
+            boolean quad,
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`); na forma `quad` é o
+            /// `D` par que inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (varia por lane), em índice de `D` (ver {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (FIXO, lido uma vez), em índice de `D` (`0`-`15`, **nunca**
+            /// combinado com {@link #quad}).
+            int vm,
+            /// Índice do par `bf16` de 32 bits dentro de {@link #vm}: `0`-`1` (um `D` guarda 2
+            /// pares).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VMMLA_b16` (B13.21, `FEAT_BF16`):
+    /// multiplicação de matriz `2×4 · 4×2` de pares `bf16`, acumulando em `f32`. Irmã de ponto
+    /// flutuante de {@link NeonMatrixMultiplyAccumulate} (`K=4` em vez de `K=8`, sem campos de
+    /// sinal). **Sempre 128 bits** — não existe forma `D` (índice de registrador ímpar em
+    /// {@link #vd}/{@link #vn}/{@link #vm} é UNDEFINED, mesma disciplina de
+    /// {@link NeonMatrixMultiplyAccumulate}).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfMatrixMultiplyAccumulate}),
+    /// criado pela B19.7 (a task irmã A64 de `BFMMLA`) — reusado sem nenhuma mudança.
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonMatrixMultiplyAccumulateBFloat16(
+            /// Registrador de destino/acumulador, em índice de `D` (`0`-`31`) — o `D` par que
+            /// inicia o `Q`.
+            int vd,
+            /// Registrador fonte 1 (duas linhas de 4 pares `bf16`), em índice de `D` (ver
+            /// {@link #vd}).
+            int vn,
+            /// Registrador fonte 2 (duas colunas de 4 pares `bf16`), em índice de `D` (ver
+            /// {@link #vd}).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFMA_b16` (B13.21, `FEAT_BF16`, forma
+    /// vetorial: mnemônicos `VFMAB`/`VFMAT`): multiply-accumulate LONG (soma simples, NÃO fundida)
+    /// — para cada uma das 4 lanes `f32` de {@link #vd} (`Vd.4S`, sempre 128 bits), lê o elemento
+    /// `bf16` de índice `2e+top` de {@link #vn}/{@link #vm} (SEMPRE `Q`, 8 elementos `bf16` cada),
+    /// multiplica em `binary32` e acumula. **Diferente do irmão inteiro/meia-precisão
+    /// {@link NeonFusedMultiplyAddLong}**: aqui NÃO existe forma `D,S,S` — confirmado que GAS
+    /// recusa a forma não-`Q` (`invalid instruction shape`) e que o bit nomeado `q` no `.decode`
+    /// é, na prática, o seletor BOTTOM/TOP (`VFMAB`=`0`/`VFMAT`=`1`), estrutura IDÊNTICA à do A64
+    /// `BFMLALB`/`BFMLALT` — medido byte a byte contra `arm-linux-gnueabihf-as -march=armv8.2-a+bf16`
+    /// (`vfmab.bf16 q0,q1,q2`=`0xFC320814`, `vfmat.bf16 q0,q1,q2`=`0xFC320854`, só o bit6 muda).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfMultiplyAddLong}), criado pela
+    /// B19.7 (a task irmã A64 de `BFMLALB`/`BFMLALT`) — reusado sem nenhuma mudança (a mesma
+    /// interleave par/ímpar de `top` já assume fonte de 8 elementos, exatamente o que `Q` fornece
+    /// aqui).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFusedMultiplyAddLongBFloat16(
+            /// `false`=`VFMAB` (elementos PARES de {@link #vn}/{@link #vm}, índice `2e`),
+            /// `true`=`VFMAT` (ÍMPARES, índice `2e+1`).
+            boolean top,
+            /// Registrador de destino/acumulador: o `D` par que inicia o `Q` (`Vd.4S`).
+            int vd,
+            /// Registrador fonte 1: o `D` par que inicia o `Q` (`Vn.8H`, lido elemento a elemento).
+            int vn,
+            /// Registrador fonte 2: o `D` par que inicia o `Q` (`Vm.8H`, lido elemento a elemento).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFMA_b16_scal` (B13.21, mnemônicos
+    /// `VFMAB`/`VFMAT` indexados): como {@link NeonFusedMultiplyAddLongBFloat16}, mas {@link #vm}
+    /// sempre contribui o MESMO elemento `bf16` {@link #index}, restrito a `D0`-`D7` (3 bits, SEM
+    /// bit de extensão — nunca `D8`-`D31`), diferente de {@link #vn} (sempre `Q` completo).
+    ///
+    /// Núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfMultiplyAddLongByElement}).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonFusedMultiplyAddLongByElementBFloat16(
+            /// Ver {@link NeonFusedMultiplyAddLongBFloat16#top}.
+            boolean top,
+            /// Registrador de destino/acumulador: o `D` par que inicia o `Q` (`Vd.4S`).
+            int vd,
+            /// Registrador fonte 1: o `D` par que inicia o `Q` (`Vn.8H`, lido elemento a elemento).
+            int vn,
+            /// Registrador fonte 2 (FIXO, lido uma vez): `D0`-`D7`.
+            int vm,
+            /// Índice do elemento `bf16` de {@link #vm} usado em TODA a operação (`0`-`3`).
+            int index) implements IrOp {
+        @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, "2-reg-misc grouping"

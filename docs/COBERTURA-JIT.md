@@ -31,18 +31,18 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 ## Progresso
 
-> **ASM 32 bits: 57 de 101** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 66 de 101** operações com nó especializado.
+> **ASM 32 bits: 57 de 106** operações emitidas nativamente (mais 9 condicionais).
+> **Truffle 32 bits: 66 de 106** operações com nó especializado.
 > **ASM 64 bits: 46 de 120** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 120** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
-> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `28` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `46/96`.
+> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `33` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `46/96`.
 
 ## Tabela A — pipeline de 32 bits
 
-Linhas = os 101 `record` de `IrOp`, na ordem do `Kind`.
+Linhas = os 106 `record` de `IrOp`, na ordem do `Kind`.
 
 | Operação | `Kind` | ASM (`AsmNativePolicy`) | Truffle (`IrOpNodeFactory`) |
 |---|---|---|---|
@@ -147,6 +147,11 @@ Linhas = os 101 `record` de `IrOp`, na ordem do `Kind`.
 | `NeonMatrixMultiplyAccumulate` | `NEON_MATRIX_MULTIPLY_ACCUMULATE` | ❌ | ❌ |
 | `NeonFusedMultiplyAddLong` | `NEON_FUSED_MULTIPLY_ADD_LONG` | ❌ | ❌ |
 | `NeonFusedMultiplyAddLongByElement` | `NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT` | ❌ | ❌ |
+| `NeonDotProductBFloat16` | `NEON_DOT_PRODUCT_BFLOAT16` | ❌ | ❌ |
+| `NeonDotProductByElementBFloat16` | `NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16` | ❌ | ❌ |
+| `NeonMatrixMultiplyAccumulateBFloat16` | `NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16` | ❌ | ❌ |
+| `NeonFusedMultiplyAddLongBFloat16` | `NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16` | ❌ | ❌ |
+| `NeonFusedMultiplyAddLongByElementBFloat16` | `NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16` | ❌ | ❌ |
 
 ### Condicionais do lado 32 bits
 

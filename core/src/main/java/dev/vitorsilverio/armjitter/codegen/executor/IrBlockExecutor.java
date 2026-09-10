@@ -148,6 +148,11 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE -> neon.executeNeonMatrixMultiplyAccumulate(core, (IrOp.NeonMatrixMultiplyAccumulate) op);
                 case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG -> neon.executeNeonFusedMultiplyAddLong(core, (IrOp.NeonFusedMultiplyAddLong) op);
                 case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT -> neon.executeNeonFusedMultiplyAddLongByElement(core, (IrOp.NeonFusedMultiplyAddLongByElement) op);
+                case IrOp.Kind.NEON_DOT_PRODUCT_BFLOAT16 -> neon.executeNeonDotProductBFloat16(core, (IrOp.NeonDotProductBFloat16) op);
+                case IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16 -> neon.executeNeonDotProductByElementBFloat16(core, (IrOp.NeonDotProductByElementBFloat16) op);
+                case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 -> neon.executeNeonMatrixMultiplyAccumulateBFloat16(core, (IrOp.NeonMatrixMultiplyAccumulateBFloat16) op);
+                case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16 -> neon.executeNeonFusedMultiplyAddLongBFloat16(core, (IrOp.NeonFusedMultiplyAddLongBFloat16) op);
+                case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 -> neon.executeNeonFusedMultiplyAddLongByElementBFloat16(core, (IrOp.NeonFusedMultiplyAddLongByElementBFloat16) op);
                 case IrOp.Kind.VFP_ALU -> vfp.executeVfpAlu(core, (IrOp.VfpAlu) op);
                 case IrOp.Kind.VFP_MOVE_IMMEDIATE -> vfp.executeVfpMoveImmediate(core, (IrOp.VfpMoveImmediate) op);
                 case IrOp.Kind.VFP_COMPARE -> vfp.executeVfpCompare(core, (IrOp.VfpCompare) op);
@@ -309,6 +314,11 @@ public final class IrBlockExecutor {
             case IrOp.NeonMatrixMultiplyAccumulate nmma -> { neon.executeNeonMatrixMultiplyAccumulate(core, nmma); yield false; }
             case IrOp.NeonFusedMultiplyAddLong nfmal -> { neon.executeNeonFusedMultiplyAddLong(core, nfmal); yield false; }
             case IrOp.NeonFusedMultiplyAddLongByElement nfmalbe -> { neon.executeNeonFusedMultiplyAddLongByElement(core, nfmalbe); yield false; }
+            case IrOp.NeonDotProductBFloat16 ndpbf16 -> { neon.executeNeonDotProductBFloat16(core, ndpbf16); yield false; }
+            case IrOp.NeonDotProductByElementBFloat16 ndpbebf16 -> { neon.executeNeonDotProductByElementBFloat16(core, ndpbebf16); yield false; }
+            case IrOp.NeonMatrixMultiplyAccumulateBFloat16 nmmabf16 -> { neon.executeNeonMatrixMultiplyAccumulateBFloat16(core, nmmabf16); yield false; }
+            case IrOp.NeonFusedMultiplyAddLongBFloat16 nfmalbf16 -> { neon.executeNeonFusedMultiplyAddLongBFloat16(core, nfmalbf16); yield false; }
+            case IrOp.NeonFusedMultiplyAddLongByElementBFloat16 nfmalbebf16 -> { neon.executeNeonFusedMultiplyAddLongByElementBFloat16(core, nfmalbebf16); yield false; }
             case IrOp.NeonSwapPermute nsp -> { neon.executeNeonSwapPermute(core, nsp); yield false; }
             case IrOp.NeonExtract nex -> { neon.executeNeonExtract(core, nex); yield false; }
             case IrOp.NeonTableLookup ntl -> { neon.executeNeonTableLookup(core, ntl); yield false; }

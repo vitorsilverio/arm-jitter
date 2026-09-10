@@ -13,17 +13,16 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (`FEAT_DotProd`/`FEAT_I8MM`); esta
 /// task (**B13.19**) implementou as **3** matriciais `VSMMLA`/`VUMMLA`/`VUSMMLA` (`FEAT_I8MM`); esta
 /// task (**B13.20**) implementa as **4** de `VFML`/`VFMSL`/`VFML_scalar`/`VFMSL_scalar`
-/// (`FEAT_FHM`); as **5** restantes (`VDOT_b16`/`VMMLA_b16`/`VFMA_b16` + as formas `_scalar`/
-/// `_scal` correspondentes, B13.21) ainda não têm dono.
+/// (`FEAT_FHM`); esta task (**B13.21**) implementa as **5** finais `VDOT_b16`/`VMMLA_b16`/
+/// `VFMA_b16` + as formas `_scal`/`_scalar` correspondentes (`FEAT_BF16`) — **arquivo completo**
+/// (4+7+3+4+5=23 linhas).
 ///
-/// **Este decoder devolve `null` (não `unimplemented`) para o que ainda não tem dono** — decisão
-/// registrada na task B13.17: como o arquivo cresce ao longo de 5 tasks (B13.17-B13.21), reivindicar
-/// o frame inteiro agora faria as linhas restantes virarem `UNIMPLEMENTED` prematuramente, antes
-/// de alguém as implementar. A B13.21 (última do arquivo) troca este comportamento por
-/// `unimplemented` explícito (G8) quando fechar o arquivo inteiro. Até lá, o `null` cai no
-/// fallback de `ArmDecoder#decodeUnconditional`/`decodeUnconditionalThumb`, que já devolve
-/// `UNIMPLEMENTED` no fim da cadeia de extensões — o comportamento observável para as linhas ainda
-/// não implementadas não muda.
+/// **Este decoder devolvia `null` (não `unimplemented`) para o que ainda não tinha dono** — decisão
+/// registrada na task B13.17: como o arquivo cresceu ao longo de 5 tasks (B13.17-B13.21), reivindicar
+/// o frame inteiro antes de todas prontas faria as linhas restantes virarem `UNIMPLEMENTED`
+/// prematuramente. **A B13.21 (última do arquivo) fecha essa dívida**: com as 23 linhas
+/// implementadas, qualquer encoding dentro do frame que não bater em nenhum `if` agora devolve
+/// `unimplemented` explícito (G8) — nunca mais `null`.
 ///
 /// Layout comum (`neon-shared.decode`, `%vd_dp`/`%vn_dp`/`%vm_dp`, mesma convenção `D:Vd` de
 /// `VfpDecoder`/`NeonDataProcessingDecoder` em precisão dupla): `Vd` = bit22:bits[15:12], `Vn` =
@@ -47,9 +46,11 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `VSUDOT_scalar`, B13.18, e `VSMMLA`/`VUMMLA`/`VUSMMLA`, B13.19 — **quatro versões de
 /// arquitetura depois de `FEAT_DotProd`, gatear junto com ele seria factualmente errado**) e
 /// {@link ArmFeature#FP16_FUSED_MULTIPLY_ADD_LONG} (`FEAT_FHM`, `VFML`/`VFMSL` + formas `_scalar`,
-/// B13.20 — **não** `FEAT_FP16`, feature própria). **Nenhum preset declara nenhuma das quatro** (a
-/// saída de `NOT_IN_ANY_PRESET` é a B13.22), então sem a feature respectiva o encoding cai no
-/// `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
+/// B13.20 — **não** `FEAT_FP16`, feature própria) e {@link ArmFeature#BFLOAT16} (`FEAT_BF16`,
+/// `VDOT_b16`/`VMMLA_b16`/`VFMA_b16` + formas `_scal`, B13.21 — feature JÁ existente, criada pela
+/// B13.13 para `VCVT_B16_F32` em `neon-dp.decode`, reusada aqui sem mudança). **Nenhum preset
+/// declara nenhuma das cinco** (a saída de `NOT_IN_ANY_PRESET` é a B13.22), então sem a feature
+/// respectiva o encoding cai no `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonSharedDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -138,6 +139,37 @@ public final class NeonSharedDecoder implements DecoderExtension {
     private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_INDEX_BIT = 3;
     private static final int FUSED_MULTIPLY_ADD_LONG_SCALAR_DOUBLE_INDEX_HIGH_BIT = 5;
 
+    // ── `VDOT_b16`/`VDOT_b16_scal` (B13.21, `FEAT_BF16`): MESMA `DOT_PRODUCT_MASK` (família
+    // dot-product, nibble fixo `1101` em bits[11:8]) — discriminadas por bits[21:20]="00" (vetorial)
+    // e bit23=0/bits[21:20]="00" (escalar), em vez de "10"/"01" das formas inteiras. `bf16` não tem
+    // variante assinada/sem sinal, então bit4 (sinal nas formas inteiras) é sempre `0` aqui. Medido
+    // byte a byte contra `arm-linux-gnueabihf-as -march=armv8.2-a+bf16` (WSL): `vdot.bf16 q0,q1,q2`
+    // = `0xFC020D44` (masked = `0xFC00_0D00`), `vdot.bf16 d0,d1,d2[1]` = `0xFE010D22` (masked =
+    // `0xFE00_0D00`). ──
+    private static final int DOT_PRODUCT_VECTOR_BFLOAT16_VALUE = 0xFC00_0D00;
+    private static final int DOT_PRODUCT_SCALAR_BFLOAT16_VALUE = 0xFE00_0D00;
+
+    // ── `VMMLA_b16` (B13.21, `FEAT_BF16`): MESMA `MATRIX_MULTIPLY_MASK` — irmã de ponto flutuante
+    // de `VSMMLA`/`VUMMLA`/`VUSMMLA`, sempre 128 bits, sem sinal. Medido byte a byte:
+    // `vmmla.bf16 q0,q1,q2` = `0xFC020C44` (masked = `0xFC00_0C40`). ──
+    private static final int MATRIX_MULTIPLY_BFLOAT16_VALUE = 0xFC00_0C40;
+
+    // ── `VFMA_b16`/`VFMA_b16_scal` (B13.21, `FEAT_BF16`, mnemônicos `VFMAB`/`VFMAT`): a MESMA forma
+    // de MASK de `DOT_PRODUCT_MASK`/`MATRIX_MULTIPLY_MASK` (`0xFFB0_0F10`) bate por coincidência —
+    // nibble fixo em bits[11:8] é `1000` (não `1101` do produto escalar), constante PRÓPRIA para não
+    // confundir as duas famílias. **`bit6` (nomeado `q` no `.decode`) é, na prática, o seletor
+    // BOTTOM/TOP** (`VFMAB`=`0`/`VFMAT`=`1`), não largura — GAS recusa a forma não-`Q` (`invalid
+    // instruction shape`), confirmando que `Vn`/`Vm` são SEMPRE `Q` (estrutura idêntica ao A64
+    // `BFMLALB`/`BFMLALT`). Medido byte a byte: `vfmab.bf16 q0,q1,q2` = `0xFC320814`, `vfmat.bf16
+    // q0,q1,q2` = `0xFC320854` (só bit6 muda); `vfmab.bf16 q0,q1,d2[3]` = `0xFE32083A`. ──
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_MASK = 0xFFB0_0F10;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_VALUE = 0xFC30_0810;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_VALUE = 0xFE30_0810;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_TOP_BIT = 6;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_RM_MASK = 0x7;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_INDEX_HIGH_BIT = 5;
+    private static final int FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_INDEX_LOW_BIT = 3;
+
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
         if (architecture.has(ArmFeature.COMPLEX_NUMBER_ARITHMETIC)) {
@@ -199,8 +231,27 @@ public final class NeonSharedDecoder implements DecoderExtension {
                 return decodeFusedMultiplyAddLongScalar(raw, address, condition, true);
             }
         }
-        // Ainda sem dono (B13.21): devolve `null` de propósito, ver javadoc da classe.
-        return null;
+        if (architecture.has(ArmFeature.BFLOAT16)) {
+            if ((raw & DOT_PRODUCT_MASK) == DOT_PRODUCT_VECTOR_BFLOAT16_VALUE) {
+                return decodeDotProductVectorBFloat16(raw, address, condition);
+            }
+            if ((raw & DOT_PRODUCT_MASK) == DOT_PRODUCT_SCALAR_BFLOAT16_VALUE) {
+                return decodeDotProductScalarBFloat16(raw, address, condition);
+            }
+            if ((raw & MATRIX_MULTIPLY_MASK) == MATRIX_MULTIPLY_BFLOAT16_VALUE) {
+                return decodeMatrixMultiplyBFloat16(raw, address, condition);
+            }
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_BFLOAT16_MASK) == FUSED_MULTIPLY_ADD_LONG_BFLOAT16_VALUE) {
+                return decodeFusedMultiplyAddLongBFloat16(raw, address, condition);
+            }
+            if ((raw & FUSED_MULTIPLY_ADD_LONG_BFLOAT16_MASK) == FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_VALUE) {
+                return decodeFusedMultiplyAddLongScalarBFloat16(raw, address, condition);
+            }
+        }
+        // B13.21 fechou o arquivo (23 linhas: B13.17-B13.21 todas com dono): qualquer encoding
+        // dentro do frame `neon-shared` que não bateu em nenhum `if` acima é UNIMPLEMENTED de
+        // verdade (G8), não mais `null` — não há trabalho pendente restando neste arquivo.
+        return unimplemented(address, raw, condition);
     }
 
     /// `VCMLA`/`VCADD` (forma vetorial, 3 registradores): rotação já convertida para GRAUS
@@ -360,6 +411,78 @@ public final class NeonSharedDecoder implements DecoderExtension {
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
                 new IrOp.NeonFusedMultiplyAddLongByElement(subtract, quad, vd, vn, rm, index));
+    }
+
+    /// `VDOT_b16` (B13.21): MESMO layout de {@link #decodeDotProductVector} (vetorial, 3
+    /// registradores) — sem campos de sinal, `bf16` não tem variante assinada/sem sinal.
+    private DecodedInstruction decodeDotProductVectorBFloat16(int raw, int address, Condition condition) {
+        boolean quad = ((raw >>> QUAD_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        if (quad && ((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonDotProductBFloat16(quad, vd, vn, vm));
+    }
+
+    /// `VDOT_b16_scal` (B13.21): MESMO layout de {@link #decodeDotProductScalar}.
+    private DecodedInstruction decodeDotProductScalarBFloat16(int raw, int address, Condition condition) {
+        boolean quad = ((raw >>> QUAD_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = raw & NIBBLE_MASK;
+        int index = (raw >>> DOT_PRODUCT_INDEX_BIT) & 1;
+        if (quad && ((vd | vn) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonDotProductByElementBFloat16(quad, vd, vn, vm, index));
+    }
+
+    /// `VMMLA_b16` (B13.21): MESMO layout de {@link #decodeMatrixMultiply} — sem campos de sinal.
+    private DecodedInstruction decodeMatrixMultiplyBFloat16(int raw, int address, Condition condition) {
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        if (((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonMatrixMultiplyAccumulateBFloat16(vd, vn, vm));
+    }
+
+    /// `VFMA_b16` (`VFMAB`/`VFMAT`, B13.21): SEMPRE 128 bits — `Vd`/`Vn`/`Vm` são o `D` par que
+    /// inicia cada `Q` (índice ímpar em qualquer um dos três é UNDEFINED, mesma disciplina de
+    /// {@link #decodeMatrixMultiply}). `bit6` é o seletor BOTTOM/TOP (ver javadoc da classe/`IrOp`).
+    private DecodedInstruction decodeFusedMultiplyAddLongBFloat16(int raw, int address, Condition condition) {
+        boolean top = ((raw >>> FUSED_MULTIPLY_ADD_LONG_BFLOAT16_TOP_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        if (((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonFusedMultiplyAddLongBFloat16(top, vd, vn, vm));
+    }
+
+    /// `VFMA_b16_scal` (B13.21): `Vm` é um nibble de 3 bits DIRETO em bits[2:0] (`D0`-`D7`, SEM bit
+    /// de extensão — nunca combinado com evenness) e `índice` é `bit5:bit3` (2 bits ESPALHADOS,
+    /// MESMA convenção `%vfml_scalar_q1_index` de `VFML_scalar` quad=1).
+    private DecodedInstruction decodeFusedMultiplyAddLongScalarBFloat16(int raw, int address, Condition condition) {
+        boolean top = ((raw >>> FUSED_MULTIPLY_ADD_LONG_BFLOAT16_TOP_BIT) & 1) != 0;
+        int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
+        int vn = doubleRegister(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT);
+        int vm = raw & FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_RM_MASK;
+        int index = (((raw >>> FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_INDEX_HIGH_BIT) & 1) << 1)
+                | ((raw >>> FUSED_MULTIPLY_ADD_LONG_BFLOAT16_SCALAR_INDEX_LOW_BIT) & 1);
+        if (((vd | vn) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(top, vd, vn, vm, index));
     }
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {

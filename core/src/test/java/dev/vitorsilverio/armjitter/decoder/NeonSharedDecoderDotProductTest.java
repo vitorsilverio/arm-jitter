@@ -223,10 +223,15 @@ class NeonSharedDecoderDotProductTest {
                 decodeArm(DOT_PRODUCT_ONLY_ARCH, vusdotVector(true, 0, 2, 4)).kind());
         assertEquals(InstructionKind.UNIMPLEMENTED,
                 decodeArm(DOT_PRODUCT_ONLY_ARCH, dotMixedScalar(0, true, 0, 2, 4, 0)).kind());
-        // VSUDOT_scalar (sinal=1) colide com o espaço PRÉ-EXISTENTE de `CoprocessorRegisterDecoder`
-        // (ver o javadoc de `withoutTheFeatureEveryEncodingStaysUnimplemented`) — sem
-        // `INT8_MATRIX_MULTIPLY`, o fallback que reivindica este raw NÃO é o `NeonSharedDecoder`.
-        assertEquals(InstructionKind.COPROCESSOR,
+        // VSUDOT_scalar (sinal=1) colidia com o espaço PRÉ-EXISTENTE de `CoprocessorRegisterDecoder`
+        // ANTES da B13.21: sem `INT8_MATRIX_MULTIPLY`, o `NeonSharedDecoder` devolvia `null` (arquivo
+        // ainda incompleto) e o fallback que reivindicava este raw não era ele. **A B13.21 fechou o
+        // arquivo** (Aceite: "um encoding não reconhecido dentro do frame `neon-shared` agora devolve
+        // UNIMPLEMENTED, não null") — o `NeonSharedDecoder` agora reivindica ESTE raw também (ele
+        // reconhece a FAMÍLIA `VSUDOT_scalar`, só falta a feature) e reporta `UNIMPLEMENTED`
+        // diretamente, sem mais deixar `CoprocessorRegisterDecoder` decidir. Mudança de comportamento
+        // INTENCIONAL da B13.21, não regressão — reclassificado aqui de propósito.
+        assertEquals(InstructionKind.UNIMPLEMENTED,
                 decodeArm(DOT_PRODUCT_ONLY_ARCH, dotMixedScalar(1, true, 0, 2, 4, 0)).kind());
     }
 

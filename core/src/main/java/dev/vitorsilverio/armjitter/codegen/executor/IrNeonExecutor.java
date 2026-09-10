@@ -454,6 +454,51 @@ public final class IrNeonExecutor {
                 vfp, op.subtract(), lanes, op.vd(), baseRn, laneOffsetN, baseRm, index);
     }
 
+    /// `neon-shared`: `VDOT_b16` (B13.21, `FEAT_BF16`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#bfDotProduct}) — a MESMA função que o A64 já usa para `BFDOT` (B19.7).
+    /// Lanes de 32 bits sempre, mesma contagem de {@link #executeNeonDotProduct}.
+    public void executeNeonDotProductBFloat16(ArmCore core, IrOp.NeonDotProductBFloat16 op) {
+        VfpRegisters vfp = core.vfp();
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
+        AdvSimdLanes.bfDotProduct(vfp, lanes, op.vd(), op.vn(), op.vm());
+    }
+
+    /// `neon-shared`: `VDOT_b16_scal` (B13.21): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#bfDotProductByElement}) — `vm` é sempre um `D` (nunca combinado com
+    /// {@link IrOp.NeonDotProductByElementBFloat16#quad}).
+    public void executeNeonDotProductByElementBFloat16(ArmCore core, IrOp.NeonDotProductByElementBFloat16 op) {
+        VfpRegisters vfp = core.vfp();
+        int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
+        AdvSimdLanes.bfDotProductByElement(vfp, lanes, op.vd(), op.vn(), op.vm(), op.index());
+    }
+
+    /// `neon-shared`: `VMMLA_b16` (B13.21, `FEAT_BF16`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#bfMatrixMultiplyAccumulate}) — a MESMA função que o A64 já usa para
+    /// `BFMMLA` (B19.7), reusada sem nenhuma mudança.
+    public void executeNeonMatrixMultiplyAccumulateBFloat16(ArmCore core, IrOp.NeonMatrixMultiplyAccumulateBFloat16 op) {
+        VfpRegisters vfp = core.vfp();
+        AdvSimdLanes.bfMatrixMultiplyAccumulate(vfp, op.vd(), op.vn(), op.vm());
+    }
+
+    /// `neon-shared`: `VFMA_b16` (`VFMAB`/`VFMAT`, B13.21, `FEAT_BF16`): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#bfMultiplyAddLong}) — a MESMA função que o A64 já usa para
+    /// `BFMLALB`/`BFMLALT` (B19.7): `Vn`/`Vm` SEMPRE `Q` aqui (ver javadoc de
+    /// {@link IrOp.NeonFusedMultiplyAddLongBFloat16}), exatamente a largura de fonte que a função já
+    /// assume.
+    public void executeNeonFusedMultiplyAddLongBFloat16(ArmCore core, IrOp.NeonFusedMultiplyAddLongBFloat16 op) {
+        VfpRegisters vfp = core.vfp();
+        AdvSimdLanes.bfMultiplyAddLong(vfp, op.top(), op.vd(), op.vn(), op.vm());
+    }
+
+    /// `neon-shared`: `VFMA_b16_scal` (B13.21): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#bfMultiplyAddLongByElement}) — `vm` restrito a `D0`-`D7` (índice
+    /// `0`-`3`), mesmo núcleo do A64 `BFMLALB_vi`/`BFMLALT_vi` (que aceita índice até `7`, aqui
+    /// nunca ultrapassa `3`).
+    public void executeNeonFusedMultiplyAddLongByElementBFloat16(ArmCore core, IrOp.NeonFusedMultiplyAddLongByElementBFloat16 op) {
+        VfpRegisters vfp = core.vfp();
+        AdvSimdLanes.bfMultiplyAddLongByElement(vfp, op.top(), op.vd(), op.vn(), op.vm(), op.index());
+    }
+
     /// Palavra `D` que contém o registrador `S<index>` (`S<2i>`/`S<2i+1>` = metade baixa/alta de
     /// `D<i>`, ver {@link VfpRegisters#s}).
     private static int singleWord(int sIndex) {

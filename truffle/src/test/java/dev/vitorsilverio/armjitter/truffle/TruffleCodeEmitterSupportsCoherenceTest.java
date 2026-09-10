@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (99 desde B13.19), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (106 desde B13.21), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(99, kinds.size(), "IrOp.Kind deve ter 99 constantes contíguas");
+        assertEquals(106, kinds.size(), "IrOp.Kind deve ter 106 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -96,11 +96,24 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // NEON_TABLE_LOOKUP, NEON_DUPLICATE_SCALAR (+4, NEON também não tem nó Truffle). B13.15
         // acrescentou NEON_CRYPTO_AES, NEON_CRYPTO_SHA (+2, idem). B13.13 acrescentou
         // NEON_FP_CONVERT_PRECISION (+1, idem). B13.19 acrescentou NEON_MATRIX_MULTIPLY_ACCUMULATE
-        // (+1, idem).
-        assertEquals(33, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // (+1, idem). B13.20 acrescentou NEON_FUSED_MULTIPLY_ADD_LONG,
+        // NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT (+2, idem — faltava nesta lista/asserção desde
+        // 2026-09-09, achado PRÉ-EXISTENTE desta sessão B13.21, corrigido junto: reproduzido num
+        // checkout limpo ANTES de qualquer mudança da B13.21, mesma falha). B13.21 acrescentou
+        // NEON_DOT_PRODUCT_BFLOAT16, NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16,
+        // NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16, NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16,
+        // NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 (+5, idem).
+        assertEquals(40, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
+                        IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
+                        IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT,
+                        IrOp.Kind.NEON_DOT_PRODUCT_BFLOAT16,
+                        IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16,
+                        IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16,
+                        IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16,
+                        IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16,
                         IrOp.Kind.NEON_THREE_SAME,
                         IrOp.Kind.NEON_LOAD_STORE_MULTIPLE, IrOp.Kind.NEON_LOAD_STORE_SINGLE,
                         IrOp.Kind.NEON_LOAD_ALL_LANES, IrOp.Kind.NEON_PAIRWISE, IrOp.Kind.NEON_FP_THREE_SAME,
@@ -258,6 +271,15 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.NeonFusedMultiplyAddLong(false, false, 0, 1, 2);
             case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT ->
                     new IrOp.NeonFusedMultiplyAddLongByElement(false, false, 0, 1, 2, 0);
+            case IrOp.Kind.NEON_DOT_PRODUCT_BFLOAT16 -> new IrOp.NeonDotProductBFloat16(false, 0, 1, 2);
+            case IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16 ->
+                    new IrOp.NeonDotProductByElementBFloat16(false, 0, 1, 2, 0);
+            case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 ->
+                    new IrOp.NeonMatrixMultiplyAccumulateBFloat16(0, 2, 4);
+            case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16 ->
+                    new IrOp.NeonFusedMultiplyAddLongBFloat16(false, 0, 2, 4);
+            case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 ->
+                    new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(false, 0, 2, 4, 0);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

@@ -172,6 +172,11 @@ public final class AsmNativePolicy {
             case IrOp.NeonMatrixMultiplyAccumulate ignored -> false;
             case IrOp.NeonFusedMultiplyAddLong ignored -> false;
             case IrOp.NeonFusedMultiplyAddLongByElement ignored -> false;
+            case IrOp.NeonDotProductBFloat16 ignored -> false;
+            case IrOp.NeonDotProductByElementBFloat16 ignored -> false;
+            case IrOp.NeonMatrixMultiplyAccumulateBFloat16 ignored -> false;
+            case IrOp.NeonFusedMultiplyAddLongBFloat16 ignored -> false;
+            case IrOp.NeonFusedMultiplyAddLongByElementBFloat16 ignored -> false;
             case IrOp.NeonSwapPermute ignored -> false;
             case IrOp.NeonExtract ignored -> false;
             case IrOp.NeonTableLookup ignored -> false;
