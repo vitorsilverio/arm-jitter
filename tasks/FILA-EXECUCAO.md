@@ -47,7 +47,49 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-10, após B19.11a fechar)
+## Onde estamos (atualizado 2026-09-10, após B19.9 fechar o épico B19)
+
+**B19.9 FECHADA 2026-09-10** — fechamento do épico B19 (zero decode). Remedição: `ARMv8.0-A`
+82%→99% (858/862, os 174 `❌` do início do épico); `docs/COBERTURA-ISA.md` já estava em dia
+(zero-diff contra a sessão anterior no mesmo dia). **Varredura completa das 114 células `❌`/`⚠️`
+que ainda restam na tabela A64** — todas já mapeadas a um `Aarch64Feature` existente (decode puro,
+nenhuma precisa de feature nova nem de decisão de versão) — agrupadas em **19 degraus novos
+nomeados, nenhuma célula sem destino** (regra máxima):
+
+| Task | Feature | Linhas |
+|---|---|---:|
+| B19.14 | `MEMORY_TAGGING` (`FEAT_MTE2`) | 26 |
+| B19.15 | `POINTER_AUTHENTICATION` (resíduo) | 10 |
+| B19.16 | `MEMORY_COPY_SET` (`FEAT_MOPS`) | 9 |
+| B19.17 | `CRC32` (`FEAT_CRC32`) | 8 |
+| B19.18 | `DIRECTED_ROUNDING_TO_INTEGRAL` (`FEAT_FRINTTS`) | 8 |
+| B19.19 | `LRCPC2` | 7 |
+| B19.20 | `COMPLEX_NUMBER_ARITHMETIC` (`FEAT_FCMA`) | 6 |
+| B19.21 | `COMMON_SHORT_SEQUENCE_COMPRESSION` (`FEAT_CSSC`) | 5 |
+| B19.22 | `COMPARE_AND_BRANCH` (`FEAT_CMPBR`) | 5 |
+| B19.23 | `DOT_PRODUCT` (residual A64) | 4 |
+| B19.24 | `FP_ABSOLUTE_MAX_MIN` (`FEAT_FAMINMAX`) | 4 |
+| B19.25 | `LSE128` | 3 |
+| B19.26 | `FP16` (residual — `FMOV`/`FCVT` escalares fora do inventário da B19.5) | 6 |
+| B19.27 | `GUARDED_CONTROL_STACK` (`FEAT_GCS`) | 1 |
+| B19.28 | `SCALABLE_MATRIX_EXTENSION` (`FEAT_SME`) | 1 |
+| B19.29 | `JAVASCRIPT_CONVERT` (`FEAT_JSCVT`) | 1 |
+| B19.11c (irmã da B19.11b) | `FP8_DOT_PRODUCT_2WAY` | 2 |
+| B19.11d (irmã da B19.11b/c) | `FP8_DOT_PRODUCT_4WAY` | 2 |
+| B19.11e (irmã da B19.11b/c/d) | `FP8` — misdecode `FSCALE`, deixado de fora pela B19.11 | 2 |
+| B19.11b (já registrada pela B19.11) | `FEAT_FP8FMA` (nova, sem constante ainda) | 4 |
+
+Nenhuma dessas 19 tem arquivo de spec escrito ainda — só o nome/escopo/tamanho, registrados no
+`## Resultado` da B19.9. **Correção sobre estimativas antigas** desta própria fila/README:
+`FEAT_FCMA` mede 6 (não 4); "família FP8" mede 10 em 4 sub-grupos, não 7. **Achado novo**: as 6
+linhas de `FEAT_FP16` residual (`FMOV_hx`/`FMOV_xh`/`FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh`)
+não fazem parte do inventário de 84 linhas que a escada B19.5.1-B19.5.6 fechou — são `FMOV`/`FCVT`
+escalares puros, não as formas `_h` de família aritmética que aquele plano mediu. `docs/VALIDACAO-ARQUITETURAS.md`
+atualizado (linha AArch64: números antigos de 2026-09-02 trocados pelos atuais, épico B19 marcado
+FECHADO). `mvn -o test` verde (3495; as mesmas 2 falhas pré-existentes de
+`Aarch64Fp16VersionCurationTest`, confirmadas independentes via `git stash`) + `install`. **G5
+completo** (não leve) nos 5 consumidores — todos verdes, `core/src/main` intocado. Ver **Resultado**
+na task.
 
 **B19.11a FECHADA 2026-09-10** — `FPMR` (Floating-point Mode Register) via `MRS`/`MSR`, gateado por
 `Aarch64Feature.FP8` (mesmo `CRn`/`CRm` de `FPCR`/`FPSR`, só `op2` muda). Nasceu de uma sessão
@@ -124,7 +166,7 @@ código.
 
 | Épico | Dimensão | Estado da especificação |
 |---|---|---|
-| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **completo** — B19.1-B19.4 + B19.5.2 feitas; B19.5.3-B19.5.6 e B19.6-B19.13 com spec |
+| **B19** — gap remanescente do A64 | 1 (decode) | ✅ **ÉPICO FECHADO** (B19.9, 2026-09-10) — B19.1-B19.13 todas ✅; 114 células remanescentes viraram 19 degraus novos nomeados (B19.14-B19.29, B19.11b-e), ainda sem spec própria |
 | **B13** — NEON/AdvSIMD 32 bits | 1 (decode) | ✅ **completo** — B13.1-B13.8 feitas; B13.9-B13.22 com spec |
 | **C12** — emissão JIT nativa | 2 | ✅ **completo** — C12.1 feita; C12.2-C12.10 com spec |
 | **A10** — Truffle | 3 | ✅ **completo** — A10.1 feita, A10.2 absorvida; A10.3-A10.9 com spec |
@@ -134,21 +176,29 @@ ver "O que ainda precisa de spec".
 
 ### ✅ Pegáveis AGORA
 
-Nenhuma dependência aberta. Lista revalidada em 2026-09-09 (sessão da B19.13) contra o
-`INDICE.md` das trilhas B/C — **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do
-escopo desta sessão), mantidos abaixo por não terem sido tocados; B13.13/B19.12 já ✅ removidos
-antes (ver nota da B19.5.6 acima). **B19.13 fechada nesta sessão, removida da lista.**
+Lista revalidada em 2026-09-10 (sessão da B19.9): **B19.11 e B13.21 fecharam mais cedo no mesmo
+dia, removidas da lista.** **C12.5/C12.10 não reconferidos nesta rodada** (trilha C fora do escopo
+da B19.9), mantidos abaixo por não terem sido tocados.
 
 | Task | O que | Tamanho |
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B19.11](trilha-b-arquiteturas/b19.11-a64-fp8.md)** | A64 `FEAT_FP8` (12 linhas) — única das três features (BF16/FP8/I8MM) sem constante em `Aarch64Feature`. **Desbloqueada 2026-09-10 pela B19.11a** (getters reais de `FPMR` prontos) | 12 linhas |
-| **[B13.21](trilha-b-arquiteturas/b13.21-neon-shared-bf16.md)** | `neon-shared`: `VDOT_b16`/`VFMA_b16`/`VMMLA_b16` + `_scal` (`FEAT_BF16`) — **fecha o arquivo** `neon-shared` (troca `null` por `unimplemented`, G8); B13.20 já reivindicou seu espaço, agora seguro | 5 linhas |
 
-**B13.21 já é pegável formalmente** (dependências B13.19 ✅/B19.7 ✅; **B13.20 fechou nesta sessão**,
-então a condição que a bloqueava — "só depois que B13.20 também tiver reivindicado seu espaço no
-`neon-shared`" — está satisfeita). Não confirmado além disso nesta sessão (fora do escopo).
+### ⚠️ Nomeadas pela B19.9, ainda SEM arquivo de spec — não pegar direto, primeiro rodada de spec
+
+A **B19.9** (fechamento do épico B19) enumerou **19 degraus novos** que cobrem as 114 células
+`❌`/`⚠️` remanescentes da tabela A64 — cada um já mapeado a um `Aarch64Feature` existente (decode
+puro, sem decisão de versão em aberto). Nenhum tem arquivo `tasks/trilha-b-arquiteturas/b19.NN-*.md`
+ainda — só nome/escopo/tamanho, no `## Resultado` da B19.9. Precisam de uma rodada de spec (como
+B19.10-B19.13 precisaram) antes de serem executáveis por uma sessão comum:
+
+`B19.14` (MTE2, 26) · `B19.15` (PAuth, 10) · `B19.16` (MOPS, 9) · `B19.17` (CRC32, 8) ·
+`B19.18` (FRINTTS, 8) · `B19.19` (LRCPC2, 7) · `B19.20` (FCMA, 6) · `B19.21` (CSSC, 5) ·
+`B19.22` (CMPBR, 5) · `B19.23` (DotProd residual, 4) · `B19.24` (FAMINMAX, 4) · `B19.25` (LSE128, 3)
+· `B19.26` (FP16 residual, 6) · `B19.27` (GCS, 1) · `B19.28` (SME `MSR_i_SVCR`, 1) ·
+`B19.29` (JSCVT `FJCVTZS`, 1) · `B19.11c` (FP8_DOT_2WAY, 2) · `B19.11d` (FP8_DOT_4WAY, 2) ·
+`B19.11e` (FP8 `FSCALE` misdecode, 2) — mais a já registrada `B19.11b` (`FEAT_FP8FMA` nova, 4).
 
 **B19.10 FECHADA 2026-09-06** — as 13 linhas de cripto A64 SHA-512/SM3/SM4 (mesmo prefixo `0xCE`
 que a B11.12 abriu pela metade para `FEAT_SHA3`); achado real que corrige a spec: o campo que
@@ -286,8 +336,8 @@ torna-o honesto. v8.0/v8.1 88%→97%, v8.2+ 88%→**87%**.
 · `E12` · `E13` · `A10.1` · `A10.3` · `A10.4` · `A10.5` · `A10.6` · `C12.1` · `C12.2` · `C12.3` ·
 `C12.4` · `C12.7` · `B19.8` · `B13.12` · `B13.17` · `B13.18` · `B19.5.3` · `B19.6` · `B19.7` ·
 `B19.10` · `B19.12` · `B13.14` · `B19.5.4` · `B19.5.5` · `B13.15` · `B13.19` · `B13.20` · `B19.5.6` ·
-`B19.13` · `B19.11a` ·
-**épico `B22` inteiro**.
+`B19.13` · `B19.11a` · `B19.9` ·
+**épicos `B19` e `B22` inteiros**.
 
 ### O que AINDA precisa de spec
 

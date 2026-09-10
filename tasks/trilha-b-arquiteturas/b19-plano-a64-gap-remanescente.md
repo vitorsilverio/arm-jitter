@@ -104,6 +104,16 @@ global disponível hoje (~174 células × 16 colunas no denominador global).
 **Progresso real** (medido): 174 → **121** células `❌` depois de B19.1 (10), B19.2 (28) e B19.3 (29).
 A64 `ARMv8.0-A` 82% → **87%**; global 83% → **88%**.
 
+### ✅ ÉPICO FECHADO — B19.9, 2026-09-10
+
+`ARMv8.0-A` **99%** (858/862, os 4 `❌` restantes são a família `FEAT_FP8FMA` sem feature própria
+ainda — ver B19.11b); `ARMv9.5-A` **90%** (1033/1146). Todas as tasks B19.1-B19.13 ✅. As 114
+células `❌`/`⚠️` remanescentes na tabela A64 estão TODAS mapeadas a um `Aarch64Feature` já
+existente (puro decode, nenhuma decisão de versão em aberto) e viraram **19 degraus novos
+nomeados** — ver `## Resultado` da `b19.9-a64-fechamento.md` para a tabela completa
+(`B19.14`-`B19.29` + `B19.11b`-`B19.11e`, sibling da família FP8). Nenhum tem spec própria ainda;
+precisam de rodada de spec antes de serem executados, mesmo processo que B19.10-B19.13 seguiram.
+
 ## Invariantes específicos deste épico
 
 - **G1**: toda família nova é oráculo-interpretada primeiro; `Ir64NativePolicy` não recebe `Kind`
