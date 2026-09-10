@@ -1919,6 +1919,145 @@ public final class AdvSimdLanes {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // FP8 — B19.11 (`FEAT_FP8`). Dois formatos de 8 bits (`ARM DDI 0487` A1.4.7, mesma definição da
+    // OCP "OFP8"): `E5M2` (expoente 5, mantissa 2, viés 15) é estilo IEEE completo, com Infinito e
+    // NaN no expoente todo-1; `E4M3` (expoente 4, mantissa 3, viés 7) é a variante "FN" (Finite,
+    // NaN-only) — SEM Infinito: dos 8 padrões de mantissa no expoente todo-1, 7 são valores FINITOS
+    // de alcance estendido (até `448`) e só `frac=111` é `NaN`. Confirmado por medição (não suposto):
+    // `developer.arm.com`/OCP "FP8 Formats for Deep Learning" (NVIDIA/ARM/Intel) via busca, já que as
+    // páginas JS-renderizadas do `developer.arm.com` não são fetchable diretamente (mesma limitação
+    // que a B19.11a documentou para `FPMR`). `FPConvertFP8`/`F8ConvertToFP` (ARM DDI 0487) descrevem
+    // a mesma conversão que as funções abaixo implementam.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    private static final int FP8_E5M2_EXP_BITS = 5, FP8_E5M2_FRAC_BITS = 2, FP8_E5M2_BIAS = 15;
+    private static final int FP8_E4M3_EXP_BITS = 4, FP8_E4M3_FRAC_BITS = 3, FP8_E4M3_BIAS = 7;
+
+    /// `binary32 → fp8` DE VOLTA a `binary32` (`FP8ToFP`, exato) — usado por `F1CVTL`/`F2CVTL`/
+    /// `BF1CVTL`/`BF2CVTL` (que depois estreitam o resultado com {@link #halfBits}/{@link
+    /// #bf16Bits}, sempre exato: FP8 tem no máximo 3 bits de mantissa, muito abaixo dos 10/7 de
+    /// `binary16`/`bfloat16`) e pelo teste diferencial. `bits` só usa os 8 bits baixos.
+    public static float fp8ToFloat(int bits, boolean e4m3) {
+        int expBits = e4m3 ? FP8_E4M3_EXP_BITS : FP8_E5M2_EXP_BITS;
+        int fracBits = e4m3 ? FP8_E4M3_FRAC_BITS : FP8_E5M2_FRAC_BITS;
+        int bias = e4m3 ? FP8_E4M3_BIAS : FP8_E5M2_BIAS;
+        int expMask = (1 << expBits) - 1;
+        int fracMask = (1 << fracBits) - 1;
+        int sign = (bits >>> (expBits + fracBits)) & 1;
+        int exp = (bits >>> fracBits) & expMask;
+        int frac = bits & fracMask;
+        float magnitude;
+        if (exp == 0) {
+            // Zero (`frac=0`) ou subnormal: `valor = frac · 2^(1-viés-fracBits)`, sem bit implícito.
+            magnitude = frac == 0 ? 0f : frac * (float) Math.scalb(1.0, 1 - bias - fracBits);
+        } else if (exp == expMask && (!e4m3 || frac == fracMask)) {
+            // `E5M2`: expoente todo-1 é sempre Infinito(`frac=0`)/NaN. `E4M3`: só `frac=111` é NaN
+            // (Armadilha 2 da task — os outros 6 padrões deste expoente caem no `else` como FINITOS).
+            magnitude = (!e4m3 && frac == 0) ? Float.POSITIVE_INFINITY : Float.NaN;
+        } else {
+            // Normal — inclui o expoente todo-1 do E4M3 quando `frac != fracMask` (alcance
+            // estendido até `448`, sem bit de Infinito).
+            magnitude = (1f + (float) frac / (1 << fracBits)) * (float) Math.scalb(1.0, exp - bias);
+        }
+        // `-NaN` em Java preserva `NaN` só invertendo o bit de sinal (negação IEEE pura), então esta
+        // linha também cobre o caso `NaN` sem tratamento especial de sinal.
+        return sign != 0 ? -magnitude : magnitude;
+    }
+
+    /// `binary32 → fp8` arredondado round-to-nearest-even (`FPConvertFP8`, `ARM DDI 0487`) — usado
+    /// só por `FCVTN_bh`/`FCVTN_bs` (B19.11). `value` já deve vir ESCALADO por
+    /// {@code 2^SInt(FPMR.NSCALE)} (feito pelo chamador via {@link Math#scalb} — escala exata,
+    /// sem perda de precisão além da conversão em si). `saturateToMaxNormal` reflete
+    /// `FPMR.OSC` (medido em `developer.arm.com`/`df.lth.se` — mirror de `AArch64-fpmr`): `true`
+    /// satura no máximo normal do formato (`448`/`57344`); `false` gera o resultado "natural" de
+    /// overflow — Infinito para `E5M2` (que tem), `NaN` para `E4M3` (que NUNCA tem Infinito).
+    public static int floatToFp8(float value, boolean e4m3, boolean saturateToMaxNormal) {
+        int expBits = e4m3 ? FP8_E4M3_EXP_BITS : FP8_E5M2_EXP_BITS;
+        int fracBits = e4m3 ? FP8_E4M3_FRAC_BITS : FP8_E5M2_FRAC_BITS;
+        int bias = e4m3 ? FP8_E4M3_BIAS : FP8_E5M2_BIAS;
+        int expMask = (1 << expBits) - 1;
+        int fracMask = (1 << fracBits) - 1;
+        int bits32 = Float.floatToRawIntBits(value);
+        int signBit = bits32 < 0 ? (1 << (expBits + fracBits)) : 0;
+        int nanBits = signBit | (expMask << fracBits) | fracMask;
+        if (Float.isNaN(value)) {
+            return nanBits;
+        }
+        int maxNormalExp = e4m3 ? expMask : expMask - 1;
+        int maxNormalFrac = e4m3 ? fracMask - 1 : fracMask;
+        int overflowBits = saturateToMaxNormal
+                ? (signBit | (maxNormalExp << fracBits) | maxNormalFrac)
+                : (e4m3 ? nanBits : (signBit | (expMask << fracBits)));
+        float magnitude = Math.abs(value);
+        if (magnitude == 0f) {
+            return signBit;
+        }
+        if (Float.isInfinite(magnitude)) {
+            return overflowBits;
+        }
+        int magBits = Float.floatToRawIntBits(magnitude);
+        int rawExp = (magBits >>> 23) & 0xFF;
+        long rawMant = magBits & 0x7F_FFFFL;
+        int unbiasedExp;
+        long mantWithImplicit;
+        if (rawExp == 0) {
+            // `binary32` subnormal — magnitude ínfima (só alcançável com `NSCALE` bem negativo);
+            // renormaliza deslocando até achar o bit implícito, por completude.
+            int shiftNorm = Long.numberOfLeadingZeros(rawMant) - (64 - 24);
+            mantWithImplicit = rawMant << (shiftNorm + 1);
+            unbiasedExp = -126 - shiftNorm - 1;
+        } else {
+            unbiasedExp = rawExp - 127;
+            mantWithImplicit = rawMant | (1L << 23);
+        }
+        int targetExp = unbiasedExp + bias;
+        int shift = 23 - fracBits + Math.max(0, 1 - targetExp);
+        if (shift >= 40) {
+            // Deslocamento tão grande que nenhum bit sobrevive ao arredondamento — vira zero
+            // (evita deslocamento indefinido; `40` está bem acima do maior `shift` real, `23`).
+            return signBit;
+        }
+        long rounded = fp8RoundToNearestEven(mantWithImplicit, shift);
+        long finalFrac;
+        if (targetExp <= 0) {
+            // Subnormal (ou zero) no destino: `rounded` já é o `frac` subnormal cru — só passa de
+            // `fracMask` se arredondar exatamente para o menor normal (`carry` para `exp=1`).
+            if (rounded > fracMask) {
+                targetExp = 1;
+                finalFrac = 0;
+            } else {
+                targetExp = 0;
+                finalFrac = rounded;
+            }
+        } else if (rounded >= (1L << (fracBits + 1))) {
+            // Carry: a mantissa arredondou para `2.0` — sobe o expoente, mantissa volta a `0`.
+            targetExp++;
+            finalFrac = 0;
+        } else {
+            finalFrac = rounded & fracMask;
+        }
+        if (targetExp > maxNormalExp || (targetExp == maxNormalExp && finalFrac > maxNormalFrac)) {
+            return overflowBits;
+        }
+        return signBit | (targetExp << fracBits) | (int) finalFrac;
+    }
+
+    /// Arredonda `mantissa` (bits altos) descartando os `shift` bits baixos, round-to-nearest-even
+    /// (empate decidido pelo bit remanescente mais baixo) — usado só por {@link #floatToFp8}.
+    private static long fp8RoundToNearestEven(long mantissa, int shift) {
+        if (shift <= 0) {
+            return mantissa << -shift;
+        }
+        long half = 1L << (shift - 1);
+        long truncated = mantissa >>> shift;
+        long remainder = mantissa & ((1L << shift) - 1);
+        if (remainder > half || (remainder == half && (truncated & 1) != 0)) {
+            truncated++;
+        }
+        return truncated;
+    }
+
     /// `EXT`/`VEXT` (A64 B8.10, A32 B13.14) — concatena `baseRm:baseRn` (`baseRn` ocupa os bytes
     /// BAIXOS, `baseRm` os ALTOS) e extrai a janela de {@code datasizeBytes} bytes começando em
     /// {@code imm}, byte a byte (sem aritmética). Resultado calculado num buffer ANTES de qualquer

@@ -65,7 +65,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorIntegerDotProductByElement, Ir64Op.VectorIntegerMatrixMultiplyAccumulate,
         Ir64Op.CryptoSha512ThreeRegister, Ir64Op.CryptoSha512TwoRegister, Ir64Op.CryptoSm3ThreeRegister,
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
-        Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement {
+        Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
+        Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -346,6 +347,11 @@ public sealed interface Ir64Op permits
         /// B19.13: `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` indexado (`FEAT_FHM`) — ver
         /// {@link VectorFpMultiplyAddLongByElement}.
         public static final int VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT = 119;
+        /// B19.11: `FCVTN_bh`/`FCVTN_bs` (`FEAT_FP8`) — ver {@link VectorFpConvertToFp8}.
+        public static final int VECTOR_FP_CONVERT_TO_FP8 = 120;
+        /// B19.11: `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`FEAT_FP8`) — ver
+        /// {@link VectorFpConvertFromFp8}.
+        public static final int VECTOR_FP_CONVERT_FROM_FP8 = 121;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2288,6 +2294,62 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte.
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_PRECISION; }
+    }
+
+    /// `FCVTN_bh`/`FCVTN_bs` (AdvSIMD "three same (FP8 convert)", `FEAT_FP8`, B19.11) — ESTREITA
+    /// dois vetores FONTE (`Rn`/`Rm`) em elementos FP8 de 1 byte, um por operando, intercalados
+    /// (`Rn` nos bytes BAIXOS do resultado, `Rm` nos ALTOS — ARM DDI 0487, `FCVTN`/`FCVTN2`
+    /// "8-bit floating-point convert and interleave"). O formato FP8 de DESTINO e a escala vêm de
+    /// `FPMR.F8D`/`FPMR.NSCALE` (lidos em tempo de EXECUÇÃO pelo executor — nenhum campo estático
+    /// aqui, ao contrário de {@link VectorFpConvertPrecision}), e o overflow satura conforme
+    /// `FPMR.OSC` ({@code core.fp8OverflowSaturatesToMaxNormal()}). Duas formas de origem com
+    /// convenções de {@link #q} DIFERENTES (medido bit a bit, `bit22` do encoding real): com
+    /// {@link #halfSource}, `Rn`/`Rm` são `f16` e `q` dobra o NÚMERO de elementos (`4H+4H→8B` /
+    /// `8H+8H→16B`, convenção comum de "three same", sem conceito de metade); sem
+    /// {@link #halfSource}, `Rn`/`Rm` são `f32` (sempre 4 elementos) e `q` seleciona a METADE do
+    /// destino (convenção `FCVTN`/`FCVTN2` de {@link VectorFpConvertPrecision}).
+    record VectorFpConvertToFp8(
+            /// `true`=fonte `f16` (`FCVTN_bh`, `q` dobra o total de elementos); `false`=fonte `f32`
+            /// (`FCVTN_bs`, `q` seleciona a metade do destino, sempre 4 elementos por operando).
+            boolean halfSource,
+            /// Ver o Javadoc da classe — significado depende de {@link #halfSource}.
+            boolean q,
+            /// Registrador `V` de destino (FP8, 1 byte por elemento).
+            int rd,
+            /// Registrador `V` fonte 1 — preenche os bytes BAIXOS do resultado.
+            int rn,
+            /// Registrador `V` fonte 2 — preenche os bytes ALTOS do resultado.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_CONVERT_TO_FP8; }
+    }
+
+    /// `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (AdvSIMD "two-register miscellaneous (FP8 widen)",
+    /// `FEAT_FP8`, B19.11) — ALARGA 8 elementos FP8 de 1 byte (metade de `Rn` selecionada por
+    /// {@link #q}, convenção `FCVTL`/`FCVTL2` de {@link VectorFpConvertPrecision}) para 8 elementos
+    /// de 2 bytes, preenchendo os 128 bits inteiros de `Rd` — SEMPRE exato (FP8 tem no máximo 3 bits
+    /// de mantissa, `binary16`/`bfloat16` têm 10/7; o único jeito de perder precisão seria a escala
+    /// empurrar o valor para o alcance subnormal do destino, comportamento correto de hardware, não
+    /// um bug de arredondamento duplo). Formato de ORIGEM e escala vêm de `FPMR.F8S1`/`FPMR.LSCALE`
+    /// (`F1CVTL`/`BF1CVTL`, {@link #secondStream}=`false`) ou `FPMR.F8S2`/`FPMR.LSCALE2`
+    /// (`F2CVTL`/`BF2CVTL`, {@link #secondStream}=`true`), lidos em tempo de EXECUÇÃO. `BF1CVTL`/
+    /// `BF2CVTL` produzem `bfloat16` — MESMO núcleo de conversão de {@link Fp64ConvertToBf16}/
+    /// {@code AdvSimdLanes#bf16Bits} (B19.7), nunca `binary16`, apesar do prefixo `F` do mnemônico
+    /// irmão sugerir o contrário.
+    record VectorFpConvertFromFp8(
+            /// `false`=lê `FPMR.F8S1`/`FPMR.LSCALE` (`F1CVTL`/`BF1CVTL`); `true`=lê
+            /// `FPMR.F8S2`/`FPMR.LSCALE2` (`F2CVTL`/`BF2CVTL`).
+            boolean secondStream,
+            /// `true`=destino `bfloat16` (`BF1CVTL`/`BF2CVTL`); `false`=destino `binary16`
+            /// (`F1CVTL`/`F2CVTL`).
+            boolean bfloat16Destination,
+            /// Seleciona a metade de `Rn` que contém os 8 elementos FP8 fonte — mesma convenção de
+            /// {@link VectorFpConvertPrecision#q()} em {@link Ir64VectorFpConvertPrecisionOp#FCVTL}.
+            boolean q,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_CONVERT_FROM_FP8; }
     }
 
     /// `EXT` (AdvSIMD extract, B8.10) — concatena `Rm:Rn` (`Rn` ocupa os bits BAIXOS, `Rm` os

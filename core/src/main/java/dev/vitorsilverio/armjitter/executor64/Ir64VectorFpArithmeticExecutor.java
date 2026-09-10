@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
@@ -400,6 +401,72 @@ final class Ir64VectorFpArithmeticExecutor {
             fp.setElement(op.rd(), laneOffset + i, narrowEsz, narrowed[i]);
         }
         finishScalarAwareWrite(fp, op.rd(), false, op.q(), narrowEsz);
+        return false;
+    }
+
+    /// Largura, em bytes, de um elemento FP8 cru — nomeado (G6) para {@link #executeConvertToFp8}/
+    /// {@link #executeConvertFromFp8} em vez do `esz` mágico `0` espalhado pelo código.
+    private static final int FP8_ESZ = 0;
+
+    /// `FCVTN_bh`/`FCVTN_bs` (`FEAT_FP8`, B19.11) — ver Javadoc de {@link Ir64Op.VectorFpConvertToFp8}.
+    /// Formato de destino/escala/overflow vêm de `FPMR` em tempo de EXECUÇÃO
+    /// (`core.fp8DestinationFormat()`/`fp8NarrowScale()`/`fp8OverflowSaturatesToMaxNormal()`) — ao
+    /// contrário do resto deste executor, nenhum dos três é decidido em tempo de decodificação
+    /// (Armadilha 3 da task: são valores de um REGISTRADOR, não do encoding). Resultado bufferizado
+    /// (E10) antes de qualquer escrita — `Rd` pode ser `Rn`/`Rm`.
+    static boolean executeConvertToFp8(Aarch64Core core, Ir64Op.VectorFpConvertToFp8 op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean e4m3 = core.fp8DestinationFormat() == Aarch64Fp8Format.E4M3;
+        int scaleExponent = core.fp8NarrowScale();
+        boolean saturate = core.fp8OverflowSaturatesToMaxNormal();
+        int sourceEsz = op.halfSource() ? 1 : 2;
+        int elements = op.halfSource() ? (op.q() ? 8 : 4) : 4;
+        int laneOffset = op.halfSource() ? 0 : (op.q() ? 2 * elements : 0);
+        long[] result = new long[2 * elements];
+        for (int i = 0; i < elements; i++) {
+            result[i] = convertElementToFp8(fp.element(op.rn(), i, sourceEsz), sourceEsz, e4m3, scaleExponent, saturate);
+            result[elements + i] =
+                    convertElementToFp8(fp.element(op.rm(), i, sourceEsz), sourceEsz, e4m3, scaleExponent, saturate);
+        }
+        for (int i = 0; i < result.length; i++) {
+            fp.setElement(op.rd(), laneOffset + i, FP8_ESZ, result[i]);
+        }
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    private static long convertElementToFp8(
+            long srcBits, int sourceEsz, boolean e4m3, int scaleExponent, boolean saturate) {
+        float value = sourceEsz == 1
+                ? AdvSimdLanes.halfToFloat(srcBits)
+                : Float.intBitsToFloat((int) srcBits);
+        float scaled = Math.scalb(value, scaleExponent);
+        return AdvSimdLanes.floatToFp8(scaled, e4m3, saturate) & 0xFFL;
+    }
+
+    /// `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`FEAT_FP8`, B19.11) — ver Javadoc de
+    /// {@link Ir64Op.VectorFpConvertFromFp8}. Sempre alarga 8 elementos FP8 (metade de `Rn`
+    /// selecionada por {@link Ir64Op.VectorFpConvertFromFp8#q()}) para os 128 bits inteiros de `Rd`
+    /// — mesma disciplina de escrita completa de {@link #executeConvertPrecision}
+    /// ({@link Ir64VectorFpConvertPrecisionOp#FCVTL}), sem finalização (nada a zerar/preservar).
+    private static final int FP8_WIDEN_SOURCE_ELEMENTS = 8;
+
+    static boolean executeConvertFromFp8(Aarch64Core core, Ir64Op.VectorFpConvertFromFp8 op) {
+        Aarch64FpRegisters fp = core.fp();
+        Aarch64Fp8Format format = op.secondStream() ? core.fp8SourceFormat2() : core.fp8SourceFormat1();
+        boolean e4m3 = format == Aarch64Fp8Format.E4M3;
+        int downscale = op.secondStream() ? core.fp8WidenScale2() : core.fp8WidenScale();
+        int laneOffset = op.q() ? FP8_WIDEN_SOURCE_ELEMENTS : 0;
+        long[] widened = new long[FP8_WIDEN_SOURCE_ELEMENTS];
+        for (int i = 0; i < FP8_WIDEN_SOURCE_ELEMENTS; i++) {
+            long srcByte = fp.element(op.rn(), laneOffset + i, FP8_ESZ);
+            float value = AdvSimdLanes.fp8ToFloat((int) srcByte, e4m3);
+            float scaled = Math.scalb(value, -downscale);
+            widened[i] = op.bfloat16Destination() ? AdvSimdLanes.bf16Bits(scaled) : AdvSimdLanes.halfBits(scaled);
+        }
+        for (int i = 0; i < FP8_WIDEN_SOURCE_ELEMENTS; i++) {
+            fp.setElement(op.rd(), i, 1, widened[i]);
+        }
         return false;
     }
 

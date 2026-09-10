@@ -382,6 +382,10 @@ public final class Ir64BlockExecutor {
                     Ir64VectorFpArithmeticExecutor.executeConvertFixedPoint(core, (Ir64Op.VectorFpConvertFixedPoint) op);
             case Ir64Op.Kind.VECTOR_FP_CONVERT_PRECISION ->
                     Ir64VectorFpArithmeticExecutor.executeConvertPrecision(core, (Ir64Op.VectorFpConvertPrecision) op);
+            case Ir64Op.Kind.VECTOR_FP_CONVERT_TO_FP8 ->
+                    Ir64VectorFpArithmeticExecutor.executeConvertToFp8(core, (Ir64Op.VectorFpConvertToFp8) op);
+            case Ir64Op.Kind.VECTOR_FP_CONVERT_FROM_FP8 ->
+                    Ir64VectorFpArithmeticExecutor.executeConvertFromFp8(core, (Ir64Op.VectorFpConvertFromFp8) op);
             case Ir64Op.Kind.VECTOR_EXTRACT ->
                     Ir64VectorArithmeticExecutor.executeExtract(core, (Ir64Op.VectorExtract) op);
             case Ir64Op.Kind.VECTOR_PERMUTE ->

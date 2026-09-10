@@ -1051,8 +1051,16 @@ public final class Aarch64Decoder {
     /// separa de `BFCVTN_v`).
     private static final int ADVSIMD_FCVTXN_OPCODE = 0b0_1101;
     /// B19.4: opcode (bits[15:11]) de `FCVTL`/`BF*CVTL`/`F*CVTL` dentro do slot narrow/widen
-    /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = variantes FP8/BF16 (B19.7), recusadas aqui.
+    /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`
+    /// (`FEAT_FP8`, B19.11).
     private static final int ADVSIMD_FCVTL_OPCODE = 0b0_1111;
+    /// B19.11 (`FEAT_FP8`): opcode (bits[15:11]) de `FCVTN_bh`/`FCVTN_bs` ("AdvSIMD three same
+    /// (FP8 convert)", `Rm` é um registrador REAL, não este slot narrow/widen) — MESMO valor que
+    /// `FRECPX_s` (`ADVSIMD_FRECPX_OPCODE`) e que `SQRT` vetorial (`decodeVectorFpUnaryRmOneOpcode`,
+    /// `key==0b11`) em espaços DIFERENTES (aquele exige `bit21=1`; este exige `bit21=0`, o espaço de
+    /// "AdvSIMD three same (FP16)"/RDM) — nunca colidem. Confirmado byte a byte contra `a64.decode`
+    /// real (`target/isa-decode/a64.decode:1216-1217`).
+    private static final int ADVSIMD_FP8_THREE_SAME_CONVERT_OPCODE = 0b1_1110;
     /// B19.5.4 (`FEAT_FP16`): MESMO slot "two-register miscellaneous" de
     /// {@link #ADVSIMD_INT_RM_TWO_REG_MISC} (`0b0_0000`), com `Rm[4:3]=0b11` em vez de `0b00` — o
     /// encoding real fixa `bit22` em `1` para marcar o grupo de meia precisão (nos `_sd` irmãos,
@@ -3152,6 +3160,17 @@ public final class Aarch64Decoder {
                     return fp16ThreeSameOp;
                 }
             }
+            // B19.11 (`FEAT_FP8`): `FCVTN_bh`/`FCVTN_bs` vivem no MESMO espaço `bit21=0`,
+            // discriminadas por `opcode=0b1_1110` (`bit15=1`, o valor que
+            // {@link #decodeAdvancedSimdFp16ThreeSame} trata como reservado/RDM e devolve `null`) —
+            // checado DEPOIS do FP16 (nunca colide: FP16 exige `bit15=0`) e ANTES de EXT/permute/
+            // copy/SHA. Sem a feature, pulado inteiro (byte a byte igual a antes desta task).
+            if (architecture.has(Aarch64Feature.FP8)) {
+                Ir64Op fp8ThreeSameOp = decodeAdvancedSimdFp8ThreeSame(word, scalar, q);
+                if (fp8ThreeSameOp != null) {
+                    return fp8ThreeSameOp;
+                }
+            }
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
             // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
@@ -3395,8 +3414,22 @@ public final class Aarch64Decoder {
                     return new Ir64Op.VectorFpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.BFCVTN, q, 1, rd, rn);
                 }
-                // `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`u`, opcode `0b0_1111`, `FEAT_FP8`) e toda
-                // combinação restante ⇒ B19.11 / reservado ⇒ `unsupported` (G8).
+                // B19.11 (`FEAT_FP8`): `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` — MESMO slot/opcode,
+                // `u=1` (o ramo que B19.4/B19.7 deixavam cair no `unsupported` de baixo). `precisionA`
+                // (bit23) distingue `F*CVTL`(0, destino `binary16`) de `BF*CVTL`(1, destino
+                // `bfloat16`); `precisionSz` (bit22) distingue `1`(0, `FPMR.F8S1`/`LSCALE`) de
+                // `2`(1, `FPMR.F8S2`/`LSCALE2`) — confirmado byte a byte contra `a64.decode` real
+                // (`target/isa-decode/a64.decode:1971-1975`) e o pseudocódigo ARM real de
+                // `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (`developer.arm.com`/`scs.stanford.edu`).
+                if (opcode == ADVSIMD_FCVTL_OPCODE && u) {
+                    if (!architecture.has(Aarch64Feature.FP8)) {
+                        throw unsupported(word, address);
+                    }
+                    boolean bfloat16Destination = precisionA == 1;
+                    boolean secondStream = precisionSz == 1;
+                    return new Ir64Op.VectorFpConvertFromFp8(secondStream, bfloat16Destination, q, rd, rn);
+                }
+                // Toda combinação restante ⇒ reservado ⇒ `unsupported` (G8).
                 throw unsupported(word, address);
             }
             // B8.9 (vetorial: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/...) + B19.3
@@ -3599,6 +3632,41 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+    }
+
+    /// B19.11 (`FEAT_FP8`): `FCVTN_bh`/`FCVTN_bs` — vivem no MESMO espaço que
+    /// {@link #decodeAdvancedSimdFp16ThreeSame} (`bit21=0`, `bit10=1`), mas com `opcode=0b1_1110`
+    /// (`bit15=1`, que aquele método trata como reservado/RDM e devolve `null` — nunca colidem,
+    /// checado APÓS ele pelo chamador). `bit22` aqui NÃO é o discriminador fp16-vs-sd de sempre: é
+    /// o próprio seletor de largura de ORIGEM (`FCVTN_bh`=`1`/`FCVTN_bs`=`0`, Armadilha 6 da task —
+    /// as duas mnemônicas diferem SÓ nesse bit). `U`(bit29)/`a`(bit23) são fixos em `0` para ambas;
+    /// a família de acumulação vizinha (`FDOT_hb_v`/`FMLAL_hb_v`/`FMLALL_sb_v`, `opcode=0b1_1111`,
+    /// fora do escopo desta task — ver "Não inclui") não bate este `opcode` e continua caindo no
+    /// `unsupported` de sempre (G8). Sem forma escalar real (`a64.decode` só lista `@qrrr_h`
+    /// vetorial). Confirmado byte a byte contra `a64.decode` real
+    /// (`target/isa-decode/a64.decode:1216-1217`).
+    private Ir64Op decodeAdvancedSimdFp8ThreeSame(int word, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!bit10) {
+            return null;
+        }
+        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        if (opcodeH != ADVSIMD_FP8_THREE_SAME_CONVERT_OPCODE) {
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
+        if (u || a) {
+            return null;
+        }
+        boolean halfSource = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorFpConvertToFp8(halfSource, q, rd, rn, rm);
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
