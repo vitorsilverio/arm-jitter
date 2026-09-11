@@ -450,6 +450,7 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.TAG_MASK_INSERT -> executeTagMaskInsert(core, (Ir64Op.TagMaskInsert) op);
             case Ir64Op.Kind.MEMORY_SET_TAGGED ->
                     executeMemorySetTagged(core, (Ir64Op.MemorySetTagged) op);
+            case Ir64Op.Kind.MIN_MAX_GENERAL -> executeMinMaxGeneral(core, (Ir64Op.MinMaxGeneral) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
                     executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
             case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
@@ -787,6 +788,7 @@ public final class Ir64BlockExecutor {
             case CLZ -> op.wide() ? Long.numberOfLeadingZeros(src) : Integer.numberOfLeadingZeros((int) src);
             case CLS -> countLeadingSignBits(src, op.wide());
             case CNT -> op.wide() ? Long.bitCount(src) : Integer.bitCount((int) src);
+            case CTZ -> op.wide() ? Long.numberOfTrailingZeros(src) : Integer.numberOfTrailingZeros((int) src);
         };
         core.setXForWidth(op.dst(), result, op.wide());
         return false;
@@ -1360,6 +1362,33 @@ public final class Ir64BlockExecutor {
         long result = op.wide() ? Math.abs(value) : (int) Math.abs((int) value);
         core.setXForWidth(op.rd(), result, op.wide());
         return false;
+    }
+
+    /// `SMAX`/`SMIN`/`UMAX`/`UMIN` (B19.21) — MESMA técnica de leitura de operando com/sem sinal
+    /// de {@code readDivideOperand} (`SDIV` em `W` exige sign-extend explícito dos 32 bits baixos;
+    /// as demais combinações já vêm zero-estendidas "de graça" via {@link Aarch64Core#xForWidth}).
+    private boolean executeMinMaxGeneral(Aarch64Core core, Ir64Op.MinMaxGeneral op) {
+        boolean signed = switch (op.op()) {
+            case SMAX, SMIN -> true;
+            case UMAX, UMIN -> false;
+        };
+        boolean max = switch (op.op()) {
+            case SMAX, UMAX -> true;
+            case SMIN, UMIN -> false;
+        };
+        long value1 = readMinMaxOperand(core, op.src1(), signed, op.wide());
+        long value2 = readMinMaxOperand(core, op.src2(), signed, op.wide());
+        int comparison = signed ? Long.compare(value1, value2) : Long.compareUnsigned(value1, value2);
+        boolean firstWins = max ? comparison >= 0 : comparison <= 0;
+        core.setXForWidth(op.dst(), firstWins ? value1 : value2, op.wide());
+        return false;
+    }
+
+    private static long readMinMaxOperand(Aarch64Core core, int index, boolean signed, boolean wide) {
+        if (signed && !wide) {
+            return (long) (int) core.xForWidth(index, false);
+        }
+        return core.xForWidth(index, wide);
     }
 
     /// `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (B19.17) — polinômio REFLETIDO (o mesmo algoritmo

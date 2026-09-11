@@ -1,8 +1,9 @@
 package dev.vitorsilverio.armjitter.ir64;
 
 /// Sub-operação de {@link Ir64Op.DataProcessing1Source} (B8.2, subgrupo "Data-processing
-/// (1 source)" de "Data Processing — Register"). `CTZ`/`ABS`/`PACIA`/`AUTIA`/etc do MESMO
-/// subgrupo ficam fora (extensões posteriores — ver `docs/isa-nao-aplicavel.tsv`).
+/// (1 source)" de "Data Processing — Register"). `ABS`/`PACIA`/`AUTIA`/etc do MESMO subgrupo NÃO
+/// entram aqui: `ABS` tem record próprio ({@link Ir64Op.AbsGeneral}), `PACIA`/`AUTIA` são
+/// `FEAT_PAuth` (B19.15, ainda não implementada).
 public enum Ir64OneSourceOp {
     /// `RBIT` (`ARM DDI 0487 C6.2.240`): inverte a ordem dos BITS do registrador inteiro.
     RBIT,
@@ -29,5 +30,8 @@ public enum Ir64OneSourceOp {
     CLS,
     /// `CNT` (forma escalar de registrador geral, `FEAT_CSSC`/ARMv8.9 — incluída nesta task por
     /// decisão explícita do escopo B8.2, ver a task): população de bits setados (`popcount`).
-    CNT
+    CNT,
+    /// `CTZ` (`ARM DDI 0487`, B19.21, `FEAT_CSSC`): conta zeros à direita (`0`-`32`/`0`-`64`,
+    /// convenção de `CTZ(0)` = largura do registrador, mesma de `Long`/`Integer.numberOfTrailingZeros`).
+    CTZ
 }

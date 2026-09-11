@@ -47,6 +47,23 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.21 fechar)
+
+**B19.21 FECHADA 2026-09-11** — A64 `FEAT_CSSC` residual, forma de registrador geral (`CTZ`/
+`SMAX`/`SMIN`/`UMAX`/`UMIN`, 5 células). `CTZ` reusa 100% `Ir64Op.DataProcessing1Source` (novo
+valor no enum `Ir64OneSourceOp`, zero record novo); `SMAX`/`SMIN`/`UMAX`/`UMIN` ganharam record
+novo (`Ir64Op.MinMaxGeneral`, `Kind` 136, NÃO nativo por decisão da spec) decodificado no mesmo
+campo de opcode de `SUBP`/`IRG`/`GMI`/`PACGA`/`CRC32*`. **Bug real achado e corrigido ANTES do
+commit, medido pelo delta de `docs/COBERTURA-ISA.md`**: a checagem inicial de `CTZ` só comparava o
+opcode de 6 bits, sem exigir `Rm=00000` — como `AUTDA` (`FEAT_PAuth`, B19.15, ainda não
+implementada) mede o MESMO opcode de 6 bits com `Rm=00001` quando `Z=0`, `CTZ` teria absorvido essa
+forma de `AUTDA` (misdecode G8), detectado porque `AUTDA` saltou de `❌` para `✅` por engano na
+primeira rodada; corrigido checando `Rm==0` explicitamente, com teste de regressão dedicado.
+`docs/COBERTURA-ISA.md`: `ARMv8.9-A`/`ARMv9.4-A`/`ARMv9.5-A` cada +5, global 97% (18780→18795/
+19215). `docs/COBERTURA-JIT.md` regenerado (`Ir64Op.Kind` 136→137). `mvn -o test` verde (3622; as
+mesmas 3 falhas pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado**
+na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.14 fechar)
 
 **B19.14 FECHADA 2026-09-11** — A64 `FEAT_MTE2` (Memory Tagging Extension, ARMv8.5-A), o MAIOR

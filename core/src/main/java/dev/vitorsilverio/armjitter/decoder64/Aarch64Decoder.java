@@ -29,6 +29,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64MinMaxOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
@@ -761,6 +762,14 @@ public final class Aarch64Decoder {
     private static final int SUBP_OPCODE_PATTERN = 0b00_0000;
     private static final int IRG_OPCODE_PATTERN = 0b00_0100;
     private static final int GMI_OPCODE_PATTERN = 0b00_0101;
+
+    // ── B19.21: `SMAX`/`SMIN`/`UMAX`/`UMIN` (`FEAT_CSSC`) — MESMO subgrupo "Data-processing
+    // ── (2 source)" (opc2=00) de SUBP/IRG/GMI/PACGA/CRC32* acima, campo de 6 bits reaproveitado
+    // ── (`MTE_REGISTER_OPCODE_SHIFT`/`_MASK`, mesma posição bits[15:10]).
+    private static final int MIN_MAX_OPCODE_SMAX = 0b01_1000;
+    private static final int MIN_MAX_OPCODE_UMAX = 0b01_1001;
+    private static final int MIN_MAX_OPCODE_SMIN = 0b01_1010;
+    private static final int MIN_MAX_OPCODE_UMIN = 0b01_1011;
 
     // ── B19.25: "Atomic 128-bit memory operations" (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), o ────
     // ── outro lado do MESMO `MOPS_ATOMIC128_BIT_SHIFT` (bit21=1) que a B19.16 deixou recusado. ──────
@@ -1766,6 +1775,9 @@ public final class Aarch64Decoder {
     /// `ABS` de registrador geral (B19.6 bloco D, `FEAT_CSSC`) — medido bit a bit contra corpus
     /// real (`aarch64-none-elf-as`, `.arch armv8.9-a`).
     private static final int ONE_SOURCE_OPCODE_ABS = 0b00_1000;
+    /// `CTZ` (B19.21, `FEAT_CSSC`) — MESMO subgrupo/gate de {@link #ONE_SOURCE_OPCODE_ABS}, medido
+    /// bit a bit contra corpus real (`aarch64-linux-gnu-as`, `.arch armv8.9-a`).
+    private static final int ONE_SOURCE_OPCODE_CTZ = 0b00_0110;
 
     // ── Data-processing (3 source), B8.2: SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH — mesmo campo ──
     // ── de 8 bits fixos em bits[28:21] de MADD/MSUB (MADD_MSUB_FIXED_PATTERN), mas com valores ────
@@ -2976,8 +2988,24 @@ public final class Aarch64Decoder {
             if (mteRegisterOpcode == GMI_OPCODE_PATTERN) {
                 return decodeTagMaskInsert(word, address);
             }
-            // opcode restante: SMAX/SMIN/UMAX/UMIN (`FEAT_CSSC`, fora do escopo desta task — ver
-            // B19.21).
+            // B19.21: SMAX/SMIN/UMAX/UMIN (`FEAT_CSSC`) — MESMO campo `mteRegisterOpcode` acima.
+            Ir64MinMaxOp minMaxOp = switch (mteRegisterOpcode) {
+                case MIN_MAX_OPCODE_SMAX -> Ir64MinMaxOp.SMAX;
+                case MIN_MAX_OPCODE_SMIN -> Ir64MinMaxOp.SMIN;
+                case MIN_MAX_OPCODE_UMAX -> Ir64MinMaxOp.UMAX;
+                case MIN_MAX_OPCODE_UMIN -> Ir64MinMaxOp.UMIN;
+                default -> null;
+            };
+            if (minMaxOp != null) {
+                if (!architecture.has(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION)) {
+                    throw unsupported(word, address);
+                }
+                boolean minMaxWide = ((word >>> SF_SHIFT) & 1) != 0;
+                int minMaxRm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+                int minMaxRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                int minMaxRd = word & REGISTER_FIELD_MASK;
+                return new Ir64Op.MinMaxGeneral(minMaxOp, minMaxRd, minMaxRn, minMaxRm, minMaxWide);
+            }
             throw unsupported(word, address);
         }
         if (muldivFixed8 == ADD_SUB_CARRY_FIXED_PATTERN) {
@@ -3097,6 +3125,20 @@ public final class Aarch64Decoder {
             int absRd = word & REGISTER_FIELD_MASK;
             return new Ir64Op.AbsGeneral(absRd, absRn, wide);
         }
+        // B19.21: `CTZ Xd, Xn` (`FEAT_CSSC`) — MESMO gate/subgrupo de `ABS` acima. Bug real achado
+        // nesta task: `Rm`(bits[20:16]) tem que ser `00000` (`@rr_sf` no `a64.decode` real) — SEM
+        // essa checagem, `AUTDA`(`Rm=00001`, MESMO opcode de 6 bits com `Z=0`, `FEAT_PAuth`, ainda
+        // não implementada) seria misdecodificada como `CTZ` (G8: medido pelo delta de
+        // `docs/COBERTURA-ISA.md`, que mostrou `AUTDA` virando `✅` por engano antes deste fix).
+        if (opcode == ONE_SOURCE_OPCODE_CTZ
+                && ((word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK) == 0) {
+            if (!architecture.has(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION)) {
+                throw unsupported(word, address);
+            }
+            int ctzRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int ctzRd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CTZ, ctzRd, ctzRn, wide);
+        }
         Ir64OneSourceOp op = switch (opcode) {
             case ONE_SOURCE_OPCODE_RBIT -> Ir64OneSourceOp.RBIT;
             case ONE_SOURCE_OPCODE_REV16 -> Ir64OneSourceOp.REV16;
@@ -3111,7 +3153,7 @@ public final class Aarch64Decoder {
             case ONE_SOURCE_OPCODE_CLZ -> Ir64OneSourceOp.CLZ;
             case ONE_SOURCE_OPCODE_CLS -> Ir64OneSourceOp.CLS;
             case ONE_SOURCE_OPCODE_CNT -> Ir64OneSourceOp.CNT;
-            // CTZ(6)/ABS(8)/PACIA.../XPAC...: extensões posteriores, fora do escopo desta task.
+            // PACIA(9)/AUTIA(10)/...: FEAT_PAuth, fora do escopo desta task (B19.15).
             default -> throw unsupported(word, address);
         };
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;

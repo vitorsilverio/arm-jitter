@@ -71,7 +71,7 @@ public sealed interface Ir64Op permits
         Ir64Op.AtomicMemoryOpPair, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove,
         Ir64Op.Fp64ConvertHalfPrecision, Ir64Op.MemoryTag, Ir64Op.MemoryTagMultiple,
         Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
-        Ir64Op.MemorySetTagged {
+        Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -387,6 +387,9 @@ public sealed interface Ir64Op permits
         public static final int TAG_MASK_INSERT = 134;
         /// B19.14: `SETGP`/`SETGM`/`SETGE` (`FEAT_MTE2`+`FEAT_MOPS`) — ver {@link MemorySetTagged}.
         public static final int MEMORY_SET_TAGGED = 135;
+        /// B19.21: `SMAX`/`SMIN`/`UMAX`/`UMIN` de registrador geral (`FEAT_CSSC`) — ver
+        /// {@link MinMaxGeneral}.
+        public static final int MIN_MAX_GENERAL = 136;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3463,5 +3466,25 @@ public sealed interface Ir64Op permits
             /// Registrador com o byte de preenchimento nos 8 bits baixos (`Xs`/`XZR`).
             int rs) implements Ir64Op {
         @Override public int kind() { return Kind.MEMORY_SET_TAGGED; }
+    }
+
+    /// `SMAX`/`SMIN`/`UMAX`/`UMIN Rd, Rn, Rm` (`ARM DDI 0487`, B19.21, `FEAT_CSSC`) — máximo/mínimo
+    /// entre dois registradores gerais, com ou sem sinal (subgrupo "Data-processing (2 source)" de
+    /// "Data Processing — Register", `opc2=00`, MESMO campo de opcode de 6 bits que
+    /// {@link SubtractPointer}/{@link InsertRandomTag}/{@link TagMaskInsert} já reusam). Diferente
+    /// das formas homônimas AdvSIMD (`✅` desde B8.x, espaço de encoding totalmente diferente).
+    record MinMaxGeneral(
+            /// Sub-operação (`SMAX`/`SMIN`/`UMAX`/`UMIN`).
+            Ir64MinMaxOp op,
+            /// Registrador de destino (índice `0`-`31`; `31` é sempre `XZR`).
+            int dst,
+            /// Primeiro operando (`Rn`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src1,
+            /// Segundo operando (`Rm`, índice `0`-`31`; `31` é sempre `XZR`).
+            int src2,
+            /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`, resultado sempre
+            /// zero-estendido para os 64 bits altos do destino).
+            boolean wide) implements Ir64Op {
+        @Override public int kind() { return Kind.MIN_MAX_GENERAL; }
     }
 }
