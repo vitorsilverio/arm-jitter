@@ -160,6 +160,52 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270` — delega 100% ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#fpComplexAdd}, já escrito pela B13.17 para `VCADD` do NEON de 32 bits). Sem
+    /// forma escalar (ver Javadoc de {@link Ir64Op.VectorFpComplexAdd}).
+    static boolean executeComplexAdd(Aarch64Core core, Ir64Op.VectorFpComplexAdd op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        AdvSimdLanes.fpComplexAdd(fp, esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.rotation());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// B19.20 (`FEAT_FCMA`): `FCMLA_v` — delega ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#fpComplexMultiplyAccumulate}, B13.17).
+    static boolean executeComplexMultiplyAccumulate(Aarch64Core core, Ir64Op.VectorFpComplexMultiplyAccumulate op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        AdvSimdLanes.fpComplexMultiplyAccumulate(fp, esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.rotation());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// B19.20 (`FEAT_FCMA`): `FCMLA_vi` — delega ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#fpComplexMultiplyAccumulateByElement}, B13.17); {@link
+    /// Ir64Op.VectorFpComplexMultiplyAccumulateByElement#index} já é o índice do PAR (o núcleo
+    /// multiplica por `2` internamente).
+    static boolean executeComplexMultiplyAccumulateByElement(
+            Aarch64Core core, Ir64Op.VectorFpComplexMultiplyAccumulateByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        AdvSimdLanes.fpComplexMultiplyAccumulateByElement(fp, esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER, op.index(), op.rotation());
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
     static boolean executePairwise(Aarch64Core core, Ir64Op.VectorFpArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();

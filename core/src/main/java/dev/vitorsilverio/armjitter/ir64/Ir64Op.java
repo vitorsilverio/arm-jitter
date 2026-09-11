@@ -71,7 +71,9 @@ public sealed interface Ir64Op permits
         Ir64Op.AtomicMemoryOpPair, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove,
         Ir64Op.Fp64ConvertHalfPrecision, Ir64Op.MemoryTag, Ir64Op.MemoryTagMultiple,
         Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
-        Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace {
+        Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace,
+        Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
+        Ir64Op.VectorFpComplexMultiplyAccumulateByElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -393,6 +395,12 @@ public sealed interface Ir64Op permits
         /// B19.15: `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD`
         /// (`FEAT_PAuth`, formas de propósito geral) — ver {@link PointerAuthInPlace}.
         public static final int POINTER_AUTH_IN_PLACE = 137;
+        /// B19.20: `FCADD_90`/`FCADD_270` (`FEAT_FCMA`) — ver {@link VectorFpComplexAdd}.
+        public static final int VECTOR_FP_COMPLEX_ADD = 138;
+        /// B19.20: `FCMLA_v` (`FEAT_FCMA`) — ver {@link VectorFpComplexMultiplyAccumulate}.
+        public static final int VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE = 139;
+        /// B19.20: `FCMLA_vi` (`FEAT_FCMA`) — ver {@link VectorFpComplexMultiplyAccumulateByElement}.
+        public static final int VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT = 140;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2257,6 +2265,81 @@ public sealed interface Ir64Op permits
             /// `0`-`1` para dupla).
             int index) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT; }
+    }
+
+    /// `FCADD_90`/`FCADD_270` (B19.20, `FEAT_FCMA`) — trata PARES de lanes adjacentes de {@link
+    /// #rn}/{@link #rm} como números complexos (lane par = parte real, ímpar = imaginária) e soma
+    /// `Rn` com `Rm` ROTACIONADO no plano complexo antes de somar. Sem forma escalar real (ARM DDI
+    /// 0487: só vetorial). Núcleo reaproveitado 100% de {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexAdd} — o MESMO já escrito pela
+    /// B13.17 para `VCADD` (NEON de 32 bits), sem semântica nova aqui.
+    record VectorFpComplexAdd(
+            /// `true` para arranjo de 128 bits, `false` para 64 bits. `esz`=`3` (dupla) EXIGE
+            /// `q=true` no encoding real (uma `D` de 64 bits não cabe um par complexo de dupla
+            /// precisão) — o decoder já recusa a combinação `esz=3 && !q` (G8).
+            boolean q,
+            /// `log2` do tamanho de CADA componente (real/imaginário) em bytes: `1`(meia
+            /// precisão)/`2`(simples)/`3`(dupla).
+            int esz,
+            /// Rotação em graus aplicada a {@link #rm} antes de somar: `90` ou `270` (ver {@link
+            /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#COMPLEX_ROTATE_90}/{@code
+            /// COMPLEX_ROTATE_270}).
+            int rotation,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2 (rotacionado antes de somar).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_ADD; }
+    }
+
+    /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link
+    /// VectorFpComplexAdd}, mas multiplica `Rn` pelo par complexo de `Rm` (com uma das 4 rotações)
+    /// e ACUMULA em {@link #rd} (lido E escrito). As 4 rotações combinadas (`0`/`90`/`180`/`270`,
+    /// cada uma contribuindo uma parcela) reproduzem a multiplicação complexa completa `(a+bi)*
+    /// (c+di)` — padrão real de geração de código do GCC/LLVM para `_Complex`. Núcleo reaproveitado
+    /// de {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulate}
+    /// (B13.17, NEON de 32 bits).
+    record VectorFpComplexMultiplyAccumulate(
+            /// `true` para arranjo de 128 bits, `false` para 64 bits. `esz`=`3` (dupla) EXIGE
+            /// `q=true`, mesma restrição de {@link VectorFpComplexAdd#q}.
+            boolean q,
+            /// `log2` do tamanho de CADA componente em bytes (`1`/`2`/`3`).
+            int esz,
+            /// Rotação em graus: `0`/`90`/`180`/`270`.
+            int rotation,
+            /// Registrador `V` de destino — lido (acumulador) E escrito.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE; }
+    }
+
+    /// `FCMLA_vi` (B19.20, `FEAT_FCMA`) — como {@link VectorFpComplexMultiplyAccumulate}, mas
+    /// {@link #rm} contribui SEMPRE o MESMO par complexo, escolhido por {@link #index} (lido UMA
+    /// vez, replicado) — análogo a `FMLA`/`FMUL` indexado comum, mas em pares. Só `esz` `1`(meia
+    /// precisão) e `2`(simples) têm forma indexada real; não há forma `D` indexada (ARM DDI 0487) —
+    /// o `esz=2` real também exige `q=true` sempre (não existe `.2s` indexado, só `.4s`).
+    record VectorFpComplexMultiplyAccumulateByElement(
+            /// `true` para arranjo de 128 bits. Para {@link #esz}`=2` é SEMPRE `true` no encoding
+            /// real (decoder já recusa `esz=2 && !q`, G8).
+            boolean q,
+            /// `log2` do tamanho de CADA componente em bytes: `1`(meia precisão) ou `2`(simples).
+            int esz,
+            /// Rotação em graus: `0`/`90`/`180`/`270`.
+            int rotation,
+            /// Registrador `V` de destino — lido (acumulador) E escrito.
+            int rd,
+            /// Registrador `V` fonte 1 (lido par a par).
+            int rn,
+            /// Registrador `V` fonte 2 — só o PAR complexo em {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do PAR complexo de {@link #rm} (não do elemento individual real/imaginário).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT; }
     }
 
     /// AdvSIMD "three same" de ponto flutuante, pareado (`FADDP_v`/`FMAXP_v`/`FMINP_v`/

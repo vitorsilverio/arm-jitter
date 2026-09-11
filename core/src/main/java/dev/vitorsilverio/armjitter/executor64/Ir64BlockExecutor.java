@@ -506,6 +506,14 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongByElement(
                             core, (Ir64Op.VectorFpMultiplyAddLongByElement) op);
+            case Ir64Op.Kind.VECTOR_FP_COMPLEX_ADD ->
+                    Ir64VectorFpArithmeticExecutor.executeComplexAdd(core, (Ir64Op.VectorFpComplexAdd) op);
+            case Ir64Op.Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE ->
+                    Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulate(
+                            core, (Ir64Op.VectorFpComplexMultiplyAccumulate) op);
+            case Ir64Op.Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT ->
+                    Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulateByElement(
+                            core, (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

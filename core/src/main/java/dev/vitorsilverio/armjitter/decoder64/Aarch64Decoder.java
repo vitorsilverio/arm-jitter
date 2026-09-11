@@ -1511,6 +1511,33 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INDEXED_L_SHIFT = 21;
     private static final int ADVSIMD_INDEXED_LM_SHIFT = 20;
     private static final int ADVSIMD_INDEXED_LM_MASK = 0b11;
+    /// B19.20 (`FEAT_FCMA`): unidade de rotação em graus — `rot` (2 bits, `FCMLA`) ou 1 bit
+    /// (`FCADD`) sempre significa "× 90°" (`0`/`90`/`180`/`270`).
+    private static final int ADVSIMD_FCMA_ROTATION_UNIT_DEGREES = 90;
+    /// B19.20: `FCMLA_v` ("three same") tem `opcode`(bits[15:11], 5 bits) `0b110rr` — `rr` é a
+    /// rotação (`0`-`3`, × {@link #ADVSIMD_FCMA_ROTATION_UNIT_DEGREES}). Máscara/padrão dos 3 bits
+    /// altos, confirmados bit a bit contra `aarch64-linux-gnu-as -march=armv8.3-a` (WSL): `fcmla
+    /// v0.4h,v1.4h,v2.4h,#0` → opcode=`0b11000`; `#90`→`0b11001`; `#180`→`0b11010`; `#270`→
+    /// `0b11011`.
+    private static final int ADVSIMD_FCMA_OPCODE_PREFIX_MASK = 0b1_1100;
+    private static final int ADVSIMD_FCMA_OPCODE_PREFIX_PATTERN = 0b1_1000;
+    private static final int ADVSIMD_FCMA_ROTATION_MASK = 0b11;
+    /// B19.20: `FCADD_90`/`FCADD_270` ("three same") — opcode FIXO (sem campo `rot`, só as duas
+    /// rotações existem: `0°`/`180°` já são `FADD`/`FSUB` comuns). Confirmado contra corpus real:
+    /// `fcadd v0.4h,v1.4h,v2.4h,#90` → opcode=`0b11100`; `#270` → `0b11110`.
+    private static final int ADVSIMD_FCADD_OPCODE_90 = 0b1_1100;
+    private static final int ADVSIMD_FCADD_OPCODE_270 = 0b1_1110;
+    /// B19.20: `FCMLA_vi` ("vector × indexed element") tem `opcode`(bits[15:12], 4 bits) `0b0rr1` —
+    /// MESMA rotação de 2 bits (`rr`) que a forma "three same", só reempacotada em 4 bits em vez de
+    /// 5 (o bit baixo fixo `1` ocupa o lugar do `bit10=1`/`bit11` fixos da forma vetorial).
+    /// Confirmado contra corpus real: `fcmla v0.4h,v1.4h,v2.h[0],#0` → opcode=`0b0001`; `#90` →
+    /// `0b0011`; `#180` → `0b0101`; `#270` → `0b0111` — nenhum desses 4 valores colide com
+    /// `MLA`/`MLS`/`MUL`/`MULX`/RDM/etc. de {@link #decodeAdvancedSimdIndexedFp}/{@link
+    /// #decodeAdvancedSimdIndexedInt} porque todos exigem `U=0`, e `FCMLA_vi` tem `U=1` sempre
+    /// (checado exaustivamente, ver `## Resultado` da task).
+    private static final int ADVSIMD_FCMA_INDEXED_OPCODE_MASK = 0b1001;
+    private static final int ADVSIMD_FCMA_INDEXED_OPCODE_PATTERN = 0b0001;
+    private static final int ADVSIMD_FCMA_INDEXED_ROTATION_SHIFT = 1;
     /// B19.7 (`FEAT_BF16`): `opcode`(bits[15:12]) de `BFDOT_vi`/`BFMLAL_vi` — MESMO valor nos dois
     /// `size` diferentes (`01`=`BFDOT_vi`, `11`=`BFMLAL_vi`), ver
     /// {@link #decodeAdvancedSimdIndexedElement}.
@@ -3835,6 +3862,16 @@ public final class Aarch64Decoder {
                     return fp8ThreeSameOp;
                 }
             }
+            // B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` também vivem no MESMO espaço
+            // `bit21=0` (`U=1`+`bit10=1` fixos, opcode nunca colide com RDM/FP16/FP8 acima —
+            // conferido exaustivamente, ver o Javadoc das constantes `ADVSIMD_FCMA_*`) — checado
+            // DEPOIS do FP8 e ANTES de EXT/permute/copy/SHA. Sem a feature, pulado inteiro.
+            if (architecture.has(Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC)) {
+                Ir64Op fcmaOp = decodeAdvancedSimdComplexNumberArithmetic(word, scalar, q);
+                if (fcmaOp != null) {
+                    return fcmaOp;
+                }
+            }
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
             // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
@@ -4331,6 +4368,47 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.VectorFpConvertToFp8(halfSource, q, rd, rn, rm);
+    }
+
+    /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
+    /// `FEAT_RDM`/FP16/FP8-three-same/EXT-permute-TBL/copy/SHA (checado ANTES de EXT/permute, mesma
+    /// disciplina de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate}), discriminados
+    /// por `U`=1 fixo + `bit10`=1 fixo + `opcode`(bits[15:11], ver as constantes `ADVSIMD_FCMA_*`).
+    /// `esz`(bits[23:22]) livre em `{1,2,3}` (`0` reservado, G8); `esz=3`(dupla) EXIGE `q=true` no
+    /// encoding real — não cabe um par complexo de dupla precisão em 64 bits (confirmado: o
+    /// assembler real só produz `.2d`, nunca `.1d`, para `FCADD`/`FCMLA`). Sem forma escalar (ARM
+    /// DDI 0487: só vetorial). Núcleo reaproveitado 100% de `advsimd/AdvSimdLanes`
+    /// (`fpComplexAdd`/`fpComplexMultiplyAccumulate`, já escrito pela B13.17 para o NEON de 32
+    /// bits). `null` (nunca `unsupported`) para qualquer combinação fora das 6 formas reais — G8,
+    /// deixa o chamador continuar tentando EXT/permute/TBL/copy/SHA no mesmo espaço.
+    private Ir64Op decodeAdvancedSimdComplexNumberArithmetic(int word, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!u || !bit10) {
+            return null;
+        }
+        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
+        if (esz == 0 || (esz == ADVSIMD_INT_SCALAR_ESZ && !q)) {
+            return null; // `esz=0` reservado; `esz=3&&!q` UNDEFINED (par complexo não cabe em D).
+        }
+        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        if ((opcode & ADVSIMD_FCMA_OPCODE_PREFIX_MASK) == ADVSIMD_FCMA_OPCODE_PREFIX_PATTERN) {
+            int rotation = (opcode & ADVSIMD_FCMA_ROTATION_MASK) * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES;
+            return new Ir64Op.VectorFpComplexMultiplyAccumulate(q, esz, rotation, rd, rn, rm);
+        }
+        if (opcode == ADVSIMD_FCADD_OPCODE_90) {
+            return new Ir64Op.VectorFpComplexAdd(q, esz, ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
+        }
+        if (opcode == ADVSIMD_FCADD_OPCODE_270) {
+            return new Ir64Op.VectorFpComplexAdd(q, esz, 3 * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
+        }
+        return null;
     }
 
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
@@ -5232,6 +5310,33 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         boolean l = ((word >>> ADVSIMD_INDEXED_L_SHIFT) & 1) != 0;
         boolean h = ((word >>> ADVSIMD_INDEXED_H_SHIFT) & 1) != 0;
+        // B19.20 (`FEAT_FCMA`): `FCMLA_vi` hijacka `opcode`(bits[15:12]) `0b0rr1` (`rr`=rotação) nos
+        // slots `sizeField=HALFWORD`(H,`esz=1`, hoje só inteiro) e `sizeField=WORD`(S,`esz=2`) — `U`
+        // sempre `1` (nenhuma chave real de `decodeAdvancedSimdIndexedFp`/`Int` usa `U=1` com este
+        // opcode, ver `ADVSIMD_FCMA_INDEXED_*`), checado ANTES do `switch` genérico pelo MESMO
+        // motivo dos blocos `BFLOAT16`/`I8MM`/`FHM`/`DotProd` abaixo. Sem forma `D` real (ARM DDI
+        // 0487): a forma `S` também exige `Q=1` sempre (não existe `.2s` indexado, só `.4s`,
+        // confirmado contra corpus real — `l`/bit21 fixo `0` nessa forma). Na forma `H`, `!q`
+        // (`.4h`) usa só `L`(bit21) como índice (`H`/bit11 fixo `0`); `q` (`.8h`) usa `H:L`.
+        if (!scalar && u && (opcode & ADVSIMD_FCMA_INDEXED_OPCODE_MASK) == ADVSIMD_FCMA_INDEXED_OPCODE_PATTERN
+                && architecture.has(Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC)
+                && (sizeField == ADVSIMD_INDEXED_SIZE_HALFWORD || sizeField == ADVSIMD_INDEXED_SIZE_WORD)) {
+            int rotation = ((opcode >>> ADVSIMD_FCMA_INDEXED_ROTATION_SHIFT) & ADVSIMD_FCMA_ROTATION_MASK)
+                    * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES;
+            if (sizeField == ADVSIMD_INDEXED_SIZE_WORD && q && !l) {
+                int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+                int index = h ? 1 : 0;
+                return new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(true, 2, rotation, rd, rn, rm, index);
+            }
+            if (sizeField == ADVSIMD_INDEXED_SIZE_HALFWORD && (q || !h)) {
+                int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+                int index = q ? ((h ? 0b10 : 0) | (l ? 0b01 : 0)) : (l ? 1 : 0);
+                return new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(q, 1, rotation, rd, rn, rmH, index);
+            }
+            // Combinações reservadas (`sizeField=WORD` com `!q`/`l=1`; `sizeField=HALFWORD` com
+            // `!q&&h`) nunca são reais (G8) — caem na cadeia normal abaixo, que também não as trata,
+            // terminando em `unsupported`.
+        }
         // B19.7 (`FEAT_BF16`): `BFDOT_vi`/`BFMLAL_vi` hijacham o MESMO `opcode`(bits[15:12])=`1111`
         // em DOIS slots de `size` diferentes (`01`=`BFDOT_vi`, `11`=`BFMLAL_vi`) — checados ANTES
         // do `switch` genérico porque cada um colide com um caso existente: `BFDOT_vi` cairia no
