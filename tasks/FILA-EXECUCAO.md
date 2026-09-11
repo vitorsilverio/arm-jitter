@@ -47,6 +47,18 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.19 fechar)
+
+**B19.19 FECHADA 2026-09-11** — A64 `FEAT_LRCPC2` (`LDAPR_i` 6 formas + `STLR_i`, 7 células).
+Reuso total: os campos de `LDAPR_i`/`STLR_i` (`size`/`opc`/`imm9`/`Rn`/`Rt`) caem nas MESMAS
+posições de bit que `LDUR`/`STUR` já decodificados — zero código de campo novo, só o gate de
+`Aarch64Feature.LRCPC2` + despacho por bits[11:10] (`00`=`LDAPR_i`/`STLR_i`, `01`=MOPS) dentro de
+`decodeMemoryCopyAndSet`, ANTES do gate de `MEMORY_COPY_SET` (features independentes). Nenhum
+`Ir64Op.Kind` novo — vira `Load64`/`Store64` comuns, `docs/COBERTURA-JIT.md` zero-diff. Vetores
+golden via `aarch64-linux-gnu-as -march=armv8.4-a` (WSL). `docs/COBERTURA-ISA.md`: global 95%→96%
+(18428→18512/19215). `mvn -o test` verde (3590; as mesmas 3 falhas pré-existentes) + `install`.
+**G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.23 fechar)
 
 **B19.23 FECHADA 2026-09-11** — A64 `FEAT_DotProd` residual (`SDOT_v`/`UDOT_v`/`SDOT_vi`/`UDOT_vi`,

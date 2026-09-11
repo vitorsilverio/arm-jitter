@@ -117,12 +117,24 @@ class Aarch64MemoryCopySetDecoderTest {
     }
 
     @Test
-    void ldaprImmediateFamilyStaysUnsupportedDespiteSharedPrefixWithMops() {
+    void ldaprImmediateFamilyDecodesInsteadOfBeingConfusedWithMops() {
         // LDAPUR/LDAPURB/STLUR (FEAT_LRCPC2, B19.19) compartilham o prefixo de 6 bits `011001`
         // (bits[29:24]) com SETP/CPYFx (bit26=0) e só divergem em bits[11:10] — sem checar esse
-        // campo, LDAPURB (opc=01) misdecodificaria como CPYFM (achado real desta task).
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, LDAPUR_X));
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, LDAPURB_W));
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, STLUR_X));
+        // campo, LDAPURB (opc=01) misdecodificaria como CPYFM (achado real da B19.16). `MOPS_DECODER`
+        // (`ARMV8_8_A`) inclui `LRCPC2` (`ARMv8.4-A`) por composição, então os 3 decodificam de
+        // verdade aqui — ver `Aarch64Lrcpc2DecoderTest` para a cobertura completa de B19.19.
+        Ir64Op.Load64 x = (Ir64Op.Load64) decode(MOPS_DECODER, LDAPUR_X);
+        assertEquals(0, x.rt());
+        assertEquals(1, x.rn());
+        assertEquals(8L, x.immediate());
+
+        Ir64Op.Load64 b = (Ir64Op.Load64) decode(MOPS_DECODER, LDAPURB_W);
+        assertEquals(0, b.rt());
+        assertEquals(1, b.rn());
+
+        Ir64Op.Store64 s = (Ir64Op.Store64) decode(MOPS_DECODER, STLUR_X);
+        assertEquals(0, s.rt());
+        assertEquals(1, s.rn());
+        assertEquals(8L, s.immediate());
     }
 }

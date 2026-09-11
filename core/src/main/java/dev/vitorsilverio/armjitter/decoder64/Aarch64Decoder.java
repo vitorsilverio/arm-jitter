@@ -718,6 +718,9 @@ public final class Aarch64Decoder {
     private static final int MOPS_FIXED_BITS_11_10_SHIFT = 10;
     private static final int MOPS_FIXED_BITS_11_10_MASK = 0b11;
     private static final int MOPS_FIXED_BITS_11_10_VALUE = 0b01;
+    /// `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, B19.19) fixam bits[11:10]="00" no MESMO campo que
+    /// discrimina MOPS acima — ver o Javadoc de {@link #decodeLoadAcquireOrStoreReleaseUnscaledImmediate}.
+    private static final int LDAPR_STLR_I_FIXED_BITS_11_10_VALUE = 0b00;
 
     // ── B19.25: "Atomic 128-bit memory operations" (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), o ────
     // ── outro lado do MESMO `MOPS_ATOMIC128_BIT_SHIFT` (bit21=1) que a B19.16 deixou recusado. ──────
@@ -1987,26 +1990,31 @@ public final class Aarch64Decoder {
     /// `SETGM`/`SETGE` (bit26=1 na família `SET*`, B19.14) continuam `unsupported` aqui de
     /// propósito — esta task não os implementa. `unpriv`/`nontemp` (`SET*`) e `options` (`CPY*`)
     /// não são modelados (mesma decisão de `PRFM`/`FPCR.RMode`: sem MMU de permissão nem cache
-    /// para os hints afetarem). **Achado real desta task**: `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`,
-    /// `@ldapr_stlr_i`, B19.19, ainda não implementada) compartilham o MESMO prefixo de 6 bits
-    /// `011001` (bits[29:24]) que `SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE` (bit26=0 nos dois
-    /// grupos) E o mesmo bit21=0 — só divergem em bits[11:10] (`01` fixo em MOPS, `00` fixo em
-    /// `LDAPR_i`/`STLR_i`, confirmado byte a byte contra `a64.decode` real do QEMU). Checar esse
-    /// campo é OBRIGATÓRIO antes de aceitar como MOPS, senão `LDAPR_i` com `opc=01/10/11`
-    /// misdecodificaria como `CPYFM`/`CPYFE`/`SETP` (G8).
+    /// para os hints afetarem). `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, `@ldapr_stlr_i`, B19.19)
+    /// compartilham o MESMO prefixo de 6 bits `011001` (bits[29:24]) que `SETP`/`SETM`/`SETE`/
+    /// `CPYFP`/`CPYFM`/`CPYFE` (bit26=0 nos dois grupos) E o mesmo bit21=0 — só divergem em
+    /// bits[11:10] (`01` fixo em MOPS, `00` fixo em `LDAPR_i`/`STLR_i`, confirmado byte a byte
+    /// contra `a64.decode` real do QEMU). Checar esse campo é OBRIGATÓRIO antes de aceitar como
+    /// MOPS, senão `LDAPR_i` com `opc=01/10/11` misdecodificaria como `CPYFM`/`CPYFE`/`SETP` (G8);
+    /// a B19.19 despacha para {@link #decodeLoadAcquireOrStoreReleaseUnscaledImmediate} ANTES de
+    /// checar {@link Aarch64Feature#MEMORY_COPY_SET}.
     private Ir64Op decodeMemoryCopyAndSet(int word, long address) {
         if (((word >>> MOPS_ATOMIC128_BIT_SHIFT) & 1) != 0) {
             // LDCLRP/LDSETP/SWPP (FEAT_LSE128, B19.25) — feature PRÓPRIA, independente de
             // FEAT_MOPS (checada abaixo só para o resto deste bucket); checar aqui, não depois.
             return decodeAtomic128(word, address);
         }
+        int fixedBits1110 = (word >>> MOPS_FIXED_BITS_11_10_SHIFT) & MOPS_FIXED_BITS_11_10_MASK;
+        if (fixedBits1110 == LDAPR_STLR_I_FIXED_BITS_11_10_VALUE) {
+            // LDAPR_i/STLR_i (FEAT_LRCPC2, B19.19) — mesmo prefixo de 6 bits que SETP/CPYFx,
+            // discriminado só por bits[11:10] (ver comentário de MOPS_FIXED_BITS_11_10_SHIFT).
+            return decodeLoadAcquireOrStoreReleaseUnscaledImmediate(word, address);
+        }
         if (!architecture.has(Aarch64Feature.MEMORY_COPY_SET)) {
             throw unsupported(word, address);
         }
-        if (((word >>> MOPS_FIXED_BITS_11_10_SHIFT) & MOPS_FIXED_BITS_11_10_MASK) != MOPS_FIXED_BITS_11_10_VALUE) {
-            // LDAPR_i/STLR_i (FEAT_LRCPC2, B19.19) — mesmo prefixo de 6 bits, ainda não
-            // implementada por esta task; recusar em vez de confundir com SETP/CPYFx (G8).
-            throw unsupported(word, address);
+        if (fixedBits1110 != MOPS_FIXED_BITS_11_10_VALUE) {
+            throw unsupported(word, address); // reservado
         }
         int rd = word & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -2023,6 +2031,32 @@ public final class Aarch64Decoder {
         }
         boolean forwardOnly = !tagOrGenericDirection;
         return new Ir64Op.MemoryCopy(decodeMopsPhase(phaseField, word, address), forwardOnly, rd, rs, rn);
+    }
+
+    /// `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, ARMv8.4-A, B19.19) — a forma com **offset imediato de 9
+    /// bits com sinal** de `LDAPR`/`STLR` (que só existiam com endereçamento por registrador,
+    /// `FEAT_LRCPC`/B19.1). Campos `sz`(bits[31:30])/`opc`(bits[23:22])/`imm9`(bits[20:12])/
+    /// `Rn`(bits[9:5])/`Rt`(bits[4:0]) caem EXATAMENTE nas mesmas posições que
+    /// {@link #SINGLE_SIZE_SHIFT}/{@link #SINGLE_OPC_SHIFT}/{@link #SINGLE_IMM9_SHIFT}/
+    /// {@link #RN_SHIFT} de {@link #decodeLoadStoreSingle} — reusa {@link #decodeSingleForm} e
+    /// {@link #buildSingle} sem nenhuma lógica nova: os mesmos combos reservados de `size`×`opc`
+    /// (`WORD`+`SIGN_EXTEND_TO_W`, `DOUBLEWORD`+`SIGN_EXTEND_TO_X`/`SIGN_EXTEND_TO_W`) já excluem
+    /// exatamente as combinações que o `a64.decode` real não lista para `LDAPR_i`. Ordenação
+    /// acquire/release é NOP observável neste interpretador single-thread — mesma decisão herdada
+    /// de `LDAR`/`STLR`/`LDAPR` sem offset (Javadoc de {@link Aarch64Feature#LRCPC2}), não
+    /// revisitada aqui.
+    private Ir64Op decodeLoadAcquireOrStoreReleaseUnscaledImmediate(int word, long address) {
+        if (!architecture.has(Aarch64Feature.LRCPC2)) {
+            throw unsupported(word, address);
+        }
+        int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
+        int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        SingleForm form = decodeSingleForm(sizeField, opcField, word, address);
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        int imm9 = (word >>> SINGLE_IMM9_SHIFT) & (int) bitMask(SINGLE_IMM9_BITS);
+        long immediate = signExtend(imm9, SINGLE_IMM9_BITS);
+        return buildSingle(form, rt, rn, Ir64AddressingMode.OFFSET, immediate, -1, null, 0);
     }
 
     private Ir64Op.Ir64MopsPhase decodeMopsPhase(int phaseBits, int word, long address) {
