@@ -47,6 +47,22 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.23 fechar)
+
+**B19.23 FECHADA 2026-09-11** — A64 `FEAT_DotProd` residual (`SDOT_v`/`UDOT_v`/`SDOT_vi`/`UDOT_vi`,
+4 células), reusando 100% o record `Ir64Op.VectorIntegerDotProduct`/`VectorIntegerDotProductByElement`
+e o núcleo `AdvSimdLanes.dotProduct`/`dotProductByElement` que `USDOT`/`SUDOT` (B19.12) já deixaram
+prontos — zero código de núcleo novo, só decode. **Achado que corrige a spec e um comentário
+pré-existente**: apesar de o `## Resultado` da B19.12 já ter revisado a premissa "já ✅" (frase
+copiada de um engano da própria B19.12), o Javadoc do bloco `USDOT_v` ainda afirmava que "`U=1` no
+MESMO opcode de `USDOT_v` seria `UDOT_v`" — **errado**: `UDOT_v` vive num opcode VIZINHO
+(`0b10010`, não `0b10011`), confirmado byte a byte contra `aarch64-linux-gnu-as -march=armv8.2-a+dotprod`
+(WSL). Achado de decode: `SDOT_vi`/`UDOT_vi` usam `Rm` de 5 bits LIVRES (`V0`-`V31`), diferente do
+`Rm` restrito a `V0`-`V15` de `USDOT_vi`. `docs/COBERTURA-ISA.md`: as 4 células ❌→✅ de `ARMv8.2-A`
+em diante (56 células/14 colunas), global 18372→18428/19215 (95% inalterado no arredondamento).
+`mvn -o test` verde (3584; as mesmas 3 falhas pré-existentes) + `install`. **G5 completo** nos 5
+consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.28 fechar)
 
 **B19.28 FECHADA 2026-09-11** — A64 `FEAT_SME` residual (`MSR SVCR<mask>, #imm`, 1 célula), o degrau

@@ -3105,20 +3105,20 @@ public sealed interface Ir64Op permits
         @Override public int kind() { return Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
     }
 
-    /// `USDOT` vetorial (`FEAT_I8MM`, B19.12) — produto escalar de 4 bytes por lane com sinal POR
-    /// OPERANDO (`Rn` sem sinal, `Rm` com sinal — não existe `SUDOT` vetorial, só a forma indexada,
-    /// ver {@link VectorIntegerDotProductByElement}), acumulando em `int32` com WRAP (nunca satura).
-    /// Sibling inteiro do produto escalar `bf16`
+    /// `USDOT`/`SDOT`/`UDOT` vetorial (`FEAT_I8MM`/`FEAT_DotProd`, B19.12/B19.23) — produto escalar
+    /// de 4 bytes por lane com sinal POR OPERANDO (`USDOT`: `Rn` sem sinal, `Rm` com sinal; `SDOT`:
+    /// os dois com sinal; `UDOT`: os dois sem sinal — não existe `SUDOT` vetorial, só a forma
+    /// indexada, ver {@link VectorIntegerDotProductByElement}), acumulando em `int32` com WRAP
+    /// (nunca satura). Sibling inteiro do produto escalar `bf16`
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bfDotProduct} — núcleo em
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dotProduct} (nasceu na B13.18 para o
-    /// `neon-shared` de 32 bits, sem semântica A64 prévia para migrar: nem `SDOT_v`/`UDOT_v` do A64
-    /// têm decoder ainda — fora do escopo desta task, `FEAT_DotProd`).
+    /// `neon-shared` de 32 bits).
     record VectorIntegerDotProduct(
             /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
             boolean q,
-            /// Sinal de `Rn` (`USDOT`: sempre `false`, sem sinal).
+            /// Sinal de `Rn` (`USDOT`: sempre `false`; `SDOT`: sempre `true`; `UDOT`: sempre `false`).
             boolean signedN,
-            /// Sinal de `Rm` (`USDOT`: sempre `true`, com sinal).
+            /// Sinal de `Rm` (`USDOT`: sempre `true`; `SDOT`: sempre `true`; `UDOT`: sempre `false`).
             boolean signedM,
             /// Registrador `V` de destino (acumulador).
             int rd,
