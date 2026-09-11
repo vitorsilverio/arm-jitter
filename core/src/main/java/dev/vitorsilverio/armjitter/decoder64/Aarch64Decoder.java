@@ -681,6 +681,13 @@ public final class Aarch64Decoder {
     // ── no decoder). G8: recusar em vez de confundir.
     private static final int LITERAL_SUBCLASS_RESERVED_BIT_SHIFT = 24;
 
+    // ── GCSSTR/GCSSTTR (`FEAT_GCS`, B19.27, `a64.decode` linha 588): `11011001 000 11111 000 ────
+    // ── unpriv:1 11 rn:5 rt:5` — mesmo bucket bit24=1 de MOPS/LSE128 acima, distinguido por um ────
+    // ── prefixo fixo próprio nos bits[31:13]+[11:10] (bit12=`unpriv`, bits[9:5]=`rn`, ─────────────
+    // ── bits[4:0]=`rt` livres). Mask/value com `unpriv=rn=rt=0`. ────────────────────────────────
+    private static final int GCSSTR_FIXED_MASK = 0xFFFFEC00;
+    private static final int GCSSTR_FIXED_VALUE = 0xD91F0C00;
+
     // ── AdvSIMD load/store multiple/single structures (`LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R`, ────
     // ── B8.6): V=1 dentro da classe Loads-and-Stores, bit31 fixo=0, bit30=Q, bits[29:24] fixo ─────
     // ── "001100"(múltiplas)/"001101"(única) — fatos conferidos contra `a64.decode`/ ───────────────
@@ -1762,6 +1769,11 @@ public final class Aarch64Decoder {
         }
         if (subclass == SUBCLASS_LITERAL
                 && ((word >>> LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) & 1) != 0) {
+            // `GCSSTR`/`GCSSTTR` (`FEAT_GCS`, B19.27): prefixo próprio dentro deste mesmo bucket
+            // bit24=1 — interceptado ANTES do catch-all abaixo.
+            if ((word & GCSSTR_FIXED_MASK) == GCSSTR_FIXED_VALUE) {
+                return decodeGcsstr(word, address);
+            }
             // `CPYFP`/`CPYFM`/`CPYFE`/`SETP`/`SETM`/`SETE`/`LDCLRP`/`LDSETP`/`SWPP` (ver comentário
             // de LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) — G8.
             throw unsupported(word, address);
@@ -1851,6 +1863,24 @@ public final class Aarch64Decoder {
             return new Ir64Op.Store64(rt, rn, size, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
         }
         return new Ir64Op.Load64(rt, rn, size, false, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+    }
+
+    /// `GCSSTR`/`GCSSTTR` (`FEAT_GCS`, B19.27): grava `Xt` em `[Xn]`. **Escopo isolado** — só o
+    /// armazenamento em si, sem o resto do mecanismo de Guarded Control Stack (`GCSPR_EL0`/
+    /// `GCSPR_EL1`, integração automática com `BL`/`BLR`/`RET`, exceção de violação); ver
+    /// `## Resultado` da task para a task-mãe futura que cobre o restante da família. O bit
+    /// `unpriv` distingue `GCSSTR`(0) de `GCSSTTR`(1, forma "unprivileged") — NOP observável
+    /// neste emulador de espaço de endereço único, mesma simplificação já documentada para
+    /// `LDTR`/`STTR` em {@link #decodeLoadStoreSingle} e para `LDAR`/`STLR` em
+    /// {@link #decodeOrderedSingle}.
+    private Ir64Op decodeGcsstr(int word, long address) {
+        if (!architecture.has(Aarch64Feature.GUARDED_CONTROL_STACK)) {
+            throw unsupported(word, address);
+        }
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.Store64(
+                rt, rn, Ir64MemSize.DOUBLEWORD, true, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
     }
 
     private Ir64Op decodeExclusivePair(int word, boolean load) {
