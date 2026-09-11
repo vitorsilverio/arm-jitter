@@ -850,8 +850,10 @@ public final class IsaCoverageReport {
     static final Map<String, String> AARCH64_MISDECODED = new LinkedHashMap<>();
 
     static {
-        // `FEAT_PAuth` (ARMv8.3-A): `LDRAA`/`LDRAB` caem no catch-all de hint-space.
-        AARCH64_MISDECODED.put("LDRA#1", "SystemInstruction[NOP_HINT]");
+        // `FEAT_PAuth` (ARMv8.3-A): `LDRAA`/`LDRAB` caíam no catch-all de hint-space (o check de
+        // PRFM em `decodeLoadStoreSingle` não olhava `idx`/`bit21`). B19.15 (2026-09-11)
+        // interceptou `LDRA*` ANTES desse catch-all e implementou a rota (b) (delega para `LDR`
+        // comum) — sai da lista de MISDECODE, vira `✅` honesto.
         // `FEAT_MTE2` (ARMv8.5-A) e `FEAT_MOPS` (ARMv8.8-A): eram a MESMA classe de bug que a
         // B11.3 corrigiu para o `LDR (literal)` INTEIRO (`LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`) —
         // sobrava o caminho de literal de PONTO FLUTUANTE. A B19.16 (2026-09-10) corrigiu a

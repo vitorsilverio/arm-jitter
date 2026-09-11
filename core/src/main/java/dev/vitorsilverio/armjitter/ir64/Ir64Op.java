@@ -71,7 +71,7 @@ public sealed interface Ir64Op permits
         Ir64Op.AtomicMemoryOpPair, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove,
         Ir64Op.Fp64ConvertHalfPrecision, Ir64Op.MemoryTag, Ir64Op.MemoryTagMultiple,
         Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
-        Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral {
+        Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -390,6 +390,9 @@ public sealed interface Ir64Op permits
         /// B19.21: `SMAX`/`SMIN`/`UMAX`/`UMIN` de registrador geral (`FEAT_CSSC`) — ver
         /// {@link MinMaxGeneral}.
         public static final int MIN_MAX_GENERAL = 136;
+        /// B19.15: `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD`
+        /// (`FEAT_PAuth`, formas de propósito geral) — ver {@link PointerAuthInPlace}.
+        public static final int POINTER_AUTH_IN_PLACE = 137;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2834,6 +2837,28 @@ public sealed interface Ir64Op permits
             /// Segundo operando (`Xm`, o modificador).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.POINTER_AUTH_GENERIC; }
+    }
+
+    /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (`ARM DDI
+    /// 0487 C6.2.*`, B19.15, `FEAT_PAuth`) — formas de propósito geral que operam IN-PLACE sobre
+    /// `Xd` (assinar/autenticar/remover assinatura de um ponteiro). MESMA disciplina de placeholder
+    /// de {@link PointerAuthGeneric} (`PACGA`, B19.6 bloco C, precedente direto citado na task): este
+    /// emulador não modela autenticação de ponteiro real, então a rota adotada (decisão registrada
+    /// na task B19.15) é IDENTIDADE — `Xd` sai com o MESMO valor de entrada (`PAC*`/`AUT*` sempre
+    /// "bem-sucedidas", `XPAC*` não têm bits de assinatura para remover). `Xn` (modificador, quando
+    /// o encoding tem o campo — a forma "Z" usa modificador zero implícito) e a chave A-vs-B (`op`)
+    /// são decodificados só por fidelidade de desmontagem: sob esta rota nenhum dos dois afeta o
+    /// resultado observável (documentado, não uma omissão).
+    record PointerAuthInPlace(
+            /// Sub-operação decodificada (só documentação/desmontagem, ver acima).
+            Ir64PointerAuthOp op,
+            /// Registrador operando (`Xd`; lido E escrito no hardware real, permanece inalterado
+            /// sob identidade — índice `0`-`31`, `31` é `XZR`).
+            int rd,
+            /// Modificador (`Xn`; `-1` quando o encoding não tem este campo — `XPACI`/`XPACD`,
+            /// cujo `Rn` é fixo/reservado no encoding, não um operando real).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.POINTER_AUTH_IN_PLACE; }
     }
 
     /// `ABS Xd, Xn` (`ARM DDI 0487`, B19.6 bloco D, `FEAT_CSSC`) — valor absoluto de registrador

@@ -437,6 +437,8 @@ public final class Ir64BlockExecutor {
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             case Ir64Op.Kind.POINTER_AUTH_GENERIC ->
                     executePointerAuthGeneric(core, (Ir64Op.PointerAuthGeneric) op);
+            case Ir64Op.Kind.POINTER_AUTH_IN_PLACE ->
+                    executePointerAuthInPlace(core, (Ir64Op.PointerAuthInPlace) op);
             case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (Ir64Op.AbsGeneral) op);
             case Ir64Op.Kind.CRC32 -> executeCrc32(core, (Ir64Op.Crc32) op);
             case Ir64Op.Kind.MEMORY_SET -> executeMemorySet(core, (Ir64Op.MemorySet) op);
@@ -1351,6 +1353,14 @@ public final class Ir64BlockExecutor {
     /// fixo e documentado é seguro).
     private boolean executePointerAuthGeneric(Aarch64Core core, Ir64Op.PointerAuthGeneric op) {
         core.setX(op.rd(), 0L);
+        return false;
+    }
+
+    /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (B19.15) —
+    /// rota (b) registrada na task (ver javadoc de {@link Ir64Op.PointerAuthInPlace}): identidade.
+    /// `Xd` já contém o valor "autenticado"/"assinado" (o operando é lido E escrito no hardware
+    /// real, mas nada muda aqui) — nenhuma escrita de registrador é necessária.
+    private boolean executePointerAuthInPlace(Aarch64Core core, Ir64Op.PointerAuthInPlace op) {
         return false;
     }
 

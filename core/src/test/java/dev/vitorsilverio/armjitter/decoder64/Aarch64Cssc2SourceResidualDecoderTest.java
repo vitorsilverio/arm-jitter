@@ -66,12 +66,25 @@ class Aarch64Cssc2SourceResidualDecoderTest {
 
     @Test
     void ctzOpcodeWithNonZeroRmIsAutdaNotCtz() {
-        // Bug real achado nesta task: `AUTDA` (`FEAT_PAuth`, ainda não implementada) mede
-        // Rm(bits[20:16])=00001 e o MESMO opcode de 6 bits de `CTZ` (com Z=0) — sem checar Rm==0,
-        // CTZ misdecodificaria essa forma de AUTDA. Precisa continuar recusando (G8), mesmo sob
-        // CSSC.
+        // Bug real achado na B19.21: `AUTDA` mede Rm(bits[20:16])=00001 e o MESMO opcode de 6 bits
+        // de `CTZ` (com Z=0) — sem checar Rm==0, CTZ misdecodificaria essa forma de AUTDA. Sob
+        // `ARMv8.0-A` (sem `POINTER_AUTHENTICATION` nem `FEAT_CSSC`) continua recusando (G8).
         int autdaShaped = (CTZ_X0_X1 & ~(0b1_1111 << 16)) | (1 << 16);
-        assertThrows(UnsupportedOperationException.class, () -> decode(CSSC_DECODER, autdaShaped));
+        assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, autdaShaped));
+    }
+
+    @Test
+    void ctzOpcodeWithNonZeroRmIsAutdaWhenPauthIsAvailable() {
+        // B19.15: `CSSC_DECODER` é `ARMv8.9-A`, que já acumula `ARMv8.3-A`
+        // (`POINTER_AUTHENTICATION`) na cadeia de extensão — a MESMA forma "AUTDA-shaped" agora
+        // decodifica de verdade como `AUTDA` (rota (b): identidade), não mais `unsupported`. Prova
+        // de que o gate de `opcode2` desta task não reabriu a colisão que a B19.21 tinha fechado
+        // (CTZ continua exigindo `opcode2==0`, nunca confunde as duas formas).
+        int autdaShaped = (CTZ_X0_X1 & ~(0b1_1111 << 16)) | (1 << 16);
+        Ir64Op op = decode(CSSC_DECODER, autdaShaped);
+        assertTrue(op instanceof Ir64Op.PointerAuthInPlace);
+        assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64PointerAuthOp.AUTDA,
+                ((Ir64Op.PointerAuthInPlace) op).op());
     }
 
     // ── SMAX/SMIN/UMAX/UMIN ─────────────────────────────────────────────────────────────────────

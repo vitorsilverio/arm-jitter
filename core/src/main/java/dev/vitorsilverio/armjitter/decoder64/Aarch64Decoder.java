@@ -31,6 +31,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64MinMaxOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64PointerAuthOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
@@ -219,6 +220,37 @@ public final class Aarch64Decoder {
     private static final int BRANCH_REGISTER_OP3_FIXED = 0b00_0000;
     private static final int BRANCH_REGISTER_OP4_MASK = 0b1_1111;
     private static final int BRANCH_REGISTER_OP4_FIXED = 0b0_0000;
+
+    // ── B19.15: `BRAZ`/`BLRAZ`/`RETA`/`BRA`/`BLRA`/`ERETA` (`FEAT_PAuth`) — MESMO prefixo fixo de ──
+    // ── 7 bits (`BRANCH_REGISTER_FIXED_PATTERN`) e `op2`(`11111`) de `BR`/`BLR`/`RET`/`ERET` acima, ─
+    // ── mas `op3`(bits[15:10]) tem os 5 bits altos fixos em `00001` (em vez de `000000`) — o bit
+    // ── baixo de `op3` é `m` (chave A=0/B=1, não afeta o resultado sob a rota (b) registrada na
+    // ── task: nenhuma autenticação real é modelada, ver `Ir64Op.PointerAuthInPlace`). `opc`
+    // ── (bits[24:21]) distingue as 6 formas: `BRAZ`=0000/`BLRAZ`=0001/`RETA`=0010/`ERETA`=0100
+    // ── (MESMOS valores de `BR`/`BLR`/`RET`/`ERET`, diferenciados só por `op3`) e `BRA`=1000/
+    // ── `BLRA`=1001 (valores NOVOS, bit23 setado). `BRAZ`/`BLRAZ`/`RETA`/`ERETA` (modificador ZERO
+    // ── implícito) têm `op4`(bits[4:0]) fixo em `11111` (sem `Rm`); `BRA`/`BLRA` (modificador
+    // ── explícito) usam `op4` como `Rm` de verdade. Medido contra `ARM DDI 0487 C6.2.*`.
+    private static final int PAUTH_BRANCH_OP3_UPPER_SHIFT = 11;
+    private static final int PAUTH_BRANCH_OP3_UPPER_MASK = 0b1_1111;
+    private static final int PAUTH_BRANCH_OP3_UPPER_FIXED = 0b0_0001;
+    private static final int PAUTH_BRANCH_OPC_BRAZ = 0b0000;
+    private static final int PAUTH_BRANCH_OPC_BLRAZ = 0b0001;
+    private static final int PAUTH_BRANCH_OPC_RETA = 0b0010;
+    private static final int PAUTH_BRANCH_OPC_ERETA = 0b0100;
+    private static final int PAUTH_BRANCH_OPC_BRA = 0b1000;
+    private static final int PAUTH_BRANCH_OPC_BLRA = 0b1001;
+    /// `op4` fixo das formas com modificador ZERO implícito (`BRAZ`/`BLRAZ`/`RETA`/`ERETA`) — sem
+    /// `Rm` no encoding real (coincide em valor com {@link #BRANCH_REGISTER_OP2_FIXED}, mas é um
+    /// campo DIFERENTE — `op4`, não `op2` — mantido com nome próprio por clareza).
+    private static final int PAUTH_BRANCH_OP4_ZERO_MODIFIER_FIXED = 0b1_1111;
+    /// `Rn` fixo das formas sem registrador de alvo explícito (`RETA`/`ERETA` sempre operam sobre
+    /// `X30`/estado de exceção implícitos — `ARM DDI 0487`, mesmo raciocínio de
+    /// {@link #BRANCH_REGISTER_OPC_ERET}).
+    private static final int PAUTH_BRANCH_RN_FIXED = 0b1_1111;
+    /// `RETAA`/`RETAB` sempre retornam para `X30` (`ARM DDI 0487 C6.2.245`) — não há campo de
+    /// registrador no encoding (diferente de `RET Xn` comum, que aceita qualquer `Xn`).
+    private static final int PAUTH_RETA_TARGET_REGISTER = 30;
 
     // ── SVC: 11010100(31:24) opc=000(23:21) imm16(20:5) opc2=000(4:2) LL=01(1:0) ────────────
     private static final int EXCEPTION_GEN_FIXED_SHIFT = 24;
@@ -974,6 +1006,21 @@ public final class Aarch64Decoder {
     private static final int SINGLE_BIT21_SHIFT = 21;
     private static final int SINGLE_IMM9_SHIFT = 12;
     private static final int SINGLE_IMM9_BITS = 9;
+
+    // ── B19.15: `LDRA`(`LDRAA`/`LDRAB`, `FEAT_PAuth`) — MESMO espaço `idx`(bits[11:10])∈{01,11} +
+    // ── `bit21`=1 já interceptado acima (achado de tasks anteriores, ver comentário de
+    // ── "idx==POST_INDEX/PRE_INDEX com bit21=1"); `size`(bits[31:30]) é SEMPRE `DOUBLEWORD` (só
+    // ── existe a forma `X`, ponteiro de 64 bits). `M`(bit23, chave A/B) não afeta o resultado sob
+    // ── a rota (b) da task (mesmo precedente de `PointerAuthInPlace`/`decodePauthBranchRegister`).
+    // ── `S`(bit22)+`imm9`(bits[20:12]) formam um imediato de 10 bits com sinal, escalado por 8
+    // ── bytes (largura de um ponteiro) — `ARM DDI 0487 C6.2.133/134`.
+    private static final int LDRA_S_BIT_SHIFT = 22;
+    private static final int LDRA_IMM_TOTAL_BITS = SINGLE_IMM9_BITS + 1;
+    private static final int LDRA_SCALE_BYTES = 8;
+    /// `W`(writeback): mesma posição de bit que `idx`'s bit alto (`bit11`) — `idx=PRE_INDEX`
+    /// (`0b11`) tem `W=1` (endereço volta para `Xn`), `idx=POST_INDEX` (`0b01`) tem `W=0` (`Xn`
+    /// não muda, mero deslocamento) — nomes de `idx` aqui são só os já existentes de
+    /// {@link #decodeLoadStoreSingle}, reaproveitados por posição de bit, não por semântica.
     private static final int SINGLE_RM_SHIFT = 16;
     private static final int SINGLE_OPTION_SHIFT = 13;
     private static final int SINGLE_OPTION_MASK = 0b111;
@@ -1778,6 +1825,19 @@ public final class Aarch64Decoder {
     /// `CTZ` (B19.21, `FEAT_CSSC`) — MESMO subgrupo/gate de {@link #ONE_SOURCE_OPCODE_ABS}, medido
     /// bit a bit contra corpus real (`aarch64-linux-gnu-as`, `.arch armv8.9-a`).
     private static final int ONE_SOURCE_OPCODE_CTZ = 0b00_0110;
+    /// `opcode2`(bits[20:16] — mesma posição de `Rm`/{@link #ADDSUB_REGISTER_RM_SHIFT}) do subgrupo
+    /// "Data-processing (1 source)": `00000`=RBIT/REV*/CLZ/CLS/CNT/ABS/CTZ, `00001`=PAC/AUT/XPAC de
+    /// propósito geral (B19.15, `FEAT_PAuth`). Demais valores são reservados.
+    private static final int ONE_SOURCE_OPCODE2_STANDARD = 0b0_0000;
+    private static final int ONE_SOURCE_OPCODE2_PAUTH = 0b0_0001;
+    /// `opcode`(bits[15:10]) bits[5:4]=`00`: as 8 formas "assinar"/"autenticar" de propósito geral
+    /// (`PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`, bits[2:0] escolhem o
+    /// mnemônico — B19.15).
+    private static final int PAUTH_IN_PLACE_TOP2_GENERAL = 0b00;
+    /// `opcode` bits[5:4]=`01`: `XPACI`(`opcode=010000`)/`XPACD`(`opcode=010001`) — sem `Rn` real
+    /// (fixo em `11111` no encoding).
+    private static final int PAUTH_IN_PLACE_TOP2_XPAC = 0b01;
+    private static final int PAUTH_IN_PLACE_XPAC_RN_FIXED = 0b1_1111;
 
     // ── Data-processing (3 source), B8.2: SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH — mesmo campo ──
     // ── de 8 bits fixos em bits[28:21] de MADD/MSUB (MADD_MSUB_FIXED_PATTERN), mas com valores ────
@@ -2499,6 +2559,21 @@ public final class Aarch64Decoder {
     private Ir64Op decodeLoadStoreSingle(int word, long address) {
         int sizeField = (word >>> SINGLE_SIZE_SHIFT) & SINGLE_SIZE_MASK;
         int opcField = (word >>> SINGLE_OPC_SHIFT) & SINGLE_OPC_MASK;
+        // `LDRA` (B19.15, `FEAT_PAuth`): `idx`(bits[11:10])∈{POST_INDEX,PRE_INDEX} & `bit21`=1 &
+        // `size`=DOUBLEWORD — o mesmo espaço que o guard "idx==POST_INDEX/PRE_INDEX com bit21=1"
+        // abaixo já reservava (recusando com `unsupported`, tasks anteriores). Interceptado ANTES
+        // do caso PRFM abaixo: sem isso, `LDRAB` com `M=1,S=0` (`opcField` bits[23:22] igual a
+        // `OPC_LOAD_SIGN_EXTEND_TO_X`) misdecodificaria como PRFM (bug real achado nesta task — o
+        // check de PRFM não olha `idx`/`bit21`, só `size`/`opc`).
+        int idxField = (word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK;
+        boolean bit21Early = ((word >>> SINGLE_BIT21_SHIFT) & 1) != 0;
+        if (bit21Early && sizeField == SIZE_DOUBLEWORD
+                && (idxField == IDX_POST_INDEX || idxField == IDX_PRE_INDEX)) {
+            if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
+                throw unsupported(word, address);
+            }
+            return decodeLoadRegisterAuthenticated(word, address, idxField == IDX_PRE_INDEX);
+        }
         // Atomic memory operations (LSE `LDADD`/.../`SWP` + `LDAPR`, B19.1): `idx`==UNSCALED &
         // bit21==1, fora da forma "unsigned offset" (bit24==0). Interceptado ANTES do caso PRFM
         // abaixo — senão `LDADDA`/`SWPA`/... de largura `X` (`size`=11, `A`=1, `R`=0) casariam
@@ -2553,10 +2628,9 @@ public final class Aarch64Decoder {
             // `idx==POST_INDEX`/`PRE_INDEX` com bit21=1 (B11.3, achado real): os formatos
             // `@ldst_imm`/`@ldst_imm_post`/`@ldst_imm_pre`/`@ldst_imm_user` reais (`a64.decode` do
             // QEMU) exigem bit21=0 — bit21=1 nesse espaço é `LDRA`/`LDRAB` ("Load/store register
-            // (pointer authentication)"), que reaproveita os MESMOS bits `idx`/`imm9` com semântica
-            // diferente. Sem esta checagem, `LDRA*` era silenciosamente misdecodificado como
-            // `STR`/`LDUR` de um `Rn` que na verdade é a chave de modificador do PAC (probe direto
-            // no decoder confirmou). G8: recusar.
+            // (pointer authentication)", `size`=DOUBLEWORD), já interceptado no topo deste método
+            // (B19.15). O que sobra aqui é a combinação RESERVADA `bit21=1` com `size`≠DOUBLEWORD
+            // (`LDRA*` só existe na forma de 64 bits) — G8: recusar.
             throw unsupported(word, address);
         }
         Ir64AddressingMode addressingMode = switch (idx) {
@@ -2573,6 +2647,26 @@ public final class Aarch64Decoder {
         int imm9 = (word >>> SINGLE_IMM9_SHIFT) & (int) bitMask(SINGLE_IMM9_BITS);
         long immediate = signExtend(imm9, SINGLE_IMM9_BITS);
         return buildSingle(form, rt, rn, addressingMode, immediate, -1, null, 0);
+    }
+
+    /// `LDRAA`/`LDRAB Xt, [Xn{, #imm}]{!}` (B19.15, `FEAT_PAuth`, `ARM DDI 0487 C6.2.133/134`) —
+    /// já confirmado `size`=DOUBLEWORD/`idx`/`bit21` pelo chamador. Rota (b) registrada na task:
+    /// nenhuma autenticação real é modelada, então `Xn` é usado DIRETO como endereço-base (a
+    /// "autenticação" de `Xn` é identidade, mesmo precedente de {@link Ir64Op.PointerAuthInPlace})
+    /// — o resultado observável é IDÊNTICO a um `LDR Xt, [Xn, #imm]` comum, com ou sem
+    /// `writeback` conforme `W`. Reaproveita {@link Ir64Op.Load64} diretamente (nenhum record
+    /// novo necessário: mesma forma de endereçamento pré-indexada/offset já suportada).
+    private Ir64Op decodeLoadRegisterAuthenticated(int word, long address, boolean writeback) {
+        boolean signBit = ((word >>> LDRA_S_BIT_SHIFT) & 1) != 0;
+        int imm9 = (word >>> SINGLE_IMM9_SHIFT) & (int) bitMask(SINGLE_IMM9_BITS);
+        int combinedImm = (signBit ? 1 << SINGLE_IMM9_BITS : 0) | imm9;
+        long immediate = signExtend(combinedImm, LDRA_IMM_TOTAL_BITS) * LDRA_SCALE_BYTES;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        Ir64AddressingMode addressingMode =
+                writeback ? Ir64AddressingMode.PRE_INDEX : Ir64AddressingMode.OFFSET;
+        return new Ir64Op.Load64(rt, rn, Ir64MemSize.DOUBLEWORD, false, true, addressingMode,
+                immediate, -1, null, 0);
     }
 
     /// Resultado de `size`+`opc` já resolvidos em campos semânticos (`ARM DDI 0487 C4.1.3`,
@@ -3114,6 +3208,23 @@ public final class Aarch64Decoder {
     private Ir64Op decodeDataProcessing1Source(int word, long address) {
         boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
         int opcode = (word >>> ONE_SOURCE_OPCODE_SHIFT) & ONE_SOURCE_OPCODE_MASK;
+        // `opcode2`(bits[20:16], mesma posição de `Rm`/`ADDSUB_REGISTER_RM_SHIFT`) distingue os DOIS
+        // subgrupos reais de "Data-processing (1 source)": `00000`=RBIT/REV*/CLZ/CLS/CNT/ABS/CTZ
+        // (já implementados) e `00001`=PAC/AUT/XPAC de propósito geral (B19.15, `FEAT_PAuth`). B19.21
+        // já tinha descoberto a checagem para `CTZ` isoladamente (colisão de opcode de 6 bits com
+        // `AUTDA`, ver `docs/COBERTURA-ISA.md`); esta task generaliza o gate para TODO o subgrupo —
+        // sem ele, `ABS`(opcode=`0b001000`) também colidiria por acaso com `PACIZA`(`opcode2=00001`,
+        // MESMO opcode de 6 bits), um bug latente da mesma família nunca antes exercitado (G8).
+        int oneSourceOpcode2 = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        if (oneSourceOpcode2 == ONE_SOURCE_OPCODE2_PAUTH) {
+            if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
+                throw unsupported(word, address);
+            }
+            return decodePointerAuthInPlace(word, address, wide, opcode);
+        }
+        if (oneSourceOpcode2 != ONE_SOURCE_OPCODE2_STANDARD) {
+            throw unsupported(word, address); // reservado
+        }
         // B19.6 bloco D: `ABS Xd, Xn` (`FEAT_CSSC`) — MESMO subgrupo "Data-processing (1 source)",
         // opcode=`0b001000`. Gateado ANTES do `switch` de `Ir64OneSourceOp` (record próprio, ver
         // {@link Ir64Op.AbsGeneral} — não é o `ABS` vetorial AdvSIMD, já `✅` desde B8.7).
@@ -3125,13 +3236,10 @@ public final class Aarch64Decoder {
             int absRd = word & REGISTER_FIELD_MASK;
             return new Ir64Op.AbsGeneral(absRd, absRn, wide);
         }
-        // B19.21: `CTZ Xd, Xn` (`FEAT_CSSC`) — MESMO gate/subgrupo de `ABS` acima. Bug real achado
-        // nesta task: `Rm`(bits[20:16]) tem que ser `00000` (`@rr_sf` no `a64.decode` real) — SEM
-        // essa checagem, `AUTDA`(`Rm=00001`, MESMO opcode de 6 bits com `Z=0`, `FEAT_PAuth`, ainda
-        // não implementada) seria misdecodificada como `CTZ` (G8: medido pelo delta de
-        // `docs/COBERTURA-ISA.md`, que mostrou `AUTDA` virando `✅` por engano antes deste fix).
-        if (opcode == ONE_SOURCE_OPCODE_CTZ
-                && ((word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK) == 0) {
+        // B19.21: `CTZ Xd, Xn` (`FEAT_CSSC`) — MESMO gate/subgrupo de `ABS` acima. `opcode2==0` já
+        // garantido pelo gate no topo desta função (B19.15) — a checagem isolada de `Rm==00000` que
+        // existia aqui antes virou redundante e foi removida.
+        if (opcode == ONE_SOURCE_OPCODE_CTZ) {
             if (!architecture.has(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION)) {
                 throw unsupported(word, address);
             }
@@ -3153,12 +3261,57 @@ public final class Aarch64Decoder {
             case ONE_SOURCE_OPCODE_CLZ -> Ir64OneSourceOp.CLZ;
             case ONE_SOURCE_OPCODE_CLS -> Ir64OneSourceOp.CLS;
             case ONE_SOURCE_OPCODE_CNT -> Ir64OneSourceOp.CNT;
-            // PACIA(9)/AUTIA(10)/...: FEAT_PAuth, fora do escopo desta task (B19.15).
             default -> throw unsupported(word, address);
         };
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.DataProcessing1Source(op, rd, rn, wide);
+    }
+
+    /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (B19.15,
+    /// `FEAT_PAuth`) — já confirmado `sf`/`opcode2`=`00001` pelo chamador. `opcode`(bits[15:10])
+    /// tem dois sub-espaços: bits[5:4]=`00` (as 8 formas "assinar"/"autenticar" de propósito geral,
+    /// `bits[2:0]` escolhem o mnemônico, bit[3] escolhe a variante "Z"/modificador-zero — não
+    /// diferenciada aqui, rota (b) da task ignora o modificador de qualquer forma) e bits[5:4]=`01`
+    /// (`XPACI`=`010000`/`XPACD`=`010001`, sem `Rn`). Auditoria de vizinhos da task: as 8 formas de
+    /// propósito geral NÃO tinham decoder algum antes desta task (só `AUTDA`/`XPACI`/`XPACD` eram
+    /// exigidas pelas 10 linhas residuais) — incluídas aqui por coesão de MESMO bloco de encoding
+    /// `@pacaut`, decisão registrada no `## Resultado` da task.
+    private Ir64Op decodePointerAuthInPlace(int word, long address, boolean wide, int opcode) {
+        if (!wide) {
+            throw unsupported(word, address); // `sf=0` é reservado neste subgrupo (só existe `X`)
+        }
+        int rd = word & REGISTER_FIELD_MASK;
+        int top2 = (opcode >>> 4) & 0b11;
+        if (top2 == PAUTH_IN_PLACE_TOP2_GENERAL) {
+            int low3 = opcode & 0b111;
+            Ir64PointerAuthOp op = switch (low3) {
+                case 0 -> Ir64PointerAuthOp.PACIA;
+                case 1 -> Ir64PointerAuthOp.PACIB;
+                case 2 -> Ir64PointerAuthOp.PACDA;
+                case 3 -> Ir64PointerAuthOp.PACDB;
+                case 4 -> Ir64PointerAuthOp.AUTIA;
+                case 5 -> Ir64PointerAuthOp.AUTIB;
+                case 6 -> Ir64PointerAuthOp.AUTDA;
+                case 7 -> Ir64PointerAuthOp.AUTDB;
+                default -> throw new AssertionError("low3 de 3 bits só tem 8 valores possíveis");
+            };
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            return new Ir64Op.PointerAuthInPlace(op, rd, rn);
+        }
+        if (top2 == PAUTH_IN_PLACE_TOP2_XPAC) {
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            if (rn != PAUTH_IN_PLACE_XPAC_RN_FIXED) {
+                throw unsupported(word, address); // reservado
+            }
+            Ir64PointerAuthOp op = switch (opcode & 0b1111) {
+                case 0b0000 -> Ir64PointerAuthOp.XPACI;
+                case 0b0001 -> Ir64PointerAuthOp.XPACD;
+                default -> throw unsupported(word, address); // reservado (ex. XPACLRI vive noutro espaço)
+            };
+            return new Ir64Op.PointerAuthInPlace(op, rd, -1);
+        }
+        throw unsupported(word, address); // reservado
     }
 
     /// `ADC`/`ADCS`/`SBC`/`SBCS` + `RMIF` + `SETF8`/`SETF16` (B8.2) — 3 subgrupos que
@@ -5952,26 +6105,80 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeBranchRegister(int word, long address) {
         int op2 = (word >>> BRANCH_REGISTER_OP2_SHIFT) & BRANCH_REGISTER_OP2_MASK;
-        int op3 = (word >>> BRANCH_REGISTER_OP3_SHIFT) & BRANCH_REGISTER_OP3_MASK;
-        int op4 = word & BRANCH_REGISTER_OP4_MASK;
-        if (op2 != BRANCH_REGISTER_OP2_FIXED || op3 != BRANCH_REGISTER_OP3_FIXED
-                || op4 != BRANCH_REGISTER_OP4_FIXED) {
+        if (op2 != BRANCH_REGISTER_OP2_FIXED) {
             // DRPS ou combinação reservada: fora da fatia B6.1/B6.6.4.
             throw unsupported(word, address);
         }
+        int op3 = (word >>> BRANCH_REGISTER_OP3_SHIFT) & BRANCH_REGISTER_OP3_MASK;
+        int op4 = word & BRANCH_REGISTER_OP4_MASK;
         int opc = (word >>> BRANCH_REGISTER_OPC_SHIFT) & BRANCH_REGISTER_OPC_MASK;
-        if (opc == BRANCH_REGISTER_OPC_ERET) {
-            // ERET (B6.6.4): Rn (bits 9:5) é fixo em `11111`, não um registrador — ignorado.
-            return new Ir64Op.ExceptionReturn();
+        if (op3 == BRANCH_REGISTER_OP3_FIXED && op4 == BRANCH_REGISTER_OP4_FIXED) {
+            if (opc == BRANCH_REGISTER_OPC_ERET) {
+                // ERET (B6.6.4): Rn (bits 9:5) é fixo em `11111`, não um registrador — ignorado.
+                return new Ir64Op.ExceptionReturn();
+            }
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            boolean link = switch (opc) {
+                case BRANCH_REGISTER_OPC_BR, BRANCH_REGISTER_OPC_RET -> false;
+                case BRANCH_REGISTER_OPC_BLR -> true;
+                default -> throw unsupported(word, address);
+            };
+            return new Ir64Op.Branch64(
+                    Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
         }
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        boolean link = switch (opc) {
-            case BRANCH_REGISTER_OPC_BR, BRANCH_REGISTER_OPC_RET -> false;
-            case BRANCH_REGISTER_OPC_BLR -> true;
-            default -> throw unsupported(word, address);
+        int op3Upper = (op3 >>> 1) & PAUTH_BRANCH_OP3_UPPER_MASK;
+        if (op3Upper == PAUTH_BRANCH_OP3_UPPER_FIXED) {
+            // B19.15: `BRAZ`/`BLRAZ`/`RETA`/`BRA`/`BLRA`/`ERETA` (`FEAT_PAuth`) — MESMO prefixo/op2
+            // de BR/BLR/RET/ERET acima, `op3` alto reaproveitado como sub-seletor (ver comentário de
+            // `PAUTH_BRANCH_OP3_UPPER_FIXED`). `m` (bit10 de `op3`, chave A/B) é lido só por
+            // fidelidade — rota (b) da task não diferencia (nenhuma autenticação real é modelada).
+            if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
+                throw unsupported(word, address);
+            }
+            return decodePauthBranchRegister(word, address, opc, op4);
+        }
+        // Demais combinações de `op3`/`op4` (ex. `DRPS`): fora da fatia B6.1/B6.6.4/B19.15.
+        throw unsupported(word, address);
+    }
+
+    /// `BRAZ`/`BLRAZ`/`RETA`/`BRA`/`BLRA`/`ERETA` (B19.15, `FEAT_PAuth`) — já confirmado
+    /// `op2`=`11111`/`op3` alto=`00001` pelo chamador. Rota (b) registrada na task (mesmo
+    /// precedente de {@link Ir64Op.PointerAuthGeneric}/{@link Ir64Op.PointerAuthInPlace}): nenhuma
+    /// autenticação real é modelada, então cada forma delega DIRETO para a contraparte não
+    /// autenticada (`BR`/`BLR`/`RET`/`ERET` comuns) — o modificador (`Xm` ou zero implícito) e a
+    /// chave A/B são decodificados só para validar o encoding, nunca usados para alterar o alvo.
+    private Ir64Op decodePauthBranchRegister(int word, long address, int opc, int op4) {
+        return switch (opc) {
+            case PAUTH_BRANCH_OPC_BRAZ, PAUTH_BRANCH_OPC_BLRAZ -> {
+                if (op4 != PAUTH_BRANCH_OP4_ZERO_MODIFIER_FIXED) {
+                    throw unsupported(word, address); // reservado
+                }
+                int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                boolean link = opc == PAUTH_BRANCH_OPC_BLRAZ;
+                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
+            }
+            case PAUTH_BRANCH_OPC_RETA -> {
+                if (op4 != PAUTH_BRANCH_OP4_ZERO_MODIFIER_FIXED
+                        || ((word >>> RN_SHIFT) & REGISTER_FIELD_MASK) != PAUTH_BRANCH_RN_FIXED) {
+                    throw unsupported(word, address); // reservado
+                }
+                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L,
+                        PAUTH_RETA_TARGET_REGISTER, false, Ir64Condition.AL);
+            }
+            case PAUTH_BRANCH_OPC_ERETA -> {
+                if (op4 != PAUTH_BRANCH_OP4_ZERO_MODIFIER_FIXED
+                        || ((word >>> RN_SHIFT) & REGISTER_FIELD_MASK) != PAUTH_BRANCH_RN_FIXED) {
+                    throw unsupported(word, address); // reservado
+                }
+                yield new Ir64Op.ExceptionReturn();
+            }
+            case PAUTH_BRANCH_OPC_BRA, PAUTH_BRANCH_OPC_BLRA -> {
+                int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                boolean link = opc == PAUTH_BRANCH_OPC_BLRA;
+                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
+            }
+            default -> throw unsupported(word, address); // reservado
         };
-        return new Ir64Op.Branch64(
-                Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
     }
 
     private Ir64Op decodeExceptionGenerating(int word, long address) {
