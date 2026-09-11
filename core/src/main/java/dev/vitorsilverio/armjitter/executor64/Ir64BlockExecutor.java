@@ -432,6 +432,8 @@ public final class Ir64BlockExecutor {
                     executePointerAuthGeneric(core, (Ir64Op.PointerAuthGeneric) op);
             case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (Ir64Op.AbsGeneral) op);
             case Ir64Op.Kind.CRC32 -> executeCrc32(core, (Ir64Op.Crc32) op);
+            case Ir64Op.Kind.MEMORY_SET -> executeMemorySet(core, (Ir64Op.MemorySet) op);
+            case Ir64Op.Kind.MEMORY_COPY -> executeMemoryCopy(core, (Ir64Op.MemoryCopy) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
                     executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
             case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
@@ -1331,6 +1333,72 @@ public final class Ir64BlockExecutor {
             }
         }
         core.setXForWidth(op.rd(), crc & 0xFFFFFFFFL, false);
+        return false;
+    }
+
+    /// `NZCV` que a fase que completa um `SETP`/`CPYP`/`CPYM`/`CPYE` grava ao final — "Option B" da
+    /// arquitetura (`N=0,Z=0,C=1,V=0` sentido direto; `N=1,Z=0,C=1,V=0` sentido reverso). Só
+    /// observável se algum software real ler `NZCV` entre fases (este emulador nunca precisa disso
+    /// — a fase seguinte só olha `Xn`==0 — mas gravar o valor arquiteturalmente correto é mais
+    /// barato que documentar mais uma simplificação).
+    private static final int MOPS_COMPLETED_FORWARD_NZCV = 0b0010;
+    private static final int MOPS_COMPLETED_BACKWARD_NZCV = 0b1010;
+
+    /// `SETP`/`SETM`/`SETE` (B19.16) — ver javadoc de {@link Ir64Op.MemorySet}: a fase que
+    /// encontra {@link Ir64Op.MemorySet#rn} diferente de zero preenche tudo de uma vez; as
+    /// demais (contador já zerado) são NOP funcional — mesma disciplina caso alguma delas seja
+    /// executada sozinha, fora de sequência.
+    private boolean executeMemorySet(Aarch64Core core, Ir64Op.MemorySet op) {
+        long count = core.x(op.rn());
+        if (count == 0) {
+            return false;
+        }
+        if (count < 0) {
+            count = Long.MAX_VALUE; // saturação: Xn[63]==1 (ARM DDI 0487)
+        }
+        long address = core.x(op.rd());
+        int fillByte = (int) core.x(op.rs());
+        for (long i = 0; i < count; i++) {
+            core.memory().write8(address + i, fillByte);
+        }
+        core.notifyOrdinaryWrite(address, (int) Math.min(count, Integer.MAX_VALUE));
+        core.setX(op.rd(), address + count);
+        core.setX(op.rn(), 0L);
+        core.pstate().setNzcv(MOPS_COMPLETED_FORWARD_NZCV);
+        return false;
+    }
+
+    /// `CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE` (B19.16) — mesma disciplina de
+    /// {@link #executeMemorySet}: a fase que encontra {@link Ir64Op.MemoryCopy#rn} diferente de
+    /// zero copia tudo (byte a byte); {@link Ir64Op.MemoryCopy#forwardOnly}==`false` (`CPYP`/
+    /// `CPYM`/`CPYE`) escolhe a direção do loop pela MESMA regra de `memmove`: se a origem vem
+    /// antes do destino e as regiões se sobrepõem, copiar de trás para frente evita que a escrita
+    /// destrua bytes de origem ainda não lidos.
+    private boolean executeMemoryCopy(Aarch64Core core, Ir64Op.MemoryCopy op) {
+        long count = core.x(op.rn());
+        if (count == 0) {
+            return false;
+        }
+        if (count < 0) {
+            count = Long.MAX_VALUE; // saturação: Xn[63]==1 (ARM DDI 0487)
+        }
+        long dst = core.x(op.rd());
+        long src = core.x(op.rs());
+        boolean backward = !op.forwardOnly() && src < dst && (src + count) > dst;
+        if (backward) {
+            for (long i = count - 1; i >= 0; i--) {
+                core.memory().write8(dst + i, core.memory().read8(src + i));
+            }
+        } else {
+            for (long i = 0; i < count; i++) {
+                core.memory().write8(dst + i, core.memory().read8(src + i));
+            }
+        }
+        core.notifyOrdinaryWrite(dst, (int) Math.min(count, Integer.MAX_VALUE));
+        core.setX(op.rd(), dst + count);
+        core.setX(op.rs(), src + count);
+        core.setX(op.rn(), 0L);
+        core.pstate().setNzcv(backward ? MOPS_COMPLETED_BACKWARD_NZCV : MOPS_COMPLETED_FORWARD_NZCV);
         return false;
     }
 

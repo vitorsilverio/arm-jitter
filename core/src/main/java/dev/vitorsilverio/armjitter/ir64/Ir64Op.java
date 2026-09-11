@@ -67,7 +67,7 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
         Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
         Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32,
-        Ir64Op.Fp64JavascriptConvert {
+        Ir64Op.Fp64JavascriptConvert, Ir64Op.MemorySet, Ir64Op.MemoryCopy {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -357,6 +357,10 @@ public sealed interface Ir64Op permits
         public static final int CRC32 = 122;
         /// B19.29: `FJCVTZS` (`FEAT_JSCVT`) — ver {@link Fp64JavascriptConvert}.
         public static final int FP64_JAVASCRIPT_CONVERT = 123;
+        /// B19.16: `SETP`/`SETM`/`SETE` (`FEAT_MOPS`) — ver {@link MemorySet}.
+        public static final int MEMORY_SET = 124;
+        /// B19.16: `CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE` (`FEAT_MOPS`) — ver {@link MemoryCopy}.
+        public static final int MEMORY_COPY = 125;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3129,5 +3133,62 @@ public sealed interface Ir64Op permits
             /// coluna `c` = elementos `8c..8c+7`).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE; }
+    }
+
+    /// Fase de uma instrução `FEAT_MOPS` (`SETP`/`SETM`/`SETE`, `CPYFP`/`CPYFM`/`CPYFE`,
+    /// `CPYP`/`CPYM`/`CPYE`, B19.16) — hardware real espera as 3 em sequência (prólogo/principal/
+    /// epílogo), interruptível entre fases. Ver {@link MemorySet}/{@link MemoryCopy} para a
+    /// simplificação que este emulador aplica (nenhuma interrupção real de instrução).
+    enum Ir64MopsPhase {
+        PROLOGUE, MAIN, EPILOGUE
+    }
+
+    /// `SETP`/`SETM`/`SETE` (`ARM DDI 0487`, `FEAT_MOPS`, ARMv8.8-A, B19.16) — memset acelerado em
+    /// 3 fases. Este emulador não modela interrupção de instrução nem precisa "acelerar" nada: a
+    /// fase que encontrar {@link #rn} (contador de bytes) diferente de zero faz o preenchimento
+    /// INTEIRO num loop e zera o contador — a(s) fase(s) seguinte(s), ao ver o contador já
+    /// zerado, são NOP funcional. Qualquer divisão de trabalho entre as 3 fases que produza esse
+    /// efeito observável ao final está correta (decisão registrada na task, mesma disciplina de
+    /// {@link PointerAuthGeneric}/{@link Crc32}: resultado determinístico e documentado em vez de
+    /// modelar o protocolo real de retomada). Sempre 64 bits (`sz` fixo no encoding — não existe
+    /// forma de 32 bits). Os bits `unpriv`/`nontemp` do encoding não são modelados (sem MMU de
+    /// permissão nem cache neste emulador para os hints afetarem). `PSTATE.NZCV` é sempre gravado
+    /// como `0b0010` ao final da fase que faz o trabalho (Option B da arquitetura, "cópia
+    /// completa, sentido direto") — irrelevante para a fase seguinte, que só olha {@link #rn}.
+    record MemorySet(
+            /// Fase (`SETP`=PROLOGUE, `SETM`=MAIN, `SETE`=EPILOGUE).
+            Ir64MopsPhase phase,
+            /// Registrador de endereço de destino (`Xd`, índice `0`-`31`; `31` é `XZR` — MOPS não
+            /// tem forma de endereço-base em `SP`).
+            int rd,
+            /// Registrador de contador de bytes (`Xn`, índice `0`-`31`; `31` é `XZR`).
+            int rn,
+            /// Registrador com o byte de preenchimento nos 8 bits baixos (`Xs`, índice `0`-`31`;
+            /// `31` é `XZR`, preenche com `0`).
+            int rs) implements Ir64Op {
+        @Override public int kind() { return Kind.MEMORY_SET; }
+    }
+
+    /// `CPYFP`/`CPYFM`/`CPYFE` (sempre para frente) e `CPYP`/`CPYM`/`CPYE` (direção decidida por
+    /// sobreposição, como `memmove`) — `FEAT_MOPS`, ARMv8.8-A, B19.16. Mesma simplificação de
+    /// {@link MemorySet}: a fase que encontrar {@link #rn} diferente de zero copia tudo de uma vez
+    /// (bytewise, escolhendo a direção do loop pela mesma regra de `memmove` quando
+    /// {@link #forwardOnly} é `false`) e zera o contador; a(s) fase(s) seguinte(s) são NOP
+    /// funcional. Sempre 64 bits. O campo `options` do encoding não é modelado (mesma razão de
+    /// {@link MemorySet}).
+    record MemoryCopy(
+            /// Fase (`CPYxP`=PROLOGUE, `CPYxM`=MAIN, `CPYxE`=EPILOGUE).
+            Ir64MopsPhase phase,
+            /// `true` para `CPYFP`/`CPYFM`/`CPYFE` (sempre para frente — software garante que as
+            /// regiões não se sobrepõem de um jeito que exija cópia reversa); `false` para
+            /// `CPYP`/`CPYM`/`CPYE` (direção decidida por sobreposição, como `memmove`).
+            boolean forwardOnly,
+            /// Registrador de endereço de destino (`Xd`, índice `0`-`31`; `31` é `XZR`).
+            int rd,
+            /// Registrador de endereço de origem (`Xs`, índice `0`-`31`; `31` é `XZR`).
+            int rs,
+            /// Registrador de contador de bytes (`Xn`, índice `0`-`31`; `31` é `XZR`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.MEMORY_COPY; }
     }
 }

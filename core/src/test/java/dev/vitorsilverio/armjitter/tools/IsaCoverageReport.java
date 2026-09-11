@@ -852,15 +852,13 @@ public final class IsaCoverageReport {
     static {
         // `FEAT_PAuth` (ARMv8.3-A): `LDRAA`/`LDRAB` caem no catch-all de hint-space.
         AARCH64_MISDECODED.put("LDRA#1", "SystemInstruction[NOP_HINT]");
-        // `FEAT_MTE2` (ARMv8.5-A) e `FEAT_MOPS` (ARMv8.8-A): mesma classe de bug que a B11.3
-        // corrigiu para o `LDR (literal)` INTEIRO (`LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`) — sobrou
-        // o caminho de literal de PONTO FLUTUANTE.
-        AARCH64_MISDECODED.put("SETGP#1", "FpLoadLiteral64");
-        AARCH64_MISDECODED.put("SETGM#1", "FpLoadLiteral64");
-        AARCH64_MISDECODED.put("SETGE#1", "FpLoadLiteral64");
-        AARCH64_MISDECODED.put("CPYP#1", "FpLoadLiteral64");
-        AARCH64_MISDECODED.put("CPYM#1", "FpLoadLiteral64");
-        AARCH64_MISDECODED.put("CPYE#1", "FpLoadLiteral64");
+        // `FEAT_MTE2` (ARMv8.5-A) e `FEAT_MOPS` (ARMv8.8-A): eram a MESMA classe de bug que a
+        // B11.3 corrigiu para o `LDR (literal)` INTEIRO (`LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`) —
+        // sobrava o caminho de literal de PONTO FLUTUANTE. A B19.16 (2026-09-10) corrigiu a
+        // ROTEAMENTO para as 9 células do bucket inteiro (não só as 6 daqui): `CPYP`/`CPYM`/`CPYE`
+        // ganharam decode de verdade (saem da lista); `SETGP`/`SETGM`/`SETGE` (variantes com tag,
+        // B19.14, ainda não implementadas) agora recusam explicitamente em vez de misdecodificar —
+        // também saem da lista de MISDECODE (viram `❌` honesto, não `⚠️`).
         // `FEAT_FAMINMAX` (ARMv9.4-A) e `FEAT_FP8` (Armv9.5-A): a 1ª ocorrência colide com o espaço
         // de `INS`/`MOV` vetorial. A 2ª ocorrência de cada uma já mede `❌` honestamente.
         AARCH64_MISDECODED.put("FAMAX#1", "VectorInsertGeneral");

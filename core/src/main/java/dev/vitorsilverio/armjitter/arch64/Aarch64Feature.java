@@ -107,8 +107,11 @@ public enum Aarch64Feature {
     /// `FEAT_WFxT` — `WFET`/`WFIT` (wait-for-event/interrupt com timeout). ARMv8.7-A. **Achado de
     /// B11.3**: já implementado sem gate desde B8.3 (mesmo padrão de {@link #LSE}).
     WFXT,
-    /// `FEAT_MOPS` — operações de memória aceleradas (`CPYE`/`CPYM`/`CPYP`, memcpy; `SETP`/`SETM`/
-    /// `SETE`, memset, já ✅ via caminho genérico — só o trio `CPY*` falta). ARMv8.8-A.
+    /// `FEAT_MOPS` — operações de memória aceleradas (`SETP`/`SETM`/`SETE`, memset; `CPYFP`/
+    /// `CPYFM`/`CPYFE`, memcpy forward-only; `CPYP`/`CPYM`/`CPYE`, memcpy genérico tipo
+    /// `memmove`). ARMv8.8-A. **Achado de B19.16**: nenhum dos 9 tinha decode de verdade — o
+    /// Javadoc anterior desta constante afirmava um "caminho genérico" para `SET*`/`CPYF*` que não
+    /// existia (confirmado contra `docs/COBERTURA-ISA.md` e o comentário real do decoder).
     MEMORY_COPY_SET,
     /// `FEAT_NMI` — "Non-Maskable Interrupt" (`MSR (immediate) ALLINT`, forma registrador em
     /// `MSR_reg`). ARMv8.8-A. **Achado de B11.3**: já implementado sem gate desde B8.3 (mesmo

@@ -47,6 +47,25 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-10, após B19.16 fechar)
+
+**B19.16 FECHADA 2026-09-10** — A64 `FEAT_MOPS` (`SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE`/
+`CPYP`/`CPYM`/`CPYE`, 9 células). Javadoc de `MEMORY_COPY_SET` corrigido (o "caminho genérico" que
+afirmava nunca existiu). Causa raiz do `⚠️` de `CPYP`/`CPYM`/`CPYE`: o bit `V`(26) nesta região do
+encoding não é um seletor SIMD&FP de verdade — é parte do opcode MOPS/tag, e `decodeLoadsAndStores`
+checava `vectorForm` ANTES do bucket reservado (bit24=1), então essas 6 instruções (+ a família
+`SETGP`/`SETGM`/`SETGE` da B19.14) caíam em `decodeFpLoadLiteral` por engano — mesma classe de bug
+que a B11.3 já tinha corrigido do lado GPR. **Achado de segunda ordem, achado só medindo o delta
+pós-fix**: `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, B19.19, ainda ⬜) compartilham o MESMO prefixo de 6
+bits com `SETP`/`CPYFx` — só bits[11:10] distingue (`01` MOPS, `00` `LDAPR_i`/`STLR_i`); sem esse
+campo checado, `LDAPUR`/`LDAPURB`/`STLUR` seriam absorvidas como `CPYFM`/`CPYFE`/`SETP` (7 células
+com `✅` falso — pego ANTES de commitar, medindo o delta de `docs/COBERTURA-ISA.md`: +80 ao invés
+dos +45 esperados). `docs/COBERTURA-ISA.md`: `ARMv8.8-A` 92%→94%, global 94%→95%
+(18237→18282/19215). Efeito colateral: `SETGP`/`SETGM`/`SETGE` saem de `⚠️` (misdecode) para `❌`
+honesto — destrava a B19.14 sem falso-positivo. `docs/COBERTURA-JIT.md` regenerado (`Ir64Op.Kind`
+124→126, ambos só interpretados). `mvn -o test` verde (3533; as mesmas 3 falhas pré-existentes,
+confirmadas independentes). **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-10, após B19.29 fechar)
 
 **B19.29 FECHADA 2026-09-10** — A64 `FEAT_JSCVT` (`FJCVTZS`, 1 célula), a segunda mais barata do

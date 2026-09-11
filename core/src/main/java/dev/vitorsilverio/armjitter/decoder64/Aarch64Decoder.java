@@ -681,6 +681,35 @@ public final class Aarch64Decoder {
     // ── no decoder). G8: recusar em vez de confundir.
     private static final int LITERAL_SUBCLASS_RESERVED_BIT_SHIFT = 24;
 
+    // ── B19.16: dentro do bucket acima (bit24=1), bit21 separa "Memory Copy and Memory Set" ──────
+    // ── (`SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE`, este grupo) de ────────
+    // ── "Atomic 128-bit memory operations" (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`, fora do ──────
+    // ── escopo — B19.25); dentro de "Memory Copy and Memory Set", bits[23:22] valem `11` SÓ nas ───
+    // ── 3 formas `SET*` (`SETP`/`SETM`/`SETE`/`SETGP`/`SETGM`/`SETGE` — nunca em `CPY*`, que usa ───
+    // ── os mesmos 2 bits como campo de FASE prólogo/principal/epílogo); bit26 (MESMA posição do ────
+    // ── bit `V` de SIMD&FP em outros buckets, mas aqui é parte do OPCODE, não um seletor real) ────
+    // ── distingue `SETP` (bit26=0, esta task) de `SETGP` com tag (bit26=1, B19.14, ainda ──────────
+    // ── recusado aqui) e `CPYF*` forward-only (bit26=0) de `CPY*` genérico (bit26=1, direção por ───
+    // ── sobreposição) — os 2 últimos são AMBOS desta task. Confirmado byte a byte contra
+    // ── `a64.decode` real do QEMU (`@set`/`@cpy`, `QEMU_REV` fixado por E11).
+    private static final int MOPS_ATOMIC128_BIT_SHIFT = 21;
+    private static final int MOPS_PHASE_FIELD_SHIFT = 22; // bits[23:22]
+    private static final int MOPS_PHASE_FIELD_MASK = 0b11;
+    private static final int MOPS_SET_MARKER_PHASE_FIELD = 0b11; // só SET*, nunca CPY*
+    private static final int MOPS_TAG_OR_GENERIC_DIRECTION_BIT_SHIFT = 26; // mesma posição de VECTOR_FORM_BIT_SHIFT
+    private static final int MOPS_RS_SHIFT = 16;
+    private static final int MOPS_SET_PHASE_SHIFT = 14; // bits[15:14], só usado pela família SET*
+    private static final int MOPS_PHASE_PROLOGUE = 0b00;
+    private static final int MOPS_PHASE_MAIN = 0b01;
+    private static final int MOPS_PHASE_EPILOGUE = 0b10;
+    // ── bits[11:10] fixo "01" em `SETP`/.../`CPYE` — DISCRIMINADOR contra `LDAPR_i`/`STLR_i` ──────
+    // ── (`FEAT_LRCPC2`, `@ldapr_stlr_i`, B19.19), que fixam "00" no MESMO campo e por acaso ────────
+    // ── compartilham o prefixo `011001` de bits[29:24] com a família `SET*`/`CPYF*` (bit26=0) ──────
+    // ── inteira — achado real da B19.16, confirmado contra `a64.decode` real do QEMU.
+    private static final int MOPS_FIXED_BITS_11_10_SHIFT = 10;
+    private static final int MOPS_FIXED_BITS_11_10_MASK = 0b11;
+    private static final int MOPS_FIXED_BITS_11_10_VALUE = 0b01;
+
     // ── GCSSTR/GCSSTTR (`FEAT_GCS`, B19.27, `a64.decode` linha 588): `11011001 000 11111 000 ────
     // ── unpriv:1 11 rn:5 rt:5` — mesmo bucket bit24=1 de MOPS/LSE128 acima, distinguido por um ────
     // ── prefixo fixo próprio nos bits[31:13]+[11:10] (bit12=`unpriv`, bits[9:5]=`rn`, ─────────────
@@ -1748,6 +1777,22 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeLoadsAndStores(int word, long address) {
         int subclass = (word >>> LOAD_STORE_SUBCLASS_SHIFT) & LOAD_STORE_SUBCLASS_MASK;
+        if (subclass == SUBCLASS_LITERAL
+                && ((word >>> LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) & 1) != 0) {
+            // B19.16 (achado real): este bucket bit24=1 (GCS/MOPS/atomic128) tem que ser
+            // interceptado ANTES do ramo `vectorForm` abaixo, não depois — `CPYP`/`CPYM`/`CPYE`/
+            // `SETGP`/`SETGM`/`SETGE` (B19.14) têm bit26=1 "por acidente" do encoding (aqui bit26
+            // é parte do opcode MOPS/tag, não o seletor SIMD&FP de verdade), e checar só depois do
+            // `if (vectorForm)` fazia esses 6 mnemônicos caírem em `decodeFpLoadLiteral` e
+            // misdecodificar como `LDR (literal)` SIMD&FP (G8, ver `IsaCoverageReport.
+            // AARCH64_MISDECODED`, entradas `CPYP#1`/`CPYM#1`/`CPYE#1` — removidas por esta task).
+            // `GCSSTR`/`GCSSTTR` (`FEAT_GCS`, B19.27) tem prefixo fixo próprio dentro do MESMO
+            // bucket — checado primeiro.
+            if ((word & GCSSTR_FIXED_MASK) == GCSSTR_FIXED_VALUE) {
+                return decodeGcsstr(word, address);
+            }
+            return decodeMemoryCopyAndSet(word, address);
+        }
         if (((word >>> VECTOR_FORM_BIT_SHIFT) & 1) != 0) {
             // AdvSIMD load/store multiple/single structures (B8.6): bit31 fixo=0 nas duas formas
             // reais (não existe eixo W/X de 32/64 bits aqui, Q assume esse papel).
@@ -1763,24 +1808,15 @@ public final class Aarch64Decoder {
             // bits (`subclass`, bits[29:28]) que já discrimina o lado GPR (V=0) abaixo; os 2
             // patterns AdvSIMD acima ocupam `subclass=00` com um prefixo de 6 bits mais específico
             // (checados primeiro), então o `default` aqui é só o resto de `subclass=00` (espaço
-            // atômico/LSE, que SIMD&FP não tem no hardware real) — recusado de propósito (G8).
+            // atômico/LSE, que SIMD&FP não tem no hardware real) — recusado de propósito (G8). O
+            // caso `SUBCLASS_LITERAL` com bit24=1 (MOPS/GCS/atomic128) já foi interceptado ANTES
+            // deste `if` (ver acima) — `decodeFpLoadLiteral` só vê bit24=0 daqui em diante.
             return switch (subclass) {
                 case SUBCLASS_LITERAL -> decodeFpLoadLiteral(word, address);
                 case SUBCLASS_PAIR -> decodeFpLoadStorePair(word, address);
                 case SUBCLASS_SINGLE -> decodeFpLoadStoreSingle(word, address);
                 default -> throw unsupported(word, address);
             };
-        }
-        if (subclass == SUBCLASS_LITERAL
-                && ((word >>> LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) & 1) != 0) {
-            // `GCSSTR`/`GCSSTTR` (`FEAT_GCS`, B19.27): prefixo próprio dentro deste mesmo bucket
-            // bit24=1 — interceptado ANTES do catch-all abaixo.
-            if ((word & GCSSTR_FIXED_MASK) == GCSSTR_FIXED_VALUE) {
-                return decodeGcsstr(word, address);
-            }
-            // `CPYFP`/`CPYFM`/`CPYFE`/`SETP`/`SETM`/`SETE`/`LDCLRP`/`LDSETP`/`SWPP` (ver comentário
-            // de LITERAL_SUBCLASS_RESERVED_BIT_SHIFT) — G8.
-            throw unsupported(word, address);
         }
         return switch (subclass) {
             case SUBCLASS_LITERAL -> decodeLoadLiteral(word, address);
@@ -1885,6 +1921,57 @@ public final class Aarch64Decoder {
         int rt = word & REGISTER_FIELD_MASK;
         return new Ir64Op.Store64(
                 rt, rn, Ir64MemSize.DOUBLEWORD, true, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+    }
+
+    /// `SETP`/`SETM`/`SETE` + `CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE` (`FEAT_MOPS`, B19.16) —
+    /// ver o comentário de `MOPS_ATOMIC128_BIT_SHIFT` para a árvore de decisão completa. `SETGP`/
+    /// `SETGM`/`SETGE` (bit26=1 na família `SET*`, B19.14) continuam `unsupported` aqui de
+    /// propósito — esta task não os implementa. `unpriv`/`nontemp` (`SET*`) e `options` (`CPY*`)
+    /// não são modelados (mesma decisão de `PRFM`/`FPCR.RMode`: sem MMU de permissão nem cache
+    /// para os hints afetarem). **Achado real desta task**: `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`,
+    /// `@ldapr_stlr_i`, B19.19, ainda não implementada) compartilham o MESMO prefixo de 6 bits
+    /// `011001` (bits[29:24]) que `SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE` (bit26=0 nos dois
+    /// grupos) E o mesmo bit21=0 — só divergem em bits[11:10] (`01` fixo em MOPS, `00` fixo em
+    /// `LDAPR_i`/`STLR_i`, confirmado byte a byte contra `a64.decode` real do QEMU). Checar esse
+    /// campo é OBRIGATÓRIO antes de aceitar como MOPS, senão `LDAPR_i` com `opc=01/10/11`
+    /// misdecodificaria como `CPYFM`/`CPYFE`/`SETP` (G8).
+    private Ir64Op decodeMemoryCopyAndSet(int word, long address) {
+        if (!architecture.has(Aarch64Feature.MEMORY_COPY_SET)) {
+            throw unsupported(word, address);
+        }
+        if (((word >>> MOPS_ATOMIC128_BIT_SHIFT) & 1) != 0) {
+            // LDCLRP/LDSETP/SWPP (FEAT_LSE128) — fora do escopo desta task, ver B19.25.
+            throw unsupported(word, address);
+        }
+        if (((word >>> MOPS_FIXED_BITS_11_10_SHIFT) & MOPS_FIXED_BITS_11_10_MASK) != MOPS_FIXED_BITS_11_10_VALUE) {
+            // LDAPR_i/STLR_i (FEAT_LRCPC2, B19.19) — mesmo prefixo de 6 bits, ainda não
+            // implementada por esta task; recusar em vez de confundir com SETP/CPYFx (G8).
+            throw unsupported(word, address);
+        }
+        int rd = word & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rs = (word >>> MOPS_RS_SHIFT) & REGISTER_FIELD_MASK;
+        int phaseField = (word >>> MOPS_PHASE_FIELD_SHIFT) & MOPS_PHASE_FIELD_MASK;
+        boolean tagOrGenericDirection = ((word >>> MOPS_TAG_OR_GENERIC_DIRECTION_BIT_SHIFT) & 1) != 0;
+        if (phaseField == MOPS_SET_MARKER_PHASE_FIELD) {
+            if (tagOrGenericDirection) {
+                // SETGP/SETGM/SETGE (variantes com tag) — B19.14, fora do escopo desta task (G8).
+                throw unsupported(word, address);
+            }
+            int phaseBits = (word >>> MOPS_SET_PHASE_SHIFT) & MOPS_PHASE_FIELD_MASK;
+            return new Ir64Op.MemorySet(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
+        }
+        boolean forwardOnly = !tagOrGenericDirection;
+        return new Ir64Op.MemoryCopy(decodeMopsPhase(phaseField, word, address), forwardOnly, rd, rs, rn);
+    }
+
+    private Ir64Op.Ir64MopsPhase decodeMopsPhase(int phaseBits, int word, long address) {
+        return switch (phaseBits) {
+            case MOPS_PHASE_PROLOGUE -> Ir64Op.Ir64MopsPhase.PROLOGUE;
+            case MOPS_PHASE_MAIN -> Ir64Op.Ir64MopsPhase.MAIN;
+            case MOPS_PHASE_EPILOGUE -> Ir64Op.Ir64MopsPhase.EPILOGUE;
+            default -> throw unsupported(word, address); // reservado
+        };
     }
 
     private Ir64Op decodeExclusivePair(int word, boolean load) {
