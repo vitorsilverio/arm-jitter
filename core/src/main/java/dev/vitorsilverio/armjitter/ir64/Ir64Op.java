@@ -69,7 +69,9 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32,
         Ir64Op.Fp64JavascriptConvert, Ir64Op.MemorySet, Ir64Op.MemoryCopy,
         Ir64Op.AtomicMemoryOpPair, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove,
-        Ir64Op.Fp64ConvertHalfPrecision {
+        Ir64Op.Fp64ConvertHalfPrecision, Ir64Op.MemoryTag, Ir64Op.MemoryTagMultiple,
+        Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
+        Ir64Op.MemorySetTagged {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -371,6 +373,20 @@ public sealed interface Ir64Op permits
         /// B19.26: `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (`FEAT_FP16` residual) — ver
         /// {@link Fp64ConvertHalfPrecision}.
         public static final int FP64_CONVERT_HALF_PRECISION = 128;
+        /// B19.14: `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G` (`FEAT_MTE2`) — ver {@link MemoryTag}.
+        public static final int MEMORY_TAG = 129;
+        /// B19.14: `STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`) — ver {@link MemoryTagMultiple}.
+        public static final int MEMORY_TAG_MULTIPLE = 130;
+        /// B19.14: `STGP` (`FEAT_MTE2`) — ver {@link StorePairTag}.
+        public static final int STORE_PAIR_TAG = 131;
+        /// B19.14: `SUBP`/`SUBPS` (`FEAT_MTE2`) — ver {@link SubtractPointer}.
+        public static final int SUBTRACT_POINTER = 132;
+        /// B19.14: `IRG` (`FEAT_MTE2`) — ver {@link InsertRandomTag}.
+        public static final int INSERT_RANDOM_TAG = 133;
+        /// B19.14: `GMI` (`FEAT_MTE2`) — ver {@link TagMaskInsert}.
+        public static final int TAG_MASK_INSERT = 134;
+        /// B19.14: `SETGP`/`SETGM`/`SETGE` (`FEAT_MTE2`+`FEAT_MOPS`) — ver {@link MemorySetTagged}.
+        public static final int MEMORY_SET_TAGGED = 135;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3287,5 +3303,165 @@ public sealed interface Ir64Op permits
             /// Registrador de origem (índice `0`-`31`, `V<n>`).
             int vn) implements Ir64Op {
         @Override public int kind() { return Kind.FP64_CONVERT_HALF_PRECISION; }
+    }
+
+    /// Direção de {@link MemoryTag} (`FEAT_MTE2`, B19.14).
+    enum Ir64MemoryTagOperation {
+        LOAD, STORE
+    }
+
+    /// `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — grava ou
+    /// lê a tag de alocação de 4 bits de 1 ou 2 granules de 16 bytes. Decisão de escopo registrada
+    /// na task: este emulador modela um armazenamento de tags FUNCIONAL (indexado por endereço,
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#memoryTag}/{@code #setMemoryTag}), mas
+    /// **não** implementa a checagem de tag em `LDR`/`STR` comuns nem a exceção de "Tag Check
+    /// Fault" (G8, decisão consciente — equivalente a nunca configurar `TCR_ELx` para modo
+    /// síncrono do ponto de vista observável). Para {@link Ir64MemoryTagOperation#STORE}, o
+    /// REGISTRADOR de tag ({@link #rt}) é resolvido como `Rt|SP` (a tag vem dos bits `[59:56]` do
+    /// PONTEIRO em `Rt`, não do endereço de destino); para {@link Ir64MemoryTagOperation#LOAD}, é
+    /// um `Xt`/`XZR` comum (confirmado byte a byte contra `do_STG`/`trans_LDG`, QEMU
+    /// `target/arm/tcg/translate-a64.c`, revisão fixada por E11 — ver `## Resultado` da task).
+    /// {@link #zeroData} (`STZG`/`STZ2G`) também zera os `16*`{@link #granules} bytes de DADOS no
+    /// endereço de acesso (sem arredondar ao granule — o hardware real exige alinhamento prévio,
+    /// que este emulador não impõe por não modelar falha). {@link #granules}`==2` cobre o SEGUNDO
+    /// granule em `endereço+16`, com a MESMA tag do primeiro.
+    record MemoryTag(
+            /// {@link Ir64MemoryTagOperation#LOAD} (`LDG`) ou {@link Ir64MemoryTagOperation#STORE}
+            /// (`STG`/`STZG`/`ST2G`/`STZ2G`).
+            Ir64MemoryTagOperation operation,
+            /// `true` para `STZG`/`STZ2G` (zera dados além de gravar a tag); sempre `false` para
+            /// `LOAD`.
+            boolean zeroData,
+            /// `1` (`STG`/`STZG`/`LDG`) ou `2` (`ST2G`/`STZ2G`) granules de 16 bytes afetados.
+            int granules,
+            /// Registrador de tag/valor (`Rt|SP` em `STORE`, `Rt`/`XZR` comum em `LOAD`).
+            int rt,
+            /// Registrador base de endereço (`Rn|SP`, índice `31`=`SP` — nunca `XZR` em MTE).
+            int rn,
+            /// Modo de endereçamento (`OFFSET`/`PRE_INDEX`/`POST_INDEX` — nunca `REGISTER_OFFSET`,
+            /// que MTE não tem forma alguma com deslocamento por registrador).
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento já escalado por 16 bytes (granule), com sinal.
+            long immediate) implements Ir64Op {
+        @Override public int kind() { return Kind.MEMORY_TAG; }
+    }
+
+    /// Direção de {@link MemoryTagMultiple} (`FEAT_MTE2`, B19.14).
+    enum Ir64MemoryTagMultipleOperation {
+        LOAD_TAGS, STORE_TAGS, STORE_ZERO_DATA_TAGS
+    }
+
+    /// `STGM`/`LDGM`/`STZGM` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — formas "multiple":
+    /// operam num BLOCO de tags inteiro por um único registrador de 64 bits, sem imediato nem
+    /// writeback (`Rn|SP` sozinho, sem offset — `imm` é sempre `0` no encoding real). Simplificação
+    /// documentada (mesmo espírito do resto da task): {@link Ir64MemoryTagMultipleOperation#LOAD_TAGS}/
+    /// {@link Ir64MemoryTagMultipleOperation#STORE_TAGS} usam um bloco FIXO de 256 bytes (16
+    /// granules — `GM_BLOCKSIZE=6` real, o único caso em que o hardware real não precisa de shift
+    /// dependente de endereço dentro do bloco, ver `mte_helper.c` `HELPER(ldgm)`/`HELPER(stgm)` na
+    /// revisão fixada por E11); {@link Ir64MemoryTagMultipleOperation#STORE_ZERO_DATA_TAGS}
+    /// (`STZGM`) usa um bloco FIXO de 64 bytes (4 granules, um tamanho de bloco DC ZVA real comum)
+    /// em vez do `DCZID_EL0.BS` de verdade (que este core anuncia como `DC ZVA` DESABILITADO, ver
+    /// {@link dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId#DCZID_EL0} — decisão
+    /// consciente, G8) e grava em CADA granule do bloco a tag nos 4 bits BAIXOS de {@link #rt}
+    /// (não `bits[59:56]` — achado real: `HELPER(stzgm_tags)` usa `val & 0xf` diretamente, ao
+    /// contrário de `STG`).
+    record MemoryTagMultiple(
+            /// Operação (ver enum).
+            Ir64MemoryTagMultipleOperation operation,
+            /// Registrador de valor: bitmap de 64 bits (`STGM`/`LDGM`) ou tag nos 4 bits baixos
+            /// (`STZGM`) — sempre `Rt`/`XZR` comum, nunca `Rt|SP`.
+            int rt,
+            /// Registrador base de endereço (`Rn|SP`).
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.MEMORY_TAG_MULTIPLE; }
+    }
+
+    /// `STGP` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — como `STP` de 64 bits (grava
+    /// {@link #rt}/{@link #rt2} no par de doublewords em `[Rn, #imm]`), **e também** grava a tag de
+    /// alocação do PRÓPRIO endereço de destino (`Rn+imm`, não de `Rt`/`Rt2` — achado real,
+    /// confirmado contra `trans_STGP`: `gen_helper_stg(env, dirty_addr, dirty_addr, ...)`, o
+    /// segundo argumento é o MESMO endereço, não um registrador de dado separado) no granule de 16
+    /// bytes endereçado. Reaproveita {@link Ir64AddressingMode} como {@link LoadStorePair}, mas é
+    /// um record PRÓPRIO (não uma extensão de {@link LoadStorePair}, que já é API pública
+    /// publicada — G3) porque não existe forma de LOAD nem largura configurável aqui (sempre
+    /// 64 bits, offset escalado por 16, não por 8).
+    record StorePairTag(
+            /// Primeiro registrador de dado (`Xt`).
+            int rt,
+            /// Segundo registrador de dado (`Xt2`).
+            int rt2,
+            /// Registrador base de endereço (`Rn|SP`).
+            int rn,
+            /// Modo de endereçamento (`OFFSET`/`PRE_INDEX`/`POST_INDEX`).
+            Ir64AddressingMode addressingMode,
+            /// Deslocamento já escalado por 16 bytes (granule), com sinal.
+            long immediate) implements Ir64Op {
+        @Override public int kind() { return Kind.STORE_PAIR_TAG; }
+    }
+
+    /// `SUBP`/`SUBPS` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — subtrai dois ponteiros
+    /// IGNORANDO os bits de tag: cada operando é sign-extended a partir dos 56 bits baixos
+    /// (`bits[55:0]`, achado real confirmado contra `do_subp` do QEMU — não é uma máscara sem
+    /// sinal) ANTES da subtração. `Rn`/`Rm` são `Rn|SP`/`Rm|SP`; `Rd` é `Xd`/`XZR` comum. Sempre 64
+    /// bits (não existe forma de 32 bits — `sf` é fixo em `1` no encoding real).
+    record SubtractPointer(
+            /// `true` para `SUBPS` (atualiza `NZCV` como uma subtração comum); `false` para `SUBP`.
+            boolean setFlags,
+            /// Registrador de destino (`Xd`/`XZR`).
+            int rd,
+            /// Primeiro operando (`Rn|SP`).
+            int rn,
+            /// Segundo operando (`Rm|SP`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.SUBTRACT_POINTER; }
+    }
+
+    /// `IRG` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — gera uma tag lógica pseudoaleatória
+    /// (algoritmo determinístico, ver
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#insertRandomTag} — mesma disciplina de
+    /// "determinístico, não criptográfico" da task, necessária para savestates/replay
+    /// reprodutíveis) respeitando a máscara de exclusão de `GCR_EL1`/`Rm`, e a insere em `Rn|SP`,
+    /// resultado em `Rd|SP`.
+    record InsertRandomTag(
+            /// Registrador de destino (`Rd|SP`).
+            int rd,
+            /// Registrador de endereço base (`Rn|SP`).
+            int rn,
+            /// Máscara de exclusão adicional (`Rm`, comum — combinada por OR com `GCR_EL1.Exclude`).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.INSERT_RANDOM_TAG; }
+    }
+
+    /// `GMI` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — "Tag Mask Insert": marca em
+    /// {@link #rd} o bit correspondente à tag ATUAL de {@link #rn} (`bits[59:56]`), OR'ado com a
+    /// máscara já acumulada em {@link #rm} — usado por alocadores para não reusar tags adjacentes.
+    record TagMaskInsert(
+            /// Registrador de destino (`Rd`, comum — máscara resultante).
+            int rd,
+            /// Registrador cuja tag ATUAL é extraída (`Rn|SP`).
+            int rn,
+            /// Máscara já acumulada (`Rm`, comum).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.TAG_MASK_INSERT; }
+    }
+
+    /// `SETGP`/`SETGM`/`SETGE` (`ARM DDI 0487`, `FEAT_MTE2`+`FEAT_MOPS`, ARMv8.8-A, B19.14) — irmãs
+    /// de {@link MemorySet} (`SETP`/`SETM`/`SETE`, B19.16) que TAMBÉM gravam a tag de alocação de
+    /// {@link #rd} (tag extraída dos bits `[59:56]`) em cada granule de 16 bytes tocado pelo
+    /// preenchimento — mesma simplificação de fase única de {@link MemorySet} (a fase que encontra
+    /// {@link #rn} diferente de zero preenche TUDO — dados E tags — de uma vez). {@link #rd} é
+    /// `Xd`/`XZR` comum, mesma convenção de {@link MemorySet#rd} (MOPS não tem forma de endereço-
+    /// base em `SP`).
+    record MemorySetTagged(
+            /// Fase (`SETGP`=PROLOGUE, `SETGM`=MAIN, `SETGE`=EPILOGUE).
+            Ir64MopsPhase phase,
+            /// Registrador de endereço de destino (`Xd`/`XZR` — a MESMA tag gravada em cada granule
+            /// vem daqui, ao contrário de {@link MemorySet}, que não grava tag nenhuma).
+            int rd,
+            /// Registrador de contador de bytes (`Xn`/`XZR`).
+            int rn,
+            /// Registrador com o byte de preenchimento nos 8 bits baixos (`Xs`/`XZR`).
+            int rs) implements Ir64Op {
+        @Override public int kind() { return Kind.MEMORY_SET_TAGGED; }
     }
 }

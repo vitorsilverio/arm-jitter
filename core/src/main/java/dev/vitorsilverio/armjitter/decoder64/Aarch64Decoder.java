@@ -275,6 +275,9 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_CPACR = 1;
     private static final int SYSREG_CRM_CPACR = 0;
     private static final int SYSREG_OP2_CPACR = 2;
+    // B19.14: RGSR_EL1/GCR_EL1 (FEAT_MTE2) — MESMO CRn/CRm de SCTLR_EL1/CPACR_EL1, só op2 muda.
+    private static final int SYSREG_OP2_RGSR_EL1 = 5;
+    private static final int SYSREG_OP2_GCR_EL1 = 6;
     private static final int SYSREG_CRN_TTBR0 = 2;
     private static final int SYSREG_CRM_TTBR0 = 0;
     private static final int SYSREG_OP2_TTBR0 = 0;
@@ -721,6 +724,43 @@ public final class Aarch64Decoder {
     /// `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, B19.19) fixam bits[11:10]="00" no MESMO campo que
     /// discrimina MOPS acima — ver o Javadoc de {@link #decodeLoadAcquireOrStoreReleaseUnscaledImmediate}.
     private static final int LDAPR_STLR_I_FIXED_BITS_11_10_VALUE = 0b00;
+
+    // ── B19.14: `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G`/`STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`) — MESMO ────────
+    // ── prefixo de 6 bits[29:24]="011001" da família `SET*`/`CPYF*`/`LDAPR_i` acima, mas
+    // ── bits[31:30]="11" (a família MOPS/`LDAPR_i`/atomic128 nunca tem essa combinação) — checado
+    // ── ANTES de `MOPS_ATOMIC128_BIT_SHIFT` porque o bit21 desta família é "1" fixo por
+    // ── coincidência de encoding, e colidiria com o gate de `FEAT_LSE128` (B19.25) sem esta
+    // ── checagem (achado real desta task).
+    private static final int MOPS_SIZE_FIELD_SHIFT = 30; // bits[31:30]
+    private static final int MOPS_SIZE_FIELD_MASK = 0b11;
+    private static final int MEMORY_TAG_FAMILY_SIZE_FIELD_VALUE = 0b11;
+    private static final int TAG_FAMILY_SIZE_SHIFT = 22; // bits[23:22]
+    private static final int TAG_FAMILY_SIZE_MASK = 0b11;
+    private static final int TAG_FAMILY_VARIANT_SHIFT = 10; // bits[11:10]
+    private static final int TAG_FAMILY_VARIANT_MASK = 0b11;
+    private static final int TAG_FAMILY_VARIANT_MULTIPLE = 0b00;
+    private static final int TAG_FAMILY_VARIANT_POST_INDEX = 0b01;
+    private static final int TAG_FAMILY_VARIANT_OFFSET = 0b10;
+    private static final int TAG_FAMILY_VARIANT_PRE_INDEX = 0b11;
+    private static final int TAG_FAMILY_IMM9_SHIFT = 12;
+    private static final int TAG_FAMILY_IMM9_BITS = 9;
+    private static final int MEMORY_TAG_GRANULE_SCALE_BYTES = 16;
+    private static final int TAG_FAMILY_SIZE_STZGM = 0b00;
+    private static final int TAG_FAMILY_SIZE_LDG = 0b01;
+    private static final int TAG_FAMILY_SIZE_STGM = 0b10;
+    private static final int TAG_FAMILY_SIZE_LDGM = 0b11;
+
+    // ── B19.14: `SUBP`/`SUBPS`/`IRG`/`GMI` (`FEAT_MTE2`) — "Data-processing (2 source)"
+    // ── (`opc2`=`0b00`, MESMO subgrupo de `PACGA`/`CRC32*`, opcode(15:10) reservado que nenhum
+    // ── deles usa); `SUBPS` é a ÚNICA das 4 com `opc2`=`0b01` (achado real: o comentário antigo
+    // ── desta função dizia "opc2=01/11: SUBP/SUBPS/IRG/GMI", mas só `SUBPS` mede `opc2=01` de
+    // ── verdade — confirmado byte a byte contra `a64.decode` real do QEMU).
+    private static final int DP_SOURCE_OPC2_SUBPS = 0b01;
+    private static final int MTE_REGISTER_OPCODE_SHIFT = 10; // bits[15:10], MESMO campo de pacgaOpcode6
+    private static final int MTE_REGISTER_OPCODE_MASK = 0b11_1111;
+    private static final int SUBP_OPCODE_PATTERN = 0b00_0000;
+    private static final int IRG_OPCODE_PATTERN = 0b00_0100;
+    private static final int GMI_OPCODE_PATTERN = 0b00_0101;
 
     // ── B19.25: "Atomic 128-bit memory operations" (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), o ────
     // ── outro lado do MESMO `MOPS_ATOMIC128_BIT_SHIFT` (bit21=1) que a B19.16 deixou recusado. ──────
@@ -2000,6 +2040,15 @@ public final class Aarch64Decoder {
     /// checar {@link Aarch64Feature#MEMORY_COPY_SET}.
     private Ir64Op decodeMemoryCopyAndSet(int word, long address) {
         if (((word >>> MOPS_ATOMIC128_BIT_SHIFT) & 1) != 0) {
+            // bit21=1: OU "Atomic 128-bit" (LDCLRP/LDSETP/SWPP, FEAT_LSE128, B19.25, bits[31:30]
+            // real="00") OU a família de tag MTE (STG/LDG/..., FEAT_MTE2, B19.14, bits[31:30]="11"
+            // — achado real desta task: bit21=1 é fixo por coincidência de encoding nas DUAS
+            // famílias, e `LDAPR_i`/`STLR_i` (que também alcança bits[31:30]="11" na sua forma `X`
+            // de 64 bits) tem bit21=0 sempre, então NUNCA colide aqui — só depois de checar bit21.
+            int mopsSizeField = (word >>> MOPS_SIZE_FIELD_SHIFT) & MOPS_SIZE_FIELD_MASK;
+            if (mopsSizeField == MEMORY_TAG_FAMILY_SIZE_FIELD_VALUE) {
+                return decodeMemoryTagFamily(word, address);
+            }
             // LDCLRP/LDSETP/SWPP (FEAT_LSE128, B19.25) — feature PRÓPRIA, independente de
             // FEAT_MOPS (checada abaixo só para o resto deste bucket); checar aqui, não depois.
             return decodeAtomic128(word, address);
@@ -2022,11 +2071,16 @@ public final class Aarch64Decoder {
         int phaseField = (word >>> MOPS_PHASE_FIELD_SHIFT) & MOPS_PHASE_FIELD_MASK;
         boolean tagOrGenericDirection = ((word >>> MOPS_TAG_OR_GENERIC_DIRECTION_BIT_SHIFT) & 1) != 0;
         if (phaseField == MOPS_SET_MARKER_PHASE_FIELD) {
-            if (tagOrGenericDirection) {
-                // SETGP/SETGM/SETGE (variantes com tag) — B19.14, fora do escopo desta task (G8).
-                throw unsupported(word, address);
-            }
             int phaseBits = (word >>> MOPS_SET_PHASE_SHIFT) & MOPS_PHASE_FIELD_MASK;
+            if (tagOrGenericDirection) {
+                // SETGP/SETGM/SETGE (variantes com tag, FEAT_MTE2, B19.14) — MESMO campo `@set` de
+                // SETP/SETM/SETE, discriminadas só por este bit (B19.16 já corrigiu o misdecode que
+                // fazia essas 3 caírem em decodeFpLoadLiteral — aqui já chegam separadas de verdade).
+                if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+                    throw unsupported(word, address);
+                }
+                return new Ir64Op.MemorySetTagged(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
+            }
             return new Ir64Op.MemorySet(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
         }
         boolean forwardOnly = !tagOrGenericDirection;
@@ -2066,6 +2120,52 @@ public final class Aarch64Decoder {
             case MOPS_PHASE_EPILOGUE -> Ir64Op.Ir64MopsPhase.EPILOGUE;
             default -> throw unsupported(word, address); // reservado
         };
+    }
+
+    /// `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G`/`STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`, ARMv8.5-A, B19.14) —
+    /// `size`(bits[23:22]) escolhe o mnemônico, `variant`(bits[11:10]) escolhe a forma: `00`="forma
+    /// multiple" (`STZGM`/`STGM`/`LDGM`) OU `LDG` (única exceção — `LDG` também mede `variant=00`,
+    /// mas com `size=01`, e é uma instrução "single" comum, não "multiple"; confirmado byte a byte
+    /// contra `a64.decode` real do QEMU: só existe UMA linha de `LDG`, sem forma pre/post-index).
+    /// `01`/`10`/`11` são sempre a forma "single/pair" (`STG`/`STZG`/`ST2G`/`STZ2G`) com endereçamento
+    /// `POST_INDEX`/`OFFSET`/`PRE_INDEX` respectivamente — **achado real**: essa correspondência é
+    /// INVERTIDA em relação à convenção `p`/`w` normal de `LDR`/`STR` (aqui `variant=01` mede
+    /// `p=1,w=1` no `a64.decode`, mas o efeito observável de `do_STG`/`trans_LDG` do QEMU, lido byte
+    /// a byte, é POST-index: sem aplicar o imediato ao endereço acessado, só ao valor escrito de
+    /// volta em `Rn`) — ver `## Resultado` da task para o raciocínio completo.
+    private Ir64Op decodeMemoryTagFamily(int word, long address) {
+        if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
+        int size = (word >>> TAG_FAMILY_SIZE_SHIFT) & TAG_FAMILY_SIZE_MASK;
+        int variant = (word >>> TAG_FAMILY_VARIANT_SHIFT) & TAG_FAMILY_VARIANT_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        long imm9 = (word >>> TAG_FAMILY_IMM9_SHIFT) & bitMask(TAG_FAMILY_IMM9_BITS);
+        long immediate = signExtend(imm9, TAG_FAMILY_IMM9_BITS) * MEMORY_TAG_GRANULE_SCALE_BYTES;
+        if (variant == TAG_FAMILY_VARIANT_MULTIPLE) {
+            return switch (size) {
+                case TAG_FAMILY_SIZE_STZGM -> new Ir64Op.MemoryTagMultiple(
+                        Ir64Op.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, rt, rn);
+                case TAG_FAMILY_SIZE_LDG -> new Ir64Op.MemoryTag(Ir64Op.Ir64MemoryTagOperation.LOAD,
+                        false, 1, rt, rn, Ir64AddressingMode.OFFSET, immediate);
+                case TAG_FAMILY_SIZE_STGM -> new Ir64Op.MemoryTagMultiple(
+                        Ir64Op.Ir64MemoryTagMultipleOperation.STORE_TAGS, rt, rn);
+                case TAG_FAMILY_SIZE_LDGM -> new Ir64Op.MemoryTagMultiple(
+                        Ir64Op.Ir64MemoryTagMultipleOperation.LOAD_TAGS, rt, rn);
+                default -> throw new AssertionError("size de 2 bits só tem 4 valores possíveis");
+            };
+        }
+        Ir64AddressingMode addressingMode = switch (variant) {
+            case TAG_FAMILY_VARIANT_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case TAG_FAMILY_VARIANT_OFFSET -> Ir64AddressingMode.OFFSET;
+            case TAG_FAMILY_VARIANT_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        boolean zeroData = (size & 0b01) != 0; // STZG(01)/STZ2G(11) zeram dados; STG(00)/ST2G(10) não.
+        int granules = (size & 0b10) != 0 ? 2 : 1; // ST2G(10)/STZ2G(11) cobrem 2 granules.
+        return new Ir64Op.MemoryTag(
+                Ir64Op.Ir64MemoryTagOperation.STORE, zeroData, granules, rt, rn, addressingMode, immediate);
     }
 
     /// `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`, ARMv9.4-A, B19.25) — ver o comentário de
@@ -2338,8 +2438,12 @@ public final class Aarch64Decoder {
         } else if (opc == PAIR_OPC_32BIT_SIGNED && load) {
             wide = false;
             ldpsw = true;
+        } else if (opc == PAIR_OPC_32BIT_SIGNED) {
+            // opc=01 com load=false é STGP (FEAT_MTE2, B19.14) — mesmo formato @ldstpair, offset
+            // escalado por 16 (granule), não por 8.
+            return decodeStorePairTag(word, address);
         } else {
-            // opc=01 com load=false é STGP (ver PAIR_OPC_32BIT_SIGNED); opc=11 é reservado.
+            // opc=11 é reservado.
             throw unsupported(word, address);
         }
         int addrModeField = (word >>> PAIR_ADDR_MODE_SHIFT) & PAIR_ADDR_MODE_MASK;
@@ -2356,6 +2460,28 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
         return new Ir64Op.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate, ldpsw);
+    }
+
+    /// `STGP` (`FEAT_MTE2`, B19.14) — MESMO layout de campo que {@link #decodeLoadStorePair}
+    /// (`@ldstpair`), só o escalonamento do imediato muda: granule de 16 bytes, não doubleword de 8
+    /// (ver Javadoc de {@link Ir64Op.StorePairTag}).
+    private Ir64Op decodeStorePairTag(int word, long address) {
+        if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
+        int addrModeField = (word >>> PAIR_ADDR_MODE_SHIFT) & PAIR_ADDR_MODE_MASK;
+        Ir64AddressingMode addressingMode = switch (addrModeField) {
+            case PAIR_ADDR_MODE_NO_ALLOC_HINT, PAIR_ADDR_MODE_OFFSET -> Ir64AddressingMode.OFFSET;
+            case PAIR_ADDR_MODE_POST_INDEX -> Ir64AddressingMode.POST_INDEX;
+            case PAIR_ADDR_MODE_PRE_INDEX -> Ir64AddressingMode.PRE_INDEX;
+            default -> throw new IllegalStateException("unreachable");
+        };
+        long imm7 = (word >>> PAIR_IMM7_SHIFT) & bitMask(PAIR_IMM7_BITS);
+        long immediate = signExtend(imm7, PAIR_IMM7_BITS) * MEMORY_TAG_GRANULE_SCALE_BYTES;
+        int rt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.StorePairTag(rt, rt2, rn, addressingMode, immediate);
     }
 
     private Ir64Op decodeLoadStoreSingle(int word, long address) {
@@ -2806,8 +2932,12 @@ public final class Aarch64Decoder {
                 return decodeDataProcessing1Source(word, address);
             }
             if (opc2 != DP_SOURCE_OPC2_TWO_SOURCE) {
-                // `opc2` = `01`/`11`: SUBP/SUBPS/IRG/GMI (MTE, fora de escopo) — `PACGA` mede
-                // `opc2=00`, tratada abaixo (B19.6 bloco C, achado desta task).
+                // `opc2`=`01`: SUBPS (`FEAT_MTE2`, B19.14) — a ÚNICA das 4 instruções MTE deste
+                // subgrupo que mede `opc2=01` de verdade (achado real, ver comentário de
+                // DP_SOURCE_OPC2_SUBPS); `opc2=11` é reservado.
+                if (opc2 == DP_SOURCE_OPC2_SUBPS) {
+                    return decodeSubtractPointer(word, address, true);
+                }
                 throw unsupported(word, address);
             }
             int divideOpcode = (word >>> DIVIDE_OPCODE_SHIFT) & DIVIDE_OPCODE_5BIT_MASK;
@@ -2833,6 +2963,18 @@ public final class Aarch64Decoder {
             int crc32Top4 = (pacgaOpcode6 >>> CRC32_TOP4_SHIFT) & CRC32_TOP4_MASK;
             if (crc32Top4 == CRC32_TOP4_PATTERN || crc32Top4 == CRC32C_TOP4_PATTERN) {
                 return decodeCrc32(word, address, crc32Top4 == CRC32C_TOP4_PATTERN);
+            }
+            // B19.14: SUBP/IRG/GMI (`FEAT_MTE2`) — MESMO subgrupo "Data-processing (2 source)"
+            // (opc2=00) de PACGA/CRC32* acima, campo de 6 bits reaproveitado (`mteRegisterOpcode`).
+            int mteRegisterOpcode = (word >>> MTE_REGISTER_OPCODE_SHIFT) & MTE_REGISTER_OPCODE_MASK;
+            if (mteRegisterOpcode == SUBP_OPCODE_PATTERN) {
+                return decodeSubtractPointer(word, address, false);
+            }
+            if (mteRegisterOpcode == IRG_OPCODE_PATTERN) {
+                return decodeInsertRandomTag(word, address);
+            }
+            if (mteRegisterOpcode == GMI_OPCODE_PATTERN) {
+                return decodeTagMaskInsert(word, address);
             }
             // opcode restante: SMAX/SMIN/UMAX/UMIN (`FEAT_CSSC`, fora do escopo desta task — ver
             // B19.21).
@@ -2873,6 +3015,43 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.PointerAuthGeneric(rd, rn, rm);
+    }
+
+    /// `SUBP`/`SUBPS Xd, Xn, Xm` (`FEAT_MTE2`, B19.14) — sempre 64 bits (não existe forma de 32
+    /// bits, `sf` fixo em `1` no encoding real, não checado aqui pois a classe já garante
+    /// `bit31`=1 — ver `MULDIV_FIXED_SHIFT`).
+    private Ir64Op decodeSubtractPointer(int word, long address, boolean setFlags) {
+        if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.SubtractPointer(setFlags, rd, rn, rm);
+    }
+
+    /// `IRG Xd, Xn, Xm` (`FEAT_MTE2`, B19.14) — ver
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#insertRandomTag} para o algoritmo
+    /// determinístico.
+    private Ir64Op decodeInsertRandomTag(int word, long address) {
+        if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.InsertRandomTag(rd, rn, rm);
+    }
+
+    /// `GMI Xd, Xn, Xm` (`FEAT_MTE2`, B19.14).
+    private Ir64Op decodeTagMaskInsert(int word, long address) {
+        if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
+        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.TagMaskInsert(rd, rn, rm);
     }
 
     /// `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (B19.17, `FEAT_CRC32`) — `size`(bits[11:10]) escolhe a
@@ -6111,6 +6290,11 @@ public final class Aarch64Decoder {
         if (register == Aarch64SystemRegisterId.FPMR && !architecture.has(Aarch64Feature.FP8)) {
             throw unsupported(word, address);
         }
+        // B19.14: RGSR_EL1/GCR_EL1 são FEAT_MTE2 — gateados, mesmo padrão de FPMR acima.
+        if ((register == Aarch64SystemRegisterId.RGSR_EL1 || register == Aarch64SystemRegisterId.GCR_EL1)
+                && !architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
+            throw unsupported(word, address);
+        }
         return new Ir64Op.SystemRegister(read, register, rt);
     }
 
@@ -6228,6 +6412,12 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_CPACR && crm == SYSREG_CRM_CPACR && op2 == SYSREG_OP2_CPACR) {
             return Aarch64SystemRegisterId.CPACR_EL1;
+        }
+        if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_RGSR_EL1) {
+            return Aarch64SystemRegisterId.RGSR_EL1;
+        }
+        if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_GCR_EL1) {
+            return Aarch64SystemRegisterId.GCR_EL1;
         }
         if (crn == SYSREG_CRN_TTBR0 && crm == SYSREG_CRM_TTBR0 && op2 == SYSREG_OP2_TTBR0) {
             return Aarch64SystemRegisterId.TTBR0_EL1;

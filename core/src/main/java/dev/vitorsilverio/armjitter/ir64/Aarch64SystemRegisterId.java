@@ -186,6 +186,19 @@ public enum Aarch64SystemRegisterId {
     /// guest tente usá-la e bata num `UnsupportedOperationException` de decode em vez de
     /// simplesmente não usar o caminho otimizado.
     DCZID_EL0,
+    /// `RGSR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=5`, B19.14, `FEAT_MTE2`) — Random Allocation Tag
+    /// Seed Register: `TAG[3:0]`/`SEED[23:8]` que alimentam o algoritmo determinístico de `IRG` (ver
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#insertRandomTag}). Armazenamento
+    /// misto: o guest pode ler/escrever livremente (mesma disciplina de "armazenamento puro" de
+    /// {@link #FPCR}), mas `IRG` também MUTA este registrador como efeito colateral real (avança o
+    /// gerador determinístico) — não é um escaninho passivo puro como `FPCR`.
+    RGSR_EL1,
+    /// `GCR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=6`, B19.14, `FEAT_MTE2`) — Tag Control Register:
+    /// `Exclude[15:0]` (máscara de tags que `IRG` nunca gera, OR'ada com `Rm` no encoding) e `RRND`
+    /// (não modelado — este core nunca usa entropia real, só o algoritmo determinístico, decisão
+    /// registrada na task). Armazenamento puro leitura/escrita; `Exclude` É consumido de verdade por
+    /// `IRG` (diferente de `FPCR.RMode`, que é lido mas não afeta o resultado).
+    GCR_EL1,
 
     // ── B6.6.7: timer genérico, EL0-acessível (`op0=3,op1=3`) — via `Aarch64SystemRegisterBus` ──
 

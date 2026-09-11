@@ -28,8 +28,10 @@ class Aarch64MemoryCopySetDecoderTest {
     private static final int CPYM = 0x1D410440;
     private static final int CPYE = 0x1D810440;
 
-    // ── golden: `setgp/setgm/setge [x0]!, x1!, x2` (`.arch_extension memtag`) — B19.14, fora do ──
-    // ── escopo desta task; regressão de que a B19.16 não passa a misdecodificar/aceitar estas. ────
+    // ── golden: `setgp/setgm/setge [x0]!, x1!, x2` (`.arch_extension memtag`) — B19.14 IMPLEMENTA
+    // ── estas 3 (ver Aarch64MemoryTagDecoderTest para a cobertura completa); aqui só a regressão
+    // ── de que continuam SEPARADAS de SETP/SETM/SETE (nunca confundidas) e gateadas por
+    // ── FEAT_MTE2 além de FEAT_MOPS.
     private static final int SETGP = 0x1DC20420;
     private static final int SETGM = 0x1DC24420;
     private static final int SETGE = 0x1DC28420;
@@ -107,13 +109,29 @@ class Aarch64MemoryCopySetDecoderTest {
     }
 
     @Test
-    void setgFamilyWithTagStaysUnsupportedEvenUnderMopsFeature() {
-        // B19.14 (variantes com tag) não é implementada por esta task — bit26=1 na família SET*
-        // (mesmo bit que discrimina CPYF/CPY) tem que continuar recusando, não decodificar como
-        // SETP/SETM/SETE por engano nem cair de volta no misdecode antigo (FpLoadLiteral64).
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, SETGP));
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, SETGM));
-        assertThrows(UnsupportedOperationException.class, () -> decode(MOPS_DECODER, SETGE));
+    void setgFamilyStaysUnsupportedWithoutFeatures() {
+        assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, SETGP));
+        assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, SETGM));
+        assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, SETGE));
+    }
+
+    @Test
+    void setgFamilyDecodesSeparatelyFromSet() {
+        // MOPS_DECODER (ARMV8_8_A) já herda FEAT_MTE2 (ARMv8.5-A é ancestral na cadeia de presets
+        // deste projeto) — SETGP/SETGM/SETGE (B19.14) decodificam de verdade, sempre SEPARADAS de
+        // SETP/SETM/SETE (bit26 as discrimina), nunca confundidas nem caindo no misdecode antigo
+        // (FpLoadLiteral64) que a B19.16 já corrigiu para a família sem tag.
+        Ir64Op.MemorySetTagged p = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGP);
+        assertEquals(Ir64Op.Ir64MopsPhase.PROLOGUE, p.phase());
+        assertEquals(0, p.rd());
+        assertEquals(1, p.rn());
+        assertEquals(2, p.rs());
+
+        Ir64Op.MemorySetTagged m = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGM);
+        assertEquals(Ir64Op.Ir64MopsPhase.MAIN, m.phase());
+
+        Ir64Op.MemorySetTagged e = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGE);
+        assertEquals(Ir64Op.Ir64MopsPhase.EPILOGUE, e.phase());
     }
 
     @Test

@@ -33,8 +33,8 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 > **ASM 32 bits: 57 de 106** operações emitidas nativamente (mais 9 condicionais).
 > **Truffle 32 bits: 66 de 106** operações com nó especializado.
-> **ASM 64 bits: 46 de 129** `Kind` emitidos nativamente.
-> **Truffle 64 bits: 0 de 129** — o backend não existe (A10.8).
+> **ASM 64 bits: 46 de 136** `Kind` emitidos nativamente.
+> **Truffle 64 bits: 0 de 136** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
@@ -171,7 +171,7 @@ Cada `⚠️` acima recusa a emissão nativa só no caso listado; no resto é `�
 
 ## Tabela B — pipeline de 64 bits
 
-Linhas = os 129 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
+Linhas = os 136 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
 
 | `Kind` | ASM (`Ir64NativePolicy`) | Truffle |
 |---|---|---|
@@ -304,6 +304,13 @@ Linhas = os 129 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 | `ATOMIC_MEMORY_OP_PAIR` | ❌ | ❌ |
 | `FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE` | ❌ | ❌ |
 | `FP64_CONVERT_HALF_PRECISION` | ❌ | ❌ |
+| `MEMORY_TAG` | ❌ | ❌ |
+| `MEMORY_TAG_MULTIPLE` | ❌ | ❌ |
+| `STORE_PAIR_TAG` | ❌ | ❌ |
+| `SUBTRACT_POINTER` | ❌ | ❌ |
+| `INSERT_RANDOM_TAG` | ❌ | ❌ |
+| `TAG_MASK_INSERT` | ❌ | ❌ |
+| `MEMORY_SET_TAGGED` | ❌ | ❌ |
 
 ### `Kind` de 64 bits ainda interpretados
 
@@ -392,4 +399,11 @@ Entrada da escada C12.3-C12.6.
 - `ATOMIC_MEMORY_OP_PAIR`
 - `FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE`
 - `FP64_CONVERT_HALF_PRECISION`
+- `MEMORY_TAG`
+- `MEMORY_TAG_MULTIPLE`
+- `STORE_PAIR_TAG`
+- `SUBTRACT_POINTER`
+- `INSERT_RANDOM_TAG`
+- `TAG_MASK_INSERT`
+- `MEMORY_SET_TAGGED`
 

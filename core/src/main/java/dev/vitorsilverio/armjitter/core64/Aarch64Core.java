@@ -8,6 +8,8 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /// Estado de uma CPU AArch64 (ARMv8-A), EL0 apenas — irmão de
@@ -224,6 +226,17 @@ public final class Aarch64Core {
     /// `Aarch64SystemRegisterId#DEBUG_UNMODELED` (B19.6) — escaninho ÚNICO e COMPARTILHADO por
     /// toda a região `SYS`/`SYSL` `op0=2` sem registrador nomeado (ver javadoc da constante).
     private long debugUnmodeled;
+    /// `RGSR_EL1`/`GCR_EL1` (B19.14, `FEAT_MTE2`) — ver javadoc de
+    /// {@link Aarch64SystemRegisterId#RGSR_EL1}/{@link Aarch64SystemRegisterId#GCR_EL1}.
+    private long rgsrEl1;
+    private long gcrEl1;
+    /// Tag de alocação MTE (4 bits) por granule de 16 bytes (B19.14) — mapa ESPARSO indexado por
+    /// `endereço >>> 4` (nunca um array denso: os testes/consumidores tocam endereços arbitrários e
+    /// distantes entre si). Granule ausente do mapa lê como tag `0` (mesmo valor "canônico" de um
+    /// granule nunca tagueado no hardware real). Decisão de escopo da task: este mapa é a ÚNICA
+    /// fonte de verdade de tags — `LDR`/`STR` comuns NUNCA o consultam (sem checagem de tag
+    /// modelada, G8).
+    private final Map<Long, Integer> memoryTags = new HashMap<>();
     /// Linha de IRQ nível-sensível controlada pelo hospedeiro (mesmo papel de
     /// {@code ArmCore#interruptLine}, 32-bit) — B6.6.7. `true` = interrupção pendente até o
     /// hospedeiro desassertar; sem GIC modelado, cabe ao hospedeiro decidir quando assertar/
@@ -451,7 +464,7 @@ public final class Aarch64Core {
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
                  TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
-                 UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED -> true;
+                 UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED, RGSR_EL1, GCR_EL1 -> true;
             default -> false;
         };
     }
@@ -500,6 +513,8 @@ public final class Aarch64Core {
             case UAO -> uao;
             case ALLINT -> allint;
             case DEBUG_UNMODELED -> debugUnmodeled;
+            case RGSR_EL1 -> rgsrEl1;
+            case GCR_EL1 -> gcrEl1;
             case CTR_EL0 -> CTR_EL0_VALUE;
             case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
@@ -531,6 +546,8 @@ public final class Aarch64Core {
             case UAO -> uao = value;
             case ALLINT -> allint = value;
             case DEBUG_UNMODELED -> debugUnmodeled = value;
+            case RGSR_EL1 -> rgsrEl1 = value;
+            case GCR_EL1 -> gcrEl1 = value;
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }
@@ -587,6 +604,148 @@ public final class Aarch64Core {
     /// normal do formato de destino, em vez do default arquitetural (`Infinity`/`NaN`).
     public boolean fp8OverflowSaturatesToMaxNormal() {
         return ((fpmr >>> FPMR_OSC_BIT) & 1) != 0;
+    }
+
+    /// Tamanho em bytes de um granule de tag MTE (B19.14, `TAG_GRANULE` real do ARM DDI 0487 —
+    /// SEMPRE 16, não configurável por nenhuma feature).
+    public static final int MEMORY_TAG_GRANULE_BYTES = 16;
+    private static final int MEMORY_TAG_GRANULE_LOG2 = 4;
+    private static final long MEMORY_TAG_GRANULE_ALIGN_MASK = ~(MEMORY_TAG_GRANULE_BYTES - 1L);
+    private static final int MEMORY_TAG_NIBBLE_MASK = 0xF;
+    /// Tamanho do bloco de tags de `STGM`/`LDGM` (B19.14) — `256` bytes/`16` granules, o único
+    /// tamanho real (`GM_BLOCKSIZE=6`) em que a leitura/escrita não depende de um deslocamento
+    /// DENTRO do bloco (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.MemoryTagMultiple}).
+    private static final int MEMORY_TAG_BLOCK_GRANULES = 16;
+    private static final long MEMORY_TAG_BLOCK_ALIGN_MASK =
+            ~((long) MEMORY_TAG_BLOCK_GRANULES * MEMORY_TAG_GRANULE_BYTES - 1L);
+    /// Tamanho do bloco "DC ZVA" simulado para `STZGM` (B19.14) — `64` bytes/`4` granules, decisão
+    /// documentada (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.MemoryTagMultiple}).
+    private static final int MEMORY_TAG_STZGM_BLOCK_GRANULES = 4;
+    /// Tamanho em bytes do bloco "DC ZVA" simulado de {@link #stzgmBlockBaseAndSetTags} — o
+    /// executor usa esta constante para saber quantos bytes de DADOS zerar a partir do endereço-
+    /// base retornado.
+    public static final int MEMORY_TAG_STZGM_BLOCK_BYTES =
+            MEMORY_TAG_STZGM_BLOCK_GRANULES * MEMORY_TAG_GRANULE_BYTES;
+    private static final long MEMORY_TAG_STZGM_BLOCK_ALIGN_MASK = ~(MEMORY_TAG_STZGM_BLOCK_BYTES - 1L);
+
+    /// Zera `bits[59:56]` de um ponteiro (B19.14, `gen_address_with_allocation_tag0` do ARM DDI
+    /// 0487/QEMU) — usado para obter um endereço "físico" canônico ANTES de indexar o armazenamento
+    /// de tags ou tocar {@link #memory()}. Este emulador não implementa TBI geral (nenhum
+    /// `LDR`/`STR` comum limpa endereço nenhum, decisão já documentada em toda a base) — esta é
+    /// só a versão MÍNIMA e auto-contida necessária para que as 26 instruções de `FEAT_MTE2` sejam
+    /// consistentes entre si (armazenamento de tags indexado pelo endereço FÍSICO, independente da
+    /// tag lógica do ponteiro que o acessa — dois ponteiros com o MESMO endereço físico e tags
+    /// DIFERENTES têm que enxergar o MESMO granule).
+    private static long stripAllocationTag(long pointer) {
+        return pointer & ~(0xFL << 56);
+    }
+
+    /// Lê a tag de alocação de 4 bits do granule de 16 bytes que contém {@code address} (B19.14).
+    /// Um granule nunca gravado lê `0` (tag canônica default, mesmo valor de um granule "novo" no
+    /// hardware real).
+    public int memoryTag(long address) {
+        return memoryTags.getOrDefault(stripAllocationTag(address) & MEMORY_TAG_GRANULE_ALIGN_MASK, 0);
+    }
+
+    /// Grava a tag de alocação de 4 bits (só os 4 bits baixos de {@code tag} são usados) no granule
+    /// de 16 bytes que contém {@code address} (B19.14).
+    public void setMemoryTag(long address, int tag) {
+        memoryTags.put(stripAllocationTag(address) & MEMORY_TAG_GRANULE_ALIGN_MASK, tag & MEMORY_TAG_NIBBLE_MASK);
+    }
+
+    /// Endereço "físico" (sem a tag lógica em `bits[59:56]`) para acesso de DADOS das instruções de
+    /// `FEAT_MTE2` (B19.14) — ver javadoc de {@link #stripAllocationTag}. Público porque o executor
+    /// (`Ir64BlockExecutor`, pacote irmão) precisa dele antes de chamar {@link #memory()}.
+    public static long physicalMemoryTagAddress(long pointer) {
+        return stripAllocationTag(pointer);
+    }
+
+    /// Empacota os `16` granules de tag do bloco de 256 bytes que contém {@code address} num
+    /// `long` (4 bits por granule, granule de endereço mais baixo nos bits mais baixos) — usado por
+    /// `STGM`/`LDGM` (B19.14).
+    public long memoryTagBlock(long address) {
+        long blockBase = stripAllocationTag(address) & MEMORY_TAG_BLOCK_ALIGN_MASK;
+        long bits = 0L;
+        for (int i = 0; i < MEMORY_TAG_BLOCK_GRANULES; i++) {
+            bits |= (long) memoryTag(blockBase + (long) i * MEMORY_TAG_GRANULE_BYTES) << (i * 4);
+        }
+        return bits;
+    }
+
+    /// Desempacota `value` (4 bits por granule) e grava os `16` granules do bloco de 256 bytes que
+    /// contém {@code address} (B19.14).
+    public void setMemoryTagBlock(long address, long value) {
+        long blockBase = stripAllocationTag(address) & MEMORY_TAG_BLOCK_ALIGN_MASK;
+        for (int i = 0; i < MEMORY_TAG_BLOCK_GRANULES; i++) {
+            setMemoryTag(blockBase + (long) i * MEMORY_TAG_GRANULE_BYTES, (int) (value >>> (i * 4)));
+        }
+    }
+
+    /// `STZGM` (B19.14) — zera os dados do bloco "DC ZVA" simulado de 64 bytes que contém
+    /// {@code address} e grava {@code tagNibble} (4 bits baixos) em cada um dos 4 granules do
+    /// bloco. Retorna o endereço-base do bloco (para o executor zerar a memória de dados).
+    public long stzgmBlockBaseAndSetTags(long address, int tagNibble) {
+        long blockBase = stripAllocationTag(address) & MEMORY_TAG_STZGM_BLOCK_ALIGN_MASK;
+        for (int i = 0; i < MEMORY_TAG_STZGM_BLOCK_GRANULES; i++) {
+            setMemoryTag(blockBase + (long) i * MEMORY_TAG_GRANULE_BYTES, tagNibble);
+        }
+        return blockBase;
+    }
+
+    /// Extrai a tag lógica (`bits[59:56]`) de um ponteiro (B19.14, `allocation_tag_from_addr` do
+    /// ARM DDI 0487).
+    public static int allocationTagFromAddress(long pointer) {
+        return (int) ((pointer >>> 56) & MEMORY_TAG_NIBBLE_MASK);
+    }
+
+    /// Substitui `bits[59:56]` de {@code pointer} por {@code tag} (4 bits baixos), preservando o
+    /// resto (B19.14, `address_with_allocation_tag` do ARM DDI 0487).
+    public static long withAllocationTag(long pointer, int tag) {
+        long cleared = pointer & ~(0xFL << 56);
+        return cleared | (((long) tag & MEMORY_TAG_NIBBLE_MASK) << 56);
+    }
+
+    /// `IRG` (B19.14) — gera uma tag pseudoaleatória DETERMINÍSTICA (algoritmo LFSR real do ARM
+    /// DDI 0487/QEMU `helper_irg`, sem entropia externa: savestates/replay exigem reprodutibilidade
+    /// exata, ver "Não fazer" da task) a partir do estado em {@link #rgsrEl1}, respeitando a máscara
+    /// de exclusão `rmExclude OR GCR_EL1.Exclude[15:0]`, e a insere no ponteiro {@code rn}.
+    /// Atualiza {@link #rgsrEl1} (novo `TAG`/`SEED`) como efeito colateral real, igual ao hardware.
+    public long insertRandomTag(long rn, long rmExclude) {
+        int exclude = (int) ((rmExclude | gcrEl1) & 0xFFFFL);
+        int start = (int) (rgsrEl1 & MEMORY_TAG_NIBBLE_MASK);
+        int seed = (int) ((rgsrEl1 >>> 8) & 0xFFFF);
+        if (seed == 0) {
+            // Decisão documentada: hardware real recorreria a entropia de verdade aqui (GCR_EL1.RRND).
+            // Este core nunca modela isso — sempre determinístico, mesma seed inicial fixa.
+            seed = 1;
+        }
+        int offset = 0;
+        for (int i = 0; i < 4; i++) {
+            int top = ((seed >>> 5) ^ (seed >>> 3) ^ (seed >>> 2) ^ seed) & 1;
+            seed = (top << 15) | (seed >>> 1);
+            offset |= top << i;
+        }
+        int rtag = chooseNonExcludedTag(start, offset, exclude);
+        rgsrEl1 = (rtag & MEMORY_TAG_NIBBLE_MASK) | ((long) seed << 8);
+        return withAllocationTag(rn, rtag);
+    }
+
+    private static int chooseNonExcludedTag(int tag, int offset, int exclude) {
+        if (exclude == 0xFFFF) {
+            return 0;
+        }
+        if (offset == 0) {
+            while (((exclude >>> tag) & 1) != 0) {
+                tag = (tag + 1) & 0xF;
+            }
+        } else {
+            do {
+                do {
+                    tag = (tag + 1) & 0xF;
+                } while (((exclude >>> tag) & 1) != 0);
+            } while (--offset > 0);
+        }
+        return tag;
     }
 
     /// Linha de IRQ nível-sensível (B6.6.7) — ver javadoc do campo {@link #interruptLine}.

@@ -441,6 +441,15 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.CRC32 -> executeCrc32(core, (Ir64Op.Crc32) op);
             case Ir64Op.Kind.MEMORY_SET -> executeMemorySet(core, (Ir64Op.MemorySet) op);
             case Ir64Op.Kind.MEMORY_COPY -> executeMemoryCopy(core, (Ir64Op.MemoryCopy) op);
+            case Ir64Op.Kind.MEMORY_TAG -> executeMemoryTag(core, (Ir64Op.MemoryTag) op);
+            case Ir64Op.Kind.MEMORY_TAG_MULTIPLE ->
+                    executeMemoryTagMultiple(core, (Ir64Op.MemoryTagMultiple) op);
+            case Ir64Op.Kind.STORE_PAIR_TAG -> executeStorePairTag(core, (Ir64Op.StorePairTag) op);
+            case Ir64Op.Kind.SUBTRACT_POINTER -> executeSubtractPointer(core, (Ir64Op.SubtractPointer) op);
+            case Ir64Op.Kind.INSERT_RANDOM_TAG -> executeInsertRandomTag(core, (Ir64Op.InsertRandomTag) op);
+            case Ir64Op.Kind.TAG_MASK_INSERT -> executeTagMaskInsert(core, (Ir64Op.TagMaskInsert) op);
+            case Ir64Op.Kind.MEMORY_SET_TAGGED ->
+                    executeMemorySetTagged(core, (Ir64Op.MemorySetTagged) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
                     executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
             case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
@@ -1444,6 +1453,133 @@ public final class Ir64BlockExecutor {
         core.setX(op.rs(), src + count);
         core.setX(op.rn(), 0L);
         core.pstate().setNzcv(backward ? MOPS_COMPLETED_BACKWARD_NZCV : MOPS_COMPLETED_FORWARD_NZCV);
+        return false;
+    }
+
+    /// `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.MemoryTag}.
+    private boolean executeMemoryTag(Aarch64Core core, Ir64Op.MemoryTag op) {
+        long base = readBaseRegister(core, op.rn());
+        long addr = transferAddress(core, base, op.addressingMode(), op.immediate(), -1, null, 0);
+        long granuleAddress = addr & ~(Aarch64Core.MEMORY_TAG_GRANULE_BYTES - 1L);
+        if (op.operation() == Ir64Op.Ir64MemoryTagOperation.LOAD) {
+            int tag = core.memoryTag(granuleAddress);
+            core.setX(op.rt(), Aarch64Core.withAllocationTag(core.x(op.rt()), tag));
+        } else {
+            int tag = Aarch64Core.allocationTagFromAddress(readBaseRegister(core, op.rt()));
+            core.setMemoryTag(granuleAddress, tag);
+            if (op.granules() == 2) {
+                core.setMemoryTag(granuleAddress + Aarch64Core.MEMORY_TAG_GRANULE_BYTES, tag);
+            }
+            if (op.zeroData()) {
+                long dataAddress = Aarch64Core.physicalMemoryTagAddress(addr);
+                int totalBytes = Aarch64Core.MEMORY_TAG_GRANULE_BYTES * op.granules();
+                for (int i = 0; i < totalBytes; i++) {
+                    core.memory().write8(dataAddress + i, 0);
+                }
+                core.notifyOrdinaryWrite(dataAddress, totalBytes);
+            }
+        }
+        writeback(core, op.rn(), op.addressingMode(), base, op.immediate());
+        return false;
+    }
+
+    /// `STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.MemoryTagMultiple}.
+    private boolean executeMemoryTagMultiple(Aarch64Core core, Ir64Op.MemoryTagMultiple op) {
+        long addr = readBaseRegister(core, op.rn());
+        switch (op.operation()) {
+            case LOAD_TAGS -> core.setX(op.rt(), core.memoryTagBlock(addr));
+            case STORE_TAGS -> core.setMemoryTagBlock(addr, core.x(op.rt()));
+            case STORE_ZERO_DATA_TAGS -> {
+                int tagNibble = (int) core.x(op.rt());
+                long blockBase = core.stzgmBlockBaseAndSetTags(addr, tagNibble);
+                for (int i = 0; i < Aarch64Core.MEMORY_TAG_STZGM_BLOCK_BYTES; i++) {
+                    core.memory().write8(blockBase + i, 0);
+                }
+                core.notifyOrdinaryWrite(blockBase, Aarch64Core.MEMORY_TAG_STZGM_BLOCK_BYTES);
+            }
+        }
+        return false;
+    }
+
+    /// `STGP` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.StorePairTag}: a tag gravada vem
+    /// do PRÓPRIO endereço de destino, não de {@link Ir64Op.StorePairTag#rt}/{@link Ir64Op.StorePairTag#rt2}.
+    private boolean executeStorePairTag(Aarch64Core core, Ir64Op.StorePairTag op) {
+        long base = readBaseRegister(core, op.rn());
+        long addr = transferAddress(core, base, op.addressingMode(), op.immediate(), -1, null, 0);
+        long dataAddress = Aarch64Core.physicalMemoryTagAddress(addr);
+        core.memory().write64(dataAddress, core.x(op.rt()));
+        core.memory().write64(dataAddress + Long.BYTES, core.x(op.rt2()));
+        core.notifyOrdinaryWrite(dataAddress, Long.BYTES * 2);
+        int tag = Aarch64Core.allocationTagFromAddress(addr);
+        core.setMemoryTag(dataAddress, tag);
+        writeback(core, op.rn(), op.addressingMode(), base, op.immediate());
+        return false;
+    }
+
+    /// `SUBP`/`SUBPS` (`FEAT_MTE2`, B19.14) — cada operando é sign-extended a partir dos 56 bits
+    /// baixos ANTES da subtração (achado real, ver Javadoc de {@link Ir64Op.SubtractPointer}).
+    private static final int SUBTRACT_POINTER_SIGN_EXTEND_BITS = 56;
+
+    private boolean executeSubtractPointer(Aarch64Core core, Ir64Op.SubtractPointer op) {
+        long n = signExtendBitfield(
+                readBaseRegister(core, op.rn()) & maskOfBitfieldWidth(SUBTRACT_POINTER_SIGN_EXTEND_BITS),
+                SUBTRACT_POINTER_SIGN_EXTEND_BITS);
+        long m = signExtendBitfield(
+                readBaseRegister(core, op.rm()) & maskOfBitfieldWidth(SUBTRACT_POINTER_SIGN_EXTEND_BITS),
+                SUBTRACT_POINTER_SIGN_EXTEND_BITS);
+        AluResult result = subWithFlags(n, m, true);
+        if (op.setFlags()) {
+            core.pstate().setNzcv(result.negative(), result.zero(), result.carry(), result.overflow());
+        }
+        core.setX(op.rd(), result.value());
+        return false;
+    }
+
+    /// `IRG` (`FEAT_MTE2`, B19.14) — ver {@link Aarch64Core#insertRandomTag}.
+    private boolean executeInsertRandomTag(Aarch64Core core, Ir64Op.InsertRandomTag op) {
+        long rn = readBaseRegister(core, op.rn());
+        long rmExclude = core.x(op.rm());
+        long result = core.insertRandomTag(rn, rmExclude);
+        writeBaseRegister(core, op.rd(), result);
+        return false;
+    }
+
+    /// `GMI` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.TagMaskInsert}.
+    private boolean executeTagMaskInsert(Aarch64Core core, Ir64Op.TagMaskInsert op) {
+        long rn = readBaseRegister(core, op.rn());
+        int tag = Aarch64Core.allocationTagFromAddress(rn);
+        long mask = core.x(op.rm());
+        core.setX(op.rd(), mask | (1L << tag));
+        return false;
+    }
+
+    /// `SETGP`/`SETGM`/`SETGE` (`FEAT_MTE2`+`FEAT_MOPS`, B19.14) — mesma disciplina de
+    /// {@link #executeMemorySet}, mas também grava a tag de {@link Ir64Op.MemorySetTagged#rd} em
+    /// cada granule de 16 bytes tocado pelo preenchimento.
+    private boolean executeMemorySetTagged(Aarch64Core core, Ir64Op.MemorySetTagged op) {
+        long count = core.x(op.rn());
+        if (count == 0) {
+            return false;
+        }
+        if (count < 0) {
+            count = Long.MAX_VALUE; // saturação: Xn[63]==1 (ARM DDI 0487)
+        }
+        long address = core.x(op.rd());
+        long dataAddress = Aarch64Core.physicalMemoryTagAddress(address);
+        int fillByte = (int) core.x(op.rs());
+        int tag = Aarch64Core.allocationTagFromAddress(address);
+        for (long i = 0; i < count; i++) {
+            core.memory().write8(dataAddress + i, fillByte);
+        }
+        core.notifyOrdinaryWrite(dataAddress, (int) Math.min(count, Integer.MAX_VALUE));
+        long granuleStart = dataAddress & ~(Aarch64Core.MEMORY_TAG_GRANULE_BYTES - 1L);
+        long granuleEnd = (dataAddress + count - 1) & ~(Aarch64Core.MEMORY_TAG_GRANULE_BYTES - 1L);
+        for (long g = granuleStart; g <= granuleEnd; g += Aarch64Core.MEMORY_TAG_GRANULE_BYTES) {
+            core.setMemoryTag(g, tag);
+        }
+        core.setX(op.rd(), address + count);
+        core.setX(op.rn(), 0L);
+        core.pstate().setNzcv(MOPS_COMPLETED_FORWARD_NZCV);
         return false;
     }
 

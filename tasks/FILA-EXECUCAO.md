@@ -47,6 +47,37 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.14 fechar)
+
+**B19.14 FECHADA 2026-09-11** — A64 `FEAT_MTE2` (Memory Tagging Extension, ARMv8.5-A), o MAIOR
+degrau residual do épico B19 (26 células): `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G`/`STGM`/`LDGM`/`STZGM`/
+`STGP`/`SUBP`/`SUBPS`/`IRG`/`GMI`/`SETGP`/`SETGM`/`SETGE`. Armazenamento de tags FUNCIONAL (mapa
+esparso em `Aarch64Core`, indexado por granule de 16 bytes), sem checagem de tag em `LDR`/`STR`
+comuns (G8, decisão consciente). **Bug real achado e corrigido ANTES de decodificar**: o topo de
+`decodeMemoryCopyAndSet` só checava `bit21` para separar `FEAT_LSE128` (`LDCLRP`/`LDSETP`/`SWPP`,
+B19.25) — como a família de tag inteira (prefixo `0xD9`) TAMBÉM fixa `bit21=1` por coincidência de
+encoding, colidiria com `FEAT_LSE128` se as duas features fossem declaradas juntas sem `FEAT_MOPS`;
+corrigido checando `bits[31:30]` DEPOIS de `bit21=1` (não antes — a forma `X` de `LDAPR_i`/`STLR_i`,
+B19.19, também mede `bits[31:30]="11"` na sua variante de 64 bits, e uma primeira tentativa de
+checar isso ANTES de `bit21` quebrou 3 testes pré-existentes, capturado pela suíte). **Achado que
+inverte a intuição do nome `p`/`w` do QEMU**: o mapeamento real `variant`→endereçamento é
+`01`→`POST_INDEX`, `10`→`OFFSET`, `11`→`PRE_INDEX` (o INVERSO do que os nomes sugerem — confirmado
+lendo o C real, não a nomenclatura). `SETGP`/`SETGM`/`SETGE` já tinham sido desbloqueadas (❌
+honesto, não mais `⚠️`) pelo efeito colateral da B19.16 — bastou decodificar de verdade, sem
+investigação de causa raiz nesta sessão. `STGP` grava a tag do PRÓPRIO endereço de destino, não de
+`Rt`/`Rt2` (achado via `trans_STGP` do QEMU). `STZGM` grava a tag dos 4 bits BAIXOS de `Rt` direto
+(não `bits[59:56]` como `STG`) — achado via `HELPER(stzgm_tags)`. **Achado de correção própria**:
+o armazenamento de tags precisa indexar por um endereço "físico" (sem a tag lógica em `bits[59:56]`
+do próprio ponteiro), senão `IRG` seguido de `STG`/`LDG` no MESMO ponteiro tagueado quebraria —
+corrigido com `Aarch64Core.stripAllocationTag`. `IRG` usa o algoritmo LFSR determinístico real do
+QEMU (sem entropia, savestates reprodutíveis) e `GCR_EL1.Exclude` É consumido de verdade (mais
+simples que a alternativa "sempre zero" cogitada pela spec). 7 records novos em `Ir64Op`
+(`Ir64Op.Kind` 129→136, nenhum nativo). Vetores golden via `aarch64-linux-gnu-as
+-march=armv8.8-a+memtag+mops` (WSL). `docs/COBERTURA-ISA.md`: global 96%→97% (18512→18780/19215),
+`ARMv8.5-A` 95%→97% (+23, não +26 — `SETGP`/`SETGM`/`SETGE` continuam `❌` honesto onde `MTE2`
+existe sem `MOPS`, requisito real da arquitetura). `mvn -o test` verde (3609; as mesmas 3 falhas
+pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.19 fechar)
 
 **B19.19 FECHADA 2026-09-11** — A64 `FEAT_LRCPC2` (`LDAPR_i` 6 formas + `STLR_i`, 7 células).
