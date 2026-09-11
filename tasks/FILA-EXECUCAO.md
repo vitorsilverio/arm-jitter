@@ -47,6 +47,22 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.26 fechar)
+
+**B19.26 FECHADA 2026-09-11** — A64 `FEAT_FP16` residual (`FMOV_hx`/`FMOV_xh`/`FCVT_s_hs`/
+`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh`, 6 células), o degrau mais barato do lote nomeado pela B19.9.
+Dois `Kind`/record NOVOS (não reaproveita `Fp64GeneralRegisterMove`/`Fp64Convert`, ver Armadilhas):
+`Fp64HalfPrecisionGeneralRegisterMove` (`FMOV_hx`/`xh` — o lado FP é sempre `H`, `sf` é ignorado de
+propósito porque produz o MESMO estado final nos dois valores, confirmado byte a byte contra
+`aarch64-linux-gnu-as -march=armv8.2-a+fp16`, WSL) e `Fp64ConvertHalfPrecision` (as 4 combinações que
+faltavam de `FCVT` meia↔simples/dupla, reusando `AdvSimdLanes.halfBits`/`halfToFloat`). Nenhum dos
+dois `Kind` entra em `Ir64NativePolicy` — caem no interpretador automaticamente, satisfazendo o "não
+adicionar caso nativo" sem lógica extra. `docs/COBERTURA-ISA.md`: as 6 células saem de `❌` para `✅`
+em `ARMv8.2-A`+ (14 colunas), global 18288→18372/19215 (95% inalterado no arredondamento).
+`docs/COBERTURA-JIT.md` regenerado (`Ir64Op.Kind` 127→129, ambos só interpretados). `mvn -o test`
+verde (3561; as mesmas 3 falhas pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver
+**Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.25 fechar)
 
 **B19.25 FECHADA 2026-09-11** — A64 `FEAT_LSE128` (`LDCLRP`/`LDSETP`/`SWPP`, 3 células, ARMv9.4-A).
@@ -251,7 +267,6 @@ além da própria B19.9 (✅) e, no caso da família FP8, de B19.11/B19.11a (✅
 |---|---|---|
 | **[C12.5](trilha-c-perf/c12.5-a64-loadstore-fp-simd-nativo.md)** | Emissão nativa A64: load/store FP/SIMD (4 escalares + 3 estruturadas) | 46/96 → 53/96 |
 | **[C12.10](trilha-c-perf/c12.10-a64-sistema-nativo.md)** | Emissão nativa A64: os 8 `Kind` de sistema (`SYSTEM_REGISTER`, `EXCEPTION_RETURN`, `PRIVILEGED_CALL`, ...) | 8 `Kind` |
-| **[B19.26](trilha-b-arquiteturas/b19.26-a64-fp16-residual.md)** | `FEAT_FP16` residual (`FMOV`/`FCVT` escalares h↔s/d) — reusa conversões já existentes | 6 células |
 | **[B19.11c](trilha-b-arquiteturas/b19.11c-a64-fp8-dot-2way.md)** / **[B19.11d](trilha-b-arquiteturas/b19.11d-a64-fp8-dot-4way.md)** | `FDOT_hb`/`FDOT_sb` (FP8 dot product 2-way/4-way) | 2+2 células |
 | demais degraus B19.14-B19.29/B19.11b/e | ver tabela completa abaixo | — |
 

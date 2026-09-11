@@ -379,4 +379,46 @@ final class Ir64FpExecutor {
         }
         return false;
     }
+
+    /// Índice `log2` do tamanho de elemento `H` (16 bits) em {@link Aarch64FpRegisters#element}/
+    /// {@link Aarch64FpRegisters#setScalar} — `FMOV_hx`/`FMOV_xh`/`FCVT_s_h*` sempre operam sobre um
+    /// escalar de 16 bits.
+    private static final int HALFWORD_SIZE_LOG2 = 1;
+
+    /// `FMOV_hx`/`FMOV_xh` (B19.26, `FEAT_FP16`) — cópia CRUA de bits entre registrador geral e
+    /// `H<n>`. O lado geral é sempre resolvido como `X` completo (`wide=true`): o resultado
+    /// observável não muda com `sf` (ver Javadoc de {@link Ir64Op.Fp64HalfPrecisionGeneralRegisterMove}).
+    static boolean executeFpHalfPrecisionGeneralRegisterMove(
+            Aarch64Core core, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.toFloat()) {
+            long raw = core.xForWidth(op.gpReg(), true) & 0xFFFFL;
+            fp.setScalar(op.fpReg(), HALFWORD_SIZE_LOG2, raw);
+        } else {
+            long raw = fp.element(op.fpReg(), 0, HALFWORD_SIZE_LOG2);
+            core.setXForWidth(op.gpReg(), raw, true);
+        }
+        return false;
+    }
+
+    /// `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (B19.26, `FEAT_FP16`) — conversão de valor
+    /// entre meia precisão e simples/dupla, reusando o núcleo `Float.floatToFloat16`/
+    /// `float16ToFloat` já usado por toda conversão de meia precisão do projeto
+    /// ({@link AdvSimdLanes#halfBits}/{@link AdvSimdLanes#halfToFloat}). `DOUBLE_TO_HALF` passa por
+    /// `float` intermediário — simplificação documentada no Javadoc de
+    /// {@link Ir64Op.Fp64ConvertHalfPrecision} (double rounding).
+    static boolean executeFpConvertHalfPrecision(Aarch64Core core, Ir64Op.Fp64ConvertHalfPrecision op) {
+        Aarch64FpRegisters fp = core.fp();
+        switch (op.conversion()) {
+            case HALF_TO_SINGLE ->
+                    fp.setSFloat(op.vd(), AdvSimdLanes.halfToFloat(fp.element(op.vn(), 0, HALFWORD_SIZE_LOG2)));
+            case HALF_TO_DOUBLE ->
+                    fp.setDDouble(op.vd(), AdvSimdLanes.halfToFloat(fp.element(op.vn(), 0, HALFWORD_SIZE_LOG2)));
+            case SINGLE_TO_HALF ->
+                    fp.setScalar(op.vd(), HALFWORD_SIZE_LOG2, AdvSimdLanes.halfBits(fp.sFloat(op.vn())));
+            case DOUBLE_TO_HALF ->
+                    fp.setScalar(op.vd(), HALFWORD_SIZE_LOG2, AdvSimdLanes.halfBits((float) fp.dDouble(op.vn())));
+        }
+        return false;
+    }
 }

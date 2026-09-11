@@ -68,7 +68,8 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
         Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32,
         Ir64Op.Fp64JavascriptConvert, Ir64Op.MemorySet, Ir64Op.MemoryCopy,
-        Ir64Op.AtomicMemoryOpPair {
+        Ir64Op.AtomicMemoryOpPair, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove,
+        Ir64Op.Fp64ConvertHalfPrecision {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -364,6 +365,12 @@ public sealed interface Ir64Op permits
         public static final int MEMORY_COPY = 125;
         /// B19.25: `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`) — ver {@link AtomicMemoryOpPair}.
         public static final int ATOMIC_MEMORY_OP_PAIR = 126;
+        /// B19.26: `FMOV_hx`/`FMOV_xh` (`FEAT_FP16` residual) — ver
+        /// {@link Fp64HalfPrecisionGeneralRegisterMove}.
+        public static final int FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE = 127;
+        /// B19.26: `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (`FEAT_FP16` residual) — ver
+        /// {@link Fp64ConvertHalfPrecision}.
+        public static final int FP64_CONVERT_HALF_PRECISION = 128;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3226,5 +3233,59 @@ public sealed interface Ir64Op permits
             /// Registrador de contador de bytes (`Xn`, índice `0`-`31`; `31` é `XZR`).
             int rn) implements Ir64Op {
         @Override public int kind() { return Kind.MEMORY_COPY; }
+    }
+
+    /// `FMOV_hx`/`FMOV_xh` (`ARM DDI 0487`, `FEAT_FP16`, ARMv8.2-A, B19.26) — cópia CRUA de bits
+    /// entre um registrador geral e o escalar `H<n>` (16 bits), sibling de
+    /// {@link Fp64GeneralRegisterMove} (que só cobre `W`↔`S`/`X`↔`D`). Record PRÓPRIO em vez de
+    /// estender aquele: lá {@link Fp64GeneralRegisterMove#wide} escolhe SIMULTANEAMENTE a largura do
+    /// lado geral E do lado FP (sempre pareadas, `W`↔`S`/`X`↔`D`); aqui o lado FP é sempre `H` (16
+    /// bits) e o `sf` do encoding pode ser `0` OU `1` produzindo o MESMO estado final — medido
+    /// contra o corpus real (`aarch64-none-elf-as -march=armv8.2-a+fp16`): como só os 16 bits baixos
+    /// do lado geral importam (`FMOV_hx`) e como escrever `Wd` já zero-estende os 32 bits altos de
+    /// `Xd` (convenção AArch64, `FMOV_xh`), o valor de `sf` não muda o estado observável — por isso
+    /// este record não carrega `sf`/`wide` nenhum, e o executor sempre resolve o lado geral como
+    /// `X` completo (ver Armadilhas da task).
+    record Fp64HalfPrecisionGeneralRegisterMove(
+            /// `true`: `Xn`/`Wn` → `Hd` (bits crus, zera o resto de `Vd`). `false`: `Hn` → `Xd`/`Wd`
+            /// (bits crus, zero-estendido).
+            boolean toFloat,
+            /// Registrador FP (índice `0`-`31`, `V<n>`).
+            int fpReg,
+            /// Registrador geral (índice `0`-`31`).
+            int gpReg) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE; }
+    }
+
+    /// Direção de {@link Fp64ConvertHalfPrecision} — as 4 combinações de `FCVT` entre meia precisão
+    /// e simples/dupla que faltavam depois de {@link Fp64Convert} (`F32_TO_F64`/`F64_TO_F32`, sem
+    /// meia precisão).
+    enum Fp64HalfPrecisionConversion {
+        HALF_TO_SINGLE, SINGLE_TO_HALF, HALF_TO_DOUBLE, DOUBLE_TO_HALF
+    }
+
+    /// `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (`ARM DDI 0487`, `FEAT_FP16`, ARMv8.2-A,
+    /// B19.26) — conversão REAL de valor (com arredondamento) entre meia precisão e simples/dupla,
+    /// completando as 2 combinações que {@link Fp64Convert} já cobria (`F32_TO_F64`/`F64_TO_F32`).
+    /// Record PRÓPRIO em vez de estender {@link Fp64Convert} (mesmo precedente de
+    /// {@link Fp64ConvertToBf16}): aquele é natively-supported pelo `Ir64NativePolicy` (C12.4) e
+    /// adicionar valores novos ao enum {@link Fp64Conversion} sem emitir nativo para eles quebraria
+    /// a premissa "toda `Kind` no `switch` do compilador tem TODOS os seus casos cobertos" — um
+    /// `Kind` novo cai automaticamente no interpretador (Não fazer da task: sem caso nativo).
+    /// **`SINGLE_TO_HALF`/`DOUBLE_TO_HALF` reusam `Float.floatToFloat16`**
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#halfBits}); `DOUBLE_TO_HALF` passa
+    /// por `float` intermediário (`(float) valor` seguido de `floatToFloat16`) — simplificação
+    /// EXPLÍCITA (double rounding, ver Armadilhas da task): o hardware real arredonda `double`→`H`
+    /// num único passo, mas os dois só divergem em casos extremos de meio-a-meio bem no limite da
+    /// mantissa de `float`, e o projeto já aceita simplificações equivalentes em `FRINTX`/`FRINTI`
+    /// (`FPCR.RMode` não modelado em A64).
+    record Fp64ConvertHalfPrecision(
+            /// Direção da conversão.
+            Fp64HalfPrecisionConversion conversion,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Registrador de origem (índice `0`-`31`, `V<n>`).
+            int vn) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_CONVERT_HALF_PRECISION; }
     }
 }

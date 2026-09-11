@@ -986,6 +986,11 @@ public final class Aarch64Decoder {
     /// nem reservado nesta classe específica, ao contrário do que
     /// {@link #decodeFpDoublePrecision} assume para o resto da classe.
     private static final int FP_TYPE_HIGH_HALF_MOVE = 0b10;
+    /// `type` fixo de `FMOV_hx`/`FMOV_xh`/`FCVT_s_sh`/`FCVT_s_dh` (`FEAT_FP16`, B19.26) — a forma
+    /// "reservado" da tabela ARM DDI 0487 é literalmente meia-precisão nestas classes (CONFERIDO
+    /// contra `aarch64-none-elf-as -march=armv8.2-a+fp16`); checar ANTES de
+    /// {@link #decodeFpDoublePrecision}, mesmo padrão de {@link #FP_TYPE_HIGH_HALF_MOVE}.
+    private static final int FP_TYPE_HALF_PRECISION = 0b11;
 
     // ── Floating-point data-processing (2 source) — FADD/FSUB/FMUL/FDIV: bits[11:10] fixo="10",
     // ── opcode(15:12) 4 bits, Rm(20:16), Rn(9:5), Rd(4:0).
@@ -1031,7 +1036,12 @@ public final class Aarch64Decoder {
     /// fixo em `FP_TYPE_DOUBLE` sem ser conversão double-real (mesmo padrão de `FMOV Vn.D[1]` em
     /// B19.6: checar ANTES de {@link #decodeFpDoublePrecision}).
     private static final int FP_ONE_SOURCE_OPCODE_BFCVT = 0b00_0110;
-    // FCVT de/para meia-precisão (6/7), FRINTx (8+): fora de escopo, ver decodeFpOneSource.
+    /// B19.26 (`FEAT_FP16`): `FCVT_s_hs`/`FCVT_s_hd` — destino meia-precisão a partir de
+    /// `type`=SINGLE/DOUBLE; a direção inversa (`FCVT_s_sh`/`FCVT_s_dh`, fonte meia-precisão) usa
+    /// os opcodes `FCVT_TO_SINGLE`/`FCVT_TO_DOUBLE` já existentes com `type`={@link
+    /// #FP_TYPE_HALF_PRECISION}, ver `decodeFpOneSource`.
+    private static final int FP_ONE_SOURCE_OPCODE_FCVT_TO_HALF = 0b00_0111;
+    // FRINTx (8+): fora de escopo, ver decodeFpOneSource.
 
     // ── Floating-point data-processing (3 source) — FMADD/FMSUB/FNMADD/FNMSUB, B8.4. ─────────────
     // ── ARMADILHA (achada rodando o corpus real): bits[28:24]="11111" sozinho NÃO basta — o ──────
@@ -1514,9 +1524,11 @@ public final class Aarch64Decoder {
     // ── B8.5: `FMOV` registrador-geral<->FP (cópia crua de bits) — mesmo `@rr`/bits[15:10]="000000"
     // ── de "Conversion (general register)" acima (MESMO valor de sufixo!), mas opcode(21:16) só
     // ── "100110"/"100111" — CONFERIDO: não colide com nenhum dos 12 opcodes de conversão inteira
-    // ── acima (nenhum tem valor 100110/100111). `type`(23:22) é sempre `sf?01:00` aqui (nunca `10`/
-    // ── `11` — essas são as formas de metade-alta/meia-precisão, fora de escopo, ver Javadoc de
-    // ── {@link Ir64Op.Fp64GeneralRegisterMove}), então basta ler `sf` e ignorar `type`.
+    // ── acima (nenhum tem valor 100110/100111). `type`(23:22) é `sf?01:00` na forma `W`↔`S`/`X`↔`D`
+    // ── (basta ler `sf` e ignorar `type`); `type`={@link #FP_TYPE_HALF_PRECISION} com os MESMOS
+    // ── opcodes é `FMOV_hx`/`FMOV_xh` (B19.26, `FEAT_FP16`) — checado ANTES, ver
+    // ── `decodeFpIntegerConvertOrGeneralRegisterMove`. `type`={@link #FP_TYPE_HIGH_HALF_MOVE} usa
+    // ── opcodes DIFERENTES (`FP_GP_MOVE_OPCODE_HIGH_TO_*`, abaixo).
     private static final int FP_GP_MOVE_OPCODE_TO_FLOAT = 0b10_0111;
     private static final int FP_GP_MOVE_OPCODE_TO_GP = 0b10_0110;
     /// `FMOV Vd.D[1],Xn`/`FMOV Xd,Vn.D[1]` (B19.6 bloco F) — MESMO campo `opcode`, valores
@@ -5176,11 +5188,11 @@ public final class Aarch64Decoder {
         return new Ir64Op.Fp64Alu(op, doublePrecision, vd, vn, vm);
     }
 
-    /// `FMOV`/`FABS`/`FNEG`/`FSQRT` (unárias), `FCVT` F32↔F64 e (B8.5) `FRINTN`/`FRINTP`/`FRINTM`/
-    /// `FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI` (Floating-point data-processing, 1 source) —
-    /// opcode(20:15) distingue as formas cobertas; demais valores (`FCVT` de/para meia-precisão —
-    /// opcode 6/7, sempre `FEAT_FP16` real, `docs/isa-nao-aplicavel.tsv` — `BFCVT_s`/
-    /// `FRINT32*`/`FRINT64*`, extensões POSTERIORES) ficam fora, ver `isa-nao-aplicavel.tsv`.
+    /// `FMOV`/`FABS`/`FNEG`/`FSQRT` (unárias), `FCVT` F32↔F64/F16↔F32/F16↔F64 (B19.26,
+    /// `FEAT_FP16`) e (B8.5) `FRINTN`/`FRINTP`/`FRINTM`/`FRINTZ`/`FRINTA`/`FRINTX`/`FRINTI`
+    /// (Floating-point data-processing, 1 source) — opcode(20:15) distingue as formas cobertas;
+    /// `BFCVT_s`/`FRINT32*`/`FRINT64*` (extensões POSTERIORES) ficam fora, ver
+    /// `isa-nao-aplicavel.tsv`.
     private Ir64Op decodeFpOneSource(int word, long address) {
         int opcode = (word >>> FP_ONE_SOURCE_OPCODE_SHIFT) & FP_ONE_SOURCE_OPCODE_MASK;
         // B19.7 (`FEAT_BF16`): `BFCVT` — `type`(23:22) EXIGE `FP_TYPE_DOUBLE` aqui, mas NÃO é
@@ -5194,6 +5206,39 @@ public final class Aarch64Decoder {
             int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int vd = word & REGISTER_FIELD_MASK;
             return new Ir64Op.Fp64ConvertToBf16(vd, vn);
+        }
+        // B19.26 (`FEAT_FP16`): `FCVT_s_hs`/`FCVT_s_hd` (destino meia-precisão, opcode=7) e
+        // `FCVT_s_sh`/`FCVT_s_dh` (fonte meia-precisão, opcodes 4/5 com
+        // `type`={@link #FP_TYPE_HALF_PRECISION}) — mesmo padrão do `BFCVT` acima: checar ANTES de
+        // {@link #decodeFpDoublePrecision}, que trataria `type`=meia-precisão como reservado.
+        if (opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_HALF) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            Ir64Op.Fp64HalfPrecisionConversion conversion = switch (type) {
+                case FP_TYPE_SINGLE -> Ir64Op.Fp64HalfPrecisionConversion.SINGLE_TO_HALF;
+                case FP_TYPE_DOUBLE -> Ir64Op.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF;
+                default -> throw unsupported(word, address);
+            };
+            if (!architecture.has(Aarch64Feature.FP16)) {
+                throw unsupported(word, address);
+            }
+            int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int vd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.Fp64ConvertHalfPrecision(conversion, vd, vn);
+        }
+        if (opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE || opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_DOUBLE) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            if (type == FP_TYPE_HALF_PRECISION) {
+                if (!architecture.has(Aarch64Feature.FP16)) {
+                    throw unsupported(word, address);
+                }
+                int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                int vd = word & REGISTER_FIELD_MASK;
+                Ir64Op.Fp64HalfPrecisionConversion conversion =
+                        opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE
+                                ? Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_SINGLE
+                                : Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE;
+                return new Ir64Op.Fp64ConvertHalfPrecision(conversion, vd, vn);
+            }
         }
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -5357,6 +5402,25 @@ public final class Aarch64Decoder {
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int rd = word & REGISTER_FIELD_MASK;
             return new Ir64Op.Fp64JavascriptConvert(rd, rn);
+        }
+        // B19.26 (`FEAT_FP16`): `FMOV_hx`/`FMOV_xh` — MESMOS opcodes de `FMOV` registrador-geral↔FP
+        // comum (`W`↔`S`/`X`↔`D`), mas `type`={@link #FP_TYPE_HALF_PRECISION} em vez de
+        // `sf?DOUBLE:SINGLE` — checar ANTES de {@link #decodeFpDoublePrecision} (que trataria este
+        // `type` como reservado). `sf` é ignorado de propósito (ver Javadoc de
+        // {@link Ir64Op.Fp64HalfPrecisionGeneralRegisterMove} — resultado idêntico nos dois valores,
+        // confirmado contra o corpus real).
+        if (opcode == FP_GP_MOVE_OPCODE_TO_FLOAT || opcode == FP_GP_MOVE_OPCODE_TO_GP) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            if (type == FP_TYPE_HALF_PRECISION) {
+                if (!architecture.has(Aarch64Feature.FP16)) {
+                    throw unsupported(word, address);
+                }
+                int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+                int rd = word & REGISTER_FIELD_MASK;
+                boolean toFloat = opcode == FP_GP_MOVE_OPCODE_TO_FLOAT;
+                return new Ir64Op.Fp64HalfPrecisionGeneralRegisterMove(
+                        toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
+            }
         }
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;

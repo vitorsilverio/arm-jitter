@@ -344,6 +344,11 @@ public final class Ir64BlockExecutor {
                     Ir64FpExecutor.executeFpIntegerConvert(core, (Ir64Op.Fp64IntegerConvert) op);
             case Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE ->
                     Ir64FpExecutor.executeFpGeneralRegisterMove(core, (Ir64Op.Fp64GeneralRegisterMove) op);
+            case Ir64Op.Kind.FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE ->
+                    Ir64FpExecutor.executeFpHalfPrecisionGeneralRegisterMove(
+                            core, (Ir64Op.Fp64HalfPrecisionGeneralRegisterMove) op);
+            case Ir64Op.Kind.FP64_CONVERT_HALF_PRECISION ->
+                    Ir64FpExecutor.executeFpConvertHalfPrecision(core, (Ir64Op.Fp64ConvertHalfPrecision) op);
             case Ir64Op.Kind.FP64_JAVASCRIPT_CONVERT ->
                     Ir64FpExecutor.executeFpJavascriptConvert(core, (Ir64Op.Fp64JavascriptConvert) op);
             case Ir64Op.Kind.VECTOR_LOAD_STORE_MULTIPLE ->
