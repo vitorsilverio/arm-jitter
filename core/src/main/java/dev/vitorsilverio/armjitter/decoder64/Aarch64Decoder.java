@@ -595,18 +595,27 @@ public final class Aarch64Decoder {
     // ── razão de `PSTATE_FIELD_NOP`: `ALLINT` mascara TODAS as interrupções inclusive `IRQ`, mas
     // ── nada consulta esse campo separado de `PstateRegister#irqDisabled`).
     private static final int SYSTEM_INSTRUCTION_ALLINT_OP1 = 0b001;
-    // ── B8.3: `SBSS`/`DIT`/`TCO`/`DAIFSet`/`DAIFClr` (+ `SVCR`, fora de escopo — `FEAT_SME`) —
-    // ── MESMO `CRn=0b0100`, `op1` PRÓPRIO (`0b011`, ver o achado acima). `DAIFSet`/`DAIFClr` TÊM
-    // ── semântica própria sobre `PstateRegister#irqDisabled` (bit `I`); as demais são
-    // ── `PSTATE_FIELD_NOP` (mesma razão de `UAO`/`PAN`/`SPSel`). `SVCR` (`op2=0b011`) fica de fora
-    // ── do `switch` abaixo — cai no `default -> unsupported`, ver `docs/isa-nao-aplicavel.tsv`
-    // ── (`FEAT_SME`, não se aplica a nenhum preset atual deste emulador).
+    // ── B8.3: `SBSS`/`DIT`/`TCO`/`DAIFSet`/`DAIFClr`/`SVCR` — MESMO `CRn=0b0100`, `op1` PRÓPRIO
+    // ── (`0b011`, ver o achado acima). `DAIFSet`/`DAIFClr` TÊM semântica própria sobre
+    // ── `PstateRegister#irqDisabled` (bit `I`); `SBSS`/`DIT`/`TCO` são `PSTATE_FIELD_NOP` (mesma
+    // ── razão de `UAO`/`PAN`/`SPSel`). B19.28: `SVCR` (`FEAT_SME`) é decodificada explicitamente
+    // ── (não cai mais no `default` genérico) — ver `SYSTEM_INSTRUCTION_PSTATE_OP2_SVCR` abaixo.
     private static final int SYSTEM_INSTRUCTION_PSTATE_IMM_OP1 = 0b011;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS = 0b001;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DIT = 0b010;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_TCO = 0b100;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET = 0b110;
     private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR = 0b111;
+    // ── B19.28: `MSR SVCR<mask>, #imm` (`FEAT_SME`, ARMv9.2-A) reaproveita o MESMO `op2=0b011`
+    // ── ainda não usado por nenhuma das formas acima; o campo `CRm` (normalmente um imediato de 4
+    // ── bits para `DAIFSet`/`DAIFClr`) é reparticionado aqui em `0:mask(2):imm(1)` — `mask`
+    // ── seleciona Streaming Mode (`0b01`)/estado ZA (`0b10`)/ambos (`0b11`), `imm` é o valor a
+    // ── gravar (0 ou 1). Confirmado byte a byte contra `aarch64-linux-gnu-as -march=armv9-a+sme`
+    // ── (WSL): `msr svcrsm, #1` monta `0xd503437f` (o assembler mostra como alias `smstart sm`).
+    private static final int SYSTEM_INSTRUCTION_PSTATE_OP2_SVCR = 0b011;
+    private static final int SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_SHIFT = 1;
+    private static final int SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_MASK = 0b11;
+    private static final int SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK = 0b1;
 
     // ── TLBI (`op0=1`, `SYS` — não `SYSL`, `L=0`): CRn=0b1000 fixo (grupo TLB maintenance),
     // ── `op1` seleciona o REGIME (EL1&0, EL2 — incl. stage-2 `IPAS2E1*`/`ALLE1`/`VMALLS12E1`,
@@ -5826,8 +5835,21 @@ public final class Aarch64Decoder {
                 }
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new Ir64Op.InterruptMask(true, imm);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new Ir64Op.InterruptMask(false, imm);
-                // SVCR (op2=0b011, FEAT_SME): não se aplica a nenhum preset atual deste emulador
-                // (ver docs/isa-nao-aplicavel.tsv) — cai aqui no default, UNIMPLEMENTED de verdade.
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_SVCR -> {
+                    // B19.28: sem arquitetura declarando FEAT_SME, isto cai no MESMO
+                    // `unsupported` genérico de qualquer outra feature ausente — comportamento
+                    // idêntico ao de antes desta task. A diferença só aparece quando a feature
+                    // ESTÁ presente (ARMV9_2_A): aí a recusa passa a ser NOMEADA — "reconhecida,
+                    // mas sem estado ZA/streaming-SVE modelado" — em vez de indistinguível de um
+                    // encoding realmente desconhecido (G8).
+                    if (!architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)) {
+                        throw unsupported(word, address);
+                    }
+                    int svcrMask = (imm >>> SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_SHIFT)
+                            & SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_MASK;
+                    int svcrImmediate = imm & SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK;
+                    throw unsupportedScalableMatrixExtension(word, address, svcrMask, svcrImmediate);
+                }
                 default -> throw unsupported(word, address);
             };
         }
@@ -6393,6 +6415,19 @@ public final class Aarch64Decoder {
     private static UnsupportedOperationException unsupported(int word, long address) {
         return new UnsupportedOperationException(
                 "AArch64: encoding fora da fatia B6.1 em 0x" + Long.toHexString(address)
+                        + ": 0x" + Integer.toHexString(word));
+    }
+
+    /// B19.28: recusa NOMEADA para `MSR SVCR`, distinta de {@link #unsupported} — o encoding FOI
+    /// reconhecido (`FEAT_SME` presente na arquitetura), mas nenhum estado ZA/streaming-SVE é
+    /// modelado ainda (ver o Javadoc de {@link Aarch64Feature#SCALABLE_MATRIX_EXTENSION}). G8:
+    /// diagnóstico rastreável em vez de indistinguível de "encoding desconhecido".
+    private static UnsupportedOperationException unsupportedScalableMatrixExtension(
+            int word, long address, int mask, int imm) {
+        return new UnsupportedOperationException(
+                "AArch64: MSR SVCR (mask=0b" + Integer.toBinaryString(mask) + ", imm=" + imm
+                        + ") reconhecida, mas FEAT_SME (estado ZA/streaming-SVE) ainda não é"
+                        + " modelado em 0x" + Long.toHexString(address)
                         + ": 0x" + Integer.toHexString(word));
     }
 

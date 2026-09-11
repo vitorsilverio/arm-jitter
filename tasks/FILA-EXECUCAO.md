@@ -47,6 +47,21 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.28 fechar)
+
+**B19.28 FECHADA 2026-09-11** — A64 `FEAT_SME` residual (`MSR SVCR<mask>, #imm`, 1 célula), o degrau
+mais simples da lista nomeada pela B19.9 depois de B19.17/B19.29. Diferente de quase todas as outras
+19 tasks desta varredura: **não decodifica com sucesso nunca** — nenhum estado ZA/streaming-SVE é
+modelado (épico B18 continua sem infraestrutura própria, confirmado antes de codar). O ganho real é
+trocar o `default` genérico (`op2=0b011` caía junto com qualquer encoding realmente desconhecido) por
+um `case` próprio que decodifica `mask`/`imm` de verdade e produz recusa NOMEADA e distinguível
+(G8) quando `FEAT_SME` está presente (`ARMV9_2_A`) — vs. o `unsupported` genérico de sempre quando a
+feature está ausente. Encoding confirmado byte a byte contra `aarch64-linux-gnu-as -march=armv9-a+sme`
+(WSL): `msr svcrsm, #1` monta `0xd503437f` (alias `smstart sm`), batendo com o cálculo manual feito a
+partir da spec da task. `docs/COBERTURA-ISA.md` zero-diff (esperado e documentado — a metodologia de
+medição não distingue "recusa nomeada" de "decode ausente"). `mvn -o test` verde (3563; as mesmas 3
+falhas pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.26 fechar)
 
 **B19.26 FECHADA 2026-09-11** — A64 `FEAT_FP16` residual (`FMOV_hx`/`FMOV_xh`/`FCVT_s_hs`/
