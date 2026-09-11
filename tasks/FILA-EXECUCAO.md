@@ -47,6 +47,22 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-10, após B19.29 fechar)
+
+**B19.29 FECHADA 2026-09-10** — A64 `FEAT_JSCVT` (`FJCVTZS`, 1 célula), a segunda mais barata do
+lote nomeado pela B19.9 (depois da B19.17/CRC32). Record próprio (`Fp64JavascriptConvert`, não
+reaproveita `Fp64IntegerConvert`) porque a regra de overflow/NaN (produz `0`, não satura) e a
+semântica de `NZCV.Z` (exatidão da conversão, não "resultado zero") são incompatíveis com o record
+genérico. Decode: `type=DOUBLE` é parte FIXA do encoding (checado ANTES de
+`decodeFpDoublePrecision`, mesmo padrão de `BFCVT`), `sf=1` não existe para esta forma. 12 testes
+novos (decoder + executor), G5 completo verde nos 5 consumidores. `docs/COBERTURA-ISA.md`:
+`FJCVTZS` ❌→✅ de `ARMv8.3-A` em diante (16 células), global 94% (18237/19215, sem mudar o
+percentual arredondado). `docs/COBERTURA-JIT.md` regenerado (também corrigiu de carona uma
+defasagem: `CRC32`/`B19.17` não tinha sido regenerado ali ainda). Confirmado que as 3 falhas
+pré-existentes de `mvn test` (2 em `Aarch64Fp16VersionCurationTest`, 1 em
+`IsaCoverageReportA64CurationGuardTest`) são independentes desta task (via `git stash`). Ver
+**Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-10, após B19.17 fechar)
 
 **B19.17 FECHADA 2026-09-10** — `FEAT_CRC32` (`CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}`, 8 células), o

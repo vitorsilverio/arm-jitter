@@ -1433,10 +1433,10 @@ public final class Aarch64Decoder {
     // ── bits[15:10] fixo="000000" (nenhuma das 6 sub-classes anteriores tem esse valor ali —
     // ── `FCSEL`/`FCCMP` têm bit10=1 sempre; compare/1-source exigem bits[14:10]≠0; 2-source exige
     // ── bits[11:10]="10"≠"00"). Opcode(21:16) 6 bits: 12 valores válidos (`SCVTF`/`UCVTF`/8
-    // ── arredondamentos `FCVTxS`/`FCVTxU` + `FCVTAS`/`FCVTAU`); os demais valores deste mesmo campo
-    // ── (`_g_simd`/`_simd`/`FJCVTZS`) são extensões POSTERIORES (`FEAT_FPRCVT`/`FEAT_JSCVT`,
-    // ── CONFERIDAS contra `translate-a64.c` real — `TRANS_FEAT(..., aa64_fprcvt, ...)`/
-    // ── `dc_isar_feature(aa64_jscvt, ...)`), ficam de fora por não bater nenhum `case` (ver
+    // ── arredondamentos `FCVTxS`/`FCVTxU` + `FCVTAS`/`FCVTAU`) + 1 valor próprio (`FJCVTZS`,
+    // ── `FEAT_JSCVT`, B19.29); os demais valores deste mesmo campo (`_g_simd`/`_simd`,
+    // ── `FEAT_FPRCVT`) são extensões POSTERIORES, CONFERIDAS contra `translate-a64.c` real
+    // ── (`TRANS_FEAT(..., aa64_fprcvt, ...)`), ficam de fora por não bater nenhum `case` (ver
     // ── `docs/isa-nao-aplicavel.tsv`).
     private static final int FP_INT_CONVERT_SUFFIX_SHIFT = 10;
     private static final int FP_INT_CONVERT_SUFFIX_MASK = 0b11_1111;
@@ -1453,6 +1453,10 @@ public final class Aarch64Decoder {
     private static final int FP_INT_CONVERT_OPCODE_FCVTZU = 0b11_1001;
     private static final int FP_INT_CONVERT_OPCODE_FCVTAS = 0b10_0100;
     private static final int FP_INT_CONVERT_OPCODE_FCVTAU = 0b10_0101;
+    /// B19.29 (`FEAT_JSCVT`): `FJCVTZS` — MESMO campo `opcode`(21:16) do grupo acima, valor não
+    /// usado por nenhum dos 12 arredondamentos comuns; só definida para `sf=0`+`type=DOUBLE`
+    /// (confirmado byte a byte contra `aarch64-linux-gnu-as -march=armv8.3-a`).
+    private static final int FP_INT_CONVERT_OPCODE_FJCVTZS = 0b11_1110;
 
     // ── B8.5: `FMOV` registrador-geral<->FP (cópia crua de bits) — mesmo `@rr`/bits[15:10]="000000"
     // ── de "Conversion (general register)" acima (MESMO valor de sufixo!), mas opcode(21:16) só
@@ -5204,6 +5208,19 @@ public final class Aarch64Decoder {
             boolean toFloat = opcode == FP_GP_MOVE_OPCODE_HIGH_TO_FLOAT;
             return new Ir64Op.Fp64HighHalfMove(toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
         }
+        // B19.29 (`FEAT_JSCVT`): `FJCVTZS` — MESMO padrão de `BFCVT`/`FMOV Vn.D[1]` acima: `type`
+        // EXIGIDO=`DOUBLE` faz parte do encoding fixo da instrução (não existe forma de precisão
+        // simples), não uma escolha genérica de {@link #decodeFpDoublePrecision} — checar ANTES,
+        // senão `type=SINGLE` cairia no `default` do switch abaixo mesmo com a feature presente.
+        if (opcode == FP_INT_CONVERT_OPCODE_FJCVTZS) {
+            int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
+            if (wide || type != FP_TYPE_DOUBLE || !architecture.has(Aarch64Feature.JAVASCRIPT_CONVERT)) {
+                throw unsupported(word, address);
+            }
+            int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            int rd = word & REGISTER_FIELD_MASK;
+            return new Ir64Op.Fp64JavascriptConvert(rd, rn);
+        }
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
@@ -5253,8 +5270,9 @@ public final class Aarch64Decoder {
             case FP_INT_CONVERT_OPCODE_FCVTAU -> {
                 toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
             }
-            // `_g_simd`/`_simd` (FEAT_FPRCVT)/`FJCVTZS` (FEAT_JSCVT): extensões POSTERIORES,
-            // CONFERIDAS contra translate-a64.c — ver isa-nao-aplicavel.tsv.
+            // `_g_simd`/`_simd` (FEAT_FPRCVT): extensão POSTERIOR, CONFERIDA contra
+            // translate-a64.c — ver isa-nao-aplicavel.tsv. `FJCVTZS` (FEAT_JSCVT) já foi
+            // interceptada ANTES deste switch (B19.29).
             default -> throw unsupported(word, address);
         }
         int fpReg = toFloat ? rd : rn;

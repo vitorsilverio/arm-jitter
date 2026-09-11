@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **94%** — 18224 de 19215 células aplicáveis decodificam.
+> **94%** — 18237 de 19215 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -60,19 +60,19 @@ Por arquitetura:
 | ARMv8.0-A | **99%** (858/862) |
 | ARMv8.1-A | **99%** (890/894) |
 | ARMv8.2-A | **98%** (1005/1019) |
-| ARMv8.3-A | **97%** (1007/1038) |
-| ARMv8.4-A | **96%** (1012/1050) |
-| ARMv8.5-A | **93%** (1014/1086) |
-| ARMv8.6-A | **93%** (1027/1099) |
-| ARMv8.7-A | **93%** (1029/1101) |
-| ARMv8.8-A | **92%** (1030/1111) |
-| ARMv8.9-A | **92%** (1031/1117) |
-| ARMv9.0-A | **93%** (1014/1086) |
-| ARMv9.1-A | **93%** (1027/1099) |
-| ARMv9.2-A | **93%** (1029/1102) |
-| ARMv9.3-A | **92%** (1030/1111) |
-| ARMv9.4-A | **91%** (1032/1125) |
-| ARMv9.5-A | **90%** (1042/1146) |
+| ARMv8.3-A | **97%** (1008/1038) |
+| ARMv8.4-A | **96%** (1013/1050) |
+| ARMv8.5-A | **93%** (1015/1086) |
+| ARMv8.6-A | **93%** (1028/1099) |
+| ARMv8.7-A | **93%** (1030/1101) |
+| ARMv8.8-A | **92%** (1031/1111) |
+| ARMv8.9-A | **92%** (1032/1117) |
+| ARMv9.0-A | **93%** (1015/1086) |
+| ARMv9.1-A | **93%** (1028/1099) |
+| ARMv9.2-A | **93%** (1030/1102) |
+| ARMv9.3-A | **92%** (1031/1111) |
+| ARMv9.4-A | **91%** (1033/1125) |
+| ARMv9.5-A | **91%** (1043/1146) |
 
 ## Resumo
 
@@ -88,7 +88,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | ARMv8.0-A 99% (858/862) · ARMv8.1-A 99% (890/894) · ARMv8.2-A 98% (1005/1019) · ARMv8.3-A 97% (1007/1038) · ARMv8.4-A 96% (1012/1050) · ARMv8.5-A 93% (1014/1086) · ARMv8.6-A 93% (1027/1099) · ARMv8.7-A 93% (1029/1101) · ARMv8.8-A 92% (1030/1111) · ARMv8.9-A 92% (1031/1117) · ARMv9.0-A 93% (1014/1086) · ARMv9.1-A 93% (1027/1099) · ARMv9.2-A 93% (1029/1102) · ARMv9.3-A 92% (1030/1111) · ARMv9.4-A 91% (1032/1125) · ARMv9.5-A 90% (1042/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 99% (858/862) · ARMv8.1-A 99% (890/894) · ARMv8.2-A 98% (1005/1019) · ARMv8.3-A 97% (1008/1038) · ARMv8.4-A 96% (1013/1050) · ARMv8.5-A 93% (1015/1086) · ARMv8.6-A 93% (1028/1099) · ARMv8.7-A 93% (1030/1101) · ARMv8.8-A 92% (1031/1111) · ARMv8.9-A 92% (1032/1117) · ARMv9.0-A 93% (1015/1086) · ARMv9.1-A 93% (1028/1099) · ARMv9.2-A 93% (1030/1102) · ARMv9.3-A 92% (1031/1111) · ARMv9.4-A 91% (1033/1125) · ARMv9.5-A 91% (1043/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2470,7 +2470,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FCVTPU_g_simd` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `FCVTZS_g_simd` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `FCVTZU_g_simd` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `FJCVTZS` | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `FJCVTZS` | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FMOV_ws` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FMOV_sw` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FMOV_xd` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

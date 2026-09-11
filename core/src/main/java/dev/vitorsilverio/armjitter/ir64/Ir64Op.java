@@ -66,7 +66,8 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSha512ThreeRegister, Ir64Op.CryptoSha512TwoRegister, Ir64Op.CryptoSm3ThreeRegister,
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
         Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
-        Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32 {
+        Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32,
+        Ir64Op.Fp64JavascriptConvert {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -354,6 +355,8 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP_CONVERT_FROM_FP8 = 121;
         /// B19.17: `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (`FEAT_CRC32`) — ver {@link Crc32}.
         public static final int CRC32 = 122;
+        /// B19.29: `FJCVTZS` (`FEAT_JSCVT`) — ver {@link Fp64JavascriptConvert}.
+        public static final int FP64_JAVASCRIPT_CONVERT = 123;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2801,6 +2804,24 @@ public sealed interface Ir64Op permits
             /// `true` para o polinômio Castagnoli (`CRC32C*`), `false` para IEEE 802.3 (`CRC32*`).
             boolean castagnoli) implements Ir64Op {
         @Override public int kind() { return Kind.CRC32; }
+    }
+
+    /// `FJCVTZS Wd, Dn` (`ARM DDI 0487 C6.2.92`, B19.29, `FEAT_JSCVT`) — converte `Dn` (sempre
+    /// precisão dupla, nunca simples) para inteiro de 32 bits com sinal, truncando em direção a
+    /// zero: EXATAMENTE `ToInt32` do ECMAScript. Difere de {@link Fp64IntegerConvert} com
+    /// {@code rounding=TOWARD_ZERO}/{@code signed=true} em dois pontos — por isso é um record
+    /// próprio em vez de reaproveitar aquele: (1) `NaN`/infinito/overflow produzem `0`, nunca o
+    /// valor de saturação (`INT32_MAX`/`INT32_MIN`); (2) `PSTATE.Z` recebe um sinalizador de
+    /// EXATIDÃO da conversão (`1` se {@link #rn} já era um inteiro de 32 bits representável sem
+    /// parte fracionária nem overflow, `0` caso contrário) — não a semântica comum de "resultado é
+    /// zero" (um valor de entrada `0.0` exato também seta `Z=1`, mas um overflow que produz `Wd=0`
+    /// seta `Z=0`, já que a conversão NÃO foi exata). `N`/`C`/`V` são sempre zerados.
+    record Fp64JavascriptConvert(
+            /// Registrador geral de destino (`Wd`, índice `0`-`31`; `31` é `WZR`). Sempre 32 bits.
+            int rd,
+            /// Registrador FP de origem (`Dn`, índice `0`-`31`). Sempre precisão dupla.
+            int rn) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_JAVASCRIPT_CONVERT; }
     }
 
     /// `DUP <V><d>, <Vn>.<T>[<index>]` (`ARM DDI 0487`, B19.6 bloco E, "Advanced SIMD scalar copy")

@@ -336,6 +336,33 @@ final class Ir64FpExecutor {
         return AdvSimdLanes.saturateToHalfwordInteger(rounded, signed);
     }
 
+    /// `FJCVTZS` (B19.29, `FEAT_JSCVT`) — `ToInt32` do ECMAScript: trunca `Dn` (sempre precisão
+    /// dupla) para `int32` em direção a zero; `NaN`/infinito/overflow produzem `0` em vez de
+    /// saturar (diferente de {@link #executeFpIntegerConvert}); `PSTATE.Z` sinaliza se a conversão
+    /// foi EXATA (entrada já inteira e dentro de alcance) — não a semântica comum de "resultado
+    /// zero" (ver Javadoc de {@link Ir64Op.Fp64JavascriptConvert}, Armadilha nº2 da task).
+    static boolean executeFpJavascriptConvert(Aarch64Core core, Ir64Op.Fp64JavascriptConvert op) {
+        double value = core.fp().dDouble(op.rn());
+        int result;
+        boolean exact;
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            result = 0;
+            exact = false;
+        } else {
+            double truncated = value < 0 ? Math.ceil(value) : Math.floor(value);
+            if (truncated < Integer.MIN_VALUE || truncated > Integer.MAX_VALUE) {
+                result = 0;
+                exact = false;
+            } else {
+                result = (int) truncated;
+                exact = truncated == value;
+            }
+        }
+        core.setXForWidth(op.rd(), result, false);
+        core.pstate().setNzcv(false, exact, false, false);
+        return false;
+    }
+
     /// `FMOV` registrador-geral↔FP escalar (B8.5) — cópia CRUA de bits, sem conversão de valor.
     static boolean executeFpGeneralRegisterMove(Aarch64Core core, Ir64Op.Fp64GeneralRegisterMove op) {
         Aarch64FpRegisters fp = core.fp();
