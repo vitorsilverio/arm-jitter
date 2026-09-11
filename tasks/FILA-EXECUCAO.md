@@ -47,6 +47,24 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-11, após B19.25 fechar)
+
+**B19.25 FECHADA 2026-09-11** — A64 `FEAT_LSE128` (`LDCLRP`/`LDSETP`/`SWPP`, 3 células, ARMv9.4-A).
+Bug de estrutura achado e corrigido antes de decodificar: `decodeMemoryCopyAndSet` (B19.16) checava
+`Aarch64Feature.MEMORY_COPY_SET` ANTES de olhar o bit que separa "Memory Copy/Set" de "Atomic
+128-bit" — movido o desvio do bit `atomic128` para o topo, cada família checa só a própria feature
+agora. **Achado que revisa a premissa da spec**: ao contrário do que a spec assumia por analogia
+com `CASP` (companheiro derivado como `rt|1`), `Rt`/`Rt2` são dois campos de encoding
+INDEPENDENTES, sem relação par/ímpar (confirmado: o assembler aceita `ldclrp x2, x4, [x5]`); e ao
+contrário de `AtomicMemoryOp`/`CASP` (que separam operando de destino), aqui o MESMO par `(Rt,Rt2)`
+é operando de entrada E recebe o valor antigo — semântica in-place, confirmada lendo
+`do_atomic128_ld` em `target/arm/tcg/translate-a64.c` do QEMU (mesma revisão fixada por E11, via
+`curl` direto do GitHub). Novo record `Ir64Op.AtomicMemoryOpPair` (`Kind` 126→127), reusa
+`Ir64AtomicOp.CLR/SET/SWP` já existentes. `docs/COBERTURA-ISA.md`: global 95% (18282→18288/19215),
+`ARMv9.4-A` 92% (1042→1045/1125), `ARMv9.5-A` 91%→92% (1052→1055/1146). `mvn -o test` verde (3545;
+as mesmas 3 falhas pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver
+**Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-10, após B19.16 fechar)
 
 **B19.16 FECHADA 2026-09-10** — A64 `FEAT_MOPS` (`SETP`/`SETM`/`SETE`/`CPYFP`/`CPYFM`/`CPYFE`/

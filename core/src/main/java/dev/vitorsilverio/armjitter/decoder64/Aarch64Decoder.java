@@ -710,6 +710,30 @@ public final class Aarch64Decoder {
     private static final int MOPS_FIXED_BITS_11_10_MASK = 0b11;
     private static final int MOPS_FIXED_BITS_11_10_VALUE = 0b01;
 
+    // ── B19.25: "Atomic 128-bit memory operations" (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), o ────
+    // ── outro lado do MESMO `MOPS_ATOMIC128_BIT_SHIFT` (bit21=1) que a B19.16 deixou recusado. ──────
+    // ── Layout confirmado byte a byte contra `a64.decode` real do QEMU (`&atomic128 rn rt rt2 a r`,
+    // ── `@atomic128 ........ a:1 r:1 . rt2:5 ...... rn:5 rt:5`) e contra `do_atomic128_ld` em
+    // ── `target/arm/tcg/translate-a64.c` (mesma revisão fixada por E11): `a`(bit23)/`r`(bit22) são
+    // ── acquire/release, NOP observável (mesmo motivo de `AtomicMemoryOp#acquire`/`#release`);
+    // ── `rt2` (bits[20:16]) e `rt` (bits[4:0]) formam o par de 128 bits — AO CONTRÁRIO de `CASP`
+    // ── (que deriva o companheiro como `rs|1`/`rt|1`), aqui os DOIS registradores são campos
+    // ── explícitos do encoding, sem relação par/ímpar alguma (confirmado: o assembler aceita
+    // ── `ldclrp x2, x4, [x5]`, registradores não consecutivos).
+    private static final int ATOMIC128_ACQUIRE_SHIFT = 23;
+    private static final int ATOMIC128_RELEASE_SHIFT = 22;
+    private static final int ATOMIC128_RT2_SHIFT = 16;
+    private static final int ATOMIC128_OPCODE_SHIFT = 10;
+    private static final int ATOMIC128_OPCODE_MASK = 0b11_1111;
+    private static final int ATOMIC128_OPCODE_LDCLRP = 0b00_0100;
+    private static final int ATOMIC128_OPCODE_LDSETP = 0b00_1100;
+    private static final int ATOMIC128_OPCODE_SWPP = 0b10_0000;
+    /// `do_atomic128_ld` recusa (`return false`, encoding não-alocado) quando `rt`/`rt2` é `XZR`
+    /// (`31`) ou quando `rt == rt2` — o par de 128 bits precisa de dois registradores de
+    /// armazenamento distintos e reais (o valor antigo é escrito de volta neles). G8: recusar em
+    /// vez de executar com semântica indefinida.
+    private static final int ATOMIC128_XZR_INDEX = 0b1_1111;
+
     // ── GCSSTR/GCSSTTR (`FEAT_GCS`, B19.27, `a64.decode` linha 588): `11011001 000 11111 000 ────
     // ── unpriv:1 11 rn:5 rt:5` — mesmo bucket bit24=1 de MOPS/LSE128 acima, distinguido por um ────
     // ── prefixo fixo próprio nos bits[31:13]+[11:10] (bit12=`unpriv`, bits[9:5]=`rn`, ─────────────
@@ -1936,11 +1960,12 @@ public final class Aarch64Decoder {
     /// campo é OBRIGATÓRIO antes de aceitar como MOPS, senão `LDAPR_i` com `opc=01/10/11`
     /// misdecodificaria como `CPYFM`/`CPYFE`/`SETP` (G8).
     private Ir64Op decodeMemoryCopyAndSet(int word, long address) {
-        if (!architecture.has(Aarch64Feature.MEMORY_COPY_SET)) {
-            throw unsupported(word, address);
-        }
         if (((word >>> MOPS_ATOMIC128_BIT_SHIFT) & 1) != 0) {
-            // LDCLRP/LDSETP/SWPP (FEAT_LSE128) — fora do escopo desta task, ver B19.25.
+            // LDCLRP/LDSETP/SWPP (FEAT_LSE128, B19.25) — feature PRÓPRIA, independente de
+            // FEAT_MOPS (checada abaixo só para o resto deste bucket); checar aqui, não depois.
+            return decodeAtomic128(word, address);
+        }
+        if (!architecture.has(Aarch64Feature.MEMORY_COPY_SET)) {
             throw unsupported(word, address);
         }
         if (((word >>> MOPS_FIXED_BITS_11_10_SHIFT) & MOPS_FIXED_BITS_11_10_MASK) != MOPS_FIXED_BITS_11_10_VALUE) {
@@ -1972,6 +1997,31 @@ public final class Aarch64Decoder {
             case MOPS_PHASE_EPILOGUE -> Ir64Op.Ir64MopsPhase.EPILOGUE;
             default -> throw unsupported(word, address); // reservado
         };
+    }
+
+    /// `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`, ARMv9.4-A, B19.25) — ver o comentário de
+    /// {@link #ATOMIC128_XZR_INDEX} para a árvore de decisão completa e {@link Ir64Op.AtomicMemoryOpPair}
+    /// para a semântica de execução.
+    private Ir64Op decodeAtomic128(int word, long address) {
+        if (!architecture.has(Aarch64Feature.LSE128)) {
+            throw unsupported(word, address);
+        }
+        int opcodeField = (word >>> ATOMIC128_OPCODE_SHIFT) & ATOMIC128_OPCODE_MASK;
+        Ir64AtomicOp operation = switch (opcodeField) {
+            case ATOMIC128_OPCODE_LDCLRP -> Ir64AtomicOp.CLR;
+            case ATOMIC128_OPCODE_LDSETP -> Ir64AtomicOp.SET;
+            case ATOMIC128_OPCODE_SWPP -> Ir64AtomicOp.SWP;
+            default -> throw unsupported(word, address); // reservado
+        };
+        boolean acquire = ((word >>> ATOMIC128_ACQUIRE_SHIFT) & 1) != 0;
+        boolean release = ((word >>> ATOMIC128_RELEASE_SHIFT) & 1) != 0;
+        int rt2 = (word >>> ATOMIC128_RT2_SHIFT) & REGISTER_FIELD_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        if (rt == ATOMIC128_XZR_INDEX || rt2 == ATOMIC128_XZR_INDEX || rt == rt2) {
+            throw unsupported(word, address);
+        }
+        return new Ir64Op.AtomicMemoryOpPair(rt, rt2, rn, operation, acquire, release);
     }
 
     private Ir64Op decodeExclusivePair(int word, boolean load) {

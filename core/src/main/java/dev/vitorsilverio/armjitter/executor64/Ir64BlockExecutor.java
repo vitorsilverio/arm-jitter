@@ -300,6 +300,8 @@ public final class Ir64BlockExecutor {
                     executeCompareAndSwapPair(core, (Ir64Op.CompareAndSwapPair) op);
             case Ir64Op.Kind.ATOMIC_MEMORY_OP ->
                     executeAtomicMemoryOp(core, (Ir64Op.AtomicMemoryOp) op);
+            case Ir64Op.Kind.ATOMIC_MEMORY_OP_PAIR ->
+                    executeAtomicMemoryOpPair(core, (Ir64Op.AtomicMemoryOpPair) op);
             case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
                     executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
@@ -1222,6 +1224,44 @@ public final class Ir64BlockExecutor {
         writeMemory(core, address, op.size(), newValue);
         core.notifyOrdinaryWrite(address, op.size().bytes());
         core.setXForWidth(op.rt(), old, wide); // 31 => XZR, descarta (alias ST<op>)
+        return false;
+    }
+
+    /// `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`, B19.25) — versão em PAR de
+    /// {@link #executeAtomicMemoryOp} (128 bits, `(lo,hi)` little-endian em `[Rn]`/`[Rn+8]`): lê o
+    /// par, aplica `CLR`/`SET`/`SWP` usando o PRÓPRIO par `(Rt,Rt2)` como operando (ver javadoc de
+    /// {@link Ir64Op.AtomicMemoryOpPair} — semântica in-place, diferente de {@link
+    /// #executeAtomicMemoryOp}, que separa `Rs`=operando de `Rt`=destino), escreve o par novo de
+    /// volta e SÓ DEPOIS sobrescreve `(Rt,Rt2)` com o par antigo lido (a ordem importa: `Rt`/`Rt2`
+    /// são lidos como operando ANTES de virarem destino). Store incondicional: `notifyOrdinaryWrite`
+    /// SEMPRE dispara para os 16 bytes inteiros, mesma disciplina de toda a família LSE do épico
+    /// B19. `Rt`/`Rt2` nunca são `XZR` nem iguais (decoder já recusa, ver
+    /// {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder}), então não há alias `ST<op>`
+    /// aqui, ao contrário de {@link #executeAtomicMemoryOp}.
+    private boolean executeAtomicMemoryOpPair(Aarch64Core core, Ir64Op.AtomicMemoryOpPair op) {
+        long address = readBaseRegister(core, op.rn());
+        long lo = core.x(op.rt());
+        long hi = core.x(op.rt2());
+        long oldLo = readMemory(core, address, Ir64MemSize.DOUBLEWORD);
+        long oldHi = readMemory(core, address + Ir64MemSize.DOUBLEWORD.bytes(), Ir64MemSize.DOUBLEWORD);
+        long newLo = switch (op.operation()) {
+            case CLR -> oldLo & ~lo;
+            case SET -> oldLo | lo;
+            case SWP -> lo;
+            default -> throw new IllegalStateException("unreachable: decoder só produz CLR/SET/SWP");
+        };
+        long newHi = switch (op.operation()) {
+            case CLR -> oldHi & ~hi;
+            case SET -> oldHi | hi;
+            case SWP -> hi;
+            default -> throw new IllegalStateException("unreachable: decoder só produz CLR/SET/SWP");
+        };
+        writeMemory(core, address, Ir64MemSize.DOUBLEWORD, newLo);
+        writeMemory(core, address + Ir64MemSize.DOUBLEWORD.bytes(), Ir64MemSize.DOUBLEWORD, newHi);
+        core.notifyOrdinaryWrite(address, Ir64MemSize.DOUBLEWORD.bytes());
+        core.notifyOrdinaryWrite(address + Ir64MemSize.DOUBLEWORD.bytes(), Ir64MemSize.DOUBLEWORD.bytes());
+        core.setX(op.rt(), oldLo);
+        core.setX(op.rt2(), oldHi);
         return false;
     }
 

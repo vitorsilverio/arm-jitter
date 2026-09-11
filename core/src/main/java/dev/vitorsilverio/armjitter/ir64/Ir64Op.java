@@ -67,7 +67,8 @@ public sealed interface Ir64Op permits
         Ir64Op.CryptoSm3FourRegister, Ir64Op.CryptoSm3ThreeRegisterImm2, Ir64Op.CryptoSm4Encrypt,
         Ir64Op.CryptoSm4KeyUpdate, Ir64Op.VectorFpMultiplyAddLong, Ir64Op.VectorFpMultiplyAddLongByElement,
         Ir64Op.VectorFpConvertToFp8, Ir64Op.VectorFpConvertFromFp8, Ir64Op.Crc32,
-        Ir64Op.Fp64JavascriptConvert, Ir64Op.MemorySet, Ir64Op.MemoryCopy {
+        Ir64Op.Fp64JavascriptConvert, Ir64Op.MemorySet, Ir64Op.MemoryCopy,
+        Ir64Op.AtomicMemoryOpPair {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -361,6 +362,8 @@ public sealed interface Ir64Op permits
         public static final int MEMORY_SET = 124;
         /// B19.16: `CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE` (`FEAT_MOPS`) — ver {@link MemoryCopy}.
         public static final int MEMORY_COPY = 125;
+        /// B19.25: `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`) — ver {@link AtomicMemoryOpPair}.
+        public static final int ATOMIC_MEMORY_OP_PAIR = 126;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1119,6 +1122,39 @@ public sealed interface Ir64Op permits
             /// `true` para as formas `LD<op>L`/`LD<op>AL` (bit `R`=1) — NOP observável.
             boolean release) implements Ir64Op {
         @Override public int kind() { return Kind.ATOMIC_MEMORY_OP; }
+    }
+
+    /// `LDCLRP`/`LDSETP`/`SWPP` (`ARM DDI 0487`, `FEAT_LSE128`, ARMv9.4-A, B19.25) — versão em PAR
+    /// de {@link AtomicMemoryOp} (128 bits em vez de 8/16/32/64). Semântica confirmada contra
+    /// `do_atomic128_ld` do QEMU (`target/arm/tcg/translate-a64.c`, mesma revisão fixada por E11):
+    /// AO CONTRÁRIO de {@link AtomicMemoryOp} (que separa `rs`=operando de `rt`=destino do valor
+    /// antigo) e de {@link CompareAndSwapPair} (que deriva o companheiro como `rs|1`/`rt|1`), aqui
+    /// os DOIS registradores do par (`rt`/`rt2`) são os MESMOS que fornecem o operando de 128 bits
+    /// E recebem o valor antigo lido de volta — semântica in-place, campos explícitos e
+    /// independentes no encoding (sem relação par/ímpar: o hardware real não valida isso, e o
+    /// decoder não precisa reproduzir essa restrição arquitetural para decodificar corretamente).
+    /// Fórmula por operação, com `(lo,hi)` = par de 128 bits lido de `[Rn]` (`lo` no endereço mais
+    /// baixo, little-endian): `CLR` → `novo = old & ~(rt:rt2)`; `SET` → `novo = old | (rt:rt2)`;
+    /// `SWP` → `novo = (rt:rt2)`. `Rt`/`Rt2` recebem o par ANTIGO (lido antes da operação), nunca o
+    /// resultado. `Rt`/`Rt2` nunca são `XZR` nem iguais entre si — o decoder já recusa esse
+    /// encoding (`ARM DDI 0487`/QEMU: `UNALLOCATED`), não o executor. `acquire`/`release` (bits
+    /// `A`/`R`) são NOP observável, mesmo espírito de {@link AtomicMemoryOp#acquire}.
+    record AtomicMemoryOpPair(
+            /// Primeiro registrador do par (operando de entrada E destino do valor antigo lido);
+            /// nunca `31` (`XZR`).
+            int rt,
+            /// Segundo registrador do par; nunca `31` (`XZR`) nem igual a {@link #rt}.
+            int rt2,
+            /// Registrador base (índice `0`-`31`; `31` é SEMPRE `SP`).
+            int rn,
+            /// Operação de leitura-modificação-escrita a aplicar (só {@code CLR}/{@code SET}/
+            /// {@code SWP} são alcançáveis por este encoding).
+            Ir64AtomicOp operation,
+            /// `true` para as formas com bit `A`=1 — NOP observável.
+            boolean acquire,
+            /// `true` para as formas com bit `R`=1 — NOP observável.
+            boolean release) implements Ir64Op {
+        @Override public int kind() { return Kind.ATOMIC_MEMORY_OP_PAIR; }
     }
 
     /// `MRS`/`MSR (register)` (`ARM DDI 0487 C5.2.3`, B6.6.1) — leitura/escrita de um registrador

@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **95%** — 18282 de 19215 células aplicáveis decodificam.
+> **95%** — 18288 de 19215 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -71,8 +71,8 @@ Por arquitetura:
 | ARMv9.1-A | **93%** (1028/1099) |
 | ARMv9.2-A | **93%** (1030/1102) |
 | ARMv9.3-A | **93%** (1040/1111) |
-| ARMv9.4-A | **92%** (1042/1125) |
-| ARMv9.5-A | **91%** (1052/1146) |
+| ARMv9.4-A | **92%** (1045/1125) |
+| ARMv9.5-A | **92%** (1055/1146) |
 
 ## Resumo
 
@@ -88,7 +88,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | ARMv8.0-A 99% (858/862) · ARMv8.1-A 99% (890/894) · ARMv8.2-A 98% (1005/1019) · ARMv8.3-A 97% (1008/1038) · ARMv8.4-A 96% (1013/1050) · ARMv8.5-A 93% (1015/1086) · ARMv8.6-A 93% (1028/1099) · ARMv8.7-A 93% (1030/1101) · ARMv8.8-A 93% (1040/1111) · ARMv8.9-A 93% (1041/1117) · ARMv9.0-A 93% (1015/1086) · ARMv9.1-A 93% (1028/1099) · ARMv9.2-A 93% (1030/1102) · ARMv9.3-A 93% (1040/1111) · ARMv9.4-A 92% (1042/1125) · ARMv9.5-A 91% (1052/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 99% (858/862) · ARMv8.1-A 99% (890/894) · ARMv8.2-A 98% (1005/1019) · ARMv8.3-A 97% (1008/1038) · ARMv8.4-A 96% (1013/1050) · ARMv8.5-A 93% (1015/1086) · ARMv8.6-A 93% (1028/1099) · ARMv8.7-A 93% (1030/1101) · ARMv8.8-A 93% (1040/1111) · ARMv8.9-A 93% (1041/1117) · ARMv9.0-A 93% (1015/1086) · ARMv9.1-A 93% (1028/1099) · ARMv9.2-A 93% (1030/1102) · ARMv9.3-A 93% (1040/1111) · ARMv9.4-A 92% (1045/1125) · ARMv9.5-A 92% (1055/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1909,9 +1909,9 @@ Inventário: `a64.decode` · 1161 instruções.
 | `LDUMIN` | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SWP` | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `LDAPR` | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `LDCLRP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ |
-| `LDSETP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ |
-| `SWPP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ |
+| `LDCLRP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ |
+| `LDSETP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ |
+| `SWPP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ |
 | `LDRA` | · | · | · | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
 | `STLR_i` | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `LDAPR_i` | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
