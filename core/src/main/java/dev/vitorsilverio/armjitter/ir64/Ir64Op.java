@@ -2516,9 +2516,9 @@ public sealed interface Ir64Op permits
     /// forma AdvSIMD "three same" padrão, confirmado em `target/arm/tcg/translate-a64.c`, revisão
     /// fixada pela E11). Formatos FP8 de `Rn`/`Rm` (`FPMR.F8S1`/`F8S2`) e a escala/`OSM` da
     /// multiplicação vêm de `FPMR` em tempo de EXECUÇÃO — mesma disciplina de
-    /// {@link VectorFp8FusedMultiplyAddLong}. **A B19.11c só decodifica `FDOT_hb_v`
-    /// ({@link #wideDestination}=`false`)** — `FDOT_sb_v` (`true`) é a B19.11d, mas reusa este
-    /// MESMO record/núcleo (`AdvSimdLanes.fp8DotProduct`), sem duplicação.
+    /// {@link VectorFp8FusedMultiplyAddLong}. `FDOT_hb_v` ({@link #wideDestination}=`false`,
+    /// B19.11c) e `FDOT_sb_v` (`true`, B19.11d) reusam este MESMO record/núcleo
+    /// (`AdvSimdLanes.fp8DotProduct`), sem duplicação.
     record VectorFp8DotProduct(
             /// `false`=`FDOT_hb` (2 elementos FP8/lane, destino `binary16`); `true`=`FDOT_sb` (4
             /// elementos FP8/lane, destino `binary32`).

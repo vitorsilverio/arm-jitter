@@ -47,6 +47,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.11d fechar)
+
+**B19.11d FECHADA 2026-09-12** — A64 `FEAT_FP8DOT4` (`FDOT_sb_v`/`FDOT_sb_vi`, 2 células), a última
+da família FP8 dot-product. **Zero código novo em núcleo/executor** — a B19.11c já tinha deixado
+`AdvSimdLanes.fp8DotProduct` genérico por `elementsPerLane` (testado com `2` e `4` naquela própria
+sessão) e o executor já ramifica 100% por `wideDestination`; esta task só decodificou as 2 linhas.
+`FDOT_sb_v` reusa o MESMO opcode `0b1_1111` que `FDOT_hb_v`(B19.11c)/`FMLAL_hb_v`(B19.11b) já usam,
+mas discriminado por `bit22` (`1`=`_hb`,`0`=`_sb`) em vez de `a`(bit23) como o par
+`FDOT_hb_v`×`FMLAL_hb_v`. `FDOT_sb_vi` mede `sizeField=HALF_PRECISION`(`00`) com layout de
+`Rm`(5 bits)/`H:L` do ramo `WORD` — achado que a própria B19.11c já tinha antecipado no comentário
+do código, confirmado correto aqui. Words golden REUSADOS dos que a B19.11c já tinha assemblado via
+`aarch64-linux-gnu-as -march=armv9.5-a+fp8dot2+fp8dot4` (WSL) para os testes de regressão negativa
+dela — 2 testes pré-existentes viraram positivos. `docs/COBERTURA-ISA.md`: as 2 células ❌→✅,
+**`ARMv9.5-A` fecha em 100%** (1144→1146/1146; global 19091→19093/19155, 99% inalterado no
+arredondamento). `docs/COBERTURA-JIT.md` zero-diff (nenhum `Kind` novo — reusa os 2 já registrados
+pela B19.11c). `mvn -o test` verde (3843; as mesmas 3 falhas pré-existentes) + `install` +
+`javadoc:jar`. **G5 completo** nos 5 consumidores. **Fecha a família FP8 dot-product inteira**
+(B19.11c+B19.11d). Ver **Resultado** na task.
+
+**Pegáveis a seguir**: os degraus B19.14-B19.29 restantes com spec pronta desde 2026-09-10 (conferir
+`INDICE.md` da trilha B para o status real de cada um — vários já fecharam em sessões paralelas no
+mesmo dia). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.11c fechar)
 
 **B19.11c FECHADA 2026-09-12** — A64 `FEAT_FP8DOT2` (`FDOT_hb_v`/`FDOT_hb_vi`, 2 células). Núcleo

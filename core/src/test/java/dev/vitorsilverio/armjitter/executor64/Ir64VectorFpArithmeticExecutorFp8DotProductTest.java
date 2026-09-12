@@ -12,11 +12,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-/// B19.11c — `FDOT_hb_v`/`FDOT_hb_vi` no executor: a ponte registrador↔núcleo (núcleo já testado
-/// exaustivamente em {@code AdvSimdLanesFp8DotProductTest}) E o consumo de verdade de `FPMR` —
-/// mesma disciplina de {@code Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest} (B19.11b),
-/// mas com `Q` afetando o número real de lanes processadas (ao contrário de `FMLAL_hb`, que
-/// sempre processa os 128 bits inteiros).
+/// B19.11c/B19.11d — `FDOT_hb_v`/`FDOT_hb_vi`/`FDOT_sb_v`/`FDOT_sb_vi` no executor: a ponte
+/// registrador↔núcleo (núcleo já testado exaustivamente em {@code AdvSimdLanesFp8DotProductTest})
+/// E o consumo de verdade de `FPMR` — mesma disciplina de
+/// {@code Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest} (B19.11b), mas com `Q` afetando o
+/// número real de lanes processadas (ao contrário de `FMLAL_hb`, que sempre processa os 128 bits
+/// inteiros). O executor (`Ir64VectorFpArithmeticExecutor#executeFp8DotProduct`) já nasceu
+/// genérico por `wideDestination` na B19.11c — a B19.11d só precisou decodificar, sem tocar
+/// aqui; os testes `fdotSb*` abaixo cobrem esse caminho que já existia mas não tinha teste.
 class Ir64VectorFpArithmeticExecutorFp8DotProductTest {
     private static final Ir64BlockExecutor EXECUTOR = new Ir64BlockExecutor();
     private static final boolean E4M3 = true;
@@ -129,6 +132,77 @@ class Ir64VectorFpArithmeticExecutorFp8DotProductTest {
         EXECUTOR.executeOp(core, new Ir64Op.VectorFp8DotProduct(false, false, 0, 0, 2));
         float expected = (float) (1.0 * 1.0 + 2.0 * 1.0 + accBefore);
         assertEquals(expected, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
+    }
+
+    // ── FDOT_sb_v (B19.11d) ──────────────────────────────────────────────────────────────────────
+
+    @Test
+    void fdotSbVSumsFourProductsPerLaneInSinglePrecision() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        writeFpmr(core, FPMR_F8S1_E4M3 | FPMR_F8S2_E4M3);
+        // !Q: 2 lanes (`.2s`), cada uma soma 4 produtos: (1*1)+(2*2)+(3*3)+(4*4) = 30.
+        for (int lane = 0; lane < 2; lane++) {
+            for (int k = 0; k < 4; k++) {
+                fp.setElement(1, 4 * lane + k, 0, fp8(1.0f + k));
+                fp.setElement(2, 4 * lane + k, 0, fp8(1.0f + k));
+            }
+            fp.setElement(0, lane, 2, AdvSimdLanes.floatBits(0.0f));
+        }
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8DotProduct(true, false, 0, 1, 2));
+        for (int lane = 0; lane < 2; lane++) {
+            assertEquals(30.0f, Float.intBitsToFloat((int) fp.element(0, lane, 2)));
+        }
+        assertEquals(0L, fp.high64(0));
+    }
+
+    @Test
+    void fdotSbAndFdotHbProduceDifferentDestinationWidthsFromSameSources() {
+        // Aceite da B19.11d: `FDOT_sb`×`FDOT_hb` não podem ser confundidas — mesma fonte, resultado
+        // em precisão simples (`FDOT_sb`) contra meia precisão (`FDOT_hb`), usando só os 2 primeiros
+        // elementos FP8 nos dois casos (o núcleo de `FDOT_hb` só consome os 2 primeiros bytes).
+        Aarch64Core hbCore = newCore();
+        Aarch64FpRegisters hbFp = hbCore.fp();
+        writeFpmr(hbCore, FPMR_F8S1_E4M3 | FPMR_F8S2_E4M3);
+        hbFp.setElement(1, 0, 0, fp8(3.0f));
+        hbFp.setElement(1, 1, 0, fp8(2.0f));
+        hbFp.setElement(2, 0, 0, fp8(3.0f));
+        hbFp.setElement(2, 1, 0, fp8(2.0f));
+        hbFp.setElement(0, 0, 1, AdvSimdLanes.halfBits(0.0f));
+        EXECUTOR.executeOp(hbCore, new Ir64Op.VectorFp8DotProduct(false, false, 0, 1, 2));
+        assertEquals(13.0f, AdvSimdLanes.halfToFloat(hbFp.element(0, 0, 1))); // (3*3)+(2*2)=13
+
+        Aarch64Core sbCore = newCore();
+        Aarch64FpRegisters sbFp = sbCore.fp();
+        writeFpmr(sbCore, FPMR_F8S1_E4M3 | FPMR_F8S2_E4M3);
+        sbFp.setElement(1, 0, 0, fp8(3.0f));
+        sbFp.setElement(1, 1, 0, fp8(2.0f));
+        sbFp.setElement(1, 2, 0, fp8(0.0f));
+        sbFp.setElement(1, 3, 0, fp8(0.0f));
+        sbFp.setElement(2, 0, 0, fp8(3.0f));
+        sbFp.setElement(2, 1, 0, fp8(2.0f));
+        sbFp.setElement(2, 2, 0, fp8(0.0f));
+        sbFp.setElement(2, 3, 0, fp8(0.0f));
+        sbFp.setElement(0, 0, 2, AdvSimdLanes.floatBits(0.0f));
+        EXECUTOR.executeOp(sbCore, new Ir64Op.VectorFp8DotProduct(true, false, 0, 1, 2));
+        assertEquals(13.0f, Float.intBitsToFloat((int) sbFp.element(0, 0, 2))); // mesmo valor lógico
+        // mas em larguras/`esz` diferentes — meia precisão (`esz=1`) × precisão simples (`esz=2`).
+    }
+
+    // ── FDOT_sb_vi (B19.11d) ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    void fdotSbViBroadcastsSingleRmGroup() {
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        writeFpmr(core, FPMR_F8S1_E4M3 | FPMR_F8S2_E4M3);
+        for (int k = 0; k < 4; k++) {
+            fp.setElement(1, k, 0, fp8(1.0f));
+            fp.setElement(3, 4 + k, 0, fp8(2.0f)); // grupo no índice 1
+        }
+        fp.setElement(0, 0, 2, AdvSimdLanes.floatBits(0.0f));
+        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8DotProductByElement(true, false, 0, 1, 3, 1));
+        assertEquals(8.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2))); // (1*2)*4 = 8
     }
 
     // ── FDOT_hb_vi ───────────────────────────────────────────────────────────────────────────────
