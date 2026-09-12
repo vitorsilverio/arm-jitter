@@ -151,13 +151,23 @@ public final class Aarch64Core {
     private static final int FPMR_F8S1_SHIFT = 0;
     private static final int FPMR_F8S2_SHIFT = 3;
     private static final int FPMR_F8D_SHIFT = 6;
-    // `OSM[14]` (saturação de overflow na multiplicação FP8) fica sem getter — sem consumidor,
-    // `FMLAL`/`FDOT` continuam fora do escopo mesmo depois desta task (ver B19.11).
+    // `OSM[14]` (B19.11b: saturação de overflow na MULTIPLICAÇÃO FP8) ganha getter agora —
+    // `FMLAL_hb`/`FMLALL_sb` são os primeiros consumidores reais (B19.11/B19.9 previam isso como
+    // fora de escopo; achado desta task corrige a hipótese "saturação isolada": no QEMU real,
+    // `OSM` é literalmente o modo de arredondamento `float_round_nearest_even_max`, cujo único
+    // efeito OBSERVÁVEL aqui é saturar no máximo normal do DESTINO — binary16/binary32, não FP8 —
+    // em vez de Infinito, ver `AdvSimdLanes#fp8FusedMultiplyAdd`).
+    private static final int FPMR_OSM_BIT = 14;
     private static final int FPMR_OSC_BIT = 15;
     private static final int FPMR_LSCALE_SHIFT = 16;
     /// `F1CVTL` só consome os 4 bits BAIXOS de `LSCALE` (confirmado via pseudocódigo real: `2^-
     /// UInt(FPMR.LSCALE[3:0])`), apesar do campo arquitetural ter 7 bits (`[22:16]`).
     private static final long FPMR_LSCALE_CONSUMED_MASK = 0xFL;
+    /// `FMLALL_sb` (B19.11b) consome o campo `LSCALE` de 7 bits INTEIRO, sem máscara — achado real
+    /// medido no `HELPER(gvec_fmla_sb)`/`fp8_mul_start` do QEMU (`scale_mask=-1`, contra `0xf` de
+    /// `F1CVTL`/`FMLAL_hb`): a Armadilha 2 da task B19.11b especulava reuso cego de
+    /// {@link #fp8WidenScale()}, que teria truncado os 3 bits altos incorretamente.
+    private static final long FPMR_LSCALE_FULL_MASK = 0x7FL;
     private static final int FPMR_NSCALE_SHIFT = 24;
     /// `NSCALE` é lido POR INTEIRO como inteiro COM SINAL de 8 bits (`SInt(FPMR.NSCALE)`,
     /// confirmado via pseudocódigo real) — ao contrário de `LSCALE`/`LSCALE2`, não há truncamento.
@@ -604,6 +614,27 @@ public final class Aarch64Core {
     /// normal do formato de destino, em vez do default arquitetural (`Infinity`/`NaN`).
     public boolean fp8OverflowSaturatesToMaxNormal() {
         return ((fpmr >>> FPMR_OSC_BIT) & 1) != 0;
+    }
+
+    /// `FPMR.LSCALE[6:0]` (B19.11b) — mesmo campo de {@link #fp8WidenScale()}, mas SEM a máscara de
+    /// 4 bits: `FMLALL_sb`/`FMLALL_sb_vi` consomem o campo INTEIRO (`2^-UInt(FPMR.LSCALE)`,
+    /// confirmado via `fp8_mul_start(env, -1)` do QEMU real — `-1` não mascara nada, ao contrário do
+    /// `0xf` que `FMLAL_hb`/`F1CVTL` usam). Nome deliberadamente DIFERENTE de
+    /// {@link #fp8WidenScale()} (que é consumido por `F1CVTL`/`FMLAL_hb`) para não sugerir que os
+    /// dois são intercambiáveis.
+    public int fp8MultiplyDownscale() {
+        return (int) ((fpmr >>> FPMR_LSCALE_SHIFT) & FPMR_LSCALE_FULL_MASK);
+    }
+
+    /// `FPMR.OSM` (B19.11b) — `true` quando overflow numa multiplicação-acumulação FP8
+    /// (`FMLAL_hb`/`FMLALL_sb`) satura no máximo normal do formato de DESTINO (`binary16`/
+    /// `binary32`, nunca FP8 — diferente de {@link #fp8OverflowSaturatesToMaxNormal()}, que é sobre
+    /// o destino FP8 de `FCVTN_bh`/`FCVTN_bs`), em vez de Infinito. Achado real (QEMU
+    /// `fp8_mul_start`): `OSM` é literalmente o modo de arredondamento
+    /// `float_round_nearest_even_max` — este getter expõe só o efeito OBSERVÁVEL (saturação), que é
+    /// tudo que {@code AdvSimdLanes#fp8FusedMultiplyAdd} precisa.
+    public boolean fp8OverflowSaturatesToMaxNormalOnMultiply() {
+        return ((fpmr >>> FPMR_OSM_BIT) & 1) != 0;
     }
 
     /// Tamanho em bytes de um granule de tag MTE (B19.14, `TAG_GRANULE` real do ARM DDI 0487 —

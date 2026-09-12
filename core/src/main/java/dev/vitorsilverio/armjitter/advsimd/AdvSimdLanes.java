@@ -2136,8 +2136,125 @@ public final class AdvSimdLanes {
         return signBit | (targetExp << fracBits) | (int) finalFrac;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // "FP8 FUSED MULTIPLY-ACCUMULATE LONG/LONG-LONG" — B19.11b (`FEAT_FP8FMA`: `FMLAL_hb`/
+    // `FMLALL_sb`, vetorial + indexada). Ao contrário de `FMLAL`/`FMLSL` ({@link
+    // #fpFusedMultiplyAddLong}, B13.20/B19.13, fonte `f16`→`f32`), aqui a fonte é FP8 (formatos
+    // INDEPENDENTES `FPMR.F8S1`/`F8S2` para `Rn`/`Rm`) e o destino é meia precisão (`_hb`) OU
+    // precisão simples (`_sb`). **Achado que corrige a hipótese da spec da task**: "long-long" é
+    // sobre a LARGURA do destino (FP8→f32 salta dois níveis de alargamento), NÃO sobre combinar
+    // vários elementos por lane — confirmado no `HELPER(gvec_fmla_sb)` real do QEMU
+    // (`f8dotadd_s(e0, e1, n=1, ...)`, UM produto por lane, ao contrário de `FDOT`/`FMMLA`, que usam
+    // `n=4`/`n=16`; a spec especulava 4 elementos por analogia com `FEAT_I8MM`). A fusão
+    // (produto·escala+acumulador) usa um ÚNICO arredondamento no hardware real (`f8dotadd_h`/`_s`
+    // fundem tudo antes de `round_pack_canonical`) — reproduzida aqui computando em `double` (o
+    // produto FP8×FP8 e a escala por potência de 2 são EXATOS nessa largura, com folga enorme sobre
+    // os 11/24 bits do destino) e arredondando uma única vez ao empacotar.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    private static final long FP8_FMA_HALF_CANONICAL_NAN_BITS = 0x7E00L;
+    private static final long FP8_FMA_HALF_INFINITY_BITS = 0x7C00L;
+    private static final long FP8_FMA_HALF_MAX_NORMAL_BITS = 0x7BFFL;
+    private static final int FP8_FMA_HALF_EXPONENT_BIAS = 15;
+    private static final int FP8_FMA_HALF_EXPONENT_RESERVED = 31;
+    private static final int FP8_FMA_HALF_FRACTION_BITS = 10;
+    private static final long FP8_FMA_HALF_FRACTION_MASK = 0x3FFL;
+    private static final long FP8_FMA_FLOAT_CANONICAL_NAN_BITS = 0x7FC0_0000L;
+
+    /// Um produto FP8×FP8 (formatos `nE4m3`/`mE4m3` — `FPMR.F8S1`/`F8S2`, INDEPENDENTES) escalado
+    /// por `2^-lscale` e fundido (arredondamento ÚNICO) num acumulador de meia precisão OU precisão
+    /// simples (`accBits` já na largura certa; `wideDestination` escolhe qual — `false`=`FMLAL_hb`,
+    /// `true`=`FMLALL_sb`). `osm` reflete `FPMR.OSM`: satura no máximo normal do DESTINO em vez de
+    /// Infinito quando o resultado MATEMATICAMENTE finito estoura o alcance ao empacotar (um
+    /// Infinito genuíno vindo de um operando FP8/acumulador especial passa intocado — mesma
+    /// distinção que {@link #floatToFp8} já faz para `FPMR.OSC`). Usado por `FMLAL_hb`/`FMLALL_sb`,
+    /// vetorial e indexada — a diferença entre as duas formas é só QUAIS bytes de `Rn`/`Rm` o
+    /// chamador seleciona antes de chegar aqui.
+    public static long fp8FusedMultiplyAdd(int nBits, boolean nE4m3, int mBits, boolean mE4m3,
+            int lscale, boolean osm, long accBits, boolean wideDestination) {
+        double product = (double) fp8ToFloat(nBits, nE4m3) * (double) fp8ToFloat(mBits, mE4m3);
+        double scaled = Math.scalb(product, -lscale);
+        double acc = wideDestination ? Float.intBitsToFloat((int) accBits) : halfToFloat(accBits);
+        double sum = scaled + acc;
+        return wideDestination ? doubleToFloatBits(sum, osm) : doubleToHalfBits(sum, osm);
+    }
+
+    private static long doubleToFloatBits(double value, boolean saturateToMaxNormal) {
+        if (Double.isNaN(value)) {
+            return FP8_FMA_FLOAT_CANONICAL_NAN_BITS;
+        }
+        float rounded = (float) value;
+        if (saturateToMaxNormal && Float.isInfinite(rounded) && !Double.isInfinite(value)) {
+            rounded = Math.copySign(Float.MAX_VALUE, rounded);
+        }
+        return floatBits(rounded);
+    }
+
+    /// `double → binary16` correto (round-to-nearest-even), com a mesma folga de guarda de
+    /// {@link #doubleToFloatBits} sobre os 11 bits de destino — {@link Float#floatToFloat16} não
+    /// serve aqui porque não expõe o modo "satura em vez de Infinito" que `osm` precisa. Estrutura
+    /// espelha {@link #floatToFp8} (extrai expoente/mantissa crus, reusa
+    /// {@link #fp8RoundToNearestEven}, resolve carry/overflow), mas para `binary16` PADRÃO (sem os
+    /// desvios E4M3/E5M2 de FP8: `Infinito` sempre existe, `NaN` canonicalizado explicitamente —
+    /// `default_nan_mode` do QEMU real).
+    private static long doubleToHalfBits(double value, boolean saturateToMaxNormal) {
+        if (Double.isNaN(value)) {
+            return FP8_FMA_HALF_CANONICAL_NAN_BITS;
+        }
+        long signBit = Double.doubleToRawLongBits(value) < 0 ? 0x8000L : 0L;
+        double magnitude = Math.abs(value);
+        if (magnitude == 0.0) {
+            return signBit;
+        }
+        if (Double.isInfinite(magnitude)) {
+            // Infinito GENUÍNO do próprio operando (não overflow de arredondamento) — `osm` nunca
+            // se aplica aqui, só no `targetExp >= FP8_FMA_HALF_EXPONENT_RESERVED` abaixo (mesma
+            // distinção que {@link #doubleToFloatBits} faz via `!Double.isInfinite(value)`).
+            return signBit | FP8_FMA_HALF_INFINITY_BITS;
+        }
+        long bits64 = Double.doubleToRawLongBits(magnitude);
+        int rawExp = (int) ((bits64 >>> 52) & 0x7FFL);
+        long rawMant = bits64 & 0xF_FFFF_FFFF_FFFFL;
+        int unbiasedExp;
+        long mantWithImplicit;
+        if (rawExp == 0) {
+            int shiftNorm = Long.numberOfLeadingZeros(rawMant) - 12;
+            mantWithImplicit = rawMant << (shiftNorm + 1);
+            unbiasedExp = -1022 - shiftNorm - 1;
+        } else {
+            unbiasedExp = rawExp - 1023;
+            mantWithImplicit = rawMant | (1L << 52);
+        }
+        int targetExp = unbiasedExp + FP8_FMA_HALF_EXPONENT_BIAS;
+        int shift = 52 - FP8_FMA_HALF_FRACTION_BITS + Math.max(0, 1 - targetExp);
+        if (shift >= 64) {
+            return signBit;
+        }
+        long rounded = fp8RoundToNearestEven(mantWithImplicit, shift);
+        long finalFrac;
+        if (targetExp <= 0) {
+            if (rounded > FP8_FMA_HALF_FRACTION_MASK) {
+                targetExp = 1;
+                finalFrac = 0;
+            } else {
+                targetExp = 0;
+                finalFrac = rounded;
+            }
+        } else if (rounded >= (1L << (FP8_FMA_HALF_FRACTION_BITS + 1))) {
+            targetExp++;
+            finalFrac = 0;
+        } else {
+            finalFrac = rounded & FP8_FMA_HALF_FRACTION_MASK;
+        }
+        if (targetExp >= FP8_FMA_HALF_EXPONENT_RESERVED) {
+            return signBit | (saturateToMaxNormal ? FP8_FMA_HALF_MAX_NORMAL_BITS : FP8_FMA_HALF_INFINITY_BITS);
+        }
+        return signBit | ((long) targetExp << FP8_FMA_HALF_FRACTION_BITS) | finalFrac;
+    }
+
     /// Arredonda `mantissa` (bits altos) descartando os `shift` bits baixos, round-to-nearest-even
-    /// (empate decidido pelo bit remanescente mais baixo) — usado só por {@link #floatToFp8}.
+    /// (empate decidido pelo bit remanescente mais baixo) — usado por {@link #floatToFp8} e por
+    /// {@link #doubleToHalfBits} (B19.11b).
     private static long fp8RoundToNearestEven(long mantissa, int shift) {
         if (shift <= 0) {
             return mantissa << -shift;

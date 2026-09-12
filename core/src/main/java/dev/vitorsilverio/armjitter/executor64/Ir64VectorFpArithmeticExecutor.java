@@ -566,6 +566,67 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// `FMLAL_hb_v`/`FMLALL_sb_v` (`FEAT_FP8FMA`, B19.11b) — ver Javadoc de
+    /// {@link Ir64Op.VectorFp8FusedMultiplyAddLong}. Formatos/escala/`OSM` vêm de `FPMR` em tempo de
+    /// EXECUÇÃO (mesma disciplina de {@link #executeConvertToFp8}/{@link #executeConvertFromFp8}).
+    /// Resultado bufferizado (E10) antes de qualquer escrita — `Rd` pode ser `Rn`/`Rm` (largura
+    /// mista FP8→meia/simples precisão). Sempre os 128 bits inteiros de `Rd` (sem finalização —
+    /// mesma disciplina de {@link #executeConvertFromFp8}, `do_fmla_fp8` do QEMU não tem forma de
+    /// 64 bits).
+    static boolean executeFp8FusedMultiplyAddLong(Aarch64Core core, Ir64Op.VectorFp8FusedMultiplyAddLong op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
+        boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
+        boolean osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
+        int lscale = op.wideDestination() ? core.fp8MultiplyDownscale() : core.fp8WidenScale();
+        int destEsz = op.wideDestination() ? 2 : 1;
+        int elements = op.wideDestination() ? 4 : 8;
+        int stride = op.wideDestination() ? 4 : 2;
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            int byteOffset = stride * i + op.sourceByteSelect();
+            long nByte = fp.element(op.rn(), byteOffset, FP8_ESZ);
+            long mByte = fp.element(op.rm(), byteOffset, FP8_ESZ);
+            long accBits = fp.element(op.rd(), i, destEsz);
+            results[i] = AdvSimdLanes.fp8FusedMultiplyAdd(
+                    (int) nByte, nE4m3, (int) mByte, mE4m3, lscale, osm, accBits, op.wideDestination());
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, destEsz, results[i]);
+        }
+        return false;
+    }
+
+    /// `FMLAL_hb_vi`/`FMLALL_sb_vi` (`FEAT_FP8FMA`, B19.11b) — como
+    /// {@link #executeFp8FusedMultiplyAddLong}, mas `Rm` contribui um ÚNICO byte FP8
+    /// ({@link Ir64Op.VectorFp8FusedMultiplyAddLongByElement#index}), lido UMA vez e replicado para
+    /// todas as lanes — achado real (`HELPER(gvec_fmla_idx_*)` do QEMU): o byte de `Rm` é calculado
+    /// FORA do laço de lanes, não recalculado por lane.
+    static boolean executeFp8FusedMultiplyAddLongByElement(
+            Aarch64Core core, Ir64Op.VectorFp8FusedMultiplyAddLongByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
+        boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
+        boolean osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
+        int lscale = op.wideDestination() ? core.fp8MultiplyDownscale() : core.fp8WidenScale();
+        int destEsz = op.wideDestination() ? 2 : 1;
+        int elements = op.wideDestination() ? 4 : 8;
+        int stride = op.wideDestination() ? 4 : 2;
+        long mByte = fp.element(op.rm(), op.index(), FP8_ESZ);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            int byteOffset = stride * i + op.sourceByteSelect();
+            long nByte = fp.element(op.rn(), byteOffset, FP8_ESZ);
+            long accBits = fp.element(op.rd(), i, destEsz);
+            results[i] = AdvSimdLanes.fp8FusedMultiplyAdd(
+                    (int) nByte, nE4m3, (int) mByte, mE4m3, lscale, osm, accBits, op.wideDestination());
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, destEsz, results[i]);
+        }
+        return false;
+    }
+
     /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — reduz os elementos de `Rn` a um único escalar em
     /// `Rd`. B8.10: precisão simples, `esz=2` fixo, sempre 4 elementos (`4S`, único arranjo real).
     /// B19.5.3 (`FEAT_FP16`): `esz=1`, `elements` `4` ou `8` conforme {@link Ir64Op.VectorFpAcrossLanes#q()}

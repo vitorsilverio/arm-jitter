@@ -75,7 +75,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
         Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited,
         Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt,
-        Ir64Op.VectorFpAbsoluteMaxMin {
+        Ir64Op.VectorFpAbsoluteMaxMin, Ir64Op.VectorFp8FusedMultiplyAddLong,
+        Ir64Op.VectorFp8FusedMultiplyAddLongByElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -413,6 +414,12 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP_SCALE_BY_INT = 144;
         /// B19.24: `FAMAX`/`FAMIN` (`FEAT_FAMINMAX`) — ver {@link VectorFpAbsoluteMaxMin}.
         public static final int VECTOR_FP_ABSOLUTE_MAX_MIN = 145;
+        /// B19.11b: `FMLAL_hb_v`/`FMLALL_sb_v` (`FEAT_FP8FMA`) — ver
+        /// {@link VectorFp8FusedMultiplyAddLong}.
+        public static final int VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG = 146;
+        /// B19.11b: `FMLAL_hb_vi`/`FMLALL_sb_vi` (`FEAT_FP8FMA`) — ver
+        /// {@link VectorFp8FusedMultiplyAddLongByElement}.
+        public static final int VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT = 147;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2433,6 +2440,64 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte 2.
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_ABSOLUTE_MAX_MIN; }
+    }
+
+    /// `FMLAL_hb_v`/`FMLALL_sb_v` (B19.11b, `FEAT_FP8FMA`) — multiply-accumulate FP8 FUNDIDO num
+    /// acumulador de meia precisão (`FMLAL_hb`, {@link #wideDestination}=`false`) ou precisão
+    /// simples (`FMLALL_sb`, `true`). "long-long" é sobre a LARGURA do destino, NÃO sobre combinar
+    /// vários elementos por lane (achado real desta task, corrige a hipótese da spec que especulava
+    /// 4 elementos por analogia com `FEAT_I8MM`: o `HELPER(gvec_fmla_sb)` real do QEMU funde só UM
+    /// produto FP8×FP8 por lane — `f8dotadd_s(e0, e1, n=1, ...)`). SEMPRE opera nos 128 bits inteiros
+    /// de `Rd` (`Vd.8H`/`Vd.4S`) — não existe forma de 64 bits (`do_fmla_fp8` do QEMU fixa
+    /// `oprsz=16` incondicionalmente, sem bit `Q` no encoding real — achado que corrige a leitura
+    /// inicial da spec, que tratava o campo `idxn` como se fosse `Q`). `Rn`/`Rm` contribuem só
+    /// METADE dos seus 16 bytes FP8 cada, selecionados por {@link #sourceByteSelect} — achado real
+    /// (QEMU `n[H1(stride*i+select)]`/`m[H1(stride*i+select)]`, MESMO seletor para os dois
+    /// operandos, ao contrário de `FMLAL2`/`FMLSL2` (B19.13) onde `top` seleciona um bloco CONTÍGUO
+    /// em vez de bytes intercalados). Formatos/escala/`OSM` vêm de `FPMR` em tempo de EXECUÇÃO —
+    /// mesma disciplina de {@link VectorFpConvertFromFp8}.
+    record VectorFp8FusedMultiplyAddLong(
+            /// `false`=`FMLAL_hb` (destino `binary16`, seleção de `Rn`/`Rm` por PARIDADE `0`/`1` a
+            /// cada 2 bytes); `true`=`FMLALL_sb` (destino `binary32`, seleção por FASE `0`-`3` a
+            /// cada 4 bytes).
+            boolean wideDestination,
+            /// Seleciona QUAIS bytes FP8 de `Rn`/`Rm` entram nesta instrução — `idxn` do encoding
+            /// real (`1` bit, `0`-`1`, se {@code !wideDestination}; `2` bits, `0`-`3`, se
+            /// {@code wideDestination} — campo `%fmlall_idxn` do QEMU, `(bit30<<1)|bit22`).
+            int sourceByteSelect,
+            /// Registrador `V` de destino/acumulador (`Vd.8H`/`Vd.4S`, lido e escrito — RMW).
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.16B`, só a metade selecionada por
+            /// {@link #sourceByteSelect} é lida).
+            int rn,
+            /// Registrador `V` fonte 2 (`Vm.16B`, mesma seleção de {@link #sourceByteSelect}).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG; }
+    }
+
+    /// `FMLAL_hb_vi`/`FMLALL_sb_vi` (B19.11b, `FEAT_FP8FMA`) — como
+    /// {@link VectorFp8FusedMultiplyAddLong}, mas {@link #rm} contribui um ÚNICO byte FP8 fixo
+    /// ({@link #index}, `0`-`15` — campo `%hlm4` do QEMU, `(bit11<<3)|bits[21:19]`), lido UMA vez e
+    /// replicado para todas as lanes (achado real: `HELPER(gvec_fmla_idx_*)` calcula o byte de `Rm`
+    /// FORA do laço de lanes). `Rn` continua contribuindo {@code elements} bytes, selecionados por
+    /// {@link #sourceByteSelect} exatamente como na forma vetorial. `Rm` é restrito a 3 bits
+    /// (`V0`-`V7`) — MENOS que os 4/5 bits de outras formas indexadas deste executor (`BFMLAL_vi`/
+    /// `FMLAL_vi`), porque o índice de 4 bits rouba um bit a mais do encoding.
+    record VectorFp8FusedMultiplyAddLongByElement(
+            /// Ver {@link VectorFp8FusedMultiplyAddLong#wideDestination}.
+            boolean wideDestination,
+            /// Ver {@link VectorFp8FusedMultiplyAddLong#sourceByteSelect} — aplicado só a
+            /// {@link #rn} aqui ({@link #rm} usa {@link #index} em vez disso).
+            int sourceByteSelect,
+            /// Registrador `V` de destino/acumulador.
+            int rd,
+            /// Registrador `V` fonte 1 (`Vn.16B`, seleção por {@link #sourceByteSelect}).
+            int rn,
+            /// Registrador `V` fonte 2 (`V0`-`V7`) — só o byte FP8 {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do byte FP8 de {@link #rm} usado em TODA a operação (`0`-`15`).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
     }
 
     /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link

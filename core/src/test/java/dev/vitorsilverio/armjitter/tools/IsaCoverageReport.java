@@ -343,16 +343,19 @@ public final class IsaCoverageReport {
         require(Aarch64Feature.LSE128, "LDCLRP", "LDSETP", "SWPP");
         // FEAT_FP8 (Armv9.5-A) — conversão/escala fp8. `FSCALE` tem 2 linhas (`@qrrr_h`/`@qrrr_sd`),
         // as duas desta feature. B19.11: as 6 conversões (`FCVTN_bh`/`FCVTN_bs`/`F1CVTL`/`F2CVTL`/
-        // `BF1CVTL`/`BF2CVTL`) — as 6 de acumulação (`FMLAL_hb_v`/`FMLALL_sb_v`/`FMLAL_hb_vi`/
-        // `FMLALL_sb_vi`) seguem SEM requisito de versão aqui (gap pré-existente, não introduzido
-        // por esta task — precisam de uma feature própria, `FEAT_FP8FMA`, junto do decode que a
-        // task irmã B19.11b vai trazer).
+        // `BF1CVTL`/`BF2CVTL`).
         require(Aarch64Feature.FP8, "FSCALE", "FCVTN_bh", "FCVTN_bs", "F1CVTL", "F2CVTL", "BF1CVTL", "BF2CVTL");
         // FEAT_FP8DOT2 (Armv9.5-A) — produto escalar fp8 2 vias → f16 (a TSV dizia `FEAT_F8DP2`,
         // nome inventado)
         require(Aarch64Feature.FP8_DOT_PRODUCT_2WAY, "FDOT_hb_v", "FDOT_hb_vi");
         // FEAT_FP8DOT4 (Armv9.5-A) — produto escalar fp8 4 vias → f32 (a TSV dizia `FEAT_F8DP4`)
         require(Aarch64Feature.FP8_DOT_PRODUCT_4WAY, "FDOT_sb_v", "FDOT_sb_vi");
+        // FEAT_FP8FMA (Armv9.5-A, B19.11b) — multiply-accumulate fp8 fundido, meia precisão
+        // (`FMLAL_hb_v`/`_vi`) e precisão simples (`FMLALL_sb_v`/`_vi`). MESMO `ID_AA64FPFR0_EL1`
+        // das duas dot-product acima (bit `F8FMA`, adjacente a `F8DP2`/`F8DP4`) — versão inferida
+        // por essa vizinhança de registrador de feature, não lida diretamente numa tabela de
+        // versões (a página `developer.arm.com` não é fetchable, mesma limitação já documentada).
+        require(Aarch64Feature.FP8_FUSED_MULTIPLY_ADD, "FMLAL_hb_v", "FMLALL_sb_v", "FMLAL_hb_vi", "FMLALL_sb_vi");
         // FEAT_CMPBR (ARMv9.5-A) — CB<cc> compare-and-branch condicional
         require(Aarch64Feature.COMPARE_AND_BRANCH, "CB_cond", "CB_cond_imm");
         // FEAT_FPRCVT (Armv9.6-A) — conversão FP↔int só em registrador SIMD&FP escalar. Nenhum

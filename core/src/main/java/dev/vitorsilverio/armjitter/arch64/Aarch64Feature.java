@@ -152,6 +152,15 @@ public enum Aarch64Feature {
     /// (`FDOT` `_sb_v`/`_sb_vi`). Armv9.5-A. Ver a nota de nome em {@link #FP8_DOT_PRODUCT_2WAY}
     /// (a TSV dizia `FEAT_F8DP4`).
     FP8_DOT_PRODUCT_4WAY,
+    /// `FEAT_FP8FMA` — multiply-accumulate `fp8` FUNDIDO com acumulação em meia precisão
+    /// (`FMLAL_hb_v`/`FMLAL_hb_vi`) ou precisão simples (`FMLALL_sb_v`/`FMLALL_sb_vi`). Opcional a
+    /// partir de Armv9.2-A, **introduzida em Armv9.5-A** (B19.11b) — MESMO `ID_AA64FPFR0_EL1` que
+    /// {@link #FP8_DOT_PRODUCT_2WAY}/{@link #FP8_DOT_PRODUCT_4WAY} (bit `F8FMA`, adjacente a
+    /// `F8DP2`/`F8DP4`), confirmado via `isar_feature_aa64_f8fma`/`ID_AA64FPFR0_EL1.F8FMA` do QEMU
+    /// real — a página `developer.arm.com` da versão Armv9.5-A não é fetchable diretamente (mesma
+    /// limitação que a B19.11a/B19.11 já documentaram), então a versão foi inferida da MESMA leva de
+    /// registrador de feature que as duas dot-product, não lida diretamente numa tabela de versões.
+    FP8_FUSED_MULTIPLY_ADD,
     /// `FEAT_CMPBR` — `CB<cc>` (compare-and-branch condicional, formas registrador e imediato).
     /// ARMv9.5-A.
     COMPARE_AND_BRANCH,

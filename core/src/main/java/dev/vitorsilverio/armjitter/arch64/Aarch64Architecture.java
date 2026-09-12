@@ -123,8 +123,9 @@ public final class Aarch64Architecture {
             Aarch64Feature.LSE128);
 
     /// ARMv9.5-A: acrescenta `FEAT_CMPBR` (`CB<cc>`) e a família FP8 — `FEAT_FP8` (conversão/escala
-    /// `fp8`, inclui `FSCALE`) e os produtos escalares `FEAT_FP8DOT2`/`FEAT_FP8DOT4` (E12) — sobre a
-    /// ARMv9.4-A.
+    /// `fp8`, inclui `FSCALE`), os produtos escalares `FEAT_FP8DOT2`/`FEAT_FP8DOT4` (E12) e o
+    /// multiply-accumulate `FEAT_FP8FMA` (B19.11b, MESMO `ID_AA64FPFR0_EL1` das duas dot-product) —
+    /// sobre a ARMv9.4-A.
     ///
     /// As features Armv9.6-A ({@link Aarch64Feature#FP_INTEGER_CONVERT_SCALAR},
     /// {@link Aarch64Feature#FP8_MATRIX_MULTIPLY_FP16}, {@link Aarch64Feature#FP8_MATRIX_MULTIPLY_FP32})
@@ -135,6 +136,7 @@ public final class Aarch64Architecture {
             Aarch64Feature.FP8,
             Aarch64Feature.FP8_DOT_PRODUCT_2WAY,
             Aarch64Feature.FP8_DOT_PRODUCT_4WAY,
+            Aarch64Feature.FP8_FUSED_MULTIPLY_ADD,
             Aarch64Feature.LOOKUP_TABLE);
 
     private final String name;
