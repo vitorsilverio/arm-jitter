@@ -47,6 +47,26 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.18 fechar)
+
+**B19.18 FECHADA 2026-09-12** — A64 `FEAT_FRINTTS` (`FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X`,
+escalar+vetorial, 8 células). Escalar: 4 opcodes novos no MESMO campo de `FRINTN`/etc.
+("Floating-point data-processing, 1 source"), record próprio `Ir64Op.Fp64RoundRangeLimited`
+(`Kind` 141, não reaproveita `Fp64Round`). Vetorial: MESMO slot `Rm=00001` de `FSQRT_v`/`FRINTx_v`
+(B8.9) — `FRINT32Z_v`/`FRINT32X_v` ganham opcode próprio (`0b11101`), `FRINT64Z_v`/`FRINT64X_v`
+COMPARTILHAM o opcode de `SQRT_v` (`0b11111`), distinguidos só pelo bit `a`(23) — `a=1`→`SQRT`,
+`a=0`→`FRINT64*`, nunca colidem (confirmado bit a bit contra corpus real). **Achado que corrige o
+algoritmo de saturação** (medido contra o QEMU real, não assumido da spec): o sentinela de
+overflow é `±2^31`/`±2^63` EXATOS (potência de dois cheia, não `2^31-1`) — `2^31` em si é um
+resultado VÁLIDO, só valores estritamente maiores saturam; `±Infinito` satura como qualquer
+overflow (não é caso especial, ao contrário de `NaN`, que passa intocado). **Achado que corrige o
+exemplo do Aceite da própria task**: `2.5` NÃO diferencia truncamento de RNE (os dois dão `2.0`,
+coincidência de `2` ser par) — o teste usa `1.5` em vez disso. `docs/COBERTURA-ISA.md`: as 8
+células ❌→✅ de `ARMv8.5-A` em diante (88 células/11 colunas), global 98%→99% (18982→19070/19215).
+`docs/COBERTURA-JIT.md` regenerado (`Ir64Op.Kind` 141→142, só interpretado). `mvn -o test` verde
+(3714; as mesmas 3 falhas pré-existentes) + `install`. **G5 completo** nos 5 consumidores. Ver
+**Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-11, após B19.21 fechar)
 
 **B19.21 FECHADA 2026-09-11** — A64 `FEAT_CSSC` residual, forma de registrador geral (`CTZ`/

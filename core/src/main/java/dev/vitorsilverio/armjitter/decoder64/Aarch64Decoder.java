@@ -1689,9 +1689,9 @@ public final class Aarch64Decoder {
 
     // ── B8.5: "Floating-point data-processing (1 source)" — `FRINTx`, opcode(20:15) 6 bits,
     // ── MESMO grupo/bits[14:10]="10000" de `FMOV`/`FABS`/`FNEG`/`FSQRT`/`FCVT` (F32<->F64) já
-    // ── decodificados — só o valor do opcode muda. `FRINT32*`/`FRINT64*`(`FEAT_FRINTTS`)/
-    // ── `BFCVT_s`(`FEAT_BF16`) são extensões POSTERIORES, CONFERIDAS contra `translate-a64.c`
-    // ── (`TRANS_FEAT(..., aa64_frint/aa64_bf16, ...)`) — ficam de fora (`isa-nao-aplicavel.tsv`).
+    // ── decodificados — só o valor do opcode muda. `BFCVT_s`(`FEAT_BF16`) é extensão POSTERIOR,
+    // ── CONFERIDA contra `translate-a64.c` (`TRANS_FEAT(..., aa64_bf16, ...)`). `FRINT32*`/
+    // ── `FRINT64*` (`FEAT_FRINTTS`) eram extensão posterior também, mas ganharam decoder na B19.18.
     private static final int FP_ROUND_OPCODE_FRINTN = 0b00_1000;
     private static final int FP_ROUND_OPCODE_FRINTP = 0b00_1001;
     private static final int FP_ROUND_OPCODE_FRINTM = 0b00_1010;
@@ -1699,6 +1699,13 @@ public final class Aarch64Decoder {
     private static final int FP_ROUND_OPCODE_FRINTA = 0b00_1100;
     private static final int FP_ROUND_OPCODE_FRINTX = 0b00_1110;
     private static final int FP_ROUND_OPCODE_FRINTI = 0b00_1111;
+    /// B19.18 (`FEAT_FRINTTS`): opcodes(20:15) NOVOS, mesmo grupo/campo dos `FRINTx` acima —
+    /// `FRINT32Z_s`/`FRINT32X_s`/`FRINT64Z_s`/`FRINT64X_s`. Conferidos bit a bit contra
+    /// `aarch64-linux-gnu-as -march=armv8.5-a` (WSL).
+    private static final int FP_ROUND_RANGE_OPCODE_FRINT32Z = 0b01_0000;
+    private static final int FP_ROUND_RANGE_OPCODE_FRINT32X = 0b01_0001;
+    private static final int FP_ROUND_RANGE_OPCODE_FRINT64Z = 0b01_0010;
+    private static final int FP_ROUND_RANGE_OPCODE_FRINT64X = 0b01_0011;
 
     // ── Add/subtract (shifted/extended register), subgrupo de Data Processing — Register: ─────
     // ── bits[28:24] fixo=01011 nas duas formas; bit21 distingue shifted(0)/extended(1, com ────
@@ -4145,6 +4152,14 @@ public final class Aarch64Decoder {
                 if (scalar && !fpUnaryOpHasScalarForm(fpRmOneOp)) {
                     throw unsupported(word, address);
                 }
+                // B19.18 (`FEAT_FRINTTS`): `RINT32Z`/`RINT32X`/`RINT64Z`/`RINT64X` só existem sob
+                // `ARMv8.5-A`+ — MESMO slot/opcode que o resto desta tabela (base ISA, sempre
+                // disponível), então o gate mora aqui, não na tabela (que não tem acesso a
+                // `architecture`).
+                if (isDirectedRoundingToIntegral(fpRmOneOp)
+                        && !architecture.has(Aarch64Feature.DIRECTED_ROUNDING_TO_INTEGRAL)) {
+                    throw unsupported(word, address);
+                }
                 return new Ir64Op.VectorFpArithmeticUnary(fpRmOneOp, scalar, q, fpRmOneEsz, rd, rn);
             }
             throw unsupported(word, address);
@@ -4864,7 +4879,8 @@ public final class Aarch64Decoder {
                  RECPE, RSQRTE,
                  SCVTF, UCVTF,
                  FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> true;
-            case ABS, NEG, SQRT, RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI, FRECPX, FCVTXN -> false;
+            case ABS, NEG, SQRT, RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI, FRECPX, FCVTXN,
+                 RINT32Z, RINT32X, RINT64Z, RINT64X -> false;
         };
     }
 
@@ -5147,8 +5163,36 @@ public final class Aarch64Decoder {
                 case 0b11 -> Ir64VectorFpUnaryOp.RSQRTE;
                 default -> null;
             };
-            case 0b1_1111 -> key == 0b11 ? Ir64VectorFpUnaryOp.SQRT : null;
+            // B19.18 (`FEAT_FRINTTS`): `FRINT32Z_v`/`FRINT32X_v` — MESMO opcode nunca usado antes
+            // desta task neste slot (`0b1_1101`), `a`(bit23) fixo em `0` no encoding real (só `u`
+            // discrimina `Z`(0)/`X`(1); `esz`/tamanho vem do bit22, já extraído fora desta tabela
+            // como `fpRmOneEsz`) — conferido bit a bit contra `a64.decode` real (achado registrado
+            // no `## Contexto` da task).
+            case 0b1_1101 -> switch (key) {
+                case 0b00 -> Ir64VectorFpUnaryOp.RINT32Z;
+                case 0b10 -> Ir64VectorFpUnaryOp.RINT32X;
+                default -> null;
+            };
+            // B19.18: `FRINT64Z_v`/`FRINT64X_v` compartilham o MESMO opcode de `SQRT` (`0b1_1111`)
+            // — `SQRT` exige `key==0b11` (`a=1`), `FRINT64*` exige `a=0` (`key==0b00`/`0b10`);
+            // nunca colidem (conferido bit a bit).
+            case 0b1_1111 -> switch (key) {
+                case 0b11 -> Ir64VectorFpUnaryOp.SQRT;
+                case 0b00 -> Ir64VectorFpUnaryOp.RINT64Z;
+                case 0b10 -> Ir64VectorFpUnaryOp.RINT64X;
+                default -> null;
+            };
             default -> null;
+        };
+    }
+
+    /// B19.18: quais valores de {@link Ir64VectorFpUnaryOp} são `FRINT32*`/`FRINT64*`
+    /// (`FEAT_FRINTTS`) — únicos que precisam do gate de arquitetura dentro do slot narrow/widen
+    /// (o resto da tabela é base ISA).
+    private static boolean isDirectedRoundingToIntegral(Ir64VectorFpUnaryOp op) {
+        return switch (op) {
+            case RINT32Z, RINT32X, RINT64Z, RINT64X -> true;
+            default -> false;
         };
     }
 
@@ -5847,8 +5891,32 @@ public final class Aarch64Decoder {
                     Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
             case FP_ROUND_OPCODE_FRINTI -> new Ir64Op.Fp64Round(
                     Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            // B19.18 (`FEAT_FRINTTS`): `Z` sempre `TOWARD_ZERO` (real no hardware, não
+            // simplificação); `X` degenera para `NEAREST_TIES_EVEN` (mesma decisão herdada de
+            // `FRINTX`/`FRINTI` acima — `FPCR.RMode` não modelado, B8.5/B8.15).
+            case FP_ROUND_RANGE_OPCODE_FRINT32Z -> requireDirectedRoundingToIntegral(word, address,
+                    new Ir64Op.Fp64RoundRangeLimited(
+                            Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, doublePrecision, vd, vn));
+            case FP_ROUND_RANGE_OPCODE_FRINT32X -> requireDirectedRoundingToIntegral(word, address,
+                    new Ir64Op.Fp64RoundRangeLimited(
+                            Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, doublePrecision, vd, vn));
+            case FP_ROUND_RANGE_OPCODE_FRINT64Z -> requireDirectedRoundingToIntegral(word, address,
+                    new Ir64Op.Fp64RoundRangeLimited(
+                            Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, doublePrecision, vd, vn));
+            case FP_ROUND_RANGE_OPCODE_FRINT64X -> requireDirectedRoundingToIntegral(word, address,
+                    new Ir64Op.Fp64RoundRangeLimited(
+                            Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, doublePrecision, vd, vn));
             default -> throw unsupported(word, address);
         };
+    }
+
+    /// B19.18 (`FEAT_FRINTTS`): gate comum às 4 formas escalares — devolve `op` se a feature
+    /// estiver presente, senão recusa (G8).
+    private Ir64Op requireDirectedRoundingToIntegral(int word, long address, Ir64Op op) {
+        if (!architecture.has(Aarch64Feature.DIRECTED_ROUNDING_TO_INTEGRAL)) {
+            throw unsupported(word, address);
+        }
+        return op;
     }
 
     /// `FMOV Sd,#imm`/`FMOV Dd,#imm` (Floating-point immediate) — o imediato de 8 bits é expandido

@@ -514,6 +514,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulateByElement(
                             core, (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) op);
+            case Ir64Op.Kind.FP64_ROUND_RANGE_LIMITED ->
+                    Ir64FpExecutor.executeFpRoundRangeLimited(core, (Ir64Op.Fp64RoundRangeLimited) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }

@@ -73,7 +73,7 @@ public sealed interface Ir64Op permits
         Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
         Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace,
         Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement {
+        Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -401,6 +401,8 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE = 139;
         /// B19.20: `FCMLA_vi` (`FEAT_FCMA`) — ver {@link VectorFpComplexMultiplyAccumulateByElement}.
         public static final int VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT = 140;
+
+        public static final int FP64_ROUND_RANGE_LIMITED = 141;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -1448,6 +1450,35 @@ public sealed interface Ir64Op permits
             /// Registrador de origem.
             int vn) implements Ir64Op {
         @Override public int kind() { return Kind.FP64_ROUND; }
+    }
+
+    /// `FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X` (`ARM DDI 0487` "Floating-point data-processing
+    /// (1 source)", B19.18, `FEAT_FRINTTS`) — arredonda para um valor integral (mantendo o
+    /// resultado em ponto flutuante, MESMA convenção de {@link Fp64Round}) e depois SATURA o
+    /// resultado para caber no alcance de um inteiro de `32` ou `64` bits COM SINAL: qualquer valor
+    /// (incluindo `±Infinito`, mas não `NaN`) fora de `[-2^rangeBits, 2^rangeBits]` vira exatamente
+    /// `±2^rangeBits` (como ponto flutuante — `2^rangeBits` em si NÃO satura, é o próprio limite
+    /// válido, achado medido contra o algoritmo real do QEMU: `int32_min/max_as_float32` são
+    /// literalmente `∓2^31`, não `∓(2^31-1)`). `X` usa `FPCR.RMode` no hardware real; este core não
+    /// modela `RMode` (decisão herdada de B8.5/B8.15), então `X` degenera para
+    /// `NEAREST_TIES_EVEN`, MESMA simplificação de {@link Fp64Round#direction()} para
+    /// `FRINTX`/`FRINTI`. `Z` SEMPRE usa `TOWARD_ZERO`, nunca `FPCR.RMode` (isso é real no
+    /// hardware, não uma simplificação).
+    record Fp64RoundRangeLimited(
+            /// `TOWARD_ZERO` para as formas `Z` (`FRINT32Z`/`FRINT64Z`); `NEAREST_TIES_EVEN` para
+            /// as formas `X` (`FRINT32X`/`FRINT64X`, simplificação herdada de `FPCR.RMode` não
+            /// modelado).
+            Fp64RoundingDirection direction,
+            /// `true`: satura para o alcance de um inteiro de 64 bits com sinal (`FRINT64*`,
+            /// `±2^63`). `false`: 32 bits (`FRINT32*`, `±2^31`).
+            boolean rangeIs64Bit,
+            /// `true` para precisão dupla, `false` para simples.
+            boolean doublePrecision,
+            /// Registrador de destino (índice `0`-`31`, `V<n>`).
+            int vd,
+            /// Registrador de origem.
+            int vn) implements Ir64Op {
+        @Override public int kind() { return Kind.FP64_ROUND_RANGE_LIMITED; }
     }
 
     /// `SCVTF`/`UCVTF`/`FCVTNS`/`FCVTNU`/`FCVTPS`/`FCVTPU`/`FCVTMS`/`FCVTMU`/`FCVTZS`/`FCVTZU`/

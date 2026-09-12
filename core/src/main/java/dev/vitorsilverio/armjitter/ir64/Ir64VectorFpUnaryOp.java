@@ -89,5 +89,18 @@ public enum Ir64VectorFpUnaryOp {
     /// mantissa do `f32` a `1` sempre que a conversão perder informação. Determinística, SEM
     /// `FPCR`. Nesta task só a forma ESCALAR (`FCVTXN_v` vetorial é B19.4); `esz` do record é o da
     /// ENTRADA (`3`/`f64`), a escrita usa o `esz` de SAÍDA (`2`/`f32`).
-    FCVTXN
+    FCVTXN,
+    /// `FRINT32Z` vetorial (B19.18, `FEAT_FRINTTS`) — arredonda para zero (truncamento) e satura
+    /// para o alcance de um inteiro de 32 bits com sinal. Ver
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.Fp64RoundRangeLimited} para a semântica
+    /// completa (mesmo núcleo do escalar).
+    RINT32Z,
+    /// `FRINT32X` vetorial (B19.18) — idêntico a {@link #RINT32Z} exceto o modo de arredondamento,
+    /// que degenera para `NEAREST_TIES_EVEN` (sem `FPCR.RMode` modelado, mesma decisão de
+    /// {@link #RINTX}).
+    RINT32X,
+    /// `FRINT64Z` vetorial (B19.18) — como {@link #RINT32Z}, satura para o alcance de 64 bits.
+    RINT64Z,
+    /// `FRINT64X` vetorial (B19.18) — como {@link #RINT32X}, satura para o alcance de 64 bits.
+    RINT64X
 }

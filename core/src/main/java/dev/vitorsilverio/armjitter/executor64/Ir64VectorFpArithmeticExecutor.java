@@ -270,11 +270,32 @@ final class Ir64VectorFpArithmeticExecutor {
                         : esz == 2 ? AdvSimdLanes.floatBits((float) Math.sqrt(Float.intBitsToFloat((int) inputBits)))
                                 : AdvSimdLanes.doubleBits(Math.sqrt(Double.longBitsToDouble(inputBits)));
                 case RINTI -> AdvSimdLanes.fpUnary(AdvSimdFpUnaryOp.RINTN, esz, inputBits);
+                // B19.18 (`FEAT_FRINTTS`): sem mnemônico A32 equivalente (é ARMv8.5-A/A64 só) —
+                // reusa o MESMO núcleo escalar de {@link Ir64FpExecutor#roundToIntegralWithRangeLimit}
+                // em vez de duplicar arredondamento+saturação.
+                case RINT32Z -> roundRangeLimitedBits(esz, inputBits, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false);
+                case RINT32X -> roundRangeLimitedBits(esz, inputBits, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false);
+                case RINT64Z -> roundRangeLimitedBits(esz, inputBits, Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true);
+                case RINT64X -> roundRangeLimitedBits(esz, inputBits, Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true);
             };
             fp.setElement(op.rd(), i, esz, resultBits);
         }
         finishScalarAwareWrite(fp, op.rd(), op.scalar(), op.q(), esz);
         return false;
+    }
+
+    /// `RINT32*`/`RINT64*` vetorial (B19.18) — `esz` aqui é SEMPRE `2`(`f32`) ou `3`(`f64`, nunca
+    /// meia-precisão: este slot não tem forma `_h`, ver Javadoc de {@link Ir64Op.Fp64RoundRangeLimited}).
+    private static long roundRangeLimitedBits(
+            int esz, long inputBits, Ir64Op.Fp64RoundingDirection direction, boolean rangeIs64Bit) {
+        if (esz == 2) {
+            float a = Float.intBitsToFloat((int) inputBits);
+            return AdvSimdLanes.floatBits(
+                    (float) Ir64FpExecutor.roundToIntegralWithRangeLimit(a, direction, rangeIs64Bit));
+        }
+        double a = Double.longBitsToDouble(inputBits);
+        return AdvSimdLanes.doubleBits(
+                Ir64FpExecutor.roundToIntegralWithRangeLimit(a, direction, rangeIs64Bit));
     }
 
     /// `esz` de saída de {@link Ir64VectorFpUnaryOp#FCVTXN} — sempre `f32` (2), independente do

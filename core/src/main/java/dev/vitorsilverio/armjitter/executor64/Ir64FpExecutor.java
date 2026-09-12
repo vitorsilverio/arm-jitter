@@ -236,6 +236,50 @@ final class Ir64FpExecutor {
         return false;
     }
 
+    /// `FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X` (B19.18, `FEAT_FRINTTS`) — arredonda (reusando
+    /// {@link #roundToIntegral}) e depois satura para o alcance de um inteiro de 32/64 bits com
+    /// sinal, mantendo o resultado em ponto flutuante (nunca converte para inteiro de verdade —
+    /// Armadilha 1 da task, não confundir com `FCVTZS`/`FCVTZU`).
+    static boolean executeFpRoundRangeLimited(Aarch64Core core, Ir64Op.Fp64RoundRangeLimited op) {
+        Aarch64FpRegisters fp = core.fp();
+        if (op.doublePrecision()) {
+            fp.setDDouble(op.vd(),
+                    roundToIntegralWithRangeLimit(fp.dDouble(op.vn()), op.direction(), op.rangeIs64Bit()));
+        } else {
+            fp.setSFloat(op.vd(), (float)
+                    roundToIntegralWithRangeLimit(fp.sFloat(op.vn()), op.direction(), op.rangeIs64Bit()));
+        }
+        return false;
+    }
+
+    /// Limite de saturação de {@link #roundToIntegralWithRangeLimit} para `FRINT32*` — `2^31`
+    /// EXATO (não `2^31-1`): o valor-sentinela real do hardware é a potência de dois cheia
+    /// (`int32_min/max_as_float32` do QEMU são literalmente `∓2^31`), então `2^31` em si é um
+    /// resultado VÁLIDO (não satura), só valores estritamente maiores saturam.
+    private static final double FRINT_RANGE_LIMIT_32_BIT = 0x1p31;
+    /// Idem para `FRINT64*` — `2^63` exato.
+    private static final double FRINT_RANGE_LIMIT_64_BIT = 0x1p63;
+
+    /// Package-private (B19.18): reaproveitado por {@link Ir64VectorFpArithmeticExecutor} para
+    /// `RINT32Z_v`/`RINT32X_v`/`RINT64Z_v`/`RINT64X_v` — MESMO núcleo do escalar, sem duplicar.
+    /// `NaN` passa intocado (herdado de {@link #roundToIntegral}, nunca satura); `±Infinito` SATURA
+    /// como qualquer valor fora de alcance (não é caso especial — diferente do `NaN`).
+    static double roundToIntegralWithRangeLimit(
+            double value, Ir64Op.Fp64RoundingDirection direction, boolean rangeIs64Bit) {
+        double rounded = roundToIntegral(value, direction);
+        if (Double.isNaN(rounded)) {
+            return rounded;
+        }
+        double limit = rangeIs64Bit ? FRINT_RANGE_LIMIT_64_BIT : FRINT_RANGE_LIMIT_32_BIT;
+        if (rounded > limit) {
+            return limit;
+        }
+        if (rounded < -limit) {
+            return -limit;
+        }
+        return rounded;
+    }
+
     /// Package-private (B8.9): reaproveitado por {@link Ir64VectorFpArithmeticExecutor} para
     /// `FRINTx_v`/`FCVTxS_vi`/`FCVTxU_vi` — MESMA tabela de arredondamento do escalar (B8.5), sem
     /// duplicar a lógica.
