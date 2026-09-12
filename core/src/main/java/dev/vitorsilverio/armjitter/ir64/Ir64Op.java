@@ -74,7 +74,8 @@ public sealed interface Ir64Op permits
         Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace,
         Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
         Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited,
-        Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt {
+        Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt,
+        Ir64Op.VectorFpAbsoluteMaxMin {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -410,6 +411,8 @@ public sealed interface Ir64Op permits
         public static final int COMPARE_AND_BRANCH_IMMEDIATE = 143;
         /// B19.11e: `FSCALE` (`FEAT_FP8`) — ver {@link VectorFpScaleByInt}.
         public static final int VECTOR_FP_SCALE_BY_INT = 144;
+        /// B19.24: `FAMAX`/`FAMIN` (`FEAT_FAMINMAX`) — ver {@link VectorFpAbsoluteMaxMin}.
+        public static final int VECTOR_FP_ABSOLUTE_MAX_MIN = 145;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2403,6 +2406,33 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte do expoente (inteiro com sinal, não ponto flutuante).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_SCALE_BY_INT; }
+    }
+
+    /// `FAMAX`/`FAMIN` (B19.24, `FEAT_FAMINMAX`, `a64.decode:1208-1211`) — `Vd[i] = |Vn[i]| >=
+    /// |Vm[i]| ? Vn[i] : Vm[i]` ({@link #max}) ou o mínimo pelo mesmo critério — compara os
+    /// operandos pelo VALOR ABSOLUTO mas devolve o operando ORIGINAL do vencedor, com sinal
+    /// preservado (não `Math.abs` do vencedor). Vive no MESMO espaço de encoding "AdvSIMD three
+    /// same (FP)" que {@link VectorFpArithmeticThreeSame} (forma `_sd`, `opcode=0b1_1011`, o mesmo
+    /// de `MUL`/`MULX`, discriminado só por `(U,a)`) e no MESMO espaço `bit21=0` que
+    /// {@link VectorFpScaleByInt} usa para `FSCALE_h` (forma `_h`, achado real desta task: MESMA
+    /// classe de bug de misdecode que a B19.11e já documentou — `decodeAdvancedSimdCopy` lia `Rm`
+    /// como `imm5` de `INS`/`DUP` antes de existir um decoder dedicado aqui). NÃO reusa
+    /// {@link VectorFpArithmeticThreeSame}: o núcleo genérico `MAX`/`MIN` compara com sinal, não
+    /// por valor absoluto — reusar produziria semântica errada.
+    record VectorFpAbsoluteMaxMin(
+            /// `true` para `FAMAX`, `false` para `FAMIN`.
+            boolean max,
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: `1`(meia precisão)/`2`(simples)/`3`(dupla).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_ABSOLUTE_MAX_MIN; }
     }
 
     /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link

@@ -189,6 +189,21 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// B19.24 (`FEAT_FAMINMAX`): `FAMAX`/`FAMIN` — delega ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#fpAbsoluteMaxMin}). Sem forma escalar (ver Javadoc de
+    /// {@link Ir64Op.VectorFpAbsoluteMaxMin}).
+    static boolean executeAbsoluteMaxMin(Aarch64Core core, Ir64Op.VectorFpAbsoluteMaxMin op) {
+        Aarch64FpRegisters fp = core.fp();
+        int esz = op.esz();
+        int elements = elementsPerRegister(op.q(), esz);
+        AdvSimdLanes.fpAbsoluteMaxMin(fp, op.max(), esz, elements,
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
     /// B19.20 (`FEAT_FCMA`): `FCMLA_v` — delega ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpComplexMultiplyAccumulate}, B13.17).
     static boolean executeComplexMultiplyAccumulate(Aarch64Core core, Ir64Op.VectorFpComplexMultiplyAccumulate op) {

@@ -519,6 +519,8 @@ public final class Ir64BlockExecutor {
                     Ir64FpExecutor.executeFpRoundRangeLimited(core, (Ir64Op.Fp64RoundRangeLimited) op);
             case Ir64Op.Kind.VECTOR_FP_SCALE_BY_INT ->
                     Ir64VectorFpArithmeticExecutor.executeScaleByInt(core, (Ir64Op.VectorFpScaleByInt) op);
+            case Ir64Op.Kind.VECTOR_FP_ABSOLUTE_MAX_MIN ->
+                    Ir64VectorFpArithmeticExecutor.executeAbsoluteMaxMin(core, (Ir64Op.VectorFpAbsoluteMaxMin) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER ->
                     executeCompareAndBranchRegister(core, (Ir64Op.CompareAndBranchRegister) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE ->

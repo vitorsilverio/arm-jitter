@@ -861,14 +861,17 @@ public final class IsaCoverageReport {
         // ganharam decode de verdade (saem da lista); `SETGP`/`SETGM`/`SETGE` (variantes com tag,
         // B19.14, ainda não implementadas) agora recusam explicitamente em vez de misdecodificar —
         // também saem da lista de MISDECODE (viram `❌` honesto, não `⚠️`).
-        // `FEAT_FAMINMAX` (ARMv9.4-A): a 1ª ocorrência colide com o espaço de `INS`/`MOV` vetorial
-        // (ainda não corrigido, B19.24). A 2ª ocorrência já mede `❌` honestamente.
-        AARCH64_MISDECODED.put("FAMAX#1", "VectorInsertGeneral");
-        AARCH64_MISDECODED.put("FAMIN#1", "VectorInsertElement");
         // `FSCALE` (`FEAT_FP8`, Armv9.5-A) sofria da MESMA classe de bug (B19.11e, 2026-09-12):
         // `FSCALE_h` (1ª ocorrência) colidia com `INS_element` por falta de decode dedicado no
         // espaço `bit21=0`; corrigido interceptando ANTES do fallback EXT/permute/copy. Ambas as
         // ocorrências decodificam de verdade agora — fora da lista de MISDECODE.
+        // `FEAT_FAMINMAX` (ARMv9.4-A) sofria da MESMA classe de bug (B19.24, 2026-09-12): `FAMAX_h`/
+        // `FAMIN_h` (1ª ocorrência de cada) colidiam com `INS_element`/`VectorInsertGeneral` por
+        // falta de decode dedicado no MESMO espaço `bit21=0`; corrigido interceptando ANTES do
+        // fallback EXT/permute/copy, mesma disciplina de `FSCALE_h`. As formas `_sd` (2ª ocorrência)
+        // já mediam `❌` honestamente (decode ausente em `decodeVectorFpThreeSameOpcode`, nunca
+        // misdecode). Ambas as ocorrências decodificam de verdade agora — fora da lista de
+        // MISDECODE.
     }
 
     /// `architecture` é `null` para os grupos A64 não versionados ainda (`sve.decode`/

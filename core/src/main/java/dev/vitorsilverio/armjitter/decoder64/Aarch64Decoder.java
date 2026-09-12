@@ -1279,6 +1279,17 @@ public final class Aarch64Decoder {
     /// pela key `(u,a)=0b110` que nenhum dos três usa (ver Javadoc de
     /// {@link #ADVSIMD_FP8_SCALE_OPCODE_H}).
     private static final int ADVSIMD_FP8_SCALE_OPCODE_SD = 0b1_1111;
+    /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_h`/`FAMIN_h` — próprio, nunca colide
+    /// com `FSCALE_h`/`FCVTN_bh`/`FCVTN_bs`/RDM/FP16 no MESMO espaço `bit21=0` (conferido). `U`
+    /// (bit29) separa `FAMAX`(`u=0`)/`FAMIN`(`u=1`). Confirmado byte a byte contra
+    /// `aarch64-linux-gnu-as -march=armv9.4-a+faminmax` (WSL): `famax v0.8h,v1.8h,v2.8h` monta
+    /// `0x4ec21c20`, `famin v0.8h,v1.8h,v2.8h` monta `0x6ec21c20`.
+    private static final int ADVSIMD_FAMINMAX_OPCODE_H = 0b0_0011;
+    /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_sd`/`FAMIN_sd` dentro de
+    /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `MUL`/`MULX`, discriminado pelas keys
+    /// `(u,a)=0b010`/`0b110` que nenhum dos dois usa (ver Javadoc do intercept em
+    /// {@link #decodeAdvancedSimdThreeSameShape}).
+    private static final int ADVSIMD_FAMINMAX_OPCODE_SD = 0b1_1011;
     /// B19.5.4 (`FEAT_FP16`): MESMO slot "two-register miscellaneous" de
     /// {@link #ADVSIMD_INT_RM_TWO_REG_MISC} (`0b0_0000`), com `Rm[4:3]=0b11` em vez de `0b00` — o
     /// encoding real fixa `bit22` em `1` para marcar o grupo de meia precisão (nos `_sd` irmãos,
@@ -3915,6 +3926,15 @@ public final class Aarch64Decoder {
                     return fp8ScaleOp;
                 }
             }
+            // B19.24 (`FEAT_FAMINMAX`): `FAMAX_h`/`FAMIN_h` também vivem no MESMO espaço `bit21=0`
+            // (opcode PRÓPRIO, nunca colide com RDM/FP16/FP8 acima — conferido) — checado DEPOIS do
+            // FP8 e ANTES de FCMA/EXT/permute/copy/SHA. Sem a feature, pulado inteiro.
+            if (architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
+                Ir64Op faminmaxOp = decodeAdvancedSimdFaminmaxHalf(word, scalar, q);
+                if (faminmaxOp != null) {
+                    return faminmaxOp;
+                }
+            }
             // B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` também vivem no MESMO espaço
             // `bit21=0` (`U=1`+`bit10=1` fixos, opcode nunca colide com RDM/FP16/FP8 acima —
             // conferido exaustivamente, ver o Javadoc das constantes `ADVSIMD_FCMA_*`) — checado
@@ -4464,6 +4484,41 @@ public final class Aarch64Decoder {
         return new Ir64Op.VectorFpScaleByInt(q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
     }
 
+    /// B19.24 (`FEAT_FAMINMAX`): `FAMAX_h`/`FAMIN_h` — vivem no MESMO espaço `bit21=0` de
+    /// `FEAT_RDM`/FP16/FP8-convert/FP8-scale/FCMA/EXT-permute-copy/SHA, discriminados por
+    /// `a`(bit23)=1 fixo + `bit22`=1 fixo (marca meia precisão) + `bit10`=1 fixo +
+    /// `opcode`(bits[15:11])={@link #ADVSIMD_FAMINMAX_OPCODE_H}, com `U`(bit29) escolhendo
+    /// `FAMAX`(`u=0`)/`FAMIN`(`u=1`). **Achado real desta task, MESMA classe de bug que a B19.11e já
+    /// documentou para `FSCALE_h`**: sem este método, o encoding cai até
+    /// {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/copy), que lê `Rm`(bits[20:16], o
+    /// registrador `Vm` de VERDADE aqui) como se fosse `imm5` de `INS_element`/`DUP` — produzindo
+    /// `VectorInsertElement`/`VectorInsertGeneral` sempre que os bits baixos de `Rm` formassem um
+    /// `esz` válido (o `⚠️` medido pela task). {@link #decodeAdvancedSimdFp16ThreeSame}/
+    /// {@link #decodeAdvancedSimdFp8ThreeSame}/{@link #decodeAdvancedSimdFp8Scale} são tentados
+    /// ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
+    /// (conferido bit a bit: nenhuma key/opcode mapeado por eles bate `opcode=0b0_0011`). Sem forma
+    /// escalar real (`a64.decode` só lista `@qrrr_h`).
+    private Ir64Op decodeAdvancedSimdFaminmaxHalf(int word, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
+        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!a || !bit22 || !bit10) {
+            return null;
+        }
+        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        if (opcodeH != ADVSIMD_FAMINMAX_OPCODE_H) {
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorFpAbsoluteMaxMin(!u, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+    }
+
     /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
     /// `FEAT_RDM`/FP16/FP8-three-same/EXT-permute-TBL/copy/SHA (checado ANTES de EXT/permute, mesma
     /// disciplina de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate}), discriminados
@@ -4856,6 +4911,16 @@ public final class Aarch64Decoder {
         if (!scalar && opcode == ADVSIMD_FP8_SCALE_OPCODE_SD && u && a
                 && architecture.has(Aarch64Feature.FP8)) {
             return new Ir64Op.VectorFpScaleByInt(q, floatEsz, rd, rn, rm);
+        }
+        // B19.24 (`FEAT_FAMINMAX`): `FAMAX_sd`/`FAMIN_sd` vivem no MESMO opcode ({@link
+        // #ADVSIMD_FAMINMAX_OPCODE_SD}) que `MUL`/`MULX` em {@link #decodeVectorFpThreeSameOpcode},
+        // discriminados pelas keys `(u=0,a=1)=0b010`/`(u=1,a=1)=0b110` que nenhum dos dois usa
+        // (medido bit a bit: `decodeVectorFpThreeSameOpcode` já devolve `null` para essas keys —
+        // não é um misdecode a corrigir ali, é decode ausente a acrescentar aqui, mesma disciplina
+        // de `FSCALE_sd`/B19.11e). Sem forma escalar real.
+        if (!scalar && opcode == ADVSIMD_FAMINMAX_OPCODE_SD && a
+                && architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
+            return new Ir64Op.VectorFpAbsoluteMaxMin(!u, q, floatEsz, rd, rn, rm);
         }
         Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
         if (fpOp != null) {

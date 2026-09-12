@@ -900,6 +900,60 @@ public final class AdvSimdLanes {
         return (int) value;
     }
 
+    /// `FAMAX`/`FAMIN` (B19.24, `FEAT_FAMINMAX`): compara `baseRn[i]`/`baseRm[i]` pelo VALOR
+    /// ABSOLUTO, mas devolve o operando ORIGINAL do vencedor (com sinal preservado) — não
+    /// `Math.abs` do vencedor. Diferente de {@link AdvSimdFpThreeSameOp#MAX}/{@code MIN} (que
+    /// comparam com sinal) e de `FABS` seguido de `FMAX`/`FMIN` (que perderia o sinal do
+    /// resultado). Em empate de magnitude (incl. `+0.0`/`-0.0` e sinais opostos do mesmo valor
+    /// absoluto), cai para o `Math.max`/`Math.min` comum sobre os valores COM sinal — mesma
+    /// disciplina de desempate que {@link AdvSimdFpThreeSameOp#MAX}/{@code MIN} já usam neste
+    /// núcleo. `NaN` em qualquer operando produz `Math.abs(NaN)=NaN`, que nunca compara maior/menor
+    /// que nada — cai no mesmo desempate e `Math.max`/`Math.min` propagam o `NaN`, mesma disciplina
+    /// de {@link #singleThreeSame}/{@link #doubleThreeSame} (nenhum dos dois implementa
+    /// `FPProcessNaNs` completo hoje).
+    public static void fpAbsoluteMaxMin(AdvSimdRegisterWords regs, boolean max, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm) {
+        for (int i = 0; i < lanes; i++) {
+            long anBits = element(regs, baseRn, i, esz);
+            long bmBits = element(regs, baseRm, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfBits(absoluteMaxMin(max, halfToFloat(anBits), halfToFloat(bmBits)));
+                case 2 -> floatBits(absoluteMaxMin(max, Float.intBitsToFloat((int) anBits),
+                        Float.intBitsToFloat((int) bmBits)));
+                case 3 -> doubleBits(absoluteMaxMin(max, Double.longBitsToDouble(anBits),
+                        Double.longBitsToDouble(bmBits)));
+                default -> throw new IllegalArgumentException("esz inválido para FAMAX/FAMIN: " + esz);
+            };
+            setElement(regs, baseRd, i, esz, resultBits);
+        }
+    }
+
+    /// @see #fpAbsoluteMaxMin(AdvSimdRegisterWords, boolean, int, int, int, int, int)
+    private static float absoluteMaxMin(boolean max, float a, float b) {
+        float absA = Math.abs(a);
+        float absB = Math.abs(b);
+        if (absA > absB) {
+            return max ? a : b;
+        }
+        if (absB > absA) {
+            return max ? b : a;
+        }
+        return max ? Math.max(a, b) : Math.min(a, b);
+    }
+
+    /// @see #fpAbsoluteMaxMin(AdvSimdRegisterWords, boolean, int, int, int, int, int)
+    private static double absoluteMaxMin(boolean max, double a, double b) {
+        double absA = Math.abs(a);
+        double absB = Math.abs(b);
+        if (absA > absB) {
+            return max ? a : b;
+        }
+        if (absB > absA) {
+            return max ? b : a;
+        }
+        return max ? Math.max(a, b) : Math.min(a, b);
+    }
+
     /// Executa uma operação "vector/scalar × indexed element" de PONTO FLUTUANTE (ver {@link
     /// AdvSimdFpThreeSameOp}) sobre `elements` elementos de `1 << esz` bytes: cada lane de `baseRd`
     /// recebe `op` aplicada à lane correspondente de `baseRn` e ao elemento FIXO `index` de

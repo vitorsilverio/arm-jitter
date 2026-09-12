@@ -47,6 +47,32 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.24 fechar)
+
+**B19.24 FECHADA 2026-09-12** — A64 `FEAT_FAMINMAX` (`FAMAX`/`FAMIN`, `_h`+`_sd`, 4 células), a
+correção de misdecode que a B19.11e já tinha antecipado como MESMA causa raiz de `FSCALE_h`.
+Confirmado: `FAMAX_h`/`FAMIN_h` viviam no espaço `bit21=0` "AdvSIMD copy" sem decoder dedicado,
+produzindo `VectorInsertGeneral`/`VectorInsertElement` por engano (opcode PRÓPRIO `0b0_0011`,
+nunca colide com `FSCALE_h`/FCVTN/RDM/FP16 no mesmo espaço); `FAMAX_sd`/`FAMIN_sd` nunca foram
+misdecode de verdade (`❌` honesto no MESMO opcode de `MUL`/`MULX`, keys `0b010`/`0b110` que
+nenhum dos dois usa). **Achado que corrige o número da própria spec**: "4 células" media 4
+LINHAS, mas o delta real foi **8 células** — `FEAT_FAMINMAX` é `ARMv9.4-A` (não só `ARMv9.5-A`),
+e `ARMv9.5-A` estende `ARMv9.4-A`, então cada linha mede `✅` nas duas colunas. Novo record
+`Ir64Op.VectorFpAbsoluteMaxMin` (`Kind` 145, interpretado apenas), deliberadamente separado de
+`VectorFpArithmeticThreeSame` (o `MAX`/`MIN` genérico compara com sinal, não por valor absoluto).
+Núcleo `AdvSimdLanes.fpAbsoluteMaxMin`: compara por `|valor|`, devolve o operando ORIGINAL do
+vencedor (sinal preservado — `FAMAX(-5.0,3.0)=-5.0`, não `5.0`); empate de magnitude (incl. `NaN`)
+cai para `Math.max`/`Math.min` com sinal, mesma disciplina de `MAX`/`MIN` já usada no núcleo.
+`docs/COBERTURA-ISA.md`: `ARMv9.4-A` 1117→1121/1125, `ARMv9.5-A` 1134→1138/1146, global
+19077→19085/19215 (99% inalterado no arredondamento). `docs/COBERTURA-JIT.md` regenerado
+(`Ir64Op.Kind` 145 total). `mvn -o test` verde (3777; as mesmas 3 falhas pré-existentes) +
+`install` + `javadoc:jar`. **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir na família B19.11/FP8**: `B19.11b` (`FEAT_FP8FMA`, 4 células), `B19.11c`/
+`B19.11d` (`FP8_DOT_PRODUCT_2WAY`/`4WAY`, 2+2 células) — specs prontas desde 2026-09-10, nenhuma
+bloqueada. `C12.5`/`C12.10` (emissão JIT nativa A64) também seguem pegáveis, dimensão 2 do
+roadmap.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.11e fechar)
 
 **B19.11e FECHADA 2026-09-12** — A64 `FSCALE` (`_h`/`_sd`, 2 células, `FEAT_FP8`), a correção de
