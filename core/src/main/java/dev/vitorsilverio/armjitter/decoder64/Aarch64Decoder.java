@@ -1267,6 +1267,18 @@ public final class Aarch64Decoder {
     /// "AdvSIMD three same (FP16)"/RDM) — nunca colidem. Confirmado byte a byte contra `a64.decode`
     /// real (`target/isa-decode/a64.decode:1216-1217`).
     private static final int ADVSIMD_FP8_THREE_SAME_CONVERT_OPCODE = 0b1_1110;
+    /// B19.11e (`FEAT_FP8`): opcode (bits[15:11]) de `FSCALE_h` — MESMO valor que, OR'ado com
+    /// {@link #ADVSIMD_FP16_OPCODE_TO_SD_BIT}, produz `0b1_1111` (o opcode de `DIV`/`RECPS`/
+    /// `RSQRTS`/`FSCALE_sd` em {@link #decodeVectorFpThreeSameOpcode}) — a key `(u=1,a=1)=0b110`
+    /// não é mapeada por nenhum dos três, então esta forma nunca colide. Confirmado byte a byte
+    /// contra `aarch64-linux-gnu-as -march=armv8.2-a+fp8` (WSL): `fscale v0.8h,v1.8h,v2.8h` monta
+    /// `0x6ec23c20`.
+    private static final int ADVSIMD_FP8_SCALE_OPCODE_H = 0b0_0111;
+    /// B19.11e (`FEAT_FP8`): opcode (bits[15:11]) de `FSCALE_sd` dentro de
+    /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `DIV`/`RECPS`/`RSQRTS`, discriminado
+    /// pela key `(u,a)=0b110` que nenhum dos três usa (ver Javadoc de
+    /// {@link #ADVSIMD_FP8_SCALE_OPCODE_H}).
+    private static final int ADVSIMD_FP8_SCALE_OPCODE_SD = 0b1_1111;
     /// B19.5.4 (`FEAT_FP16`): MESMO slot "two-register miscellaneous" de
     /// {@link #ADVSIMD_INT_RM_TWO_REG_MISC} (`0b0_0000`), com `Rm[4:3]=0b11` em vez de `0b00` — o
     /// encoding real fixa `bit22` em `1` para marcar o grupo de meia precisão (nos `_sd` irmãos,
@@ -3896,6 +3908,12 @@ public final class Aarch64Decoder {
                 if (fp8ThreeSameOp != null) {
                     return fp8ThreeSameOp;
                 }
+                // B19.11e: `FSCALE_h` — mesma feature, opcode DIFERENTE de FCVTN_bh/FCVTN_bs
+                // (nunca colide, ver Javadoc de {@link #decodeAdvancedSimdFp8Scale}).
+                Ir64Op fp8ScaleOp = decodeAdvancedSimdFp8Scale(word, scalar, q);
+                if (fp8ScaleOp != null) {
+                    return fp8ScaleOp;
+                }
             }
             // B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` também vivem no MESMO espaço
             // `bit21=0` (`U=1`+`bit10=1` fixos, opcode nunca colide com RDM/FP16/FP8 acima —
@@ -4413,6 +4431,39 @@ public final class Aarch64Decoder {
         return new Ir64Op.VectorFpConvertToFp8(halfSource, q, rd, rn, rm);
     }
 
+    /// B19.11e (`FEAT_FP8`): `FSCALE_h` — vive no MESMO espaço `bit21=0` de `FEAT_RDM`/FP16/
+    /// FP8-convert/FCMA/EXT-permute-copy/SHA, discriminado por `U`=1 fixo + `a`(bit23)=1 fixo +
+    /// `bit22`=1 fixo (marca meia precisão, nunca um `sz` livre aqui) + `bit10`=1 fixo +
+    /// `opcode`(bits[15:11])={@link #ADVSIMD_FP8_SCALE_OPCODE_H}. **Achado real desta task**: sem
+    /// este método, o encoding caía até {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/
+    /// copy), que leu `Rm`(bits[20:16], o registrador `Vm` de VERDADE aqui) como se fosse `imm5`
+    /// de `INS_element`/`DUP` — produzindo `VectorInsertElement`/`VectorInsertGeneral` sempre que
+    /// os bits baixos de `Rm` calhassem de formar um `esz` válido (o `⚠️` medido pela task).
+    /// {@link #decodeAdvancedSimdFp16ThreeSame} e {@link #decodeAdvancedSimdFp8ThreeSame} são
+    /// tentados ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
+    /// (conferido bit a bit: nenhuma key mapeada por eles bate `(u=1,a=1)`). Sem forma escalar
+    /// real (`a64.decode` só lista `@qrrr_h`).
+    private Ir64Op decodeAdvancedSimdFp8Scale(int word, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
+        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (!u || !a || !bit22 || !bit10) {
+            return null;
+        }
+        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        if (opcodeH != ADVSIMD_FP8_SCALE_OPCODE_H) {
+            return null;
+        }
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorFpScaleByInt(q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+    }
+
     /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
     /// `FEAT_RDM`/FP16/FP8-three-same/EXT-permute-TBL/copy/SHA (checado ANTES de EXT/permute, mesma
     /// disciplina de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate}), discriminados
@@ -4796,6 +4847,16 @@ public final class Aarch64Decoder {
         // `decodeVectorFpThreeSameOpcode` (`ADD`/`SUB`/`DIV`/`MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/
         // `MLS`) NÃO têm forma escalar real: com prefixo escalar, esses encodings são reservados ⇒
         // `unsupported` (G8), nunca `VectorFpArithmeticThreeSame` nem a forma vetorial.
+        // B19.11e (`FEAT_FP8`): `FSCALE_sd` vive no MESMO opcode ({@link
+        // #ADVSIMD_FP8_SCALE_OPCODE_SD}) que `DIV`/`RECPS`/`RSQRTS` em
+        // {@link #decodeVectorFpThreeSameOpcode}, discriminado pela key `(u=1,a=1)=0b110` que
+        // NENHUM dos três usa (medido bit a bit: `decodeVectorFpThreeSameOpcode` já devolve `null`
+        // para essa key — não é um misdecode a corrigir ali, é decode ausente a acrescentar aqui).
+        // Sem forma escalar real.
+        if (!scalar && opcode == ADVSIMD_FP8_SCALE_OPCODE_SD && u && a
+                && architecture.has(Aarch64Feature.FP8)) {
+            return new Ir64Op.VectorFpScaleByInt(q, floatEsz, rd, rn, rm);
+        }
         Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
         if (fpOp != null) {
             if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {

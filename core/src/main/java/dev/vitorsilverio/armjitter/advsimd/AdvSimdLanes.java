@@ -861,6 +861,45 @@ public final class AdvSimdLanes {
         };
     }
 
+    /// `FSCALE` (B19.11e, `FEAT_FP8`): escala cada lane de ponto flutuante de `baseRn` por
+    /// `2^baseRm[i]`, lendo a lane de `baseRm` como um INTEIRO COM SINAL (não um valor de ponto
+    /// flutuante) — o mesmo padrão de `scalbn`/`ldexp` da libc, mas com o expoente vindo lane a
+    /// lane de outro vetor em vez de um imediato escalar. `Math.scalb` reproduz EXATAMENTE
+    /// `FPScale` do ARM DDI 0487 nos casos especiais (`NaN` passa intocado, `±Infinito`/`±0`
+    /// preservam o sinal sem escalar, overflow/underflow do expoente resultante saturam em
+    /// `±Infinito`/zero — conferido contra a documentação do próprio JDK, não assumido). O
+    /// expoente é grampeado a `int` ANTES de {@link Math#scalb}: um `long` fora da faixa de `int`
+    /// já produziria o MESMO resultado saturado (a magnitude excede em muito qualquer expoente
+    /// IEEE representável), então o grampeamento não muda nenhum resultado observável. Sem forma
+    /// escalar real (`a64.decode` só lista `@qrrr_h`/`@qrrr_sd` vetoriais).
+    public static void fpScaleByInt(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd, int baseRn,
+            int baseRm) {
+        for (int i = 0; i < lanes; i++) {
+            long anBits = element(regs, baseRn, i, esz);
+            long bmBits = element(regs, baseRm, i, esz);
+            int scale = clampToScaleFactor(signExtend(bmBits, esz));
+            long resultBits = switch (esz) {
+                case 1 -> halfBits(Math.scalb(halfToFloat(anBits), scale));
+                case 2 -> floatBits(Math.scalb(Float.intBitsToFloat((int) anBits), scale));
+                case 3 -> doubleBits(Math.scalb(Double.longBitsToDouble(anBits), scale));
+                default -> throw new IllegalArgumentException("esz inválido para FSCALE: " + esz);
+            };
+            setElement(regs, baseRd, i, esz, resultBits);
+        }
+    }
+
+    /// Grampeia o expoente de {@link #fpScaleByInt} à faixa de `int` sem mudar nenhum resultado
+    /// observável (ver Javadoc de {@link #fpScaleByInt}).
+    private static int clampToScaleFactor(long value) {
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (value < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) value;
+    }
+
     /// Executa uma operação "vector/scalar × indexed element" de PONTO FLUTUANTE (ver {@link
     /// AdvSimdFpThreeSameOp}) sobre `elements` elementos de `1 << esz` bytes: cada lane de `baseRd`
     /// recebe `op` aplicada à lane correspondente de `baseRn` e ao elemento FIXO `index` de

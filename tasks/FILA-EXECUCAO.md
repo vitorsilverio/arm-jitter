@@ -47,6 +47,32 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.11e fechar)
+
+**B19.11e FECHADA 2026-09-12** — A64 `FSCALE` (`_h`/`_sd`, 2 células, `FEAT_FP8`), a correção de
+misdecode (não feature nova) da família FP8. **Causa raiz do `⚠️` medido**: `FSCALE_h` vive no
+espaço `bit21=0` "AdvSIMD copy" (`INS`/`DUP`, B8.12) sem nenhum decoder dedicado antes desta task,
+então `decodeAdvancedSimdCopy` lia `Rm` (o registrador `Vm` real) como se fosse `imm5` de
+`INS_element`/`INS_general` — produzia `VectorInsertElement`/`VectorInsertGeneral` sempre que os
+bits baixos de `Rm` formassem um `esz` válido (quase sempre, para um registrador real). `FSCALE_sd`
+NUNCA foi misdecode de verdade — `decodeVectorFpThreeSameOpcode` já devolvia `null` corretamente
+para sua key `(u=1,a=1)`, media `❌` honesto (decode ausente, não confusão). **Achado que abre
+caminho para a B19.24 (ainda `⬜`)**: `FAMAX`/`FAMIN` sofrem da MESMA classe de bug no MESMO espaço
+de encoding — causa raiz já documentada no `## Resultado` desta task para reuso direto. Novo record
+`Ir64Op.VectorFpScaleByInt` (`Kind` 144) deliberadamente separado de `VectorFpArithmeticThreeSame`
+(o núcleo genérico interpretaria o expoente inteiro de `Rm` como ponto flutuante, semântica
+errada); núcleo `AdvSimdLanes.fpScaleByInt` delega a `Math.scalb` (reproduz `FPScale` do ARM DDI
+0487 exatamente nos casos especiais, testado com escala positiva/negativa/overflow/underflow/NaN).
+`docs/COBERTURA-ISA.md`: as 2 células `⚠️`/`❌`→`✅` em `ARMv9.5-A` (19075→19077/19215, 99%
+inalterado; `ARMv9.5-A` 98% inalterado). `docs/COBERTURA-JIT.md` regenerado (`Ir64Op.Kind`
+144→145, só interpretado). `mvn -o test` verde (3756; as mesmas 3 falhas pré-existentes) +
+`install` + `javadoc:jar`. **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir na família B19.11/FP8**: `B19.11b` (`FEAT_FP8FMA`, 4 células),
+`B19.11c`/`B19.11d` (`FP8_DOT_PRODUCT_2WAY`/`4WAY`, 2+2 células) — todas com spec pronta desde
+2026-09-10, nenhuma bloqueada. `B19.24` (`FEAT_FAMINMAX`, misdecode de `FAMAX`/`FAMIN`, mesma
+classe de bug desta task, causa raiz já documentada) também pegável.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.22 fechar)
 
 **B19.22 FECHADA 2026-09-12** — A64 `FEAT_CMPBR` (`CB_cond` 4 formas + `CB_cond_imm`, 5 células, só

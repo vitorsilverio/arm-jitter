@@ -74,7 +74,7 @@ public sealed interface Ir64Op permits
         Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace,
         Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
         Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited,
-        Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate {
+        Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -408,6 +408,8 @@ public sealed interface Ir64Op permits
         public static final int COMPARE_AND_BRANCH_REGISTER = 142;
         /// B19.22: `CB_cond_imm` (`FEAT_CMPBR`) — ver {@link CompareAndBranchImmediate}.
         public static final int COMPARE_AND_BRANCH_IMMEDIATE = 143;
+        /// B19.11e: `FSCALE` (`FEAT_FP8`) — ver {@link VectorFpScaleByInt}.
+        public static final int VECTOR_FP_SCALE_BY_INT = 144;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2372,6 +2374,35 @@ public sealed interface Ir64Op permits
             /// Registrador `V` fonte 2 (rotacionado antes de somar).
             int rm) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_ADD; }
+    }
+
+    /// `FSCALE` (B19.11e, `FEAT_FP8`, `a64.decode:1213-1214`) — escala cada lane de ponto
+    /// flutuante de {@link #rn} por `2^Rm[i]`, lendo a lane de {@link #rm} como um INTEIRO COM
+    /// SINAL (não um valor de ponto flutuante), largura igual à do elemento — análogo a
+    /// `scalbn`/`ldexp` da libc com o expoente vindo lane a lane de outro vetor. Vive no MESMO
+    /// espaço de encoding "AdvSIMD three same (FP)" que {@link VectorFpArithmeticThreeSame}
+    /// (`opcode=0b1_1111`, o mesmo de `DIV`/`RECPS`/`RSQRTS`, discriminado só por `(U,a)`), mas
+    /// NÃO reusa aquele record: o núcleo genérico de "three same (FP)" ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}) interpreta AMBOS os
+    /// operandos como ponto flutuante, o que produziria semântica errada para `Rm` aqui. Sem
+    /// forma escalar real (ver Javadoc de
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpScaleByInt}). Achado real desta
+    /// task: a forma
+    /// `_h` (meia precisão) vive num espaço de encoding DIFERENTE (`bit21=0`, prefixo fixo
+    /// completo, discriminado de `INS`/`DUP` por opcode — ver o decoder), mas produz o MESMO
+    /// record (`esz` distingue).
+    record VectorFpScaleByInt(
+            /// `true` para arranjo de 128 bits, `false` para 64 bits.
+            boolean q,
+            /// `log2` do tamanho do elemento em bytes: `1`(meia precisão)/`2`(simples)/`3`(dupla).
+            int esz,
+            /// Registrador `V` de destino.
+            int rd,
+            /// Registrador `V` fonte do valor a escalar.
+            int rn,
+            /// Registrador `V` fonte do expoente (inteiro com sinal, não ponto flutuante).
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP_SCALE_BY_INT; }
     }
 
     /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link
