@@ -374,6 +374,38 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
+    /// Cortex-M3/SC300 — **ARMv7-M puro, sem a extensão DSP** (B15.1). `ARMV7M` acima já inclui
+    /// DSP inteira (`PACK_SATURATE`/`PARALLEL_SIMD`/`SIGNED_MULTIPLY_MEDIA`/`DSP_MULTIPLY`/`UMAAL`)
+    /// desde a B9.16 — ou seja, o que se chama `ARMV7M` hoje é, na nomenclatura real do manual ARM,
+    /// um **ARMv7E-M** (ver {@link #ARMV7EM}), não um ARMv7-M puro. A B12.4 (catálogo de
+    /// processadores) encontrou essa lacuna ao tentar catalogar o Cortex-M3 (sem DSP): mapeá-lo
+    /// para `ARMV7M` seria uma entrada factualmente errada, não uma aproximação conservadora.
+    /// **G3**: `ARMV7M` permanece intocado (nome e comportamento) — este preset nasce AO LADO,
+    /// nunca o substitui.
+    private static final ArmArchitecture ARMV7M_PURE_FEATURES = extending(ARMV6M_FEATURES, "ARMv7-M (sem DSP)",
+            ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE,
+            ArmFeature.EXCLUSIVE_WORD, ArmFeature.EXCLUSIVE_SIZED,
+            ArmFeature.MOVW_MOVT, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE,
+            ArmFeature.MLS_MULTIPLY, ArmFeature.DIVIDE, ArmFeature.SATURATING,
+            ArmFeature.M_FAULT_MASKING, ArmFeature.M_PROFILE_WIDE_MISC_CONTROL,
+            ArmFeature.CLZ, ArmFeature.LDRD_STRD, ArmFeature.PRELOAD_HINTS);
+
+    public static final ArmArchitecture ARMV7M_PURE = ARMV7M_PURE_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7M_PURE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7M_PURE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV7M_PURE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_PURE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_PURE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
+    /// Cortex-M4/M7 — nome arquiteturalmente correto do preset `ARMV7M` acima (que já é, de fato,
+    /// um ARMv7E-M desde a B9.16, ver Javadoc de {@link #ARMV7M_PURE}). Alias por IDENTIDADE (não
+    /// uma cópia reconstruída): existe só para o catálogo de processadores (B15.7) poder nomear
+    /// Cortex-M4/M7 sem reaproveitar o nome ambíguo `ARMV7M`, sem duplicar objeto nem manutenção.
+    public static final ArmArchitecture ARMV7EM = ARMV7M;
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

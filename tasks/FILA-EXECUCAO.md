@@ -47,6 +47,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B15.1 fechar)
+
+**B15.1 FECHADA 2026-09-12** — todo o épico A64 **B19 está fechado** (última pendente, B19.11d,
+fechou mais cedo no mesmo dia); com o A64 saturado em 99-100% em toda coluna de versão, a próxima
+lacuna real de `docs/COBERTURA-ISA.md` é o perfil M (`v6-M` 88%, `v7-M` 96%), inteiramente
+explicada pelo épico **B15** (perfil M moderno, ainda `📋 plano`). B15.1 é o primeiro degrau da
+escada: `ArmArchitecture.ARMV7M_PURE` (ARMv7-M sem DSP, para Cortex-M3/SC300) + `ARMV7EM` (alias
+por identidade do `ARMV7M` existente, que já é um ARMv7E-M desde a B9.16). **Zero célula nova na
+tabela** (spec explícita: os dois presets não entram no mapa `ARM_ARCHITECTURES` de
+`IsaCoverageReport` ainda) — o ganho desta task é desbloquear B15.2-B15.7 (que sim fecham as 11
+células a 0% de `m-nocp.decode` + o catálogo de 10 Cortex-M pendentes da B12.4), sem qualquer risco
+de regressão (mudança puramente aditiva, G3 preservado byte a byte no preset `ARMV7M` existente).
+`docs/COBERTURA-ISA.md` byte a byte idêntica. `mvn -o test` verde (3847; as mesmas 3 falhas
+pré-existentes de mojibake) + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado** na
+task.
+
+**Pegáveis a seguir**: `B15.2` (`NOCP`/`NOCP_8_1` — exceção de coprocessador ausente,
+`MProfileExceptionModel`, 2 células reais) é o próximo degrau natural da escada B15 (depende de
+B15.1 ✅) — mas **ainda não tem spec própria escrita** (só a entrada na tabela de `b15-plano-armv8m.md`),
+precisa de uma rodada de spec antes de ser executável, seguindo o mesmo padrão que a B19.9 aplicou
+aos 19 degraus do B19. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap, sem relação com o perfil M.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.11d fechar)
 
 **B19.11d FECHADA 2026-09-12** — A64 `FEAT_FP8DOT4` (`FDOT_sb_v`/`FDOT_sb_vi`, 2 células), a última
