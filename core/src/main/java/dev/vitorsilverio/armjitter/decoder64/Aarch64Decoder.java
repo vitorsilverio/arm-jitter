@@ -12,6 +12,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
+import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchCondition;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
@@ -189,6 +190,33 @@ public final class Aarch64Decoder {
     private static final int TBZ_FIXED_PATTERN = 0b011011;
     private static final int IMM19_SHIFT = 5;
     private static final int IMM19_BITS = 19;
+
+    // ── B19.22: CB_cond/CB_cond_imm (`FEAT_CMPBR`) — MESMO campo `COMPARE_BRANCH_FIXED_SHIFT`
+    // ── acima (bits[30:25]), prefixo PRÓPRIO `0b111010` (vizinho de CBZ/TBZ, nunca colide: os 3
+    // ── prefixos de 6 bits são distintos). `bit24` distingue a forma registrador (`0`, `CB_cond`)
+    // ── da forma imediata (`1`, `CB_cond_imm`) dentro do MESMO prefixo — reaproveita `BIT_24`.
+    // ── CB_cond: sf/esz-hi(31) 1110100(30:24) cc(23:21) Rm(20:16) eszField(15:14) imm9(13:5)
+    // ── Rt(4:0) — `eszField`: `00`=word(sf=0)/doubleword(sf=1), `10`=byte(CBB), `11`=halfword(CBH),
+    // ── `01` reservado (sem forma no manual, G8: recusar).
+    private static final int COMPARE_BRANCH_COND_FIXED_PATTERN = 0b111010;
+    private static final int CB_COND_CC_SHIFT = 21;
+    private static final int CB_COND_CC_MASK = 0b111;
+    private static final int CB_COND_RM_SHIFT = 16;
+    private static final int CB_COND_ESZ_FIELD_SHIFT = 14;
+    private static final int CB_COND_ESZ_FIELD_MASK = 0b11;
+    private static final int CB_COND_ESZ_FIELD_WORD_OR_DOUBLE = 0b00;
+    private static final int CB_COND_ESZ_FIELD_BYTE = 0b10;
+    private static final int CB_COND_ESZ_FIELD_HALF = 0b11;
+    // ── CB_cond_imm: sf(31) 1110101(30:24) cc(23:21) imm6(20:15) reservado=0(14) imm9(13:5)
+    // ── Rt(4:0) — `imm6` é `UInt`, NUNCA estendido com sinal (ao contrário do deslocamento).
+    private static final int CB_COND_IMM6_SHIFT = 15;
+    private static final int CB_COND_IMM6_BITS = 6;
+    private static final int CB_COND_IMM_RESERVED_BIT14 = 1 << 14;
+    // ── deslocamento de desvio comum às duas formas (`%imm9 !function=times_4` do a64.decode) —
+    // ── MESMA posição de bits em ambas, mas shift/largura PRÓPRIOS (não confundir com
+    // ── `SINGLE_IMM9_SHIFT`, usado por load/store unscaled, campo em posição diferente).
+    private static final int CB_COND_OFFSET_IMM9_SHIFT = 5;
+    private static final int CB_COND_OFFSET_IMM9_BITS = 9;
 
     // ── TBZ/TBNZ: b5(31) 011011(30:25) op(24) b40(23:19) imm14(18:5) Rt(4:0) ────────────────
     private static final int TBZ_B5_SHIFT = 31;
@@ -6212,6 +6240,9 @@ public final class Aarch64Decoder {
         if (sixBitFixed == TBZ_FIXED_PATTERN) {
             return decodeTestBranch(word, address);
         }
+        if (sixBitFixed == COMPARE_BRANCH_COND_FIXED_PATTERN) {
+            return decodeCompareAndBranchConditional(word, address);
+        }
         int branchRegisterFixed = (word >>> BRANCH_REGISTER_FIXED_SHIFT) & BRANCH_REGISTER_FIXED_7BIT_MASK;
         if (branchRegisterFixed == BRANCH_REGISTER_FIXED_PATTERN) {
             return decodeBranchRegister(word, address);
@@ -6274,6 +6305,86 @@ public final class Aarch64Decoder {
         int rt = word & REGISTER_FIELD_MASK;
         return new Ir64Op.CompareBranch64(
                 Ir64CompareBranchForm.TBZ_TBNZ, rt, true, bitPosition, branchIfNonZero, target);
+    }
+
+    /// `CB_cond`/`CB_cond_imm` (`FEAT_CMPBR`, B19.22) — `bit24` distingue as duas formas dentro do
+    /// MESMO prefixo de 6 bits `COMPARE_BRANCH_COND_FIXED_PATTERN`.
+    private Ir64Op decodeCompareAndBranchConditional(int word, long address) {
+        if (!architecture.has(Aarch64Feature.COMPARE_AND_BRANCH)) {
+            throw unsupported(word, address);
+        }
+        boolean immediateForm = (word & BIT_24) != 0;
+        return immediateForm
+                ? decodeCompareAndBranchImmediate(word, address)
+                : decodeCompareAndBranchRegister(word, address);
+    }
+
+    /// Mapeamento de `cc` (3 bits) da forma REGISTRADOR de `CB_cond` — confirmado contra
+    /// `trans_CB_cond` do QEMU real (`cb_cond[8]`): `4`/`5` são reservados (G8, recusar).
+    private static Ir64CompareBranchCondition decodeCompareBranchRegisterCondition(
+            int cc, int word, long address) {
+        return switch (cc) {
+            case 0 -> Ir64CompareBranchCondition.GREATER_THAN;
+            case 1 -> Ir64CompareBranchCondition.GREATER_OR_EQUAL;
+            case 2 -> Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED;
+            case 3 -> Ir64CompareBranchCondition.GREATER_OR_EQUAL_UNSIGNED;
+            case 6 -> Ir64CompareBranchCondition.EQUAL;
+            case 7 -> Ir64CompareBranchCondition.NOT_EQUAL;
+            default -> throw unsupported(word, address); // cc==4/5: reservado
+        };
+    }
+
+    /// Mapeamento de `cc` (3 bits) da forma IMEDIATA de `CB_cond_imm` — confirmado contra
+    /// `trans_CB_cond_imm` do QEMU real (`cb_cond[8]`), DIFERENTE do mapeamento da forma
+    /// registrador (`LT`/`LTU` aqui onde a forma registrador teria `GE`/`GEU` no MESMO valor de
+    /// `cc`; achado documentado explicitamente no comentário-fonte do QEMU: "CB imm and CB encode
+    /// the condition differently").
+    private static Ir64CompareBranchCondition decodeCompareBranchImmediateCondition(
+            int cc, int word, long address) {
+        return switch (cc) {
+            case 0 -> Ir64CompareBranchCondition.GREATER_THAN;
+            case 1 -> Ir64CompareBranchCondition.LESS_THAN;
+            case 2 -> Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED;
+            case 3 -> Ir64CompareBranchCondition.LESS_THAN_UNSIGNED;
+            case 6 -> Ir64CompareBranchCondition.EQUAL;
+            case 7 -> Ir64CompareBranchCondition.NOT_EQUAL;
+            default -> throw unsupported(word, address); // cc==4/5: reservado
+        };
+    }
+
+    private Ir64Op decodeCompareAndBranchRegister(int word, long address) {
+        int cc = (word >>> CB_COND_CC_SHIFT) & CB_COND_CC_MASK;
+        Ir64CompareBranchCondition condition = decodeCompareBranchRegisterCondition(cc, word, address);
+        int eszField = (word >>> CB_COND_ESZ_FIELD_SHIFT) & CB_COND_ESZ_FIELD_MASK;
+        Ir64MemSize size = switch (eszField) {
+            case CB_COND_ESZ_FIELD_WORD_OR_DOUBLE ->
+                    ((word >>> SF_SHIFT) & 1) != 0 ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
+            case CB_COND_ESZ_FIELD_BYTE -> Ir64MemSize.BYTE;
+            case CB_COND_ESZ_FIELD_HALF -> Ir64MemSize.HALF;
+            default -> throw unsupported(word, address); // eszField==0b01: reservado
+        };
+        int rm = (word >>> CB_COND_RM_SHIFT) & REGISTER_FIELD_MASK;
+        int rt = word & REGISTER_FIELD_MASK;
+        long imm9 = (word >>> CB_COND_OFFSET_IMM9_SHIFT) & bitMask(CB_COND_OFFSET_IMM9_BITS);
+        long offset = signExtend(imm9, CB_COND_OFFSET_IMM9_BITS) * BYTES_PER_BRANCH_UNIT;
+        long target = address + offset;
+        return new Ir64Op.CompareAndBranchRegister(condition, rt, rm, size, target);
+    }
+
+    private Ir64Op decodeCompareAndBranchImmediate(int word, long address) {
+        if ((word & CB_COND_IMM_RESERVED_BIT14) != 0) {
+            // bit[14] reservado: nenhuma forma no manual o usa em `1` — G8, recusar.
+            throw unsupported(word, address);
+        }
+        int cc = (word >>> CB_COND_CC_SHIFT) & CB_COND_CC_MASK;
+        Ir64CompareBranchCondition condition = decodeCompareBranchImmediateCondition(cc, word, address);
+        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
+        int immediate = (word >>> CB_COND_IMM6_SHIFT) & (int) bitMask(CB_COND_IMM6_BITS);
+        int rt = word & REGISTER_FIELD_MASK;
+        long imm9 = (word >>> CB_COND_OFFSET_IMM9_SHIFT) & bitMask(CB_COND_OFFSET_IMM9_BITS);
+        long offset = signExtend(imm9, CB_COND_OFFSET_IMM9_BITS) * BYTES_PER_BRANCH_UNIT;
+        long target = address + offset;
+        return new Ir64Op.CompareAndBranchImmediate(condition, rt, wide, immediate, target);
     }
 
     private Ir64Op decodeBranchRegister(int word, long address) {

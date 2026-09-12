@@ -17,6 +17,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
+import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchCondition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
@@ -516,6 +517,10 @@ public final class Ir64BlockExecutor {
                             core, (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) op);
             case Ir64Op.Kind.FP64_ROUND_RANGE_LIMITED ->
                     Ir64FpExecutor.executeFpRoundRangeLimited(core, (Ir64Op.Fp64RoundRangeLimited) op);
+            case Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER ->
+                    executeCompareAndBranchRegister(core, (Ir64Op.CompareAndBranchRegister) op);
+            case Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE ->
+                    executeCompareAndBranchImmediate(core, (Ir64Op.CompareAndBranchImmediate) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }
@@ -1088,6 +1093,53 @@ public final class Ir64BlockExecutor {
         }
         core.setProgramCounter(op.target());
         return true;
+    }
+
+    /// `CB_cond` (`FEAT_CMPBR`, B19.22) — compara `Rt`/`Rm` sem tocar `NZCV`. Reusa
+    /// {@link #signExtendFromSize}/{@link #zeroTruncateToSize} (que já são identidade para
+    /// {@link Ir64MemSize#DOUBLEWORD}, dispensando um caso especial de 64 bits aqui) para estender
+    /// os operandos conforme a assinatura da condição — só `GT`/`GE` são com sinal
+    /// ({@link Ir64CompareBranchCondition#isSigned}).
+    private boolean executeCompareAndBranchRegister(Aarch64Core core, Ir64Op.CompareAndBranchRegister op) {
+        long rawT = core.x(op.rt());
+        long rawM = core.x(op.rm());
+        long t = op.condition().isSigned()
+                ? signExtendFromSize(rawT, op.size()) : zeroTruncateToSize(rawT, op.size());
+        long m = op.condition().isSigned()
+                ? signExtendFromSize(rawM, op.size()) : zeroTruncateToSize(rawM, op.size());
+        if (!evaluateCompareBranchCondition(op.condition(), t, m)) {
+            return false;
+        }
+        core.setProgramCounter(op.target());
+        return true;
+    }
+
+    /// `CB_cond_imm` (`FEAT_CMPBR`, B19.22) — compara `Rt` contra o imediato `UInt(imm6)` sem tocar
+    /// `NZCV`.
+    private boolean executeCompareAndBranchImmediate(Aarch64Core core, Ir64Op.CompareAndBranchImmediate op) {
+        long rawT = core.x(op.rt());
+        long t = op.wide()
+                ? rawT
+                : (op.condition().isSigned() ? (long) (int) rawT : rawT & 0xFFFF_FFFFL);
+        if (!evaluateCompareBranchCondition(op.condition(), t, (long) op.immediate())) {
+            return false;
+        }
+        core.setProgramCounter(op.target());
+        return true;
+    }
+
+    private static boolean evaluateCompareBranchCondition(
+            Ir64CompareBranchCondition condition, long a, long b) {
+        return switch (condition) {
+            case GREATER_THAN -> a > b;
+            case GREATER_OR_EQUAL -> a >= b;
+            case GREATER_THAN_UNSIGNED -> Long.compareUnsigned(a, b) > 0;
+            case GREATER_OR_EQUAL_UNSIGNED -> Long.compareUnsigned(a, b) >= 0;
+            case LESS_THAN -> a < b;
+            case LESS_THAN_UNSIGNED -> Long.compareUnsigned(a, b) < 0;
+            case EQUAL -> a == b;
+            case NOT_EQUAL -> a != b;
+        };
     }
 
     private boolean executeSvc(Aarch64Core core, Ir64Op.Svc op) {

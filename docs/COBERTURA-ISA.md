@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 19070 de 19215 células aplicáveis decodificam.
+> **99%** — 19075 de 19215 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -72,7 +72,7 @@ Por arquitetura:
 | ARMv9.2-A | **99%** (1094/1102) |
 | ARMv9.3-A | **99%** (1107/1111) |
 | ARMv9.4-A | **99%** (1117/1125) |
-| ARMv9.5-A | **98%** (1127/1146) |
+| ARMv9.5-A | **98%** (1132/1146) |
 
 ## Resumo
 
@@ -88,7 +88,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | ARMv8.0-A 98% (851/862) · ARMv8.1-A 98% (883/894) · ARMv8.2-A 98% (1008/1019) · ARMv8.3-A 99% (1034/1038) · ARMv8.4-A 99% (1046/1050) · ARMv8.5-A 99% (1079/1086) · ARMv8.6-A 99% (1092/1099) · ARMv8.7-A 99% (1094/1101) · ARMv8.8-A 99% (1107/1111) · ARMv8.9-A 99% (1113/1117) · ARMv9.0-A 99% (1079/1086) · ARMv9.1-A 99% (1092/1099) · ARMv9.2-A 99% (1094/1102) · ARMv9.3-A 99% (1107/1111) · ARMv9.4-A 99% (1117/1125) · ARMv9.5-A 98% (1127/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 98% (851/862) · ARMv8.1-A 98% (883/894) · ARMv8.2-A 98% (1008/1019) · ARMv8.3-A 99% (1034/1038) · ARMv8.4-A 99% (1046/1050) · ARMv8.5-A 99% (1079/1086) · ARMv8.6-A 99% (1092/1099) · ARMv8.7-A 99% (1094/1101) · ARMv8.8-A 99% (1107/1111) · ARMv8.9-A 99% (1113/1117) · ARMv9.0-A 99% (1079/1086) · ARMv9.1-A 99% (1092/1099) · ARMv9.2-A 99% (1094/1102) · ARMv9.3-A 99% (1107/1111) · ARMv9.4-A 99% (1117/1125) · ARMv9.5-A 98% (1132/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1690,11 +1690,11 @@ Inventário: `a64.decode` · 1161 instruções.
 | `CBZ` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `TBZ` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `B_cond` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `CB_cond_imm` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
+| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `CB_cond` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `CB_cond_imm` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `BR` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `BLR` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `RET` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

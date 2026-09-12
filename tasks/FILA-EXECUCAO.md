@@ -47,6 +47,25 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.22 fechar)
+
+**B19.22 FECHADA 2026-09-12** — A64 `FEAT_CMPBR` (`CB_cond` 4 formas + `CB_cond_imm`, 5 células, só
+`ARMv9.5-A`). Mapeamento de `cc` (3 bits) confirmado contra o QEMU real (`trans_CB_cond`/
+`trans_CB_cond_imm`) em vez do manual — achado do próprio comentário-fonte do QEMU: a forma
+imediata usa `LT`/`LTU` exatamente onde a forma registrador usaria `GE`/`GEU` no MESMO valor de
+`cc`, por isso duas tabelas de mapeamento próprias, nunca uma conversão única. Toolchain aceitou a
+extensão (`aarch64-linux-gnu-as -march=armv9.5-a+cmpbr`, WSL/`binutils 2.46`), ao contrário do risco
+que a spec antecipava — não precisou montar nada à mão. Novo enum `Ir64CompareBranchCondition`
+(deliberadamente separado de `Ir64Condition`, nunca lê `NZCV`); executor reusa
+`signExtendFromSize`/`zeroTruncateToSize` (já identidade em `DOUBLEWORD`, sem `if` extra).
+**Achado não previsto pela spec**: `StandardIr64BlockLifter.isTerminal` precisava dos 2 `Kind`
+novos — sem isso o lifter continuaria decodificando depois de um `CB_cond`/`CB_cond_imm` dentro do
+MESMO bloco JIT (mesma classe de bug que `Branch64`/`CompareBranch64`/`Svc` já evitam ali).
+`Ir64Op.Kind` 142→144. `docs/COBERTURA-ISA.md`: as 5 células ❌→✅ só em `ARMv9.5-A`
+(1127→1132/1146; global 19070→19075/19215, 99% inalterado no arredondamento). `docs/COBERTURA-JIT.md`
+regenerado. `mvn -o test` verde (3739; as mesmas 3 falhas pré-existentes) + `install`. **G5
+completo** nos 5 consumidores. Ver **Resultado** na task.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.18 fechar)
 
 **B19.18 FECHADA 2026-09-12** — A64 `FEAT_FRINTTS` (`FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X`,

@@ -73,7 +73,8 @@ public sealed interface Ir64Op permits
         Ir64Op.StorePairTag, Ir64Op.SubtractPointer, Ir64Op.InsertRandomTag, Ir64Op.TagMaskInsert,
         Ir64Op.MemorySetTagged, Ir64Op.MinMaxGeneral, Ir64Op.PointerAuthInPlace,
         Ir64Op.VectorFpComplexAdd, Ir64Op.VectorFpComplexMultiplyAccumulate,
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited {
+        Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited,
+        Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -403,6 +404,10 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT = 140;
 
         public static final int FP64_ROUND_RANGE_LIMITED = 141;
+        /// B19.22: `CB_cond` (`FEAT_CMPBR`) — ver {@link CompareAndBranchRegister}.
+        public static final int COMPARE_AND_BRANCH_REGISTER = 142;
+        /// B19.22: `CB_cond_imm` (`FEAT_CMPBR`) — ver {@link CompareAndBranchImmediate}.
+        public static final int COMPARE_AND_BRANCH_IMMEDIATE = 143;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -525,6 +530,50 @@ public sealed interface Ir64Op permits
             /// Destino absoluto já resolvido pelo decoder.
             long target) implements Ir64Op {
         @Override public int kind() { return Kind.COMPARE_BRANCH64; }
+    }
+
+    /// `CB_cond Rt, Rm, <cc>, label` (`FEAT_CMPBR`, B19.22, `ARM DDI 0487 C6.2.53`) — funde
+    /// comparação + desvio condicional numa única instrução, o que hoje o compilador sintetiza como
+    /// `CMP`/`SUBS` + `B.cond`. **Sem efeito em `NZCV`** (a comparação é interna à instrução) — ao
+    /// contrário de {@link Branch64} (`B.cond`), que lê `NZCV` já calculado por uma instrução
+    /// anterior. O conjunto de condições é o subconjunto de 6 valores de
+    /// {@link Ir64CompareBranchCondition} (mapeamento próprio da forma registrador — diferente de
+    /// {@link CompareAndBranchImmediate}).
+    record CompareAndBranchRegister(
+            /// Condição da comparação `Rt <cond> Rm`.
+            Ir64CompareBranchCondition condition,
+            /// Registrador comparado (índice `0`-`31`; `31` é `XZR`, lê `0`).
+            int rt,
+            /// Registrador comparado (índice `0`-`31`; `31` é `XZR`, lê `0`).
+            int rm,
+            /// Largura da comparação (`esz` do encoding): `BYTE`/`HALF` comparam só os bits baixos
+            /// de `Rt`/`Rm` (sem mascarar antes, ao contrário de instruções normais de 32 bits);
+            /// `WORD`/`DOUBLEWORD` comparam a largura inteira selecionada por `sf`.
+            Ir64MemSize size,
+            /// Destino absoluto já resolvido pelo decoder.
+            long target) implements Ir64Op {
+        @Override public int kind() { return Kind.COMPARE_AND_BRANCH_REGISTER; }
+    }
+
+    /// `CB_cond_imm Rt, #imm, <cc>, label` (`FEAT_CMPBR`, B19.22, `ARM DDI 0487 C6.2.54`) — mesma
+    /// ideia de {@link CompareAndBranchRegister}, mas compara `Rt` contra um imediato de 6 bits SEM
+    /// SINAL (`0`-`63`) em vez de outro registrador. **Sem efeito em `NZCV`**. O conjunto de
+    /// condições é o subconjunto de 6 valores de {@link Ir64CompareBranchCondition} (mapeamento
+    /// próprio da forma imediata — usa `LT`/`LTU` onde a forma registrador usaria `GE`/`GEU` no
+    /// MESMO valor de campo `cc`, achado confirmado contra o QEMU real).
+    record CompareAndBranchImmediate(
+            /// Condição da comparação `Rt <cond> #immediate`.
+            Ir64CompareBranchCondition condition,
+            /// Registrador comparado (índice `0`-`31`; `31` é `XZR`, lê `0`).
+            int rt,
+            /// Largura da comparação (`sf`: `true`=`X` 64 bits, `false`=`W` 32 bits).
+            boolean wide,
+            /// Imediato de comparação, SEM SINAL, `0`-`63` (`UInt(imm6)` do manual — nunca
+            /// estendido com sinal, ao contrário do deslocamento de desvio).
+            int immediate,
+            /// Destino absoluto já resolvido pelo decoder.
+            long target) implements Ir64Op {
+        @Override public int kind() { return Kind.COMPARE_AND_BRANCH_IMMEDIATE; }
     }
 
     /// `SVC` (`ARM DDI 0487 C6.2.311`): chamada de sistema delegada ao dispatcher do host — mesmo
