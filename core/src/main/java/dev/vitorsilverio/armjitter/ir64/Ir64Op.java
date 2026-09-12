@@ -76,7 +76,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFpComplexMultiplyAccumulateByElement, Ir64Op.Fp64RoundRangeLimited,
         Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt,
         Ir64Op.VectorFpAbsoluteMaxMin, Ir64Op.VectorFp8FusedMultiplyAddLong,
-        Ir64Op.VectorFp8FusedMultiplyAddLongByElement {
+        Ir64Op.VectorFp8FusedMultiplyAddLongByElement, Ir64Op.VectorFp8DotProduct,
+        Ir64Op.VectorFp8DotProductByElement {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -420,6 +421,11 @@ public sealed interface Ir64Op permits
         /// B19.11b: `FMLAL_hb_vi`/`FMLALL_sb_vi` (`FEAT_FP8FMA`) — ver
         /// {@link VectorFp8FusedMultiplyAddLongByElement}.
         public static final int VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT = 147;
+        /// B19.11c/B19.11d: `FDOT_hb_v`/`FDOT_sb_v` (`FEAT_FP8DOT2`/`FEAT_FP8DOT4`) — ver
+        /// {@link VectorFp8DotProduct}.
+        public static final int VECTOR_FP8_DOT_PRODUCT = 148;
+        /// B19.11c/B19.11d: `FDOT_hb_vi`/`FDOT_sb_vi` — ver {@link VectorFp8DotProductByElement}.
+        public static final int VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT = 149;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -2498,6 +2504,59 @@ public sealed interface Ir64Op permits
             /// Índice do byte FP8 de {@link #rm} usado em TODA a operação (`0`-`15`).
             int index) implements Ir64Op {
         @Override public int kind() { return Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
+    }
+
+    /// `FDOT_hb_v`/`FDOT_sb_v` (B19.11c/B19.11d, `FEAT_FP8DOT2`/`FEAT_FP8DOT4`) — produto escalar
+    /// FP8 FUNDIDO (arredondamento ÚNICO) de 2 (`FDOT_hb`) ou 4 (`FDOT_sb`) pares FP8×FP8 por lane,
+    /// acumulado em meia precisão (`FDOT_hb`, {@link #wideDestination}=`false`) ou precisão simples
+    /// (`FDOT_sb`, `true`) — análogo estrutural a `SDOT`/`UDOT` (inteiro, B19.23), mas com conversão
+    /// FP8→float obrigatória de cada operando antes de multiplicar/acumular. **AO CONTRÁRIO** de
+    /// {@link VectorFp8FusedMultiplyAddLong} (que ignora `Q` e sempre processa os 128 bits inteiros
+    /// de `Rd`), `FDOT` usa `Q` normalmente (`do_f8dot` do QEMU real passa `a->q ? 16 : 8` —
+    /// forma AdvSIMD "three same" padrão, confirmado em `target/arm/tcg/translate-a64.c`, revisão
+    /// fixada pela E11). Formatos FP8 de `Rn`/`Rm` (`FPMR.F8S1`/`F8S2`) e a escala/`OSM` da
+    /// multiplicação vêm de `FPMR` em tempo de EXECUÇÃO — mesma disciplina de
+    /// {@link VectorFp8FusedMultiplyAddLong}. **A B19.11c só decodifica `FDOT_hb_v`
+    /// ({@link #wideDestination}=`false`)** — `FDOT_sb_v` (`true`) é a B19.11d, mas reusa este
+    /// MESMO record/núcleo (`AdvSimdLanes.fp8DotProduct`), sem duplicação.
+    record VectorFp8DotProduct(
+            /// `false`=`FDOT_hb` (2 elementos FP8/lane, destino `binary16`); `true`=`FDOT_sb` (4
+            /// elementos FP8/lane, destino `binary32`).
+            boolean wideDestination,
+            /// `Q` — `false`=64 bits (`Vd.4H`/`Vd.2S`), `true`=128 bits (`Vd.8H`/`Vd.4S`).
+            boolean q,
+            /// Registrador `V` de destino/acumulador (lido e escrito — RMW).
+            int rd,
+            /// Registrador `V` fonte 1 — cada lane fornece os elementos FP8 empacotados nos bytes
+            /// baixos (byte `k` de cada grupo em `[8k, 8k+8)`).
+            int rn,
+            /// Registrador `V` fonte 2 — mesma disposição de {@link #rn}.
+            int rm) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP8_DOT_PRODUCT; }
+    }
+
+    /// `FDOT_hb_vi`/`FDOT_sb_vi` (B19.11c/B19.11d) — como {@link VectorFp8DotProduct}, mas
+    /// {@link #rm} contribui um ÚNICO grupo FP8 FIXO (selecionado por {@link #index}), lido UMA vez
+    /// e replicado para todas as lanes (achado real: `HELPER(gvec_fdot_idx_*)` do QEMU calcula o
+    /// grupo de `Rm` FORA do laço de lanes). **Ao contrário de**
+    /// {@link VectorFp8FusedMultiplyAddLongByElement} (que precisou de um layout de `Rm`/índice
+    /// PRÓPRIO), `FDOT_hb_vi`/`FDOT_sb_vi` reusam o esquema `H:L:M`/`H:L` GENÉRICO já usado por
+    /// `FMUL_vi`/`SDOT_vi` para o mesmo tamanho de elemento (achado real desta task).
+    record VectorFp8DotProductByElement(
+            /// Ver {@link VectorFp8DotProduct#wideDestination}.
+            boolean wideDestination,
+            /// Ver {@link VectorFp8DotProduct#q}.
+            boolean q,
+            /// Registrador `V` de destino/acumulador.
+            int rd,
+            /// Registrador `V` fonte 1.
+            int rn,
+            /// Registrador `V` fonte 2 — só o grupo FP8 {@link #index} é lido, replicado.
+            int rm,
+            /// Índice do grupo FP8 de {@link #rm} usado em TODA a operação (`0`-`7` se
+            /// {@code !wideDestination}, `0`-`3` se {@code wideDestination}).
+            int index) implements Ir64Op {
+        @Override public int kind() { return Kind.VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT; }
     }
 
     /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link

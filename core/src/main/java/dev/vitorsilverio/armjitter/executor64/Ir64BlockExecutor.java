@@ -527,6 +527,11 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFp8FusedMultiplyAddLongByElement(
                             core, (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) op);
+            case Ir64Op.Kind.VECTOR_FP8_DOT_PRODUCT ->
+                    Ir64VectorFpArithmeticExecutor.executeFp8DotProduct(core, (Ir64Op.VectorFp8DotProduct) op);
+            case Ir64Op.Kind.VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT ->
+                    Ir64VectorFpArithmeticExecutor.executeFp8DotProductByElement(
+                            core, (Ir64Op.VectorFp8DotProductByElement) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER ->
                     executeCompareAndBranchRegister(core, (Ir64Op.CompareAndBranchRegister) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE ->

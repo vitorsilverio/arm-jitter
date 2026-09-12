@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 19089 de 19155 células aplicáveis decodificam.
+> **99%** — 19091 de 19155 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -72,7 +72,7 @@ Por arquitetura:
 | ARMv9.2-A | **99%** (1094/1098) |
 | ARMv9.3-A | **100%** (1107/1107) |
 | ARMv9.4-A | **100%** (1121/1121) |
-| ARMv9.5-A | **99%** (1142/1146) |
+| ARMv9.5-A | **99%** (1144/1146) |
 
 ## Resumo
 
@@ -88,7 +88,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
-| A64 — AArch64 | 1161 | ARMv8.0-A 99% (851/858) · ARMv8.1-A 99% (883/890) · ARMv8.2-A 99% (1008/1015) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 99% (1079/1082) · ARMv8.6-A 99% (1092/1095) · ARMv8.7-A 99% (1094/1097) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 99% (1079/1082) · ARMv9.1-A 99% (1092/1095) · ARMv9.2-A 99% (1094/1098) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 99% (1142/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 99% (851/858) · ARMv8.1-A 99% (883/890) · ARMv8.2-A 99% (1008/1015) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 99% (1079/1082) · ARMv8.6-A 99% (1092/1095) · ARMv8.7-A 99% (1094/1097) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 99% (1079/1082) · ARMv9.1-A 99% (1092/1095) · ARMv9.2-A 99% (1094/1098) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 99% (1144/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -2315,7 +2315,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMLAL_hb_v` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FMLALL_sb_v` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FDOT_sb_v` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `FDOT_hb_v` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
+| `FDOT_hb_v` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FMMLA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `FMMLA_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `FMUL_si` | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -2404,7 +2404,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `FMLAL_hb_vi` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FMLALL_sb_vi` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FDOT_sb_vi` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
-| `FDOT_hb_vi` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ❌ |
+| `FDOT_hb_vi` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
 | `FCSEL` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FMADD` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FMSUB` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

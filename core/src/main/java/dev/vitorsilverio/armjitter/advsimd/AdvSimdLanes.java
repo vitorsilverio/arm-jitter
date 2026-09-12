@@ -2179,6 +2179,43 @@ public final class AdvSimdLanes {
         return wideDestination ? doubleToFloatBits(sum, osm) : doubleToHalfBits(sum, osm);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // "FP8 DOT PRODUCT" — B19.11c/B19.11d (`FEAT_FP8DOT2`/`FEAT_FP8DOT4`: `FDOT_hb`/`FDOT_sb`,
+    // vetorial + indexada). Núcleo GENÉRICO parametrizado por `elementsPerLane` (2 para `FDOT_hb`,
+    // 4 para `FDOT_sb`) — mesmo espírito de reuso de {@link #fpFusedMultiplyAddLong} (B13.20/B19.13)
+    // e do próprio {@link #fp8FusedMultiplyAdd} (B19.11b) que este método espelha na disciplina de
+    // arredondamento ÚNICO. Confirmado contra `f8dot`/`f8dotadd_h`/`f8dotadd_s` do QEMU real
+    // (`fp8_helper.c`, revisão fixada pela E11): os `elementsPerLane` produtos são somados em ponto
+    // flutuante EXATO (via `parts64_muladd` fundido) antes da escala/soma final com o acumulador,
+    // um ÚNICO arredondamento no total.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// Produto escalar FP8 FUNDIDO (arredondamento ÚNICO): soma `elementsPerLane` produtos
+    /// FP8×FP8 (formatos `nE4m3`/`mE4m3` — `FPMR.F8S1`/`F8S2`, INDEPENDENTES por operando) escalados
+    /// por `2^-lscale` e somados a um acumulador de meia precisão OU precisão simples (`accBits` já
+    /// na largura certa; `wideDestination` escolhe qual — `false`=`FDOT_hb`, `true`=`FDOT_sb`).
+    /// `nBytes`/`mBytes` empacotam os `elementsPerLane` bytes FP8 nos bits BAIXOS (byte `k` em
+    /// `[8k, 8k+8)`). `osm` reflete `FPMR.OSM`, mesma disciplina de {@link #fp8FusedMultiplyAdd}
+    /// (satura no máximo normal do DESTINO em vez de Infinito só quando o resultado MATEMATICAMENTE
+    /// finito estoura o alcance ao empacotar). Computado em `double` — folga de guarda enorme sobre
+    /// os 11/24 bits do destino, já que cada produto FP8×FP8 tem no máximo ~8 bits de mantissa e
+    /// `elementsPerLane` é `2`/`4` — reproduz byte a byte a soma EXATA que o hardware real faz antes
+    /// do único arredondamento, mesma técnica de {@link #fp8FusedMultiplyAdd}.
+    public static long fp8DotProduct(long nBytes, long mBytes, boolean nE4m3, boolean mE4m3,
+            int elementsPerLane, int lscale, boolean osm, long accBits, boolean wideDestination) {
+        double sum = 0.0;
+        for (int k = 0; k < elementsPerLane; k++) {
+            int shift = k * 8;
+            int nByte = (int) ((nBytes >>> shift) & 0xFF);
+            int mByte = (int) ((mBytes >>> shift) & 0xFF);
+            sum += (double) fp8ToFloat(nByte, nE4m3) * (double) fp8ToFloat(mByte, mE4m3);
+        }
+        double scaled = Math.scalb(sum, -lscale);
+        double acc = wideDestination ? Float.intBitsToFloat((int) accBits) : halfToFloat(accBits);
+        double total = scaled + acc;
+        return wideDestination ? doubleToFloatBits(total, osm) : doubleToHalfBits(total, osm);
+    }
+
     private static long doubleToFloatBits(double value, boolean saturateToMaxNormal) {
         if (Double.isNaN(value)) {
             return FP8_FMA_FLOAT_CANONICAL_NAN_BITS;

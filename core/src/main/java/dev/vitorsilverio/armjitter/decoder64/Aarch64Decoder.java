@@ -1321,6 +1321,12 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_FP8_FMA_INDEXED_RM_MASK = 0b111;
     private static final int ADVSIMD_FP8_FMA_INDEXED_INDEX_SHIFT = 19;
     private static final int ADVSIMD_FP8_FMA_INDEXED_INDEX_MASK = 0b111;
+    /// B19.11c (`FEAT_FP8DOT2`): opcode (bits[15:12]) de `FDOT_hb_vi` dentro de
+    /// {@link #decodeAdvancedSimdIndexedElement} — `sizeField=HALFWORD`(`0b01`), `U`=`0` fixo,
+    /// MESMO valor usado por `FDOT_sb_vi` (`sizeField=HALF_PRECISION`(`0b00`), B19.11d, ainda `⬜`)
+    /// — nunca colidem, discriminados só por `sizeField`. Confirmado byte a byte contra
+    /// `target/isa-decode/a64.decode:1356-1357`.
+    private static final int ADVSIMD_FP8_DOT_INDEXED_OPCODE = 0b0000;
     /// B19.5.4 (`FEAT_FP16`): MESMO slot "two-register miscellaneous" de
     /// {@link #ADVSIMD_INT_RM_TWO_REG_MISC} (`0b0_0000`), com `Rm[4:3]=0b11` em vez de `0b00` — o
     /// encoding real fixa `bit22` em `1` para marcar o grupo de meia precisão (nos `_sd` irmãos,
@@ -3980,6 +3986,15 @@ public final class Aarch64Decoder {
                     return fp8FmaSingleOp;
                 }
             }
+            // B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_v` também vive no MESMO espaço `bit21=0`
+            // (reusa o opcode de `FMLAL_hb_v`, discriminado por `a`) — checado DEPOIS do
+            // `FP8_FUSED_MULTIPLY_ADD` e ANTES do FCMA. Sem a feature, pulado inteiro.
+            if (architecture.has(Aarch64Feature.FP8_DOT_PRODUCT_2WAY)) {
+                Ir64Op fp8DotHalfOp = decodeAdvancedSimdFp8DotHalf(word, scalar, q);
+                if (fp8DotHalfOp != null) {
+                    return fp8DotHalfOp;
+                }
+            }
             // B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` também vivem no MESMO espaço
             // `bit21=0` (`U=1`+`bit10=1` fixos, opcode nunca colide com RDM/FP16/FP8 acima —
             // conferido exaustivamente, ver o Javadoc das constantes `ADVSIMD_FCMA_*`) — checado
@@ -4621,6 +4636,35 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         return new Ir64Op.VectorFp8FusedMultiplyAddLong(true, idxn, rd, rn, rm);
+    }
+
+    /// B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_v` — vive no MESMO espaço `bit21=0`/opcode
+    /// {@link #ADVSIMD_FP8_FMA_OPCODE_HB} que `FMLAL_hb_v` (B19.11b) já usa, discriminado por
+    /// `a`(bit23): `0`=`FDOT_hb_v` (esta task), `1`=`FMLAL_hb_v`. **AO CONTRÁRIO** de `FMLAL_hb_v`
+    /// (que ignora `Q` e sempre processa os 128 bits inteiros de `Rd`, `idxn` roubando o bit30),
+    /// `FDOT_hb_v` usa `Q` NORMALMENTE — `do_f8dot` do QEMU real passa `a->q ? 16 : 8` (forma
+    /// AdvSIMD "three same" padrão), achado confirmado em `target/arm/tcg/translate-a64.c`
+    /// (`do_f8dot`/`do_fmla_fp8`, revisão fixada pela E11). `FDOT_sb_v` (`bit22=0`, B19.11d, ainda
+    /// `⬜`) fica de fora — `null` aqui, cai no `unsupported` de sempre (G8), exatamente como hoje.
+    private Ir64Op decodeAdvancedSimdFp8DotHalf(int word, boolean scalar, boolean q) {
+        if (scalar) {
+            return null;
+        }
+        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
+        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
+        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
+        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
+        if (u || a || !bit22 || !bit10) {
+            return null;
+        }
+        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
+        if (opcodeH != ADVSIMD_FP8_FMA_OPCODE_HB) {
+            return null;
+        }
+        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
+        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+        int rd = word & REGISTER_FIELD_MASK;
+        return new Ir64Op.VectorFp8DotProduct(false, q, rd, rn, rm);
     }
 
     /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
@@ -5759,6 +5803,24 @@ public final class Aarch64Decoder {
             int idxnLow = (word >>> ADVSIMD_INT_SIZE_SHIFT) & 1;
             int idxn = (idxnHigh << 1) | idxnLow;
             return new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(true, idxn, rd, rn, rmFp8, index);
+        }
+        // B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_vi` — sizeField=`HALFWORD`(`01`), opcode
+        // {@link #ADVSIMD_FP8_DOT_INDEXED_OPCODE}, `U`=`0` fixo. **Ao contrário de**
+        // `FMLAL_hb_vi` (B19.11b, `Rm`/índice PRÓPRIOS), `FDOT_hb_vi` cai bit a bit no MESMO layout
+        // `Rm`(4 bits)/`H:L:M`(3 bits) que o `case HALFWORD` genérico abaixo já usa para o inteiro —
+        // confirmado contra `target/isa-decode/a64.decode` (`@qrrx_h`/`%hlm`, MESMA fórmula) — mas
+        // precisa ser interceptado AQUI porque `opcode=0000,u=0` está livre em
+        // {@link #decodeAdvancedSimdIndexedInt} (nenhuma chave `(U,opcode)` o reivindica) e cairia
+        // no G8 de baixo sem este bloco, mesmo com a feature presente. `FDOT_sb_vi` (B19.11d, ainda
+        // `⬜`) mede `sizeField=HALF_PRECISION`(`00`) com um layout de `Rm` DIFERENTE (5 bits/`H:L`)
+        // — fora do escopo desta task, tratado separadamente (ver o bloco espelho abaixo).
+        if (!scalar && !u && sizeField == ADVSIMD_INDEXED_SIZE_HALFWORD
+                && opcode == ADVSIMD_FP8_DOT_INDEXED_OPCODE
+                && architecture.has(Aarch64Feature.FP8_DOT_PRODUCT_2WAY)) {
+            int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
+            int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
+            int index = (h ? 0b100 : 0) | lm;
+            return new Ir64Op.VectorFp8DotProductByElement(false, q, rd, rn, rm, index);
         }
         Ir64Op result = switch (sizeField) {
             // Doubleword: só ponto flutuante (`FMUL`/`FMLA`/`FMLS`/`FMULX` "d") — `Rm` de 5 bits,

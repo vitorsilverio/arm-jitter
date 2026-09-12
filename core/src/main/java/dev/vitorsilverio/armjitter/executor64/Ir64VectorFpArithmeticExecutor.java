@@ -627,6 +627,67 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
+    /// `FDOT_hb_v` (`FEAT_FP8DOT2`, B19.11c) — ver Javadoc de {@link Ir64Op.VectorFp8DotProduct}.
+    /// Formatos/escala/`OSM` vêm de `FPMR` em tempo de EXECUÇÃO (mesma disciplina de
+    /// {@link #executeFp8FusedMultiplyAddLong}). `Rn`/`Rm` são lidos com `esz`=`destEsz`
+    /// diretamente (`fp.element` já devolve os `elementsPerLane` bytes FP8 empacotados de uma vez,
+    /// já que uma lane de destino e um grupo-fonte medem a MESMA largura aqui — ao contrário de
+    /// {@link #executeFp8FusedMultiplyAddLong}, onde a largura de `Rn`/`Rm` é sempre FP8 cru). `Rd`
+    /// é RMW; finalização "destructive" padrão (zera os bits altos quando `!q`), diferente de
+    /// {@link #executeFp8FusedMultiplyAddLong} (sempre 128 bits, sem `Q` real).
+    static boolean executeFp8DotProduct(Aarch64Core core, Ir64Op.VectorFp8DotProduct op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
+        boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
+        boolean osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
+        int lscale = op.wideDestination() ? core.fp8MultiplyDownscale() : core.fp8WidenScale();
+        int esz = op.wideDestination() ? 2 : 1;
+        int elementsPerLane = op.wideDestination() ? 4 : 2;
+        int elements = elementsPerRegister(op.q(), esz);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long nBytes = fp.element(op.rn(), i, esz);
+            long mBytes = fp.element(op.rm(), i, esz);
+            long accBits = fp.element(op.rd(), i, esz);
+            results[i] = AdvSimdLanes.fp8DotProduct(
+                    nBytes, mBytes, nE4m3, mE4m3, elementsPerLane, lscale, osm, accBits, op.wideDestination());
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, esz, results[i]);
+        }
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
+    /// `FDOT_hb_vi` (`FEAT_FP8DOT2`, B19.11c) — como {@link #executeFp8DotProduct}, mas {@link
+    /// Ir64Op.VectorFp8DotProductByElement#rm} contribui um ÚNICO grupo FP8 FIXO
+    /// ({@link Ir64Op.VectorFp8DotProductByElement#index}), lido UMA vez e replicado para todas as
+    /// lanes (achado real: `HELPER(gvec_fdot_idx_*)` do QEMU calcula o grupo de `Rm` FORA do laço
+    /// de lanes).
+    static boolean executeFp8DotProductByElement(Aarch64Core core, Ir64Op.VectorFp8DotProductByElement op) {
+        Aarch64FpRegisters fp = core.fp();
+        boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
+        boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
+        boolean osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
+        int lscale = op.wideDestination() ? core.fp8MultiplyDownscale() : core.fp8WidenScale();
+        int esz = op.wideDestination() ? 2 : 1;
+        int elementsPerLane = op.wideDestination() ? 4 : 2;
+        int elements = elementsPerRegister(op.q(), esz);
+        long mBytes = fp.element(op.rm(), op.index(), esz);
+        long[] results = new long[elements];
+        for (int i = 0; i < elements; i++) {
+            long nBytes = fp.element(op.rn(), i, esz);
+            long accBits = fp.element(op.rd(), i, esz);
+            results[i] = AdvSimdLanes.fp8DotProduct(
+                    nBytes, mBytes, nE4m3, mE4m3, elementsPerLane, lscale, osm, accBits, op.wideDestination());
+        }
+        for (int i = 0; i < elements; i++) {
+            fp.setElement(op.rd(), i, esz, results[i]);
+        }
+        finishDestructiveWrite(fp, op.rd(), op.q());
+        return false;
+    }
+
     /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` — reduz os elementos de `Rn` a um único escalar em
     /// `Rd`. B8.10: precisão simples, `esz=2` fixo, sempre 4 elementos (`4S`, único arranjo real).
     /// B19.5.3 (`FEAT_FP16`): `esz=1`, `elements` `4` ou `8` conforme {@link Ir64Op.VectorFpAcrossLanes#q()}

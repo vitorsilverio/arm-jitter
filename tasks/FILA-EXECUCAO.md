@@ -47,6 +47,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-12, após B19.11c fechar)
+
+**B19.11c FECHADA 2026-09-12** — A64 `FEAT_FP8DOT2` (`FDOT_hb_v`/`FDOT_hb_vi`, 2 células). Núcleo
+`AdvSimdLanes.fp8DotProduct` nasceu GENÉRICO por `elementsPerLane` (testado com `2` e `4`) para a
+B19.11d (`FDOT_sb`, 4-way) reusar sem duplicar — ainda `⬜`, agora só decode. Campos de `FPMR`
+confirmados IDÊNTICOS aos que `FMLAL_hb`/`FMLALL_sb` (B19.11b) já consomem (`F8S1`/`F8S2`,
+`LSCALE` mascarado/`OSM`), medidos contra `fp8_helper.c` real do QEMU. Achado que inverte a
+Armadilha 1 da B19.11b: `FDOT` usa `Q` NORMALMENTE (`do_f8dot` do QEMU), ao contrário de
+`FMLAL_hb`/`FMLALL_sb` (que ignoram `Q`). Decode indexado reusa 100% o esquema `H:L:M` genérico já
+usado por `FMUL_vi`/`BFMLAL_vi` — mais simples que a B19.11b. Corpus golden REAL via
+`aarch64-linux-gnu-as -march=armv9.5-a+fp8dot2+fp8dot4` (WSL binutils 2.46 aceita `fdot` de
+verdade, ao contrário de `fmlal`/`fmlall`). `docs/COBERTURA-ISA.md`: as 2 células ❌→✅ em
+`ARMv9.5-A` (global 19089→19091/19155, 99% inalterado). `docs/COBERTURA-JIT.md` regenerado
+(`Ir64Op.Kind` 148→150, só interpretado). `mvn -o test` verde (3837; as mesmas 3 falhas
+pré-existentes) + `install` + `javadoc:jar`. **G5 completo** nos 5 consumidores. Ver **Resultado**
+na task.
+
+**Pegáveis a seguir**: `B19.11d` (`FEAT_FP8DOT4`, `FDOT_sb_v`/`FDOT_sb_vi`, 2 células — núcleo já
+pronto para reusar, ver `## Resultado` da B19.11c). `C12.5`/`C12.10` (emissão JIT nativa A64)
+também seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-12, após B19.24 fechar)
 
 **B19.24 FECHADA 2026-09-12** — A64 `FEAT_FAMINMAX` (`FAMAX`/`FAMIN`, `_h`+`_sd`, 4 células), a

@@ -131,13 +131,16 @@ class Aarch64AdvSimdFp8DecoderTest {
     }
 
     @Test
-    void accumulationFamilyOpcodeAndABitStayUnsupported() {
+    void accumulationFamilyOpcodeNowDecodesUnderB19_11c() {
         // `FDOT_hb_v` (opcode=0b11111, vizinho de FCVTN_bh que só muda o opcode em 1 bit — B19.11
-        // "Não inclui": família de acumulação fica FORA desta task, tem que continuar `unsupported`
-        // mesmo com FEAT_FP8 ativa). Derivado bit a bit de FCVTN_BH_D (0x0e42f420) trocando só
-        // bits[15:11] de `0b11110` para `0b11111` (bit11: 0->1).
+        // "Não inclui" registrou a família de acumulação como fora daquela task). A B19.11c
+        // implementou `FDOT_hb_v` neste MESMO slot (`FP8_DOT_PRODUCT_2WAY`, já incluída em
+        // `ARMV9_5_A`) — este teste, que antes provava "continua unsupported", agora prova o
+        // oposto: decodifica de verdade. Regressão negativa completa em
+        // `Aarch64AdvSimdFp8DotProductDecoderTest`. Derivado bit a bit de FCVTN_BH_D (0x0e42f420)
+        // trocando só bits[15:11] de `0b11110` para `0b11111` (bit11: 0->1).
         int fdotHbV = 0x0e42fc20;
-        assertThrows(UnsupportedOperationException.class, () -> decodeWord(FP8_DECODER, fdotHbV));
+        assertEquals(Ir64Op.VectorFp8DotProduct.class, decodeWord(FP8_DECODER, fdotHbV).getClass());
 
         // Mesmo opcode de FCVTN_bh (0b11110) mas `a`(bit23)=1 — combinação reservada dentro do
         // espaço desta task (só `u=0 && a=0` é `FCVTN_bh`/`FCVTN_bs`), tem que continuar
