@@ -47,6 +47,20 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-13, spec da B15.2 escrita)
+
+**B15.2 ganhou spec própria** (`trilha-b-arquiteturas/b15.2-nocp-coprocessador-ausente.md`),
+seguindo o padrão que a B19.9 aplicou aos degraus do B19 — ainda **não executada** (`## Resultado`
+pendente). Medido contra `target/isa-decode/m-nocp.decode` real e contra o código (`ArmArchitecture`,
+`MProfileExceptionModel`, `MProfileSystemControl`, `Thumb2CoprocessorDecoder`/`Thumb2VfpDecoder`)
+antes de escrever, não por suposição — achado registrado na própria spec (Armadilha 1): o espaço de
+bits da forma 1 de `NOCP` (`hi=1110 1110`) colide com o que `Thumb2CoprocessorDecoder` (`MCR`/`MRC`)
+já reivindica INCONDICIONALMENTE em `ARMV7M`/`ARMV7M_PURE` hoje — a resolver (confirmar contra o
+manual se M-profile real tem `MCR`/`MRC` de coprocessador genérico) na sessão que executar. A spec
+também nota que "CPACR/NSACR" do plano do épico é imprecisa: `NSACR` só existe com a Security
+Extension (B15.4, ainda não implementada) — fora do escopo real da B15.2. **`B15.2` passa a ser
+pegável por uma sessão comum.**
+
 ## Onde estamos (atualizado 2026-09-12, após B15.1 fechar)
 
 **B15.1 FECHADA 2026-09-12** — todo o épico A64 **B19 está fechado** (última pendente, B19.11d,
