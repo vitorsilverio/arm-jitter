@@ -47,6 +47,26 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-13, spec da B15.3 escrita)
+
+**B15.3 ganhou spec própria** (`trilha-b-arquiteturas/b15.3-vmsr-vmrs-vldr-vstr-sysreg.md`), mesmo
+padrão que a B19.9/B15.2 já aplicaram — ainda **não executada** (`## Resultado` pendente). Cobre as
+3 células restantes de `m-nocp.decode` que vivem no MESMO bloco QEMU que a B15.2 já priorizou
+corretamente: `VMSR_VMRS` (perfil M, `reg=FPSCR`) + `VLDR_sysreg`/`VSTR_sysreg`. Achado central,
+medido contra o QEMU real (`target/arm/tcg/translate-m-nocp.c`, via `WebFetch`) antes de escrever:
+o campo `reg` só vale `FPSCR` (valor `1`) nesta task — os outros 4 valores que a arquitetura real
+define (`FPSCR_NZCVQC`=2, `VPR`/`P0`=12, `FPCXT_NS`=14, `FPCXT_S`=15) dependem de extensões que este
+projeto ainda não modela (ARMv8.1-M/Security Extension/MVE — B15.4/B15.6/B16), então ficam `❌`
+honesto (sequenciamento, não exclusão, regra máxima do projeto). Reuso pretendido: `ArmCore.fpscr()`
+já existe incondicionalmente desde a B3.3 — perfil M só precisa decodificar/executar o acesso
+memory-mapped a ele, sem banco de estado novo. Duas decisões deixadas em aberto para a execução
+(documentadas como Armadilhas, não resolvidas por suposição): (1) se `VMSR_VMRS` M-profile pode
+reusar `InstructionKind.VFP_SYSTEM_TRANSFER` da A-profile sem mudança (a regra de `Rt=15` diverge:
+A-profile aliasa para APSR, perfil M é UNPREDICTABLE/UNDEF — precisa confirmar se essa lógica vive
+no decoder ou vaza para o executor); (2) se `VLDR_sysreg`/`VSTR_sysreg` (memória↔registrador de
+sistema, não memória↔GPR) cabem nos campos neutros de `DecodedInstruction` ou precisam do escape
+hatch `liftedOp` (RFC B13.2). **`B15.3` passa a ser pegável por uma sessão comum.**
+
 ## Onde estamos (atualizado 2026-09-13, após B15.2 fechar)
 
 **B15.2 FECHADA 2026-09-13** — perfil M `NOCP`/`NOCP_8_1` (exceção de coprocessador ausente, 2
