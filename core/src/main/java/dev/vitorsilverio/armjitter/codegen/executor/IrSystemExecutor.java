@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.core.MProfileException;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
@@ -283,6 +284,23 @@ public final class IrSystemExecutor {
         } else {
             model.writeSystemRegister(core, op.sysm(), core.register(op.armRegister()));
         }
+    }
+
+    /// `NOCP`/`NOCP_8_1` (perfil M, B15.2): seta `UFSR.NOCP` e entra em `USAGE_FAULT` direto no
+    /// {@link MProfileExceptionModel} — sem passar por `ArmException` (que é compartilhado com o
+    /// perfil A/R, onde `NOCP` não faz sentido nenhum, ver Armadilha 2 da task). O cast é seguro
+    /// pelo mesmo motivo de {@link #executeMProfileSystemRegister}: esta op só é produzida sob
+    /// {@code ArmFeature.M_PROFILE}.
+    ///
+    /// @return sempre {@code true} — `enterException` sempre muda o PC para o vetor do handler.
+    public boolean executeNocp(ArmCore core, IrOp.Nocp op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        MProfileExceptionModel model = (MProfileExceptionModel) core.exceptionModel();
+        model.setUsageFaultNocp();
+        model.enterException(core, MProfileException.USAGE_FAULT);
+        return true;
     }
 
     /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 passam a

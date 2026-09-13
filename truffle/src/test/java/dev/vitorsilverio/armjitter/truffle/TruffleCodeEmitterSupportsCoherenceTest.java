@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (106 desde B13.21), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (107 desde B15.2), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(106, kinds.size(), "IrOp.Kind deve ter 106 constantes contíguas");
+        assertEquals(107, kinds.size(), "IrOp.Kind deve ter 107 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -102,9 +102,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // checkout limpo ANTES de qualquer mudança da B13.21, mesma falha). B13.21 acrescentou
         // NEON_DOT_PRODUCT_BFLOAT16, NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16,
         // NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16, NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16,
-        // NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 (+5, idem).
-        assertEquals(40, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 (+5, idem). B15.2 acrescentou NOCP (+1
+        // — "Não inclui" explícito da task: decode+interpretado apenas, sem Truffle, mesmo padrão
+        // do resto da trilha B — dimensão 3 do roadmap fica para o épico A10 tratar depois).
+        assertEquals(41, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
+                        IrOp.Kind.NOCP,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -280,6 +283,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.NeonFusedMultiplyAddLongBFloat16(false, 0, 2, 4);
             case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 ->
                     new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(false, 0, 2, 4, 0);
+            case IrOp.Kind.NOCP -> new IrOp.Nocp(10, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

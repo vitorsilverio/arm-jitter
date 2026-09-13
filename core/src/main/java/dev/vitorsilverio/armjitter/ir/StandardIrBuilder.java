@@ -565,6 +565,9 @@ public final class StandardIrBuilder implements IrBuilder {
                         (packed & (1 << 5)) != 0, // round
                         instruction.condition()));
             }
+            // NOCP/NOCP_8_1 (perfil M, B15.2): `immediate` carrega o coprocessador-alvo (`cp`).
+            // Ver IrOp.Nocp/IrSystemExecutor#executeNocp.
+            case NOCP -> block.add(new IrOp.Nocp(instruction.immediate(), instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(

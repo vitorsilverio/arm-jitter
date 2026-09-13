@@ -16,12 +16,23 @@ import java.util.Objects;
 /// Fora de escopo (ver "Não inclui" da B7.3): MPU, DWT/ITM/FPB, CPUID/campos read-only
 /// detalhados, mais de {@link MProfileExceptionModel#MAX_EXTERNAL_IRQS} IRQs externas,
 /// tail-chaining, lazy-stacking, DEBUGEN.
+///
+/// **`CPACR` (`0xE000ED88`) deliberadamente NÃO tem offset próprio aqui (B15.2, Armadilha 4)**:
+/// nenhum coprocessador (FPU) existe neste emulador para o registrador gatear de verdade, e
+/// `read32` já devolve `0` para qualquer offset desconhecido — coerente com "nenhum coprocessador
+/// habilitado", a mesma leitura que um `CPACR` armazenado e inicializado a `0` produziria. Fica
+/// para quando B15.5 (`VLLDM`/`VSCCLRM`, que preservam estado FP condicionalmente a `CPACR`)
+/// precisar de um valor gravável de verdade.
 public final class MProfileSystemControl {
     private static final int VTOR_OFFSET = 0xD08;
     private static final int ICSR_OFFSET = 0xD04;
     private static final int AIRCR_OFFSET = 0xD0C;
     private static final int SHPR1_OFFSET = 0xD18;
     private static final int SHCSR_OFFSET = 0xD24;
+    /// `CFSR` (Configurable Fault Status Register, `0xE000ED28`, B15.2) — `UFSR`/`BFSR`/`MMFSR`
+    /// empacotados; o estado real mora em {@link MProfileExceptionModel#cfsr()} (mesmo padrão de
+    /// `priority`/`pending` acima), write-1-to-clear.
+    private static final int CFSR_OFFSET = 0xD28;
     private static final int NVIC_ISER0_OFFSET = 0x100;
     private static final int NVIC_ICER0_OFFSET = 0x180;
     private static final int NVIC_ISPR0_OFFSET = 0x200;
@@ -106,6 +117,9 @@ public final class MProfileSystemControl {
         if (offset == SHCSR_OFFSET) {
             return shcsr;
         }
+        if (offset == CFSR_OFFSET) {
+            return exceptionModel.cfsr();
+        }
         if (offset == NVIC_ISER0_OFFSET || offset == NVIC_ICER0_OFFSET) {
             return readEnabledWord();
         }
@@ -143,6 +157,8 @@ public final class MProfileSystemControl {
             writeAircr(value);
         } else if (offset == SHCSR_OFFSET) {
             shcsr = value;
+        } else if (offset == CFSR_OFFSET) {
+            exceptionModel.clearCfsrBits(value);
         } else if (offset == NVIC_ISER0_OFFSET) {
             setEnabledBits(value, true);
         } else if (offset == NVIC_ICER0_OFFSET) {

@@ -320,10 +320,19 @@ public final class ArmArchitecture {
     /// ISA, B9.10): o mesmo `ARMv6-M Architecture Reference Manual` (ARM DDI 0419C), seção A3.3.1,
     /// afirma que "ARMv6-M supports the 16-bit Thumb instructions from ARMv7-M, in addition to the
     /// 32-bit BL, DMB, DSB, ISB, MRS and MSR instructions" — uma lista fechada de SEIS encodings de
-    /// 32 bits que não inclui `B.W`/`TBB`/`TBH`. A task B7.4 original anexou este decoder por
-    /// engano (ele não aparece na enumeração do javadoc logo acima, que já dizia "BL... barreiras
-    /// ... MRS/MSR — todos cobertos por Thumb2MiscDecoder"): sem esta correção, `ARMV6M` aceitava
-    /// silenciosamente `B.W`/`TBB`/`TBH`, que a arquitetura real rejeita (G8).
+    /// 32 bits que não inclui `B.W`/`TBB`/`TBH`. A task B7.4 original anexou `Thumb2BranchDecoder`
+    /// por engano (ele não aparece na enumeração do javadoc logo acima, que já dizia "BL...
+    /// barreiras ... MRS/MSR — todos cobertos por Thumb2MiscDecoder"): sem esta correção, `ARMV6M`
+    /// aceitava silenciosamente `B.W`/`TBB`/`TBH`, que a arquitetura real rejeita (G8).
+    ///
+    /// **B15.2 acrescenta uma SÉTIMA exceção deliberada** à mesma lista fechada:
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder} (`NOCP`/`NOCP_8_1`).
+    /// `target/isa-decode/m-nocp.decode` (QEMU) trata o espaço de coprocessador ausente como
+    /// genérico a qualquer core `ARM_FEATURE_M`, sem distinguir v6-M de v7-M — mesma convenção que
+    /// `MProfileExceptionModel#enterException(ArmCore, ArmException)` já usa (UNDEFINED→
+    /// USAGE_FAULT sem gate de versão), e a mesma que `docs/COBERTURA-ISA.md`/`IsaCoverageReport`
+    /// já usam para medir a célula `m-nocp.decode` × `v6-M` (aplicabilidade por
+    /// `ArmFeature#M_PROFILE` cru, sem distinguir versão).
     ///
     /// **B9.11** fechou o achado colateral que a B9.10 deixou pendente: dentro do próprio
     /// `Thumb2MiscDecoder` (compartilhado com `ARMV7M`), os hints largos (`NOP.W`/`YIELD.W`/
@@ -335,7 +344,12 @@ public final class ArmArchitecture {
     /// E v7-M) — não existe em perfil M nenhum, que usa `EXC_RETURN` via `BX`/`POP`, não `SUBS PC`.
     public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
             .withThumb32DecoderExtensions(List.of(
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES)));
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES),
+                    // NOCP (B15.2): `docs/COBERTURA-ISA.md` mede `m-nocp.decode` como aplicável a
+                    // v6-M também (mesma convenção já usada por UNDEFINED->USAGE_FAULT em
+                    // MProfileExceptionModel, que não distingue v6-M/v7-M) — o v6-M real não tem
+                    // Thumb-2 largo em geral, mas o espaço de coprocessador ausente é medido igual.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV6M_FEATURES)));
 
     /// Cortex-M4/M7 (extensão DSP) — **ARMv7-M** (B7.4, features DSP completadas pela B9.16): Thumb-2
     /// largo completo + divide + bitfield + os registradores de mascaramento de falha
@@ -372,7 +386,10 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+                    // NOCP (B15.2): SUBSTITUI Thumb2CoprocessorDecoder — perfil M não tem MCR/MRC
+                    // de coprocessador genérico de verdade, ver Javadoc de Thumb2NocpDecoder
+                    // (Armadilha 1 da spec).
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV7M_FEATURES)));
 
     /// Cortex-M3/SC300 — **ARMv7-M puro, sem a extensão DSP** (B15.1). `ARMV7M` acima já inclui
     /// DSP inteira (`PACK_SATURATE`/`PARALLEL_SIMD`/`SIGNED_MULTIPLY_MEDIA`/`DSP_MULTIPLY`/`UMAAL`)
@@ -398,7 +415,8 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_PURE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_PURE_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+                    // NOCP (B15.2): mesma substituição de ARMV7M acima.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV7M_PURE_FEATURES)));
 
     /// Cortex-M4/M7 — nome arquiteturalmente correto do preset `ARMV7M` acima (que já é, de fato,
     /// um ARMv7E-M desde a B9.16, ver Javadoc de {@link #ARMV7M_PURE}). Alias por IDENTIDADE (não

@@ -363,6 +363,16 @@ public enum InstructionKind {
     /// `SPSR` de outro modo via `IrOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
     /// `sourceRegister` = `Rn`; `immediate` = valor empacotado de `BankedRegisterSysm#resolve`.
     MSR_BANK,
+    /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de
+    /// acessar um coprocessador ausente/desabilitado — o espaço INTEIRO de encoding de
+    /// coprocessador Thumb-2 (`MCR`/`MRC` clássico + extension register load/store), que o perfil M
+    /// não suporta de verdade (nenhuma FPU real neste emulador). Via `IrOp.Nocp`: seta
+    /// `UFSR.NOCP` (`CFSR` em `0xE000ED28`) e entra em `MProfileException#USAGE_FAULT`. Só
+    /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}.
+    /// `immediate` = número do coprocessador-alvo (`cp`, bits\[11:8\] do encoding; fixo em `10`
+    /// para `NOCP_8_1`) — sem uso funcional hoje, carregado só por fidelidade de trace/debug,
+    /// mesmo padrão de `HVC`/`SMC`.
+    NOCP,
     /// **Escape hatch de lifting** (RFC B13.2): a instrução já traz sua própria operação de IR em
     /// {@link DecodedInstruction#liftedOp} — `StandardIrBuilder` apenas a adiciona ao bloco, sem
     /// traduzir campo nenhum. Existe para as famílias vetoriais (NEON, e depois MVE), cuja forma de

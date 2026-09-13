@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 19093 de 19155 células aplicáveis decodificam.
+> **99%** — 19099 de 19155 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -55,8 +55,8 @@ Por arquitetura:
 | v6K | **100%** (306/306) |
 | MPCore | **100%** (356/356) |
 | v7-A | **100%** (652/652) |
-| v6-M | **88%** (83/94) |
-| v7-M | **96%** (323/334) |
+| v6-M | **91%** (86/94) |
+| v7-M | **97%** (326/334) |
 | ARMv8.0-A | **99%** (851/858) |
 | ARMv8.1-A | **99%** (883/890) |
 | ARMv8.2-A | **99%** (1008/1015) |
@@ -86,7 +86,7 @@ Por arquitetura:
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
 | NEON — load/store | 5 | não se aplica a nenhum preset atual |
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
-| ARMv7-M — coprocessador ausente | 11 | v6-M 0% (0/11) · v7-M 0% (0/11) |
+| ARMv7-M — coprocessador ausente | 11 | v6-M 27% (3/11) · v7-M 27% (3/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | não se aplica a nenhum preset atual |
 | A64 — AArch64 | 1161 | ARMv8.0-A 99% (851/858) · ARMv8.1-A 99% (883/890) · ARMv8.2-A 99% (1008/1015) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 99% (1079/1082) · ARMv8.6-A 99% (1092/1095) · ARMv8.7-A 99% (1094/1097) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 99% (1079/1082) · ARMv9.1-A 99% (1092/1095) · ARMv9.2-A 99% (1094/1098) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
@@ -1278,9 +1278,9 @@ Inventário: `m-nocp.decode` · 11 instruções.
 | `VLDR_sysreg` | · | · | · | · | · | ❌ | ❌ |
 | `VSTR_sysreg` | · | · | · | · | · | ❌ | ❌ |
 | `VSTR_sysreg` | · | · | · | · | · | ❌ | ❌ |
-| `NOCP` | · | · | · | · | · | ❌ | ❌ |
-| `NOCP` | · | · | · | · | · | ❌ | ❌ |
-| `NOCP_8_1` | · | · | · | · | · | ❌ | ❌ |
+| `NOCP` | · | · | · | · | · | ✅ | ✅ |
+| `NOCP` | · | · | · | · | · | ✅ | ✅ |
+| `NOCP_8_1` | · | · | · | · | · | ✅ | ✅ |
 
 ## MVE (Helium) — ARMv8.1-M
 

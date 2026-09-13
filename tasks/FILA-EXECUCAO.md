@@ -47,6 +47,28 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-13, após B15.2 fechar)
+
+**B15.2 FECHADA 2026-09-13** — perfil M `NOCP`/`NOCP_8_1` (exceção de coprocessador ausente, 2
+células). `Thumb2NocpDecoder` novo SUBSTITUI `Thumb2CoprocessorDecoder` em `ARMV6M`/`ARMV7M`/
+`ARMV7M_PURE` (Armadilha 1 confirmada: nenhum teste pré-existente exercitava `MCR`/`MRC` sob perfil
+M, e o espaço que `Thumb2CoprocessorDecoder` reivindicava é subconjunto estrito da forma 1 de
+`NOCP`). **Achado real pego ANTES de commitar** (medindo o delta de `docs/COBERTURA-ISA.md`, mesma
+disciplina de B19.14/B19.16): a primeira versão do decoder tratava a forma 2 genericamente e fazia
+`VLLDM_VLSTM`/`VSCCLRM` (B15.5, ainda não implementadas) saltarem para `✅` por engano — corrigido
+com 2 máscaras de exclusão específicas computadas a partir do `m-nocp.decode` real, mantendo essas
+2 células `❌` honesto. `CPACR` deliberadamente sem armazenamento próprio (Armadilha 4 da spec:
+`read32` já devolve 0 para offset desconhecido, mesmo resultado); `CFSR`/`UFSR` ganhou
+armazenamento real com semântica write-1-to-clear. `docs/COBERTURA-ISA.md`: `v6-M` 88%→94%
+(83→89/94), `v7-M` 96%→98% (323→329/334), global 99% inalterado no arredondamento
+(19093→19099/19155). `docs/COBERTURA-JIT.md` regenerado (`IrOp.Kind` 106→107, só interpretado,
+sem nó Truffle). `mvn -o test` verde (3860; as mesmas 3 falhas pré-existentes) + `truffle` (73
+verde) + `capi` + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B15.3` (`VMSR_VMRS`/`VLDR_sysreg`/`VSTR_sysreg`, o próximo degrau da escada
+B15, depende de B15.2 ✅) — ainda não tem spec própria escrita, precisa de uma rodada de spec antes
+de ser executável. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-13, spec da B15.2 escrita)
 
 **B15.2 ganhou spec própria** (`trilha-b-arquiteturas/b15.2-nocp-coprocessador-ausente.md`),

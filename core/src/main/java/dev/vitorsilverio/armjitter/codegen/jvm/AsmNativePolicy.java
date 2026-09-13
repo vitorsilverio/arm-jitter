@@ -222,6 +222,10 @@ public final class AsmNativePolicy {
             // MRS_BANK/MSR_BANK (B9.8.5): mesmo mecanismo de Hvc/Smc/Eret.
             case IrOp.MrsBank ignored -> true;
             case IrOp.MsrBank ignored -> true;
+            // NOCP/NOCP_8_1 (B15.2): sem emissão nativa nesta task ("Não inclui" — decode +
+            // interpretado apenas, mesmo padrão do resto da trilha B) — bloco inteiro cai no
+            // fallback interpretado (WHOLE_BLOCK) ou por op (PER_OP), mesmo caminho de NEON acima.
+            case IrOp.Nocp ignored -> false;
         };
     }
 

@@ -28,6 +28,11 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_FAULT_MASKING} —, gateado no decoder).
     private static final int FAULTMASK_BIT = 1 << 0;
 
+    /// Bit `NOCP` do `UFSR` (ARMv7-M ARM B3.2.15) — `UFSR` é o byte alto do `CFSR`
+    /// (`bits[31:16]`), então `NOCP` (`bit[3]` do `UFSR`) mora em `bit[19]` do `CFSR` completo
+    /// (B15.2). Setado por {@link #setUsageFaultNocp()} antes de entrar em `USAGE_FAULT`.
+    private static final int CFSR_UFSR_NOCP_BIT = 1 << 19;
+
     // ── Números SYSm dos registradores especiais (B7.4, ARMv7-M ARM B5.1.1). Públicos para o
     // decoder (Thumb2MiscDecoder) reusar o mesmo conjunto ao decidir quais SYSm são UNDEFINED. ──
     /// SYSm 0 — `APSR`: só os flags de aplicação (NZCVQ + GE) do `xPSR`.
@@ -165,6 +170,10 @@ public final class MProfileExceptionModel implements ExceptionModel {
     private int basepri;
     private int faultmask;
     private int vectorTableOffset;
+    /// `CFSR` (`UFSR`/`BFSR`/`MMFSR` empacotados, B15.2) — armazenamento simples, mesmo padrão de
+    /// `basepri`/`faultmask` acima; só o bit `NOCP` do `UFSR` é escrito por esta task (ver
+    /// {@link #setUsageFaultNocp()}). Leitura/escrita memory-mapped em {@link MProfileSystemControl}.
+    private int cfsr;
 
     /// Retorna o MSP. Quando o MSP é o SP ativo (Handler mode, ou Thread com SPSEL=0), este
     /// valor está desatualizado — leia {@code core.register(13)} nesse caso.
@@ -347,6 +356,25 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// Ajusta o VTOR (setup de teste; memory-mapped de verdade na B7.3).
     public void setVectorTableOffset(int vectorTableOffset) {
         this.vectorTableOffset = vectorTableOffset;
+    }
+
+    /// Retorna o `CFSR` cru (`UFSR`/`BFSR`/`MMFSR` empacotados, B15.2).
+    public int cfsr() {
+        return cfsr;
+    }
+
+    /// Seta o bit `NOCP` do `UFSR` (B15.2): chamado ao entrar em `USAGE_FAULT` por uma instrução
+    /// de coprocessador ausente (`NOCP`/`NOCP_8_1`) — a arquitetura real seta o fault status como
+    /// parte da DETECÇÃO, antes de empilhar o frame de exceção, não do handler.
+    public void setUsageFaultNocp() {
+        cfsr |= CFSR_UFSR_NOCP_BIT;
+    }
+
+    /// `CFSR` é write-1-to-clear no hardware real (ARMv7-M ARM B3.2.15): cada bit setado em
+    /// `mask` é limpo; bits não setados em `mask` são preservados. Chamado por
+    /// {@link MProfileSystemControl#write32} numa escrita de software em `0xE000ED28`.
+    public void clearCfsrBits(int mask) {
+        cfsr &= ~mask;
     }
 
     /// Marca a exceção `number` como pendente (ISPR/PENDSVSET/PENDSTSET do

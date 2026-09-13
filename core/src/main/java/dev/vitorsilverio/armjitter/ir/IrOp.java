@@ -18,7 +18,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonMatrixMultiplyAccumulate, IrOp.NeonFusedMultiplyAddLong,
         IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
-        IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16 {
+        IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
+        IrOp.Nocp {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -182,6 +183,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16 = 104;
         /// B13.21: `VFMA_b16_scal` — ver {@link NeonFusedMultiplyAddLongByElementBFloat16}.
         public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 = 105;
+        /// B15.2: `NOCP`/`NOCP_8_1` (perfil M) — ver {@link Nocp}.
+        public static final int NOCP = 106;
     }
 
     /// Operacao ALU generica.
@@ -1457,6 +1460,23 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.M_PROFILE_SYSTEM_REGISTER; }
+    }
+
+    /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de acessar
+    /// um coprocessador ausente/desabilitado — seta `UFSR.NOCP` (`CFSR` em `0xE000ED28`) e entra em
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileException#USAGE_FAULT} via
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel}. Só produzida pelo decoder
+    /// quando {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE} está ativo, portanto o
+    /// executor pode assumir que o `ExceptionModel` instalado é um `MProfileExceptionModel` — mesmo
+    /// contrato de {@link MProfileSystemRegister}.
+    record Nocp(
+            /// Coprocessador-alvo (`cp`, bits\[11:8\] do encoding; fixo em `10` para `NOCP_8_1`) —
+            /// sem uso funcional hoje, carregado só por fidelidade de trace/debug (mesmo padrão de
+            /// {@link Hvc}/{@link Smc}).
+            int coprocessor,
+            /// Condição necessária para executar a exceção.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.NOCP; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, forma "three same" (B13.2/B13.4): `Vd[i] = op(Vn[i], Vm[i])`

@@ -169,6 +169,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
                 case IrOp.Kind.DSP_TOP_WORD_MULTIPLY -> alu.executeDspTopWordMultiply(core, (IrOp.DspTopWordMultiply) op);
+                case IrOp.Kind.NOCP -> pcChanged |= system.executeNocp(core, (IrOp.Nocp) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -342,6 +343,7 @@ public final class IrBlockExecutor {
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }
             case IrOp.DspTopWordMultiply topWord -> { alu.executeDspTopWordMultiply(core, topWord); yield false; }
+            case IrOp.Nocp nocp -> system.executeNocp(core, nocp);
         };
     }
 
