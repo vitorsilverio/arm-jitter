@@ -47,6 +47,42 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-14, rodada de spec em massa — todos os épicos ganharam spec)
+
+**Todos os épicos da trilha B que ainda estavam sem spec de sub-task ganharam spec completa nesta
+rodada** (pedido explícito do usuário: "faça todas as specs"), executada por agentes Opus em série
+(isolamento por worktree quebrado neste ambiente — mismatch de path WSL/Windows num redirect de
+`.git`; contornado rodando sequencialmente no checkout principal, nunca em paralelo, respeitando a
+regra de nunca duas sessões simultâneas no mesmo repo) + a escada B15.4-B15.7 escrita diretamente
+pela sessão orquestradora (sem agente, por já ter contexto de B15.2/B15.3). **84 specs novas**:
+`B14` (7) · `B15.4-B15.7` (4, completando a escada B15 inteira) · `B16` (14) · `B17` (26, incl. RFC
+B17.2) · `B18` (13) · `B20` (9) · `B21` (8, incl. RFC B21.1). Nenhuma foi EXECUTADA — são specs
+prontas para uma sessão comum pegar, uma de cada vez, seguindo o protocolo normal (`tasks/README.md`
++ `INDICE.md` da trilha + a spec + as fontes que ela cita).
+
+**Duas decisões de RFC precisam do usuário antes que as sub-tasks dependentes delas sejam
+executáveis de verdade** (as specs downstream já foram escritas assumindo a recomendação, mas a
+decisão final é do usuário, não do agente — ver `tasks/README.md`):
+- **`B17.2`** (`trilha-b-arquiteturas/b17.2-rfc-comprimento-vetor.md`): comprimento de vetor SVE.
+  Recomendação: VL configurável, `V0-V31` como vista das 2 palavras baixas de `Z0-Z31` (reusa
+  `AdvSimdRegisterWords` da RFC B13.2 sem mudar nenhuma assinatura pública), VL default 256 bits.
+- **`B21.1`** (`trilha-b-arquiteturas/b21.1-rfc-modelo-26-bits.md`): representação do estado ARM
+  26-bit. Recomendação: `CpsrRegister` continua sendo o armazenamento real, `R15` vira uma *view*
+  composta só nos pontos que a observam (opção c do plano).
+
+**Achados importantes que as rodadas de spec descobriram** (não corrigidos ainda — documentados nas
+specs para a sessão de execução resolver):
+- **Bug G8 real em `VfpDecoder`** (achado da B14): não checa `bits[31:28]`, então hoje, sob
+  `ARMV7A`/`ARM11_MPCORE` (e T32), `VSEL`/`VMAXNM`/`VRINTA`/`VCVTA`/`VMOVX`/`VINS` decodificam como
+  outras instruções VFP (`VMLA`/`VDIV`/conversão com sinal trocado/etc.) em vez de `UNDEFINED`. A
+  spec da B14.4 tem que corrigir isso nos presets EXISTENTES, não só no preset novo.
+- **`Thumb2NocpDecoder` (B15.2) reivindica todo o espaço de bits de MVE** sob `M_PROFILE` — a B16
+  precisa registrar seus decoders ANTES dele na lista, senão toda instrução MVE viraria `NOCP` por
+  engano.
+- Várias tabelas de contagem de encodings dos planos mestres (`b16-plano-mve-helium.md`,
+  `b17-plano-sve.md`) tinham agrupamento por cabeçalho errado — as specs de fechamento de cada
+  família (`B16.1`, `B17.1`) já trazem partição normativa reverificada contra o `.decode` real.
+
 ## Onde estamos (atualizado 2026-09-13, spec da B15.3 escrita)
 
 **B15.3 ganhou spec própria** (`trilha-b-arquiteturas/b15.3-vmsr-vmrs-vldr-vstr-sysreg.md`), mesmo
