@@ -363,6 +363,17 @@ public enum InstructionKind {
     /// `SPSR` de outro modo via `IrOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
     /// `sourceRegister` = `Rn`; `immediate` = valor empacotado de `BankedRegisterSysm#resolve`.
     MSR_BANK,
+    /// `VLDR_sysreg` (perfil M, B15.3, `target/isa-decode/m-nocp.decode`): carrega o registrador de
+    /// sistema `FPSCR` (único `reg` implementado nesta task — ver {@link #VFP_SYSREG_STORE}) a
+    /// partir de `[Rn {+,-}imm7×4]`, com pré/pós-indexação e writeback opcionais (mesma convenção de
+    /// `P`/`U`/`W` de `LOAD`/`STORE` genérico). `destinationRegister`=`-1` (o destino não é um GPR,
+    /// é `ArmCore.fpscr()`); `sourceRegister`=`Rn`; `immediate`=offset em bytes já resolvido (com
+    /// sinal); `accessSizeBytes`=4; `writeback`/`postIndexed` como em `LOAD`.
+    VFP_SYSREG_LOAD,
+    /// `VSTR_sysreg` (ver {@link #VFP_SYSREG_LOAD}): grava `ArmCore.fpscr()` em
+    /// `[Rn {+,-}imm7×4]`. `sourceRegister`=`Rn` (base); o valor gravado é sempre o `FPSCR` inteiro,
+    /// sem registrador de origem adicional.
+    VFP_SYSREG_STORE,
     /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de
     /// acessar um coprocessador ausente/desabilitado — o espaço INTEIRO de encoding de
     /// coprocessador Thumb-2 (`MCR`/`MRC` clássico + extension register load/store), que o perfil M

@@ -778,7 +778,24 @@ public final class IsaCoverageReport {
                 decoded = new ThumbDecoder(architecture).decode(memory, 0);
             } else if (group.probe() == Probe.THUMB32) {
                 // Thumb-2: o padrão do decodetree é `hw1:hw2`, e na memória hw1 vem primeiro.
-                memory.put16(0, (word >>> 16) & 0xFFFF);
+                int hw1 = (word >>> 16) & 0xFFFF;
+                // B15.3: algumas linhas (ex. `m-nocp.decode`: `VMSR_VMRS`/`VLDR_sysreg`/
+                // `VSTR_sysreg`) escrevem `----` nos bits[31:28] na notação do QEMU — o arquivo
+                // real herda o marcador de classe Thumb-2 de 32 bits (`top5 ∈ {0b11101,0b11110,
+                // 0b11111}`, bits[15:11] de `hw1`) de um contexto de inclusão externo, não
+                // reproduzido por este parser isolado (`DecodeTreeSpec` só vê a linha, não o
+                // arquivo inteiro que a inclui). Sem correção, `ThumbDecoder` nunca reconheceria a
+                // palavra como Thumb-2 de 32 bits (consumiria só `hw1` como instrução de 16 bits),
+                // reportando MISSING para SEMPRE — falso negativo do MEDIDOR, não da implementação
+                // (mesma categoria do achado B9.7, ver `FILL_STRATEGIES`). Só força quando os bits
+                // estão GENUINAMENTE livres (`top5` resultante inválido): nunca sobrescreve um
+                // padrão que já fixa esses bits para um marcador válido.
+                int top5 = (hw1 >>> 11) & 0x1F;
+                if (top5 != 0b11101 && top5 != 0b11110 && top5 != 0b11111) {
+                    hw1 = (hw1 & 0x07FF) | (0b11101 << 11);
+                    word = (hw1 << 16) | (word & 0xFFFF);
+                }
+                memory.put16(0, hw1);
                 memory.put16(2, word & 0xFFFF);
                 decoded = new ThumbDecoder(architecture).decode(memory, 0);
                 // Sem Thumb-2 o decoder consome só a PRIMEIRA halfword e devolve outra instrução,

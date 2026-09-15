@@ -170,6 +170,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
                 case IrOp.Kind.DSP_TOP_WORD_MULTIPLY -> alu.executeDspTopWordMultiply(core, (IrOp.DspTopWordMultiply) op);
                 case IrOp.Kind.NOCP -> pcChanged |= system.executeNocp(core, (IrOp.Nocp) op);
+                case IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER -> vfp.executeVfpSysregMemoryTransfer(core, (IrOp.VfpSysregMemoryTransfer) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -344,6 +345,7 @@ public final class IrBlockExecutor {
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }
             case IrOp.DspTopWordMultiply topWord -> { alu.executeDspTopWordMultiply(core, topWord); yield false; }
             case IrOp.Nocp nocp -> system.executeNocp(core, nocp);
+            case IrOp.VfpSysregMemoryTransfer vfpSysreg -> { vfp.executeVfpSysregMemoryTransfer(core, vfpSysreg); yield false; }
         };
     }
 

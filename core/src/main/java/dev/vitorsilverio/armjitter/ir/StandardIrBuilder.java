@@ -506,6 +506,20 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.condition()));
+            case VFP_SYSREG_LOAD -> block.add(new IrOp.VfpSysregMemoryTransfer(
+                    true,
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.writeback(),
+                    instruction.postIndexed(),
+                    instruction.condition()));
+            case VFP_SYSREG_STORE -> block.add(new IrOp.VfpSysregMemoryTransfer(
+                    false,
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.writeback(),
+                    instruction.postIndexed(),
+                    instruction.condition()));
             // VMOV_64_sp (B9.5): par de S consecutivos, ver IrOp.VfpCorePairTransferSingle.
             case VFP_CORE_PAIR_TRANSFER_SINGLE -> block.add(new IrOp.VfpCorePairTransferSingle(
                     instruction.link(),

@@ -19,7 +19,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
-        IrOp.Nocp {
+        IrOp.Nocp, IrOp.VfpSysregMemoryTransfer {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -185,6 +185,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16 = 105;
         /// B15.2: `NOCP`/`NOCP_8_1` (perfil M) — ver {@link Nocp}.
         public static final int NOCP = 106;
+        /// B15.3: `VLDR_sysreg`/`VSTR_sysreg` (perfil M) — ver {@link VfpSysregMemoryTransfer}.
+        public static final int VFP_SYSREG_MEMORY_TRANSFER = 107;
     }
 
     /// Operacao ALU generica.
@@ -1477,6 +1479,29 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a exceção.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.NOCP; }
+    }
+
+    /// `VLDR_sysreg`/`VSTR_sysreg` (perfil M, B15.3, `target/isa-decode/m-nocp.decode`): move o
+    /// valor bruto de `ArmCore.fpscr()` de/para `[base {+,-}offsetBytes]`, com pré/pós-indexação e
+    /// writeback opcionais — mesma semântica de endereço de {@link Load}/{@link Store} genérico
+    /// ({@code postIndexed ? base : base + offsetBytes}, seguido de {@code base + offsetBytes}
+    /// quando {@link #writeback}), só que o destino/origem não é um GPR. Único `reg` implementado
+    /// nesta task é `FPSCR` (ver `Thumb2VfpSystemAccessDecoder`); os demais valores reais da
+    /// arquitetura (`FPSCR_NZCVQC`/`VPR`,`P0`/`FPCXT_NS`/`FPCXT_S`) ainda não são decodificados.
+    record VfpSysregMemoryTransfer(
+            /// `true` para `VLDR_sysreg` (memória -> `FPSCR`); `false` para `VSTR_sysreg`.
+            boolean load,
+            /// Registrador base do endereço (`Rn`).
+            int base,
+            /// Offset em bytes (±`imm7`×4), já resolvido pelo decoder.
+            int offsetBytes,
+            /// Indica writeback no registrador base.
+            boolean writeback,
+            /// Indica endereçamento post-index (`P=0,W=1` forçado no encoding real).
+            boolean postIndexed,
+            /// Condição necessária para executar a transferência.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_SYSREG_MEMORY_TRANSFER; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, forma "three same" (B13.2/B13.4): `Vd[i] = op(Vn[i], Vm[i])`

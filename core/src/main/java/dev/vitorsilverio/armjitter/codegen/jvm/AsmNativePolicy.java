@@ -226,6 +226,9 @@ public final class AsmNativePolicy {
             // interpretado apenas, mesmo padrão do resto da trilha B) — bloco inteiro cai no
             // fallback interpretado (WHOLE_BLOCK) ou por op (PER_OP), mesmo caminho de NEON acima.
             case IrOp.Nocp ignored -> false;
+            // VLDR_sysreg/VSTR_sysreg (B15.3): sem emissão nativa nesta task ("Não inclui" — decode
+            // + interpretado apenas, mesmo padrão de Nocp acima).
+            case IrOp.VfpSysregMemoryTransfer ignored -> false;
         };
     }
 

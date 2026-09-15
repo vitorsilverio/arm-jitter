@@ -171,6 +171,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             // MRS/MSR SYSm do perfil M (B7.4): `MSR` lê o registrador ARM fonte; `MRS` não lê
             // registrador ARM algum (só o registrador especial, fora deste bitmask).
             case IrOp.MProfileSystemRegister t -> t.read() ? 0 : (1 << t.armRegister());
+            // VLDR_sysreg/VSTR_sysreg (B15.3): `base` sempre lido para calcular o endereço,
+            // independente da direção (destino/origem é FPSCR, fora deste bitmask).
+            case IrOp.VfpSysregMemoryTransfer t -> 1 << t.base();
             default -> 0;
         };
     }
@@ -271,6 +274,9 @@ public final class DeadCodeEliminationPass implements IrOptimizer {
             // MRS/MSR SYSm do perfil M (B7.4): `MRS` escreve o registrador ARM destino; `MSR` não
             // escreve registrador ARM algum (só o registrador especial, fora deste bitmask).
             case IrOp.MProfileSystemRegister t -> t.read() ? (1 << t.armRegister()) : 0;
+            // VLDR_sysreg/VSTR_sysreg (B15.3): só escreve um GPR (`base`) com writeback; o destino
+            // real do valor movido é FPSCR, fora deste bitmask.
+            case IrOp.VfpSysregMemoryTransfer t -> t.writeback() ? (1 << t.base()) : 0;
             default -> 0;
         };
     }

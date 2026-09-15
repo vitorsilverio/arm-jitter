@@ -345,6 +345,9 @@ public final class ArmArchitecture {
     public static final ArmArchitecture ARMV6M = ARMV6M_FEATURES
             .withThumb32DecoderExtensions(List.of(
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV6M_FEATURES),
+                    // VMSR_VMRS/VLDR_sysreg/VSTR_sysreg (B15.3): TEM que vir ANTES de
+                    // Thumb2NocpDecoder — mesmo bloco QEMU, formas específicas primeiro.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV6M_FEATURES),
                     // NOCP (B15.2): `docs/COBERTURA-ISA.md` mede `m-nocp.decode` como aplicável a
                     // v6-M também (mesma convenção já usada por UNDEFINED->USAGE_FAULT em
                     // MProfileExceptionModel, que não distingue v6-M/v7-M) — o v6-M real não tem
@@ -386,6 +389,9 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_FEATURES),
+                    // VMSR_VMRS/VLDR_sysreg/VSTR_sysreg (B15.3): TEM que vir ANTES de
+                    // Thumb2NocpDecoder — mesmo bloco QEMU, formas específicas primeiro.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV7M_FEATURES),
                     // NOCP (B15.2): SUBSTITUI Thumb2CoprocessorDecoder — perfil M não tem MCR/MRC
                     // de coprocessador genérico de verdade, ver Javadoc de Thumb2NocpDecoder
                     // (Armadilha 1 da spec).
@@ -415,6 +421,9 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7M_PURE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7M_PURE_FEATURES),
+                    // VMSR_VMRS/VLDR_sysreg/VSTR_sysreg (B15.3): TEM que vir ANTES de
+                    // Thumb2NocpDecoder — mesmo bloco QEMU, formas específicas primeiro.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV7M_PURE_FEATURES),
                     // NOCP (B15.2): mesma substituição de ARMV7M acima.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV7M_PURE_FEATURES)));
 

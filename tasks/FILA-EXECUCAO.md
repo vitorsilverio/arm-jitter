@@ -47,6 +47,31 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-14, após B15.3 fechar)
+
+**B15.3 FECHADA 2026-09-14** — perfil M `VMSR_VMRS`/`VLDR_sysreg`/`VSTR_sysreg` (`m-nocp.decode`, 3
+células), terceiro degrau da escada B15. Reusa `ArmCore.fpscr()` (incondicional desde B3.3);
+`VMSR_VMRS` reaproveita `InstructionKind.VFP_SYSTEM_TRANSFER` sem nenhuma mudança (o aliasing
+`Rt=15`→APSR da A-profile vive só no executor, e o decoder novo recusa `Rt=15` no perfil M, então
+o ramo nunca é alcançado); `VLDR_sysreg`/`VSTR_sysreg` ganharam 2 `InstructionKind` novos + 1 `IrOp`
+novo (`VfpSysregMemoryTransfer`, `Kind` 107, interpretado apenas). **Achado real: bug de MEDIÇÃO**
+(não de implementação) em `IsaCoverageReport` — as 3 linhas de `m-nocp.decode` escrevem `----`
+(bits[31:28] livre) na notação real do QEMU, e a sonda da ferramenta deixava esses bits em `0`,
+produzindo uma palavra Thumb-2 arquiteturalmente inválida (nunca reconhecida como instrução de 32
+bits por `ThumbDecoder`, então a sonda relatava `MISSING` incondicional, independente do decoder
+estar certo) — corrigido em `IsaCoverageReport#probeOnce` forçando o marcador de classe Thumb-2
+válido só quando os bits estão genuinamente livres (confirmado que a correção não muda nenhuma
+outra célula da tabela). `docs/COBERTURA-ISA.md`: `v6-M` 91%→96%, `v7-M` 97%→99%, `m-nocp.decode`
+27%→72% nas duas colunas. `docs/COBERTURA-JIT.md`: `IrOp.Kind` 107→108.
+`TruffleCodeEmitterSupportsCoherenceTest` atualizado (contrato factory↔supports preservado). `mvn
+-o test` verde (3876; as mesmas 3 falhas pré-existentes) + `truffle` (73) + `capi` + `install`. **G5
+completo** nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B15.4` (Security Extension mínima, `SG`/`BXNS`/`BLXNS`, depende só de
+B15.1 ✅) — spec pronta desde 2026-09-14. `B15.6`/`B15.7` também têm spec pronta mas dependem de
+B15.4. `B15.5` depende de B15.3 (fechada agora) E B15.4 (ainda ⬜). `C12.5`/`C12.10` (emissão JIT
+nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-14, rodada de spec em massa — todos os épicos ganharam spec)
 
 **Todos os épicos da trilha B que ainda estavam sem spec de sub-task ganharam spec completa nesta

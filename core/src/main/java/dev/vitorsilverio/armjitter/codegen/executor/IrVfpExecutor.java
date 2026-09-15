@@ -432,6 +432,27 @@ public final class IrVfpExecutor {
         }
     }
 
+    /// `VLDR_sysreg`/`VSTR_sysreg` (perfil M, B15.3): move o valor bruto de `ArmCore.fpscr()` de/para
+    /// `[base {+,-}offsetBytes]` — mesma aritmética de endereço de {@link IrMemoryExecutor#executeLoad}/
+    /// {@link IrMemoryExecutor#executeStore} (`postIndexed ? base : base + offsetBytes`, seguido de
+    /// `base + offsetBytes` quando {@code writeback}), só que o destino/origem é `ArmCore.fpscr()`,
+    /// não um GPR.
+    public void executeVfpSysregMemoryTransfer(ArmCore core, IrOp.VfpSysregMemoryTransfer op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int base = core.register(op.base());
+        int address = op.postIndexed() ? base : base + op.offsetBytes();
+        if (op.load()) {
+            core.fpscr().setValue(support.read32Arm7(core, address));
+        } else {
+            support.write32Arm7(core, address, core.fpscr().value());
+        }
+        if (op.writeback()) {
+            core.setRegister(op.base(), base + op.offsetBytes());
+        }
+    }
+
     /// `VMOV_64_sp`: `armLow`/`armHigh` de/para `Sm`/`Sm+1` (par consecutivo, NAO via `d()`/`setD()`
     /// — `m` pode ser ímpar, caso em que as duas metades pertencem a `D` diferentes).
     public void executeVfpCorePairTransferSingle(ArmCore core, IrOp.VfpCorePairTransferSingle op) {
