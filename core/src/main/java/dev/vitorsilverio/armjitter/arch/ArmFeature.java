@@ -326,5 +326,19 @@ public enum ArmFeature {
     /// {@link #HALF_PRECISION_FP} (aritmética de MESMA largura) — feature própria, independente. Mirror de
     /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#FP16_FUSED_MULTIPLY_ADD_LONG} para o
     /// lado A32/T32. **Nenhum preset a declara** (a saída de `NOT_IN_ANY_PRESET` é a B13.22).
-    FP16_FUSED_MULTIPLY_ADD_LONG
+    FP16_FUSED_MULTIPLY_ADD_LONG,
+
+    // ---- B15.4 (perfil M: Security Extension mínima) ----
+    /// **ARMv8-M Security Extension** (TrustZone para perfil M): `SG`/`BXNS`/`BLXNS` (`t32.decode`/
+    /// `t16.decode`) e banking de `MSP`/`PSP` por estado de segurança (Secure/Non-secure), além dos
+    /// 4 ponteiros de pilha resultantes — ver
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel}. Presente nos presets
+    /// {@code ARMV8M_BASELINE}/{@code ARMV8M_MAINLINE} (`ArmArchitecture`), NUNCA em `ARMV6M`/
+    /// `ARMV7M`/`ARMV7M_PURE`/`ARMV7EM` (G3: esses presets não ganham a feature). **Sem SAU
+    /// (Security Attribution Unit) real** — `SG` executa sem verificar se veio de uma região
+    /// Non-secure Callable de verdade, e `TT`/`TTT`/`TTA`/`TTAT` (já decodificados desde antes desta
+    /// feature, ver B9.11) devolvem sempre `0` (mesma simplificação escolhida pelo próprio QEMU no
+    /// modo `linux-user`, `HELPER(v7m_tt)`) — simplificação CONSCIENTE e documentada, não segurança
+    /// real (ver `## Resultado` da task B15.4).
+    M_PROFILE_SECURITY
 }

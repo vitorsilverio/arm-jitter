@@ -278,6 +278,13 @@ public final class StandardIrBuilder implements IrBuilder {
                             ? ((instruction.address() + instructionWidth(instruction)) | 1)
                             : (instruction.address() + instructionWidth(instruction)),
                     instruction.condition()));
+            case SECURE_GATEWAY -> block.add(new IrOp.SecureGateway(instruction.condition()));
+            case SECURE_BRANCH_EXCHANGE -> block.add(new IrOp.SecureBranchExchange(
+                    instruction.sourceRegister(),
+                    registerValueOverride(instruction, instruction.sourceRegister()),
+                    instruction.link(),
+                    (instruction.address() + instructionWidth(instruction)) | 1,
+                    instruction.condition()));
             case LONG_BRANCH_PREFIX -> block.add(new IrOp.ThumbBlPrefix(
                     instruction.immediate(),
                     instruction.address(),

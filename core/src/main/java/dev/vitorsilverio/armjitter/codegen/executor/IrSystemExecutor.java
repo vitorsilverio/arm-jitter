@@ -303,6 +303,15 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `SG` (B15.4): só produzida sob `ArmFeature#M_PROFILE_SECURITY` (exclusivo do perfil M),
+    /// mesmo cast direto de {@link #executeNocp} acima.
+    public void executeSecureGateway(ArmCore core, IrOp.SecureGateway op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        ((MProfileExceptionModel) core.exceptionModel()).secureGateway(core);
+    }
+
     /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 passam a
     /// usar BE8 (task B1.8, ver {@code IrExecutionSupport#applyDataEndiannessWord}); a busca de
     /// instrução nunca é afetada.

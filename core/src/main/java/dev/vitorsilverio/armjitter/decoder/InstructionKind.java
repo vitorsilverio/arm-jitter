@@ -384,6 +384,20 @@ public enum InstructionKind {
     /// para `NOCP_8_1`) — sem uso funcional hoje, carregado só por fidelidade de trace/debug,
     /// mesmo padrão de `HVC`/`SMC`.
     NOCP,
+    /// `SG` (Secure Gateway, perfil M, B15.4, `t32.decode`): entra em estado Secure e limpa o
+    /// `bit0` do endereço de retorno em `LR` — via `IrOp.SecureGateway`. **Sem verificação de
+    /// região Non-secure Callable real** (SAU não modelada, ver B15.4 "Não inclui") — SG executa
+    /// sempre que decodificada, simplificação CONSCIENTE documentada, não segurança real. Só
+    /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}. Nenhum
+    /// campo neutro é significativo neste kind.
+    SECURE_GATEWAY,
+    /// `BXNS`/`BLXNS` (perfil M, B15.4, `t16.decode`): troca de estado Secure/Non-secure por
+    /// `bit0` do valor de `Rm`, banking do `SP` ativo, e os mecanismos `EXC_RETURN`/`FNC_RETURN`
+    /// quando o destino é um valor mágico reconhecido — via `IrOp.SecureBranchExchange` (mesma
+    /// forma de campos de {@link #BRANCH_EXCHANGE}: `sourceRegister`=`Rm`; `link`=`true` só para
+    /// `BLXNS`). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
+    SECURE_BRANCH_EXCHANGE,
     /// **Escape hatch de lifting** (RFC B13.2): a instrução já traz sua própria operação de IR em
     /// {@link DecodedInstruction#liftedOp} — `StandardIrBuilder` apenas a adiciona ao bloco, sem
     /// traduzir campo nenhum. Existe para as famílias vetoriais (NEON, e depois MVE), cuja forma de

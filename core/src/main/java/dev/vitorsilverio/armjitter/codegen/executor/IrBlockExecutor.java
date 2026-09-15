@@ -171,6 +171,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.DSP_TOP_WORD_MULTIPLY -> alu.executeDspTopWordMultiply(core, (IrOp.DspTopWordMultiply) op);
                 case IrOp.Kind.NOCP -> pcChanged |= system.executeNocp(core, (IrOp.Nocp) op);
                 case IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER -> vfp.executeVfpSysregMemoryTransfer(core, (IrOp.VfpSysregMemoryTransfer) op);
+                case IrOp.Kind.SECURE_GATEWAY -> system.executeSecureGateway(core, (IrOp.SecureGateway) op);
+                case IrOp.Kind.SECURE_BRANCH_EXCHANGE -> pcChanged |= branch.executeSecureBranchExchange(core, (IrOp.SecureBranchExchange) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -346,6 +348,8 @@ public final class IrBlockExecutor {
             case IrOp.DspTopWordMultiply topWord -> { alu.executeDspTopWordMultiply(core, topWord); yield false; }
             case IrOp.Nocp nocp -> system.executeNocp(core, nocp);
             case IrOp.VfpSysregMemoryTransfer vfpSysreg -> { vfp.executeVfpSysregMemoryTransfer(core, vfpSysreg); yield false; }
+            case IrOp.SecureGateway sg -> { system.executeSecureGateway(core, sg); yield false; }
+            case IrOp.SecureBranchExchange sbx -> branch.executeSecureBranchExchange(core, sbx);
         };
     }
 

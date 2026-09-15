@@ -119,6 +119,24 @@ public final class MProfileExceptionModel implements ExceptionModel {
     private static final int EXC_RETURN_PREFIX_MASK = 0xFFFFFFF0;
     private static final int EXC_RETURN_PREFIX = 0xFFFFFFF0;
 
+    // ── Security Extension (B15.4, ARMv8-M): SG/BXNS/BLXNS ──────────────────────────────────
+    /// `LR` gravado por `BLXNS` quando troca para Non-secure (QEMU real, `HELPER(v7m_blxns)`:
+    /// `env->regs[14] = 0xfeffffff`) — NÃO é o "integrity signature" de empilhamento de exceção
+    /// (`0xFEFA125A`/`B`, mecanismo de hardware DIFERENTE, fora do escopo desta task, ver "Não
+    /// inclui"); é o marcador `FNC_RETURN` que uma `BXNS` subsequente (a partir do código
+    /// Non-secure, tipicamente `BX LR`) reconhece para desfazer a chamada (ver
+    /// {@link #isFunctionReturnCandidate}/{@link #functionReturn}).
+    private static final int FUNCTION_RETURN_MAGIC = 0xFEFFFFFF;
+    /// Menor valor reconhecido como candidato a `FNC_RETURN` por `BXNS` (QEMU real,
+    /// `FNC_RETURN_MIN_MAGIC`) — abaixo do prefixo de `EXC_RETURN` ({@link #EXC_RETURN_PREFIX},
+    /// `0xFFFFFFF0`), então as duas faixas nunca colidem.
+    private static final int FUNCTION_RETURN_MIN_MAGIC = 0xFEFFFFFE;
+    /// Tamanho do frame empilhado por `BLXNS` na pilha Secure (2 words: endereço de retorno +
+    /// número de exceção simplificado — sem `SFPA`/contexto de FP, ver Javadoc de {@link
+    /// #blxns}) e desempilhado por {@link #functionReturn}.
+    private static final int FUNCTION_CALL_FRAME_SIZE_BYTES = 8;
+    private static final int FUNCTION_CALL_FRAME_PSR_OFFSET = 4;
+
     private static final int VECTOR_ENTRY_SIZE_BYTES = 4;
     /// Bit 0 do endereço lido da tabela de vetores: deve ser 1 (Thumb). Mesmo bit de
     /// {@link #XPSR_THUMB_BIT} conceitualmente, mas em posição de ENDEREÇO, não de `xPSR`.
@@ -175,6 +193,20 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// {@link #setUsageFaultNocp()}). Leitura/escrita memory-mapped em {@link MProfileSystemControl}.
     private int cfsr;
 
+    /// Estado de segurança corrente (`true` = Secure — valor de reset real do ARMv8-M quando a
+    /// Security Extension está implementada). Só mutado por {@link #secureGateway}/
+    /// {@link #secureBranchExchange} (B15.4), sob {@link
+    /// dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY} — em qualquer preset sem
+    /// essa feature este campo nunca muda, então {@link #mainStackPointer}/{@link
+    /// #processStackPointer} continuam se comportando EXATAMENTE como antes da B15.4 (G3): eles são
+    /// a sombra do domínio Secure, que é o único domínio que existe quando a feature está ausente.
+    private boolean secure = true;
+    /// Sombra do MSP do domínio Non-secure (só existe/é tocada sob `M_PROFILE_SECURITY`) — ver
+    /// {@link #mainStackPointer} para a sombra do domínio Secure.
+    private int mainStackPointerNonSecure;
+    /// Sombra do PSP do domínio Non-secure — ver {@link #processStackPointer}.
+    private int processStackPointerNonSecure;
+
     /// Retorna o MSP. Quando o MSP é o SP ativo (Handler mode, ou Thread com SPSEL=0), este
     /// valor está desatualizado — leia {@code core.register(13)} nesse caso.
     public int mainStackPointer() {
@@ -225,6 +257,156 @@ public final class MProfileExceptionModel implements ExceptionModel {
             mainStackPointer = core.register(ArmCore.SP);
             core.setRegister(ArmCore.SP, processStackPointer);
         }
+    }
+
+    /// Retorna `true` quando o núcleo está no estado Secure (B15.4). Sempre `true` em presets sem
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY} — não há estado
+    /// Non-secure para trocar.
+    public boolean secure() {
+        return secure;
+    }
+
+    /// Sombra do MSP do domínio `secureState` (ver {@link #mainStackPointer} para o acessor do
+    /// domínio Secure, preservado por G3).
+    private int mainStackPointerFor(boolean secureState) {
+        return secureState ? mainStackPointer : mainStackPointerNonSecure;
+    }
+
+    private void setMainStackPointerFor(boolean secureState, int value) {
+        if (secureState) {
+            mainStackPointer = value;
+        } else {
+            mainStackPointerNonSecure = value;
+        }
+    }
+
+    private int processStackPointerFor(boolean secureState) {
+        return secureState ? processStackPointer : processStackPointerNonSecure;
+    }
+
+    private void setProcessStackPointerFor(boolean secureState, int value) {
+        if (secureState) {
+            processStackPointer = value;
+        } else {
+            processStackPointerNonSecure = value;
+        }
+    }
+
+    /// Troca o estado de segurança corrente (B15.4): salva o `SP` ativo na sombra do domínio que
+    /// está sendo deixado (MESMO `SPSEL`/`handlerModeActive` que já seleciona MSP-vs-PSP na B7.2 —
+    /// a dimensão de segurança é ORTOGONAL, nunca substitui essa escolha, ver Armadilha 5 da spec),
+    /// depois carrega o `SP` ativo a partir da sombra correspondente do domínio de destino. Sem
+    /// efeito quando `toSecure` já é o estado corrente.
+    private void switchSecurityState(ArmCore core, boolean toSecure) {
+        if (toSecure == secure) {
+            return;
+        }
+        boolean useMsp = handlerModeActive() || !spsel();
+        if (useMsp) {
+            setMainStackPointerFor(secure, core.register(ArmCore.SP));
+        } else {
+            setProcessStackPointerFor(secure, core.register(ArmCore.SP));
+        }
+        secure = toSecure;
+        core.setRegister(ArmCore.SP, useMsp ? mainStackPointerFor(secure) : processStackPointerFor(secure));
+    }
+
+    /// `SG` (Secure Gateway, B15.4): entra em Secure e limpa o `bit0` do endereço de retorno em
+    /// `LR` — parte do protocolo que garante que o `BXNS` de retorno subsequente sempre aponta para
+    /// uma instrução Thumb válida. **Sem verificação de região Non-secure Callable real** (SAU não
+    /// modelada): executa incondicionalmente sempre que decodificada e alcançada, simplificação
+    /// CONSCIENTE documentada (ver B15.4 "Não inclui") — este emulador não pode ser usado como
+    /// sandbox de segurança até a SAU existir.
+    public void secureGateway(ArmCore core) {
+        switchSecurityState(core, true);
+        core.setRegister(ArmCore.LR, core.register(ArmCore.LR) & ~1);
+    }
+
+    /// `BXNS`/`BLXNS` (B15.4): despacha para {@link #bxns}/{@link #blxns} conforme `link`.
+    ///
+    /// @param dest          valor de `Rm` (destino bruto, com `bit0` significativo)
+    /// @param link          `true` para `BLXNS` (grava retorno), `false` para `BXNS`
+    /// @param returnAddress endereço da instrução seguinte (com `bit0` setado), usado só quando
+    ///                      `link` e a chamada NÃO troca de estado (ver Javadoc de {@link #blxns})
+    public void secureBranchExchange(ArmCore core, int dest, boolean link, int returnAddress) {
+        if (link) {
+            blxns(core, dest, returnAddress);
+        } else {
+            bxns(core, dest);
+        }
+    }
+
+    /// `BXNS` (B15.4, QEMU real `HELPER(v7m_bxns)`): reconhece `EXC_RETURN` ({@link
+    /// #isExcReturnCandidate}/{@link #exceptionReturn} — MESMO mecanismo de `BX`/`POP{PC}` comuns,
+    /// chamado diretamente, NÃO via {@link #interceptsBranch}: esse método genérico também trata
+    /// `bit0=0` como tentativa de ir para estado ARM, o que é ERRADO aqui — em `BXNS`, `bit0=0`
+    /// significa legitimamente "trocar para Non-secure", não "vá para ARM") e `FNC_RETURN` ({@link
+    /// #functionReturn}); caso contrário, troca de estado por `bit0` (`1`=permanece/entra Secure,
+    /// `0`=Non-secure) e desvia para `dest & ~1` — perfil M não tem estado ARM, então o destino é
+    /// sempre Thumb (ao contrário de `BX` comum, não há `cpsr().setThumbMode`).
+    private void bxns(ArmCore core, int dest) {
+        if (isExcReturnCandidate(dest)) {
+            exceptionReturn(core, dest);
+            return;
+        }
+        if (isFunctionReturnCandidate(dest)) {
+            functionReturn(core);
+            return;
+        }
+        switchSecurityState(core, (dest & 1) != 0);
+        core.setProgramCounter(dest & ~1);
+    }
+
+    /// `BLXNS` (B15.4, QEMU real `HELPER(v7m_blxns)`): quando `dest.bit0=1`, comporta-se como um
+    /// `BLX` comum DENTRO do domínio Secure (grava `returnAddress` em `LR`, sem troca de estado nem
+    /// empilhamento — achado central da spec, contrariando a suposição inicial de que `BLXNS`
+    /// sempre empilha). Quando `dest.bit0=0` (troca para Non-secure): empilha `{returnAddress,
+    /// número de exceção corrente}` no `SP` Secure ativo (SEM `SFPA`/contexto de FP — este projeto
+    /// não modela FPU real em perfil M, ver B15.2/B15.3), grava {@link #FUNCTION_RETURN_MAGIC} em
+    /// `LR` (não um "integrity signature" — ver Javadoc da constante) e troca para Non-secure.
+    private void blxns(ArmCore core, int dest, int returnAddress) {
+        if ((dest & 1) != 0) {
+            core.setRegister(ArmCore.LR, returnAddress);
+            core.setProgramCounter(dest & ~1);
+            return;
+        }
+        int frame = core.register(ArmCore.SP) - FUNCTION_CALL_FRAME_SIZE_BYTES;
+        core.memory().write32(frame, returnAddress);
+        core.memory().write32(frame + FUNCTION_CALL_FRAME_PSR_OFFSET, currentException & XPSR_IPSR_MASK);
+        core.setRegister(ArmCore.SP, frame);
+        core.setRegister(ArmCore.LR, FUNCTION_RETURN_MAGIC);
+        switchSecurityState(core, false);
+        core.setProgramCounter(dest);
+    }
+
+    private static boolean isFunctionReturnCandidate(int target) {
+        return Integer.compareUnsigned(target, FUNCTION_RETURN_MIN_MAGIC) >= 0
+                && Integer.compareUnsigned(target, EXC_RETURN_PREFIX) < 0;
+    }
+
+    /// Desfaz uma `BLXNS` anterior (B15.4, QEMU real `do_v7m_function_return`): desempilha
+    /// `{endereço de retorno, número de exceção}` do `SP` Secure ativo, restaura o número de
+    /// exceção (sem a checagem de consistência do QEMU real — simplificação, este projeto não
+    /// bancaria exceção por segurança, ver "Não inclui") e troca de volta para Secure. `bit0=0` no
+    /// endereço restaurado é `INVSTATE` (mesmo tratamento de {@link #exceptionReturn}).
+    private void functionReturn(ArmCore core) {
+        boolean useMsp = handlerModeActive() || !spsel();
+        int frame = useMsp ? mainStackPointerFor(true) : processStackPointerFor(true);
+        int newPc = core.memory().read32(frame);
+        int newException = core.memory().read32(frame + FUNCTION_CALL_FRAME_PSR_OFFSET);
+        int newFrame = frame + FUNCTION_CALL_FRAME_SIZE_BYTES;
+        if (useMsp) {
+            setMainStackPointerFor(true, newFrame);
+        } else {
+            setProcessStackPointerFor(true, newFrame);
+        }
+        switchSecurityState(core, true);
+        if ((newPc & 1) == 0) {
+            enterException(core, MProfileException.USAGE_FAULT);
+            return;
+        }
+        currentException = newException & XPSR_IPSR_MASK;
+        core.setProgramCounter(newPc & ~1);
     }
 
     /// Retorna o IPSR atual (0 = Thread mode; caso contrário, o número da exceção ativa).

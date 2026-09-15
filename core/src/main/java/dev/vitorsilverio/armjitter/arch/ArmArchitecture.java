@@ -433,6 +433,40 @@ public final class ArmArchitecture {
     /// Cortex-M4/M7 sem reaproveitar o nome ambíguo `ARMV7M`, sem duplicar objeto nem manutenção.
     public static final ArmArchitecture ARMV7EM = ARMV7M;
 
+    /// ARMv8-M Baseline (B15.4) — `ARMV7M_PURE` (sem DSP) + {@link ArmFeature#M_PROFILE_SECURITY}
+    /// (`SG`/`BXNS`/`BLXNS`, banking de `MSP`/`PSP` por estado de segurança). **G3**: `ARMV7M_PURE`
+    /// permanece intocado — este preset nasce AO LADO.
+    private static final ArmArchitecture ARMV8M_BASELINE_FEATURES = extending(ARMV7M_PURE_FEATURES,
+            "ARMv8-M Baseline (Security Extension)", ArmFeature.M_PROFILE_SECURITY);
+
+    public static final ArmArchitecture ARMV8M_BASELINE = ARMV8M_BASELINE_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV8M_BASELINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8M_BASELINE_FEATURES)));
+
+    /// ARMv8-M Mainline (B15.4) — `ARMV7M` (com DSP, ou seja ARMv7E-M na nomenclatura real, ver
+    /// {@link #ARMV7M_PURE}) + {@link ArmFeature#M_PROFILE_SECURITY}. **G3**: `ARMV7M` permanece
+    /// intocado.
+    private static final ArmArchitecture ARMV8M_MAINLINE_FEATURES = extending(ARMV7M_FEATURES,
+            "ARMv8-M Mainline (Security Extension)", ArmFeature.M_PROFILE_SECURITY);
+
+    public static final ArmArchitecture ARMV8M_MAINLINE = ARMV8M_MAINLINE_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV8M_MAINLINE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8M_MAINLINE_FEATURES)));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

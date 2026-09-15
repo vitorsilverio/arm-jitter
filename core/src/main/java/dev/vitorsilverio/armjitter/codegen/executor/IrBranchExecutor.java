@@ -41,6 +41,22 @@ public final class IrBranchExecutor {
         return true;
     }
 
+    /// `BXNS`/`BLXNS` (perfil M, B15.4): só produzida sob `ArmFeature#M_PROFILE_SECURITY`
+    /// (exclusivo do perfil M) — cast direto, mesmo padrão de `IrSystemExecutor#executeNocp`.
+    /// `MProfileExceptionModel` decide sozinho o destino de `LR`/`SP`/PC (troca de estado,
+    /// `EXC_RETURN`/`FNC_RETURN`) — ver Javadoc de `MProfileExceptionModel#secureBranchExchange`.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeSecureBranchExchange(ArmCore core, IrOp.SecureBranchExchange branch) {
+        if (!core.cpsr().evalCond(branch.condition())) {
+            return false;
+        }
+        int target = support.registerValue(core, branch.sourceRegister(), branch.sourceValueOverride());
+        ((dev.vitorsilverio.armjitter.core.MProfileExceptionModel) core.exceptionModel())
+                .secureBranchExchange(core, target, branch.link(), branch.returnAddress());
+        return true;
+    }
+
     public void executeThumbBlPrefix(ArmCore core, IrOp.ThumbBlPrefix prefix) {
         if (!core.cpsr().evalCond(prefix.condition())) {
             return;

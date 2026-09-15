@@ -229,6 +229,11 @@ public final class AsmNativePolicy {
             // VLDR_sysreg/VSTR_sysreg (B15.3): sem emissão nativa nesta task ("Não inclui" — decode
             // + interpretado apenas, mesmo padrão de Nocp acima).
             case IrOp.VfpSysregMemoryTransfer ignored -> false;
+            // SG/BXNS/BLXNS (B15.4, Security Extension): sem emissão nativa nesta task ("Não
+            // inclui" — decode + interpretado apenas, mesmo padrão de Nocp/VfpSysregMemoryTransfer
+            // acima).
+            case IrOp.SecureGateway ignored -> false;
+            case IrOp.SecureBranchExchange ignored -> false;
         };
     }
 

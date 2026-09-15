@@ -157,7 +157,13 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     BREAKPOINT, HALT,
                     // NOCP (perfil M, B15.2): sempre troca o PC (entra em USAGE_FAULT via
                     // MProfileExceptionModel), mesma categoria de HVC/SMC/BREAKPOINT acima.
-                    NOCP -> true;
+                    NOCP,
+                    // SECURE_GATEWAY (SG, B15.4): não troca o PC, mas muda o estado de segurança
+                    // observável (Secure/Non-secure) e o banco de SP ativo — terminal pela mesma
+                    // razão que COPROCESSOR (estado de CPU mudou, não só o PC).
+                    // SECURE_BRANCH_EXCHANGE (BXNS/BLXNS, B15.4): sempre troca o PC, mesma
+                    // categoria de BRANCH_EXCHANGE.
+                    SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,

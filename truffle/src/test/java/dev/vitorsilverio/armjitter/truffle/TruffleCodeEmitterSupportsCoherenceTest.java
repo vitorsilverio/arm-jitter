@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(108, kinds.size(), "IrOp.Kind deve ter 108 constantes contíguas");
+        assertEquals(110, kinds.size(), "IrOp.Kind deve ter 110 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -106,11 +106,15 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // — "Não inclui" explícito da task: decode+interpretado apenas, sem Truffle, mesmo padrão
         // do resto da trilha B — dimensão 3 do roadmap fica para o épico A10 tratar depois). B15.3
         // acrescentou VFP_SYSREG_MEMORY_TRANSFER (+1 — mesmo "Não inclui" da B15.2: decode +
-        // interpretado apenas).
-        assertEquals(42, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // interpretado apenas). B15.4 acrescentou SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE (+2 —
+        // mesmo "Não inclui" da B15.2/B15.3: decode + interpretado apenas, dimensão 3 do roadmap
+        // fica para o épico A10 tratar depois).
+        assertEquals(44, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
+                        IrOp.Kind.SECURE_GATEWAY,
+                        IrOp.Kind.SECURE_BRANCH_EXCHANGE,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -288,6 +292,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(false, 0, 2, 4, 0);
             case IrOp.Kind.NOCP -> new IrOp.Nocp(10, c);
             case IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER -> new IrOp.VfpSysregMemoryTransfer(true, 0, 8, false, false, c);
+            case IrOp.Kind.SECURE_GATEWAY -> new IrOp.SecureGateway(c);
+            case IrOp.Kind.SECURE_BRANCH_EXCHANGE -> new IrOp.SecureBranchExchange(0, -1, false, 0, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

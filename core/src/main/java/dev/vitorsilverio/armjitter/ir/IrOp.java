@@ -19,7 +19,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
-        IrOp.Nocp, IrOp.VfpSysregMemoryTransfer {
+        IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -187,6 +187,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int NOCP = 106;
         /// B15.3: `VLDR_sysreg`/`VSTR_sysreg` (perfil M) — ver {@link VfpSysregMemoryTransfer}.
         public static final int VFP_SYSREG_MEMORY_TRANSFER = 107;
+        /// B15.4: `SG` (perfil M, Security Extension) — ver {@link SecureGateway}.
+        public static final int SECURE_GATEWAY = 108;
+        /// B15.4: `BXNS`/`BLXNS` (perfil M, Security Extension) — ver {@link SecureBranchExchange}.
+        public static final int SECURE_BRANCH_EXCHANGE = 109;
     }
 
     /// Operacao ALU generica.
@@ -2687,5 +2691,36 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_CRYPTO_SHA; }
+    }
+
+    /// `SG` (Secure Gateway, perfil M, B15.4): entra em estado Secure e limpa o `bit0` de `LR` —
+    /// via {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel#secureGateway}. Não
+    /// muda o PC (a execução continua na instrução seguinte); marcada terminal no lifter mesmo
+    /// assim, mesma categoria de {@link Nocp}/`COPROCESSOR` (muda estado observável da CPU).
+    record SecureGateway(
+            /// Condição necessária para executar (sempre {@link Condition#AL} em Thumb comum).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SECURE_GATEWAY; }
+    }
+
+    /// `BXNS`/`BLXNS` (perfil M, B15.4): branch-exchange com troca de estado Secure/Non-secure —
+    /// mesmos campos de {@link BranchExchange}, mas despachado para
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel#secureBranchExchange}
+    /// em vez da troca ARM/THUMB genérica (perfil M não tem estado ARM).
+    record SecureBranchExchange(
+            /// Registrador que contém o destino (`Rm`) — sempre um registrador real (`BXNS`/
+            /// `BLXNS` não têm forma imediata).
+            int sourceRegister,
+            /// Valor fixo para usar como destino, ou `-1`.
+            int sourceValueOverride,
+            /// Indica gravação de retorno (`BLXNS`); `MProfileExceptionModel` decide sozinho ONDE
+            /// esse retorno vai (LR direto quando não troca de estado, pilha Secure + `LR` mágico
+            /// de `FNC_RETURN` quando troca — ver Javadoc do método).
+            boolean link,
+            /// Endereço de retorno (da instrução seguinte, com `bit0` setado) a usar quando `link`.
+            int returnAddress,
+            /// Condição necessária para tomar o branch.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.SECURE_BRANCH_EXCHANGE; }
     }
 }

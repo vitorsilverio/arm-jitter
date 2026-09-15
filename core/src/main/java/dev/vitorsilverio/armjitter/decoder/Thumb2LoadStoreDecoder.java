@@ -298,10 +298,21 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     private static final int STACK_POINTER = 13;
     private static final int MINIMUM_BLOCK_TRANSFER_REGISTERS = 2;
 
+    /// `SG` (Secure Gateway, perfil M, B15.4): encoding FIXO de 32 bits — `target/isa-decode/
+    /// t32.decode` linha ~561 (`1110 1001 0111 1111 1110 1001 01111111` = `0xE97FE97F`), no MESMO
+    /// slot que `LDRD_ri_t32` (`w=1,p=1`) ocuparia (Armadilha 1 da spec: checar ANTES de
+    /// `decodeDoubleTransfer` capturar o mesmo padrão por engano, mesma disciplina de exclusão que
+    /// {@link Thumb2NocpDecoder} já usa para `VLLDM_VLSTM`/`VSCCLRM`).
+    private static final int SECURE_GATEWAY_ENCODING = 0xE97FE97F;
+
     private DecodedInstruction decodeExtraLoadStoreOrMultiple(int raw, int address, Condition condition) {
         int top7 = (raw >>> TOP7_SHIFT) & TOP7_MASK;
         if (top7 != EXTRA_TOP7) {
             return null;
+        }
+        if (architecture.has(ArmFeature.M_PROFILE_SECURITY) && raw == SECURE_GATEWAY_ENCODING) {
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.SECURE_GATEWAY, -1, -1, -1, 0, false, false, false);
         }
         boolean p = ((raw >>> P_BIT) & 1) != 0;
         boolean w = ((raw >>> W_BIT) & 1) != 0;
@@ -441,6 +452,12 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     private static final int EXCLUSIVE_RD_SHIFT = 0;
     private static final int EXCLUSIVE_RD_MASK = 0xF;
 
+    // ── TT/TTT/TTA/TTAT (perfil M, B15.4) — mesmo prefixo de STREX word-form, ver acima ─────
+    /// `bits[5:0]` (`A`/`T` ficam em bits7/6, fora desta máscara) fixos em `000000` no encoding
+    /// real de `TT` — narrowing que evita capturar qualquer STREX real (que usaria esses bits como
+    /// parte do offset), ver Javadoc de {@link #decodeExclusiveWordOrSized}.
+    private static final int TT_FIXED_LOW_BITS_MASK = 0x3F;
+
     /// `raw[22]=1,P=0,W=0`: espaço de `LDREX{,B,H,D}`/`STREX{,B,H,D}` de 32 bits — ARM DDI 0406C
     /// A5.3.8/A8.8.75/A8.8.212 (e correspondentes de load), confirmado no QEMU `t32.decode` seção
     /// "Load/Store Exclusive, Load-Acquire/Store-Release, and Table Branch" (`@strex_i`/
@@ -450,6 +467,15 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     private DecodedInstruction decodeExclusiveWordOrSized(int raw, int address, Condition condition) {
         boolean sizedForm = ((raw >>> U_OR_FIXED_BIT) & 1) != 0;
         boolean load = ((raw >>> L_BIT) & 1) != 0;
+        if (architecture.has(ArmFeature.M_PROFILE_SECURITY) && !sizedForm && !load
+                && ((raw >>> RT_SHIFT_LDRD) & RT_MASK_LDRD) == EXCLUSIVE_FIXED_MARKER
+                && (raw & TT_FIXED_LOW_BITS_MASK) == 0) {
+            // TT/TTT/TTA/TTAT (B15.4, t32.decode linha ~582): mesmo espaço de STREX word-form com
+            // Rt=1111 (marcador, não um Rt real) — real STREX com Rt=PC já é UNPREDICTABLE
+            // (decodeWordExclusive devolveria null de qualquer forma), então este subespaço é
+            // livre para TT sem colisão real (Armadilha 2 da spec: checar ANTES de STREX).
+            return decodeTestTarget(raw, address, condition);
+        }
         if (!sizedForm) {
             return decodeWordExclusive(raw, address, condition, load);
         }
@@ -460,6 +486,23 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
             case EXCLUSIVE_OP4_DOUBLE -> decodeSizedExclusive(raw, address, condition, load, 8);
             default -> null; // TBB/TBH ou load-acquire/store-release ARMv8, fora do escopo
         };
+    }
+
+    /// `TT`/`TTT`/`TTA`/`TTAT` (perfil M, B15.4): consulta a configuração de segurança/MPU do
+    /// endereço em `Rn`, resultado em `Rd`. **Sem SAU (Security Attribution Unit) real** (B15.4
+    /// "Não inclui"): devolve sempre `0`, a MESMA simplificação que o próprio QEMU escolhe no modo
+    /// `linux-user` (`HELPER(v7m_tt)` real: `return 0;`) — decisão registrada explicitamente na
+    /// spec (Inclui item 6) em vez de inventar semântica de SAU sem fonte. Reusa `InstructionKind
+    /// #MOV` com imediato `0` (G1: zero IR nova) — `rn`/`A`/`T` continuam recuperáveis de
+    /// {@link DecodedInstruction#raw} caso uma SAU real seja modelada depois.
+    private DecodedInstruction decodeTestTarget(int raw, int address, Condition condition) {
+        int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
+        int rd = (raw >>> RT2_SHIFT) & RT_MASK_LDRD;
+        if (rn == PROGRAM_COUNTER || rd == PROGRAM_COUNTER) {
+            return null; // UNPREDICTABLE
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.MOV,
+                rd, -1, -1, 0, true, false, false);
     }
 
     /// `LDREX`/`STREX` (word, sem sufixo de tamanho): ao contrário do ARM clássico (acesso exato

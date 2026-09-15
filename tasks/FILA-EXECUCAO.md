@@ -47,6 +47,34 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-15, após B15.4 fechar)
+
+**B15.4 FECHADA 2026-09-15** — perfil M `SG`/`BXNS`/`BLXNS`/`TT` (Security Extension mínima),
+quarto degrau da escada B15. `ArmFeature.M_PROFILE_SECURITY` + presets `ARMV8M_BASELINE`/
+`ARMV8M_MAINLINE`. `SG` via `IrOp.SecureGateway` novo (`Kind` 108); `TT` reusa `MOV`+imediato `0`
+(G1, zero IR nova — mesma simplificação do QEMU real no modo `linux-user`); `BXNS`/`BLXNS` via
+`IrOp.SecureBranchExchange` novo (`Kind` 109). **Achado que corrige a spec, medido contra o QEMU
+real** (`target/arm/tcg/m_helper.c`, via `WebFetch`): o "integrity signature" `0xFEFA125A/B` que a
+spec assumia NÃO existe em `BLXNS` — é mecanismo de hardware diferente (empilhamento de exceção),
+fora do escopo. O protocolo real é `LR=0xFEFFFFFF` (`FNC_RETURN`) + empilhamento de `{retorno,
+exceção}` na pilha Secure, e `BLXNS.bit0=1` nunca empilha (comum dentro do domínio Secure — outra
+suposição da spec corrigida). `BXNS` reconhece `EXC_RETURN`/`FNC_RETURN` chamando os métodos
+privados diretamente (não via `interceptsBranch`/`branchIntercepted` genéricos, que tratam
+`bit0=0` como "ARM state" — política errada para `BXNS`, capturada por um teste que falhava).
+`docs/COBERTURA-ISA.md` zero-diff (deliberado: os 2 presets novos ainda não entram no mapa
+`ARM_ARCHITECTURES` do `IsaCoverageReport`, mesmo precedente de B15.1 — tentativa de adicioná-los
+sem uma rodada de curadoria própria derrubaria o global 99%→98% por artefato de contagem, medido e
+revertido nesta sessão). `docs/COBERTURA-JIT.md`: `IrOp.Kind` 108→110. `mvn -o test` verde (3884;
+as mesmas 3 falhas pré-existentes) + `truffle`(73) + `capi` + `install`. **G5 completo** (gbaemu +
+ndsemu). Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B15.5` (`VLLDM_VLSTM`/`VSCCLRM`, últimas células de `m-nocp.decode`,
+fecha 11/11 — depende de B15.4 ✅ e B15.3 ✅, ambas fechadas) e `B15.6` (`ARMV8_1M`/
+`LOW_OVERHEAD_BRANCH`, depende só de B15.4 ✅) agora pegáveis. `C12.5`/`C12.10` (emissão JIT
+nativa A64) seguem pegáveis, dimensão 2 do roadmap. Uma task de curadoria própria para adicionar
+`v8-M.Base`/`v8-M.Main` ao `IsaCoverageReport` (~180 células a revisar) ficou documentada como
+pendência na B15.4, ainda sem task nomeada.
+
 ## Onde estamos (atualizado 2026-09-14, após B15.3 fechar)
 
 **B15.3 FECHADA 2026-09-14** — perfil M `VMSR_VMRS`/`VLDR_sysreg`/`VSTR_sysreg` (`m-nocp.decode`, 3

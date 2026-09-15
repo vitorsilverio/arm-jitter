@@ -325,6 +325,22 @@ public final class ThumbDecoder implements InstructionDecoder {
                     -1, rm, -1, 0, false, false, true);
         }
 
+        // BXNS (perfil M, B15.4, Security Extension): `0100 0111 0 mmmm 100` — MESMO layout de BX
+        // acima (`@branchr`), opcode PRÓPRIO (bits2:0=100, não 000 — nunca colide com BX).
+        if (architecture.has(ArmFeature.M_PROFILE_SECURITY) && (raw & 0xFF87) == 0x4704) {
+            int rm = (raw >>> 3) & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.SECURE_BRANCH_EXCHANGE, -1, rm, -1, 0, false, false, false);
+        }
+
+        // BLXNS (perfil M, B15.4): `0100 0111 1 mmmm 100` — mesma relação com BLX acima que BXNS
+        // tem com BX.
+        if (architecture.has(ArmFeature.M_PROFILE_SECURITY) && (raw & 0xFF87) == 0x4784) {
+            int rm = (raw >>> 3) & 0xF;
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, Condition.AL,
+                    InstructionKind.SECURE_BRANCH_EXCHANGE, -1, rm, -1, 0, false, false, true);
+        }
+
         if ((raw & 0xFC00) == 0x4400) {
             int op = (raw >>> 8) & 0x3;
             int highDestination = (raw >>> 7) & 0x1;

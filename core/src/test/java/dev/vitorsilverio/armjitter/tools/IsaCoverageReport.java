@@ -158,6 +158,15 @@ public final class IsaCoverageReport {
         ARM_ARCHITECTURES.put("v7-A", ArmArchitecture.ARMV7A);
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
+        // ARMV8M_BASELINE/ARMV8M_MAINLINE (B15.4) NÃO entram aqui ainda — mesmo precedente da
+        // B15.1 ("zero célula nova... os presets não entram no mapa ARM_ARCHITECTURES ainda").
+        // Medido nesta sessão: adicioná-los sem uma rodada de curadoria própria faz ~180 células
+        // (grupos que já são `·` sob v7-M/v6-M via entradas específicas de `isa-nao-aplicavel.tsv`
+        // — MVE, NEON, VFP incondicional etc.) aparecerem como `❌` cru nas duas colunas novas
+        // (nenhuma entrada de curadoria nomeia "v8-M.Base"/"v8-M.Main" ainda), derrubando o global
+        // de 99%→98% por um artefato de contagem, não por trabalho pendente de verdade. Fica para
+        // uma task própria de curadoria (mesmo padrão que a B14/B16/B20 reservam um passo de
+        // "fechamento" para isso), não uma consequência automática de B15.4.
     }
 
     /// Arquiteturas A64 sondadas, uma coluna por versão ARM (B11.5) — mesma UX de
