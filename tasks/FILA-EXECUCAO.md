@@ -47,6 +47,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-15, após B15.5 fechar)
+
+**B15.5 FECHADA 2026-09-15** — `VLLDM`/`VLSTM` (sem FPU real, sempre `UNDEFINED` nomeado, nunca
+`NOCP`) + `VSCCLRM` (zera de verdade `D`/`S`, armazenamento puro desde a B3.3), as 6 células finais
+de `m-nocp.decode`. Decoder novo `Thumb2VlldmVlstmVscclrmDecoder`, registrado antes de
+`Thumb2NocpDecoder` nos 5 presets M-profile, reusando os mesmos valores de máscara/valor que a
+exclusão da B15.2 já calculava. `IrOp.VlldmVlstm` (`Kind` 110) seta `UFSR.UNDEFINSTR` (`bit[16]` do
+`CFSR`, novo — diferente do `bit[19]` `NOCP`) via `MProfileExceptionModel#setUsageFaultUndefinstr()`.
+`IrOp.Vscclrm` (`Kind` 111) zera `D<n>`/`S<n>` DIRETO (achado que simplifica a spec: mais simples e
+mais correto que replicar a conversão `D`↔`S` do QEMU, que só existe por causa do array interno dele
+— `VfpRegisters` já suporta `D16`-`D31` nativamente, sem vista `S`), recortando defensivamente o
+intervalo ao tamanho real do banco. Sem consulta a `CONTROL_S.SFPA`/`FPCCR.ASPEN` (não modelados,
+decisão B15.4 "Não inclui") — `VSCCLRM` sempre zera. **`docs/COBERTURA-ISA.md`: `v6-M` 96%→100%
+(94/94) e `v7-M` 99%→100% (334/334) — `m-nocp.decode` fecha 11/11 nos dois presets, primeira linha
+da tabela inteira a chegar a 100% num preset real** (global 99% inalterado no arredondamento,
+19109→19115/19155). `docs/COBERTURA-JIT.md` regenerado (`IrOp.Kind` 110→112, ambos só
+interpretados). `mvn -o test` verde (3899; as mesmas 3 falhas pré-existentes) + `truffle` (73) +
+`capi` + `install`. **G5 completo** (gbaemu 240 + ndsemu 183). Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B15.6` (`ARMV8_1M`/`LOW_OVERHEAD_BRANCH`, depende só de B15.4 ✅, spec
+pronta) segue pegável. `B15.7` (fechamento do catálogo Cortex-M) depende de B15.6 (ainda ⬜) —
+ainda não pegável. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-15, após B15.4 fechar)
 
 **B15.4 FECHADA 2026-09-15** — perfil M `SG`/`BXNS`/`BLXNS`/`TT` (Security Extension mínima),

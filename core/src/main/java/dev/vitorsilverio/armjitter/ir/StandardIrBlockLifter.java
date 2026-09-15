@@ -163,7 +163,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // razão que COPROCESSOR (estado de CPU mudou, não só o PC).
                     // SECURE_BRANCH_EXCHANGE (BXNS/BLXNS, B15.4): sempre troca o PC, mesma
                     // categoria de BRANCH_EXCHANGE.
-                    SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE -> true;
+                    SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE,
+                    // VLLDM_VLSTM (perfil M, B15.5): sempre troca o PC (entra em USAGE_FAULT via
+                    // MProfileExceptionModel), mesma categoria de NOCP acima.
+                    VLLDM_VLSTM -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,
@@ -184,7 +187,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // Escape hatch de lifting (B13.2): hoje só famílias vetoriais NEON, que nunca
                     // tocam o PC. Um `IrOp` que trocasse o PC não poderia entrar por aqui sem
                     // revisitar esta linha.
-                    LIFTED_IR_OP -> false;
+                    LIFTED_IR_OP,
+                    // VSCCLRM (perfil M, B15.5): zera registradores FP, nunca toca o PC (mesma
+                    // categoria de VFP_SYSREG_LOAD/STORE acima — armazenamento puro, sem FPU real).
+                    VSCCLRM -> false;
         };
     }
 

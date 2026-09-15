@@ -234,6 +234,10 @@ public final class AsmNativePolicy {
             // acima).
             case IrOp.SecureGateway ignored -> false;
             case IrOp.SecureBranchExchange ignored -> false;
+            // VLLDM_VLSTM/VSCCLRM (B15.5): sem emissão nativa nesta task ("Não inclui" — decode +
+            // interpretado apenas, mesmo padrão de Nocp/VfpSysregMemoryTransfer/SecureGateway acima).
+            case IrOp.VlldmVlstm ignored -> false;
+            case IrOp.Vscclrm ignored -> false;
         };
     }
 

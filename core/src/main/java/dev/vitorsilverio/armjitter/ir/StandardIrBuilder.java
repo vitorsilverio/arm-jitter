@@ -589,6 +589,14 @@ public final class StandardIrBuilder implements IrBuilder {
             // NOCP/NOCP_8_1 (perfil M, B15.2): `immediate` carrega o coprocessador-alvo (`cp`).
             // Ver IrOp.Nocp/IrSystemExecutor#executeNocp.
             case NOCP -> block.add(new IrOp.Nocp(instruction.immediate(), instruction.condition()));
+            // VLLDM_VLSTM (perfil M, B15.5): sem campos neutros significativos (sempre UNDEF).
+            case VLLDM_VLSTM -> block.add(new IrOp.VlldmVlstm(instruction.condition()));
+            // VSCCLRM (perfil M, B15.5): `link` carrega doublePrecision (ver InstructionKind#VSCCLRM).
+            case VSCCLRM -> block.add(new IrOp.Vscclrm(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.immediate(),
+                    instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(

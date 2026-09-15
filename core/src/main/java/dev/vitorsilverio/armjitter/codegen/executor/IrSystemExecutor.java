@@ -303,6 +303,22 @@ public final class IrSystemExecutor {
         return true;
     }
 
+    /// `VLLDM`/`VLSTM` (perfil M, B15.5): sem FPU real, sempre `UNDEFINED` — seta `UFSR.UNDEFINSTR`
+    /// (diferente do `UFSR.NOCP` de {@link #executeNocp}: a arquitetura real prioriza estas 2 formas
+    /// ANTES do `NOCP` genérico, ver Javadoc de {@code IrOp.VlldmVlstm}) e entra em `USAGE_FAULT`
+    /// direto no {@link MProfileExceptionModel}, mesmo cast seguro de {@link #executeNocp}.
+    ///
+    /// @return sempre {@code true} — `enterException` sempre muda o PC para o vetor do handler.
+    public boolean executeVlldmVlstm(ArmCore core, IrOp.VlldmVlstm op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        MProfileExceptionModel model = (MProfileExceptionModel) core.exceptionModel();
+        model.setUsageFaultUndefinstr();
+        model.enterException(core, MProfileException.USAGE_FAULT);
+        return true;
+    }
+
     /// `SG` (B15.4): só produzida sob `ArmFeature#M_PROFILE_SECURITY` (exclusivo do perfil M),
     /// mesmo cast direto de {@link #executeNocp} acima.
     public void executeSecureGateway(ArmCore core, IrOp.SecureGateway op) {

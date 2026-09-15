@@ -398,6 +398,20 @@ public enum InstructionKind {
     /// `BLXNS`). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
     SECURE_BRANCH_EXCHANGE,
+    /// `VLLDM`/`VLSTM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): sem FPU real, sempre
+    /// `UNDEFINED` — via `IrOp.VlldmVlstm`, prioridade explícita sobre `NOCP` que a arquitetura real
+    /// exige para estas 2 formas específicas (ver Javadoc do `IrOp`). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}. Nenhum campo neutro é
+    /// significativo neste kind.
+    VLLDM_VLSTM,
+    /// `VSCCLRM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): zera um intervalo de
+    /// registradores FP via `IrOp.Vscclrm`. `destinationRegister` = primeiro registrador do
+    /// intervalo (`D<n>`/`S<n>` já resolvido pelo decoder a partir de `Vd`/`D`); `immediate` =
+    /// último registrador do intervalo, inclusive; `link` = `true` para a forma de precisão dupla
+    /// (`size=3`, `D`), `false` para simples (`size=2`, `S`) — reuso do campo neutro, mesmo padrão
+    /// de `LOAD`/`STORE` de 64 bits reusando `link` para load-vs-store. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}.
+    VSCCLRM,
     /// **Escape hatch de lifting** (RFC B13.2): a instrução já traz sua própria operação de IR em
     /// {@link DecodedInstruction#liftedOp} — `StandardIrBuilder` apenas a adiciona ao bloco, sem
     /// traduzir campo nenhum. Existe para as famílias vetoriais (NEON, e depois MVE), cuja forma de

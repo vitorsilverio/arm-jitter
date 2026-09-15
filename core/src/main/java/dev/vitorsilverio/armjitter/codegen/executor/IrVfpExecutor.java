@@ -453,6 +453,29 @@ public final class IrVfpExecutor {
         }
     }
 
+    /// `VSCCLRM` (perfil M, B15.5): zera `D<primeiro>`..`D<último>` ou `S<primeiro>`..`S<último>`
+    /// (conforme {@link IrOp.Vscclrm#doublePrecision()}), recortando o limite superior ao tamanho
+    /// real do banco (`lastRegister` pode vir de um `imm` grande, encoding `UNPREDICTABLE`) — nunca
+    /// lança, só ignora os registradores fora do banco. Nenhuma dependência de FPU real: o
+    /// armazenamento `D`/`S` já existe incondicionalmente desde a B3.3.
+    public void executeVscclrm(ArmCore core, IrOp.Vscclrm op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        int bankLimit = (op.doublePrecision() ? VfpRegisters.DOUBLE_COUNT : VfpRegisters.SINGLE_COUNT) - 1;
+        int last = Math.min(op.lastRegister(), bankLimit);
+        if (op.doublePrecision()) {
+            for (int d = op.firstRegister(); d <= last; d++) {
+                vfp.setD(d, 0L);
+            }
+        } else {
+            for (int s = op.firstRegister(); s <= last; s++) {
+                vfp.setS(s, 0);
+            }
+        }
+    }
+
     /// `VMOV_64_sp`: `armLow`/`armHigh` de/para `Sm`/`Sm+1` (par consecutivo, NAO via `d()`/`setD()`
     /// — `m` pode ser ímpar, caso em que as duas metades pertencem a `D` diferentes).
     public void executeVfpCorePairTransferSingle(ArmCore core, IrOp.VfpCorePairTransferSingle op) {

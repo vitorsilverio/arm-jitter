@@ -19,7 +19,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
-        IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange {
+        IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
+        IrOp.VlldmVlstm, IrOp.Vscclrm {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -191,6 +192,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int SECURE_GATEWAY = 108;
         /// B15.4: `BXNS`/`BLXNS` (perfil M, Security Extension) — ver {@link SecureBranchExchange}.
         public static final int SECURE_BRANCH_EXCHANGE = 109;
+        /// B15.5: `VLLDM`/`VLSTM` (perfil M, `m-nocp.decode`) — ver {@link VlldmVlstm}.
+        public static final int VLLDM_VLSTM = 110;
+        /// B15.5: `VSCCLRM` (perfil M, `m-nocp.decode`) — ver {@link Vscclrm}.
+        public static final int VSCCLRM = 111;
     }
 
     /// Operacao ALU generica.
@@ -1506,6 +1511,44 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_SYSREG_MEMORY_TRANSFER; }
+    }
+
+    /// `VLLDM`/`VLSTM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): salva/restaura o banco
+    /// FP completo via lazy state preservation em hardware real — mas "lazy" é uma otimização de
+    /// HARDWARE (economiza ciclos quando o handler de exceção nunca toca FP), sem semântica
+    /// observável que este emulador precise reproduzir (ver Javadoc de
+    /// {@code Thumb2VlldmVlstmVscclrmDecoder}). Sem FPU real no perfil M, o `.decode` real prioriza
+    /// estas 2 formas ANTES do `NOCP` genérico e as trata como `UNDEFINED` explícito ("these are the
+    /// two UNDEFs that must take precedence over NOCP") — via
+    /// {@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel#setUsageFaultUndefinstr()}
+    /// (bit `UNDEFINSTR` do `UFSR`, diferente do bit `NOCP` que {@link Nocp} seta) seguido de
+    /// `USAGE_FAULT`. Só produzida sob {@code ArmFeature.M_PROFILE}, mesmo contrato de {@link Nocp}.
+    /// Nenhum campo além da condição é significativo — o resultado (UNDEF) não depende de `Rn`/`l`/
+    /// `op` do encoding.
+    record VlldmVlstm(
+            /// Condição necessária para disparar a exceção.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VLLDM_VLSTM; }
+    }
+
+    /// `VSCCLRM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): zera um intervalo contíguo
+    /// de registradores FP existentes como armazenamento puro desde a B3.3 (`ArmCore.vfp()`) — usado
+    /// pelo software para limpar informação residual de FP na transição Non-secure→Secure. Sem
+    /// dependência de FPU real (zerar não é operação aritmética), ao contrário de {@link VlldmVlstm}.
+    /// `firstRegister`/`lastRegister` (inclusive) já vêm resolvidos pelo decoder a partir de
+    /// `Vd`/`imm`/`D`; `lastRegister` pode exceder o banco real (encoding `UNPREDICTABLE` com `imm`
+    /// grande) — o executor recorta defensivamente, nunca lança.
+    record Vscclrm(
+            /// `true` para a forma de precisão dupla (`size=3`, registradores `D`); `false` para a
+            /// forma de precisão simples (`size=2`, registradores `S`).
+            boolean doublePrecision,
+            /// Primeiro registrador do intervalo (`D<n>` ou `S<n>` conforme {@link #doublePrecision}).
+            int firstRegister,
+            /// Último registrador do intervalo, inclusive (não recortado ao tamanho real do banco).
+            int lastRegister,
+            /// Condição necessária para executar a limpeza.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VSCCLRM; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, forma "three same" (B13.2/B13.4): `Vd[i] = op(Vn[i], Vm[i])`
