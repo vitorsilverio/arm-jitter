@@ -68,6 +68,36 @@ class ArmProcessorTest {
     }
 
     @Test
+    void armv7mPureFamilyResolvesToArmv7mPure() {
+        assertSame(ArmArchitecture.ARMV7M_PURE, ArmProcessor.SC300.architecture());
+        assertSame(ArmArchitecture.ARMV7M_PURE, ArmProcessor.CORTEX_M3.architecture());
+    }
+
+    @Test
+    void armv7emFamilyResolvesToArmv7em() {
+        assertSame(ArmArchitecture.ARMV7EM, ArmProcessor.CORTEX_M4.architecture());
+        assertSame(ArmArchitecture.ARMV7EM, ArmProcessor.CORTEX_M7.architecture());
+    }
+
+    @Test
+    void armv8mBaselineFamilyResolvesToArmv8mBaseline() {
+        assertSame(ArmArchitecture.ARMV8M_BASELINE, ArmProcessor.CORTEX_M23.architecture());
+    }
+
+    @Test
+    void armv8mMainlineFamilyResolvesToArmv8mMainline() {
+        assertSame(ArmArchitecture.ARMV8M_MAINLINE, ArmProcessor.CORTEX_M33.architecture());
+        assertSame(ArmArchitecture.ARMV8M_MAINLINE, ArmProcessor.CORTEX_M35P.architecture());
+    }
+
+    @Test
+    void armv8_1mFamilyResolvesToArmv8_1m() {
+        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M52.architecture());
+        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M55.architecture());
+        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M85.architecture());
+    }
+
+    @Test
     void displayNameMatchesCommercialName() {
         assertEquals("Cortex-A9", ArmProcessor.CORTEX_A9.displayName());
         assertEquals("ARM7TDMI", ArmProcessor.ARM7TDMI.displayName());

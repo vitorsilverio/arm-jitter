@@ -46,20 +46,26 @@ package dev.vitorsilverio.armjitter.arch;
 /// depois um preset `ARMv8-A AArch32` composto sobre {@link ArmArchitecture#ARMV7A}), candidata
 /// futura na trilha B (regra máxima do projeto — nunca "fora de escopo para sempre").
 ///
-/// **Escopo de B12.4** (perfil M): só o `ARMv6-M` puro (`SC000`/`Cortex-M0`/`M0+`/`M1`) resolve
-/// para preset existente (`ARMV6M`) sem ressalva. `SecurCore SC300`/`Cortex-M3` (`ARMv7-M` real,
-/// **sem** a extensão DSP) ficam de fora do catálogo: o preset `ARMV7M` deste projeto (B7.4) inclui
-/// {@link ArmFeature#SATURATING} (`QADD`/`QSUB`/`QDADD`/`QDSUB`, parte da extensão DSP opcional que
-/// só existe de fato em `ARMv7E-M`), então mapear `Cortex-M3` para `ARMV7M` seria uma entrada de
-/// catálogo factualmente ERRADA (superconjunto, não aproximação conservadora — o núcleo real
-/// rejeitaria `QADD` como `UNDEFINED`, este preset aceitaria) — diferente da aproximação
-/// documentada de {@link #ARM7EJ_S} (que é um subconjunto conservador, Jazelle nunca modelado).
-/// `Cortex-M4`/`M7` (`ARMv7E-M`), `Cortex-M23` (`ARMv8-M Baseline`), `Cortex-M33`/`M35P`
-/// (`ARMv8-M Mainline`) e `Cortex-M52`/`M55`/`M85` (`ARMv8.1-M Mainline`) também ficam de fora:
-/// nenhuma dessas versões tem preset ainda. Todos ficam documentados como pendentes (regra máxima
-/// do projeto, `tasks/README.md` — nunca "fora de escopo para sempre"), candidatos a uma sub-task
-/// que primeiro resolva o preset `ARMv7-M` puro (sem `SATURATING`) e depois crie os presets
-/// `ARMv7E-M`/`ARMv8-M`/`ARMv8.1-M`.
+/// **Escopo de B12.4** (perfil M, primeiro degrau): só o `ARMv6-M` puro (`SC000`/`Cortex-M0`/
+/// `M0+`/`M1`) resolvia para preset existente (`ARMV6M`) sem ressalva na época. `SecurCore SC300`/
+/// `Cortex-M3` (`ARMv7-M` real, **sem** a extensão DSP) ficaram de fora do catálogo naquela sessão:
+/// o preset `ARMV7M` deste projeto (B7.4) inclui {@link ArmFeature#SATURATING} (`QADD`/`QSUB`/
+/// `QDADD`/`QDSUB`, parte da extensão DSP opcional que só existe de fato em `ARMv7E-M`), então
+/// mapear `Cortex-M3` para `ARMV7M` seria uma entrada de catálogo factualmente ERRADA
+/// (superconjunto, não aproximação conservadora — o núcleo real rejeitaria `QADD` como
+/// `UNDEFINED`, este preset aceitaria) — diferente da aproximação documentada de {@link #ARM7EJ_S}
+/// (que é um subconjunto conservador, Jazelle nunca modelado).
+///
+/// **Escopo de B15.7** (fechamento do épico B15, perfil M moderno): os 10 núcleos que a B12.4
+/// deixou pendentes agora têm preset e entram no catálogo — {@link #SC300}/{@link #CORTEX_M3}
+/// (`ARMV7M_PURE`, B15.1), {@link #CORTEX_M4}/{@link #CORTEX_M7} (`ARMV7EM`, alias de `ARMV7M`,
+/// B15.1), {@link #CORTEX_M23} (`ARMV8M_BASELINE`, B15.4), {@link #CORTEX_M33}/
+/// {@link #CORTEX_M35P} (`ARMV8M_MAINLINE`, B15.4) e {@link #CORTEX_M52}/{@link #CORTEX_M55}/
+/// {@link #CORTEX_M85} (`ARMV8_1M`, B15.6 — **mapeamento PARCIAL**, documentado em cada constante:
+/// Helium/MVE é intrínseco a esses 3 núcleos reais e ainda não está implementado, épico B16
+/// `⬜`). `Cortex-M23`/`M33`/`M35P` resolvem para a variante COM Security Extension (TrustZone) —
+/// este projeto não modela um preset "sem TrustZone" separado, mesma simplificação de SKU que
+/// `Cortex-A5`..`A17` já aplicam do lado A-profile (uma constante por núcleo canônico).
 ///
 /// **Sem uso ainda em `ArmCore`** (G3): este catálogo não muda nenhuma factory/API pública
 /// existente. Quem quiser usar hoje faz `new ArmCore(memory, ArmProcessor.ARM7TDMI.architecture())`
@@ -181,7 +187,64 @@ public enum ArmProcessor {
     CORTEX_M0PLUS("Cortex-M0+", ArmArchitecture.ARMV6M),
 
     /// `ARMv6-M`, mesma família do Cortex-M0.
-    CORTEX_M1("Cortex-M1", ArmArchitecture.ARMV6M);
+    CORTEX_M1("Cortex-M1", ArmArchitecture.ARMV6M),
+
+    /// SecurCore `SC300` — `ARMv7-M` **sem** a extensão DSP (B15.1/B15.7), o núcleo que motivou o
+    /// épico B15 inteiro (ver Javadoc da classe): {@link ArmArchitecture#ARMV7M} (o preset chamado
+    /// "ARMv7-M" desde a B7.4) na verdade já inclui DSP (é um ARMv7E-M real), então mapear `SC300`
+    /// nele seria entrada factualmente errada. Resolve para {@link ArmArchitecture#ARMV7M_PURE}.
+    SC300("SecurCore SC300", ArmArchitecture.ARMV7M_PURE),
+
+    /// `ARMv7-M` sem DSP (B15.1/B15.7) — mesma família do {@link #SC300}, resolve para
+    /// {@link ArmArchitecture#ARMV7M_PURE}.
+    CORTEX_M3("Cortex-M3", ArmArchitecture.ARMV7M_PURE),
+
+    /// `ARMv7E-M` (com DSP; FPU opcional, não modelada com granularidade de variante — este
+    /// projeto assume a variante SEM FPU dedicada, o denominador comum entre `Cortex-M4`/`M4F`)
+    /// (B15.1/B15.7). Resolve para {@link ArmArchitecture#ARMV7EM} (alias por identidade de
+    /// {@link ArmArchitecture#ARMV7M}, que já inclui DSP desde a B9.16).
+    CORTEX_M4("Cortex-M4", ArmArchitecture.ARMV7EM),
+
+    /// `ARMv7E-M` (com DSP; FPU/cache opcionais, mesma aproximação do {@link #CORTEX_M4}) (B15.1/
+    /// B15.7). Resolve para {@link ArmArchitecture#ARMV7EM}.
+    CORTEX_M7("Cortex-M7", ArmArchitecture.ARMV7EM),
+
+    /// `ARMv8-M Baseline` (B15.4/B15.7) — a Security Extension (TrustZone) é opcional na
+    /// arquitetura real, mas este catálogo assume a variante COM TrustZone (a mais capaz; este
+    /// projeto ainda não modela um preset "ARMv8-M Baseline sem Security Extension" separado —
+    /// mesma simplificação de granularidade de SKU que B12.1-B12.6 já aplicaram ao lado A-profile,
+    /// ex. `Cortex-A5`..`A17` não distinguem variantes com/sem NEON). Resolve para
+    /// {@link ArmArchitecture#ARMV8M_BASELINE}.
+    CORTEX_M23("Cortex-M23", ArmArchitecture.ARMV8M_BASELINE),
+
+    /// `ARMv8-M Mainline` (B15.4/B15.7) — mesma aproximação do {@link #CORTEX_M23} (variante COM
+    /// TrustZone; FPU/DSP opcionais também não modelados com granularidade de variante). Resolve
+    /// para {@link ArmArchitecture#ARMV8M_MAINLINE}.
+    CORTEX_M33("Cortex-M33", ArmArchitecture.ARMV8M_MAINLINE),
+
+    /// `ARMv8-M Mainline` com proteção física adicional (não modelada — mesma aproximação do
+    /// {@link #CORTEX_M23}/{@link #CORTEX_M33}, proteção física é ortogonal ao conjunto de
+    /// instruções). Resolve para {@link ArmArchitecture#ARMV8M_MAINLINE}.
+    CORTEX_M35P("Cortex-M35P", ArmArchitecture.ARMV8M_MAINLINE),
+
+    /// `ARMv8.1-M Mainline` **com Helium/MVE como parte intrínseca do núcleo real** — este projeto
+    /// ainda NÃO implementa Helium/MVE (épico B16, `⬜`). Resolve para
+    /// {@link ArmArchitecture#ARMV8_1M}, que cobre só a parte escalar/Low Overhead Branch da
+    /// arquitetura real: **mapeamento PARCIAL, documentado deliberadamente** (mesmo padrão que
+    /// {@link ArmArchitecture#ARMV8_1M} já anota) — nenhum código que dependa de uma instrução MVE
+    /// real deve ser considerado suportado por esta constante até a B16 fechar.
+    CORTEX_M52("Cortex-M52", ArmArchitecture.ARMV8_1M),
+
+    /// `ARMv8.1-M Mainline` com Helium/MVE intrínseco — mesma limitação PARCIAL do
+    /// {@link #CORTEX_M52} (Helium ainda não implementado, épico B16). Resolve para
+    /// {@link ArmArchitecture#ARMV8_1M}.
+    CORTEX_M55("Cortex-M55", ArmArchitecture.ARMV8_1M),
+
+    /// `ARMv8.1-M Mainline` com Helium/MVE intrínseco + PACBTI (Pointer Authentication/Branch
+    /// Target Identification) — mesma limitação PARCIAL do {@link #CORTEX_M52}/{@link #CORTEX_M55}
+    /// (Helium ainda não implementado, épico B16) **e PACBTI também não modelado** (extensão
+    /// própria, fora do escopo do épico B15). Resolve para {@link ArmArchitecture#ARMV8_1M}.
+    CORTEX_M85("Cortex-M85", ArmArchitecture.ARMV8_1M);
 
     private final String displayName;
     private final ArmArchitecture architecture;

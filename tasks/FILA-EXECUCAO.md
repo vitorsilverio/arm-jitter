@@ -47,6 +47,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-16, após B15.7 fechar — épico B15 FECHADO)
+
+**B15.7 FECHADA 2026-09-16** — fechamento do épico B15 (perfil M moderno): `ArmProcessor` ganha as
+10 constantes pendentes desde a B12.4 (`SC300`/`CORTEX_M3`→`ARMV7M_PURE`, `CORTEX_M4`/`CORTEX_M7`→
+`ARMV7EM`, `CORTEX_M23`→`ARMV8M_BASELINE`, `CORTEX_M33`/`CORTEX_M35P`→`ARMV8M_MAINLINE`,
+`CORTEX_M52`/`CORTEX_M55`/`CORTEX_M85`→`ARMV8_1M`). Decisão tomada (opção b da spec): `M52`/`M55`/
+`M85` catalogados com Javadoc de limitação PARCIAL (Helium/MVE intrínseco ao núcleo real, ainda não
+implementado — épico B16). `Cortex-M23`/`M33`/`M35P` resolvem para a variante COM Security
+Extension (únicos presets que existem hoje — `ARMV8M_BASELINE`/`ARMV8M_MAINLINE` já embutem
+`M_PROFILE_SECURITY` incondicionalmente desde B15.4), documentado como a mesma simplificação de
+granularidade de SKU que os núcleos A-profile já usam. **`m-nocp.decode` confirmado 11/11**
+(`v6-M`/`v7-M` 100% nas 11 linhas), `docs/COBERTURA-ISA.md` zero-diff (catálogo de processadores
+não afeta a medição de decode). `docs/VALIDACAO-ARQUITETURAS.md` ganhou linha para o perfil M
+moderno (N1 ✅, N2-N4 `⬜` — candidato a task própria de torture/binário real, mesmo bloqueio de
+toolchain de B6.2/B6.6.6/F11). `mvn -o test` verde (3920; as mesmas 3 falhas pré-existentes de
+mojibake) + `truffle` (73) + `install`. **G5 completo** (gbaemu 240 + ndsemu 183). **Épico B15
+(B15.1-B15.7) FECHADO.** Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap. A próxima fronteira natural de cobertura de ISA no perfil M é o épico **B16** (MVE/
+Helium) — pré-requisito duro para `Cortex-M52`/`M55`/`M85` ganharem mapeamento completo — mas ainda
+não foi verificado se tem spec própria pronta (conferir `INDICE.md` da trilha B antes de pegar).
+
 ## Onde estamos (atualizado 2026-09-16, após B15.6 fechar)
 
 **B15.6 FECHADA 2026-09-16** — `DLS`/`WLS`/`LE` (Low Overhead Branch Extension, ARMv8.1-M), formas
