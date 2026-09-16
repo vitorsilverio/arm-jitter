@@ -47,6 +47,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-16, após B15.6 fechar)
+
+**B15.6 FECHADA 2026-09-16** — `DLS`/`WLS`/`LE` (Low Overhead Branch Extension, ARMv8.1-M), formas
+puras (sem tail-predication). Preset `ARMV8_1M` novo + `ArmFeature.LOW_OVERHEAD_BRANCH`.
+**Achado que corrige a spec**: `LCTP`/`WLSTP`/`DLSTP`/`LETP`/`VCTP` exigem genuinamente `FEAT_MVE`
+no QEMU real (`trans_LCTP`/`trans_DLS`/`trans_WLS`/`trans_LE` checam `aa32_mve` incondicionalmente
+para essas formas) — não há forma "pura" possível, ficam `❌` honesto até a B16. **Achado maior,
+bloqueador real fora do escopo original**: bug pré-existente em `ThumbDecoder#tryDecodeThumb32`
+escondia TODA a família M-profile "loop and branch insns" atrás do dispatch de `BL`/`BLX_i` —
+`BLX_i` é "non-M-profile only" no `.decode` real, mas o dispatcher tratava qualquer
+`hw2[15:14]==11` como `BL`/`BLX` incondicionalmente, então todo candidato dessa família virava
+`UNIMPLEMENTED` (falta de `BLX_IMMEDIATE`) ANTES de qualquer extensão de decoder ser consultada.
+Corrigido com um guard por `ArmFeature.M_PROFILE`; `mvn -o test` completo confirma G3 (zero
+regressão em `BL`/`BLX_i` existentes). `docs/COBERTURA-ISA.md` zero-diff (mesmo precedente de
+B15.1 — `ARMV8_1M` ainda não entra no mapa `ARM_ARCHITECTURES`, fica para a B15.7).
+`docs/COBERTURA-JIT.md` regenerado (`IrOp.Kind` 112→114, ambos só interpretados). `mvn -o test`
+verde (3915; as mesmas 3 falhas pré-existentes de mojibake) + `truffle` (73) + `install`. **G5
+completo** (gbaemu + ndsemu). Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B15.7` (fechamento do catálogo Cortex-M, depende de B15.6 ✅ e B15.5 ✅,
+ambas fechadas) agora pegável. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão
+2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-15, após B15.5 fechar)
 
 **B15.5 FECHADA 2026-09-15** — `VLLDM`/`VLSTM` (sem FPU real, sempre `UNDEFINED` nomeado, nunca

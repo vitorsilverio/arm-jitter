@@ -412,6 +412,20 @@ public enum InstructionKind {
     /// de `LOAD`/`STORE` de 64 bits reusando `link` para load-vs-store. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}.
     VSCCLRM,
+    /// `DLS`/`WLS` (perfil M, B15.6, Low Overhead Branch Extension, `t32.decode`): grava
+    /// `sourceRegister` em `LR` (contador de loop) via `IrOp.LoopStart`; `link=true` (`WLS`) desvia
+    /// para `immediate` (endereço já resolvido pelo decoder) quando `sourceRegister==0` — `DLS`
+    /// (`link=false`) nunca desvia. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#LOW_OVERHEAD_BRANCH}.
+    LOOP_START,
+    /// `LE` (perfil M, B15.6, Low Overhead Branch Extension, `t32.decode`), forma pura (sem tail-
+    /// predication — `LETP` não decodifica, ver `Thumb2LowOverheadBranchDecoder`): via
+    /// `IrOp.LoopEnd`. `link=true` (`f=1`, "loop-forever") desvia incondicionalmente para
+    /// `immediate` sem tocar `LR`; `link=false` decrementa `LR` e desvia de volta só se `LR`
+    /// (não-assinado) `> 1` ANTES do decremento (achado medido contra `trans_LE` do QEMU, não
+    /// deduzido do nome do bit `f`). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#LOW_OVERHEAD_BRANCH}.
+    LOOP_END,
     /// **Escape hatch de lifting** (RFC B13.2): a instrução já traz sua própria operação de IR em
     /// {@link DecodedInstruction#liftedOp} — `StandardIrBuilder` apenas a adiciona ao bloco, sem
     /// traduzir campo nenhum. Existe para as famílias vetoriais (NEON, e depois MVE), cuja forma de

@@ -166,7 +166,11 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE,
                     // VLLDM_VLSTM (perfil M, B15.5): sempre troca o PC (entra em USAGE_FAULT via
                     // MProfileExceptionModel), mesma categoria de NOCP acima.
-                    VLLDM_VLSTM -> true;
+                    VLLDM_VLSTM,
+                    // LOOP_START/LOOP_END (DLS/WLS/LE, perfil M, B15.6): podem trocar o PC (WLS com
+                    // rn==0, LE que fecha ou continua o loop) — mesma categoria de TABLE_BRANCH/
+                    // COMPARE_BRANCH_ZERO acima, terminal independente do guard condicional.
+                    LOOP_START, LOOP_END -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,

@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (112 desde B15.5), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (114 desde B15.6), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(112, kinds.size(), "IrOp.Kind deve ter 112 constantes contíguas");
+        assertEquals(114, kinds.size(), "IrOp.Kind deve ter 114 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -110,7 +110,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // mesmo "Não inclui" da B15.2/B15.3: decode + interpretado apenas, dimensão 3 do roadmap
         // fica para o épico A10 tratar depois). B15.5 acrescentou VLLDM_VLSTM, VSCCLRM (+2 — mesmo
         // "Não inclui" da B15.2/B15.3/B15.4).
-        assertEquals(46, uncovered.size(), "Kinds descobertos: " + uncovered);
+        assertEquals(48, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -118,6 +118,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.SECURE_BRANCH_EXCHANGE,
                         IrOp.Kind.VLLDM_VLSTM,
                         IrOp.Kind.VSCCLRM,
+                        IrOp.Kind.LOOP_START,
+                        IrOp.Kind.LOOP_END,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -299,6 +301,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.SECURE_BRANCH_EXCHANGE -> new IrOp.SecureBranchExchange(0, -1, false, 0, c);
             case IrOp.Kind.VLLDM_VLSTM -> new IrOp.VlldmVlstm(c);
             case IrOp.Kind.VSCCLRM -> new IrOp.Vscclrm(true, 0, 1, c);
+            case IrOp.Kind.LOOP_START -> new IrOp.LoopStart(0, 0, true, c);
+            case IrOp.Kind.LOOP_END -> new IrOp.LoopEnd(0, false, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

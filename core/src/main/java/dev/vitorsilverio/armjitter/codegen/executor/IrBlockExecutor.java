@@ -175,6 +175,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.SECURE_BRANCH_EXCHANGE -> pcChanged |= branch.executeSecureBranchExchange(core, (IrOp.SecureBranchExchange) op);
                 case IrOp.Kind.VLLDM_VLSTM -> pcChanged |= system.executeVlldmVlstm(core, (IrOp.VlldmVlstm) op);
                 case IrOp.Kind.VSCCLRM -> vfp.executeVscclrm(core, (IrOp.Vscclrm) op);
+                case IrOp.Kind.LOOP_START -> pcChanged |= branch.executeLoopStart(core, (IrOp.LoopStart) op);
+                case IrOp.Kind.LOOP_END -> pcChanged |= branch.executeLoopEnd(core, (IrOp.LoopEnd) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -354,6 +356,8 @@ public final class IrBlockExecutor {
             case IrOp.SecureBranchExchange sbx -> branch.executeSecureBranchExchange(core, sbx);
             case IrOp.VlldmVlstm vlldmVlstm -> system.executeVlldmVlstm(core, vlldmVlstm);
             case IrOp.Vscclrm vscclrm -> { vfp.executeVscclrm(core, vscclrm); yield false; }
+            case IrOp.LoopStart loopStart -> branch.executeLoopStart(core, loopStart);
+            case IrOp.LoopEnd loopEnd -> branch.executeLoopEnd(core, loopEnd);
         };
     }
 

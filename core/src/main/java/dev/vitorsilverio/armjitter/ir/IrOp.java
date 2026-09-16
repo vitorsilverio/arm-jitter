@@ -20,7 +20,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
         IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
-        IrOp.VlldmVlstm, IrOp.Vscclrm {
+        IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -196,6 +196,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VLLDM_VLSTM = 110;
         /// B15.5: `VSCCLRM` (perfil M, `m-nocp.decode`) — ver {@link Vscclrm}.
         public static final int VSCCLRM = 111;
+        /// B15.6: `DLS`/`WLS` (perfil M, Low Overhead Branch, `t32.decode`) — ver {@link LoopStart}.
+        public static final int LOOP_START = 112;
+        /// B15.6: `LE` (perfil M, Low Overhead Branch, `t32.decode`) — ver {@link LoopEnd}.
+        public static final int LOOP_END = 113;
     }
 
     /// Operacao ALU generica.
@@ -2765,5 +2769,38 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para tomar o branch.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.SECURE_BRANCH_EXCHANGE; }
+    }
+
+    /// `DLS`/`WLS` (perfil M, B15.6, Low Overhead Branch Extension): grava `rn` em `LR` (contador
+    /// de loop); `WLS` (`hasSkipBranch=true`) desvia para `target` quando `rn==0` (loop "while",
+    /// pode nunca executar) — `DLS` (`hasSkipBranch=false`) nunca desvia, só inicializa `LR`. Ver
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder} para o achado
+    /// sobre por que `LCTP`/`WLSTP`/`DLSTP` (tail-predication) não produzem este `IrOp`.
+    record LoopStart(
+            /// Registrador cujo valor inicializa o contador de loop (`LR`).
+            int rn,
+            /// Endereço absoluto de destino quando o branch é tomado (`WLS` com `rn==0`);
+            /// irrelevante quando `hasSkipBranch` é `false`.
+            int target,
+            /// `true` para `WLS` (pode desviar); `false` para `DLS` (nunca desvia).
+            boolean hasSkipBranch,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOOP_START; }
+    }
+
+    /// `LE` (perfil M, B15.6, Low Overhead Branch Extension), forma pura (sem tail-predication —
+    /// ver {@link LoopStart}). **Achado medido contra `trans_LE` do QEMU real** (não deduzido do
+    /// nome do bit `f`): `forever=true` (`f=1`) desvia INCONDICIONALMENTE para `target` sem tocar
+    /// `LR`; `forever=false` decrementa `LR` e desvia de volta só se `LR` (não-assinado) era `> 1`
+    /// ANTES do decremento (a checagem ocorre antes de subtrair, não depois).
+    record LoopEnd(
+            /// Endereço absoluto de destino do desvio (para trás, início do corpo do loop).
+            int target,
+            /// `true` para a forma "loop-forever" (`f=1`, desvio incondicional, `LR` intocado).
+            boolean forever,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOOP_END; }
     }
 }

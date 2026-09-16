@@ -476,6 +476,28 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VlldmVlstmVscclrmDecoder(ARMV8M_MAINLINE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8M_MAINLINE_FEATURES)));
 
+    /// ARMv8.1-M (B15.6) — `ARMV8M_MAINLINE` + {@link ArmFeature#LOW_OVERHEAD_BRANCH} (`DLS`/`WLS`/
+    /// `LE`, formas puras). **G3**: `ARMV8M_MAINLINE` permanece intocado — este preset nasce AO
+    /// LADO. **Zero célula nova em `docs/COBERTURA-ISA.md`** (mesmo precedente da `ARMV7M_PURE`/
+    /// `ARMV7EM` na B15.1): o preset ainda não entra no mapa `ARM_ARCHITECTURES` de
+    /// `IsaCoverageReport` — fica para a B15.7 (fechamento do catálogo Cortex-M) decidir a
+    /// curadoria de coluna nova.
+    private static final ArmArchitecture ARMV8_1M_FEATURES = extending(ARMV8M_MAINLINE_FEATURES,
+            "ARMv8.1-M (Low Overhead Branch)", ArmFeature.LOW_OVERHEAD_BRANCH);
+
+    public static final ArmArchitecture ARMV8_1M = ARMV8_1M_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VlldmVlstmVscclrmDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder(ARMV8_1M_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_FEATURES)));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

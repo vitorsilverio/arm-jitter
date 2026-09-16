@@ -5,6 +5,10 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Executa branches e interworking da IR interpretada.
 public final class IrBranchExecutor {
+    /// `LR`/`R14` reusado como contador de loop pelo Low Overhead Branch Extension (B15.6,
+    /// ARMv8.1-M) — não há registrador oculto, ver Javadoc de `IrOp.LoopStart`/`IrOp.LoopEnd`.
+    private static final int LOOP_COUNTER_REGISTER = 14;
+
     private final IrExecutionSupport support;
 
     IrBranchExecutor(IrExecutionSupport support) {
@@ -118,6 +122,46 @@ public final class IrBranchExecutor {
             return false;
         }
         core.setProgramCounter(cbz.target());
+        return true;
+    }
+
+    /// `DLS`/`WLS` (perfil M, B15.6): grava `rn` em `LR` sempre; `WLS` (`hasSkipBranch`) desvia
+    /// para `target` quando `rn==0` (lido ANTES de sobrescrever `LR` — cobre o caso raro/válido de
+    /// `rn==LR`, ver Armadilha 4 da task).
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeLoopStart(ArmCore core, IrOp.LoopStart loopStart) {
+        if (!core.cpsr().evalCond(loopStart.condition())) {
+            return false;
+        }
+        int count = core.register(loopStart.rn());
+        core.setRegister(LOOP_COUNTER_REGISTER, count);
+        if (loopStart.hasSkipBranch() && count == 0) {
+            core.setProgramCounter(loopStart.target());
+            return true;
+        }
+        return false;
+    }
+
+    /// `LE` (perfil M, B15.6), forma pura: `forever` (`f=1`) desvia incondicionalmente sem tocar
+    /// `LR`; senão decrementa/testa `LR` como o QEMU real (`trans_LE`) — checagem ANTES do
+    /// decremento, `LR` (não-assinado) `<= 1` sai sem decrementar.
+    ///
+    /// @return {@code true} quando o PC foi alterado pela operação
+    public boolean executeLoopEnd(ArmCore core, IrOp.LoopEnd loopEnd) {
+        if (!core.cpsr().evalCond(loopEnd.condition())) {
+            return false;
+        }
+        if (loopEnd.forever()) {
+            core.setProgramCounter(loopEnd.target());
+            return true;
+        }
+        int counter = core.register(LOOP_COUNTER_REGISTER);
+        if (Integer.compareUnsigned(counter, 1) <= 0) {
+            return false;
+        }
+        core.setRegister(LOOP_COUNTER_REGISTER, counter - 1);
+        core.setProgramCounter(loopEnd.target());
         return true;
     }
 }

@@ -720,7 +720,17 @@ public final class ThumbDecoder implements InstructionDecoder {
         // erroneamente candidatos de `top5 ∈ {0b11101, 0b11111}` cujo SEGUNDO halfword também
         // tenha bits[15:14]==0b11 por coincidência (ex. TBB/TBH, `hi=0xE8D0-0xE8DF`/
         // `lo=0xF000-0xF01F` — `lo` bate com a máscara mas `hi` não é `0b11110`).
-        if (top5 == 0b11110 && (lo & BRANCH_WITH_LINK_MASK) == BRANCH_WITH_LINK_MASK) {
+        // B15.6, achado medido contra `target/isa-decode/t32.decode` real: `hw2[12]==0` dentro
+        // deste espaço (`BLX_i`) é EXPLICITAMENTE "non-M-profile only" no `.decode` — sob perfil M,
+        // o MESMO prefixo de bits é reservado para a família "loop and branch insns" (`BF`/`DLS`/
+        // `WLS`/`LE`/`LCTP`/`VCTP`, B15.6), nunca `BLX` imediato (que o perfil M nunca teve, ver
+        // `ArmFeature#BLX_IMMEDIATE`). Sem este guard, TODO candidato dessa família caía em
+        // `decodeLongBranch32` → `isBlx=true` → `UNIMPLEMENTED` (falta de `BLX_IMMEDIATE`) ANTES de
+        // consultar `dispatchThumb32Extensions`, escondendo `Thumb2LowOverheadBranchDecoder`
+        // inteiro. `hw2[12]==1` (`BL`, universal a todo perfil) continua tratado aqui normalmente.
+        boolean wouldBeBlxImmediate = (lo & BL_VS_BLX_BIT) == 0;
+        if (top5 == 0b11110 && (lo & BRANCH_WITH_LINK_MASK) == BRANCH_WITH_LINK_MASK
+                && !(wouldBeBlxImmediate && architecture.has(ArmFeature.M_PROFILE))) {
             return decodeLongBranch32(address, hi, lo, raw32);
         }
         DecodedInstruction decoded = dispatchThumb32Extensions(address, raw32);

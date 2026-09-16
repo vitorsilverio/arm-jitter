@@ -597,6 +597,17 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.immediate(),
                     instruction.condition()));
+            // LOOP_START (DLS/WLS, B15.6): `link` carrega hasSkipBranch (ver InstructionKind#LOOP_START).
+            case LOOP_START -> block.add(new IrOp.LoopStart(
+                    instruction.sourceRegister(),
+                    instruction.immediate(),
+                    instruction.link(),
+                    instruction.condition()));
+            // LOOP_END (LE, B15.6): `link` carrega forever (ver InstructionKind#LOOP_END).
+            case LOOP_END -> block.add(new IrOp.LoopEnd(
+                    instruction.immediate(),
+                    instruction.link(),
+                    instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(

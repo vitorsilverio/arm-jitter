@@ -340,5 +340,18 @@ public enum ArmFeature {
     /// feature, ver B9.11) devolvem sempre `0` (mesma simplificação escolhida pelo próprio QEMU no
     /// modo `linux-user`, `HELPER(v7m_tt)`) — simplificação CONSCIENTE e documentada, não segurança
     /// real (ver `## Resultado` da task B15.4).
-    M_PROFILE_SECURITY
+    M_PROFILE_SECURITY,
+
+    // ---- B15.6 (perfil M: Low Overhead Branch Extension, FEAT_LOB) ----
+    /// **Low Overhead Branch Extension** (ARMv8.1-M): `DLS`/`WLS`/`LE` (`t32.decode`, formas
+    /// "puras", sem tail-predication) — reusam `LR`/`R14` como contador de loop, sem registrador
+    /// oculto nem simulação da predição de branch de hardware (sem efeito observável num
+    /// interpretador, ver `## Resultado` da task B15.6). **`LCTP`/`WLSTP`/`DLSTP`/`LETP`/`VCTP`
+    /// (tail-predication) NÃO são cobertos por esta feature** — exigem genuinamente
+    /// {@code FEAT_MVE} no hardware real (confirmado contra `target/arm/tcg/translate.c` do QEMU:
+    /// `trans_LCTP`/`trans_DLS`/`trans_WLS`/`trans_LE` checam `dc_isar_feature(aa32_mve, s)` para
+    /// essas formas especificamente), então ficam `❌` honesto até a B16 (MVE/Helium) trazer o
+    /// banco `VPR`. Presente no preset {@code ARMV8_1M} (`ArmArchitecture`), NUNCA em
+    /// `ARMV8M_BASELINE`/`ARMV8M_MAINLINE` (G3: esses presets não ganham a feature).
+    LOW_OVERHEAD_BRANCH
 }

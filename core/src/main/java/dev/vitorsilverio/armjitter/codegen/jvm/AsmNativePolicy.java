@@ -238,6 +238,11 @@ public final class AsmNativePolicy {
             // interpretado apenas, mesmo padrão de Nocp/VfpSysregMemoryTransfer/SecureGateway acima).
             case IrOp.VlldmVlstm ignored -> false;
             case IrOp.Vscclrm ignored -> false;
+            // LOOP_START/LOOP_END (DLS/WLS/LE, B15.6): sem emissão nativa nesta task ("Não inclui"
+            // — decode + interpretado apenas, mesmo padrão de Nocp/VfpSysregMemoryTransfer/
+            // SecureGateway/VlldmVlstm acima).
+            case IrOp.LoopStart ignored -> false;
+            case IrOp.LoopEnd ignored -> false;
         };
     }
 
