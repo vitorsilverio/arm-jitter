@@ -71,6 +71,12 @@ public final class ArmCore {
     private final CpsrRegister cpsr = new CpsrRegister();
     private final VfpRegisters vfp = new VfpRegisters();
     private final FpscrRegister fpscr = new FpscrRegister();
+    /// `VPR` (Vector Predication Register, ARMv8.1-M Helium/MVE — B16.1): estado de CPU do perfil
+    /// M, fora do banco memory-mapped do SCS. Persistido por {@link #saveStateVpr}/
+    /// {@link #loadStateVpr}, NUNCA como parte de {@link #saveState}/{@link #loadState} (G3 —
+    /// mesmo padrão aditivo de {@link #vfp}/{@link #fpscr} para os consumidores que ainda não
+    /// gravam este estado).
+    private final VprRegister vpr = new VprRegister();
     private final AddressSpace memory;
     /// Cache de {@link AddressSpace#providesAccessCycles()} do barramento (capacidade estática):
     /// quando `false`, {@link #addMemoryCycles} retorna sem a chamada virtual por acesso.
@@ -269,6 +275,25 @@ public final class ArmCore {
     /// este registrador ainda).
     public FpscrRegister fpscr() {
         return fpscr;
+    }
+
+    /// Retorna o `VPR` mutável associado ao core (B16.1 — só o estado; nenhuma lógica de
+    /// predicação/`VMSR`/`VMRS` consome este registrador ainda, isso é a B16.2).
+    public VprRegister vpr() {
+        return vpr;
+    }
+
+    /// Serializa o `VPR` num stream À PARTE do save-state principal (B16.1, G3: NUNCA altera o
+    /// formato de {@link #saveState}/{@link #loadState} nem bumpa {@link #STATE_VERSION}) — mesmo
+    /// padrão aditivo de {@link VfpRegisters#saveStateExtended} (B13.1). O chamador decide quando
+    /// persistir este stream extra.
+    public void saveStateVpr(java.io.DataOutputStream out) throws java.io.IOException {
+        vpr.saveState(out);
+    }
+
+    /// Restaura o `VPR` gravado por {@link #saveStateVpr}.
+    public void loadStateVpr(java.io.DataInputStream in) throws java.io.IOException {
+        vpr.loadState(in);
     }
 
     /// Retorna o modo atual da CPU.

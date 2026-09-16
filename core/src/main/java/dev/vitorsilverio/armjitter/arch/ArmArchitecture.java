@@ -498,6 +498,29 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder(ARMV8_1M_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_FEATURES)));
 
+    /// `ARMV8_1M` + {@link ArmFeature#MVE_INTEGER}/{@link ArmFeature#MVE_FLOAT} (B16.1) —
+    /// fundação de estado do Helium (MVE): banco `Q0`-`Q7` (gate sobre `VfpRegisters`, B13.1) +
+    /// `VPR` (predicação). **Sem decode**: MESMA lista de extensões de decoder que `ARMV8_1M`,
+    /// nenhuma extensão MVE ainda — `docs/COBERTURA-ISA.md` continua byte a byte idêntica (o
+    /// grupo `mve.decode` só sai de `NOT_IN_ANY_PRESET` na B16.14, que também é quem decide a
+    /// curadoria de coluna nova em `IsaCoverageReport`, mesmo precedente de `ARMV8_1M`/B15.6).
+    /// **G3**: `ARMV8_1M` permanece intocado — este preset nasce AO LADO.
+    private static final ArmArchitecture ARMV8_1M_MVE_FEATURES = extending(ARMV8_1M,
+            "ARMv8.1-M+MVE (Helium)", ArmFeature.MVE_INTEGER, ArmFeature.MVE_FLOAT);
+
+    public static final ArmArchitecture ARMV8_1M_MVE = ARMV8_1M_MVE_FEATURES
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VlldmVlstmVscclrmDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder(ARMV8_1M_MVE_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

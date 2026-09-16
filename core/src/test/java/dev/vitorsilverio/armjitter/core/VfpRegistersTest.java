@@ -232,4 +232,50 @@ class VfpRegistersTest {
         assertEquals(0, vfp.s(10));
         assertEquals(0L, vfp.d(25));
     }
+
+    // ── B16.1: gate MVE Q0-Q7 sobre o MESMO banco (nenhum armazenamento novo) ──
+
+    @Test
+    void mveGateAcceptsQ0ThroughQ7UnderMveIntegerArchitecture() {
+        for (int q = 0; q < VfpRegisters.MVE_QUAD_COUNT; q++) {
+            assertTrue(VfpRegisters.isValidMveQuadRegister(dev.vitorsilverio.armjitter.arch.ArmArchitecture.ARMV8_1M_MVE, q),
+                    "Q" + q + " deve ser válido sob ARMV8_1M_MVE");
+        }
+        assertEquals(8, VfpRegisters.MVE_QUAD_COUNT);
+    }
+
+    @Test
+    void mveGateRejectsQ8ThroughQ15EvenUnderMveIntegerArchitecture() {
+        for (int q = VfpRegisters.MVE_QUAD_COUNT; q < VfpRegisters.QUAD_COUNT; q++) {
+            assertFalse(VfpRegisters.isValidMveQuadRegister(dev.vitorsilverio.armjitter.arch.ArmArchitecture.ARMV8_1M_MVE, q),
+                    "Q" + q + " não deve ser endereçável por MVE (mve_check_qreg_bank: qmask < 8)");
+        }
+    }
+
+    @Test
+    void mveGateRejectsEverythingWithoutMveIntegerFeature() {
+        // ARMV8_1M não tem MVE_INTEGER (B15.6 é só Low Overhead Branch) — nenhum Q é válido.
+        for (int q = 0; q < VfpRegisters.QUAD_COUNT; q++) {
+            assertFalse(VfpRegisters.isValidMveQuadRegister(dev.vitorsilverio.armjitter.arch.ArmArchitecture.ARMV8_1M, q));
+        }
+        // Preset NEON (ADVANCED_SIMD) também não tem MVE_INTEGER: Q8-Q15 continuam intactos ali,
+        // fora deste gate MVE (acessados diretamente por q()/setQ(), não por este método).
+        for (int q = 0; q < VfpRegisters.QUAD_COUNT; q++) {
+            assertFalse(VfpRegisters.isValidMveQuadRegister(dev.vitorsilverio.armjitter.arch.ArmArchitecture.ARMV7A, q));
+        }
+    }
+
+    @Test
+    void writingQ0Through7AliasesTheSameDAndSViewsUsedByNeon() {
+        // O achado central da B16.1: nenhum banco novo — MVE lê exatamente o mesmo armazenamento
+        // que a B13.1 já modelou para NEON (Q0 = D0+D1 = S0-S3).
+        VfpRegisters vfp = new VfpRegisters();
+        vfp.setQ(3, 0x1111_1111_2222_2222L, 0x3333_3333_4444_4444L);
+
+        assertTrue(VfpRegisters.isValidMveQuadRegister(dev.vitorsilverio.armjitter.arch.ArmArchitecture.ARMV8_1M_MVE, 3));
+        assertEquals(0x1111_1111_2222_2222L, vfp.d(6));
+        assertEquals(0x3333_3333_4444_4444L, vfp.d(7));
+        assertEquals(0x2222_2222, vfp.s(12));
+        assertEquals(0x4444_4444, vfp.s(14));
+    }
 }

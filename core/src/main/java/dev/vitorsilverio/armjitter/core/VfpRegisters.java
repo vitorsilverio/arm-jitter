@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
+
 /// Banco de registradores VFP/Advanced SIMD do lado de 32 bits: **32 registradores `D`** (double,
 /// 64 bits) com vista **`Q0`-`Q15`** (128 bits, `Q<i>` = par `D<2i>` baixo + `D<2i+1>` alto) e
 /// vista **`S0`-`S31`** (single, 32 bits) — `S<2i>` = metade BAIXA de `D<i>`, `S<2i+1>` = metade
@@ -30,6 +33,11 @@ public final class VfpRegisters implements dev.vitorsilverio.armjitter.advsimd.A
     /// Quantidade de registradores `Q` (quadword, 128 bits): `Q<i>` = `D<2i>` (baixo) + `D<2i+1>`
     /// (alto).
     public static final int QUAD_COUNT = 16;
+
+    /// Quantidade de registradores `Q` que o **MVE (Helium)** enxerga (B16.1) — só `Q0`-`Q7`,
+    /// nunca `Q8`-`Q15`, mesmo o banco físico deste array tendo {@link #QUAD_COUNT} inteiros
+    /// (`mve_check_qreg_bank`, QEMU `target/arm/tcg/translate-mve.c`: `return qmask < 8;`).
+    public static final int MVE_QUAD_COUNT = 8;
 
     /// Máscara para a metade baixa de 32 bits.
     private static final long LOW_32_BITS_MASK = 0xFFFF_FFFFL;
@@ -237,5 +245,18 @@ public final class VfpRegisters implements dev.vitorsilverio.armjitter.advsimd.A
     /// Cópia defensiva do banco `D` **completo** (`long[32]` = `D0`-`D31`).
     public long[] snapshotD() {
         return java.util.Arrays.copyOf(d, d.length);
+    }
+
+    /// Valida se `q` é endereçável como registrador MVE `Q0`-`Q7` sob `architecture` (B16.1) — o
+    /// MESMO armazenamento `Q0`-`Q15` deste banco (aliasing `D`/`S` já resolvido pela B13.1), só
+    /// que MVE restringe a JANELA visível aos primeiros {@value #MVE_QUAD_COUNT} (achado central
+    /// da B16.1, verbatim do QEMU real: `mve_check_qreg_bank` em
+    /// `target/arm/tcg/translate-mve.c` devolve {@code qmask < 8}). Recusa (devolve {@code false})
+    /// quando {@link ArmFeature#MVE_INTEGER} não está presente OU `q` está fora de
+    /// `0..MVE_QUAD_COUNT-1` — nenhum decoder MVE existe ainda (B16.2+) para consumir este
+    /// método; ele só é fundação (Q8-Q15 continuam intactos para {@link ArmFeature#ADVANCED_SIMD}
+    /// via {@link #q}/{@link #setQ} diretamente, que não passam por este gate).
+    public static boolean isValidMveQuadRegister(ArmArchitecture architecture, int q) {
+        return architecture.has(ArmFeature.MVE_INTEGER) && q >= 0 && q < MVE_QUAD_COUNT;
     }
 }

@@ -353,5 +353,26 @@ public enum ArmFeature {
     /// essas formas especificamente), então ficam `❌` honesto até a B16 (MVE/Helium) trazer o
     /// banco `VPR`. Presente no preset {@code ARMV8_1M} (`ArmArchitecture`), NUNCA em
     /// `ARMV8M_BASELINE`/`ARMV8M_MAINLINE` (G3: esses presets não ganham a feature).
-    LOW_OVERHEAD_BRANCH
+    LOW_OVERHEAD_BRANCH,
+
+    // ---- B16.1 (MVE/Helium: fundacao de estado -- banco Q0-Q7, VPR, sem decode) ----
+    /// **MVE inteiro** (Helium, ARMv8.1-M, `FEAT_MVE`) -- extensao OPCIONAL do perfil M moderno.
+    /// Implica {@link #M_PROFILE}; **nao existe em nenhum perfil A/R** (G2: nenhum preset
+    /// `ARMV4T`/`ARMV5TE`/`ARMV6K`/`ARM11_MPCORE`/`ARMV7A` pode ganhar esta feature -- MVE e
+    /// exclusivamente perfil M, ao contrario de NEON/AdvSIMD que e exclusivamente A/R). Com esta
+    /// feature ligada, `Q0`-`Q7` (128 bits cada) tornam-se enderecaveis, ALIASANDO o mesmo banco
+    /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters} de 32 `D` que a B13.1 ja estende
+    /// para `Q0`-`Q15` (NEON) -- `MVE_INTEGER` so restringe a JANELA visivel a `Q0`-`Q7`
+    /// (`mve_check_qreg_bank` do QEMU real), nunca cria armazenamento novo. Esta task (B16.1)
+    /// nao decodifica nenhum encoding MVE -- e so o gate de estado que a B16.2+ vai consumir.
+    MVE_INTEGER,
+    /// **MVE com ponto flutuante** (`FEAT_MVE_FP`, meia e simples precisao) -- extensao A PARTE
+    /// de {@link #MVE_INTEGER}: a arquitetura real permite MVE inteiro sem MVE FP (nucleo
+    /// so-inteiro existe), entao um core pode ter {@link #MVE_INTEGER} sem esta feature, mas nao
+    /// o contrario (MVE FP sempre implica MVE inteiro). Nenhum decode desta task (B16.1) consulta
+    /// `MVE_FLOAT` -- ela nasce aqui so para nao haver a tentacao de gatear operacoes FP MVE por
+    /// {@link #MVE_INTEGER} nas tasks seguintes (B16.7/B16.12, as primeiras a precisar dela).
+    /// **Nao implica {@link #VFPV2}**: MVE FP e uma unidade vetorial do perfil M, independente do
+    /// VFP escalar classico (`ArmArchitecture.ARMV7M` documenta explicitamente "sem VFP").
+    MVE_FLOAT
 }
