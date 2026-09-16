@@ -47,6 +47,34 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-16, após B16.2 fechar)
+
+**B16.2 FECHADA 2026-09-16** — a máquina de predicação MVE/Helium completa: `MveVptState` (4
+funções transcritas do QEMU real: `eciMask`/`elementMask`/`advance`/`vpstMask`), `ECI` no MESMO
+byte de `CpsrRegister#itState()` (zero armazenamento novo), decoder `Thumb2MvePredicationDecoder`
+(`VPST`/`VPNOT`/`VPSEL`, registrado antes de `Thumb2NocpDecoder`) e `VMSR_VMRS reg=12` (`VPR`,
+item 6 da task, B15.3 já fechada). **Achado real, bug pré-existente corrigido**: `ItState.
+inProgress` checava o byte inteiro de `itState()` — com `ECI` compartilhando esse byte, um `ECI`
+válido não-zero era erroneamente tratado como "dentro de um IT block", fazendo `ArmInterpreter`/
+`StandardIrBlockLifter` emitirem um `SetItState(0)` espúrio que zerava o `ECI` recém-avançado;
+corrigido para checar só `ITSTATE<3:0>` (G3 preservado — todo IT block genuíno nunca tem nibble
+baixo `0` com nibble alto ativo). Decisão (a)/(b) do núcleo vetorial predicado registrada como
+**ainda em aberto na prática** (recomendação (b), sem protótipo — nenhuma instrução aritmética MVE
+existe ainda para medir contra; `VPSEL` não passa por `AdvSimdLanes`, é seleção byte a byte
+direta). `VPNOT`/`VPSEL` tiveram semântica DERIVADA (não confirmada byte a byte contra
+`HELPER(mve_vpnot)`/`HELPER(mve_vpsel)` do QEMU real — não encontrados via `WebFetch`/`WebSearch`
+dentro do orçamento da sessão), documentado explicitamente como desvio do padrão "transcrever" do
+resto da task. `docs/COBERTURA-ISA.md` zero-diff (Armadilha 7 — `mve.decode` só sai de
+`NOT_IN_ANY_PRESET` na B16.14). `docs/COBERTURA-JIT.md`: `IrOp.Kind` 114→119 (todos
+interpretados). `mvn -o test` verde (3982; as mesmas 3 falhas pré-existentes de mojibake) +
+`truffle` (73, `TruffleCodeEmitterSupportsCoherenceTest` atualizado) + `install`. **G5 completo**
+nos 5 consumidores (gbaemu 240, ndsemu 183, armbox, virtual-arm-box, n3dsemu). Ver **Resultado** na
+task.
+
+**Pegáveis a seguir**: `B16.3` (`VLDR_VSTR` contíguo não-alargante, depende de B16.2 ✅) é o
+próximo degrau natural da escada MVE. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis,
+dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-16, após B15.7 fechar — épico B15 FECHADO)
 
 **B15.7 FECHADA 2026-09-16** — fechamento do épico B15 (perfil M moderno): `ArmProcessor` ganha as

@@ -51,6 +51,11 @@ public final class Thumb2VfpSystemAccessDecoder implements DecoderExtension {
     /// Único valor de `reg` implementado nesta task (`FPSCR`) — mesmo valor/nome que
     /// {@link VfpDecoder} já usa para a forma A-profile.
     private static final int FPSCR_REGISTER_SELECTOR = 0x1;
+    /// `VPR` (B16.2, `Inclui` item 6 da task — a B15.3 documentou este valor como "fica fora
+    /// (B16)"): reg = `12` no MESMO campo de `VMSR_VMRS`. Só aceito sob
+    /// {@link ArmFeature#MVE_INTEGER} — sem MVE, `VPR` não existe, e este valor de `reg` continua
+    /// caindo em `NOCP` genérico via {@link Thumb2NocpDecoder} (comportamento anterior, G3).
+    private static final int VPR_REGISTER_SELECTOR = 0xC;
     private static final int PROGRAM_COUNTER = 15;
 
     // ── VMSR_VMRS: `---- 1110 111 l:1 reg:4 rt:4 1010 0001 0000` ──────────────────────────────
@@ -90,28 +95,33 @@ public final class Thumb2VfpSystemAccessDecoder implements DecoderExtension {
         if (!architecture.has(ArmFeature.M_PROFILE)) {
             return null;
         }
-        DecodedInstruction vmsrVmrs = tryDecodeVmsrVmrs(raw, address, condition);
+        DecodedInstruction vmsrVmrs = tryDecodeVmsrVmrs(raw, address, condition, architecture);
         if (vmsrVmrs != null) {
             return vmsrVmrs;
         }
         return tryDecodeVldrVstrSysreg(raw, address, condition);
     }
 
-    private static DecodedInstruction tryDecodeVmsrVmrs(int raw, int address, Condition condition) {
+    private static DecodedInstruction tryDecodeVmsrVmrs(int raw, int address, Condition condition,
+            ArmArchitecture architecture) {
         if ((raw & VMSR_VMRS_MASK) != VMSR_VMRS_VALUE) {
             return null;
         }
         int reg = (raw >>> VMSR_VMRS_REG_SHIFT) & VMSR_VMRS_REG_MASK;
-        if (reg != FPSCR_REGISTER_SELECTOR) {
-            return null; // FPSCR_NZCVQC/VPR/P0/FPCXT_NS/FPCXT_S — B15.4/B15.6/B16, ainda não implementadas.
-        }
         int rt = (raw >>> VMSR_VMRS_RT_SHIFT) & VMSR_VMRS_RT_MASK;
         if (rt == PROGRAM_COUNTER) {
             return null; // UNPREDICTABLE no perfil M (diferente do aliasing APSR da A-profile).
         }
-        boolean read = (raw & VMSR_VMRS_LOAD_BIT) != 0; // l=1: VMRS (FPSCR -> rt).
-        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.VFP_SYSTEM_TRANSFER,
-                rt, -1, -1, 0, false, false, read);
+        boolean read = (raw & VMSR_VMRS_LOAD_BIT) != 0; // l=1: VMRS (registrador -> rt).
+        if (reg == FPSCR_REGISTER_SELECTOR) {
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.VFP_SYSTEM_TRANSFER, rt, -1, -1, 0, false, false, read);
+        }
+        if (reg == VPR_REGISTER_SELECTOR && architecture.has(ArmFeature.MVE_INTEGER)) {
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.VPR_TRANSFER, rt, -1, -1, 0, false, false, read);
+        }
+        return null; // FPSCR_NZCVQC/FPCXT_NS/FPCXT_S — B15.4/B15.6 (Security Extension), ainda não implementadas.
     }
 
     private static DecodedInstruction tryDecodeVldrVstrSysreg(int raw, int address, Condition condition) {

@@ -37,10 +37,24 @@ public final class ItState {
     private static final int LOW5_MASK = 0x1F;
     /// `ITSTATE<2:0> == 0` identifica a última instrução do bloco (o bloco termina após ela).
     private static final int LAST_INSTRUCTION_MASK = 0x7;
+    /// `ITSTATE<3:0>` — campo `mask` inteiro (B16.2): `0` identifica "fora de um IT block" (e,
+    /// pela sobreposição com `ECI`, "sem `IT` ativo, `ECI` pode estar no nibble alto"). Diferente
+    /// de {@link #LAST_INSTRUCTION_MASK} (só 3 bits, usado para detectar a ÚLTIMA instrução DENTRO
+    /// de um bloco já em andamento — `0b1000` é "em andamento, última instrução" e teria
+    /// `& LAST_INSTRUCTION_MASK == 0` mesmo estando em andamento).
+    private static final int MASK_FIELD = 0xF;
 
-    /// `true` quando `itState` indica um IT block em andamento (ITSTATE≠0).
+    /// `true` quando `itState` indica um IT block em andamento — checa APENAS
+    /// `ITSTATE<3:0>` (o campo `mask`), nunca o byte inteiro (B16.2, achado real): desde que
+    /// `ECI` (MVE/Helium) passou a ocupar o MESMO byte (`CpsrRegister#eci()`), um `ITSTATE` com
+    /// nibble baixo `0` e nibble alto não-zero é `ECI` puro, não um IT block — checar o byte
+    /// inteiro faria {@code ArmInterpreter}/{@code StandardIrBlockLifter} tratar erroneamente
+    /// toda instrução MVE beatwise como "governada por IT" e emitir um `SetItState` espúrio que
+    /// zera o `ECI` que {@code MveVptState#advance} acabou de calcular. Uma entrada real de `IT`
+    /// NUNCA tem `mask=0b0000` ({@link #entryState}/o decoder de `IT` rejeitam essa forma antes),
+    /// então o campo baixo é o discriminador correto e suficiente nos dois casos.
     public static boolean inProgress(int itState) {
-        return itState != 0;
+        return (itState & MASK_FIELD) != 0;
     }
 
     /// Condição da instrução GOVERNADA pelo ITSTATE atual, ou {@link Condition#AL} fora de um IT

@@ -20,7 +20,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
         IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
-        IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd {
+        IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd,
+        IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -200,6 +201,16 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int LOOP_START = 112;
         /// B15.6: `LE` (perfil M, Low Overhead Branch, `t32.decode`) — ver {@link LoopEnd}.
         public static final int LOOP_END = 113;
+        /// B16.2: avanço pós-instrução do `VPR`/`ECI` (MVE/Helium) — ver {@link AdvanceVpt}.
+        public static final int ADVANCE_VPT = 114;
+        /// B16.2: `VPST` (perfil M, MVE/Helium) — ver {@link Vpst}.
+        public static final int VPST = 115;
+        /// B16.2: `VPNOT` (perfil M, MVE/Helium) — ver {@link Vpnot}.
+        public static final int VPNOT = 116;
+        /// B16.2: `VPSEL` (perfil M, MVE/Helium) — ver {@link Vpsel}.
+        public static final int VPSEL = 117;
+        /// B16.2: `VMSR_VMRS` com `reg=12` (`VPR`, perfil M, MVE/Helium) — ver {@link VprTransfer}.
+        public static final int VPR_TRANSFER = 118;
     }
 
     /// Operacao ALU generica.
@@ -2802,5 +2813,75 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.LOOP_END; }
+    }
+
+    /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — transcrição de
+    /// `mve_advance_vpt` via {@link dev.vitorsilverio.armjitter.core.MveVptState#advance}. Emitido
+    /// por `StandardIrBuilder#lift` depois de QUALQUER {@code InstructionKind} beatwise (ver
+    /// {@link dev.vitorsilverio.armjitter.decoder.InstructionKind#isMveBeatwise()}), mesmo padrão
+    /// de {@link SetItState} (avanço do `IT`) — sempre com {@link Condition#AL}: o avanço é
+    /// INCONDICIONAL (G4), mesmo quando a instrução governada estava totalmente predicada.
+    record AdvanceVpt(
+            /// Condição necessária para executar — sempre {@link Condition#AL} na prática (o
+            /// lifter nunca emite este `IrOp` sob outra condição, mesmo padrão de `SetItState`).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.ADVANCE_VPT; }
+    }
+
+    /// `VPST` (perfil M, B16.2, MVE/Helium, `target/isa-decode/mve.decode`): grava `mask` em
+    /// `VPR.MASK01`/`MASK23` via {@link dev.vitorsilverio.armjitter.core.MveVptState#vpstMask}
+    /// (o `eci` corrente decide se `MASK01` também é atualizado, ver Javadoc de `vpstMask`).
+    record Vpst(
+            /// Campo `mask` de 4 bits (`%mask_22_13`, bit 22 ++ bits\[15:13\]).
+            int mask,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VPST; }
+    }
+
+    /// `VPNOT` (perfil M, B16.2, MVE/Helium): inverte `VPR.P0` nas lanes correspondentes aos beats
+    /// já executados (via {@link dev.vitorsilverio.armjitter.core.MveVptState#eciMask} — o mesmo
+    /// idioma que `mve_advance_vpt` usa para o "invMask" antes de deslocar `MASK01`/`MASK23`).
+    /// Nenhum campo neutro além da condição: o encoding é totalmente fixo (`VPST` com `mask=0`).
+    record Vpnot(
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VPNOT; }
+    }
+
+    /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte, `@2op_nosz` —
+    /// sem campo `size`, a arquitetura real não distingue largura de elemento aqui) entre `qn` e
+    /// `qm` conforme `VPR.P0`, escrevendo em `qd`, mascarado pelo `elementMask` corrente (beat/
+    /// tail/ECI) — ver Javadoc do executor para a derivação da semântica exata (não pôde ser
+    /// confirmada byte a byte contra `HELPER(mve_vpsel)` do QEMU real nesta rodada de spec, ver
+    /// `## Resultado` da task).
+    record Vpsel(
+            /// `Qd` (`0`-`7` depois de validado por
+            /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#isValidMveQuadRegister}).
+            int qd,
+            /// `Qn`.
+            int qn,
+            /// `Qm`.
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VPSEL; }
+    }
+
+    /// `VMSR`/`VMRS` com `reg=12` (perfil M, B16.2, MVE/Helium): transfere o `VPR` bruto de/para
+    /// `armRegister` — MESMO layout de {@link VfpSystemTransfer}, sem o caso especial de aliasing
+    /// `APSR_nzcv` (`VPR` não tem equivalente) e sem chamar {@link
+    /// dev.vitorsilverio.armjitter.core.MveVptState#advance} (`VMSR_VMRS` nunca é beatwise, ao
+    /// contrário de {@link Vpst}/{@link Vpnot}/{@link Vpsel} — o QEMU real não chama
+    /// `mve_advance_vpt` aqui).
+    record VprTransfer(
+            /// `true` para `VMRS` (`VPR` → `armRegister`); `false` para `VMSR` (`armRegister` →
+            /// `VPR`).
+            boolean read,
+            /// Registrador ARM envolvido (`Rt`, nunca `15` — recusado no decode).
+            int armRegister,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VPR_TRANSFER; }
     }
 }

@@ -177,6 +177,17 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VSCCLRM -> vfp.executeVscclrm(core, (IrOp.Vscclrm) op);
                 case IrOp.Kind.LOOP_START -> pcChanged |= branch.executeLoopStart(core, (IrOp.LoopStart) op);
                 case IrOp.Kind.LOOP_END -> pcChanged |= branch.executeLoopEnd(core, (IrOp.LoopEnd) op);
+                case IrOp.Kind.VPST -> pcChanged |= system.executeVpst(core, (IrOp.Vpst) op);
+                case IrOp.Kind.VPNOT -> pcChanged |= system.executeVpnot(core, (IrOp.Vpnot) op);
+                case IrOp.Kind.VPSEL -> pcChanged |= system.executeVpsel(core, (IrOp.Vpsel) op);
+                // ADVANCE_VPT (B16.2): pulado quando a instrução MVE anterior no MESMO bloco já
+                // mudou o PC (fault de ECI reservado) — ver Javadoc de IrSystemExecutor#executeAdvanceVpt.
+                case IrOp.Kind.ADVANCE_VPT -> {
+                    if (!pcChanged) {
+                        system.executeAdvanceVpt(core, (IrOp.AdvanceVpt) op);
+                    }
+                }
+                case IrOp.Kind.VPR_TRANSFER -> system.executeVprTransfer(core, (IrOp.VprTransfer) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -358,6 +369,11 @@ public final class IrBlockExecutor {
             case IrOp.Vscclrm vscclrm -> { vfp.executeVscclrm(core, vscclrm); yield false; }
             case IrOp.LoopStart loopStart -> branch.executeLoopStart(core, loopStart);
             case IrOp.LoopEnd loopEnd -> branch.executeLoopEnd(core, loopEnd);
+            case IrOp.Vpst vpst -> system.executeVpst(core, vpst);
+            case IrOp.Vpnot vpnot -> system.executeVpnot(core, vpnot);
+            case IrOp.Vpsel vpsel -> system.executeVpsel(core, vpsel);
+            case IrOp.AdvanceVpt advanceVpt -> { system.executeAdvanceVpt(core, advanceVpt); yield false; }
+            case IrOp.VprTransfer vprTransfer -> { system.executeVprTransfer(core, vprTransfer); yield false; }
         };
     }
 

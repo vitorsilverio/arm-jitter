@@ -205,6 +205,37 @@ public final class CpsrRegister {
         value = (value & ~IT_HIGH_MASK & ~IT_LOW_MASK) | (high << IT_HIGH_SHIFT) | (low << IT_LOW_SHIFT);
     }
 
+    /// Deslocamento do nibble alto do byte de {@link #itState()}/{@link #setItState} — MESMOS 4
+    /// bits que {@link #eci()} lê (B16.2, MVE/Helium). Nomeado separadamente de
+    /// {@link ItState#advance} para deixar explícito que esta constante descreve a SOBREPOSIÇÃO
+    /// `ECI`/`ITSTATE`, não a semântica de `IT`.
+    private static final int ECI_NIBBLE_SHIFT = 4;
+    private static final int ECI_NIBBLE_MASK = 0xF;
+
+    /// Retorna o `ECI` (Execution Completion Indicator, ARMv8.1-M MVE/Helium, B16.2) corrente —
+    /// nibble alto (bits\[7:4\]) do MESMO byte de {@link #itState()}, NÃO um campo novo. A
+    /// arquitetura real sobrepõe `EPSR.ECI`/`EPSR.IT` deliberadamente: um bloco `IT` Thumb-2 e uma
+    /// instrução MVE interrompida no meio nunca coexistem (MVE não pode viver dentro de um `IT`
+    /// block), então o mesmo espaço de bits serve aos dois papéis sem ambiguidade — quando
+    /// {@link #itState()}\[3:0\] != 0 (um `IT` block está em andamento), este nibble é a condição do
+    /// `IT`, não `ECI`; ver {@link MveVptState#eciMask} para essa checagem. Salvo/restaurado de
+    /// carona pela mesma via de {@link #itState()} (via `SPSR` na entrada/saída de exceção) —
+    /// propósito central desta sobreposição (ver Javadoc de `MveVptState`).
+    public int eci() {
+        return (itState() >>> ECI_NIBBLE_SHIFT) & ECI_NIBBLE_MASK;
+    }
+
+    /// Grava o `ECI` (bits\[7:4\] do byte de {@link #itState()}), preservando os bits\[3:0\]
+    /// (resto do `ITSTATE`) — MVE nunca é decodificada dentro de um `IT` block, então na prática
+    /// esses bits baixos já estão zerados quando `ECI` é gravado, mas este método não assume isso.
+    public void setEci(int eci) {
+        setItState((itState() & IT_REST_MASK_FOR_ECI) | ((eci & ECI_NIBBLE_MASK) << ECI_NIBBLE_SHIFT));
+    }
+
+    /// Máscara dos bits\[3:0\] do byte de {@link #itState()} — resto do `ITSTATE`, preservado por
+    /// {@link #setEci}.
+    private static final int IT_REST_MASK_FOR_ECI = 0xF;
+
     private void setFlag(int mask, boolean enabled) {
         if (enabled) {
             value |= mask;

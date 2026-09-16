@@ -243,6 +243,14 @@ public final class AsmNativePolicy {
             // SecureGateway/VlldmVlstm acima).
             case IrOp.LoopStart ignored -> false;
             case IrOp.LoopEnd ignored -> false;
+            // VPST/VPNOT/VPSEL + o avanço pós-instrução (B16.2, MVE/Helium): sem emissão nativa
+            // nesta task ("Não inclui" — decode + interpretado apenas, mesmo padrão de
+            // Nocp/VfpSysregMemoryTransfer/SecureGateway/VlldmVlstm/LoopStart acima).
+            case IrOp.Vpst ignored -> false;
+            case IrOp.Vpnot ignored -> false;
+            case IrOp.Vpsel ignored -> false;
+            case IrOp.AdvanceVpt ignored -> false;
+            case IrOp.VprTransfer ignored -> false;
         };
     }
 

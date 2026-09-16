@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BankedRegisterSysm;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
@@ -613,6 +614,31 @@ public final class StandardIrBuilder implements IrBuilder {
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
+            // VPST (perfil M, B16.2): `immediate` carrega o campo `mask` de 4 bits.
+            case VPST -> block.add(new IrOp.Vpst(instruction.immediate(), instruction.condition()));
+            // VPNOT (perfil M, B16.2): sem campos neutros significativos.
+            case VPNOT -> block.add(new IrOp.Vpnot(instruction.condition()));
+            // VPSEL (perfil M, B16.2): Qd/Qn/Qm cabem nos 3 registradores neutros existentes.
+            case VPSEL -> block.add(new IrOp.Vpsel(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            // VPR_TRANSFER (VMSR/VMRS reg=12, B16.2): `link` carrega `read` (mesma convenção de
+            // VFP_SYSTEM_TRANSFER).
+            case VPR_TRANSFER -> block.add(new IrOp.VprTransfer(
+                    instruction.link(),
+                    instruction.destinationRegister(),
+                    instruction.condition()));
+        }
+
+        // MVE beatwise (perfil M, B16.2): o avanço de VPR/ECI roda depois de QUALQUER instrução
+        // MVE, executada ou totalmente predicada (G4) — mesmo gancho que o avanço do IT (abaixo,
+        // em ArmInterpreter/StandardIrBlockLifter) instala para o bloco IT, só que aqui é
+        // incondicional por-instrução em vez de por-bloco-corrente. Tasks MVE futuras (B16.3+) só
+        // precisam marcar seu InstructionKind novo em InstructionKind#isMveBeatwise().
+        if (instruction.kind().isMveBeatwise()) {
+            block.add(new IrOp.AdvanceVpt(Condition.AL));
         }
 
         block.add(new IrOp.Cycle(1));

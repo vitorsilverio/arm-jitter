@@ -170,7 +170,14 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // LOOP_START/LOOP_END (DLS/WLS/LE, perfil M, B15.6): podem trocar o PC (WLS com
                     // rn==0, LE que fecha ou continua o loop) — mesma categoria de TABLE_BRANCH/
                     // COMPARE_BRANCH_ZERO acima, terminal independente do guard condicional.
-                    LOOP_START, LOOP_END -> true;
+                    LOOP_START, LOOP_END,
+                    // VPST/VPNOT/VPSEL (perfil M, B16.2, MVE/Helium): `ECI` reservado faulta
+                    // (USAGE_FAULT/INVSTATE, troca o PC) — mesma categoria de NOCP/VLLDM_VLSTM
+                    // acima. Na prática este emulador nunca PRODUZ um `ECI` reservado (só
+                    // `MveVptState#advance` escreve `ECI`, e sempre com um dos 5 valores válidos),
+                    // mas terminal por precaução, mesmo critério de LOOP_START/LOOP_END ("podem
+                    // trocar o PC").
+                    VPST, VPNOT, VPSEL -> true;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,
@@ -194,7 +201,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     LIFTED_IR_OP,
                     // VSCCLRM (perfil M, B15.5): zera registradores FP, nunca toca o PC (mesma
                     // categoria de VFP_SYSREG_LOAD/STORE acima — armazenamento puro, sem FPU real).
-                    VSCCLRM -> false;
+                    VSCCLRM,
+                    // VPR_TRANSFER (VMSR/VMRS reg=12, B16.2): armazenamento puro do VPR, nunca
+                    // toca o PC (mesma categoria de MPROFILE_MRS/MSR acima).
+                    VPR_TRANSFER -> false;
         };
     }
 

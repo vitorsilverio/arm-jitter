@@ -37,6 +37,11 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// entrar em `USAGE_FAULT` por `VLLDM`/`VLSTM` (que tomam UNDEF, nunca `NOCP`, mesmo sem FPU
     /// real — ver `IrOp.VlldmVlstm`) — bit DIFERENTE do `NOCP` acima, arquiteturalmente distintos.
     private static final int CFSR_UFSR_UNDEFINSTR_BIT = 1 << 16;
+    /// Bit `INVSTATE` do `UFSR` (ARMv7-M ARM B3.2.15) — `bit[1]` do `UFSR`, então mora em
+    /// `bit[17]` do `CFSR` completo (B16.2) — DIFERENTE de `UNDEFINSTR`/`NOCP` acima. Setado por
+    /// {@link #setUsageFaultInvstate()} antes de entrar em `USAGE_FAULT` por `ECI` reservado
+    /// (`mve_eci_check` real, `target/arm/tcg/translate-mve.c`) numa instrução MVE beatwise.
+    private static final int CFSR_UFSR_INVSTATE_BIT = 1 << 17;
 
     // ── Números SYSm dos registradores especiais (B7.4, ARMv7-M ARM B5.1.1). Públicos para o
     // decoder (Thumb2MiscDecoder) reusar o mesmo conjunto ao decidir quais SYSm são UNDEFINED. ──
@@ -562,6 +567,14 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// distingue "coprocessador ausente" de "instrução indefinida", ver Javadoc de `IrOp.VlldmVlstm`).
     public void setUsageFaultUndefinstr() {
         cfsr |= CFSR_UFSR_UNDEFINSTR_BIT;
+    }
+
+    /// Seta o bit `INVSTATE` do `UFSR` (B16.2): chamado ao entrar em `USAGE_FAULT` por `ECI`
+    /// reservado numa instrução MVE beatwise — mesma disciplina de {@link #setUsageFaultNocp()}/
+    /// {@link #setUsageFaultUndefinstr()}, bit diferente dos dois (a arquitetura real distingue as
+    /// três causas de `USAGE_FAULT`).
+    public void setUsageFaultInvstate() {
+        cfsr |= CFSR_UFSR_INVSTATE_BIT;
     }
 
     /// `CFSR` é write-1-to-clear no hardware real (ARMv7-M ARM B3.2.15): cada bit setado em

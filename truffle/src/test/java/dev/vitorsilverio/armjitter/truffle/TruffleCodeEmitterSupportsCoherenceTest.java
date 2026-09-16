@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (114 desde B15.6), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (119 desde B16.2), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(114, kinds.size(), "IrOp.Kind deve ter 114 constantes contíguas");
+        assertEquals(119, kinds.size(), "IrOp.Kind deve ter 119 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -109,8 +109,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // interpretado apenas). B15.4 acrescentou SECURE_GATEWAY, SECURE_BRANCH_EXCHANGE (+2 —
         // mesmo "Não inclui" da B15.2/B15.3: decode + interpretado apenas, dimensão 3 do roadmap
         // fica para o épico A10 tratar depois). B15.5 acrescentou VLLDM_VLSTM, VSCCLRM (+2 — mesmo
-        // "Não inclui" da B15.2/B15.3/B15.4).
-        assertEquals(48, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // "Não inclui" da B15.2/B15.3/B15.4). B16.2 acrescentou ADVANCE_VPT, VPST, VPNOT, VPSEL,
+        // VPR_TRANSFER (+5 — mesmo "Não inclui": decode + interpretado apenas, MVE/Helium fica
+        // para o épico A10 tratar depois, dimensão 3 do roadmap).
+        assertEquals(53, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -120,6 +122,11 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VSCCLRM,
                         IrOp.Kind.LOOP_START,
                         IrOp.Kind.LOOP_END,
+                        IrOp.Kind.ADVANCE_VPT,
+                        IrOp.Kind.VPST,
+                        IrOp.Kind.VPNOT,
+                        IrOp.Kind.VPSEL,
+                        IrOp.Kind.VPR_TRANSFER,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -303,6 +310,11 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.VSCCLRM -> new IrOp.Vscclrm(true, 0, 1, c);
             case IrOp.Kind.LOOP_START -> new IrOp.LoopStart(0, 0, true, c);
             case IrOp.Kind.LOOP_END -> new IrOp.LoopEnd(0, false, c);
+            case IrOp.Kind.ADVANCE_VPT -> new IrOp.AdvanceVpt(c);
+            case IrOp.Kind.VPST -> new IrOp.Vpst(0b1010, c);
+            case IrOp.Kind.VPNOT -> new IrOp.Vpnot(c);
+            case IrOp.Kind.VPSEL -> new IrOp.Vpsel(0, 1, 2, c);
+            case IrOp.Kind.VPR_TRANSFER -> new IrOp.VprTransfer(true, 0, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

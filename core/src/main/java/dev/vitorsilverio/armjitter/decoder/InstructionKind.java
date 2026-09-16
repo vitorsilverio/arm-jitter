@@ -432,5 +432,41 @@ public enum InstructionKind {
     /// operando (operação + tamanho de elemento + largura do arranjo + índice de lane +
     /// deslocamento) não cabe nos campos neutros de `DecodedInstruction`. Nenhum campo neutro é
     /// significativo neste kind.
-    LIFTED_IR_OP
+    LIFTED_IR_OP,
+    /// `VPST` (perfil M, B16.2, MVE/Helium, `target/isa-decode/mve.decode`): grava
+    /// `immediate` (mask de 4 bits, `%mask_22_13`) em `VPR.MASK01`/`MASK23` via
+    /// `IrOp.Vpst`/`MveVptState#vpstMask`. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise (ver
+    /// {@link #isMveBeatwise()}).
+    VPST,
+    /// `VPNOT` (perfil M, B16.2, MVE/Helium): inverte `VPR.P0` nas lanes correspondentes aos beats
+    /// já executados via `IrOp.Vpnot` — encoding fixo (`VPST` com `mask=0` é literalmente `VPNOT`,
+    /// achado da spec). Nenhum campo neutro é significativo. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise.
+    VPNOT,
+    /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte) entre
+    /// `destinationRegister`=`Qd`, `sourceRegister`=`Qn`, `secondSourceRegister`=`Qm` conforme
+    /// `VPR.P0` via `IrOp.Vpsel`. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise.
+    VPSEL,
+    /// `VMSR`/`VMRS` com `reg=12` (`VPR`, B16.2 "Inclui" item 6 — a B15.3 documentou este valor
+    /// como pendente até o B16 existir): transfere o `VPR` bruto de/para `destinationRegister`
+    /// via `IrOp.VprTransfer`. NÃO é beatwise (o QEMU real nunca chama `mve_advance_vpt` para
+    /// `VMSR_VMRS`, ao contrário de `VPST`/`VPNOT`/`VPSEL`). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
+    VPR_TRANSFER;
+
+    /// Instruções MVE "beatwise" (Helium, B16.2+): o avanço de
+    /// {@link dev.vitorsilverio.armjitter.core.MveVptState#advance} roda depois de QUALQUER uma
+    /// destas — não só das 3 que a B16.2 decodifica —, então cada task de conteúdo MVE futura
+    /// (B16.3+) só precisa acrescentar seu {@code Kind} novo a este conjunto para herdar o gancho
+    /// que {@code StandardIrBuilder#lift} instala (ver Javadoc lá).
+    private static final java.util.EnumSet<InstructionKind> MVE_BEATWISE =
+            java.util.EnumSet.of(VPST, VPNOT, VPSEL);
+
+    /// `true` quando esta instrução é MVE beatwise (avança `VPR`/`ECI` depois de executar, mesmo
+    /// totalmente predicada — G4).
+    public boolean isMveBeatwise() {
+        return MVE_BEATWISE.contains(this);
+    }
 }

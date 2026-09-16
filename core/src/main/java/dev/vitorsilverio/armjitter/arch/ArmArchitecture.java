@@ -519,6 +519,9 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VfpSystemAccessDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VlldmVlstmVscclrmDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MvePredicationDecoder (B16.2): VPST/VPNOT/VPSEL vivem no MESMO espaço
+                    // de bits que Thumb2NocpDecoder reivindica (forma 1) — TEM que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MvePredicationDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

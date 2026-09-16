@@ -7,6 +7,9 @@ import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.core.MProfileException;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
+import dev.vitorsilverio.armjitter.core.MveVptState;
+import dev.vitorsilverio.armjitter.core.VfpRegisters;
+import dev.vitorsilverio.armjitter.core.VprRegister;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
@@ -364,5 +367,124 @@ public final class IrSystemExecutor {
             return;
         }
         core.cpsr().setItState(setItState.itState());
+    }
+
+    /// `LTPSIZE` neutro (B16.2 "Não inclui": tail predication/`LOW_OVERHEAD_BRANCH` não modela
+    /// este estado ainda) — passado a {@link MveVptState#elementMask} para desligar a etapa de
+    /// tail predication (`ltpsize < 4` nunca é verdadeiro).
+    private static final int NO_TAIL_PREDICATION_LTPSIZE = 4;
+
+    /// Entra em `USAGE_FAULT` com `UFSR.INVSTATE` (`mve_eci_check` real: `ECI` reservado numa
+    /// instrução MVE beatwise) — mesmo cast direto de {@link #executeNocp}.
+    ///
+    /// @return sempre `true` — `enterException` sempre muda o PC para o vetor do handler.
+    private static boolean faultInvstate(ArmCore core) {
+        MProfileExceptionModel model = (MProfileExceptionModel) core.exceptionModel();
+        model.setUsageFaultInvstate();
+        model.enterException(core, MProfileException.USAGE_FAULT);
+        return true;
+    }
+
+    /// `VPST` (perfil M, B16.2, MVE/Helium): grava `VPR.MASK01`/`MASK23` via
+    /// {@link MveVptState#vpstMask} — antes, valida `ECI` (`mve_eci_check` real, roda para TODA
+    /// instrução MVE beatwise): reservado faulta em vez de gravar (ver {@link #faultInvstate}).
+    ///
+    /// @return `true` quando faultou (PC mudou) — {@link
+    ///         dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} usa isto para pular o
+    ///         {@link IrOp.AdvanceVpt} seguinte no mesmo bloco: o QEMU real nunca chega a
+    ///         `mve_update_and_store_eci`/`mve_advance_vpt` quando `mve_eci_check` falha —
+    ///         translation-time short-circuit, não comportamento de pipeline.
+    public boolean executeVpst(ArmCore core, IrOp.Vpst op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        core.vpr().setValue(MveVptState.vpstMask(core.vpr().value(), eci, op.mask()));
+        return false;
+    }
+
+    /// `VPNOT` (perfil M, B16.2, MVE/Helium): inverte `VPR.P0` nas lanes correspondentes aos
+    /// beats já executados — `vpr ^= eciMask` afeta só os 16 bits baixos (campo `P0`, deslocamento
+    /// `0`), o MESMO idioma que {@link MveVptState#advance} usa para o `invMask`. **Não pôde ser
+    /// confirmado byte a byte contra `HELPER(mve_vpnot)` do QEMU real nesta rodada de spec** (não
+    /// encontrado via `WebFetch`/`WebSearch` dentro do orçamento da sessão) — derivado do idioma
+    /// idêntico já usado por `mve_advance_vpt` no MESMO arquivo; ver `## Resultado` da task B16.2.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeVpnot(ArmCore core, IrOp.Vpnot op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int itState = core.cpsr().itState();
+        core.vpr().setValue(core.vpr().value() ^ MveVptState.eciMask(itState));
+        return false;
+    }
+
+    /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte — `@2op_nosz`
+    /// não tem campo `size`) entre `Qn` e `Qm` conforme `VPR.P0`, escrevendo em `Qd` só nos bytes
+    /// que {@link MveVptState#elementMask} marca como ativos (`LTPSIZE` neutro, ver
+    /// {@link #NO_TAIL_PREDICATION_LTPSIZE}). **Semântica derivada, não confirmada byte a byte
+    /// contra `HELPER(mve_vpsel)` do QEMU real** (mesma limitação de {@link #executeVpnot}) — a
+    /// derivação segue o pseudocódigo arquitetural (`Armv8-M ARM` B4.24): seleção sempre por byte,
+    /// write-enable pelo `elementMask` corrente. Ver `## Resultado` da task B16.2.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeVpsel(ArmCore core, IrOp.Vpsel op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int p0 = (vpr & VprRegister.P0_MASK) >>> VprRegister.P0_SHIFT;
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        for (int byteIndex = 0; byteIndex < 16; byteIndex++) {
+            if (((mask >>> byteIndex) & 1) == 0) {
+                continue;
+            }
+            boolean selectN = ((p0 >>> byteIndex) & 1) != 0;
+            long value = vfp.element(selectN ? op.qn() : op.qm(), byteIndex, 0);
+            vfp.setElement(op.qd(), byteIndex, 0, value);
+        }
+        return false;
+    }
+
+    /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — {@link
+    /// MveVptState#advance}. Emitido incondicionalmente (G4) depois de toda instrução MVE
+    /// beatwise; {@link dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} pula esta
+    /// chamada quando a instrução MVE anterior no MESMO bloco já mudou o PC (fault de `ECI`
+    /// reservado — ver {@link #executeVpst}), nunca quando ela só zerou o `elementMask` inteiro
+    /// (predicação total, que AINDA avança, ver Javadoc de {@link IrOp.AdvanceVpt}).
+    public void executeAdvanceVpt(ArmCore core, IrOp.AdvanceVpt op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        MveVptState.MveVptAdvance result = MveVptState.advance(core.vpr().value(), core.cpsr().itState());
+        core.vpr().setValue(result.vpr());
+        core.cpsr().setItState(result.itState());
+    }
+
+    /// `VMSR`/`VMRS` com `reg=12` (perfil M, B16.2, MVE/Helium): transfere o `VPR` bruto de/para
+    /// `armRegister` — armazenamento puro, sem aliasing (ver Javadoc de {@link IrOp.VprTransfer}).
+    /// NÃO avança `VPR`/`ECI` ({@link #executeAdvanceVpt}): `VMSR_VMRS` nunca é beatwise.
+    public void executeVprTransfer(ArmCore core, IrOp.VprTransfer op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        if (op.read()) {
+            core.setRegister(op.armRegister(), core.vpr().value());
+        } else {
+            core.vpr().setValue(core.register(op.armRegister()));
+        }
     }
 }
