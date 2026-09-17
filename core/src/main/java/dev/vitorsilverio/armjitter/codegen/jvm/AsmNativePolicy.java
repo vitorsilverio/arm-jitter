@@ -282,6 +282,9 @@ public final class AsmNativePolicy {
             case IrOp.MveVectorFpComplexMultiply ignored -> false;
             case IrOp.MveVectorDualMultiplyAddHigh ignored -> false;
             case IrOp.MveVectorDoublingWideningMultiply ignored -> false;
+            case IrOp.MveVectorFpTwoOp ignored -> false;
+            case IrOp.MveVectorFpComplexAdd ignored -> false;
+            case IrOp.MveVectorFpComplexMultiplyAccumulate ignored -> false;
         };
     }
 

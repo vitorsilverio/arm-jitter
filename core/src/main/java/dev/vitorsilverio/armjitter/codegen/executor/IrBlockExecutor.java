@@ -229,6 +229,13 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorDualMultiplyAddHigh(core, (IrOp.MveVectorDualMultiplyAddHigh) op);
                 case IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY -> pcChanged |= system
                         .executeMveVectorDoublingWideningMultiply(core, (IrOp.MveVectorDoublingWideningMultiply) op);
+                // B16.7 sub-família 3: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_FP_TWO_OP ->
+                        pcChanged |= system.executeMveVectorFpTwoOp(core, (IrOp.MveVectorFpTwoOp) op);
+                case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_ADD ->
+                        pcChanged |= system.executeMveVectorFpComplexAdd(core, (IrOp.MveVectorFpComplexAdd) op);
+                case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE -> pcChanged |= system
+                        .executeMveVectorFpComplexMultiplyAccumulate(core, (IrOp.MveVectorFpComplexMultiplyAccumulate) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -457,6 +464,11 @@ public final class IrBlockExecutor {
                     system.executeMveVectorDualMultiplyAddHigh(core, mveVectorDualMultiplyAddHigh);
             case IrOp.MveVectorDoublingWideningMultiply mveVectorDoublingWideningMultiply ->
                     system.executeMveVectorDoublingWideningMultiply(core, mveVectorDoublingWideningMultiply);
+            case IrOp.MveVectorFpTwoOp mveVectorFpTwoOp -> system.executeMveVectorFpTwoOp(core, mveVectorFpTwoOp);
+            case IrOp.MveVectorFpComplexAdd mveVectorFpComplexAdd ->
+                    system.executeMveVectorFpComplexAdd(core, mveVectorFpComplexAdd);
+            case IrOp.MveVectorFpComplexMultiplyAccumulate mveVectorFpComplexMultiplyAccumulate -> system
+                    .executeMveVectorFpComplexMultiplyAccumulate(core, mveVectorFpComplexMultiplyAccumulate);
         };
     }
 

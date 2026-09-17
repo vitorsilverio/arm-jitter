@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (139 desde B16.7 sub-família 2), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (142 desde B16.7 sub-família 3), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(139, kinds.size(), "IrOp.Kind deve ter 139 constantes contíguas");
+        assertEquals(142, kinds.size(), "IrOp.Kind deve ter 142 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -123,8 +123,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED, MVE_VECTOR_NARROW_INTERLEAVED,
         // MVE_VECTOR_FP_CONVERT_PRECISION (+5, mesmo "Não inclui"). B16.7 sub-família 2 acrescentou
         // MVE_VECTOR_FP_COMPLEX_MULTIPLY, MVE_VECTOR_DUAL_MULTIPLY_ADD_HIGH,
-        // MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY (+3, mesmo "Não inclui").
-        assertEquals(73, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY (+3, mesmo "Não inclui"). B16.7 sub-família 3
+        // acrescentou MVE_VECTOR_FP_TWO_OP, MVE_VECTOR_FP_COMPLEX_ADD,
+        // MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE (+3, mesmo "Não inclui").
+        assertEquals(76, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -177,7 +179,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED, IrOp.Kind.MVE_VECTOR_NARROW_INTERLEAVED,
                         IrOp.Kind.MVE_VECTOR_FP_CONVERT_PRECISION,
                         IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY, IrOp.Kind.MVE_VECTOR_DUAL_MULTIPLY_ADD_HIGH,
-                        IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY)),
+                        IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY,
+                        IrOp.Kind.MVE_VECTOR_FP_TWO_OP, IrOp.Kind.MVE_VECTOR_FP_COMPLEX_ADD,
+                        IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -373,6 +377,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.MveVectorDualMultiplyAddHigh(true, false, false, 0, 0, 1, 2, c);
             case IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY ->
                     new IrOp.MveVectorDoublingWideningMultiply(1, false, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_FP_TWO_OP -> new IrOp.MveVectorFpTwoOp(AdvSimdFpThreeSameOp.ADD, 2, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_ADD -> new IrOp.MveVectorFpComplexAdd(true, 2, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE ->
+                    new IrOp.MveVectorFpComplexMultiplyAccumulate(0, 2, 0, 1, 2, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

@@ -1346,4 +1346,80 @@ public final class IrSystemExecutor {
         }
         return false;
     }
+
+    /// `VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/`VFMS` (perfil M, B16.7
+    /// sub-família 3, MVE/Helium, `FEAT_MVE_FP`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpThreeSameMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpTwoOp(ArmCore core, IrOp.MveVectorFpTwoOp op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpThreeSameMasked(vfp, op.op(), esz, lanes, baseRd, baseRn, baseRm, mask);
+        return false;
+    }
+
+    /// `VCADD90_fp`/`VCADD270_fp` (perfil M, B16.7 sub-família 3, MVE/Helium, `FEAT_MVE_FP`): delega
+    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpComplexAddMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpComplexAdd(ArmCore core, IrOp.MveVectorFpComplexAdd op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        int rotation = op.rotate90() ? AdvSimdLanes.COMPLEX_ROTATE_90 : AdvSimdLanes.COMPLEX_ROTATE_270;
+        AdvSimdLanes.fpComplexAddMasked(vfp, esz, lanes, baseRd, baseRn, baseRm, rotation, mask);
+        return false;
+    }
+
+    /// `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (perfil M, B16.7 sub-família 3, MVE/Helium,
+    /// `FEAT_MVE_FP`): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpComplexMultiplyAccumulateMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpComplexMultiplyAccumulate(ArmCore core,
+            IrOp.MveVectorFpComplexMultiplyAccumulate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpComplexMultiplyAccumulateMasked(vfp, esz, lanes, baseRd, baseRn, baseRm, op.rotation(), mask);
+        return false;
+    }
 }

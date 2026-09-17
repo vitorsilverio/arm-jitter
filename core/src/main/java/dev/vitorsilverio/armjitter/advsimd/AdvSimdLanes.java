@@ -1179,6 +1179,35 @@ public final class AdvSimdLanes {
         }
     }
 
+    /// Como {@link #fpThreeSame}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #threeSameMasked}) — MVE/Helium (B16.7 sub-família 3): lane cujo byte de máscara está
+    /// desligado PRESERVA o destino (pula o cálculo — equivalente e mais barato, mesma disciplina de
+    /// {@link #threeSameMasked}). Ao contrário de {@link #threeSameMasked}, nunca satura (nenhuma
+    /// operação FP de MVE seta `FPSCR.QC` — ver Javadoc de
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MveVectorFpTwoOp}), então não há retorno.
+    public static void fpThreeSameMasked(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long anBits = element(regs, baseRn, i, esz);
+            long bmBits = element(regs, baseRm, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfThreeSame(op, anBits, bmBits, dBits);
+                case 2 -> singleThreeSame(op, anBits, bmBits, dBits);
+                case 3 -> doubleThreeSame(op, anBits, bmBits, dBits);
+                default -> throw new IllegalArgumentException("esz inválido para FP three-same: " + esz);
+            };
+            long merged = mergeLaneBytes(dBits, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
     /// Ramo F16 (`esz=1`) de {@link #fpThreeSame}: calcula em `float` e estreita uma vez
     /// ({@link #halfBits}). `MLA`/`MLS` estreitam o produto a binary16 ANTES do acumulador (dois
     /// arredondamentos F16, NÃO fundido); `FMLA`/`FMLS` são fundidos ({@link Math#fma(float,float,float)}).
@@ -1514,6 +1543,38 @@ public final class AdvSimdLanes {
         };
     }
 
+    /// Como {@link #fpComplexAdd}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #complexAddMasked}) — `VCADD90_fp`/`VCADD270_fp` (B16.7 sub-família 3, MVE/Helium,
+    /// `FEAT_MVE_FP`). Cada par (par=real, ímpar=imaginário) tem sua PRÓPRIA máscara (mesmo padrão
+    /// de {@link #complexAddMasked}, ao contrário de {@link #fpComplexAdd} que não é predicado).
+    /// Nunca satura.
+    public static void fpComplexAddMasked(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd, int baseRn,
+            int baseRm, int rotation, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int pair = 0; pair < lanes; pair += 2) {
+            int reMask = (byteMask >>> (pair * elementBytes)) & elementByteMask;
+            int imMask = (byteMask >>> ((pair + 1) * elementBytes)) & elementByteMask;
+            if (reMask == 0 && imMask == 0) {
+                continue;
+            }
+            long aReBits = element(regs, baseRn, pair, esz);
+            long aImBits = element(regs, baseRn, pair + 1, esz);
+            long bReBits = element(regs, baseRm, pair, esz);
+            long bImBits = element(regs, baseRm, pair + 1, esz);
+            if (reMask != 0) {
+                long reResult = complexAddPart(esz, aReBits, aImBits, bReBits, bImBits, rotation, true);
+                long current = element(regs, baseRd, pair, esz);
+                setElement(regs, baseRd, pair, esz, mergeLaneBytes(current, reResult, reMask, elementBytes));
+            }
+            if (imMask != 0) {
+                long imResult = complexAddPart(esz, aReBits, aImBits, bReBits, bImBits, rotation, false);
+                long current = element(regs, baseRd, pair + 1, esz);
+                setElement(regs, baseRd, pair + 1, esz, mergeLaneBytes(current, imResult, imMask, elementBytes));
+            }
+        }
+    }
+
     /// Executa `VCMLA`/`FCMLA` (`FEAT_FCMA`) sobre `lanes` elementos de `1 << esz` bytes: multiply-
     /// accumulate complexo FUNDIDO (`Math.fma`, um arredondamento — mesma convenção `FMLA`/`FMLS` do
     /// resto do núcleo) de pares de lanes ADJACENTES de `baseRn`/`baseRm` acumulando em `baseRd`
@@ -1538,6 +1599,42 @@ public final class AdvSimdLanes {
             long imResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation, false);
             setElement(regs, baseRd, pair, esz, reResult);
             setElement(regs, baseRd, pair + 1, esz, imResult);
+        }
+    }
+
+    /// Como {@link #fpComplexMultiplyAccumulate}, mas PREDICADO por byte (`byteMask`, mesma
+    /// convenção de {@link #complexAddMasked}/{@link #fpComplexAddMasked}) — `VCMLA0`/`VCMLA90`/
+    /// `VCMLA180`/`VCMLA270` (B16.7 sub-família 3, MVE/Helium, `FEAT_MVE_FP`). Cada par (real/
+    /// imaginário) tem sua PRÓPRIA máscara — a leitura do acumulador ATUAL (`dReBits`/`dImBits`) só
+    /// importa para a metade cuja máscara está ativa, mas ler as duas incondicionalmente é
+    /// inofensivo (mesmo padrão do resto do núcleo: computar e depois mesclar só os bytes ativos).
+    /// Nunca satura.
+    public static void fpComplexMultiplyAccumulateMasked(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd,
+            int baseRn, int baseRm, int rotation, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int pair = 0; pair < lanes; pair += 2) {
+            int reMask = (byteMask >>> (pair * elementBytes)) & elementByteMask;
+            int imMask = (byteMask >>> ((pair + 1) * elementBytes)) & elementByteMask;
+            if (reMask == 0 && imMask == 0) {
+                continue;
+            }
+            long aReBits = element(regs, baseRn, pair, esz);
+            long aImBits = element(regs, baseRn, pair + 1, esz);
+            long bReBits = element(regs, baseRm, pair, esz);
+            long bImBits = element(regs, baseRm, pair + 1, esz);
+            long dReBits = element(regs, baseRd, pair, esz);
+            long dImBits = element(regs, baseRd, pair + 1, esz);
+            if (reMask != 0) {
+                long reResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation,
+                        true);
+                setElement(regs, baseRd, pair, esz, mergeLaneBytes(dReBits, reResult, reMask, elementBytes));
+            }
+            if (imMask != 0) {
+                long imResult = complexMlaPart(esz, aReBits, aImBits, bReBits, bImBits, dReBits, dImBits, rotation,
+                        false);
+                setElement(regs, baseRd, pair + 1, esz, mergeLaneBytes(dImBits, imResult, imMask, elementBytes));
+            }
         }
     }
 

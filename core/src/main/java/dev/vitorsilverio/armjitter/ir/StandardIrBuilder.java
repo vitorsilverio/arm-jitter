@@ -659,7 +659,18 @@ public final class StandardIrBuilder implements IrBuilder {
                 || instruction.liftedOp() instanceof IrOp.MveVectorFpAbsAccumulate
                 || instruction.liftedOp() instanceof IrOp.MveVectorShiftWidenInterleaved
                 || instruction.liftedOp() instanceof IrOp.MveVectorNarrowInterleaved
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpConvertPrecision) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpConvertPrecision
+                // B16.7 sub-família 2 (achado real desta sessão: faltavam aqui desde a sub-família 2
+                // fechar — VCMUL*/VQDMLADH*/VQDMLSDH*/VQDMULL* nunca avançavam VPR/ECI, corrigido
+                // junto com a sub-família 3 por serem o MESMO gancho).
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiply
+                || instruction.liftedOp() instanceof IrOp.MveVectorDualMultiplyAddHigh
+                || instruction.liftedOp() instanceof IrOp.MveVectorDoublingWideningMultiply
+                // B16.7 sub-família 3: VADD_fp/VSUB_fp/VMUL_fp/VABD_fp/VMAXNM/VMINNM/VFMA/VFMS/
+                // VCADD90_fp/VCADD270_fp/VCMLA0/90/180/270 — mesmo padrão acima.
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpTwoOp
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexAdd
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiplyAccumulate) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
         } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla

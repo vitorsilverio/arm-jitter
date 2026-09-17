@@ -27,7 +27,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.AdvanceEci, IrOp.MveVector2Op, IrOp.MveVector2OpWidening, IrOp.MveVectorCarry,
         IrOp.MveVectorComplexAdd, IrOp.MveVectorAbsAccumulate, IrOp.MveVectorFpAbsAccumulate,
         IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision,
-        IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply {
+        IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply,
+        IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -274,6 +275,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.7 sub-família 2: `VQDMULLB`/`VQDMULLT` (perfil M, MVE/Helium) — ver
         /// {@link MveVectorDoublingWideningMultiply}.
         public static final int MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY = 138;
+        /// B16.7 sub-família 3: `VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/
+        /// `VFMS` (`FEAT_MVE_FP`, perfil M, MVE/Helium) — ver {@link MveVectorFpTwoOp}.
+        public static final int MVE_VECTOR_FP_TWO_OP = 139;
+        /// B16.7 sub-família 3: `VCADD90_fp`/`VCADD270_fp` (`FEAT_MVE_FP`, perfil M, MVE/Helium) —
+        /// ver {@link MveVectorFpComplexAdd}.
+        public static final int MVE_VECTOR_FP_COMPLEX_ADD = 140;
+        /// B16.7 sub-família 3: `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (`FEAT_MVE_FP`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorFpComplexMultiplyAccumulate}.
+        public static final int MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE = 141;
     }
 
     /// Operacao ALU generica.
@@ -3511,5 +3521,87 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY; }
+    }
+
+    /// `VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/`VFMS` (perfil M, B16.7
+    /// sub-família 3, MVE/Helium, `FEAT_MVE_FP`, `target/isa-decode/mve.decode` `@2op_fp`, seção
+    /// "2-operand FP"): delega ao núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameMasked}) — a MESMA função de
+    /// operação ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp}) que
+    /// `NeonFpThreeSame`/A64 já usam via {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}
+    /// para o caminho NÃO predicado (RFC B13.2 D1) — zero código novo de aritmética, só o gancho
+    /// PREDICADO. `VFMA`/`VFMS` reusam {@code FMLA}/{@code FMLS} (FUNDIDO, um arredondamento —
+    /// `DO_VFMA`/`mve_helper.c` real). `size` (`%2op_fp_size`, bit20 DIRETO: `1`=binary16,
+    /// `0`=binary32 — convenção NEON FP, não confundir com {@link MveVectorFpComplexAdd}/
+    /// {@link MveVectorFpComplexMultiplyAccumulate} abaixo, que usam a forma REVERSA). Beatwise
+    /// (mesmo gancho de {@link MveVector2Op}). Nunca satura (`FPSCR.QC` não se aplica a operações FP
+    /// MVE, mesmo precedente de {@link MveVectorFpAbsAccumulate}/{@link MveVectorFpConvertPrecision}).
+    record MveVectorFpTwoOp(
+            /// Operação a executar (núcleo compartilhado) — só `ADD`/`SUB`/`MUL`/`ABD`/`MAXNM`/
+            /// `MINNM`/`FMLA`/`FMLS` nesta task.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp op,
+            /// `1` = binary16, `2` = binary32 (`%2op_fp_size`, bit20 DIRETO).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_TWO_OP; }
+    }
+
+    /// `VCADD90_fp`/`VCADD270_fp` (perfil M, B16.7 sub-família 3, MVE/Helium, `FEAT_MVE_FP`,
+    /// `target/isa-decode/mve.decode` `@2op_fp_size_rev` — "VCADD is an exception, where bit 20 is 0
+    /// for 16 bit and 1 for 32 bit"): delega ao núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexAddMasked}) — MESMA fórmula
+    /// `FComplexAddImpl` de {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexAdd}
+    /// (`FEAT_FCMA`/NEON), só que PREDICADA por par (real/imaginário). **Não confundir com
+    /// `VHCADD90`/`VHCADD270`/`VCADD90`/`VCADD270` INTEIROS (B16.6, {@link MveVectorComplexAdd},
+    /// encodings DISTINTOS, núcleo separado).** Beatwise (mesmo gancho de {@link MveVector2Op}).
+    /// Nunca satura.
+    record MveVectorFpComplexAdd(
+            /// `true` para `VCADD90_fp` (rotação `90°`); `false` para `VCADD270_fp` (`270°`).
+            boolean rotate90,
+            /// `1` = binary16, `2` = binary32 (`%2op_fp_size_rev`, `bit20+1` — forma REVERSA, ver
+            /// Javadoc da classe).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_ADD; }
+    }
+
+    /// `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (perfil M, B16.7 sub-família 3, MVE/Helium,
+    /// `FEAT_MVE_FP`, `target/isa-decode/mve.decode` `@2op_fp_size_rev`): delega ao núcleo
+    /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulateMasked})
+    /// — MESMA fórmula `FComplexMulAdd` de {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulate} (`FEAT_FCMA`/
+    /// NEON `VCMLA`/`FCMLA`), só que PREDICADA por par. **Não confundir com `VCMUL0`/`VCMUL90`/
+    /// `VCMUL180`/`VCMUL270` (B16.7 sub-família 2, {@link MveVectorFpComplexMultiply}, "real ×
+    /// complexo" sem acumular — encodings e núcleo DISTINTOS, achado da sub-família 2).** Beatwise
+    /// (mesmo gancho de {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpComplexMultiplyAccumulate(
+            /// `0`/`90`/`180`/`270` — ver a tabela de contribuição de cada rotação no Javadoc de
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyAccumulate}.
+            int rotation,
+            /// `1` = binary16, `2` = binary32 (`%2op_fp_size_rev`, `bit20+1`).
+            int esz,
+            /// `Qd` (`0`-`7`) — fonte (acumulador) E destino.
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE; }
     }
 }

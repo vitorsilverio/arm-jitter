@@ -47,6 +47,32 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, após B16.7 fechar — épico B16.7 inteiro concluído)
+
+**B16.7 FECHADA 2026-09-17 (58/58 encodings, as 3 sub-famílias)** — sub-família 3 (2-op FP puro,
+`VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/`VFMS`/`VCADD90_fp`/`VCADD270_fp`/
+`VCMLA0/90/180/270`, 14 encodings) fechou a task. `Thumb2MveVector2opFpDecoder` novo, registrado
+antes de `Thumb2NocpDecoder`. **Reuso total do núcleo, zero aritmética nova** — as 8 linhas `@2op_fp`
+mapeiam 1:1 para `AdvSimdFpThreeSameOp` já existente (`ADD`/`SUB`/`MUL`/`ABD`/`MAXNM`/`MINNM`/`FMLA`/
+`FMLS`), as 6 `@2op_fp_size_rev` reusam a MESMA fórmula `FComplexAddImpl`/`FComplexMulAdd` de
+`fpComplexAdd`/`fpComplexMultiplyAccumulate` (`FEAT_FCMA`/NEON); só o gancho PREDICADO
+(`fpThreeSameMasked`/`fpComplexAddMasked`/`fpComplexMultiplyAccumulateMasked`) era novo. Medido bit a
+bit contra o `.decode` real via `curl`: as 14 linhas compartilham a MESMA máscara de bits fixos
+(`0xFFA11F51`), sem `{}` sobreposto — decode é tabela direta, sem prioridade a resolver. 3 `IrOp.Kind`
+novos (139-141), só interpretados. **Achado real, bug pré-existente da sub-família 2 corrigido
+junto**: `StandardIrBuilder` nunca ganhou o gancho de `AdvanceVpt` para `VCMUL*`/`VQDMLADH*`/
+`VQDMULL*` (sub-família 2, sessão anterior) — corrompia a predicação de qualquer MVE beatwise
+seguinte no mesmo bloco; corrigido junto com os 3 tipos novos desta sessão. `docs/COBERTURA-ISA.md`
+zero-diff (mesma Armadilha 7 de B16.2-B16.7). `docs/COBERTURA-JIT.md`: `IrOp.Kind` 139→142. `mvn -o
+test` verde (4171; as mesmas 3 falhas pré-existentes) + `truffle` (73) + `install`. **G5 completo**
+(gbaemu + ndsemu). 18 testes novos. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.8` (comparações `VCMP`/`VPT`, depende de
+B16.2 ✅), `B16.9` (escalares, depende de B16.6 ✅), `B16.10` (deslocamentos por imediato + `VMOVL`,
+depende de B16.6 ✅), `B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅) — todos com
+spec escrita desde 2026-09-13, nenhum ainda executado (conferir `INDICE.md` da trilha B antes de
+pegar). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-17, após B16.7 sub-família 2 fechar)
 
 **B16.7 sub-família 2 FECHADA 2026-09-17 (44/58 encodings acumulados da task; sub-família 3
