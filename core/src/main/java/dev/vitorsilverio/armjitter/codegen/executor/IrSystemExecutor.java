@@ -1265,4 +1265,85 @@ public final class IrSystemExecutor {
         }
         return false;
     }
+
+    /// `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`): delega
+    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpComplexMultiplyMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpComplexMultiply(ArmCore core, IrOp.MveVectorFpComplexMultiply op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpComplexMultiplyMasked(vfp, esz, lanes, baseRd, baseRn, baseRm, op.rotation(), mask);
+        return false;
+    }
+
+    /// `VQDMLADH`/`VQDMLSDH` e variantes `X`/`R` (perfil M, B16.7, MVE/Helium): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#dualMultiplyAddHighMasked}) — só METADE das lanes é escrita
+    /// (ver Javadoc de lá).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorDualMultiplyAddHigh(ArmCore core, IrOp.MveVectorDualMultiplyAddHigh op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.dualMultiplyAddHighMasked(vfp, op.add(), op.exchange(), op.rounded(), esz,
+                lanes, baseRd, baseRn, baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VQDMULLB`/`VQDMULLT` (perfil M, B16.7, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#doublingWideningInterleavedMasked}).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorDoublingWideningMultiply(ArmCore core, IrOp.MveVectorDoublingWideningMultiply op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.doublingWideningInterleavedMasked(vfp, esz, outputElements, op.top(), baseRd,
+                baseRn, baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
 }

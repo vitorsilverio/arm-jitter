@@ -229,7 +229,36 @@ public final class AdvSimdLanes {
     /// mínima já aceita para `unsignedBig`/`saturateToElement`/`signedSaturatingAdd`/
     /// `signedSaturatingSub` desde B13.5).
     private static long saturatingDoublingProduct(long sa, long sb, int wideEsz) {
-        return saturateToElement(BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1), wideEsz, true);
+        return saturatingDoublingProductChecked(sa, sb, wideEsz).value();
+    }
+
+    /// Como {@link #saturatingDoublingProduct}, mas devolve a bandeira de saturação — usada por
+    /// {@link #doublingWideningInterleavedMasked} (`VQDMULLB`/`VQDMULLT`, B16.7, MVE/Helium): a
+    /// PRIMEIRA forma alargante intercalada que satura (as seis de {@link #wideningInterleavedMasked},
+    /// B16.6, nunca saturam — `SMULL`/`UMULL`/`PMULL`).
+    private static Saturation saturatingDoublingProductChecked(long sa, long sb, int wideEsz) {
+        return saturateChecked(BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1), wideEsz, true);
+    }
+
+    /// Multiplicação dobrada DUPLA de alta ordem saturante, com soma OU subtração dos dois produtos
+    /// (`VQDMLADH`/`VQDMLSDH` e variantes `X`/`R`, B16.7, MVE/Helium, verbatim de
+    /// `DO_VQDMLADH_OP`/`do_vqdmladh_*`/`do_vqdmlsdh_*`, `target/arm/tcg/mve_helper.c`): computa
+    /// `(a*b [+ ou -] c*d)*2 [+ arredondamento]`, satura ao DOBRO da largura do elemento (mesma
+    /// convenção `wideEsz = esz+1` do resto do núcleo) e devolve a metade ALTA — generalização de
+    /// {@link #doublingMultiplyHighChecked} (produto ÚNICO) para dois produtos, usando
+    /// {@link BigInteger} para não replicar as três variantes por largura (`do_sat_bhw`/
+    /// `sadd64_overflow`) que o QEMU real usa por não ter aritmética de precisão arbitrária em C.
+    private static Saturation dualDoublingMultiplyHighChecked(long a, long b, long c, long d, int esz, boolean add,
+            boolean rounding) {
+        int esize = 8 << esz;
+        BigInteger productAb = BigInteger.valueOf(a).multiply(BigInteger.valueOf(b));
+        BigInteger productCd = BigInteger.valueOf(c).multiply(BigInteger.valueOf(d));
+        BigInteger combined = (add ? productAb.add(productCd) : productAb.subtract(productCd)).shiftLeft(1);
+        if (rounding) {
+            combined = combined.add(BigInteger.ONE.shiftLeft(esize - 1));
+        }
+        Saturation wide = saturateChecked(combined, esz + 1, true);
+        return new Saturation(wide.value() >> esize, wide.saturated());
     }
 
     /// Deslocamento por REGISTRADOR (`SSHL`/`USHL`/`SQSHL`/`UQSHL`/...): a quantidade é o BYTE BAIXO
@@ -802,6 +831,142 @@ public final class AdvSimdLanes {
             long result = computeWidening(op, esz, wideEsz, a, b, sa, sb, current);
             long merged = mergeLaneBytes(current, truncate(result, wideEsz), laneMask, wideElementBytes);
             setElement(regs, baseRd, le, wideEsz, merged);
+        }
+    }
+
+    /// `VQDMULLB`/`VQDMULLT` (B16.7, MVE/Helium, verbatim de `DO_2OP_SAT_L`/`do_qdmullh`/`do_qdmullw`,
+    /// `target/arm/tcg/mve_helper.c`): como {@link #wideningInterleavedMasked} com
+    /// {@link AdvSimdWideningOp#SQDMULL} (mesmo padrão de indexação intercalada `le*2 + top`), mas
+    /// devolve `true` se alguma lane ATIVA saturou (`FPSCR.QC`) — diferente das seis formas de
+    /// {@link #wideningInterleavedMasked} (B16.6, `SMULL`/`UMULL`/`PMULL`, nunca saturam), esta é a
+    /// PRIMEIRA forma alargante intercalada que satura.
+    public static boolean doublingWideningInterleavedMasked(AdvSimdRegisterWords regs, int esz, int outputElements,
+            boolean top, int baseRd, int baseRn, int baseRm, int byteMask) {
+        boolean qc = false;
+        int wideEsz = esz + 1;
+        int wideElementBytes = 1 << wideEsz;
+        int wideElementByteMask = (1 << wideElementBytes) - 1;
+        int sourceOffset = top ? 1 : 0;
+        for (int le = 0; le < outputElements; le++) {
+            int laneMask = (byteMask >>> (le * wideElementBytes)) & wideElementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            int sourceLane = le * 2 + sourceOffset;
+            long sa = signExtend(element(regs, baseRn, sourceLane, esz), esz);
+            long sb = signExtend(element(regs, baseRm, sourceLane, esz), esz);
+            Saturation result = saturatingDoublingProductChecked(sa, sb, wideEsz);
+            long current = element(regs, baseRd, le, wideEsz);
+            long merged = mergeLaneBytes(current, truncate(result.value(), wideEsz), laneMask, wideElementBytes);
+            setElement(regs, baseRd, le, wideEsz, merged);
+            qc |= result.saturated();
+        }
+        return qc;
+    }
+
+    /// `VQDMLADH`/`VQDMLSDH` e variantes `X` (exchange)/`R` (rounded) (B16.7, MVE/Helium, verbatim de
+    /// `DO_VQDMLADH_OP`, `target/arm/tcg/mve_helper.c`): **achado real** — esta instrução escreve SÓ
+    /// METADE das lanes (as de paridade `exchange?1:0`); a outra metade fica INTOCADA (nem lida pelo
+    /// predicado, nem escrita) — mesmo comportamento do `if ((e & 1) == XCHG)` real, que pula a
+    /// iteração inteira (sem `mergemask`) para a paridade contrária. Por par de lanes adjacentes
+    /// `(2i, 2i+1)`: a forma NÃO-exchange escreve a lane PAR com `(n[2i]*m[2i] [+ou-] n[2i+1]*m[2i+1])`;
+    /// a forma exchange escreve a lane ÍMPAR com `(n[2i+1]*m[2i] [+ou-] n[2i]*m[2i+1])` — `add`
+    /// escolhe `+` (`VQDMLADH*`) ou `-` (`VQDMLSDH*`). Devolve `true` se alguma lane ATIVA saturou.
+    public static boolean dualMultiplyAddHighMasked(AdvSimdRegisterWords regs, boolean add, boolean exchange,
+            boolean rounding, int esz, int lanes, int baseRd, int baseRn, int baseRm, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        int xchg = exchange ? 1 : 0;
+        for (int e = xchg; e < lanes; e += 2) {
+            int laneMask = (byteMask >>> (e * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = signExtend(element(regs, baseRn, e, esz), esz);
+            long b = signExtend(element(regs, baseRm, e - xchg, esz), esz);
+            long c = signExtend(element(regs, baseRn, e + (1 - 2 * xchg), esz), esz);
+            long d = signExtend(element(regs, baseRm, e + (1 - xchg), esz), esz);
+            Saturation result = dualDoublingMultiplyHighChecked(a, b, c, d, esz, add, rounding);
+            long current = element(regs, baseRd, e, esz);
+            long merged = mergeLaneBytes(current, truncate(result.value(), esz), laneMask, elementBytes);
+            setElement(regs, baseRd, e, esz, merged);
+            qc |= result.saturated();
+        }
+        return qc;
+    }
+
+    /// `n*m` (multiplicação FP simples, sem acumular) para {@link #fpComplexMultiplyMasked} — `esz`
+    /// `1`(binary16)/`2`(binary32), nunca `3` (`FEAT_MVE_FP` não tem forma de precisão dupla).
+    private static long fpComplexMulPart(int esz, long aBits, long bBits) {
+        return switch (esz) {
+            case 1 -> halfBits(halfToFloat(aBits) * halfToFloat(bBits));
+            case 2 -> floatBits(Float.intBitsToFloat((int) aBits) * Float.intBitsToFloat((int) bBits));
+            default -> throw new IllegalArgumentException("esz inválido para VCMUL (só fp16/fp32): " + esz);
+        };
+    }
+
+    /// `-value`, mesma restrição de `esz` de {@link #fpComplexMulPart}.
+    private static long fpNegate(int esz, long bits) {
+        return switch (esz) {
+            case 1 -> halfBits(-halfToFloat(bits));
+            case 2 -> floatBits(-Float.intBitsToFloat((int) bits));
+            default -> throw new IllegalArgumentException("esz inválido para VCMUL (só fp16/fp32): " + esz);
+        };
+    }
+
+    /// `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270` (B16.7, MVE/Helium, `FEAT_MVE_FP`, verbatim de
+    /// `DO_VCMLA` instanciado com `FN=DO_VCMULH`/`DO_VCMULS` — multiplicação PURA, sem acumular
+    /// (`D` do `FN` é ignorado), `target/arm/tcg/mve_helper.c`). **Achado real que corrige a suposição
+    /// de reusar {@link #fpComplexMultiplyAccumulate}**: ao contrário de `VCMLA`/`FCMLA` (complexo ×
+    /// complexo genuíno, `a_re`/`a_im` de `Qn` distintos), `VCMUL` usa o MESMO elemento de `Qn`
+    /// (`n[e]` ou `n[e+1]`, conforme a rotação) para AS DUAS metades do par de saída — é "real ×
+    /// complexo", não "complexo × complexo". `rotation` (`0`=`0°`,`1`=`90°`,`2`=`180°`,`3`=`270°`)
+    /// escolhe sinal/ordem de `Qm` e qual metade de `Qn` contribui, tabela verbatim de `DO_VCMLA`
+    /// (`ROT` `0`-`3`). Predicado por byte na granularidade da lane (as duas metades do par podem ter
+    /// máscaras diferentes — `mergemask`/`mask >> ESIZE` reais).
+    public static void fpComplexMultiplyMasked(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd, int baseRn,
+            int baseRm, int rotation, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int pair = 0; pair < lanes; pair += 2) {
+            int maskLo = (byteMask >>> (pair * elementBytes)) & elementByteMask;
+            int maskHi = (byteMask >>> ((pair + 1) * elementBytes)) & elementByteMask;
+            if (maskLo == 0 && maskHi == 0) {
+                continue;
+            }
+            long nLo = element(regs, baseRn, pair, esz);
+            long nHi = element(regs, baseRn, pair + 1, esz);
+            long mLo = element(regs, baseRm, pair, esz);
+            long mHi = element(regs, baseRm, pair + 1, esz);
+            long r0;
+            long r1;
+            switch (rotation) {
+                case 0 -> {
+                    r0 = fpComplexMulPart(esz, nLo, mLo);
+                    r1 = fpComplexMulPart(esz, nLo, mHi);
+                }
+                case 1 -> {
+                    r0 = fpComplexMulPart(esz, nHi, fpNegate(esz, mHi));
+                    r1 = fpComplexMulPart(esz, nHi, mLo);
+                }
+                case 2 -> {
+                    r0 = fpComplexMulPart(esz, nLo, fpNegate(esz, mLo));
+                    r1 = fpComplexMulPart(esz, nLo, fpNegate(esz, mHi));
+                }
+                default -> {
+                    r0 = fpComplexMulPart(esz, nHi, mHi);
+                    r1 = fpComplexMulPart(esz, nHi, fpNegate(esz, mLo));
+                }
+            }
+            if (maskLo != 0) {
+                long current = element(regs, baseRd, pair, esz);
+                setElement(regs, baseRd, pair, esz, mergeLaneBytes(current, r0, maskLo, elementBytes));
+            }
+            if (maskHi != 0) {
+                long current = element(regs, baseRd, pair + 1, esz);
+                setElement(regs, baseRd, pair + 1, esz, mergeLaneBytes(current, r1, maskHi, elementBytes));
+            }
         }
     }
 

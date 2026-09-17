@@ -222,6 +222,13 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorNarrowInterleaved(core, (IrOp.MveVectorNarrowInterleaved) op);
                 case IrOp.Kind.MVE_VECTOR_FP_CONVERT_PRECISION ->
                         pcChanged |= system.executeMveVectorFpConvertPrecision(core, (IrOp.MveVectorFpConvertPrecision) op);
+                // B16.7 sub-família 2: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY ->
+                        pcChanged |= system.executeMveVectorFpComplexMultiply(core, (IrOp.MveVectorFpComplexMultiply) op);
+                case IrOp.Kind.MVE_VECTOR_DUAL_MULTIPLY_ADD_HIGH ->
+                        pcChanged |= system.executeMveVectorDualMultiplyAddHigh(core, (IrOp.MveVectorDualMultiplyAddHigh) op);
+                case IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY -> pcChanged |= system
+                        .executeMveVectorDoublingWideningMultiply(core, (IrOp.MveVectorDoublingWideningMultiply) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -444,6 +451,12 @@ public final class IrBlockExecutor {
                     system.executeMveVectorNarrowInterleaved(core, mveVectorNarrowInterleaved);
             case IrOp.MveVectorFpConvertPrecision mveVectorFpConvertPrecision ->
                     system.executeMveVectorFpConvertPrecision(core, mveVectorFpConvertPrecision);
+            case IrOp.MveVectorFpComplexMultiply mveVectorFpComplexMultiply ->
+                    system.executeMveVectorFpComplexMultiply(core, mveVectorFpComplexMultiply);
+            case IrOp.MveVectorDualMultiplyAddHigh mveVectorDualMultiplyAddHigh ->
+                    system.executeMveVectorDualMultiplyAddHigh(core, mveVectorDualMultiplyAddHigh);
+            case IrOp.MveVectorDoublingWideningMultiply mveVectorDoublingWideningMultiply ->
+                    system.executeMveVectorDoublingWideningMultiply(core, mveVectorDoublingWideningMultiply);
         };
     }
 

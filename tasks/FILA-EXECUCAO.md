@@ -47,6 +47,36 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, após B16.7 sub-família 2 fechar)
+
+**B16.7 sub-família 2 FECHADA 2026-09-17 (44/58 encodings acumulados da task; sub-família 3
+pendente, corte explícito autorizado pela própria task)** — `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270`
+(`FEAT_MVE_FP`), `VQDMLADH`/`VQDMLSDH` + variantes `X`(exchange)/`R`(rounded), `VQDMULLB`/`VQDMULLT`,
+14 encodings, o `{}` sobreposto das linhas 325-350 do `.decode` real. `Thumb2MveComplexDualAccumulateDecoder`
+novo, registrado antes de `Thumb2NocpDecoder`. **3 achados reais que corrigem a leitura ingênua do
+`.decode`**, medidos bit a bit contra `translate-mve.c`/`mve_helper.c` reais (via `curl` direto no
+`Bash`, mais confiável que `WebFetch` para citar macros C sem paráfrase): (1) `bits[21:20]` distingue
+as duas famílias do bloco por LITERAL (`VCMUL*`/`VQDMULL*` reivindicam `0b11` fixo) vs campo REAL
+(`VQDMLADH*` usa como `size`), e `bit28` muda de sentido (`size_28` vs `U`/add-ou-sub, sempre como
+parte do BYTE ALTO literal completo); (2) `VQDMLADH`/`VQDMLSDH` (e variantes `X`) escrevem SÓ METADE
+das lanes — a metade oposta fica intocada, não recebe outro valor; (3) `VCMUL` usa o MESMO elemento
+de `Qn` para as duas metades do par de saída ("real × complexo", não "complexo × complexo" como
+`VCMLA`/`FCMLA` — não reusa `fpComplexMultiplyAccumulate`). Achado extra transcrito de
+`trans_VQDMULLB`/`trans_VQDMULLT`: na forma WORD, `Qd` coincidindo com `Qn`/`Qm` é recusado (não
+alocado). Núcleo novo em `AdvSimdLanes`: `dualMultiplyAddHighMasked`/`dualDoublingMultiplyHighChecked`
+(generalização via `BigInteger` de `doublingMultiplyHighChecked` para dois produtos),
+`doublingWideningInterleavedMasked`/`saturatingDoublingProductChecked` (primeira forma alargante
+intercalada que satura), `fpComplexMultiplyMasked`/`fpComplexMulPart`/`fpNegate` (núcleo dedicado). 3
+`IrOp.Kind` novos (136-138), só interpretados. `docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7).
+`docs/COBERTURA-JIT.md`: `IrOp.Kind` 136→139. `mvn -o test` verde (4153; as mesmas 3 falhas
+pré-existentes) + `truffle` (73) + `install`. **G5 completo** (gbaemu + ndsemu). 17 testes novos. Ver
+**Resultado** na task.
+
+**Pegáveis a seguir**: sub-família 3 da B16.7 (2-op FP puro, `VADD_fp`…`VCMLA270`, 14 encodings,
+últimas da task) — nenhuma sessão própria ainda, núcleo básico (`fpThreeSame`/`fpComplexAdd`/
+`maxNum`/`minNum`) já existe para reuso. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis,
+dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-17, após B16.7 sub-família 1 fechar)
 
 **B16.7 sub-família 1 FECHADA 2026-09-17 (30/58 encodings da task; sub-famílias 2 e 3 pendentes,

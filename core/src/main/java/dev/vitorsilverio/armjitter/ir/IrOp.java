@@ -26,7 +26,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveInterleavedLoadStore, IrOp.MveIncrementDup, IrOp.MveWrappingIncrementDup,
         IrOp.AdvanceEci, IrOp.MveVector2Op, IrOp.MveVector2OpWidening, IrOp.MveVectorCarry,
         IrOp.MveVectorComplexAdd, IrOp.MveVectorAbsAccumulate, IrOp.MveVectorFpAbsAccumulate,
-        IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision {
+        IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision,
+        IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -264,6 +265,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.7: `VCVTB_SH`/`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (conversão binary16↔binary32
         /// "bottom"/"top", `FEAT_MVE_FP`, perfil M, MVE/Helium) — ver {@link MveVectorFpConvertPrecision}.
         public static final int MVE_VECTOR_FP_CONVERT_PRECISION = 135;
+        /// B16.7 sub-família 2: `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270` (`FEAT_MVE_FP`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorFpComplexMultiply}.
+        public static final int MVE_VECTOR_FP_COMPLEX_MULTIPLY = 136;
+        /// B16.7 sub-família 2: `VQDMLADH`/`VQDMLSDH` e variantes `X`/`R` (perfil M, MVE/Helium) —
+        /// ver {@link MveVectorDualMultiplyAddHigh}.
+        public static final int MVE_VECTOR_DUAL_MULTIPLY_ADD_HIGH = 137;
+        /// B16.7 sub-família 2: `VQDMULLB`/`VQDMULLT` (perfil M, MVE/Helium) — ver
+        /// {@link MveVectorDoublingWideningMultiply}.
+        public static final int MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY = 138;
     }
 
     /// Operacao ALU generica.
@@ -3424,5 +3434,82 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_PRECISION; }
+    }
+
+    /// `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270` (perfil M, B16.7 sub-família 2, MVE/Helium,
+    /// `FEAT_MVE_FP`, `target/isa-decode/mve.decode` `@2op_sz28` — "note that in this format bit 28
+    /// is size, not U"): delega a {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexMultiplyMasked}
+    /// — ver Javadoc de lá para a diferença real com `VCMLA`/`FCMLA`. Beatwise (mesmo gancho de
+    /// {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpComplexMultiply(
+            /// `0`=`VCMUL0`, `1`=`VCMUL90`, `2`=`VCMUL180`, `3`=`VCMUL270` — `(bit16<<1)|bit0` no
+            /// encoding real, mesma convenção `ROT` de `DO_VCMLA`.
+            int rotation,
+            /// `1` = binary16, `2` = binary32 (`%size_28`, `bit28+1`; nunca `0`/`3`).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY; }
+    }
+
+    /// `VQDMLADH`/`VQDMLSDH` e variantes `X` (exchange)/`R` (rounded) (perfil M, B16.7 sub-família 2,
+    /// MVE/Helium, `target/isa-decode/mve.decode` `@2op` — o `{}` sobreposto com `VCMUL*` onde
+    /// `bits[21:20]` é `size` real, não o literal `11` que `VCMUL*` reivindica): delega a
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#dualMultiplyAddHighMasked} — ver
+    /// Javadoc de lá para o achado real de que só METADE das lanes é escrita por instância. `size`
+    /// (`bits[21:20]`) é real (`0`-`2`; `3` reservado para `VCMUL*` pela prioridade textual do `{}`).
+    /// Beatwise (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` só quando alguma lane ATIVA
+    /// (da metade escrita) satura.
+    record MveVectorDualMultiplyAddHigh(
+            /// `true` para `VQDMLADH*` (soma os dois produtos); `false` para `VQDMLSDH*` (subtrai) —
+            /// `bit28` (`U`) no encoding real.
+            boolean add,
+            /// `true` para as formas `X` (exchange, escreve lanes ÍMPARES); `false` para as formas
+            /// sem sufixo (escreve lanes PARES) — `bit16` no encoding real.
+            boolean exchange,
+            /// `true` para as formas `R` (rounded, `VQRDMLADH*`/`VQRDMLSDH*`); `false` para as sem
+            /// `R` — `bit0` no encoding real.
+            boolean rounded,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` reservado, ver Javadoc da classe).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_DUAL_MULTIPLY_ADD_HIGH; }
+    }
+
+    /// `VQDMULLB`/`VQDMULLT` (perfil M, B16.7 sub-família 2, MVE/Helium, `target/isa-decode/mve.decode`
+    /// `@2op_sz28`, verbatim de `DO_2OP_SAT_L`/`do_qdmullh`/`do_qdmullw`, `target/arm/tcg/mve_helper.c`):
+    /// ALARGA saturando — delega a {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#doublingWideningInterleavedMasked}
+    /// (mesmo padrão de indexação intercalada `le*2+top` de {@link MveVector2OpWidening}). Beatwise
+    /// (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` quando alguma lane ATIVA satura — a
+    /// PRIMEIRA forma alargante intercalada que satura (diferente de {@link MveVector2OpWidening},
+    /// B16.6, que nunca satura).
+    record MveVectorDoublingWideningMultiply(
+            /// `log2` do tamanho do elemento FONTE em bytes — `1`(halfword) ou `2`(word), `%size_28`
+            /// (`bit28+1`).
+            int esz,
+            /// `true` para a forma `T` (lanes ÍMPARES da fonte); `false` para `B` (lanes PARES).
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`, fonte).
+            int qn,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY; }
     }
 }

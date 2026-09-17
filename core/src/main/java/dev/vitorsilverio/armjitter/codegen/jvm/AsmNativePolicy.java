@@ -279,6 +279,9 @@ public final class AsmNativePolicy {
             case IrOp.MveVectorShiftWidenInterleaved ignored -> false;
             case IrOp.MveVectorNarrowInterleaved ignored -> false;
             case IrOp.MveVectorFpConvertPrecision ignored -> false;
+            case IrOp.MveVectorFpComplexMultiply ignored -> false;
+            case IrOp.MveVectorDualMultiplyAddHigh ignored -> false;
+            case IrOp.MveVectorDoublingWideningMultiply ignored -> false;
         };
     }
 
