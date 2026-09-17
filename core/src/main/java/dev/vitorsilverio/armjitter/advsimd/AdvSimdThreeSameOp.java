@@ -127,5 +127,16 @@ public enum AdvSimdThreeSameOp {
     /// e a da soma final). Só `esz` `1`(H)/`2`(S) — `SQRDMLAH_v` / `VQRDMLAH`.
     SQRDMLAH,
     /// Como {@link #SQRDMLAH}, mas SUBTRAI do `Rd` ATUAL — `SQRDMLSH_v` / `VQRDMLSH`.
-    SQRDMLSH
+    SQRDMLSH,
+    /// Multiplicação de alta ordem, assinada, SEM saturação nem arredondamento: `(sext(a)*sext(b)) >>
+    /// (8 << esz)` — `VMULH.S` (MVE/Helium, B16.7, `do_mulh_*`, `target/arm/tcg/mve_helper.c`; sem
+    /// equivalente no A64/NEON — `SQDMULH` dobra e satura, este não faz nenhum dos dois).
+    SMULH,
+    /// Como {@link #SMULH}, não assinado — `VMULH.U`.
+    UMULH,
+    /// Como {@link #SMULH}, com ARREDONDAMENTO (`+ 1 << (bits-1)`) antes do deslocamento —
+    /// `VRMULH.S` (`do_rmulh_*`).
+    SRMULH,
+    /// Como {@link #SRMULH}, não assinado — `VRMULH.U`.
+    URMULH
 }

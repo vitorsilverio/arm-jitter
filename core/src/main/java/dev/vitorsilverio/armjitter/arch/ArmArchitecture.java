@@ -538,6 +538,11 @@ public final class ArmArchitecture {
                     // MESMO espaço `bits[27:25]=111` que Thumb2NocpDecoder reivindica — TEM que vir
                     // antes (Armadilha 1 da task).
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveVector2opDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveVectorOverlapDecoder (B16.7): os quatro blocos {} sobrepostos
+                    // (VCVTB/T_SH/HS, VMAXNMA/VMINNMA, VSHLL T2, VQMOVUNB/T, VQMOVN_*, VMOVNB/T,
+                    // VMAXA/VMINA, VMULH/VRMULH) vivem no MESMO espaço de bits `111.1110...1` que
+                    // Thumb2NocpDecoder reivindica — TEM que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveVectorOverlapDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

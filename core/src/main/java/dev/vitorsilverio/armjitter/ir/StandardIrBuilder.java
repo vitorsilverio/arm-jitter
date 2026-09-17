@@ -652,7 +652,14 @@ public final class StandardIrBuilder implements IrBuilder {
                 || instruction.liftedOp() instanceof IrOp.MveVector2Op
                 || instruction.liftedOp() instanceof IrOp.MveVector2OpWidening
                 || instruction.liftedOp() instanceof IrOp.MveVectorCarry
-                || instruction.liftedOp() instanceof IrOp.MveVectorComplexAdd) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorComplexAdd
+                // B16.7: VMAXA/VMINA, VMAXNMA/VMINNMA, VSHLL T2, VMOVN*/VQMOVN*/VQMOVUN* e a
+                // conversão binary16<->binary32 "bottom"/"top" — mesmo padrão acima.
+                || instruction.liftedOp() instanceof IrOp.MveVectorAbsAccumulate
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpAbsAccumulate
+                || instruction.liftedOp() instanceof IrOp.MveVectorShiftWidenInterleaved
+                || instruction.liftedOp() instanceof IrOp.MveVectorNarrowInterleaved
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpConvertPrecision) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
         } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla

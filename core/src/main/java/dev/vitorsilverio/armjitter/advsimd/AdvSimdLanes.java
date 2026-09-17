@@ -375,6 +375,11 @@ public final class AdvSimdLanes {
                 // o `Rd` ATUAL sign-extendido, com DUAS saturações independentes.
                 case SQRDMLAH -> signedSaturatingAdd(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
                 case SQRDMLSH -> signedSaturatingSub(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
+                // B16.7 — alta ordem MVE, sem saturação nem dobra (`do_mulh_*`/`do_rmulh_*` reais):
+                case SMULH -> (sa * sb) >> (8 << esz);
+                case UMULH -> (a * b) >>> (8 << esz);
+                case SRMULH -> (sa * sb + (1L << ((8 << esz) - 1))) >> (8 << esz);
+                case URMULH -> (a * b + (1L << ((8 << esz) - 1))) >>> (8 << esz);
             };
     }
 
@@ -796,6 +801,33 @@ public final class AdvSimdLanes {
             long current = element(regs, baseRd, le, wideEsz);
             long result = computeWidening(op, esz, wideEsz, a, b, sa, sb, current);
             long merged = mergeLaneBytes(current, truncate(result, wideEsz), laneMask, wideElementBytes);
+            setElement(regs, baseRd, le, wideEsz, merged);
+        }
+    }
+
+    /// `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma **T2** (`shift == esize`, B16.7, MVE/Helium,
+    /// verbatim de `DO_VSHLL`, `target/arm/tcg/mve_helper.c`): como {@link #shiftWidenImmediate}, mas
+    /// com o padrão de INDEXAÇÃO INTERCALADA do MVE — a lane LARGA de saída `le` lê a lane ESTREITA
+    /// `le*2 + (top?1:0)` da fonte (MESMO padrão de {@link #wideningInterleavedMasked}), sinal/zero-
+    /// estende e desloca à esquerda por `shift` (sempre `esize`, T2). Nunca satura. Predicado por
+    /// byte na granularidade da lane LARGA de saída.
+    public static void shiftWidenInterleavedMasked(AdvSimdRegisterWords regs, boolean signed, int esz, int shift,
+            int outputElements, boolean top, int baseRd, int baseRn, int byteMask) {
+        int wideEsz = esz + 1;
+        int wideElementBytes = 1 << wideEsz;
+        int wideElementByteMask = (1 << wideElementBytes) - 1;
+        int sourceOffset = top ? 1 : 0;
+        for (int le = 0; le < outputElements; le++) {
+            int laneMask = (byteMask >>> (le * wideElementBytes)) & wideElementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            int sourceLane = le * 2 + sourceOffset;
+            long narrow = element(regs, baseRn, sourceLane, esz);
+            long extended = signed ? signExtend(narrow, esz) : narrow;
+            long current = element(regs, baseRd, le, wideEsz);
+            long result = truncate(safeShiftLeft(extended, shift), wideEsz);
+            long merged = mergeLaneBytes(current, result, laneMask, wideElementBytes);
             setElement(regs, baseRd, le, wideEsz, merged);
         }
     }
@@ -1879,6 +1911,163 @@ public final class AdvSimdLanes {
         }
         for (int i = 0; i < elements; i++) {
             setElement(regs, baseRd, laneOffset + i, esz, results[i]);
+        }
+    }
+
+    /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (B16.7, MVE/Helium, verbatim de
+    /// `DO_VMOVN`/`DO_VMOVN_SAT`, `target/arm/tcg/mve_helper.c`): como {@link #narrowUnary}, mas com
+    /// o padrão de INDEXAÇÃO INTERCALADA do MVE — a lane ESTREITA de saída `le*2 + (top?1:0)` recebe
+    /// a lane LARGA `le` da fonte (oposto de {@link #wideningInterleavedMasked}: lá a intercalação é
+    /// na FONTE, aqui é no DESTINO). Predicado por byte na granularidade da lane de SAÍDA (estreita).
+    /// Devolve `true` se alguma lane ATIVA saturou (`FPSCR.QC`) — só {@link AdvSimdNarrowUnaryOp#SQXTN}/
+    /// {@link AdvSimdNarrowUnaryOp#SQXTUN}/{@link AdvSimdNarrowUnaryOp#UQXTN} podem saturar;
+    /// {@link AdvSimdNarrowUnaryOp#XTN} nunca satura.
+    public static boolean narrowInterleavedMasked(AdvSimdRegisterWords regs, AdvSimdNarrowUnaryOp op, int esz,
+            int outputElements, boolean top, int baseRd, int baseRn, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        int wideEsz = esz + 1;
+        int sourceOffset = top ? 1 : 0;
+        for (int le = 0; le < outputElements; le++) {
+            int destLane = le * 2 + sourceOffset;
+            int laneMask = (byteMask >>> (destLane * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long wide = element(regs, baseRn, le, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow;
+            boolean saturated;
+            switch (op) {
+                case SQXTN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(signedWide), esz, true);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case SQXTUN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(signedWide), esz, false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case UQXTN -> {
+                    Saturation s = saturateChecked(unsignedBig(wide), esz, false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                default -> {
+                    narrow = wide; // XTN: truncamento puro, sem saturação.
+                    saturated = false;
+                }
+            }
+            long current = element(regs, baseRd, destLane, esz);
+            long merged = mergeLaneBytes(current, truncate(narrow, esz), laneMask, elementBytes);
+            setElement(regs, baseRd, destLane, esz, merged);
+            qc |= saturated;
+        }
+        return qc;
+    }
+
+    /// `VMAXA`/`VMINA` (B16.7, MVE/Helium, verbatim de `DO_VMAXMINA`, `target/arm/tcg/mve_helper.c`):
+    /// `Qd[i] = max/min(Qd[i], |sext(Qm[i])|)` — comparação NÃO assinada (comentário real: "vd is
+    /// unsigned; vm is signed, and we take its absolute value; we then do an unsigned comparison").
+    /// `Qd` é FONTE (lida ATUAL) e DESTINO ao mesmo tempo — não confundir com {@link #threeSameMasked}
+    /// (que tem `Qn` separado). Nunca satura (`|INT_MIN|` reproduz o wraparound real via
+    /// {@link #truncate}, mesmo comportamento do `UTYPE` do QEMU).
+    public static void absAccumulateMasked(AdvSimdRegisterWords regs, boolean max, int esz, int lanes, int baseRd,
+            int baseRn, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long m = element(regs, baseRn, i, esz);
+            long abs = Math.abs(signExtend(m, esz));
+            long current = element(regs, baseRd, i, esz);
+            boolean pick = max ? Long.compareUnsigned(current, abs) >= 0 : Long.compareUnsigned(current, abs) <= 0;
+            long result = pick ? current : abs;
+            long merged = mergeLaneBytes(current, truncate(result, esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// `VMAXNMA`/`VMINNMA` (B16.7, MVE/Helium, `FEAT_MVE_FP`, verbatim de `DO_2OP_FP` instanciado com
+    /// `float16_maxnuma`/`minnuma`/`float32_maxnuma`/`minnuma`, `target/arm/tcg/mve_helper.c`):
+    /// `Qd[i] = maxNum/minNum(|Qd[i]|, |Qm[i]|)` — `Qd` é FONTE (lida ATUAL) e DESTINO (a `@vmaxnma`
+    /// do encoding real: "Qd and Qn share a field"). `esz` `1`=binary16 ({@link #halfBits}/
+    /// {@link #halfToFloat}), `2`=binary32. Sem modelo de `FPSCR`/exceção parcial de lane (mesma
+    /// simplificação consciente do resto do núcleo FP — G8, documentado como pendência).
+    public static void fpAbsAccumulateMasked(AdvSimdRegisterWords regs, boolean max, int esz, int lanes, int baseRd,
+            int baseRn, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long current = element(regs, baseRd, i, esz);
+            long m = element(regs, baseRn, i, esz);
+            long resultBits;
+            if (esz == 1) {
+                float d = Math.abs(halfToFloat(current));
+                float n = Math.abs(halfToFloat(m));
+                resultBits = halfBits(max ? maxNum(d, n) : minNum(d, n));
+            } else {
+                float d = Math.abs(Float.intBitsToFloat((int) current));
+                float n = Math.abs(Float.intBitsToFloat((int) m));
+                resultBits = floatBits(max ? maxNum(d, n) : minNum(d, n));
+            }
+            long merged = mergeLaneBytes(current, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// `VCVTB_SH`/`VCVTT_SH` (single→half, ESTREITANDO, B16.7, MVE/Helium, `FEAT_MVE_FP`, verbatim de
+    /// `do_vcvt_sh`, `target/arm/tcg/mve_helper.c`): lê elemento WORD (`esz=2`) de `baseRn` na lane
+    /// `i` (`0`-`3`), converte para binary16 (round-to-nearest-even, {@link #halfBits}) e escreve na
+    /// lane HALFWORD `i*2+(top?1:0)` de `baseRd` — predicado pelos bits de byte da lane de SAÍDA (2
+    /// bytes). Sem modelo de `FPCR.AHP`/flags parciais (G8, pendência documentada).
+    public static void fpNarrowPrecisionInterleavedMasked(AdvSimdRegisterWords regs, boolean top, int baseRd,
+            int baseRn, int byteMask) {
+        final int narrowEsz = 1;
+        final int wideEsz = 2;
+        for (int i = 0; i < 4; i++) {
+            int destLane = i * 2 + (top ? 1 : 0);
+            int laneMask = (byteMask >>> (destLane << narrowEsz)) & 0x3;
+            if (laneMask == 0) {
+                continue;
+            }
+            float wide = Float.intBitsToFloat((int) element(regs, baseRn, i, wideEsz));
+            long narrow = halfBits(wide);
+            long current = element(regs, baseRd, destLane, narrowEsz);
+            long merged = mergeLaneBytes(current, narrow, laneMask, 1 << narrowEsz);
+            setElement(regs, baseRd, destLane, narrowEsz, merged);
+        }
+    }
+
+    /// `VCVTB_HS`/`VCVTT_HS` (half→single, ALARGANDO, B16.7, MVE/Helium, `FEAT_MVE_FP`, verbatim de
+    /// `do_vcvt_hs`): lê elemento HALFWORD de `baseRn` na lane `i*2+(top?1:0)` (fonte INTERCALADA,
+    /// mesmo padrão de {@link #wideningInterleavedMasked}), converte para binary32
+    /// ({@link #halfToFloat}) e escreve na lane WORD `i` (`0`-`3`) de `baseRd` — predicado pelos bits
+    /// de byte da lane de SAÍDA (4 bytes).
+    public static void fpWidenPrecisionInterleavedMasked(AdvSimdRegisterWords regs, boolean top, int baseRd,
+            int baseRn, int byteMask) {
+        final int narrowEsz = 1;
+        final int wideEsz = 2;
+        for (int i = 0; i < 4; i++) {
+            int laneMask = (byteMask >>> (i << wideEsz)) & 0xF;
+            if (laneMask == 0) {
+                continue;
+            }
+            int sourceLane = i * 2 + (top ? 1 : 0);
+            long half = element(regs, baseRn, sourceLane, narrowEsz);
+            float wide = halfToFloat(half);
+            long current = element(regs, baseRd, i, wideEsz);
+            long merged = mergeLaneBytes(current, floatBits(wide), laneMask, 1 << wideEsz);
+            setElement(regs, baseRd, i, wideEsz, merged);
         }
     }
 

@@ -25,7 +25,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveWideningLoadStore, IrOp.MveGatherScatterOffset, IrOp.MveGatherScatterImmediate,
         IrOp.MveInterleavedLoadStore, IrOp.MveIncrementDup, IrOp.MveWrappingIncrementDup,
         IrOp.AdvanceEci, IrOp.MveVector2Op, IrOp.MveVector2OpWidening, IrOp.MveVectorCarry,
-        IrOp.MveVectorComplexAdd {
+        IrOp.MveVectorComplexAdd, IrOp.MveVectorAbsAccumulate, IrOp.MveVectorFpAbsAccumulate,
+        IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -248,6 +249,21 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.6: `VHCADD90`/`VHCADD270`/`VCADD90`/`VCADD270` (soma complexa inteira, perfil M,
         /// MVE/Helium) — ver {@link MveVectorComplexAdd}.
         public static final int MVE_VECTOR_COMPLEX_ADD = 130;
+        /// B16.7: `VMAXA`/`VMINA` (acumula `|sext(Qm)|` em `Qd`, inteiro, perfil M, MVE/Helium) —
+        /// ver {@link MveVectorAbsAccumulate}.
+        public static final int MVE_VECTOR_ABS_ACCUMULATE = 131;
+        /// B16.7: `VMAXNMA`/`VMINNMA` (acumula `|Qm|` em `Qd`, ponto flutuante, `FEAT_MVE_FP`, perfil
+        /// M, MVE/Helium) — ver {@link MveVectorFpAbsAccumulate}.
+        public static final int MVE_VECTOR_FP_ABS_ACCUMULATE = 132;
+        /// B16.7: `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma T2 (`shift == esize`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorShiftWidenInterleaved}.
+        public static final int MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED = 133;
+        /// B16.7: `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M,
+        /// MVE/Helium) — ver {@link MveVectorNarrowInterleaved}.
+        public static final int MVE_VECTOR_NARROW_INTERLEAVED = 134;
+        /// B16.7: `VCVTB_SH`/`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (conversão binary16↔binary32
+        /// "bottom"/"top", `FEAT_MVE_FP`, perfil M, MVE/Helium) — ver {@link MveVectorFpConvertPrecision}.
+        public static final int MVE_VECTOR_FP_CONVERT_PRECISION = 135;
     }
 
     /// Operacao ALU generica.
@@ -3295,5 +3311,118 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_COMPLEX_ADD; }
+    }
+
+    /// `VMAXA`/`VMINA` (perfil M, B16.7, MVE/Helium, `target/isa-decode/mve.decode` `@1op`, verbatim
+    /// de `DO_VMAXMINA`, `target/arm/tcg/mve_helper.c`): `Qd[i] = max/min(Qd[i], |sext(Qm[i])|)`
+    /// — comparação NÃO ASSINADA (`Qd` é `unsigned`, `Qm` é `signed` e seu valor absoluto é tomado
+    /// primeiro; ver Javadoc de {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#absAccumulateMasked}).
+    /// `Qd` é FONTE e DESTINO ao mesmo tempo — não tem `Qn` separado. Beatwise (mesmo gancho de
+    /// {@link MveVector2Op}). Nunca satura.
+    record MveVectorAbsAccumulate(
+            /// `true` para `VMAXA`; `false` para `VMINA`.
+            boolean max,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` recusado no decoder).
+            int esz,
+            /// `Qd` (`0`-`7`) — fonte E destino.
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_ABS_ACCUMULATE; }
+    }
+
+    /// `VMAXNMA`/`VMINNMA` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`, `target/isa-decode/mve.decode`
+    /// `@vmaxnma` — "Qd and Qn share a field"): `Qd[i] = maxNum/minNum(|Qd[i]|, |Qm[i]|)`, ponto
+    /// flutuante, verbatim de `DO_2OP_FP` instanciado com `float16_maxnuma`/`minnuma`/
+    /// `float32_maxnuma`/`minnuma` (`target/arm/tcg/mve_helper.c`). `Qd` é FONTE e DESTINO. Beatwise
+    /// (mesmo gancho de {@link MveVector2Op}). Nunca satura (`FPSCR.QC` não se aplica a operações
+    /// FP MVE nesta task).
+    record MveVectorFpAbsAccumulate(
+            /// `true` para `VMAXNMA`; `false` para `VMINNMA`.
+            boolean max,
+            /// `1` = binary16, `2` = binary32 (campo `size` do encoding real, literal por bloco —
+            /// nunca `0`/`3`).
+            int esz,
+            /// `Qd` (`0`-`7`) — fonte E destino.
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_ABS_ACCUMULATE; }
+    }
+
+    /// `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma **T2** (`shift == esize`, perfil M, B16.7,
+    /// MVE/Helium, `target/isa-decode/mve.decode` `@2_shll_esize_b`/`@2_shll_esize_h` — comentário do
+    /// arquivo real: "not a @2op pattern, but is here because it overlaps what would be size=0b11
+    /// VMULH/VRMULH"): ALARGA — lê `8 >> esz` elementos de `1 << esz` bytes da lane INTERCALADA
+    /// `le*2 + (top?1:0)` de `Qm` (mesmo padrão de {@link MveVector2OpWidening}) e escreve `Qd`
+    /// INTEIRO com elementos de `1 << (esz+1)` bytes (dobro da largura), sinal/zero-estendidos e
+    /// deslocados à esquerda por `esize` bits. **Não confundir com `VSHLL` forma T1 (B16.10,
+    /// encoding DISTINTO com o MESMO mnemônico).** Beatwise (mesmo gancho de {@link MveVector2Op}).
+    /// Nunca satura.
+    record MveVectorShiftWidenInterleaved(
+            /// `true` = sinal-estende (`VSHLL_*S`); `false` = zero-estende (`VSHLL_*U`).
+            boolean signed,
+            /// `log2` do tamanho do elemento FONTE em bytes — `0`(byte, `shift=8`) ou `1`(halfword,
+            /// `shift=16`); a T2 nunca tem fonte WORD.
+            int esz,
+            /// `true` para a forma `_T` (lanes ÍMPARES da fonte); `false` para `_B` (lanes PARES).
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED; }
+    }
+
+    /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium,
+    /// `target/isa-decode/mve.decode` `@1op`, verbatim de `DO_VMOVN`/`DO_VMOVN_SAT`,
+    /// `target/arm/tcg/mve_helper.c`): ESTREITA — lê `8 >> esz` elementos de `1 << (esz+1)` bytes de
+    /// `Qm` e escreve a lane ESTREITA INTERCALADA `le*2 + (top?1:0)` de `Qd` (oposto de
+    /// {@link MveVector2OpWidening}: aqui a intercalação é no DESTINO). Reusa {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp} (mesmo mapeamento do A64/NEON:
+    /// `XTN`=`VMOVN`, `SQXTN`=`VQMOVN_*S`, `SQXTUN`=`VQMOVUN*`, `UQXTN`=`VQMOVN_*U`). Beatwise (mesmo
+    /// gancho de {@link MveVector2Op}). `FPSCR.QC` só para as 3 formas saturantes.
+    record MveVectorNarrowInterleaved(
+            /// Operação de estreitamento a executar.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp op,
+            /// `log2` do tamanho do elemento ESTREITO (saída) em bytes — `0`(byte) ou `1`(halfword);
+            /// nunca `2`/`3` (MVE não tem forma de saída WORD aqui).
+            int esz,
+            /// `true` para a forma `T`; `false` para `B`.
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_NARROW_INTERLEAVED; }
+    }
+
+    /// `VCVTB_SH`/`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`,
+    /// `target/isa-decode/mve.decode` `@1op_nosz`, verbatim de `do_vcvt_sh`/`do_vcvt_hs`,
+    /// `target/arm/tcg/mve_helper.c`): conversão binary16↔binary32 "bottom"/"top" — não confundir
+    /// com `VCVT` fp↔int/ponto-fixo (B16.12, encodings distintos). {@link #widen} `true` (`_HS`):
+    /// lê `Qm` INTERCALADO (halfword, lane `i*2+top`), escreve `Qd` word (lane `i`, `0`-`3`).
+    /// {@link #widen} `false` (`_SH`): lê `Qm` word (lane `i`), escreve `Qd` INTERCALADO (halfword,
+    /// lane `i*2+top`). Beatwise (mesmo gancho de {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpConvertPrecision(
+            /// `true` = half→single (`_HS`, ALARGANDO); `false` = single→half (`_SH`, ESTREITANDO).
+            boolean widen,
+            /// `true` para a forma `T`; `false` para `B`.
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_PRECISION; }
     }
 }

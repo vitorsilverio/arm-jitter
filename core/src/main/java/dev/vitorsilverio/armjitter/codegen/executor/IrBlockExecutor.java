@@ -211,6 +211,17 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.MVE_VECTOR_CARRY -> pcChanged |= system.executeMveVectorCarry(core, (IrOp.MveVectorCarry) op);
                 case IrOp.Kind.MVE_VECTOR_COMPLEX_ADD ->
                         pcChanged |= system.executeMveVectorComplexAdd(core, (IrOp.MveVectorComplexAdd) op);
+                // B16.7: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_ABS_ACCUMULATE ->
+                        pcChanged |= system.executeMveVectorAbsAccumulate(core, (IrOp.MveVectorAbsAccumulate) op);
+                case IrOp.Kind.MVE_VECTOR_FP_ABS_ACCUMULATE ->
+                        pcChanged |= system.executeMveVectorFpAbsAccumulate(core, (IrOp.MveVectorFpAbsAccumulate) op);
+                case IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED -> pcChanged |= system.executeMveVectorShiftWidenInterleaved(
+                        core, (IrOp.MveVectorShiftWidenInterleaved) op);
+                case IrOp.Kind.MVE_VECTOR_NARROW_INTERLEAVED ->
+                        pcChanged |= system.executeMveVectorNarrowInterleaved(core, (IrOp.MveVectorNarrowInterleaved) op);
+                case IrOp.Kind.MVE_VECTOR_FP_CONVERT_PRECISION ->
+                        pcChanged |= system.executeMveVectorFpConvertPrecision(core, (IrOp.MveVectorFpConvertPrecision) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -423,6 +434,16 @@ public final class IrBlockExecutor {
             case IrOp.MveVectorCarry mveVectorCarry -> system.executeMveVectorCarry(core, mveVectorCarry);
             case IrOp.MveVectorComplexAdd mveVectorComplexAdd ->
                     system.executeMveVectorComplexAdd(core, mveVectorComplexAdd);
+            case IrOp.MveVectorAbsAccumulate mveVectorAbsAccumulate ->
+                    system.executeMveVectorAbsAccumulate(core, mveVectorAbsAccumulate);
+            case IrOp.MveVectorFpAbsAccumulate mveVectorFpAbsAccumulate ->
+                    system.executeMveVectorFpAbsAccumulate(core, mveVectorFpAbsAccumulate);
+            case IrOp.MveVectorShiftWidenInterleaved mveVectorShiftWidenInterleaved ->
+                    system.executeMveVectorShiftWidenInterleaved(core, mveVectorShiftWidenInterleaved);
+            case IrOp.MveVectorNarrowInterleaved mveVectorNarrowInterleaved ->
+                    system.executeMveVectorNarrowInterleaved(core, mveVectorNarrowInterleaved);
+            case IrOp.MveVectorFpConvertPrecision mveVectorFpConvertPrecision ->
+                    system.executeMveVectorFpConvertPrecision(core, mveVectorFpConvertPrecision);
         };
     }
 

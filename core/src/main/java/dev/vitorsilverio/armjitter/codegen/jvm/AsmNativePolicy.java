@@ -271,6 +271,14 @@ public final class AsmNativePolicy {
             case IrOp.MveVector2OpWidening ignored -> false;
             case IrOp.MveVectorCarry ignored -> false;
             case IrOp.MveVectorComplexAdd ignored -> false;
+            // VMAXA/VMINA, VMAXNMA/VMINNMA, VSHLL T2, VMOVN*/VQMOVN*/VQMOVUN* e a conversão
+            // binary16<->binary32 "bottom"/"top" (B16.7, MVE/Helium): mesmo padrão acima, sem
+            // emissão nativa nesta task.
+            case IrOp.MveVectorAbsAccumulate ignored -> false;
+            case IrOp.MveVectorFpAbsAccumulate ignored -> false;
+            case IrOp.MveVectorShiftWidenInterleaved ignored -> false;
+            case IrOp.MveVectorNarrowInterleaved ignored -> false;
+            case IrOp.MveVectorFpConvertPrecision ignored -> false;
         };
     }
 

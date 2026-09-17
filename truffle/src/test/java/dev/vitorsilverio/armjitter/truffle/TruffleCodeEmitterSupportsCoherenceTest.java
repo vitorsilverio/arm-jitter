@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (127 desde B16.5), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (136 desde B16.7), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(127, kinds.size(), "IrOp.Kind deve ter 127 constantes contíguas");
+        assertEquals(136, kinds.size(), "IrOp.Kind deve ter 136 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -115,8 +115,14 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // MVE_LOAD_STORE (+1, mesmo "Não inclui" de B16.2). B16.4 acrescentou
         // MVE_WIDENING_LOAD_STORE (+1, mesmo "Não inclui"). B16.5 acrescentou
         // MVE_GATHER_SCATTER_OFFSET, MVE_GATHER_SCATTER_IMMEDIATE, MVE_INTERLEAVED_LOAD_STORE,
-        // MVE_INCREMENT_DUP, MVE_WRAPPING_INCREMENT_DUP, ADVANCE_ECI (+6, mesmo "Não inclui").
-        assertEquals(61, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // MVE_INCREMENT_DUP, MVE_WRAPPING_INCREMENT_DUP, ADVANCE_ECI (+6, mesmo "Não inclui"). B16.6
+        // acrescentou MVE_VECTOR_2OP, MVE_VECTOR_2OP_WIDENING, MVE_VECTOR_CARRY,
+        // MVE_VECTOR_COMPLEX_ADD (+4, mesmo "Não inclui" — faltava nesta lista/asserção desde
+        // 2026-09-16, achado PRÉ-EXISTENTE desta sessão B16.7, corrigido junto). B16.7 acrescentou
+        // MVE_VECTOR_ABS_ACCUMULATE, MVE_VECTOR_FP_ABS_ACCUMULATE,
+        // MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED, MVE_VECTOR_NARROW_INTERLEAVED,
+        // MVE_VECTOR_FP_CONVERT_PRECISION (+5, mesmo "Não inclui").
+        assertEquals(70, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -162,7 +168,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_DOT_PRODUCT, IrOp.Kind.NEON_DOT_PRODUCT_BY_ELEMENT,
                         IrOp.Kind.NEON_SWAP_PERMUTE, IrOp.Kind.NEON_EXTRACT,
                         IrOp.Kind.NEON_TABLE_LOOKUP, IrOp.Kind.NEON_DUPLICATE_SCALAR,
-                        IrOp.Kind.NEON_CRYPTO_AES, IrOp.Kind.NEON_CRYPTO_SHA)),
+                        IrOp.Kind.NEON_CRYPTO_AES, IrOp.Kind.NEON_CRYPTO_SHA,
+                        IrOp.Kind.MVE_VECTOR_2OP, IrOp.Kind.MVE_VECTOR_2OP_WIDENING,
+                        IrOp.Kind.MVE_VECTOR_CARRY, IrOp.Kind.MVE_VECTOR_COMPLEX_ADD,
+                        IrOp.Kind.MVE_VECTOR_ABS_ACCUMULATE, IrOp.Kind.MVE_VECTOR_FP_ABS_ACCUMULATE,
+                        IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED, IrOp.Kind.MVE_VECTOR_NARROW_INTERLEAVED,
+                        IrOp.Kind.MVE_VECTOR_FP_CONVERT_PRECISION)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -340,6 +351,19 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.MVE_WRAPPING_INCREMENT_DUP ->
                     new IrOp.MveWrappingIncrementDup(0, 2, 3, 0, 1, false, c);
             case IrOp.Kind.ADVANCE_ECI -> new IrOp.AdvanceEci(c);
+            case IrOp.Kind.MVE_VECTOR_2OP -> new IrOp.MveVector2Op(AdvSimdThreeSameOp.ADD, 0, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_2OP_WIDENING ->
+                    new IrOp.MveVector2OpWidening(AdvSimdWideningOp.SMULL, 0, false, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_CARRY -> new IrOp.MveVectorCarry(true, false, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_COMPLEX_ADD -> new IrOp.MveVectorComplexAdd(true, false, 0, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_ABS_ACCUMULATE -> new IrOp.MveVectorAbsAccumulate(true, 0, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_FP_ABS_ACCUMULATE -> new IrOp.MveVectorFpAbsAccumulate(true, 2, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_INTERLEAVED ->
+                    new IrOp.MveVectorShiftWidenInterleaved(true, 0, false, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_NARROW_INTERLEAVED ->
+                    new IrOp.MveVectorNarrowInterleaved(AdvSimdNarrowUnaryOp.XTN, 0, false, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_FP_CONVERT_PRECISION ->
+                    new IrOp.MveVectorFpConvertPrecision(false, false, 0, 1, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

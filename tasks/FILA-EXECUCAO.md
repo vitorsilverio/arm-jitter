@@ -47,6 +47,35 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, após B16.7 sub-família 1 fechar)
+
+**B16.7 sub-família 1 FECHADA 2026-09-17 (30/58 encodings da task; sub-famílias 2 e 3 pendentes,
+corte explícito autorizado pela própria task)** — os quatro blocos `{}` sobrepostos: `VCVTB_SH`/
+`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (conversão binary16↔binary32, `MVE_FLOAT`), `VMAXNMA`/`VMINNMA`
+(max/min do valor absoluto FP), `VSHLL` forma **T2** (`shift == esize`, indexação intercalada na
+FONTE), `VQMOVUNB/T`/`VQMOVN_*`/`VMOVNB/T` (estreitamento, indexação intercalada no DESTINO),
+`VMAXA`/`VMINA` (max/min de `|sext(Qm)|`) e o catch-all `VMULH`/`VRMULH`. `Thumb2MveVectorOverlapDecoder`
+novo, registrado antes de `Thumb2NocpDecoder`. **2 achados reais que corrigem a leitura ingênua do
+`.decode`**, medidos bit a bit: (1) no slot `bits[17:16]=01,bit7=1`, `U=1` produz `VMOVNB/T` (`XTN`,
+sem saturação) e NÃO "VQMOVUN unsigned"; (2) `VMAXA`/`VMINA` só existem para `U=0` — não há forma
+"unsigned source" (`Qm` já é sempre assinado). 2 primitivas novas de indexação intercalada em
+`AdvSimdLanes` (`shiftWidenInterleavedMasked`/`narrowInterleavedMasked`) + 3 pequenas (`absAccumulateMasked`/
+`fpAbsAccumulateMasked`/conversão de precisão FP). 5 `IrOp.Kind` novos (131-135), só interpretados.
+**Achado de processo corrigido junto**: `TruffleCodeEmitterSupportsCoherenceTest` nunca tinha sido
+atualizado para os 4 `Kind` da B16.6 (bug pré-existente, achado ao rodar `truffle` pela primeira vez
+com contexto MVE) — corrigido junto com os 5 novos. **Achado de infraestrutura**:
+`./gerar-cobertura-jit.sh` mede código ERRADO (jar antigo do `~/.m2`) se `core` não for reinstalado
+(`mvn -o install -pl core -DskipTests`) antes — a segunda invocação `mvn` do script (`-pl truffle`
+sem `-am`) resolve a dependência do repositório local, não do reactor. `docs/COBERTURA-ISA.md`
+zero-diff (mesma Armadilha 7 de B16.2-B16.6). `docs/COBERTURA-JIT.md`: `IrOp.Kind` 131→136. `mvn -o
+test` verde (4136; as mesmas 3 falhas pré-existentes) + `truffle` (73) + `capi` + `install`. **G5
+completo** (gbaemu + ndsemu). 24 testes novos. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: sub-família 2 da B16.7 (`VCMUL0/90/180/270`, `VQDMLADH`/`VQDMLSDH`+`X`/`R`,
+`VQDMULLB/T`, 14 encodings) e sub-família 3 (2-op FP puro, `VADD_fp`…`VCMLA270`, 14 encodings) —
+nenhuma tem sessão própria ainda, mas o corte já está documentado no `## Resultado` da B16.7.
+`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-17, após B16.6 fechar)
 
 **B16.6 FECHADA 2026-09-17** — vector 2-op inteiro (lógica, aritmética, min/max/abd/halving,

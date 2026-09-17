@@ -1138,4 +1138,131 @@ public final class IrSystemExecutor {
         AdvSimdLanes.complexAddMasked(vfp, op.rotate90(), op.halving(), esz, lanes, baseRd, baseRn, baseRm, mask);
         return false;
     }
+
+    /// `VMAXA`/`VMINA` (perfil M, B16.7, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#absAccumulateMasked}). Nunca satura, sem `FPSCR.QC`.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorAbsAccumulate(ArmCore core, IrOp.MveVectorAbsAccumulate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.absAccumulateMasked(vfp, op.max(), esz, lanes, baseRd, baseRm, mask);
+        return false;
+    }
+
+    /// `VMAXNMA`/`VMINNMA` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#fpAbsAccumulateMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpAbsAccumulate(ArmCore core, IrOp.MveVectorFpAbsAccumulate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpAbsAccumulateMasked(vfp, op.max(), esz, lanes, baseRd, baseRm, mask);
+        return false;
+    }
+
+    /// `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma T2 (perfil M, B16.7, MVE/Helium): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftWidenInterleavedMasked}). `shift` é sempre
+    /// `8 << esz` (T2 — "shift == esize"). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorShiftWidenInterleaved(ArmCore core, IrOp.MveVectorShiftWidenInterleaved op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int shift = 8 << esz;
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.shiftWidenInterleavedMasked(vfp, op.signed(), esz, shift, outputElements, op.top(), baseRd,
+                baseRm, mask);
+        return false;
+    }
+
+    /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium):
+    /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowInterleavedMasked}). `FPSCR.QC` só
+    /// para as 3 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp#XTN}
+    /// nunca satura).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorNarrowInterleaved(ArmCore core, IrOp.MveVectorNarrowInterleaved op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.narrowInterleavedMasked(vfp, op.op(), esz, outputElements, op.top(), baseRd,
+                baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VCVTB_SH`/`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`):
+    /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpNarrowPrecisionInterleavedMasked}/
+    /// {@link AdvSimdLanes#fpWidenPrecisionInterleavedMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpConvertPrecision(ArmCore core, IrOp.MveVectorFpConvertPrecision op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        if (op.widen()) {
+            AdvSimdLanes.fpWidenPrecisionInterleavedMasked(vfp, op.top(), baseRd, baseRm, mask);
+        } else {
+            AdvSimdLanes.fpNarrowPrecisionInterleavedMasked(vfp, op.top(), baseRd, baseRm, mask);
+        }
+        return false;
+    }
 }
