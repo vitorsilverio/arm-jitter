@@ -47,6 +47,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, após B16.5 fechar)
+
+**B16.5 FECHADA 2026-09-17** — gather/scatter por vetor de offsets (`VLDR_S_sg`/`VLDR_U_sg`/
+`VSTR_sg`), gather/scatter com base vetorial e imediato (`VLDRW/D_sg_imm`/`VSTRW/D_sg_imm`),
+desentrelaçamento (`VLD2`/`VLD4`/`VST2`/`VST4`) e os 4 `dup` incrementais (`VIDUP`/`VDDUP`/
+`VIWDUP`/`VDWDUP`), 15 encodings, o degrau seguinte da B16.3. 3 decoders novos
+(`Thumb2MveGatherScatterDecoder`/`Thumb2MveInterleavedLoadStoreDecoder`/
+`Thumb2MveIncrementDupDecoder`), registrados antes de `Thumb2NocpDecoder` (mesma Armadilha 3 da
+B16.3/B16.4). **Achado central**: `VLD2`/`VLD4`/`VST2`/`VST4` são "beatwise mas NÃO predicadas"
+(só `ECI` gate, nunca `VPR`/`VPT`) — exigiu um gancho pós-instrução novo (`IrOp.AdvanceEci`/
+`MveVptState.advanceEciOnly`), distinto de `AdvanceVpt`, para não corromper um `VPST` em andamento
+na instrução seguinte. `VLD2`/`VLD4`/`VST2`/`VST4` transcritos verbatim das tabelas `off[]` de
+`mve_helper.c` real (otimização de pipelining de hardware, não deriva do manual arquitetural).
+`docs/COBERTURA-ISA.md`: zero-diff, mesma Armadilha 7 da B16.2-B16.4. `docs/COBERTURA-JIT.md`:
+`IrOp.Kind` 121→127 (todos interpretados). `mvn -o test` verde (4085; as mesmas 3 falhas
+pré-existentes) + `truffle` (73) + `install`. **G5 completo** nos 5 consumidores. Ver
+**Resultado** na task.
+
+**Pegáveis a seguir**: `B16.6` (vector 2-op inteiro, depende de B16.2 ✅) é o próximo degrau natural
+da escada MVE. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-16, após B16.4 fechar)
 
 **B16.4 FECHADA 2026-09-16** — `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (load alargante/store estreitante, 6

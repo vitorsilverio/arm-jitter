@@ -158,6 +158,24 @@ public final class MveVptState {
         return new MveVptAdvance(newVpr, newItState);
     }
 
+    /// `mve_update_and_store_eci` verbatim (B16.5): cicla só o nibble de `ECI` — MESMA regra de
+    /// `A0A1A2B0`→`A0`, senão `NONE`, só quando NÃO há bloco `IT` ativo — mas, ao contrário de
+    /// {@link #advance}, NUNCA toca `MASK01`/`MASK23`/`P0` do `VPR` (usado por instruções
+    /// "beatwise mas não predicadas", `VLD2`/`VLD4`/`VST2`/`VST4`, que não participam da máquina
+    /// `VPT`). Quando `ECI` já é `NONE` dentro de um bloco `IT`, devolve o `itState` intocado
+    /// (mesmo curto-circuito `if (s->eci)` do QEMU real).
+    public static int advanceEciOnly(int itState) {
+        if ((itState & IT_REST_MASK) != 0) {
+            return itState;
+        }
+        int eci = (itState & ECI_NIBBLE_MASK) >>> ECI_SHIFT;
+        if (eci == ECI_NONE) {
+            return itState;
+        }
+        int nextEci = eci == ECI_A0A1A2B0 ? ECI_A0 : ECI_NONE;
+        return nextEci << ECI_SHIFT;
+    }
+
     /// `gen_vpst` verbatim: grava `mask` (4 bits, `%mask_22_13`) em `MASK01` e, quando `eci` indica
     /// que o beat 1 ainda não rodou (`ECI_NONE`/`ECI_A0`), TAMBÉM em `MASK23` (os dois campos ficam
     /// idênticos na entrada de um `VPT`/`VPST` novo); caso contrário (`ECI_A0A1`/`ECI_A0A1A2`/

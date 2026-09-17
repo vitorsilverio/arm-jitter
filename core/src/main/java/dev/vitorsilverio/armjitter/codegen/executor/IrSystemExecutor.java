@@ -600,4 +600,398 @@ public final class IrSystemExecutor {
         }
         return false;
     }
+
+    /// Log2 do tamanho de um registrador `Q` inteiro em palavras de 32 bits (`16 / 4`) — usado só
+    /// pelo laço de 4 iterações de {@link #executeMveGatherScatterOffset} no ramo `registerSizeLog2
+    /// == 3` (`DO_VLDR64_SG`/`DO_VSTR64_SG` reais SEMPRE iteram em passos de 4 bytes, mesmo movendo
+    /// dados de 64 bits — ver Javadoc de {@link IrOp.MveGatherScatterOffset#registerSizeLog2}).
+    private static final int DOUBLEWORD_LOG2 = 3;
+    private static final int WORD_LOG2 = 2;
+
+    /// `VLDR_S_sg`/`VLDR_U_sg`/`VSTR_sg` (perfil M, B16.5, MVE/Helium): gather/scatter por vetor de
+    /// offsets. Dois ramos, verbatim do QEMU real (`target/arm/tcg/mve_helper.c`): `registerSizeLog2
+    /// < 3` usa `DO_VLDR_SG`/`DO_VSTR_SG` (offset lido de `qm` na MESMA largura do registrador,
+    /// endereço por lane independente); `registerSizeLog2 == 3` usa `DO_VLDR64_SG`/`DO_VSTR64_SG`
+    /// (par de acessos de 32 bits, offset lido só das lanes PARES de 32 bits de `qm` — Javadoc do
+    /// `IrOp` explica o porquê). Mesma disciplina de duas máscaras de {@link
+    /// #executeMveWideningLoadStore}: `eciMask` sozinho decide se a lane é tocada; `elementMask`
+    /// decide entre carregar de verdade ou gravar ZERO (load) — no store só `elementMask` importa.
+    ///
+    /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
+    public boolean executeMveGatherScatterOffset(ArmCore core, IrOp.MveGatherScatterOffset op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int base = core.register(op.rn());
+        int vpr = core.vpr().value();
+        int itState = core.cpsr().itState();
+        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int eciMask = MveVptState.eciMask(itState);
+        VfpRegisters vfp = core.vfp();
+        int memorySizeLog2 = op.memorySizeLog2();
+        int registerSizeLog2 = op.registerSizeLog2();
+        if (registerSizeLog2 == DOUBLEWORD_LOG2) {
+            for (int e = 0; e < 4; e++) {
+                int b = e << WORD_LOG2;
+                if (((eciMask >>> b) & 1) == 0) {
+                    continue;
+                }
+                int offsetLane = e & ~1;
+                long offsetValue = vfp.element(op.qm(), offsetLane, WORD_LOG2);
+                int addr = base + (op.offsetScaled()
+                        ? (int) (offsetValue << memorySizeLog2) : (int) offsetValue);
+                addr += 4 * (e & 1);
+                if (op.load()) {
+                    long value = ((fullMask >>> b) & 1) != 0
+                            ? support.readVectorElement(core, addr, WORD_LOG2) : 0;
+                    vfp.setElement(op.qd(), e, WORD_LOG2, value);
+                } else if (((fullMask >>> b) & 1) != 0) {
+                    long value = vfp.element(op.qd(), e, WORD_LOG2);
+                    support.writeVectorElement(core, addr, WORD_LOG2, value);
+                    core.notifyOrdinaryWrite(addr, 1 << WORD_LOG2);
+                }
+            }
+        } else {
+            int elementCount = 16 >>> registerSizeLog2;
+            for (int e = 0; e < elementCount; e++) {
+                int b = e << registerSizeLog2;
+                if (((eciMask >>> b) & 1) == 0) {
+                    continue;
+                }
+                long offsetValue = vfp.element(op.qm(), e, registerSizeLog2);
+                int addr = base + (op.offsetScaled()
+                        ? (int) (offsetValue << memorySizeLog2) : (int) offsetValue);
+                if (op.load()) {
+                    long value;
+                    if (((fullMask >>> b) & 1) != 0) {
+                        long raw = support.readVectorElement(core, addr, memorySizeLog2);
+                        value = op.signedLoad() ? AdvSimdLanes.signExtend(raw, memorySizeLog2) : raw;
+                        value = AdvSimdLanes.truncate(value, registerSizeLog2);
+                    } else {
+                        value = 0;
+                    }
+                    vfp.setElement(op.qd(), e, registerSizeLog2, value);
+                } else if (((fullMask >>> b) & 1) != 0) {
+                    long narrowed = AdvSimdLanes.truncate(
+                            vfp.element(op.qd(), e, registerSizeLog2), memorySizeLog2);
+                    support.writeVectorElement(core, addr, memorySizeLog2, narrowed);
+                    core.notifyOrdinaryWrite(addr, 1 << memorySizeLog2);
+                }
+            }
+        }
+        return false;
+    }
+
+    /// `VLDRW_sg_imm`/`VLDRD_sg_imm`/`VSTRW_sg_imm`/`VSTRD_sg_imm` (perfil M, B16.5, MVE/Helium):
+    /// gather/scatter com base vetorial `qm` (cada lane já é um ENDEREÇO) mais {@code op.offset()}
+    /// escalar somado a todas as lanes — mesma fórmula de endereço de {@link
+    /// #executeMveGatherScatterOffset} com os papéis de "base"/"offset" trocados (`do_ldst_sg_imm`
+    /// real). Writeback é POR LANE, gated só por `eciMask` (roda mesmo quando `elementMask` zera a
+    /// lane) — diferente do writeback escalar único de {@link #executeMveLoadStore}.
+    ///
+    /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
+    public boolean executeMveGatherScatterImmediate(ArmCore core, IrOp.MveGatherScatterImmediate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int vpr = core.vpr().value();
+        int itState = core.cpsr().itState();
+        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int eciMask = MveVptState.eciMask(itState);
+        VfpRegisters vfp = core.vfp();
+        int sizeLog2 = op.sizeLog2();
+        if (sizeLog2 == DOUBLEWORD_LOG2) {
+            for (int e = 0; e < 4; e++) {
+                int b = e << WORD_LOG2;
+                if (((eciMask >>> b) & 1) == 0) {
+                    continue;
+                }
+                int offsetLane = e & ~1;
+                int laneBase = (int) vfp.element(op.qm(), offsetLane, WORD_LOG2);
+                int addr = laneBase + op.offset() + (4 * (e & 1));
+                if (op.load()) {
+                    long value = ((fullMask >>> b) & 1) != 0
+                            ? support.readVectorElement(core, addr, WORD_LOG2) : 0;
+                    vfp.setElement(op.qd(), e, WORD_LOG2, value);
+                } else if (((fullMask >>> b) & 1) != 0) {
+                    long value = vfp.element(op.qd(), e, WORD_LOG2);
+                    support.writeVectorElement(core, addr, WORD_LOG2, value);
+                    core.notifyOrdinaryWrite(addr, 1 << WORD_LOG2);
+                }
+                if (op.writeback() && (e & 1) != 0) {
+                    vfp.setElement(op.qm(), offsetLane, WORD_LOG2, Integer.toUnsignedLong(addr - 4));
+                }
+            }
+        } else {
+            int elementCount = 16 >>> sizeLog2;
+            for (int e = 0; e < elementCount; e++) {
+                int b = e << sizeLog2;
+                if (((eciMask >>> b) & 1) == 0) {
+                    continue;
+                }
+                int laneBase = (int) vfp.element(op.qm(), e, sizeLog2);
+                int addr = laneBase + op.offset();
+                if (op.load()) {
+                    long value = ((fullMask >>> b) & 1) != 0
+                            ? support.readVectorElement(core, addr, sizeLog2) : 0;
+                    vfp.setElement(op.qd(), e, sizeLog2, value);
+                } else if (((fullMask >>> b) & 1) != 0) {
+                    long value = vfp.element(op.qd(), e, sizeLog2);
+                    support.writeVectorElement(core, addr, sizeLog2, value);
+                    core.notifyOrdinaryWrite(addr, 1 << sizeLog2);
+                }
+                if (op.writeback()) {
+                    vfp.setElement(op.qm(), e, sizeLog2, Integer.toUnsignedLong(addr));
+                }
+            }
+        }
+        return false;
+    }
+
+    /// Tabelas `off[]` de {@link #executeMveInterleavedLoadStore}, transcritas verbatim de
+    /// `DO_VLD2B`/`DO_VLD4B`/`DO_VLD2H`/`DO_VLD4H`/`DO_VLD2W`/`DO_VLD4W` (idênticas para as formas
+    /// `VST*`, `target/arm/tcg/mve_helper.c`) — cada linha é um `pat` (`0`-`3`; grupo `2` só usa
+    /// `pat` `0`/`1`).
+    private static final int[][] INTERLEAVE_OFF_BYTE_4 = {
+            {0, 1, 10, 11}, {2, 3, 12, 13}, {4, 5, 14, 15}, {6, 7, 8, 9}
+    };
+    private static final int[][] INTERLEAVE_OFF_BYTE_2 = {
+            {0, 2, 12, 14}, {4, 6, 8, 10}
+    };
+    /// `DO_VLD4H(op, O1, O2)` monta `off[4] = {O1, O1, O2, O2}` a partir de só 2 valores por `pat`.
+    private static final int[][] INTERLEAVE_HALFWORD_PAIR_4 = {
+            {0, 5}, {1, 6}, {2, 7}, {3, 4}
+    };
+    private static final int[][] INTERLEAVE_OFF_HALFWORD_2 = {
+            {0, 1, 6, 7}, {2, 3, 4, 5}
+    };
+    private static final int[][] INTERLEAVE_OFF_WORD_2 = {
+            {0, 4, 24, 28}, {8, 12, 16, 20}
+    };
+
+    private static int[] interleaveOffsetTable(int groupSize, int sizeLog2, int pat) {
+        return switch (sizeLog2) {
+            case 0 -> groupSize == 4 ? INTERLEAVE_OFF_BYTE_4[pat] : INTERLEAVE_OFF_BYTE_2[pat];
+            case 1 -> groupSize == 4
+                    ? expandHalfwordPair(INTERLEAVE_HALFWORD_PAIR_4[pat])
+                    : INTERLEAVE_OFF_HALFWORD_2[pat];
+            case 2 -> groupSize == 4 ? INTERLEAVE_OFF_BYTE_4[pat] : INTERLEAVE_OFF_WORD_2[pat];
+            default -> throw new IllegalArgumentException("sizeLog2 inválido para VLD2/VLD4: " + sizeLog2);
+        };
+    }
+
+    private static int[] expandHalfwordPair(int[] pair) {
+        return new int[] {pair[0], pair[0], pair[1], pair[1]};
+    }
+
+    /// `VLD2`/`VLD4`/`VST2`/`VST4` (perfil M, B16.5, MVE/Helium): desentrelaçamento/entrelaçamento
+    /// em 4 beats de 32 bits, transcrito verbatim de `DO_VLD2*`/`DO_VLD4*`/`DO_VST2*`/`DO_VST4*`
+    /// (`target/arm/tcg/mve_helper.c`) — três formas de endereço/empacotamento por
+    /// {@link IrOp.MveInterleavedLoadStore#sizeLog2} (byte/halfword/word), cada uma com sua própria
+    /// aritmética de deslocamento de bits (ver os comentários por `case`, fiéis ao C original).
+    /// **Só `eciMask` gate cada beat** (nenhum `elementMask`/`VPT` — comentário literal do QEMU
+    /// real: "beatwise but not predicated"). Writeback incondicional (G4), soma
+    /// `groupSize * 16` bytes.
+    ///
+    /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
+    public boolean executeMveInterleavedLoadStore(ArmCore core, IrOp.MveInterleavedLoadStore op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int base = core.register(op.rn());
+        int eciMask = MveVptState.eciMask(core.cpsr().itState());
+        int[] off = interleaveOffsetTable(op.groupSize(), op.sizeLog2(), op.pat());
+        VfpRegisters vfp = core.vfp();
+        int qnidx = op.qd();
+        int o1 = off[0];
+        switch (op.sizeLog2()) {
+            case 0 -> { // DO_VLD4B/DO_VLD2B/DO_VST4B/DO_VST2B: uma word por beat, 4 bytes empacotados
+                int byteScale = op.groupSize() == 4 ? 4 : 2;
+                for (int beat = 0; beat < 4; beat++) {
+                    if (((eciMask >>> (beat << 2)) & 1) == 0) {
+                        continue;
+                    }
+                    int addr = base + off[beat] * byteScale;
+                    if (op.load()) {
+                        long data = support.readVectorElement(core, addr, WORD_LOG2);
+                        for (int e = 0; e < 4; e++, data >>>= 8) {
+                            int qd = op.groupSize() == 4 ? qnidx + e : qnidx + (e & 1);
+                            int lane = op.groupSize() == 4 ? off[beat] : off[beat] + (e >> 1);
+                            vfp.setElement(qd, lane, 0, data & 0xFF);
+                        }
+                    } else {
+                        long data = 0;
+                        for (int e = 3; e >= 0; e--) {
+                            int qd = op.groupSize() == 4 ? qnidx + e : qnidx + (e & 1);
+                            int lane = op.groupSize() == 4 ? off[beat] : off[beat] + (e >> 1);
+                            data = (data << 8) | vfp.element(qd, lane, 0);
+                        }
+                        support.writeVectorElement(core, addr, WORD_LOG2, data);
+                        core.notifyOrdinaryWrite(addr, 4);
+                    }
+                }
+            }
+            case 1 -> { // DO_VLD4H/DO_VLD2H/DO_VST4H/DO_VST2H
+                int y = 0;
+                for (int beat = 0; beat < 4; beat++) {
+                    if (((eciMask >>> (beat << 2)) & 1) == 0) {
+                        y ^= op.groupSize() == 4 ? 2 : 0;
+                        continue;
+                    }
+                    if (op.groupSize() == 4) {
+                        int addr = base + off[beat] * 8 + (beat & 1) * 4;
+                        if (op.load()) {
+                            long data = support.readVectorElement(core, addr, WORD_LOG2);
+                            vfp.setElement(qnidx + y, off[beat], 1, data & 0xFFFF);
+                            vfp.setElement(qnidx + y + 1, off[beat], 1, (data >>> 16) & 0xFFFF);
+                        } else {
+                            long data = vfp.element(qnidx + y, off[beat], 1)
+                                    | (vfp.element(qnidx + y + 1, off[beat], 1) << 16);
+                            support.writeVectorElement(core, addr, WORD_LOG2, data);
+                            core.notifyOrdinaryWrite(addr, 4);
+                        }
+                        y ^= 2;
+                    } else {
+                        int addr = base + off[beat] * 4;
+                        if (op.load()) {
+                            long data = support.readVectorElement(core, addr, WORD_LOG2);
+                            vfp.setElement(qnidx, off[beat], 1, data & 0xFFFF);
+                            vfp.setElement(qnidx + 1, off[beat], 1, (data >>> 16) & 0xFFFF);
+                        } else {
+                            long data = vfp.element(qnidx, off[beat], 1)
+                                    | (vfp.element(qnidx + 1, off[beat], 1) << 16);
+                            support.writeVectorElement(core, addr, WORD_LOG2, data);
+                            core.notifyOrdinaryWrite(addr, 4);
+                        }
+                    }
+                }
+            }
+            case 2 -> { // DO_VLD4W/DO_VLD2W/DO_VST4W/DO_VST2W
+                for (int beat = 0; beat < 4; beat++) {
+                    if (((eciMask >>> (beat << 2)) & 1) == 0) {
+                        continue;
+                    }
+                    if (op.groupSize() == 4) {
+                        int addr = base + off[beat] * 4;
+                        int y = (beat + (o1 & 2)) & 3;
+                        int lane = off[beat] >>> 2;
+                        if (op.load()) {
+                            long data = support.readVectorElement(core, addr, WORD_LOG2);
+                            vfp.setElement(qnidx + y, lane, WORD_LOG2, data);
+                        } else {
+                            long data = vfp.element(qnidx + y, lane, WORD_LOG2);
+                            support.writeVectorElement(core, addr, WORD_LOG2, data);
+                            core.notifyOrdinaryWrite(addr, 4);
+                        }
+                    } else {
+                        int addr = base + off[beat];
+                        int qd = qnidx + (beat & 1);
+                        int lane = off[beat] >>> 3;
+                        if (op.load()) {
+                            long data = support.readVectorElement(core, addr, WORD_LOG2);
+                            vfp.setElement(qd, lane, WORD_LOG2, data);
+                        } else {
+                            long data = vfp.element(qd, lane, WORD_LOG2);
+                            support.writeVectorElement(core, addr, WORD_LOG2, data);
+                            core.notifyOrdinaryWrite(addr, 4);
+                        }
+                    }
+                }
+            }
+            default -> throw new IllegalArgumentException("sizeLog2 inválido para VLD2/VLD4: " + op.sizeLog2());
+        }
+        if (op.writeback()) {
+            core.setRegister(op.rn(), base + op.groupSize() * 16);
+        }
+        return false;
+    }
+
+    /// `VIDUP`/`VDDUP` (perfil M, B16.5, MVE/Helium): verbatim de `DO_VIDUP` — grava `Rn` (truncado
+    /// ao elemento) em cada lane sucessiva de `Qd`, mascarado por `elementMask` (`mergemask`, lane
+    /// mascarada preserva o valor atual), e acumula `Rn += imm` livremente (SEM truncar o valor
+    /// escalar) a cada lane, gravando o resultado final de volta em `Rn`.
+    public boolean executeMveIncrementDup(ArmCore core, IrOp.MveIncrementDup op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        VfpRegisters vfp = core.vfp();
+        int sizeLog2 = op.sizeLog2();
+        int offset = core.register(op.rn());
+        int elementCount = 16 >>> sizeLog2;
+        for (int e = 0; e < elementCount; e++) {
+            int b = e << sizeLog2;
+            if (((mask >>> b) & 1) != 0) {
+                vfp.setElement(op.qd(), e, sizeLog2, AdvSimdLanes.truncate(offset, sizeLog2));
+            }
+            offset += op.imm();
+        }
+        core.setRegister(op.rn(), offset);
+        return false;
+    }
+
+    /// `VIWDUP`/`VDWDUP` (perfil M, B16.5, MVE/Helium): como {@link #executeMveIncrementDup}, mas
+    /// o passo envolve (wrap) contra `Rm` — `do_add_wrap`/`do_sub_wrap` verbatim.
+    public boolean executeMveWrappingIncrementDup(ArmCore core, IrOp.MveWrappingIncrementDup op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        VfpRegisters vfp = core.vfp();
+        int sizeLog2 = op.sizeLog2();
+        int offset = core.register(op.rn());
+        int wrap = core.register(op.rm());
+        int elementCount = 16 >>> sizeLog2;
+        for (int e = 0; e < elementCount; e++) {
+            int b = e << sizeLog2;
+            if (((mask >>> b) & 1) != 0) {
+                vfp.setElement(op.qd(), e, sizeLog2, AdvSimdLanes.truncate(offset, sizeLog2));
+            }
+            if (op.decrement()) {
+                if (offset == 0) {
+                    offset = wrap;
+                }
+                offset -= op.imm();
+            } else {
+                offset += op.imm();
+                if (offset == wrap) {
+                    offset = 0;
+                }
+            }
+        }
+        core.setRegister(op.rn(), offset);
+        return false;
+    }
+
+    /// Avanço pós-instrução SÓ do `ECI` (B16.5) — {@link MveVptState#advanceEciOnly}. Usado só por
+    /// {@link IrOp.MveInterleavedLoadStore} (`VLD2`/`VLD4`/`VST2`/`VST4`), mesmo gate de
+    /// `pcChanged` de {@link #executeAdvanceVpt} no chamador.
+    public void executeAdvanceEci(ArmCore core, IrOp.AdvanceEci op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        core.cpsr().setItState(MveVptState.advanceEciOnly(core.cpsr().itState()));
+    }
 }

@@ -22,7 +22,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
         IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd,
         IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer, IrOp.MveLoadStore,
-        IrOp.MveWideningLoadStore {
+        IrOp.MveWideningLoadStore, IrOp.MveGatherScatterOffset, IrOp.MveGatherScatterImmediate,
+        IrOp.MveInterleavedLoadStore, IrOp.MveIncrementDup, IrOp.MveWrappingIncrementDup,
+        IrOp.AdvanceEci {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -217,6 +219,22 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.4: `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (load alargante/store estreitante, perfil M,
         /// MVE/Helium) — ver {@link MveWideningLoadStore}.
         public static final int MVE_WIDENING_LOAD_STORE = 120;
+        /// B16.5: `VLDR_S_sg`/`VLDR_U_sg`/`VSTR_sg` (gather/scatter por vetor de offsets, perfil M,
+        /// MVE/Helium) — ver {@link MveGatherScatterOffset}.
+        public static final int MVE_GATHER_SCATTER_OFFSET = 121;
+        /// B16.5: `VLDRW_sg_imm`/`VLDRD_sg_imm`/`VSTRW_sg_imm`/`VSTRD_sg_imm` (gather/scatter com
+        /// base vetorial e imediato, perfil M, MVE/Helium) — ver {@link MveGatherScatterImmediate}.
+        public static final int MVE_GATHER_SCATTER_IMMEDIATE = 122;
+        /// B16.5: `VLD2`/`VLD4`/`VST2`/`VST4` (desentrelaçamento, perfil M, MVE/Helium) — ver
+        /// {@link MveInterleavedLoadStore}.
+        public static final int MVE_INTERLEAVED_LOAD_STORE = 123;
+        /// B16.5: `VIDUP`/`VDDUP` (perfil M, MVE/Helium) — ver {@link MveIncrementDup}.
+        public static final int MVE_INCREMENT_DUP = 124;
+        /// B16.5: `VIWDUP`/`VDWDUP` (perfil M, MVE/Helium) — ver {@link MveWrappingIncrementDup}.
+        public static final int MVE_WRAPPING_INCREMENT_DUP = 125;
+        /// B16.5: avanço pós-instrução SÓ do `ECI` (`mve_update_and_store_eci`), sem tocar o `VPR`
+        /// (perfil M, MVE/Helium) — ver {@link AdvanceEci}.
+        public static final int ADVANCE_ECI = 126;
     }
 
     /// Operacao ALU generica.
@@ -2967,5 +2985,164 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_WIDENING_LOAD_STORE; }
+    }
+
+    /// `VLDR_S_sg`/`VLDR_U_sg`/`VSTR_sg` (perfil M, B16.5, MVE/Helium, `target/isa-decode/mve.decode`):
+    /// gather load / scatter store por vetor de OFFSETS em `qm` — cada lane de `qm` (largura
+    /// {@link #registerSizeLog2}) é somada a `Rn` (mais o escalonamento de {@link #offsetScaled},
+    /// pelo tamanho em MEMÓRIA) para formar um endereço INDEPENDENTE por lane (verbatim de
+    /// `DO_VLDR_SG`/`DO_VSTR_SG`, `target/arm/tcg/mve_helper.c`). Duas máscaras distintas no load
+    /// (mesmo padrão de {@link MveWideningLoadStore}): `eciMask` decide se a lane é tocada (beat
+    /// abandonado preserva); `elementMask` decide entre carregar de verdade ou gravar ZERO. No
+    /// store só `elementMask` importa. **Sem writeback** (`@vldst_sg` não tem campo `w`).
+    record MveGatherScatterOffset(
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`), o vetor de offsets — recusado no decode quando `Qd == Qm`
+            /// (UNPREDICTABLE real: o registrador de offsets seria sobrescrito no meio da operação).
+            int qm,
+            /// `Rn` (base escalar; `15` recusado no decode — UNPREDICTABLE).
+            int rn,
+            /// Log2 do tamanho do elemento NA MEMÓRIA (`msize`, `0`-`3`).
+            int memorySizeLog2,
+            /// Log2 do tamanho do elemento NO REGISTRADOR (`size`, `0`-`3`) — também a largura em
+            /// que `qm` é lido lane a lane. `3` (doubleword) usa o par de acessos de 32 bits
+            /// verbatim de `DO_VLDR64_SG`/`DO_VSTR64_SG` (offset lido só das lanes PARES de `qm`).
+            int registerSizeLog2,
+            /// `true` estende com SINAL (`VLDR_S_sg`); `false` estende com ZERO (`VLDR_U_sg`/
+            /// `VSTR_sg`, campo irrelevante no store).
+            boolean signedLoad,
+            /// `os`: `true` escala o offset lido de `qm` por `1 << memorySizeLog2` antes de somar a
+            /// `Rn` (`ADDR_ADD_OSH`/`OSW`/`OSD`); `false` soma sem escalar (`ADDR_ADD`).
+            boolean offsetScaled,
+            /// `true` para `VLDR_S_sg`/`VLDR_U_sg` (memória → `Qd`); `false` para `VSTR_sg`.
+            boolean load,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_GATHER_SCATTER_OFFSET; }
+    }
+
+    /// `VLDRW_sg_imm`/`VLDRD_sg_imm`/`VSTRW_sg_imm`/`VSTRD_sg_imm` (perfil M, B16.5, MVE/Helium):
+    /// gather/scatter com base VETORIAL (`qm`, cada lane já contém um ENDEREÇO completo — não um
+    /// offset) mais um imediato ESCALAR somado a todas as lanes (`do_ldst_sg_imm` real: os
+    /// parâmetros "base"/"offset" trocam de papel em relação a {@link MveGatherScatterOffset}, mas
+    /// a fórmula de endereço é a MESMA soma). **`Qm` vem do campo normalmente rotulado `Qn`**
+    /// (`@vldst_sg_imm qm=%qn` — comentário literal do arquivo, Armadilha 1 da task). Writeback é
+    /// POR LANE (`w=1`: cada lane de `qm` recebe seu próprio endereço calculado, não um único `Rn`
+    /// escalar) e roda sempre que a lane está ativa por `ECI` (independente do `elementMask` de
+    /// `VPT` — verbatim do `if (WB) { m[e] = addr; }` dentro do `if (eci_mask)` de `DO_VLDR_SG`).
+    record MveGatherScatterImmediate(
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, extraído via `%qn` — Armadilha 1), o vetor de endereços base.
+            int qm,
+            /// Offset com sinal (`imm7 << sizeLog2`, `a=0` nega — mesma convenção de
+            /// {@link MveLoadStore#offset}).
+            int offset,
+            /// Log2 do tamanho do elemento (`2`=`W`, `3`=`D` — memória e registrador SEMPRE do
+            /// mesmo tamanho aqui, sem alargamento).
+            int sizeLog2,
+            /// `true` quando cada lane ativa de `qm` recebe de volta seu endereço calculado.
+            boolean writeback,
+            /// `true` para `VLDRW_sg_imm`/`VLDRD_sg_imm`; `false` para `VSTRW_sg_imm`/`VSTRD_sg_imm`.
+            boolean load,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_GATHER_SCATTER_IMMEDIATE; }
+    }
+
+    /// `VLD2`/`VLD4`/`VST2`/`VST4` (perfil M, B16.5, MVE/Helium): desentrelaçamento/entrelaçamento
+    /// de um grupo de {@link #groupSize} registradores `Q` consecutivos a partir de `Qd`, em 4
+    /// "beats" de 32 bits cada (verbatim de `DO_VLD2*`/`DO_VLD4*`/`DO_VST2*`/`DO_VST4*`,
+    /// `target/arm/tcg/mve_helper.c` — tabelas `off[]` por {@link #pat} transcritas em
+    /// `IrSystemExecutor`). **Beatwise mas NÃO predicado** (comentário literal do QEMU real): só
+    /// `eciMask` gate cada beat, `elementMask`/`VPT` nunca é consultado — por isso usa
+    /// {@link AdvanceEci} (não {@link AdvanceVpt}) como gancho pós-instrução, já que
+    /// `mve_update_and_store_eci` NUNCA toca `VPR.MASK01`/`MASK23`, ao contrário de
+    /// `mve_advance_vpt`. Writeback (quando presente) é incondicional, soma `groupSize * 16` bytes
+    /// a `Rn` (`do_vldst_il` real: `addrinc` = `32` para grupo 2, `64` para grupo 4).
+    record MveInterleavedLoadStore(
+            /// `Qd`, primeiro registrador do grupo (`VLD2`/`VST2`: `Qd <= 6`; `VLD4`/`VST4`:
+            /// `Qd <= 4` — recusado no decode senão, `Qd+groupSize-1` estouraria `Q7`).
+            int qd,
+            /// `Rn` (base; `15` sempre recusado, `13` recusado quando {@link #writeback}).
+            int rn,
+            /// `2` (`VLD2`/`VST2`) ou `4` (`VLD4`/`VST4`) — quantos `Q` consecutivos o grupo cobre.
+            int groupSize,
+            /// Log2 do tamanho do elemento (`0`=byte, `1`=halfword, `2`=word).
+            int sizeLog2,
+            /// `pat` (`0`-`3`): qual "fatia" do grupo esta instrução move — a arquitetura real
+            /// decompõe um `VLD4.8 {Qd-Qd+3}` em 4 instruções `VLD4` consecutivas, uma por `pat`,
+            /// cada uma cobrindo 4 estruturas via `off[]` (Armadilha 6 da task: `pat` não é "qual
+            /// registrador").
+            int pat,
+            /// `true` para `VLD2`/`VLD4` (memória → grupo); `false` para `VST2`/`VST4`.
+            boolean load,
+            /// `true` quando `Rn` recebe o endereço pós-incremento (incondicional — G4).
+            boolean writeback,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_INTERLEAVED_LOAD_STORE; }
+    }
+
+    /// `VIDUP`/`VDDUP` (perfil M, B16.5, MVE/Helium): preenche `Qd` com `Rn, Rn+passo, Rn+2·passo,
+    /// ...` (verbatim de `DO_VIDUP`, `target/arm/tcg/mve_helper.c`) e escreve de volta em `Rn` o
+    /// valor de continuação (SEM truncar ao tamanho do elemento — só a gravação em `Qd` trunca,
+    /// `Rn` acumula em 32 bits cheios para sempre). `VDDUP` é `VIDUP` com {@link #imm} já NEGADO
+    /// pelo decoder (`a->imm = -a->imm`, `trans_VDDUP` real) — mesmo `IrOp`, sem campo de direção.
+    /// Predicado por `elementMask` (lane mascarada preserva o valor atual de `Qd`, via
+    /// `mergemask`); beatwise ({@link AdvanceVpt}, a própria `HELPER` chama `mve_advance_vpt`).
+    record MveIncrementDup(
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Rn` (sempre PAR por construção do encoding — `%vidup_rn`, nunca `13`/`15`).
+            int rn,
+            /// Log2 do tamanho do elemento (`0`-`2`; `size==3` é "outro encoding", recusado no
+            /// decode).
+            int sizeLog2,
+            /// Passo somado a cada lane sucessiva — já com o sinal aplicado (`VDDUP` chega aqui com
+            /// `imm` negativo).
+            int imm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_INCREMENT_DUP; }
+    }
+
+    /// `VIWDUP`/`VDWDUP` (perfil M, B16.5, MVE/Helium): como {@link MveIncrementDup}, mas o
+    /// contador ENVOLVE (wrap) em `Rm` — `VIWDUP`: `offset+=imm; if (offset==Rm) offset=0`
+    /// (`do_add_wrap` real); `VDWDUP`: `if (offset==0) offset=Rm; offset-=imm` (`do_sub_wrap`
+    /// real) — comportamentos DIFERENTES o suficiente para não caberem no mesmo `imm` com sinal
+    /// trocado (ao contrário de {@link MveIncrementDup}, por isso um campo {@link #decrement}
+    /// explícito em vez de negar `imm`).
+    record MveWrappingIncrementDup(
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Rn` (sempre PAR por construção — `%vidup_rn`).
+            int rn,
+            /// `Rm` (sempre ÍMPAR por construção — `%vidup_rm`; `13`/`15` recusados no decode —
+            /// UNPREDICTABLE).
+            int rm,
+            /// Log2 do tamanho do elemento (`0`-`2`; `size==3` recusado no decode).
+            int sizeLog2,
+            /// Passo (sempre não-negativo — a direção vem de {@link #decrement}, não do sinal).
+            int imm,
+            /// `true` para `VDWDUP` (`do_sub_wrap`); `false` para `VIWDUP` (`do_add_wrap`).
+            boolean decrement,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_WRAPPING_INCREMENT_DUP; }
+    }
+
+    /// Avanço pós-instrução SÓ do `ECI` (perfil M, B16.5, MVE/Helium) — `mve_update_and_store_eci`
+    /// verbatim: cicla o nibble de `ECI` exatamente como
+    /// {@link dev.vitorsilverio.armjitter.core.MveVptState#advance} faz, mas
+    /// **nunca** toca `VPR.MASK01`/`MASK23`/`P0` (ao contrário de {@link AdvanceVpt}). Usado só por
+    /// {@link MveInterleavedLoadStore} (`VLD2`/`VLD4`/`VST2`/`VST4`) — instruções "beatwise mas não
+    /// predicadas" que não participam da máquina `VPT` (ver Javadoc de {@link MveInterleavedLoadStore}).
+    record AdvanceEci(
+            /// Condição necessária para executar — sempre {@link Condition#AL} na prática, mesmo
+            /// padrão de {@link AdvanceVpt}.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.ADVANCE_ECI; }
     }
 }

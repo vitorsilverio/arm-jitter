@@ -193,6 +193,24 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.MVE_LOAD_STORE -> pcChanged |= system.executeMveLoadStore(core, (IrOp.MveLoadStore) op);
                 case IrOp.Kind.MVE_WIDENING_LOAD_STORE ->
                         pcChanged |= system.executeMveWideningLoadStore(core, (IrOp.MveWideningLoadStore) op);
+                // B16.5: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_GATHER_SCATTER_OFFSET ->
+                        pcChanged |= system.executeMveGatherScatterOffset(core, (IrOp.MveGatherScatterOffset) op);
+                case IrOp.Kind.MVE_GATHER_SCATTER_IMMEDIATE ->
+                        pcChanged |= system.executeMveGatherScatterImmediate(core, (IrOp.MveGatherScatterImmediate) op);
+                case IrOp.Kind.MVE_INTERLEAVED_LOAD_STORE ->
+                        pcChanged |= system.executeMveInterleavedLoadStore(core, (IrOp.MveInterleavedLoadStore) op);
+                case IrOp.Kind.MVE_INCREMENT_DUP ->
+                        pcChanged |= system.executeMveIncrementDup(core, (IrOp.MveIncrementDup) op);
+                case IrOp.Kind.MVE_WRAPPING_INCREMENT_DUP ->
+                        pcChanged |= system.executeMveWrappingIncrementDup(core, (IrOp.MveWrappingIncrementDup) op);
+                // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
+                // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
+                case IrOp.Kind.ADVANCE_ECI -> {
+                    if (!pcChanged) {
+                        system.executeAdvanceEci(core, (IrOp.AdvanceEci) op);
+                    }
+                }
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -382,6 +400,16 @@ public final class IrBlockExecutor {
             case IrOp.MveLoadStore mveLoadStore -> system.executeMveLoadStore(core, mveLoadStore);
             case IrOp.MveWideningLoadStore mveWideningLoadStore ->
                     system.executeMveWideningLoadStore(core, mveWideningLoadStore);
+            case IrOp.MveGatherScatterOffset gatherScatterOffset ->
+                    system.executeMveGatherScatterOffset(core, gatherScatterOffset);
+            case IrOp.MveGatherScatterImmediate gatherScatterImmediate ->
+                    system.executeMveGatherScatterImmediate(core, gatherScatterImmediate);
+            case IrOp.MveInterleavedLoadStore interleavedLoadStore ->
+                    system.executeMveInterleavedLoadStore(core, interleavedLoadStore);
+            case IrOp.MveIncrementDup incrementDup -> system.executeMveIncrementDup(core, incrementDup);
+            case IrOp.MveWrappingIncrementDup wrappingIncrementDup ->
+                    system.executeMveWrappingIncrementDup(core, wrappingIncrementDup);
+            case IrOp.AdvanceEci advanceEci -> { system.executeAdvanceEci(core, advanceEci); yield false; }
         };
     }
 

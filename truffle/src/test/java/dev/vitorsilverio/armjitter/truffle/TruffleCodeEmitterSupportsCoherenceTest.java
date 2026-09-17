@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
 /// {@link IrOpNodeFactory#create} nunca podem divergir. Sem este teste a correção da A10.1 se
 /// reintroduz sozinha quando uma task futura acrescentar um `Kind` só num dos dois lugares.
 ///
-/// Para cada `IrOp.Kind` (119 desde B16.2), monta um `IrOp` representativo (só o `kind()` importa —
+/// Para cada `IrOp.Kind` (127 desde B16.5), monta um `IrOp` representativo (só o `kind()` importa —
 /// `create` nunca inspeciona outro campo para escolher o nó) e verifica:
 /// <ul>
 ///   <li>{@code supports(op) == true}  ⇒ {@code create(op, executor)} NÃO lança;</li>
@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(121, kinds.size(), "IrOp.Kind deve ter 121 constantes contíguas");
+        assertEquals(127, kinds.size(), "IrOp.Kind deve ter 127 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -113,8 +113,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // VPR_TRANSFER (+5 — mesmo "Não inclui": decode + interpretado apenas, MVE/Helium fica
         // para o épico A10 tratar depois, dimensão 3 do roadmap). B16.3 acrescentou
         // MVE_LOAD_STORE (+1, mesmo "Não inclui" de B16.2). B16.4 acrescentou
-        // MVE_WIDENING_LOAD_STORE (+1, mesmo "Não inclui").
-        assertEquals(55, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // MVE_WIDENING_LOAD_STORE (+1, mesmo "Não inclui"). B16.5 acrescentou
+        // MVE_GATHER_SCATTER_OFFSET, MVE_GATHER_SCATTER_IMMEDIATE, MVE_INTERLEAVED_LOAD_STORE,
+        // MVE_INCREMENT_DUP, MVE_WRAPPING_INCREMENT_DUP, ADVANCE_ECI (+6, mesmo "Não inclui").
+        assertEquals(61, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -131,6 +133,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VPR_TRANSFER,
                         IrOp.Kind.MVE_LOAD_STORE,
                         IrOp.Kind.MVE_WIDENING_LOAD_STORE,
+                        IrOp.Kind.MVE_GATHER_SCATTER_OFFSET,
+                        IrOp.Kind.MVE_GATHER_SCATTER_IMMEDIATE,
+                        IrOp.Kind.MVE_INTERLEAVED_LOAD_STORE,
+                        IrOp.Kind.MVE_INCREMENT_DUP,
+                        IrOp.Kind.MVE_WRAPPING_INCREMENT_DUP,
+                        IrOp.Kind.ADVANCE_ECI,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -322,6 +330,16 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.MVE_LOAD_STORE -> new IrOp.MveLoadStore(0, 1, 0, true, false, false, c);
             case IrOp.Kind.MVE_WIDENING_LOAD_STORE ->
                     new IrOp.MveWideningLoadStore(0, 1, 0, 0, 1, true, true, false, false, c);
+            case IrOp.Kind.MVE_GATHER_SCATTER_OFFSET ->
+                    new IrOp.MveGatherScatterOffset(0, 1, 2, 0, 1, true, false, true, c);
+            case IrOp.Kind.MVE_GATHER_SCATTER_IMMEDIATE ->
+                    new IrOp.MveGatherScatterImmediate(0, 1, 4, 2, true, true, c);
+            case IrOp.Kind.MVE_INTERLEAVED_LOAD_STORE ->
+                    new IrOp.MveInterleavedLoadStore(0, 1, 2, 0, 0, true, false, c);
+            case IrOp.Kind.MVE_INCREMENT_DUP -> new IrOp.MveIncrementDup(0, 2, 0, 1, c);
+            case IrOp.Kind.MVE_WRAPPING_INCREMENT_DUP ->
+                    new IrOp.MveWrappingIncrementDup(0, 2, 3, 0, 1, false, c);
+            case IrOp.Kind.ADVANCE_ECI -> new IrOp.AdvanceEci(c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

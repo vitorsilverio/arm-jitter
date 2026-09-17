@@ -257,6 +257,14 @@ public final class AsmNativePolicy {
             // VLDSTB_H/VLDSTB_W/VLDSTH_W (B16.4, MVE/Helium): mesmo padrão acima, sem emissão
             // nativa nesta task.
             case IrOp.MveWideningLoadStore ignored -> false;
+            // Gather/scatter, VLD2/VLD4/VST2/VST4, VIDUP/VDDUP/VIWDUP/VDWDUP e o avanço de ECI
+            // (B16.5, MVE/Helium): mesmo padrão acima, sem emissão nativa nesta task.
+            case IrOp.MveGatherScatterOffset ignored -> false;
+            case IrOp.MveGatherScatterImmediate ignored -> false;
+            case IrOp.MveInterleavedLoadStore ignored -> false;
+            case IrOp.MveIncrementDup ignored -> false;
+            case IrOp.MveWrappingIncrementDup ignored -> false;
+            case IrOp.AdvanceEci ignored -> false;
         };
     }
 

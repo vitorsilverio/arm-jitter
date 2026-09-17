@@ -641,8 +641,17 @@ public final class StandardIrBuilder implements IrBuilder {
         // chegam via o escape hatch `liftedOp` (LIFTED_IR_OP, fora do switch acima), então os
         // testes seguintes cobrem esses caminhos.
         if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof IrOp.MveLoadStore
-                || instruction.liftedOp() instanceof IrOp.MveWideningLoadStore) {
+                || instruction.liftedOp() instanceof IrOp.MveWideningLoadStore
+                || instruction.liftedOp() instanceof IrOp.MveGatherScatterOffset
+                || instruction.liftedOp() instanceof IrOp.MveGatherScatterImmediate
+                || instruction.liftedOp() instanceof IrOp.MveIncrementDup
+                || instruction.liftedOp() instanceof IrOp.MveWrappingIncrementDup) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
+        } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
+            // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla
+            // (`mve_update_and_store_eci` real), o `VPR` nunca é tocado (ao contrário de
+            // AdvanceVpt/mve_advance_vpt) — ver Javadoc de IrOp.MveInterleavedLoadStore.
+            block.add(new IrOp.AdvanceEci(Condition.AL));
         }
 
         block.add(new IrOp.Cycle(1));
