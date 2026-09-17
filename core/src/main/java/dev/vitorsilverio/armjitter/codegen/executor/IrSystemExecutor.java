@@ -487,4 +487,51 @@ public final class IrSystemExecutor {
             core.vpr().setValue(core.register(op.armRegister()));
         }
     }
+
+    /// `VLDR_VSTR` (perfil M, B16.3, MVE/Helium): move os 128 bits de `Qd` de/para memória, BYTE a
+    /// BYTE (Armadilha 5 da task — predicação por byte de memória, nunca um único acesso de 128
+    /// bits quando a máscara não é cheia), usando {@link #NO_TAIL_PREDICATION_LTPSIZE} (mesma
+    /// convenção de {@link #executeVpsel}: tail predication ainda não modelada, B15.6/B16.7+).
+    /// Mesma checagem de `ECI` reservado que toda instrução MVE beatwise faz ({@code
+    /// mve_eci_check} real) ANTES de tocar memória/registrador — ver {@link #executeVpst}.
+    ///
+    /// Writeback de `Rn` é SEMPRE incondicional (G4, Armadilha 6 da task): roda mesmo quando a
+    /// instrução inteira está mascarada (`elementMask == 0`) — o QEMU real trata o cálculo de
+    /// endereço/writeback como efeito ESCALAR da instrução, fora do laço "por beat" que aplica a
+    /// máscara.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}) — {@link
+    ///         dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} usa isto para pular o
+    ///         {@link IrOp.AdvanceVpt} seguinte no mesmo bloco.
+    public boolean executeMveLoadStore(ArmCore core, IrOp.MveLoadStore op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int base = core.register(op.rn());
+        int accessAddress = op.postIndexed() ? base : base + op.offset();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        VfpRegisters vfp = core.vfp();
+        for (int byteIndex = 0; byteIndex < 16; byteIndex++) {
+            if (((mask >>> byteIndex) & 1) == 0) {
+                continue;
+            }
+            int byteAddress = accessAddress + byteIndex;
+            if (op.load()) {
+                int value = support.read8Arm7(core, byteAddress);
+                vfp.setElement(op.qd(), byteIndex, 0, value);
+            } else {
+                long value = vfp.element(op.qd(), byteIndex, 0);
+                support.write8Arm7(core, byteAddress, (int) value);
+            }
+        }
+        if (op.writeback()) {
+            core.setRegister(op.rn(), base + op.offset());
+        }
+        return false;
+    }
 }

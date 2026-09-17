@@ -47,6 +47,25 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-16, após B16.3 fechar)
+
+**B16.3 FECHADA 2026-09-16** — `VLDR_VSTR` contíguo não-alargante (6 encodings), o degrau seguinte
+da escada MVE. `Thumb2MveLoadStoreDecoder` novo (escape hatch `liftedOp`, registrado antes de
+`Thumb2NocpDecoder`, Armadilha 1). **Achado que corrige a prosa da própria task**: o marcador de
+`size` fica em `bits[12:7]`, não `bits[11:6]` (off-by-one confirmado via `WebFetch` do `mve.decode`
+real). Transferência sempre de 16 bytes (`Qd` inteiro, `size` só escala o offset), predicação byte a
+byte, writeback incondicional (G4), beatwise (gancho de `AdvanceVpt` estendido em
+`StandardIrBuilder` para cobrir o caminho `liftedOp`, já que `isMveBeatwise()` só olha
+`InstructionKind`). **`docs/COBERTURA-ISA.md`: zero-diff, CONFIRMADO** — mesma Armadilha 7 da B16.2
+(`mve.decode` continua `NOT_IN_ANY_PRESET` até a B16.14); a claim "6 células mudam" do Objetivo
+original da task já estava desatualizada. `docs/COBERTURA-JIT.md`: `IrOp.Kind` 119→120. `mvn -o
+test` verde (4002; as mesmas 3 falhas pré-existentes) + `truffle` (73) + `install`. **G5 completo**
+nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B16.4` (`VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W`, load alargante/store estreitante,
+depende de B16.3 ✅) é o próximo degrau natural da escada MVE. `C12.5`/`C12.10` (emissão JIT nativa
+A64) seguem pegáveis, dimensão 2 do roadmap.
+
 ## Onde estamos (atualizado 2026-09-16, após B16.2 fechar)
 
 **B16.2 FECHADA 2026-09-16** — a máquina de predicação MVE/Helium completa: `MveVptState` (4

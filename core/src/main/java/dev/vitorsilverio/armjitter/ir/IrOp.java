@@ -21,7 +21,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
         IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
         IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd,
-        IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer {
+        IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer, IrOp.MveLoadStore {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -211,6 +211,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VPSEL = 117;
         /// B16.2: `VMSR_VMRS` com `reg=12` (`VPR`, perfil M, MVE/Helium) — ver {@link VprTransfer}.
         public static final int VPR_TRANSFER = 118;
+        /// B16.3: `VLDR_VSTR` contíguo não-alargante (perfil M, MVE/Helium) — ver {@link MveLoadStore}.
+        public static final int MVE_LOAD_STORE = 119;
     }
 
     /// Operacao ALU generica.
@@ -2883,5 +2885,34 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VPR_TRANSFER; }
+    }
+
+    /// `VLDR_VSTR` (perfil M, B16.3, MVE/Helium, `target/isa-decode/mve.decode`): move os 128 bits
+    /// de `Qd` de/para memória, byte a byte, respeitando o `elementMask` corrente (lane mascarada
+    /// num load preserva o valor atual do registrador; lane mascarada num store preserva o byte de
+    /// memória — Armadilha 5 da task, predicação é por BYTE, não "tudo ou nada"). Beatwise (mesmo
+    /// gancho de {@link AdvanceVpt} que {@link Vpst}/{@link Vpnot}/{@link Vpsel} usam — instalado
+    /// manualmente por {@code StandardIrBuilder#lift}, já que este `IrOp` chega via o escape hatch
+    /// {@code DecodedInstruction#liftedOp}, fora do switch de `InstructionKind`).
+    record MveLoadStore(
+            /// `Qd` (`0`-`7`, já validado por
+            /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#isValidMveQuadRegister}).
+            int qd,
+            /// `Rn` (base, já recusado se `15`, ou `13` com writeback — UNDEF no decode).
+            int rn,
+            /// Offset com sinal, JÁ escalado pelo tamanho do elemento (`imm7 << size`, nunca `<< 2`
+            /// fixo — Armadilha 2 da task).
+            int offset,
+            /// `true` para `VLDR` (memória → `Qd`); `false` para `VSTR` (`Qd` → memória).
+            boolean load,
+            /// `true` quando `Rn` recebe o endereço pós-offset (writeback SEMPRE incondicional —
+            /// G4, nunca predicado por `elementMask`, mesmo com a instrução totalmente mascarada).
+            boolean writeback,
+            /// `true` para pós-index (endereço de acesso = `Rn` ANTES do offset; `P=0`, `W`
+            /// forçado); `false` para pré-index/offset (endereço de acesso = `Rn ± offset`; `P=1`).
+            boolean postIndexed,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_LOAD_STORE; }
     }
 }

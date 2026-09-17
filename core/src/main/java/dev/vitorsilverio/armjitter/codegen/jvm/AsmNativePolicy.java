@@ -251,6 +251,9 @@ public final class AsmNativePolicy {
             case IrOp.Vpsel ignored -> false;
             case IrOp.AdvanceVpt ignored -> false;
             case IrOp.VprTransfer ignored -> false;
+            // VLDR_VSTR (B16.3, MVE/Helium): sem emissão nativa nesta task ("Não inclui" — decode +
+            // interpretado apenas, mesmo padrão de Vpst/Vpnot/Vpsel/AdvanceVpt/VprTransfer acima).
+            case IrOp.MveLoadStore ignored -> false;
         };
     }
 

@@ -635,9 +635,11 @@ public final class StandardIrBuilder implements IrBuilder {
         // MVE beatwise (perfil M, B16.2): o avanço de VPR/ECI roda depois de QUALQUER instrução
         // MVE, executada ou totalmente predicada (G4) — mesmo gancho que o avanço do IT (abaixo,
         // em ArmInterpreter/StandardIrBlockLifter) instala para o bloco IT, só que aqui é
-        // incondicional por-instrução em vez de por-bloco-corrente. Tasks MVE futuras (B16.3+) só
-        // precisam marcar seu InstructionKind novo em InstructionKind#isMveBeatwise().
-        if (instruction.kind().isMveBeatwise()) {
+        // incondicional por-instrução em vez de por-bloco-corrente. Tasks MVE futuras que cabem nos
+        // campos neutros só precisam marcar seu InstructionKind novo em
+        // InstructionKind#isMveBeatwise(); B16.3 (VLDR_VSTR) chega via o escape hatch `liftedOp`
+        // (LIFTED_IR_OP, fora do switch acima), então o segundo teste cobre esse caminho.
+        if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof IrOp.MveLoadStore) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
         }
 
