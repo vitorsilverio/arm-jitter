@@ -191,6 +191,8 @@ public final class IrBlockExecutor {
                 // MVE_LOAD_STORE (B16.3): pode faultar (ECI reservado) igual VPST/VPNOT/VPSEL —
                 // mesmo pcChanged-gate para o ADVANCE_VPT seguinte.
                 case IrOp.Kind.MVE_LOAD_STORE -> pcChanged |= system.executeMveLoadStore(core, (IrOp.MveLoadStore) op);
+                case IrOp.Kind.MVE_WIDENING_LOAD_STORE ->
+                        pcChanged |= system.executeMveWideningLoadStore(core, (IrOp.MveWideningLoadStore) op);
                     default -> throw new IllegalStateException("IrOp kind desconhecido: " + op.kind());
                 }
             }
@@ -378,6 +380,8 @@ public final class IrBlockExecutor {
             case IrOp.AdvanceVpt advanceVpt -> { system.executeAdvanceVpt(core, advanceVpt); yield false; }
             case IrOp.VprTransfer vprTransfer -> { system.executeVprTransfer(core, vprTransfer); yield false; }
             case IrOp.MveLoadStore mveLoadStore -> system.executeMveLoadStore(core, mveLoadStore);
+            case IrOp.MveWideningLoadStore mveWideningLoadStore ->
+                    system.executeMveWideningLoadStore(core, mveWideningLoadStore);
         };
     }
 

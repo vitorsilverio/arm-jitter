@@ -525,6 +525,9 @@ public final class ArmArchitecture {
                     // Thumb2MveLoadStoreDecoder (B16.3): VLDR_VSTR vive no MESMO espaço de bits que
                     // Thumb2NocpDecoder reivindica (forma 2) — TEM que vir antes (Armadilha 1).
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveLoadStoreDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveWideningLoadStoreDecoder (B16.4): VLDSTB_H/VLDSTB_W/VLDSTH_W vivem no
+                    // MESMO espaço de bits (`111.110x`) — TEM que vir antes (Armadilha 3 da task).
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveWideningLoadStoreDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

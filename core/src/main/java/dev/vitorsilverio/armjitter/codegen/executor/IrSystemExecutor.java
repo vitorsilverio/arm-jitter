@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
@@ -528,6 +529,71 @@ public final class IrSystemExecutor {
                 long value = vfp.element(op.qd(), byteIndex, 0);
                 support.write8Arm7(core, byteAddress, (int) value);
             }
+        }
+        if (op.writeback()) {
+            core.setRegister(op.rn(), base + op.offset());
+        }
+        return false;
+    }
+
+    /// `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (perfil M, B16.4, MVE/Helium): load que alarga (extensão de
+    /// sinal/zero) ou store que estreita (truncamento), predicados por ELEMENTO (não por byte —
+    /// diferente de {@link #executeMveLoadStore}, ver Javadoc de {@link IrOp.MveWideningLoadStore}).
+    /// Usa {@link IrExecutionSupport#readVectorElement}/{@link IrExecutionSupport#writeVectorElement}
+    /// (sem o quirk de rotação de acesso desalinhado do ARM7 — `LDR`/`LDRH`, não aplicável a
+    /// elemento vetorial, mesmo precedente NEON da B13.3) em vez de {@code read8Arm7}, já que aqui o
+    /// elemento tem largura real (`1`/`2` bytes), não sempre `1` como em {@link #executeMveLoadStore}.
+    ///
+    /// No load, distingue duas máscaras (verbatim de `DO_VLDR`, `target/arm/tcg/mve_helper.c`):
+    /// {@link MveVptState#eciMask} sozinho decide se a lane é tocada (beat abandonado = não
+    /// tocada, comportamento UNKNOWN implementado como preservar); dentro disso,
+    /// {@link MveVptState#elementMask} (que já inclui `eciMask`) decide entre carregar de verdade
+    /// ou gravar ZERO (predicado `VPT` falhou, mas o beat está ativo). No store, só
+    /// {@link MveVptState#elementMask} importa (mesmo padrão de {@link #executeMveLoadStore}).
+    ///
+    /// Writeback de `Rn` é SEMPRE incondicional (G4), mesma regra de {@link #executeMveLoadStore}.
+    ///
+    /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
+    public boolean executeMveWideningLoadStore(ArmCore core, IrOp.MveWideningLoadStore op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        int base = core.register(op.rn());
+        int accessAddress = op.postIndexed() ? base : base + op.offset();
+        int vpr = core.vpr().value();
+        int itState = core.cpsr().itState();
+        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int eciMask = MveVptState.eciMask(itState);
+        VfpRegisters vfp = core.vfp();
+        int registerSizeLog2 = op.registerSizeLog2();
+        int memorySizeLog2 = op.memorySizeLog2();
+        int memoryElementBytes = 1 << memorySizeLog2;
+        int elementCount = 16 >>> registerSizeLog2;
+        int address = accessAddress;
+        for (int e = 0; e < elementCount; e++) {
+            int b = e << registerSizeLog2;
+            if (op.load()) {
+                if (((eciMask >>> b) & 1) != 0) {
+                    long value;
+                    if (((fullMask >>> b) & 1) != 0) {
+                        long raw = support.readVectorElement(core, address, memorySizeLog2);
+                        value = op.signed() ? AdvSimdLanes.signExtend(raw, memorySizeLog2) : raw;
+                        value = AdvSimdLanes.truncate(value, registerSizeLog2);
+                    } else {
+                        value = 0;
+                    }
+                    vfp.setElement(op.qd(), e, registerSizeLog2, value);
+                }
+            } else if (((fullMask >>> b) & 1) != 0) {
+                long narrowed = AdvSimdLanes.truncate(vfp.element(op.qd(), e, registerSizeLog2), memorySizeLog2);
+                support.writeVectorElement(core, address, memorySizeLog2, narrowed);
+                core.notifyOrdinaryWrite(address, memoryElementBytes);
+            }
+            address += memoryElementBytes;
         }
         if (op.writeback()) {
             core.setRegister(op.rn(), base + op.offset());

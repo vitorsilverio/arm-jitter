@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(120, kinds.size(), "IrOp.Kind deve ter 120 constantes contíguas");
+        assertEquals(121, kinds.size(), "IrOp.Kind deve ter 121 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -112,8 +112,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // "Não inclui" da B15.2/B15.3/B15.4). B16.2 acrescentou ADVANCE_VPT, VPST, VPNOT, VPSEL,
         // VPR_TRANSFER (+5 — mesmo "Não inclui": decode + interpretado apenas, MVE/Helium fica
         // para o épico A10 tratar depois, dimensão 3 do roadmap). B16.3 acrescentou
-        // MVE_LOAD_STORE (+1, mesmo "Não inclui" de B16.2).
-        assertEquals(54, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // MVE_LOAD_STORE (+1, mesmo "Não inclui" de B16.2). B16.4 acrescentou
+        // MVE_WIDENING_LOAD_STORE (+1, mesmo "Não inclui").
+        assertEquals(55, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -129,6 +130,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VPSEL,
                         IrOp.Kind.VPR_TRANSFER,
                         IrOp.Kind.MVE_LOAD_STORE,
+                        IrOp.Kind.MVE_WIDENING_LOAD_STORE,
                         IrOp.Kind.NEON_FP_CONVERT_PRECISION,
                         IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE,
                         IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG,
@@ -318,6 +320,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.VPSEL -> new IrOp.Vpsel(0, 1, 2, c);
             case IrOp.Kind.VPR_TRANSFER -> new IrOp.VprTransfer(true, 0, c);
             case IrOp.Kind.MVE_LOAD_STORE -> new IrOp.MveLoadStore(0, 1, 0, true, false, false, c);
+            case IrOp.Kind.MVE_WIDENING_LOAD_STORE ->
+                    new IrOp.MveWideningLoadStore(0, 1, 0, 0, 1, true, true, false, false, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

@@ -21,7 +21,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFusedMultiplyAddLongBFloat16, IrOp.NeonFusedMultiplyAddLongByElementBFloat16,
         IrOp.Nocp, IrOp.VfpSysregMemoryTransfer, IrOp.SecureGateway, IrOp.SecureBranchExchange,
         IrOp.VlldmVlstm, IrOp.Vscclrm, IrOp.LoopStart, IrOp.LoopEnd,
-        IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer, IrOp.MveLoadStore {
+        IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer, IrOp.MveLoadStore,
+        IrOp.MveWideningLoadStore {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -213,6 +214,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VPR_TRANSFER = 118;
         /// B16.3: `VLDR_VSTR` contíguo não-alargante (perfil M, MVE/Helium) — ver {@link MveLoadStore}.
         public static final int MVE_LOAD_STORE = 119;
+        /// B16.4: `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (load alargante/store estreitante, perfil M,
+        /// MVE/Helium) — ver {@link MveWideningLoadStore}.
+        public static final int MVE_WIDENING_LOAD_STORE = 120;
     }
 
     /// Operacao ALU generica.
@@ -2914,5 +2918,54 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_LOAD_STORE; }
+    }
+
+    /// `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (perfil M, B16.4, MVE/Helium, `target/isa-decode/mve.decode`):
+    /// load que ALARGA (lê `1 << memorySizeLog2` bytes da memória, estende para
+    /// `1 << registerSizeLog2` bytes na lane de `Qd`) ou store que ESTREITA (trunca cada lane de
+    /// `Qd` para `1 << memorySizeLog2` bytes na memória). Predicação por ELEMENTO (não por byte,
+    /// diferente de {@link MveLoadStore}): a máscara é indexada em passos de
+    /// `1 << registerSizeLog2` (o tamanho do REGISTRADOR — verbatim de `DO_VLDR`/`DO_VSTR`,
+    /// `target/arm/tcg/mve_helper.c`, `for (b = 0, e = 0; b < 16; b += ESIZE, e++)` com
+    /// `ESIZE` = tamanho do registrador), enquanto o ENDEREÇO avança em passos de
+    /// `1 << memorySizeLog2` (`addr += MSIZE`). Beatwise (mesmo gancho de {@link AdvanceVpt} que
+    /// {@link MveLoadStore} usa).
+    ///
+    /// No load, um elemento cujo beat já foi abandonado (bit de `eciMask` desligado) não é tocado
+    /// (comportamento UNKNOWN permitido pelo hardware real, "R_SXTM" — implementado como
+    /// preservar o valor atual da lane); um elemento cujo beat está ativo mas falha o predicado de
+    /// `VPT` (bit de `eciMask` ligado, bit da máscara cheia desligado) grava ZERO na lane — as duas
+    /// máscaras são DISTINTAS aqui (diferente de {@link MveLoadStore}, que usa uma única máscara
+    /// fundida). No store, só a máscara cheia importa: elemento fora dela não é escrito na memória.
+    record MveWideningLoadStore(
+            /// `Qd` (`0`-`7` por construção — `@vldst_wn` extrai só 3 bits, "no D bit").
+            int qd,
+            /// `Rn` (base, `0`-`7` por construção — nunca `13`/`15`, checagem da B16.3 vacuamente
+            /// satisfeita aqui, ver Armadilha 1/item 1 da task).
+            int rn,
+            /// Offset com sinal, JÁ escalado pelo tamanho em MEMÓRIA (`imm7 << memorySizeLog2` —
+            /// achado medido contra `do_ldst` real: é o `msize` da macro `DO_VLDST_WIDE_NARROW`
+            /// que escala, não o tamanho do registrador).
+            int offset,
+            /// Log2 do tamanho do elemento NA MEMÓRIA (`0`=byte, `1`=halfword).
+            int memorySizeLog2,
+            /// Log2 do tamanho do elemento NO REGISTRADOR (`1`=halfword, `2`=word) — sempre maior
+            /// que {@link #memorySizeLog2} (é sempre um alargamento/estreitamento real).
+            int registerSizeLog2,
+            /// `true` para `VLDR*` (memória → `Qd`, com extensão); `false` para `VSTR*` (`Qd` →
+            /// memória, com truncamento). Só `load` pode ter {@link #signed} `false` (`u=1`); um
+            /// store sempre tem `U=0` (recusado no decode, campo aqui é sempre irrelevante).
+            boolean load,
+            /// `true` = estende com SINAL (`u=0`); `false` = estende com ZERO (`u=1`). Ignorado
+            /// quando {@link #load} é `false` (store trunca, não estende).
+            boolean signed,
+            /// `true` quando `Rn` recebe o endereço pós-offset (writeback SEMPRE incondicional —
+            /// G4, mesma regra de {@link MveLoadStore}).
+            boolean writeback,
+            /// `true` para pós-index (`P=0`, `W` forçado); `false` para pré-index/offset (`P=1`).
+            boolean postIndexed,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_WIDENING_LOAD_STORE; }
     }
 }

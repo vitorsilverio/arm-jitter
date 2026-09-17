@@ -637,9 +637,11 @@ public final class StandardIrBuilder implements IrBuilder {
         // em ArmInterpreter/StandardIrBlockLifter) instala para o bloco IT, só que aqui é
         // incondicional por-instrução em vez de por-bloco-corrente. Tasks MVE futuras que cabem nos
         // campos neutros só precisam marcar seu InstructionKind novo em
-        // InstructionKind#isMveBeatwise(); B16.3 (VLDR_VSTR) chega via o escape hatch `liftedOp`
-        // (LIFTED_IR_OP, fora do switch acima), então o segundo teste cobre esse caminho.
-        if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof IrOp.MveLoadStore) {
+        // InstructionKind#isMveBeatwise(); B16.3 (VLDR_VSTR) e B16.4 (VLDSTB_H/VLDSTB_W/VLDSTH_W)
+        // chegam via o escape hatch `liftedOp` (LIFTED_IR_OP, fora do switch acima), então os
+        // testes seguintes cobrem esses caminhos.
+        if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof IrOp.MveLoadStore
+                || instruction.liftedOp() instanceof IrOp.MveWideningLoadStore) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
         }
 

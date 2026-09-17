@@ -47,6 +47,25 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-16, após B16.4 fechar)
+
+**B16.4 FECHADA 2026-09-16** — `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (load alargante/store estreitante, 6
+encodings), o degrau seguinte da B16.3. `Thumb2MveWideningLoadStoreDecoder` novo (registrado antes de
+`Thumb2NocpDecoder`, mesma Armadilha 3 da B16.3). **Achado central confirmado via `WebFetch` do
+`@vldst_wn` real**: `Rn`/`Qd` têm só 3 bits aqui (`bit22` é literal fixo `0`, NÃO o bit alto de `Qd`
+de 4 bits da B16.3 — confirmado por teste dedicado). **Achado que corrige a Aceite da própria task,
+medido contra `DO_VLDR`/`mve_element_mask` reais**: um load alargante grava ZERO nas lanes que falham
+o predicado `VPT` (não preserva, diferente da B16.3) — só lanes de um beat `ECI`-abandonado
+preservam; o store só pula a escrita. Offset escala pelo tamanho em MEMÓRIA (`do_ldst` real), não
+pelo do registrador. `docs/COBERTURA-ISA.md`: zero-diff, CONFIRMADO — mesma Armadilha 7 da B16.2/
+B16.3 (`mve.decode` continua `NOT_IN_ANY_PRESET` até a B16.14). `docs/COBERTURA-JIT.md`: `IrOp.Kind`
+120→121. `mvn -o test` verde (4027; as mesmas 3 falhas pré-existentes) + `truffle` (73) + `install`.
+**G5 completo** nos 5 consumidores. Ver **Resultado** na task.
+
+**Pegáveis a seguir**: `B16.5` (gather/scatter + desentrelaçamento, depende de B16.3 ✅) é o próximo
+degrau natural da escada MVE. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2
+do roadmap.
+
 ## Onde estamos (atualizado 2026-09-16, após B16.3 fechar)
 
 **B16.3 FECHADA 2026-09-16** — `VLDR_VSTR` contíguo não-alargante (6 encodings), o degrau seguinte
