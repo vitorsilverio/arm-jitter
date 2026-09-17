@@ -204,6 +204,13 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveIncrementDup(core, (IrOp.MveIncrementDup) op);
                 case IrOp.Kind.MVE_WRAPPING_INCREMENT_DUP ->
                         pcChanged |= system.executeMveWrappingIncrementDup(core, (IrOp.MveWrappingIncrementDup) op);
+                // B16.6: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_2OP -> pcChanged |= system.executeMveVector2Op(core, (IrOp.MveVector2Op) op);
+                case IrOp.Kind.MVE_VECTOR_2OP_WIDENING ->
+                        pcChanged |= system.executeMveVector2OpWidening(core, (IrOp.MveVector2OpWidening) op);
+                case IrOp.Kind.MVE_VECTOR_CARRY -> pcChanged |= system.executeMveVectorCarry(core, (IrOp.MveVectorCarry) op);
+                case IrOp.Kind.MVE_VECTOR_COMPLEX_ADD ->
+                        pcChanged |= system.executeMveVectorComplexAdd(core, (IrOp.MveVectorComplexAdd) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -410,6 +417,12 @@ public final class IrBlockExecutor {
             case IrOp.MveWrappingIncrementDup wrappingIncrementDup ->
                     system.executeMveWrappingIncrementDup(core, wrappingIncrementDup);
             case IrOp.AdvanceEci advanceEci -> { system.executeAdvanceEci(core, advanceEci); yield false; }
+            case IrOp.MveVector2Op mveVector2Op -> system.executeMveVector2Op(core, mveVector2Op);
+            case IrOp.MveVector2OpWidening mveVector2OpWidening ->
+                    system.executeMveVector2OpWidening(core, mveVector2OpWidening);
+            case IrOp.MveVectorCarry mveVectorCarry -> system.executeMveVectorCarry(core, mveVectorCarry);
+            case IrOp.MveVectorComplexAdd mveVectorComplexAdd ->
+                    system.executeMveVectorComplexAdd(core, mveVectorComplexAdd);
         };
     }
 

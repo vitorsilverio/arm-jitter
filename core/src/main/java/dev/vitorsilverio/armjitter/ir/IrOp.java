@@ -24,7 +24,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.AdvanceVpt, IrOp.Vpst, IrOp.Vpnot, IrOp.Vpsel, IrOp.VprTransfer, IrOp.MveLoadStore,
         IrOp.MveWideningLoadStore, IrOp.MveGatherScatterOffset, IrOp.MveGatherScatterImmediate,
         IrOp.MveInterleavedLoadStore, IrOp.MveIncrementDup, IrOp.MveWrappingIncrementDup,
-        IrOp.AdvanceEci {
+        IrOp.AdvanceEci, IrOp.MveVector2Op, IrOp.MveVector2OpWidening, IrOp.MveVectorCarry,
+        IrOp.MveVectorComplexAdd {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -235,6 +236,18 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.5: avanço pós-instrução SÓ do `ECI` (`mve_update_and_store_eci`), sem tocar o `VPR`
         /// (perfil M, MVE/Helium) — ver {@link AdvanceEci}.
         public static final int ADVANCE_ECI = 126;
+        /// B16.6: vector 2-op inteiro reusando {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp}
+        /// (perfil M, MVE/Helium) — ver {@link MveVector2Op}.
+        public static final int MVE_VECTOR_2OP = 127;
+        /// B16.6: `VMULLP_B`/`VMULLP_T`/`VMULL_BS`/`VMULL_BU`/`VMULL_TS`/`VMULL_TU` (alargante,
+        /// perfil M, MVE/Helium) — ver {@link MveVector2OpWidening}.
+        public static final int MVE_VECTOR_2OP_WIDENING = 128;
+        /// B16.6: `VADC`/`VADCI`/`VSBC`/`VSBCI` (carry encadeado por `FPSCR.C`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorCarry}.
+        public static final int MVE_VECTOR_CARRY = 129;
+        /// B16.6: `VHCADD90`/`VHCADD270`/`VCADD90`/`VCADD270` (soma complexa inteira, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorComplexAdd}.
+        public static final int MVE_VECTOR_COMPLEX_ADD = 130;
     }
 
     /// Operacao ALU generica.
@@ -3144,5 +3157,143 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// padrão de {@link AdvanceVpt}.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.ADVANCE_ECI; }
+    }
+
+    /// Vector 2-op inteiro (perfil M, B16.6, MVE/Helium, `target/isa-decode/mve.decode`, seção
+    /// "Vector 2-op"): `Qd[i] = op(Qn[i], Qm[i])` para cada lane de `1 << esz` bytes de `Q0`-`Q7`,
+    /// PREDICADO por elemento — diferente de {@link dev.vitorsilverio.armjitter.ir.IrOp.NeonThreeSame}
+    /// (NEON de 32 bits, sem predicação), reusa o MESMO {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} (RFC B13.2 D1) via {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameMasked}. Cobre as 34 linhas
+    /// (lógica/aritmética base, min/max/abd/halving/saturantes/deslocamento por vetor, `VRHADD`) que
+    /// já existem no núcleo compartilhado — ver `## Resultado` da task para o inventário completo.
+    /// Beatwise (gancho manual de {@link AdvanceVpt} em `StandardIrBuilder`, mesmo padrão de
+    /// {@link MveLoadStore} desde a B16.3 — chega via o escape hatch {@code
+    /// DecodedInstruction#liftedOp}).
+    record MveVector2Op(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp op,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` é recusado no decoder, MVE não
+            /// tem elemento de 64 bits nesta forma).
+            int esz,
+            /// `Qd` (`0`-`7`, já validado por
+            /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#isValidMveQuadRegister}).
+            int qd,
+            /// `Qn` — na forma `@2op_rev` (deslocamento por vetor) já vem TROCADO com `Qm` pelo
+            /// decoder (achado da task: "Vn e Vm invertidos de propósito" no `mve.decode` real).
+            int qn,
+            /// `Qm` — ver {@link #qn}.
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_2OP; }
+    }
+
+    /// `VMULLP_B`/`VMULLP_T` (polinomial) e `VMULL_BS`/`VMULL_BU`/`VMULL_TS`/`VMULL_TU` (inteiro,
+    /// perfil M, B16.6, MVE/Helium): ALARGA — lê `8 >> esz` elementos de `1 << esz` bytes de `Qn`/
+    /// `Qm` e escreve `Qd` INTEIRO com elementos de `1 << (esz+1)` bytes (dobro da largura) — reusa
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#wideningInterleavedMasked}.
+    /// **Achado real que corrige a suposição inicial**: {@link #top} `false`/`true` (`_B`/`_T`) NÃO
+    /// seleciona metade contígua baixa/alta (padrão `SMULL2`/`UMULL2` do A64) — seleciona lanes
+    /// PARES/ÍMPARES intercaladas da fonte (`le*2 + top`, verbatim de `DO_2OP_L`,
+    /// `target/arm/tcg/mve_helper.c`, confirmado via `WebFetch`). `VMULLP_*` usa {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp#PMULL} — o núcleo precisou generalizar
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#polynomialMultiply8} para largura
+    /// VARIÁVEL (`esz` `0`/`1`, byte/halfword — QEMU nomeia as duas formas `vmullpbh`/`vmullpbw`:
+    /// fonte BYTE produz resultado HALFWORD, fonte HALFWORD produz resultado WORD; MVE não tem forma
+    /// de fonte WORD para `VMULLP`, ao contrário do `VMULL` inteiro), ver
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#polynomialMultiply}. Beatwise (mesmo
+    /// gancho de {@link MveVector2Op}), predicado por byte na granularidade da lane LARGA
+    /// (`mergemask` real também se aplica a esta forma — outro achado que corrige a suposição
+    /// inicial de que só `threeSame` precisaria de máscara).
+    record MveVector2OpWidening(
+            /// Operação alargante a executar — só {@link
+            /// dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp#SMULL}/{@link
+            /// dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp#UMULL}/{@link
+            /// dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp#PMULL} nesta task.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp op,
+            /// `log2` do tamanho do elemento FONTE (`Qn`/`Qm`) em bytes — `0`/`1` (byte/halfword)
+            /// para `VMULLP_*` (`%size_28` decodifica `bit28+1` em `1`/`2`; o esz FONTE real é
+            /// `bit28` diretamente — ver Javadoc da classe); `0`-`2` para `VMULL_*S`/`VMULL_*U`
+            /// (`3` recusado no decoder).
+            int esz,
+            /// `true` para a forma `_T` (lanes ÍMPARES da fonte); `false` para `_B` (lanes PARES) —
+            /// discriminado por `bit12` no encoding real. Ver Javadoc da classe (não é metade
+            /// contígua).
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (fonte, `0`-`7`).
+            int qn,
+            /// `Qm` (fonte, `0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_2OP_WIDENING; }
+    }
+
+    /// `VADC`/`VADCI`/`VSBC`/`VSBCI` (perfil M, B16.6, MVE/Helium): soma/subtração com CARRY
+    /// encadeado por `FPSCR.C` (não `APSR`/`CPSR`) através dos 4 elementos de 32 bits de `Qn`/`Qm`
+    /// (ESIZE fixo em 4 — `size` do encoding é decorativo, sempre `0` nesta forma `@2op_nosz`),
+    /// verbatim de `do_vadc`/`HELPER(mve_vadc)`/`HELPER(mve_vadci)`/`HELPER(mve_vsbc)`/
+    /// `HELPER(mve_vsbci)` (`target/arm/tcg/mve_helper.c`): o carry de SAÍDA de um elemento vira o
+    /// carry de ENTRADA do elemento seguinte, DENTRO da mesma instrução — só elementos ATIVOS
+    /// (bit de `elementMask`) atualizam a cadeia; ao final, `FPSCR.C` recebe o carry final sempre
+    /// que ALGUM elemento estava ativo (`mask & 0x1111`, verificado mesmo quando `updateFlags` seria
+    /// `false` pelo chamador — achado real do QEMU: a checagem FORÇA `true`). Formas `I`
+    /// (`VADCI`/`VSBCI`) ignoram o `FPSCR.C` de ENTRADA (`VADCI` usa `0`; `VSBCI` usa `1`, convenção
+    /// SBC padrão de "sem empréstimo"), mas ainda ESCREVEM o carry de saída. `VSBC`/`VSBCI` invertem
+    /// `Qm` bit a bit antes de somar (`n + ~m + carry_in`, complemento de dois). Beatwise (mesmo
+    /// gancho de {@link MveVector2Op}).
+    record MveVectorCarry(
+            /// `true` para `VADC`/`VADCI` (`Qm` não invertido); `false` para `VSBC`/`VSBCI`
+            /// (`Qm` invertido bit a bit).
+            boolean add,
+            /// `true` para as formas `I` (`VADCI`/`VSBCI` — carry de entrada IGNORADO, `0`/`1` fixo
+            /// conforme {@link #add}); `false` para `VADC`/`VSBC` (carry de entrada = `FPSCR.C`
+            /// atual).
+            boolean immediateCarry,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_CARRY; }
+    }
+
+    /// `VHCADD90`/`VHCADD270`/`VCADD90`/`VCADD270` (perfil M, B16.6, MVE/Helium): soma complexa
+    /// INTEIRA entre lanes ADJACENTES de `Qn`/`Qm` — verbatim de `DO_VCADD`/`DO_VCADD_ALL`
+    /// (`target/arm/tcg/mve_helper.c`): para cada par `(2i, 2i+1)`, a lane PAR do destino combina
+    /// `Qn[2i]` com `Qm[2i+1]` e a lane ÍMPAR combina `Qn[2i+1]` com `Qm[2i]` — o SINAL da combinação
+    /// (soma/subtração) e QUAL lane usa qual sinal dependem de {@link #rotate90}: `90` faz
+    /// PAR=SUBTRAI/ÍMPAR=SOMA, `270` faz PAR=SOMA/ÍMPAR=SUBTRAI (`DO_VCADD_ALL(vcadd90, DO_SUB,
+    /// DO_ADD)`/`DO_VCADD_ALL(vcadd270, DO_ADD, DO_SUB)` reais). {@link #halving} (`VHCADD*`) troca
+    /// soma/subtração planas por {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp#SHADD}/
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp#SHSUB} (SEMPRE assinado — não
+    /// existe forma `VCADD`/`VHCADD` não assinada, diferente de {@link MveVector2Op}). **Não
+    /// confundir com `VCADD90_fp`/`VCADD270_fp` (B16.7, encodings DISTINTOS, núcleo FP separado
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpComplexAdd} — Armadilha 4 da
+    /// task).** Beatwise (mesmo gancho de {@link MveVector2Op}).
+    record MveVectorComplexAdd(
+            /// `true` para `VHCADD90`/`VCADD90`; `false` para `VHCADD270`/`VCADD270` — ver Javadoc
+            /// da classe para qual lane (par/ímpar) soma ou subtrai em cada caso.
+            boolean rotate90,
+            /// `true` para `VHCADD90`/`VHCADD270` (halving, sempre assinado); `false` para
+            /// `VCADD90`/`VCADD270` (soma/subtração plana, sem halving).
+            boolean halving,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` recusado no decoder).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_COMPLEX_ADD; }
     }
 }

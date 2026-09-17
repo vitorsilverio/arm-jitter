@@ -534,6 +534,10 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveGatherScatterDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveInterleavedLoadStoreDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveIncrementDupDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveVector2opDecoder (B16.6): a seção "Vector 2-op" inteira vive no
+                    // MESMO espaço `bits[27:25]=111` que Thumb2NocpDecoder reivindica — TEM que vir
+                    // antes (Armadilha 1 da task).
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveVector2opDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

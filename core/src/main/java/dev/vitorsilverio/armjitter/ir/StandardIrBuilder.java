@@ -645,7 +645,14 @@ public final class StandardIrBuilder implements IrBuilder {
                 || instruction.liftedOp() instanceof IrOp.MveGatherScatterOffset
                 || instruction.liftedOp() instanceof IrOp.MveGatherScatterImmediate
                 || instruction.liftedOp() instanceof IrOp.MveIncrementDup
-                || instruction.liftedOp() instanceof IrOp.MveWrappingIncrementDup) {
+                || instruction.liftedOp() instanceof IrOp.MveWrappingIncrementDup
+                // B16.6: MveVector2Op/MveVector2OpWidening/MveVectorCarry/MveVectorComplexAdd
+                // também chegam via `liftedOp` e são beatwise/predicadas por `VPT` (`mergemask`
+                // real), mesmo padrão dos escapes acima desde B16.3.
+                || instruction.liftedOp() instanceof IrOp.MveVector2Op
+                || instruction.liftedOp() instanceof IrOp.MveVector2OpWidening
+                || instruction.liftedOp() instanceof IrOp.MveVectorCarry
+                || instruction.liftedOp() instanceof IrOp.MveVectorComplexAdd) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
         } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla

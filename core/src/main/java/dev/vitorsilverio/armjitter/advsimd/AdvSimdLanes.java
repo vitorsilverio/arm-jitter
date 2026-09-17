@@ -56,8 +56,16 @@ public final class AdvSimdLanes {
     /// Pública porque `PMULL`/`PMULL2` do A64 (B8.11, alargando sem truncar) reaproveita o mesmo
     /// produto de 15 bits.
     public static long polynomialMultiply8(long a, long b) {
+        return polynomialMultiply(a, b, 8);
+    }
+
+    /// Como {@link #polynomialMultiply8}, mas com largura de operando VARIÁVEL (`bits`) — `VMULLP_B`/
+    /// `VMULLP_T` (MVE/Helium, B16.6) operam sobre halfword/word (`bits` `16`/`32`), diferente do
+    /// NEON A32/A64 (`VMULL.P8`/`PMULL`), que só tem forma byte (`bits=8`, via {@link
+    /// #polynomialMultiply8}). Mesma definição `PolynomialMult` do ARM ARM, só generalizada.
+    public static long polynomialMultiply(long a, long b, int bits) {
         long result = 0;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < bits; i++) {
             if (((b >>> i) & 1) != 0) {
                 result ^= a << i;
             }
@@ -84,35 +92,63 @@ public final class AdvSimdLanes {
 
     /// Satura `value` (matemático, sem wraparound) ao intervalo representável por um elemento de
     /// `esz` bytes, assinado ou não.
-    private static long saturateToElement(BigInteger value, int esz, boolean signed) {
+    /// Resultado de uma saturação, com a bandeira de "saturou de verdade" (B16.6, MVE/Helium:
+    /// `FPSCR.QC` só é setado quando uma lane ATIVA saturou — `mve_helper.c` real, `qc |= sat &
+    /// mask & 1`). O A64/NEON de 32 bits (que NÃO modelam `QC`, ver Javadoc da classe) continuam
+    /// chamando as variantes SEM sufixo `Checked`, que só descartam a bandeira — zero duplicação de
+    /// algoritmo (G3: comportamento deles inalterado).
+    private record Saturation(long value, boolean saturated) {
+    }
+
+    private static Saturation saturateChecked(BigInteger value, int esz, boolean signed) {
         int bits = 8 << esz;
         BigInteger max = signed
                 ? BigInteger.ONE.shiftLeft(bits - 1).subtract(BigInteger.ONE)
                 : BigInteger.ONE.shiftLeft(bits).subtract(BigInteger.ONE);
         BigInteger min = signed ? max.negate().subtract(BigInteger.ONE) : BigInteger.ZERO;
         if (value.compareTo(max) > 0) {
-            return max.longValue();
+            return new Saturation(max.longValue(), true);
         }
         if (value.compareTo(min) < 0) {
-            return min.longValue();
+            return new Saturation(min.longValue(), true);
         }
-        return value.longValue();
+        return new Saturation(value.longValue(), false);
+    }
+
+    private static long saturateToElement(BigInteger value, int esz, boolean signed) {
+        return saturateChecked(value, esz, signed).value();
+    }
+
+    private static Saturation signedSaturatingAddChecked(long sa, long sb, int esz) {
+        return saturateChecked(BigInteger.valueOf(sa).add(BigInteger.valueOf(sb)), esz, true);
     }
 
     private static long signedSaturatingAdd(long sa, long sb, int esz) {
-        return saturateToElement(BigInteger.valueOf(sa).add(BigInteger.valueOf(sb)), esz, true);
+        return signedSaturatingAddChecked(sa, sb, esz).value();
+    }
+
+    private static Saturation signedSaturatingSubChecked(long sa, long sb, int esz) {
+        return saturateChecked(BigInteger.valueOf(sa).subtract(BigInteger.valueOf(sb)), esz, true);
     }
 
     private static long signedSaturatingSub(long sa, long sb, int esz) {
-        return saturateToElement(BigInteger.valueOf(sa).subtract(BigInteger.valueOf(sb)), esz, true);
+        return signedSaturatingSubChecked(sa, sb, esz).value();
+    }
+
+    private static Saturation unsignedSaturatingAddChecked(long a, long b, int esz) {
+        return saturateChecked(unsignedBig(a).add(unsignedBig(b)), esz, false);
     }
 
     private static long unsignedSaturatingAdd(long a, long b, int esz) {
-        return saturateToElement(unsignedBig(a).add(unsignedBig(b)), esz, false);
+        return unsignedSaturatingAddChecked(a, b, esz).value();
+    }
+
+    private static Saturation unsignedSaturatingSubChecked(long a, long b, int esz) {
+        return saturateChecked(unsignedBig(a).subtract(unsignedBig(b)), esz, false);
     }
 
     private static long unsignedSaturatingSub(long a, long b, int esz) {
-        return saturateToElement(unsignedBig(a).subtract(unsignedBig(b)), esz, false);
+        return unsignedSaturatingSubChecked(a, b, esz).value();
     }
 
     /// Deslocamento à esquerda seguro: Java `<<`/`>>>`/`>>` usam o deslocamento MOD 64 para `long`
@@ -142,9 +178,13 @@ public final class AdvSimdLanes {
     }
 
     /// Deslocamento à esquerda por quantidade VARIÁVEL com saturação ao tamanho do elemento.
-    private static long saturatingShiftLeft(long value, int shift, int esz, boolean signed) {
+    private static Saturation saturatingShiftLeftChecked(long value, int shift, int esz, boolean signed) {
         BigInteger v = signed ? BigInteger.valueOf(value) : unsignedBig(value);
-        return saturateToElement(v.shiftLeft(shift), esz, signed);
+        return saturateChecked(v.shiftLeft(shift), esz, signed);
+    }
+
+    private static long saturatingShiftLeft(long value, int shift, int esz, boolean signed) {
+        return saturatingShiftLeftChecked(value, shift, esz, signed).value();
     }
 
     /// "Shift Left and Insert" (`SLI`): desloca `source` à esquerda por `shift` e insere no `Rd`
@@ -169,13 +209,17 @@ public final class AdvSimdLanes {
     }
 
     /// Multiplicação dobrada de alta ordem saturante (`SQDMULH`/`SQRDMULH`) — `esize = 8<<esz`.
-    private static long doublingMultiplyHigh(long sa, long sb, int esz, boolean rounding) {
+    private static Saturation doublingMultiplyHighChecked(long sa, long sb, int esz, boolean rounding) {
         int esize = 8 << esz;
         BigInteger product = BigInteger.valueOf(sa).multiply(BigInteger.valueOf(sb)).shiftLeft(1);
         if (rounding) {
             product = product.add(BigInteger.ONE.shiftLeft(esize - 1));
         }
-        return saturateToElement(product.shiftRight(esize), esz, true);
+        return saturateChecked(product.shiftRight(esize), esz, true);
+    }
+
+    private static long doublingMultiplyHigh(long sa, long sb, int esz, boolean rounding) {
+        return doublingMultiplyHighChecked(sa, sb, esz, rounding).value();
     }
 
     /// `2*sext(a)*sext(b)`, saturado ao tamanho `wideEsz` (LARGO — já é o `esz+1` do chamador) —
@@ -213,13 +257,19 @@ public final class AdvSimdLanes {
 
     /// `SQSHL`/`UQSHL`/`SQRSHL`/`UQRSHL` por registrador: só o lado ESQUERDO (`amount>=0`) satura;
     /// o lado direito (`amount<0`) é um deslocamento comum (com ou sem arredondamento), NUNCA satura.
-    private static long saturatingShiftByRegister(long value, int amount, int esz, boolean signed, boolean rounding) {
+    private static Saturation saturatingShiftByRegisterChecked(long value, int amount, int esz, boolean signed,
+            boolean rounding) {
         if (amount >= 0) {
-            return saturatingShiftLeft(value, amount, esz, signed);
+            return saturatingShiftLeftChecked(value, amount, esz, signed);
         }
         int magnitude = -amount;
-        return rounding ? roundingShiftRight(value, magnitude, signed)
+        long result = rounding ? roundingShiftRight(value, magnitude, signed)
                 : (signed ? arithmeticShiftRight(value, magnitude) : logicalShiftRight(value, magnitude));
+        return new Saturation(result, false);
+    }
+
+    private static long saturatingShiftByRegister(long value, int amount, int esz, boolean signed, boolean rounding) {
+        return saturatingShiftByRegisterChecked(value, amount, esz, signed, rounding).value();
     }
 
     /// Lê a lane `lane` (elemento de `1 << esz` bytes, lane `0` = bits menos significativos) do
@@ -261,7 +311,17 @@ public final class AdvSimdLanes {
             // desde B13.5, `SQRDMLAH`/`SQRDMLSH`), elemento a elemento — mesmo comportamento
             // arquitetural do executor A64.
             long d = element(regs, baseRd, i, esz);
-            long result = switch (op) {
+            long result = computeThreeSame(op, esz, a, b, sa, sb, d);
+            setElement(regs, baseRd, i, esz, truncate(result, esz));
+        }
+    }
+
+    /// Núcleo da operação "three same" — extraído de {@link #threeSame} (B16.6, MVE/Helium) para ser
+    /// reusado TAMBÉM pela forma predicada ({@link #threeSameMasked}), sem duplicar o `switch`
+    /// (RFC B13.2 D1). `a`/`b` já zero-estendidos, `sa`/`sb` já sign-estendidos (o chamador decide
+    /// uma vez, evita recomputar); `d` é o valor ATUAL do destino (só lido pelas operações RMW).
+    private static long computeThreeSame(AdvSimdThreeSameOp op, int esz, long a, long b, long sa, long sb, long d) {
+            return switch (op) {
                 case ADD -> a + b;
                 case SUB -> a - b;
                 case CMGT -> boolMask(sa > sb, esz);
@@ -316,8 +376,121 @@ public final class AdvSimdLanes {
                 case SQRDMLAH -> signedSaturatingAdd(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
                 case SQRDMLSH -> signedSaturatingSub(signExtend(d, esz), doublingMultiplyHigh(sa, sb, esz, true), esz);
             };
-            setElement(regs, baseRd, i, esz, truncate(result, esz));
+    }
+
+    /// Como {@link #computeThreeSame}, mas para os 10 valores de {@link AdvSimdThreeSameOp} que
+    /// podem saturar (B16.6, MVE/Helium: `SQADD`/`UQADD`/`SQSUB`/`UQSUB`/`SQSHL`/`UQSHL`/`SQRSHL`/
+    /// `UQRSHL`/`SQDMULH`/`SQRDMULH`) — devolve a bandeira real de saturação em vez de só o valor.
+    /// Os demais `op` delegam a {@link #computeThreeSame} com `saturated=false` (zero duplicação:
+    /// nenhum deles satura de verdade nesta task — RMW como `SQRDMLAH`/`SQRDMLSH` não aparecem no
+    /// conjunto reusado pela B16.6, ver `## Resultado` da task).
+    private static Saturation computeThreeSameChecked(AdvSimdThreeSameOp op, int esz, long a, long b, long sa,
+            long sb, long d) {
+        return switch (op) {
+            case SQADD -> signedSaturatingAddChecked(sa, sb, esz);
+            case UQADD -> unsignedSaturatingAddChecked(a, b, esz);
+            case SQSUB -> signedSaturatingSubChecked(sa, sb, esz);
+            case UQSUB -> unsignedSaturatingSubChecked(a, b, esz);
+            case SQSHL -> saturatingShiftByRegisterChecked(sa, registerShiftAmount(b), esz, true, false);
+            case UQSHL -> saturatingShiftByRegisterChecked(a, registerShiftAmount(b), esz, false, false);
+            case SQRSHL -> saturatingShiftByRegisterChecked(sa, registerShiftAmount(b), esz, true, true);
+            case UQRSHL -> saturatingShiftByRegisterChecked(a, registerShiftAmount(b), esz, false, true);
+            case SQDMULH -> doublingMultiplyHighChecked(sa, sb, esz, false);
+            case SQRDMULH -> doublingMultiplyHighChecked(sa, sb, esz, true);
+            default -> new Saturation(computeThreeSame(op, esz, a, b, sa, sb, d), false);
+        };
+    }
+
+    /// Mescla `result` em `current` byte a byte, só nos bytes cujo bit correspondente de `laneMask`
+    /// (`0..elementBytes-1`, bit0 = byte menos significativo do elemento) está setado — `mergemask`
+    /// real do QEMU (`target/arm/tcg/mve_helper.c`): byte cujo bit é `0` PRESERVA o valor atual do
+    /// destino (B16.6, MVE/Helium — nunca zera, ao contrário do que a semântica "zeroing" de
+    /// outras arquiteturas SIMD-predicadas poderia sugerir).
+    private static long mergeLaneBytes(long current, long result, int laneMask, int elementBytes) {
+        long merged = current;
+        for (int byteIndex = 0; byteIndex < elementBytes; byteIndex++) {
+            if (((laneMask >>> byteIndex) & 1) != 0) {
+                int shift = byteIndex * 8;
+                long byteMask = 0xFFL << shift;
+                merged = (merged & ~byteMask) | (result & byteMask);
+            }
         }
+        return merged;
+    }
+
+    /// Como {@link #threeSame}, mas PREDICADO por byte (`byteMask`, 1 bit por byte dos 16 bytes de
+    /// um `Q`, mesma convenção de {@link dev.vitorsilverio.armjitter.core.MveVptState#elementMask})
+    /// — MVE/Helium (B16.6): lane cujo byte de máscara está desligado PRESERVA o destino (nem
+    /// computa: `mergemask` real preserva, e pular o cálculo é equivalente e mais barato). Devolve
+    /// `true` se alguma lane ATIVA saturou (`FPSCR.QC`, ver {@link #computeThreeSameChecked}) — só
+    /// o chamador MVE decide o que fazer com isso (o núcleo não conhece `FPSCR`).
+    public static boolean threeSameMasked(AdvSimdRegisterWords regs, AdvSimdThreeSameOp op, int esz, int lanes,
+            int baseRd, int baseRn, int baseRm, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = element(regs, baseRn, i, esz);
+            long b = element(regs, baseRm, i, esz);
+            long sa = signExtend(a, esz);
+            long sb = signExtend(b, esz);
+            long d = element(regs, baseRd, i, esz);
+            Saturation computed = computeThreeSameChecked(op, esz, a, b, sa, sb, d);
+            long merged = mergeLaneBytes(d, truncate(computed.value(), esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+            qc |= computed.saturated();
+        }
+        return qc;
+    }
+
+    /// Soma complexa INTEIRA entre lanes ADJACENTES, predicada por byte (mesma convenção de
+    /// {@link #threeSameMasked}) — `VCADD90`/`VCADD270`/`VHCADD90`/`VHCADD270` (B16.6, MVE/Helium,
+    /// verbatim de `DO_VCADD`/`DO_VCADD_ALL`, `target/arm/tcg/mve_helper.c`): a lane PAR do destino
+    /// combina `Qn[2i]` com `Qm[2i+1]`, a lane ÍMPAR combina `Qn[2i+1]` com `Qm[2i]`.
+    /// `rotate90=true`: PAR subtrai, ÍMPAR soma; `rotate90=false` (270°): PAR soma, ÍMPAR subtrai.
+    /// `halving=true` usa halving assinado (`(sext(a) op sext(b)) >> 1`, sempre — não existe forma
+    /// não assinada real); `halving=false` usa soma/subtração plana (sem sign-extend: o resultado
+    /// truncado é idêntico com ou sem, mas o halving PRECISA do sinal para o deslocamento
+    /// aritmético). Nunca satura (não está entre os 10 `op` de {@link #computeThreeSameChecked}) —
+    /// sem retorno de `FPSCR.QC`.
+    public static void complexAddMasked(AdvSimdRegisterWords regs, boolean rotate90, boolean halving, int esz,
+            int lanes, int baseRd, int baseRn, int baseRm, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int pair = 0; pair < lanes; pair += 2) {
+            long nEven = element(regs, baseRn, pair, esz);
+            long nOdd = element(regs, baseRn, pair + 1, esz);
+            long mEven = element(regs, baseRm, pair, esz);
+            long mOdd = element(regs, baseRm, pair + 1, esz);
+            long evenResult = complexAddCombine(nEven, mOdd, esz, rotate90, halving);
+            long oddResult = complexAddCombine(nOdd, mEven, esz, !rotate90, halving);
+            int evenMask = (byteMask >>> (pair * elementBytes)) & elementByteMask;
+            int oddMask = (byteMask >>> ((pair + 1) * elementBytes)) & elementByteMask;
+            if (evenMask != 0) {
+                long current = element(regs, baseRd, pair, esz);
+                setElement(regs, baseRd, pair, esz, mergeLaneBytes(current, truncate(evenResult, esz), evenMask, elementBytes));
+            }
+            if (oddMask != 0) {
+                long current = element(regs, baseRd, pair + 1, esz);
+                setElement(regs, baseRd, pair + 1, esz, mergeLaneBytes(current, truncate(oddResult, esz), oddMask, elementBytes));
+            }
+        }
+    }
+
+    /// `subtract=true` faz `a - b`; `false` faz `a + b`. `halving` troca a aritmética plana por
+    /// `(sext(a) ± sext(b)) >> 1` (arredondamento aritmético à direita, sempre assinado — ver
+    /// Javadoc de {@link #complexAddMasked}).
+    private static long complexAddCombine(long a, long b, int esz, boolean subtract, boolean halving) {
+        if (halving) {
+            long sa = signExtend(a, esz);
+            long sb = signExtend(b, esz);
+            return subtract ? (sa - sb) >> 1 : (sa + sb) >> 1;
+        }
+        return subtract ? a - b : a + b;
     }
 
     /// Executa uma operação "vector/scalar × indexed element" (ver {@link AdvSimdThreeSameOp}) sobre
@@ -556,29 +729,74 @@ public final class AdvSimdLanes {
             long sa = signExtend(a, esz);
             long sb = signExtend(b, esz);
             long current = element(regs, baseRd, i, wideEsz);
-            results[i] = switch (op) {
-                case SMULL -> sa * sb;
-                case UMULL -> a * b;
-                case SMLAL -> current + sa * sb;
-                case UMLAL -> current + a * b;
-                case SMLSL -> current - sa * sb;
-                case UMLSL -> current - a * b;
-                case SADDL -> sa + sb;
-                case UADDL -> a + b;
-                case SSUBL -> sa - sb;
-                case USUBL -> a - b;
-                case SABAL -> signExtend(current, wideEsz) + Math.abs(sa - sb);
-                case UABAL -> current + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
-                case SABDL -> Math.abs(sa - sb);
-                case UABDL -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
-                case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
-                case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-                case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
-                case PMULL -> polynomialMultiply8(a, b);
-            };
+            results[i] = computeWidening(op, esz, wideEsz, a, b, sa, sb, current);
         }
         for (int i = 0; i < outputElements; i++) {
             setElement(regs, baseRd, i, wideEsz, truncate(results[i], wideEsz));
+        }
+    }
+
+    /// Núcleo da operação "widening" — extraído de {@link #widening} (B16.6, MVE/Helium) para ser
+    /// reusado TAMBÉM pela forma intercalada/predicada ({@link #wideningInterleavedMasked}), sem
+    /// duplicar o `switch` (RFC B13.2 D1).
+    private static long computeWidening(AdvSimdWideningOp op, int esz, int wideEsz, long a, long b, long sa,
+            long sb, long current) {
+        return switch (op) {
+            case SMULL -> sa * sb;
+            case UMULL -> a * b;
+            case SMLAL -> current + sa * sb;
+            case UMLAL -> current + a * b;
+            case SMLSL -> current - sa * sb;
+            case UMLSL -> current - a * b;
+            case SADDL -> sa + sb;
+            case UADDL -> a + b;
+            case SSUBL -> sa - sb;
+            case USUBL -> a - b;
+            case SABAL -> signExtend(current, wideEsz) + Math.abs(sa - sb);
+            case UABAL -> current + (Long.compareUnsigned(a, b) >= 0 ? a - b : b - a);
+            case SABDL -> Math.abs(sa - sb);
+            case UABDL -> Long.compareUnsigned(a, b) >= 0 ? a - b : b - a;
+            case SQDMULL -> saturatingDoublingProduct(sa, sb, wideEsz);
+            case SQDMLAL -> signedSaturatingAdd(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+            case SQDMLSL -> signedSaturatingSub(current, saturatingDoublingProduct(sa, sb, wideEsz), wideEsz);
+            // B16.6: generalizado para largura VARIÁVEL (`8 << esz`) — `VMULLP_B`/`VMULLP_T`
+            // (MVE/Helium) operam sobre halfword/word (`esz` `1`/`2`), diferente do A64/NEON
+            // A32 `PMULL`/`VMULL.P8` (sempre `esz=0`, onde `8 << esz == 8`, comportamento
+            // IDÊNTICO ao antigo `polynomialMultiply8` — G3, zero mudança para os chamadores
+            // existentes).
+            case PMULL -> polynomialMultiply(a, b, 8 << esz);
+        };
+    }
+
+    /// Como {@link #widening}, mas com o padrão de INDEXAÇÃO do MVE (`VMULL_BS`/`VMULL_BU`/
+    /// `VMULL_TS`/`VMULL_TU`/`VMULLP_B`/`VMULLP_T`, B16.6, verbatim de `DO_2OP_L`,
+    /// `target/arm/tcg/mve_helper.c`): a lane LARGA de saída `le` lê a lane ESTREITA `le*2 +
+    /// (top?1:0)` de `Qn`/`Qm` — **achado real que corrige a suposição inicial da task**: "bottom"/
+    /// "top" aqui significa lanes PARES/ÍMPARES intercaladas, **não** metade contígua baixa/alta
+    /// como `SMULL2`/`UMULL2` do A64 (confirmado via `WebFetch` de `DO_2OP_L`, não a suposição óbvia
+    /// por analogia). Predicado por byte na granularidade da lane LARGA (mesma convenção de
+    /// {@link #threeSameMasked}) — `mergemask` real também se aplica aqui, ao contrário do que a
+    /// ausência de menção no achado inicial sugeria.
+    public static void wideningInterleavedMasked(AdvSimdRegisterWords regs, AdvSimdWideningOp op, int esz,
+            int outputElements, boolean top, int baseRd, int baseRn, int baseRm, int byteMask) {
+        int wideEsz = esz + 1;
+        int wideElementBytes = 1 << wideEsz;
+        int wideElementByteMask = (1 << wideElementBytes) - 1;
+        int sourceOffset = top ? 1 : 0;
+        for (int le = 0; le < outputElements; le++) {
+            int laneMask = (byteMask >>> (le * wideElementBytes)) & wideElementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            int sourceLane = le * 2 + sourceOffset;
+            long a = element(regs, baseRn, sourceLane, esz);
+            long b = element(regs, baseRm, sourceLane, esz);
+            long sa = signExtend(a, esz);
+            long sb = signExtend(b, esz);
+            long current = element(regs, baseRd, le, wideEsz);
+            long result = computeWidening(op, esz, wideEsz, a, b, sa, sb, current);
+            long merged = mergeLaneBytes(current, truncate(result, wideEsz), laneMask, wideElementBytes);
+            setElement(regs, baseRd, le, wideEsz, merged);
         }
     }
 

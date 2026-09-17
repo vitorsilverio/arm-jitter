@@ -47,6 +47,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, após B16.6 fechar)
+
+**B16.6 FECHADA 2026-09-17** — vector 2-op inteiro (lógica, aritmética, min/max/abd/halving,
+saturantes, deslocamento por vetor `@2op_rev`, `VMULL*`/`VMULLP*` alargante e as formas com carry/
+soma complexa `VADC`/`VADCI`/`VSBC`/`VSBCI`/`VHCADD`/`VCADD`), 48 encodings. `Thumb2MveVector2opDecoder`
+novo, registrado antes de `Thumb2NocpDecoder`. **34/48 reusam `AdvSimdThreeSameOp` direto** (zero
+código novo de aritmética); 14 exigiram entradas novas no núcleo (`AdvSimdLanes#wideningInterleavedMasked`/
+`complexAddMasked`, executor dedicado para `VADC`/`VSBC`). **2 achados reais que corrigem a
+suposição inicial da task** (medidos contra `DO_2OP_L`/`mve_helper.c` reais via `WebFetch`):
+`VMULL_B*`/`VMULL_T*`/`VMULLP_B`/`VMULLP_T` selecionam lanes PARES/ÍMPARES intercaladas da fonte
+(`le*2+top`), NÃO metade contígua como `SMULL2` do A64 — e essas mesmas formas TAMBÉM são
+predicadas (`mergemask` real), não só as `threeSame`. `FPSCR.QC` (bit 27) novo, setado só quando
+lane ATIVA satura. `docs/COBERTURA-ISA.md` zero-diff, CONFIRMADO (mesma Armadilha 7 de B16.2-B16.5).
+`docs/COBERTURA-JIT.md`: `IrOp.Kind` 127→131. `mvn -o test` verde (4112; as mesmas 3 falhas
+pré-existentes) + `truffle` (73) + `install`. **G5 completo** nos 5 consumidores. Ver **Resultado**
+na task.
+
+**Pegáveis a seguir**: `B16.7` (vector 2-op FP + `VSHLL` T2, depende de B16.6 ✅) é o próximo degrau
+natural da escada MVE. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap.
+
 ## Onde estamos (atualizado 2026-09-17, após B16.5 fechar)
 
 **B16.5 FECHADA 2026-09-17** — gather/scatter por vetor de offsets (`VLDR_S_sg`/`VLDR_U_sg`/

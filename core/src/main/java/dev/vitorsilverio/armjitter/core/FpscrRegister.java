@@ -20,6 +20,12 @@ public final class FpscrRegister {
     public static final int CARRY_FLAG = 1 << 29;
     /// Bit V do FPSCR (resultado de comparação: sem ordem/NaN).
     public static final int OVERFLOW_FLAG = 1 << 28;
+    /// Bit QC do FPSCR (`bit 27`, saturação cumulativa — B16.6, MVE/Helium: `FPSCR.QC` seta quando
+    /// alguma lane ATIVA de uma operação vetorial saturante MVE satura de verdade; ver
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameMasked}). O caminho
+    /// AdvSIMD/NEON não-MVE (A64/NEON A32) NUNCA seta este bit — decisão consciente registrada em
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp}, preservada aqui (G3).
+    public static final int QC_FLAG = 1 << 27;
     /// Bit DN do FPSCR (default NaN mode). Aceito e armazenado, mas sem efeito observável —
     /// a semântica de NaN deste core já é a do Java (payload propagado bit a bit), documentado
     /// aqui em vez de implementado como um modo à parte.
@@ -98,6 +104,19 @@ public final class FpscrRegister {
     /// Retorna `true` quando V esta setado.
     public boolean v() {
         return (value & OVERFLOW_FLAG) != 0;
+    }
+
+    /// Retorna `true` quando QC está setado (saturação cumulativa MVE — ver Javadoc de
+    /// {@link #QC_FLAG}).
+    public boolean qc() {
+        return (value & QC_FLAG) != 0;
+    }
+
+    /// Seta QC (write-1, nunca limpa — mesma semântica "sticky" do QEMU real: só é limpo por
+    /// escrita explícita de `0` no `FPSCR`, nunca automaticamente por uma instrução MVE que não
+    /// saturou).
+    public void orQc() {
+        value |= QC_FLAG;
     }
 
     /// Atualiza os flags NZCV de comparação de uma vez, a partir do valor compactado

@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpsrRegister;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.core.MProfileException;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.core.MveVptState;
@@ -993,5 +994,148 @@ public final class IrSystemExecutor {
             return;
         }
         core.cpsr().setItState(MveVptState.advanceEciOnly(core.cpsr().itState()));
+    }
+
+    /// Vector 2-op inteiro (perfil M, B16.6, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#threeSameMasked}) — a MESMA função que `IrNeonExecutor`/executor A64
+    /// chamam via {@link AdvSimdLanes#threeSame} para o caminho NÃO predicado (RFC B13.2 D1). As 12
+    /// formas saturantes setam `FPSCR.QC` só quando alguma lane ATIVA saturou de verdade (ver
+    /// Javadoc de {@link dev.vitorsilverio.armjitter.core.FpscrRegister#QC_FLAG}).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVector2Op(ArmCore core, IrOp.MveVector2Op op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.threeSameMasked(vfp, op.op(), esz, lanes, baseRd, baseRn, baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VMULLP_B`/`VMULLP_T`/`VMULL_BS`/`VMULL_BU`/`VMULL_TS`/`VMULL_TU` (perfil M, B16.6,
+    /// MVE/Helium): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#wideningInterleavedMasked}).
+    /// Nenhuma destas seis satura (não estão entre os 10 `op` saturantes de {@link
+    /// AdvSimdLanes#threeSameMasked} — `SMULL`/`UMULL`/`PMULL` nunca saturam por construção), sem
+    /// `FPSCR.QC`.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVector2OpWidening(ArmCore core, IrOp.MveVector2OpWidening op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.wideningInterleavedMasked(vfp, op.op(), esz, outputElements, op.top(), baseRd, baseRn, baseRm,
+                mask);
+        return false;
+    }
+
+    /// `VADC`/`VADCI`/`VSBC`/`VSBCI` (perfil M, B16.6, MVE/Helium): soma/subtração com carry
+    /// encadeado por `FPSCR.C` através dos 4 elementos de 32 bits de `Qn`/`Qm` — verbatim de
+    /// `do_vadc` (`target/arm/tcg/mve_helper.c`, ver Javadoc de {@link IrOp.MveVectorCarry}). ESIZE
+    /// fixo em 4 bytes (não usa {@link AdvSimdLanes#threeSameMasked}: o carry ENCADEADO entre
+    /// lanes, que só avança em lanes ATIVAS, não é uma operação "three same" independente por lane).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorCarry(ArmCore core, IrOp.MveVectorCarry op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        final int esz = 2; // ESIZE fixo em 4 bytes (word) — `size` do encoding é decorativo aqui.
+        final int elementBytes = 1 << esz;
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        FpscrRegister fpscr = core.fpscr();
+        boolean carry = op.immediateCarry() ? !op.add() : fpscr.c();
+        boolean anyActive = false;
+        int invert = op.add() ? 0 : -1;
+        for (int i = 0; i < 4; i++) {
+            int laneMask = (mask >>> (i * elementBytes)) & 0xF;
+            long n = AdvSimdLanes.element(vfp, baseRn, i, esz);
+            long m = AdvSimdLanes.element(vfp, baseRm, i, esz);
+            long sum = (carry ? 1L : 0L) + (n & 0xFFFF_FFFFL) + ((m ^ invert) & 0xFFFF_FFFFL);
+            if (laneMask != 0) {
+                anyActive = true;
+                carry = ((sum >>> 32) & 1) != 0;
+            }
+            long current = AdvSimdLanes.element(vfp, baseRd, i, esz);
+            long merged = mergeMveCarryLane(current, sum, laneMask, elementBytes);
+            AdvSimdLanes.setElement(vfp, baseRd, i, esz, merged);
+        }
+        if (anyActive) {
+            fpscr.setNzcv(carry ? FpscrRegister.CARRY_FLAG : 0);
+        }
+        return false;
+    }
+
+    /// Mescla `result` (32 bits crus, só os 4 bytes baixos usados) em `current` byte a byte —
+    /// mesma convenção de `mergemask`/{@link AdvSimdLanes#threeSameMasked} usada por
+    /// {@link #executeMveVectorCarry} (duplicado aqui em vez de reusar `mergeLaneBytes`, privado ao
+    /// núcleo — G6, sem número mágico: `0xFFL << (byteIndex*8)` é a mesma fórmula documentada lá).
+    private static long mergeMveCarryLane(long current, long result, int laneMask, int elementBytes) {
+        long merged = current;
+        for (int byteIndex = 0; byteIndex < elementBytes; byteIndex++) {
+            if (((laneMask >>> byteIndex) & 1) != 0) {
+                long byteMask = 0xFFL << (byteIndex * 8);
+                merged = (merged & ~byteMask) | (result & byteMask);
+            }
+        }
+        return merged;
+    }
+
+    /// `VHCADD90`/`VHCADD270`/`VCADD90`/`VCADD270` (perfil M, B16.6, MVE/Helium): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#complexAddMasked}). Nunca satura, sem `FPSCR.QC`.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorComplexAdd(ArmCore core, IrOp.MveVectorComplexAdd op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.complexAddMasked(vfp, op.rotate90(), op.halving(), esz, lanes, baseRd, baseRn, baseRm, mask);
+        return false;
     }
 }

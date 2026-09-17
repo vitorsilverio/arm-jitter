@@ -265,6 +265,12 @@ public final class AsmNativePolicy {
             case IrOp.MveIncrementDup ignored -> false;
             case IrOp.MveWrappingIncrementDup ignored -> false;
             case IrOp.AdvanceEci ignored -> false;
+            // Vector 2-op inteiro, alargante, carry e soma complexa (B16.6, MVE/Helium): mesmo
+            // padrão acima, sem emissão nativa nesta task.
+            case IrOp.MveVector2Op ignored -> false;
+            case IrOp.MveVector2OpWidening ignored -> false;
+            case IrOp.MveVectorCarry ignored -> false;
+            case IrOp.MveVectorComplexAdd ignored -> false;
         };
     }
 
