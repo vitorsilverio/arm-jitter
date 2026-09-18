@@ -274,7 +274,11 @@ class IsaCoverageReportA64CurationGuardTest {
     /// `CRC32`/`CRC32C` são o outro lado do mesmo achado: `·` só em `ARMv8.0-A` (onde `FEAT_CRC32` é
     /// opcional) e trabalho pendente de `ARMv8.1-A` em diante — não `·` nas 16, como o `*` fazia.
     @Test
-    void crc32IsPendingWorkFromArmv81aOnwards() {
+    void crc32IsImplementedFromArmv81aOnwards() {
+        // Era "pending work" quando escrito (E12); o decode de CRC32/CRC32C foi implementado desde
+        // então — a curadoria (`require(Aarch64Feature.CRC32, ...)`) segue certa (`·` só em
+        // ARMv8.0-A, onde a feature é opcional), só o estado esperado nas colunas restantes mudou
+        // de "ainda falta implementar" para "real, medido".
         List<TableRow> crc = rows.stream()
                 .filter(r -> r.name().equals("CRC32") || r.name().equals("CRC32C"))
                 .toList();
@@ -283,8 +287,8 @@ class IsaCoverageReportA64CurationGuardTest {
             assertEquals(NOT_APPLICABLE, row.cells().get(0),
                     row.name() + ": FEAT_CRC32 é opcional em ARMv8.0-A");
             for (int i = 1; i < COLUMNS.size(); i++) {
-                assertEquals(MISSING, row.cells().get(i),
-                        row.name() + " @ " + COLUMNS.get(i) + ": obrigatória de ARMv8.1-A em diante");
+                assertEquals(SUPPORTED, row.cells().get(i),
+                        row.name() + " @ " + COLUMNS.get(i) + ": obrigatória e implementada de ARMv8.1-A em diante");
             }
         }
     }

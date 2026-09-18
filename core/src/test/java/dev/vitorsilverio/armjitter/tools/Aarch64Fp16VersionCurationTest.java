@@ -88,10 +88,23 @@ final class Aarch64Fp16VersionCurationTest {
         }
     }
 
-    // ─── não-vazamento: nenhuma linha curada é hoje ✅, e cada chave casa uma linha REAL da tabela ─
+    // ─── não-vazamento: nenhuma linha curada mostra ✅ numa coluna SEM a feature, e cada chave ────
+    // ─── casa uma linha REAL da tabela. As colunas COM a feature podem (e hoje devem) ser ✅ reais ─
+    // ─── — o decode de FEAT_FP16/FEAT_FHM foi implementado depois de B19.5.2 escrever esta ────────
+    // ─── curadoria; o invariante que importa é a coluna certa, não "nunca implementado". ──────────
+
+    /// Mesma ordem de 16 colunas de {@code docs/COBERTURA-ISA.md`} (ARMv8.0-A…ARMv9.5-A) que
+    /// {@link IsaCoverageReport#AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE} indexa por posição.
+    private static final List<Aarch64Architecture> COLUMN_ARCHITECTURES = List.of(
+            Aarch64Architecture.ARMV8_0_A, Aarch64Architecture.ARMV8_1_A, Aarch64Architecture.ARMV8_2_A,
+            Aarch64Architecture.ARMV8_3_A, Aarch64Architecture.ARMV8_4_A, Aarch64Architecture.ARMV8_5_A,
+            Aarch64Architecture.ARMV8_6_A, Aarch64Architecture.ARMV8_7_A, Aarch64Architecture.ARMV8_8_A,
+            Aarch64Architecture.ARMV8_9_A, Aarch64Architecture.ARMV9_0_A, Aarch64Architecture.ARMV9_1_A,
+            Aarch64Architecture.ARMV9_2_A, Aarch64Architecture.ARMV9_3_A, Aarch64Architecture.ARMV9_4_A,
+            Aarch64Architecture.ARMV9_5_A);
 
     @Test
-    void curedLines_areNotCurrentlySupported_andEachMatchesARealTableRow() throws IOException {
+    void curedLines_areNeverSupportedInAColumnThatLacksTheFeature_andEachMatchesARealTableRow() throws IOException {
         List<String[]> rows = readAarch64Table(); // [name, "st|st|..."], na ordem do inventário
         Map<String, Integer> occurrence = new LinkedHashMap<>();
         Map<String, List<String>> statusesByKey = new LinkedHashMap<>();
@@ -101,36 +114,47 @@ final class Aarch64Fp16VersionCurationTest {
         }
 
         List<String> missingFromTable = new ArrayList<>();
-        List<String> wronglySupported = new ArrayList<>();
-        for (String key : IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.keySet()) {
+        List<String> leakedIntoInapplicableColumn = new ArrayList<>();
+        for (Map.Entry<String, Aarch64Feature> entry
+                : IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.entrySet()) {
+            String key = entry.getKey();
             List<String> statuses = statusesByKey.get(key);
             if (statuses == null) {
                 missingFromTable.add(key);
                 continue;
             }
-            if (statuses.contains("✅")) { // ✅
-                wronglySupported.add(key + " -> " + statuses);
+            for (int i = 0; i < COLUMN_ARCHITECTURES.size(); i++) {
+                if (!COLUMN_ARCHITECTURES.get(i).has(entry.getValue()) && statuses.get(i).contains("✅")) {
+                    leakedIntoInapplicableColumn.add(key + " @ col" + i + " -> " + statuses.get(i));
+                }
             }
         }
         assertTrue(missingFromTable.isEmpty(), "chaves sem linha correspondente no inventário: " + missingFromTable);
-        assertTrue(wronglySupported.isEmpty(),
-                "curar estas linhas apagaria cobertura ✅ real (usar OCORRÊNCIA, não NOME): " + wronglySupported);
+        assertTrue(leakedIntoInapplicableColumn.isEmpty(),
+                "curadoria deixou ✅ vazar para coluna sem a feature exigida: " + leakedIntoInapplicableColumn);
     }
 
     @Test
-    void everyCuredLine_isCurrentlyMissingOrNotApplicable_never_something_else() throws IOException {
-        // Reforço do anterior: os únicos estados aceitáveis HOJE para uma linha curada são ❌ (será
-        // ·/❌ conforme a versão) ou · (as 12 escondidas pela TSV, que passam a ❌ de v8.2+).
+    void everyCuredLine_isNotApplicableExactlyWhereTheArchitectureLacksTheFeature() throws IOException {
+        // Reforço do anterior: em toda coluna SEM a feature exigida a célula tem que ser `·`
+        // (nunca ❌ cru nem ✅) — é exatamente isso que a curadoria por ocorrência existe para
+        // garantir. Nas colunas COM a feature qualquer estado real (✅/❌) é aceitável.
         List<String[]> rows = readAarch64Table();
         Map<String, Integer> occurrence = new LinkedHashMap<>();
-        Map<String, String> flatByKey = new LinkedHashMap<>();
+        Map<String, List<String>> statusesByKey = new LinkedHashMap<>();
         for (String[] row : rows) {
             int occ = occurrence.merge(row[0], 1, Integer::sum);
-            flatByKey.put(row[0] + "#" + occ, row[1]);
+            statusesByKey.put(row[0] + "#" + occ, List.of(row[1].split("\\|", -1)));
         }
-        for (String key : IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.keySet()) {
-            String flat = flatByKey.get(key);
-            assertFalse(flat.contains("✅") || flat.contains("⚠"), key + " tem ✅/⚠️: " + flat);
+        for (Map.Entry<String, Aarch64Feature> entry
+                : IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE.entrySet()) {
+            List<String> statuses = statusesByKey.get(entry.getKey());
+            for (int i = 0; i < COLUMN_ARCHITECTURES.size(); i++) {
+                if (!COLUMN_ARCHITECTURES.get(i).has(entry.getValue())) {
+                    assertEquals("·", statuses.get(i),
+                            entry.getKey() + " @ col" + i + " deveria ser não-aplicável (·): " + statuses);
+                }
+            }
         }
     }
 
