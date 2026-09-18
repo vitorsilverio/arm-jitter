@@ -1,6 +1,9 @@
 package dev.vitorsilverio.armjitter.core;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -18,6 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MveVectorShiftNarrowAndCarryExecutionTest {
     private static final int CODE_BASE = 0x100;
     private static final int MEMORY_SIZE = 0x8000;
+    /// Bit `INVSTATE` do `UFSR` — `bit[1]` do `UFSR`, byte alto do `CFSR` (mesma constante de
+    /// `MvePredicationTest`).
+    private static final int CFSR_UFSR_INVSTATE_BIT = 1 << 17;
+    private static final int USAGE_FAULT_VECTOR_ADDRESS = 4 * MProfileException.USAGE_FAULT.number();
+    private static final int USAGE_FAULT_HANDLER_PC = 0x2000;
 
     private static ArmCore newCore() {
         TestAddressSpace memory = new TestAddressSpace(MEMORY_SIZE);
@@ -254,5 +262,128 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         // Com shift=32, elemento0 recebe o Rdm ANTIGO inteiro; Rdm novo recebe o elemento0 ANTIGO.
         assertEquals(0xDEADBEEF, (int) core.vfp().element(1, 0, 2));
         assertEquals(0x1234_5678, core.register(0));
+    }
+
+    @Test
+    void vshlcInactiveLanesPreserveDestinationContentUnchanged() {
+        ArmCore core = newCore();
+        // Qd words: [0]=1 (ATIVO), [1..3]=sentinelas não-zero que NÃO podem mudar se mascaradas.
+        core.vfp().setQ(1, 0xDEADBEEF_00000001L, 0x12345678_CAFEBABEL);
+        core.setRegister(0, 0xF);
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x000F); // só elemento0 (beat A0) ativo.
+        // VSHLC: imm=4, Qd=1, Rdm=R0.
+        int r = rawVshlc(4, 1, 0);
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(0x1F, (int) core.vfp().element(1, 0, 2), "elemento0 ATIVO: (1<<4)|(0xF&0xF)");
+        assertEquals(0xDEADBEEF, (int) core.vfp().element(1, 1, 2), "elemento1 mascarado: PRESERVADO");
+        assertEquals(0xCAFEBABE, (int) core.vfp().element(1, 2, 2), "elemento2 mascarado: PRESERVADO");
+        assertEquals(0x12345678, (int) core.vfp().element(1, 3, 2), "elemento3 mascarado: PRESERVADO");
+    }
+
+    // ── Rounding também se aplica às 3 formas SATURANTES que arredondam (gap: só SHRN/RSHRN tinham
+    // teste de execução de arredondamento; VQRSHRN_S/_U/VQRSHRUN só tinham teste de DECODE) ────────
+
+    @Test
+    void vqrshrnSRoundsDifferentlyThanVqshrnSForSameOperand() {
+        // wide halfword[0] = 3, shift efetivo = 1 (campo cru = 7): truncar (VQSHRN_S) dá 1 (3>>1);
+        // arredondar (VQRSHRN_S) dá 2 ((3+1)>>1) — nenhum dos dois satura, isola só o arredondamento.
+        ArmCore truncCore = newCore();
+        truncCore.vfp().setQ(3, 3L, 0L);
+        int vqshrnS = rawNarrow(0, 0, 7, 0, 0, 0, 1, 3); // U=0,bit7=0,bit0=0 -> VQSHRN_S.
+        put32(truncCore, CODE_BASE, vqshrnS);
+        truncCore.step();
+        assertEquals(1, truncCore.vfp().element(1, 0, 0), "VQSHRN_S trunca: 3>>1 = 1");
+        assertFalse(truncCore.fpscr().qc());
+
+        ArmCore roundCore = newCore();
+        roundCore.vfp().setQ(3, 3L, 0L);
+        int vqrshrnS = rawNarrow(0, 0, 7, 0, 0, 1, 1, 3); // U=0,bit7=0,bit0=1 -> VQRSHRN_S.
+        put32(roundCore, CODE_BASE, vqrshrnS);
+        roundCore.step();
+        assertEquals(2, roundCore.vfp().element(1, 0, 0), "VQRSHRN_S arredonda: (3+1)>>1 = 2");
+        assertFalse(roundCore.fpscr().qc());
+    }
+
+    @Test
+    void vqrshrnURoundsDifferentlyThanVqshrnUForSameOperand() {
+        // Mesmo operando/deslocamento da forma S, agora U=1 (unsigned): VQSHRN_U trunca, VQRSHRN_U
+        // arredonda — confirma que o mapeamento de bits também alcança UQSHRN/UQRSHRN, não só os
+        // signed.
+        ArmCore truncCore = newCore();
+        truncCore.vfp().setQ(3, 3L, 0L);
+        int vqshrnU = rawNarrow(1, 0, 7, 0, 0, 0, 1, 3); // U=1,bit7=0,bit0=0 -> VQSHRN_U.
+        put32(truncCore, CODE_BASE, vqshrnU);
+        truncCore.step();
+        assertEquals(1, truncCore.vfp().element(1, 0, 0), "VQSHRN_U trunca: 3>>1 = 1");
+
+        ArmCore roundCore = newCore();
+        roundCore.vfp().setQ(3, 3L, 0L);
+        int vqrshrnU = rawNarrow(1, 0, 7, 0, 0, 1, 1, 3); // U=1,bit7=0,bit0=1 -> VQRSHRN_U.
+        put32(roundCore, CODE_BASE, vqrshrnU);
+        roundCore.step();
+        assertEquals(2, roundCore.vfp().element(1, 0, 0), "VQRSHRN_U arredonda: (3+1)>>1 = 2");
+    }
+
+    @Test
+    void vqrshrunRoundsDifferentlyThanVqshrunForSameOperand() {
+        // wide halfword[0] = 1 (signed, positivo), shift efetivo = 1: truncar (VQSHRUN) dá 0 (1>>1);
+        // arredondar (VQRSHRUN) dá 1 ((1+1)>>1) — confirma que o arredondamento chega à ÚNICA forma
+        // signed->unsigned que também arredonda.
+        ArmCore truncCore = newCore();
+        truncCore.vfp().setQ(3, 1L, 0L);
+        int vqshrun = rawNarrow(0, 0, 7, 0, 1, 0, 1, 3); // U=0,bit7=1,bit0=0 -> VQSHRUN.
+        put32(truncCore, CODE_BASE, vqshrun);
+        truncCore.step();
+        assertEquals(0, truncCore.vfp().element(1, 0, 0), "VQSHRUN trunca: 1>>1 = 0");
+
+        ArmCore roundCore = newCore();
+        roundCore.vfp().setQ(3, 1L, 0L);
+        int vqrshrun = rawNarrow(1, 0, 7, 0, 1, 0, 1, 3); // U=1,bit7=1,bit0=0 -> VQRSHRUN.
+        put32(roundCore, CODE_BASE, vqrshrun);
+        roundCore.step();
+        assertEquals(1, roundCore.vfp().element(1, 0, 0), "VQRSHRUN arredonda: (1+1)>>1 = 1");
+    }
+
+    // ── ECI reservado: USAGE_FAULT com UFSR.INVSTATE (via IrOp direto — inalcançável pelo decode
+    // real deste emulador, mesmo padrão de `MvePredicationTest#reservedEciEntersUsageFaultWithInvstateSet`) ─
+
+    @Test
+    void reservedEciEntersUsageFaultWithInvstateSetForNarrowingFamily() {
+        ArmCore core = newCore();
+        ((TestAddressSpace) core.memory()).put32(USAGE_FAULT_VECTOR_ADDRESS, USAGE_FAULT_HANDLER_PC | 1);
+        MProfileExceptionModel model = new MProfileExceptionModel();
+        core.setExceptionModel(model);
+        core.cpsr().setEci(3); // valor reservado.
+        int pcBefore = core.programCounter();
+        IrOp.MveVectorShiftNarrowImmediateInterleaved op = new IrOp.MveVectorShiftNarrowImmediateInterleaved(
+                AdvSimdShiftNarrowOp.SHRN, 0, 1, false, 1, 3, Condition.AL);
+
+        boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, pcBefore);
+
+        assertTrue(pcChanged);
+        assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
+        assertEquals(CFSR_UFSR_INVSTATE_BIT, model.cfsr() & CFSR_UFSR_INVSTATE_BIT);
+    }
+
+    @Test
+    void reservedEciEntersUsageFaultWithInvstateSetForVshlc() {
+        ArmCore core = newCore();
+        ((TestAddressSpace) core.memory()).put32(USAGE_FAULT_VECTOR_ADDRESS, USAGE_FAULT_HANDLER_PC | 1);
+        MProfileExceptionModel model = new MProfileExceptionModel();
+        core.setExceptionModel(model);
+        core.cpsr().setEci(6); // outro valor reservado (3/6/7-15).
+        int pcBefore = core.programCounter();
+        IrOp.MveVectorShiftLeftCarry op = new IrOp.MveVectorShiftLeftCarry(4, 1, 0, Condition.AL);
+
+        boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, pcBefore);
+
+        assertTrue(pcChanged);
+        assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
+        assertEquals(CFSR_UFSR_INVSTATE_BIT, model.cfsr() & CFSR_UFSR_INVSTATE_BIT);
     }
 }
