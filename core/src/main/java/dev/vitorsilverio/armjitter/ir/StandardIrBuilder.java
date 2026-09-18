@@ -683,7 +683,12 @@ public final class StandardIrBuilder implements IrBuilder {
                 || instruction.liftedOp() instanceof IrOp.MveVectorScalarWidening
                 || instruction.liftedOp() instanceof IrOp.MveVectorFpScalar
                 || instruction.liftedOp() instanceof IrOp.MveVectorFpScalarFma
-                || instruction.liftedOp() instanceof IrOp.MveVectorScalarSpecial) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorScalarSpecial
+                // B16.11: VSHRNB/T, VRSHRNB/T, VQSHRNB/T_S, VQSHRNB/T_U, VQSHRUNB/T, VQRSHRNB/T_S,
+                // VQRSHRNB/T_U, VQRSHRUNB/T e VSHLC — mesmo padrão acima (o helper real, incluindo
+                // `HELPER(mve_vshlc)`, chama `mve_advance_vpt` no fim).
+                || instruction.liftedOp() instanceof IrOp.MveVectorShiftNarrowImmediateInterleaved
+                || instruction.liftedOp() instanceof IrOp.MveVectorShiftLeftCarry) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
             if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
                 block.add(new IrOp.Vpst(compare.mask(), compare.condition()));

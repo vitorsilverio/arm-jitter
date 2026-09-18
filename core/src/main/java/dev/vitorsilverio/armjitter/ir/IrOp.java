@@ -31,7 +31,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate,
         IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar, IrOp.MveVectorScalar, IrOp.MveVectorScalarWidening,
         IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial,
-        IrOp.MveVectorShiftImmediate, IrOp.MveVectorShiftWidenImmediateInterleaved {
+        IrOp.MveVectorShiftImmediate, IrOp.MveVectorShiftWidenImmediateInterleaved,
+        IrOp.MveVectorShiftNarrowImmediateInterleaved, IrOp.MveVectorShiftLeftCarry {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -319,6 +320,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// `VMOVL` = `shift == 0`, perfil M, MVE/Helium) — ver
         /// {@link MveVectorShiftWidenImmediateInterleaved}.
         public static final int MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED = 150;
+        /// B16.11: `VSHRNB`/`VSHRNT`/`VRSHRNB`/`VRSHRNT`/`VQSHRNB_S`/`VQSHRNT_S`/`VQSHRNB_U`/
+        /// `VQSHRNT_U`/`VQSHRUNB`/`VQSHRUNT`/`VQRSHRNB_S`/`VQRSHRNT_S`/`VQRSHRNB_U`/`VQRSHRNT_U`/
+        /// `VQRSHRUNB`/`VQRSHRUNT` (deslocamento estreitante, só `b`/`h`, perfil M, MVE/Helium) —
+        /// ver {@link MveVectorShiftNarrowImmediateInterleaved}.
+        public static final int MVE_VECTOR_SHIFT_NARROW_IMMEDIATE_INTERLEAVED = 151;
+        /// B16.11: `VSHLC` (deslocamento à esquerda do vetor INTEIRO com carry em GPR, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorShiftLeftCarry}.
+        public static final int MVE_VECTOR_SHIFT_LEFT_CARRY = 152;
     }
 
     /// Operacao ALU generica.
@@ -3925,5 +3934,60 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED; }
+    }
+
+    /// `VSHRNB`/`VSHRNT`/`VRSHRNB`/`VRSHRNT`/`VQSHRNB_S`/`VQSHRNT_S`/`VQSHRNB_U`/`VQSHRNT_U`/
+    /// `VQSHRUNB`/`VQSHRUNT`/`VQRSHRNB_S`/`VQRSHRNT_S`/`VQRSHRNB_U`/`VQRSHRNT_U`/`VQRSHRUNB`/
+    /// `VQRSHRUNT` (perfil M, B16.11, MVE/Helium, `target/isa-decode/mve.decode`, só `b`/`h`):
+    /// ESTREITA com deslocamento — mesmo padrão de indexação INTERCALADA `le*2 + (top?1:0)` de
+    /// {@link MveVectorNarrowInterleaved}, via
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftNarrowInterleavedMasked}.
+    /// Reusa {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp} (MESMO enum/mapeamento
+    /// do A64/NEON: `SHRN`=`VSHRN`, `RSHRN`=`VRSHRN`, `SQSHRN`/`UQSHRN`=`VQSHRN_S`/`_U`,
+    /// `SQSHRUN`=`VQSHRUN`, `SQRSHRN`/`UQRSHRN`=`VQRSHRN_S`/`_U`, `SQRSHRUN`=`VQRSHRUN`). Beatwise
+    /// (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` só para as 6 formas saturantes (`SHRN`/
+    /// `RSHRN` nunca saturam).
+    record MveVectorShiftNarrowImmediateInterleaved(
+            /// Operação de deslocamento estreitante a executar.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp op,
+            /// `log2` do tamanho do elemento ESTREITO (saída) em bytes — `0`(byte) ou `1`(halfword);
+            /// nunca `2`/`3` (a família só suporta `b`/`h`, daí o título da seção real).
+            int esz,
+            /// Quantidade de deslocamento, já resolvida pelo decoder (`N - raw`, `%rshift_i3/i4`).
+            int shift,
+            /// `true` para a forma `T`; `false` para `B`.
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_NARROW_IMMEDIATE_INTERLEAVED; }
+    }
+
+    /// `VSHLC` (perfil M, B16.11, MVE/Helium, `target/isa-decode/mve.decode`): "Whole Vector Left
+    /// Shift with Carry" — desloca os 128 bits de `Qd` à esquerda por `imm` bits (contagem `1`-`32`;
+    /// `imm == 0` no encoding significa "desloca por 32", NÃO é `UNDEF`/no-op — confirmado verbatim
+    /// contra `trans_VSHLC`/`HELPER(mve_vshlc)`, `target/arm/tcg/{translate,mve_helper}.c`),
+    /// injetando os bits BAIXOS de `Rdm` na base e devolvendo em `Rdm` os bits que saíram pelo topo.
+    /// **NÃO é estreitante** (está na mesma seção do arquivo real por adjacência de encoding, não por
+    /// família — ver Javadoc do decoder) e **NÃO é predicada lane-a-lane**: opera em 4 elementos de
+    /// 32 bits (granularidade de BEAT), cada um checado contra UM bit da máscara MVE (`mask & 1` por
+    /// beat, não por byte). Beatwise (mesmo gancho de {@link MveVector2Op} para `AdvanceVpt`/`ECI`).
+    /// Nunca satura, sem `FPSCR.QC`.
+    record MveVectorShiftLeftCarry(
+            /// Campo `imm:5` cru do encoding (`0`-`31`; `0` significa "desloca por 32" — NUNCA
+            /// pré-resolvido pelo decoder, ao contrário de {@link MveVectorShiftImmediate}, porque o
+            /// helper real trata `shift == 0` como caso especial, não como "sem deslocamento").
+            int imm,
+            /// `Qd` (`0`-`7`) — fonte E destino.
+            int qd,
+            /// `Rdm` (GPR que fornece os bits que entram e recebe os que saem; `13`/`15` são `UNDEF`,
+            /// recusados pelo decoder).
+            int rdm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_LEFT_CARRY; }
     }
 }

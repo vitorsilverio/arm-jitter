@@ -298,6 +298,10 @@ public final class AsmNativePolicy {
             // padrão acima, sem emissão nativa nesta task.
             case IrOp.MveVectorShiftImmediate ignored -> false;
             case IrOp.MveVectorShiftWidenImmediateInterleaved ignored -> false;
+            // Deslocamentos estreitantes (só b/h) e VSHLC (B16.11, MVE/Helium): mesmo padrão acima,
+            // sem emissão nativa nesta task.
+            case IrOp.MveVectorShiftNarrowImmediateInterleaved ignored -> false;
+            case IrOp.MveVectorShiftLeftCarry ignored -> false;
         };
     }
 

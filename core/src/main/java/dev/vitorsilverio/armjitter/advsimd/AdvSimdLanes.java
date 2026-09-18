@@ -2526,6 +2526,89 @@ public final class AdvSimdLanes {
         return qc;
     }
 
+    /// `VSHRNB`/`VSHRNT`/`VRSHRNB`/`VRSHRNT`/`VQSHRNB_S`/`VQSHRNT_S`/`VQSHRNB_U`/`VQSHRNT_U`/
+    /// `VQSHRUNB`/`VQSHRUNT`/`VQRSHRNB_S`/`VQRSHRNT_S`/`VQRSHRNB_U`/`VQRSHRNT_U`/`VQRSHRUNB`/
+    /// `VQRSHRUNT` (B16.11, MVE/Helium, `só b/h`, verbatim de `DO_VSHRN`/`DO_VSHRN_SAT`,
+    /// `target/arm/tcg/mve_helper.c`): como {@link #shiftNarrowImmediate}, mas com o padrão de
+    /// INDEXAÇÃO INTERCALADA do MVE — a lane ESTREITA de saída `le*2 + (top?1:0)` recebe a lane
+    /// LARGA `le` da fonte (`esz+1` bytes) deslocada à direita por `shift` e, conforme {@code op}
+    /// ({@link AdvSimdShiftNarrowOp}), arredondada e/ou saturada — MESMO mapeamento
+    /// operação→enum de {@link #shiftNarrowImmediate} (RFC B13.2 D1). Predicado por byte na
+    /// granularidade da lane de SAÍDA (estreita), mesmo padrão de {@link #narrowInterleavedMasked}
+    /// (oposto de {@link #shiftWidenInterleavedMasked}: lá a intercalação é na FONTE, aqui é no
+    /// DESTINO). Devolve `true` se alguma lane ATIVA saturou (`FPSCR.QC`) — só as 6 formas `Q*`
+    /// podem saturar; {@link AdvSimdShiftNarrowOp#SHRN}/{@link AdvSimdShiftNarrowOp#RSHRN} nunca
+    /// setam `QC`.
+    public static boolean shiftNarrowInterleavedMasked(AdvSimdRegisterWords regs, AdvSimdShiftNarrowOp op, int esz,
+            int shift, int outputElements, boolean top, int baseRd, int baseRn, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        int wideEsz = esz + 1;
+        int sourceOffset = top ? 1 : 0;
+        for (int le = 0; le < outputElements; le++) {
+            int destLane = le * 2 + sourceOffset;
+            int laneMask = (byteMask >>> (destLane * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long wide = element(regs, baseRn, le, wideEsz);
+            long signedWide = signExtend(wide, wideEsz);
+            long narrow;
+            boolean saturated;
+            switch (op) {
+                case SHRN -> {
+                    narrow = logicalShiftRight(wide, shift);
+                    saturated = false;
+                }
+                case RSHRN -> {
+                    narrow = roundingShiftRight(wide, shift, false);
+                    saturated = false;
+                }
+                case SQSHRN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz,
+                            true);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case UQSHRN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(logicalShiftRight(wide, shift)), esz, false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case SQSHRUN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(arithmeticShiftRight(signedWide, shift)), esz,
+                            false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case SQRSHRN -> {
+                    Saturation s = saturateChecked(
+                            BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, true);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                case UQRSHRN -> {
+                    Saturation s = saturateChecked(BigInteger.valueOf(roundingShiftRight(wide, shift, false)), esz,
+                            false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+                default -> { // SQRSHRUN
+                    Saturation s = saturateChecked(
+                            BigInteger.valueOf(roundingShiftRight(signedWide, shift, true)), esz, false);
+                    narrow = s.value();
+                    saturated = s.saturated();
+                }
+            }
+            long current = element(regs, baseRd, destLane, esz);
+            long merged = mergeLaneBytes(current, truncate(narrow, esz), laneMask, elementBytes);
+            setElement(regs, baseRd, destLane, esz, merged);
+            qc |= saturated;
+        }
+        return qc;
+    }
+
     /// `VMAXA`/`VMINA` (B16.7, MVE/Helium, verbatim de `DO_VMAXMINA`, `target/arm/tcg/mve_helper.c`):
     /// `Qd[i] = max/min(Qd[i], |sext(Qm[i])|)` — comparação NÃO assinada (comentário real: "vd is
     /// unsigned; vm is signed, and we take its absolute value; we then do an unsigned comparison").

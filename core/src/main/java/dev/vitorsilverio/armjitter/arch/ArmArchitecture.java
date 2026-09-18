@@ -566,6 +566,12 @@ public final class ArmArchitecture {
                     // vivem no MESMO espaço de bits `111.1110.../111.1111...` que Thumb2NocpDecoder
                     // reivindica — TEM que vir antes.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveShiftImmediateDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveNarrowingShiftDecoder (B16.11): deslocamentos estreitantes (só b/h) +
+                    // VSHLC vivem no MESMO espaço de bits `111.1110...` (bit21=0/1 respectivamente)
+                    // que Thumb2NocpDecoder reivindica — TEM que vir antes. Disjunto de
+                    // Thumb2MveShiftImmediateDecoder por bit21/bit7 (ver Javadoc do decoder), ordem
+                    // relativa entre os dois não importa.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveNarrowingShiftDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

@@ -1269,6 +1269,88 @@ public final class IrSystemExecutor {
         return false;
     }
 
+    /// `VSHRNB`/`VSHRNT`/`VRSHRNB`/`VRSHRNT`/`VQSHRNB_S/T_S`/`VQSHRNB_U/T_U`/`VQSHRUNB/T`/
+    /// `VQRSHRNB_S/T_S`/`VQRSHRNB_U/T_U`/`VQRSHRUNB/T` (perfil M, B16.11, MVE/Helium): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftNarrowInterleavedMasked}). `FPSCR.QC` só para
+    /// as 6 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp#SHRN}/
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp#RSHRN} nunca saturam).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorShiftNarrowImmediateInterleaved(ArmCore core,
+            IrOp.MveVectorShiftNarrowImmediateInterleaved op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.shiftNarrowInterleavedMasked(vfp, op.op(), esz, op.shift(), outputElements,
+                op.top(), baseRd, baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VSHLC` (perfil M, B16.11, MVE/Helium, verbatim de `HELPER(mve_vshlc)`,
+    /// `target/arm/tcg/mve_helper.c`): desloca os 128 bits de `Qd` à esquerda por `shift` bits
+    /// (`shift == 0` do encoding significa "desloca por 32", tratado explicitamente — ver Javadoc de
+    /// {@link IrOp.MveVectorShiftLeftCarry}), injetando os bits BAIXOS de `Rdm` na base de cada
+    /// elemento de 32 bits e atualizando `Rdm` com os bits que saíram pelo topo do último elemento
+    /// ATIVO (granularidade de BEAT — `mask & 1` por elemento de 32 bits, não por byte). Nunca
+    /// satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorShiftLeftCarry(ArmCore core, IrOp.MveVectorShiftLeftCarry op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        final int esz = 2; // ESIZE fixo em 4 bytes (word) — VSHLC sempre opera em elementos de 32 bits.
+        final int elementBytes = 1 << esz;
+        final int elementCount = 4; // 128 bits / 32 bits.
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int shift = op.imm() == 0 ? 32 : op.imm();
+        long rdm = Integer.toUnsignedLong(core.register(op.rdm()));
+        for (int e = 0; e < elementCount; e++) {
+            int laneMask = (mask >>> (e * elementBytes)) & 0xF;
+            long current = AdvSimdLanes.element(vfp, baseRd, e, esz);
+            long result;
+            long nextRdm = rdm;
+            if (shift == 32) {
+                result = rdm;
+                if (laneMask != 0) {
+                    nextRdm = current;
+                }
+            } else {
+                long shiftMask = (1L << shift) - 1;
+                result = ((current << shift) | (rdm & shiftMask)) & 0xFFFF_FFFFL;
+                if (laneMask != 0) {
+                    nextRdm = current >>> (32 - shift);
+                }
+            }
+            long merged = mergeMveCarryLane(current, result, laneMask, elementBytes);
+            AdvSimdLanes.setElement(vfp, baseRd, e, esz, merged);
+            rdm = nextRdm & 0xFFFF_FFFFL;
+        }
+        core.setRegister(op.rdm(), (int) rdm);
+        return false;
+    }
+
     /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium):
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowInterleavedMasked}). `FPSCR.QC` só
     /// para as 3 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp#XTN}

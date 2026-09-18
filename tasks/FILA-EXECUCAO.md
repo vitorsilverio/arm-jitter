@@ -53,22 +53,23 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.10 fechar deslocamentos por imediato + `VSHLL` T1)
+## Onde estamos (atualizado 2026-09-18, após B16.11 fechar deslocamentos estreitantes + `VSHLC`)
 
-**B16.10 FECHADA (38/38 encodings)** — `VSHLI`/`VQSHLI_S`/`VQSHLI_U`/`VQSHLUI`/`VSHRI_S`/`VSHRI_U`/
-`VRSHRI_S`/`VRSHRI_U`/`VSRI`/`VSLI` + `VSHLL_BS/BU/TS/TU` T1 (inclui `VMOVL`, sem `Kind` próprio).
-Bits verificados contra o arquivo real (`target/isa-decode/mve.decode`), não contra a transcrição da
-spec — o prefixo de largura estava 1 bit deslocado na spec original (`bits[21:19]`/`[21:20]`/`bit21`,
-não `[20:18]`/etc). Achado que corrige o Inclui original: `Qd == Qm` NÃO é `UNDEF` em `VSHLL`
-(`do_2shift_vec` real só valida `qd|qm < 8`, nunca compara os dois). `VSHLL` T1 reusa o MESMO núcleo
-intercalado (`shiftWidenInterleavedMasked`) que a B16.7 já usa para o T2. `mvn -o test` 100% verde
-(4212 + truffle 73, após ajustar a coherence test para 151 `Kind`). `docs/COBERTURA-ISA.md` zero-diff
-(mesma Armadilha 7 da B16.2/B16.8/B16.9). G5 verde. Ver `## Resultado` de `B16.10` (trilha B).
+**B16.11 FECHADA (33/33 encodings)** — `VSHRNB/T`/`VRSHRNB/T`/`VQSHRNB/T_S`/`VQSHRNB/T_U`/
+`VQSHRUNB/T`/`VQRSHRNB/T_S`/`VQRSHRNB/T_U`/`VQRSHRUNB/T` (32, só `b`/`h`) + `VSHLC` (1, shift do
+vetor INTEIRO com carry em GPR, beatwise). Os 16 mnemônicos diferem em só 3 bits (`U`/`bit7`/`bit0`
+— corrige a Armadilha 1 original, que previa 4); eixo `B`/`T` (`bit12`) preserva a metade não
+escrita via `AdvSimdLanes#shiftNarrowInterleavedMasked` (novo). `VSHLC` com `imm==0`="desloca por
+32" (não `UNDEF`/no-op, confirmado no QEMU). `mvn -o test` 100% verde (core 4322 + truffle 73, após
+ajustar a coherence test para 153 `Kind`). `docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7 da
+B16.2/B16.8/B16.9/B16.10: `mve.decode` só sai de `NOT_IN_ANY_PRESET` na B16.14). G5 verde. Ver
+`## Resultado` de `B16.11` (trilha B).
 
-**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.11` (deslocamentos estreitantes +
-`VSHLC`, depende de B16.10 ✅ agora fechada), `B16.12` (conversões `VCVT`/`VRINT`, depende de B16.7
-✅), `B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅) — todos com spec escrita,
-nenhum ainda executado (conferir `INDICE.md` da trilha B antes de pegar). `C12.5`/`C12.10` (emissão
+**Pegáveis a seguir**: os dois degraus que faltam para fechar o épico B16 inteiro —
+`B16.12` (conversões `VCVT`/`VRINT`, depende de B16.7 ✅) e `B16.13` (misc/reduções/imediato
+modificado, depende de B16.6 ✅) — ambos com spec escrita, nenhum ainda executado (conferir
+`INDICE.md` da trilha B antes de pegar). `B16.14` (fechamento do épico — provável candidata a
+"MVE sai de `NOT_IN_ANY_PRESET`") depende dos dois e não é pegável ainda. `C12.5`/`C12.10` (emissão
 JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a

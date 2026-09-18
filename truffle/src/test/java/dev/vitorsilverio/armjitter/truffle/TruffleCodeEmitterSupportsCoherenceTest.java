@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(151, kinds.size(), "IrOp.Kind deve ter 151 constantes contíguas");
+        assertEquals(153, kinds.size(), "IrOp.Kind deve ter 153 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -131,8 +131,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // MVE_VECTOR_SCALAR, MVE_VECTOR_SCALAR_WIDENING, MVE_VECTOR_FP_SCALAR,
         // MVE_VECTOR_FP_SCALAR_FMA, MVE_VECTOR_SCALAR_SPECIAL (+5, mesmo "Não inclui"). B16.10
         // acrescentou MVE_VECTOR_SHIFT_IMMEDIATE, MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED (+2,
-        // mesmo "Não inclui").
-        assertEquals(85, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // mesmo "Não inclui"). B16.11 acrescentou MVE_VECTOR_SHIFT_NARROW_IMMEDIATE_INTERLEAVED,
+        // MVE_VECTOR_SHIFT_LEFT_CARRY (+2, mesmo "Não inclui").
+        assertEquals(87, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -193,7 +194,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_FP_SCALAR, IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA,
                         IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL,
                         IrOp.Kind.MVE_VECTOR_SHIFT_IMMEDIATE,
-                        IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED)),
+                        IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED,
+                        IrOp.Kind.MVE_VECTOR_SHIFT_NARROW_IMMEDIATE_INTERLEAVED,
+                        IrOp.Kind.MVE_VECTOR_SHIFT_LEFT_CARRY)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -409,6 +412,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.MveVectorShiftImmediate(AdvSimdShiftImmediateOp.SHL, 0, 0, 0, 1, c);
             case IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED ->
                     new IrOp.MveVectorShiftWidenImmediateInterleaved(true, 0, 0, false, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_SHIFT_NARROW_IMMEDIATE_INTERLEAVED -> new IrOp.MveVectorShiftNarrowImmediateInterleaved(
+                    AdvSimdShiftNarrowOp.SHRN, 0, 1, false, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_SHIFT_LEFT_CARRY -> new IrOp.MveVectorShiftLeftCarry(1, 0, 1, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }
