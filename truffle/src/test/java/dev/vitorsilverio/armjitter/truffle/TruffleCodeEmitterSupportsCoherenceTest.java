@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(163, kinds.size(), "IrOp.Kind deve ter 163 constantes contíguas");
+        assertEquals(168, kinds.size(), "IrOp.Kind deve ter 168 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -137,8 +137,11 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // acrescentou MVE_VECTOR_UNARY, MVE_VECTOR_FP_UNARY, MVE_VECTOR_DUP, MVE_MOVE_LANES_GPR,
         // MVE_VECTOR_ADD_ACROSS_VECTOR, MVE_VECTOR_ADD_ACROSS_VECTOR_LONG,
         // MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE, MVE_VECTOR_MODIFIED_IMMEDIATE (+8, mesmo
+        // "Não inclui"). B16.13b acrescentou MVE_VECTOR_DUAL_ACCUMULATE,
+        // MVE_VECTOR_DUAL_ACCUMULATE_LONG, MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
+        // MVE_VECTOR_MIN_MAX_ACROSS_VECTOR, MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR (+5, mesmo
         // "Não inclui").
-        assertEquals(97, uncovered.size(), "Kinds descobertos: " + uncovered);
+        assertEquals(102, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -207,7 +210,12 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_MOVE_LANES_GPR, IrOp.Kind.MVE_VECTOR_ADD_ACROSS_VECTOR,
                         IrOp.Kind.MVE_VECTOR_ADD_ACROSS_VECTOR_LONG,
                         IrOp.Kind.MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE,
-                        IrOp.Kind.MVE_VECTOR_MODIFIED_IMMEDIATE)),
+                        IrOp.Kind.MVE_VECTOR_MODIFIED_IMMEDIATE,
+                        IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE,
+                        IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG,
+                        IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
+                        IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR,
+                        IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -441,6 +449,16 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.MveVectorAbsoluteDifferenceAccumulate(false, 0, 0, 1, 2, c);
             case IrOp.Kind.MVE_VECTOR_MODIFIED_IMMEDIATE ->
                     new IrOp.MveVectorModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, 0L, 0, c);
+            case IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE ->
+                    new IrOp.MveVectorDualAccumulate(false, false, false, true, 0, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG ->
+                    new IrOp.MveVectorDualAccumulateLong(false, false, false, true, 1, 0, 1, 3, 2, c);
+            case IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH ->
+                    new IrOp.MveVectorRoundingDualAccumulateHigh(false, false, false, true, 0, 1, 3, 2, c);
+            case IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR ->
+                    new IrOp.MveVectorMinMaxAcrossVector(true, false, false, 2, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR ->
+                    new IrOp.MveVectorFpMinMaxAcrossVector(true, false, 2, 0, 1, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

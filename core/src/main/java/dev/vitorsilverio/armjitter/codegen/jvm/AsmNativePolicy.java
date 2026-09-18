@@ -316,6 +316,11 @@ public final class AsmNativePolicy {
             case IrOp.MveVectorAddAcrossVectorLong ignored -> false;
             case IrOp.MveVectorAbsoluteDifferenceAccumulate ignored -> false;
             case IrOp.MveVectorModifiedImmediate ignored -> false;
+            case IrOp.MveVectorDualAccumulate ignored -> false;
+            case IrOp.MveVectorDualAccumulateLong ignored -> false;
+            case IrOp.MveVectorRoundingDualAccumulateHigh ignored -> false;
+            case IrOp.MveVectorMinMaxAcrossVector ignored -> false;
+            case IrOp.MveVectorFpMinMaxAcrossVector ignored -> false;
         };
     }
 

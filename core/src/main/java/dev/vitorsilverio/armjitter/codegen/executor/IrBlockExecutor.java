@@ -287,6 +287,18 @@ public final class IrBlockExecutor {
                                 (IrOp.MveVectorAbsoluteDifferenceAccumulate) op);
                 case IrOp.Kind.MVE_VECTOR_MODIFIED_IMMEDIATE -> pcChanged |= system
                         .executeMveVectorModifiedImmediate(core, (IrOp.MveVectorModifiedImmediate) op);
+                // B16.13b: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE -> pcChanged |= system
+                        .executeMveVectorDualAccumulate(core, (IrOp.MveVectorDualAccumulate) op);
+                case IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG -> pcChanged |= system
+                        .executeMveVectorDualAccumulateLong(core, (IrOp.MveVectorDualAccumulateLong) op);
+                case IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH -> pcChanged |= system
+                        .executeMveVectorRoundingDualAccumulateHigh(core,
+                                (IrOp.MveVectorRoundingDualAccumulateHigh) op);
+                case IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR -> pcChanged |= system
+                        .executeMveVectorMinMaxAcrossVector(core, (IrOp.MveVectorMinMaxAcrossVector) op);
+                case IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR -> pcChanged |= system
+                        .executeMveVectorFpMinMaxAcrossVector(core, (IrOp.MveVectorFpMinMaxAcrossVector) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -555,6 +567,16 @@ public final class IrBlockExecutor {
                     .executeMveVectorAbsoluteDifferenceAccumulate(core, mveVectorAbsoluteDifferenceAccumulate);
             case IrOp.MveVectorModifiedImmediate mveVectorModifiedImmediate ->
                     system.executeMveVectorModifiedImmediate(core, mveVectorModifiedImmediate);
+            case IrOp.MveVectorDualAccumulate mveVectorDualAccumulate ->
+                    system.executeMveVectorDualAccumulate(core, mveVectorDualAccumulate);
+            case IrOp.MveVectorDualAccumulateLong mveVectorDualAccumulateLong ->
+                    system.executeMveVectorDualAccumulateLong(core, mveVectorDualAccumulateLong);
+            case IrOp.MveVectorRoundingDualAccumulateHigh mveVectorRoundingDualAccumulateHigh -> system
+                    .executeMveVectorRoundingDualAccumulateHigh(core, mveVectorRoundingDualAccumulateHigh);
+            case IrOp.MveVectorMinMaxAcrossVector mveVectorMinMaxAcrossVector ->
+                    system.executeMveVectorMinMaxAcrossVector(core, mveVectorMinMaxAcrossVector);
+            case IrOp.MveVectorFpMinMaxAcrossVector mveVectorFpMinMaxAcrossVector ->
+                    system.executeMveVectorFpMinMaxAcrossVector(core, mveVectorFpMinMaxAcrossVector);
         };
     }
 

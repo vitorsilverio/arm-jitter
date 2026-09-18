@@ -699,7 +699,16 @@ public final class StandardIrBuilder implements IrBuilder {
                 || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVector
                 || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVectorLong
                 || instruction.liftedOp() instanceof IrOp.MveVectorAbsoluteDifferenceAccumulate
-                || instruction.liftedOp() instanceof IrOp.MveVectorModifiedImmediate) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorModifiedImmediate
+                // B16.13b: VMLADAV/VMLSDAV/VMLALDAV/VMLSLDAV/VRMLALDAVH/VRMLSLDAVH/VMAXV/VMINV/
+                // VMAXAV/VMINAV/VMAXNMV/VMINNMV/VMAXNMAV/VMINNMAV — todos predicados (mergemask/
+                // mve_element_mask reais, `mve_advance_vpt` chamado por todos os helpers verbatim),
+                // mesmo padrão acima.
+                || instruction.liftedOp() instanceof IrOp.MveVectorDualAccumulate
+                || instruction.liftedOp() instanceof IrOp.MveVectorDualAccumulateLong
+                || instruction.liftedOp() instanceof IrOp.MveVectorRoundingDualAccumulateHigh
+                || instruction.liftedOp() instanceof IrOp.MveVectorMinMaxAcrossVector
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpMinMaxAcrossVector) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
             if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
                 block.add(new IrOp.Vpst(compare.mask(), compare.condition()));

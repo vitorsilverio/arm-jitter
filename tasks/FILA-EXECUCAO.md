@@ -53,27 +53,30 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.13a fechar 1-op misc/VDUP/VMOV_2gp/reduções/imediato)
+## Onde estamos (atualizado 2026-09-18, após B16.13b fechar sub-família 3 — B16.13 100% fechada)
 
-**B16.13a FECHADA (22/50 encodings)** — sub-famílias 1 (`VMOV_to_2gp`/`VMOV_from_2gp`, 2), 2 (1-op
-misc `VCLS`/`VCLZ`/`VREV*`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG` + `VABS_fp`/`VNEG_fp` + `VDUP`, 15) e
-4 (`VADDV`/`VADDLV`/`VABAV_S`/`VABAV_U`/`Vimm_1r`, 5). 3 decoders novos
-(`Thumb2MveMoveLanesGprDecoder`/`Thumb2MveVectorMiscDecoder`/`Thumb2MveReduceDecoder`). Achados reais
-(verbatim contra QEMU via `curl`): `VMOV_from_2gp` NÃO recusa `Rt==Rt2` (só `VMOV_to_2gp` recusa) e
-os dois NÃO são predicados por `VPR` (só `AdvanceEci`); `VADDV`/`VADDLV` ficam no MESMO `{}`
-sobreposto e a ordem TEXTUAL decide um caso de colisão real; `VABAV` sempre acumula (sem bit `a`);
-`VDUP` usa `%qn` para `Qd`. Achado de processo documentado, não corrigido (fora do escopo): B16.12
-(`MveVectorFpConvert`/`MveVectorFpConvertFixed`) nunca emite `AdvanceVpt` apesar do Javadoc afirmar
-o contrário. `mvn -o test` verde (core 4399 + truffle 73, coherence test 155→163 `Kind`).
-`docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7). `docs/COBERTURA-JIT.md` atualizado (155→163).
-G5 verde nos 5 consumidores. **B16.13b (sub-família 3, acumulação/redução dual, 28 encodings) segue
-⬜** — não pegável nesta sessão futura sem reler a spec da B16.13 desde o início. Ver `## Resultado`
-de `B16.13` (trilha B).
+**B16.13 FECHADA (50/50 encodings)** — B16.13a (2026-09-18, sub-famílias 1/2/4, 22/50) +
+B16.13b (2026-09-18, sub-família 3 — `VMLADAV`/`VMLSDAV`/`VMLALDAV`/`VMLSLDAV`/`VRMLALDAVH`/
+`VRMLSLDAVH`/`VMAXV`/`VMINV`/`VMAXAV`/`VMINAV`/`VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV`, 28/50).
+Decoder novo `Thumb2MveDualAccumulateDecoder` (registrado após `Thumb2MveReduceDecoder`, sem
+colisão de bits entre os dois, verificado por script). Achados reais (verbatim contra QEMU via
+`curl`): `VMLADAV_S`/`VMLADAV_U` (forma byte) têm DUAS codificações reais que produzem o mesmo
+`IrOp` (mesma classe do achado `VADDV`/`VADDLV` da B16.13a); um raw com `rdahi=15` sempre decodifica
+como `VMLADAV_S`, nunca chega a "VMLALDAV_S rejeitado"; os grupos aninhados `[NMAV/NMV]`/`[V/AV]`
+colidem de verdade — sob preset com `MVE_FLOAT`, "`VMAXV_S` com `size=3`" não existe na prática
+(a arquitetura reaproveita esse espaço de bits para `VMAXNMV_S`); `VMLSDAV`/`VRMLSLDAVH` usam o
+prefixo "unsigned" mas são sempre assinados; `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` usam o bit
+que normalmente escolhe sinal para escolher PRECISÃO (binary16 vs binary32); binary16 zera os 16
+bits altos de `Rda`. 5 `IrOp` novos (`Kind` 163-167), todos interpretados apenas (mesmo padrão da
+B16.13a). `mvn -o test` verde (core 4468 + truffle 73, coherence test 163→168 `Kind`).
+`docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7 — `mve.decode` só sai de `NOT_IN_ANY_PRESET`
+na B16.14). `docs/COBERTURA-JIT.md` atualizado (163→168). G5 verde nos 5 consumidores. Ver
+`## Resultado` de `B16.13` (trilha B, duas seções: B16.13a e B16.13b).
 
-**Pegáveis a seguir**: `B16.13b` (sub-família 3 da B16.13, único bloco com grupos aninhados `[...]`
-do arquivo — ler a spec inteira antes de pegar) é o último degrau antes do fechamento do épico B16.
-`B16.14` (fechamento do épico) depende de B16.13 completa (13a+13b) e não é pegável ainda.
-`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+**Pegáveis a seguir**: `B16.14` (fechamento do épico B16 — troca `NOT_IN_ANY_PRESET` por
+`Applicability`, acrescenta `ARMV8_1M_MVE` às arquiteturas sondadas, catálogo `Cortex-M52`/`M55`/
+`M85`) agora é pegável — suas duas dependências (B16.13, B15.7) estão ✅. `C12.5`/`C12.10` (emissão
+JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

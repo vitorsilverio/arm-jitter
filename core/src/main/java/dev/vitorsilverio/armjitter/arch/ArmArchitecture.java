@@ -593,6 +593,12 @@ public final class ArmArchitecture {
                     // espaço de bits `111.1110.../111.1111...` que Thumb2NocpDecoder reivindica —
                     // TEM que vir antes.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveReduceDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveDualAccumulateDecoder (B16.13b): VMLADAV/VMLSDAV/VMLALDAV/VMLSLDAV/
+                    // VRMLALDAVH/VRMLSLDAVH/VMAXV/VMINV/VMAXAV/VMINAV/VMAXNMV/VMINNMV/VMAXNMAV/
+                    // VMINNMAV vivem no MESMO espaço de bits `111.1110...` que Thumb2NocpDecoder
+                    // reivindica — TEM que vir antes. Verificado (não presumido) sem colisão com
+                    // Thumb2MveReduceDecoder — ordem relativa entre os dois não importa.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveDualAccumulateDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;
