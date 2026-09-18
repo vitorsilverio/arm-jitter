@@ -47,6 +47,21 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
+## Onde estamos (atualizado 2026-09-17, as 3 falhas pré-existentes de `mvn test` foram corrigidas)
+
+**As "mesmas 3 falhas pré-existentes" citadas em toda entrada abaixo desde B19.5.2/E12 NÃO EXISTEM
+MAIS** (`70df261`) — não eram bug de produção: `Aarch64Fp16VersionCurationTest` (2 testes) e
+`IsaCoverageReportA64CurationGuardTest.crc32IsPendingWorkFromArmv81aOnwards` guardavam a expectativa
+"ainda não implementado"/"ainda pendente" para `FEAT_FP16`/`FEAT_FHM` (88+8 linhas) e `CRC32`/
+`CRC32C`, mas essas famílias já são decodificadas de verdade há várias sessões (`docs/COBERTURA-ISA.md`
+mostra `✅` real nas colunas aplicáveis) — os testes nunca foram atualizados para acompanhar. A
+curadoria por (nome, ocorrência) em si sempre esteve correta (`·` nas colunas sem a feature, `✅` real
+nas que têm); os 3 testes foram reescritos para checar esse invariante real (nunca vazar `✅` numa
+coluna sem a feature) em vez de assumir "nunca implementado". `mvn -o test` agora 100% verde (4171 +
+73), zero falhas. **Regra daqui pra frente: teste vermelho é bloqueador, nunca "falha pré-existente" a
+carregar — se a expectativa do teste ficou obsoleta porque o trabalho avançou, conserta o teste na
+hora, não documenta como pendência eterna.**
+
 ## Onde estamos (atualizado 2026-09-17, após B16.7 fechar — épico B16.7 inteiro concluído)
 
 **B16.7 FECHADA 2026-09-17 (58/58 encodings, as 3 sub-famílias)** — sub-família 3 (2-op FP puro,
