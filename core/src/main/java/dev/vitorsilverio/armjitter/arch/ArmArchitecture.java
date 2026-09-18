@@ -552,6 +552,10 @@ public final class ArmArchitecture {
                     // no MESMO espaço de bits `111.1110...`/`111.1111...` que Thumb2NocpDecoder
                     // reivindica — TEM que vir antes.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveVector2opFpDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveComparisonDecoder (B16.8): VCMP*/VCMP*_fp/VCMP*_scalar/
+                    // VCMP*_fp_scalar vivem no MESMO espaço de bits `111.1110...` que
+                    // Thumb2NocpDecoder reivindica — TEM que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveComparisonDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

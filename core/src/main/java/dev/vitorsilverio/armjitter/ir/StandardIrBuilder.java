@@ -670,8 +670,21 @@ public final class StandardIrBuilder implements IrBuilder {
                 // VCADD90_fp/VCADD270_fp/VCMLA0/90/180/270 — mesmo padrão acima.
                 || instruction.liftedOp() instanceof IrOp.MveVectorFpTwoOp
                 || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexAdd
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiplyAccumulate) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiplyAccumulate
+                // B16.8: VCMP*/VCMP*_fp (vetor×vetor e vetor×escalar) — mesmo padrão acima. O
+                // `VPT` (mask != 0) é aberto ABAIXO, DEPOIS do AdvanceVpt, reproduzindo a ordem
+                // real do QEMU (o helper `DO_VCMP` já chama `mve_advance_vpt` internamente; só
+                // DEPOIS, fora do helper, `do_vcmp`/`do_vcmp_scalar` chamam `gen_vpst` se
+                // `a->mask`) — ver Javadoc de `IrOp.MveVectorCompare`.
+                || instruction.liftedOp() instanceof IrOp.MveVectorCompare
+                || instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
+            if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
+                block.add(new IrOp.Vpst(compare.mask(), compare.condition()));
+            } else if (instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar compareScalar
+                    && compareScalar.mask() != 0) {
+                block.add(new IrOp.Vpst(compareScalar.mask(), compareScalar.condition()));
+            }
         } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla
             // (`mve_update_and_store_eci` real), o `VPR` nunca é tocado (ao contrário de

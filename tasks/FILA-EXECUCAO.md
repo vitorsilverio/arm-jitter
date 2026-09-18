@@ -53,20 +53,22 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-17, após B16.7 fechar o épico B16.7 inteiro + 3 falhas de `mvn test` corrigidas)
+## Onde estamos (atualizado 2026-09-18, após B16.8 fechar comparações `VCMP`/`VPT`)
 
-**B16.7 FECHADA (58/58 encodings, as 3 sub-famílias)** — vector 2-op FP puro + `VCMUL`/`VQDMLADH`/
-`VQDMULL` + conversões binary16↔binary32/`VMAXNMA`/`VQMOVN`/`VMAXA`/`VMULH`. Épico B16 (MVE/Helium)
-segue em andamento nos degraus seguintes. `mvn -o test` 100% verde (4171 + truffle 73) — as "3 falhas
-pré-existentes" (mojibake) citadas em sessões antigas **foram corrigidas em `70df261`/`11dbf3c`**: não
-eram bug de produção, eram 3 testes-guarda (`Aarch64Fp16VersionCurationTest`,
-`IsaCoverageReportA64CurationGuardTest`) com expectativa "ainda não implementado" que ficou obsoleta
-depois que FEAT_FP16/FHM/CRC32 foram implementados de verdade — reescritos para checar o invariante
-real. **Regra daqui pra frente: teste vermelho é bloqueador, nunca "falha pré-existente" a carregar.**
-Ver `## Resultado` de `B16.7` (trilha B) para a narrativa completa dos achados técnicos.
+**B16.8 FECHADA (34/34 encodings)** — `VCMP*`/`VCMP*_fp`/`VCMP*_scalar`/`VCMP*_fp_scalar` (as 8
+condições expandidas + FP) e a forma `VPT` (`VCMP` com `mask != 0`, reusa `IrOp.Vpst`/`executeVpst`
+da B16.2). Dois achados que divergem da spec original: `Rm == 15` é "constante zero" (não
+`UNPREDICTABLE` — só `Rm == 13` é recusado) e `size == 3` da forma inteira vira a forma `_fp` de
+verdade quando `MVE_FLOAT` está presente (não é um "reservado" genérico). `mvn -o test` 100% verde
+(4212 + truffle 73). `docs/COBERTURA-ISA.md` zero-diff (Armadilha 7 da B16.2: `mve.decode` só sai de
+`NOT_IN_ANY_PRESET` na B16.14). **Achado de processo**: `gerar-cobertura-jit.sh`/`gerar-cobertura-isa.sh`
+usam `java`/`mvn -pl truffle` (sem `-am`) e por isso enxergam o `arm-jitter` **instalado em `~/.m2`**
+— rodar `mvn -o install` ANTES de regenerar as duas tabelas numa sessão que mexeu no `core`, senão a
+ferramenta mede uma versão desatualizada silenciosamente. Ver `## Resultado` de `B16.8` (trilha B).
 
-**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.8` (comparações `VCMP`/`VPT`, depende de
-B16.2 ✅), `B16.9` (escalares, depende de B16.6 ✅), `B16.10` (deslocamentos por imediato + `VMOVL`,
+**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.9` (escalares aritméticos, depende de
+B16.6 ✅ — divide blocos `{}` com as linhas 499-506 da B16.8, já resolvido por construção: o guarda
+de `size` da B16.8 não reivindica esse espaço), `B16.10` (deslocamentos por imediato + `VMOVL`,
 depende de B16.6 ✅), `B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅) — todos com
 spec escrita, nenhum ainda executado (conferir `INDICE.md` da trilha B antes de pegar). `C12.5`/
 `C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.

@@ -28,7 +28,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorComplexAdd, IrOp.MveVectorAbsAccumulate, IrOp.MveVectorFpAbsAccumulate,
         IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision,
         IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply,
-        IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate {
+        IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate,
+        IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -284,6 +285,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.7 sub-família 3: `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (`FEAT_MVE_FP`, perfil M,
         /// MVE/Helium) — ver {@link MveVectorFpComplexMultiplyAccumulate}.
         public static final int MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE = 141;
+        /// B16.8: `VCMP*`/`VCMP*_fp` vetor×vetor (perfil M, MVE/Helium) — ver {@link MveVectorCompare}.
+        public static final int MVE_VECTOR_COMPARE = 142;
+        /// B16.8: `VCMP*_scalar`/`VCMP*_fp_scalar` vetor×GPR (perfil M, MVE/Helium) — ver
+        /// {@link MveVectorCompareScalar}.
+        public static final int MVE_VECTOR_COMPARE_SCALAR = 143;
     }
 
     /// Operacao ALU generica.
@@ -3603,5 +3609,73 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE; }
+    }
+
+    /// `VCMPEQ`/`VCMPNE`/`VCMPGE`/`VCMPLT`/`VCMPGT`/`VCMPLE`/`VCMPCS`/`VCMPHI` e as 6 formas `_fp`
+    /// correspondentes (perfil M, B16.8, MVE/Helium, `target/isa-decode/mve.decode`, seção
+    /// "Comparisons", vetor×vetor): compara `Qn`/`Qm` lane a lane e escreve o resultado em
+    /// `VPR.P0` (**não** um registrador vetorial — diferente de `CMEQ`/`CMGT` do NEON/A64,
+    /// Armadilha 2 da task), replicando o bit de cada lane pelos `1 << esz` bytes do elemento
+    /// (verbatim de `DO_VCMP`, `target/arm/tcg/mve_helper.c`: "Comparison sets 0/1 bits for each
+    /// byte in the element"). Bits de `P0` para beats AINDA NÃO executados (`eciMask == 0`)
+    /// ficam INTOCADOS; para lanes predicadas-fora em beats executados (`elementMask == 0`)
+    /// ficam ZERADOS; do contrário recebem o resultado da comparação (comentário literal do QEMU
+    /// real, citado verbatim no Javadoc do executor). Quando `mask` (`%mask_22_13`) é diferente de
+    /// zero, a instrução é uma `VPT` (`VCMP` seguida de `VPST`, achado da B16.2) — o
+    /// `StandardIrBuilder` emite um {@link Vpst} adicional LOGO APÓS o {@link AdvanceVpt} desta
+    /// instrução, reproduzindo a ordem real do QEMU (`do_vcmp`: helper que já chama
+    /// `mve_advance_vpt` interno, DEPOIS `gen_vpst` se `a->mask`). Beatwise ({@link AdvanceVpt}
+    /// sempre roda depois) e TERMINAL (`DISAS_UPDATE_NOCHAIN` real — ver
+    /// {@link dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter}).
+    record MveVectorCompare(
+            /// Condição de comparação (`EQ`/`NE`/`GE`/`LT`/`GT`/`LE`/`CS`/`HI`) — `CS`/`HI` só
+            /// existem nas formas inteiras, nunca em {@link #floatingPoint}.
+            dev.vitorsilverio.armjitter.advsimd.MveCompareCondition compareCondition,
+            /// `true` para as formas `_fp` (`@vcmp_fp`); `false` para as inteiras (`@vcmp`).
+            boolean floatingPoint,
+            /// Tamanho do elemento: inteiras `0`/`1`/`2` (byte/halfword/word, extraído do campo
+            /// `size` — `size==3` já recusado no decode); FP `1`/`2` (binary16/binary32, bit 28,
+            /// `%2op_fp_scalar_size`, MESMA convenção `neon_3same_fp_size` de
+            /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2MveVector2opFpDecoder}).
+            int esz,
+            /// `Qn` (campo inline de 3 bits em `@vcmp`/`@vcmp_fp` — sempre `0`-`7`, nunca precisa
+            /// de validação de faixa).
+            int qn,
+            /// `Qm` (`%qm`, 4 bits — já validado por
+            /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters#isValidMveQuadRegister}).
+            int qm,
+            /// Campo `mask` de 4 bits (`%mask_22_13`) — `VCMP` pura tem `mask=0`; `!= 0` estabelece
+            /// `VPT` (ver Javadoc da classe).
+            int mask,
+            /// Condição ARM necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_COMPARE; }
+    }
+
+    /// Forma escalar (vetor × GPR broadcast) das mesmas 8 condições de {@link MveVectorCompare}
+    /// (`@vcmp_scalar`/`@vcmp_fp_scalar`) — MESMA semântica de escrita em `P0`, comparando cada
+    /// lane de `Qn` contra o MESMO valor de `Rm` (broadcast). **Achado medido contra o QEMU real
+    /// nesta task, que DIVERGE do que a spec citava**: `do_vcmp_scalar` só recusa `Rm == 13`
+    /// (`a->rm == 13` → `false`, UNPREDICTABLE); `Rm == 15` é uma forma VÁLIDA, "constante zero"
+    /// (`if (a->rm == 15) rm = tcg_constant_i32(0);`), não UNPREDICTABLE — resolvido no
+    /// EXECUTOR, não no decode. `@vcmp_fp_scalar` **não decodifica o bit 28** (comentário literal
+    /// do arquivo real: "we do not decode it in this format to avoid complicated
+    /// overlapping-instruction-groups") — cada linha passa `size=1` ou `size=2` fixo.
+    record MveVectorCompareScalar(
+            dev.vitorsilverio.armjitter.advsimd.MveCompareCondition compareCondition,
+            boolean floatingPoint,
+            /// Inteiras: `0`/`1`/`2` (campo `size`, `size==3` recusado no decode). FP: `1`/`2`
+            /// literal por linha (bit 28 NÃO decodificado, ver Javadoc da classe).
+            int esz,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Rm` (`0`-`15`, `13` já recusado no decode; `15` = "constante zero", resolvido no
+            /// executor).
+            int rm,
+            /// Campo `mask` de 4 bits — MESMA semântica de {@link MveVectorCompare#mask}.
+            int mask,
+            /// Condição ARM necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_COMPARE_SCALAR; }
     }
 }

@@ -236,6 +236,11 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorFpComplexAdd(core, (IrOp.MveVectorFpComplexAdd) op);
                 case IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE -> pcChanged |= system
                         .executeMveVectorFpComplexMultiplyAccumulate(core, (IrOp.MveVectorFpComplexMultiplyAccumulate) op);
+                // B16.8: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_COMPARE ->
+                        pcChanged |= system.executeMveVectorCompare(core, (IrOp.MveVectorCompare) op);
+                case IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR ->
+                        pcChanged |= system.executeMveVectorCompareScalar(core, (IrOp.MveVectorCompareScalar) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -469,6 +474,9 @@ public final class IrBlockExecutor {
                     system.executeMveVectorFpComplexAdd(core, mveVectorFpComplexAdd);
             case IrOp.MveVectorFpComplexMultiplyAccumulate mveVectorFpComplexMultiplyAccumulate -> system
                     .executeMveVectorFpComplexMultiplyAccumulate(core, mveVectorFpComplexMultiplyAccumulate);
+            case IrOp.MveVectorCompare mveVectorCompare -> system.executeMveVectorCompare(core, mveVectorCompare);
+            case IrOp.MveVectorCompareScalar mveVectorCompareScalar ->
+                    system.executeMveVectorCompareScalar(core, mveVectorCompareScalar);
         };
     }
 

@@ -1422,4 +1422,150 @@ public final class IrSystemExecutor {
         AdvSimdLanes.fpComplexMultiplyAccumulateMasked(vfp, esz, lanes, baseRd, baseRn, baseRm, op.rotation(), mask);
         return false;
     }
+
+    /// `Rm == 15` do `VCMP*_scalar`/`VCMP*_fp_scalar` (perfil M, B16.8): "constante zero" —
+    /// `do_vcmp_scalar` real (`target/arm/tcg/translate-mve.c`): `if (a->rm == 15) rm =
+    /// tcg_constant_i32(0);`. Resolvido aqui (execução), não no decode: `Rm == 15` É um encoding
+    /// válido, ao contrário de `Rm == 13` (recusado no decode, ver
+    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2MveComparisonDecoder}).
+    private static final int VCMP_SCALAR_ZERO_ENCODING = 15;
+
+    /// `DO_VCMP_S`/`DO_VCMP_U` verbatim (`target/arm/tcg/mve_helper.c`): `EQ`/`NE` comparam os
+    /// bits crus (zero-extendidos por {@link VfpRegisters#element}, irrelevante o sinal);
+    /// `GE`/`LT`/`GT`/`LE` COM SINAL ({@link AdvSimdLanes#signExtend}); `CS`/`HI` SEM SINAL
+    /// ({@link Long#compareUnsigned}).
+    private static boolean evaluateMveIntCompare(
+            dev.vitorsilverio.armjitter.advsimd.MveCompareCondition condition, long a, long b, int esz) {
+        return switch (condition) {
+            case EQ -> a == b;
+            case NE -> a != b;
+            case GE -> AdvSimdLanes.signExtend(a, esz) >= AdvSimdLanes.signExtend(b, esz);
+            case LT -> AdvSimdLanes.signExtend(a, esz) < AdvSimdLanes.signExtend(b, esz);
+            case GT -> AdvSimdLanes.signExtend(a, esz) > AdvSimdLanes.signExtend(b, esz);
+            case LE -> AdvSimdLanes.signExtend(a, esz) <= AdvSimdLanes.signExtend(b, esz);
+            case CS -> Long.compareUnsigned(a, b) >= 0;
+            case HI -> Long.compareUnsigned(a, b) > 0;
+        };
+    }
+
+    /// `vfcmpeq`/`vfcmpne`/`vfcmpge`/`vfcmplt`/`vfcmpgt`/`vfcmple` (`target/arm/tcg/mve_helper.c`)
+    /// — `CS`/`HI` nunca chegam aqui (sem forma `_fp`, ver Javadoc de
+    /// {@link dev.vitorsilverio.armjitter.advsimd.MveCompareCondition}).
+    private static boolean evaluateMveFpCompare(
+            dev.vitorsilverio.armjitter.advsimd.MveCompareCondition condition, float a, float b) {
+        return switch (condition) {
+            case EQ -> a == b;
+            case NE -> a != b;
+            case GE -> a >= b;
+            case LT -> a < b;
+            case GT -> a > b;
+            case LE -> a <= b;
+            case CS, HI -> throw new IllegalStateException(
+                    "CS/HI não têm forma _fp (ver MveCompareCondition)");
+        };
+    }
+
+    /// Reinterpreta os `1 << esz` bytes baixos de `bits` como ponto flutuante — bit CAST, não
+    /// conversão numérica (`(TYPE)rm` do QEMU real É um cast C entre `uint16_t`/`uint32_t` e
+    /// `float16`/`float32`, que na própria representação do QEMU SÃO `uint16_t`/`uint32_t` —
+    /// nenhuma conversão de valor ocorre).
+    private static float mveCompareFloatValue(long bits, int esz) {
+        return esz == 1 ? AdvSimdLanes.halfToFloat(bits) : Float.intBitsToFloat((int) bits);
+    }
+
+    /// `DO_VCMP`/`DO_VCMP_SCALAR`/`DO_VCMP_FP`/`DO_VCMP_FP_SCALAR` verbatim, a parte comum às 4
+    /// macros (`target/arm/tcg/mve_helper.c`): computa `beatpred` (1 bit por BYTE, replicado pelos
+    /// `1 << esz` bytes de cada lane cuja comparação deu verdadeiro — "Comparison sets 0/1 bits
+    /// for each byte in the element"), aplica `elementMask` e mescla em `VPR.P0` respeitando
+    /// `eciMask` — comentário literal do arquivo real: "P0 bits for non-executed beats (where
+    /// eci_mask is 0) are unchanged. P0 bits for predicated lanes in executed beats (where mask is
+    /// 0) are 0. P0 bits otherwise are updated with the results of the comparisons. We must also
+    /// keep unchanged the MASK fields at the top of v7m.vpr" — os bits 16-31 (`MASK01`/`MASK23`)
+    /// ficam intactos porque `eciMask`/`beatpred` só ocupam os 16 bits baixos (`P0`).
+    private static int mergeCompareResultIntoP0(int vpr, int itState, int elementMask, int beatpred) {
+        int eciMask = MveVptState.eciMask(itState) & 0xFFFF;
+        int maskedBeatpred = beatpred & elementMask;
+        return (vpr & ~eciMask) | (maskedBeatpred & eciMask);
+    }
+
+    /// `VCMPEQ`/`VCMPNE`/`VCMPGE`/`VCMPLT`/`VCMPGT`/`VCMPLE`/`VCMPCS`/`VCMPHI` e as 6 formas `_fp`
+    /// vetor×vetor (perfil M, B16.8, MVE/Helium): compara `Qn`/`Qm` lane a lane, escreve `VPR.P0`
+    /// (ver {@link #mergeCompareResultIntoP0}). **Não chama {@link MveVptState#advance}** — o
+    /// avanço é o {@link IrOp.AdvanceVpt} genérico que {@code StandardIrBuilder} sempre emite
+    /// LOGO DEPOIS desta op (mesmo gancho de {@link #executeMveVector2Op}); quando `op.mask() !=
+    /// 0`, um {@link IrOp.Vpst} adicional (emitido DEPOIS do `AdvanceVpt` pelo `StandardIrBuilder`)
+    /// estabelece o `VPT`, reproduzindo a ordem exata do QEMU real (`do_vcmp`: o helper já chama
+    /// `mve_advance_vpt` internamente; só DEPOIS, fora do helper, `gen_vpst` roda condicionado a
+    /// `a->mask`) — inverter esta ordem corromperia a PRÓPRIA abertura do `VPT` (a máscara recém-
+    /// -aberta seria consumida pelo avanço da MESMA instrução, em vez de só pelas seguintes).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorCompare(ArmCore core, IrOp.MveVectorCompare op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int itState = core.cpsr().itState();
+        int elementMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = 16 / elementBytes;
+        int laneByteMask = (elementBytes == 4) ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
+        int beatpred = 0;
+        for (int lane = 0; lane < lanes; lane++) {
+            long a = vfp.element(op.qn(), lane, esz);
+            long b = vfp.element(op.qm(), lane, esz);
+            boolean result = op.floatingPoint()
+                    ? evaluateMveFpCompare(op.compareCondition(), mveCompareFloatValue(a, esz), mveCompareFloatValue(b, esz))
+                    : evaluateMveIntCompare(op.compareCondition(), a, b, esz);
+            if (result) {
+                beatpred |= laneByteMask << (lane * elementBytes);
+            }
+        }
+        core.vpr().setValue(mergeCompareResultIntoP0(vpr, itState, elementMask, beatpred));
+        return false;
+    }
+
+    /// Forma escalar (vetor × GPR broadcast) de {@link #executeMveVectorCompare} — mesma escrita
+    /// em `P0`, comparando cada lane de `Qn` contra o MESMO valor de `Rm` truncado ao tamanho do
+    /// elemento (`(TYPE)rm` real). `Rm == 15` é "constante zero" (ver
+    /// {@link #VCMP_SCALAR_ZERO_ENCODING}); `Rm == 13` já foi recusado no decode.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorCompareScalar(ArmCore core, IrOp.MveVectorCompareScalar op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int itState = core.cpsr().itState();
+        int elementMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int lanes = 16 / elementBytes;
+        int laneByteMask = (elementBytes == 4) ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
+        long rawRm = op.rm() == VCMP_SCALAR_ZERO_ENCODING ? 0L : Integer.toUnsignedLong(core.register(op.rm()));
+        long rm = AdvSimdLanes.truncate(rawRm, esz);
+        int beatpred = 0;
+        for (int lane = 0; lane < lanes; lane++) {
+            long a = vfp.element(op.qn(), lane, esz);
+            boolean result = op.floatingPoint()
+                    ? evaluateMveFpCompare(op.compareCondition(), mveCompareFloatValue(a, esz), mveCompareFloatValue(rm, esz))
+                    : evaluateMveIntCompare(op.compareCondition(), a, rm, esz);
+            if (result) {
+                beatpred |= laneByteMask << (lane * elementBytes);
+            }
+        }
+        core.vpr().setValue(mergeCompareResultIntoP0(vpr, itState, elementMask, beatpred));
+        return false;
+    }
 }
