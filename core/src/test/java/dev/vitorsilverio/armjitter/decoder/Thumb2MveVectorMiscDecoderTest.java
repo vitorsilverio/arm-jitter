@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
+import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import org.junit.jupiter.api.Test;
@@ -128,6 +129,70 @@ class Thumb2MveVectorMiscDecoderTest {
         assertNull(tryDecode(oneOpRaw(0b11, 2, 0b0000, 0b00, 1, 2)));
     }
 
+    @Test
+    void requiresMveIntegerFeature() {
+        int r = oneOpRaw(0b00, 0, 0b0100, 0b01, 1, 2);
+        assertNull(new Thumb2MveVectorMiscDecoder(ArmArchitecture.ARMV7A).tryDecode(r, 0, Condition.AL));
+    }
+
+    @Test
+    void oneOpRejectsMalformedBit12Bit4Bit0() {
+        int good = oneOpRaw(0b00, 0, 0b0100, 0b01, 1, 2); // VCLS.
+        assertNull(tryDecode(good | (1 << 12)), "bit12 tem que ser 0");
+        assertNull(tryDecode(good | (1 << 4)), "bit4 tem que ser 0");
+        assertNull(tryDecode(good | 1), "bit0 tem que ser 0");
+    }
+
+    @Test
+    void oneOpRejectsQdOrQmInHighBank() {
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0100, 0b01, 8, 2)), "Qd=8 fora de Q0-Q7");
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0100, 0b01, 1, 9)), "Qm=9 fora de Q0-Q7");
+    }
+
+    @Test
+    void oneOpRejectsUnallocatedNibbleUnderMisc() {
+        // group=00 (misc), nibble=0b0010 não corresponde a nenhum mnemônico da família.
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0010, 0b01, 1, 2)));
+    }
+
+    @Test
+    void miscNibblesRejectTheThirdSub2Value() {
+        // Cada nibble de 2 mnemônicos (CLS/CLZ, REV32/REV64, SQABS/SQNEG) só define sub2=01/11 —
+        // sub2=00/10 não tem mnemônico correspondente.
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0100, 0b00, 1, 2))); // nem CLS nem CLZ.
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0000, 0b00, 1, 2))); // nem REV32 nem REV64.
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0111, 0b00, 1, 2))); // nem SQABS nem SQNEG.
+        // nibble=0101 (slot do VMVN) com sub2 != 11 também não tem mnemônico.
+        assertNull(tryDecode(oneOpRaw(0b00, 0, 0b0101, 0b01, 1, 2)));
+    }
+
+    @Test
+    void absNegIntRejectsUnallocatedSub2() {
+        // group=01 (abs/neg), nibble=0011 (ABS/NEG int), sub2 só define 01/11 — 00/10 sem mnemônico.
+        assertNull(tryDecode(oneOpRaw(0b01, 0, 0b0011, 0b00, 1, 2)));
+        assertNull(tryDecode(oneOpRaw(0b01, 0, 0b0011, 0b10, 1, 2)));
+    }
+
+    @Test
+    void absNegFpRejectsWithoutMveFloatAndUnallocatedSub2() {
+        // MVE_INTEGER presente, MVE_FLOAT ausente (arquitetura sintética — nenhum preset público
+        // decompõe as duas hoje, mas o gate tem que valer independentemente).
+        ArmArchitecture integerOnly =
+                ArmArchitecture.extending(ArmArchitecture.ARMV8_1M, "mve-integer-only-test", ArmFeature.MVE_INTEGER);
+        int absFpRaw = oneOpRaw(0b01, 2, 0b0111, 0b01, 1, 2);
+        assertNull(new Thumb2MveVectorMiscDecoder(integerOnly).tryDecode(absFpRaw, 0, Condition.AL));
+
+        // Com MVE_FLOAT presente, sub2 só define 01/11 — 00/10 sem mnemônico.
+        assertNull(tryDecode(oneOpRaw(0b01, 2, 0b0111, 0b00, 1, 2)));
+        assertNull(tryDecode(oneOpRaw(0b01, 2, 0b0111, 0b10, 1, 2)));
+    }
+
+    @Test
+    void groupAbsNegRejectsNibbleWithoutMnemonic() {
+        // group=01, nibble=0101 não é nem ABS_NEG_INT(0011) nem ABS_NEG_FP(0111).
+        assertNull(tryDecode(oneOpRaw(0b01, 0, 0b0101, 0b01, 1, 2)));
+    }
+
     // ── @vdup ───────────────────────────────────────────────────────────────────────────────────
 
     private static int vdupRawReal(int b, int e, int qd, int rt) {
@@ -179,5 +244,20 @@ class Thumb2MveVectorMiscDecoderTest {
     void rejectsVdupRtSpOrPc() {
         assertNull(tryDecode(vdupRawReal(1, 0, 1, 13)));
         assertNull(tryDecode(vdupRawReal(1, 0, 1, 15)));
+    }
+
+    @Test
+    void rejectsVdupMalformedLiteralBits() {
+        int good = vdupRawReal(1, 0, 3, 5);
+        assertNull(tryDecode(good & ~(1 << 23)), "bit23 tem que ser 1");
+        assertNull(tryDecode(good | (1 << 6)), "bit6 tem que ser 0");
+        assertNull(tryDecode(good | 1), "bits[3:0] têm que ser 0000");
+    }
+
+    @Test
+    void rejectsVdupQdInHighBank() {
+        // Qd=8 via %qn (bit7=1, bits[19:17]=000) — fora de Q0-Q7.
+        int raw = vdupRawReal(1, 0, 0, 5) | (1 << 7);
+        assertNull(tryDecode(raw));
     }
 }

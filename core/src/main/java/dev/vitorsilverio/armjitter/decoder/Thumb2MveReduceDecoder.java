@@ -213,6 +213,11 @@ public final class Thumb2MveReduceDecoder implements DecoderExtension {
         }
         int rdahiRaw = (raw >>> VADDLV_RDAHI_RAW_SHIFT) & VADDLV_RDAHI_RAW_MASK;
         int rdahi = rdahiRaw * 2 + 1;
+        // `rdahi == GPR_PC` (15) É INALCANÇÁVEL por construção: só ocorre quando `rdahiRaw == 0b111`,
+        // que força `bits[23:20] = 1111` — o MESMO literal de `VADDV`, que sempre vence a prioridade
+        // textual do `{}` (ver Javadoc da classe) antes de `tryDecodeAddLv` ser tentado. Mantido
+        // verbatim ao QEMU real (`trans_VADDLV` checa os dois), documentado como cobertura
+        // impossível em vez de testado artificialmente.
         if (rdahi == GPR_SP || rdahi == GPR_PC) {
             return null;
         }

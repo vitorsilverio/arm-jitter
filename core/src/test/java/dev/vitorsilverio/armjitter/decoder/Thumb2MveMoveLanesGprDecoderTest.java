@@ -87,4 +87,18 @@ class Thumb2MveMoveLanesGprDecoderTest {
         int r = raw(0b00, 1, 2, 0, 3);
         assertNull(new Thumb2MveMoveLanesGprDecoder(ArmArchitecture.ARMV7A).tryDecode(r, 0, Condition.AL));
     }
+
+    @Test
+    void rejectsMalformedLiteralBits() {
+        int good = raw(0b00, 1, 2, 0, 3);
+        assertNull(tryDecode(good | (1 << 12)), "bit12 tem que ser 0");
+        assertNull(tryDecode(good ^ (1 << 8)), "bits[11:8] têm que ser 1111");
+        assertNull(tryDecode(good ^ (1 << 5)), "bits[7:5] têm que ser 000");
+    }
+
+    @Test
+    void rejectsQdInHighBank() {
+        // Qd=8 (Q8, fora de Q0-Q7 sob MVE_INTEGER).
+        assertNull(tryDecode(raw(0b00, 8, 2, 0, 3)));
+    }
 }

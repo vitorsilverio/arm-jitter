@@ -190,4 +190,80 @@ class Thumb2MveReduceDecoderTest {
     void rejectsReservedCmodeFifteenOpOne() {
         assertNull(tryDecode(vimmRaw(0b1111, 1, 2, 0)));
     }
+
+    @Test
+    void requiresMveIntegerFeature() {
+        int r = addVRaw(0, 2, 3, 1, 5);
+        assertNull(new Thumb2MveReduceDecoder(ArmArchitecture.ARMV7A).tryDecode(r, 0, Condition.AL));
+    }
+
+    // ── VADDV: rejeições dos literais ───────────────────────────────────────────────────────────
+
+    @Test
+    void addVRejectsMalformedLiteralBits() {
+        int good = addVRaw(0, 2, 3, 1, 5);
+        assertNull(tryDecode(good | (1 << 12)), "bit12 tem que ser 0");
+        assertNull(tryDecode(good ^ (1 << 8)), "bits[11:8] têm que ser 1111");
+        assertNull(tryDecode(good | (1 << 6)), "bits[7:6] têm que ser 00");
+        assertNull(tryDecode(good | (1 << 4)), "bit4 tem que ser 0");
+        assertNull(tryDecode(good | 1), "bit0 tem que ser 0");
+        assertNull(tryDecode(good ^ (1 << 16)), "bits[17:16] têm que ser 01");
+    }
+
+    @Test
+    void rejectsWrongTop3Bits() {
+        int good = addVRaw(0, 2, 3, 1, 5);
+        assertNull(tryDecode(good & ~(1 << 31)), "bits[31:29] têm que ser 111");
+    }
+
+    // ── VADDLV: rejeições dos literais ──────────────────────────────────────────────────────────
+
+    @Test
+    void addLvRejectsMalformedLiteralBits() {
+        int good = addLvRaw(1, 0b011, 2, 1, 4); // não colide com VADDV (bits[23:20] != 1111).
+        assertNull(tryDecode(good & ~(1 << 23)), "bit23 tem que ser 1");
+        assertNull(tryDecode(good ^ (1 << 16)), "bits[19:16] têm que ser 1001");
+        assertNull(tryDecode(good | (1 << 12)), "bit12 tem que ser 0");
+        assertNull(tryDecode(good ^ (1 << 8)), "bits[11:8] têm que ser 1111");
+        assertNull(tryDecode(good | (1 << 6)), "bits[7:6] têm que ser 00");
+        assertNull(tryDecode(good | (1 << 4)), "bit4 tem que ser 0");
+        assertNull(tryDecode(good | 1), "bit0 tem que ser 0");
+    }
+
+    // ── VABAV: rejeições dos literais e do banco alto ───────────────────────────────────────────
+
+    @Test
+    void abavRejectsMalformedLiteralBits() {
+        int good = abavRaw(0, 1, 3, 5, 6);
+        assertNull(tryDecode(good ^ (1 << 22)), "bits[23:22] têm que ser 10");
+        assertNull(tryDecode(good | (1 << 16)), "bit16 tem que ser 0");
+        assertNull(tryDecode(good ^ (1 << 8)), "bits[11:8] têm que ser 1111");
+        assertNull(tryDecode(good | (1 << 6)), "bit6 tem que ser 0");
+        assertNull(tryDecode(good | (1 << 4)), "bit4 tem que ser 0");
+        assertNull(tryDecode(good & ~1), "bit0 tem que ser 1");
+    }
+
+    @Test
+    void abavRejectsQnOrQmInHighBank() {
+        assertNull(tryDecode(abavRaw(0, 1, 8, 5, 6)), "Qn=8 fora de Q0-Q7");
+        assertNull(tryDecode(abavRaw(0, 1, 3, 5, 8)), "Qm=8 fora de Q0-Q7");
+    }
+
+    // ── Vimm_1r: rejeições dos literais e do banco alto ─────────────────────────────────────────
+
+    @Test
+    void vimmRejectsMalformedLiteralBits() {
+        int good = vimmRaw(0b0001, 0, 2, 0xAB);
+        assertNull(tryDecode(good ^ (1 << 23)), "bits[27:23] têm que ser 11111");
+        assertNull(tryDecode(good | (1 << 19)), "bits[21:19] têm que ser 000");
+        assertNull(tryDecode(good | (1 << 12)), "bit12 tem que ser 0");
+        assertNull(tryDecode(good | (1 << 7)), "bit7 tem que ser 0");
+        assertNull(tryDecode(good & ~(1 << 6)), "bit6 tem que ser 1");
+        assertNull(tryDecode(good & ~(1 << 4)), "bit4 tem que ser 1");
+    }
+
+    @Test
+    void vimmRejectsQdInHighBank() {
+        assertNull(tryDecode(vimmRaw(0b0001, 0, 8, 0xAB)));
+    }
 }
