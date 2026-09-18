@@ -677,7 +677,13 @@ public final class StandardIrBuilder implements IrBuilder {
                 // DEPOIS, fora do helper, `do_vcmp`/`do_vcmp_scalar` chamam `gen_vpst` se
                 // `a->mask`) — ver Javadoc de `IrOp.MveVectorCompare`.
                 || instruction.liftedOp() instanceof IrOp.MveVectorCompare
-                || instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar
+                // B16.9: operações escalares (vetor × GPR broadcast) — mesmo padrão acima.
+                || instruction.liftedOp() instanceof IrOp.MveVectorScalar
+                || instruction.liftedOp() instanceof IrOp.MveVectorScalarWidening
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpScalar
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpScalarFma
+                || instruction.liftedOp() instanceof IrOp.MveVectorScalarSpecial) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
             if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
                 block.add(new IrOp.Vpst(compare.mask(), compare.condition()));

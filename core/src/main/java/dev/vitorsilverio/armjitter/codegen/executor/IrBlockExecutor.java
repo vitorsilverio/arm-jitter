@@ -241,6 +241,17 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorCompare(core, (IrOp.MveVectorCompare) op);
                 case IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR ->
                         pcChanged |= system.executeMveVectorCompareScalar(core, (IrOp.MveVectorCompareScalar) op);
+                // B16.9: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_SCALAR ->
+                        pcChanged |= system.executeMveVectorScalar(core, (IrOp.MveVectorScalar) op);
+                case IrOp.Kind.MVE_VECTOR_SCALAR_WIDENING ->
+                        pcChanged |= system.executeMveVectorScalarWidening(core, (IrOp.MveVectorScalarWidening) op);
+                case IrOp.Kind.MVE_VECTOR_FP_SCALAR ->
+                        pcChanged |= system.executeMveVectorFpScalar(core, (IrOp.MveVectorFpScalar) op);
+                case IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA ->
+                        pcChanged |= system.executeMveVectorFpScalarFma(core, (IrOp.MveVectorFpScalarFma) op);
+                case IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL ->
+                        pcChanged |= system.executeMveVectorScalarSpecial(core, (IrOp.MveVectorScalarSpecial) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -477,6 +488,14 @@ public final class IrBlockExecutor {
             case IrOp.MveVectorCompare mveVectorCompare -> system.executeMveVectorCompare(core, mveVectorCompare);
             case IrOp.MveVectorCompareScalar mveVectorCompareScalar ->
                     system.executeMveVectorCompareScalar(core, mveVectorCompareScalar);
+            case IrOp.MveVectorScalar mveVectorScalar -> system.executeMveVectorScalar(core, mveVectorScalar);
+            case IrOp.MveVectorScalarWidening mveVectorScalarWidening ->
+                    system.executeMveVectorScalarWidening(core, mveVectorScalarWidening);
+            case IrOp.MveVectorFpScalar mveVectorFpScalar -> system.executeMveVectorFpScalar(core, mveVectorFpScalar);
+            case IrOp.MveVectorFpScalarFma mveVectorFpScalarFma ->
+                    system.executeMveVectorFpScalarFma(core, mveVectorFpScalarFma);
+            case IrOp.MveVectorScalarSpecial mveVectorScalarSpecial ->
+                    system.executeMveVectorScalarSpecial(core, mveVectorScalarSpecial);
         };
     }
 

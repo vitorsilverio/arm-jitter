@@ -864,6 +864,267 @@ public final class AdvSimdLanes {
         return qc;
     }
 
+    /// Operações escalares (vetor × GPR broadcast, perfil M, B16.9, MVE/Helium, `target/isa-decode/
+    /// mve.decode`, seção "Scalar operations", formato `@2scalar`/`@shl_scalar`): como
+    /// {@link #threeSameMasked}, mas o segundo operando é um valor ÚNICO (`scalarValue`, já lido do
+    /// GPR pelo chamador) em vez de uma lane de `baseRm` — verbatim de `DO_2OP_SCALAR`/
+    /// `DO_2OP_SAT_SCALAR` (`target/arm/tcg/mve_helper.c`: `TYPE m = rm;` fora do laço, a MESMA
+    /// variável usada em toda lane). Serve TANTO o grupo `VADD_scalar`…`VQRDMULH_scalar`/`VMLA`
+    /// (`baseRn=Qn`, `baseRd=Qd`, `scalarValue`=`Rm` truncado) QUANTO o grupo `@shl_scalar`
+    /// (`VSHL_S_scalar`…`VQRSHL_U_scalar`, `baseRn=baseRd=Qda`, `scalarValue`=`Rm` — a CONTAGEM de
+    /// deslocamento, cujo byte baixo {@link #registerShiftAmount} já extrai sozinho, então truncar a
+    /// `esz` antes não perde informação relevante): os dois cabem no MESMO núcleo porque
+    /// `computeThreeSame`/`computeThreeSameChecked` já tratam `SSHL`/`USHL`/`SRSHL`/`URSHL`/`SQSHL`/
+    /// `UQSHL`/`SQRSHL`/`UQRSHL` como "aplica `op` a `(a,b)`" sem se importar se `a`/`b` vêm de
+    /// registradores diferentes ou do MESMO registrador lido antes de escrito (por lane, sem
+    /// dependência cruzada). Devolve `true` se alguma lane ATIVA saturou (`FPSCR.QC`).
+    public static boolean threeSameScalarMasked(AdvSimdRegisterWords regs, AdvSimdThreeSameOp op, int esz, int lanes,
+            int baseRd, int baseRn, long scalarValue, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        long b = truncate(scalarValue, esz);
+        long sb = signExtend(b, esz);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = element(regs, baseRn, i, esz);
+            long sa = signExtend(a, esz);
+            long d = element(regs, baseRd, i, esz);
+            Saturation computed = computeThreeSameChecked(op, esz, a, b, sa, sb, d);
+            long merged = mergeLaneBytes(d, truncate(computed.value(), esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+            qc |= computed.saturated();
+        }
+        return qc;
+    }
+
+    /// `VQDMULLB_scalar`/`VQDMULLT_scalar` (perfil M, B16.9, MVE/Helium, verbatim de
+    /// `DO_2OP_SAT_SCALAR_L`/`do_qdmullh`/`do_qdmullw`, `target/arm/tcg/mve_helper.c`): como
+    /// {@link #doublingWideningInterleavedMasked}, mas o segundo operando é o valor ÚNICO
+    /// `scalarValue` (já lido do GPR e truncado ao tamanho FONTE `esz`) em vez de uma lane
+    /// intercalada de `baseRm` — mesmo padrão de indexação `le*2 + top` (lanes PARES/ÍMPARES
+    /// intercaladas, não metade contígua). Devolve `true` se alguma lane ATIVA saturou.
+    public static boolean doublingWideningScalarInterleavedMasked(AdvSimdRegisterWords regs, int esz,
+            int outputElements, boolean top, int baseRd, int baseRn, long scalarValue, int byteMask) {
+        boolean qc = false;
+        int wideEsz = esz + 1;
+        int wideElementBytes = 1 << wideEsz;
+        int wideElementByteMask = (1 << wideElementBytes) - 1;
+        int sourceOffset = top ? 1 : 0;
+        long sb = signExtend(truncate(scalarValue, esz), esz);
+        for (int le = 0; le < outputElements; le++) {
+            int laneMask = (byteMask >>> (le * wideElementBytes)) & wideElementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            int sourceLane = le * 2 + sourceOffset;
+            long sa = signExtend(element(regs, baseRn, sourceLane, esz), esz);
+            Saturation result = saturatingDoublingProductChecked(sa, sb, wideEsz);
+            long current = element(regs, baseRd, le, wideEsz);
+            long merged = mergeLaneBytes(current, truncate(result.value(), wideEsz), laneMask, wideElementBytes);
+            setElement(regs, baseRd, le, wideEsz, merged);
+            qc |= result.saturated();
+        }
+        return qc;
+    }
+
+    /// `VBRSR` (bit reverse and shift right, perfil M, B16.9, MVE/Helium, verbatim de
+    /// `do_vbrsrb`/`do_vbrsrh`/`do_vbrsrw`, `target/arm/tcg/mve_helper.c`): sem análogo em NEON/A64.
+    /// `Rm` (mascarado a 8 bits) é a CONTAGEM: `0` produz `0`; senão inverte os bits de `Qn[i]`
+    /// dentro da largura do elemento e desloca à DIREITA (lógico) por `esize - count` quando
+    /// `count < esize` (mantendo só os `count` bits mais significativos originais, agora nos bits
+    /// menos significativos do resultado); `count >= esize` mantém o valor totalmente invertido.
+    public static void bitReverseShiftRightMasked(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd,
+            int baseRn, long scalarValue, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        int bits = 8 << esz;
+        int count = (int) (scalarValue & 0xFFL);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long n = element(regs, baseRn, i, esz);
+            long result;
+            if (count == 0) {
+                result = 0;
+            } else {
+                long reversed = reverseBits(n, esz);
+                result = count < bits ? (reversed >>> (bits - count)) : reversed;
+            }
+            long current = element(regs, baseRd, i, esz);
+            long merged = mergeLaneBytes(current, truncate(result, esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// Inverte a ordem dos `1 << esz` bytes... não — inverte a ordem dos BITS de um elemento de
+    /// `1 << esz` bytes (`revbit8`/`revbit16`/`revbit32` reais) usando {@link Integer#reverse(int)}
+    /// (que inverte os 32 bits inteiros) e desloca o resultado para alinhar ao tamanho do elemento.
+    private static long reverseBits(long value, int esz) {
+        int bits = 8 << esz;
+        int reversed = Integer.reverse((int) value);
+        return (reversed >>> (32 - bits)) & elementMask(esz);
+    }
+
+    /// `VMLAS` (perfil M, B16.9, MVE/Helium, verbatim de `DO_VMLAS`/`DO_2OP_ACC_SCALAR_U`,
+    /// `target/arm/tcg/mve_helper.c`): **achado real** — `VMLAS` NÃO é `VMLA` com operandos
+    /// trocados por acaso; `DO_VMLAS(D,N,M) = (N)*(D)+(M)` multiplica `Qn[i]` pelo `Qd[i]` ATUAL
+    /// (não por `Rm`) e SOMA `Rm` (não `Qd`) — o comentário do arquivo real é explícito: "the
+    /// *MLASH insns are vector * vector + scalar". Sem sinal (aritmética `unsigned` de wraparound,
+    /// como `VMLA`), sem saturação.
+    public static void multiplyAccumulateSwapScalarMasked(AdvSimdRegisterWords regs, int esz, int lanes, int baseRd,
+            int baseRn, long scalarValue, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        long scalar = truncate(scalarValue, esz);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = element(regs, baseRn, i, esz);
+            long d = element(regs, baseRd, i, esz);
+            long result = a * d + scalar;
+            long merged = mergeLaneBytes(d, truncate(result, esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// `VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (perfil M, B16.9, MVE/Helium, verbatim de
+    /// `do_vqdmlah_b`/`_h`/`_w`, `target/arm/tcg/mve_helper.c`, comentário real: "the *MLAH insns
+    /// are vector * scalar + vector; the *MLASH insns are vector * vector + scalar"): multiplicação
+    /// dobrada saturante de `Qn[i]` por um segundo fator, com arredondamento OPCIONAL e soma de um
+    /// terceiro operando, tudo saturado numa ÚNICA operação de largura DUPLA (não duas saturações
+    /// independentes como {@link AdvSimdThreeSameOp#SQRDMLAH} do A64/NEON — arquiteturalmente
+    /// distinto, por isso `BigInteger` em vez de reusar aquele `op`, mesma disciplina de
+    /// {@link #saturatingDoublingProductChecked}). `swapAccumulatorAndScalar=false`
+    /// (`VQDMLAH`/`VQRDMLAH`): segundo fator = `Rm`, terceiro operando = `Qd` ATUAL.
+    /// `swapAccumulatorAndScalar=true` (`VQDMLASH`/`VQRDMLASH`): segundo fator = `Qd` ATUAL,
+    /// terceiro operando = `Rm`. `rounding` adiciona `1 << (esize-1)` antes de saturar/deslocar
+    /// (`VQRDMLAH`/`VQRDMLASH` vs `VQDMLAH`/`VQDMLASH`). Devolve `true` se alguma lane ATIVA saturou.
+    public static boolean doublingMultiplyAccumulateScalarMasked(AdvSimdRegisterWords regs, int esz, int lanes,
+            int baseRd, int baseRn, long scalarValue, boolean swapAccumulatorAndScalar, boolean rounding,
+            int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        long scalar = signExtend(truncate(scalarValue, esz), esz);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = signExtend(element(regs, baseRn, i, esz), esz);
+            long current = signExtend(element(regs, baseRd, i, esz), esz);
+            long secondFactor = swapAccumulatorAndScalar ? current : scalar;
+            long thirdOperand = swapAccumulatorAndScalar ? scalar : current;
+            Saturation computed = doublingMultiplyAccumulateScalarChecked(a, secondFactor, thirdOperand, esz,
+                    rounding);
+            long d = element(regs, baseRd, i, esz);
+            long merged = mergeLaneBytes(d, truncate(computed.value(), esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+            qc |= computed.saturated();
+        }
+        return qc;
+    }
+
+    /// Núcleo de {@link #doublingMultiplyAccumulateScalarMasked} — `r = a*b*2 + (c << bits) +
+    /// (round ? 1<<(bits-1) : 0)`, saturado ao DOBRO da largura do elemento (`do_sat_bhw` real), e
+    /// deslocado à direita por `bits` — verbatim de `do_vqdmlah_b`/`_h`/`_w`, generalizado para
+    /// largura VARIÁVEL via {@link BigInteger} (evita o cuidado manual de overflow de 64 bits que o
+    /// C real precisa só na forma `w`, `sadd64_overflow` em 3 estágios — mesma disciplina de
+    /// {@link #saturatingDoublingProductChecked}, que já usa `BigInteger` pelo mesmo motivo).
+    private static Saturation doublingMultiplyAccumulateScalarChecked(long a, long b, long c, int esz,
+            boolean rounding) {
+        int bits = 8 << esz;
+        BigInteger sum = BigInteger.valueOf(a).multiply(BigInteger.valueOf(b)).shiftLeft(1)
+                .add(BigInteger.valueOf(c).shiftLeft(bits));
+        if (rounding) {
+            sum = sum.add(BigInteger.ONE.shiftLeft(bits - 1));
+        }
+        Saturation saturatedWide = saturateChecked(sum, esz + 1, true);
+        return new Saturation(saturatedWide.value() >> bits, saturatedWide.saturated());
+    }
+
+    /// Operações escalares FP planas (`VADD_fp_scalar`/`VSUB_fp_scalar`/`VMUL_fp_scalar`, perfil M,
+    /// B16.9, MVE/Helium, `FEAT_MVE_FP`): como {@link #fpThreeSameMasked}, mas o segundo operando é
+    /// um valor ÚNICO (`scalarBits`, já lido do GPR pelo chamador) em vez de uma lane de `baseRm` —
+    /// mesmo padrão de {@link #threeSameScalarMasked}. Só `ADD`/`SUB`/`MUL` de
+    /// {@link AdvSimdFpThreeSameOp} fazem sentido aqui (o chamador nunca passa outro). Nunca satura.
+    public static void fpThreeSameScalarMasked(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz,
+            int lanes, int baseRd, int baseRn, long scalarBits, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        long bmBits = truncate(scalarBits, esz);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long anBits = element(regs, baseRn, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfThreeSame(op, anBits, bmBits, dBits);
+                case 2 -> singleThreeSame(op, anBits, bmBits, dBits);
+                default -> throw new IllegalArgumentException("esz inválido para FP scalar: " + esz);
+            };
+            long merged = mergeLaneBytes(dBits, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// `VFMA_scalar`/`VFMAS_scalar` (perfil M, B16.9, MVE/Helium, `FEAT_MVE_FP`, verbatim de
+    /// `DO_2OP_FP_ACC_SCALAR`/`DO_VFMAS_SCALARH`/`DO_VFMAS_SCALARS`, `target/arm/tcg/mve_helper.c`):
+    /// **achado real, confirmado nos DOIS comentários literais do arquivo** — "VFMA is vector *
+    /// scalar + vector" (`swapAccumulator=false`: `Qd[i] = fma(Qn[i], Rm, Qd[i])`) e "VFMAS is
+    /// vector * vector + scalar, so swap op2 and op3" (`swapAccumulator=true`: `Qd[i] =
+    /// fma(Qn[i], Qd[i], Rm)` — MESMA troca de papéis de {@link #multiplyAccumulateSwapScalarMasked}
+    /// (`VMLAS`), só que fundido/ponto-flutuante). Arredondamento ÚNICO ({@link Math#fma}), nunca
+    /// satura.
+    public static void fpFusedMultiplyAddScalarMasked(AdvSimdRegisterWords regs, boolean swapAccumulator, int esz,
+            int lanes, int baseRd, int baseRn, long scalarBits, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        long mBits = truncate(scalarBits, esz);
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long anBits = element(regs, baseRn, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = switch (esz) {
+                case 1 -> halfFusedMultiplyAddScalar(swapAccumulator, anBits, mBits, dBits);
+                case 2 -> singleFusedMultiplyAddScalar(swapAccumulator, anBits, mBits, dBits);
+                default -> throw new IllegalArgumentException("esz inválido para FP FMA scalar: " + esz);
+            };
+            long merged = mergeLaneBytes(dBits, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
+    /// Ramo F16 de {@link #fpFusedMultiplyAddScalarMasked}: `swap=false` → `fma(a,m,d)` (`VFMA`);
+    /// `swap=true` → `fma(a,d,m)` (`VFMAS`, papéis de `m`/`d` trocados no `fma`).
+    private static long halfFusedMultiplyAddScalar(boolean swap, long anBits, long mBits, long dBits) {
+        float a = halfToFloat(anBits);
+        float m = halfToFloat(mBits);
+        float d = halfToFloat(dBits);
+        return swap ? halfBits(Math.fma(a, d, m)) : halfBits(Math.fma(a, m, d));
+    }
+
+    /// Ramo F32 de {@link #fpFusedMultiplyAddScalarMasked} — ver {@link #halfFusedMultiplyAddScalar}.
+    private static long singleFusedMultiplyAddScalar(boolean swap, long anBits, long mBits, long dBits) {
+        float a = Float.intBitsToFloat((int) anBits);
+        float m = Float.intBitsToFloat((int) mBits);
+        float d = Float.intBitsToFloat((int) dBits);
+        return swap ? floatBits(Math.fma(a, d, m)) : floatBits(Math.fma(a, m, d));
+    }
+
     /// `VQDMLADH`/`VQDMLSDH` e variantes `X` (exchange)/`R` (rounded) (B16.7, MVE/Helium, verbatim de
     /// `DO_VQDMLADH_OP`, `target/arm/tcg/mve_helper.c`): **achado real** — esta instrução escreve SÓ
     /// METADE das lanes (as de paridade `exchange?1:0`); a outra metade fica INTOCADA (nem lida pelo

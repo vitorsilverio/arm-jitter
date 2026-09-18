@@ -556,6 +556,12 @@ public final class ArmArchitecture {
                     // VCMP*_fp_scalar vivem no MESMO espaço de bits `111.1110...` que
                     // Thumb2NocpDecoder reivindica — TEM que vir antes.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveComparisonDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveVectorScalarDecoder (B16.9): as 35 formas escalares (vetor × GPR
+                    // broadcast) vivem no MESMO espaço de bits `111.1110...` que Thumb2NocpDecoder
+                    // reivindica — TEM que vir antes. Registrado DEPOIS de
+                    // Thumb2MveComparisonDecoder (pendência da B16.8: nenhum ajuste de ordem
+                    // necessário, os guardas de size/gate de cada decoder já resolvem a colisão).
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveVectorScalarDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

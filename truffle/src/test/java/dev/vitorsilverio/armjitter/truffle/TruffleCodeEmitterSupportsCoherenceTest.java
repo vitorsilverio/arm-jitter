@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(144, kinds.size(), "IrOp.Kind deve ter 144 constantes contíguas");
+        assertEquals(149, kinds.size(), "IrOp.Kind deve ter 149 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -127,8 +127,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // acrescentou MVE_VECTOR_FP_TWO_OP, MVE_VECTOR_FP_COMPLEX_ADD,
         // MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE (+3, mesmo "Não inclui"). B16.8 acrescentou
         // MVE_VECTOR_COMPARE, MVE_VECTOR_COMPARE_SCALAR (+2, mesmo "Não inclui": decode +
-        // interpretado apenas, MVE/Helium fica para o épico A10 tratar depois).
-        assertEquals(78, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // interpretado apenas, MVE/Helium fica para o épico A10 tratar depois). B16.9 acrescentou
+        // MVE_VECTOR_SCALAR, MVE_VECTOR_SCALAR_WIDENING, MVE_VECTOR_FP_SCALAR,
+        // MVE_VECTOR_FP_SCALAR_FMA, MVE_VECTOR_SCALAR_SPECIAL (+5, mesmo "Não inclui").
+        assertEquals(83, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -184,7 +186,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_DOUBLING_WIDENING_MULTIPLY,
                         IrOp.Kind.MVE_VECTOR_FP_TWO_OP, IrOp.Kind.MVE_VECTOR_FP_COMPLEX_ADD,
                         IrOp.Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE,
-                        IrOp.Kind.MVE_VECTOR_COMPARE, IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR)),
+                        IrOp.Kind.MVE_VECTOR_COMPARE, IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR,
+                        IrOp.Kind.MVE_VECTOR_SCALAR, IrOp.Kind.MVE_VECTOR_SCALAR_WIDENING,
+                        IrOp.Kind.MVE_VECTOR_FP_SCALAR, IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA,
+                        IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -388,6 +393,14 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     dev.vitorsilverio.armjitter.advsimd.MveCompareCondition.EQ, false, 2, 0, 1, 0, c);
             case IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR -> new IrOp.MveVectorCompareScalar(
                     dev.vitorsilverio.armjitter.advsimd.MveCompareCondition.EQ, false, 2, 0, 1, 0, c);
+            case IrOp.Kind.MVE_VECTOR_SCALAR -> new IrOp.MveVectorScalar(AdvSimdThreeSameOp.ADD, 0, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_SCALAR_WIDENING ->
+                    new IrOp.MveVectorScalarWidening(1, false, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_FP_SCALAR ->
+                    new IrOp.MveVectorFpScalar(AdvSimdFpThreeSameOp.ADD, 2, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA -> new IrOp.MveVectorFpScalarFma(false, 2, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL -> new IrOp.MveVectorScalarSpecial(
+                    IrOp.MveVectorScalarSpecial.SpecialOp.VBRSR, 0, 0, 1, 2, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

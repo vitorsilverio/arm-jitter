@@ -287,6 +287,13 @@ public final class AsmNativePolicy {
             case IrOp.MveVectorFpComplexMultiplyAccumulate ignored -> false;
             case IrOp.MveVectorCompare ignored -> false;
             case IrOp.MveVectorCompareScalar ignored -> false;
+            // Operações escalares (B16.9, MVE/Helium): mesmo padrão acima, sem emissão nativa
+            // nesta task.
+            case IrOp.MveVectorScalar ignored -> false;
+            case IrOp.MveVectorScalarWidening ignored -> false;
+            case IrOp.MveVectorFpScalar ignored -> false;
+            case IrOp.MveVectorFpScalarFma ignored -> false;
+            case IrOp.MveVectorScalarSpecial ignored -> false;
         };
     }
 

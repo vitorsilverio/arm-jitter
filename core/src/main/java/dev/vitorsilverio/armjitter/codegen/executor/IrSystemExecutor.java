@@ -1568,4 +1568,163 @@ public final class IrSystemExecutor {
         core.vpr().setValue(mergeCompareResultIntoP0(vpr, itState, elementMask, beatpred));
         return false;
     }
+
+    /// `VADD_scalar`…`VQRDMULH_scalar`/`VMLA` (`@2scalar`) e `VSHL_S_scalar`…`VQRSHL_U_scalar`
+    /// (`@shl_scalar`, perfil M, B16.9, MVE/Helium): delega ao núcleo COMPARTILHADO ({@link
+    /// AdvSimdLanes#threeSameScalarMasked}) — `Rm` é lido UMA vez do GPR (zero-estendido de 32
+    /// bits) e replicado por toda a operação. As formas saturantes setam `FPSCR.QC` só quando
+    /// alguma lane ATIVA saturou.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorScalar(ArmCore core, IrOp.MveVectorScalar op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        long rm = Integer.toUnsignedLong(core.register(op.rm()));
+        boolean saturated = AdvSimdLanes.threeSameScalarMasked(vfp, op.op(), esz, lanes, baseRd, baseRn, rm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VQDMULLB_scalar`/`VQDMULLT_scalar` (perfil M, B16.9, MVE/Helium): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#doublingWideningScalarInterleavedMasked}).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorScalarWidening(ArmCore core, IrOp.MveVectorScalarWidening op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        long rm = Integer.toUnsignedLong(core.register(op.rm()));
+        boolean saturated = AdvSimdLanes.doublingWideningScalarInterleavedMasked(vfp, esz, outputElements, op.top(),
+                baseRd, baseRn, rm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VADD_fp_scalar`/`VSUB_fp_scalar`/`VMUL_fp_scalar` (perfil M, B16.9, MVE/Helium): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameScalarMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpScalar(ArmCore core, IrOp.MveVectorFpScalar op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        long rm = Integer.toUnsignedLong(core.register(op.rm()));
+        AdvSimdLanes.fpThreeSameScalarMasked(vfp, op.op(), esz, lanes, baseRd, baseRn, rm, mask);
+        return false;
+    }
+
+    /// `VFMA_scalar`/`VFMAS_scalar` (perfil M, B16.9, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpFusedMultiplyAddScalarMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpScalarFma(ArmCore core, IrOp.MveVectorFpScalarFma op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        long rm = Integer.toUnsignedLong(core.register(op.rm()));
+        AdvSimdLanes.fpFusedMultiplyAddScalarMasked(vfp, op.swapAccumulator(), esz, lanes, baseRd, baseRn, rm, mask);
+        return false;
+    }
+
+    /// `VBRSR`/`VMLAS`/`VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (perfil M, B16.9, MVE/Helium):
+    /// delega ao método dedicado de {@link AdvSimdLanes} correspondente a {@link
+    /// IrOp.MveVectorScalarSpecial.SpecialOp}. As 4 formas `VQ*DMLA*H` setam `FPSCR.QC` só quando
+    /// alguma lane ATIVA saturou; `VBRSR`/`VMLAS` nunca saturam.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorScalarSpecial(ArmCore core, IrOp.MveVectorScalarSpecial op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
+        long rm = Integer.toUnsignedLong(core.register(op.rm()));
+        switch (op.op()) {
+            case VBRSR -> AdvSimdLanes.bitReverseShiftRightMasked(vfp, esz, lanes, baseRd, baseRn, rm, mask);
+            case VMLAS -> AdvSimdLanes.multiplyAccumulateSwapScalarMasked(vfp, esz, lanes, baseRd, baseRn, rm, mask);
+            case VQDMLAH -> {
+                if (AdvSimdLanes.doublingMultiplyAccumulateScalarMasked(vfp, esz, lanes, baseRd, baseRn, rm, false,
+                        false, mask)) {
+                    core.fpscr().orQc();
+                }
+            }
+            case VQRDMLAH -> {
+                if (AdvSimdLanes.doublingMultiplyAccumulateScalarMasked(vfp, esz, lanes, baseRd, baseRn, rm, false,
+                        true, mask)) {
+                    core.fpscr().orQc();
+                }
+            }
+            case VQDMLASH -> {
+                if (AdvSimdLanes.doublingMultiplyAccumulateScalarMasked(vfp, esz, lanes, baseRd, baseRn, rm, true,
+                        false, mask)) {
+                    core.fpscr().orQc();
+                }
+            }
+            case VQRDMLASH -> {
+                if (AdvSimdLanes.doublingMultiplyAccumulateScalarMasked(vfp, esz, lanes, baseRd, baseRn, rm, true,
+                        true, mask)) {
+                    core.fpscr().orQc();
+                }
+            }
+        }
+        return false;
+    }
 }

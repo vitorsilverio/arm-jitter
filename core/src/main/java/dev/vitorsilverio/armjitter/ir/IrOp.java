@@ -29,7 +29,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorShiftWidenInterleaved, IrOp.MveVectorNarrowInterleaved, IrOp.MveVectorFpConvertPrecision,
         IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply,
         IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate,
-        IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar {
+        IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar, IrOp.MveVectorScalar, IrOp.MveVectorScalarWidening,
+        IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -290,6 +291,25 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.8: `VCMP*_scalar`/`VCMP*_fp_scalar` vetor×GPR (perfil M, MVE/Helium) — ver
         /// {@link MveVectorCompareScalar}.
         public static final int MVE_VECTOR_COMPARE_SCALAR = 143;
+        /// B16.9: `VADD_scalar`…`VQRDMULH_scalar`/`VMLA` (`@2scalar`) e `VSHL_S_scalar`…
+        /// `VQRSHL_U_scalar` (`@shl_scalar`), reusando
+        /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} com o segundo
+        /// operando vindo de um GPR (perfil M, MVE/Helium) — ver {@link MveVectorScalar}.
+        public static final int MVE_VECTOR_SCALAR = 144;
+        /// B16.9: `VQDMULLB_scalar`/`VQDMULLT_scalar` (alargante, escalar, perfil M, MVE/Helium) —
+        /// ver {@link MveVectorScalarWidening}.
+        public static final int MVE_VECTOR_SCALAR_WIDENING = 145;
+        /// B16.9: `VADD_fp_scalar`/`VSUB_fp_scalar`/`VMUL_fp_scalar` (`FEAT_MVE_FP`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorFpScalar}.
+        public static final int MVE_VECTOR_FP_SCALAR = 146;
+        /// B16.9: `VFMA_scalar`/`VFMAS_scalar` (fundido, `FEAT_MVE_FP`, perfil M, MVE/Helium) — ver
+        /// {@link MveVectorFpScalarFma}.
+        public static final int MVE_VECTOR_FP_SCALAR_FMA = 147;
+        /// B16.9: `VBRSR`/`VMLAS`/`VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (formas escalares SEM
+        /// análogo em {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp}, perfil M,
+        /// MVE/Helium) — ver
+        /// {@link MveVectorScalarSpecial}.
+        public static final int MVE_VECTOR_SCALAR_SPECIAL = 148;
     }
 
     /// Operacao ALU generica.
@@ -3677,5 +3697,171 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição ARM necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_COMPARE_SCALAR; }
+    }
+
+    /// Operações escalares (vetor × GPR broadcast, perfil M, B16.9, MVE/Helium, `target/isa-decode/
+    /// mve.decode`, seção "Scalar operations", 22 encodings): reusa o MESMO
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} de {@link MveVector2Op}
+    /// (RFC B13.2 D1) — via {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameScalarMasked}
+    /// — mas o segundo operando é um valor ÚNICO lido de `Rm` (`0`-`15`, nunca `13`/`15`,
+    /// UNPREDICTABLE em ambos, recusados no decode) e replicado por toda a operação, não uma lane de
+    /// `Qm`. Cobre DUAS formas de encoding com o MESMO núcleo: `@2scalar` (`VADD_scalar`…
+    /// `VQRDMULH_scalar`/`VMLA` — `qn`≠`qd`, `Rm` é o VALOR replicado) e `@shl_scalar`
+    /// (`VSHL_S_scalar`…`VQRSHL_U_scalar` — `qn`={@link #qd}, o `&shl_scalar` real só tem `qda`;
+    /// `Rm` é a CONTAGEM de deslocamento, mas {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameScalarMasked} funciona igual porque
+    /// só o BYTE BAIXO de `Rm` importa nas formas `SSHL`/`USHL`/`SRSHL`/`URSHL`/`SQSHL`/`UQSHL`/
+    /// `SQRSHL`/`UQRSHL`, preservado por qualquer truncamento `esz>=0`). **`VMLA` é a ÚNICA linha
+    /// com `111 -` (bit 28 don't-care)** — o decoder não lê `U` para produzir `MLA`, único caso do
+    /// arquivo. Beatwise (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` só para lanes ATIVAS nas
+    /// 10 formas saturantes.
+    record MveVectorScalar(
+            /// Operação a executar (núcleo compartilhado) — qualquer valor de
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} usado por
+            /// {@link MveVector2Op} EXCETO os exclusivos de widening/carry/complexo.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp op,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` recusado no decoder).
+            int esz,
+            /// `Qd` (`0`-`7`) — para `@shl_scalar`, é o MESMO valor de {@link #qn} (`Qda`).
+            int qd,
+            /// `Qn` (`0`-`7`) — para `@shl_scalar`, é o MESMO valor de {@link #qd} (`Qda`, fonte E
+            /// destino).
+            int qn,
+            /// `Rm` (`0`-`15`; `13`/`15` já recusados no decoder, G8).
+            int rm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SCALAR; }
+    }
+
+    /// `VQDMULLB_scalar`/`VQDMULLT_scalar` (perfil M, B16.9, MVE/Helium, verbatim de
+    /// `DO_2OP_SAT_SCALAR_L`, `target/arm/tcg/mve_helper.c`): ALARGA — lê `8 >> esz` elementos de
+    /// `1 << esz` bytes de `Qn` na indexação INTERCALADA `le*2 + (top?1:0)` (mesmo padrão de
+    /// {@link MveVector2OpWidening}/{@link MveVectorDoublingWideningMultiply}) e multiplica cada um
+    /// pelo MESMO valor de `Rm` (truncado a `esz`), saturando ao DOBRO da largura — delega a
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#doublingWideningScalarInterleavedMasked}.
+    /// **`esz` vem do bit 28 DIRETAMENTE** (`%size_28`, que aqui coincide numericamente com o `esz`
+    /// real da fonte: `0`→halfword(`1`), `1`→word(`2`) — ver Javadoc do decoder para a diferença com
+    /// a Armadilha 2/7 da B16.7/B16.6, onde `%size_28` NÃO coincidia). `Qd == Qn` com `esz` word é
+    /// UNPREDICTABLE (`a->qd == a->qn && a->size == MO_32` no QEMU real — "choose to undef"),
+    /// recusado no decoder. Beatwise (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` quando
+    /// alguma lane ATIVA satura.
+    record MveVectorScalarWidening(
+            /// `log2` do tamanho do elemento FONTE (`Qn`) em bytes — `1` (halfword) ou `2` (word);
+            /// nunca `0`/`3` (ver Javadoc da classe).
+            int esz,
+            /// `true` para a forma `T` (lanes ÍMPARES da fonte); `false` para `B` (lanes PARES).
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`, fonte) — `Qd == Qn` com {@link #esz} `2` (word) já recusado no decoder.
+            int qn,
+            /// `Rm` (`0`-`15`; `13`/`15` já recusados no decoder, G8).
+            int rm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SCALAR_WIDENING; }
+    }
+
+    /// `VADD_fp_scalar`/`VSUB_fp_scalar`/`VMUL_fp_scalar` (perfil M, B16.9, MVE/Helium,
+    /// `FEAT_MVE_FP`, verbatim de `DO_2OP_FP_SCALAR_ALL`, `target/arm/tcg/mve_helper.c`): delega a
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameScalarMasked} — o segundo
+    /// operando é o valor ÚNICO de `Rm` (binary16/binary32 conforme {@link #esz}), replicado por
+    /// toda a operação, em vez de uma lane de `Qm`. Beatwise (mesmo gancho de {@link MveVector2Op}).
+    /// Nunca satura (nenhuma operação FP de MVE seta `FPSCR.QC`).
+    record MveVectorFpScalar(
+            /// Só `ADD`/`SUB`/`MUL` de
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp} nesta task.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp op,
+            /// `1` = binary16, `2` = binary32 (`%2op_fp_scalar_size`, bit 28: `1`→16 bits,
+            /// `0`→32 bits).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Rm` (`0`-`15`; `13`/`15` já recusados no decoder, G8).
+            int rm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR; }
+    }
+
+    /// `VFMA_scalar`/`VFMAS_scalar` (perfil M, B16.9, MVE/Helium, `FEAT_MVE_FP`, verbatim de
+    /// `DO_2OP_FP_ACC_SCALAR`/`DO_VFMAS_SCALARH`/`DO_VFMAS_SCALARS`, `target/arm/tcg/mve_helper.c`):
+    /// multiply-accumulate FUNDIDO (arredondamento único) com escalar — delega a
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpFusedMultiplyAddScalarMasked}.
+    /// **Achado real, confirmado nos DOIS comentários literais do arquivo (não adivinhado)**:
+    /// `VFMA_scalar` ("vector * scalar + vector") calcula `Qd[i] = fma(Qn[i], Rm, Qd[i])`;
+    /// `VFMAS_scalar` ("vector * vector + scalar, so swap op2 and op3") calcula
+    /// `Qd[i] = fma(Qn[i], Qd[i], Rm)` — MESMA troca de papéis de `VMLA`/`VMLAS` (ver
+    /// {@link MveVectorScalarSpecial}), só que fundido/ponto-flutuante. Beatwise (mesmo gancho de
+    /// {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpScalarFma(
+            /// `false` = `VFMA_scalar` (`fma(Qn,Rm,Qd)`); `true` = `VFMAS_scalar`
+            /// (`fma(Qn,Qd,Rm)`) — ver Javadoc da classe.
+            boolean swapAccumulator,
+            /// `1` = binary16, `2` = binary32.
+            int esz,
+            /// `Qd` (`0`-`7`) — fonte (acumulador) E destino.
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Rm` (`0`-`15`; `13`/`15` já recusados no decoder, G8).
+            int rm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR_FMA; }
+    }
+
+    /// `VBRSR`/`VMLAS`/`VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (perfil M, B16.9, MVE/Helium):
+    /// as 6 formas escalares SEM análogo em
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} — cada uma delega a um método
+    /// dedicado de {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes} (ver Javadoc de cada
+    /// {@link SpecialOp} para a semântica verbatim do `mve_helper.c` real). `VBRSR` (bit reverse and
+    /// shift right) não tem análogo em NEON/A64. `VMLAS` inverte os papéis de `Qd`/`Rm` em relação a
+    /// `VMLA` ({@link MveVectorScalar}) — "vector * vector + scalar". `VQDMLAH`/`VQRDMLASH`/
+    /// `VQDMLASH`/`VQRDMLASH` são multiplicação dobrada saturante com acumulador, saturada numa
+    /// ÚNICA operação de largura dupla (arquiteturalmente distinta de `SQRDMLAH` do A64/NEON).
+    /// Beatwise (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` só para lanes ATIVAS nas 4 formas
+    /// `VQ*DMLA*H` (`VMLAS`/`VBRSR` nunca saturam).
+    record MveVectorScalarSpecial(
+            /// Qual das 6 operações executar.
+            SpecialOp op,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; `3` recusado no decoder).
+            int esz,
+            /// `Qd` (`0`-`7`) — fonte (acumulador, exceto `VBRSR`) E destino.
+            int qd,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Rm` (`0`-`15`; `13`/`15` já recusados no decoder, G8).
+            int rm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SCALAR_SPECIAL; }
+
+        /// As 6 operações servidas por {@link MveVectorScalarSpecial} — nenhuma cabe em
+        /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} sem alterar o `switch`
+        /// exaustivo compartilhado por A64/NEON/`MveVector2Op` (RFC B13.2 D1: reuso não vale a pena
+        /// quando a semântica REAL diverge, aqui confirmado contra o QEMU verbatim).
+        public enum SpecialOp {
+            /// `Qd[i] = do_vbrsr(Qn[i], Rm)` — ver Javadoc de
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#bitReverseShiftRightMasked}.
+            VBRSR,
+            /// `Qd[i] = Qn[i] * Qd[i] + Rm` — ver Javadoc de
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#multiplyAccumulateSwapScalarMasked}.
+            VMLAS,
+            /// `Qd[i] = round(2*Qn[i]*Rm) + Qd[i]`, saturado — `swapAccumulatorAndScalar=false`,
+            /// `rounding=false` em
+            /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#doublingMultiplyAccumulateScalarMasked}.
+            VQDMLAH,
+            /// Como {@link #VQDMLAH}, com arredondamento (`rounding=true`).
+            VQRDMLAH,
+            /// `Qd[i] = round(2*Qn[i]*Qd[i]) + Rm`, saturado — `swapAccumulatorAndScalar=true`,
+            /// `rounding=false`.
+            VQDMLASH,
+            /// Como {@link #VQDMLASH}, com arredondamento (`rounding=true`).
+            VQRDMLASH
+        }
     }
 }
