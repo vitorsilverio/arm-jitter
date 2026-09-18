@@ -138,6 +138,17 @@ class Thumb2MveShiftImmediateDecoderTest {
         assertNull(tryDecode(rawShift(0, 0b0100, prefixByte(1), 0, 1)));
     }
 
+    @Test
+    void nibbleSsraAndSrsraDoNotExistInMveEvenThoughNeonHasThem() {
+        // opc=0001/0011 mapeiam SSRA/USRA/SRSRA/URSRA na tabela reusada de
+        // NeonShiftImmediateDecoder (NEON A32) mas não existem nesta família MVE — confirmado
+        // contra o mve.decode real: nenhuma linha usa esse nibble com bit4=1 neste frame.
+        assertNull(tryDecode(rawShift(0, 0b0001, prefixByte(1), 0, 1)));
+        assertNull(tryDecode(rawShift(1, 0b0001, prefixByte(1), 0, 1)));
+        assertNull(tryDecode(rawShift(0, 0b0011, prefixByte(1), 0, 1)));
+        assertNull(tryDecode(rawShift(1, 0b0011, prefixByte(1), 0, 1)));
+    }
+
     // ── VSHLL T1 / VMOVL ─────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -176,6 +187,52 @@ class Thumb2MveShiftImmediateDecoderTest {
         // não implementada — tem que continuar null, não virar VSHLL por engano.
         int raw = rawVshll(0, 0, 0, 3, 0, 1) | (1 << 7) | 1;
         assertNull(tryDecode(raw));
+    }
+
+    @Test
+    void vshllRejectsBit7AloneAndBit0Alone() {
+        int base = rawVshll(0, 0, 0, 3, 0, 1);
+        assertNull(tryDecode(base | (1 << 7)));
+        assertNull(tryDecode(base | 1));
+    }
+
+    @Test
+    void vshllRejectsBit21Zero() {
+        // bit21=0: mesmo frame das narrowing shifts (@2_shr_b/h usam esse prefixo livre) — VSHLL
+        // exige bit21=1 literal.
+        int raw = rawVshll(0, 0, 0, 3, 0, 1) & ~(1 << 21);
+        assertNull(tryDecode(raw));
+    }
+
+    @Test
+    void vshllRejectsNonFifteenNibble() {
+        int raw = (rawVshll(0, 0, 0, 3, 0, 1) & ~(0b1111 << 8)) | (0b1110 << 8);
+        assertNull(tryDecode(raw));
+    }
+
+    @Test
+    void vshllRejectsBit6ZeroAndBit4One() {
+        int base = rawVshll(0, 0, 0, 3, 0, 1);
+        assertNull(tryDecode(base & ~(1 << 6)));
+        assertNull(tryDecode(base | (1 << 4)));
+    }
+
+    @Test
+    void vshllRejectsReservedWidthPrefix() {
+        // bits[20:19] = 00: nem byte (precisa bit19=1) nem halfword (precisa bit20=1) — não existe
+        // forma "w" para VSHLL.
+        int raw = rawVshll(0, 0, 0, 3, 0, 1) & ~(0b11 << 19);
+        assertNull(tryDecode(raw));
+    }
+
+    @Test
+    void rejectsQdGreaterThanSevenOnVshll() {
+        assertNull(tryDecode(rawVshll(0, 0, 0, 3, 8, 1)));
+    }
+
+    @Test
+    void rejectsQmGreaterThanSevenOnVshll() {
+        assertNull(tryDecode(rawVshll(0, 0, 0, 3, 0, 9)));
     }
 
     @Test

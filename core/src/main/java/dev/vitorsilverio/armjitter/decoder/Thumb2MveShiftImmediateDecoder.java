@@ -176,6 +176,14 @@ public final class Thumb2MveShiftImmediateDecoder implements DecoderExtension {
             return null;
         }
         int nibble = (raw >>> OPCODE_NIBBLE_SHIFT) & OPCODE_NIBBLE_MASK;
+        if (!isKnownNibble(nibble)) {
+            // `NeonShiftImmediateDecoder#shiftOperation` também mapeia `opc=0001`/`0011`
+            // (SSRA/USRA/SRSRA/URSRA, formas RMW-acumuladas do NEON A32) — MVE não tem essas duas
+            // formas nesta família (confirmado contra `mve.decode`: nenhuma linha real usa esse
+            // nibble com `bit4=1` neste frame). Recusar ANTES de consultar a tabela reusada, senão
+            // o reuso fabricaria uma instrução que não existe (G8).
+            return null;
+        }
         AdvSimdShiftImmediateOp op = NeonShiftImmediateDecoder.shiftOperation(nibble, u ? 1 : 0);
         if (op == null) {
             return null;
@@ -190,6 +198,16 @@ public final class Thumb2MveShiftImmediateDecoder implements DecoderExtension {
         int shift = rightShift ? (8 << esz) - rawShift : rawShift;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
                 new IrOp.MveVectorShiftImmediate(op, esz, shift, qd, qm, condition));
+    }
+
+    /// Os 6 nibbles REAIS desta família (`target/isa-decode/mve.decode`, linhas 601-655) — só estes
+    /// batem em alguma das 30 linhas; `0001`/`0011` (SSRA/USRA/SRSRA/URSRA na tabela reusada de
+    /// {@link NeonShiftImmediateDecoder}) não existem aqui, mesmo com `bit4=1`.
+    private static boolean isKnownNibble(int nibble) {
+        return switch (nibble) {
+            case 0b0000, 0b0010, 0b0100, 0b0101, 0b0110, 0b0111 -> true;
+            default -> false;
+        };
     }
 
     /// Os 3 nibbles `_shr`/`VSRI` (`N - raw`); os demais (`_shl`/`VSLI`/`VQSHLUI`) usam `raw` direto.
