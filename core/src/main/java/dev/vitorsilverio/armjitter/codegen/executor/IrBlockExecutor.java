@@ -269,6 +269,24 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorFpConvert(core, (IrOp.MveVectorFpConvert) op);
                 case IrOp.Kind.MVE_VECTOR_FP_CONVERT_FIXED ->
                         pcChanged |= system.executeMveVectorFpConvertFixed(core, (IrOp.MveVectorFpConvertFixed) op);
+                // B16.13a: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_UNARY ->
+                        pcChanged |= system.executeMveVectorUnary(core, (IrOp.MveVectorUnary) op);
+                case IrOp.Kind.MVE_VECTOR_FP_UNARY ->
+                        pcChanged |= system.executeMveVectorFpUnary(core, (IrOp.MveVectorFpUnary) op);
+                case IrOp.Kind.MVE_VECTOR_DUP ->
+                        pcChanged |= system.executeMveVectorDup(core, (IrOp.MveVectorDup) op);
+                case IrOp.Kind.MVE_MOVE_LANES_GPR ->
+                        pcChanged |= system.executeMveMoveLanesGpr(core, (IrOp.MveMoveLanesGpr) op);
+                case IrOp.Kind.MVE_VECTOR_ADD_ACROSS_VECTOR ->
+                        pcChanged |= system.executeMveVectorAddAcrossVector(core, (IrOp.MveVectorAddAcrossVector) op);
+                case IrOp.Kind.MVE_VECTOR_ADD_ACROSS_VECTOR_LONG -> pcChanged |= system
+                        .executeMveVectorAddAcrossVectorLong(core, (IrOp.MveVectorAddAcrossVectorLong) op);
+                case IrOp.Kind.MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE -> pcChanged |= system
+                        .executeMveVectorAbsoluteDifferenceAccumulate(core,
+                                (IrOp.MveVectorAbsoluteDifferenceAccumulate) op);
+                case IrOp.Kind.MVE_VECTOR_MODIFIED_IMMEDIATE -> pcChanged |= system
+                        .executeMveVectorModifiedImmediate(core, (IrOp.MveVectorModifiedImmediate) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -525,6 +543,18 @@ public final class IrBlockExecutor {
                     system.executeMveVectorFpConvert(core, mveVectorFpConvert);
             case IrOp.MveVectorFpConvertFixed mveVectorFpConvertFixed ->
                     system.executeMveVectorFpConvertFixed(core, mveVectorFpConvertFixed);
+            case IrOp.MveVectorUnary mveVectorUnary -> system.executeMveVectorUnary(core, mveVectorUnary);
+            case IrOp.MveVectorFpUnary mveVectorFpUnary -> system.executeMveVectorFpUnary(core, mveVectorFpUnary);
+            case IrOp.MveVectorDup mveVectorDup -> system.executeMveVectorDup(core, mveVectorDup);
+            case IrOp.MveMoveLanesGpr mveMoveLanesGpr -> system.executeMveMoveLanesGpr(core, mveMoveLanesGpr);
+            case IrOp.MveVectorAddAcrossVector mveVectorAddAcrossVector ->
+                    system.executeMveVectorAddAcrossVector(core, mveVectorAddAcrossVector);
+            case IrOp.MveVectorAddAcrossVectorLong mveVectorAddAcrossVectorLong ->
+                    system.executeMveVectorAddAcrossVectorLong(core, mveVectorAddAcrossVectorLong);
+            case IrOp.MveVectorAbsoluteDifferenceAccumulate mveVectorAbsoluteDifferenceAccumulate -> system
+                    .executeMveVectorAbsoluteDifferenceAccumulate(core, mveVectorAbsoluteDifferenceAccumulate);
+            case IrOp.MveVectorModifiedImmediate mveVectorModifiedImmediate ->
+                    system.executeMveVectorModifiedImmediate(core, mveVectorModifiedImmediate);
         };
     }
 

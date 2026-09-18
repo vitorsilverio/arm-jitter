@@ -578,6 +578,21 @@ public final class ArmArchitecture {
                     // Thumb2MveShiftImmediateDecoder/Thumb2MveNarrowingShiftDecoder por bit4 (ver
                     // Javadoc do decoder), ordem relativa entre os três não importa.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveFpConvertDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveMoveLanesGprDecoder (B16.13a): VMOV_to_2gp/VMOV_from_2gp vivem no
+                    // MESMO espaço de bits `1110_1100_0...` (extension-register load/store do VFP,
+                    // que Thumb2NocpDecoder reivindica via `bits[27:24]=1110` sob M_PROFILE) — TEM
+                    // que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveMoveLanesGprDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveVectorMiscDecoder (B16.13a): 1-op misc (VCLS/VCLZ/VREV*/VMVN/VABS/
+                    // VNEG/VQABS/VQNEG), VABS_fp/VNEG_fp e VDUP vivem nos MESMOS espaços de bits
+                    // `111.1111...`/`1110_1110...` que Thumb2NocpDecoder reivindica — TEM que vir
+                    // antes. Disjunto de Thumb2MveFpConvertDecoder por bits[17:16] (ver Javadoc do
+                    // decoder), ordem relativa entre os dois não importa.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveVectorMiscDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveReduceDecoder (B16.13a): VADDV/VADDLV/VABAV/Vimm_1r vivem no MESMO
+                    // espaço de bits `111.1110.../111.1111...` que Thumb2NocpDecoder reivindica —
+                    // TEM que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveReduceDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

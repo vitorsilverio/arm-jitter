@@ -1400,6 +1400,270 @@ public final class IrSystemExecutor {
         return false;
     }
 
+    /// `VCLS`/`VCLZ`/`VREV16`/`VREV32`/`VREV64`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG` (perfil M,
+    /// B16.13a, MVE/Helium): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#unaryMasked}).
+    /// `FPSCR.QC` só quando `SQABS`/`SQNEG` saturam numa lane ATIVA.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorUnary(ArmCore core, IrOp.MveVectorUnary op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRn = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated = AdvSimdLanes.unaryMasked(vfp, op.op(), esz, lanes, baseRd, baseRn, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VABS_fp`/`VNEG_fp` (perfil M, B16.13a, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#fpUnaryMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpUnary(ArmCore core, IrOp.MveVectorFpUnary op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpUnaryMasked(vfp, op.op(), esz, lanes, baseRd, baseRm, mask);
+        return false;
+    }
+
+    /// `VDUP` (perfil M, B16.13a, MVE/Helium): replica `Rt` (truncado a `1 << esz` bytes) em todas
+    /// as lanes ATIVAS de `Qd` (ver Javadoc de {@link IrOp.MveVectorDup} para o achado `%qn`, já
+    /// resolvido pelo decoder — aqui `op.qd()` já é o índice correto).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorDup(ArmCore core, IrOp.MveVectorDup op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int elementBytes = 1 << esz;
+        int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
+        int lanes = 16 / elementBytes;
+        long value = core.register(op.rt()) & 0xFFFF_FFFFL;
+        for (int lane = 0; lane < lanes; lane++) {
+            int laneMask = (byteMask >>> (lane * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long current = vfp.element(op.qd(), lane, esz);
+            vfp.setElement(op.qd(), lane, esz, AdvSimdLanes.mergeMaskedBytes(current, value, laneMask, elementBytes));
+        }
+        return false;
+    }
+
+    /// `VMOV_to_2gp`/`VMOV_from_2gp` (perfil M, B16.13a, MVE/Helium): **NÃO predicado por `VPR`**
+    /// (ver Javadoc de {@link IrOp.MveMoveLanesGpr}) — só o `ECI` reservado pode faultar.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveMoveLanesGpr(ArmCore core, IrOp.MveMoveLanesGpr op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        final int WORD_ESZ = 2;
+        int laneLow = op.idx();
+        int laneHigh = op.idx() + 2;
+        if (op.toGpr()) {
+            core.setRegister(op.rt(), (int) vfp.element(op.qd(), laneLow, WORD_ESZ));
+            core.setRegister(op.rt2(), (int) vfp.element(op.qd(), laneHigh, WORD_ESZ));
+        } else {
+            vfp.setElement(op.qd(), laneLow, WORD_ESZ, core.register(op.rt()) & 0xFFFF_FFFFL);
+            vfp.setElement(op.qd(), laneHigh, WORD_ESZ, core.register(op.rt2()) & 0xFFFF_FFFFL);
+        }
+        return false;
+    }
+
+    /// `VADDV` (perfil M, B16.13a, MVE/Helium): soma horizontal das lanes ATIVAS de `Qm` em `Rda`
+    /// (ver Javadoc de {@link IrOp.MveVectorAddAcrossVector} para a semântica de
+    /// `accumulate`/máscara-toda-zero).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorAddAcrossVector(ArmCore core, IrOp.MveVectorAddAcrossVector op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.size();
+        int elementBytes = 1 << esz;
+        int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
+        int lanes = 16 / elementBytes;
+        long acc = op.accumulate() ? (core.register(op.rda()) & 0xFFFF_FFFFL) : 0L;
+        for (int lane = 0; lane < lanes; lane++) {
+            int laneMask = (byteMask >>> (lane * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long raw = vfp.element(op.qm(), lane, esz);
+            long value = op.unsignedForm() ? raw : signExtendMveElement(raw, esz);
+            acc += value;
+        }
+        core.setRegister(op.rda(), (int) acc);
+        return false;
+    }
+
+    /// `VADDLV` (perfil M, B16.13a, MVE/Helium): como {@link #executeMveVectorAddAcrossVector}, mas
+    /// elementos SEMPRE de 32 bits e acumulador de 64 bits em `RdaHi:RdaLo` (ver Javadoc de
+    /// {@link IrOp.MveVectorAddAcrossVectorLong}).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorAddAcrossVectorLong(ArmCore core, IrOp.MveVectorAddAcrossVectorLong op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        final int WORD_ESZ = 2;
+        final int WORD_BYTES = 4;
+        final int WORD_BYTE_MASK = 0xF;
+        final int LANES = 4;
+        long acc = op.accumulate()
+                ? ((core.register(op.rdalo()) & 0xFFFF_FFFFL) | ((long) core.register(op.rdahi()) << 32))
+                : 0L;
+        for (int lane = 0; lane < LANES; lane++) {
+            int laneMask = (byteMask >>> (lane * WORD_BYTES)) & WORD_BYTE_MASK;
+            if (laneMask == 0) {
+                continue;
+            }
+            long raw = vfp.element(op.qm(), lane, WORD_ESZ);
+            long value = op.unsignedForm() ? (raw & 0xFFFF_FFFFL) : (int) raw;
+            acc += value;
+        }
+        core.setRegister(op.rdalo(), (int) acc);
+        core.setRegister(op.rdahi(), (int) (acc >>> 32));
+        return false;
+    }
+
+    /// `VABAV_S`/`VABAV_U` (perfil M, B16.13a, MVE/Helium): soma horizontal, nas lanes ATIVAS, de
+    /// `|Qn[i] - Qm[i]|` em `Rda` — SEMPRE acumula (sem bit `a`, ver Javadoc de
+    /// {@link IrOp.MveVectorAbsoluteDifferenceAccumulate}).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorAbsoluteDifferenceAccumulate(ArmCore core,
+            IrOp.MveVectorAbsoluteDifferenceAccumulate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.size();
+        int elementBytes = 1 << esz;
+        int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
+        int lanes = 16 / elementBytes;
+        long acc = core.register(op.rda()) & 0xFFFF_FFFFL;
+        for (int lane = 0; lane < lanes; lane++) {
+            int laneMask = (byteMask >>> (lane * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long n = vfp.element(op.qn(), lane, esz);
+            long m = vfp.element(op.qm(), lane, esz);
+            long sn = op.unsignedForm() ? n : signExtendMveElement(n, esz);
+            long sm = op.unsignedForm() ? m : signExtendMveElement(m, esz);
+            acc += sn >= sm ? (sn - sm) : (sm - sn);
+        }
+        core.setRegister(op.rda(), (int) acc);
+        return false;
+    }
+
+    /// `Vimm_1r` (perfil M, B16.13a, MVE/Helium): `VORR`/`VBIC`/`VMOV`/`VMVN` de imediato modificado
+    /// já resolvido pelo decoder (ver Javadoc de {@link IrOp.MveVectorModifiedImmediate}) — predicado
+    /// por byte a granularidade de palavra de 64 bits (`DO_1OP_IMM`/`mergemask` real).
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorModifiedImmediate(ArmCore core, IrOp.MveVectorModifiedImmediate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int wordLow = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        applyMveModifiedImmediate(vfp, op, wordLow, byteMask & 0xFF);
+        applyMveModifiedImmediate(vfp, op, wordLow + 1, (byteMask >>> 8) & 0xFF);
+        return false;
+    }
+
+    private static void applyMveModifiedImmediate(VfpRegisters vfp, IrOp.MveVectorModifiedImmediate op, int word,
+            int wordByteMask) {
+        if (wordByteMask == 0) {
+            return;
+        }
+        long current = vfp.d(word);
+        long result = switch (op.op()) {
+            case MOV -> op.imm64();
+            case MVN -> ~op.imm64();
+            case ORR -> current | op.imm64();
+            case BIC -> current & ~op.imm64();
+        };
+        final int WORD_BYTES = 8;
+        vfp.setD(word, AdvSimdLanes.mergeMaskedBytes(current, result, wordByteMask, WORD_BYTES));
+    }
+
+    /// Sign-extend de um elemento MVE de `1 << esz` bytes (`0`=byte/`1`=halfword/`2`=word) para
+    /// `long`, usado pelas reduções (`VADDV`/`VABAV`) quando `unsignedForm=false`.
+    private static long signExtendMveElement(long raw, int esz) {
+        return switch (esz) {
+            case 0 -> (byte) raw;
+            case 1 -> (short) raw;
+            default -> (int) raw;
+        };
+    }
+
     /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium):
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowInterleavedMasked}). `FPSCR.QC` só
     /// para as 3 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp#XTN}

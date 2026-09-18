@@ -688,7 +688,18 @@ public final class StandardIrBuilder implements IrBuilder {
                 // VQRSHRNB/T_U, VQRSHRUNB/T e VSHLC — mesmo padrão acima (o helper real, incluindo
                 // `HELPER(mve_vshlc)`, chama `mve_advance_vpt` no fim).
                 || instruction.liftedOp() instanceof IrOp.MveVectorShiftNarrowImmediateInterleaved
-                || instruction.liftedOp() instanceof IrOp.MveVectorShiftLeftCarry) {
+                || instruction.liftedOp() instanceof IrOp.MveVectorShiftLeftCarry
+                // B16.13a: 1-op misc (VCLS/VCLZ/VREV*/VMVN/VABS/VNEG/VQABS/VQNEG), VABS_fp/VNEG_fp,
+                // VDUP, VADDV/VADDLV, VABAV e Vimm_1r — todos predicados (mergemask/mve_element_mask
+                // reais), mesmo padrão acima. VMOV_to_2gp/VMOV_from_2gp NÃO entram aqui (não são
+                // predicados — ver o ramo AdvanceEci abaixo).
+                || instruction.liftedOp() instanceof IrOp.MveVectorUnary
+                || instruction.liftedOp() instanceof IrOp.MveVectorFpUnary
+                || instruction.liftedOp() instanceof IrOp.MveVectorDup
+                || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVector
+                || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVectorLong
+                || instruction.liftedOp() instanceof IrOp.MveVectorAbsoluteDifferenceAccumulate
+                || instruction.liftedOp() instanceof IrOp.MveVectorModifiedImmediate) {
             block.add(new IrOp.AdvanceVpt(Condition.AL));
             if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
                 block.add(new IrOp.Vpst(compare.mask(), compare.condition()));
@@ -696,7 +707,11 @@ public final class StandardIrBuilder implements IrBuilder {
                     && compareScalar.mask() != 0) {
                 block.add(new IrOp.Vpst(compareScalar.mask(), compareScalar.condition()));
             }
-        } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore) {
+        } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore
+                // B16.13a: VMOV_to_2gp/VMOV_from_2gp são "beatwise mas não predicado" (verbatim de
+                // trans_VMOV_to_2gp/trans_VMOV_from_2gp real: só o ECI cicla, nunca chamam
+                // mve_element_mask) — mesma categoria de MveInterleavedLoadStore acima.
+                || instruction.liftedOp() instanceof IrOp.MveMoveLanesGpr) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla
             // (`mve_update_and_store_eci` real), o `VPR` nunca é tocado (ao contrário de
             // AdvanceVpt/mve_advance_vpt) — ver Javadoc de IrOp.MveInterleavedLoadStore.

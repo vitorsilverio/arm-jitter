@@ -53,25 +53,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.12 fechar conversões `VCVT`/`VRINT`)
+## Onde estamos (atualizado 2026-09-18, após B16.13a fechar 1-op misc/VDUP/VMOV_2gp/reduções/imediato)
 
-**B16.12 FECHADA (26/26 encodings)** — as 8 formas `_fixed` (fp↔ponto fixo, `@vcvt`/`@vcvt_f16`,
-distinguidas por `bit9`) + os 18 `@1op` (`VCVT_SF/UF/FS/FU`, `VCVTA/N/P/M{S,U}`, `VRINT*`). Reuso
-total: as 18 `@1op` mapeiam 1:1 para `AdvSimdFpUnaryOp` já existente (B13.13, zero valor novo no
-enum) e as 8 `_fixed` reusam `AdvSimdLanes#convertFixedPoint` (A64/NEON) — só código novo foi o
-gancho predicado (`#fpUnaryMasked`/`#convertFixedPointMasked`) + 2 `IrOp`. Achado que CORRIGE a spec:
-`VCVT_FS`/`VCVT_FU`/as 4 formas `_fixed` de fp→int SEMPRE truncam, ignorando `FPSCR.RMode` (verbatim
-contra QEMU real, não "usam RMode" como a spec supunha). Colisão de prefixo com B16.10 resolvida por
-`bit4` (0 nesta task, 1 em B16.10). `mvn -o test` 100% verde (core 4322 + truffle 73, coherence test
-153→155 `Kind`). `docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7 recorrente: `mve.decode` só sai
-de `NOT_IN_ANY_PRESET` na B16.14). `docs/COBERTURA-JIT.md` atualizado (153→155). G5 verde (gbaemu +
-ndsemu). Ver `## Resultado` de `B16.12` (trilha B).
+**B16.13a FECHADA (22/50 encodings)** — sub-famílias 1 (`VMOV_to_2gp`/`VMOV_from_2gp`, 2), 2 (1-op
+misc `VCLS`/`VCLZ`/`VREV*`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG` + `VABS_fp`/`VNEG_fp` + `VDUP`, 15) e
+4 (`VADDV`/`VADDLV`/`VABAV_S`/`VABAV_U`/`Vimm_1r`, 5). 3 decoders novos
+(`Thumb2MveMoveLanesGprDecoder`/`Thumb2MveVectorMiscDecoder`/`Thumb2MveReduceDecoder`). Achados reais
+(verbatim contra QEMU via `curl`): `VMOV_from_2gp` NÃO recusa `Rt==Rt2` (só `VMOV_to_2gp` recusa) e
+os dois NÃO são predicados por `VPR` (só `AdvanceEci`); `VADDV`/`VADDLV` ficam no MESMO `{}`
+sobreposto e a ordem TEXTUAL decide um caso de colisão real; `VABAV` sempre acumula (sem bit `a`);
+`VDUP` usa `%qn` para `Qd`. Achado de processo documentado, não corrigido (fora do escopo): B16.12
+(`MveVectorFpConvert`/`MveVectorFpConvertFixed`) nunca emite `AdvanceVpt` apesar do Javadoc afirmar
+o contrário. `mvn -o test` verde (core 4399 + truffle 73, coherence test 155→163 `Kind`).
+`docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7). `docs/COBERTURA-JIT.md` atualizado (155→163).
+G5 verde nos 5 consumidores. **B16.13b (sub-família 3, acumulação/redução dual, 28 encodings) segue
+⬜** — não pegável nesta sessão futura sem reler a spec da B16.13 desde o início. Ver `## Resultado`
+de `B16.13` (trilha B).
 
-**Pegáveis a seguir**: o último degrau antes do fechamento do épico B16 —
-`B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅), spec escrita, ainda não executada
-(conferir `INDICE.md` da trilha B antes de pegar). `B16.14` (fechamento do épico — provável candidata
-a "MVE sai de `NOT_IN_ANY_PRESET`") depende de B16.13 e não é pegável ainda. `C12.5`/`C12.10` (emissão
-JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+**Pegáveis a seguir**: `B16.13b` (sub-família 3 da B16.13, único bloco com grupos aninhados `[...]`
+do arquivo — ler a spec inteira antes de pegar) é o último degrau antes do fechamento do épico B16.
+`B16.14` (fechamento do épico) depende de B16.13 completa (13a+13b) e não é pegável ainda.
+`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

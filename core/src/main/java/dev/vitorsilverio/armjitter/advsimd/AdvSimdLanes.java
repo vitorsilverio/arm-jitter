@@ -452,6 +452,15 @@ public final class AdvSimdLanes {
         return merged;
     }
 
+    /// Mescla `result` em `current`, byte a byte, segundo `byteMask` (1 bit por byte de
+    /// `elementBytes` bytes) — bit desligado PRESERVA o byte atual de `current`. Nome público de
+    /// {@link #mergeLaneBytes} para os executores MVE em que a unidade mesclada não é uma "lane"
+    /// SIMD comum (`VDUP`: lane normal, mas fora do laço de {@link #unaryMasked}; `Vimm_1r`:
+    /// palavra de 64 bits inteira, B16.13).
+    public static long mergeMaskedBytes(long current, long result, int byteMask, int elementBytes) {
+        return mergeLaneBytes(current, result, byteMask, elementBytes);
+    }
+
     /// Como {@link #threeSame}, mas PREDICADO por byte (`byteMask`, 1 bit por byte dos 16 bytes de
     /// um `Q`, mesma convenção de {@link dev.vitorsilverio.armjitter.core.MveVptState#elementMask})
     /// — MVE/Helium (B16.6): lane cujo byte de máscara está desligado PRESERVA o destino (nem
@@ -2356,6 +2365,70 @@ public final class AdvSimdLanes {
             case SADDLP, UADDLP, SADALP, UADALP -> widenPairwiseAdd(regs, op, esz, elements, baseRd, baseRn);
             default -> generalUnary(regs, op, esz, elements, baseRd, baseRn);
         }
+    }
+
+    /// Como {@link #unary}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #threeSameMasked}) — MVE/Helium (B16.13, "vector miscellaneous"): lane cujo byte de
+    /// máscara está desligado PRESERVA o destino. Cobre só o subconjunto de {@link AdvSimdUnaryOp}
+    /// que o MVE realmente usa nesta família (`REV64`/`REV32`/`REV16`/`CLS`/`CLZ`/`NOT`/`ABS`/`NEG`/
+    /// `SQABS`/`SQNEG` — nunca `SADDLP`/`UADDLP`/`SADALP`/`UADALP`/`CMxx0`/`CNT`/`URECPE`/`URSQRTE`,
+    /// sem forma MVE correspondente). `REV*` lê TODAS as lanes de `baseRn` para um buffer ANTES de
+    /// escrever `baseRd` (E10) — necessário mesmo aqui, porque a reordenação cruza lanes que a
+    /// própria máscara poderia deixar parcialmente escritas se `Qd==Qm`. Devolve `true` se alguma
+    /// lane ATIVA saturou (`FPSCR.QC`, só `SQABS`/`SQNEG`).
+    public static boolean unaryMasked(AdvSimdRegisterWords regs, AdvSimdUnaryOp op, int esz, int lanes,
+            int baseRd, int baseRn, int byteMask) {
+        long[] values = new long[lanes];
+        boolean[] saturated = new boolean[lanes];
+        switch (op) {
+            case REV64, REV32, REV16 -> {
+                int containerBits = switch (op) {
+                    case REV64 -> ADVSIMD_REV_GROUP_64_BITS;
+                    case REV32 -> ADVSIMD_REV_GROUP_32_BITS;
+                    default -> ADVSIMD_REV_GROUP_16_BITS;
+                };
+                int elementsPerContainer = containerBits / (8 << esz);
+                for (int i = 0; i < lanes; i++) {
+                    int containerBase = (i / elementsPerContainer) * elementsPerContainer;
+                    int offsetWithinContainer = i % elementsPerContainer;
+                    int sourceIndex = containerBase + (elementsPerContainer - 1 - offsetWithinContainer);
+                    values[i] = element(regs, baseRn, sourceIndex, esz);
+                }
+            }
+            default -> {
+                for (int i = 0; i < lanes; i++) {
+                    long a = element(regs, baseRn, i, esz);
+                    long sa = signExtend(a, esz);
+                    Saturation computed = switch (op) {
+                        case SQABS -> saturateChecked(BigInteger.valueOf(sa).abs(), esz, true);
+                        case SQNEG -> saturateChecked(BigInteger.valueOf(sa).negate(), esz, true);
+                        case ABS -> new Saturation(Math.abs(sa), false);
+                        case NEG -> new Saturation(-a, false);
+                        case CLS -> new Saturation(countLeadingSignBits(a, sa, esz), false);
+                        case CLZ -> new Saturation(leadingZerosInWidth(a, 8 << esz), false);
+                        case NOT -> new Saturation(~a, false);
+                        default -> throw new IllegalStateException(
+                                "unaryMasked: operação sem forma MVE correspondente: " + op);
+                    };
+                    values[i] = computed.value();
+                    saturated[i] = computed.saturated();
+                }
+            }
+        }
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long d = element(regs, baseRd, i, esz);
+            long merged = mergeLaneBytes(d, truncate(values[i], esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+            qc |= saturated[i];
+        }
+        return qc;
     }
 
     /// `REV64`/`REV32`/`REV16`: dentro de cada grupo consecutivo de {@code containerBits} bits,

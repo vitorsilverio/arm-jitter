@@ -306,6 +306,16 @@ public final class AsmNativePolicy {
             // mesmo padrão acima, sem emissão nativa nesta task.
             case IrOp.MveVectorFpConvert ignored -> false;
             case IrOp.MveVectorFpConvertFixed ignored -> false;
+            // 1-op misc, VDUP, movimentos lane<->GPR, reduções e imediato modificado (B16.13a,
+            // MVE/Helium): mesmo padrão acima, sem emissão nativa nesta task.
+            case IrOp.MveVectorUnary ignored -> false;
+            case IrOp.MveVectorFpUnary ignored -> false;
+            case IrOp.MveVectorDup ignored -> false;
+            case IrOp.MveMoveLanesGpr ignored -> false;
+            case IrOp.MveVectorAddAcrossVector ignored -> false;
+            case IrOp.MveVectorAddAcrossVectorLong ignored -> false;
+            case IrOp.MveVectorAbsoluteDifferenceAccumulate ignored -> false;
+            case IrOp.MveVectorModifiedImmediate ignored -> false;
         };
     }
 

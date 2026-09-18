@@ -33,7 +33,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial,
         IrOp.MveVectorShiftImmediate, IrOp.MveVectorShiftWidenImmediateInterleaved,
         IrOp.MveVectorShiftNarrowImmediateInterleaved, IrOp.MveVectorShiftLeftCarry,
-        IrOp.MveVectorFpConvert, IrOp.MveVectorFpConvertFixed {
+        IrOp.MveVectorFpConvert, IrOp.MveVectorFpConvertFixed, IrOp.MveVectorUnary, IrOp.MveVectorFpUnary,
+        IrOp.MveVectorDup, IrOp.MveMoveLanesGpr, IrOp.MveVectorAddAcrossVector, IrOp.MveVectorAddAcrossVectorLong,
+        IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -337,6 +339,28 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// `VCVT_UF_fixed`/`VCVT_FS_fixed`/`VCVT_FU_fixed` (`FEAT_MVE_FP`, perfil M, MVE/Helium) —
         /// ver {@link MveVectorFpConvertFixed}.
         public static final int MVE_VECTOR_FP_CONVERT_FIXED = 154;
+        /// B16.13a: `VCLS`/`VCLZ`/`VREV16`/`VREV32`/`VREV64`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG`
+        /// (inteiro, perfil M, MVE/Helium) — ver {@link MveVectorUnary}.
+        public static final int MVE_VECTOR_UNARY = 155;
+        /// B16.13a: `VABS_fp`/`VNEG_fp` (`FEAT_MVE_FP`, perfil M, MVE/Helium) — ver
+        /// {@link MveVectorFpUnary}.
+        public static final int MVE_VECTOR_FP_UNARY = 156;
+        /// B16.13a: `VDUP` (broadcast de `Rt` para todas as lanes ATIVAS de `Qd`, perfil M,
+        /// MVE/Helium) — ver {@link MveVectorDup}.
+        public static final int MVE_VECTOR_DUP = 157;
+        /// B16.13a: `VMOV_to_2gp`/`VMOV_from_2gp` (perfil M, MVE/Helium) — ver
+        /// {@link MveMoveLanesGpr}.
+        public static final int MVE_MOVE_LANES_GPR = 158;
+        /// B16.13a: `VADDV` (perfil M, MVE/Helium) — ver {@link MveVectorAddAcrossVector}.
+        public static final int MVE_VECTOR_ADD_ACROSS_VECTOR = 159;
+        /// B16.13a: `VADDLV` (perfil M, MVE/Helium) — ver {@link MveVectorAddAcrossVectorLong}.
+        public static final int MVE_VECTOR_ADD_ACROSS_VECTOR_LONG = 160;
+        /// B16.13a: `VABAV_S`/`VABAV_U` (perfil M, MVE/Helium) — ver
+        /// {@link MveVectorAbsoluteDifferenceAccumulate}.
+        public static final int MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE = 161;
+        /// B16.13a: `Vimm_1r` (`VORR`/`VBIC`/`VMOV`/`VMVN` imediato, decidido no executor por
+        /// `cmode`/`op`, perfil M, MVE/Helium) — ver {@link MveVectorModifiedImmediate}.
+        public static final int MVE_VECTOR_MODIFIED_IMMEDIATE = 162;
     }
 
     /// Operacao ALU generica.
@@ -4065,5 +4089,192 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_FIXED; }
+    }
+
+    /// `VCLS`/`VCLZ`/`VREV16`/`VREV32`/`VREV64`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG` (perfil M,
+    /// B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode` `@1op`/`@1op_nosz`,
+    /// linhas 371-386, 10 dos 15 encodings da sub-família 2 — os outros 2 são {@link
+    /// MveVectorFpUnary}, 3 são {@link MveVectorDup}): delega ao núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unaryMasked}) — a MESMA operação ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp}) que `NeonUnary`/A64 já usam via
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary} para o caminho NÃO predicado —
+    /// zero código novo de aritmética, só o gancho PREDICADO. `VMVN` usa `esz=0` sempre (`@1op_nosz`
+    /// — bitwise, tamanho de elemento é irrelevante). `FPSCR.QC` setado (via {@link
+    /// dev.vitorsilverio.armjitter.core.FpscrRegister#orQc}) quando `SQABS`/`SQNEG` saturam numa
+    /// lane ATIVA. Beatwise (mesmo gancho de {@link MveVector2Op}).
+    record MveVectorUnary(
+            /// Operação a executar (núcleo compartilhado) — só `CLS`/`CLZ`/`REV64`/`REV32`/`REV16`/
+            /// `NOT`/`ABS`/`NEG`/`SQABS`/`SQNEG` têm forma correspondente nesta família MVE.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp op,
+            /// `0`(byte)/`1`(halfword)/`2`(word); sempre `0` para `VMVN` (`@1op_nosz`).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_UNARY; }
+    }
+
+    /// `VABS_fp`/`VNEG_fp` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_FP`, `target/isa-decode/mve.decode`
+    /// `@1op`, linhas 380-383, 2 dos 15 encodings da sub-família 2): delega ao núcleo COMPARTILHADO
+    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpUnaryMasked}) com {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp#ABS}/{@code NEG} — MESMA função que já
+    /// existe desde B13.13/B16.12, zero código novo de aritmética. Record dedicado (em vez de reusar
+    /// {@link MveVectorFpConvert}, que tem o MESMO formato de campos) porque o gancho beatwise
+    /// (`AdvanceVpt` em `StandardIrBuilder`) de `MveVectorFpConvert`/`MveVectorFpConvertFixed` está
+    /// AUSENTE hoje (achado desta task, não corrigido aqui — fora do escopo do B16.13, candidato a
+    /// task própria: `VCVT`/`VRINT` MVE nunca avançam `VPR`/`ECI`, ao contrário do que o Javadoc
+    /// desses dois records afirma). Beatwise (mesmo gancho de {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpUnary(
+            /// Só {@code ABS}/{@code NEG} têm forma correspondente nesta família MVE.
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp op,
+            /// `1` = binary16, `2` = binary32 (`size`, `bits[19:18]` do `@1op`; MVE nunca tem `3`).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_UNARY; }
+    }
+
+    /// `VDUP` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
+    /// linhas 391-395, 3 dos 15 encodings da sub-família 2): replica `Rt` (truncado a `esz` bytes)
+    /// em todas as lanes ATIVAS de `Qd` — verbatim de `HELPER(mve_vdup)` (`mve_helper.c`): `mergemask`
+    /// por byte, preserva lanes inativas. **`Qd` vem de `%qn`, não `%qd`** (comentário literal do
+    /// arquivo real: "Qd is in the fields usually named Qn") — achado da task, testado
+    /// explicitamente. `dev.vitorsilverio.armjitter.core.VfpRegisters#replicateElement` NÃO é
+    /// reusado aqui porque não suporta predicação (sobrescreve todas as lanes incondicionalmente);
+    /// auditado, não reusado.
+    record MveVectorDup(
+            /// `0`(byte)/`1`(halfword)/`2`(word) — `B`/`E` do encoding real (bits 22/5).
+            int esz,
+            /// `Qd` (`0`-`7`, extraído de `%qn` — ver Javadoc da classe).
+            int qd,
+            /// `Rt` (`13`/`15` recusados no decode).
+            int rt,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_DUP; }
+    }
+
+    /// `VMOV_to_2gp`/`VMOV_from_2gp` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`,
+    /// `target/isa-decode/mve.decode`, linhas 206-208, sub-família 1 completa, 2 encodings):
+    /// move 2 lanes de 32 bits de `Qd` para `Rt`/`Rt2` (`toGpr=true`) ou o inverso (`toGpr=false`).
+    /// **NÃO é predicado por `VPR`** (achado confirmado verbatim contra `trans_VMOV_to_2gp`/
+    /// `trans_VMOV_from_2gp`, `translate-mve.c`: só é "beatwise" pelo `ECI`, nunca chama
+    /// `mve_element_mask` — mesma categoria "beatwise mas não predicado" de {@link
+    /// MveInterleavedLoadStore}, `AdvanceEci` em vez de `AdvanceVpt`). `idx` seleciona o par de lanes
+    /// de 32 bits: `idx=0` → `{lane 0, lane 2}`; `idx=1` → `{lane 1, lane 3}` (`vd=Qd*2`/`vd+1` em
+    /// termos de `D`, `idx` é o índice de 32 bits DENTRO de cada `D`). **Achado real que CORRIGE a
+    /// task**: o QEMU real só recusa `rt == rt2` em `VMOV_to_2gp` — `VMOV_from_2gp` NÃO tem essa
+    /// checagem (`trans_VMOV_from_2gp` omite `a->rt == a->rt2` da condição, ao contrário do
+    /// `trans_VMOV_to_2gp`; confirmado lendo as duas funções lado a lado, não a versão genérica que
+    /// a task citava). `Rt`/`Rt2` `∈ {13,15}` recusados nos dois sentidos.
+    record MveMoveLanesGpr(
+            /// `true` = `Qd` → `Rt`/`Rt2` (`VMOV_to_2gp`); `false` = `Rt`/`Rt2` → `Qd`
+            /// (`VMOV_from_2gp`).
+            boolean toGpr,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// Seleciona o par de lanes de 32 bits (`{0,2}` se `0`, `{1,3}` se `1`).
+            int idx,
+            /// `Rt` (lane par do par selecionado).
+            int rt,
+            /// `Rt2` (lane ímpar do par selecionado).
+            int rt2,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_MOVE_LANES_GPR; }
+    }
+
+    /// `VADDV` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
+    /// linhas 578-582, sub-família 4): soma horizontal das lanes ATIVAS de `Qm` (`size`: byte/
+    /// halfword/word, `unsignedForm` controla a extensão de sinal antes da soma) em `Rda` — verbatim
+    /// de `DO_VADDV`/`mve_helper.c`: lane mascarada simplesmente NÃO contribui (nem soma zero, nem
+    /// interrompe as demais). `accumulate=false` (`a=0`) começa a soma do ZERO (o modelo de "beat"
+    /// do QEMU só herda `Rda` no meio de uma instrução partida — este emulador executa cada
+    /// instrução atomicamente, então SEMPRE está no "primeiro beat"); `accumulate=true` (`a=1`)
+    /// começa a soma do valor ATUAL de `Rda`. Com TODAS as lanes mascaradas, `Rda` fica inalterado
+    /// (`a=1`) ou vira `0` (`a=0`) — o laço real simplesmente não executa nenhuma iteração.
+    record MveVectorAddAcrossVector(
+            /// `true` para a forma não assinada (`u=1`).
+            boolean unsignedForm,
+            /// `true` acumula sobre `Rda` atual; `false` começa do zero.
+            boolean accumulate,
+            /// `0`(byte)/`1`(halfword)/`2`(word); `3` recusado no decode.
+            int size,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// `Rda` (registrador de destino/acumulador).
+            int rda,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR; }
+    }
+
+    /// `VADDLV` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
+    /// linhas 584-588, sub-família 4): como {@link MveVectorAddAcrossVector}, mas os elementos são
+    /// SEMPRE de 32 bits e o acumulador é um PAR de GPRs de 64 bits (`RdaHi:RdaLo`) — verbatim de
+    /// `DO_VADDLV`/`mve_helper.c`. Mesma semântica de `accumulate`/máscara-toda-zero de {@link
+    /// MveVectorAddAcrossVector}.
+    record MveVectorAddAcrossVectorLong(
+            /// `true` para a forma não assinada (`u=1`).
+            boolean unsignedForm,
+            /// `true` acumula sobre `RdaHi:RdaLo` atual; `false` começa do zero.
+            boolean accumulate,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// `RdaHi` (`13`/`15` recusados no decode; `%rdahi` — ímpar).
+            int rdahi,
+            /// `RdaLo` (`%rdalo` — par).
+            int rdalo,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR_LONG; }
+    }
+
+    /// `VABAV_S`/`VABAV_U` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`,
+    /// `target/isa-decode/mve.decode`, linhas 591-594, sub-família 4): soma horizontal, nas lanes
+    /// ATIVAS, da diferença absoluta `|Qn[i] - Qm[i]|` (assinada/não assinada por `unsignedForm`,
+    /// `size` byte/halfword/word) em `Rda` — verbatim de `DO_VABAV`/`mve_helper.c`. **Sem bit `a`**:
+    /// ao contrário de {@link MveVectorAddAcrossVector}, SEMPRE acumula sobre o `Rda` ATUAL (o
+    /// helper real recebe `ra` já carregado do registrador, sem ramo de "começar do zero").
+    record MveVectorAbsoluteDifferenceAccumulate(
+            /// `true` para a forma não assinada.
+            boolean unsignedForm,
+            /// `0`(byte)/`1`(halfword)/`2`(word); `3` recusado no decode.
+            int size,
+            /// `Qn` (`0`-`7`).
+            int qn,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// `Rda` (sempre acumulador, nunca `13`/`15` — recusados no decode).
+            int rda,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE; }
+    }
+
+    /// `Vimm_1r` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
+    /// linha 597, sub-família 4): `VORR`/`VBIC`/`VMOV`/`VMVN` de imediato modificado, decididos pelo
+    /// DECODER via {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate#expand}
+    /// (MESMO núcleo do NEON A32, `NeonModifiedImmediate`/RFC B13.2 D1) — `op`/`imm64` chegam JÁ
+    /// resolvidos, como {@code NeonModifiedImmediate} já faz. Diferença do NEON A32: aqui a operação
+    /// é PREDICADA por byte a granularidade de palavra de 64 bits (`DO_1OP_IMM`/`mergemask`,
+    /// `mve_helper.c`) — lane cujo byte de máscara está desligado PRESERVA o destino.
+    record MveVectorModifiedImmediate(
+            /// Operação já classificada pelo decoder (`MOV`/`MVN`/`ORR`/`BIC`).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp op,
+            /// Imediato de 64 bits já expandido pelo decoder.
+            long imm64,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_MODIFIED_IMMEDIATE; }
     }
 }
