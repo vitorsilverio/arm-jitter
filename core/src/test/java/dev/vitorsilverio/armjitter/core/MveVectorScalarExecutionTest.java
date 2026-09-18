@@ -241,6 +241,35 @@ class MveVectorScalarExecutionTest {
         return (byte) value;
     }
 
+    // ── VQRDMLAH: mesmo núcleo de VQDMLAH, mas com o arredondamento (+1<<(bits-1)) somado ANTES
+    // ── de saturar/deslocar — só decode-testado até aqui; prova que a constante de arredondamento
+    // ── de fato muda o resultado (não é um parâmetro morto no núcleo compartilhado).
+
+    @Test
+    void vqrdmlahRoundingConstantChangesTheResultComparedToVqdmlah() {
+        // Fórmula real: result = sat16(2*a*b + (c<<8) + (round ? 1<<7 : 0)) >> 8.
+        // a=Qn=100, b=Rm=1, c=Qd=0 -> 2*100*1 = 200 (sat16 não estoura, 200 < 32767).
+        // Sem round: 200 >> 8 = 0. Com round: (200 + 128) >> 8 = 328 >> 8 = 1.
+        ArmCore coreDmlah = newCore();
+        coreDmlah.vfp().setQ(1, 0L, 0L); // Qd inicial = 0 (== c).
+        coreDmlah.vfp().setQ(2, 100L, 0L); // Qn = 100 (== a).
+        coreDmlah.setRegister(4, 1); // Rm = 1 (== b).
+        int rDmlah = raw2scalar(0, 0, 1, 2, 0, 0, 0b1110, 0b110, 4); // VQDMLAH (nibble3=110, sem round).
+        put32(coreDmlah, CODE_BASE, rDmlah);
+        coreDmlah.step();
+        assertEquals(0, signExtendByte(coreDmlah.vfp().element(1, 0, 0)), "sem round: 200 >> 8 = 0");
+
+        ArmCore coreDrmlah = newCore();
+        coreDrmlah.vfp().setQ(1, 0L, 0L);
+        coreDrmlah.vfp().setQ(2, 100L, 0L);
+        coreDrmlah.setRegister(4, 1);
+        int rDrmlah = raw2scalar(0, 0, 1, 2, 0, 0, 0b1110, 0b100, 4); // VQRDMLAH (nibble3=100, com round).
+        put32(coreDrmlah, CODE_BASE, rDrmlah);
+        coreDrmlah.step();
+        assertEquals(1, signExtendByte(coreDrmlah.vfp().element(1, 0, 0)),
+                "com round: (200 + 128) >> 8 = 1 — a constante de arredondamento realmente é somada");
+    }
+
     @Test
     void qdmlahSetsQcOnlyWhenTheActiveLaneSaturates() {
         ArmCore core = newCore();
