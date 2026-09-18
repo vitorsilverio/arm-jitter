@@ -53,34 +53,33 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.13b fechar sub-família 3 — B16.13 100% fechada)
+## Onde estamos (atualizado 2026-09-18, após B16.14 fechar o épico B16 — MVE/Helium 100% medido)
 
-**B16.13 FECHADA (50/50 encodings)** — B16.13a (2026-09-18, sub-famílias 1/2/4, 22/50) +
-B16.13b (2026-09-18, sub-família 3 — `VMLADAV`/`VMLSDAV`/`VMLALDAV`/`VMLSLDAV`/`VRMLALDAVH`/
-`VRMLSLDAVH`/`VMAXV`/`VMINV`/`VMAXAV`/`VMINAV`/`VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV`, 28/50).
-Decoder novo `Thumb2MveDualAccumulateDecoder` (registrado após `Thumb2MveReduceDecoder`, sem
-colisão de bits entre os dois, verificado por script). Achados reais (verbatim contra QEMU via
-`curl`): `VMLADAV_S`/`VMLADAV_U` (forma byte) têm DUAS codificações reais que produzem o mesmo
-`IrOp` (mesma classe do achado `VADDV`/`VADDLV` da B16.13a); um raw com `rdahi=15` sempre decodifica
-como `VMLADAV_S`, nunca chega a "VMLALDAV_S rejeitado"; os grupos aninhados `[NMAV/NMV]`/`[V/AV]`
-colidem de verdade — sob preset com `MVE_FLOAT`, "`VMAXV_S` com `size=3`" não existe na prática
-(a arquitetura reaproveita esse espaço de bits para `VMAXNMV_S`); `VMLSDAV`/`VRMLSLDAVH` usam o
-prefixo "unsigned" mas são sempre assinados; `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` usam o bit
-que normalmente escolhe sinal para escolher PRECISÃO (binary16 vs binary32); binary16 zera os 16
-bits altos de `Rda`. 5 `IrOp` novos (`Kind` 163-167), todos interpretados apenas (mesmo padrão da
-B16.13a). **Auditoria JaCoCo pós-fechamento inicial achou gaps reais** (8/28 encodings nunca
-alcançados em teste, `accumulate=true`/lanes mascaradas sem cobertura nos 5 executores novos) **e 2
-bugs reais no decoder** (`sizeFromField` invertido em 5 pontos de despacho) — corrigidos, decoder
-100% linha/branch, executores sem gap além do baseline pré-existente do projeto (`evalCond=false`).
-`mvn -o test` verde (core 4483 + truffle 73, coherence test 163→168 `Kind`).
-`docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7 — `mve.decode` só sai de `NOT_IN_ANY_PRESET`
-na B16.14). `docs/COBERTURA-JIT.md` atualizado (163→168). G5 verde nos 5 consumidores. Ver
-`## Resultado` de `B16.13` (trilha B, duas seções: B16.13a e B16.13b).
+**B16.14 FECHADA — épico B16 (MVE/Helium) FECHADO.** `IsaCoverageReport` troca a `Applicability`
+de `mve.decode` de `NOT_IN_ANY_PRESET` para `MVE_INTEGER`, e `ARMV8_1M_MVE` entra como coluna nova
+(`ARMv8.1-M+MVE`) em `docs/COBERTURA-ISA.md`. Grupo `mve.decode` mede **352/352 ✅, zero `⚠️`**
+contra a coluna nova. Dois achados reais corrigidos nesta task: (1) 3 linhas de
+`isa-nao-aplicavel.tsv` (`VDUP`/`VRINTZ*`/`VRINTX*`) sem coluna `grupo` apagavam células MVE reais
+por engano (mnemônico homônimo em `vfp.decode`) — escopadas ao arquivo certo; (2) 12 linhas de
+curadoria "ausência estrutural de perfil M" (`ERET`/`MRS_bank`/`MSR_bank`/`SMC`/`HVC`/`RFE`/`SRS`/
+`BXJ`/`BLX_i`/`SUB_rri`/`SETEND`/`BLX_suffix`) precisaram da coluna nova na lista de arquiteturas
+(mesma razão já valia para v7-M). As 7 colunas antigas (v4T..v7-M) ficaram byte-a-byte inalteradas
+(conferido). `ArmProcessor.CORTEX_M52`/`M55`/`M85` passam a resolver para `ARMV8_1M_MVE` (antes
+`ARMV8_1M` sem Helium) — MVE-I/MVE-F são `IMPLEMENTATION DEFINED` mesmo nesses núcleos (WebSearch
+confirmou), catálogo assume a variante mais capaz, mesma simplificação de SKU do TrustZone em
+M23/M33/M35P. **34 gaps genuínos documentados, não implementados** (fora do escopo desta task):
+19 encodings "MVE long shift" GPR-pair (`t32.decode`, nenhum decoder MVE existente cobre esse
+espaço — candidata a task nova), `BF` 3/4 formas (`BFL`/`BFCSEL`/`BFX`/`BFLX`), tail-predication
+`WLSTP`/`DLSTP`/`LCTP`/`VCTP` (documentado desde B15.6 como bloqueado no banco `VPR` — **agora
+desbloqueado**, é o achado mais acionável), `CLRM`, e `SB`/`CRC32*` (7, extensões opcionais não
+implementadas em NENHUM preset de 32 bits, achado independente de MVE). `mvn -o test` verde (core
+4483 + truffle 73) + G5 verde nos 5 consumidores (zero-diff funcional). Release não publicado
+(suspenso até 100% global). Ver `## Resultado` de `B16.14`.
 
-**Pegáveis a seguir**: `B16.14` (fechamento do épico B16 — troca `NOT_IN_ANY_PRESET` por
-`Applicability`, acrescenta `ARMV8_1M_MVE` às arquiteturas sondadas, catálogo `Cortex-M52`/`M55`/
-`M85`) agora é pegável — suas duas dependências (B16.13, B15.7) estão ✅. `C12.5`/`C12.10` (emissão
-JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap. Candidatas novas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long
+shift" GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4, desbloqueada
+pelo fechamento do B16), `BF` 3 formas restantes, `CLRM`, `SB`/`CRC32*` de 32 bits.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

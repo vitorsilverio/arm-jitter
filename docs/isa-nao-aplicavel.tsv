@@ -71,8 +71,13 @@ CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
 VRINTR*	*	ARMv8-A (VFP)
-VRINTZ*	*	ARMv8-A (VFP)
-VRINTX*	*	ARMv8-A (VFP)
+# B16.14: `VRINTZ`/`VRINTX` (bare, sem sufixo `_hp`/`_sp`/`_dp`) também existem como mnemônico
+# DISTINTO em `mve.decode` (Helium, ARMv8.1-M+MVE, real e implementado desde a B16.x) — sem
+# `grupo`, a exclusão pensada para as formas condicionais de `vfp.decode` (`VRINTZ_hp`/`_sp`/`_dp`,
+# `VRINTX_hp`/`_sp`/`_dp`) apagava a célula ✅ real da forma MVE. `vfp-uncond.decode` usa o
+# mnemônico `VRINT` (bare, sem X/Z) para as formas incondicionais — não precisa de linha aqui.
+VRINTZ*	*	ARMv8-A (VFP)	vfp.decode
+VRINTX*	*	ARMv8-A (VFP)	vfp.decode
 VJCVT	*	ARMv8.3-A (conversão com semântica de JavaScript)
 
 # ── ARMv8.2-A FP16: as formas `_hp` (meia precisão) ──────────────────────────────────────────
@@ -92,7 +97,11 @@ HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bit
 HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bits atuais	a32.decode
 
 # ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
-VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje
+# B16.14: o mnemônico `VDUP` (bare) vive em `vfp.decode` (não em `neon-dp.decode` — lá o inventário
+# chama a forma "scalar" de `VDUP_scalar`, já `·`/`NOT_IN_ANY_PRESET`) e TAMBÉM existe como
+# mnemônico DISTINTO em `mve.decode` (Helium, ARMv8.1-M+MVE, real e implementado) — sem `grupo`, a
+# exclusão apagava as 3 células ✅ reais das formas MVE (`VDUP` byte/halfword/word).
+VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje	vfp.decode
 
 # ── A64, "Data-processing (1/2 source)": FEAT_CSSC (ARMv8.9-A) — posterior ao escopo da B8.2 ──
 
@@ -218,11 +227,13 @@ SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
 # ── ARM DDI 0403E p/ ARMv7-M). Escopado a `t32.decode` (os mesmos mnemônicos existem em
 # ── `a32.decode`, onde v7-A acabou de virar ✅ — B9.15).
 # ── (HVC/SMC em v6-M já estavam curados acima, sem `grupo`; aqui só o que faltava.)
-ERET	v6-M,v7-M	perfil M não tem Hyp mode nem exception-return por ELR (ARM DDI 0419C/0403E; B9.11)	t32.decode
-MRS_bank	v6-M,v7-M	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
-MSR_bank	v6-M,v7-M	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
-SMC	v7-M	perfil M não tem Monitor mode/Security Extensions (ARM DDI 0403E; B9.11)	t32.decode
-HVC	v7-M	perfil M não tem Hyp mode (ARM DDI 0403E; B9.11)	t32.decode
+# B16.14: mesma ausência estrutural vale para `ARMv8.1-M+MVE` (perfil M também) — Helium não muda
+# o modelo de exceção/modo do core, então a coluna nova entra nas mesmas linhas.
+ERET	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem Hyp mode nem exception-return por ELR (ARM DDI 0419C/0403E; B9.11)	t32.decode
+MRS_bank	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
+MSR_bank	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem banco de registrador por modo (ARM DDI 0419C/0403E; B9.11)	t32.decode
+SMC	v7-M,ARMv8.1-M+MVE	perfil M não tem Monitor mode/Security Extensions (ARM DDI 0403E; B9.11)	t32.decode
+HVC	v7-M,ARMv8.1-M+MVE	perfil M não tem Hyp mode (ARM DDI 0403E; B9.11)	t32.decode
 
 # ── A32 pré-v7 (v4T, v5TE, v6K, ARM11 MPCore): ERET/HVC/MRS_bank/MSR_bank são das Virtualization
 # ── Extensions do ARMv7-A (`trans_ERET` = `ARM_FEATURE_V7VE`; `trans_HVC` = `ENABLE_ARCH_7`),
@@ -690,12 +701,17 @@ CLRM	v7-M	ARMv8-M mainline (register clearing/TrustZone hardening), posterior a 
 SG	v7-M	ARMv8-M Security Extension (TrustZone), posterior a ARMv7-M	t32.decode
 VCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
 LCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
-BLX_i	v7-M	M-profile é Thumb-only por construção — nunca tem estado de execução ARM	t32.decode
-BXJ	v7-M	M-profile rejeita Jazelle (QEMU trans_BXJ: arm_dc_feature ARM_FEATURE_M ⇒ UNDEFINED)	t32.decode
-RFE	v7-M	modelo de exceção A/R-profile (retorno com writeback de SP banco); M-profile usa EXC_RETURN via BX/POP	t32.decode
-SRS	v7-M	modelo de exceção A/R-profile (stack de exceção manual); M-profile empilha automaticamente via hardware	t32.decode
+# B16.14: `BLX_i`/`BXJ`/`RFE`/`SRS`/`SUB_rri` são ausências ESTRUTURAIS do perfil M (modo de
+# execução ARM, Jazelle, modelo de exceção A/R-profile) — Helium não muda nada disso, mesma
+# curadoria de `v7-M` vale para `ARMv8.1-M+MVE`. `SB`/`CRC32*` ficam de fora desta lista de
+# propósito: são extensões OPCIONAIS reais do ARMv8-M (FEAT_SB/FEAT_CRC32), não implementadas por
+# este projeto no lado T32 ainda — gap pré-existente e genuíno, não curadoria (ver `## Resultado`).
+BLX_i	v7-M,ARMv8.1-M+MVE	M-profile é Thumb-only por construção — nunca tem estado de execução ARM	t32.decode
+BXJ	v7-M,ARMv8.1-M+MVE	M-profile rejeita Jazelle (QEMU trans_BXJ: arm_dc_feature ARM_FEATURE_M ⇒ UNDEFINED)	t32.decode
+RFE	v7-M,ARMv8.1-M+MVE	modelo de exceção A/R-profile (retorno com writeback de SP banco); M-profile usa EXC_RETURN via BX/POP	t32.decode
+SRS	v7-M,ARMv8.1-M+MVE	modelo de exceção A/R-profile (stack de exceção manual); M-profile empilha automaticamente via hardware	t32.decode
 SB	v7-M	ARMv8.0-A/FEAT_SB (Speculation Barrier), posterior a ARMv7-M	t32.decode
-SUB_rri	v7-M	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem essa forma (B9.11), M-profile usa EXC_RETURN via BX/POP	t32.decode
+SUB_rri	v7-M,ARMv8.1-M+MVE	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem essa forma (B9.11), M-profile usa EXC_RETURN via BX/POP	t32.decode
 
 # ── B22.4 (2026-08-29): curadoria de denominador da coluna T16 — células ❌ de instruções que a
 # ── arquitetura da coluna NÃO tem (posteriores a ela, ou inexistentes naquele perfil, ou
@@ -752,7 +768,7 @@ BKPT	v4T	ARMv5T (ARM DDI 0100I), anterior ao ARMv4T (ARM7TDMI)	t16.decode
 # ── (ARMv7-M). Categoria "não existe neste perfil", NÃO "posterior" (B22.5). v4T/v5TE já curados
 # ── acima ("ARMv6, anterior"). Decoder gate ArmFeature.SETEND_BIG_ENDIAN_DATA (ThumbDecoder 497),
 # ── que nenhum preset M declara.
-SETEND	v6-M,v7-M	perfil M não tem instrução de endianness (endianness fixa; ARM DDI 0419C / 0403E)	t16.decode
+SETEND	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem instrução de endianness (endianness fixa; ARM DDI 0419C / 0403E)	t16.decode
 # ── Par legado BL/BLX de meio-halfword (Thumb-1 split: BLX_suffix=0xE800, BL_BLX_prefix=0xF000,
 # ── BL_suffix=0xF800). Em v4T: BLX não existe (ARMv5T). Nos presets com ArmFeature.THUMB2
 # ── (v7-A, v6-M, v7-M): INALCANÇÁVEL por decisão de decode (B2.6) — ThumbDecoder.decode:170
@@ -761,6 +777,6 @@ SETEND	v6-M,v7-M	perfil M não tem instrução de endianness (endianness fixa; A
 # ── 611-637); o próprio t16.decode do QEMU comenta que estes padrões só valem para CPU sem
 # ── Thumb-2. BL/BLX de 32 bits (LONG_BRANCH_32) seguem ✅ em v7-A/v6-M/v7-M — não são afetados.
 BLX_suffix	v4T	ARMv5T (BLX não existe em ARMv4T), anterior ao ARMv4T	t16.decode
-BLX_suffix	v7-A,v6-M,v7-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
+BLX_suffix	v7-A,v6-M,v7-M,ARMv8.1-M+MVE	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
 BL_BLX_prefix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
 BL_suffix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode

@@ -91,6 +91,11 @@ public final class IsaCoverageReport {
     private static final Applicability THUMB2 = arch -> arch.has(ArmFeature.THUMB2);
     private static final Applicability VFP = arch -> arch.has(ArmFeature.VFPV2);
     private static final Applicability M_PROFILE = arch -> arch.has(ArmFeature.M_PROFILE);
+    /// MVE (Helium), ARMv8.1-M — B16.14. `ARMV8_1M_MVE` declara `MVE_INTEGER` **e** `MVE_FLOAT`
+    /// juntas (Armadilha 2 da B16.14: nenhum preset "MVE inteiro-apenas" existe hoje), então medir
+    /// só `MVE_INTEGER` já cobre corretamente as ~40 linhas que exigem `MVE_FLOAT` sob esta coluna —
+    /// um preset MVE-inteiro-apenas fica registrado como pendência/task própria, não exclusão.
+    private static final Applicability MVE_INTEGER = arch -> arch.has(ArmFeature.MVE_INTEGER);
     /// Extensões que NENHUM preset atual do `ArmArchitecture` declara — ficam na tabela para o
     /// inventário ser completo (não presumir que algo nunca será necessário), mas marcadas como
     /// não aplicáveis em vez de "faltando".
@@ -140,7 +145,7 @@ public final class IsaCoverageReport {
             new Group("neon-shared.decode", "NEON — formas compartilhadas VFP/NEON", 32, Probe.ARM32, true,
                     NOT_IN_ANY_PRESET, ""),
             new Group("m-nocp.decode", "ARMv7-M — coprocessador ausente", 32, Probe.THUMB32, true, M_PROFILE, ""),
-            new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, NOT_IN_ANY_PRESET, ""),
+            new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, MVE_INTEGER, ""),
             new Group("a64.decode", "A64 — AArch64", 32, Probe.A64, false, ALWAYS, ""),
             new Group("sve.decode", "SVE/SVE2 — vetor escalável", 32, Probe.A64, false, NOT_IN_ANY_PRESET,
                     "Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE."),
@@ -158,6 +163,7 @@ public final class IsaCoverageReport {
         ARM_ARCHITECTURES.put("v7-A", ArmArchitecture.ARMV7A);
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
+        ARM_ARCHITECTURES.put("ARMv8.1-M+MVE", ArmArchitecture.ARMV8_1M_MVE);
         // ARMV8M_BASELINE/ARMV8M_MAINLINE (B15.4) NÃO entram aqui ainda — mesmo precedente da
         // B15.1 ("zero célula nova... os presets não entram no mapa ARM_ARCHITECTURES ainda").
         // Medido nesta sessão: adicioná-los sem uma rodada de curadoria própria faz ~180 células

@@ -61,9 +61,9 @@ package dev.vitorsilverio.armjitter.arch;
 /// (`ARMV7M_PURE`, B15.1), {@link #CORTEX_M4}/{@link #CORTEX_M7} (`ARMV7EM`, alias de `ARMV7M`,
 /// B15.1), {@link #CORTEX_M23} (`ARMV8M_BASELINE`, B15.4), {@link #CORTEX_M33}/
 /// {@link #CORTEX_M35P} (`ARMV8M_MAINLINE`, B15.4) e {@link #CORTEX_M52}/{@link #CORTEX_M55}/
-/// {@link #CORTEX_M85} (`ARMV8_1M`, B15.6 — **mapeamento PARCIAL**, documentado em cada constante:
-/// Helium/MVE é intrínseco a esses 3 núcleos reais e ainda não está implementado, épico B16
-/// `⬜`). `Cortex-M23`/`M33`/`M35P` resolvem para a variante COM Security Extension (TrustZone) —
+/// {@link #CORTEX_M85} (`ARMV8_1M`, B15.6 — na época **mapeamento PARCIAL**, sem Helium/MVE;
+/// completado pela **B16.14** para {@link ArmArchitecture#ARMV8_1M_MVE} assim que o épico B16
+/// fechou o decode/execução de Helium). `Cortex-M23`/`M33`/`M35P` resolvem para a variante COM Security Extension (TrustZone) —
 /// este projeto não modela um preset "sem TrustZone" separado, mesma simplificação de SKU que
 /// `Cortex-A5`..`A17` já aplicam do lado A-profile (uma constante por núcleo canônico).
 ///
@@ -227,24 +227,29 @@ public enum ArmProcessor {
     /// instruções). Resolve para {@link ArmArchitecture#ARMV8M_MAINLINE}.
     CORTEX_M35P("Cortex-M35P", ArmArchitecture.ARMV8M_MAINLINE),
 
-    /// `ARMv8.1-M Mainline` **com Helium/MVE como parte intrínseca do núcleo real** — este projeto
-    /// ainda NÃO implementa Helium/MVE (épico B16, `⬜`). Resolve para
-    /// {@link ArmArchitecture#ARMV8_1M}, que cobre só a parte escalar/Low Overhead Branch da
-    /// arquitetura real: **mapeamento PARCIAL, documentado deliberadamente** (mesmo padrão que
-    /// {@link ArmArchitecture#ARMV8_1M} já anota) — nenhum código que dependa de uma instrução MVE
-    /// real deve ser considerado suportado por esta constante até a B16 fechar.
-    CORTEX_M52("Cortex-M52", ArmArchitecture.ARMV8_1M),
+    /// `ARMv8.1-M Mainline` — o `Cortex-M52` é o núcleo de entrada da linha Helium (Arm, "Cortex-M55
+    /// Processor Devices Generic User Guide", 101273: MVE-I/MVE-F são features de configuração
+    /// IMPLEMENTATION DEFINED do `M-profile Vector Extension`, opcionais mesmo nos núcleos com
+    /// Helium — nenhum dos três é garantido "sempre com MVE-F" pela arquitetura). Mesma
+    /// simplificação de granularidade de SKU que {@link #CORTEX_M23}/{@link #CORTEX_M33} já aplicam
+    /// para TrustZone: este catálogo assume a variante MAIS capaz (MVE-I + MVE-F). Resolve para
+    /// {@link ArmArchitecture#ARMV8_1M_MVE} (B16.14 — antes da B16 fechar decode/execução de
+    /// Helium/MVE, apontava para {@link ArmArchitecture#ARMV8_1M} sem MVE, mapeamento PARCIAL; ver
+    /// B15.6/B15.7).
+    CORTEX_M52("Cortex-M52", ArmArchitecture.ARMV8_1M_MVE),
 
-    /// `ARMv8.1-M Mainline` com Helium/MVE intrínseco — mesma limitação PARCIAL do
-    /// {@link #CORTEX_M52} (Helium ainda não implementado, épico B16). Resolve para
-    /// {@link ArmArchitecture#ARMV8_1M}.
-    CORTEX_M55("Cortex-M55", ArmArchitecture.ARMV8_1M),
+    /// `ARMv8.1-M Mainline` — mesma simplificação do {@link #CORTEX_M52} (MVE-I/MVE-F são
+    /// IMPLEMENTATION DEFINED mesmo no `Cortex-M55`, catálogo assume a variante mais capaz).
+    /// Resolve para {@link ArmArchitecture#ARMV8_1M_MVE} (B16.14, mesmo fechamento do
+    /// {@link #CORTEX_M52}).
+    CORTEX_M55("Cortex-M55", ArmArchitecture.ARMV8_1M_MVE),
 
-    /// `ARMv8.1-M Mainline` com Helium/MVE intrínseco + PACBTI (Pointer Authentication/Branch
-    /// Target Identification) — mesma limitação PARCIAL do {@link #CORTEX_M52}/{@link #CORTEX_M55}
-    /// (Helium ainda não implementado, épico B16) **e PACBTI também não modelado** (extensão
-    /// própria, fora do escopo do épico B15). Resolve para {@link ArmArchitecture#ARMV8_1M}.
-    CORTEX_M85("Cortex-M85", ArmArchitecture.ARMV8_1M);
+    /// `ARMv8.1-M Mainline` — mesma simplificação do {@link #CORTEX_M52}/{@link #CORTEX_M55}
+    /// (MVE-I/MVE-F IMPLEMENTATION DEFINED, catálogo assume a variante mais capaz). Resolve para
+    /// {@link ArmArchitecture#ARMV8_1M_MVE} (B16.14, mesmo fechamento dos dois anteriores);
+    /// **PACBTI (Pointer Authentication/Branch Target Identification) continua não modelado**
+    /// (extensão própria, fora do escopo dos épicos B15/B16).
+    CORTEX_M85("Cortex-M85", ArmArchitecture.ARMV8_1M_MVE);
 
     private final String displayName;
     private final ArmArchitecture architecture;

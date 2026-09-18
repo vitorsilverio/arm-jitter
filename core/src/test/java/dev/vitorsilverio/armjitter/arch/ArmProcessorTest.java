@@ -91,10 +91,13 @@ class ArmProcessorTest {
     }
 
     @Test
-    void armv8_1mFamilyResolvesToArmv8_1m() {
-        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M52.architecture());
-        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M55.architecture());
-        assertSame(ArmArchitecture.ARMV8_1M, ArmProcessor.CORTEX_M85.architecture());
+    void armv8_1mFamilyResolvesToArmv8_1mMve() {
+        // B16.14: Helium/MVE fechou decode+execução (épico B16) — M52/M55/M85 passam a resolver
+        // para o preset COM MVE, não mais o parcial sem Helium (mesma simplificação de SKU que
+        // já assume a variante mais capaz, ver Javadoc de ArmProcessor).
+        assertSame(ArmArchitecture.ARMV8_1M_MVE, ArmProcessor.CORTEX_M52.architecture());
+        assertSame(ArmArchitecture.ARMV8_1M_MVE, ArmProcessor.CORTEX_M55.architecture());
+        assertSame(ArmArchitecture.ARMV8_1M_MVE, ArmProcessor.CORTEX_M85.architecture());
     }
 
     @Test
