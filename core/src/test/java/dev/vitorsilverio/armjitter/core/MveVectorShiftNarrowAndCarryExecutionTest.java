@@ -386,4 +386,41 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
         assertEquals(CFSR_UFSR_INVSTATE_BIT, model.cfsr() & CFSR_UFSR_INVSTATE_BIT);
     }
+
+    // ── Condição falsa: a condição de uma instrução MVE vem do bloco `IT` corrente, não de bits
+    // fixos do raw — só testável via `IrOp` direto (mesmo padrão de
+    // `MveVectorCompareExecutionTest#conditionFalseSkipsEverything`) ────────────────────────────────
+
+    @Test
+    void conditionFalseSkipsNarrowingFamilyEntirely() {
+        ArmCore core = newCore();
+        core.cpsr().set(core.cpsr().get() & ~CpsrRegister.ZERO_FLAG); // Z=0 -> EQ falsa.
+        core.vfp().setQ(3, 0x7FFFL, 0L); // saturaria se executado.
+        core.vfp().setQ(1, 0xAAAA_AAAAL, 0L);
+        boolean qcBefore = core.fpscr().qc();
+        IrOp.MveVectorShiftNarrowImmediateInterleaved op = new IrOp.MveVectorShiftNarrowImmediateInterleaved(
+                AdvSimdShiftNarrowOp.SQSHRN, 0, 1, false, 1, 3, Condition.EQ);
+
+        boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, core.programCounter());
+
+        assertFalse(pcChanged);
+        assertEquals(0xAA, core.vfp().element(1, 0, 0), "Qd intocado: condição falsa pula a instrução inteira");
+        assertEquals(qcBefore, core.fpscr().qc(), "QC não muda quando a condição é falsa");
+    }
+
+    @Test
+    void conditionFalseSkipsVshlcEntirely() {
+        ArmCore core = newCore();
+        core.cpsr().set(core.cpsr().get() & ~CpsrRegister.ZERO_FLAG); // Z=0 -> EQ falsa.
+        core.vfp().setQ(1, 0x0000_0002_0000_0001L, 0L);
+        core.setRegister(0, 0xF);
+        int rdmBefore = core.register(0);
+        IrOp.MveVectorShiftLeftCarry op = new IrOp.MveVectorShiftLeftCarry(4, 1, 0, Condition.EQ);
+
+        boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, core.programCounter());
+
+        assertFalse(pcChanged);
+        assertEquals(1, core.vfp().element(1, 0, 2), "Qd intocado: condição falsa pula VSHLC inteiro");
+        assertEquals(rdmBefore, core.register(0), "Rdm não muda quando a condição é falsa");
+    }
 }
