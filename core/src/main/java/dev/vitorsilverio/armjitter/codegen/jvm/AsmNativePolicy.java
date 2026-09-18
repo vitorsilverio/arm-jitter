@@ -302,6 +302,10 @@ public final class AsmNativePolicy {
             // sem emissão nativa nesta task.
             case IrOp.MveVectorShiftNarrowImmediateInterleaved ignored -> false;
             case IrOp.MveVectorShiftLeftCarry ignored -> false;
+            // VCVT (int<->fp, ponto fixo, modo de arredondamento) e VRINT* (B16.12, MVE/Helium):
+            // mesmo padrão acima, sem emissão nativa nesta task.
+            case IrOp.MveVectorFpConvert ignored -> false;
+            case IrOp.MveVectorFpConvertFixed ignored -> false;
         };
     }
 

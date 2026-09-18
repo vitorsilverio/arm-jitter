@@ -1351,6 +1351,55 @@ public final class IrSystemExecutor {
         return false;
     }
 
+    /// `VCVT_SF`/`VCVT_UF`/`VCVT_FS`/`VCVT_FU`/`VCVTA{S,U}`/`VCVTN{S,U}`/`VCVTP{S,U}`/`VCVTM{S,U}`/
+    /// `VRINTN`/`VRINTX`/`VRINTA`/`VRINTZ`/`VRINTM`/`VRINTP` (perfil M, B16.12, MVE/Helium): delega
+    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpUnaryMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpConvert(ArmCore core, IrOp.MveVectorFpConvert op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.fpUnaryMasked(vfp, op.op(), esz, lanes, baseRd, baseRm, mask);
+        return false;
+    }
+
+    /// `VCVT_SH_fixed`/`VCVT_UH_fixed`/`VCVT_HS_fixed`/`VCVT_HU_fixed`/`VCVT_SF_fixed`/
+    /// `VCVT_UF_fixed`/`VCVT_FS_fixed`/`VCVT_FU_fixed` (perfil M, B16.12, MVE/Helium): delega ao
+    /// núcleo COMPARTILHADO ({@link AdvSimdLanes#convertFixedPointMasked}). Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorFpConvertFixed(ArmCore core, IrOp.MveVectorFpConvertFixed op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.convertFixedPointMasked(vfp, esz, op.fractionBits(), op.toFloat(), op.signed(), lanes, baseRd,
+                baseRm, mask);
+        return false;
+    }
+
     /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium):
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowInterleavedMasked}). `FPSCR.QC` só
     /// para as 3 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp#XTN}

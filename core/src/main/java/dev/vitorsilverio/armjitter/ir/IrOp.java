@@ -32,7 +32,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar, IrOp.MveVectorScalar, IrOp.MveVectorScalarWidening,
         IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial,
         IrOp.MveVectorShiftImmediate, IrOp.MveVectorShiftWidenImmediateInterleaved,
-        IrOp.MveVectorShiftNarrowImmediateInterleaved, IrOp.MveVectorShiftLeftCarry {
+        IrOp.MveVectorShiftNarrowImmediateInterleaved, IrOp.MveVectorShiftLeftCarry,
+        IrOp.MveVectorFpConvert, IrOp.MveVectorFpConvertFixed {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -328,6 +329,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.11: `VSHLC` (deslocamento à esquerda do vetor INTEIRO com carry em GPR, perfil M,
         /// MVE/Helium) — ver {@link MveVectorShiftLeftCarry}.
         public static final int MVE_VECTOR_SHIFT_LEFT_CARRY = 152;
+        /// B16.12: `VCVT_SF`/`VCVT_UF`/`VCVT_FS`/`VCVT_FU`/`VCVTA{S,U}`/`VCVTN{S,U}`/`VCVTP{S,U}`/
+        /// `VCVTM{S,U}`/`VRINTN`/`VRINTX`/`VRINTA`/`VRINTZ`/`VRINTM`/`VRINTP` (`FEAT_MVE_FP`, perfil
+        /// M, MVE/Helium) — ver {@link MveVectorFpConvert}.
+        public static final int MVE_VECTOR_FP_CONVERT = 153;
+        /// B16.12: `VCVT_SH_fixed`/`VCVT_UH_fixed`/`VCVT_HS_fixed`/`VCVT_HU_fixed`/`VCVT_SF_fixed`/
+        /// `VCVT_UF_fixed`/`VCVT_FS_fixed`/`VCVT_FU_fixed` (`FEAT_MVE_FP`, perfil M, MVE/Helium) —
+        /// ver {@link MveVectorFpConvertFixed}.
+        public static final int MVE_VECTOR_FP_CONVERT_FIXED = 154;
     }
 
     /// Operacao ALU generica.
@@ -3989,5 +3998,72 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_LEFT_CARRY; }
+    }
+
+    /// `VCVT_SF`/`VCVT_UF`/`VCVT_FS`/`VCVT_FU`, `VCVTAS`/`VCVTAU`/`VCVTNS`/`VCVTNU`/`VCVTPS`/
+    /// `VCVTPU`/`VCVTMS`/`VCVTMU` e `VRINTN`/`VRINTX`/`VRINTA`/`VRINTZ`/`VRINTM`/`VRINTP` (perfil M,
+    /// B16.12, MVE/Helium, `FEAT_MVE_FP`, `target/isa-decode/mve.decode` `@1op`, linhas 810-832 —
+    /// 18 dos 26 encodings da task; os outros 8 são {@link MveVectorFpConvertFixed}): delega ao
+    /// núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpUnaryMasked})
+    /// — a MESMA função de operação ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp})
+    /// que `NeonFpUnary`/A64 já usam via {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpUnary}
+    /// para o caminho NÃO predicado — zero código novo de aritmética/arredondamento, só o gancho
+    /// PREDICADO. `VCVT_FS`/`VCVT_FU` (`FCVTZS`/`FCVTZU`) SEMPRE arredondam para zero, IGNORANDO
+    /// `FPSCR.RMode` (confirmado verbatim contra `DO_VCVT`/`mve_helper.c` real: usa os helpers
+    /// `*_round_to_zero`, não o `FPSCR` corrente — o MESMO comportamento que o NEON de 32 bits já
+    /// tinha para `VCVT` sem sufixo de modo). `VCVTA`/`N`/`P`/`M` carregam o modo de arredondamento
+    /// no PRÓPRIO encoding (não consultam `FPSCR.RMode`). Beatwise (mesmo gancho de
+    /// {@link MveVector2Op}). Nunca satura (`FPSCR.QC` não se aplica a operações FP MVE, mesmo
+    /// precedente de {@link MveVectorFpTwoOp}).
+    record MveVectorFpConvert(
+            /// Operação a executar (núcleo compartilhado) — só as 18 formas de conversão/
+            /// arredondamento desta task (nunca `ABS`/`NEG`/`RECPE`/`RSQRTE`/comparações-com-zero,
+            /// que não têm encoding nesta família MVE).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp op,
+            /// `1` = binary16, `2` = binary32 (`size`, `bits[19:18]` do `@1op`; MVE nunca tem `3`).
+            int esz,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT; }
+    }
+
+    /// `VCVT_SH_fixed`/`VCVT_UH_fixed`/`VCVT_HS_fixed`/`VCVT_HU_fixed`/`VCVT_SF_fixed`/
+    /// `VCVT_UF_fixed`/`VCVT_FS_fixed`/`VCVT_FU_fixed` (perfil M, B16.12, MVE/Helium,
+    /// `FEAT_MVE_FP`, `target/isa-decode/mve.decode` `@vcvt`/`@vcvt_f16`, linhas 793-808 — os 8
+    /// encodings de ponto fixo↔ponto flutuante da task): delega ao núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPointMasked}) — a MESMA função
+    /// que o A64 (`@fcvt_fixed`) e o NEON de 32 bits (`VCVT` fixo↔float F32) já usam via
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPoint} (RFC B13.2 D1) —
+    /// zero aritmética nova, só o gancho PREDICADO + meia precisão (`esz=1`, que o NEON de 32 bits
+    /// não tinha). `toFloat=true` (`VCVT_{S,U}{H,F}_fixed`) SEMPRE arredonda pelo cast Java padrão
+    /// (mais-próximo); `toFloat=false` (`VCVT_{H,F}{S,U}_fixed`) SEMPRE trunca para zero — NENHUMA
+    /// das 8 consulta `FPSCR.RMode` (confirmado verbatim: `DO_VCVT` chama os MESMOS helpers
+    /// `*_round_to_zero`/sem-sufixo que {@link MveVectorFpConvert} usa para `VCVT_FS`/`VCVT_SF` com
+    /// `shift=0` — a forma "fixa" e a forma "simples" são LITERALMENTE a mesma operação, só o fator
+    /// de escala muda). `shift`/`fractionBits` já resolvido pelo decoder (`N - raw`, mesma
+    /// convenção `%rshift_i4`/`%rshift_i5` de B16.10/B16.11). Beatwise (mesmo gancho de
+    /// {@link MveVector2Op}). Nunca satura.
+    record MveVectorFpConvertFixed(
+            /// `true` para `VCVT_{S,U}{H,F}_fixed` (inteiro → ponto flutuante); `false` para
+            /// `VCVT_{H,F}{S,U}_fixed` (ponto flutuante → inteiro, sempre truncado).
+            boolean toFloat,
+            /// `true` para as formas `S` (assinado); `false` para `U` (sem sinal).
+            boolean signed,
+            /// `1` = binary16 (`@vcvt_f16`), `2` = binary32 (`@vcvt`); nunca `3`.
+            int esz,
+            /// Quantidade de bits fracionários, já resolvida pelo decoder (`N - raw`, `N` = `8 <<
+            /// esz`).
+            int fractionBits,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_FIXED; }
     }
 }

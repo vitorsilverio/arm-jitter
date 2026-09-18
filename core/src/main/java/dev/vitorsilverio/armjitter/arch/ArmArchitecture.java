@@ -572,6 +572,12 @@ public final class ArmArchitecture {
                     // Thumb2MveShiftImmediateDecoder por bit21/bit7 (ver Javadoc do decoder), ordem
                     // relativa entre os dois não importa.
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveNarrowingShiftDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveFpConvertDecoder (B16.12): VCVT/VRINT (int<->fp, ponto fixo, modo de
+                    // arredondamento) vivem no MESMO espaço de bits `111.1111...` que
+                    // Thumb2NocpDecoder reivindica — TEM que vir antes. Disjunto de
+                    // Thumb2MveShiftImmediateDecoder/Thumb2MveNarrowingShiftDecoder por bit4 (ver
+                    // Javadoc do decoder), ordem relativa entre os três não importa.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveFpConvertDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

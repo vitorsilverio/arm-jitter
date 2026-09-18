@@ -2204,6 +2204,51 @@ public final class AdvSimdLanes {
         }
     }
 
+    /// Como {@link #convertFixedPoint}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #fpThreeSameMasked}) — MVE/Helium (B16.12): `VCVT_SH_fixed`/`VCVT_UH_fixed`/
+    /// `VCVT_HS_fixed`/`VCVT_HU_fixed`/`VCVT_SF_fixed`/`VCVT_UF_fixed`/`VCVT_FS_fixed`/
+    /// `VCVT_FU_fixed` (`target/isa-decode/mve.decode`, `@vcvt`/`@vcvt_f16`). Lane cujo byte de
+    /// máscara está desligado PRESERVA o destino. Nunca satura (mesmo precedente de
+    /// {@link #fpThreeSameMasked} — MVE não seta `FPSCR.QC` em operação FP).
+    public static void convertFixedPointMasked(AdvSimdRegisterWords regs, int esz, int fractionBits,
+            boolean toFloat, boolean signed, int lanes, int baseRd, int baseRn, int byteMask) {
+        boolean wide = esz == 3;
+        double scale = Math.scalb(1.0, fractionBits);
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long inputBits = element(regs, baseRn, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits;
+            if (toFloat) {
+                double asDouble;
+                if (wide) {
+                    asDouble = signed ? (double) inputBits : unsignedLongToDouble(inputBits);
+                } else if (esz == 1) {
+                    asDouble = signed ? (double) (short) inputBits : (double) inputBits;
+                } else {
+                    asDouble = signed ? (double) (int) inputBits : (double) inputBits;
+                }
+                double scaled = asDouble / scale;
+                resultBits = esz == 1 ? halfBits((float) scaled) : esz == 2 ? floatBits((float) scaled) : doubleBits(scaled);
+            } else {
+                double value = esz == 1 ? halfToFloat(inputBits)
+                        : esz == 2 ? Float.intBitsToFloat((int) inputBits) : Double.longBitsToDouble(inputBits);
+                double scaled = value * scale;
+                double rounded = roundTowardZeroForConversion(scaled);
+                long converted = esz == 1 ? saturateToHalfwordInteger(rounded, signed)
+                        : saturateToInteger(rounded, signed, wide);
+                resultBits = converted & (wide ? -1L : esz == 1 ? 0xFFFFL : 0xFFFF_FFFFL);
+            }
+            long merged = mergeLaneBytes(dBits, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
+    }
+
     /// Limite superior/inferior de um inteiro de 16 bits assinado/sem sinal (G6 — nomeado em vez
     /// de literal solto em {@link #saturateToHalfwordInteger}).
     private static final double HALFWORD_SIGNED_MIN = -32768.0;
@@ -2784,6 +2829,29 @@ public final class AdvSimdLanes {
             }
             default -> throw new IllegalArgumentException("esz inválido para fpUnary: " + esz);
         };
+    }
+
+    /// Como {@link #fpUnary}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #fpThreeSameMasked}) — MVE/Helium (B16.12): as 18 formas `VCVT_SF`/`VCVT_UF`/
+    /// `VCVT_FS`/`VCVT_FU`/`VCVTA{S,U}`/`VCVTN{S,U}`/`VCVTP{S,U}`/`VCVTM{S,U}`/`VRINTN`/`VRINTX`/
+    /// `VRINTA`/`VRINTZ`/`VRINTM`/`VRINTP` (`@1op`, `esz` `1`=binary16/`2`=binary32 — MVE nunca tem
+    /// lane de 64 bits). Lane cujo byte de máscara está desligado PRESERVA o destino. Nunca satura
+    /// (mesmo precedente de {@link #fpThreeSameMasked}).
+    public static void fpUnaryMasked(AdvSimdRegisterWords regs, AdvSimdFpUnaryOp op, int esz, int lanes,
+            int baseRd, int baseRm, int byteMask) {
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long inputBits = element(regs, baseRm, i, esz);
+            long dBits = element(regs, baseRd, i, esz);
+            long resultBits = fpUnary(op, esz, inputBits);
+            long merged = mergeLaneBytes(dBits, resultBits, laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+        }
     }
 
     /// `SCVTF`/`UCVTF` (B13.13, migrado do executor A64): `inputBits` é um inteiro assinado/não
