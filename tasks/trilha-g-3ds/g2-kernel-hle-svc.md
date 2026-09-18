@@ -143,3 +143,96 @@ libctru consulta.
   **uma** thread e limpa. Confundir os dois causa deadlock ou spin infinito.
 - Não use `Thread` do Java para as threads do guest. Um `ArmCore`, uma fila de contextos.
 - `svcGetSystemTick` que não avança monotonicamente trava qualquer laço de espera do libctru.
+
+## Resultado
+
+🟡 PARCIAL — **PR1** (2026-08-15, commit `b6198c5`): handles + memória +
+`svcOutputDebugString`.
+
+**PR2** (2026-08-15, sessão seguinte): `kernel/Scheduler` novo (cooperativo, um único
+`ArmCore` reutilizado por todas as threads via `ArmCore#saveState`/`loadState` completo — não
+o `CpuState` de 8 campos do `SwiDispatcher`, que não cobre r4-r12/bancos privilegiados; TLS
+por thread alocado e trocado via `N3dsCp15#setThreadLocalStorage` a cada troca);
+`ThreadObject` deixou de ser um `record` (agora mutável: prioridade/estado/contexto salvo
+mudam em vida); `MutexObject` (recursivo, com dono), `SemaphoreObject`, `EventObject`
+(oneshot/sticky) — os 3 implementam `Waitable`, contrato novo (`isAvailableFor`/`acquire`)
+que também cobre esperar uma HANDLE DE THREAD terminar; `AddressArbiterObject`,
+`SessionObject`, `MemoryBlockObject`. `SvcTable` ganhou `svcCreateThread`/`ExitThread`/
+`SleepThread`/`Get`+`SetThreadPriority`, `svcCreateMutex`/`ReleaseMutex`,
+`svcCreateSemaphore`/`ReleaseSemaphore`, `svcCreateEvent`/`SignalEvent`/`ClearEvent`,
+`svcCreateMemoryBlock`/`Map`/`UnmapMemoryBlock`, `svcArbitrateAddress`,
+`svcWaitSynchronization1`/`N` (índice do objeto acordado em `r1`, `waitAll` vs `waitAny`),
+`svcConnectToPort` (cria `SessionObject`) e `svcSendSyncRequest` (loga o cabeçalho IPC
+decodificado de TLS+0x80 e lança, "não inclui" da task — serviços reais são a G3).
+
+**Achado real, implementado além da lista literal de SVCs da task**: `svcCreateAddressArbiter`
+(`0x21`) não estava na lista, mas `svcArbitrateAddress` (`0x22`, que ESTÁ) não tem como
+funcionar sem um handle de arbiter real — o próprio teste da PR1 já documentava isso como
+bloqueio ("para o boot real progredir além da primeira svc observada"); implementado como
+pré-requisito estrito do que já estava no escopo, não "por precaução". Convenções de
+registrador de TODAS as SVCs novas conferidas contra a montagem REAL dos wrappers
+(`arm-none-eabi-objdump -d libctru.a`, mesma metodologia da PR1) — achado extra:
+`svcWaitSynchronization`/`N`/`ArbitrateAddress` passam o timeout de 64 bits em pares de
+registrador não-óbvios (`r2:r3` no primeiro, `r0`+`r4` no N, `r4:r5` no arbiter), sem
+shuffling de pilha, dependendo do padding AAPCS natural.
+
+**Achado real reportado, NÃO corrigido (fora do escopo desta task)**: com `0x21`
+implementado, `n3dsemu testdata/application.3dsx` progride além da primeira `svc` e esbarra
+numa decisão ARQUITETURAL de OUTRO épico do arm-jitter — `FpscrRegister#setValue` (decisão
+nº 3 do épico B3) só suporta o modo IEEE round-to-nearest da VFP, e o `crt0`/newlib do
+libctru grava um FPSCR com `LEN`/`STRIDE` (aritmética vetorial VFPv2) diferente de zero antes
+de `main()`. **O aceite objetivo "roda até `svcExitProcess`, sai código 0" desta task NÃO é
+alcançável enquanto essa decisão do arm-jitter não for revisitada** (seria uma task própria
+do arm-jitter, fora do escopo de kernel HLE desta) — confirmado idêntico nos 3 backends
+(JIT/`--interp`/`--check`, `Application3dsxTest` parametrizado) e com `n3dsemu --trace-svc`
+real.
+
+Todo o resto do aceite fechou: `svcSendSyncRequest` loga o cabeçalho IPC antes de lançar;
+teste unitário por objeto de kernel (`MutexObjectTest` — recursão + release por não-dono,
+`SemaphoreObjectTest`, `EventObjectTest` — oneshot/sticky, `SvcTableTest` — `waitAll` vs
+`waitAny` com índice, timeout que expira via bloqueio real + adiantamento do relógio virtual
+`core.addCycles`, nunca `System.nanoTime()`). `mvn -o test` verde (84 testes; só o repo
+`n3dsemu` tocado, G5 não se aplica).
+
+**Sessão de continuação (2026-08-16, motivada pela investigação que achou os 2 gaps abaixo
+dos SVCs `0x38`/`0x3A`)**: 2 bugs reais fechados. **(1)** `svc 0x39`
+(`svcGetResourceLimitLimitValues`), fora da lista original da task — mesmo padrão do achado
+de `svcCreateAddressArbiter` da PR2: um SVC vizinho que o `__system_allocateHeaps` do crt0
+usa e a spec original não previu. Sem ele, o array de saída do teto de `COMMIT` nunca era
+escrito (ficava com o que já estava na pilha do guest, tipicamente `0`), o tamanho de heap
+calculado pelo crt0 virava `0` e o `svcControlMemory(MEMOP_ALLOC)` seguinte falhava com
+`MISALIGNED_SIZE` — implementado espelhando `handleGetResourceLimitCurrentValues` (mesma
+convenção de registrador), com `ResourceLimitValues#limitValueOf` novo.
+
+**(2)** Achado arquitetural mais profundo, descoberto ao investigar por que o `ALLOC`
+continuava falhando mesmo com um teto plausível: `MemoryMap.LINEAR_HEAP_BASE`(`0x08000000`)/
+`NEW_HEAP_BASE`(`0x14000000`) deste projeto estavam com os endereços TROCADOS em relação ao
+3dbrew real (`Memory_layout`: o heap "geral", mapeado por `ControlMemory` **sem** a flag
+`LINEAR`, fica em `0x08000000`; o heap LINEAR de verdade, via `MEMOP_ALLOC_LINEAR`, fica em
+`0x14000000` — o oposto) — confirmado via `WebFetch` na wiki antes de corrigir, não um
+palpite. Consequência prática: o segundo `svcControlMemory` do crt0 (que usa a flag `LINEAR`,
+endereço escolhido pelo kernel) caía no pool errado e falhava com `OUT_OF_RANGE`. Corrigido
+renomeando para `GENERAL_HEAP_BASE`/`LINEAR_HEAP_BASE` nos endereços certos
+(`MemoryManager`/`N3dsMachine`/`N3dsAddressSpace` atualizados) — e, como bug lateral
+necessário para o primeiro `ALLOC` (endereço explícito, sem a flag) continuar funcionando,
+`MemoryManager#controlMemory` passou a escolher o pool pelo ENDEREÇO quando `addr0≠0` (a flag
+`LINEAR` só decide quando o kernel escolhe o endereço, `addr0==0` — um `addr0` explícito já é
+auto-suficiente no Horizon real). Os dois heaps (16 MiB cada, antes 2 MiB/16 MiB
+desbalanceados) agora batem exatamente o teto de `COMMIT` que `ResourceLimitValues` relata,
+já que o crt0 reparte esse teto meio a meio quando não há `.smdh`/exheader.
+
+**`n3dsemu testdata/application.3dsx` não panica mais** (era `svcBreak(PANIC)` toda vez) — os
+dois `svcControlMemory` de heap agora sucedem nos 3 backends. **Novo limite encontrado, NÃO
+corrigido (fora do escopo desta continuação cirúrgica)**: o backend JIT entra num laço que
+chama `svcCreateAddressArbiter` (`0x21`) repetida e indefinidamente no MESMO PC — confirmado
+manualmente até 200 mil fatias sem sair sozinho; provavelmente precisa de
+sincronização/escalonador cooperativo de verdade reagindo a esse padrão (fora do "não inclui"
+desta task, território de G3 ou de uma G2.2). **Achado extra**: INTERPRETED/CHECK avançam
+MUITO mais devagar por fatia que o JIT (blocos compilados/encadeados cobrem mais instruções
+por fatia) — dentro do mesmo orçamento de fatias que o JIT já usa para alcançar o laço, os
+outros dois backends ainda não saíram do segundo `svcControlMemory`; o aceite original da G2
+("JIT e `--interp` produzem exatamente a mesma sequência de SVCs") não foi revalidado ponta a
+ponta por essa divergência de RITMO (não necessariamente de comportamento) — fica para a
+sessão que atacar o laço do arbiter também confirmar isso com um orçamento de fatias generoso
+o bastante para os 3 backends convergirem. `mvn -o test` verde (87 testes; só `n3dsemu`
+tocado, G5 não se aplica).

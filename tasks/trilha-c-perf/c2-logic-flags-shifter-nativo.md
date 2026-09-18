@@ -56,3 +56,11 @@ emitir (pode ser bug da tabela OU bug real; reporte ao usuário).
 - Shift por registrador consome 1 ciclo interno extra — NÃO alterar contagem de ciclos
   nesta task (só flags); o custo já está modelado no IR.
 - MOVS/MVNS pc,... com S é retorno de exceção — já tratado em outro caminho; não tocar.
+
+## Resultado
+
+**✅ Concluída.** Helpers `shiftedOperandCarry`/`doXxxS` implementados; a policy só
+rejeita `dst15+S` nas ALU (não mais shift+setFlags no geral). Property test cobrindo
+32 combinações × n=0..255 × 2 carries, comparando emissor ASM vs. interpretado.
+`asmcheck` de JUS (800 blocos) com zero divergências. Bench JUS: 76,5 → 81,7 fps
+(+6,8%).

@@ -60,3 +60,38 @@ utilitário precisar de ajuste, PARE e reporte — vira mini-task no arm-jitter)
   configurável do utilitário; os gba-tests pegam diferenças aqui.
 - SRAM é 8-bit-only no GBA — se o handler atual trata isso, o novo mapeamento
   precisa manter (é handler, não RAM mapeada).
+
+## Resultado
+
+**✅ Concluída** (gbaemu `64e08c1`). `GbaBus` reimplementado sobre `PagedAddressSpace`
+(composição): EWRAM/IWRAM viram páginas de RAM verdadeiras via `mapRam`+`mapMirror`;
+BIOS/Paleta/VRAM/OAM/ROM+EEPROM/SRAM/I-O viram um handler por bloco
+(`MemorySpaceGroup`, reproduz a ordem de prioridade de registro de hoje), reaproveitando
+os MESMOS dispositivos sem mudar comportamento observável.
+
+`PAGE_SHIFT=15` (32KB) — 4KB chegou a REGREDIR o bench (tabelas maiores/esparsas, pior
+localidade de cache no caminho quente de EWRAM/IWRAM), achado registrado no commit.
+
+**Decisões documentadas**: waitstates de GAME_PAK continuam calculados dinamicamente
+via WAITCNT (fora da tabela estática de páginas do utilitário, que é por página fixa —
+não serviria ao caso dinâmico); `InvalidationAwareAddressSpace` continua envolvendo o
+bus inteiro sem usar o `WriteListener`/`setContainsCode` por página do utilitário (o
+`JitRuntime.invalidate()` já tem seu próprio gate O(1) por bitset — duplicar o
+rastreio de "página com código" nas duas camadas seria redundante e arriscaria
+desync, sem ganho medido).
+
+Suite gbaemu 216 verde (`JitInterpreterDivergenceTest` sem divergência, gba-tests,
+IRQ/timer/DMA). Bench headless dos 5 jogos (3 execuções, médias) nos dois backends:
+**-8% a -29%** (interp: -8% a -20%; asm+chain: -15% a -29%), sem regressão em nenhum
+jogo.
+
+**Validação de gameplay do usuário concluída 2026-07-16** (A/B real: build pós-C6 vs.
+worktree no commit pai `942b664`, mesmos 5 jogos): os 3 problemas observados no
+boot+save (chiado de áudio no SMW, glitch de batalha do Pokémon agora também visível
+em INTERPRETED, canal de áudio baixo/acelerado no Metroid) **já existiam no build
+pré-C6 — confirmados pré-existentes, não são regressão desta task**.
+
+Achado relevante registrado à parte: o glitch de batalha do Pokémon antes atribuído
+só ao caminho ASM (ver C5) TAMBÉM ocorre em INTERPRETED — contradiz a atribuição
+anterior, fica como pendência de investigação futura (não corrigido aqui, fora de
+escopo de C6).

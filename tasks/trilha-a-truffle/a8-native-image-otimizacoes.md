@@ -52,3 +52,24 @@ Para o PGO: o profile é gerado com o workload de throughput `--truffle` + o
   na tabela.
 - Medir sempre com a mesma energia/plano do Windows e sem outras cargas (ruído >
   diferenças de single-digit %); best-of-5 já mitiga.
+
+## Resultado
+
+✅ (2026-07-31, armbox `b1411f6`) — 5 variantes medidas (baseline/`-O3`/
+`-O3 -march=native`/`--gc=G1`/`--pgo=<profile> -O3`), mesma máquina/sessão, best-of-5
+para startup+throughput, `PeakWorkingSet64` por polling para RSS, corretude
+`hello.elf`+`busybox echo hi` nos 2 backends. `--gc=G1` falhou no build com erro claro
+(`only supported on Linux AMD64 and AArch64` — resultado válido, não bloqueio,
+registrado).
+
+**PGO+`-O3` venceu (ou empatou) as 4 métricas simultaneamente** — startup 33,0ms
+(empate técnico com `-march=native` 33,5ms), throughput truffle 2101ms (melhor, vs
+2175ms de `-march=native`), throughput interp 1466ms (melhor, vs 1536ms), RSS 97,3MB
+(ÚNICA variante abaixo do baseline 101,8MB) — promovido a default do perfil `native`
+do armbox (`pom.xml`), perfil comitado em `armbox/native-profile/default.iprof` com
+receita de regeneração no README. `-march=native` descartado apesar de próximo
+(binário não-portável, não venceu PGO em nenhuma métrica). Tabela completa + comandos
+reproduzíveis no README do armbox.
+
+`mvn -o test` verde (arm-jitter + armbox, JBR 25); G5 não se aplica (nenhum arquivo
+Java/IR tocado, só `pom.xml`/build config do armbox e README).

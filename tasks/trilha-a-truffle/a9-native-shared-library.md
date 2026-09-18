@@ -103,3 +103,36 @@ e `TraceCompilation` mostra `opt done` dentro da lib.
   `aj_last_error` — teste dedicado (ex. `aj_write` fora de qualquer região).
 - O nome das funções exportadas é ABI pública a partir do PR1 — mudanças depois
   são breaking change de verdade (G3 vale dobrado aqui); começar pequeno.
+
+## Resultado
+
+PR1 ✅ (2026-07-31, ambiente GraalVM+MSVC ficou disponível nesta máquina — ver
+`tasks/FILA-EXECUCAO.md`) — módulo `capi/` novo (irmão de `core/`/`truffle/`) com
+`ArmJitterCApi`/`CoreHandle`/`CallbackOpenBus`/`MmioRead·WriteFunctionPointer`; API v1
+completa (`aj_create`/`destroy`/`map_ram`/`write`/`read`/`set_mmio_callbacks`/
+`get·set_register`/`get·set_cpsr`/`set_pc`/`run_cycles`/`set_irq_line`/
+`save·load_state`/`last_error`), backend `INTERPRETED_IR` só (`backendId=1` devolve
+erro claro, reservado para PR2).
+
+**Achado real de native-image** (fora do escopo de qualquer bug pré-existente,
+específico desta task): um campo estático inicializado com `WordFactory.nullPointer()`
+(`globalErrorBuffer`) faz o `native-image` tentar SIMULAR o inicializador de classe em
+tempo de build e falhar com `Unsupported kind: Object` em **todo** `@CEntryPoint` da
+classe (`SimulateClassInitializerSupport` não sabe colocar um valor `Word` no heap da
+imagem) — corrigido removendo o inicializador explícito (campo estático `Word` fica
+implicitamente zero-inicializado, que É o ponteiro nulo em runtime sob SVM; o mesmo
+NÃO se aplica a inicializadores de campo de INSTÂNCIA, que rodam em runtime via `new`,
+não simulados).
+
+PR1 do smoke test (`capi/src/test/c/smoke.c` + `capi/build-and-run-smoke.ps1`) cobre:
+programa ARM real (soma sem SWI, termina por orçamento de ciclos) até R0 conferido,
+callback MMIO (read devolve constante do C, write registra endereço/tamanho/valor do
+último byte), save/load state round-trip, e handle inválido devolvendo erro claro sem
+crash — todas as 19 checagens passam contra o `.dll` real compilado com
+`cl.exe`/GraalVM 25.0.3. `mvn -o test`/`install` verdes (JBR 25, capi/ compila sem
+GraalVM instalado — só o perfil `native-lib` exige). README ganhou a seção "Biblioteca
+nativa (C API)".
+
+PR2 (backend Truffle) segue bloqueado: depende de "A7 verde", e A7 não fechou (bailout
+SVM do backend Truffle persiste, ver índice da A7) — fica para quando esse bailout for
+corrigido.

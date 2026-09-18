@@ -55,3 +55,31 @@ Truffle compilando blocos em runtime.
 - Confirmar a versão exata do GraalVM 25 LTS que o usuário instalar antes de escrever
   os passos de build no relatório — comandos/flags do `native-image` mudam entre
   versões.
+
+## Resultado
+
+🟡 PARCIAL (ver [relatório](RELATORIO-A5.md)). Repo `armbox` (commit dedicado A5):
+`Backend.TRUFFLE` novo (`--truffle`) ligado a `TruffleJitRuntimeFactory`; perfil Maven
+`native` (`native-maven-plugin` 0.11.1) gera `armbox.exe` (39,5MB) com
+`JAVA_HOME=`GraalVM 25.0.3 Oracle + ambiente MSVC (`vcvars64.bat`, exigido no
+Windows); backend ASM recusado cedo sob native-image via `ImageInfo.inImageCode()`
+com mensagem clara (armadilha ✅).
+
+**Aceite #1 ✅** (stdout/exit idênticos à JVM para `hello.elf` e `busybox-armv5l`
+reais).
+
+**Aceite #2 🔴 não alcançado**: `TraceCompilation` mostra 0 blocos compilados com
+sucesso — TODA tentativa de compilar um `TruffleBlockRootNode` contra um bloco ARM
+real (loop de verdade via busybox, não os blocos sintéticos retos do bench A0/A4)
+bilateral bailout de partial evaluation, tanto no binário nativo (`FrameWithoutBoxing
+should not be materialized`) quanto no JBR com Truffle Unchained (`tooDeepInlining`) —
+causa raiz: `IrBlockExecutor#executeOp` (A3) é um dispatcher único exaustivo sobre
+TODO `IrOp.Kind`, sem especialização por nó Truffle, e o PE não consegue
+expandir/podar os ramos para nenhum bloco real; consequência medida: `--truffle`
+ficou MAIS LENTO que `--interp` (2,76s vs 1,77s, loop de 2000 iterações) porque paga o
+custo de compilar em background sem nunca ter sucesso. Não é bug de A5 nem específico
+de native-image — é limitação pré-existente de A2/A3 nunca antes exercitada com
+blocos reais; recomendação registrada no relatório para uma eventual task futura de
+especialização de nós Truffle por `IrOp`, fora do escopo desta task.
+
+**Revalidada pela A7 (2026-07-27): permanece 🟡** — ver nota na task A7.

@@ -151,3 +151,44 @@ mesmo caminho de apresentação da G4.
 - Não misture os registradores **internos** da GPU (`0x0000`–`0x0FFF`, escritos por lista de
   comando) com os **externos** (`0x1EF00000`, escritos por `gsp::WriteHWRegs`). São dois
   espaços distintos; os externos controlam framebuffer/LCD e já foram tratados na G3/G4.
+
+## Resultado
+
+🟡 PARCIAL (2026-08-19, PR1-3 implementadas, falta validação visual do usuário) — PR1
+(parser+registradores) e PR2 (shader interpretado + `VertexPipeline` + geometria na Vulkan,
+cross-validado contra `.shbin` real do `simple_tri`), ver detalhe completo em
+`FILA-HISTORICO.md`.
+
+**PR3 (2026-08-19)**: `gpu/tev/TevConfig`+`TevGlslGenerator` (decodifica os 6 estágios TEV
+dos registradores reais/gera GLSL, testado — ainda não consumido pelo pipeline Vulkan, que
+segue com o shader estático equivalente ao caso `simple_tri`, sem mudança observável);
+`gpu/Texture` (formatos não-comprimidos + deswizzle Morton 8×8, testado — sampler Vulkan fica
+para PR4, a própria task permite); e **a integração real ao boot** que faltava:
+`GSPGPU_TriggerCmdReqQueue` (`GspGpuService`) lia a fila GX só para CONTAR o disparo até esta
+PR — agora lê de verdade (`gpu/GxCommandQueue`, layout confirmado via 3dbrew
+`GSP_Shared_Memory`), `gpu/shader/ShaderUpload` (novo) captura o upload de vertex shader por
+registrador-FIFO (código/*operand descriptors*/uniforms float — o caminho real do hardware,
+offsets confirmados via 3dbrew `GPU/Internal_Registers`, diferente do `.shbin`-arquivo usado
+nos testes da PR2), e um `DrawArrays`/`DrawElements` real dentro de uma lista processada
+desenha de verdade no `PicaRenderer` (`Main`/`N3dsMachine` ganharam sobrecarga para injetar o
+`VulkanRenderer` real no modo janela).
+
+Teste de integração ponta-a-ponta novo (`GspGpuServiceTest`) monta a fila GX real na memória
+compartilhada e confirma 3 vértices corretos chegando ao `RecordingRenderer` — primeiro teste
+da G5 que exercita fila→registradores→shader→`VertexPipeline`→renderer junto. `mvn -o test`
+verde (**180**, +17 novos: `TevConfigTest`/`TevGlslGeneratorTest`/`TextureTest`/
+`ShaderUploadTest`/integração), incl. `VulkanRendererSmokeTest` (3, inalterado, contra o
+driver real). Fumaça manual `--headless` de `simple_tri.3dsx`: sem crash, mesmo padrão de
+espera de VBlank já existente em `hello-world.3dsx`.
+
+**Simplificações documentadas** (Javadoc de `ShaderUpload`, não são bugs): mapeamento
+saída→semântica fixo na convenção `o0`=posição/`o1`=cor (sem decodificar
+`GPUREG_SH_OUTMAP_*`), só uniform **float32** suportado (float24 empacotado lança
+`UnsupportedOperationException`), desenho sempre em `Screen.TOP`, múltiplos disparos na mesma
+lista leem o estado final dos registradores. G5-invariante não se aplica (nenhum arquivo
+arm-jitter tocado).
+
+**Falta**: usuário rodar `n3dsemu <path>/simple_tri.3dsx` (modo janela) e confirmar
+visualmente o triângulo (RFC D4 — nenhuma task da trilha G fecha por inspeção automática); se
+confirmado, PR4 (sampler Vulkan de textura + wiring do TEV no pipeline + float24 +
+`SH_OUTMAP` granular) fecha a trilha G.

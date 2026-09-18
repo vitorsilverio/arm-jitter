@@ -45,3 +45,29 @@ antes/depois. É uma task de medição — nenhum código novo esperado além de
   Conferir `Truffle.getRuntime().getName()` impresso antes de cada medição (A4/A5
   já fazem isso).
 - Rebuild do nativo SEM `mvn install` novo do arm-jitter = medir o jar velho.
+
+## Resultado
+
+🔴 medida (2026-07-27, [relatório](RELATORIO-A5.md#a7-data-resultado-pós-a6)) —
+rebuild completo com A6 mergeada (`mvn -o install` JBR 25 + `armbox.exe` via GraalVM
+25.0.3+MSVC) confirmado, aceite #1 (corretude `hello.elf`/`busybox-armv5l`) ✅
+mantido nos dois ambientes/backends.
+
+**Aceite #2 (TraceCompilation) misto**: JBR 25+Unchained agora COMPILA de verdade
+(1812 `opt done`, 0 `opt failed` — A6 confirmada, não é artefato pontual da sessão
+dela); native-image reproduz o MESMO bailout `FrameWithoutBoxing should not be
+materialized` da A5 byte a byte (0 `opt done`, 903 `opt failed`) — a especialização de
+nós de A6 resolveu o pipeline JVMCI mas não teve nenhum efeito sobre o pipeline
+SVM/Enterprise Truffle Compiler, causa raiz sob SVM ainda sem diagnóstico.
+
+**Aceite de ganho de tempo 🔴 falha nos DOIS ambientes** (loop de 2000 iterações,
+best-of-5): native-image `--truffle` 3307ms vs `--interp` 2164ms; JBR+Unchained
+`--truffle` 3713ms vs `--interp` 2508ms (JBR mais lento apesar de compilar de verdade
+— wall-time de processo curto dominado pelo custo fixo de bootstrap dos módulos
+Unchained, não comparável ao ganho estrutural).
+
+**Nenhum dos dois critérios de aceite fechou nos dois ambientes simultaneamente → A5
+NÃO promovida a ✅, permanece 🟡.** `mvn -o test` verde (1322 core + 13 truffle, JBR
+25). Análise da causa raiz SVM e do custo de bootstrap Unchained ficam para sessão de
+modelo forte dedicada (fora do escopo de medição desta task, conforme a própria task
+instrui).

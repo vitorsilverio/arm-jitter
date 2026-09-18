@@ -110,3 +110,12 @@ F4-MSR, F3.
 - Blocos com CHAINING saltam para outro bloco compilado: o flush F2 na saída cobre
   isso (o próximo bloco faz o próprio prólogo) — confirmar que o chaining sai por um
   caminho que executa o flush.
+
+## Resultado
+
+**❌ Fechada sem implementar (2026-07-11).** Ver a seção **⚠️ Prioridade rebaixada**
+no topo desta task: reavaliação com JFR de 120s em dois jogos (MKDS corrida, JUS
+intro Mobiclip) via savestate, no backend `asm superblocks` (default de produção),
+mostrou flags/condição em ~0,4% das amostras nos dois cenários — a conclusão original
+de 2026-07-08 foi reafirmada com dados novos pós-C0/superblocos, não apenas herdada.
+Reabrir exige profile novo mostrando sinal diferente, não reabrir "só para ver".

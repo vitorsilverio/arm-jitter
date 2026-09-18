@@ -58,3 +58,15 @@ ALU simples, `Cycle` e `Fetch`, caindo para o interpretado em qualquer outro cas
   no emissor novo, nunca "ajuste" o interpretador para passar.
 - Truffle em JVM sem Graal roda interpretado — os testes de equivalência valem mesmo
   assim (corretude não depende de compilação).
+
+## Resultado
+
+✅ `CodegenBackend.TRUFFLE` adicionado no core (única mudança lá); `TruffleCodeEmitter`/
+`TruffleBlockRootNode` no módulo `truffle/`: `RootNode` com `IrOp[] @CompilationFinal` +
+`@ExplodeLoop`, delegando CADA op a `IrBlockExecutor.executeOp` — zero semântica de
+ALU/flags reimplementada, G1 intacto. Suportado nativamente: ALU cond AL sem
+`ShiftedRegister` com MOV/ADD/SUB/AND/CMP + `Cycle`/`Fetch`; resto cai no fallback
+`InterpretedCodeEmitter` inteiro. Deps `truffle-api`/`truffle-runtime` 25.0.1 só no
+módulo truffle. Equivalência via `BlockEquivalenceHarness` do core (ALU puro nativo /
+op não suportada→fallback / bloco vazio). Suíte core 467 + truffle 3 verdes, `mvn test`
+verde na raiz; gbaemu 216 + ndsemu 175 revalidados.

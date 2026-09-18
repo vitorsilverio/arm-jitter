@@ -43,4 +43,5 @@ compilado `JitRuntimeFactory.armThumb` com `hotThreshold=1`).
 - [x] `ArmTraceListener.onMemoryAbort` novo, `default` vazio (G3).
 - [x] `ArmCore.enterMemoryAbort` chama o gancho ANTES de mutar PC/CPSR/banco de registradores.
 - [x] Testes provando paridade do PC exato nos 3 caminhos de execução.
-- [x] `mvn -o test` verde (core), G5 revalidado (gbaemu/ndsemu/armbox).
+- [x] `mvn -o test` verde (core) + `mvn -o install`; G5 revalidado: gbaemu verde, ndsemu verde,
+      armbox 40/41 (a 1 falha é a mesma pré-existente de `Armv7TortureTest`/VFP, não-regressão).

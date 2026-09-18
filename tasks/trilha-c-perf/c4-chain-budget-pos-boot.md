@@ -48,3 +48,9 @@ Para CADA combinação candidata de budgets de runtime:
   Sintomas de budget alto demais no ARM7: som atrasado/loopado, input perdido.
 - Trocar o budget é seguro em fronteira de frame (fora de `execute`) — não trocar no
   meio de um slice.
+
+## Resultado
+
+**✅ Fechada** (ndsemu `85e4b36` + `cf7b5c2`). Budgets de runtime 256/64 (ARM9/ARM7):
+bench MKDS +6%, SM64DS +7,6%, JUS +11,4%. Boots frios dos 4 jogos de referência OK.
+Gameplay validado na GUI pelo usuário em 2026-07-10 → **256/64 é o DEFAULT**.

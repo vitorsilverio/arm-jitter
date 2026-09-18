@@ -152,3 +152,23 @@ por alguns exemplos.
   execução. Logar e seguir descobre todas de uma vez.
 - O `APT` é onde o libctru mais depende de estado entre chamadas. Um `Enable` sem
   `Initialize` anterior tem de ser tolerado (logado), não explodir.
+
+## Resultado
+
+🟡 PARCIAL (2026-08-18) — codec IPC (`ipc/`), `ServiceRegistry`+7 serviços (`srv:`/`APT:U`/
+`hid:USER`/`fs:USER`/`gsp::Gpu`/`cfg:u`/`ptm:u`) e pulso periódico de 60 Hz no `Scheduler`
+implementados; `svcSendSyncRequest` despacha de verdade (não lança mais).
+
+**2 achados reais corrigidos**: (1) `Loader3dsx` concatenava code/rodata/data pelo tamanho
+BRUTO — o carregador de referência arredonda cada segmento até 0x1000 antes do próximo
+começar; sem isso `srv:GetServiceHandle` sempre lia string vazia (confirmado via objdump no
+`read-controls.3dsx` real). (2) a thread interna de relay de interrupção do `gsp::Gpu`
+precisa da FILA de interrupções populada (3dbrew GSP Shared Memory), não só do evento bruto
+sinalizado. `mvn -o test` verde (118 testes, +19 novos).
+
+**Aceite NÃO fechado**: `read-controls.3dsx` ainda não sai sozinho via `--script`+START —
+trava girando `svcClearEvent`/`svcWaitSynchronization` no evento de VBlank, thread de relay
+(prioridade mais alta) nunca devolve controle ao loop real da aplicação; raiz não isolada
+(candidato a G3.2, mesmo padrão G2→G2.2). `application.3dsx` (hello-world) nunca chama
+`svcExitProcess` por design (sem checagem de tecla) — item do aceite original inatingível com
+este ROM. Commit `468bf5c`.

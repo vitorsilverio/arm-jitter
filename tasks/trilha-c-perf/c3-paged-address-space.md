@@ -60,3 +60,18 @@ hospedeiros adotam gradualmente.
   caso (delegar ao handler) em vez de assumir.
 - Não converter os hospedeiros "no atacado": uma região por PR, com bench, para achar
   regressões cedo.
+
+## Resultado
+
+**✅ Utilitário entregue no arm-jitter** (`memory/PagedAddressSpace`):
+`mapRam`/`mapHandler`/`mapMirror`/`unmap`, `WriteListener` por página que só dispara
+em página marcada por `setContainsCode` (mesma ideia do índice página→blocos do
+`BlockCache`), open-bus configurável, waitstates por página via
+`providesAccessCycles()`. 13 testes novos.
+
+**Microbench honesto**: um if-chain sintético raso é enganoso — refeito com 8
+branches como o mapa real do GBA, o `PagedAddressSpace` ficou **~19-26% mais rápido**
+que o if-chain realista (0,74-0,81x o tempo).
+
+Suite core 480 verde; gbaemu 216 + ndsemu 175 revalidados. **Adoção NÃO incluída
+aqui** — é PR separado por hospedeiro, fora do escopo desta task (ver C6/C7).

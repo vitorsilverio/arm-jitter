@@ -64,3 +64,41 @@ com o caso restore.
   filtrar chaves por região de ROM/RAM estável na v1 e anotar.
 - O pool de compilação compartilha CPU com a emulação — `precompile` deve usar a
   prioridade/fila existente, nunca uma thread nova dedicada.
+
+## Resultado
+
+**✅ Concluída (2026-07-17).** arm-jitter: `BlockCache#hotKeys(max)` (só blocos
+COMPILADOS, ordem decrescente de acertos) + `JitRuntime#hotBlockKeys(max)` (delega)
++ `JitRuntime#precompile(Collection<BlockKey>, AddressSpace)` novos; `precompile` é
+no-op no modo não-tiered (`coldEmitter==null`), e chaves já presentes/com memória
+que não decodifica mais (ROM diferente/self-modified) são ignoradas — o próprio
+`lift` é a validação, sem exceção especial.
+
+**Desvio documentado da assinatura literal da spec**: `precompile` recebe um
+`AddressSpace memory` extra (a spec só listava `Collection<BlockKey> keys` — sem uma
+fonte de memória não há como fazer o lift; `JitRuntime` não guarda um `AddressSpace`
+persistente).
+
+ndsemu: `dev.vitorsilverio.ndsemu.jit.HotBlockStore` novo (texto simples versionado
+`NDSEMU-HOTPCS v1` + guarda de hash CRC32 da ROM) grava `<rom>.hotpcs`
+(`hotBlockKeys(512)` dos dois cores) no fechamento do app (shutdown hook), ao trocar
+de ROM e nos 2 fluxos de save-state (`saveStateQuick`/`saveStateToFile`); recarrega
+e chama `precompile` de forma SÍNCRONA (mesma thread da emulação — `BlockCache` não
+é thread-safe para acesso concorrente com `execute`; o "background" do warm-start já
+vem do pool de compilação existente dentro do `precompile`) ao carregar ROM e nos 2
+fluxos de load de save-state.
+
+Testes novos: arm-jitter `BlockCacheHotKeysTest` (3) + `JitRuntimeWarmStartTest` (5,
+incl. round-trip de compilação em background via polling); ndsemu
+`HotBlockStoreTest` (4: round-trip fim-a-fim populando runtimes/memórias FRESCOS
+antes de qualquer execução real, hash divergente ignorado, arquivo corrompido
+ignorado, arquivo ausente ignorado). Suítes verdes: arm-jitter 724 core + 13
+truffle, ndsemu 179, gbaemu (regressão, não usa nada disto).
+
+**PENDENTE de validação do usuário** (não medido nesta sessão, sem ambiente de ROM
+real/headless disponível): Aceite #1 (medição objetiva de warmup no MKDS via
+savestate, antes/depois) e Aceite #2 (asmcheck JUS com precompile ativo + boot dos 4
+jogos com/sem `.hotpcs` real) — a spec explicitamente permite registrar isso como
+pendência em vez de inventar números. Armadilha do filtro de chaves IWRAM/RAM
+instável (v1) também NÃO implementada — não há telemetria real desta sessão para
+decidir o filtro; anotado, não fechado.

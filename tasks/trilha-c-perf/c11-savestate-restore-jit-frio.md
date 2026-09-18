@@ -89,3 +89,36 @@ de lá se o mesmo padrão `clear()`-only existir (verificar `GbaConsole`).
   (flag off = zero custo), como o `[gui-prof]` faz.
 - gbaemu: o warm-up lá é irrelevante (INTERPRETED default), mas o Fix C se aplica
   por higiene se o padrão existir — NÃO portar Fix A/B para o gbaemu.
+
+## Resultado
+
+**✅ Fase 2 concluída (2026-07-16, sessão de modelo forte).** Confirmado por leitura
+de fonte que `LoopSuperblockDetector.promoted`/`pending` (não só
+`JitRuntime.superblockHeads`) também sobrevivem ao `clear()` —
+`isPromoted(headPc)` bloqueia PARA SEMPRE a reconfirmação de um head já promovido
+antes do save, então o loop de maior valor de uma cena nunca mais vira superbloco
+depois de um restore, mesmo com seus blocos individuais recompilando normalmente.
+
+**Fix C implementado como fix PRIMÁRIO** (não só higiene, como a spec original
+supunha): `JitRuntime.reset()` novo no arm-jitter — limpa `blockCache()` +
+`superblockHeads` + reinstala um `LoopSuperblockDetector` fresco quando superblocos
+estão ligados; `NdsConsole.loadState` (ambos os runtimes) e `GbaConsole.loadState`
+trocam `blockCache().clear()` por `reset()` (gbaemu é no-op hoje — INTERPRETED
+default não liga superblocos — mantido por paridade). 2 testes novos em
+`LoopSuperblockTest` provando o bug
+(`blockCacheClearAloneLeavesSuperblockHeadPermanentlyBlocked`) e a correção
+(`resetAllowsSuperblockHeadToBeRebuiltAfterRestore`).
+
+**Re-medição com o `.ss` real do usuário** (SM64DS, mesmo harness da fase 1):
+cenário frio (agora via `reset()`) parte de 23,7ms/frame e converge para a faixa do
+cenário quente (~11,6-13,2ms/frame, antes ~17-20ms/frame e o gap NUNCA fechava) já
+entre os frames 1200-2400 (20-40s de jogo) — dentro do critério de aceite (≤60s,
+perto do ideal ≤15s).
+
+**Decisão de modelo forte: Fix A/B NÃO são necessários** — Fix C sozinho fecha o gap
+medido; não implementados nesta sessão (documentado como decisão, não como
+pendência). Boot dos 4 jogos de referência sem regressão. `asmcheck` de JUS mostrou
+uma divergência ASM×interpretador pré-existente e não relacionada (`ASM_CHECK` não
+liga superblocos — `reset()` se comporta identicamente a `clear()` nesse backend por
+construção; achado registrado, fora do escopo de C11, não investigado). Suítes
+arm-jitter (582+13) + ndsemu (175) + gbaemu (216) verdes.

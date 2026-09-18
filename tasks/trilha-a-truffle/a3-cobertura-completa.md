@@ -55,3 +55,21 @@ Regras herdadas do ASM que valem aqui:
   reimplemente.
 - `@TruffleBoundary` em chamadas para código não-parcialmente-avaliável (ex.:
   `AddressSpace` do hospedeiro), senão a compilação Truffle explode ou deoptimiza.
+
+## Resultado
+
+✅ Insight arquitetural: `TruffleBlockRootNode` já delegava CADA op — mesmo as
+"suportadas" da A2 — a `IrBlockExecutor#executeOp`, o mesmo dispatcher exaustivo usado
+pelo fallback PER_OP do ASM; o único motivo de blocos caírem no fallback `WHOLE_BLOCK`
+era o fixup de PC no final do nó ser INCONDICIONAL. Corrigido: `executeBlock` agora
+acumula `pcChanged` por op — igual ao loop de `IrBlockExecutor#execute` — e só faz o
+fixup quando nenhuma op mudou o PC. Com isso `TruffleCodeEmitter.supports()` virou
+`true` sempre: TODO IrOp (ShiftedRegister, condição≠AL, memória, branches, LDM/STM,
+PSR/SWI/coprocessador, ARMv6/v6K/ARMv5TE) já compila nativamente, sem precisar dos 7
+PRs por categoria do plano original — não há especialização de nó por op ainda (isso é
+ganho de performance/JIT, fora do escopo de correção da A3; ver A4). `fallback`/
+`InterpretedCodeEmitter` mantidos por compat de API (G3), caminho inatingível na
+prática. Suite truffle 7 testes verdes cobrindo ALU+ShiftedRegister, 14 cond × 16
+NZCV, Load/Store, Branch, Multiply+LDM/STM; core 498 + truffle 7 verdes na raiz do
+reactor. PENDENTE (aceite #2 da task): usuário rodar divergence-checking com ROM real,
+ainda não implementado.

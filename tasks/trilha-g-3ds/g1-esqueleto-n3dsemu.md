@@ -183,3 +183,26 @@ e gbaemu+ndsemu+armbox revalidados.
 - O `.3dsx` **não** é ELF. Não tente reusar o `Elf32Loader` do armbox.
 - Se `C:\devkitPro\examples\3ds` não compilar (toolchain desatualizado), **PARE e reporte** —
   sem corpus não há como validar nada desta trilha. Não invente um `.3dsx` à mão.
+
+## Resultado
+
+✅ (2026-08-15) — repo novo `n3dsemu`; `loader/Loader3dsx` com relocação completa (algoritmo
+transcrito do carregador de referência do Homebrew Launcher, spec do 3dbrew não documenta a
+semântica); mapa RFC §3 sobre `PagedAddressSpace` + `LoggingOpenBus`; `core/N3dsCp15` com
+`c13`/TLS desde o início; `kernel/SvcTable` intercepta toda `svc`, loga com nomes reais
+(tabela extraída via `objdump` no `libctru.a` real, não copiada de memória) e lança
+`UnsupportedSvcException`; `ARM11_MPCORE` (B5.2) + `ExclusiveMonitor` compartilhado (B5.1,
+RFC D1) desde já.
+
+**Achado real documentado, não é bug do arm-jitter** (decisão de compatibilidade, ver Javadoc
+de `SvcTable`): o decoder ARM compartilhado interpreta o imediato de `SVC` na convenção
+GBA/NDS (número nos 8 bits altos); o Horizon usa a convenção oposta (número direto no campo)
+— `SvcTable` relê a instrução crua da memória do guest em vez de tocar no decoder
+compartilhado (evitaria quebrar gbaemu/ndsemu/armbox).
+
+`n3dsemu testdata/application.3dsx --trace-svc` chega a `0x21 svcCreateAddressArbiter`,
+idêntico nos 3 backends (JIT/`--interp`/`--check`) — o aceite mais importante, confirma
+`ARM11_MPCORE` executando ARMv6K real de forma consistente. `mvn -o test` verde (15 testes);
+G5 não se aplica (repo novo). Corpus `testdata/` com 4 exemplos reais do devkitPro (r68/
+libctru 2.7.0), compilados localmente (armadilha de ambiente: precisa do shell MSYS2 do
+PRÓPRIO devkitPro, não do Git Bash — documentado em `testdata/README.md`). Destrava G2.

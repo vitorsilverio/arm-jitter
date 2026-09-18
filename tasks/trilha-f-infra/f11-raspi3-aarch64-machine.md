@@ -171,3 +171,25 @@ aceite (`EARLYCON_BANNER` no console) ainda não foi alcançado. Candidatas à p
 profiling do INTERPRETED (slices/s, procurar `WFI`/loop-e-volta) para separar "lento de verdade"
 de "preso"; (b) investigar a divergência do JIT separadamente (endereço `0x200` sugere algo bem
 anterior aos 3 gaps fechados aqui, possivelmente não relacionado).
+
+**Sessões 1-3 (2026-08-18/20)**: relato minucioso movido para `tasks/FILA-HISTORICO.md` (seções
+"F11 — sessão 2/3, relato minucioso"). Resumo: itens 1-2 do "Inclui" (assets versionados +
+`FdtPatcher.withNodeRemoved`) e itens 3-5 (`Raspi364Machine implements Machine64`,
+`RunnableMachine` extraído, `device/bcm2836/` com `Bcm2836GenericTimer`/`Bcm2836LocalIntc`,
+`boot/CompositeSystemRegisterBus`) fecharam nas sessões 1-2; a sessão 2 bateu no gap real de
+`CCMP`/`CCMN` (Conditional Compare, nunca implementado no épico B6.3) na primeira instrução do
+`kernel8.img`; a sessão 3, já com `CCMP`/`CCMN` fechados por B6.8, avançou até um segundo gap real
+(`ORR X21, XZR, X0` = alias `MOV` de registrador, classe "Logical (shifted register)" nunca
+coberta por nenhuma sub-task de B6) — sugeriu a sub-task `B6.9` ao usuário.
+
+## Resultado (sessão 8, 2026-08-26)
+
+Frente (b) da sessão 7 fechada — causa raiz da divergência do backend JIT achada e corrigida no
+`arm-jitter` (2 bugs reais, viraram a task `E7` na trilha E: `Ir64BlockCompiler` sem `try/catch`
+no bloco nativo + `JitRuntime64#execute` sem proteção no `lift()` de bloco quente). Medido
+localmente contra o fix (ainda **não** publicado no Central nesta sessão): o JIT para de lançar
+exceção e roda o orçamento completo, mas não alcança o marco — converge no MESMO sintoma "lento
+vs. preso" do INTERPRETED (ver sessão 7 acima). `virtual-arm-box` segue em `arm-jitter:1.1.0`;
+`reachesEarlyconBannerJit` documentado como pendente de F5 (publicar)/F7 (consumir) antes de
+reabilitar. F11 segue 🟡 PARCIAL — frente (a) (separar "lento" de "preso" no INTERPRETED), agora
+comum aos dois backends, é o próximo passo.

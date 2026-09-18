@@ -42,3 +42,24 @@ avança sem devolver o controle ao loop de hardware do hospedeiro.
 - O gbaemu historicamente usou runtime interpretado como default na GUI por um problema
   de GC/classloading (ver memória do projeto) — confirmar qual runtime a GUI usa HOJE
   antes de medir; habilitar chaining no runtime errado não medirá nada.
+
+## Resultado
+
+**✅ Concluída.** `GbaConsole.CHAIN_CYCLE_BUDGET=32` (conservador, bem abaixo de
+1 scanline/1232 ciclos), aplicado nos dois backends para manter
+`JitInterpreterDivergenceTest` válido. Bench headless dos 5 jogos: **+9,1% a +41,0%**.
+gba-tests + suite 216 verdes.
+
+**Validação de gameplay (2026-07-11, usuário, 3 jogos)**: a travadinha de compilação
+que o ASM dava antes SUMIU com chaining — confirmado.
+
+**Achados novos, registrados a pedido do usuário, SEM investigação (escolha dele, não
+falta de tempo)**: (1) Pokémon FireRed tem glitches gráficos em batalha rodando
+ASM+chaining — possível regressão do caminho ASM, escopo desta task; (2) animação da
+BIOS + áudio lentos — usuário confirmou que acontece TAMBÉM em `INTERPRETED`, logo NÃO
+é regressão desta task nem do ASM; bug pré-existente mais amplo, versão de origem
+desconhecida.
+
+**Decisão do usuário: `INTERPRETED` segue DEFAULT do gbaemu** (já era assim desde
+2026-06-21 por causa do corte de input do JIT — reforçado agora também por precisão);
+ASM fica reservado para quando precisar de mais desempenho, não como default.

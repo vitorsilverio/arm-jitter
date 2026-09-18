@@ -63,3 +63,52 @@ Qualquer ideia que "junte" instruções do ponto de vista de interrupção está
 - O tier frio do JIT dos OUTROS consumidores passa por aqui — qualquer mudança
   estrutural no executor precisa das suítes dos 3 (arm-jitter/gbaemu/ndsemu)
   verdes, sempre.
+
+## Resultado
+
+**🟡→✅ Fase 1 (medir) concluída em 2026-07-17.** `InterpretedThroughputBenchTest`
+novo (espelha `ChainCycleBudgetBenchTest` de C5, `useJit=false`); ANTES publicado:
+pokefirered 612ms, smw 635ms, castlevania 150ms, metroid 227ms, mariokart 301ms
+(50M ciclos cada). JFR de 120s (`InterpretedProfileMain`, harness manual não-teste)
+rodado em FireRed interpretado — **savestate de batalha não disponível nesta
+sessão** (nenhum `.ss` de batalha em `roms/`), perfil coletado em boot+overworld em
+vez disso (limitação registrada, não bloqueante: o hot path do dispatcher não
+deveria variar por fase do jogo). Top do profile confirma a expectativa da spec:
+`IrBlockExecutor.execute` (o switch de dispatch) domina (~5000 de ~8400 amostras),
+seguido por `IrAluExecutor`/`IrMemoryExecutor`/`GbaBus$MemorySpaceGroup.owner`
+(waitstate lookup, candidato #4). Suites arm-jitter (sem mudança) + gbaemu
+(`JitInterpreterDivergenceTest` sem divergência) verdes.
+
+**Fase 2, candidato #1 (dispatch) implementado e MANTIDO (2026-07-17, sessão
+seguinte)**: `IrOp.kind()` (chamada virtual megamórfica sobre ~40 subtipos selados)
+deixou de ser chamado por op a cada execução do bloco; `IrBlock` agora resolve um
+`int[] kindsArray` uma única vez na construção (paralelo a `operationsArray()`), e
+`IrBlockExecutor#execute` faz `switch (kinds[i])` em vez de `switch (op.kind())` — o
+tableswitch em si não mudou, só a origem do discriminador. `executeOp` (fallback
+PER_OP do ASM) não foi tocado. Ganho medido: 10 execuções antes/depois (para
+absorver ruído de máquina, até ±20% run-a-run) — pokefirered 929→810ms, smw
+832→657ms, castlevania 172→148ms, metroid 280→258ms, mariokart 365→304ms,
+**agregado −15,6%** (bate a meta ≥15% do Aceite). Suítes arm-jitter 745+13, gbaemu
+240, ndsemu 179 — todas verdes.
+
+**Candidato #2 investigado, sem PR (nada a mudar)**: verificado no código
+(`JitRuntime#execute`, caminho não-tiered, `hotThreshold=1`) que o `lift` só roda na
+primeira execução de cada `pc`; a partir daí o `IrBlock` fica no `BlockCache` para
+sempre (ou até invalidação por SMC), sem re-lift em cache hit. Consistente com o
+profile da fase 1. **Fechado como "já coberto", zero código.**
+
+**Candidato #4 (`GbaBus$MemorySpaceGroup.owner`) implementado em seguida** (não o
+#3 — o profile também não credenciava, `evalCond` já é um `switch` barato). Bucket
+de I/O ganhou uma tabela endereço→dono pré-computada na montagem
+(`GbaBus#mapIoBucket`, `MemorySpaceGroup` aceita `fastOwners`/`fastBase`
+opcionais), substituindo a varredura linear de `owner()` por um índice de array —
+reproduz EXATAMENTE a mesma regra de prioridade do `owner()` original; buckets
+pequenos (≤2 membros) não usam a tabela. Ganho medido: agregado médio
+2350ms→2194ms, **≈ −6,6%** (acima do piso de 2% do Aceite). Suíte gbaemu 240 verde;
+mudança 100% gbaemu (`GbaBus.java`), ndsemu não revalidado (não usa `GbaBus`).
+
+**Fase 2 encerrada** (meta ≥15% batida pelo #1, #2 sem custo real, #4 deu ganho
+extra positivo; candidato #3 descartado por análise e #5 exigiria evidência de
+alocação que o profile desta sessão não coletou). **Validação do usuário
+2026-07-17**: FireRed continua com velocidade normal — sem regressão perceptível de
+fidelidade/timing das otimizações da fase 2. **C8 FECHADA.**

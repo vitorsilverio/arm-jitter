@@ -153,3 +153,67 @@ reproduzíveis já documentados).
   `ArmFeature`/UNPREDICTABLE/flags por conta própria — sempre delegar para o mesmo
   código que o interpretador usa. O ganho desta task é estrutural (como o Graal ENXERGA
   o código), não semântico.
+
+## Resultado
+
+🟡 PARCIAL (2026-07-16) — implementadas as 7 categorias INTEIRAS da taxonomia da spec
+(`AluOpNode`, `MultiplyOpNode`, `MemoryOpNode`, `TransferOpNode`, `BranchOpNode`,
+`SystemOpNode`, `CycleFetchOpNode`), cobrindo as 40 `IrOp.Kind` sem sobrar nenhuma
+categoria "genérica" (a taxonomia da própria task já esgota o sealed `IrOp`); cada nó
+guarda o op concreto `@CompilationFinal` e despacha DIRETO ao método do executor de
+categoria correspondente (switch pequeno de até 11 casos POR nó, nunca o switch de 40
+casos de `executeOp`), escolhido na emissão por `IrOpNodeFactory`; `TruffleBlockRootNode`
+monta um array `@Children IrOpNode[]` em vez do array de dados `IrOp[]`, mantendo
+`@ExplodeLoop` (item 2 da spec, decisão confirmada). `@TruffleBoundary` aplicado nos 4
+pontos de escape reais (memória via `MemoryOpNode`/`TransferOpNode`, `TableBranch`,
+`Swi`/`Coprocessor`/`StoreReturnState`/`ReturnFromException` em `SystemOpNode`,
+`Fetch`) — mais grosso que o "só no `AddressSpace.read/write`" literal do item 3,
+porque `IrExecutionSupport`/os 6 executores vivem no `core/` e NÃO PODEM depender de
+`truffle-api` (G3/A1 — limite de módulo pré-existente); `ConditionProfile` nos 2 pontos
+do item 4 (guard por-op quando `condition != AL`, `pcChanged` do fim do bloco).
+
+**Desvio de infra necessário e documentado**: os 6 executores (`IrAluExecutor` etc.) e
+seus métodos eram *package-private* em `core/.../codegen/executor` — impossível
+chamá-los do módulo `truffle/` sem alguma mudança; resolvido widening a visibilidade
+para `public` (classes+métodos, sem tocar nenhuma linha de `IrBlockExecutor#execute`/
+`executeOp`) + 6 getters novos em `IrBlockExecutor` (`aluExecutor()` etc.) — aditivo,
+G3 intacto, G1 intacto (zero semântica nova).
+
+**Aceite 1 (TraceCompilation) ✅ no JBR 25 + Truffle Unchained**: mesmo workload de A5
+(`busybox sh -c` com loop real) — **137 `opt done`, 0 `opt failed`** (antes: 0/0, só
+bailout); saída do programa (`done 5000`) correta sob compilação real.
+
+**Aceite 1 🔴 native-image**: rebuildado com GraalVM 25.0.3+MSVC (mesma receita da
+A5) — MESMO bailout `FrameWithoutBoxing should not be materialized` persiste (916
+`opt failed`, 0 `opt done`) — a especialização de nós resolveu o bailout no pipeline
+JVMCI/HotSpot (JBR) mas NÃO no pipeline SVM/Enterprise Truffle Compiler do
+native-image; são pipelines de compilação Truffle distintos, e a causa raiz sob SVM
+continua sem diagnóstico — fica para a A7, que já é a task dedicada a fechar
+native-image.
+
+Aceite 2 (suíte truffle/equivalência): 606 core + 13 truffle testes verdes
+(`mvn -o test`, JBR 25); a suíte formal com compilação FORÇADA (thresholds baixos +
+`CompilationFailureAction=Throw`, pedida pela Armadilha 1) não foi automatizada nesta
+sessão (exigiria perfil surefire novo com module-path Unchained) — mitigado por
+evidência prática equivalente: o programa busybox rodou até o fim com resultado
+correto sob 137 blocos REALMENTE compilados.
+
+Aceite 3 (ganho): NO NATIVE-IMAGE segue mais lento (`--truffle` ~2,6s vs `--interp`
+~1,8s, 2000 iterações — igual à A5, pois lá a compilação ainda falha); NO
+JBR+Unchained também mais lento em wall-time de processo curto (~3,3-4,9s vs
+~2,2s) mas essa medição é dominada pelo custo fixo de carregar os módulos
+Truffle/Graal via classpath Unchained num processo de vida curta, não comparável 1:1
+à medição de processo único da A5 — o ganho estrutural (compilação passou a
+ACONTECER) não se traduziu em ganho de wall-time neste workload curto; não invalidada
+a hipótese de ganho em blocos/traces grandes de vida longa (A4), só não demonstrada
+aqui.
+
+`mvn -o test` verde no reactor completo + gbaemu (216, sem divergência) + ndsemu (175)
+revalidados verdes (G5, só por precaução — nenhuma semântica mudou).
+
+**Resumo do que fechou vs não fechou**: fechou o objetivo central (compilação REAL de
+blocos ARM reais, antes 0/0 nos dois ambientes, agora 137/0 no JBR) e G1/G3 intactos;
+não fechou o binário nativo (mesmo bailout de A5, agora sabidamente um problema
+SVM-específico não relacionado ao dispatcher) nem a suíte de equivalência sob
+compilação forçada automatizada — ambos ficam para trabalho seguinte (A7 herda o
+primeiro com um diagnóstico mais preciso).

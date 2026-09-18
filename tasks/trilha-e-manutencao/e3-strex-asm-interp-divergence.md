@@ -95,3 +95,29 @@ neste bloco específico, e decidir o fix.
 - O `ARM11_MPCORE` preset é multi-core no hardware real (monitor GLOBAL entre núcleos) mas o
   n3dsemu só emula 1 núcleo — não complicar a investigação com semântica multi-core que não se
   aplica aqui; o bug é observável num único núcleo já.
+
+## Resultado
+
+✅ (2026-08-19) — causa raiz achada, NÃO era bug de semântica de LDREX/STREX em nenhum backend
+(`AsmRuntimeHelpers`/`IrMemoryExecutor` já espelhavam a mesma ordem de operações — checagem do
+monitor ANTES da escrita, `notifyOrdinaryWrite` idêntico). Era um bug do PRÓPRIO harness de
+diagnóstico: `DivergenceCheckingCodeEmitter` isola o candidato num `scratchCore` restaurado por
+bloco via `ArmCore#loadState`, que limpa o monitor de exclusividade DE PROPÓSITO (falha espúria de
+STREX é permitida pela arquitetura num save-state real) — mas esse mesmo restore roda a CADA bloco
+IR, não só em save-states de verdade. Padrão de spinlock/retry (`LDREX` num bloco, `STREX` no bloco
+seguinte após o branch de retry) faz o candidato SEMPRE ver o monitor aberto e falhar, enquanto o
+oráculo — rodando no core real, nunca passando por esse restore — vê a reserva de verdade e sucede;
+exatamente a divergência observada (`reference=0`/sucesso, `candidate=1`/falha).
+`ArmV6ExclusiveNativeEquivalenceTest` (B1.6) não pegava porque testa LDREX+STREX no MESMO bloco via
+`BlockEquivalenceHarness` (sem o restore por bloco do `DivergenceCheckingCodeEmitter`).
+
+**Fix**: após o restore, transfere a reserva do monitor do core real pro `scratchCore`
+(`DivergenceCheckingCodeEmitter.java`, aditivo — `ArmCore#loadState` continua limpando o monitor
+para save-states reais, sem mudança). Teste de regressão novo
+(`DivergenceCheckingCodeEmitterExclusiveMonitorTest`, reproduz cross-block antes do fix, verde
+depois).
+
+`mvn -o test` verde (core+truffle) + `mvn -o install`; G5 revalidado: gbaemu verde, ndsemu verde,
+n3dsemu verde (os 2 testes que a task cita — `Application3dsxTest` — voltam a passar), armbox 40/41
+(a 1 falha é a mesma pré-existente `Armv7TortureTest`/`VfpRegisters`, não-regressão, já documentada
+pela E2/B1.8).

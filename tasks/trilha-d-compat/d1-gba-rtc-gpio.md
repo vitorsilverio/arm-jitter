@@ -57,3 +57,44 @@ hoje. Referência única e suficiente: GBATEK, seções "GBA Cart I/O Port (GPIO
 - Leitura de GPIO só funciona com o bit "read enable" (0xC8) — jogos leem 0xC4
   com enable desligado esperando dados de ROM; devolver ROM nesse caso (teste 2).
 - BCD: 0x59 minutos = 59, não 89 — conversão nos DOIS sentidos com teste.
+
+## Resultado
+
+✅ Concluída (repo gbaemu; protocolo verificado contra o GBATEK real via fetch
+direto — "GBA Cart I/O Port (GPIO)", "GBA Cart Real-Time Clock (RTC)" e "DS
+Real-Time Clock (RTC)" [o GBA reaproveita quase todo o protocolo serial do NDS,
+só troca a tabela de comandos e move o bit AM/PM de hour.bit6→bit7].
+`S3511aRtc` novo [`cartridge/rtc/`]: máquina de estados do chip S-3511A só com
+os 3 fios SCK/SIO/CS [`updatePins`], LSB-first, byte de comando `0110 CCC D`
+decodificado sem depender de nenhum estado do GPIO — não sabe nada sobre
+Direção, isso é responsabilidade de quem chama. **v1 (decisão do próprio
+enunciado da task): data/hora sempre lida AO VIVO do `GbaRtcClock` no instante
+do comando** — sem offset, sem campos internos de ano/mês/dia persistidos; o
+único registrador realmente stateful é o de controle [modo 12/24h e
+power-off auto-clear-on-read, `CONTROL_RESET_VALUE=0x00` para nunca mostrar
+"battery has run dry" sem ter modelado perda de energia real]. `GbaRom` ganha
+uma janela de GPIO opcional [0x080000C4-C9, só interceptada quando
+`rtc != null` — G3 intacto para os 5 jogos de referência]: leitura de pino de
+saída = latch simples, leitura do pino SIO como entrada = `rtc.sioReadback()`,
+gate de habilitação global via bit0 do registrador de controle do GPIO
+[distinto do registrador de controle DO CHIP — nomenclatura cuidada no código
+para não confundir as duas camadas]. `GbaRtcDetector` [game code, mesmo
+padrão do override A2CE→SRAM]: `AXVE`/`AXPE`/`BPEE` [Ruby/Sapphire/Emerald] +
+`U3IJ`/`U32J`/`U33J` [Boktai]; `GbaCartridge.hasRtc()` novo. Save state:
+`SAVE_STATE_VERSION` 2→3, bloco do RTC [fase/bit-shift/comando/direção/buffer
+de parâmetro/registrador de controle — NÃO a hora] escrito só quando
+`cartridge.hasRtc()`, resolvido via `bus.find(GbaRom.class).rtc()` [sem mudar
+a assinatura do construtor de `GbaConsole`]. Armadilha do enunciado sobre
+ordem D1×C6 resolvida: como `GbaRom.contains()` não mudou, a tabela de páginas
+de C6 [`probeBucketMembers`, que só sonda os EXTREMOS do bloco] continua
+enxergando `GbaRom` do jeito que já enxergava antes — nenhuma mudança em
+`GbaBus` foi necessária, D1 funciona igual antes/depois de C6. 25 testes
+novos [`S3511aRtcTest` 6 — protocolo puro com relógio FAKE, BCD 59→0x59 não
+89/0x3B, wrap de meio-dia em modo 12h, reset limpa o registrador de controle;
+`GbaRomGpioTest` 4 — regressão sem RTC, gate de habilitação [teste 2 da
+task], readback de saída, SIO como entrada fim-a-fim; `GbaRtcDetectorTest` 4
+— jogos com/sem RTC incl. FireRed; `GbaConsoleRtcSaveStateTest` 1 — save
+state NO MEIO de uma transação serial, retomada com sucesso após reload
+[teste 4 da task]]. Suite gbaemu 231 verde [219+12 já contando testes de
+tasks anteriores]. arm-jitter não tocado nesta task — gate de regressão é só
+gbaemu [G5 não se aplica, sem mudança na lib compartilhada].
