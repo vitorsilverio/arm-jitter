@@ -68,7 +68,11 @@ colidem de verdade — sob preset com `MVE_FLOAT`, "`VMAXV_S` com `size=3`" não
 prefixo "unsigned" mas são sempre assinados; `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` usam o bit
 que normalmente escolhe sinal para escolher PRECISÃO (binary16 vs binary32); binary16 zera os 16
 bits altos de `Rda`. 5 `IrOp` novos (`Kind` 163-167), todos interpretados apenas (mesmo padrão da
-B16.13a). `mvn -o test` verde (core 4468 + truffle 73, coherence test 163→168 `Kind`).
+B16.13a). **Auditoria JaCoCo pós-fechamento inicial achou gaps reais** (8/28 encodings nunca
+alcançados em teste, `accumulate=true`/lanes mascaradas sem cobertura nos 5 executores novos) **e 2
+bugs reais no decoder** (`sizeFromField` invertido em 5 pontos de despacho) — corrigidos, decoder
+100% linha/branch, executores sem gap além do baseline pré-existente do projeto (`evalCond=false`).
+`mvn -o test` verde (core 4483 + truffle 73, coherence test 163→168 `Kind`).
 `docs/COBERTURA-ISA.md` zero-diff (mesma Armadilha 7 — `mve.decode` só sai de `NOT_IN_ANY_PRESET`
 na B16.14). `docs/COBERTURA-JIT.md` atualizado (163→168). G5 verde nos 5 consumidores. Ver
 `## Resultado` de `B16.13` (trilha B, duas seções: B16.13a e B16.13b).

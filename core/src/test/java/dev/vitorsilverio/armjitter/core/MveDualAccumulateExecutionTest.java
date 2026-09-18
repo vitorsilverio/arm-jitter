@@ -144,11 +144,57 @@ class MveDualAccumulateExecutionTest {
         assertEquals(0, core.register(3));
     }
 
+    @Test
+    void vmlaldavSAccumulatesOntoCurrentPairAndSkipsMaskedLanes() {
+        ArmCore core = newCore();
+        // Qn halfwords 1,2,3,4 (lanes 0-3); Qm halfwords todas 1.
+        core.vfp().setQ(2, 1L | (2L << 16) | (3L << 32) | (4L << 48), 0L);
+        core.vfp().setQ(3, 1L | (1L << 16) | (1L << 32) | (1L << 48), 0L);
+        core.setRegister(2, 100); // RdaLo atual.
+        core.setRegister(3, 0); // RdaHi atual.
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x00FF); // só lanes 0-3 (halfwords 1,2,3,4) ativas.
+        int r = mlaldavSRaw(0, 2, 0, 1, 3, 0b001, 1); // a=1.
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(100 + 1 + 2 + 3 + 4, core.register(2), "acumula sobre RdaLo atual (a=1)");
+    }
+
+    @Test
+    void vmlaldavSSkipsMaskedLanesEntirely() {
+        ArmCore core = newCore();
+        core.vfp().setQ(2, 1L | (2L << 16) | (3L << 32) | (4L << 48), 0L);
+        core.vfp().setQ(3, 1L | (1L << 16) | (1L << 32) | (1L << 48), 0L);
+        core.setRegister(2, 0);
+        core.setRegister(3, 0);
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x0003); // só lane 0 (halfword=1, 2 bytes) ativa.
+        int r = mlaldavSRaw(0, 2, 0, 0, 3, 0b001, 1);
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(1, core.register(2), "lanes 1/2/3 mascaradas não entram na soma");
+    }
+
     // ── VRMLALDAVH_S / VRMLSLDAVH (arredondado, elementos word) ─────────────────────────────────────
 
-    private static int vrmlaldavhRaw(int qn, int x, int a, int qm, int rdahiRaw, int rdaloRaw, boolean subtract) {
-        return (0b111 << 29) | (0b1110 << 24) | (1 << 23) | (rdahiRaw << 20) | embedQn(qn) | (0 << 16)
-                | (rdaloRaw << 13) | (x << 12) | (0b1111 << 8) | (a << 5) | embedQm(qm) | (subtract ? 1 : 0);
+    /// `VRMLALDAVH_S` (top byte `1110 1110`, `bits[11:8]=1111`, tail do bloco `S`).
+    private static int vrmlaldavhSRaw(int qn, int x, int a, int qm, int rdahiRaw, int rdaloRaw) {
+        return (0b1110 << 28) | (0b1110 << 24) | (1 << 23) | (rdahiRaw << 20) | embedQn(qn) | (0 << 16)
+                | (rdaloRaw << 13) | (x << 12) | (0b1111 << 8) | (a << 5) | embedQm(qm);
+    }
+
+    /// `VRMLSLDAVH` (top byte `1111 1110`, `bits[11:8]=1110`, 4º bloco `{}` — encoding DISTINTO de
+    /// `VRMLALDAVH_S`, não apenas `VRMLALDAVH_S` com `bit0` trocado; sempre subtrai, `subtract` não é
+    /// um bit do encoding).
+    private static int vrmlsldavhRaw(int qn, int x, int a, int qm, int rdahiRaw, int rdaloRaw) {
+        return (0b1111 << 28) | (0b1110 << 24) | (1 << 23) | (rdahiRaw << 20) | embedQn(qn) | (0 << 16)
+                | (rdaloRaw << 13) | (x << 12) | (0b1110 << 8) | (a << 5) | embedQm(qm) | 1;
     }
 
     @Test
@@ -159,13 +205,47 @@ class MveDualAccumulateExecutionTest {
         core.vfp().setQ(3, 1L | (1L << 32), 1L | (1L << 32));
         core.setRegister(0, 0); // RdaLo.
         core.setRegister(1, 0); // RdaHi.
-        int r = vrmlaldavhRaw(2, 0, 0, 3, 0b000, 0, false); // rdahi=1, rdalo=0.
+        int r = vrmlaldavhSRaw(2, 0, 0, 3, 0b000, 0); // rdahi=1, rdalo=0.
         put32(core, CODE_BASE, r);
 
         core.step();
 
         assertEquals(4, core.register(0), "4 lanes word, 1 arredondado cada, soma sempre (VRMLALDAVH)");
         assertEquals(0, core.register(1));
+    }
+
+    @Test
+    void vrmlaldavhAccumulatesOntoCurrentPairAndSkipsMaskedLanes() {
+        ArmCore core = newCore();
+        core.vfp().setQ(2, 256L | (256L << 32), 256L | (256L << 32));
+        core.vfp().setQ(3, 1L | (1L << 32), 1L | (1L << 32));
+        core.setRegister(0, 100); // RdaLo atual.
+        core.setRegister(1, 0); // RdaHi atual.
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x00FF); // só lanes 0/1 (word), lanes 2/3 mascaradas.
+        int r = vrmlaldavhSRaw(2, 0, 1, 3, 0b000, 0); // a=1.
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(100 + 1 + 1, core.register(0), "acumula sobre RdaLo atual; lanes 2/3 mascaradas");
+    }
+
+    @Test
+    void vrmlsldavhNegatesOddLaneProductBeforeRounding() {
+        ArmCore core = newCore();
+        core.vfp().setQ(2, 256L | (256L << 32), 256L | (256L << 32));
+        core.vfp().setQ(3, 1L | (1L << 32), 1L | (1L << 32));
+        core.setRegister(0, 999); // deve ser ignorado (a=0).
+        core.setRegister(1, 0);
+        int r = vrmlsldavhRaw(2, 0, 0, 3, 0b000, 0); // VRMLSLDAVH, a=0.
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        // lane0(par)=+1, lane1(ímpar)=-1, lane2(par)=+1, lane3(ímpar)=-1 -> soma 0, do zero.
+        assertEquals(0, core.register(0));
     }
 
     // ── VMAXV_S / VMAXAV (sem bit `a`, sempre lê Rda atual) ─────────────────────────────────────────
@@ -203,6 +283,22 @@ class MveDualAccumulateExecutionTest {
         core.step();
 
         assertEquals(-10, core.register(0), "min(5,3,-10,7,2) = -10");
+    }
+
+    @Test
+    void vmaxvSkipsMaskedLanes() {
+        ArmCore core = newCore();
+        core.vfp().setQ(2, (3L & 0xFFFFFFFFL) | ((-10 & 0xFFFFFFFFL) << 32), (7L & 0xFFFFFFFFL) | ((2L) << 32));
+        core.setRegister(0, 5);
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x00FF); // só lanes 0/1 (words 3,-10) ativas; lane 2 (word 7) mascarada.
+        int r = intMinMaxSRaw(0b10, 2, 0, 2, false); // VMAXV_S, size=word.
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(5, core.register(0), "max(5,3,-10) = 5, lane do word 7 mascarada não conta");
     }
 
     @Test
@@ -249,6 +345,46 @@ class MveDualAccumulateExecutionTest {
         core.step();
 
         assertEquals(9.0f, Float.intBitsToFloat(core.register(0)));
+    }
+
+    @Test
+    void vmaxnmvSkipsMaskedLanes() {
+        ArmCore core = newCore();
+        core.vfp().setQ(2, Float.floatToRawIntBits(2.5f) & 0xFFFF_FFFFL,
+                Float.floatToRawIntBits(99.0f) & 0xFFFF_FFFFL);
+        core.setRegister(0, Float.floatToRawIntBits(1.0f));
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x000F); // só lane 0 (2.5f) ativa; o 99.0f (lane 2) fica mascarado.
+        int r = fpMinMaxRaw(0b1110_1110, 0b1110, 0, 2); // bloco S (single), VMAXNMV.
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(2.5f, Float.intBitsToFloat(core.register(0)), "lane com 99.0f mascarada não conta");
+    }
+
+    @Test
+    void vmaxnmavHalfPrecisionTakesAbsoluteValueAndSkipsMaskedLanes() {
+        ArmCore core = newCore();
+        short hNeg3 = (short) dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.halfBits(-3.0f);
+        short h5 = (short) dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.halfBits(5.0f);
+        short hNeg9 = (short) dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.halfBits(-9.0f);
+        long low64 = (hNeg3 & 0xFFFFL) | ((h5 & 0xFFFFL) << 16) | ((hNeg9 & 0xFFFFL) << 32);
+        core.vfp().setQ(2, low64, 0L); // halfwords: -3.0 (lane0), 5.0 (lane1), -9.0 (lane2).
+        core.setRegister(0,
+                0xFFFF_0000 | (short) dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.halfBits(2.0f));
+        core.vpr().setMask01(1);
+        core.vpr().setMask23(1);
+        core.vpr().setP0(0x0033); // lanes 0 e 2 ativas (bytes 0-1 e 4-5); lane 1 (5.0) mascarada.
+        int r = fpMinMaxRaw(0b1111_1110, 0b1100, 0, 2); // bloco U (half), VMAXNMAV (absoluteForm).
+        put32(core, CODE_BASE, r);
+
+        core.step();
+
+        assertEquals(0, core.register(0) & 0xFFFF_0000, "16 bits altos zerados");
+        assertEquals(9.0f, dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.halfToFloat(core.register(0) & 0xFFFFL),
+                "max(2.0, |-3.0|, |-9.0|) = 9.0; lane com 5.0 mascarada não conta");
     }
 
     @Test

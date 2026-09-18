@@ -173,6 +173,47 @@ class Thumb2MveDualAccumulateDecoderTest {
         assertEquals(4, rh.rdalo());
     }
 
+    @Test
+    void roundingHighRejectsQnInHighBank() {
+        assertNull(tryDecode(vrmlsldavhRaw(8, 0, 0, 2, 0b001, 2)));
+    }
+
+    // ── VRMLALDAVH_S / VRMLALDAVH_U (tail dos blocos S/U) ───────────────────────────────────────────
+
+    private static int vrmlaldavhSRaw(int qn, int x, int a, int qm, int rdahiRaw, int rdaloRaw) {
+        return (0b1110 << 28) | (0b1110 << 24) | (1 << 23) | (rdahiRaw << 20) | embedQn(qn) | (0 << 16)
+                | (rdaloRaw << 13) | (x << 12) | (0b1111 << 8) | (a << 5) | embedQm(qm);
+    }
+
+    private static int vrmlaldavhURaw(int qn, int x, int a, int qm, int rdahiRaw, int rdaloRaw) {
+        return (0b1111 << 28) | (0b1110 << 24) | (1 << 23) | (rdahiRaw << 20) | embedQn(qn) | (0 << 16)
+                | (rdaloRaw << 13) | (x << 12) | (0b1111 << 8) | (a << 5) | embedQm(qm);
+    }
+
+    @Test
+    void decodesVrmlaldavhSFromTailOfBlockS() {
+        IrOp.MveVectorRoundingDualAccumulateHigh rh = assertInstanceOf(
+                IrOp.MveVectorRoundingDualAccumulateHigh.class,
+                tryDecode(vrmlaldavhSRaw(2, 1, 1, 3, 0b010, 1)).liftedOp());
+        assertFalse(rh.unsignedForm());
+        assertFalse(rh.subtract());
+        assertTrue(rh.exchange());
+        assertTrue(rh.accumulate());
+        assertEquals(5, rh.rdahi());
+        assertEquals(2, rh.rdalo());
+    }
+
+    @Test
+    void decodesVrmlaldavhUFromTailOfBlockUAndRejectsExchange() {
+        IrOp.MveVectorRoundingDualAccumulateHigh rh = assertInstanceOf(
+                IrOp.MveVectorRoundingDualAccumulateHigh.class,
+                tryDecode(vrmlaldavhURaw(2, 0, 1, 3, 0b010, 1)).liftedOp());
+        assertTrue(rh.unsignedForm());
+
+        // VRMLALDAVH_U não tem forma exchange (mesma restrição de VMLALDAV_U/VMLADAV_U).
+        assertNull(tryDecode(vrmlaldavhURaw(2, 1, 1, 3, 0b010, 1)));
+    }
+
     // ── VMLADAV_S / VMLADAV_U "soltas" (byte-only, bit0=1) ──────────────────────────────────────────
 
     private static int mladavSLooseRaw(int qn, int x, int a, int qm, int rdaloRaw) {
@@ -194,6 +235,29 @@ class Thumb2MveDualAccumulateDecoderTest {
 
         IrOp.MveVectorDualAccumulate u = assertInstanceOf(IrOp.MveVectorDualAccumulate.class,
                 tryDecode(mladavULooseRaw(2, 0, 1, 3, 1)).liftedOp());
+        assertTrue(u.unsignedForm());
+    }
+
+    // ── VMLADAV_S / VMLADAV_U (catch-all no FIM dos blocos S/U, `bit0=0`) ───────────────────────────
+
+    private static int mladavSTailRaw(int qn, int x, int a, int qm, int rdaloRaw) {
+        return mladavSLooseRaw(qn, x, a, qm, rdaloRaw) & ~1;
+    }
+
+    private static int mladavUTailRaw(int qn, int x, int a, int qm, int rdaloRaw) {
+        return mladavULooseRaw(qn, x, a, qm, rdaloRaw) & ~1;
+    }
+
+    @Test
+    void decodesTailCatchAllFormsOfVmladavAfterMaxMinGroupsFail() {
+        // bits[19:16] livres (não batem com nenhum literal VMAXNM*/VMAXV/VMAXAV) -> cai no
+        // catch-all VMLADAV_S/VMLADAV_U no FIM dos blocos S/U (Armadilha 3).
+        IrOp.MveVectorDualAccumulate s = assertInstanceOf(IrOp.MveVectorDualAccumulate.class,
+                tryDecode(mladavSTailRaw(2, 0, 1, 3, 1)).liftedOp());
+        assertFalse(s.unsignedForm());
+
+        IrOp.MveVectorDualAccumulate u = assertInstanceOf(IrOp.MveVectorDualAccumulate.class,
+                tryDecode(mladavUTailRaw(2, 0, 1, 3, 1)).liftedOp());
         assertTrue(u.unsignedForm());
     }
 
@@ -242,6 +306,11 @@ class Thumb2MveDualAccumulateDecoderTest {
         IrOp.MveVectorMinMaxAcrossVector maxU = assertInstanceOf(IrOp.MveVectorMinMaxAcrossVector.class,
                 tryDecode(intMinMaxURaw(0b10, 0, 2, 1)).liftedOp());
         assertTrue(maxU.unsignedForm());
+
+        IrOp.MveVectorMinMaxAcrossVector minU = assertInstanceOf(IrOp.MveVectorMinMaxAcrossVector.class,
+                tryDecode(intMinMaxURaw(0b10, 0, 2, 1) | (1 << 7)).liftedOp());
+        assertFalse(minU.max());
+        assertTrue(minU.unsignedForm());
     }
 
     @Test
@@ -252,12 +321,22 @@ class Thumb2MveDualAccumulateDecoderTest {
         assertTrue(maxav.max());
         assertTrue(maxav.absoluteForm());
         assertFalse(maxav.unsignedForm());
+
+        IrOp.MveVectorMinMaxAcrossVector minav = assertInstanceOf(IrOp.MveVectorMinMaxAcrossVector.class,
+                tryDecode(intMinMaxSRaw(0b00, 2, 3, 6) | (1 << 7)).liftedOp());
+        assertFalse(minav.max());
+        assertTrue(minav.absoluteForm());
     }
 
     @Test
     void intMinMaxRejectsRdaSpOrPc() {
         assertNull(tryDecode(intMinMaxSRaw(0b10, 1, 13, 2)));
         assertNull(tryDecode(intMinMaxSRaw(0b10, 1, 15, 2)));
+    }
+
+    @Test
+    void intMinMaxRejectsQmInHighBank() {
+        assertNull(tryDecode(intMinMaxSRaw(0b10, 1, 5, 8)));
     }
 
     @Test
@@ -296,11 +375,45 @@ class Thumb2MveDualAccumulateDecoderTest {
                 tryDecode(fpMinMaxSRaw(0b1100, 4, 2)).liftedOp());
         assertTrue(maxnmavS.absoluteForm());
 
+        IrOp.MveVectorFpMinMaxAcrossVector minnmvS = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
+                tryDecode(fpMinMaxSRaw(0b1110, 4, 2) | (1 << 7)).liftedOp());
+        assertFalse(minnmvS.max());
+        assertFalse(minnmvS.absoluteForm());
+
+        IrOp.MveVectorFpMinMaxAcrossVector minnmavS = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
+                tryDecode(fpMinMaxSRaw(0b1100, 4, 2) | (1 << 7)).liftedOp());
+        assertFalse(minnmavS.max());
+        assertTrue(minnmavS.absoluteForm());
+
         // Bloco U (top byte FE): mesmas 4 formas com esz=1 (binary16) — o bit que normalmente
         // distingue S/U aqui escolhe PRECISÃO, não sinal.
         IrOp.MveVectorFpMinMaxAcrossVector maxnmvU = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
                 tryDecode(fpMinMaxURaw(0b1110, 4, 2)).liftedOp());
         assertEquals(1, maxnmvU.esz());
+
+        IrOp.MveVectorFpMinMaxAcrossVector maxnmavU = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
+                tryDecode(fpMinMaxURaw(0b1100, 4, 2)).liftedOp());
+        assertEquals(1, maxnmavU.esz());
+        assertTrue(maxnmavU.absoluteForm());
+
+        IrOp.MveVectorFpMinMaxAcrossVector minnmavU = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
+                tryDecode(fpMinMaxURaw(0b1100, 4, 2) | (1 << 7)).liftedOp());
+        assertFalse(minnmavU.max());
+
+        IrOp.MveVectorFpMinMaxAcrossVector minnmvU = assertInstanceOf(IrOp.MveVectorFpMinMaxAcrossVector.class,
+                tryDecode(fpMinMaxURaw(0b1110, 4, 2) | (1 << 7)).liftedOp());
+        assertFalse(minnmvU.max());
+    }
+
+    @Test
+    void fpMinMaxRejectsRdaSpOrPc() {
+        assertNull(tryDecode(fpMinMaxSRaw(0b1110, 13, 2)));
+        assertNull(tryDecode(fpMinMaxSRaw(0b1110, 15, 2)));
+    }
+
+    @Test
+    void fpMinMaxRejectsQmInHighBank() {
+        assertNull(tryDecode(fpMinMaxSRaw(0b1110, 4, 8)));
     }
 
     @Test
@@ -336,5 +449,12 @@ class Thumb2MveDualAccumulateDecoderTest {
     @Test
     void rejectsQnInHighBank() {
         assertNull(tryDecode(mladavSGeneralRaw(1, 8, 0, 1, 5, 2)));
+    }
+
+    @Test
+    void rejectsWrongTop3OrTop24Bits() {
+        int good = mladavSGeneralRaw(1, 3, 0, 1, 5, 2);
+        assertNull(tryDecode(good & ~(1 << 31)), "bits[31:29] têm que ser 111");
+        assertNull(tryDecode(good & ~(0b1110 << 24) | (0b1101 << 24)), "bits[27:24] têm que ser 1110");
     }
 }
