@@ -1211,6 +1211,64 @@ public final class IrSystemExecutor {
         return false;
     }
 
+    /// `VSHLI`/`VQSHLI_S`/`VQSHLI_U`/`VQSHLUI`/`VSHRI_S`/`VSHRI_U`/`VRSHRI_S`/`VRSHRI_U`/`VSRI`/`VSLI`
+    /// (perfil M, B16.10, MVE/Helium): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftImmediateMasked}) — a MESMA função que `IrNeonExecutor`/executor A64
+    /// chamam via {@link AdvSimdLanes#shiftImmediate} para o caminho NÃO predicado (RFC B13.2 D1). As
+    /// 3 formas saturantes setam `FPSCR.QC` só quando alguma lane ATIVA saturou de verdade.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorShiftImmediate(ArmCore core, IrOp.MveVectorShiftImmediate op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int lanes = 16 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        boolean saturated =
+                AdvSimdLanes.shiftImmediateMasked(vfp, op.op(), esz, op.shift(), lanes, baseRd, baseRm, mask);
+        if (saturated) {
+            core.fpscr().orQc();
+        }
+        return false;
+    }
+
+    /// `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma T1 (perfil M, B16.10, MVE/Helium, inclui
+    /// `VMOVL` = `shift == 0`, sem `Kind` próprio): delega ao núcleo COMPARTILHADO
+    /// ({@link AdvSimdLanes#shiftWidenInterleavedMasked}) — MESMA função que
+    /// {@link #executeMveVectorShiftWidenInterleaved} (T2) chama, só que aqui `shift` vem do encoding
+    /// em vez de fixo em `esize`. Nunca satura.
+    ///
+    /// @return `true` quando faultou (ver {@link #executeVpst}).
+    public boolean executeMveVectorShiftWidenImmediateInterleaved(ArmCore core,
+            IrOp.MveVectorShiftWidenImmediateInterleaved op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int eci = core.cpsr().eci();
+        if (MveVptState.isReservedEci(eci)) {
+            return faultInvstate(core);
+        }
+        VfpRegisters vfp = core.vfp();
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int esz = op.esz();
+        int outputElements = 8 >> esz;
+        int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
+        int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
+        AdvSimdLanes.shiftWidenInterleavedMasked(vfp, op.signed(), esz, op.shift(), outputElements, op.top(), baseRd,
+                baseRm, mask);
+        return false;
+    }
+
     /// `VMOVNB`/`VMOVNT`/`VQMOVN_B*`/`VQMOVN_T*`/`VQMOVUNB`/`VQMOVUNT` (perfil M, B16.7, MVE/Helium):
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrowInterleavedMasked}). `FPSCR.QC` só
     /// para as 3 formas saturantes ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp#XTN}

@@ -30,7 +30,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorFpComplexMultiply, IrOp.MveVectorDualMultiplyAddHigh, IrOp.MveVectorDoublingWideningMultiply,
         IrOp.MveVectorFpTwoOp, IrOp.MveVectorFpComplexAdd, IrOp.MveVectorFpComplexMultiplyAccumulate,
         IrOp.MveVectorCompare, IrOp.MveVectorCompareScalar, IrOp.MveVectorScalar, IrOp.MveVectorScalarWidening,
-        IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial {
+        IrOp.MveVectorFpScalar, IrOp.MveVectorFpScalarFma, IrOp.MveVectorScalarSpecial,
+        IrOp.MveVectorShiftImmediate, IrOp.MveVectorShiftWidenImmediateInterleaved {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -310,6 +311,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// MVE/Helium) — ver
         /// {@link MveVectorScalarSpecial}.
         public static final int MVE_VECTOR_SCALAR_SPECIAL = 148;
+        /// B16.10: `VSHLI`/`VQSHLI_S`/`VQSHLI_U`/`VQSHLUI`/`VSHRI_S`/`VSHRI_U`/`VRSHRI_S`/`VRSHRI_U`/
+        /// `VSRI`/`VSLI` (deslocamento por imediato + shift-and-insert, perfil M, MVE/Helium) — ver
+        /// {@link MveVectorShiftImmediate}.
+        public static final int MVE_VECTOR_SHIFT_IMMEDIATE = 149;
+        /// B16.10: `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma **T1** (`shift < esize`, inclui
+        /// `VMOVL` = `shift == 0`, perfil M, MVE/Helium) — ver
+        /// {@link MveVectorShiftWidenImmediateInterleaved}.
+        public static final int MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED = 150;
     }
 
     /// Operacao ALU generica.
@@ -3863,5 +3872,58 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Como {@link #VQDMLASH}, com arredondamento (`rounding=true`).
             VQRDMLASH
         }
+    }
+
+    /// `VSHLI`/`VQSHLI_S`/`VQSHLI_U`/`VQSHLUI`/`VSHRI_S`/`VSHRI_U`/`VRSHRI_S`/`VRSHRI_U`/`VSRI`/`VSLI`
+    /// (perfil M, B16.10, MVE/Helium, `target/isa-decode/mve.decode`, `@2_shl_*`/`@2_shr_*`): reusa
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp} — MESMO núcleo do A64/NEON
+    /// (RFC B13.2 D1) — via
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftImmediateMasked}. `shift` já vem
+    /// resolvido do decoder (`N - shift` nas formas `_shr`/`VSRI`, valor cru nas formas `_shl`/
+    /// `VSLI`/`VSHLUI`). Beatwise (mesmo gancho de {@link MveVector2Op}). `FPSCR.QC` só para as 3
+    /// formas saturantes (`SQSHL`/`UQSHL`/`SQSHLU`).
+    record MveVectorShiftImmediate(
+            /// Operação a executar (núcleo compartilhado com A64/NEON).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp op,
+            /// `log2` do tamanho do elemento em bytes (`0`-`2`; determinado pelo PREFIXO de bits do
+            /// encoding, não por um campo `size` — ver Javadoc do decoder).
+            int esz,
+            /// Quantidade de deslocamento, já resolvida pelo decoder.
+            int shift,
+            /// `Qd` (`0`-`7`) — fonte (RMW nas formas `SRI`/`SLI`) E destino.
+            int qd,
+            /// `Qm` (`0`-`7`).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_IMMEDIATE; }
+    }
+
+    /// `VSHLL_BS`/`VSHLL_BU`/`VSHLL_TS`/`VSHLL_TU` forma **T1** (`shift < esize`, perfil M, B16.10,
+    /// MVE/Helium, `target/isa-decode/mve.decode` `@2_shll_b`/`@2_shll_h`): ALARGA — mesmo padrão de
+    /// indexação INTERCALADA `le*2 + (top?1:0)` de {@link MveVectorShiftWidenInterleaved} (T2), via
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftWidenInterleavedMasked} — a
+    /// ÚNICA diferença real entre as duas formas é que aqui `shift` é um campo do encoding (`0` a
+    /// `esize-1`) em vez de fixo em `esize`. **`VMOVL` é esta forma com `shift == 0`** (comentário
+    /// literal do arquivo real: "we implement it that way rather than special-casing it in the
+    /// decode") — não tem `Kind` próprio. **Não confundir com a forma T2 (B16.7, encoding
+    /// DISTINTO).** Beatwise (mesmo gancho de {@link MveVector2Op}). Nunca satura.
+    record MveVectorShiftWidenImmediateInterleaved(
+            /// `true` = sinal-estende (`VSHLL_*S`); `false` = zero-estende (`VSHLL_*U`).
+            boolean signed,
+            /// `log2` do tamanho do elemento FONTE em bytes — `0`(byte) ou `1`(halfword); a T1 nunca
+            /// tem fonte WORD.
+            int esz,
+            /// Quantidade de deslocamento, já resolvida pelo decoder (`0..esize-1`; `0` = `VMOVL`).
+            int shift,
+            /// `true` para a forma `_T` (lanes ÍMPARES da fonte); `false` para `_B` (lanes PARES).
+            boolean top,
+            /// `Qd` (`0`-`7`).
+            int qd,
+            /// `Qm` (`0`-`7`, fonte).
+            int qm,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED; }
     }
 }

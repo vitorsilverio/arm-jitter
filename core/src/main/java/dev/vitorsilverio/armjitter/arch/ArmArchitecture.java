@@ -562,6 +562,10 @@ public final class ArmArchitecture {
                     // Thumb2MveComparisonDecoder (pendência da B16.8: nenhum ajuste de ordem
                     // necessário, os guardas de size/gate de cada decoder já resolvem a colisão).
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveVectorScalarDecoder(ARMV8_1M_MVE_FEATURES),
+                    // Thumb2MveShiftImmediateDecoder (B16.10): deslocamentos por imediato + VSHLL T1
+                    // vivem no MESMO espaço de bits `111.1110.../111.1111...` que Thumb2NocpDecoder
+                    // reivindica — TEM que vir antes.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveShiftImmediateDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
     private final String name;

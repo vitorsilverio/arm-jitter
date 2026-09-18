@@ -652,30 +652,65 @@ public final class AdvSimdLanes {
             long a = element(regs, baseRn, i, esz);
             long sa = signExtend(a, esz);
             long current = element(regs, baseRd, i, esz);
-            long result = switch (op) {
-                case SSHR -> arithmeticShiftRight(sa, shift);
-                case USHR -> logicalShiftRight(a, shift);
-                case SRSHR -> roundingShiftRight(sa, shift, true);
-                case URSHR -> roundingShiftRight(a, shift, false);
-                case SSRA -> signExtend(current, esz) + arithmeticShiftRight(sa, shift);
-                case USRA -> current + logicalShiftRight(a, shift);
-                case SRSRA -> signExtend(current, esz) + roundingShiftRight(sa, shift, true);
-                case URSRA -> current + roundingShiftRight(a, shift, false);
-                case SRI -> insertShiftRight(current, a, shift, esz);
-                case SHL -> safeShiftLeft(a, shift);
-                case SLI -> insertShiftLeft(current, a, shift);
-                case SQSHL -> saturatingShiftLeft(sa, shift, esz, true);
-                case UQSHL -> saturatingShiftLeft(a, shift, esz, false);
-                // `SQSHLU`: fonte ASSINADA (desloca como `sa`, não `a`) mas saturação NÃO
-                // assinada — `saturatingShiftLeft` não serve aqui porque seu único parâmetro
-                // `signed` governa as DUAS coisas (interpretação do deslocamento E sinal da
-                // saturação), que para `SQSHLU` divergem de propósito (achado real ao testar:
-                // `unsignedBig(sa=-1)` trataria `-1` como quase `2^64`, produzindo lixo em vez de
-                // saturar em `0`).
-                case SQSHLU -> saturateToElement(BigInteger.valueOf(sa).shiftLeft(shift), esz, false);
-            };
+            long result = computeShiftImmediateChecked(op, esz, shift, a, sa, current).value();
             setElement(regs, baseRd, i, esz, truncate(result, esz));
         }
+    }
+
+    /// Núcleo de {@link #shiftImmediate}, extraído em B16.10 (MVE/Helium) para ser reusado TAMBÉM
+    /// pela forma predicada ({@link #shiftImmediateMasked}), sem duplicar o `switch` (mesma
+    /// disciplina de {@link #computeThreeSameChecked}). Só `SQSHL`/`UQSHL`/`SQSHLU` podem saturar;
+    /// as demais devolvem `Saturation(value, false)`.
+    private static Saturation computeShiftImmediateChecked(AdvSimdShiftImmediateOp op, int esz, int shift,
+            long a, long sa, long current) {
+        return switch (op) {
+            case SSHR -> new Saturation(arithmeticShiftRight(sa, shift), false);
+            case USHR -> new Saturation(logicalShiftRight(a, shift), false);
+            case SRSHR -> new Saturation(roundingShiftRight(sa, shift, true), false);
+            case URSHR -> new Saturation(roundingShiftRight(a, shift, false), false);
+            case SSRA -> new Saturation(signExtend(current, esz) + arithmeticShiftRight(sa, shift), false);
+            case USRA -> new Saturation(current + logicalShiftRight(a, shift), false);
+            case SRSRA -> new Saturation(signExtend(current, esz) + roundingShiftRight(sa, shift, true), false);
+            case URSRA -> new Saturation(current + roundingShiftRight(a, shift, false), false);
+            case SRI -> new Saturation(insertShiftRight(current, a, shift, esz), false);
+            case SHL -> new Saturation(safeShiftLeft(a, shift), false);
+            case SLI -> new Saturation(insertShiftLeft(current, a, shift), false);
+            case SQSHL -> saturatingShiftLeftChecked(sa, shift, esz, true);
+            case UQSHL -> saturatingShiftLeftChecked(a, shift, esz, false);
+            // `SQSHLU`: fonte ASSINADA (desloca como `sa`, não `a`) mas saturação NÃO
+            // assinada — `saturatingShiftLeftChecked` não serve aqui porque seu único parâmetro
+            // `signed` governa as DUAS coisas (interpretação do deslocamento E sinal da
+            // saturação), que para `SQSHLU` divergem de propósito (achado real ao testar:
+            // `unsignedBig(sa=-1)` trataria `-1` como quase `2^64`, produzindo lixo em vez de
+            // saturar em `0`).
+            case SQSHLU -> saturateChecked(BigInteger.valueOf(sa).shiftLeft(shift), esz, false);
+        };
+    }
+
+    /// Como {@link #shiftImmediate}, mas PREDICADO por byte (`byteMask`, mesma convenção de
+    /// {@link #threeSameMasked}) — MVE/Helium (B16.10): lane cujo byte de máscara está desligado
+    /// PRESERVA o destino. Devolve `true` se alguma lane ATIVA saturou (`FPSCR.QC`) — só `SQSHLI`/
+    /// `UQSHLI`/`VQSHLUI` (`SQSHL`/`UQSHL`/`SQSHLU`) podem saturar; `VSRI`/`VSLI` e as formas não
+    /// saturantes nunca setam `QC`.
+    public static boolean shiftImmediateMasked(AdvSimdRegisterWords regs, AdvSimdShiftImmediateOp op, int esz,
+            int shift, int lanes, int baseRd, int baseRn, int byteMask) {
+        boolean qc = false;
+        int elementBytes = 1 << esz;
+        int elementByteMask = (1 << elementBytes) - 1;
+        for (int i = 0; i < lanes; i++) {
+            int laneMask = (byteMask >>> (i * elementBytes)) & elementByteMask;
+            if (laneMask == 0) {
+                continue;
+            }
+            long a = element(regs, baseRn, i, esz);
+            long sa = signExtend(a, esz);
+            long current = element(regs, baseRd, i, esz);
+            Saturation computed = computeShiftImmediateChecked(op, esz, shift, a, sa, current);
+            long merged = mergeLaneBytes(current, truncate(computed.value(), esz), laneMask, elementBytes);
+            setElement(regs, baseRd, i, esz, merged);
+            qc |= computed.saturated();
+        }
+        return qc;
     }
 
     /// Executa uma operação "shift by immediate" ESTREITANTE (ver {@link AdvSimdShiftNarrowOp})

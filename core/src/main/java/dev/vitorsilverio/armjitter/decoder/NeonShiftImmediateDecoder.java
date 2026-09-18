@@ -121,7 +121,12 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
     /// 4 bits do A32 é o `opcode` de 5 bits do A64 deslocado de 1). `null` para os `opc` de B13.8
     /// (`1000`/`1001`/`1010`/`1100`-`1111`) e para os 3 slots UNALLOCATED reais (`opc=0100 U=0`,
     /// `opc=0110 U=0`, `opc=1011`) — o chamador transforma `null` em `UNIMPLEMENTED` (G8).
-    private static AdvSimdShiftImmediateOp shiftOperation(int opc, int u) {
+    ///
+    /// Pacote-visível (não mais `private`) desde B16.10: `Thumb2MveShiftImmediateDecoder` (MVE,
+    /// perfil M) reusa esta MESMA tabela `opc`/`U` — o `mve.decode` real usa EXATAMENTE os mesmos 6
+    /// valores de `opc` (`0000`/`0010`/`0100`/`0101`/`0110`/`0111`) com a MESMA semântica de `U`
+    /// (achado confirmado bit a bit contra o arquivo real).
+    static AdvSimdShiftImmediateOp shiftOperation(int opc, int u) {
         return switch (opc) {
             case 0b0000 -> u == 0 ? AdvSimdShiftImmediateOp.SSHR : AdvSimdShiftImmediateOp.USHR;
             case 0b0001 -> u == 0 ? AdvSimdShiftImmediateOp.SSRA : AdvSimdShiftImmediateOp.USRA;

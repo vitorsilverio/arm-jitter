@@ -53,25 +53,23 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.8 fechar comparações `VCMP`/`VPT`)
+## Onde estamos (atualizado 2026-09-18, após B16.10 fechar deslocamentos por imediato + `VSHLL` T1)
 
-**B16.8 FECHADA (34/34 encodings)** — `VCMP*`/`VCMP*_fp`/`VCMP*_scalar`/`VCMP*_fp_scalar` (as 8
-condições expandidas + FP) e a forma `VPT` (`VCMP` com `mask != 0`, reusa `IrOp.Vpst`/`executeVpst`
-da B16.2). Dois achados que divergem da spec original: `Rm == 15` é "constante zero" (não
-`UNPREDICTABLE` — só `Rm == 13` é recusado) e `size == 3` da forma inteira vira a forma `_fp` de
-verdade quando `MVE_FLOAT` está presente (não é um "reservado" genérico). `mvn -o test` 100% verde
-(4212 + truffle 73). `docs/COBERTURA-ISA.md` zero-diff (Armadilha 7 da B16.2: `mve.decode` só sai de
-`NOT_IN_ANY_PRESET` na B16.14). **Achado de processo**: `gerar-cobertura-jit.sh`/`gerar-cobertura-isa.sh`
-usam `java`/`mvn -pl truffle` (sem `-am`) e por isso enxergam o `arm-jitter` **instalado em `~/.m2`**
-— rodar `mvn -o install` ANTES de regenerar as duas tabelas numa sessão que mexeu no `core`, senão a
-ferramenta mede uma versão desatualizada silenciosamente. Ver `## Resultado` de `B16.8` (trilha B).
+**B16.10 FECHADA (38/38 encodings)** — `VSHLI`/`VQSHLI_S`/`VQSHLI_U`/`VQSHLUI`/`VSHRI_S`/`VSHRI_U`/
+`VRSHRI_S`/`VRSHRI_U`/`VSRI`/`VSLI` + `VSHLL_BS/BU/TS/TU` T1 (inclui `VMOVL`, sem `Kind` próprio).
+Bits verificados contra o arquivo real (`target/isa-decode/mve.decode`), não contra a transcrição da
+spec — o prefixo de largura estava 1 bit deslocado na spec original (`bits[21:19]`/`[21:20]`/`bit21`,
+não `[20:18]`/etc). Achado que corrige o Inclui original: `Qd == Qm` NÃO é `UNDEF` em `VSHLL`
+(`do_2shift_vec` real só valida `qd|qm < 8`, nunca compara os dois). `VSHLL` T1 reusa o MESMO núcleo
+intercalado (`shiftWidenInterleavedMasked`) que a B16.7 já usa para o T2. `mvn -o test` 100% verde
+(4212 + truffle 73, após ajustar a coherence test para 151 `Kind`). `docs/COBERTURA-ISA.md` zero-diff
+(mesma Armadilha 7 da B16.2/B16.8/B16.9). G5 verde. Ver `## Resultado` de `B16.10` (trilha B).
 
-**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.9` (escalares aritméticos, depende de
-B16.6 ✅ — divide blocos `{}` com as linhas 499-506 da B16.8, já resolvido por construção: o guarda
-de `size` da B16.8 não reivindica esse espaço), `B16.10` (deslocamentos por imediato + `VMOVL`,
-depende de B16.6 ✅), `B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅) — todos com
-spec escrita, nenhum ainda executado (conferir `INDICE.md` da trilha B antes de pegar). `C12.5`/
-`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+**Pegáveis a seguir**: próximos degraus do épico B16 — `B16.11` (deslocamentos estreitantes +
+`VSHLC`, depende de B16.10 ✅ agora fechada), `B16.12` (conversões `VCVT`/`VRINT`, depende de B16.7
+✅), `B16.13` (misc/reduções/imediato modificado, depende de B16.6 ✅) — todos com spec escrita,
+nenhum ainda executado (conferir `INDICE.md` da trilha B antes de pegar). `C12.5`/`C12.10` (emissão
+JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

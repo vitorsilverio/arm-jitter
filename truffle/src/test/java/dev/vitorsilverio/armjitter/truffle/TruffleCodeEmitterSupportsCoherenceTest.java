@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(149, kinds.size(), "IrOp.Kind deve ter 149 constantes contíguas");
+        assertEquals(151, kinds.size(), "IrOp.Kind deve ter 151 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -129,8 +129,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // MVE_VECTOR_COMPARE, MVE_VECTOR_COMPARE_SCALAR (+2, mesmo "Não inclui": decode +
         // interpretado apenas, MVE/Helium fica para o épico A10 tratar depois). B16.9 acrescentou
         // MVE_VECTOR_SCALAR, MVE_VECTOR_SCALAR_WIDENING, MVE_VECTOR_FP_SCALAR,
-        // MVE_VECTOR_FP_SCALAR_FMA, MVE_VECTOR_SCALAR_SPECIAL (+5, mesmo "Não inclui").
-        assertEquals(83, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // MVE_VECTOR_FP_SCALAR_FMA, MVE_VECTOR_SCALAR_SPECIAL (+5, mesmo "Não inclui"). B16.10
+        // acrescentou MVE_VECTOR_SHIFT_IMMEDIATE, MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED (+2,
+        // mesmo "Não inclui").
+        assertEquals(85, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -189,7 +191,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_COMPARE, IrOp.Kind.MVE_VECTOR_COMPARE_SCALAR,
                         IrOp.Kind.MVE_VECTOR_SCALAR, IrOp.Kind.MVE_VECTOR_SCALAR_WIDENING,
                         IrOp.Kind.MVE_VECTOR_FP_SCALAR, IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA,
-                        IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL)),
+                        IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL,
+                        IrOp.Kind.MVE_VECTOR_SHIFT_IMMEDIATE,
+                        IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -401,6 +405,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.MVE_VECTOR_FP_SCALAR_FMA -> new IrOp.MveVectorFpScalarFma(false, 2, 0, 1, 2, c);
             case IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL -> new IrOp.MveVectorScalarSpecial(
                     IrOp.MveVectorScalarSpecial.SpecialOp.VBRSR, 0, 0, 1, 2, c);
+            case IrOp.Kind.MVE_VECTOR_SHIFT_IMMEDIATE ->
+                    new IrOp.MveVectorShiftImmediate(AdvSimdShiftImmediateOp.SHL, 0, 0, 0, 1, c);
+            case IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED ->
+                    new IrOp.MveVectorShiftWidenImmediateInterleaved(true, 0, 0, false, 0, 1, c);
             default -> throw new AssertionError("kind sem sampleOp: " + kind);
         };
     }

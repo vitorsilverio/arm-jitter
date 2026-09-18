@@ -252,6 +252,12 @@ public final class IrBlockExecutor {
                         pcChanged |= system.executeMveVectorFpScalarFma(core, (IrOp.MveVectorFpScalarFma) op);
                 case IrOp.Kind.MVE_VECTOR_SCALAR_SPECIAL ->
                         pcChanged |= system.executeMveVectorScalarSpecial(core, (IrOp.MveVectorScalarSpecial) op);
+                // B16.10: mesmo pcChanged-gate acima (podem faultar em ECI reservado).
+                case IrOp.Kind.MVE_VECTOR_SHIFT_IMMEDIATE ->
+                        pcChanged |= system.executeMveVectorShiftImmediate(core, (IrOp.MveVectorShiftImmediate) op);
+                case IrOp.Kind.MVE_VECTOR_SHIFT_WIDEN_IMMEDIATE_INTERLEAVED -> pcChanged |= system
+                        .executeMveVectorShiftWidenImmediateInterleaved(core,
+                                (IrOp.MveVectorShiftWidenImmediateInterleaved) op);
                 // ADVANCE_ECI (B16.5): mesmo gate de pcChanged que ADVANCE_VPT usa (pulado quando a
                 // instrução anterior no MESMO bloco já mudou o PC por fault de ECI reservado).
                 case IrOp.Kind.ADVANCE_ECI -> {
@@ -496,6 +502,10 @@ public final class IrBlockExecutor {
                     system.executeMveVectorFpScalarFma(core, mveVectorFpScalarFma);
             case IrOp.MveVectorScalarSpecial mveVectorScalarSpecial ->
                     system.executeMveVectorScalarSpecial(core, mveVectorScalarSpecial);
+            case IrOp.MveVectorShiftImmediate mveVectorShiftImmediate ->
+                    system.executeMveVectorShiftImmediate(core, mveVectorShiftImmediate);
+            case IrOp.MveVectorShiftWidenImmediateInterleaved mveVectorShiftWidenImmediateInterleaved ->
+                    system.executeMveVectorShiftWidenImmediateInterleaved(core, mveVectorShiftWidenImmediateInterleaved);
         };
     }
 

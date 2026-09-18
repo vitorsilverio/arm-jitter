@@ -294,6 +294,10 @@ public final class AsmNativePolicy {
             case IrOp.MveVectorFpScalar ignored -> false;
             case IrOp.MveVectorFpScalarFma ignored -> false;
             case IrOp.MveVectorScalarSpecial ignored -> false;
+            // Deslocamentos por imediato, shift-and-insert e VSHLL T1 (B16.10, MVE/Helium): mesmo
+            // padrão acima, sem emissão nativa nesta task.
+            case IrOp.MveVectorShiftImmediate ignored -> false;
+            case IrOp.MveVectorShiftWidenImmediateInterleaved ignored -> false;
         };
     }
 
