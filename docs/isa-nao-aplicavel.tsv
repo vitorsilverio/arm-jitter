@@ -73,15 +73,21 @@ STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); im
 CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
-VRINTR*	*	ARMv8-A (VFP)
+# B14.7: ESTREITADA de `*` para as 7 colunas pré-v8-A — `VRINTR_hp`/`_sp`/`_dp` são ARMv8-A reais
+# e NÃO implementadas (dependem de `FPSCR.RMode`, ver B14.5 "Não inclui"/B14.6 "Não inclui"), então
+# a coluna `v8-A/32` mede `❌` honesto (trabalho pendente, não exclusão) em vez de `·`.
+VRINTR*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)
 # B16.14: `VRINTZ`/`VRINTX` (bare, sem sufixo `_hp`/`_sp`/`_dp`) também existem como mnemônico
 # DISTINTO em `mve.decode` (Helium, ARMv8.1-M+MVE, real e implementado desde a B16.x) — sem
 # `grupo`, a exclusão pensada para as formas condicionais de `vfp.decode` (`VRINTZ_hp`/`_sp`/`_dp`,
 # `VRINTX_hp`/`_sp`/`_dp`) apagava a célula ✅ real da forma MVE. `vfp-uncond.decode` usa o
 # mnemônico `VRINT` (bare, sem X/Z) para as formas incondicionais — não precisa de linha aqui.
-VRINTZ*	*	ARMv8-A (VFP)	vfp.decode
-VRINTX*	*	ARMv8-A (VFP)	vfp.decode
-VJCVT	*	ARMv8.3-A (conversão com semântica de JavaScript)
+# B14.7: mesma ESTREITADA de `*` que `VRINTR*` acima, mesmo motivo (não implementado sob ARMV8A_32).
+VRINTZ*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)	vfp.decode
+VRINTX*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)	vfp.decode
+# B14.7: ESTREITADA de `*` — VJCVT é ARMv8.3-A (posterior a ARMV8A_32, ARMv8.0) e não implementada;
+# mede ❌ honesto na coluna v8-A/32 em vez de `·`.
+VJCVT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8.3-A (conversão com semântica de JavaScript); não implementada, mede ❌ na coluna v8-A/32 (B14.7)
 
 # ── ARMv8.2-A FP16: as formas `_hp` (meia precisão) ──────────────────────────────────────────
 # B14.6b: ESTREITADA de `*` (todas as arquiteturas) para as 7 colunas pré-v8-A — `*` apagaria
@@ -99,11 +105,13 @@ BLXNS	*	ARMv8-M Security Extension
 # ── ARMv8-A ─────────────────────────────────────────────────────────────────────────────────
 SEVL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (hint "send event local"). E12: arquitetura era `*` e alcançava as 16 colunas A64, onde SEVL é ISA BASE e JÁ É IMPLEMENTADO (Aarch64Decoder, B6.6.7/B8.3) — a linha apagava 16 células ✅ reais
 # ── B22.1: `HLT` (Halting debug) é ARMv8-A (perfil A) / ARMv8-M (perfil M), ARM DDI 0487 — ────
-# ── posterior a TODOS os presets de 32 bits atuais (v4T..v7-A, v6-M, v7-M). O decoder passa a
-# ── reconhecer o encoding e a recusá-lo por gate (`ArmFeature.HALT`, sem preset); `grupo`
-# ── escopa a exclusão a cada `.decode` porque `HLT` também existe em `a64.decode` (já ✅, B8.3).
-HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bits atuais	t16.decode
-HLT	*	ARMv8-A / ARMv8-M, ARM DDI 0487 — posterior a todos os presets de 32 bits atuais	a32.decode
+# ── posterior aos presets de 32 bits pré-v8 (v4T..v7-A, v6-M, v7-M). O decoder passa a
+# ── reconhecer o encoding e a recusá-lo por gate (`ArmFeature.HALT`, sem preset até B14.1);
+# ── `grupo` escopa a exclusão a cada `.decode` porque `HLT` também existe em `a64.decode` (já ✅,
+# ── B8.3). B14.7: ESTREITADA de `*` para as 7 colunas pré-v8-A — `ARMV8A_32` (B14.1) DECLARA
+# ── `ArmFeature.HALT`, então `HLT` mede `✅` de verdade na coluna v8-A/32 (t16.decode/a32.decode).
+HLT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 (ArmFeature.HALT)	t16.decode
+HLT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 (ArmFeature.HALT)	a32.decode
 
 # ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
 # B16.14: o mnemônico `VDUP` (bare) vive em `vfp.decode` (não em `neon-dp.decode` — lá o inventário

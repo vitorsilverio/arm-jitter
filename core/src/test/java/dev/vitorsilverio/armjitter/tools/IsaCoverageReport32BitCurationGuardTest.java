@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// mnemônico HOMÔNIMO, mas DISTINTO, de `mve.decode` — sem `grupo`, a exclusão não sabe diferenciar.
 ///
 /// Mesmo papel do `IsaCoverageReportA64CurationGuardTest` (que a E12 escreveu para o lado A64) —
-/// este é o equivalente para as 8 colunas de 32 bits (`v4T`...`v7-M`, `ARMv8.1-M+MVE`). Verifica o
+/// este é o equivalente para as 9 colunas de 32 bits (`v4T`...`v7-M`, `ARMv8.1-M+MVE`, `v8-A/32` —
+/// a última acrescentada pela B14.7). Verifica o
 /// RESULTADO medido (a tabela versionada), não a mecânica da exclusão — mesma filosofia de "a
 /// tabela é medição, não opinião" que rege `IsaCoverageReport` inteiro.
 ///
@@ -33,10 +34,11 @@ class IsaCoverageReport32BitCurationGuardTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 8 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
-    /// originais; `ARMv8.1-M+MVE` é a coluna que a B16.14 acrescentou).
+    /// As 9 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
+    /// originais; `ARMv8.1-M+MVE` é a coluna que a B16.14 acrescentou; `v8-A/32` é a coluna que a
+    /// B14.7 acrescentou).
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v6-M", "v7-M", "ARMv8.1-M+MVE");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v6-M", "v7-M", "ARMv8.1-M+MVE", "v8-A/32");
 
     private static final String SUPPORTED = "✅";
     private static final String FALLBACK = "⚠️";

@@ -96,6 +96,10 @@ public final class IsaCoverageReport {
     /// só `MVE_INTEGER` já cobre corretamente as ~40 linhas que exigem `MVE_FLOAT` sob esta coluna —
     /// um preset MVE-inteiro-apenas fica registrado como pendência/task própria, não exclusão.
     private static final Applicability MVE_INTEGER = arch -> arch.has(ArmFeature.MVE_INTEGER);
+    /// VFP incondicional de ARMv8-A 32 bits (`VSEL`/`VMAXNM`/`VMINNM`/`VRINT{A,N,P,M}`/`VCVT{A,N,P,M}`)
+    /// — B14.7, fecha o `NOT_IN_ANY_PRESET` do grupo `vfp-uncond.decode` agora que `ARMV8A_32`
+    /// (B14.1) declara {@link ArmFeature#ARMV8_FP}.
+    private static final Applicability ARMV8_FP = arch -> arch.has(ArmFeature.ARMV8_FP);
     /// Extensões que NENHUM preset atual do `ArmArchitecture` declara — ficam na tabela para o
     /// inventário ser completo (não presumir que algo nunca será necessário), mas marcadas como
     /// não aplicáveis em vez de "faltando".
@@ -138,7 +142,8 @@ public final class IsaCoverageReport {
             new Group("vfp.decode", "VFP — ponto flutuante (condicional)", 32, Probe.ARM32, true, VFP,
                     "As formas `_hp` (meia precisão) são ARMv8.2-FP16, não VFPv2/v3."),
             new Group("vfp-uncond.decode", "VFP — formas incondicionais (ARMv8-A)", 32, Probe.ARM32, true,
-                    NOT_IN_ANY_PRESET, "`VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVTA` são ARMv8-A de 32 bits."),
+                    ARMV8_FP, "`VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVTA` são ARMv8-A de 32 bits — "
+                            + "aplicável a partir de `ArmArchitecture.ARMV8A_32` (B14.7)."),
             new Group("neon-dp.decode", "NEON — processamento de dados", 32, Probe.ARM32, true,
                     NOT_IN_ANY_PRESET, "Advanced SIMD: extensão OPCIONAL do ARMv7-A; nenhum preset a declara hoje."),
             new Group("neon-ls.decode", "NEON — load/store", 32, Probe.ARM32, true, NOT_IN_ANY_PRESET, ""),
@@ -164,6 +169,9 @@ public final class IsaCoverageReport {
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
         ARM_ARCHITECTURES.put("ARMv8.1-M+MVE", ArmArchitecture.ARMV8_1M_MVE);
+        // B14.7: coluna nova, única não-zero-diff do épico B14 (ver `## Resultado` da task) —
+        // mesma natureza da B13.22 para o épico B13 (denominador cresce, cobertura global pode cair).
+        ARM_ARCHITECTURES.put("v8-A/32", ArmArchitecture.ARMV8A_32);
         // ARMV8M_BASELINE/ARMV8M_MAINLINE (B15.4) NÃO entram aqui ainda — mesmo precedente da
         // B15.1 ("zero célula nova... os presets não entram no mapa ARM_ARCHITECTURES ainda").
         // Medido nesta sessão: adicioná-los sem uma rodada de curadoria própria faz ~180 células
@@ -858,10 +866,39 @@ public final class IsaCoverageReport {
             TestAddressSpace asAlways = new TestAddressSpace(8);
             asAlways.put32(0, (word & 0x0FFFFFFF) | (0xE << 28));
             DecodedInstruction always = new ArmDecoder(architecture).decode(asAlways, 0);
-            return unconditional != null && always != null && unconditional.kind() == always.kind();
+            return unconditional != null && always != null && sameSemantics(unconditional, always);
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /// **Achado da B14.7**: comparar só `.kind()` é raso demais para este heurístico — `VFP_ALU`
+    /// (e outros `Kind` "guarda-chuva") empacota a operação de verdade em {@link
+    /// DecodedInstruction#immediate()} (o ordinal de `IrOp.VfpOperation`, ver `VfpDecoder`). Sem
+    /// isto, `VMAXNM_sp` (`vfp-uncond.decode`, `cond=1111`) e `VDIV` (`vfp.decode`, `cond=1110`,
+    /// MESMO padrão `bit23=1,bits21:20=00,bit6=0`) tinham o MESMO `Kind` por coincidência e o
+    /// medidor acusava "misdecode" onde as duas são instruções genuinamente distintas e
+    /// corretamente decodificadas — falso positivo confirmado por probe direto (`VMAXNM_sp` vira
+    /// `imm=17`/MAXNM sob `cond=1111` e `imm=3`/DIV sob `cond=1110`). Compara todos os campos
+    /// semânticos (tudo exceto `address`/`raw`/`condition`/`instructionSet`, que DEVEM diferir
+    /// entre as duas sondas por construção).
+    private static boolean sameSemantics(DecodedInstruction a, DecodedInstruction b) {
+        return a.kind() == b.kind()
+                && a.destinationRegister() == b.destinationRegister()
+                && a.sourceRegister() == b.sourceRegister()
+                && a.secondSourceRegister() == b.secondSourceRegister()
+                && a.immediate() == b.immediate()
+                && a.immediateOperand() == b.immediateOperand()
+                && a.setFlags() == b.setFlags()
+                && a.link() == b.link()
+                && a.accessSizeBytes() == b.accessSizeBytes()
+                && a.signedAccess() == b.signedAccess()
+                && a.writeback() == b.writeback()
+                && a.postIndexed() == b.postIndexed()
+                && a.blockTransferMode() == b.blockTransferMode()
+                && a.emptyRegisterList() == b.emptyRegisterList()
+                && a.unprivileged() == b.unprivileged()
+                && java.util.Objects.equals(a.liftedOp(), b.liftedOp());
     }
 
     /// Linhas do inventário A64 cujo encoding o `Aarch64Decoder` REIVINDICA mas decodifica como

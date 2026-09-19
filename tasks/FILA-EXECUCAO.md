@@ -53,32 +53,32 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.6b fechar a aritmética `_hp` de 32 bits)
+## Onde estamos (atualizado 2026-09-19, após B14.7 fechar o épico B14)
 
-**B14.6b FECHADA** (segunda e última fatia de B14.6). As 5 formas `sz=1` do espaço incondicional
-(`VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp`/`VRINT_hp`/`VCVT_hp`) e 22 das 25 linhas `_hp` do espaço
-condicional (aritmética/unárias/compare/imediato/conversão/fixed-point/load-store) decodificam e
-executam com aritmética `binary16` de verdade sob `ARMV8A_32`+`FP16_ARITHMETIC` — ponte pelo mesmo
-núcleo FP16 do NEON (`AdvSimdLanes.halfBits`/`halfToFloat`), zero conversão de bits nova.
-`VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` ficam `UNIMPLEMENTED` (dependem de `FPSCR.RMode`; nem as formas
-`sp`/`dp` condicionais estão implementadas, mesma exclusão de B14.5). Armadilha 2 (`boolean
-doublePrecision` não expressa 3 precisões) resolvida com 9 `Kind`/record PRÓPRIOS (`IrOp.Kind`
-173→182), sem tocar nenhuma assinatura pública existente (G3 nunca ficou em jogo). Achado de
-processo real: gatear o espaço `_hp` condicional só em `claimsThisDecoder` fazia o
-`CoprocessorDecoder` genérico capturar o encoding sem a feature — corrigido reivindicando o espaço
-SEMPRE (mesmo padrão G8 de `isVmovHalfEncoding`/B22.2) e devolvendo `UNIMPLEMENTED` explícito
-dentro do próprio `tryDecode`. `docs/isa-nao-aplicavel.tsv`: linha `*_hp` estreitada de `*` para as
-7 colunas pré-v8-A (mesma operação da B14.2 para `LDA`/`STL`). `docs/COBERTURA-ISA.md` byte a byte
-idêntica; `docs/COBERTURA-JIT.md` regenerado (9 linhas novas, ❌/❌ esperado). `mvn -o test` verde
-na raiz + G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado` de `B14.6` (seção "B14.6b"). **Épico B14
-fica só faltando B14.7** (fechamento: coluna `v8-A/32` + `ArmProcessor.CORTEX_A32`).
+**B14.7 FECHADA — ÉPICO B14 FECHADO.** Coluna `v8-A/32` nova no `IsaCoverageReport`
+(`Applicability ARMV8_FP`, substitui `NOT_IN_ANY_PRESET` de `vfp-uncond.decode`) mede **17/17**
+naquele grupo e **94%** (736/778) no preset `ARMV8A_32` inteiro; `ArmProcessor.CORTEX_A32` fecha a
+pendência da B12.6. `docs/isa-nao-aplicavel.tsv` auditado: `VRINTR*`/`VRINTZ*`/`VRINTX*`/`VJCVT`/
+`HLT` estreitados de `*` para as 7 colunas pré-v8-A (mesma operação de B14.2/B14.6b para
+`LDA`/`STL`/`*_hp`); as 7 colunas antigas continuam byte a byte idênticas (conferido por diff).
+**Achado real não previsto pela spec**: a primeira medição mostrou `vfp-uncond.decode` em 14/17 —
+`VMAXNM_hp/sp/dp` mediam `⚠️` por um FALSO POSITIVO do próprio medidor (`decodesTheSameIgnoringCondition`
+comparava só `Kind`, e `VMAXNM`/`VDIV` compartilham o `Kind` guarda-chuva `VFP_ALU` com `immediate`
+diferente); corrigido comparando todos os campos semânticos (`sameSemantics`), sem afetar nenhuma
+detecção de misdecode real existente (2 `⚠️` A64 antes, +3 `✅` depois, mais nada mudou). Achado
+colateral: narrowing de `HLT` expôs que a coluna JÁ EXISTENTE `ARMv8.1-M+MVE` também não tinha
+`ArmFeature.HALT` — `❌` legítimo, candidato a task própria de perfil M. `IsaCoverageReport32BitCurationGuardTest`
+atualizado para 9 colunas (era 8). `mvn -o test` verde (4684 testes) + G5 completo nos 5
+consumidores (`gbaemu`/`ndsemu`/`armbox`/`virtual-arm-box`/`n3dsemu`). Ver `## Resultado` de
+`B14.7` para a lista de `❌` expostos (candidatos a tasks futuras) e o delta de cobertura completo.
 
-**Pegáveis a seguir**: `B14.7` (fechamento do épico B14 — depende de B14.6+B14.3, ambas ✅) é o
-próximo degrau natural. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
 roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência
 pendente. Candidatas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift"
 GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas
-restantes, `CLRM`, `SB` de 32 bits.
+restantes, `CLRM`, `SB` de 32 bits. Candidatas novas da B14.7 (specs ainda não escritas):
+`VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de 32 bits, conversões FP16 do VFPv3
+(`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets ARMv8-M modernos.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

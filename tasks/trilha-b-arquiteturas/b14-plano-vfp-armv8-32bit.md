@@ -1,6 +1,6 @@
 # B14 — VFP incondicional (ARMv8-A de 32 bits): épico curto
 
-**Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** 📋 plano
+**Trilha:** B · **Repo:** arm-jitter (+ revalidação G5 nos consumidores) · **Status:** ✅ ÉPICO FECHADO (2026-09-19, B14.7)
 
 Um dos 7 grupos que `docs/COBERTURA-ISA.md` marca "não se aplica a nenhum preset atual" — ver
 `b13-plano-neon-a32.md` para a discussão de por que isso nunca foi decisão de escopo. Este é o
@@ -66,3 +66,22 @@ arquitetura, o próximo degrau natural é a versão SEGUINTE do ARM").
 - O espaço `1111 1110` colide visualmente com `MCR`/`CDP` de coprocessador (mesmo `1110` nos bits
   27:24 quando `cond=1111`). O `IsaCoverageReport` já sinaliza esse tipo de erro como `⚠️`
   (`FALLBACK`) em vez de `✅` — usar isso como teste de que o fechamento G8 funcionou.
+
+## Fechamento (B14.7, 2026-09-19)
+
+Meta cumprida: `vfp-uncond.decode` mede **17/17** contra a coluna `v8-A/32` (preset `ARMV8A_32`);
+`ArmProcessor.CORTEX_A32` fecha a pendência de B12.6. Ver `## Resultado` de `b14.7-fechamento-coluna-v8a32.md`
+para o detalhe completo — inclui um achado real fora da spec (falso positivo `VMAXNM`≡`VDIV` no
+próprio medidor de cobertura, corrigido) e a lista de `❌` que a coluna nova expôs como trabalho
+pendente legítimo, não exclusão:
+
+- `VRINTR`/`VRINTZ`/`VRINTX` de 32 bits (dependem de `FPSCR.RMode`, nunca implementadas nas formas
+  condicionais `sp`/`dp` — exclusão explícita de B14.5/B14.6).
+- `VJCVT` (ARMv8.3-A, posterior ao baseline `ARMv8.0-A` de `ARMV8A_32`).
+- `VCVT_f32_f16`/`_f16_f32`/`_f64_f16`/`_f16_f64`/`VCVT_b16_f32`/`VCVT_hp_int` (extensões opcionais
+  de VFPv3/BFloat16, nenhum preset as declara).
+- Achado colateral: `HLT` sob o preset `ARMv8.1-M+MVE` (perfil M) também mede `❌` — `ArmFeature.HALT`
+  não é declarada pelos presets ARMv8-M modernos ainda.
+
+Nenhum destes foi implementado nesta task (por escopo — B14.7 é só medição/catálogo); cada um é
+candidato a task própria quando priorizado.

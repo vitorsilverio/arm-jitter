@@ -60,6 +60,13 @@ class ArmProcessorTest {
     }
 
     @Test
+    void cortexA32ResolvesToArmv8a32() {
+        // B14.7: resolve a pendência de B12.6 (ver Javadoc da classe) — Cortex-A32 é o único
+        // núcleo AArch32-only de ARMv8-A do catálogo.
+        assertSame(ArmArchitecture.ARMV8A_32, ArmProcessor.CORTEX_A32.architecture());
+    }
+
+    @Test
     void armv6mFamilyResolvesToArmv6m() {
         assertSame(ArmArchitecture.ARMV6M, ArmProcessor.SC000.architecture());
         assertSame(ArmArchitecture.ARMV6M, ArmProcessor.CORTEX_M0.architecture());
