@@ -61,6 +61,9 @@ public final class AsmNativePolicy {
             // ARMv5TE emitidas nativamente (Mobiclip/SDK usam pesado). Só as formas com escrita
             // em PC (UNPREDICTABLE/troca de bloco) ficam no interpretado.
             case IrOp.Saturating s -> s.dst() != 15;
+            // CRC32 (ARMv8-A, B14.3): sem emissor nativo ainda — decode+interpretado apenas
+            // (a task explicitamente não inclui emissão nativa/Truffle).
+            case IrOp.Crc32 ignored -> false;
             case IrOp.DspMultiply d -> d.dst() != 15 && !(d.op2() == 2 && d.rn() == 15);
             // Ops ARMv6 da B1.3 (paralelas, SEL, saturação, USAD): nativas desde a task B1.6.
             case IrOp.ParallelAlu ignored -> true;

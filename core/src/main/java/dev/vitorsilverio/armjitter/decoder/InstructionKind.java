@@ -455,7 +455,13 @@ public enum InstructionKind {
     /// via `IrOp.VprTransfer`. NÃO é beatwise (o QEMU real nunca chama `mve_advance_vpt` para
     /// `VMSR_VMRS`, ao contrário de `VPST`/`VPNOT`/`VPSEL`). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
-    VPR_TRANSFER;
+    VPR_TRANSFER,
+    /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A, B14.3) — `destinationRegister`=Rd,
+    /// `sourceRegister`=Rm (dado), `secondSourceRegister`=Rn (acumulador de entrada);
+    /// `immediate` empacota bits 1:0 = código de largura (0=8, 1=16, 2=32) e bit 2 = polinômio
+    /// Castagnoli (`1`=CRC32C, `0`=IEEE 802.3). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#CRC32}.
+    CRC32;
 
     /// Instruções MVE "beatwise" (Helium, B16.2+): o avanço de
     /// {@link dev.vitorsilverio.armjitter.core.MveVptState#advance} roda depois de QUALQUER uma

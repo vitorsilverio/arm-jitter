@@ -308,6 +308,29 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rm, rn, op, false, false, false);
         }
 
+        // CRC32{B,H,W}/CRC32C{B,H,W} (ARMv8-A, B14.3): `cccc 0001 0ss0 nnnn dddd 00c0 0100 mmmm` —
+        // vizinho de um bit da aritmética saturante acima (`bits[7:4]` `0100` vs `0101`). `ss`
+        // (bits[22:21]) escolhe a largura (00=B,01=H,10=W; 11 não existe); `c` (bit9) escolhe o
+        // polinômio (0=IEEE 802.3, 1=Castagnoli).
+        if ((raw & 0x0F90_0DF0) == 0x0100_0040 && architecture.has(ArmFeature.CRC32)) {
+            int sizeCode = (raw >>> 21) & 0x3;
+            if (sizeCode != 0b11) {
+                int rn = (raw >>> 16) & 0xF;
+                int rd = (raw >>> 12) & 0xF;
+                int rm = raw & 0xF;
+                boolean castagnoli = ((raw >>> 9) & 1) != 0;
+                int dataWidthBits = switch (sizeCode) {
+                    case 0 -> 8;
+                    case 1 -> 16;
+                    default -> 32;
+                };
+                int packed = (dataWidthBits == 8 ? 0 : dataWidthBits == 16 ? 1 : 2) | (castagnoli ? 0x4 : 0);
+                return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.CRC32,
+                        rd, rm, rn, packed, false, false, false);
+            }
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+
         // Multiplicações DSP (ARMv5TE): `cccc 0001 0PP0 dddd nnnn ssss 1yx0 mmmm`. As metades de 16 bits
         // e o registrador acumulador são empacotados no imediato para o builder desempacotar.
         if ((raw & 0x0F90_0090) == 0x0100_0080 && architecture.has(ArmFeature.DSP_MULTIPLY)) {

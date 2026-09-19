@@ -209,7 +209,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     VSCCLRM,
                     // VPR_TRANSFER (VMSR/VMRS reg=12, B16.2): armazenamento puro do VPR, nunca
                     // toca o PC (mesma categoria de MPROFILE_MRS/MSR acima).
-                    VPR_TRANSFER -> false;
+                    VPR_TRANSFER,
+                    // CRC32 (ARMv8-A, B14.3): puro cálculo sobre GPRs, nunca toca o PC (mesma
+                    // categoria de SATURATING/DSP_MULTIPLY acima).
+                    CRC32 -> false;
         };
     }
 

@@ -37,7 +37,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorDup, IrOp.MveMoveLanesGpr, IrOp.MveVectorAddAcrossVector, IrOp.MveVectorAddAcrossVectorLong,
         IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate,
         IrOp.MveVectorDualAccumulate, IrOp.MveVectorDualAccumulateLong, IrOp.MveVectorRoundingDualAccumulateHigh,
-        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector {
+        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32 {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -378,6 +378,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B16.13b: `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` (`FEAT_MVE_FP`, perfil M, MVE/Helium)
         /// — ver {@link MveVectorFpMinMaxAcrossVector}.
         public static final int MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR = 167;
+        /// B14.3: `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A) — ver {@link Crc32}.
+        public static final int CRC32 = 168;
     }
 
     /// Operacao ALU generica.
@@ -708,6 +710,26 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.SATURATING; }
+    }
+
+    /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A, B14.3) — espelho de 32 bits de
+    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.Crc32}, sem a forma `X` (dado de 64 bits, que
+    /// não existe em AArch32). O algoritmo (laço refletido bit-a-bit) vive em
+    /// {@link dev.vitorsilverio.armjitter.advsimd.Crc32Checksum}, compartilhado com o lado A64.
+    record Crc32(
+            /// Registrador de destino (Rd).
+            int dst,
+            /// Acumulador de entrada (Rn).
+            int rn,
+            /// Registrador de dado (Rm).
+            int rm,
+            /// Largura do dado lido de {@link #rm} em bits: `8`/`16`/`32` (formas `B`/`H`/`W`).
+            int dataWidthBits,
+            /// `true` para o polinômio Castagnoli (`CRC32C*`), `false` para IEEE 802.3 (`CRC32*`).
+            boolean castagnoli,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.CRC32; }
     }
 
     /// Multiplicações DSP ARMv5TE. `op2`: 0=SMLAxy, 1=SMLAW(x=0)/SMULW(x=1), 2=SMLALxy, 3=SMULxy.

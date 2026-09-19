@@ -248,6 +248,22 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.secondSourceRegister(),
                     instruction.immediate(),
                     instruction.condition()));
+            case CRC32 -> {
+                int packed = instruction.immediate();
+                int dataWidthBits = switch (packed & 0x3) {
+                    case 0 -> 8;
+                    case 1 -> 16;
+                    default -> 32; // sizeCode==2 (W); 3 é recusado no decode
+                };
+                boolean castagnoli = (packed & 0x4) != 0;
+                block.add(new IrOp.Crc32(
+                        instruction.destinationRegister(),
+                        instruction.secondSourceRegister(),
+                        instruction.sourceRegister(),
+                        dataWidthBits,
+                        castagnoli,
+                        instruction.condition()));
+            }
             case DSP_MULTIPLY -> {
                 int packed = instruction.immediate();
                 block.add(new IrOp.DspMultiply(

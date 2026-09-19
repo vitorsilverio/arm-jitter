@@ -79,6 +79,16 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
         if (family >= FAMILY_QADD && family <= FAMILY_CLZ && op >= TWO_SOURCE_OP_MIN) {
             return decodeTwoSourceGroup(raw, address, condition, family, op);
         }
+        // CRC32 (family=C IEEE/D Castagnoli, B14.3): `op` (nibble[7:4]) em {8,9,A} = largura B/H/W
+        // — mesmo espaço numérico de REV/REV16/RBIT/REVSH da family=9, mas family diferente, sem
+        // colisão. `family` C/D também é usado pelas 36 paralelas (op em {0,1,2,4,5,6}), que não
+        // colide (larguras de CRC32 usam op>=8).
+        if ((family == FAMILY_CRC32_IEEE || family == FAMILY_CRC32_CASTAGNOLI) && isCrc32WidthOp(op)) {
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 8) & 0xF;
+            int rm = raw & 0xF;
+            return decodeCrc32(raw, address, condition, rn, rd, rm, family == FAMILY_CRC32_CASTAGNOLI, op);
+        }
         // As 36 paralelas: family em {8,9,A,C,D,E}, op em {0,1,2,4,5,6} (3 e 7 são buracos).
         if (isParallelFamily(family) && isParallelVariantOp(op)) {
             return decodeParallelAlu(raw, address, condition, family, op);
@@ -182,6 +192,10 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
     private static final int FAMILY_REV = 0x9;
     private static final int FAMILY_SEL = 0xA;
     private static final int FAMILY_CLZ = 0xB;
+    /// `CRC32*` (polinômio IEEE 802.3) — B14.3.
+    private static final int FAMILY_CRC32_IEEE = 0xC;
+    /// `CRC32C*` (polinômio Castagnoli) — B14.3.
+    private static final int FAMILY_CRC32_CASTAGNOLI = 0xD;
     /// `op` (nibble[7:4]) sempre `>= 0x8` neste grupo — distingue de "as 36 paralelas", que
     /// reusam os mesmos valores de `family` com `op` em `{0,1,2,4,5,6}`.
     private static final int TWO_SOURCE_OP_MIN = 0x8;
@@ -218,6 +232,30 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
         }
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.SATURATING,
                 rd, rm, rn, saturatingOp, false, false, false);
+    }
+
+    /// `op` (nibble[7:4]) de `CRC32{B,H,W}`/`CRC32C{B,H,W}`: `1000`=B, `1001`=H, `1010`=W (mesmos
+    /// valores numéricos de REV/REV16/RBIT na family=9, mas famílias C/D não colidem com ela).
+    private static boolean isCrc32WidthOp(int op) {
+        return op == 0x8 || op == 0x9 || op == 0xA;
+    }
+
+    private DecodedInstruction decodeCrc32(int raw, int address, Condition condition,
+            int rn, int rd, int rm, boolean castagnoli, int op) {
+        if (!architecture.has(ArmFeature.CRC32)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int dataWidthBits = switch (op) {
+            case 0x8 -> 8;
+            case 0x9 -> 16;
+            default -> 32; // 0xA
+        };
+        if (isRestricted(rd) || isRestricted(rm) || isRestricted(rn)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int packed = (dataWidthBits == 8 ? 0 : dataWidthBits == 16 ? 1 : 2) | (castagnoli ? 0x4 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, InstructionKind.CRC32,
+                rd, rm, rn, packed, false, false, false);
     }
 
     private DecodedInstruction decodeReverseOrClz(int raw, int address, Condition condition,

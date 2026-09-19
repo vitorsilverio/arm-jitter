@@ -67,6 +67,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.MULTIPLY -> alu.executeMultiply(core, (IrOp.Multiply) op);
                 case IrOp.Kind.LONG_MULTIPLY -> alu.executeLongMultiply(core, (IrOp.LongMultiply) op);
                 case IrOp.Kind.SATURATING -> alu.executeSaturating(core, (IrOp.Saturating) op);
+                case IrOp.Kind.CRC32 -> alu.executeCrc32(core, (IrOp.Crc32) op);
                 case IrOp.Kind.DSP_MULTIPLY -> alu.executeDspMultiply(core, (IrOp.DspMultiply) op);
                 case IrOp.Kind.PARALLEL_ALU -> alu.executeParallelAlu(core, (IrOp.ParallelAlu) op);
                 case IrOp.Kind.SEL -> alu.executeSel(core, (IrOp.Sel) op);
@@ -377,6 +378,7 @@ public final class IrBlockExecutor {
             case IrOp.Multiply multiply -> { alu.executeMultiply(core, multiply); yield false; }
             case IrOp.LongMultiply lm -> { alu.executeLongMultiply(core, lm); yield false; }
             case IrOp.Saturating sat -> { alu.executeSaturating(core, sat); yield false; }
+            case IrOp.Crc32 crc -> { alu.executeCrc32(core, crc); yield false; }
             case IrOp.DspMultiply dsp -> { alu.executeDspMultiply(core, dsp); yield false; }
             case IrOp.ParallelAlu parallel -> { alu.executeParallelAlu(core, parallel); yield false; }
             case IrOp.Sel sel -> { alu.executeSel(core, sel); yield false; }

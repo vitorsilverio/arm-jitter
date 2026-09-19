@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(168, kinds.size(), "IrOp.Kind deve ter 168 constantes contíguas");
+        assertEquals(169, kinds.size(), "IrOp.Kind deve ter 169 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -140,8 +140,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // "Não inclui"). B16.13b acrescentou MVE_VECTOR_DUAL_ACCUMULATE,
         // MVE_VECTOR_DUAL_ACCUMULATE_LONG, MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
         // MVE_VECTOR_MIN_MAX_ACROSS_VECTOR, MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR (+5, mesmo
-        // "Não inclui").
-        assertEquals(102, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // "Não inclui"). B14.3 acrescentou CRC32 (+1 — mesmo "Não inclui": a task explicita
+        // decode+interpretado apenas, emissão nativa/Truffle fica para trabalho futuro).
+        assertEquals(103, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -215,7 +216,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG,
                         IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
                         IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR,
-                        IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR)),
+                        IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR,
+                        IrOp.Kind.CRC32)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -244,6 +246,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.MULTIPLY -> new IrOp.Multiply(0, 1, -1, 2, -1, -1, -1, false, false, false, c);
             case IrOp.Kind.LONG_MULTIPLY -> new IrOp.LongMultiply(0, 1, 2, -1, 3, -1, -1, -1, false, false, false, c);
             case IrOp.Kind.SATURATING -> new IrOp.Saturating(0, 1, 2, 0, c);
+            case IrOp.Kind.CRC32 -> new IrOp.Crc32(0, 1, 2, 8, false, c);
             case IrOp.Kind.DSP_MULTIPLY -> new IrOp.DspMultiply(0, 1, 2, 3, 0, 0, 0, c);
             case IrOp.Kind.PSR_TRANSFER -> new IrOp.PsrTransfer(true, false, 0, -1, 0, false, 0, c);
             case IrOp.Kind.LOAD -> new IrOp.Load(0, 1, -1, imm, 4, false, false, false, false, c);

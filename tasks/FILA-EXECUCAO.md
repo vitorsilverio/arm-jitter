@@ -53,33 +53,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-18, após B16.14 fechar o épico B16 — MVE/Helium 100% medido)
+## Onde estamos (atualizado 2026-09-19, após B14.3 fechar `CRC32*` A32/T32)
 
-**B16.14 FECHADA — épico B16 (MVE/Helium) FECHADO.** `IsaCoverageReport` troca a `Applicability`
-de `mve.decode` de `NOT_IN_ANY_PRESET` para `MVE_INTEGER`, e `ARMV8_1M_MVE` entra como coluna nova
-(`ARMv8.1-M+MVE`) em `docs/COBERTURA-ISA.md`. Grupo `mve.decode` mede **352/352 ✅, zero `⚠️`**
-contra a coluna nova. Dois achados reais corrigidos nesta task: (1) 3 linhas de
-`isa-nao-aplicavel.tsv` (`VDUP`/`VRINTZ*`/`VRINTX*`) sem coluna `grupo` apagavam células MVE reais
-por engano (mnemônico homônimo em `vfp.decode`) — escopadas ao arquivo certo; (2) 12 linhas de
-curadoria "ausência estrutural de perfil M" (`ERET`/`MRS_bank`/`MSR_bank`/`SMC`/`HVC`/`RFE`/`SRS`/
-`BXJ`/`BLX_i`/`SUB_rri`/`SETEND`/`BLX_suffix`) precisaram da coluna nova na lista de arquiteturas
-(mesma razão já valia para v7-M). As 7 colunas antigas (v4T..v7-M) ficaram byte-a-byte inalteradas
-(conferido). `ArmProcessor.CORTEX_M52`/`M55`/`M85` passam a resolver para `ARMV8_1M_MVE` (antes
-`ARMV8_1M` sem Helium) — MVE-I/MVE-F são `IMPLEMENTATION DEFINED` mesmo nesses núcleos (WebSearch
-confirmou), catálogo assume a variante mais capaz, mesma simplificação de SKU do TrustZone em
-M23/M33/M35P. **34 gaps genuínos documentados, não implementados** (fora do escopo desta task):
-19 encodings "MVE long shift" GPR-pair (`t32.decode`, nenhum decoder MVE existente cobre esse
-espaço — candidata a task nova), `BF` 3/4 formas (`BFL`/`BFCSEL`/`BFX`/`BFLX`), tail-predication
-`WLSTP`/`DLSTP`/`LCTP`/`VCTP` (documentado desde B15.6 como bloqueado no banco `VPR` — **agora
-desbloqueado**, é o achado mais acionável), `CLRM`, e `SB`/`CRC32*` (7, extensões opcionais não
-implementadas em NENHUM preset de 32 bits, achado independente de MVE). `mvn -o test` verde (core
-4483 + truffle 73) + G5 verde nos 5 consumidores (zero-diff funcional). Release não publicado
-(suspenso até 100% global). Ver `## Resultado` de `B16.14`.
+**B14.3 FECHADA.** `CRC32B/H/W`/`CRC32CB/CH/CW` decodificam e executam sob o preset `ARMV8A_32`
+(A32 + T32, 12 linhas). Zero algoritmo novo: o laço bit-a-bit da B19.17 foi extraído para
+`advsimd/Crc32Checksum` (núcleo compartilhado, medição confirmou `advsimd` como o único pacote já
+importado pelos dois pipelines — 32 e 64 bits) e o lado A64 migrado para delegar (zero-diff, os
+testes da B19.17 passam sem alteração). `docs/COBERTURA-ISA.md` byte a byte idêntico (a coluna
+`v8-A/32` só nasce na B14.7); `docs/isa-nao-aplicavel.tsv` não precisou de mudança. Achado de
+processo: `IrOp.Kind` novo em 32 bits força atualizar TRÊS switches exaustivos
+(`StandardIrBuilder`/`IrBlockExecutor`/`StandardIrBlockLifter`) mais dois guards do módulo
+`truffle/` (`TruffleCodeEmitterSupportsCoherenceTest` + `docs/COBERTURA-JIT.md`) — nenhum desses
+cinco pontos está listado na "Validação" de tasks antigas da trilha B13/B14 que acrescentam
+`Kind`; útil registrar para a próxima. `mvn -o test` verde na raiz (todos os módulos). Ver
+`## Resultado` de `B14.3`.
 
-**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
-roadmap. Candidatas novas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long
-shift" GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4, desbloqueada
-pelo fechamento do B16), `BF` 3 formas restantes, `CLRM`, `SB`/`CRC32*` de 32 bits.
+**Pegáveis a seguir**: `B14.2` (`LDA`/`STL`/`LDAEX*`/`STLEX*`, 28 linhas, mesma dependência
+B14.1 ✅) é o próximo degrau natural do épico B14. `C12.5`/`C12.10` (emissão JIT nativa A64)
+seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode)
+seguem pegáveis sem dependência pendente. Candidatas gap-driven da B16.14 (specs ainda não
+escritas): decoder MVE "long shift" GPR-pair (19 encodings), tail-predication
+`WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32 bits.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

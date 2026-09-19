@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
+import dev.vitorsilverio.armjitter.advsimd.Crc32Checksum;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -272,6 +273,18 @@ public final class IrAluExecutor {
         if (q[0]) {
             core.cpsr().setSaturation(true); // sticky: only ever set here
         }
+    }
+
+    /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (B14.3) — delega ao núcleo compartilhado com o A64
+    /// ({@link Crc32Checksum}). Nunca seta flags (não é uma operação ALU comum).
+    public void executeCrc32(ArmCore core, IrOp.Crc32 op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int accumulator = core.register(op.rn());
+        long data = Integer.toUnsignedLong(core.register(op.rm()));
+        int result = Crc32Checksum.compute(accumulator, data, op.dataWidthBits(), op.castagnoli());
+        core.setRegister(op.dst(), result);
     }
 
     /// Multiplicações DSP ARMv5TE: produtos 16x16 (e 32x16 word) com sinal, com acumulador
