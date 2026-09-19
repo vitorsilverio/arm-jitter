@@ -53,32 +53,36 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.7 fechar o épico B14)
+## Onde estamos (atualizado 2026-09-19, após B13.16 plugar NEON no encoding T32)
 
-**B14.7 FECHADA — ÉPICO B14 FECHADO.** Coluna `v8-A/32` nova no `IsaCoverageReport`
-(`Applicability ARMV8_FP`, substitui `NOT_IN_ANY_PRESET` de `vfp-uncond.decode`) mede **17/17**
-naquele grupo e **94%** (736/778) no preset `ARMV8A_32` inteiro; `ArmProcessor.CORTEX_A32` fecha a
-pendência da B12.6. `docs/isa-nao-aplicavel.tsv` auditado: `VRINTR*`/`VRINTZ*`/`VRINTX*`/`VJCVT`/
-`HLT` estreitados de `*` para as 7 colunas pré-v8-A (mesma operação de B14.2/B14.6b para
-`LDA`/`STL`/`*_hp`); as 7 colunas antigas continuam byte a byte idênticas (conferido por diff).
-**Achado real não previsto pela spec**: a primeira medição mostrou `vfp-uncond.decode` em 14/17 —
-`VMAXNM_hp/sp/dp` mediam `⚠️` por um FALSO POSITIVO do próprio medidor (`decodesTheSameIgnoringCondition`
-comparava só `Kind`, e `VMAXNM`/`VDIV` compartilham o `Kind` guarda-chuva `VFP_ALU` com `immediate`
-diferente); corrigido comparando todos os campos semânticos (`sameSemantics`), sem afetar nenhuma
-detecção de misdecode real existente (2 `⚠️` A64 antes, +3 `✅` depois, mais nada mudou). Achado
-colateral: narrowing de `HLT` expôs que a coluna JÁ EXISTENTE `ARMv8.1-M+MVE` também não tinha
-`ArmFeature.HALT` — `❌` legítimo, candidato a task própria de perfil M. `IsaCoverageReport32BitCurationGuardTest`
-atualizado para 9 colunas (era 8). `mvn -o test` verde (4684 testes) + G5 completo nos 5
-consumidores (`gbaemu`/`ndsemu`/`armbox`/`virtual-arm-box`/`n3dsemu`). Ver `## Resultado` de
-`B14.7` para a lista de `❌` expostos (candidatos a tasks futuras) e o delta de cobertura completo.
+**B13.16 FECHADA.** `decoder/Thumb2NeonDecoder` novo: adaptador puro de transformação+delegação
+(zero laço de execução) que reconhece o frame T32 de `neon-dp.decode` (`p`=bit24 A32 → bit28 T32,
+frame `(raw & 0xEF00_0000) == 0xEF00_0000`) e de `neon-ls.decode` (byte alto INTEIRO troca de
+`0xF4` para `0xF9`, frame `(raw & 0xFF00_0000) == 0xF900_0000` — achado da medição: não é um bit só
+que se move aqui, diferente de `neon-dp`) e delega aos 7 decoders A32 do épico B13
+(`NeonDataProcessingDecoder`/`NeonShiftImmediateDecoder`/`NeonModifiedImmediateDecoder`/
+`NeonThreeRegDifferentDecoder`/`NeonTwoRegMiscDecoder`/`NeonExtractTableDuplicateDecoder`/
+`NeonLoadStoreDecoder`), devolvendo o `IrOp` idêntico com `raw`=T32 original e
+`InstructionSet.THUMB`. `DecodedInstruction.withRaw` novo (análogo a `withInstructionSet`) —
+nenhum decoder anterior precisava trocar só o `raw` preservando o resto. **Zero registro em preset
+de produção** (isso é B13.22) ⇒ zero-diff: `docs/COBERTURA-ISA.md` byte a byte idêntica (confirmado
+por `git diff` vazio após `./gerar-cobertura-isa.sh`), suítes de B2.x/B3.2/B13.x inalteradas.
+`Thumb2NeonDecoderTest` novo (12 casos): equivalência A32↔T32 nas 8 seções do épico (reusando
+encodings golden já conferidos por B13.3-B13.14, nenhum encoding novo inventado), gate duplo
+(`ADVANCED_SIMD`/`THUMB2`) e a Armadilha 1 (máscara não engole `MOVW`/`LDR.W` T32 legítimos).
+`mvn -o test` verde (4700 testes) + G5 completo nos 5 consumidores
+(`gbaemu`/`ndsemu`/`armbox`/`virtual-arm-box`/`n3dsemu`). Ver `## Resultado` de `B13.16` na task.
 
-**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
-roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência
-pendente. Candidatas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift"
-GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas
-restantes, `CLRM`, `SB` de 32 bits. Candidatas novas da B14.7 (specs ainda não escritas):
-`VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de 32 bits, conversões FP16 do VFPv3
-(`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets ARMv8-M modernos.
+**Pegáveis a seguir**: `B13.22` (fechamento de presets NEON — primeira task NÃO-zero-diff do
+épico B13, denominador +325, cobertura global pode CAIR) fica pegável depois que B13.21 (✅) e agora
+B13.16 (✅) fecham o épico de decode inteiro — conferir o `INDICE.md` antes de pegar. `C12.5`/`C12.10`
+(emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações
+SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas gap-driven da
+B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
+tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
+bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de
+32 bits, conversões FP16 do VFPv3 (`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets ARMv8-M
+modernos.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

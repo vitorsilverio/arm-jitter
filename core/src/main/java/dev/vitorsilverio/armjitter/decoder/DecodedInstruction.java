@@ -253,4 +253,16 @@ public record DecodedInstruction(
                 accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList,
                 unprivileged, liftedOp);
     }
+
+    /// Cria uma cópia com {@link #raw} substituído, preservando todos os outros campos. Usado por
+    /// decoders que transformam a palavra antes de delegar a um sub-decoder de outro encoding
+    /// (B13.16, `Thumb2NeonDecoder` transformando T32 para a forma A32 antes de delegar aos
+    /// decoders NEON do épico B13) — o `raw` devolvido precisa ser a palavra ORIGINAL, não a
+    /// transformada, para que traço/exceções/`Fetch` continuem corretos.
+    public DecodedInstruction withRaw(int newRaw) {
+        return new DecodedInstruction(address, newRaw, instructionSet, condition, kind, destinationRegister,
+                sourceRegister, secondSourceRegister, immediate, immediateOperand, setFlags, link,
+                accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList,
+                unprivileged, liftedOp);
+    }
 }
