@@ -12,6 +12,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -221,6 +222,24 @@ class VfpUnconditionalMovxVinsTest {
         assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, bit6Clear).kind());
         int bits1816Set = movxVinsWord(false, 2, 1) | (1 << 16);
         assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, bits1816Set).kind());
+    }
+
+    /// Prova de que `VFP_MOVE_HALF_LANE` NÃO termina o bloco JIT (`StandardIrBlockLifter#isTerminal`
+    /// — `VMOVX`/`VINS` compartilham a mesma linha `-> true`/`-> false` de outros `Kind` VFP já
+    /// existentes, então a cobertura de linha do JaCoCo nessa linha não prova nada especificamente
+    /// sobre `VFP_MOVE_HALF_LANE`: só o LIFTER DE BLOCO de verdade — decodificando duas instruções
+    /// em sequência via `ArmDecoder`, não `liftSingleOp` — mostra que a segunda instrução continua
+    /// sendo elevada no MESMO bloco).
+    @Test
+    void vmovxDoesNotTerminateBlockSecondInstructionStillLifted() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put32(0, movxVinsWord(false, 1, 0));
+        memory.put32(4, movxVinsWord(true, 2, 1));
+        StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(FP16_TEST_ARCH), new StandardIrBuilder());
+        IrBlock block = lifter.lift(memory, 0, 2, 0);
+        assertEquals(8, block.endPc(), "bloco deveria conter as DUAS instruções, não terminar na primeira");
+        long moveHalfLaneOps = block.operations().stream().filter(op -> op instanceof IrOp.VfpMoveHalfLane).count();
+        assertEquals(2, moveHalfLaneOps);
     }
 
     private static DecodedInstruction notNullDecode(VfpDecoder decoder, int word) {
