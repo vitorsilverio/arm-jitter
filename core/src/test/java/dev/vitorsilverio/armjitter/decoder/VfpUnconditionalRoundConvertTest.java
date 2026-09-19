@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
@@ -303,6 +304,47 @@ class VfpUnconditionalRoundConvertTest {
         assertEquals(0, core.vfp().s(1));
     }
 
+    /// Fecha o branch `false` de `executeVfpRound`/`executeVfpConvertRounded` (`op.condition()`,
+    /// o gate do BLOCO) — nenhum outro teste desta suíte passava `condition != AL`, então o `if
+    /// (!evalCond) return;` nunca era exercitado (JaCoCo: "1 de 2 branches perdidos" nos dois
+    /// métodos). Mesmo padrão de `vselWithFalseBlockConditionSkipsEntirelyRegardlessOf...` da
+    /// B14.4 — o `IrOp` aceita qualquer `Condition` (código real, alcançável por quem monta o op
+    /// na mão), mesmo o decoder só produzindo `AL`.
+    @Test
+    void vrintWithFalseBlockConditionSkipsEntirely() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(1, -1.0f); // sentinela: não deve mudar.
+        core.vfp().setSFloat(0, 2.5f);
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
+        new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
+                new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0, Condition.NE), 0);
+        assertEquals(-1.0f, core.vfp().sFloat(1));
+    }
+
+    @Test
+    void vcvtWithFalseBlockConditionSkipsEntirely() {
+        ArmCore core = newCore();
+        core.vfp().setS(1, -1); // sentinela: não deve mudar.
+        core.vfp().setSFloat(0, 2.5f);
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
+        new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
+                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 1, 0,
+                        Condition.NE), 0);
+        assertEquals(-1, core.vfp().s(1));
+    }
+
+    /// Prova DIRETA (não só por exclusão) de que `AsmNativePolicy` recusa `VfpRound`/
+    /// `VfpConvertRounded` — sem este teste, os 2 `case ... -> false` novos nunca eram alcançados
+    /// (JaCoCo: `nc`, não-coberto) porque nada mais na suíte chama `supports()` com esses `Kind`.
+    @Test
+    void asmNativePolicyRefusesVfpRoundAndVfpConvertRounded() {
+        assertEquals(false, AsmNativePolicy.supports(
+                new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 0, 1, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(
+                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 0, 1,
+                        Condition.AL)));
+    }
+
     @Test
     void vcvtDoesNotModifyFpscr() {
         ArmCore core = newCore();
@@ -341,6 +383,16 @@ class VfpUnconditionalRoundConvertTest {
         assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vrintD16).kind());
         int vcvtD16Source = vcvtWord(0, true, true, 0, 16);
         assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vcvtD16Source).kind());
+    }
+
+    /// Fecha o outro operando do `||` de `decodeRoundOrConvert` para `VRINT` (JaCoCo apontou: só
+    /// `vd` inválido estava exercitado no teste acima — `vd=16` já é `true` e faz o `||` dar
+    /// short-circuit, nunca avaliando `vm`; aqui `vd` é válido e só `vm=16` é que derruba).
+    @Test
+    void vrintWithInvalidVmRegisterAloneIsUnimplementedNeverNull() {
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        int vmInvalid = vrintWord(0, true, 0, 16);
+        assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vmInvalid).kind());
     }
 
     // ── 6. Caminho de execução de BLOCO (Kind-switch de `IrBlockExecutor#execute`) ─────────────
