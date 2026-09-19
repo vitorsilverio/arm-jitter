@@ -53,36 +53,37 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B13.16 plugar NEON no encoding T32)
+## Onde estamos (atualizado 2026-09-19, após B13.22 fechar o épico B13 inteiro)
 
-**B13.16 FECHADA.** `decoder/Thumb2NeonDecoder` novo: adaptador puro de transformação+delegação
-(zero laço de execução) que reconhece o frame T32 de `neon-dp.decode` (`p`=bit24 A32 → bit28 T32,
-frame `(raw & 0xEF00_0000) == 0xEF00_0000`) e de `neon-ls.decode` (byte alto INTEIRO troca de
-`0xF4` para `0xF9`, frame `(raw & 0xFF00_0000) == 0xF900_0000` — achado da medição: não é um bit só
-que se move aqui, diferente de `neon-dp`) e delega aos 7 decoders A32 do épico B13
-(`NeonDataProcessingDecoder`/`NeonShiftImmediateDecoder`/`NeonModifiedImmediateDecoder`/
-`NeonThreeRegDifferentDecoder`/`NeonTwoRegMiscDecoder`/`NeonExtractTableDuplicateDecoder`/
-`NeonLoadStoreDecoder`), devolvendo o `IrOp` idêntico com `raw`=T32 original e
-`InstructionSet.THUMB`. `DecodedInstruction.withRaw` novo (análogo a `withInstructionSet`) —
-nenhum decoder anterior precisava trocar só o `raw` preservando o resto. **Zero registro em preset
-de produção** (isso é B13.22) ⇒ zero-diff: `docs/COBERTURA-ISA.md` byte a byte idêntica (confirmado
-por `git diff` vazio após `./gerar-cobertura-isa.sh`), suítes de B2.x/B3.2/B13.x inalteradas.
-`Thumb2NeonDecoderTest` novo (12 casos): equivalência A32↔T32 nas 8 seções do épico (reusando
-encodings golden já conferidos por B13.3-B13.14, nenhum encoding novo inventado), gate duplo
-(`ADVANCED_SIMD`/`THUMB2`) e a Armadilha 1 (máscara não engole `MOVW`/`LDR.W` T32 legítimos).
-`mvn -o test` verde (4700 testes) + G5 completo nos 5 consumidores
-(`gbaemu`/`ndsemu`/`armbox`/`virtual-arm-box`/`n3dsemu`). Ver `## Resultado` de `B13.16` na task.
+**B13.22 FECHADA — ÉPICO B13 (NEON de 32 bits) FECHADO.** Preset público novo
+`ArmArchitecture.ARMV7A_NEON` (`extending(ARMV7A, ADVANCED_SIMD, VFPV3_D32)`, aditivo, `ARMV7A`
+intocado — G3): pluga os 7 decoders A32 do épico + `NeonSharedDecoder` (ANTES de
+`CoprocessorDecoder`) e, no lado Thumb-2, `Thumb2NeonDecoder` (B13.16) + `Thumb2NeonSharedDecoder`
+(NOVO — wrapper fino sem transformação, `neon-shared` tem encoding idêntico A32/T32). As 7 features
+irmãs do épico (RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) ficam de fora do preset — são todas
+extensões ARMv8.x que nenhum núcleo ARMv7-A real tem — e são curadas por mnemônico em
+`IsaCoverageReport.ARM32_VERSION_REQUIREMENTS` (espelho por nome da `AARCH64_VERSION_REQUIREMENTS`
+da E12), medindo `·` (não `❌`) na coluna nova. `IsaCoverageReport`: os 3 grupos saem de
+`NOT_IN_ANY_PRESET`, coluna `v7-A+NEON` nova. **Medição**: global 99%→98% (queda esperada,
+denominador +325), coluna `v7-A+NEON` 85% (903/1051; dentro dos 325: 279 ✅/35 ·/11 ❌ real — 7
+formas `SHA1x_3s`/`SHA256x_3s` sem decoder nenhum ainda + 4 `VCVT_xx_2sh` já eram a lacuna F16
+conhecida de B13.8). `ArmProcessor` ganhou 7 entradas `_NEON` irmãs (`Cortex-A5`..`A17`, aditivas).
+`ArmV7aNeonPresetTest` novo (G3 + decode cross-seção A32/T32); 2 guards pré-existentes
+(`IsaCoverageReport32BitCurationGuardTest`/`IsaCoverageReportV8A32ColumnTest`) tinham lista de
+colunas hardcoded, corrigidos para incluir a nova. `mvn -o test` verde (4709 testes) + G5 completo
+nos 5 consumidores. Ver `## Resultado` de `B13.22` na task.
 
-**Pegáveis a seguir**: `B13.22` (fechamento de presets NEON — primeira task NÃO-zero-diff do
-épico B13, denominador +325, cobertura global pode CAIR) fica pegável depois que B13.21 (✅) e agora
-B13.16 (✅) fecham o épico de decode inteiro — conferir o `INDICE.md` antes de pegar. `C12.5`/`C12.10`
-(emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações
-SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas gap-driven da
-B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
+**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência
+pendente. Candidata nova da B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/
+`SHA1M_3s`/`SHA1SU0_3s`/`SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64
+via `Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas
+gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
 tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
 bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de
 32 bits, conversões FP16 do VFPv3 (`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets ARMv8-M
-modernos.
+modernos. Candidata nova da B13.8/B13.22: "NEON FP16 AArch32" (as 4 `VCVT_xx_2sh` + as formas F16
+que B13.6/B13.11/B13.13 também adiaram), depende de B19.5.1.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

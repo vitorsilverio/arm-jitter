@@ -60,6 +60,18 @@ class ArmProcessorTest {
     }
 
     @Test
+    void cortexAv7NeonVariantsResolveToArmv7aNeon() {
+        // B13.22: entradas IRMÃS, aditivas — as sem sufixo (acima) continuam ARMV7A sem NEON.
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A5_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A7_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A8_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A9_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A12_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A15_NEON.architecture());
+        assertSame(ArmArchitecture.ARMV7A_NEON, ArmProcessor.CORTEX_A17_NEON.architecture());
+    }
+
+    @Test
     void cortexA32ResolvesToArmv8a32() {
         // B14.7: resolve a pendência de B12.6 (ver Javadoc da classe) — Cortex-A32 é o único
         // núcleo AArch32-only de ARMv8-A do catálogo.

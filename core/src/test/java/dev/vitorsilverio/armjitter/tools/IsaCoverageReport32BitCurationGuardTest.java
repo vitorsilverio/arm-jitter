@@ -34,11 +34,11 @@ class IsaCoverageReport32BitCurationGuardTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 9 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
-    /// originais; `ARMv8.1-M+MVE` é a coluna que a B16.14 acrescentou; `v8-A/32` é a coluna que a
-    /// B14.7 acrescentou).
+    /// As 10 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
+    /// originais; `v7-A+NEON` é a coluna que a B13.22 acrescentou; `ARMv8.1-M+MVE` é a coluna que a
+    /// B16.14 acrescentou; `v8-A/32` é a coluna que a B14.7 acrescentou).
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v6-M", "v7-M", "ARMv8.1-M+MVE", "v8-A/32");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v6-M", "v7-M", "ARMv8.1-M+MVE", "v8-A/32");
 
     private static final String SUPPORTED = "✅";
     private static final String FALLBACK = "⚠️";
@@ -137,12 +137,14 @@ class IsaCoverageReport32BitCurationGuardTest {
                 "## A32", "## T16", "## T32", "## VFP — ponto flutuante", "## VFP — formas incondicionais",
                 "## NEON — processamento", "## NEON — load/store", "## NEON — formas compartilhadas",
                 "## ARMv7-M", "## MVE (Helium)");
+        List<String> originalColumns = List.of("v4T", "v5TE", "v6K", "MPCore", "v7-A", "v6-M", "v7-M");
         List<String> offenders = new ArrayList<>();
         for (String prefix : sectionPrefixes) {
             for (Row rowEntry : readSection(prefix)) {
-                for (int i = 0; i < 7; i++) { // as 7 colunas originais, ARMv8.1-M+MVE (índice 7) fica fora
+                for (String column : originalColumns) {
+                    int i = COLUMNS.indexOf(column);
                     if (FALLBACK.equals(rowEntry.cells().get(i))) {
-                        offenders.add(rowEntry.name() + " @ " + COLUMNS.get(i) + " (seção " + prefix + ")");
+                        offenders.add(rowEntry.name() + " @ " + column + " (seção " + prefix + ")");
                     }
                 }
             }

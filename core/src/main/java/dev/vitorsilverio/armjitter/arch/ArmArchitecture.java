@@ -635,6 +635,61 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8A_32_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
+    /// ARMv7-A **com NEON/Advanced SIMD** (B13.22, fecha o épico B13) — `ARMV7A` +
+    /// {@link ArmFeature#ADVANCED_SIMD} + {@link ArmFeature#VFPV3_D32} (banco `D0`-`D31`/`Q0`-`Q15`
+    /// completo). **NEON é OPCIONAL no ARMv7-A real** (ARM DDI 0406C, "Advanced SIMD (NEON)
+    /// Extension" é uma opção de implementação) — por isso este preset nasce AO LADO de
+    /// {@link #ARMV7A} (G3: `ARMV7A` permanece intocado, decodifica NEON como `UNIMPLEMENTED` para
+    /// sempre), nunca o substitui.
+    ///
+    /// **As 7 features irmãs do épico (`ADVANCED_SIMD_RDM`/`CRYPTO`/
+    /// `COMPLEX_NUMBER_ARITHMETIC`/`DOT_PRODUCT`/`INT8_MATRIX_MULTIPLY`/
+    /// `FP16_FUSED_MULTIPLY_ADD_LONG`/`BFLOAT16`) NÃO entram aqui** — são todas extensões de versões
+    /// ARMv8.x (`FEAT_RDM`=v8.1, cripto AES/SHA=v8.0 "Cryptographic Extension" opcional só a partir
+    /// de núcleos ARMv8, `FEAT_FCMA`/`FEAT_DotProd`/`FEAT_FHM`=v8.2, `FEAT_I8MM`/`FEAT_BF16`=v8.6) —
+    /// nenhum Cortex-A5/A7/A8/A9/A12/A15/A17 real (ARMv7-A puro) as tem. Declará-las aqui seria
+    /// entrada factualmente errada (mesmo princípio de B12.4/B12.6); ficam para um preset ARMv8-A
+    /// AArch32 COM NEON, ainda não modelado (candidata a task futura, composta sobre
+    /// {@link #ARMV8A_32} do mesmo jeito que este preset compõe sobre {@link #ARMV7A}). O efeito
+    /// prático (curadoria de versão em `IsaCoverageReport`, `ARM32_VERSION_REQUIREMENTS`): as
+    /// linhas dessas 7 features medem `·` (não aplicável) nesta coluna, nunca `❌`.
+    ///
+    /// **Extensões de decoder**: os 7 decoders A32 do épico B13
+    /// (`NeonDataProcessingDecoder`/`NeonShiftImmediateDecoder`/`NeonModifiedImmediateDecoder`/
+    /// `NeonThreeRegDifferentDecoder`/`NeonTwoRegMiscDecoder`/`NeonExtractTableDuplicateDecoder`/
+    /// `NeonLoadStoreDecoder`) mais `NeonSharedDecoder` (B13.17-B13.21), ANTES de
+    /// `CoprocessorDecoder` (mesma disciplina de {@link #ARMV7A}: espaço específico antes do
+    /// fallback genérico cp10/11). No lado Thumb-2: `Thumb2NeonDecoder` (B13.16, transforma e
+    /// delega `neon-dp`/`neon-ls`) mais `Thumb2NeonSharedDecoder` (B13.22, `neon-shared` — encoding
+    /// idêntico A32/T32, só relabela {@link InstructionSet}), ambos ANTES de
+    /// `Thumb2CoprocessorDecoder`.
+    private static final ArmArchitecture ARMV7A_NEON_FEATURES = extending(ARMV7A, "ARMv7-A+NEON",
+            ArmFeature.ADVANCED_SIMD, ArmFeature.VFPV3_D32);
+
+    public static final ArmArchitecture ARMV7A_NEON = ARMV7A_NEON_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonDataProcessingDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonShiftImmediateDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonModifiedImmediateDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonThreeRegDifferentDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonTwoRegMiscDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonExtractTableDuplicateDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonLoadStoreDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonSharedDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7A_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

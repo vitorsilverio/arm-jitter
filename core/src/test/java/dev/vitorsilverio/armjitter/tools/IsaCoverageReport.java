@@ -100,6 +100,12 @@ public final class IsaCoverageReport {
     /// — B14.7, fecha o `NOT_IN_ANY_PRESET` do grupo `vfp-uncond.decode` agora que `ARMV8A_32`
     /// (B14.1) declara {@link ArmFeature#ARMV8_FP}.
     private static final Applicability ARMV8_FP = arch -> arch.has(ArmFeature.ARMV8_FP);
+    /// NEON/Advanced SIMD de 32 bits (`neon-dp.decode`/`neon-ls.decode`/`neon-shared.decode`) —
+    /// B13.22, fecha o `NOT_IN_ANY_PRESET` dos três grupos agora que
+    /// {@link ArmArchitecture#ARMV7A_NEON} declara {@link ArmFeature#ADVANCED_SIMD}. As 7 features
+    /// irmãs do épico (RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) são curadas à parte, por mnemônico, em
+    /// {@link #ARM32_VERSION_REQUIREMENTS} — nenhuma delas é implicada por esta constante.
+    private static final Applicability ADVANCED_SIMD = arch -> arch.has(ArmFeature.ADVANCED_SIMD);
     /// Extensões que NENHUM preset atual do `ArmArchitecture` declara — ficam na tabela para o
     /// inventário ser completo (não presumir que algo nunca será necessário), mas marcadas como
     /// não aplicáveis em vez de "faltando".
@@ -145,10 +151,16 @@ public final class IsaCoverageReport {
                     ARMV8_FP, "`VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVTA` são ARMv8-A de 32 bits — "
                             + "aplicável a partir de `ArmArchitecture.ARMV8A_32` (B14.7)."),
             new Group("neon-dp.decode", "NEON — processamento de dados", 32, Probe.ARM32, true,
-                    NOT_IN_ANY_PRESET, "Advanced SIMD: extensão OPCIONAL do ARMv7-A; nenhum preset a declara hoje."),
-            new Group("neon-ls.decode", "NEON — load/store", 32, Probe.ARM32, true, NOT_IN_ANY_PRESET, ""),
+                    ADVANCED_SIMD, "Advanced SIMD: extensão OPCIONAL do ARMv7-A — aplicável a partir de "
+                            + "`ArmArchitecture.ARMV7A_NEON` (B13.22). As formas de features irmãs "
+                            + "(RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16, nenhuma delas em núcleos ARMv7-A "
+                            + "reais) são curadas à parte, ver `ARM32_VERSION_REQUIREMENTS`."),
+            new Group("neon-ls.decode", "NEON — load/store", 32, Probe.ARM32, true, ADVANCED_SIMD,
+                    "Aplicável a partir de `ArmArchitecture.ARMV7A_NEON` (B13.22)."),
             new Group("neon-shared.decode", "NEON — formas compartilhadas VFP/NEON", 32, Probe.ARM32, true,
-                    NOT_IN_ANY_PRESET, ""),
+                    ADVANCED_SIMD, "Aplicável a partir de `ArmArchitecture.ARMV7A_NEON` (B13.22); "
+                            + "todas as 23 linhas exigem uma feature irmã além de `ADVANCED_SIMD` — "
+                            + "ver `ARM32_VERSION_REQUIREMENTS`."),
             new Group("m-nocp.decode", "ARMv7-M — coprocessador ausente", 32, Probe.THUMB32, true, M_PROFILE, ""),
             new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, MVE_INTEGER, ""),
             new Group("a64.decode", "A64 — AArch64", 32, Probe.A64, false, ALWAYS, ""),
@@ -166,6 +178,9 @@ public final class IsaCoverageReport {
         ARM_ARCHITECTURES.put("v6K", ArmArchitecture.ARMV6K);
         ARM_ARCHITECTURES.put("MPCore", ArmArchitecture.ARM11_MPCORE);
         ARM_ARCHITECTURES.put("v7-A", ArmArchitecture.ARMV7A);
+        // B13.22: coluna nova, fecha o épico B13 — mesma natureza não-zero-diff da B14.7 (denominador
+        // cresce +325 linhas de NEON, cobertura global pode cair, ver `## Resultado` da task).
+        ARM_ARCHITECTURES.put("v7-A+NEON", ArmArchitecture.ARMV7A_NEON);
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
         ARM_ARCHITECTURES.put("ARMv8.1-M+MVE", ArmArchitecture.ARMV8_1M_MVE);
@@ -475,6 +490,76 @@ public final class IsaCoverageReport {
                 "FMLSL2_vi");
     }
 
+    /// Mnemônico → feature ARM32/T32 mínima real que o exige (B13.22, espelho de
+    /// {@link #AARCH64_VERSION_REQUIREMENTS} para o lado de 32 bits). Um mnemônico ausente daqui é
+    /// aplicável a qualquer preset que já satisfaça a {@link Applicability} do grupo — casa por
+    /// NOME porque nenhum destes mnemônicos tem uma segunda linha, na MESMA arquivo `.decode`, que
+    /// precise de requisito diferente (ao contrário do caso `_h` da B19.5.2 do lado A64).
+    ///
+    /// As 4 features de {@code neon-dp.decode} (RDM, cripto de 2-reg-misc) e as 7 de
+    /// {@code neon-shared.decode} (FCMA/DotProd/I8MM/FHM/BF16) são todas extensões ARMv8.x que
+    /// NENHUM núcleo ARMv7-A real tem — sem esta curadoria, essas linhas mediriam `❌` (trabalho
+    /// pendente) na coluna `v7-A+NEON` em vez de `·` (não aplicável), o mesmo problema que a E12
+    /// corrigiu do lado A64. Mnemônicos confirmados contra `target/isa-decode/neon-dp.decode` e
+    /// `neon-shared.decode` (B13.22).
+    static final Map<String, ArmFeature> ARM32_VERSION_REQUIREMENTS = new LinkedHashMap<>();
+
+    static {
+        // FEAT_RDM (ARMv8.1) — `VQRDMLAH`/`VQRDMLSH`, formas 3-reg-same e 2-reg-and-scalar (B13.5).
+        ARM32_VERSION_REQUIREMENTS.put("VQRDMLAH_3s", ArmFeature.ADVANCED_SIMD_RDM);
+        ARM32_VERSION_REQUIREMENTS.put("VQRDMLSH_3s", ArmFeature.ADVANCED_SIMD_RDM);
+        ARM32_VERSION_REQUIREMENTS.put("VQRDMLAH_2sc", ArmFeature.ADVANCED_SIMD_RDM);
+        ARM32_VERSION_REQUIREMENTS.put("VQRDMLSH_2sc", ArmFeature.ADVANCED_SIMD_RDM);
+        // ARMv8-A Cryptographic Extension (base) — `neon-dp.decode` "2-reg-misc" (B13.15). As 7
+        // formas "3same_crypto" irmãs (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/`SHA256H_3s`/
+        // `SHA256H2_3s`/`SHA256SU1_3s`) NÃO estão implementadas por nenhum decoder A32/T32 ainda
+        // (achado da B13.22, fora do escopo desta task) — medem `❌` honesto sem curadoria, correto.
+        ARM32_VERSION_REQUIREMENTS.put("AESE", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("AESD", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("AESMC", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("AESIMC", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("SHA1H", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("SHA1SU1", ArmFeature.CRYPTO);
+        ARM32_VERSION_REQUIREMENTS.put("SHA256SU0", ArmFeature.CRYPTO);
+        // FEAT_BF16 (ARMv8.6) — `VCVT_B16_F32` (`neon-dp.decode`, B13.13) + as 5 de `neon-shared`
+        // (B13.21).
+        ARM32_VERSION_REQUIREMENTS.put("VCVT_B16_F32", ArmFeature.BFLOAT16);
+        ARM32_VERSION_REQUIREMENTS.put("VDOT_b16", ArmFeature.BFLOAT16);
+        ARM32_VERSION_REQUIREMENTS.put("VMMLA_b16", ArmFeature.BFLOAT16);
+        ARM32_VERSION_REQUIREMENTS.put("VFMA_b16", ArmFeature.BFLOAT16);
+        ARM32_VERSION_REQUIREMENTS.put("VDOT_b16_scal", ArmFeature.BFLOAT16);
+        ARM32_VERSION_REQUIREMENTS.put("VFMA_b16_scal", ArmFeature.BFLOAT16);
+        // FEAT_FCMA (ARMv8.3) — `VCMLA`/`VCADD`/`VCMLA_scalar` (`neon-shared.decode`, B13.17).
+        ARM32_VERSION_REQUIREMENTS.put("VCMLA", ArmFeature.COMPLEX_NUMBER_ARITHMETIC);
+        ARM32_VERSION_REQUIREMENTS.put("VCADD", ArmFeature.COMPLEX_NUMBER_ARITHMETIC);
+        ARM32_VERSION_REQUIREMENTS.put("VCMLA_scalar", ArmFeature.COMPLEX_NUMBER_ARITHMETIC);
+        // FEAT_DotProd (ARMv8.2) — só as formas de MESMO sinal (B13.18); as mistas são FEAT_I8MM.
+        ARM32_VERSION_REQUIREMENTS.put("VSDOT", ArmFeature.DOT_PRODUCT);
+        ARM32_VERSION_REQUIREMENTS.put("VUDOT", ArmFeature.DOT_PRODUCT);
+        ARM32_VERSION_REQUIREMENTS.put("VSDOT_scalar", ArmFeature.DOT_PRODUCT);
+        ARM32_VERSION_REQUIREMENTS.put("VUDOT_scalar", ArmFeature.DOT_PRODUCT);
+        // FEAT_I8MM (ARMv8.6) — formas mistas de produto escalar (B13.18) + matriciais (B13.19).
+        ARM32_VERSION_REQUIREMENTS.put("VUSDOT", ArmFeature.INT8_MATRIX_MULTIPLY);
+        ARM32_VERSION_REQUIREMENTS.put("VUSDOT_scalar", ArmFeature.INT8_MATRIX_MULTIPLY);
+        ARM32_VERSION_REQUIREMENTS.put("VSUDOT_scalar", ArmFeature.INT8_MATRIX_MULTIPLY);
+        ARM32_VERSION_REQUIREMENTS.put("VSMMLA", ArmFeature.INT8_MATRIX_MULTIPLY);
+        ARM32_VERSION_REQUIREMENTS.put("VUMMLA", ArmFeature.INT8_MATRIX_MULTIPLY);
+        ARM32_VERSION_REQUIREMENTS.put("VUSMMLA", ArmFeature.INT8_MATRIX_MULTIPLY);
+        // FEAT_FHM (ARMv8.2) — `VFML`/`VFML_scalar` (`s` bit distingue VFML/VFMSL, mesmo nome no
+        // decodetree, B13.20).
+        ARM32_VERSION_REQUIREMENTS.put("VFML", ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG);
+        ARM32_VERSION_REQUIREMENTS.put("VFML_scalar", ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG);
+    }
+
+    /// Aplicabilidade curada por feature ARM32/T32 (B13.22, ver {@link #ARM32_VERSION_REQUIREMENTS}):
+    /// um mnemônico sem entrada é aplicável a qualquer arquitetura que já satisfaça a
+    /// {@link Applicability} do grupo; um mnemônico mapeado só é aplicável quando a arquitetura tem
+    /// a feature real que ele exige.
+    static boolean isApplicableToArm32Version(String instruction, ArmArchitecture architecture) {
+        ArmFeature required = ARM32_VERSION_REQUIREMENTS.get(instruction);
+        return required == null || architecture.has(required);
+    }
+
     /// Campos que são NÚMERO DE REGISTRADOR: preenchidos com valores baixos e distintos para não
     /// cair em `r15`/`UNPREDICTABLE`, que muitos encodings rejeitam legitimamente.
     private static final List<String> REGISTER_FIELDS = List.of(
@@ -727,7 +812,8 @@ public final class IsaCoverageReport {
                         ? (aarch64Versioned
                                 ? isApplicableToAarch64Version(instruction.name(), occurrence, aarch64Architecture)
                                 : group.applicability() != NOT_IN_ANY_PRESET)
-                        : group.applicability().appliesTo(architecture);
+                        : group.applicability().appliesTo(architecture)
+                                && isApplicableToArm32Version(instruction.name(), architecture);
                 if (!applicable || isExcluded(instruction.name(), column, group.decodeFile(), occurrence)) {
                     rows.append(" · |");
                     continue;

@@ -68,6 +68,13 @@ package dev.vitorsilverio.armjitter.arch;
 /// existente. Quem quiser usar hoje faz `new ArmCore(memory, ArmProcessor.ARM7TDMI.architecture())`
 /// manualmente.
 ///
+/// **Escopo de B13.22** (fecha o épico NEON de 32 bits): NEON é uma opção de SÍNTESE do ARMv7-A,
+/// não um atributo fixo do nome comercial — por isso os 7 núcleos {@code Cortex-A5}-{@code A17}
+/// ganham uma entrada `_NEON` IRMÃ (aditiva, G3) resolvendo para {@link ArmArchitecture#ARMV7A_NEON},
+/// em vez de a entrada existente mudar de arquitetura. Nenhuma das 7 features irmãs do épico
+/// (RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) entra em nenhuma entrada aqui — são extensões ARMv8.x que
+/// nenhum núcleo ARMv7-A real tem (ver Javadoc de {@link ArmArchitecture#ARMV7A_NEON}).
+///
 /// Fonte: [List of ARM processors](https://en.wikipedia.org/wiki/List_of_ARM_processors)
 /// (Wikipedia, consultada 2026-08-28) para a versão de arquitetura de cada núcleo.
 public enum ArmProcessor {
@@ -171,6 +178,36 @@ public enum ArmProcessor {
 
     /// `ARMv7-A`.
     CORTEX_A17("Cortex-A17", ArmArchitecture.ARMV7A),
+
+    /// `ARMv7-A` + NEON/Advanced SIMD (B13.22) — Advanced SIMD é uma opção de SÍNTESE do núcleo
+    /// (ARM DDI 0388I "Cortex-A5 Technical Reference Manual", "Advanced SIMD and VFP options"), não
+    /// um atributo fixo do nome comercial "Cortex-A5"; **este catálogo não distingue variantes de
+    /// síntese com/sem NEON** (mesma simplificação de granularidade de SKU que já vale para
+    /// TrustZone em {@link #CORTEX_M23}/`M33` e Helium em {@link #CORTEX_M52}/`M55`/`M85`) — a
+    /// entrada SEM sufixo ({@link #CORTEX_A5}) permanece a aproximação conservadora (subconjunto
+    /// sempre correto), esta é a variante mais capaz para quem sabe que o SoC alvo sintetizou NEON.
+    CORTEX_A5_NEON("Cortex-A5 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0464F, Cortex-A7 TRM).
+    CORTEX_A7_NEON("Cortex-A7 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0344K, Cortex-A8 TRM,
+    /// "Media Processing Engine" opcional).
+    CORTEX_A8_NEON("Cortex-A8 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0388I, Cortex-A9 TRM); a
+    /// PRÓPRIA task B13.22 cita "há Cortex-A9 sem NEON" como o exemplo canônico de por que NEON é
+    /// opcional — por isso a entrada SEM sufixo continua sendo a aproximação certa por default.
+    CORTEX_A9_NEON("Cortex-A9 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0458C, Cortex-A12 TRM).
+    CORTEX_A12_NEON("Cortex-A12 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0438I, Cortex-A15 TRM).
+    CORTEX_A15_NEON("Cortex-A15 (NEON)", ArmArchitecture.ARMV7A_NEON),
+
+    /// `ARMv7-A` + NEON — mesma nota do {@link #CORTEX_A5_NEON} (ARM DDI 0464F, Cortex-A17 TRM).
+    CORTEX_A17_NEON("Cortex-A17 (NEON)", ArmArchitecture.ARMV7A_NEON),
 
     /// `ARMv8-A` AArch32-only (B14.7 — resolve a pendência de B12.6, ver Javadoc da classe):
     /// `LDA`/`STL`/`CRC32` (B14.1-B14.3) fecham a lacuna que impedia mapear este núcleo para
