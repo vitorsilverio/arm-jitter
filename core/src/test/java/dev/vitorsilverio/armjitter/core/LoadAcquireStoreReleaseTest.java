@@ -69,6 +69,17 @@ class LoadAcquireStoreReleaseTest {
         return exclusiveFamilyA32(0b1111, false, sz, rd, rn, rm);
     }
 
+    /// `LDA`/`LDAEX` com o marcador de bits 3:0 (`formValid`) violado — não é um encoding real,
+    /// tem que cair em `UNIMPLEMENTED` (G8), nunca ser confundido com outra instrução.
+    private static int loadWithMalformedMarker(int discriminator, int sz, int rt, int rn, int badMarker) {
+        return exclusiveFamilyA32(discriminator, true, sz, rt, rn, badMarker);
+    }
+
+    /// `STL` com o marcador de bits 15:12 (`nonExclusiveStoreMarkerValid`) violado.
+    private static int stlWithMalformedMarker(int sz, int rt, int rn, int badMarker) {
+        return exclusiveFamilyA32(DISC_ACQUIRE_PLAIN, false, sz, badMarker, rn, rt);
+    }
+
     // ── Encoders T32 (mesmo padrão de Thumb2LoadStoreDecoderTest, op4 novo) ─────────────────────
 
     private static final int OP4_PLAIN_BYTE = 0b1000;
@@ -115,6 +126,27 @@ class LoadAcquireStoreReleaseTest {
     private static int stlT(int op4, int rn, int rt) {
         return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b100 << 20) | (rn << 16) | (rt << 12)
                 | (0xF << 8) | (op4 << 4) | 0xF;
+    }
+
+    /// `LDAEX{,B,H}`/`STLEX{,B,H}` T32 com o marcador de `bits[11:8]` (`Rt2`/upperField) violado —
+    /// deve cair em `UNIMPLEMENTED` (não é um encoding real da forma sized não-doubleword).
+    private static int exclusiveTMalformedUpperMarker(int op4, boolean load, int rn, int rt, int badUpperMarker) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | ((load ? 0b101 : 0b100) << 20) | (rn << 16)
+                | (rt << 12) | (badUpperMarker << 8) | (op4 << 4) | (load ? 0xF : 0);
+    }
+
+    /// `LDAEX{,B,H}` T32 com o marcador de `bits[3:0]` (posição do status/`Rd`) violado na direção
+    /// load — deve cair em `UNIMPLEMENTED`.
+    private static int ldaexTMalformedLoadMarker(int op4, int rn, int rt, int badLowMarker) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | (0b101 << 20) | (rn << 16) | (rt << 12)
+                | (0xF << 8) | (op4 << 4) | badLowMarker;
+    }
+
+    /// `LDA{,B,H}`/`STL{,B,H}` T32 com `bits[11:8]`/`bits[3:0]` (sempre marcadores fixos nesta
+    /// família) violados — deve cair em `UNIMPLEMENTED`.
+    private static int plainTMalformedMarker(int op4, boolean load, int rn, int rt, int upperMarker, int lowMarker) {
+        return (0b1110100 << 25) | (1 << 23) | (1 << 22) | ((load ? 0b101 : 0b100) << 20) | (rn << 16)
+                | (rt << 12) | (upperMarker << 8) | (op4 << 4) | lowMarker;
     }
 
     private static int reservedOp4T(int rn, int rt) {
@@ -398,6 +430,208 @@ class LoadAcquireStoreReleaseTest {
             memory.put32(0, encoding);
             assertEquals(InstructionKind.UNIMPLEMENTED,
                     new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void ldaexWithProgramCounterBaseOrDestinationIsUndefined() {
+        int[] encodings = {ldaex(0b00, 1, 15), ldaex(0b00, 15, 0)};
+        for (int encoding : encodings) {
+            TestAddressSpace memory = new TestAddressSpace(8);
+            memory.put32(0, encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    // ── Marcadores/campos reservados violados: G8, nunca confundir com outra instrução ─────────
+
+    @Test
+    void ldaWithMalformedLoadMarkerIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put32(0, loadWithMalformedMarker(DISC_ACQUIRE_PLAIN, 0b00, 1, 0, 0x3));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void ldaexWithMalformedLoadMarkerIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put32(0, loadWithMalformedMarker(DISC_ACQUIRE_EXCLUSIVE, 0b00, 1, 0, 0x3));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void stlWithMalformedStatusMarkerIsUnimplemented() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put32(0, stlWithMalformedMarker(0b00, 2, 0, 0x3));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumb2LdaexWithProgramCounterBaseOrDestinationIsUndefined() {
+        int[] encodings = {
+                ldaexT(OP4_EXCLUSIVE_WORD, 15, 1), // Rn=PC
+                ldaexT(OP4_EXCLUSIVE_WORD, 0, 15), // Rt=PC
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2StlexWithProgramCounterBaseOrSourceIsUndefined() {
+        int[] encodings = {
+                stlexT(OP4_EXCLUSIVE_WORD, 15, 1, 2), // Rn=PC
+                stlexT(OP4_EXCLUSIVE_WORD, 0, 15, 2), // Rt=PC
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2StlexUnpredictableRegisterCombinationsAreUndefined() {
+        int[] encodings = {
+                stlexT(OP4_EXCLUSIVE_WORD, 0, 1, 15), // Rd=PC
+                stlexT(OP4_EXCLUSIVE_WORD, 0, 1, 0),  // Rd == Rn
+                stlexT(OP4_EXCLUSIVE_WORD, 0, 1, 1),  // Rd == Rt
+                stlexdT(0, 2, 3, 3),                  // Rd == Rt2 (só existe na forma doubleword)
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    // ── T32: as formas byte/half também decodificam (só word foi testada acima) ────────────────
+
+    @Test
+    void thumb2AcquireReleasePlainByteAndHalfFormsDecode() {
+        int[][] cases = {{OP4_PLAIN_BYTE, 1}, {OP4_PLAIN_HALF, 2}};
+        for (int[] c : cases) {
+            TestAddressSpace loadMemory = putThumb32(new TestAddressSpace(8), ldaT(c[0], 0, 1));
+            assertEquals(InstructionKind.LOAD,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(loadMemory, 0).kind(),
+                    "op4=" + c[0]);
+            TestAddressSpace storeMemory = putThumb32(new TestAddressSpace(8), stlT(c[0], 0, 1));
+            assertEquals(InstructionKind.STORE,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(storeMemory, 0).kind(),
+                    "op4=" + c[0]);
+        }
+    }
+
+    @Test
+    void thumb2AcquireReleaseExclusiveByteAndHalfFormsDecode() {
+        int[] op4s = {OP4_EXCLUSIVE_BYTE, OP4_EXCLUSIVE_HALF};
+        for (int op4 : op4s) {
+            TestAddressSpace loadMemory = putThumb32(new TestAddressSpace(8), ldaexT(op4, 0, 1));
+            assertEquals(InstructionKind.LOAD_EXCLUSIVE,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(loadMemory, 0).kind(), "op4=" + op4);
+            TestAddressSpace storeMemory = putThumb32(new TestAddressSpace(8), stlexT(op4, 0, 1, 2));
+            assertEquals(InstructionKind.STORE_EXCLUSIVE,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(storeMemory, 0).kind(), "op4=" + op4);
+        }
+    }
+
+    @Test
+    void thumb2LdaexMalformedUpperMarkerIsUnimplemented() {
+        TestAddressSpace memory = putThumb32(new TestAddressSpace(8),
+                exclusiveTMalformedUpperMarker(OP4_EXCLUSIVE_WORD, true, 0, 1, 0x3));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumb2LdaexMalformedLoadMarkerIsUnimplemented() {
+        TestAddressSpace memory = putThumb32(new TestAddressSpace(8),
+                ldaexTMalformedLoadMarker(OP4_EXCLUSIVE_WORD, 0, 1, 0x3));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumb2LdaexdMalformedPairIsUnimplemented() {
+        int[] encodings = {
+                ldaexdT(0, 3, 4), // Rt impar
+                ldaexdT(0, 2, 5), // Rt2 != Rt+1
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2StlexdMalformedPairIsUnimplemented() {
+        int[] encodings = {
+                stlexdT(0, 3, 4, 6), // Rt impar
+                stlexdT(0, 2, 5, 6), // Rt2 != Rt+1
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2LdaWithProgramCounterBaseOrDestinationIsUndefined() {
+        int[] encodings = {
+                ldaT(OP4_PLAIN_WORD, 15, 1), // Rn=PC
+                ldaT(OP4_PLAIN_WORD, 0, 15), // Rt=PC
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2StlWithProgramCounterBaseOrSourceIsUndefined() {
+        int[] encodings = {
+                stlT(OP4_PLAIN_WORD, 15, 1), // Rn=PC
+                stlT(OP4_PLAIN_WORD, 0, 15), // Rt=PC
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2LdaMalformedMarkerIsUnimplemented() {
+        int[] encodings = {
+                plainTMalformedMarker(OP4_PLAIN_WORD, true, 0, 1, 0x3, 0xF), // upperMarker errado
+                plainTMalformedMarker(OP4_PLAIN_WORD, true, 0, 1, 0xF, 0x3), // lowMarker errado
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+        }
+    }
+
+    @Test
+    void thumb2StlMalformedMarkerIsUnimplemented() {
+        int[] encodings = {
+                plainTMalformedMarker(OP4_PLAIN_WORD, false, 0, 1, 0x3, 0xF),
+                plainTMalformedMarker(OP4_PLAIN_WORD, false, 0, 1, 0xF, 0x3),
+        };
+        for (int encoding : encodings) {
+            TestAddressSpace memory = putThumb32(new TestAddressSpace(8), encoding);
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
         }
     }
 
