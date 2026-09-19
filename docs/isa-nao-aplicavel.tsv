@@ -84,7 +84,13 @@ VRINTX*	*	ARMv8-A (VFP)	vfp.decode
 VJCVT	*	ARMv8.3-A (conversão com semântica de JavaScript)
 
 # ── ARMv8.2-A FP16: as formas `_hp` (meia precisão) ──────────────────────────────────────────
-*_hp	*	ARMv8.2-A FP16; VFPv2/VFPv3 só têm precisão simples e dupla
+# B14.6b: ESTREITADA de `*` (todas as arquiteturas) para as 7 colunas pré-v8-A — `*` apagaria
+# também a célula ✅ real que a B14.6b acabou de implementar sob `ARMV8A_32` quando a B14.7 criar
+# a coluna `v8-A/32` (mesma operação que a B14.2 já fez para `LDA`/`STL`, e pelo mesmo motivo).
+# `VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` continuam de fora mesmo sob `ARMV8A_32` (dependem de
+# `FPSCR.RMode`, nem as formas `sp`/`dp` estão implementadas — B14.5 "Não inclui") — ficam para a
+# B14.7 registrar com linha própria quando a coluna nova expuser a lacuna.
+*_hp	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8.2-A FP16; VFPv2/VFPv3 só têm precisão simples e dupla
 
 # ── ARMv8-M Security Extension (perfil M) ────────────────────────────────────────────────────
 BXNS	*	ARMv8-M Security Extension

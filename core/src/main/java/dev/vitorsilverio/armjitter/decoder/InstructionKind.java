@@ -240,6 +240,41 @@ public enum InstructionKind {
     /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate`=`1` para `VINS`, `0` para
     /// `VMOVX` (ver `IrOp.VfpMoveHalfLane#insert`).
     VFP_MOVE_HALF_LANE,
+
+    // ── B14.6b: aritmética `_hp` (FEAT_FP16) — Kind/records PRÓPRIOS, sempre meia precisão (sem
+    // `signedAccess` de precisão: só existe UMA precisão aqui) — ver o comentário equivalente em
+    // `IrOp` sobre por que a Armadilha 2 de B14.6 foi resolvida assim. ──
+
+    /// `VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp` (espaço condicional) e
+    /// `VMAXNM_hp`/`VMINNM_hp` (espaço incondicional), B14.6b. `destinationRegister`=Vd,
+    /// `sourceRegister`=Vn (`-1` nas formas unárias), `secondSourceRegister`=Vm,
+    /// `immediate`=ordinal de `IrOp.VfpOperation`.
+    VFP_ALU_HALF,
+    /// `VMOV.F16 Vd,#imm` (B14.6b). `destinationRegister`=Vd, `immediate`=`imm8` cru (ainda não
+    /// expandido).
+    VFP_MOVE_IMMEDIATE_HALF,
+    /// `VCMP_hp`/`VCMPE_hp` (B14.6b). `destinationRegister`=Vd, `secondSourceRegister`=Vm (`-1`
+    /// quando compara com zero), `immediate` bit 0 = compara com zero, bit 1 = `VCMPE_hp`.
+    VFP_COMPARE_HALF,
+    /// `VSEL_hp` (B14.6b, espaço VFP incondicional). `destinationRegister`=Vd,
+    /// `sourceRegister`=Vn, `secondSourceRegister`=Vm, `immediate`=`cc` cru (0-3).
+    VFP_SELECT_HALF,
+    /// `VRINT{A,N,P,M}_hp` (B14.6b, espaço VFP incondicional). `destinationRegister`=Vd,
+    /// `secondSourceRegister`=Vm, `immediate`=ordinal de `AdvSimdLanes.RoundingMode`.
+    VFP_ROUND_HALF,
+    /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b, espaço VFP incondicional). `destinationRegister`=Vd
+    /// (inteiro de 32 bits), `secondSourceRegister`=Vm (meia precisão), `immediate` empacota
+    /// bits 2:0 = ordinal de `AdvSimdLanes.RoundingMode`, bit 3 = sinal (`1`=`VCVTxS`).
+    VFP_CONVERT_ROUNDED_HALF,
+    /// `VCVT_fix_hp` (B14.6b). `destinationRegister`=Vd, `immediate` empacota bit0=toFixedPoint,
+    /// bit1=unsigned, bit2=is32Bit, bits[N:3]=imm cru — mesmo layout de `VFP_CONVERT_FIXED`.
+    VFP_CONVERT_FIXED_HALF,
+    /// `VLDR_hp` (B14.6b). `destinationRegister`=Vd, `sourceRegister`=base (Rn),
+    /// `immediate`=offset em bytes já resolvido (±`imm8`×4, mesma escala fixa de `VFP_LOAD`).
+    VFP_LOAD_HALF,
+    /// `VSTR_hp` (B14.6b) — ver {@link #VFP_LOAD_HALF}.
+    VFP_STORE_HALF,
+
     /// `VLDR`. `destinationRegister`=Vd, `sourceRegister`=base (Rn), `immediate`=offset em bytes
     /// já resolvido (±`imm8`×4), `signedAccess`=precisão dupla.
     VFP_LOAD,

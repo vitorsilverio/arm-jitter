@@ -39,7 +39,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate,
         IrOp.MveVectorDualAccumulate, IrOp.MveVectorDualAccumulateLong, IrOp.MveVectorRoundingDualAccumulateHigh,
         IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32, IrOp.VfpSelect,
-        IrOp.VfpRound, IrOp.VfpConvertRounded, IrOp.VfpMoveHalfLane {
+        IrOp.VfpRound, IrOp.VfpConvertRounded, IrOp.VfpMoveHalfLane,
+        IrOp.VfpAluHalf, IrOp.VfpMoveImmediateHalf, IrOp.VfpCompareHalf, IrOp.VfpSelectHalf,
+        IrOp.VfpRoundHalf, IrOp.VfpConvertRoundedHalf, IrOp.VfpConvertFixedHalf, IrOp.VfpLoadHalf,
+        IrOp.VfpStoreHalf {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -393,6 +396,26 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B14.6: `VMOVX`/`VINS` (ARMv8-A, `FEAT_FP16`, espaço VFP incondicional) — ver
         /// {@link VfpMoveHalfLane}.
         public static final int VFP_MOVE_HALF_LANE = 172;
+        /// B14.6b: aritmética/unárias `_hp` (`VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp`,
+        /// espaço condicional) + `VMAXNM_hp`/`VMINNM_hp` (espaço incondicional) — ver
+        /// {@link VfpAluHalf}. Kind ÚNICO para os dois espaços, mesma economia de {@link #VFP_ALU}.
+        public static final int VFP_ALU_HALF = 173;
+        /// B14.6b: `VMOV.F16 Vd,#imm` — ver {@link VfpMoveImmediateHalf}.
+        public static final int VFP_MOVE_IMMEDIATE_HALF = 174;
+        /// B14.6b: `VCMP_hp`/`VCMPE_hp` — ver {@link VfpCompareHalf}.
+        public static final int VFP_COMPARE_HALF = 175;
+        /// B14.6b: `VSEL_hp` (espaço incondicional) — ver {@link VfpSelectHalf}.
+        public static final int VFP_SELECT_HALF = 176;
+        /// B14.6b: `VRINT{A,N,P,M}_hp` (espaço incondicional) — ver {@link VfpRoundHalf}.
+        public static final int VFP_ROUND_HALF = 177;
+        /// B14.6b: `VCVT{A,N,P,M}{S,U}_hp` (espaço incondicional) — ver {@link VfpConvertRoundedHalf}.
+        public static final int VFP_CONVERT_ROUNDED_HALF = 178;
+        /// B14.6b: `VCVT_fix_hp` — ver {@link VfpConvertFixedHalf}.
+        public static final int VFP_CONVERT_FIXED_HALF = 179;
+        /// B14.6b: `VLDR_hp` — ver {@link VfpLoadHalf}.
+        public static final int VFP_LOAD_HALF = 180;
+        /// B14.6b: `VSTR_hp` — ver {@link VfpStoreHalf}.
+        public static final int VFP_STORE_HALF = 181;
     }
 
     /// Operacao ALU generica.
@@ -1524,6 +1547,163 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.VFP_MOVE_HALF_LANE; }
     }
 
+    // ── B14.6b: aritmética `_hp` (FEAT_FP16) — Kind/records PRÓPRIOS (Armadilha 2 de B14.6:
+    // `boolean doublePrecision` não expressa 3 precisões; mudar seu tipo nos records SP/DP
+    // quebraria G3 — pattern matching exaustivo em toda parte do projeto — então a meia precisão
+    // ganha sua PRÓPRIA família de Kind/record, mesmo padrão que {@link VfpMoveHalfLane} (B14.6a)
+    // já usou). Todos operam em registradores `S` (5 bits, banco de 32) — o valor de 16 bits mora
+    // SEMPRE nos bits baixos (`Sx[15:0]`); o executor zero-estende os bits altos do destino ao
+    // escrever (mesma convenção de {@link VfpMoveHalfLane#insert} `VMOVX`), decisão documentada no
+    // `## Resultado` da task (o ARM ARM deixa os bits altos UNKNOWN; zero-estender é determinístico
+    // e reusa a mesma convenção já adotada por VMOVX). Ponte para `binary16`:
+    // {@link AdvSimdLanes#halfBits}/{@link AdvSimdLanes#halfToFloat} — o mesmo núcleo que o NEON
+    // FP16 já usa (RFC B13.2 D1), nunca uma conversão de bits nova. ──
+
+    /// Aritmética/unárias `_hp` (B14.6b): `VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp`
+    /// (espaço condicional) e `VMAXNM_hp`/`VMINNM_hp` (espaço incondicional) — MESMO `op` de
+    /// {@link VfpAlu}, sem campo de precisão (sempre meia precisão). Formas unárias usam só `vm`
+    /// (`vn=-1`, mesma convenção de {@link VfpAlu#vn}).
+    record VfpAluHalf(
+            /// Operação a executar (reusa {@link VfpOperation}; `MAXNM`/`MINNM` só chegam pelo
+            /// espaço incondicional, o resto pelo condicional).
+            VfpOperation op,
+            /// Registrador de destino (também acumulador de entrada para `MLA`/`MLS`/`FMA`/`FMS`).
+            int vd,
+            /// Primeiro registrador de origem (ignorado pelas formas unárias).
+            int vn,
+            /// Segundo registrador de origem (único operando das formas unárias).
+            int vm,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_ALU_HALF; }
+    }
+
+    /// `VMOV.F16 Vd,#imm` (B14.6b): grava um imediato de meia precisão já expandido
+    /// (`VFPExpandImm` para `N=16`, ver `StandardIrBuilder#vfpExpandImmHalf`).
+    record VfpMoveImmediateHalf(
+            /// Registrador de destino.
+            int vd,
+            /// Bits crus do imediato de 16 bits (zero-estendido).
+            int immediateBits,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_MOVE_IMMEDIATE_HALF; }
+    }
+
+    /// `VCMP_hp`/`VCMPE_hp` (B14.6b): compara `vd` com `vm` (ou com zero) em meia precisão e grava
+    /// só `FPSCR.NZCV` — mesma tabela de {@link VfpCompare}.
+    record VfpCompareHalf(
+            /// `true` para as formas `VCMP(E)_hp Vd, #0.0` (compara com zero em vez de `vm`).
+            boolean compareWithZero,
+            /// `true` para `VCMPE_hp`.
+            boolean signalOnQuietNaN,
+            /// Registrador comparado.
+            int vd,
+            /// Segundo operando da comparação (ignorado quando `compareWithZero`).
+            int vm,
+            /// Condição necessária para executar a comparação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_COMPARE_HALF; }
+    }
+
+    /// `VSEL_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de {@link VfpSelect}, sem
+    /// campo de precisão (sempre `S`/meia precisão): `vd = selectCondition ? vn : vm`, cópia de
+    /// BITS crua (nunca aritmética).
+    record VfpSelectHalf(
+            /// Registrador de destino.
+            int vd,
+            /// Registrador escolhido quando {@link #selectCondition} é verdadeira.
+            int vn,
+            /// Registrador escolhido quando {@link #selectCondition} é falsa.
+            int vm,
+            /// Condição de SELEÇÃO (`cc:2` do encoding) — avaliada contra o CPSR.
+            Condition selectCondition,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_SELECT_HALF; }
+    }
+
+    /// `VRINT{A,N,P,M}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de {@link VfpRound}
+    /// em meia precisão: arredonda `vm` para valor integral MANTENDO ponto flutuante.
+    record VfpRoundHalf(
+            /// Direção de arredondamento (do campo `rm` do encoding).
+            AdvSimdLanes.RoundingMode direction,
+            /// Registrador de destino.
+            int vd,
+            /// Registrador de origem.
+            int vm,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_ROUND_HALF; }
+    }
+
+    /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de
+    /// {@link VfpConvertRounded}: converte `vm` (meia precisão) para inteiro de 32 bits em `vd`.
+    record VfpConvertRoundedHalf(
+            /// Direção de arredondamento (do campo `rm`).
+            AdvSimdLanes.RoundingMode direction,
+            /// `true` = conversão com sinal (`VCVTxS`), `false` = sem sinal (`VCVTxU`).
+            boolean signed,
+            /// Registrador de destino (`S`, inteiro de 32 bits).
+            int vd,
+            /// Registrador de origem (`S`, meia precisão).
+            int vm,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT_ROUNDED_HALF; }
+    }
+
+    /// `VCVT_fix_hp` (B14.6b) — mesma semântica de {@link VfpConvertFixed} em meia precisão:
+    /// converte, no MESMO `vd`, entre meia precisão e um inteiro fixo empacotado nos bits baixos.
+    record VfpConvertFixedHalf(
+            /// `true` = float → fixo; `false` = fixo → float.
+            boolean toFixedPoint,
+            /// `true` = inteiro fixo sem sinal.
+            boolean unsignedFixedPoint,
+            /// `true` = campo fixo de 32 bits; `false` = 16 bits.
+            boolean fixedPointIs32Bit,
+            /// Quantidade de bits fracionários do formato fixo.
+            int fractionBits,
+            /// Registrador de origem e destino (mesmo registrador).
+            int vd,
+            /// Condição necessária para executar a conversão.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT_FIXED_HALF; }
+    }
+
+    /// `VLDR_hp` (B14.6b) — mesma semântica de {@link VfpLoad} em meia precisão: carrega
+    /// `Vd[15:0]` de `[base + offsetBytes]` (halfword, 2 bytes), zero-estendendo `Vd[31:16]`.
+    record VfpLoadHalf(
+            /// Registrador de destino.
+            int vd,
+            /// Registrador base do endereço.
+            int base,
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1` — ver
+            /// {@link VfpLoad#baseValueOverride}.
+            int baseValueOverride,
+            /// Offset em bytes (±`imm8`×4 — mesma escala fixa de {@link VfpLoad}, independente do
+            /// tamanho do acesso, ver ARM DDI 0406C A8.8.333/A7.7.230), já resolvido pelo lifter.
+            int offsetBytes,
+            /// Condição necessária para executar o load.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_LOAD_HALF; }
+    }
+
+    /// `VSTR_hp` (B14.6b) — ver {@link VfpLoadHalf}.
+    record VfpStoreHalf(
+            /// Registrador de origem.
+            int vd,
+            /// Registrador base do endereço.
+            int base,
+            /// Valor fixo para usar como base quando o registrador base é `PC`, ou `-1`.
+            int baseValueOverride,
+            /// Offset em bytes (±`imm8`×4), já resolvido pelo lifter.
+            int offsetBytes,
+            /// Condição necessária para executar o store.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_STORE_HALF; }
+    }
+
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já
     /// expandido pelo decoder/lifter (decode fica em B3.5).
     record VfpMoveImmediate(
@@ -1583,7 +1763,17 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// `VCVT.U32.F32`: simples → inteiro sem sinal (round-toward-zero, satura em `[0, 2³²-1]`, NaN→0).
         F32_TO_U32,
         /// `VCVT.U32.F64`: dupla → inteiro sem sinal (round-toward-zero, satura em `[0, 2³²-1]`, NaN→0).
-        F64_TO_U32
+        F64_TO_U32,
+        /// `VCVT.F16.S32` (B14.6b, `VCVT_int_hp`): inteiro com sinal → meia precisão.
+        S32_TO_F16,
+        /// `VCVT.F16.U32` (B14.6b, `VCVT_int_hp`): inteiro sem sinal → meia precisão.
+        U32_TO_F16,
+        /// `VCVT.S32.F16` (B14.6b, `VCVT_hp_int`): meia precisão → inteiro com sinal
+        /// (round-toward-zero, satura, NaN→0).
+        F16_TO_S32,
+        /// `VCVT.U32.F16` (B14.6b, `VCVT_hp_int`): meia precisão → inteiro sem sinal
+        /// (round-toward-zero, satura em `[0, 2³²-1]`, NaN→0).
+        F16_TO_U32
     }
 
     /// `VCVT` na forma default (não `VCVTR`, que usaria `FPSCR.RMode` — fora de escopo, RMode≠RN

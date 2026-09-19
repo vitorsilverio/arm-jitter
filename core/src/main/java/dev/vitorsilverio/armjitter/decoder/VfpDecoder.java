@@ -86,6 +86,18 @@ public final class VfpDecoder implements DecoderExtension {
         if (isVmovHalfEncoding(raw)) {
             return decodeVmovHalf(raw, address, condition);
         }
+        if (isHpCoprocessorSpaceEncoding(raw)) {
+            // Reivindicar o espaço mesmo SEM `FP16_ARITHMETIC` (recusa explícita, G8 — mesmo
+            // padrão de `isVmovHalfEncoding`/`decodeVmovHalf`: sem isto, `claimsThisDecoder`
+            // devolveria `false`, `tryDecode` devolveria `null`, e o `CoprocessorDecoder` genérico
+            // capturaria este `bit4=0` CDP-shape de cp9/cp10/cp11 como coprocessador arbitrário —
+            // corrupção silenciosa, não `UNIMPLEMENTED`).
+            if (!architecture.has(ArmFeature.FP16_ARITHMETIC)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            DecodedInstruction decoded = decodeHalfPrecisionConditionalSpace(raw, address, condition);
+            return decoded != null ? decoded : DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
         if (!isVfpCoprocessorSpace(raw)) {
             return null;
         }
@@ -169,8 +181,9 @@ public final class VfpDecoder implements DecoderExtension {
         }
         int sizeField = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
         if (sizeField == UNCONDITIONAL_SIZE_HALF_PRECISION) {
-            // `VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp` — FEAT_FP16, B14.6.
-            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            // `VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp`/`VRINT_hp`/`VCVT_hp` (B14.6b) — `null` aqui vira
+            // `UNIMPLEMENTED` no `tryDecode` chamador (mesma conversão de todo o resto da classe).
+            return decodeUnconditionalHalfPrecision(raw, address, condition);
         }
         boolean doublePrecision = sizeField == SIZE_DOUBLE;
         boolean bit23 = (raw & BIT23_MASK) != 0;
@@ -307,12 +320,87 @@ public final class VfpDecoder implements DecoderExtension {
                 vd, -1, vm, insert ? 1 : 0, false, false, false, 0, false);
     }
 
+    /// B14.6b: `VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp`/`VRINT_hp`/`VCVT_hp` (as 5 formas `sz=1` do espaço
+    /// incondicional). Gate PRÓPRIO por `FP16_ARITHMETIC` (independente de `ARMV8_FP`, já checado
+    /// por quem chama) — mesmo padrão de {@link #decodeMovxVins}.
+    private DecodedInstruction decodeUnconditionalHalfPrecision(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.FP16_ARITHMETIC)) {
+            return null;
+        }
+        boolean bit23 = (raw & BIT23_MASK) != 0;
+        if (!bit23) {
+            return decodeVselHalf(raw, address, condition);
+        }
+        int bits2120 = (raw >>> BITS21_20_SHIFT) & BITS21_20_MASK;
+        if (bits2120 == 0) {
+            return decodeMaxNmMinNmHalf(raw, address, condition);
+        }
+        if (bits2120 == BITS21_20_ROUND_OR_CONVERT && (raw & BIT19_MASK) != 0) {
+            return decodeRoundOrConvertHalf(raw, address, condition);
+        }
+        return null;
+    }
+
+    /// `VSEL_hp` — espelho de {@link #decodeVsel} sem `doublePrecision` (sempre `S`).
+    private DecodedInstruction decodeVselHalf(int raw, int address, Condition condition) {
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, false);
+        int vd = vd(raw, false);
+        int vm = vm(raw, false);
+        int cc = (raw >>> BITS21_20_SHIFT) & BITS21_20_MASK;
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_SELECT_HALF,
+                vd, vn, vm, cc, false, false, false);
+    }
+
+    /// `VMAXNM_hp`/`VMINNM_hp` — espelho de {@link #decodeMaxNmMinNm} sem `doublePrecision`.
+    private DecodedInstruction decodeMaxNmMinNmHalf(int raw, int address, Condition condition) {
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, false);
+        int vd = vd(raw, false);
+        int vm = vm(raw, false);
+        boolean isMin = (raw & BIT6_MASK) != 0;
+        return vfpAluHalf(isMin ? IrOp.VfpOperation.MINNM : IrOp.VfpOperation.MAXNM, vd, vn, vm, address, raw, condition);
+    }
+
+    /// `VRINT_hp`/`VCVT_hp` — espelho de {@link #decodeRoundOrConvert} sem `doublePrecision`
+    /// (origem/destino sempre `S`).
+    private DecodedInstruction decodeRoundOrConvertHalf(int raw, int address, Condition condition) {
+        if ((raw & BIT6_MASK) == 0) {
+            return null;
+        }
+        boolean isVcvt = (raw & BIT18_MASK) != 0;
+        int rm = (raw >>> RM_SHIFT) & RM_MASK;
+        AdvSimdLanes.RoundingMode direction = roundingModeFromField(rm);
+        if (!isVcvt) {
+            if ((raw & BIT7_MASK) != 0) {
+                return null;
+            }
+            int vd = vd(raw, false);
+            int vm = vm(raw, false);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ROUND_HALF,
+                    vd, -1, vm, direction.ordinal(), false, false, false);
+        }
+        boolean signed = (raw & BIT7_MASK) != 0;
+        int vdSingle = vd(raw, false);
+        int vmSource = vm(raw, false);
+        int packed = direction.ordinal() | (signed ? 0b1000 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CONVERT_ROUNDED_HALF,
+                vdSingle, -1, vmSource, packed, false, false, false);
+    }
+
     private boolean claimsThisDecoder(int raw) {
         if (isVmovHalfEncoding(raw)) {
             // B22.2: `VMOV_half` mora fora do gate `isVfpCoprocessorSpace` (`bits[11:8]=1001`).
             // Reivindicar mesmo SEM `HALF_PRECISION_FP` (recusa explícita, G8) — basta o núcleo
             // ter VFP. `|| HALF_PRECISION_FP` cobre um preset hipotético de meia precisão sem VFPv2.
             return architecture.has(ArmFeature.VFPV2) || architecture.has(ArmFeature.HALF_PRECISION_FP);
+        }
+        if (isHpCoprocessorSpaceEncoding(raw)) {
+            // B14.6b: as 22 linhas `_hp` do espaço condicional (`bits[11:8]=1001`, `bits2724 ∈
+            // {0xD,0xE}`) — reivindicar SEMPRE (mesmo padrão de `isVmovHalfEncoding` acima), o
+            // gate por `FP16_ARITHMETIC` fica dentro de `tryDecode` (decide `UNIMPLEMENTED` vs
+            // decode real). Devolver `false` aqui sem a feature faria `tryDecode` devolver `null`
+            // e o espaço voltar pro `CoprocessorDecoder` genérico — a mesma corrupção silenciosa
+            // que a B22.2 fechou para `VMOV_half`.
+            return true;
         }
         return architecture.has(ArmFeature.VFPV2) && isVfpCoprocessorSpace(raw);
     }
@@ -322,6 +410,135 @@ public final class VfpDecoder implements DecoderExtension {
         boolean coprocessorSpace = bits2724 == 0xC || bits2724 == 0xD || bits2724 == 0xE;
         int size = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
         return coprocessorSpace && (size == SIZE_SINGLE || size == SIZE_DOUBLE);
+    }
+
+    /// B14.6b: as 22 linhas `_hp` do espaço CONDICIONAL (`vfp.decode`, diferente do espaço
+    /// incondicional que {@link #isUnconditionalVfpSpace} já cobre) — `bits2724 ∈ {0xD,0xE}`
+    /// (`VLDR_VSTR_hp` mora em `0xD`; o resto da aritmética/conversão mora em `0xE`, NÃO existe
+    /// `_hp` em `0xC`: `VMOV_64_sp/dp` e `VLDM/VSTM` increment-after não têm forma de meia
+    /// precisão) com `size=0x9` (o mesmo valor de {@link #UNCONDITIONAL_SIZE_HALF_PRECISION},
+    /// reaproveitado aqui — o campo é bit-a-bit idêntico nos dois espaços).
+    private static boolean isHpCoprocessorSpaceEncoding(int raw) {
+        int bits2724 = (raw >>> COPROCESSOR_SPACE_SHIFT) & COPROCESSOR_SPACE_MASK;
+        boolean space = bits2724 == 0xD || bits2724 == 0xE;
+        int size = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
+        return space && size == UNCONDITIONAL_SIZE_HALF_PRECISION;
+    }
+
+    /// B14.6b: dispatcher do espaço condicional `_hp` — espelha {@link #decodeCdpOrMrcSpace}/
+    /// {@link #decodeLoadStoreOrLoadStoreMultipleDb} mas só para as formas que REALMENTE existem
+    /// em meia precisão (`vfp.decode` medido, ver Contexto da task).
+    private DecodedInstruction decodeHalfPrecisionConditionalSpace(int raw, int address, Condition condition) {
+        int bits2724 = (raw >>> COPROCESSOR_SPACE_SHIFT) & COPROCESSOR_SPACE_MASK;
+        return switch (bits2724) {
+            // `bit4=1` (MRC/MSR-shape) não tem forma `_hp` — `VMOV_single`/`VMSR_VMRS`/etc. só sp/dp.
+            case 0xE -> (raw & BIT4_MASK) == 0 ? decodeHalfPrecisionDataProcessing(raw, address, condition) : null;
+            case 0xD -> decodeHalfPrecisionLoadStore(raw, address, condition);
+            default -> null;
+        };
+    }
+
+    /// B14.6b: espelho de {@link #decodeDataProcessing} em meia precisão — mesma extração de
+    /// `op1`, mas todo registrador é `%vX_sp` (nunca `%vX_dp`: meia precisão SEMPRE mora num `S`
+    /// inteiro, nunca combina num `D`) e o resultado é {@link IrOp.VfpAluHalf}, não
+    /// {@link IrOp.VfpAlu} (Armadilha 2 de B14.6).
+    private DecodedInstruction decodeHalfPrecisionDataProcessing(int raw, int address, Condition condition) {
+        int op1 = ((raw & BIT23_MASK) != 0 ? 0b100 : 0)
+                | ((raw & BIT21_MASK) != 0 ? 0b010 : 0)
+                | ((raw & BIT20_MASK) != 0 ? 0b001 : 0);
+        if (op1 == 0b111) {
+            return decodeHalfImmediateOrTwoOperandFamily(raw, address, condition);
+        }
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, false);
+        int vd = vd(raw, false);
+        int vm = vm(raw, false);
+        boolean bit6 = (raw & BIT6_MASK) != 0;
+        return switch (op1) {
+            case 0b000 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.MLS : IrOp.VfpOperation.MLA, vd, vn, vm, address, raw, condition);
+            case 0b010 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.NMUL : IrOp.VfpOperation.MUL, vd, vn, vm, address, raw, condition);
+            case 0b011 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.SUB : IrOp.VfpOperation.ADD, vd, vn, vm, address, raw, condition);
+            case 0b100 -> bit6 ? null : vfpAluHalf(IrOp.VfpOperation.DIV, vd, vn, vm, address, raw, condition);
+            // VNMLS_hp (bit6=0) / VNMLA_hp (bit6=1) — mesma ordem invertida de `decodeDataProcessing`.
+            case 0b001 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.NMLA : IrOp.VfpOperation.NMLS, vd, vn, vm, address, raw, condition);
+            case 0b110 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
+                    : vfpAluHalf(bit6 ? IrOp.VfpOperation.FMS : IrOp.VfpOperation.FMA, vd, vn, vm, address, raw, condition);
+            case 0b101 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
+                    : vfpAluHalf(bit6 ? IrOp.VfpOperation.FNMA : IrOp.VfpOperation.FNMS, vd, vn, vm, address, raw, condition);
+            default -> null;
+        };
+    }
+
+    /// B14.6b: espelho de {@link #decodeImmediateOrTwoOperandFamily} em meia precisão.
+    /// **`VMOV_reg_hp` não existe** (nenhuma linha em `vfp.decode` — copiar um `S` inteiro já
+    /// cobre o caso, ARM não define um mnemônico `_hp` redundante): `opc2=0x0,bit7=0` é reservado.
+    private DecodedInstruction decodeHalfImmediateOrTwoOperandFamily(int raw, int address, Condition condition) {
+        int vd = vd(raw, false);
+        if ((raw & BIT6_MASK) == 0) {
+            // VMOV_imm_hp.
+            int imm8 = ((raw >>> VN_NIBBLE_SHIFT) & NIBBLE_MASK) << 4 | (raw & NIBBLE_MASK);
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_MOVE_IMMEDIATE_HALF,
+                    vd, -1, -1, imm8, true, false, false);
+        }
+        int opc2 = (raw >>> VN_NIBBLE_SHIFT) & NIBBLE_MASK;
+        boolean bit7 = (raw & BIT7_MASK) != 0;
+        int vm = vm(raw, false);
+        return switch (opc2) {
+            case 0x0 -> !bit7 ? null : vfpAluHalf(IrOp.VfpOperation.ABS, vd, -1, vm, address, raw, condition);
+            case 0x1 -> vfpAluHalf(bit7 ? IrOp.VfpOperation.SQRT : IrOp.VfpOperation.NEG, vd, -1, vm, address, raw, condition);
+            case 0x4, 0x5 -> {
+                boolean compareWithZero = opc2 == 0x5;
+                boolean signalOnQuietNaN = bit7;
+                yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_COMPARE_HALF,
+                        vd, -1, compareWithZero ? -1 : vm, (compareWithZero ? 1 : 0) | (signalOnQuietNaN ? 2 : 0), false, false, false);
+            }
+            // VCVT_int_hp: inteiro de 32 bits (`%vm_sp`, banco S comum) -> meia precisão; bit7=sinal.
+            case 0x8 -> vfpConvert(bit7 ? IrOp.VfpConversion.S32_TO_F16 : IrOp.VfpConversion.U32_TO_F16, vd, vm, address, raw, condition);
+            // VCVT_hp_int: meia precisão -> inteiro de 32 bits; exige bit7=rz=1 (VCVTR fora de
+            // escopo, mesma decisão de `decodeImmediateOrTwoOperandFamily`); opc2 bit0=sinal.
+            case 0xC, 0xD -> {
+                if (!bit7) {
+                    yield null;
+                }
+                boolean signedConvert = opc2 == 0xD;
+                yield vfpConvert(signedConvert ? IrOp.VfpConversion.F16_TO_S32 : IrOp.VfpConversion.F16_TO_U32,
+                        vd, vm, address, raw, condition);
+            }
+            case 0xA, 0xB, 0xE, 0xF -> {
+                boolean toFixedPoint = (raw & BIT18_MASK) != 0;
+                boolean unsignedFixedPoint = (raw & BIT16_MASK) != 0;
+                boolean fixedPointIs32Bit = bit7;
+                int imm = vm(raw, false);
+                int packed = imm << 3
+                        | (fixedPointIs32Bit ? 0b100 : 0)
+                        | (unsignedFixedPoint ? 0b010 : 0)
+                        | (toFixedPoint ? 0b001 : 0);
+                yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.VFP_CONVERT_FIXED_HALF, vd, -1, -1, packed, false, false, false);
+            }
+            // VRINTR_hp/VRINTZ_hp/VRINTX_hp (opc2 0x6/0x7) — EXCLUÍDAS (mesmo "Não inclui" de
+            // B14.6/B14.5: dependem de FPSCR.RMode, e nem as formas sp/dp estão implementadas).
+            default -> null;
+        };
+    }
+
+    /// B14.6b: `VLDR_VSTR_hp` (`bits2724=0xD`, único encoding `_hp` deste grupo — `VLDM`/`VSTM`
+    /// decrement-before não têm forma de meia precisão, `bit21=1` aqui é reservado).
+    private DecodedInstruction decodeHalfPrecisionLoadStore(int raw, int address, Condition condition) {
+        if ((raw & BIT21_MASK) != 0) {
+            return null;
+        }
+        int rn = (raw >>> VN_NIBBLE_SHIFT) & NIBBLE_MASK;
+        int vd = vd(raw, false);
+        boolean add = (raw & BIT23_MASK) != 0;
+        boolean load = (raw & BIT20_MASK) != 0;
+        int imm8 = raw & 0xFF;
+        // Escala fixa ×4 mesmo em meia precisão (ARM DDI 0406C A7.7.230: `imm32 =
+        // ZeroExtend(imm8:'00', 32)`, sempre em unidades de palavra, independente do tamanho do
+        // acesso — mesma constante "estranha" que já vale para `VLDR_VSTR_{sp,dp}`).
+        int offsetBytes = (add ? imm8 : -imm8) * 4;
+        InstructionKind kind = load ? InstructionKind.VFP_LOAD_HALF : InstructionKind.VFP_STORE_HALF;
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, kind,
+                vd, rn, -1, offsetBytes, true, false, false);
     }
 
     // ── B22.2: VMOV_half (`---- 1110 000 l:1 .... rt:4 1001 . 001 0000`, vn=%vn_sp) ──
@@ -765,5 +982,12 @@ public final class VfpDecoder implements DecoderExtension {
             int address, int raw, Condition condition) {
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CONVERT,
                 vd, vm, -1, conversion.ordinal(), false, false, false);
+    }
+
+    /// B14.6b: espelho de {@link #vfpAlu} sem `doublePrecision` (sempre meia precisão).
+    private static DecodedInstruction vfpAluHalf(IrOp.VfpOperation op, int vd, int vn, int vm,
+            int address, int raw, Condition condition) {
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ALU_HALF,
+                vd, vn, vm, op.ordinal(), false, false, false);
     }
 }

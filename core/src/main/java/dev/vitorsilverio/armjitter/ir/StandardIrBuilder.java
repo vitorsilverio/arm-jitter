@@ -507,6 +507,70 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
+            // B14.6b (`_hp`): mesmo padrão dos kinds sp/dp acima, sem `signedAccess`/doublePrecision
+            // (só existe uma precisão em cada kind novo — ver Armadilha 2 de B14.6/`## Resultado`
+            // de B14.6a).
+            case VFP_ALU_HALF -> block.add(new IrOp.VfpAluHalf(
+                    IrOp.VfpOperation.values()[instruction.immediate()],
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_MOVE_IMMEDIATE_HALF -> block.add(new IrOp.VfpMoveImmediateHalf(
+                    instruction.destinationRegister(),
+                    vfpExpandImmHalf(instruction.immediate()),
+                    instruction.condition()));
+            case VFP_COMPARE_HALF -> block.add(new IrOp.VfpCompareHalf(
+                    (instruction.immediate() & 1) != 0,
+                    (instruction.immediate() & 2) != 0,
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_SELECT_HALF -> block.add(new IrOp.VfpSelectHalf(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    vselCondition(instruction.immediate()),
+                    instruction.condition()));
+            case VFP_ROUND_HALF -> block.add(new IrOp.VfpRoundHalf(
+                    AdvSimdLanes.RoundingMode.values()[instruction.immediate()],
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            case VFP_CONVERT_ROUNDED_HALF -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.VfpConvertRoundedHalf(
+                        AdvSimdLanes.RoundingMode.values()[packed & 0b111],
+                        (packed & 0b1000) != 0,
+                        instruction.destinationRegister(),
+                        instruction.secondSourceRegister(),
+                        instruction.condition()));
+            }
+            case VFP_CONVERT_FIXED_HALF -> {
+                int packed = instruction.immediate();
+                boolean fixedPointIs32Bit = (packed & 0b100) != 0;
+                int imm = packed >>> 3;
+                int fractionBits = fixedPointIs32Bit ? (32 - imm) : (16 - imm);
+                block.add(new IrOp.VfpConvertFixedHalf(
+                        (packed & 0b001) != 0,
+                        (packed & 0b010) != 0,
+                        fixedPointIs32Bit,
+                        fractionBits,
+                        instruction.destinationRegister(),
+                        instruction.condition()));
+            }
+            case VFP_LOAD_HALF -> block.add(new IrOp.VfpLoadHalf(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    baseValueOverride(instruction),
+                    instruction.immediate(),
+                    instruction.condition()));
+            case VFP_STORE_HALF -> block.add(new IrOp.VfpStoreHalf(
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    baseValueOverride(instruction),
+                    instruction.immediate(),
+                    instruction.condition()));
             // `baseValueOverride(instruction)` (mesmo helper do `LOAD`/`STORE` ARM genérico acima)
             // é indispensável aqui: `VLDR`/`VSTR Vx, [pc, #imm]` é o idioma padrão do `gcc` para
             // literais `double`/`float` (literal pool) — sem o override, `base`=15 seria lido AO
@@ -839,6 +903,21 @@ public final class StandardIrBuilder implements IrBuilder {
         }
         long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
         return (high16 << 16) & 0xFFFF_FFFFL;
+    }
+
+    /// `VFPExpandImm` (ARM DDI 0406C A7.5.1) para `N=16` (meia precisão, B14.6b): mesma fórmula
+    /// geral de {@link #vfpExpandImm} — `sign:NOT(bit6):Replicate(bit6,E-3):bits[5:4]:bits[3:0]:
+    /// Zeros(F-4)`, com `E=5` (expoente) e `F=10` (mantissa) — só o formato de destino muda; o
+    /// campo `imm8` de entrada é o MESMO layout de sinal/expoente/mantissa dos outros dois.
+    private static int vfpExpandImmHalf(int imm8) {
+        boolean sign = (imm8 & 0x80) != 0;
+        boolean notBit6 = (imm8 & 0x40) == 0;
+        int high4 = (imm8 >>> 4) & 0x3; // bits[5:4]: 2 bits baixos do expoente.
+        int low4 = imm8 & 0xF; // bits[3:0]: topo da mantissa de 10 bits.
+        return (sign ? 0x8000 : 0)
+                | (notBit6 ? 0x4000 : 0x3000) // NOT(bit6):Replicate(bit6,2) — 3 bits, posições 14:12.
+                | (high4 << 10)
+                | (low4 << 6);
     }
 
     /// `VSEL` (B14.4): mapeia `cc:2` (0-3) para a condição de seleção correspondente (ARM ARM

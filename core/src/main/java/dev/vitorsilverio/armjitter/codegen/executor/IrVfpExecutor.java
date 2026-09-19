@@ -374,6 +374,14 @@ public final class IrVfpExecutor {
             // SEM sinal: Java não tem `int` sem sinal nativo, então o clamp é manual em `long`.
             case F32_TO_U32 -> vfp.setS(op.vd(), toUnsignedInt32((double) vfp.sFloat(op.vm())));
             case F64_TO_U32 -> vfp.setS(op.vd(), toUnsignedInt32(vfp.dDouble(op.vm())));
+            // B14.6b: `VCVT_int_hp`/`VCVT_hp_int` — ponte pelo mesmo núcleo FP16 do NEON
+            // ({@link AdvSimdLanes#halfBits}/{@link AdvSimdLanes#halfToFloat}), nunca conversão
+            // de bits nova (RFC B13.2 D1).
+            case S32_TO_F16 -> vfp.setS(op.vd(), (int) AdvSimdLanes.halfBits((float) vfp.s(op.vm())) & 0xFFFF);
+            case U32_TO_F16 -> vfp.setS(op.vd(),
+                    (int) AdvSimdLanes.halfBits((float) Integer.toUnsignedLong(vfp.s(op.vm()))) & 0xFFFF);
+            case F16_TO_S32 -> vfp.setS(op.vd(), (int) AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF));
+            case F16_TO_U32 -> vfp.setS(op.vd(), toUnsignedInt32((double) AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF)));
         }
     }
 
@@ -583,14 +591,31 @@ public final class IrVfpExecutor {
         double scale = Math.scalb(1.0, op.fractionBits());
         if (op.doublePrecision()) {
             if (op.toFixedPoint()) {
-                vfp.setD(op.vd(), doubleToFixed(vfp.dDouble(op.vd()) * scale, op));
+                vfp.setD(op.vd(), doubleToFixed(vfp.dDouble(op.vd()) * scale, op.fixedPointIs32Bit(), op.unsignedFixedPoint()));
             } else {
-                vfp.setDDouble(op.vd(), fixedToDouble(vfp.d(op.vd()), op) / scale);
+                vfp.setDDouble(op.vd(), fixedToDouble(vfp.d(op.vd()), op.fixedPointIs32Bit(), op.unsignedFixedPoint()) / scale);
             }
         } else if (op.toFixedPoint()) {
-            vfp.setS(op.vd(), (int) doubleToFixed((double) vfp.sFloat(op.vd()) * scale, op));
+            vfp.setS(op.vd(), (int) doubleToFixed((double) vfp.sFloat(op.vd()) * scale, op.fixedPointIs32Bit(), op.unsignedFixedPoint()));
         } else {
-            vfp.setSFloat(op.vd(), (float) (fixedToDouble(vfp.s(op.vd()), op) / scale));
+            vfp.setSFloat(op.vd(), (float) (fixedToDouble(vfp.s(op.vd()), op.fixedPointIs32Bit(), op.unsignedFixedPoint()) / scale));
+        }
+    }
+
+    /// `VCVT_fix_hp` (B14.6b) — espelho de {@link #executeVfpConvertFixed} em meia precisão (só a
+    /// forma `sp`-like existe, ver {@link IrOp.VfpConvertFixedHalf}).
+    public void executeVfpConvertFixedHalf(ArmCore core, IrOp.VfpConvertFixedHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        double scale = Math.scalb(1.0, op.fractionBits());
+        if (op.toFixedPoint()) {
+            double scaled = AdvSimdLanes.halfToFloat(vfp.s(op.vd()) & 0xFFFF) * scale;
+            vfp.setS(op.vd(), (int) doubleToFixed(scaled, op.fixedPointIs32Bit(), op.unsignedFixedPoint()));
+        } else {
+            double value = fixedToDouble(vfp.s(op.vd()), op.fixedPointIs32Bit(), op.unsignedFixedPoint()) / scale;
+            vfp.setS(op.vd(), (int) AdvSimdLanes.halfBits((float) value) & 0xFFFF);
         }
     }
 
@@ -599,12 +624,12 @@ public final class IrVfpExecutor {
     /// registrador INTEIRO (32 bits em `sp`, 64 em `dp`) — só os `fixedPointIs32Bit ? 32 : 16` bits
     /// baixos importam, o resto é ignorado (QEMU passa o registrador cheio e o `itype` do helper
     /// trunca; nunca lançamos por excesso de bits altos, mesma tolerância do hardware real).
-    private static double fixedToDouble(long raw, IrOp.VfpConvertFixed op) {
-        if (op.fixedPointIs32Bit()) {
-            return op.unsignedFixedPoint() ? (double) (raw & 0xFFFF_FFFFL) : (double) (int) raw;
+    private static double fixedToDouble(long raw, boolean fixedPointIs32Bit, boolean unsignedFixedPoint) {
+        if (fixedPointIs32Bit) {
+            return unsignedFixedPoint ? (double) (raw & 0xFFFF_FFFFL) : (double) (int) raw;
         }
         long masked = raw & 0xFFFFL;
-        return op.unsignedFixedPoint() ? (double) masked : (double) (short) masked;
+        return unsignedFixedPoint ? (double) masked : (double) (short) masked;
     }
 
     /// Converte `scaledValue` (já multiplicado por `2^fractionBits`) para o inteiro fixo de 16/32
@@ -613,14 +638,203 @@ public final class IrVfpExecutor {
     /// resultado já trunca certo; para `dp`, o `long` já é a extensão de sinal/zero de 64 bits
     /// correta para {@link VfpRegisters#setD} (QEMU: o helper devolve um `int16_t`/`int32_t`
     /// implicitamente convertido para o `uint64_t` de retorno — sign/zero-extend, nunca zero alto).
-    private static long doubleToFixed(double scaledValue, IrOp.VfpConvertFixed op) {
-        int bits = op.fixedPointIs32Bit() ? 32 : 16;
-        double minValue = op.unsignedFixedPoint() ? 0.0 : -Math.scalb(1.0, bits - 1);
-        double maxValue = op.unsignedFixedPoint() ? Math.scalb(1.0, bits) - 1.0 : Math.scalb(1.0, bits - 1) - 1.0;
+    private static long doubleToFixed(double scaledValue, boolean fixedPointIs32Bit, boolean unsignedFixedPoint) {
+        int bits = fixedPointIs32Bit ? 32 : 16;
+        double minValue = unsignedFixedPoint ? 0.0 : -Math.scalb(1.0, bits - 1);
+        double maxValue = unsignedFixedPoint ? Math.scalb(1.0, bits) - 1.0 : Math.scalb(1.0, bits - 1) - 1.0;
         double truncated = scaledValue < 0 ? Math.ceil(scaledValue) : Math.floor(scaledValue);
         if (Double.isNaN(truncated)) {
             truncated = 0.0;
         }
         return (long) Math.max(minValue, Math.min(maxValue, truncated));
+    }
+
+    // ── B14.6b: aritmética `_hp` (FEAT_FP16) — helpers de leitura/escrita com flush-to-zero em
+    // meia precisão (denormal-as-zero é definido sobre o formato half, nunca sobre o float
+    // intermediário usado para computar) + os 9 `execute*Half`. ──
+
+    private static final int HALF_SIGN_BIT = 0x8000;
+    private static final int HALF_EXPONENT_MASK = 0x7C00;
+    private static final int HALF_MANTISSA_MASK = 0x03FF;
+
+    /// Zera `bits` (preservando o sinal) quando `flushToZero` e `bits` representa um subnormal
+    /// binary16 (expoente zero, mantissa não-zero) — mesma decisão de {@link #flushSingle}/
+    /// {@link #flushDouble}, aplicada ao formato half.
+    private static int flushHalfBits(int bits, boolean flushToZero) {
+        if (flushToZero && (bits & HALF_EXPONENT_MASK) == 0 && (bits & HALF_MANTISSA_MASK) != 0) {
+            return bits & HALF_SIGN_BIT;
+        }
+        return bits;
+    }
+
+    /// Lê `Sx[15:0]` como `float` (widening exato, {@link AdvSimdLanes#halfToFloat}), aplicando
+    /// flush-to-zero à ENTRADA antes de converter (denormal-as-zero).
+    private static float readHalfOperand(VfpRegisters vfp, int reg, boolean flushToZero) {
+        return AdvSimdLanes.halfToFloat(flushHalfBits(vfp.s(reg) & 0xFFFF, flushToZero));
+    }
+
+    /// `VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp`/`VMAXNM_hp`/`VMINNM_hp` (B14.6b).
+    /// `NEG`/`ABS` são manipulação de BITS crua (bit de sinal na posição 15 do half) — não passam
+    /// por flush/arredondamento, mesma decisão de {@link #computeSingle} para as formas `sp`.
+    public void executeVfpAluHalf(ArmCore core, IrOp.VfpAluHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        boolean flushToZero = core.fpscr().flushToZero();
+        int vmBits = vfp.s(op.vm()) & 0xFFFF;
+        int resultBits = switch (op.op()) {
+            case NEG -> vmBits ^ HALF_SIGN_BIT;
+            case ABS -> vmBits & ~HALF_SIGN_BIT;
+            default -> computeHalfArithmeticBits(vfp, op, flushToZero);
+        };
+        vfp.setS(op.vd(), resultBits);
+    }
+
+    /// Ramo aritmético de {@link #executeVfpAluHalf} — espelha {@link #computeSingleArithmetic},
+    /// mas cada resultado é narrowed a binary16 via {@link AdvSimdLanes#halfBits} (arredondamento
+    /// ties-to-even do JDK, `Float.float16ToFloat`/`floatToFloat16`, mesmo núcleo do FP16 NEON já
+    /// validado — Armadilha 7 da task: NÃO é o mesmo que arredondar em `float` e converter, mas
+    /// como aqui a aritmética JÁ é feita em `float` a partir de operandos widened exatamente de
+    /// `half`, o único arredondamento real é este narrow final — mesma composição de
+    /// {@link AdvSimdLanes#halfThreeSame}). `MLA`/`MLS`/`NMLA`/`NMLS` (NÃO fundidos) narrowam o
+    /// PRODUTO a half antes de acumular (dois arredondamentos), igual ao núcleo NEON.
+    private static int computeHalfArithmeticBits(VfpRegisters vfp, IrOp.VfpAluHalf op, boolean flushToZero) {
+        float vn = op.vn() >= 0 ? readHalfOperand(vfp, op.vn(), flushToZero) : 0f;
+        float vm = readHalfOperand(vfp, op.vm(), flushToZero);
+        float result = switch (op.op()) {
+            case ADD -> vn + vm;
+            case SUB -> vn - vm;
+            case MUL -> vn * vm;
+            case DIV -> vn / vm;
+            case MLA -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                float product = AdvSimdLanes.halfToFloat(AdvSimdLanes.halfBits(vn * vm));
+                yield vd + product;
+            }
+            case MLS -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                float product = AdvSimdLanes.halfToFloat(AdvSimdLanes.halfBits(vn * vm));
+                yield vd - product;
+            }
+            case NMLA -> {
+                float vd = -readHalfOperand(vfp, op.vd(), flushToZero);
+                float product = -AdvSimdLanes.halfToFloat(AdvSimdLanes.halfBits(vn * vm));
+                yield vd + product;
+            }
+            case NMLS -> {
+                float vd = -readHalfOperand(vfp, op.vd(), flushToZero);
+                float product = AdvSimdLanes.halfToFloat(AdvSimdLanes.halfBits(vn * vm));
+                yield vd + product;
+            }
+            case NMUL -> -(vn * vm);
+            case SQRT -> (float) Math.sqrt((double) vm);
+            case FMA -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                yield Math.fma(vn, vm, vd);
+            }
+            case FMS -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                yield Math.fma(-vn, vm, vd);
+            }
+            case FNMA -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                yield Math.fma(-vn, vm, -vd);
+            }
+            case FNMS -> {
+                float vd = readHalfOperand(vfp, op.vd(), flushToZero);
+                yield Math.fma(vn, vm, -vd);
+            }
+            case MAXNM -> AdvSimdLanes.maxNum(vn, vm);
+            case MINNM -> AdvSimdLanes.minNum(vn, vm);
+            case NEG, ABS, COPY -> throw new IllegalStateException("tratado em executeVfpAluHalf");
+        };
+        return flushHalfBits((int) AdvSimdLanes.halfBits(result) & 0xFFFF, flushToZero);
+    }
+
+    /// `VMOV.F16 Vd,#imm` (B14.6b).
+    public void executeVfpMoveImmediateHalf(ArmCore core, IrOp.VfpMoveImmediateHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        core.vfp().setS(op.vd(), op.immediateBits() & 0xFFFF);
+    }
+
+    /// `VCMP_hp`/`VCMPE_hp` (B14.6b) — mesma tabela de {@link #executeVfpCompare}.
+    public void executeVfpCompareHalf(ArmCore core, IrOp.VfpCompareHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        boolean flushToZero = core.fpscr().flushToZero();
+        float a = readHalfOperand(vfp, op.vd(), flushToZero);
+        float b = op.compareWithZero() ? 0f : readHalfOperand(vfp, op.vm(), flushToZero);
+        boolean unordered = Float.isNaN(a) || Float.isNaN(b);
+        boolean equal = !unordered && a == b;
+        boolean less = !unordered && a < b;
+        int packed;
+        if (unordered) {
+            packed = FpscrRegister.CARRY_FLAG | FpscrRegister.OVERFLOW_FLAG;
+        } else if (equal) {
+            packed = FpscrRegister.ZERO_FLAG | FpscrRegister.CARRY_FLAG;
+        } else if (less) {
+            packed = FpscrRegister.NEGATIVE_FLAG;
+        } else {
+            packed = FpscrRegister.CARRY_FLAG;
+        }
+        core.fpscr().setNzcv(packed);
+    }
+
+    /// `VSEL_hp` (B14.6b) — cópia de BITS crua dos 16 bits baixos (zero-estendida ao escrever,
+    /// mesma convenção de {@link #executeVfpMoveHalfLane}), nunca aritmética.
+    public void executeVfpSelectHalf(ArmCore core, IrOp.VfpSelectHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        boolean selectVn = core.cpsr().evalCond(op.selectCondition());
+        VfpRegisters vfp = core.vfp();
+        int sourceBits = (selectVn ? vfp.s(op.vn()) : vfp.s(op.vm())) & 0xFFFF;
+        vfp.setS(op.vd(), sourceBits);
+    }
+
+    /// `VRINT{A,N,P,M}_hp` (B14.6b) — mesmo núcleo de {@link #executeVfpRound}.
+    public void executeVfpRoundHalf(ArmCore core, IrOp.VfpRoundHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        float vm = AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF);
+        double rounded = AdvSimdLanes.roundForConversion(vm, op.direction());
+        vfp.setS(op.vd(), (int) AdvSimdLanes.halfBits((float) rounded) & 0xFFFF);
+    }
+
+    /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b) — mesmo núcleo de {@link #executeVfpConvertRounded}.
+    public void executeVfpConvertRoundedHalf(ArmCore core, IrOp.VfpConvertRoundedHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        double value = AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF);
+        double rounded = AdvSimdLanes.roundForConversion(value, op.direction());
+        long saturated = AdvSimdLanes.saturateToInteger(rounded, op.signed(), false);
+        vfp.setS(op.vd(), (int) saturated);
+    }
+
+    /// `VLDR_hp` (B14.6b) — carrega um halfword (2 bytes), zero-estendendo `Vd[31:16]`.
+    public void executeVfpLoadHalf(ArmCore core, IrOp.VfpLoadHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int address = support.registerValue(core, op.base(), op.baseValueOverride()) + op.offsetBytes();
+        core.vfp().setS(op.vd(), support.read16Arm7(core, address, false) & 0xFFFF);
+    }
+
+    /// `VSTR_hp` (B14.6b) — grava só os 16 bits baixos de `Vd` (ver {@link #executeVfpLoadHalf}).
+    public void executeVfpStoreHalf(ArmCore core, IrOp.VfpStoreHalf op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        int address = support.registerValue(core, op.base(), op.baseValueOverride()) + op.offsetBytes();
+        support.write16Arm7(core, address, core.vfp().s(op.vd()) & 0xFFFF);
     }
 }

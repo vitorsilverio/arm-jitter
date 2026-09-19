@@ -53,27 +53,32 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.6a fechar `VMOVX`/`VINS`)
+## Onde estamos (atualizado 2026-09-19, após B14.6b fechar a aritmética `_hp` de 32 bits)
 
-**B14.6a FECHADA** (primeira fatia de B14.6, quebra pré-autorizada pela spec). `ArmFeature.FP16_ARITHMETIC`
-nova (declarada só por `ARMV8A_32`) + `VMOVX`/`VINS` (as 2 linhas de manipulação de BITS do espaço
-VFP incondicional, sem aritmética `binary16`) decodificam e executam sob A32 e T32. `IrOp.Kind`
-ganhou `VFP_MOVE_HALF_LANE` (173 constantes contíguas agora) via `Kind`/record PRÓPRIO (não reusa
-`doublePrecision` — as duas instruções só operam em `S`). Achado de processo: 2 switches exaustivos
-sobre o tipo selado `IrOp` (`IrBlockExecutor`, `AsmNativePolicy`) SEM `default` quebram a compilação
-se um `Kind` novo não ganhar `case` nos dois — junto do `permits` clause do próprio `IrOp`, são 3
-lugares que dão erro de compilação (não silencioso) ao esquecer. `docs/COBERTURA-ISA.md` byte a byte
-idêntica; `docs/COBERTURA-JIT.md` regenerado (1 linha nova, ❌/❌). `mvn -o test` verde na raiz + G5
-(`gbaemu`/`ndsemu`) verde. Ver `## Resultado` de `B14.6` (seção "B14.6a").
+**B14.6b FECHADA** (segunda e última fatia de B14.6). As 5 formas `sz=1` do espaço incondicional
+(`VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp`/`VRINT_hp`/`VCVT_hp`) e 22 das 25 linhas `_hp` do espaço
+condicional (aritmética/unárias/compare/imediato/conversão/fixed-point/load-store) decodificam e
+executam com aritmética `binary16` de verdade sob `ARMV8A_32`+`FP16_ARITHMETIC` — ponte pelo mesmo
+núcleo FP16 do NEON (`AdvSimdLanes.halfBits`/`halfToFloat`), zero conversão de bits nova.
+`VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` ficam `UNIMPLEMENTED` (dependem de `FPSCR.RMode`; nem as formas
+`sp`/`dp` condicionais estão implementadas, mesma exclusão de B14.5). Armadilha 2 (`boolean
+doublePrecision` não expressa 3 precisões) resolvida com 9 `Kind`/record PRÓPRIOS (`IrOp.Kind`
+173→182), sem tocar nenhuma assinatura pública existente (G3 nunca ficou em jogo). Achado de
+processo real: gatear o espaço `_hp` condicional só em `claimsThisDecoder` fazia o
+`CoprocessorDecoder` genérico capturar o encoding sem a feature — corrigido reivindicando o espaço
+SEMPRE (mesmo padrão G8 de `isVmovHalfEncoding`/B22.2) e devolvendo `UNIMPLEMENTED` explícito
+dentro do próprio `tryDecode`. `docs/isa-nao-aplicavel.tsv`: linha `*_hp` estreitada de `*` para as
+7 colunas pré-v8-A (mesma operação da B14.2 para `LDA`/`STL`). `docs/COBERTURA-ISA.md` byte a byte
+idêntica; `docs/COBERTURA-JIT.md` regenerado (9 linhas novas, ❌/❌ esperado). `mvn -o test` verde
+na raiz + G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado` de `B14.6` (seção "B14.6b"). **Épico B14
+fica só faltando B14.7** (fechamento: coluna `v8-A/32` + `ArmProcessor.CORTEX_A32`).
 
-**Pegáveis a seguir**: `B14.6b` (as 5 formas `sz=1` do espaço incondicional — `VSEL_hp`/`VMAXNM_hp`/
-`VMINNM_hp`/`VRINT_hp`/`VCVT_hp` — e as 25 linhas `_hp` do espaço condicional, exigindo aritmética
-`binary16` de verdade e resolver a Armadilha 2 da task para essas 30 formas — ver "Pendências para
-B14.6b" no `## Resultado`) é o próximo degrau do épico B14. `C12.5`/`C12.10` (emissão JIT nativa A64)
-seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem
-pegáveis sem dependência pendente. Candidatas gap-driven da B16.14 (specs ainda não escritas):
-decoder MVE "long shift" GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4),
-`BF` 3 formas restantes, `CLRM`, `SB` de 32 bits.
+**Pegáveis a seguir**: `B14.7` (fechamento do épico B14 — depende de B14.6+B14.3, ambas ✅) é o
+próximo degrau natural. `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
+roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência
+pendente. Candidatas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift"
+GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas
+restantes, `CLRM`, `SB` de 32 bits.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

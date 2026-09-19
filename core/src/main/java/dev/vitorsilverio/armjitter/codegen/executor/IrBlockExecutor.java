@@ -170,6 +170,15 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_ROUND -> vfp.executeVfpRound(core, (IrOp.VfpRound) op);
                 case IrOp.Kind.VFP_CONVERT_ROUNDED -> vfp.executeVfpConvertRounded(core, (IrOp.VfpConvertRounded) op);
                 case IrOp.Kind.VFP_MOVE_HALF_LANE -> vfp.executeVfpMoveHalfLane(core, (IrOp.VfpMoveHalfLane) op);
+                case IrOp.Kind.VFP_ALU_HALF -> vfp.executeVfpAluHalf(core, (IrOp.VfpAluHalf) op);
+                case IrOp.Kind.VFP_MOVE_IMMEDIATE_HALF -> vfp.executeVfpMoveImmediateHalf(core, (IrOp.VfpMoveImmediateHalf) op);
+                case IrOp.Kind.VFP_COMPARE_HALF -> vfp.executeVfpCompareHalf(core, (IrOp.VfpCompareHalf) op);
+                case IrOp.Kind.VFP_SELECT_HALF -> vfp.executeVfpSelectHalf(core, (IrOp.VfpSelectHalf) op);
+                case IrOp.Kind.VFP_ROUND_HALF -> vfp.executeVfpRoundHalf(core, (IrOp.VfpRoundHalf) op);
+                case IrOp.Kind.VFP_CONVERT_ROUNDED_HALF -> vfp.executeVfpConvertRoundedHalf(core, (IrOp.VfpConvertRoundedHalf) op);
+                case IrOp.Kind.VFP_CONVERT_FIXED_HALF -> vfp.executeVfpConvertFixedHalf(core, (IrOp.VfpConvertFixedHalf) op);
+                case IrOp.Kind.VFP_LOAD_HALF -> vfp.executeVfpLoadHalf(core, (IrOp.VfpLoadHalf) op);
+                case IrOp.Kind.VFP_STORE_HALF -> vfp.executeVfpStoreHalf(core, (IrOp.VfpStoreHalf) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
@@ -485,6 +494,15 @@ public final class IrBlockExecutor {
             case IrOp.VfpRound vfpRound -> { vfp.executeVfpRound(core, vfpRound); yield false; }
             case IrOp.VfpConvertRounded vfpCvtRounded -> { vfp.executeVfpConvertRounded(core, vfpCvtRounded); yield false; }
             case IrOp.VfpMoveHalfLane vfpMoveHalfLane -> { vfp.executeVfpMoveHalfLane(core, vfpMoveHalfLane); yield false; }
+            case IrOp.VfpAluHalf vfpAluHalf -> { vfp.executeVfpAluHalf(core, vfpAluHalf); yield false; }
+            case IrOp.VfpMoveImmediateHalf vfpMoveImmHalf -> { vfp.executeVfpMoveImmediateHalf(core, vfpMoveImmHalf); yield false; }
+            case IrOp.VfpCompareHalf vfpCompareHalf -> { vfp.executeVfpCompareHalf(core, vfpCompareHalf); yield false; }
+            case IrOp.VfpSelectHalf vfpSelectHalf -> { vfp.executeVfpSelectHalf(core, vfpSelectHalf); yield false; }
+            case IrOp.VfpRoundHalf vfpRoundHalf -> { vfp.executeVfpRoundHalf(core, vfpRoundHalf); yield false; }
+            case IrOp.VfpConvertRoundedHalf vfpCvtRoundedHalf -> { vfp.executeVfpConvertRoundedHalf(core, vfpCvtRoundedHalf); yield false; }
+            case IrOp.VfpConvertFixedHalf vfpCvtFixedHalf -> { vfp.executeVfpConvertFixedHalf(core, vfpCvtFixedHalf); yield false; }
+            case IrOp.VfpLoadHalf vfpLoadHalf -> { vfp.executeVfpLoadHalf(core, vfpLoadHalf); yield false; }
+            case IrOp.VfpStoreHalf vfpStoreHalf -> { vfp.executeVfpStoreHalf(core, vfpStoreHalf); yield false; }
             case IrOp.MProfileSystemRegister m -> { system.executeMProfileSystemRegister(core, m); yield false; }
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }

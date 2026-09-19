@@ -31,18 +31,18 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 ## Progresso
 
-> **ASM 32 bits: 57 de 173** operações emitidas nativamente (mais 9 condicionais).
-> **Truffle 32 bits: 66 de 173** operações com nó especializado.
+> **ASM 32 bits: 57 de 182** operações emitidas nativamente (mais 9 condicionais).
+> **Truffle 32 bits: 66 de 182** operações com nó especializado.
 > **ASM 64 bits: 46 de 150** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 150** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
-> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `100` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `46/96`.
+> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `109` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `46/96`.
 
 ## Tabela A — pipeline de 32 bits
 
-Linhas = os 173 `record` de `IrOp`, na ordem do `Kind`.
+Linhas = os 182 `record` de `IrOp`, na ordem do `Kind`.
 
 | Operação | `Kind` | ASM (`AsmNativePolicy`) | Truffle (`IrOpNodeFactory`) |
 |---|---|---|---|
@@ -219,6 +219,15 @@ Linhas = os 173 `record` de `IrOp`, na ordem do `Kind`.
 | `VfpRound` | `VFP_ROUND` | ❌ | ❌ |
 | `VfpConvertRounded` | `VFP_CONVERT_ROUNDED` | ❌ | ❌ |
 | `VfpMoveHalfLane` | `VFP_MOVE_HALF_LANE` | ❌ | ❌ |
+| `VfpAluHalf` | `VFP_ALU_HALF` | ❌ | ❌ |
+| `VfpMoveImmediateHalf` | `VFP_MOVE_IMMEDIATE_HALF` | ❌ | ❌ |
+| `VfpCompareHalf` | `VFP_COMPARE_HALF` | ❌ | ❌ |
+| `VfpSelectHalf` | `VFP_SELECT_HALF` | ❌ | ❌ |
+| `VfpRoundHalf` | `VFP_ROUND_HALF` | ❌ | ❌ |
+| `VfpConvertRoundedHalf` | `VFP_CONVERT_ROUNDED_HALF` | ❌ | ❌ |
+| `VfpConvertFixedHalf` | `VFP_CONVERT_FIXED_HALF` | ❌ | ❌ |
+| `VfpLoadHalf` | `VFP_LOAD_HALF` | ❌ | ❌ |
+| `VfpStoreHalf` | `VFP_STORE_HALF` | ❌ | ❌ |
 
 ### Condicionais do lado 32 bits
 
