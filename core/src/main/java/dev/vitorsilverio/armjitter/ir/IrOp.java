@@ -39,7 +39,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate,
         IrOp.MveVectorDualAccumulate, IrOp.MveVectorDualAccumulateLong, IrOp.MveVectorRoundingDualAccumulateHigh,
         IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32, IrOp.VfpSelect,
-        IrOp.VfpRound, IrOp.VfpConvertRounded {
+        IrOp.VfpRound, IrOp.VfpConvertRounded, IrOp.VfpMoveHalfLane {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -390,6 +390,9 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// B14.5: `VCVT{A,N,P,M}{S,U}` (`sp`/`dp`, ARMv8-A, espaço VFP incondicional) — ver
         /// {@link VfpConvertRounded}.
         public static final int VFP_CONVERT_ROUNDED = 171;
+        /// B14.6: `VMOVX`/`VINS` (ARMv8-A, `FEAT_FP16`, espaço VFP incondicional) — ver
+        /// {@link VfpMoveHalfLane}.
+        public static final int VFP_MOVE_HALF_LANE = 172;
     }
 
     /// Operacao ALU generica.
@@ -1499,6 +1502,26 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_CONVERT_ROUNDED; }
+    }
+
+    /// `VMOVX`/`VINS` (B14.6, ARMv8-A, `ArmFeature.FP16_ARITHMETIC`, espaço VFP incondicional):
+    /// troca CRUA de metades de 16 bits de um registrador `S` de 32 bits — nunca interpreta o
+    /// conteúdo como float (sem arredondamento, sem `FPSCR`), ao contrário de toda a aritmética
+    /// `_hp` que o resto do épico B14.6 vai trazer. **`VMOVX`**: `vd = zeroExtend(vm[31:16])`
+    /// (metade alta de `vm` vira a metade baixa de `vd`, resto zerado). **`VINS`**: `vd[31:16] =
+    /// vm[15:0]`, `vd[15:0]` PRESERVADO (é por isso que o executor lê o `vd` atual antes de
+    /// escrever — a única operação `_hp`/`half` desta task que depende do valor prévio do
+    /// destino). Ambas operam SEMPRE em `S` (nunca `D` — não há forma dupla, ver Contexto da task).
+    record VfpMoveHalfLane(
+            /// `true` para `VINS`, `false` para `VMOVX`.
+            boolean insert,
+            /// Registrador de destino (`S`).
+            int vd,
+            /// Registrador de origem (`S`).
+            int vm,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_MOVE_HALF_LANE; }
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já

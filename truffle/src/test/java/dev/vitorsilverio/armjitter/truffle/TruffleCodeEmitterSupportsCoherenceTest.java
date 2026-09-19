@@ -58,7 +58,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(172, kinds.size(), "IrOp.Kind deve ter 172 constantes contíguas");
+        assertEquals(173, kinds.size(), "IrOp.Kind deve ter 173 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -145,8 +145,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // decode+interpretado apenas, emissão nativa/Truffle fica para trabalho futuro). B14.4
         // acrescentou VFP_SELECT (+1, `VSEL`, mesmo "Não inclui": decode + interpretado apenas).
         // B14.5 acrescentou VFP_ROUND, VFP_CONVERT_ROUNDED (+2, `VRINT{A,N,P,M}`/
-        // `VCVT{A,N,P,M}{S,U}`, mesmo "Não inclui": decode + interpretado apenas).
-        assertEquals(106, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // `VCVT{A,N,P,M}{S,U}`, mesmo "Não inclui": decode + interpretado apenas). B14.6
+        // acrescentou VFP_MOVE_HALF_LANE (+1, `VMOVX`/`VINS`, mesmo "Não inclui").
+        assertEquals(107, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -222,7 +223,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR,
                         IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR,
                         IrOp.Kind.CRC32, IrOp.Kind.VFP_SELECT,
-                        IrOp.Kind.VFP_ROUND, IrOp.Kind.VFP_CONVERT_ROUNDED)),
+                        IrOp.Kind.VFP_ROUND, IrOp.Kind.VFP_CONVERT_ROUNDED, IrOp.Kind.VFP_MOVE_HALF_LANE)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -303,6 +304,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                     new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 0, 1, c);
             case IrOp.Kind.VFP_CONVERT_ROUNDED ->
                     new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, false, 0, 1, c);
+            case IrOp.Kind.VFP_MOVE_HALF_LANE -> new IrOp.VfpMoveHalfLane(false, 0, 1, c);
             case IrOp.Kind.VFP_CONVERT -> new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 0, 1, c);
             case IrOp.Kind.VFP_LOAD -> new IrOp.VfpLoad(false, 0, 1, -1, 0, c);
             case IrOp.Kind.VFP_STORE -> new IrOp.VfpStore(false, 0, 1, -1, 0, c);

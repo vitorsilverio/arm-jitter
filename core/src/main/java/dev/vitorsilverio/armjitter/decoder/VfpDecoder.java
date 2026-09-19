@@ -182,10 +182,14 @@ public final class VfpDecoder implements DecoderExtension {
             return decodeMaxNmMinNm(raw, address, condition, doublePrecision);
         }
         if (bits2120 == BITS21_20_ROUND_OR_CONVERT) {
-            return decodeRoundOrConvert(raw, address, condition, doublePrecision);
+            // `bit19` separa as duas famílias que compartilham `bits[21:20]=11`: `VRINT`/`VCVT`
+            // (B14.5, `bit19=1`) de `VMOVX`/`VINS` (B14.6, `bit19=0`, `bits[18:16]=000` fixo —
+            // o campo `Vn` inteiro é zero nestas duas, ver Contexto da task).
+            if ((raw & BIT19_MASK) != 0) {
+                return decodeRoundOrConvert(raw, address, condition, doublePrecision);
+            }
+            return decodeMovxVins(raw, address, condition);
         }
-        // VMOVX/VINS (bits[23:16]=1_11_0000, B14.6) — ainda não implementado: recusa explícita
-        // (G8), nunca `null` (que devolveria o espaço ao `CoprocessorDecoder` genérico).
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
@@ -274,6 +278,33 @@ public final class VfpDecoder implements DecoderExtension {
             case 0b11 -> AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY;
             default -> throw new IllegalArgumentException("rm fora do campo de 2 bits: " + rm);
         };
+    }
+
+    /// `bits[18:16]` — devem ser `000` em `VMOVX`/`VINS` (o campo `Vn` inteiro, que estas duas
+    /// instruções não usam como registrador, é fixo zero no `.decode`). Junto de `bit19=0` (já
+    /// checado por quem chama), isso completa o nibble `0000` de `bits[19:16]`.
+    private static final int BITS18_16_MASK = 0x7 << 16;
+
+    /// `VMOVX`/`VINS` (B14.6, `ArmFeature#FP16_ARITHMETIC`): `bit7` seleciona `VINS` (`1`) /
+    /// `VMOVX` (`0`); `bit6=1` fixo (marca esta sub-família dentro do espaço incondicional). `bit4`
+    /// NÃO é checado aqui — {@link #isUnconditionalVfpSpace} (Armadilha 3 da task) já garante
+    /// `bit4=0` para todo `raw` que chega neste método (é o bit que separa "CDP-shape" de
+    /// `MCR2`/`MRC2`, checado ANTES de qualquer coisa nesta classe); checá-lo de novo aqui seria
+    /// morto (JaCoCo denunciaria o branch como inalcançável). `Vm` é `%vm_sp` (bit5 = extensão,
+    /// nunca um marcador fixo). Sem a feature, `UNIMPLEMENTED` explícito (G8) — nunca `null`
+    /// (devolveria o espaço ao `CoprocessorDecoder` genérico).
+    private DecodedInstruction decodeMovxVins(int raw, int address, Condition condition) {
+        if ((raw & BITS18_16_MASK) != 0 || (raw & BIT6_MASK) == 0) {
+            return null;
+        }
+        if (!architecture.has(ArmFeature.FP16_ARITHMETIC)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+        boolean insert = (raw & BIT7_MASK) != 0;
+        int vd = vd(raw, false);
+        int vm = vm(raw, false);
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_MOVE_HALF_LANE,
+                vd, -1, vm, insert ? 1 : 0, false, false, false, 0, false);
     }
 
     private boolean claimsThisDecoder(int raw) {

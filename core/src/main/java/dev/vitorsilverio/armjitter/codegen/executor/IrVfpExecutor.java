@@ -335,6 +335,24 @@ public final class IrVfpExecutor {
         vfp.setS(op.vd(), (int) saturated);
     }
 
+    /// `VMOVX`/`VINS` (B14.6): troca CRUA de metades de 16 bits de um `S`, sem interpretar o float
+    /// (nunca arredonda, nunca toca `FPSCR`) — ver Javadoc de {@link IrOp.VfpMoveHalfLane}.
+    /// `VMOVX` usa `>>>` (nunca `>>`) para zerar a metade alta do destino automaticamente. `VINS`
+    /// lê o `vd` ATUAL antes de escrever, para preservar `vd[15:0]`.
+    public void executeVfpMoveHalfLane(ArmCore core, IrOp.VfpMoveHalfLane op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        if (op.insert()) {
+            int lowHalfOfSource = vfp.s(op.vm()) & 0xFFFF;
+            int lowHalfOfDestinationPreserved = vfp.s(op.vd()) & 0xFFFF;
+            vfp.setS(op.vd(), (lowHalfOfSource << 16) | lowHalfOfDestinationPreserved);
+        } else {
+            vfp.setS(op.vd(), vfp.s(op.vm()) >>> 16);
+        }
+    }
+
     /// `VCVT` (forma default, round-toward-zero para inteiro).
     public void executeVfpConvert(ArmCore core, IrOp.VfpConvert op) {
         if (!core.cpsr().evalCond(op.condition())) {

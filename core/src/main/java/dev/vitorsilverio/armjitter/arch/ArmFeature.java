@@ -265,6 +265,17 @@ public enum ArmFeature {
     /// espúrio para o `CoprocessorBus` — a violação de G8 que esta feature fecha).
     HALF_PRECISION_FP,
 
+    // ---- Onda 6, B14.6 (FEAT_FP16 de 32 bits: VMOVX/VINS + aritmética `_hp`) ----
+    /// **Meia precisão de ponto flutuante ARITMÉTICA** (`FEAT_FP16`, ARMv8.2-A): `VMOVX`/`VINS`
+    /// (troca de metades de um `S`, espaço VFP incondicional) e, quando as tasks seguintes do
+    /// épico B14 fecharem, `VADD_hp`/`VMUL_hp`/`VCVT_hp`/etc (espaço condicional). **Feature
+    /// PRÓPRIA, distinta de {@link #HALF_PRECISION_FP}** (Armadilha 1 da task B14.6): esta cobre
+    /// aritmética real de `binary16`, aquela cobre só a transferência crua de bits do `VMOV_half`
+    /// (VFPv3-HP) — hardware real pode ter uma sem a outra. Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#FP16} do lado A64 (B19.5). Presente
+    /// em {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8A_32} (B14.6).
+    FP16_ARITHMETIC,
+
     // ---- Onda 6, B22.1 (`HLT` — Halting debug) ----
     /// `HLT #imm` (Halting debug, **ARMv8-A** no perfil A / **ARMv8-M** no perfil M, ARM DDI
     /// 0487) — para o core e entrega ao debugger externo. Introduzida bem depois de todos os

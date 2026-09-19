@@ -607,9 +607,10 @@ public final class ArmArchitecture {
     /// (`LDA`/`STL` e variantes, B14.2) + {@link ArmFeature#CRC32} (B14.3) + {@link ArmFeature#HALT}
     /// (`HLT`, já decodificado desde B22.1 — este é o primeiro preset a declarar a feature, então
     /// `HLT` passa a decodificar como {@link dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT}
-    /// em vez de cair no fallthrough genérico, ver Javadoc de {@link ArmFeature#HALT}). **Sem
-    /// decode novo** nesta task além da diferença de `HLT` já citada — `LDA`/`STL`/`CRC32`/`VSEL`/
-    /// `VMAXNM`/`VMINNM`/`VRINT`/`VCVT` ficam para B14.2-B14.5. **G3**: `ARMV7A` permanece
+    /// em vez de cair no fallthrough genérico, ver Javadoc de {@link ArmFeature#HALT}) + {@link
+    /// ArmFeature#FP16_ARITHMETIC} (`VMOVX`/`VINS`, B14.6). **Sem decode novo** nesta task além da
+    /// diferença de `HLT` já citada — `LDA`/`STL`/`CRC32`/`VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVT`/
+    /// `VMOVX`/`VINS` ficam para B14.2-B14.6. **G3**: `ARMV7A` permanece
     /// intocado — este preset nasce AO LADO, com a MESMA lista de extensões de decoder do
     /// `ARMV7A`, reparametrizada com {@code ARMV8A_32_FEATURES} (senão as features novas ficam
     /// invisíveis em tempo de decode, o bug que a B4.0.3 caçou no armbox — ver Javadoc de
@@ -617,7 +618,8 @@ public final class ArmArchitecture {
     /// {@link #ARMV7M_PURE}/B15.1 e {@link #ARMV8_1M}/B15.6): o preset ainda não entra no mapa
     /// `ARM_ARCHITECTURES` de `IsaCoverageReport` — fica para a B14.7 (fechamento do épico).
     private static final ArmArchitecture ARMV8A_32_FEATURES = extending(ARMV7A, "ARMv8-A (AArch32)",
-            ArmFeature.ARMV8_FP, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT);
+            ArmFeature.ARMV8_FP, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT,
+            ArmFeature.FP16_ARITHMETIC);
 
     public static final ArmArchitecture ARMV8A_32 = ARMV8A_32_FEATURES
             .withDecoderExtensions(List.of(

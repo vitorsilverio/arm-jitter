@@ -501,6 +501,12 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.secondSourceRegister(),
                         instruction.condition()));
             }
+            // B14.6: `immediate`=1 para `VINS`, `0` para `VMOVX` (ver `VfpDecoder#decodeMovxVins`).
+            case VFP_MOVE_HALF_LANE -> block.add(new IrOp.VfpMoveHalfLane(
+                    instruction.immediate() != 0,
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
             // `baseValueOverride(instruction)` (mesmo helper do `LOAD`/`STORE` ARM genérico acima)
             // é indispensável aqui: `VLDR`/`VSTR Vx, [pc, #imm]` é o idioma padrão do `gcc` para
             // literais `double`/`float` (literal pool) — sem o override, `base`=15 seria lido AO

@@ -235,6 +235,11 @@ public enum InstructionKind {
     /// empacota bits 2:0 = ordinal de `AdvSimdLanes.RoundingMode`, bit 3 = sinal (`1`=`VCVTxS`),
     /// `signedAccess`=precisão dupla da ORIGEM (`vd` é sempre simples, ver `IrOp.VfpConvertRounded`).
     VFP_CONVERT_ROUNDED,
+    /// `VMOVX`/`VINS` (B14.6, `ArmFeature#FP16_ARITHMETIC`, ARMv8-A, espaço VFP incondicional) —
+    /// troca CRUA de metades de 16 bits de um registrador `S` (sem interpretar o float).
+    /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate`=`1` para `VINS`, `0` para
+    /// `VMOVX` (ver `IrOp.VfpMoveHalfLane#insert`).
+    VFP_MOVE_HALF_LANE,
     /// `VLDR`. `destinationRegister`=Vd, `sourceRegister`=base (Rn), `immediate`=offset em bytes
     /// já resolvido (±`imm8`×4), `signedAccess`=precisão dupla.
     VFP_LOAD,

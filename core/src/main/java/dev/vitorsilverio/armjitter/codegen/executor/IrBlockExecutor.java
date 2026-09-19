@@ -169,6 +169,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_SELECT -> vfp.executeVfpSelect(core, (IrOp.VfpSelect) op);
                 case IrOp.Kind.VFP_ROUND -> vfp.executeVfpRound(core, (IrOp.VfpRound) op);
                 case IrOp.Kind.VFP_CONVERT_ROUNDED -> vfp.executeVfpConvertRounded(core, (IrOp.VfpConvertRounded) op);
+                case IrOp.Kind.VFP_MOVE_HALF_LANE -> vfp.executeVfpMoveHalfLane(core, (IrOp.VfpMoveHalfLane) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
@@ -483,6 +484,7 @@ public final class IrBlockExecutor {
             case IrOp.VfpSelect vfpSelect -> { vfp.executeVfpSelect(core, vfpSelect); yield false; }
             case IrOp.VfpRound vfpRound -> { vfp.executeVfpRound(core, vfpRound); yield false; }
             case IrOp.VfpConvertRounded vfpCvtRounded -> { vfp.executeVfpConvertRounded(core, vfpCvtRounded); yield false; }
+            case IrOp.VfpMoveHalfLane vfpMoveHalfLane -> { vfp.executeVfpMoveHalfLane(core, vfpMoveHalfLane); yield false; }
             case IrOp.MProfileSystemRegister m -> { system.executeMProfileSystemRegister(core, m); yield false; }
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }

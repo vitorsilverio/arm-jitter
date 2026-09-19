@@ -195,8 +195,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // VFP (B3.5): nenhuma toca o PC. VFP_SELECT (B14.4): `VSEL` idem — cópia de
                     // registrador VFP condicionada por CPSR, nunca escreve PC. VFP_ROUND/
                     // VFP_CONVERT_ROUNDED (B14.5): idem — só tocam registradores VFP.
+                    // VFP_MOVE_HALF_LANE (B14.6): `VMOVX`/`VINS` idem — troca crua de metades de
+                    // um `S`, nunca escreve PC.
                     VFP_ALU, VFP_MOVE_IMMEDIATE, VFP_COMPARE, VFP_CONVERT, VFP_SELECT, VFP_ROUND,
-                    VFP_CONVERT_ROUNDED, VFP_LOAD, VFP_STORE,
+                    VFP_CONVERT_ROUNDED, VFP_MOVE_HALF_LANE, VFP_LOAD, VFP_STORE,
                     VFP_LOAD_MULTIPLE, VFP_STORE_MULTIPLE, VFP_CORE_TRANSFER, VFP_CORE_PAIR_TRANSFER,
                     VFP_SYSTEM_TRANSFER,
                     // VLDR_sysreg/VSTR_sysreg (perfil M, B15.3): nunca tocam o PC (Rn=15 é
