@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
@@ -216,6 +217,71 @@ class Crc32ArithmeticTest {
         memory.put32(0, armCrc32(0b11, false, 0, 1, 2));
         DecodedInstruction instruction = new ArmDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0);
         assertEquals(InstructionKind.UNIMPLEMENTED, instruction.kind());
+    }
+
+    // ── T32 rejeita SP/PC em rd/rm/rn (isRestricted, espelhando o vizinho QADD) ─────────────────
+
+    @Test
+    void thumb2Crc32RejectsProgramCounterAsDestination() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put16(0, twoSourceHi(0xC, 1));
+        memory.put16(2, twoSourceLo(15, 0x8, 2)); // rd=PC
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumb2Crc32RejectsStackPointerAsDataRegister() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put16(0, twoSourceHi(0xC, 1));
+        memory.put16(2, twoSourceLo(0, 0x8, 13)); // rm=SP
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    @Test
+    void thumb2Crc32RejectsProgramCounterAsAccumulator() {
+        TestAddressSpace memory = new TestAddressSpace(8);
+        memory.put16(0, twoSourceHi(0xC, 15)); // rn=PC
+        memory.put16(2, twoSourceLo(0, 0x8, 2));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                new ThumbDecoder(ArmArchitecture.ARMV8A_32).decode(memory, 0).kind());
+    }
+
+    // ── Condição diferente de AL: a operação é pulada, exatamente como o vizinho QADD ───────────
+
+    @Test
+    void armCrc32SkipsExecutionWhenConditionFails() {
+        ArmCore core = newArmCore();
+        core.setRegister(0, 0xFFFF_FFFF);
+        core.setRegister(1, 0x61);
+        core.setRegister(2, 0x1234_5678); // destino pré-existente, não deve mudar
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE (cond=0001) falha
+        int notEqual = 0x1;
+        int word = (armCrc32(0, false, 0, 0, 1) & 0x0FFF_FFFF) | (notEqual << 28);
+        runArm(core, word);
+        assertEquals(0x1234_5678, core.register(2), "condição falsa não deve executar o CRC32");
+    }
+
+    @Test
+    void thumb2Crc32SkipsExecutionWhenConditionFails() {
+        ArmCore core = newThumb2Core();
+        core.setRegister(0, 0xFFFF_FFFF);
+        core.setRegister(1, 0x61);
+        core.setRegister(2, 0x1234_5678);
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE (cond=0001) falha
+        IrBlockExecutor executor = new IrBlockExecutor(ArmArchitecture.ARMV8A_32);
+        executor.executeOp(core, new IrOp.Crc32(2, 0, 1, 8, false, Condition.NE), 0);
+        assertEquals(0x1234_5678, core.register(2), "condição falsa não deve executar o CRC32");
+    }
+
+    // ── AsmNativePolicy: CRC32 nunca é emitido nativamente (decode+interpretado apenas) ────────
+
+    @Test
+    void asmNativePolicyRejectsCrc32() {
+        assertFalse(AsmNativePolicy.supports(
+                new IrOp.Crc32(0, 1, 2, 8, false, Condition.AL)),
+                "CRC32 não tem emissor nativo (B14.3: decode+interpretado apenas)");
     }
 
     // ── O vizinho de um bit (QADD/QSUB/QDADD/QDSUB) não regride ─────────────────────────────────
