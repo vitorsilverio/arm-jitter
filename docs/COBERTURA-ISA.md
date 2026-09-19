@@ -44,7 +44,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 19808 de 19882 células aplicáveis decodificam.
+> **99%** — 19808 de 19896 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -57,7 +57,7 @@ Por arquitetura:
 | v7-A | **100%** (652/652) |
 | v6-M | **100%** (94/94) |
 | v7-M | **100%** (334/334) |
-| ARMv8.1-M+MVE | **95%** (693/727) |
+| ARMv8.1-M+MVE | **93%** (693/741) |
 | ARMv8.0-A | **99%** (851/858) |
 | ARMv8.1-A | **99%** (883/890) |
 | ARMv8.2-A | **99%** (1008/1015) |
@@ -81,7 +81,7 @@ Por arquitetura:
 |---|---:|---|
 | A32 — instruções ARM de 32 bits | 266 | v4T 100% (144/144) · v5TE 100% (156/156) · v6K 100% (231/231) · MPCore 100% (231/231) · v7-A 100% (244/244) |
 | T16 — Thumb clássico | 87 | v4T 100% (62/62) · v5TE 100% (65/65) · v6K 100% (75/75) · MPCore 100% (75/75) · v7-A 100% (82/82) · v6-M 100% (75/75) · v7-M 100% (81/81) · ARMv8.1-M+MVE 100% (82/82) |
-| T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) · ARMv8.1-M+MVE 87% (248/282) |
+| T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v6-M 100% (8/8) · v7-M 100% (242/242) · ARMv8.1-M+MVE 83% (248/296) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | não se aplica a nenhum preset atual |
 | NEON — processamento de dados | 297 | não se aplica a nenhum preset atual |
@@ -691,24 +691,24 @@ Inventário: `t32.decode` · 310 instruções.
 | `STREXB` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `STREXH` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `STREXD_t32` | · | · | · | · | ✅ | · | ✅ | ✅ |
-| `STLEX` | · | · | · | · | · | · | · | · |
-| `STLEXB` | · | · | · | · | · | · | · | · |
-| `STLEXH` | · | · | · | · | · | · | · | · |
-| `STLEXD_t32` | · | · | · | · | · | · | · | · |
-| `STL` | · | · | · | · | · | · | · | · |
-| `STLB` | · | · | · | · | · | · | · | · |
-| `STLH` | · | · | · | · | · | · | · | · |
+| `STLEX` | · | · | · | · | · | · | · | ❌ |
+| `STLEXB` | · | · | · | · | · | · | · | ❌ |
+| `STLEXH` | · | · | · | · | · | · | · | ❌ |
+| `STLEXD_t32` | · | · | · | · | · | · | · | ❌ |
+| `STL` | · | · | · | · | · | · | · | ❌ |
+| `STLB` | · | · | · | · | · | · | · | ❌ |
+| `STLH` | · | · | · | · | · | · | · | ❌ |
 | `LDREX` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `LDREXB` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `LDREXH` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `LDREXD_t32` | · | · | · | · | ✅ | · | ✅ | ✅ |
-| `LDAEX` | · | · | · | · | · | · | · | · |
-| `LDAEXB` | · | · | · | · | · | · | · | · |
-| `LDAEXH` | · | · | · | · | · | · | · | · |
-| `LDAEXD_t32` | · | · | · | · | · | · | · | · |
-| `LDA` | · | · | · | · | · | · | · | · |
-| `LDAB` | · | · | · | · | · | · | · | · |
-| `LDAH` | · | · | · | · | · | · | · | · |
+| `LDAEX` | · | · | · | · | · | · | · | ❌ |
+| `LDAEXB` | · | · | · | · | · | · | · | ❌ |
+| `LDAEXH` | · | · | · | · | · | · | · | ❌ |
+| `LDAEXD_t32` | · | · | · | · | · | · | · | ❌ |
+| `LDA` | · | · | · | · | · | · | · | ❌ |
+| `LDAB` | · | · | · | · | · | · | · | ❌ |
+| `LDAH` | · | · | · | · | · | · | · | ❌ |
 | `TBB` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `TBH` | · | · | · | · | ✅ | · | ✅ | ✅ |
 | `SADD8` | · | · | · | · | ✅ | · | ✅ | ✅ |

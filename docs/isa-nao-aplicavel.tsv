@@ -51,20 +51,23 @@
 #   `Aarch64Feature`/`Aarch64Architecture` e a entrada no mapa — não uma linha aqui.
 
 # ── ARMv8-A: instruções de aquisição/liberação (load-acquire / store-release) ─────────────────
-LDA	*	ARMv8-A (load-acquire); não existe em ARMv4T..ARMv7-A
-LDAB	*	ARMv8-A (load-acquire)
-LDAH	*	ARMv8-A (load-acquire)
-LDAEX	*	ARMv8-A (load-acquire exclusive)
-LDAEXB	*	ARMv8-A (load-acquire exclusive)
-LDAEXH	*	ARMv8-A (load-acquire exclusive)
-LDAEXD*	*	ARMv8-A (load-acquire exclusive); `*` casa também `LDAEXD_t32` (inventário do t32.decode)
-STL	*	ARMv8-A (store-release)
-STLB	*	ARMv8-A (store-release)
-STLH	*	ARMv8-A (store-release)
-STLEX	*	ARMv8-A (store-release exclusive)
-STLEXB	*	ARMv8-A (store-release exclusive)
-STLEXH	*	ARMv8-A (store-release exclusive)
-STLEXD*	*	ARMv8-A (store-release exclusive); `*` casa também `STLEXD_t32` (inventário do t32.decode)
+# B14.2: implementadas sob ARMV8A_32 (ArmFeature.LOAD_ACQUIRE_STORE_RELEASE) — a exclusão ESTREITA
+# (não apaga) para as 7 colunas pré-v8 que nunca tiveram a instrução; a coluna v8-A/32 só nasce na
+# B14.7, então até lá esta linha ainda alcança tudo que existe hoje (zero-diff em COBERTURA-ISA.md).
+LDA	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2 — não existe em ARMv4T..ARMv7-A/v6-M/v7-M
+LDAB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2
+LDAH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2
+LDAEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
+LDAEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
+LDAEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
+LDAEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `LDAEXD_t32` (inventário do t32.decode)
+STL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
+STLB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
+STLH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
+STLEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
+STLEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
+STLEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
+STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `STLEXD_t32` (inventário do t32.decode)
 
 # ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
 CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão

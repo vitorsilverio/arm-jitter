@@ -28,10 +28,14 @@ import dev.vitorsilverio.armjitter.core.Condition;
 ///
 /// <p><b>Fora de escopo desta task</b> (deliberado):
 /// `TBB`/`TBH` (mesmo prefixo de 7 bits desta classe para `LDRD`/`STRD`/`LDREX`/`STREX`, mas são
-/// branches — ficam em B2.4, ver `b2.3-thumb2-loadstore.md`); as formas load-acquire/store-release
-/// ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, mesmo espaço de bits de `LDREX*`/`STREX*` — fora do
-/// escopo, ARM clássico também não as implementa). Todos caem no UNDEFINED controlado do
+/// branches — ficam em B2.4, ver `b2.3-thumb2-loadstore.md`). Cai no UNDEFINED controlado do
 /// {@link ThumbDecoder} (`null` devolvido aqui).
+///
+/// <p><b>B14.2</b>: as formas load-acquire/store-release ARMv8-A (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`,
+/// mesmo espaço de bits "sized" de `LDREX*`/`STREX*`, `op4` `8`-`F`) agora decodificam sob
+/// {@link ArmFeature#LOAD_ACQUIRE_STORE_RELEASE} — ver {@link #decodeExclusiveWordOrSized},
+/// {@link #decodeSizedExclusive(int, int, Condition, boolean, int, ArmFeature)} e
+/// {@link #decodeAcquireReleasePlain}.
 ///
 /// <p><b>B2.7 PR3</b>: `LDREX`/`STREX`/`LDREXB/H/D`/`STREXB/H/D` de 32 bits, antes fora de escopo
 /// (ver nota histórica removida acima), agora decodificados — ver
@@ -438,13 +442,34 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
 
     /// `raw[7:4]`: dentro do subgrupo `P=0,W=0` (a forma "sized", `raw[23]=1`), distingue
     /// byte/half/doubleword de `TBB`/`TBH` (op4 `0`/`1`, tratados em {@link Thumb2BranchDecoder})
-    /// e das formas load-acquire/store-release ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, op4 `8`-`F`
-    /// — mesmo espaço de bits que o ARM clássico também não implementa, fora do escopo).
+    /// e das formas load-acquire/store-release ARMv8 (`LDAEX*`/`STLEX*`/`LDA*`/`STL*`, op4 `8`-`F`,
+    /// B14.2 — ver {@link #decodeAcquireReleasePlain}/segundo parâmetro de
+    /// {@link #decodeSizedExclusive(int, int, Condition, boolean, int, ArmFeature)}); `0b1011` é o
+    /// único valor sem instrução real, continua caindo em `null`/`UNIMPLEMENTED` (G8).
     private static final int EXCLUSIVE_OP4_SHIFT = 4;
     private static final int EXCLUSIVE_OP4_MASK = 0xF;
     private static final int EXCLUSIVE_OP4_BYTE = 0b0100;
     private static final int EXCLUSIVE_OP4_HALF = 0b0101;
     private static final int EXCLUSIVE_OP4_DOUBLE = 0b0111;
+    /// `LDAB`/`STLB` (B14.2): acquire/release SEM exclusividade, tamanho byte.
+    private static final int ACQUIRE_RELEASE_OP4_BYTE = 0b1000;
+    /// `LDAH`/`STLH` (B14.2): acquire/release SEM exclusividade, tamanho halfword.
+    private static final int ACQUIRE_RELEASE_OP4_HALF = 0b1001;
+    /// `LDA`/`STL` (B14.2): acquire/release SEM exclusividade, tamanho word.
+    private static final int ACQUIRE_RELEASE_OP4_WORD = 0b1010;
+    /// `LDAEXB`/`STLEXB` (B14.2): exclusivo COM acquire/release, tamanho byte.
+    private static final int ACQUIRE_RELEASE_EXCLUSIVE_OP4_BYTE = 0b1100;
+    /// `LDAEXH`/`STLEXH` (B14.2): exclusivo COM acquire/release, tamanho halfword.
+    private static final int ACQUIRE_RELEASE_EXCLUSIVE_OP4_HALF = 0b1101;
+    /// `LDAEX`/`STLEX` (B14.2): exclusivo COM acquire/release, tamanho word — ao contrário do
+    /// exclusivo clássico (que tem a forma word em {@link #decodeWordExclusive}, com offset), esta
+    /// forma vive no espaço "sized" (sem offset), porque o encoding ARMv8 novo não reaproveita o
+    /// layout `@strex_i`/`@ldrex_i`.
+    private static final int ACQUIRE_RELEASE_EXCLUSIVE_OP4_WORD = 0b1110;
+    /// `LDAEXD_t32`/`STLEXD_t32` (B14.2): exclusivo COM acquire/release, par doubleword —
+    /// `@strex_d`/`@ldrex_d`, mesmo layout de `Rt2`/`Rd` explícitos que `STREXD_t32`/`LDREXD_t32`
+    /// já usam.
+    private static final int ACQUIRE_RELEASE_EXCLUSIVE_OP4_DOUBLE = 0b1111;
 
     /// Marcador fixo `1111` que ocupa o campo `Rt2`/`Rd` quando ele não é usado por uma forma
     /// específica (`LDREXB/H`'s `Rt2`, e o `Rd` sempre ausente de `LDREX*`).
@@ -484,7 +509,18 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
             case EXCLUSIVE_OP4_BYTE -> decodeSizedExclusive(raw, address, condition, load, 1);
             case EXCLUSIVE_OP4_HALF -> decodeSizedExclusive(raw, address, condition, load, 2);
             case EXCLUSIVE_OP4_DOUBLE -> decodeSizedExclusive(raw, address, condition, load, 8);
-            default -> null; // TBB/TBH ou load-acquire/store-release ARMv8, fora do escopo
+            case ACQUIRE_RELEASE_OP4_BYTE -> decodeAcquireReleasePlain(raw, address, condition, load, 1);
+            case ACQUIRE_RELEASE_OP4_HALF -> decodeAcquireReleasePlain(raw, address, condition, load, 2);
+            case ACQUIRE_RELEASE_OP4_WORD -> decodeAcquireReleasePlain(raw, address, condition, load, 4);
+            case ACQUIRE_RELEASE_EXCLUSIVE_OP4_BYTE ->
+                    decodeSizedExclusive(raw, address, condition, load, 1, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
+            case ACQUIRE_RELEASE_EXCLUSIVE_OP4_HALF ->
+                    decodeSizedExclusive(raw, address, condition, load, 2, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
+            case ACQUIRE_RELEASE_EXCLUSIVE_OP4_WORD ->
+                    decodeSizedExclusive(raw, address, condition, load, 4, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
+            case ACQUIRE_RELEASE_EXCLUSIVE_OP4_DOUBLE ->
+                    decodeSizedExclusive(raw, address, condition, load, 8, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
+            default -> null; // TBB/TBH (tratados em Thumb2BranchDecoder) ou `0b1011` (sem instrução real)
         };
     }
 
@@ -546,7 +582,23 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     /// (`dst`/`dst+1`), sem precisar de um campo `second` independente como
     /// {@code IrOp.DoubleTransfer} ganhou.
     private DecodedInstruction decodeSizedExclusive(int raw, int address, Condition condition, boolean load, int sizeBytes) {
-        if (!architecture.has(ArmFeature.EXCLUSIVE_SIZED)) {
+        return decodeSizedExclusive(raw, address, condition, load, sizeBytes, ArmFeature.EXCLUSIVE_SIZED);
+    }
+
+    /// Generalização de {@link #decodeSizedExclusive(int, int, Condition, boolean, int)} para as
+    /// formas `LDAEX*`/`STLEX*` (B14.2, ARMv8-A): MESMO layout de registrador (`rt`(15:12),
+    /// `Rt2`/marcador(11:8), `Rd`(status)/marcador(3:0)) e MESMAS regras de par
+    /// doubleword/UNPREDICTABLE do exclusivo clássico — só muda o `ArmFeature` de gate e o
+    /// tamanho `word`(4) fica disponível aqui (o exclusivo clássico só tem word via
+    /// {@link #decodeWordExclusive}, com offset). Ordenação acquire/release é NOP observável neste
+    /// interpretador single-thread (mesma decisão de {@code Ir64Op.LoadExclusive#acquireRelease}
+    /// no lado A64 e do bloco A32 equivalente em {@code ArmDecoder}) — como o monitor de
+    /// exclusividade já é a MESMA semântica de `LDREX`/`STREX`, reusa
+    /// {@link InstructionKind#LOAD_EXCLUSIVE}/{@link InstructionKind#STORE_EXCLUSIVE} sem sinalizar
+    /// nada de novo (G1: zero IR nova).
+    private DecodedInstruction decodeSizedExclusive(int raw, int address, Condition condition, boolean load,
+            int sizeBytes, ArmFeature requiredFeature) {
+        if (!architecture.has(requiredFeature)) {
             return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
         }
         int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
@@ -576,5 +628,33 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         }
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
                 InstructionKind.STORE_EXCLUSIVE, rd, rn, rt, 0, false, false, false, sizeBytes, false);
+    }
+
+    /// `LDA{,B,H}`/`STL{,B,H}` (B14.2, ARMv8-A, `op4` `8`-`A`): carga/escrita simples em `[Rn]`,
+    /// sem offset, SEM tocar o monitor de exclusividade — ao contrário de todas as outras formas
+    /// deste arquivo, `rt` (15:12) é o MESMO campo tanto para a direção load quanto para a
+    /// direção store (não há registrador de status: `Rd`/`Rt2`(3:0/11:8) são SEMPRE marcadores
+    /// fixos `1111`, mesmo em `STL`). Reusa {@link InstructionKind#LOAD}/{@link InstructionKind#STORE}
+    /// (a mesma IrOp que `LDR`/`STR` de `[Rn]` sem deslocamento, G1: zero IR nova). Ordenação
+    /// acquire/release é NOP observável — mesma decisão de
+    /// {@link #decodeSizedExclusive(int, int, Condition, boolean, int, ArmFeature)}.
+    private DecodedInstruction decodeAcquireReleasePlain(int raw, int address, Condition condition, boolean load,
+            int sizeBytes) {
+        if (!architecture.has(ArmFeature.LOAD_ACQUIRE_STORE_RELEASE)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        int rn = (raw >>> RN2_SHIFT) & RN2_MASK;
+        int rt = (raw >>> RT_SHIFT_LDRD) & RT_MASK_LDRD;
+        if (rn == PROGRAM_COUNTER || rt == PROGRAM_COUNTER) {
+            return null; // UNPREDICTABLE
+        }
+        int upperMarker = (raw >>> RT2_SHIFT) & RT_MASK_LDRD;
+        int lowMarker = (raw >>> EXCLUSIVE_RD_SHIFT) & EXCLUSIVE_RD_MASK;
+        if (upperMarker != EXCLUSIVE_FIXED_MARKER || lowMarker != EXCLUSIVE_FIXED_MARKER) {
+            return null; // campo Rt2/Rd inválido — não é uma LDA*/STL* real
+        }
+        InstructionKind kind = load ? InstructionKind.LOAD : InstructionKind.STORE;
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
+                rt, rn, -1, 0, true, false, false, sizeBytes, false);
     }
 }

@@ -53,27 +53,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.3 fechar `CRC32*` A32/T32)
+## Onde estamos (atualizado 2026-09-19, após B14.2 fechar `LDA`/`STL`/`LDAEX*`/`STLEX*` A32/T32)
 
-**B14.3 FECHADA.** `CRC32B/H/W`/`CRC32CB/CH/CW` decodificam e executam sob o preset `ARMV8A_32`
-(A32 + T32, 12 linhas). Zero algoritmo novo: o laço bit-a-bit da B19.17 foi extraído para
-`advsimd/Crc32Checksum` (núcleo compartilhado, medição confirmou `advsimd` como o único pacote já
-importado pelos dois pipelines — 32 e 64 bits) e o lado A64 migrado para delegar (zero-diff, os
-testes da B19.17 passam sem alteração). `docs/COBERTURA-ISA.md` byte a byte idêntico (a coluna
-`v8-A/32` só nasce na B14.7); `docs/isa-nao-aplicavel.tsv` não precisou de mudança. Achado de
-processo: `IrOp.Kind` novo em 32 bits força atualizar TRÊS switches exaustivos
-(`StandardIrBuilder`/`IrBlockExecutor`/`StandardIrBlockLifter`) mais dois guards do módulo
-`truffle/` (`TruffleCodeEmitterSupportsCoherenceTest` + `docs/COBERTURA-JIT.md`) — nenhum desses
-cinco pontos está listado na "Validação" de tasks antigas da trilha B13/B14 que acrescentam
-`Kind`; útil registrar para a próxima. `mvn -o test` verde na raiz (todos os módulos). Ver
-`## Resultado` de `B14.3`.
+**B14.2 FECHADA.** `LDA`/`LDAB`/`LDAH`/`LDAEX*`/`STL`/`STLB`/`STLH`/`STLEX*` (A32 + T32, 28 linhas)
+decodificam e executam sob `ARMV8A_32`. Zero `IrOp`/`InstructionKind` novo: `LDAEX*`/`STLEX*`
+reusam `LOAD_EXCLUSIVE`/`STORE_EXCLUSIVE` (mesmo monitor de B1.4/B5.1), `LDA*`/`STL*` reusam
+`LOAD`/`STORE` (carga/escrita simples em `[Rn]`, nunca tocam o monitor — testado explicitamente,
+`LDA` seguido de `STREX` tem que falhar). Acquire/release é NOP observável, mesma decisão do A64.
+**⚠️ `docs/COBERTURA-ISA.md` NÃO ficou byte a byte idêntica** — achado não previsto pela spec: o
+grupo T32 mede 8 colunas (não 7), e a 8ª (`ARMv8.1-M+MVE`) ficou exposta como `❌` real ao estreitar
+o tsv (denominador +14 em `global`/`ARMv8.1-M+MVE`; decisão de NÃO mascarar essa lacuna sem
+confirmar antes se a instrução existe no encoding M-profile — ver `## Resultado` de `B14.2` para o
+raciocínio completo). `mvn -o test` verde na raiz + G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado`
+de `B14.2`.
 
-**Pegáveis a seguir**: `B14.2` (`LDA`/`STL`/`LDAEX*`/`STLEX*`, 28 linhas, mesma dependência
-B14.1 ✅) é o próximo degrau natural do épico B14. `C12.5`/`C12.10` (emissão JIT nativa A64)
-seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode)
-seguem pegáveis sem dependência pendente. Candidatas gap-driven da B16.14 (specs ainda não
-escritas): decoder MVE "long shift" GPR-pair (19 encodings), tail-predication
-`WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32 bits.
+**Pegáveis a seguir**: `B14.4` (`VSEL`/`VMAXNM`/`VMINNM`, mesma dependência B14.1 ✅ — já tem um
+achado de misdecode G8 pré-existente documentado na spec) é o próximo degrau natural do épico B14.
+`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1`
+(fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas
+gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
+tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
+bits.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

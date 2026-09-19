@@ -61,6 +61,20 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int MLS_MASK = 0x0FF0_00F0;
     private static final int MLS_VALUE = 0x0060_0090;
 
+    // Nibble `bits[11:8]` do bloco de acessos exclusivos/acquire-release (B14.2): distingue as
+    // três famílias que compartilham o resto do padrão (`bits[27:23]=00011`, `bits[7:4]=1001`).
+    private static final int EXCLUSIVE_DISCRIMINATOR_SHIFT = 8;
+    private static final int EXCLUSIVE_DISCRIMINATOR_MASK = 0xF;
+    /// `1111`: exclusivo clássico (`LDREX*`/`STREX*`, ARMv6/v6K) — gate `EXCLUSIVE_WORD`/
+    /// `EXCLUSIVE_SIZED`.
+    private static final int EXCLUSIVE_DISCRIMINATOR_CLASSIC = 0b1111;
+    /// `1110`: exclusivo com acquire/release (`LDAEX*`/`STLEX*`, ARMv8-A) — mesmas regras de
+    /// registrador do exclusivo clássico, gate `LOAD_ACQUIRE_STORE_RELEASE`.
+    private static final int EXCLUSIVE_DISCRIMINATOR_ACQUIRE_RELEASE_EXCLUSIVE = 0b1110;
+    /// `1100`: acquire/release SEM exclusividade (`LDA*`/`STL*`, ARMv8-A) — não toca o monitor,
+    /// nunca tem forma doubleword, gate `LOAD_ACQUIRE_STORE_RELEASE`.
+    private static final int EXCLUSIVE_DISCRIMINATOR_ACQUIRE_RELEASE_PLAIN = 0b1100;
+
     /// `SBFX`/`UBFX`: `cccc 0111 101 widthm1[4:0] dddd lsb[4:0] 101 nnnn` (SBFX) /
     /// `cccc 0111 111 widthm1[4:0] dddd lsb[4:0] 101 nnnn` (UBFX).
     private static final int BIT_FIELD_EXTRACT_MASK = 0x0FE0_0070;
@@ -534,43 +548,88 @@ public final class ArmDecoder implements InstructionDecoder {
                     rd, rn, rm, 0, false, false, false, byteAccess ? 1 : 4, false);
         }
 
-        // Acessos exclusivos ARMv6/v6K: `cccc 0001 1sz1 nnnn dddd 1111 1001 1111` (LDREX*) e
-        // `cccc 0001 1sz0 nnnn dddd 1111 1001 mmmm` (STREX*), com sz: 00=word, 01=doubleword,
-        // 10=byte, 11=halfword. Word é gateado por EXCLUSIVE_WORD; B/H/D por EXCLUSIVE_SIZED.
+        // Acessos exclusivos ARMv6/v6K + acquire/release ARMv8-A (B14.2): `cccc 0001 1sz? nnnn
+        // dddd XXXX 1001 mmmm`, com sz (bits 22:21) igual ao já documentado (00=word, 01=doubleword,
+        // 10=byte, 11=halfword) e XXXX (bits 11:8) escolhendo a família — `1111`=exclusivo clássico
+        // (LDREX*/STREX*, já existia), `1110`=exclusivo+acquire/release (LDAEX*/STLEX*, novo),
+        // `1100`=acquire/release sem exclusividade (LDA*/STL*, novo, sem forma doubleword). Os
+        // outros 13 valores do nibble continuam UNDEFINED (G8) — não existe instrução real ali.
         // Precisa vir antes do bloco de halfword-transfer (0x0000_0090), que engoliria o padrão.
-        if ((raw & 0x0F80_0FF0) == 0x0180_0F90) {
+        if ((raw & 0x0F80_00F0) == 0x0180_0090) {
+            int discriminator = (raw >>> EXCLUSIVE_DISCRIMINATOR_SHIFT) & EXCLUSIVE_DISCRIMINATOR_MASK;
+            boolean exclusive = discriminator == EXCLUSIVE_DISCRIMINATOR_CLASSIC
+                    || discriminator == EXCLUSIVE_DISCRIMINATOR_ACQUIRE_RELEASE_EXCLUSIVE;
+            boolean acquireReleasePlain = discriminator == EXCLUSIVE_DISCRIMINATOR_ACQUIRE_RELEASE_PLAIN;
+            if (!exclusive && !acquireReleasePlain) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
             boolean load = (raw & (1 << 20)) != 0;
             int sizeBits = (raw >>> 21) & 0x3;
+            if (acquireReleasePlain && sizeBits == 0b01) {
+                // LDA/STL não têm forma doubleword (só LDAEXD/STLEXD, família exclusiva).
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
             int sizeBytes = switch (sizeBits) {
                 case 0b00 -> 4;
                 case 0b01 -> 8;
                 case 0b10 -> 1;
                 default -> 2;
             };
-            ArmFeature required = sizeBytes == 4 ? ArmFeature.EXCLUSIVE_WORD : ArmFeature.EXCLUSIVE_SIZED;
-            boolean formValid = !load || (raw & 0xF) == 0xF; // LDREX* tem os bits 3:0 fixos em 1111
+            ArmFeature required = discriminator == EXCLUSIVE_DISCRIMINATOR_CLASSIC
+                    ? (sizeBytes == 4 ? ArmFeature.EXCLUSIVE_WORD : ArmFeature.EXCLUSIVE_SIZED)
+                    : ArmFeature.LOAD_ACQUIRE_STORE_RELEASE;
+            boolean formValid = !load || (raw & 0xF) == 0xF; // *EX*/LDA*/LDREX* têm bits 3:0 fixos em 1111
+            int rn = (raw >>> 16) & 0xF;
+            int rd = (raw >>> 12) & 0xF;
+            int rm = raw & 0xF;
+            // LDA/STL não têm registrador de status: bits 15:12 são um marcador fixo `1111` no
+            // encoding real, não um Rd de verdade (STL usa bits 3:0 para o dado, como STREX usa
+            // `rm` — ver a tabela de campos da task B14.2).
+            boolean nonExclusiveStoreMarkerValid = exclusive || load || rd == 0xF;
             // Este padrão de bits colide com outras encodings mais abaixo no decoder (halfword
             // transfer, etc.) — retorna UNDEFINED explicitamente quando a arquitetura não tem a
             // feature ou a forma é inválida, em vez de cair (fall-through) num decode errado
             // (mesmo cuidado do BLX/CLZ/Saturating acima).
-            if (!architecture.has(required) || !formValid) {
+            if (!architecture.has(required) || !formValid || !nonExclusiveStoreMarkerValid) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
-            int rn = (raw >>> 16) & 0xF;
-            int rd = (raw >>> 12) & 0xF;
-            int rm = raw & 0xF;
-            if (exclusiveRegistersValid(load, sizeBytes, rd, rn, rm)) {
-                return load
-                        ? new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
-                                InstructionKind.LOAD_EXCLUSIVE, rd, rn, -1, 0, false, false, false,
-                                sizeBytes, false)
-                        : new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
-                                InstructionKind.STORE_EXCLUSIVE, rd, rn, rm, 0, false, false, false,
-                                sizeBytes, false);
+            if (exclusive) {
+                if (exclusiveRegistersValid(load, sizeBytes, rd, rn, rm)) {
+                    return load
+                            ? new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                                    InstructionKind.LOAD_EXCLUSIVE, rd, rn, -1, 0, false, false, false,
+                                    sizeBytes, false)
+                            : new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                                    InstructionKind.STORE_EXCLUSIVE, rd, rn, rm, 0, false, false, false,
+                                    sizeBytes, false);
+                }
+                // Formas UNPREDICTABLE (Rd/Rn/Rm=PC, Rd sobreposto ao par do STREX, par ímpar
+                // do LDREXD/STREXD) seguem para UNDEFINED em vez de aceitar silenciosamente.
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
-            // Formas UNPREDICTABLE (Rd/Rn/Rm=PC, Rd sobreposto ao par do STREX, par ímpar
-            // do LDREXD/STREXD) seguem para UNDEFINED em vez de aceitar silenciosamente.
-            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            // LDA*/STL*: carga/escrita simples em `[Rn]`, sem offset, SEM tocar o monitor de
+            // exclusividade — reusa InstructionKind.LOAD/STORE (zero IrOp novo, G1). A ordenação
+            // acquire/release é NOP observável neste interpretador single-thread (mesma decisão
+            // documentada em Ir64Op.LoadExclusive#acquireRelease para o lado A64): como não há
+            // efeito algum a modelar, o decoder nem carrega um sinalizador — reproduzir a MESMA
+            // instrução exata (LDR/STR de `[Rn]`) já conta a mesma história.
+            if (rn == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            if (load) {
+                if (rd == PROGRAM_COUNTER) {
+                    return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+                }
+                return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.LOAD, rd, rn, -1, 0, true, false, false, sizeBytes, false, false,
+                        false, false);
+            }
+            if (rm == PROGRAM_COUNTER) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                    InstructionKind.STORE, rm, rn, -1, 0, true, false, false, sizeBytes, false, false,
+                    false, false);
         }
 
         // MLS (ARMv6T2+, B3.1): precisa vir antes do bloco de halfword-transfer (0x0000_0090
