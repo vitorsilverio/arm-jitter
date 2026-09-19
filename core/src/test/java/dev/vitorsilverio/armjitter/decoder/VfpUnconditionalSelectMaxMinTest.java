@@ -2,11 +2,13 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
@@ -216,12 +218,43 @@ class VfpUnconditionalSelectMaxMinTest {
         assertEquals(22.0f, core.vfp().sFloat(2));
     }
 
+    /// Fecha o branch `false` de `IrVfpExecutor#executeVfpSelect` — `op.condition()` (gate do
+    /// BLOCO) é sempre `AL` no que o decoder produz, mas o record aceita qualquer `Condition` (é
+    /// código real, alcançável por quem monta `IrOp.VfpSelect` na mão, mesmo padrão de
+    /// `executeVfpCompare`/`executeVfpConvert` etc.). Prova direta da Armadilha 2: `condition`
+    /// (bloco) e `selectCondition` (dado) são campos INDEPENDENTES — aqui `condition=NE` é falso
+    /// (Z=1) e a operação inteira é pulada, mesmo que `selectCondition=EQ` fosse verdadeiro.
+    @Test
+    void vselWithFalseBlockConditionSkipsEntirelyRegardlessOfSelectCondition() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(2, -1.0f); // valor sentinela: não deve mudar.
+        core.vfp().setSFloat(0, 11.0f);
+        core.vfp().setSFloat(1, 22.0f);
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso, EQ verdadeiro.
+        IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
+        executor.executeOp(core, new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.NE), 0);
+        assertEquals(-1.0f, core.vfp().sFloat(2));
+    }
+
     @Test
     void vselDoublePrecisionCopiesBitsExactly() {
         ArmCore core = newCore();
         core.vfp().setD(0, Double.doubleToRawLongBits(Double.NaN));
         core.vfp().setDDouble(1, 7.5);
         core.cpsr().setNzcv(true, false, false, true); // N=1,V=1 -> GE (N==V) verdadeiro -> vn.
+        IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
+        executor.executeOp(core, new IrOp.VfpSelect(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
+        assertEquals(Double.doubleToRawLongBits(Double.NaN), core.vfp().d(2));
+    }
+
+    /// Fecha o lado `vm` do ternário de precisão dupla em `executeVfpSelect` — o teste acima só
+    /// exercitava `selectCondition` verdadeiro (escolhe `vn`); este cobre falso (escolhe `vm`).
+    @Test
+    void vselDoublePrecisionSelectsVmWhenSelectConditionFalse() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, 1.5);
+        core.vfp().setD(1, Double.doubleToRawLongBits(Double.NaN));
+        core.cpsr().setNzcv(true, false, false, false); // N=1,V=0 -> GE (N==V) falso -> escolhe vm.
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
         executor.executeOp(core, new IrOp.VfpSelect(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
         assertEquals(Double.doubleToRawLongBits(Double.NaN), core.vfp().d(2));
@@ -262,6 +295,18 @@ class VfpUnconditionalSelectMaxMinTest {
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.maxNum(0.0, -0.0), core.vfp().dDouble(2));
     }
 
+    /// `computeDoubleArithmetic` tem o `case MINNM` próprio (não cai no `default`/`MAXNM`) — sem
+    /// este teste, o `switch` de precisão dupla nunca exercitava `MINNM`, só `MAXNM`.
+    @Test
+    void vminnmDoublePrecisionPrefersNumericOperandOverNaN() {
+        ArmCore core = newCore();
+        core.vfp().setDDouble(0, Double.NaN);
+        core.vfp().setDDouble(1, 2.5);
+        IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
+        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, true, 2, 0, 1, Condition.AL), 0);
+        assertEquals(2.5, core.vfp().dDouble(2));
+    }
+
     /// Equivalência explícita com o núcleo A64 `FMAXNM`/`FMINNM` (mesma delegação a
     /// `AdvSimdLanes`) — casos de teste obrigatórios da task: `(NaN,1.0)`, `(1.0,NaN)`,
     /// `(NaN,NaN)`, `(+0.0,-0.0)`, `(-0.0,+0.0)`.
@@ -283,6 +328,17 @@ class VfpUnconditionalSelectMaxMinTest {
         }
     }
 
+    /// Prova DIRETA (não só por exclusão no loop de equivalência) de que `AsmNativePolicy` recusa
+    /// `MAXNM`/`MINNM` — achado da revisão de cobertura: o loop de equivalência só EXCLUI esses 2
+    /// valores, nunca invoca `supports()` com eles, então o branch `op==MAXNM`/`op==MINNM` de
+    /// `AsmNativePolicy` ficava sem teste algum (JaCoCo confirmou: 1 de 4 branches faltando).
+    @Test
+    void asmNativePolicyRefusesMaxNmAndMinNmButAcceptsRestOfVfpAlu() {
+        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 0, 1, 2, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, true, 0, 1, 2, Condition.AL)));
+        assertEquals(true, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 0, 1, 2, Condition.AL)));
+    }
+
     // ── 6. Fechamento G8: o resto do espaço incondicional (B14.5/B14.6) é UNIMPLEMENTED, não `null` ─
 
     @Test
@@ -294,6 +350,105 @@ class VfpUnconditionalSelectMaxMinTest {
         // VRINT (bits[23:20]=1110-ish, B14.5): bit23=1, bits21:20 != 00 -> cai no "resto".
         int vrintLike = (0xF << 28) | (0xE << 24) | (1 << 23) | (0x3 << 20) | (0xA << 8);
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(VFP_V8_TEST_ARCH, vrintLike).kind());
+    }
+
+    /// **Achado pós-fechamento (revisão de cobertura)**: o desenho original devolvia o `null` de
+    /// `decodeVsel`/`decodeMaxNmMinNm` (registrador `D16`+ inválido sem `VFPV3_D32`) direto de
+    /// `tryDecode`, sem converter para `UNIMPLEMENTED` — violação G8 (`claimsEncodingSpace` já diz
+    /// `true` para este `raw`). Passava despercebido porque `ArmDecoder#decodeUnconditional`
+    /// converte QUALQUER `null` de extensão em `UNIMPLEMENTED` no fallback final — então testar só
+    /// via `decodeArm` (que passa por `ArmDecoder`) não pegava o bug; é preciso chamar
+    /// `VfpDecoder#tryDecode` diretamente.
+    @Test
+    void vselDoubleWithInvalidD16RegisterIsExplicitlyUnimplementedNeverNull() {
+        int word = vselWord(0, true, 16, 0, 1); // VSELEQ.F64 D16, D0, D1
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        assertEquals(true, decoder.claimsEncodingSpace(word));
+        DecodedInstruction decoded = decoder.tryDecode(word, 0, Condition.AL);
+        assertNotNull(decoded, "tryDecode devolveu null apesar de claimsEncodingSpace=true (G8)");
+        assertEquals(InstructionKind.UNIMPLEMENTED, decoded.kind());
+    }
+
+    @Test
+    void vmaxnmDoubleWithInvalidD16RegisterIsExplicitlyUnimplementedNeverNull() {
+        int word = maxNmMinNmWord(false, true, 0, 0, 16); // VMAXNM.F64 D0, D0, D16
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        assertEquals(true, decoder.claimsEncodingSpace(word));
+        DecodedInstruction decoded = decoder.tryDecode(word, 0, Condition.AL);
+        assertNotNull(decoded, "tryDecode devolveu null apesar de claimsEncodingSpace=true (G8)");
+        assertEquals(InstructionKind.UNIMPLEMENTED, decoded.kind());
+    }
+
+    /// Fecha os outros 2 operandos do `||` de `decodeVsel` (JaCoCo apontou: só `vd` inválido
+    /// estava exercitado, `vn`/`vm` inválidos individualmente não).
+    @Test
+    void vselWithInvalidVnOrVmRegisterIsUnimplementedNeverNull() {
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        int vnInvalid = vselWord(0, true, 0, 16, 1); // VSELEQ.F64 D0, D16, D1
+        assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vnInvalid).kind());
+        int vmInvalid = vselWord(0, true, 0, 1, 16); // VSELEQ.F64 D0, D1, D16
+        assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vmInvalid).kind());
+    }
+
+    /// Mesmo fechamento para `decodeMaxNmMinNm` (só `vm` inválido estava exercitado).
+    @Test
+    void vmaxnmWithInvalidVdOrVnRegisterIsUnimplementedNeverNull() {
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        int vdInvalid = maxNmMinNmWord(false, true, 16, 0, 1); // VMAXNM.F64 D16, D0, D1
+        assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vdInvalid).kind());
+        int vnInvalid = maxNmMinNmWord(false, true, 0, 16, 1); // VMAXNM.F64 D0, D16, D1
+        assertEquals(InstructionKind.UNIMPLEMENTED, notNullDecode(decoder, vnInvalid).kind());
+    }
+
+    private static DecodedInstruction notNullDecode(VfpDecoder decoder, int word) {
+        DecodedInstruction decoded = decoder.tryDecode(word, 0, Condition.AL);
+        assertNotNull(decoded, "tryDecode devolveu null apesar de claimsEncodingSpace=true (G8)");
+        return decoded;
+    }
+
+    /// Fecha o branch `false` de `claimsEncodingSpace` (`isUnconditionalVfpSpace(raw)==false`) —
+    /// os outros testes desta suíte só passavam `raw` DENTRO do espaço incondicional.
+    @Test
+    void claimsEncodingSpaceFalseBranchFallsThroughToClaimsThisDecoder() {
+        // VADD.F32 S2,S0,S1 (cond=AL, op1=0b011 bit6=0): `---- 1110 0.11 vn vd size .0.0 vm` —
+        // espaço VFP CONDICIONAL comum (bits[31:28]=cond real, não 0xF), fora do gate de B14.4.
+        int conditionalWord = (0xE << 28) | (0xE << 24);
+        conditionalWord |= extOf(2, false) << 22;
+        conditionalWord |= 0b11 << 20; // op1=0b011: bit23=0 (implícito), bit21=1, bit20=1.
+        conditionalWord |= nibbleOf(0, false) << 16; // vn=0
+        conditionalWord |= nibbleOf(2, false) << 12; // vd=2
+        conditionalWord |= size(false) << 8;
+        conditionalWord |= extOf(0, false) << 7; // vn ext
+        conditionalWord |= extOf(1, false) << 5; // vm ext
+        conditionalWord |= nibbleOf(1, false); // vm=1
+        VfpDecoder decoder = new VfpDecoder(VFP_V8_TEST_ARCH);
+        assertEquals(false, isUnconditionalWordForTest(conditionalWord));
+        assertEquals(true, decoder.claimsEncodingSpace(conditionalWord));
+        DecodedInstruction decoded = decoder.tryDecode(conditionalWord, 0, Condition.AL);
+        assertEquals(InstructionKind.VFP_ALU, decoded.kind());
+        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), liftSingleOp(decoded));
+    }
+
+    private static boolean isUnconditionalWordForTest(int raw) {
+        return (raw >>> 28) == 0xF;
+    }
+
+    // ── 7. Caminho de execução de BLOCO (Kind-switch de `IrBlockExecutor#execute`), não só
+    //        `executeOp` (fallback PER_OP) — os testes acima só exercitavam este último ──────────
+
+    @Test
+    void vselExecutesThroughPrimaryBlockDispatchNotOnlyExecuteOpFallback() {
+        ArmCore core = newCore();
+        core.vfp().setSFloat(0, 5.0f);
+        core.vfp().setSFloat(1, 9.0f);
+        core.cpsr().setNzcv(false, false, false, false); // Z=0 -> EQ falso -> escolhe vm.
+        IrBlock.Builder builder = IrBlock.builder(0);
+        builder.add(new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.AL));
+        builder.add(new IrOp.Cycle(1));
+        builder.add(new IrOp.Fetch(4, 4));
+        IrBlock block = builder.endPc(4).sealed();
+        new IrBlockExecutor(VFP_V8_TEST_ARCH).execute(block, core);
+        assertEquals(9.0f, core.vfp().sFloat(2));
     }
 
     @Test

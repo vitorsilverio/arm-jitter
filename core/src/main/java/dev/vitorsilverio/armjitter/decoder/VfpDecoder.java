@@ -71,7 +71,13 @@ public final class VfpDecoder implements DecoderExtension {
         // capturaria erroneamente encodings deste espaço). Ver javadoc de
         // `#isUnconditionalVfpSpace`/`#decodeUnconditionalSpace` para o porquê do gate ficar aqui.
         if (isUnconditionalVfpSpace(raw)) {
-            return decodeUnconditionalSpace(raw, address, condition);
+            // `decodeVsel`/`decodeMaxNmMinNm` podem devolver `null` (`Dn` inválido sem
+            // `VFPV3_D32`) — `claimsEncodingSpace` já disse `true` para este `raw` (não checa
+            // validade de registrador), então `null` aqui violaria G8 (o `⚠️` que a task existe
+            // para eliminar). Mesma conversão `null -> UNIMPLEMENTED` que o resto da classe já
+            // faz para o espaço condicional (linha ~94).
+            DecodedInstruction decoded = decodeUnconditionalSpace(raw, address, condition);
+            return decoded != null ? decoded : DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
         }
         if (!claimsThisDecoder(raw)) {
             return null;
