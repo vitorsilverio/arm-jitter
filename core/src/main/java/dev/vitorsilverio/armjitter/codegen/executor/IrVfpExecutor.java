@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.FpRoundingMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
@@ -139,6 +140,11 @@ public final class IrVfpExecutor {
                 yield DirectedFpRounding.roundFloat(Math.fma(vn, vm, -vd),
                         DirectedFpRounding.exactFma(vn, vm, -vd).doubleValue(), mode);
             }
+            // VMAXNM/VMINNM (B14.4): variante "numérica" de max/min — se só um operando é NaN, o
+            // resultado é o OUTRO; delega ao mesmo núcleo do `FMAXNM`/`FMINNM` A64 (Ir64FpExecutor),
+            // NUNCA `Math.max`/`Math.min` (Armadilha 3 da task — aqueles não tratam NaN assim).
+            case MAXNM -> AdvSimdLanes.maxNum(vn, vm);
+            case MINNM -> AdvSimdLanes.minNum(vn, vm);
             case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeSingle");
         };
         return flushSingle(result, flushToZero);
@@ -203,6 +209,8 @@ public final class IrVfpExecutor {
                 double vd = flushDouble(vfp.dDouble(op.vd()), flushToZero);
                 yield DirectedFpRounding.roundDouble(Math.fma(vn, vm, -vd), DirectedFpRounding.exactFma(vn, vm, -vd), mode);
             }
+            case MAXNM -> AdvSimdLanes.maxNum(vn, vm);
+            case MINNM -> AdvSimdLanes.minNum(vn, vm);
             case NEG, ABS, COPY -> throw new IllegalStateException("tratado em computeDouble");
         };
         return flushDouble(result, flushToZero);
@@ -272,6 +280,24 @@ public final class IrVfpExecutor {
             packed = FpscrRegister.CARRY_FLAG;
         }
         core.fpscr().setNzcv(packed);
+    }
+
+    /// `VSEL` (B14.4): `vd = selectCondition ? vn : vm` — cópia de BITS crua (nunca aritmética:
+    /// não normaliza NaN, não toca `FPSCR`). {@link IrOp.VfpSelect#selectCondition} é avaliado
+    /// contra o **CPSR** ({@link ArmCore#cpsr()}), nunca o FPSCR — diferente de {@link #executeVfpCompare}.
+    /// {@link IrOp.VfpSelect#condition} (sempre `AL`, espaço incondicional) só gate o bloco, nunca
+    /// decide `vn`/`vm` (ver Armadilha 2 da task: os dois campos não podem se confundir).
+    public void executeVfpSelect(ArmCore core, IrOp.VfpSelect op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        boolean selectVn = core.cpsr().evalCond(op.selectCondition());
+        VfpRegisters vfp = core.vfp();
+        if (op.doublePrecision()) {
+            vfp.setD(op.vd(), selectVn ? vfp.d(op.vn()) : vfp.d(op.vm()));
+        } else {
+            vfp.setS(op.vd(), selectVn ? vfp.s(op.vn()) : vfp.s(op.vm()));
+        }
     }
 
     /// `VCVT` (forma default, round-toward-zero para inteiro).

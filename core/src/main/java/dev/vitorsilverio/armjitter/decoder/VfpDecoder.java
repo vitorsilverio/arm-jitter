@@ -65,6 +65,14 @@ public final class VfpDecoder implements DecoderExtension {
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
+        // B14.4: `bits[31:28]==0xF` é o espaço VFP INCONDICIONAL (`vfp-uncond.decode`), nunca uma
+        // instrução condicional normal — precisa ser verificado ANTES de qualquer outro caminho
+        // desta classe (inclusive `isVmovHalfEncoding`, cujo mask ignora `bits[31:28]` e por isso
+        // capturaria erroneamente encodings deste espaço). Ver javadoc de
+        // `#isUnconditionalVfpSpace`/`#decodeUnconditionalSpace` para o porquê do gate ficar aqui.
+        if (isUnconditionalVfpSpace(raw)) {
+            return decodeUnconditionalSpace(raw, address, condition);
+        }
         if (!claimsThisDecoder(raw)) {
             return null;
         }
@@ -88,7 +96,111 @@ public final class VfpDecoder implements DecoderExtension {
 
     @Override
     public boolean claimsEncodingSpace(int raw) {
+        if (isUnconditionalVfpSpace(raw)) {
+            return true;
+        }
         return claimsThisDecoder(raw);
+    }
+
+    // ── B14.4: espaço VFP incondicional (`vfp-uncond.decode`) — `VSEL`/`VMAXNM`/`VMINNM` (esta
+    // task) + `VRINT`/`VCVT`/`VMOVX`/`VINS` (B14.5/B14.6, recusados explicitamente por enquanto). ──
+
+    /// `bit4` fixo em `0` nos 6 encodings desta task (`.0.0`/`.1.0` no `.decode`) — separa este
+    /// espaço "CDP-shape" de `MCR2`/`MRC2` (`bit4=1`, Armadilha 4 da task: um `MCR2`/`MRC2` real
+    /// para `cp9`/`cp10`/`cp11` NUNCA deve ser roubado por este gate).
+    private static final int UNCONDITIONAL_SIZE_HALF_PRECISION = 0x9;
+    /// `bits[21:20]` fixos em `00` para `VMAXNM_sp`/`VMINNM_sp`/`VMAXNM_dp`/`VMINNM_dp` (`1.00` no
+    /// `.decode`: `bit23=1` — já checado por quem chama —, `bit22` é a extensão de `Vd` (varia,
+    /// NÃO é um bit fixo do padrão — achado real: um `BITS23_20_MASK` de 4 bits colidiria com esse
+    /// bit de registrador e perderia `VMAXNM`/`VMINNM` sempre que `Vd` fosse ímpar), `bits21:20=00`.
+    private static final int BITS21_20_SHIFT = 20;
+    private static final int BITS21_20_MASK = 0x3;
+
+    /// `true` quando `raw` cai no espaço VFP incondicional (`vfp-uncond.decode`): `bits[31:28]=0xF`
+    /// (a mesma marca "cond=1111" que, desde a E6, `ArmDecoder#decodeUnconditional` usa para A32 —
+    /// e que o `raw32` de `ThumbDecoder` também produz para T32, já que o hw1 real destas
+    /// instruções tem topo `1111`, não o `1110` do espaço VFP condicional comum, ver javadoc de
+    /// {@link Thumb2VfpDecoder}), `bits[27:24]=0xE` (o único nibble que `vfp-uncond.decode` usa —
+    /// `1100`/`1101` com `cond=1111` são outro espaço, fora deste arquivo) e `bit4=0` (CDP-shape,
+    /// não `MCR2`/`MRC2`). `bits[11:8]` (o "coprocessador" clássico, aqui `CP9`/`CP10`/`CP11`)
+    /// ainda não é checado aqui — só o suficiente para dizer "isto É `vfp-uncond.decode`, decida
+    /// dentro" vs "isto não é nada deste arquivo, deixe outro `DecoderExtension` tentar".
+    private static boolean isUnconditionalVfpSpace(int raw) {
+        if ((raw >>> 28) != 0xF) {
+            return false;
+        }
+        if (((raw >>> COPROCESSOR_SPACE_SHIFT) & COPROCESSOR_SPACE_MASK) != 0xE) {
+            return false;
+        }
+        if ((raw & BIT4_MASK) != 0) {
+            return false;
+        }
+        int sizeField = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
+        return sizeField == UNCONDITIONAL_SIZE_HALF_PRECISION || sizeField == SIZE_SINGLE || sizeField == SIZE_DOUBLE;
+    }
+
+    /// Decodifica dentro do espaço VFP incondicional (achado central da B14.4: sem isto, `VSEL`
+    /// decodificava como `VMLA`/`VNMLS`/`VMUL`/`VADD` e `VMAXNM` como `VDIV`, em `ARMV7A`/
+    /// `ARM11_MPCORE` — o `decodeDataProcessing` condicional nunca olhava `bits[31:28]`). Sem
+    /// {@link ArmFeature#ARMV8_FP} recusa TODO o espaço com `UNIMPLEMENTED` — fechando o misdecode
+    /// nos presets antigos, não só no `ARMV8A_32` novo (G8, ver Armadilhas 1/8 da task).
+    private DecodedInstruction decodeUnconditionalSpace(int raw, int address, Condition condition) {
+        if (!architecture.has(ArmFeature.ARMV8_FP)) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+        int sizeField = (raw >>> SIZE_FIELD_SHIFT) & SIZE_FIELD_MASK;
+        if (sizeField == UNCONDITIONAL_SIZE_HALF_PRECISION) {
+            // `VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp` — FEAT_FP16, B14.6.
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+        }
+        boolean doublePrecision = sizeField == SIZE_DOUBLE;
+        boolean bit23 = (raw & BIT23_MASK) != 0;
+        if (!bit23) {
+            return decodeVsel(raw, address, condition, doublePrecision);
+        }
+        int bits2120 = (raw >>> BITS21_20_SHIFT) & BITS21_20_MASK;
+        if (bits2120 == 0) {
+            return decodeMaxNmMinNm(raw, address, condition, doublePrecision);
+        }
+        // VRINT/VCVT (bits[23:20]=1110/1111, B14.5) ou VMOVX/VINS (bits[23:16]=1_11_0000, B14.6) —
+        // ainda não implementados: recusa explícita (G8), nunca `null` (que devolveria o espaço ao
+        // `CoprocessorDecoder` genérico).
+        return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+    }
+
+    /// `VSEL` (`sz=2`/`sz=3` — a forma `sz=1`/`_hp` já foi recusada por
+    /// {@link #decodeUnconditionalSpace}): `cc:2` em `bits[21:20]`, vn/vd/vm com a MESMA precisão
+    /// (`@vfp_dnm_s`/`@vfp_dnm_d`, mesmos extratores de {@link #decodeDataProcessing}).
+    private DecodedInstruction decodeVsel(int raw, int address, Condition condition, boolean doublePrecision) {
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, doublePrecision);
+        int vd = vd(raw, doublePrecision);
+        int vm = vm(raw, doublePrecision);
+        if (!validDoubleRegister(vn, doublePrecision) || !validDoubleRegister(vd, doublePrecision)
+                || !validDoubleRegister(vm, doublePrecision)) {
+            return null;
+        }
+        int cc = (raw >>> BITS21_20_SHIFT) & BITS21_20_MASK;
+        // `condition` da `DecodedInstruction` fica AL (o parâmetro recebido já é AL — este espaço é
+        // incondicional, ver `ArmDecoder#decodeUnconditional`); `cc` vira DADO em `immediate`
+        // (Armadilha 2 — nunca `Condition` da instrução).
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_SELECT,
+                vd, vn, vm, cc, false, false, false, 0, doublePrecision);
+    }
+
+    /// `VMAXNM_sp`/`VMINNM_sp`/`VMAXNM_dp`/`VMINNM_dp` — `bit6` seleciona MAX(`0`)/MIN(`1`), mesmo
+    /// layout de vn/vd/vm de {@link #decodeVsel}. Reusa {@link InstructionKind#VFP_ALU} (nenhum
+    /// `Kind` novo) delegando a {@link IrOp.VfpOperation#MAXNM}/{@link IrOp.VfpOperation#MINNM}.
+    private DecodedInstruction decodeMaxNmMinNm(int raw, int address, Condition condition, boolean doublePrecision) {
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, doublePrecision);
+        int vd = vd(raw, doublePrecision);
+        int vm = vm(raw, doublePrecision);
+        if (!validDoubleRegister(vn, doublePrecision) || !validDoubleRegister(vd, doublePrecision)
+                || !validDoubleRegister(vm, doublePrecision)) {
+            return null;
+        }
+        boolean isMin = (raw & BIT6_MASK) != 0;
+        return vfpAlu(isMin ? IrOp.VfpOperation.MINNM : IrOp.VfpOperation.MAXNM, doublePrecision, vd, vn, vm,
+                address, raw, condition);
     }
 
     private boolean claimsThisDecoder(int raw) {

@@ -471,6 +471,15 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.condition()));
+            // B14.4: `cc:2` (0-3) mapeia para EQ/VS/GE/GT (ARM ARM A8.8.294) — vira o campo DADO
+            // `selectCondition` do IrOp, nunca `instruction.condition()` (Armadilha 2 da task).
+            case VFP_SELECT -> block.add(new IrOp.VfpSelect(
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.secondSourceRegister(),
+                    vselCondition(instruction.immediate()),
+                    instruction.condition()));
             // `baseValueOverride(instruction)` (mesmo helper do `LOAD`/`STORE` ARM genérico acima)
             // é indispensável aqui: `VLDR`/`VSTR Vx, [pc, #imm]` é o idioma padrão do `gcc` para
             // literais `double`/`float` (literal pool) — sem o override, `base`=15 seria lido AO
@@ -803,6 +812,18 @@ public final class StandardIrBuilder implements IrBuilder {
         }
         long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
         return (high16 << 16) & 0xFFFF_FFFFL;
+    }
+
+    /// `VSEL` (B14.4): mapeia `cc:2` (0-3) para a condição de seleção correspondente (ARM ARM
+    /// A8.8.294) — `0`=`EQ`(Z==1), `1`=`VS`(V==1), `2`=`GE`(N==V), `3`=`GT`(!Z && N==V). Os 4 são os
+    /// ÚNICOS valores que `cc:2` produz; o decoder (`VfpDecoder`) já garante isso.
+    private static Condition vselCondition(int cc) {
+        return switch (cc) {
+            case 0 -> Condition.EQ;
+            case 1 -> Condition.VS;
+            case 2 -> Condition.GE;
+            default -> Condition.GT;
+        };
     }
 
     /// Converte os bits 7:5 do encoding de aritmética paralela ARMv6 na operação-base.

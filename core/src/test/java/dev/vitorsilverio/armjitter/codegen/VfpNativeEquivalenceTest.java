@@ -390,6 +390,12 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             long vmBitsD = random.nextLong();
             long vdBitsD = random.nextLong();
             for (IrOp.VfpOperation op : IrOp.VfpOperation.values()) {
+                // MAXNM/MINNM (B14.4): sem emissor nativo ainda (task explicita "decode +
+                // interpretado apenas", `AsmNativePolicy` recusa e cai no fallback interpretado) —
+                // mesma exclusão que CRC32/VfpSelect/Nocp têm em outras suítes, não um esquecimento.
+                if (op == IrOp.VfpOperation.MAXNM || op == IrOp.VfpOperation.MINNM) {
+                    continue;
+                }
                 IrBlock singleBlock = block(new IrOp.VfpAlu(op, false, 0, 1, 2, Condition.AL));
                 assertEquivalentVfp(singleBlock, core -> {
                     core.vfp().setS(0, vdBits);

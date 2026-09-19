@@ -37,7 +37,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorDup, IrOp.MveMoveLanesGpr, IrOp.MveVectorAddAcrossVector, IrOp.MveVectorAddAcrossVectorLong,
         IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate,
         IrOp.MveVectorDualAccumulate, IrOp.MveVectorDualAccumulateLong, IrOp.MveVectorRoundingDualAccumulateHigh,
-        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32 {
+        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32, IrOp.VfpSelect {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -380,6 +380,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR = 167;
         /// B14.3: `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A) — ver {@link Crc32}.
         public static final int CRC32 = 168;
+        /// B14.4: `VSEL` (`sp`/`dp`, ARMv8-A, espaço VFP incondicional) — ver {@link VfpSelect}.
+        public static final int VFP_SELECT = 169;
     }
 
     /// Operacao ALU generica.
@@ -1385,7 +1387,15 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         FNMA,
         /// `VFNMS` (B9.6, VFPv4): `vd = -vd + (vn * vm)`, FUNDIDO. Mesma convenção de sinal de
         /// {@link #NMLS} (`neg_n=false, neg_d=true` → `fma(-vd, vn, vm)` = `-vd + vn·vm`).
-        FNMS
+        FNMS,
+        /// `VMAXNM` (B14.4, ARMv8-A): `vd = maxNum(vn, vm)` — variante "numérica" de `VMAX`: se só
+        /// um operando é NaN, o resultado é o OUTRO (não NaN); só quando os dois são NaN o
+        /// resultado é NaN. Delega a {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#maxNum}
+        /// (mesmo núcleo do `FMAXNM` A64, B8.4) — **nunca** `Math.max` (ver Armadilhas de B14.4).
+        MAXNM,
+        /// `VMINNM` (B14.4, ARMv8-A): espelho de {@link #MAXNM} com
+        /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#minNum}.
+        MINNM
     }
 
     /// Operação aritmética/unária VFP (`VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/
@@ -1410,6 +1420,32 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar a operação.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_ALU; }
+    }
+
+    /// `VSEL` (B14.4, ARMv8-A, espaço VFP incondicional): `vd = selectCondition ? vn : vm` — cópia
+    /// de BITS crua (não normaliza NaN, não toca `FPSCR`), selecionada pelos flags do **CPSR**
+    /// (`Condition#EQ`/`VS`/`GE`/`GT`, os 4 únicos valores que `cc:2` produz — ARM ARM A8.8.294:
+    /// `0`→EQ, `1`→VS, `2`→GE, `3`→GT). **`selectCondition` é DADO, nunca controle**: ao contrário
+    /// de {@link #condition}, que (sempre {@link Condition#AL} aqui — `VSEL` mora no espaço
+    /// incondicional) guarda o bloco/lifter, `selectCondition` só é lido DENTRO do executor para
+    /// escolher `vn` ou `vm`. Misturar os dois (usar `selectCondition` como `condition` da
+    /// instrução) faria o bloco PULAR `VSEL` quando a condição fosse falsa, em vez de escrever
+    /// `vm` em `vd` — resultado silenciosamente errado (Armadilha 2 da task B14.4).
+    record VfpSelect(
+            /// `true` para precisão dupla (registradores `D`), `false` para simples (`S`).
+            boolean doublePrecision,
+            /// Registrador de destino.
+            int vd,
+            /// Registrador escolhido quando {@link #selectCondition} é verdadeira.
+            int vn,
+            /// Registrador escolhido quando {@link #selectCondition} é falsa.
+            int vm,
+            /// Condição de SELEÇÃO (`cc:2` do encoding, mapeado para `EQ`/`VS`/`GE`/`GT`) — avaliada
+            /// contra o CPSR pelo executor, nunca contra o `FPSCR`.
+            Condition selectCondition,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}: `VSEL` é incondicional).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_SELECT; }
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já

@@ -221,6 +221,11 @@ public enum InstructionKind {
     /// `sourceRegister`=Vm, `immediate`=ordinal de `IrOp.VfpConversion` (já fixa a precisão de
     /// cada lado, sem precisar de `signedAccess` aqui).
     VFP_CONVERT,
+    /// `VSEL` (B14.4, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd,
+    /// `sourceRegister`=Vn, `secondSourceRegister`=Vm, `immediate`=`cc` cru (0-3, mapeado para
+    /// `EQ`/`VS`/`GE`/`GT` no `StandardIrBuilder` — nunca vira `condition` da instrução, ver
+    /// `IrOp.VfpSelect`), `signedAccess`=precisão dupla.
+    VFP_SELECT,
     /// `VLDR`. `destinationRegister`=Vd, `sourceRegister`=base (Rn), `immediate`=offset em bytes
     /// já resolvido (±`imm8`×4), `signedAccess`=precisão dupla.
     VFP_LOAD,

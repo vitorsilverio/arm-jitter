@@ -57,7 +57,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(169, kinds.size(), "IrOp.Kind deve ter 169 constantes contíguas");
+        assertEquals(170, kinds.size(), "IrOp.Kind deve ter 170 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -141,8 +141,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // MVE_VECTOR_DUAL_ACCUMULATE_LONG, MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
         // MVE_VECTOR_MIN_MAX_ACROSS_VECTOR, MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR (+5, mesmo
         // "Não inclui"). B14.3 acrescentou CRC32 (+1 — mesmo "Não inclui": a task explicita
-        // decode+interpretado apenas, emissão nativa/Truffle fica para trabalho futuro).
-        assertEquals(103, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // decode+interpretado apenas, emissão nativa/Truffle fica para trabalho futuro). B14.4
+        // acrescentou VFP_SELECT (+1, `VSEL`, mesmo "Não inclui": decode + interpretado apenas).
+        assertEquals(104, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -217,7 +218,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
                         IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR,
                         IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR,
-                        IrOp.Kind.CRC32)),
+                        IrOp.Kind.CRC32, IrOp.Kind.VFP_SELECT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -293,6 +294,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.VFP_ALU -> new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 0, 1, 2, c);
             case IrOp.Kind.VFP_MOVE_IMMEDIATE -> new IrOp.VfpMoveImmediate(false, 0, 0L, c);
             case IrOp.Kind.VFP_COMPARE -> new IrOp.VfpCompare(false, false, false, 0, 1, c);
+            case IrOp.Kind.VFP_SELECT -> new IrOp.VfpSelect(false, 0, 1, 2, Condition.EQ, c);
             case IrOp.Kind.VFP_CONVERT -> new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 0, 1, c);
             case IrOp.Kind.VFP_LOAD -> new IrOp.VfpLoad(false, 0, 1, -1, 0, c);
             case IrOp.Kind.VFP_STORE -> new IrOp.VfpStore(false, 0, 1, -1, 0, c);

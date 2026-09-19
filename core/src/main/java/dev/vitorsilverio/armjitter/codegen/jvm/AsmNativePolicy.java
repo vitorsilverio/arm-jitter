@@ -187,7 +187,10 @@ public final class AsmNativePolicy {
             // NEON "two-register miscellaneous" cripto, `size==0b11` (B13.15): idem.
             case IrOp.NeonCryptoAes ignored -> false;
             case IrOp.NeonCryptoSha ignored -> false;
-            case IrOp.VfpAlu ignored -> true;
+            // MAXNM/MINNM (B14.4, ArmFeature.ARMV8_FP): sem emissor nativo ainda ("Não inclui" da
+            // task — decode + interpretado apenas, mesmo padrão de VfpSelect/Crc32/Nocp abaixo).
+            // O resto de VfpAlu (ADD/SUB/MUL/DIV/MLA/.../FNMS) segue nativo desde a B3.6.
+            case IrOp.VfpAlu alu -> alu.op() != IrOp.VfpOperation.MAXNM && alu.op() != IrOp.VfpOperation.MINNM;
             case IrOp.VfpMoveImmediate ignored -> true;
             case IrOp.VfpCompare ignored -> true;
             case IrOp.VfpConvert ignored -> true;
@@ -203,6 +206,9 @@ public final class AsmNativePolicy {
             // IrOpInterop cercado de flush/reload (mesmo mecanismo desta task inteira).
             case IrOp.VfpCorePairTransferSingle ignored -> true;
             case IrOp.VfpConvertFixed ignored -> true;
+            // VSEL (B14.4, ARMv8-A): sem emissão nativa nesta task ("Não inclui" — decode +
+            // interpretado apenas, mesmo padrão de Crc32/Nocp/VfpSysregMemoryTransfer acima).
+            case IrOp.VfpSelect ignored -> false;
             // MRS/MSR SYSm do perfil M (B7.4): emitido nativamente desde a task C12.7 — via
             // IrOpInterop (delega ao MProfileExceptionModel via IrSystemExecutor, sem duplicar).
             case IrOp.MProfileSystemRegister ignored -> true;

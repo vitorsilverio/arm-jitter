@@ -53,25 +53,28 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.2 fechar `LDA`/`STL`/`LDAEX*`/`STLEX*` A32/T32)
+## Onde estamos (atualizado 2026-09-19, após B14.4 fechar `VSEL`/`VMAXNM`/`VMINNM` + o misdecode G8)
 
-**B14.2 FECHADA.** `LDA`/`LDAB`/`LDAH`/`LDAEX*`/`STL`/`STLB`/`STLH`/`STLEX*` (A32 + T32, 28 linhas)
-decodificam e executam sob `ARMV8A_32`. Zero `IrOp`/`InstructionKind` novo: `LDAEX*`/`STLEX*`
-reusam `LOAD_EXCLUSIVE`/`STORE_EXCLUSIVE` (mesmo monitor de B1.4/B5.1), `LDA*`/`STL*` reusam
-`LOAD`/`STORE` (carga/escrita simples em `[Rn]`, nunca tocam o monitor — testado explicitamente,
-`LDA` seguido de `STREX` tem que falhar). Acquire/release é NOP observável, mesma decisão do A64.
-**⚠️ `docs/COBERTURA-ISA.md` NÃO ficou byte a byte idêntica** — achado não previsto pela spec: o
-grupo T32 mede 8 colunas (não 7), e a 8ª (`ARMv8.1-M+MVE`) ficou exposta como `❌` real ao estreitar
-o tsv (denominador +14 em `global`/`ARMv8.1-M+MVE`; decisão de NÃO mascarar essa lacuna sem
-confirmar antes se a instrução existe no encoding M-profile — ver `## Resultado` de `B14.2` para o
-raciocínio completo). `mvn -o test` verde na raiz + G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado`
-de `B14.2`.
+**B14.4 FECHADA.** `VSEL` (`sz=2`/`sz=3`, 4 `cc`) + `VMAXNM`/`VMINNM` (`sp`/`dp`) decodificam e
+executam sob `ARMV8A_32`, A32 e T32 — e o misdecode G8 pré-existente (`VSEL`/`VMAXNM` virando
+`VMLA`/`VNMLS`/`VMUL`/`VADD`/`VDIV` em `ARMV7A`/`ARM11_MPCORE`) foi fechado para TODO preset com
+VFP, não só o novo (gate único dentro de `VfpDecoder`, antes de `isVmovHalfEncoding`). `IrOp.VfpSelect`
+novo (`Kind.VFP_SELECT=169`, `selectCondition` é DADO nunca `condition` do bloco — Armadilha 2
+respeitada); `VMAXNM`/`VMINNM` reusam `VFP_ALU`/`AdvSimdLanes.maxNum`/`minNum`, zero algoritmo novo.
+**2 achados reais durante a execução (não previstos pela spec)**: (1) a máscara de 4 bits proposta
+para `VMAXNM`/`VMINNM` colidia com o bit de extensão de `Vd` (perderia `Vd` ímpar); (2)
+`AsmNativePolicy` já reivindicava emissão nativa para TODO `VfpAlu` — como `MAXNM`/`MINNM` são
+valores novos do mesmo enum, herdaram essa reivindicação sem ter emissor, corrompendo o registrador
+de destino silenciosamente (achado pelo `VfpNativeEquivalenceTest` pré-existente fazendo seu
+trabalho — G1). Os 2 corrigidos nesta sessão. `docs/COBERTURA-ISA.md` byte a byte idêntica (medido
+antes/depois); `docs/COBERTURA-JIT.md` regenerado (`VfpSelect`=❌/❌). `mvn -o test` verde na raiz +
+G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado` de `B14.4`.
 
-**Pegáveis a seguir**: `B14.4` (`VSEL`/`VMAXNM`/`VMINNM`, mesma dependência B14.1 ✅ — já tem um
-achado de misdecode G8 pré-existente documentado na spec) é o próximo degrau natural do épico B14.
-`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1`
-(fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas
-gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
+**Pegáveis a seguir**: `B14.5` (`VRINT{A,N,P,M}`/`VCVT{A,N,P,M}`, depende de B14.4 ✅ — mesmo espaço
+incondicional já instalado em `VfpDecoder`) é o próximo degrau natural do épico B14. `C12.5`/`C12.10`
+(emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações
+SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas gap-driven da
+B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
 tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
 bits.
 
