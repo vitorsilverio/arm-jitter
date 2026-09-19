@@ -321,7 +321,9 @@ public final class StandardIrBuilder implements IrBuilder {
                     (instruction.immediate() & BankedRegisterSysm.ELR_HYP_BIT) != 0,
                     (instruction.immediate() & BankedRegisterSysm.SPSR_BIT) != 0,
                     instruction.condition()));
-            case BREAKPOINT -> block.add(new IrOp.Breakpoint(instruction.immediate()));
+            // HALT (HLT, B14.1b): mesmo contrato de execução de BREAKPOINT (delega a
+            // BkptDispatcher, ou UNDEFINED sem handler) — ver Javadoc de IrOp#Breakpoint.
+            case BREAKPOINT, HALT -> block.add(new IrOp.Breakpoint(instruction.immediate()));
             case COPROCESSOR -> block.add(new IrOp.Coprocessor(
                     instruction.link(),
                     instruction.immediate() & 0xF,

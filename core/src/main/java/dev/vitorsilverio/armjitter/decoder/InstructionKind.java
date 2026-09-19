@@ -264,10 +264,11 @@ public enum InstructionKind {
     BREAKPOINT,
     /// `HLT #imm` (B22.1, ARM DDI 0487 — Halting debug, ARMv8-A / ARMv8-M): `immediate`=imediato
     /// de 6 (Thumb, `0xBA80`) ou 16 (ARM, `.... 0001 0000 ... 0111 ...`) bits. Sem {@link
-    /// dev.vitorsilverio.armjitter.arch.ArmFeature#HALT} (nenhum preset atual a declara) o
-    /// encoding é reconhecido e recusado com `UNIMPLEMENTED` — nenhum preset chega a executá-lo.
-    /// Quando um preset ARMv8-A de 32 bits (B14) existir, a semântica de execução = entregar ao
-    /// debugger do host (mesmo caminho de {@link #BREAKPOINT}) ou, sem debugger, `UNDEFINED`.
+    /// dev.vitorsilverio.armjitter.arch.ArmFeature#HALT} (nenhum preset pré-`ARMV8A_32` a declara)
+    /// o encoding é reconhecido e recusado com `UNIMPLEMENTED`. Com a feature (`ARMV8A_32`, B14.1),
+    /// executa pelo MESMO caminho de {@link #BREAKPOINT} (B14.1b, reuso de
+    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.Breakpoint}): entrega ao debugger do host se
+    /// houver handler registrado, ou {@code ArmException.UNDEFINED} sem um.
     HALT,
     /// `MCRR`/`MRRC` (ARMv5TE+, F3): transferência DUPLA de registrador de/para coprocessador —
     /// diferente de {@link #COPROCESSOR} (`MCR`/`MRC`, um só registrador ARM + `CRn`/`opcode2`),

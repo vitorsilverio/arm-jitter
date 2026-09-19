@@ -500,6 +500,22 @@ class C127NativeEquivalenceTest {
                 }));
     }
 
+    // ── HALT (HLT sob ARMV8A_32, B14.1b — reusa IrOp.Breakpoint, mesmo contrato de BKPT) ────
+
+    @Test
+    void haltRaisesSameExceptionAsInterpreted() {
+        AsmCodeEmitter asmEmitter = new AsmCodeEmitter(ArmArchitecture.ARMV8A_32);
+        InterpretedCodeEmitter reference = new InterpretedCodeEmitter(ArmArchitecture.ARMV8A_32);
+        TestAddressSpace memory = new TestAddressSpace(32);
+        memory.put32(0, 0xE101_2374); // HLT #0x1234 -- sem BkptDispatcher instalado, vira UNDEFINED
+        IrBlock block = liftArm(ArmArchitecture.ARMV8A_32, memory, 1);
+
+        assertTrue(asmEmitter.isNativeSupported(block),
+                "HLT reusa IrOp.Breakpoint, já aceito nativamente desde a C12.7");
+        harness.assertEquivalent(reference, asmEmitter, block,
+                EquivalenceTestSupport.independentPair(memory, core -> { }));
+    }
+
     // ── Cache de registradores: flush antes do helper, reload depois (armadilha 1) ─
 
     @Test

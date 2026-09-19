@@ -999,13 +999,16 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.SWI; }
     }
 
-    /// `BKPT` (B7.5, ARMv5T+): imediato de 8 (Thumb) ou 16 (ARM) bits delegado ao
-    /// {@link dev.vitorsilverio.armjitter.core.BkptDispatcher} do host — mesmo padrão de
-    /// {@link Swi}, mas sempre incondicional (o encoding não tem campo de condição em nenhum
-    /// dos dois modos; {@link #condition()} retorna {@link Condition#AL} pelo default da
-    /// interface).
+    /// `BKPT` (B7.5, ARMv5T+) **e** `HLT` (B14.1b, ARMv8-A de 32 bits) — imediato delegado ao
+    /// {@link dev.vitorsilverio.armjitter.core.BkptDispatcher} do host (mesmo padrão de
+    /// {@link Swi}), ou {@code ArmException.UNDEFINED} quando não há handler registrado para o
+    /// imediato. As duas instruções têm nomes/encodings diferentes (`BKPT` imediato de 8 Thumb/16
+    /// ARM bits; `HLT` de 6 Thumb/16 ARM bits) mas o MESMO contrato de execução observável neste
+    /// projeto — decisão explícita da B14.1b, não uma coincidência a desfazer depois. Sempre
+    /// incondicional (nenhum dos encodings tem campo de condição; {@link #condition()} retorna
+    /// {@link Condition#AL} pelo default da interface).
     record Breakpoint(
-            /// Imediato da instrução BKPT.
+            /// Imediato da instrução BKPT/HLT.
             int immediate) implements IrOp {
         @Override public int kind() { return Kind.BREAKPOINT; }
     }

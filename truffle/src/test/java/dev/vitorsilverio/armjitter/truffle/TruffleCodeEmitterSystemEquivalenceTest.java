@@ -164,6 +164,27 @@ class TruffleCodeEmitterSystemEquivalenceTest {
         assertBlockEquivalent(block, core -> core.setRegister(0, 0x40));
     }
 
+    // ── HALT (HLT sob ARMV8A_32, B14.1b) — reusa IrOp.Breakpoint, SystemOpNode não muda ──────
+    // Vetor à parte (não usa liftArmV7/assertBlockEquivalent, presos a ARMV7A): prova que o
+    // Truffle já reconhece HLT sem nenhum `case` novo em SystemOpNode, por dispatch de TIPO
+    // (IrOp.Breakpoint), não de InstructionKind de origem.
+    @Test
+    void haltBecomesUndefinedWithoutDispatcherHandlerUnderArmv8a32() {
+        ByteArrayAddressSpace memory = new ByteArrayAddressSpace(4);
+        memory.write32(0, 0xE101_2374); // HLT #0x1234 -- BkptDispatcher.empty() não tem handler
+        IrBlock block = new StandardIrBlockLifter(new ArmDecoder(ArmArchitecture.ARMV8A_32), new StandardIrBuilder())
+                .lift(memory, 0, 1);
+
+        TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV8A_32);
+        harness.assertEquivalent(referenceEmitter, emitter, block, () -> {
+            ArmCore reference = new ArmCore(new ByteArrayAddressSpace(64), SwiDispatcher.empty(), ArmArchitecture.ARMV8A_32);
+            ArmCore candidate = new ArmCore(new ByteArrayAddressSpace(64), SwiDispatcher.empty(), ArmArchitecture.ARMV8A_32);
+            return new EquivalencePair(reference, candidate);
+        });
+        assertEquals(1L, emitter.nativeBlockCount(), "HLT deve compilar nativamente via SystemOpNode, sem case novo");
+        assertEquals(0L, emitter.fallbackBlockCount());
+    }
+
     @Test
     void eretInTheMiddleOfABlockRunsThePrecedingOpFirstAndEndsTheBlock() {
         // ADD r0, r0, #1 ; ERET — o ADD roda, o ERET muda modo/PC e termina o bloco (sem nó
