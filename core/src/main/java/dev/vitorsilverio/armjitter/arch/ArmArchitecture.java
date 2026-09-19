@@ -601,6 +601,38 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MveDualAccumulateDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NocpDecoder(ARMV8_1M_MVE_FEATURES)));
 
+    /// ARMv8-A executando em AArch32 (B14.1) — o modo que `Cortex-A32`/o lado 32-bit dos
+    /// `Cortex-A5x`/`A7x` usam. `ARMV7A` + {@link ArmFeature#ARMV8_FP} (`VSEL`/`VMAXNM`/`VMINNM`/
+    /// `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}`, B14.4/B14.5) + {@link ArmFeature#LOAD_ACQUIRE_STORE_RELEASE}
+    /// (`LDA`/`STL` e variantes, B14.2) + {@link ArmFeature#CRC32} (B14.3) + {@link ArmFeature#HALT}
+    /// (`HLT`, já decodificado desde B22.1 — este é o primeiro preset a declarar a feature, então
+    /// `HLT` passa a decodificar como {@link dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT}
+    /// em vez de cair no fallthrough genérico, ver Javadoc de {@link ArmFeature#HALT}). **Sem
+    /// decode novo** nesta task além da diferença de `HLT` já citada — `LDA`/`STL`/`CRC32`/`VSEL`/
+    /// `VMAXNM`/`VMINNM`/`VRINT`/`VCVT` ficam para B14.2-B14.5. **G3**: `ARMV7A` permanece
+    /// intocado — este preset nasce AO LADO, com a MESMA lista de extensões de decoder do
+    /// `ARMV7A`, reparametrizada com {@code ARMV8A_32_FEATURES} (senão as features novas ficam
+    /// invisíveis em tempo de decode, o bug que a B4.0.3 caçou no armbox — ver Javadoc de
+    /// {@link #ARMV7A}). **Zero célula nova em `docs/COBERTURA-ISA.md`** (mesmo precedente de
+    /// {@link #ARMV7M_PURE}/B15.1 e {@link #ARMV8_1M}/B15.6): o preset ainda não entra no mapa
+    /// `ARM_ARCHITECTURES` de `IsaCoverageReport` — fica para a B14.7 (fechamento do épico).
+    private static final ArmArchitecture ARMV8A_32_FEATURES = extending(ARMV7A, "ARMv8-A (AArch32)",
+            ArmFeature.ARMV8_FP, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT);
+
+    public static final ArmArchitecture ARMV8A_32 = ARMV8A_32_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

@@ -374,5 +374,32 @@ public enum ArmFeature {
     /// {@link #MVE_INTEGER} nas tasks seguintes (B16.7/B16.12, as primeiras a precisar dela).
     /// **Nao implica {@link #VFPV2}**: MVE FP e uma unidade vetorial do perfil M, independente do
     /// VFP escalar classico (`ArmArchitecture.ARMV7M` documenta explicitamente "sem VFP").
-    MVE_FLOAT
+    MVE_FLOAT,
+
+    // ---- Onda 6, B14.1 (fundação: ArmArchitecture.ARMV8A_32) ----
+    /// **FPARMv8** (`MVFR2.FPMISC`) — `VSEL` (B14.4), `VMAXNM`/`VMINNM` (B14.4), `VRINT{A,N,P,M}`/
+    /// `VCVT{A,N,P,M}` com modo explícito (B14.5). O QEMU real distingue 4 níveis de
+    /// `MVFR2.FPMISC` (`vsel`≥1, `vcvt_dr`≥2, `vrint`≥3, `vminmaxnm`≥4,
+    /// `target/arm/cpu-features.h`) — esta feature única assume o núcleo mais capaz (todo ARMv8-A
+    /// real declara os 4 níveis juntos, confirmado nesta rodada); se um núcleo real com `FPMISC`
+    /// intermediário aparecer, a feature se quebra em quatro numa task futura (não é exclusão, é
+    /// granularidade ainda não justificada por um consumidor). **Nenhum preset a declarava antes
+    /// de {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8A_32}.**
+    ARMV8_FP,
+    /// **Load-Acquire/Store-Release** (`LDA`/`LDAB`/`LDAH`/`LDAEX*`/`STL`/`STLB`/`STLH`/`STLEX*`,
+    /// A32+T32, B14.2) — baseline **obrigatória** de ARMv8-A, não uma extensão opcional: no QEMU
+    /// real o gate de `trans_LDA`/`trans_STL`/`trans_STLEX*` é `ENABLE_ARCH_8`
+    /// (`arm_dc_feature(s, ARM_FEATURE_V8)`, confirmado em `target/arm/tcg/translate.c`), não um
+    /// bit de `ID_ISAR`/`MVFR`. Esta feature é, portanto, um PROXY de "este preset é ARMv8-A" —
+    /// não procurar o registrador de identidade correspondente, ele não existe. **Nenhum preset a
+    /// declarava antes de {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8A_32}.**
+    LOAD_ACQUIRE_STORE_RELEASE,
+    /// **CRC32** de 32 bits (`CRC32B/H/W` + `CRC32CB/CH/CW`, A32+T32, B14.3) — `ID_ISAR5.CRC32`,
+    /// confirmado no QEMU real como `dc_isar_feature(aa32_crc32, s)` em `op_crc32`
+    /// (`target/arm/tcg/translate.c`). **Opcional em ARMv8.0-A, obrigatória a partir de
+    /// ARMv8.1-A** — mesmo padrão do espelho
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#CRC32} do lado A64. **Nenhum
+    /// preset a declarava antes de
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8A_32}.**
+    CRC32
 }
