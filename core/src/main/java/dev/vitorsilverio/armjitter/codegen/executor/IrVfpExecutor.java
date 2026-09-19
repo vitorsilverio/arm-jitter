@@ -300,6 +300,41 @@ public final class IrVfpExecutor {
         }
     }
 
+    /// `VRINT{A,N,P,M}` (B14.5): arredonda `vm` para valor integral MANTENDO ponto flutuante,
+    /// usando a direção da PRÓPRIA instrução ({@link IrOp.VfpRound#direction}) — nunca
+    /// `FPSCR.RMode`. Delega a {@link AdvSimdLanes#roundForConversion}, mesmo núcleo do `FRINTx`
+    /// A64 (`NaN`/infinito passam adiante inalterados, tratado lá). Sem flush-to-zero (mesma
+    /// decisão de {@link #executeVfpConvert}, que também não aplica `FZ`).
+    public void executeVfpRound(ArmCore core, IrOp.VfpRound op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        if (op.doublePrecision()) {
+            double rounded = AdvSimdLanes.roundForConversion(vfp.dDouble(op.vm()), op.direction());
+            vfp.setDDouble(op.vd(), rounded);
+        } else {
+            double rounded = AdvSimdLanes.roundForConversion(vfp.sFloat(op.vm()), op.direction());
+            vfp.setSFloat(op.vd(), (float) rounded);
+        }
+    }
+
+    /// `VCVT{A,N,P,M}{S,U}` (B14.5): converte `vm` para inteiro de 32 bits em `vd` (SEMPRE `S`),
+    /// com sinal `op.signed()`, arredondando pela direção da PRÓPRIA instrução
+    /// ({@link IrOp.VfpConvertRounded#direction}). Mesma composição de
+    /// {@link AdvSimdLanes#roundForConversion} + {@link AdvSimdLanes#saturateToInteger} que o A64
+    /// já usa para `FCVTAS`/`FCVTAU`/etc — `NaN`→`0`, fora de faixa→saturação, nunca duplicado.
+    public void executeVfpConvertRounded(ArmCore core, IrOp.VfpConvertRounded op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        double value = op.doublePrecision() ? vfp.dDouble(op.vm()) : vfp.sFloat(op.vm());
+        double rounded = AdvSimdLanes.roundForConversion(value, op.direction());
+        long saturated = AdvSimdLanes.saturateToInteger(rounded, op.signed(), false);
+        vfp.setS(op.vd(), (int) saturated);
+    }
+
     /// `VCVT` (forma default, round-toward-zero para inteiro).
     public void executeVfpConvert(ArmCore core, IrOp.VfpConvert op) {
         if (!core.cpsr().evalCond(op.condition())) {

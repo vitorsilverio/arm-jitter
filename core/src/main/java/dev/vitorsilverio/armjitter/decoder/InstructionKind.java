@@ -226,6 +226,15 @@ public enum InstructionKind {
     /// `EQ`/`VS`/`GE`/`GT` no `StandardIrBuilder` — nunca vira `condition` da instrução, ver
     /// `IrOp.VfpSelect`), `signedAccess`=precisão dupla.
     VFP_SELECT,
+    /// `VRINT{A,N,P,M}` (B14.5, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd,
+    /// `secondSourceRegister`=Vm, `immediate`=ordinal de `AdvSimdLanes.RoundingMode` (direção do
+    /// campo `rm`, NUNCA do `FPSCR.RMode`), `signedAccess`=precisão dupla.
+    VFP_ROUND,
+    /// `VCVT{A,N,P,M}{S,U}` (B14.5, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd
+    /// (sempre `S`), `secondSourceRegister`=Vm (`S` ou `D`, conforme `signedAccess`), `immediate`
+    /// empacota bits 2:0 = ordinal de `AdvSimdLanes.RoundingMode`, bit 3 = sinal (`1`=`VCVTxS`),
+    /// `signedAccess`=precisão dupla da ORIGEM (`vd` é sempre simples, ver `IrOp.VfpConvertRounded`).
+    VFP_CONVERT_ROUNDED,
     /// `VLDR`. `destinationRegister`=Vd, `sourceRegister`=base (Rn), `immediate`=offset em bytes
     /// já resolvido (±`imm8`×4), `signedAccess`=precisão dupla.
     VFP_LOAD,

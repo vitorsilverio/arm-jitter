@@ -3010,17 +3010,29 @@ public final class AdvSimdLanes {
                 || op == AdvSimdFpUnaryOp.FCVTAU;
     }
 
-    /// As 5 direções de arredondamento usadas por {@link #convertFloatToFixed} — enum LOCAL (não o
-    /// `Ir64Op.Fp64RoundingDirection` do lado A64) para não criar dependência de {@code advsimd}
-    /// sobre {@code ir64} (este pacote é o núcleo COMPARTILHADO, independente de A32/A64).
-    private enum RoundingMode { NEAREST_TIES_EVEN, TOWARD_POSITIVE_INFINITY, TOWARD_NEGATIVE_INFINITY, TOWARD_ZERO, NEAREST_TIES_AWAY }
+    /// As 5 direções de arredondamento usadas por {@link #convertFloatToFixed} — PÚBLICO desde a
+    /// B14.5 (antes, enum LOCAL "para não criar dependência de `advsimd` sobre `ir64`"; permanece
+    /// sem relação com o `Ir64Op.Fp64RoundingDirection` do lado A64, que continua seu próprio tipo —
+    /// só o núcleo de {@code advsimd}, já COMPARTILHADO entre A32 e A64, ficou visível para que
+    /// `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}` (VFP incondicional de 32 bits, espaço `1111 1110`) reusem
+    /// {@link #roundForConversion} diretamente em vez de duplicar a tabela `rm`→direção e o
+    /// algoritmo de arredondamento). `IrOp.VfpRound`/`IrOp.VfpConvertRounded` (`ir`, 32 bits) usam
+    /// este tipo diretamente — decisão registrada na task B14.5 (Armadilha 1): promover este núcleo
+    /// já validado em vez de acrescentar um valor a {@code core.FpRoundingMode} (que representa o
+    /// campo `RMODE` do FPSCR, 4 valores, contrato public diferente — não tem "ties away") ou criar
+    /// um terceiro enum espelhado.
+    public enum RoundingMode { NEAREST_TIES_EVEN, TOWARD_POSITIVE_INFINITY, TOWARD_NEGATIVE_INFINITY, TOWARD_ZERO, NEAREST_TIES_AWAY }
 
     /// Mesma direção de {@link #roundForRint}, mas parametrizada por {@link RoundingMode} em vez de
     /// {@link AdvSimdFpUnaryOp} (`FCVTZS`/`FCVTZU` compartilham a MESMA direção `TOWARD_ZERO`, por
     /// exemplo) — `NaN`/infinito passam intocados, {@link #saturateToInteger}/
     /// {@link #saturateToHalfwordInteger} precisam do valor intacto para saturar corretamente
-    /// (`FPToFixed`: `NaN`→`0`, infinito→limite da largura).
-    private static double roundForConversion(double value, RoundingMode direction) {
+    /// (`FPToFixed`: `NaN`→`0`, infinito→limite da largura). PÚBLICO desde a B14.5 (ver Javadoc de
+    /// {@link RoundingMode}) — `VRINT{A,N,P,M}` (B14.5, 32 bits) chama este método diretamente para
+    /// arredondar MANTENDO ponto flutuante (nunca converte para inteiro); `VCVT{A,N,P,M}{S,U}`
+    /// (mesma task) encadeia o resultado com {@link #saturateToInteger}, mesma composição que
+    /// {@link #convertFloatToFixed} já usa para A64.
+    public static double roundForConversion(double value, RoundingMode direction) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return value;
         }

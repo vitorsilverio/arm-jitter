@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
@@ -37,7 +38,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.MveVectorDup, IrOp.MveMoveLanesGpr, IrOp.MveVectorAddAcrossVector, IrOp.MveVectorAddAcrossVectorLong,
         IrOp.MveVectorAbsoluteDifferenceAccumulate, IrOp.MveVectorModifiedImmediate,
         IrOp.MveVectorDualAccumulate, IrOp.MveVectorDualAccumulateLong, IrOp.MveVectorRoundingDualAccumulateHigh,
-        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32, IrOp.VfpSelect {
+        IrOp.MveVectorMinMaxAcrossVector, IrOp.MveVectorFpMinMaxAcrossVector, IrOp.Crc32, IrOp.VfpSelect,
+        IrOp.VfpRound, IrOp.VfpConvertRounded {
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -382,6 +384,12 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int CRC32 = 168;
         /// B14.4: `VSEL` (`sp`/`dp`, ARMv8-A, espaço VFP incondicional) — ver {@link VfpSelect}.
         public static final int VFP_SELECT = 169;
+        /// B14.5: `VRINT{A,N,P,M}` (`sp`/`dp`, ARMv8-A, espaço VFP incondicional) — ver
+        /// {@link VfpRound}.
+        public static final int VFP_ROUND = 170;
+        /// B14.5: `VCVT{A,N,P,M}{S,U}` (`sp`/`dp`, ARMv8-A, espaço VFP incondicional) — ver
+        /// {@link VfpConvertRounded}.
+        public static final int VFP_CONVERT_ROUNDED = 171;
     }
 
     /// Operacao ALU generica.
@@ -1446,6 +1454,51 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: `VSEL` é incondicional).
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_SELECT; }
+    }
+
+    /// `VRINT{A,N,P,M}` (B14.5, ARMv8-A, espaço VFP incondicional): `vd = roundToIntegral(vm,
+    /// direction)` — arredonda para valor integral MANTENDO ponto flutuante (nunca converte para
+    /// inteiro, ao contrário de {@link VfpConvertRounded}). `direction` vem do campo `rm` da
+    /// PRÓPRIA instrução (mapeado pelo decoder), **nunca** de `FPSCR.RMode` — por isso usa
+    /// {@link AdvSimdLanes.RoundingMode} (5 valores, inclui `NEAREST_TIES_AWAY`) em vez de
+    /// {@link dev.vitorsilverio.armjitter.core.FpRoundingMode} (4 valores, contrato do campo
+    /// `RMODE` do FPSCR — não expressa "ties away", ver Armadilha 1 da task). `NaN`/infinito passam
+    /// adiante inalterados (mesma decisão de {@code Ir64Op.Fp64Round}/`FRINTx` A64).
+    record VfpRound(
+            /// Direção de arredondamento (do campo `rm` do encoding).
+            AdvSimdLanes.RoundingMode direction,
+            /// `true` para precisão dupla (registradores `D`), `false` para simples (`S`) — mesma
+            /// precisão em `vd`/`vm`.
+            boolean doublePrecision,
+            /// Registrador de destino.
+            int vd,
+            /// Registrador de origem.
+            int vm,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_ROUND; }
+    }
+
+    /// `VCVT{A,N,P,M}{S,U}` (B14.5, ARMv8-A, espaço VFP incondicional): converte `vm` (ponto
+    /// flutuante, precisão `doublePrecision`) para um inteiro de 32 bits em `vd` — **`vd` é SEMPRE
+    /// `S`**, mesmo quando `doublePrecision` é `true` (a origem é `D`, o destino nunca é, ver
+    /// Contexto da task) —, com/sem sinal (`signed`), arredondando pela `direction` da PRÓPRIA
+    /// instrução. Diferente de {@link VfpConvert} (forma default, sempre round-toward-zero
+    /// implícito): aqui a direção é explícita e pode ser qualquer uma das 5.
+    record VfpConvertRounded(
+            /// Direção de arredondamento (do campo `rm`).
+            AdvSimdLanes.RoundingMode direction,
+            /// `true` = conversão com sinal (`VCVTxS`), `false` = sem sinal (`VCVTxU`).
+            boolean signed,
+            /// `true` quando a ORIGEM (`vm`) é precisão dupla; o destino (`vd`) é sempre simples.
+            boolean doublePrecision,
+            /// Registrador de destino (sempre `S`).
+            int vd,
+            /// Registrador de origem (`S` ou `D`, conforme `doublePrecision`).
+            int vm,
+            /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT_ROUNDED; }
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já

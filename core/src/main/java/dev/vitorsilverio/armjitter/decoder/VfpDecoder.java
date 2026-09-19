@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
@@ -108,8 +109,9 @@ public final class VfpDecoder implements DecoderExtension {
         return claimsThisDecoder(raw);
     }
 
-    // ── B14.4: espaço VFP incondicional (`vfp-uncond.decode`) — `VSEL`/`VMAXNM`/`VMINNM` (esta
-    // task) + `VRINT`/`VCVT`/`VMOVX`/`VINS` (B14.5/B14.6, recusados explicitamente por enquanto). ──
+    // ── Espaço VFP incondicional (`vfp-uncond.decode`) — `VSEL`/`VMAXNM`/`VMINNM` (B14.4) +
+    // `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}{S,U}` `sz=2`/`sz=3` (B14.5) + `VMOVX`/`VINS`/formas `_hp`
+    // (B14.6, recusados explicitamente por enquanto). ──
 
     /// `bit4` fixo em `0` nos 6 encodings desta task (`.0.0`/`.1.0` no `.decode`) — separa este
     /// espaço "CDP-shape" de `MCR2`/`MRC2` (`bit4=1`, Armadilha 4 da task: um `MCR2`/`MRC2` real
@@ -121,6 +123,17 @@ public final class VfpDecoder implements DecoderExtension {
     /// bit de registrador e perderia `VMAXNM`/`VMINNM` sempre que `Vd` fosse ímpar), `bits21:20=00`.
     private static final int BITS21_20_SHIFT = 20;
     private static final int BITS21_20_MASK = 0x3;
+    /// `bits[21:20]=11` (B14.5): `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}{S,U}` — distinto de `bits21:20=00`
+    /// (`VMAXNM`/`VMINNM`, acima). `bits[21:20]∈{01,10}` não têm forma definida neste espaço
+    /// (cai no fallback `UNIMPLEMENTED` de {@link #decodeUnconditionalSpace}).
+    private static final int BITS21_20_ROUND_OR_CONVERT = 0x3;
+    /// `bit19` fixo em `1` nas 4 linhas de `VRINT`/`VCVT` desta task (B14.5) — parte do padrão
+    /// `bits[19:18]` que, junto de `bit18`, distingue `VRINT` (`10`) de `VCVT` (`11`).
+    private static final int BIT19_MASK = 1 << 19;
+    /// `rm` = `bits[17:16]` (B14.5): direção de arredondamento da PRÓPRIA instrução — tabela
+    /// DIFERENTE da de `FpRoundingMode`/`FPSCR.RMode` (ver {@link #roundingModeFromField}).
+    private static final int RM_SHIFT = 16;
+    private static final int RM_MASK = 0x3;
 
     /// `true` quando `raw` cai no espaço VFP incondicional (`vfp-uncond.decode`): `bits[31:28]=0xF`
     /// (a mesma marca "cond=1111" que, desde a E6, `ArmDecoder#decodeUnconditional` usa para A32 —
@@ -168,9 +181,11 @@ public final class VfpDecoder implements DecoderExtension {
         if (bits2120 == 0) {
             return decodeMaxNmMinNm(raw, address, condition, doublePrecision);
         }
-        // VRINT/VCVT (bits[23:20]=1110/1111, B14.5) ou VMOVX/VINS (bits[23:16]=1_11_0000, B14.6) —
-        // ainda não implementados: recusa explícita (G8), nunca `null` (que devolveria o espaço ao
-        // `CoprocessorDecoder` genérico).
+        if (bits2120 == BITS21_20_ROUND_OR_CONVERT) {
+            return decodeRoundOrConvert(raw, address, condition, doublePrecision);
+        }
+        // VMOVX/VINS (bits[23:16]=1_11_0000, B14.6) — ainda não implementado: recusa explícita
+        // (G8), nunca `null` (que devolveria o espaço ao `CoprocessorDecoder` genérico).
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
@@ -207,6 +222,58 @@ public final class VfpDecoder implements DecoderExtension {
         boolean isMin = (raw & BIT6_MASK) != 0;
         return vfpAlu(isMin ? IrOp.VfpOperation.MINNM : IrOp.VfpOperation.MAXNM, doublePrecision, vd, vn, vm,
                 address, raw, condition);
+    }
+
+    /// `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}{S,U}` (B14.5, `sz=2`/`sz=3` — a forma `sz=1`/`_hp` já foi
+    /// recusada por {@link #decodeUnconditionalSpace}): `bit18` distingue `VRINT` (`0`) de `VCVT`
+    /// (`1`) dentro de `bits[19:18]` (`bit19` fixo `1` nas duas); `rm`=`bits[17:16]` é o modo de
+    /// arredondamento da PRÓPRIA instrução, mapeado por {@link #roundingModeFromField} — tabela
+    /// DIFERENTE da de `FPSCR.RMode` (ver Contexto da task: `00`=ties-away, `01`=ties-even,
+    /// `10`=+inf, `11`=-inf). `bit6` fixo em `1` nas duas famílias (rejeitado como `null`/G8 se não
+    /// bater); `VRINT` fixa `bit7=0` (rejeitado se setado); `VCVT` usa `bit7` como `op` (sinal) e
+    /// SEMPRE produz `Vd` simples (`vd(raw, false)`), mesmo quando a origem é `D`.
+    private DecodedInstruction decodeRoundOrConvert(int raw, int address, Condition condition, boolean doublePrecision) {
+        if ((raw & BIT19_MASK) == 0 || (raw & BIT6_MASK) == 0) {
+            return null;
+        }
+        boolean isVcvt = (raw & BIT18_MASK) != 0;
+        int rm = (raw >>> RM_SHIFT) & RM_MASK;
+        AdvSimdLanes.RoundingMode direction = roundingModeFromField(rm);
+        if (!isVcvt) {
+            if ((raw & BIT7_MASK) != 0) {
+                return null;
+            }
+            int vd = vd(raw, doublePrecision);
+            int vm = vm(raw, doublePrecision);
+            if (!validDoubleRegister(vd, doublePrecision) || !validDoubleRegister(vm, doublePrecision)) {
+                return null;
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ROUND,
+                    vd, -1, vm, direction.ordinal(), false, false, false, 0, doublePrecision);
+        }
+        boolean signed = (raw & BIT7_MASK) != 0;
+        int vdSingle = vd(raw, false);
+        int vmSource = vm(raw, doublePrecision);
+        if (!validDoubleRegister(vdSingle, false) || !validDoubleRegister(vmSource, doublePrecision)) {
+            return null;
+        }
+        int packed = direction.ordinal() | (signed ? 0b1000 : 0);
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CONVERT_ROUNDED,
+                vdSingle, -1, vmSource, packed, false, false, false, 0, doublePrecision);
+    }
+
+    /// Tabela `rm`→direção confirmada no QEMU real (`target/arm/tcg/translate-vfp.c`,
+    /// `fp_decode_rm[]`, mesma tabela para `trans_VRINT`/`trans_VCVT`) — **DIFERENTE** da tabela do
+    /// campo `RMODE` do FPSCR (`FpRoundingMode.fromFieldValue`): confundir as duas produz
+    /// `VRINTP` executando `VRINTM` silenciosamente (Armadilha 3 da task B14.5).
+    private static AdvSimdLanes.RoundingMode roundingModeFromField(int rm) {
+        return switch (rm) {
+            case 0b00 -> AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY;
+            case 0b01 -> AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN;
+            case 0b10 -> AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY;
+            case 0b11 -> AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY;
+            default -> throw new IllegalArgumentException("rm fora do campo de 2 bits: " + rm);
+        };
     }
 
     private boolean claimsThisDecoder(int raw) {

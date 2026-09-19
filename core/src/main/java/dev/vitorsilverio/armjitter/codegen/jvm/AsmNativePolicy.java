@@ -209,6 +209,10 @@ public final class AsmNativePolicy {
             // VSEL (B14.4, ARMv8-A): sem emissão nativa nesta task ("Não inclui" — decode +
             // interpretado apenas, mesmo padrão de Crc32/Nocp/VfpSysregMemoryTransfer acima).
             case IrOp.VfpSelect ignored -> false;
+            // VRINT/VCVT com modo explícito (B14.5, ARMv8-A): sem emissão nativa nesta task ("Não
+            // inclui" — decode + interpretado apenas, mesmo padrão de VfpSelect acima).
+            case IrOp.VfpRound ignored -> false;
+            case IrOp.VfpConvertRounded ignored -> false;
             // MRS/MSR SYSm do perfil M (B7.4): emitido nativamente desde a task C12.7 — via
             // IrOpInterop (delega ao MProfileExceptionModel via IrSystemExecutor, sem duplicar).
             case IrOp.MProfileSystemRegister ignored -> true;

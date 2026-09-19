@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
@@ -57,7 +58,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(170, kinds.size(), "IrOp.Kind deve ter 170 constantes contíguas");
+        assertEquals(172, kinds.size(), "IrOp.Kind deve ter 172 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -143,7 +144,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // "Não inclui"). B14.3 acrescentou CRC32 (+1 — mesmo "Não inclui": a task explicita
         // decode+interpretado apenas, emissão nativa/Truffle fica para trabalho futuro). B14.4
         // acrescentou VFP_SELECT (+1, `VSEL`, mesmo "Não inclui": decode + interpretado apenas).
-        assertEquals(104, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // B14.5 acrescentou VFP_ROUND, VFP_CONVERT_ROUNDED (+2, `VRINT{A,N,P,M}`/
+        // `VCVT{A,N,P,M}{S,U}`, mesmo "Não inclui": decode + interpretado apenas).
+        assertEquals(106, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -218,7 +221,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH,
                         IrOp.Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR,
                         IrOp.Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR,
-                        IrOp.Kind.CRC32, IrOp.Kind.VFP_SELECT)),
+                        IrOp.Kind.CRC32, IrOp.Kind.VFP_SELECT,
+                        IrOp.Kind.VFP_ROUND, IrOp.Kind.VFP_CONVERT_ROUNDED)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -295,6 +299,10 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.VFP_MOVE_IMMEDIATE -> new IrOp.VfpMoveImmediate(false, 0, 0L, c);
             case IrOp.Kind.VFP_COMPARE -> new IrOp.VfpCompare(false, false, false, 0, 1, c);
             case IrOp.Kind.VFP_SELECT -> new IrOp.VfpSelect(false, 0, 1, 2, Condition.EQ, c);
+            case IrOp.Kind.VFP_ROUND ->
+                    new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 0, 1, c);
+            case IrOp.Kind.VFP_CONVERT_ROUNDED ->
+                    new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, false, 0, 1, c);
             case IrOp.Kind.VFP_CONVERT -> new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 0, 1, c);
             case IrOp.Kind.VFP_LOAD -> new IrOp.VfpLoad(false, 0, 1, -1, 0, c);
             case IrOp.Kind.VFP_STORE -> new IrOp.VfpStore(false, 0, 1, -1, 0, c);

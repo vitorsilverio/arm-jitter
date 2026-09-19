@@ -53,30 +53,27 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B14.4 fechar `VSEL`/`VMAXNM`/`VMINNM` + o misdecode G8)
+## Onde estamos (atualizado 2026-09-19, após B14.5 fechar `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}{S,U}`)
 
-**B14.4 FECHADA.** `VSEL` (`sz=2`/`sz=3`, 4 `cc`) + `VMAXNM`/`VMINNM` (`sp`/`dp`) decodificam e
-executam sob `ARMV8A_32`, A32 e T32 — e o misdecode G8 pré-existente (`VSEL`/`VMAXNM` virando
-`VMLA`/`VNMLS`/`VMUL`/`VADD`/`VDIV` em `ARMV7A`/`ARM11_MPCORE`) foi fechado para TODO preset com
-VFP, não só o novo (gate único dentro de `VfpDecoder`, antes de `isVmovHalfEncoding`). `IrOp.VfpSelect`
-novo (`Kind.VFP_SELECT=169`, `selectCondition` é DADO nunca `condition` do bloco — Armadilha 2
-respeitada); `VMAXNM`/`VMINNM` reusam `VFP_ALU`/`AdvSimdLanes.maxNum`/`minNum`, zero algoritmo novo.
-**2 achados reais durante a execução (não previstos pela spec)**: (1) a máscara de 4 bits proposta
-para `VMAXNM`/`VMINNM` colidia com o bit de extensão de `Vd` (perderia `Vd` ímpar); (2)
-`AsmNativePolicy` já reivindicava emissão nativa para TODO `VfpAlu` — como `MAXNM`/`MINNM` são
-valores novos do mesmo enum, herdaram essa reivindicação sem ter emissor, corrompendo o registrador
-de destino silenciosamente (achado pelo `VfpNativeEquivalenceTest` pré-existente fazendo seu
-trabalho — G1). Os 2 corrigidos nesta sessão. `docs/COBERTURA-ISA.md` byte a byte idêntica (medido
-antes/depois); `docs/COBERTURA-JIT.md` regenerado (`VfpSelect`=❌/❌). `mvn -o test` verde na raiz +
-G5 (`gbaemu`/`ndsemu`) verde. Ver `## Resultado` de `B14.4`.
+**B14.5 FECHADA.** `VRINT{A,N,P,M}` + `VCVT{A,N,P,M}{S,U}` (`sp`/`dp`, `sz=2`/`sz=3`) decodificam e
+executam sob `ARMV8A_32`, A32 e T32, com o modo de arredondamento vindo do campo `rm` da instrução
+(tabela QEMU: `00`=ties-away/`01`=ties-even/`10`=+inf/`11`=-inf), nunca do `FPSCR.RMode`. Armadilha 1
+(desenho) resolvida por PROMOÇÃO: o `enum RoundingMode`/`roundForConversion` de `AdvSimdLanes` (já
+usado pelo A64) viraram `public` em vez de um tipo novo ou de mexer em `core.FpRoundingMode` (G3
+respeitado — widening de visibilidade é aditivo). `IrOp.VfpRound`/`IrOp.VfpConvertRounded` novos
+(`Kind`=170/171); `VCVT` desta família sempre produz `Vd` simples mesmo com origem `D`. Achado de
+processo: `./gerar-cobertura-jit.sh` usa dois processos `mvn` separados — sem `mvn -pl core -am
+install -DskipTests` antes, o segundo resolve `core` pelo JAR publicado no `~/.m2` (stale), gerando
+tabela desatualizada SEM erro. `docs/COBERTURA-ISA.md` byte a byte idêntica; `docs/COBERTURA-JIT.md`
+regenerado (2 linhas novas, ambas ❌/❌). `mvn -o test` verde na raiz + G5 (`gbaemu`/`ndsemu`) verde.
+Ver `## Resultado` de `B14.5`.
 
-**Pegáveis a seguir**: `B14.5` (`VRINT{A,N,P,M}`/`VCVT{A,N,P,M}`, depende de B14.4 ✅ — mesmo espaço
-incondicional já instalado em `VfpDecoder`) é o próximo degrau natural do épico B14. `C12.5`/`C12.10`
-(emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações
-SVE/perfil-R, zero decode) seguem pegáveis sem dependência pendente. Candidatas gap-driven da
-B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
-tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
-bits.
+**Pegáveis a seguir**: `B14.6` (`FEAT_FP16` de 32 bits — `VMOVX`/`VINS` + formas `sz=1`/`_hp`,
+depende de B14.5 ✅) é o próximo degrau natural do épico B14. `C12.5`/`C12.10` (emissão JIT nativa
+A64) seguem pegáveis, dimensão 2 do roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode)
+seguem pegáveis sem dependência pendente. Candidatas gap-driven da B16.14 (specs ainda não escritas):
+decoder MVE "long shift" GPR-pair (19 encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4),
+`BF` 3 formas restantes, `CLRM`, `SB` de 32 bits.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

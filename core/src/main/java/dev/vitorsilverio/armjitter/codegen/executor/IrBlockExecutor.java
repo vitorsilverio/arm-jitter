@@ -167,6 +167,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_CORE_PAIR_TRANSFER_SINGLE -> vfp.executeVfpCorePairTransferSingle(core, (IrOp.VfpCorePairTransferSingle) op);
                 case IrOp.Kind.VFP_CONVERT_FIXED -> vfp.executeVfpConvertFixed(core, (IrOp.VfpConvertFixed) op);
                 case IrOp.Kind.VFP_SELECT -> vfp.executeVfpSelect(core, (IrOp.VfpSelect) op);
+                case IrOp.Kind.VFP_ROUND -> vfp.executeVfpRound(core, (IrOp.VfpRound) op);
+                case IrOp.Kind.VFP_CONVERT_ROUNDED -> vfp.executeVfpConvertRounded(core, (IrOp.VfpConvertRounded) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
@@ -479,6 +481,8 @@ public final class IrBlockExecutor {
             case IrOp.VfpCorePairTransferSingle vfpCorePairSingle -> { vfp.executeVfpCorePairTransferSingle(core, vfpCorePairSingle); yield false; }
             case IrOp.VfpConvertFixed vfpCvtFixed -> { vfp.executeVfpConvertFixed(core, vfpCvtFixed); yield false; }
             case IrOp.VfpSelect vfpSelect -> { vfp.executeVfpSelect(core, vfpSelect); yield false; }
+            case IrOp.VfpRound vfpRound -> { vfp.executeVfpRound(core, vfpRound); yield false; }
+            case IrOp.VfpConvertRounded vfpCvtRounded -> { vfp.executeVfpConvertRounded(core, vfpCvtRounded); yield false; }
             case IrOp.MProfileSystemRegister m -> { system.executeMProfileSystemRegister(core, m); yield false; }
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }

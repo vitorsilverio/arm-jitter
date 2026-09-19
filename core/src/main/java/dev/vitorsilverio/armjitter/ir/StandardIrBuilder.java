@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BankedRegisterSysm;
@@ -480,6 +481,26 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.secondSourceRegister(),
                     vselCondition(instruction.immediate()),
                     instruction.condition()));
+            // B14.5: `immediate`=ordinal de `AdvSimdLanes.RoundingMode` (direção do campo `rm`,
+            // nunca `FPSCR.RMode`).
+            case VFP_ROUND -> block.add(new IrOp.VfpRound(
+                    AdvSimdLanes.RoundingMode.values()[instruction.immediate()],
+                    instruction.signedAccess(),
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
+                    instruction.condition()));
+            // B14.5: `immediate` empacota bits 2:0 = ordinal de `AdvSimdLanes.RoundingMode`, bit 3 =
+            // sinal — desempacotado aqui, mesmo padrão de `VFP_CONVERT_FIXED` abaixo.
+            case VFP_CONVERT_ROUNDED -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.VfpConvertRounded(
+                        AdvSimdLanes.RoundingMode.values()[packed & 0b111],
+                        (packed & 0b1000) != 0,
+                        instruction.signedAccess(),
+                        instruction.destinationRegister(),
+                        instruction.secondSourceRegister(),
+                        instruction.condition()));
+            }
             // `baseValueOverride(instruction)` (mesmo helper do `LOAD`/`STORE` ARM genérico acima)
             // é indispensável aqui: `VLDR`/`VSTR Vx, [pc, #imm]` é o idioma padrão do `gcc` para
             // literais `double`/`float` (literal pool) — sem o override, `base`=15 seria lido AO
