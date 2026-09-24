@@ -702,6 +702,64 @@ public final class ArmArchitecture {
                     // acima (delega a NeonSharedDecoder, herda o mesmo comportamento "nunca null").
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV7A_NEON_FEATURES)));
 
+    /// ARMv7-R **user-level** (B20.1) — primeiro degrau do perfil R (Cortex-R4/R5/R7/R8, catálogo na
+    /// B20.6). O conjunto de instruções é o de {@link #ARMV7A} MENOS as extensões que o perfil R real
+    /// não tem: **sem** {@link ArmFeature#HYPERVISOR_CALL}/{@link ArmFeature#VIRTUALIZATION_EXTENSIONS}
+    /// (não há Hyp mode em ARMv7-R) nem {@link ArmFeature#SECURE_MONITOR_CALL} (sem Security
+    /// Extensions/Monitor mode). **`extending(ARMV7A, ...)` não serve aqui** — só SOMA features, e
+    /// {@code ARMV7A_FEATURES} já declara as três acima; por isso este preset nasce de {@link #of},
+    /// lista positiva, mesmo precedente de {@link #ARMV7M_PURE} (B15.1: "não dá para subtrair via
+    /// `extending`"). `DIVIDE` (`SDIV`/`UDIV`) já decodifica sob qualquer preset que a declare — é um
+    /// carve-out direto em {@link dev.vitorsilverio.armjitter.decoder.ArmDecoder} gateado só por
+    /// `architecture.has(ArmFeature.DIVIDE)`, sem checagem de perfil — então basta declarar a feature
+    /// aqui (confirmado lendo o carve-out antes de escrever esta lista, achado 2 da spec B20.1).
+    ///
+    /// **Sem VFP** ({@link ArmFeature#VFPV2} de fora): os Cortex-R4/R5/R7/R8 têm variantes "sem F"
+    /// reais (sem FP nenhum) — este preset nasce como o núcleo mínimo, mesma disciplina de
+    /// {@link #ARMV6}/{@link #ARMV6T2}/{@link #ARMV6Z} (B12.5): variantes "(F)"/"F" ficam de fora,
+    /// candidatas a uma sub-task futura que componha VFP sobre este preset. **Sem NEON.**
+    ///
+    /// {@link ArmFeature#R_PROFILE}/{@link ArmFeature#PMSA} não têm consumidor ainda — só a ausência
+    /// das três features de virtualização/segurança acima é observável hoje. MPU (B20.2/B20.3), TCM
+    /// (B20.4) e o modelo de exceção sem Hyp/Monitor (B20.5) são tasks futuras nomeadas; até lá este
+    /// preset roda contra um {@code AddressSpace} plano, como qualquer preset sem MMU/MPU, com
+    /// {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel} default. **Este preset ainda
+    /// não entra no mapa `ARM_ARCHITECTURES` de `IsaCoverageReport`** — a coluna `v7-R` nasce na
+    /// B20.6, junto do catálogo de Cortex-R (mesmo precedente de {@link #ARMV7M_PURE}/B15.1 e
+    /// {@link #ARMV8A_32}/B14.1: zero-diff em `docs/COBERTURA-ISA.md`).
+    private static final ArmArchitecture ARMV7R_FEATURES = of("ArmV7-R",
+            // ARMv5TE
+            ArmFeature.BLX, ArmFeature.BLX_IMMEDIATE, ArmFeature.CLZ, ArmFeature.DSP_MULTIPLY,
+            ArmFeature.SATURATING, ArmFeature.LDRD_STRD, ArmFeature.LOAD_PC_INTERWORKING,
+            ArmFeature.MUL_PRESERVES_CARRY, ArmFeature.LDM_WRITEBACK_BASE_IN_LIST,
+            ArmFeature.EMPTY_RLIST_NO_TRANSFER, ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL,
+            ArmFeature.BREAKPOINT, ArmFeature.PRELOAD_HINTS,
+            // ARMv6K (menos SECURE_MONITOR_CALL)
+            ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE, ArmFeature.UMAAL,
+            ArmFeature.PARALLEL_SIMD, ArmFeature.PACK_SATURATE, ArmFeature.EXCLUSIVE_WORD,
+            ArmFeature.EXCLUSIVE_SIZED, ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+            ArmFeature.SETEND_BIG_ENDIAN_DATA, ArmFeature.WAIT_HINTS, ArmFeature.UNALIGNED_ACCESS,
+            ArmFeature.SIGNED_MULTIPLY_MEDIA,
+            // ARMv6K+Thumb2
+            ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS, ArmFeature.MOVW_MOVT,
+            // ARMv7-A "inteiro v7" (menos VFPV2/VFP_FUSED_MULTIPLY_ACCUMULATE/HYPERVISOR_CALL/
+            // VIRTUALIZATION_EXTENSIONS)
+            ArmFeature.MLS_MULTIPLY, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE, ArmFeature.DIVIDE,
+            // Perfil R
+            ArmFeature.R_PROFILE, ArmFeature.PMSA);
+
+    public static final ArmArchitecture ARMV7R = ARMV7R_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7R_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7R_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV7R_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7R_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7R_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;

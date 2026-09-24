@@ -53,44 +53,23 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-19, após B13.22 fechar o épico B13 inteiro)
+## Onde estamos (atualizado 2026-09-23, após B20.1 abrir o épico B20 — perfil R)
 
-**B13.22 FECHADA — ÉPICO B13 (NEON de 32 bits) FECHADO.** Preset público novo
-`ArmArchitecture.ARMV7A_NEON` (`extending(ARMV7A, ADVANCED_SIMD, VFPV3_D32)`, aditivo, `ARMV7A`
-intocado — G3): pluga os 7 decoders A32 do épico + `CoprocessorDecoder` + `NeonSharedDecoder` POR
-ÚLTIMO (achado real, ver abaixo) e, no lado Thumb-2, `Thumb2NeonDecoder` (B13.16) + ... +
-`Thumb2CoprocessorDecoder` + `Thumb2NeonSharedDecoder` (NOVO — wrapper fino sem transformação,
-`neon-shared` tem encoding idêntico A32/T32) também por último. As 7 features irmãs do épico
-(RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) ficam de fora do preset — são todas extensões ARMv8.x que
-nenhum núcleo ARMv7-A real tem — e são curadas por mnemônico em
-`IsaCoverageReport.ARM32_VERSION_REQUIREMENTS` (espelho por nome da `AARCH64_VERSION_REQUIREMENTS`
-da E12), medindo `·` (não `❌`) na coluna nova. `IsaCoverageReport`: os 3 grupos saem de
-`NOT_IN_ANY_PRESET`, coluna `v7-A+NEON` nova. **Medição** (números finais, já com a correção de
-ordem abaixo): global 99%→98% (20544/20675→21484/21726, queda esperada, denominador +325), coluna
-`v7-A+NEON` 89% (940/1051; dentro dos 325 NEON: 279 ✅/35 ·/11 ❌ real — 7 formas
-`SHA1x_3s`/`SHA256x_3s` sem decoder nenhum ainda + 4 `VCVT_xx_2sh` já eram a lacuna F16 conhecida de
-B13.8). `ArmProcessor` ganhou 7 entradas `_NEON` irmãs (`Cortex-A5`..`A17`, aditivas).
+**B20.1 FECHADA.** `ArmFeature.R_PROFILE`/`PMSA` (sem consumidor ainda) + preset público
+`ArmArchitecture.ARMV7R` — user-level, A32+T32 completos, `DIVIDE`, sem
+`HYPERVISOR_CALL`/`VIRTUALIZATION_EXTENSIONS`/`SECURE_MONITOR_CALL`/`VFPV2`. Nasce de `of(...)`
+(lista positiva confirmada linha a linha contra `ARMV7A`, `extending` não serve — somaria as 3
+features de virtualização/segurança). Zero decoder novo; `SDIV`/`UDIV` já decodificam por serem
+gateados só por `DIVIDE`, sem checagem de perfil (confirmado lendo `ArmDecoder` antes de escrever
+qualquer coisa). `docs/COBERTURA-ISA.md` zero-diff confirmado (`./gerar-cobertura-isa.sh`, a coluna
+`v7-R` nasce só na B20.6) + `mvn -o test` verde + G5 completo nos 5 consumidores. Ver `## Resultado`
+de `B20.1` na task.
 
-**Achado real via JaCoCo (a pedido do usuário, memória `feedback-testes-falhando-prioridade-cobertura`)**:
-a 1ª versão registrava `NeonSharedDecoder`/`Thumb2NeonSharedDecoder` ANTES de
-`CoprocessorDecoder`/`Thumb2CoprocessorDecoder`. `NeonSharedDecoder` nunca devolve `null` desde a
-B13.21 (fecha o "null debt" do arquivo com `unimplemented(...)` explícito, sem checar se o `raw`
-está no frame `neon-shared`) — nenhuma task anterior tinha registrado esse decoder numa
-`ArmArchitecture` de verdade, então o efeito nunca fora exercitado. Com ele ANTES do
-`CoprocessorDecoder`, `MCR`/`MRC`/`MCRR`/`MRRC`/`DMB`/`DSB`/`ISB`/`MRS`/`MSR`/branches largos etc
-ficavam `UNIMPLEMENTED` sob `ARMV7A_NEON` (confirmado por probe: `0xEE010F10`/`MCR p15,0,r0,c1,c0,0`
-decodifica `COPROCESSOR` sob `ARMV7A`, virava `UNIMPLEMENTED` sob a 1ª versão do preset novo).
-Corrigido movendo os dois para o FIM de cada lista — quem nunca devolve `null` só pode vir por
-último. `Thumb2NeonSharedDecoder` também simplificado (removido `if (decoded == null)`, código
-morto). Testes de regressão novos + JaCoCo confirma 0 linhas/branches perdidos nas 3 classes
-tocadas. `mvn -o verify` verde (4717 testes) + G5 completo nos 5 consumidores (rodado 2x, antes e
-depois do fix). Ver `## Resultado` de `B13.22` na task.
-
-**Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
-roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência
-pendente. Candidata nova da B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/
-`SHA1M_3s`/`SHA1SU0_3s`/`SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64
-via `Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas
+**Pegáveis a seguir**: `B20.2` (registradores CP15 de MPU, PMSAv7) destravada por B20.1.
+`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. Candidata nova da
+B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
+`SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via
+`Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas
 gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
 tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
 bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de

@@ -412,5 +412,24 @@ public enum ArmFeature {
     /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#CRC32} do lado A64. **Nenhum
     /// preset a declarava antes de
     /// {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8A_32}.**
-    CRC32
+    CRC32,
+
+    // ---- Onda 7, B20.1 (fundação: preset ArmArchitecture.ARMV7R, sem MPU/TCM/modelo de exceção próprio) ----
+    /// Marca um core de **perfil R** (Cortex-R, tempo real): sem modos Hyp/Monitor
+    /// ({@link #HYPERVISOR_CALL}/{@link #VIRTUALIZATION_EXTENSIONS}/{@link #SECURE_MONITOR_CALL}
+    /// nunca acompanham esta feature — ver {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV7R}),
+    /// memória protegida por regiões em vez de páginas (ver {@link #PMSA}). **Nenhum decoder a
+    /// consome ainda** (mesma honestidade do Javadoc de {@link #M_PROFILE} quando foi criada): o
+    /// que ela implica hoje é só a AUSÊNCIA das três features de virtualização/segurança no preset
+    /// `ARMV7R`; o que vai gatear de verdade é o modelo de exceção sem Hyp/Monitor (B20.5) e o
+    /// catálogo `ArmProcessor.CORTEX_R*` (B20.6).
+    R_PROFILE,
+    /// **PMSA** (Protected Memory System Architecture) — memória protegida por regiões (MPU), sem
+    /// tradução de endereço (sem páginas, sem TLB). **Mutuamente exclusiva com VMSA** (nenhuma
+    /// feature de VMSA existe ainda neste projeto; quando existir, nenhum preset pode declarar as
+    /// duas). **Nenhum decoder a consome ainda**: `PmsaAddressSpace` é a B20.3, os registradores
+    /// CP15 de MPU (`MPUIR`/`RGNR`/`DRBAR`/`DRSR`/`DRACR`) são a B20.2 — nesta task ela só existe
+    /// como declaração, presente em {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV7R}
+    /// e em nenhum outro preset.
+    PMSA
 }
