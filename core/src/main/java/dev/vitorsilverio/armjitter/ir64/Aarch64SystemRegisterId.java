@@ -56,6 +56,37 @@ public enum Aarch64SystemRegisterId {
     /// AdvSIMD é permitida.
     CPACR_EL1,
 
+    // ── B20.8: PMSAv8-64 (ARMv8-R AArch64, Cortex-R82) — registradores de MPU de EL1. Fonte
+    // ── normativa: ARM DDI 0600A.d (ARM ARM Supplement, ARMv8-R AArch64), lido via `curl` nesta
+    // ── sessão (não parafraseado), capítulo G1.3. `op0=0b11`/`op1=0b000` em todos, iguais ao grupo
+    // ── "geral" de EL1 acima — nenhuma colisão de `CRn`/`CRm`/`op2` com os registradores VMSA já
+    // ── mapeados neste enum (mutuamente exclusivos por preset, nunca pelo decoder).
+
+    /// `MPUIR_EL1` (`op0=0b11,op1=0b000,CRn=0b0000,CRm=0b0000,op2=0b100`, DDI 0600A.d §G1.3.14) —
+    /// número de regiões de MPU de EL1 implementadas (`REGION[7:0]`). Só leitura.
+    MPUIR_EL1,
+    /// `PRSELR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b0010,op2=0b001`, DDI 0600A.d §G1.3.26) —
+    /// seleciona a região de EL1 visível em {@link #PRBAR_EL1}/{@link #PRLAR_EL1} (`REGION[7:0]`).
+    PRSELR_EL1,
+    /// `PRBAR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b1000,op2=0b000`, DDI 0600A.d §G1.3.16) —
+    /// base da região de EL1 selecionada por {@link #PRSELR_EL1} (`BASE[51:6]`/`SH[5:4]`/`AP[3:2]`/
+    /// `XN[1]`). **Largura de campo de bit ≠ da versão de 32 bits `PRBAR`** (Armadilha 1 da task
+    /// B20.8: `BASE` tem 46 bits aqui, não 26 — nunca deduzir do layout `ArmArchitecture#ARMV8R_32`).
+    PRBAR_EL1,
+    /// `PRLAR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b1000,op2=0b001`, DDI 0600A.d §G1.3.19) —
+    /// limite (inclusivo) da região de EL1 selecionada por {@link #PRSELR_EL1} (`LIMIT[51:6]`/
+    /// `NS[4]`/`AttrIndx[3:1]`/`EN[0]`). Mesma ressalva de largura de {@link #PRBAR_EL1}.
+    PRLAR_EL1,
+    /// `PRENR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b0001,op2=0b001`, DDI 0600A.d §G1.3.20) —
+    /// bitmap de habilitação direta das regiões 0-31 (espelha {@link #PRLAR_EL1}`.EN` por região,
+    /// sem passar por {@link #PRSELR_EL1}). Mesmo tratamento "sem consumidor real confirmado" do
+    /// espelho de 32 bits (ver Javadoc de
+    /// {@link dev.vitorsilverio.armjitter.memory.mpu.Pmsav8MpuRegisters#prenr}) —
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8SystemRegisters64} guarda o valor bruto,
+    /// `PRLAR_EL1.EN` continua a fonte autoritativa que
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8AddressSpace64} consulta.
+    PRENR_EL1,
+
     // ── B6.6.7: identidade da CPU, resolvidos direto pelo `Aarch64Core` (ver javadoc da classe) ──
 
     /// `CurrentEL` (`op0=3,op1=0,CRn=4,CRm=2,op2=2`) — nível de exceção atual em `[3:2]`

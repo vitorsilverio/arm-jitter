@@ -139,6 +139,26 @@ public final class Aarch64Architecture {
             Aarch64Feature.FP8_FUSED_MULTIPLY_ADD,
             Aarch64Feature.LOOKUP_TABLE);
 
+    /// **ARMv8-R AArch64** (`Cortex-R82`, B20.8) — estende {@link #ARMV8_0_A} (a B19.9 mediu o
+    /// conjunto A64 dela em 99%, baseline suficiente para um perfil R não nascer cheio de buracos)
+    /// acrescentando {@link Aarch64Feature#R_PROFILE}/{@link Aarch64Feature#PMSA}. **Não** é uma
+    /// escada de versão (ao contrário de `ARMV8_1_A`...`ARMV9_5_A` acima) — é ortogonal, mesmo
+    /// papel do preset `ArmArchitecture#ARMV7R`/`ARMV8R_32` do lado 32 bits (B20.1/B20.7).
+    ///
+    /// **Diferente do preset 32-bit `ARMV8R_32`** (que usa `of(...)`, lista positiva, porque
+    /// `extending(ARMV7A, ...)` traria `HYPERVISOR_CALL`/`SECURE_MONITOR_CALL` indevidos): aqui
+    /// `extending(ARMV8_0_A, ...)` é seguro porque `Aarch64Feature` não tem um equivalente a essas
+    /// duas — `SMC`/`HVC` de 64 bits são incondicionais no `Aarch64Decoder`, nunca gateados por
+    /// feature (confirmado por grep nesta rodada, ver `## Resultado` da task B20.8).
+    ///
+    /// **Só-PMSA** (decisão de escopo da task B20.8, citando o ARM DDI 0600A.d): o `Cortex-R82`
+    /// admite VMSA em EL1 como opção de implementação, mas isso fica de fora — task futura nomeada.
+    /// Sem VFP/AdvSIMD adicional além do que {@link #ARMV8_0_A} já traz (A64 sempre inclui
+    /// AdvSIMD&amp;FP na baseline, ao contrário do lado 32 bits onde é opcional).
+    public static final Aarch64Architecture ARMV8_R_64 = extending(ARMV8_0_A, "ARMv8-R (AArch64)",
+            Aarch64Feature.R_PROFILE,
+            Aarch64Feature.PMSA);
+
     private final String name;
     private final EnumSet<Aarch64Feature> features;
 

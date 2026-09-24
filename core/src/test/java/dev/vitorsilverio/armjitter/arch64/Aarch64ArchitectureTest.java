@@ -163,4 +163,16 @@ class Aarch64ArchitectureTest {
     void toStringReturnsTheName() {
         assertEquals("ARMv8.0-A", Aarch64Architecture.ARMV8_0_A.toString());
     }
+
+    /// B20.8: `ARMV8_R_64` estende `ARMV8_0_A` (não é uma escada de versão) acrescentando
+    /// `R_PROFILE`/`PMSA`, sem mutar `ARMV8_0_A` nem qualquer outro preset (G3).
+    @Test
+    void armv8r64ExtendsArmv80aWithRProfileAndPmsa() {
+        Aarch64Architecture armv8r64 = Aarch64Architecture.ARMV8_R_64;
+        assertTrue(armv8r64.has(Aarch64Feature.R_PROFILE));
+        assertTrue(armv8r64.has(Aarch64Feature.PMSA));
+        assertFalse(Aarch64Architecture.ARMV8_0_A.has(Aarch64Feature.R_PROFILE),
+                "ARMV8_0_A não pode ser mutada por extending");
+        assertFalse(Aarch64Architecture.ARMV8_0_A.has(Aarch64Feature.PMSA));
+    }
 }

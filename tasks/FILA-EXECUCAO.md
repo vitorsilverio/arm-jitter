@@ -53,27 +53,28 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após auditoria JaCoCo pós-B20.7)
+## Onde estamos (atualizado 2026-09-24, após fechamento da B20.8)
 
-**B20.7 FECHADA** (preset `ArmArchitecture.ARMV8R_32`, PMSAv8-32, catálogo
-`ArmProcessor.CORTEX_R52`/`CORTEX_R52PLUS`, coluna `v8-R` nascendo em **96% (637/661)**) **e depois
-auditada com JaCoCo de verdade a pedido do usuário**: achou gaps reais (branch coverage 64% em
-`Cp15Pmsav8MpuCoprocessor` — EL2/Hyp write path e os 2 listeners de abort sem nenhum teste — e a
-suíte de integração ponta-a-ponta, equivalente à `ArmCorePmsaAbortTest`/`PmsaAccessEquivalenceTest`
-da B20.3, simplesmente não existia). Fechado com ~19 testes novos/estendidos, zero mudança de
-código de produção. `mvn -o test` verde (4889 testes no `core`) + G5 em `gbaemu`/`ndsemu`/`armbox`
-(verdes); `virtual-arm-box`/`n3dsemu` não rodados (congelados/pausados). Ver `## Resultado` da task
-(`b20.7-armv8r-aarch32.md`), seção "Auditoria de cobertura JaCoCo pós-fechamento".
+**B20.8 FECHADA** (`Aarch64Architecture.ARMV8_R_64` + `Aarch64Processor.CORTEX_R82`, PMSAv8-64 no
+lado A64 — `Pmsav8SystemRegisters64`/`Pmsav8AddressSpace64`, 5 registradores de MPU de EL1). ARM DDI
+0600A.d lido de ponta a ponta via `curl` (não parafraseado). **Achado real que corrige a suposição
+do épico**: sobreposição de regiões em PMSAv8-64 é `Translation fault` (Table C1-4), NÃO
+`Permission fault` como no PMSAv8-32 (B20.7) — as duas versões de PMSA divergem nesse ponto, não são
+espelho perfeito. Reusa `MemoryTranslationException64`/`FaultStatus64` de VMSA64 diretamente (o
+manual confirma "reuses IFSC and DFSC fault encodings"), só um código novo (`PERMISSION_FAULT_L0`,
+nível 0, que VMSA64 nunca gera). QEMU não implementa `cortex-r82` ainda (confirmado por busca no
+código-fonte real) — região de fundo é decisão de implementação documentada, não fonte normativa
+(o DDI 0600A.d deixa o mapa padrão IMPLEMENTATION DEFINED). Coluna nova em `docs/COBERTURA-ISA.md`
+ADIADA para a B20.9 (Armadilha 6 da spec) — `./gerar-cobertura-isa.sh` rodado, zero-diff. `mvn -o
+test` verde (core) + `mvn -o install` local + G5 verde em `gbaemu`/`ndsemu`/`armbox`
+(`virtual-arm-box`/`n3dsemu` continuam congelados/pausados). Ver `## Resultado` da task
+(`b20.8-armv8r-aarch64.md`).
 
-**Manutenção feita nesta sessão**: `B6.5.1` (índice trilha B) estava `⬜` mas já tinha sido
-implementada há muito tempo (`core64/Aarch64FpRegisters.java` existe, `B6.5.2`/`3`/`4` já ✅
-dependiam dela) — corrigido para `✅`, índice estava só desatualizado.
-
-**Pegáveis a seguir**: `B20.8` (Cortex-R82, ARMv8-R AArch64) tem spec escrita e depende de `B20.7`
-✅ + `B19.9` ✅ — **pegável agora**, mas a spec avisa que nenhum campo de bit do lado A64 foi
-confirmado ainda (fonte ARM DDI 0600A não lida) — próxima sessão deve começar por aí. `B20.9`
-(validação N1-N4) segue bloqueada no usuário (runner natural é o `virtual-arm-box` congelado).
-`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. Candidata nova da
+**Pegáveis a seguir**: `B20.9` (validação N1-N4 + fechamento do épico B20, decide se a coluna `v8-R
+(AArch64)` de `docs/COBERTURA-ISA.md` entra aqui, adiada pela B20.8) segue bloqueada no usuário —
+runner natural é o `virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda (achado
+real da B20.8). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
+Candidata nova da
 B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
 `SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via
 `Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas

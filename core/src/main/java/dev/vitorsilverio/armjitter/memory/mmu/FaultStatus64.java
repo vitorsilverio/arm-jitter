@@ -25,7 +25,16 @@ public enum FaultStatus64 {
     /// Bloco de 2MiB (nível 2) nega o acesso pedido.
     PERMISSION_FAULT_L2(0x0E),
     /// Página de 4KiB (nível 3) nega o acesso pedido.
-    PERMISSION_FAULT_L3(0x0F);
+    PERMISSION_FAULT_L3(0x0F),
+    /// **Nível 0, só PMSAv8-64** (B20.8) — VMSA64 nunca gera isto (nível 0 nunca é folha em
+    /// VMSA64 4KiB/48-bit), mas a MPU não tem níveis: o ARM DDI 0600A §G1.1/Table C1-14 (lido nesta
+    /// sessão via `curl`, não parafraseado) confirma que PMSAv8-64 "reuses IFSC and DFSC fault
+    /// encodings" de VMSA64 e a nota de §G1.1 é explícita — *"In PMSAv8-64, only level 0 Permission
+    /// faults are supported in ESR_ELx.{IFSC, DFSC} and PAR_EL1.FST"* — código `0b001100` (`0x0C`).
+    /// Região negada e sobreposição de regiões (falha "Multiple" da Table C1-4) usam este único
+    /// código; "sem região casando" usa {@link #TRANSLATION_FAULT_L0} (mesma tabela: "No match" →
+    /// Translation fault nível 0).
+    PERMISSION_FAULT_L0(0x0C);
 
     private final int code;
 

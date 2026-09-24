@@ -367,6 +367,24 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRM_SPSR = 0;
     private static final int SYSREG_OP2_SPSR = 0;
 
+    // ── B20.8: PMSAv8-64 (ARMv8-R AArch64) — `op0=3,op1=0`, mesmo grupo "geral" de EL1 acima.
+    // ── Encodings do ARM DDI 0600A.d §G1.3 (ver Javadoc de Aarch64SystemRegisterId).
+    private static final int SYSREG_CRN_MPUIR_EL1 = 0;
+    private static final int SYSREG_CRM_MPUIR_EL1 = 0;
+    private static final int SYSREG_OP2_MPUIR_EL1 = 4;
+    private static final int SYSREG_CRN_PRSELR_EL1 = 6;
+    private static final int SYSREG_CRM_PRSELR_EL1 = 2;
+    private static final int SYSREG_OP2_PRSELR_EL1 = 1;
+    private static final int SYSREG_CRN_PRBAR_EL1 = 6;
+    private static final int SYSREG_CRM_PRBAR_EL1 = 8;
+    private static final int SYSREG_OP2_PRBAR_EL1 = 0;
+    private static final int SYSREG_CRN_PRLAR_EL1 = 6;
+    private static final int SYSREG_CRM_PRLAR_EL1 = 8;
+    private static final int SYSREG_OP2_PRLAR_EL1 = 1;
+    private static final int SYSREG_CRN_PRENR_EL1 = 6;
+    private static final int SYSREG_CRM_PRENR_EL1 = 1;
+    private static final int SYSREG_OP2_PRENR_EL1 = 1;
+
     // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`) — valores conferidos contra a tabela
     // ── de registradores de sistema real (`aarch64-none-elf-as`/`objdump`, forma genérica
     // ── `S3_4_Cn_Cm_op2`), ver corpus da task.
@@ -7211,6 +7229,13 @@ public final class Aarch64Decoder {
                 && !architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
             throw unsupported(word, address);
         }
+        // B20.8: PMSAv8-64 — sem ArmFeature.PMSA (perfil A/VMSA), os 5 registradores de MPU
+        // continuam UNDEFINED (G8), mesmo padrão de RGSR_EL1/GCR_EL1 acima.
+        if ((register == Aarch64SystemRegisterId.MPUIR_EL1 || register == Aarch64SystemRegisterId.PRSELR_EL1
+                || register == Aarch64SystemRegisterId.PRBAR_EL1 || register == Aarch64SystemRegisterId.PRLAR_EL1
+                || register == Aarch64SystemRegisterId.PRENR_EL1) && !architecture.has(Aarch64Feature.PMSA)) {
+            throw unsupported(word, address);
+        }
         return new Ir64Op.SystemRegister(read, register, rt);
     }
 
@@ -7361,6 +7386,23 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_SPSR && crm == SYSREG_CRM_SPSR && op2 == SYSREG_OP2_SPSR) {
             return Aarch64SystemRegisterId.SPSR_EL1;
+        }
+        // B20.8: PMSAv8-64. Gate por Aarch64Feature.PMSA fica em decodeSystemRegister (mesmo padrão
+        // de ALLINT/PAN/UAO/DIT acima) — aqui só resolve o encoding cru, sem checar arquitetura.
+        if (crn == SYSREG_CRN_MPUIR_EL1 && crm == SYSREG_CRM_MPUIR_EL1 && op2 == SYSREG_OP2_MPUIR_EL1) {
+            return Aarch64SystemRegisterId.MPUIR_EL1;
+        }
+        if (crn == SYSREG_CRN_PRSELR_EL1 && crm == SYSREG_CRM_PRSELR_EL1 && op2 == SYSREG_OP2_PRSELR_EL1) {
+            return Aarch64SystemRegisterId.PRSELR_EL1;
+        }
+        if (crn == SYSREG_CRN_PRBAR_EL1 && crm == SYSREG_CRM_PRBAR_EL1 && op2 == SYSREG_OP2_PRBAR_EL1) {
+            return Aarch64SystemRegisterId.PRBAR_EL1;
+        }
+        if (crn == SYSREG_CRN_PRLAR_EL1 && crm == SYSREG_CRM_PRLAR_EL1 && op2 == SYSREG_OP2_PRLAR_EL1) {
+            return Aarch64SystemRegisterId.PRLAR_EL1;
+        }
+        if (crn == SYSREG_CRN_PRENR_EL1 && crm == SYSREG_CRM_PRENR_EL1 && op2 == SYSREG_OP2_PRENR_EL1) {
+            return Aarch64SystemRegisterId.PRENR_EL1;
         }
         return null;
     }

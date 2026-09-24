@@ -194,5 +194,29 @@ public enum Aarch64Feature {
     /// `FEAT_F8F32MM` — multiplicação de matriz `fp8` com acumulação em precisão **simples**
     /// (`FMMLA_sb`). Armv9.6-A. A TSV dizia `FEAT_F8MM4`, nome inventado (E12). Nenhum preset a
     /// declara ainda: ver o bloco acima.
-    FP8_MATRIX_MULTIPLY_FP32
+    FP8_MATRIX_MULTIPLY_FP32,
+
+    // ---- B20.8: ARMv8-R AArch64 (Cortex-R82) — mirror de dev.vitorsilverio.armjitter.arch.ArmFeature
+    // ---- do lado de 32 bits (B20.1), enums DIFERENTES por desenho (mesmo padrão já usado pelo
+    // ---- projeto para RDM/CRC32/etc — ver Javadoc de ArmFeature#ADVANCED_SIMD_RDM).
+    /// Marca um core AArch64 de **perfil R** (Cortex-R, tempo real) — mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#R_PROFILE} (32-bit). Mesma honestidade de
+    /// Javadoc do espelho: nenhum decoder/executor consulta isto diretamente hoje, é a AUSÊNCIA
+    /// implícita de tudo que só faz sentido em perfil A (nada aqui ainda, `Aarch64Decoder` não tem
+    /// um equivalente a `HYPERVISOR_CALL`/`SECURE_MONITOR_CALL` gateado por feature — `SMC`/`HVC`
+    /// de 64 bits já são incondicionais). O que gateia de verdade é {@link #PMSA} (registradores de
+    /// MPU) e o catálogo {@link Aarch64Processor#CORTEX_R82}.
+    R_PROFILE,
+    /// **PMSA** (Protected Memory System Architecture) de 64 bits — mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#PMSA} (32-bit). Gateia os 5 registradores
+    /// de sistema novos (`MPUIR_EL1`/`PRSELR_EL1`/`PRBAR_EL1`/`PRLAR_EL1`/`PRENR_EL1`,
+    /// `Aarch64Decoder#decodeSystemRegisterId`) e é consumida por
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8SystemRegisters64}/
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8AddressSpace64} (B20.8). **Mutuamente
+    /// exclusiva com VMSA64** — nenhum preset A64 existente a declara, e o preset novo
+    /// {@link Aarch64Architecture#ARMV8_R_64} não estende nenhum preset A64 existente que já tenha
+    /// VMSA ligado (VMSA em A64 não é gateada por feature — é o hospedeiro que decide instalar
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64VmsaSystemRegisters} OU
+    /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8SystemRegisters64}, nunca os dois).
+    PMSA
 }

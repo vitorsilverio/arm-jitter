@@ -146,7 +146,13 @@ public enum Aarch64Processor {
     C1_PRO("C1-Pro", Aarch64Architecture.ARMV9_3_A),
 
     /// A64-only, `ARMv9.3-A` — branding C-Series (pós-2025), variante de baixo consumo.
-    C1_NANO("C1-Nano", Aarch64Architecture.ARMV9_3_A);
+    C1_NANO("C1-Nano", Aarch64Architecture.ARMV9_3_A),
+
+    /// **AArch64-only** (B20.8) — ao contrário do `Cortex-R52`/`R52+` (32-bit, B20.7), o `R82` NÃO
+    /// executa A32 em nenhum EL: não catalogado em `arch.ArmProcessor` (Armadilha 5 da task).
+    /// `ARMv8-R AArch64`, perfil de tempo real (PMSA/MPU, sem VMSA neste preset — ver Javadoc de
+    /// {@link Aarch64Architecture#ARMV8_R_64}).
+    CORTEX_R82("Cortex-R82", Aarch64Architecture.ARMV8_R_64);
 
     private final String displayName;
     private final Aarch64Architecture architecture;
