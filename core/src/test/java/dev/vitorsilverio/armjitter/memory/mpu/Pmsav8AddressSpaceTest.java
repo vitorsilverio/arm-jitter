@@ -239,6 +239,27 @@ class Pmsav8AddressSpaceTest {
     }
 
     @Test
+    void withUnprivilegedAccessRunsActionToCompletionAndRestoresPrivilegeOnSuccess() {
+        // Caso "feliz" (action.run() retorna sem lançar) — sem este teste, o único caminho
+        // exercitado por withUnprivilegedAccessTemporarilySwitchesToUserPermissionAndRestores
+        // sempre lança, e o retorno normal do método (fora do finally, sem exceção) fica sem
+        // cobertura (achado real via JaCoCo, sessão de auditoria pós-B20.7).
+        TestAddressSpace physical = new TestAddressSpace(0x1000);
+        Pmsav8MpuRegisters mpu = new Pmsav8MpuRegisters(1, 1);
+        mpu.setMpuEnabled(true);
+        Pmsav8AddressSpace space = new Pmsav8AddressSpace(physical, mpu);
+        program(mpu, 0, 0x100, PRBAR_FULL_ACCESS, true); // usuário também tem acesso — não lança
+        space.setPrivileged(true);
+
+        int[] valueSeenInsideAction = new int[1];
+        space.withUnprivilegedAccess(() -> valueSeenInsideAction[0] = space.read8(0x100));
+
+        assertEquals(0, valueSeenInsideAction[0], "action.run() completou normalmente dentro do escopo");
+        space.write32(0x100, 0xCAFE); // fora do escopo, privilégio restaurado (AP permite escrita privilegiada)
+        assertEquals(0xCAFE, space.read32(0x100));
+    }
+
+    @Test
     void allSizesReadWriteAndFetchDelegateToPhysicalWhenBypassed() {
         TestAddressSpace physical = new TestAddressSpace(0x1000);
         Pmsav8MpuRegisters mpu = new Pmsav8MpuRegisters(1, 1);

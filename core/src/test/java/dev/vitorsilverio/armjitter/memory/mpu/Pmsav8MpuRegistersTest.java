@@ -69,6 +69,18 @@ class Pmsav8MpuRegistersTest {
     }
 
     @Test
+    void setHprselrOutOfRangeIsIgnoredSilently() {
+        Pmsav8MpuRegisters mpu = new Pmsav8MpuRegisters(2, 2);
+        mpu.setHprselr(1);
+
+        mpu.setHprselr(2); // fora de faixa (hRegionCount=2, índices válidos 0-1)
+        assertEquals(1, mpu.hprselr(), "HPRSELR mantém o valor anterior, não corrompe");
+
+        mpu.setHprselr(-1);
+        assertEquals(1, mpu.hprselr());
+    }
+
+    @Test
     void hprbarHprlarHprselrAreIndependentFromEl1Bank() {
         Pmsav8MpuRegisters mpu = new Pmsav8MpuRegisters(2, 2);
 

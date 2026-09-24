@@ -53,19 +53,17 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após B20.7 fechar — ARMv8-R AArch32)
+## Onde estamos (atualizado 2026-09-24, após auditoria JaCoCo pós-B20.7)
 
-**B20.7 FECHADA.** Preset `ArmArchitecture.ARMV8R_32` (PMSAv8-32 do zero: `Pmsav8MpuRegisters`/
-`Cp15Pmsav8MpuCoprocessor`/`Pmsav8AddressSpace`, granule 64 bytes, limite inclusivo, sobreposição
-SEMPRE falha — confirmado lendo `pmsav8_mpu_lookup` inteiro no QEMU real) + catálogo
-`ArmProcessor.CORTEX_R52`/`CORTEX_R52PLUS`; coluna `v8-R` nasce em **96% (637/661)** na mesma
-sessão, zero-diff nas 12 colunas antigas. Achado real: `ARMV8_FP`/`FP16_ARITHMETIC` (2 das 5
-features de `ARMV8A_32`/B14.1) ficaram DE FORA da lista positiva — dependem do banco VFP, que este
-preset não tem (mesma decisão do `ARMV7R`); só `LOAD_ACQUIRE_STORE_RELEASE`/`CRC32`/`HALT` entraram.
-Terceira classe de falta de memória (`Pmsav8AccessException`) propagada nos 6 motores (`ArmCore`/
-`ArmTraceListener`/`IrBlockExecutor`/`AsmBlockCompiler`/`StandardIrBlockLifter`/`JitRuntime`),
-espelhando a B20.3. `mvn -o test` verde (4871 testes) + G5 em `gbaemu`/`ndsemu`/`armbox` (verdes);
-`virtual-arm-box`/`n3dsemu` não rodados (congelados/pausados). Ver `## Resultado` da task.
+**B20.7 FECHADA** (preset `ArmArchitecture.ARMV8R_32`, PMSAv8-32, catálogo
+`ArmProcessor.CORTEX_R52`/`CORTEX_R52PLUS`, coluna `v8-R` nascendo em **96% (637/661)**) **e depois
+auditada com JaCoCo de verdade a pedido do usuário**: achou gaps reais (branch coverage 64% em
+`Cp15Pmsav8MpuCoprocessor` — EL2/Hyp write path e os 2 listeners de abort sem nenhum teste — e a
+suíte de integração ponta-a-ponta, equivalente à `ArmCorePmsaAbortTest`/`PmsaAccessEquivalenceTest`
+da B20.3, simplesmente não existia). Fechado com ~19 testes novos/estendidos, zero mudança de
+código de produção. `mvn -o test` verde (4889 testes no `core`) + G5 em `gbaemu`/`ndsemu`/`armbox`
+(verdes); `virtual-arm-box`/`n3dsemu` não rodados (congelados/pausados). Ver `## Resultado` da task
+(`b20.7-armv8r-aarch32.md`), seção "Auditoria de cobertura JaCoCo pós-fechamento".
 
 **Manutenção feita nesta sessão**: `B6.5.1` (índice trilha B) estava `⬜` mas já tinha sido
 implementada há muito tempo (`core64/Aarch64FpRegisters.java` existe, `B6.5.2`/`3`/`4` já ✅
