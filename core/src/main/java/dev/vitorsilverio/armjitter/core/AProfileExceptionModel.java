@@ -1,19 +1,48 @@
 package dev.vitorsilverio.armjitter.core;
 
-/// {@link ExceptionModel} do perfil ARM clássico (A/R): vetores fixos em `0x00`-`0x1C` (ou
-/// `0xFFFF0000`+ com {@link ArmCore#highVectors()}), troca de modo bancada, SPSR do modo alvo e
+/// {@link ExceptionModel} do perfil ARM clássico (A **e** R, B20.5): vetores fixos em `0x00`-`0x1C`
+/// (ou `0xFFFF0000`+ com {@link ArmCore#highVectors()}), troca de modo bancada, SPSR do modo alvo e
 /// máscara de IRQ/FIQ. Extraído de {@code ArmCore#handleException} na B7.1 (refactor zero-diff) —
 /// é o modelo default de todo {@link ArmCore}, sem nenhuma mudança de comportamento observável.
+///
+/// ARMv7-R (`ArmArchitecture.ARMV7R`, B20.1) não tem Hyp/Monitor mode (sem Security/Virtualization
+/// Extensions) — o decoder já recusa `HVC`/`SMC` sob esse preset (B20.1), mas isto sozinho não
+/// impede uma chamada DIRETA de {@link ArmCore#requestException} (host, teste, ou uma exceção
+/// composta que uma task futura venha a montar) de pedir {@link ArmException#HVC}/
+/// {@link ArmException#SMC} mesmo assim. O construtor {@link #AProfileExceptionModel(boolean)}
+/// fecha esse buraco: com `hypAndMonitorAvailable=false`, as duas viram {@link ArmException#UNDEFINED}
+/// antes de resolver modo/vetor/endereço de retorno — o mesmo que o hardware real faz numa
+/// implementação sem essas extensões (`HVC`/`SMC` são encodings UNDEFINED nela). O construtor sem
+/// argumento preserva o comportamento de sempre (`hypAndMonitorAvailable=true`, G3): nenhum preset
+/// A instala isto sozinho — o mesmo precedente de {@link MProfileExceptionModel}/`ARMV6M`
+/// (B7.2) — é o hospedeiro que constrói `new AProfileExceptionModel(false)` e chama
+/// {@link ArmCore#setExceptionModel} para um core `ARMV7R`.
 public final class AProfileExceptionModel implements ExceptionModel {
+
+    private final boolean hypAndMonitorAvailable;
+
+    /// Modelo default: Hyp/Monitor disponíveis (comportamento de sempre, todo preset A). G3 — este
+    /// construtor não muda.
+    public AProfileExceptionModel() {
+        this(true);
+    }
+
+    /// @param hypAndMonitorAvailable `false` rebaixa {@link ArmException#HVC}/{@link ArmException#SMC}
+    /// para {@link ArmException#UNDEFINED} nesta entrada de exceção (perfil R, B20.5: sem Hyp/Monitor
+    /// mode). `true` preserva o comportamento default (perfil A).
+    public AProfileExceptionModel(boolean hypAndMonitorAvailable) {
+        this.hypAndMonitorAvailable = hypAndMonitorAvailable;
+    }
 
     @Override
     public void enterException(ArmCore core, ArmException exception) {
-        int returnAddress = exceptionReturnAddress(core, exception);
+        ArmException effectiveException = downgradeIfHypOrMonitorUnavailable(exception);
+        int returnAddress = exceptionReturnAddress(core, effectiveException);
         // Qualquer entrada de exceção (SWI/IRQ/undefined/aborts) abre o monitor de
         // exclusividade: um STREX após o retorno deve falhar e refazer o par LDREX/STREX.
         core.clearExclusiveMonitor();
-        CpuMode targetMode = exceptionMode(exception);
-        int vector = exceptionVector(exception);
+        CpuMode targetMode = exceptionMode(effectiveException);
+        int vector = exceptionVector(effectiveException);
         int oldCpsr = core.cpsr().get();
         core.switchMode(targetMode);
         core.setSpsr(targetMode, oldCpsr);
@@ -42,10 +71,23 @@ public final class AProfileExceptionModel implements ExceptionModel {
         // bytes. NONE por padrão (nenhuma mudança de comportamento em cores sem CP15/SCTLR.EE).
         core.applyExceptionEndiannessPolicy();
         core.cpsr().setIrqDisabled(true);
-        if (exception == ArmException.RESET || exception == ArmException.FIQ) {
+        if (effectiveException == ArmException.RESET || effectiveException == ArmException.FIQ) {
             core.cpsr().setFiqDisabled(true);
         }
         core.setProgramCounter((core.highVectors() ? 0xFFFF0000 : 0) + vector);
+    }
+
+    /// Perfil R (B20.5): sem Hyp/Monitor mode, `HVC`/`SMC` são encodings UNDEFINED no hardware
+    /// real. O decoder já recusa os dois sob `ARMV7R` (B20.1) — isto cobre o caminho que o decode
+    /// não alcança (chamada direta de {@link ArmCore#requestException}).
+    private ArmException downgradeIfHypOrMonitorUnavailable(ArmException exception) {
+        if (hypAndMonitorAvailable) {
+            return exception;
+        }
+        return switch (exception) {
+            case HVC, SMC -> ArmException.UNDEFINED;
+            default -> exception;
+        };
     }
 
     private static int exceptionReturnAddress(ArmCore core, ArmException exception) {

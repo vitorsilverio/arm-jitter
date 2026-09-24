@@ -720,13 +720,25 @@ public final class ArmArchitecture {
     /// candidatas a uma sub-task futura que componha VFP sobre este preset. **Sem NEON.**
     ///
     /// {@link ArmFeature#R_PROFILE}/{@link ArmFeature#PMSA} não têm consumidor ainda — só a ausência
-    /// das três features de virtualização/segurança acima é observável hoje. MPU (B20.2/B20.3), TCM
-    /// (B20.4) e o modelo de exceção sem Hyp/Monitor (B20.5) são tasks futuras nomeadas; até lá este
-    /// preset roda contra um {@code AddressSpace} plano, como qualquer preset sem MMU/MPU, com
-    /// {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel} default. **Este preset ainda
-    /// não entra no mapa `ARM_ARCHITECTURES` de `IsaCoverageReport`** — a coluna `v7-R` nasce na
-    /// B20.6, junto do catálogo de Cortex-R (mesmo precedente de {@link #ARMV7M_PURE}/B15.1 e
-    /// {@link #ARMV8A_32}/B14.1: zero-diff em `docs/COBERTURA-ISA.md`).
+    /// das três features de virtualização/segurança acima é observável hoje. MPU
+    /// ({@link dev.vitorsilverio.armjitter.memory.mpu.PmsaAddressSpace}, B20.2/B20.3) e TCM (B20.4)
+    /// já existem; até lá este preset roda contra um {@code AddressSpace} plano, como qualquer
+    /// preset sem MMU/MPU.
+    ///
+    /// **Modelo de exceção (B20.5): este preset NÃO instala nada sozinho** — o mesmo precedente de
+    /// {@link #ARMV6M}/{@link dev.vitorsilverio.armjitter.core.MProfileExceptionModel} (B7.2). O
+    /// {@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel} default de todo
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore} JÁ é quase correto para `ARMV7R` (mesmos
+    /// modos/vetores/SPSR do perfil A), mas aceitaria `HVC`/`SMC` diretos por
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore#requestException} (o decode já os recusa,
+    /// B20.1). Quem cria o `ArmCore` para `ARMV7R` deve instalar
+    /// `new AProfileExceptionModel(false)` via
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore#setExceptionModel} para fechar esse caminho.
+    ///
+    /// **Este preset ainda não entra no mapa `ARM_ARCHITECTURES` de `IsaCoverageReport`** — a coluna
+    /// `v7-R` nasce na B20.6, junto do catálogo de Cortex-R (mesmo precedente de
+    /// {@link #ARMV7M_PURE}/B15.1 e {@link #ARMV8A_32}/B14.1: zero-diff em
+    /// `docs/COBERTURA-ISA.md`).
     private static final ArmArchitecture ARMV7R_FEATURES = of("ArmV7-R",
             // ARMv5TE
             ArmFeature.BLX, ArmFeature.BLX_IMMEDIATE, ArmFeature.CLZ, ArmFeature.DSP_MULTIPLY,
