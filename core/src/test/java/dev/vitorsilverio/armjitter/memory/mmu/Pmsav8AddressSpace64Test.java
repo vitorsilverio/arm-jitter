@@ -207,4 +207,60 @@ class Pmsav8AddressSpace64Test {
         space.write32(0x100, 0xABCD);
         assertEquals(0xABCD, space.read32(0x100));
     }
+
+    // ── read16/write8/write16 + delegação de accessCycles/providesAccessCycles/notifyWrite ──────
+    // (achado da auditoria JaCoCo: nenhum teste acima chamava estes métodos)
+
+    @Test
+    void read16Write8Write16GoThroughTheSamePermissionCheck() {
+        TestAddressSpace physical = new TestAddressSpace(0x1000);
+        Pmsav8SystemRegisters64 bus = newBus(1);
+        Pmsav8AddressSpace64 space = new Pmsav8AddressSpace64(AddressSpace64.wrapping(physical), bus);
+        program(bus, 0, 0x100, PRBAR_FULL_ACCESS, true);
+
+        space.write8(0x100, 0xAB);
+        assertEquals(0xAB, physical.read8(0x100));
+        space.write16(0x102, 0x1234);
+        assertEquals(0x1234, space.read16(0x102));
+
+        MemoryTranslationException64 fault = assertThrows(MemoryTranslationException64.class,
+                () -> space.write8(0x200, 1));
+        assertEquals(FaultStatus64.TRANSLATION_FAULT_L0, fault.faultStatus());
+    }
+
+    @Test
+    void accessCyclesForDataAccessSkipsThePermissionCheckAndDelegatesToPhysical() {
+        TestAddressSpace physical = new TestAddressSpace(0x1000);
+        Pmsav8SystemRegisters64 bus = newBus(1); // nenhuma região programada: qualquer fetch abortaria
+        Pmsav8AddressSpace64 space = new Pmsav8AddressSpace64(AddressSpace64.wrapping(physical), bus);
+
+        // DATA_READ/DATA_WRITE não passam pela checagem de permissão em accessCycles (essa é feita
+        // por read/write) — só delega ao físico, mesmo sem nenhuma região cobrindo o endereço.
+        assertEquals(physical.accessCycles(0x800, 4, MemoryAccessType.DATA_READ),
+                space.accessCycles(0x800, 4, MemoryAccessType.DATA_READ));
+    }
+
+    @Test
+    void providesAccessCyclesAndNotifyWriteDelegateToPhysical() {
+        TestAddressSpace physical = new TestAddressSpace(0x1000);
+        Pmsav8SystemRegisters64 bus = newBus(1);
+        Pmsav8AddressSpace64 space = new Pmsav8AddressSpace64(AddressSpace64.wrapping(physical), bus);
+
+        assertEquals(physical.providesAccessCycles(), space.providesAccessCycles());
+        space.notifyWrite(0x10); // não deve lançar
+    }
+
+    // ── execução PERMITIDA numa região real (não a de fundo) ────────────────────────
+
+    @Test
+    void executeIsAllowedWhenApPermitsAndXnIsClear() {
+        TestAddressSpace physical = new TestAddressSpace(0x1000);
+        physical.put32(0x100, 0xD503_201F); // NOP A64
+        Pmsav8SystemRegisters64 bus = newBus(1);
+        Pmsav8AddressSpace64 space = new Pmsav8AddressSpace64(AddressSpace64.wrapping(physical), bus);
+        program(bus, 0, 0x100, PRBAR_FULL_ACCESS, true); // AP=0b01, XN=0
+        space.setPrivileged(true);
+
+        space.accessCycles(0x100, 4, MemoryAccessType.INSTRUCTION_FETCH); // não deve lançar
+    }
 }
