@@ -676,8 +676,18 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.NeonTwoRegMiscDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.NeonExtractTableDuplicateDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.NeonLoadStoreDecoder(ARMV7A_NEON_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.NeonSharedDecoder(ARMV7A_NEON_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder(),
+                    // NeonSharedDecoder TEM que vir POR ÚLTIMO: desde a B13.21 ele nunca devolve
+                    // `null` (fecha o espaço com `unimplemented(...)` explícito, G8) — se algum
+                    // decoder DEPOIS dele nunca fosse consultado, um preset sem as 5 features de
+                    // `neon-shared` (como este) faria QUALQUER encoding do espaço incondicional que
+                    // sobrasse (ex.: `MCR`/`MRC`/`CDP`/`STC`/`LDC`, que `CoprocessorDecoder` reivindica
+                    // logo acima) virar `UNIMPLEMENTED` em vez de chegar até ele — achado real (não
+                    // hipotético) confirmado por probe direto contra `0xEE010F10` (`MCR p15,0,r0,c1,c0,0`)
+                    // durante a revisão desta task: `ARMV7A` decodifica `COPROCESSOR`, a primeira
+                    // versão desta lista (`NeonSharedDecoder` antes de `CoprocessorDecoder`)
+                    // decodificava `UNIMPLEMENTED`.
+                    new dev.vitorsilverio.armjitter.decoder.NeonSharedDecoder(ARMV7A_NEON_FEATURES)))
             .withThumb32DecoderExtensions(List.of(
                     new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV7A_NEON_FEATURES),
@@ -685,10 +695,12 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NeonDecoder(ARMV7A_NEON_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV7A_NEON_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7A_NEON_FEATURES),
-                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder(),
+                    // Thumb2NeonSharedDecoder TEM que vir POR ÚLTIMO — mesmo motivo do lado A32
+                    // acima (delega a NeonSharedDecoder, herda o mesmo comportamento "nunca null").
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV7A_NEON_FEATURES)));
 
     private final String name;
     private final EnumSet<ArmFeature> features;

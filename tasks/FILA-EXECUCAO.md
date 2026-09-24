@@ -57,21 +57,34 @@ para as regras de release (suspensas até lá).
 
 **B13.22 FECHADA — ÉPICO B13 (NEON de 32 bits) FECHADO.** Preset público novo
 `ArmArchitecture.ARMV7A_NEON` (`extending(ARMV7A, ADVANCED_SIMD, VFPV3_D32)`, aditivo, `ARMV7A`
-intocado — G3): pluga os 7 decoders A32 do épico + `NeonSharedDecoder` (ANTES de
-`CoprocessorDecoder`) e, no lado Thumb-2, `Thumb2NeonDecoder` (B13.16) + `Thumb2NeonSharedDecoder`
-(NOVO — wrapper fino sem transformação, `neon-shared` tem encoding idêntico A32/T32). As 7 features
-irmãs do épico (RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) ficam de fora do preset — são todas
-extensões ARMv8.x que nenhum núcleo ARMv7-A real tem — e são curadas por mnemônico em
+intocado — G3): pluga os 7 decoders A32 do épico + `CoprocessorDecoder` + `NeonSharedDecoder` POR
+ÚLTIMO (achado real, ver abaixo) e, no lado Thumb-2, `Thumb2NeonDecoder` (B13.16) + ... +
+`Thumb2CoprocessorDecoder` + `Thumb2NeonSharedDecoder` (NOVO — wrapper fino sem transformação,
+`neon-shared` tem encoding idêntico A32/T32) também por último. As 7 features irmãs do épico
+(RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) ficam de fora do preset — são todas extensões ARMv8.x que
+nenhum núcleo ARMv7-A real tem — e são curadas por mnemônico em
 `IsaCoverageReport.ARM32_VERSION_REQUIREMENTS` (espelho por nome da `AARCH64_VERSION_REQUIREMENTS`
 da E12), medindo `·` (não `❌`) na coluna nova. `IsaCoverageReport`: os 3 grupos saem de
-`NOT_IN_ANY_PRESET`, coluna `v7-A+NEON` nova. **Medição**: global 99%→98% (queda esperada,
-denominador +325), coluna `v7-A+NEON` 85% (903/1051; dentro dos 325: 279 ✅/35 ·/11 ❌ real — 7
-formas `SHA1x_3s`/`SHA256x_3s` sem decoder nenhum ainda + 4 `VCVT_xx_2sh` já eram a lacuna F16
-conhecida de B13.8). `ArmProcessor` ganhou 7 entradas `_NEON` irmãs (`Cortex-A5`..`A17`, aditivas).
-`ArmV7aNeonPresetTest` novo (G3 + decode cross-seção A32/T32); 2 guards pré-existentes
-(`IsaCoverageReport32BitCurationGuardTest`/`IsaCoverageReportV8A32ColumnTest`) tinham lista de
-colunas hardcoded, corrigidos para incluir a nova. `mvn -o test` verde (4709 testes) + G5 completo
-nos 5 consumidores. Ver `## Resultado` de `B13.22` na task.
+`NOT_IN_ANY_PRESET`, coluna `v7-A+NEON` nova. **Medição** (números finais, já com a correção de
+ordem abaixo): global 99%→98% (20544/20675→21484/21726, queda esperada, denominador +325), coluna
+`v7-A+NEON` 89% (940/1051; dentro dos 325 NEON: 279 ✅/35 ·/11 ❌ real — 7 formas
+`SHA1x_3s`/`SHA256x_3s` sem decoder nenhum ainda + 4 `VCVT_xx_2sh` já eram a lacuna F16 conhecida de
+B13.8). `ArmProcessor` ganhou 7 entradas `_NEON` irmãs (`Cortex-A5`..`A17`, aditivas).
+
+**Achado real via JaCoCo (a pedido do usuário, memória `feedback-testes-falhando-prioridade-cobertura`)**:
+a 1ª versão registrava `NeonSharedDecoder`/`Thumb2NeonSharedDecoder` ANTES de
+`CoprocessorDecoder`/`Thumb2CoprocessorDecoder`. `NeonSharedDecoder` nunca devolve `null` desde a
+B13.21 (fecha o "null debt" do arquivo com `unimplemented(...)` explícito, sem checar se o `raw`
+está no frame `neon-shared`) — nenhuma task anterior tinha registrado esse decoder numa
+`ArmArchitecture` de verdade, então o efeito nunca fora exercitado. Com ele ANTES do
+`CoprocessorDecoder`, `MCR`/`MRC`/`MCRR`/`MRRC`/`DMB`/`DSB`/`ISB`/`MRS`/`MSR`/branches largos etc
+ficavam `UNIMPLEMENTED` sob `ARMV7A_NEON` (confirmado por probe: `0xEE010F10`/`MCR p15,0,r0,c1,c0,0`
+decodifica `COPROCESSOR` sob `ARMV7A`, virava `UNIMPLEMENTED` sob a 1ª versão do preset novo).
+Corrigido movendo os dois para o FIM de cada lista — quem nunca devolve `null` só pode vir por
+último. `Thumb2NeonSharedDecoder` também simplificado (removido `if (decoded == null)`, código
+morto). Testes de regressão novos + JaCoCo confirma 0 linhas/branches perdidos nas 3 classes
+tocadas. `mvn -o verify` verde (4717 testes) + G5 completo nos 5 consumidores (rodado 2x, antes e
+depois do fix). Ver `## Resultado` de `B13.22` na task.
 
 **Pegáveis a seguir**: `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do
 roadmap. `B17.1`/`B20.1` (fundações SVE/perfil-R, zero decode) seguem pegáveis sem dependência

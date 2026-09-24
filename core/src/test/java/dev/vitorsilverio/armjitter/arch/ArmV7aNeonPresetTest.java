@@ -78,8 +78,10 @@ class ArmV7aNeonPresetTest {
                     new NeonTwoRegMiscDecoder(ALL_EPIC_FEATURES_BASE),
                     new NeonExtractTableDuplicateDecoder(ALL_EPIC_FEATURES_BASE),
                     new NeonLoadStoreDecoder(ALL_EPIC_FEATURES_BASE),
-                    new NeonSharedDecoder(ALL_EPIC_FEATURES_BASE),
-                    new CoprocessorDecoder()))
+                    new CoprocessorDecoder(),
+                    // NeonSharedDecoder por último — mesmo motivo documentado em
+                    // ArmArchitecture#ARMV7A_NEON (nunca devolve null desde a B13.21).
+                    new NeonSharedDecoder(ALL_EPIC_FEATURES_BASE)))
             .withThumb32DecoderExtensions(List.of(
                     new Thumb2NeonDecoder(ALL_EPIC_FEATURES_BASE),
                     new Thumb2NeonSharedDecoder(ALL_EPIC_FEATURES_BASE)));
@@ -184,5 +186,44 @@ class ArmV7aNeonPresetTest {
                 decodeThumb32(ArmArchitecture.ARMV7A_NEON, VCMLA_SHARED).kind());
         assertNotEquals(InstructionKind.UNIMPLEMENTED,
                 decodeThumb32(ALL_EPIC_FEATURES, VCMLA_SHARED).kind());
+    }
+
+    // ── Regressão: NeonSharedDecoder NUNCA devolve `null` desde a B13.21 (fecha o "null debt" do
+    // arquivo com `unimplemented(...)` explícito) — se ele viesse ANTES de outro decoder na lista de
+    // extensões, esse outro decoder nunca seria alcançado para nenhum encoding que NeonSharedDecoder
+    // não reivindicasse de verdade. Achado real (não hipotético) desta task: a primeira versão do
+    // preset registrava `NeonSharedDecoder`/`Thumb2NeonSharedDecoder` ANTES de
+    // `CoprocessorDecoder`/`Thumb2CoprocessorDecoder`, e um `MCR`/`MRC` comum (nada relacionado a
+    // NEON) virava `UNIMPLEMENTED` sob `ARMV7A_NEON` — confirmado por probe direto contra
+    // `0xEE010F10` (`MCR p15,0,r0,c1,c0,0`), que decodifica `COPROCESSOR` sob `ARMV7A` e virava
+    // `UNIMPLEMENTED` sob a primeira versão do preset novo. Corrigido registrando
+    // `NeonSharedDecoder`/`Thumb2NeonSharedDecoder` por ÚLTIMO nas duas listas.
+
+    /// `MCR p15,0,r0,c1,c0,0` — grava `SCTLR`, um dos usos mais comuns de `MCR` real (habilitar MMU).
+    private static final int MCR_SCTLR = 0xEE01_0F10;
+
+    @Test
+    void armv7aNeonStillDecodesOrdinaryCoprocessorInstructionsInA32() {
+        assertEquals(InstructionKind.COPROCESSOR, decodeArm(ArmArchitecture.ARMV7A, MCR_SCTLR).kind());
+        assertEquals(InstructionKind.COPROCESSOR, decodeArm(ArmArchitecture.ARMV7A_NEON, MCR_SCTLR).kind());
+    }
+
+    @Test
+    void armv7aNeonStillDecodesOrdinaryCoprocessorInstructionsInThumb32() {
+        // Mesmo raw: o espaço de coprocessador Thumb-2 reusa o layout de bits do ARM clássico
+        // (mesma convenção de Thumb2CoprocessorDecoder/Thumb2VfpDecoder — bits[31:28] fixo `1110`,
+        // que já bate com `cond=AL` do encoding A32 acima).
+        assertEquals(InstructionKind.COPROCESSOR, decodeThumb32(ArmArchitecture.ARMV7A, MCR_SCTLR).kind());
+        assertEquals(InstructionKind.COPROCESSOR, decodeThumb32(ArmArchitecture.ARMV7A_NEON, MCR_SCTLR).kind());
+    }
+
+    /// `DMB SY` (Thumb-2, `Thumb2MiscDecoder`) — prova que barreiras/hints/`MSR`/`MRS`/branches
+    /// largos continuam alcançáveis sob `ARMV7A_NEON` (não só o coprocessador).
+    private static final int DMB_SY_T32 = 0xF3BF_8F5F;
+
+    @Test
+    void armv7aNeonStillDecodesThumb2MiscInstructions() {
+        assertNotEquals(InstructionKind.UNIMPLEMENTED, decodeThumb32(ArmArchitecture.ARMV7A, DMB_SY_T32).kind());
+        assertNotEquals(InstructionKind.UNIMPLEMENTED, decodeThumb32(ArmArchitecture.ARMV7A_NEON, DMB_SY_T32).kind());
     }
 }
