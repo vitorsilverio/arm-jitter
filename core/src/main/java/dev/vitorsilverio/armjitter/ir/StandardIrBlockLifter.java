@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
+import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
 
 import java.util.Objects;
 
@@ -54,12 +55,13 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             DecodedInstruction instruction;
             try {
                 instruction = decoder.decode(memory, pc);
-            } catch (IndexOutOfBoundsException | MemoryTranslationException exception) {
+            } catch (IndexOutOfBoundsException | MemoryTranslationException | PmsaAccessException exception) {
                 // Leitura ADIANTADA que saiu do mapa: o bloco simplesmente TERMINA aqui. A CPU
                 // pode nunca chegar a executar esta instrução (o bloco pode desviar antes), então
                 // levantar a falta agora seria uma exceção que o hardware real nunca geraria.
                 // `IndexOutOfBoundsException` (barramento sem MMU) já era tratado assim desde
-                // sempre; `MemoryTranslationException` (B4.1.1+, página não mapeada) precisa do
+                // sempre; `MemoryTranslationException` (B4.1.1+, página não mapeada) e
+                // `PmsaAccessException` (B20.3, região PMSA negada) precisam do
                 // MESMO tratamento — sem isto, o `lift` de um bloco que só encosta na página
                 // seguinte entrega ao host um PREFETCH_ABORT no endereço de INÍCIO do bloco
                 // (`JitRuntime` só conhece esse PC), o kernel "conserta" um endereço que não era o

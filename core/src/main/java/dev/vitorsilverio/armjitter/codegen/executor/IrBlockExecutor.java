@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
+import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
 
 /// Orquestra a execução interpretada de um bloco IR.
 ///
@@ -325,6 +326,11 @@ public final class IrBlockExecutor {
             }
         } catch (MemoryTranslationException fault) {
             core.enterMemoryAbort(ownerInstructionAddress(ops, kinds, i), fault);
+            return cycles;
+        } catch (PmsaAccessException fault) {
+            // B20.3: mesmo tratamento acima, catch à parte (Armadilha 4 da B20.3 — classe irmã,
+            // nunca subtipo de MemoryTranslationException).
+            core.enterPmsaAbort(ownerInstructionAddress(ops, kinds, i), fault);
             return cycles;
         }
 

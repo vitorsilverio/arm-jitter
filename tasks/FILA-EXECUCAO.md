@@ -53,19 +53,22 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-23, após B20.1 abrir o épico B20 — perfil R)
+## Onde estamos (atualizado 2026-09-24, após B20.3 fechar o coração do épico B20 — perfil R)
 
-**B20.1 FECHADA.** `ArmFeature.R_PROFILE`/`PMSA` (sem consumidor ainda) + preset público
-`ArmArchitecture.ARMV7R` — user-level, A32+T32 completos, `DIVIDE`, sem
-`HYPERVISOR_CALL`/`VIRTUALIZATION_EXTENSIONS`/`SECURE_MONITOR_CALL`/`VFPV2`. Nasce de `of(...)`
-(lista positiva confirmada linha a linha contra `ARMV7A`, `extending` não serve — somaria as 3
-features de virtualização/segurança). Zero decoder novo; `SDIV`/`UDIV` já decodificam por serem
-gateados só por `DIVIDE`, sem checagem de perfil (confirmado lendo `ArmDecoder` antes de escrever
-qualquer coisa). `docs/COBERTURA-ISA.md` zero-diff confirmado (`./gerar-cobertura-isa.sh`, a coluna
-`v7-R` nasce só na B20.6) + `mvn -o test` verde + G5 completo nos 5 consumidores. Ver `## Resultado`
-de `B20.1` na task.
+**B20.1, B20.2 e B20.3 FECHADAS.** B20.3: `PmsaAddressSpace implements AddressSpace` (checagem por
+região PMSAv7) + `PmsaFaultStatus`/`PmsaAccessException` novos + `PmsaAccessException` capturada nos
+7 pontos reais do projeto que já tratavam `MemoryTranslationException` (não só "2 motores" como a
+spec original supunha) + `DFSR`/`IFSR`/`DFAR`/`IFAR` adicionados a `Pmsav7MpuCoprocessor`. Semântica
+confirmada via `curl` direto do QEMU real (`target/arm/ptw.c`), corrigindo 3 suposições da spec
+original (`rsize_min` do perfil R é `1` não `4`, índice de sub-região usa offset-na-região não
+endereço bruto, tabela `AP[2:0]` real difere da tabelada). `docs/COBERTURA-ISA.md` zero-diff
+(nenhum encoding novo) + `mvn -o test` verde + G5 completo nos 5 consumidores + 100% JaCoCo nas 5
+classes do pacote `memory.mpu`. Ver `## Resultado` de `B20.3` na task.
 
-**Pegáveis a seguir**: `B20.2` (registradores CP15 de MPU, PMSAv7) destravada por B20.1.
+**Pegáveis a seguir**: `B20.4` (TCM, ATCM/BTCM) destravada por B20.3 — atenção à nota de
+`translationGeneration` que a B20.3 deixou (Armadilha 6: se o TCM puder mudar o CONTEÚDO visto num
+mesmo endereço sem escrita, precisa bumpar geração, o que `PmsaAddressSpace` não faz). `B20.5`
+(modelo de exceção do perfil R) também destravada, independente de B20.4.
 `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. Candidata nova da
 B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
 `SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via

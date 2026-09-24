@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.coprocessor.CoprocessorBus;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.MemoryAbortListener;
 
 /// CP15 PMSAv7 (ARM DDI 0406C, "Protected Memory System Architecture"): liga as instruções
 /// `MCR`/`MRC` que configuram a MPU de um core de perfil R (B20.1, `ArmArchitecture#ARMV7R`) ao
@@ -44,7 +45,16 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 /// então instalar os dois ao mesmo tempo exigiria um hospedeiro escrever um decorator que
 /// encadeia ambos deliberadamente — fora do alcance de uma checagem local a esta classe. Decisão
 /// registrada: documentar (este Javadoc), não implementar detecção.
-public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
+///
+/// **`DFSR`/`IFSR`/`DFAR`/`IFAR` (B20.3)**: esta classe também implementa {@link
+/// MemoryAbortListener}, armazenando o que {@link PmsaAddressSpace} preenche a cada
+/// `PmsaAccessException` convertida pelo `ArmCore` — mesmo padrão do `Cp15VmsaCoprocessor`. O host
+/// precisa registrar `core.setMemoryAbortListener(this)` além de `core.setCoprocessorBus(this)`
+/// (dois ganchos independentes do mesmo `ArmCore`). Diferente do VMSA, o estado de privilégio (para
+/// decidir permissão) não vive aqui: {@link PmsaAddressSpace} implementa `ModeChangeListener`
+/// diretamente (ver Javadoc daquela classe), porque é ela, não este bus, quem precisa do bit a cada
+/// acesso.
+public final class Pmsav7MpuCoprocessor implements CoprocessorBus, MemoryAbortListener {
     private static final int CP15 = 15;
 
     /// `MPUIR` (`c0,c0,4`) — único registrador sob `CRn=0` que esta classe atende.
@@ -66,6 +76,20 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
     private static final int OPCODE2_DRSR = 2;
     private static final int OPCODE2_DRACR = 4;
 
+    /// `DFSR`/`IFSR` (`c5,c0,{0,1}`) — MESMO `CRn`/`CRm` do VMSA (`Cp15VmsaCoprocessor`); os dois
+    /// bus nunca coexistem no mesmo `ArmCore` (Armadilha 5 da B20.2).
+    private static final int CRN_FAULT_STATUS = 5;
+    // (CRN_FAULT_ADDRESS não existe como constante própria: DFAR/IFAR moram sob CRN_MPU_REGION,
+    // CRm=CRM_PRIMARY — mesmo CRn=6, distinguido por CRm no switch, nunca outro `case` numérico.)
+    private static final int OPCODE2_DFSR = 0;
+    private static final int OPCODE2_IFSR = 1;
+    /// `DFAR`/`IFAR` (`c6,c0,{0,2}`) — MESMO `CRn` de {@link #CRN_MPU_REGION} (`c6`), mas
+    /// `CRm=CRM_PRIMARY` (0), nunca `CRM_RGNR`/`CRM_REGION_CONFIG` — o `switch`/`case` desta classe
+    /// distingue os três grupos por `CRm`, nunca por um `CRn` numérico próprio (que colidiria com
+    /// `CRN_MPU_REGION`, ambos `c6`, ARM DDI 0100I §B4.1.51 `IFAR` usa `opcode2=2`, não `1`).
+    private static final int OPCODE2_DFAR = 0;
+    private static final int OPCODE2_IFAR = 2;
+
     private static final int MPUIR_DREGION_SHIFT = 8;
 
     private static final int SCTLR_M_BIT = 1;
@@ -77,6 +101,10 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
     private final ArmCore core;
 
     private int sctlr;
+    private int dfsr;
+    private int ifsr;
+    private int dfar;
+    private int ifar;
 
     /// @param mpu          banco de estado que este coprocessador programa
     /// @param core         core cujo `SCTLR.V` (vetores altos) este coprocessador sincroniza
@@ -109,7 +137,9 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
             case CRN_SYSTEM_CONTROL -> crm == CRM_PRIMARY && opcode2 == OPCODE2_SCTLR;
             case CRN_MPU_REGION -> (crm == CRM_RGNR && opcode2 == OPCODE2_RGNR)
                     || (crm == CRM_REGION_CONFIG
-                    && (opcode2 == OPCODE2_DRBAR || opcode2 == OPCODE2_DRSR || opcode2 == OPCODE2_DRACR));
+                    && (opcode2 == OPCODE2_DRBAR || opcode2 == OPCODE2_DRSR || opcode2 == OPCODE2_DRACR))
+                    || (crm == CRM_PRIMARY && (opcode2 == OPCODE2_DFAR || opcode2 == OPCODE2_IFAR));
+            case CRN_FAULT_STATUS -> crm == CRM_PRIMARY && (opcode2 == OPCODE2_DFSR || opcode2 == OPCODE2_IFSR);
             default -> false;
         };
     }
@@ -119,7 +149,8 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
         return switch (crn) {
             case CRN_IDENTIFICATION -> mpu.regionCount() << MPUIR_DREGION_SHIFT;
             case CRN_SYSTEM_CONTROL -> sctlrValue();
-            case CRN_MPU_REGION -> readMpuRegion(crm, opcode2);
+            case CRN_MPU_REGION -> crm == CRM_PRIMARY ? readFaultAddress(opcode2) : readMpuRegion(crm, opcode2);
+            case CRN_FAULT_STATUS -> opcode2 == OPCODE2_DFSR ? dfsr : ifsr;
             default -> throw unsupported(crn, crm, opcode2);
         };
     }
@@ -135,6 +166,10 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
         };
     }
 
+    private int readFaultAddress(int opcode2) {
+        return opcode2 == OPCODE2_DFAR ? dfar : ifar;
+    }
+
     @Override
     public void write(int coprocessor, int opcode1, int crn, int crm, int opcode2, int value) {
         switch (crn) {
@@ -142,7 +177,20 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
                 // MPUIR é só leitura (ARM DDI 0406C) — escrita ignorada, ver Javadoc da classe.
             }
             case CRN_SYSTEM_CONTROL -> applySctlr(value);
-            case CRN_MPU_REGION -> writeMpuRegion(crm, opcode2, value);
+            case CRN_MPU_REGION -> {
+                if (crm == CRM_PRIMARY) {
+                    writeFaultAddress(opcode2, value);
+                } else {
+                    writeMpuRegion(crm, opcode2, value);
+                }
+            }
+            case CRN_FAULT_STATUS -> {
+                if (opcode2 == OPCODE2_DFSR) {
+                    dfsr = value;
+                } else {
+                    ifsr = value;
+                }
+            }
             default -> throw unsupported(crn, crm, opcode2);
         }
     }
@@ -157,6 +205,31 @@ public final class Pmsav7MpuCoprocessor implements CoprocessorBus {
             case OPCODE2_DRSR -> mpu.setDrsr(value);
             default -> mpu.setDracr(value);
         }
+    }
+
+    private void writeFaultAddress(int opcode2, int value) {
+        if (opcode2 == OPCODE2_DFAR) {
+            dfar = value;
+        } else {
+            ifar = value;
+        }
+    }
+
+    /// {@link MemoryAbortListener}: chamado por `ArmCore#enterPmsaAbort` ANTES da entrada em
+    /// `ArmException.DATA_ABORT` — grava `DFAR`/`DFSR` (software pode reler o que o abort gravou,
+    /// mesmo padrão do `Cp15VmsaCoprocessor`).
+    @Override
+    public void onDataAbort(int faultAddress, int faultStatus) {
+        dfar = faultAddress;
+        dfsr = faultStatus;
+    }
+
+    /// {@link MemoryAbortListener}: chamado ANTES da entrada em `ArmException.PREFETCH_ABORT` —
+    /// grava `IFAR`/`IFSR`.
+    @Override
+    public void onPrefetchAbort(int faultAddress, int faultStatus) {
+        ifar = faultAddress;
+        ifsr = faultStatus;
     }
 
     private void applySctlr(int value) {
