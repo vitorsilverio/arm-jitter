@@ -130,18 +130,22 @@ class Asm64CodeEmitterPerOpTest {
 
     /// Uma op interpretada que lança {@code MemoryTranslationException64} é capturada pelo handler
     /// do bloco compilado — mesmo `LOCAL_FAULT_PC`/ciclos parciais que uma op nativa já tem
-    /// (`Ir64BlockCompilerMemoryAbortTest`). `FpLoad64` (SIMD&FP load/store, B8.13) não é suportada
-    /// nativamente hoje (C12.5 fecha esse gap) e toca memória via `core.memory().read64`.
+    /// (`Ir64BlockCompilerMemoryAbortTest`). **Achado da C12.5, mesmo padrão de troca de op já
+    /// documentado acima**: a versão original desta task usava `Ir64Op.FpLoad64` (SIMD&FP
+    /// load/store, B8.13) como "não suportada nativamente hoje" — a C12.5 passou a suportar os 7
+    /// `Kind` de load/store FP/SIMD nativamente, então trocado por
+    /// {@link Ir64Op.AtomicMemoryOpPair} (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), que nenhuma
+    /// sub-task de C12 reivindica ainda e também toca memória via `core.memory().read64`.
     @Test
     void interpretedOpMemoryTranslationFaultEntersGuestHandler() {
         assertFalse(Ir64NativePolicy.supports(
-                new Ir64Op.FpLoad64(0, 0, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE,
-                        dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, -1, null, 0)));
+                new Ir64Op.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
+                        false, false)));
 
         long faultingVa = 0x5000L;
         Ir64Block block = blockOf(0x1000,
-                new Ir64Op.FpLoad64(0, 0, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE,
-                        dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0, -1, null, 0));
+                new Ir64Op.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
+                        false, false));
         harness.assertEquivalent(interpreted, asmPerOp, block, () -> {
             Aarch64Core reference = newFaultingCore();
             reference.setX(0, faultingVa);

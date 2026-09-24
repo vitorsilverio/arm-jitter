@@ -382,6 +382,16 @@ public final class Ir64BlockCompiler {
             case Ir64Op.Fp64IntegerConvert fp64IntegerConvert -> constructFp64IntegerConvert(mv, fp64IntegerConvert);
             case Ir64Op.Fp64GeneralRegisterMove fp64GeneralRegisterMove ->
                     constructFp64GeneralRegisterMove(mv, fp64GeneralRegisterMove);
+            case Ir64Op.FpLoad64 fpLoad64 -> constructFpLoad64(mv, fpLoad64);
+            case Ir64Op.FpStore64 fpStore64 -> constructFpStore64(mv, fpStore64);
+            case Ir64Op.FpLoadStorePair fpLoadStorePair -> constructFpLoadStorePair(mv, fpLoadStorePair);
+            case Ir64Op.FpLoadLiteral64 fpLoadLiteral64 -> constructFpLoadLiteral64(mv, fpLoadLiteral64);
+            case Ir64Op.VectorLoadStoreMultiple vectorLoadStoreMultiple ->
+                    constructVectorLoadStoreMultiple(mv, vectorLoadStoreMultiple);
+            case Ir64Op.VectorLoadStoreSingle vectorLoadStoreSingle ->
+                    constructVectorLoadStoreSingle(mv, vectorLoadStoreSingle);
+            case Ir64Op.VectorLoadSingleReplicate vectorLoadSingleReplicate ->
+                    constructVectorLoadSingleReplicate(mv, vectorLoadSingleReplicate);
             default -> throw new IllegalStateException(
                     "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
                             + " — verifique Ir64NativePolicy.supports antes de compilar");
@@ -395,6 +405,7 @@ public final class Ir64BlockCompiler {
     private static final String IR64_COMPARE_BRANCH_FORM =
             "dev/vitorsilverio/armjitter/ir64/Ir64CompareBranchForm";
     private static final String IR64_MEM_SIZE = "dev/vitorsilverio/armjitter/ir64/Ir64MemSize";
+    private static final String IR64_FP_MEM_SIZE = "dev/vitorsilverio/armjitter/ir64/Ir64FpMemSize";
     private static final String IR64_ADDRESSING_MODE =
             "dev/vitorsilverio/armjitter/ir64/Ir64AddressingMode";
     private static final String IR64_EXTEND_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64ExtendType";
@@ -990,6 +1001,133 @@ public final class Ir64BlockCompiler {
         mv.visitLdcInsn(op.fpReg());
         mv.visitLdcInsn(op.gpReg());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZII)V", false);
+    }
+
+    /// `FpLoad64`/`FpStore64` (C12.5, B8.13) — mesmo layout de campos de {@link #constructLoad64},
+    /// trocando {@link #IR64_MEM_SIZE} por {@link #IR64_FP_MEM_SIZE} (tamanho `QUAD` extra) e sem
+    /// `signExtend`/`wide` (SIMD&FP não tem forma com sinal nem eixo `W`/`X` — Armadilha 2 da spec:
+    /// a disciplina de escrita destrutiva/zeragem vive inteira em
+    /// {@code Ir64BlockExecutor#executeFpLoad}, intocada aqui).
+    private void constructFpLoad64(MethodVisitor mv, Ir64Op.FpLoad64 op) {
+        String type = IR64_OP + "$FpLoad64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.vt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_FP_MEM_SIZE, op.size().name());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitLdcInsn(op.rm());
+        emitEnumConstantOrNull(mv, IR64_EXTEND_TYPE, op.extendType());
+        mv.visitLdcInsn(op.shiftAmount());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIL" + IR64_FP_MEM_SIZE + ";L" + IR64_ADDRESSING_MODE + ";JIL" + IR64_EXTEND_TYPE + ";I)V",
+                false);
+    }
+
+    private void constructFpStore64(MethodVisitor mv, Ir64Op.FpStore64 op) {
+        String type = IR64_OP + "$FpStore64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.vt());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_FP_MEM_SIZE, op.size().name());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitLdcInsn(op.rm());
+        emitEnumConstantOrNull(mv, IR64_EXTEND_TYPE, op.extendType());
+        mv.visitLdcInsn(op.shiftAmount());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(IIL" + IR64_FP_MEM_SIZE + ";L" + IR64_ADDRESSING_MODE + ";JIL" + IR64_EXTEND_TYPE + ";I)V",
+                false);
+    }
+
+    /// `LDP`/`STP` SIMD&FP (C12.5, B8.13) — nunca tem forma `REGISTER_OFFSET` (mesma restrição de
+    /// {@link #constructLoadStorePair}) e sem `signExtend` (não existe `LDPSW` SIMD&FP).
+    private void constructFpLoadStorePair(MethodVisitor mv, Ir64Op.FpLoadStorePair op) {
+        String type = IR64_OP + "$FpLoadStorePair";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.load());
+        mv.visitLdcInsn(op.vt());
+        mv.visitLdcInsn(op.vt2());
+        mv.visitLdcInsn(op.rn());
+        emitEnumConstant(mv, IR64_FP_MEM_SIZE, op.size().name());
+        emitEnumConstant(mv, IR64_ADDRESSING_MODE, op.addressingMode().name());
+        mv.visitLdcInsn(op.immediate());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>",
+                "(ZIIIL" + IR64_FP_MEM_SIZE + ";L" + IR64_ADDRESSING_MODE + ";J)V", false);
+    }
+
+    /// `LDR (literal)` SIMD&FP (C12.5, B8.13) — Armadilha 6 da spec: {@link Ir64Op.FpLoadLiteral64#address}
+    /// já é o endereço ABSOLUTO resolvido pelo decoder a partir do PC da PRÓPRIA instrução (nunca o
+    /// PC do bloco) — mesma convenção de {@link #constructLoadLiteral64}, campo constante de
+    /// compilação, nenhum cálculo de PC acontece aqui.
+    private void constructFpLoadLiteral64(MethodVisitor mv, Ir64Op.FpLoadLiteral64 op) {
+        String type = IR64_OP + "$FpLoadLiteral64";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.vt());
+        mv.visitLdcInsn(op.address());
+        emitEnumConstant(mv, IR64_FP_MEM_SIZE, op.size().name());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IJL" + IR64_FP_MEM_SIZE + ";)V", false);
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, C12.5, B8.6) — Armadilha 4
+    /// da spec: reconstrói só o record (campos constantes de compilação) e delega a
+    /// {@code Ir64AsmRuntimeHelpers#executeOp}/{@code Ir64BlockExecutor#executeVectorLoadStoreMultiple}
+    /// — os laços de `rpt`/`selem`/elementos (com a passada separada de zeragem dos bits altos,
+    /// Armadilha 2) NÃO são reimplementados em bytecode, mesmo padrão de "chamar helper" que a
+    /// C12.3 usou para atomicidade.
+    private void constructVectorLoadStoreMultiple(MethodVisitor mv, Ir64Op.VectorLoadStoreMultiple op) {
+        String type = IR64_OP + "$VectorLoadStoreMultiple";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.load());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        mv.visitLdcInsn(op.rm());
+        emitBoolean(mv, op.q());
+        emitBoolean(mv, op.postIndex());
+        mv.visitLdcInsn(op.elementSizeLog2());
+        mv.visitLdcInsn(op.rpt());
+        mv.visitLdcInsn(op.selem());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZZIII)V", false);
+    }
+
+    /// `LD1`-`LD4`/`ST1`-`ST4` de lane única (AdvSIMD load/store SINGLE structure, C12.5, B8.6) —
+    /// mesma rota "helper" de {@link #constructVectorLoadStoreMultiple} (Armadilha 4): o laço de
+    /// `selem` registradores e a escrita de UMA lane sem tocar o resto do registro (Armadilha 2,
+    /// disciplina "preserva") vivem só em {@code Ir64BlockExecutor#executeVectorLoadStoreSingle}.
+    private void constructVectorLoadStoreSingle(MethodVisitor mv, Ir64Op.VectorLoadStoreSingle op) {
+        String type = IR64_OP + "$VectorLoadStoreSingle";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        emitBoolean(mv, op.load());
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        mv.visitLdcInsn(op.rm());
+        emitBoolean(mv, op.postIndex());
+        mv.visitLdcInsn(op.elementSizeLog2());
+        mv.visitLdcInsn(op.selem());
+        mv.visitLdcInsn(op.index());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZIII)V", false);
+    }
+
+    /// `LD1R`-`LD4R` (C12.5, B8.6) — mesma rota "helper" (Armadilha 4); sem `load` (só existe forma
+    /// `LD`, nunca `ST`, ver javadoc de {@link Ir64Op.VectorLoadSingleReplicate}).
+    private void constructVectorLoadSingleReplicate(MethodVisitor mv, Ir64Op.VectorLoadSingleReplicate op) {
+        String type = IR64_OP + "$VectorLoadSingleReplicate";
+        mv.visitTypeInsn(Opcodes.NEW, type);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(op.rt());
+        mv.visitLdcInsn(op.rn());
+        mv.visitLdcInsn(op.rm());
+        emitBoolean(mv, op.q());
+        emitBoolean(mv, op.postIndex());
+        mv.visitLdcInsn(op.elementSizeLog2());
+        mv.visitLdcInsn(op.selem());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIZZII)V", false);
     }
 
     private void emitEnumConstant(MethodVisitor mv, String enumInternalName, String constantName) {

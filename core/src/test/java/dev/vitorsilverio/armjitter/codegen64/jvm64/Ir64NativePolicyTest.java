@@ -87,4 +87,25 @@ class Ir64NativePolicyTest {
         assertTrue(Ir64NativePolicy.supports(
                 new Ir64Op.Fp64GeneralRegisterMove(false, true, 0, 1)));
     }
+
+    @Test
+    void supportsC125LoadStoreFpSimdOpSet() {
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.FpLoad64(
+                0, 1, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE,
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0L, -1, null, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.FpStore64(
+                0, 1, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE,
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0L, -1, null, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.FpLoadStorePair(
+                true, 0, 1, 2, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.DOUBLE,
+                dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, 0L)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.FpLoadLiteral64(
+                0, 0x1000L, dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize.QUAD)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.VectorLoadStoreMultiple(
+                true, 0, 1, -1, true, false, 3, 1, 1)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.VectorLoadStoreSingle(
+                true, 0, 1, -1, false, 3, 1, 0)));
+        assertTrue(Ir64NativePolicy.supports(new Ir64Op.VectorLoadSingleReplicate(
+                0, 1, -1, true, false, 3, 1)));
+    }
 }

@@ -8,18 +8,22 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// {@link dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy} (32 bits), introduzido na task
 /// B6.4 (PR1).
 ///
-/// ## Cobertura — NÃO é exaustiva (medida em 2026-09-02 / C12.1; +16 pela C12.3; +6 pela C12.4)
+/// ## Cobertura — NÃO é exaustiva (medida em 2026-09-02 / C12.1; +16 pela C12.3; +6 pela C12.4;
+/// +7 pela C12.5)
 ///
-/// O `switch` abaixo cobre **46 dos 96 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
+/// O `switch` abaixo cobre **53 dos 96 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
 /// desvios), B6.2 (loads/stores + `Svc`), B6.3.1-B6.3.4 (registrador deslocado/estendido,
 /// `CSEL`, bitfield, `MADD`, `SDIV`, exclusivos), B6.5.2-B6.5.4 (FP escalar `FP64_ALU`/
 /// `FP64_MOVE_IMMEDIATE`/`FP64_COMPARE`/`FP64_CONVERT`), **C12.3** (inteiro restante: ALU de
 /// registrador, comparação condicional, 1-source/multiplicação, exclusivos/atômicos de par e
-/// manipulação de flags — 16 `Kind`, ver {@code c12.3-a64-inteiro-nativo.md}) e **C12.4** (FP
+/// manipulação de flags — 16 `Kind`, ver {@code c12.3-a64-inteiro-nativo.md}), **C12.4** (FP
 /// escalar restante: `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` fundidos, `FCSEL`, `FCCMP`/`FCCMPE`,
 /// `FRINT*`, conversão FP↔inteiro geral, `FMOV` bits crus entre `V` e `X`/`W` — 6 `Kind`, ver
-/// {@code c12.4-a64-fp-escalar-nativo.md}). Os 50 que ainda faltam — load/store FP/SIMD (C12.5),
-/// AdvSIMD aritmético (C12.6) e sistema (C12.10) — caem no
+/// {@code c12.4-a64-fp-escalar-nativo.md}) e **C12.5** (load/store FP/SIMD: `FpLoad64`/
+/// `FpStore64`/`FpLoadStorePair`/`FpLoadLiteral64` escalares e `VectorLoadStoreMultiple`/
+/// `VectorLoadStoreSingle`/`VectorLoadSingleReplicate` estruturados (`LD1`-`LD4`/`ST1`-`ST4`) — 7
+/// `Kind`, ver {@code c12.5-a64-loadstore-fp-simd-nativo.md}). Os 43 que ainda faltam — AdvSIMD
+/// aritmético (C12.6) e sistema (C12.10) — caem no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter}.
 ///
 /// Agravava porque a política padrão do {@code Asm64CodeEmitter} era `WHOLE_BLOCK`: **UMA op não
@@ -93,7 +97,14 @@ public final class Ir64NativePolicy {
                  Ir64Op.Kind.FP64_CONDITIONAL_COMPARE,
                  Ir64Op.Kind.FP64_ROUND,
                  Ir64Op.Kind.FP64_INTEGER_CONVERT,
-                 Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE -> true;
+                 Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE,
+                 Ir64Op.Kind.FP_LOAD64,
+                 Ir64Op.Kind.FP_STORE64,
+                 Ir64Op.Kind.FP_LOAD_STORE_PAIR,
+                 Ir64Op.Kind.FP_LOAD_LITERAL64,
+                 Ir64Op.Kind.VECTOR_LOAD_STORE_MULTIPLE,
+                 Ir64Op.Kind.VECTOR_LOAD_STORE_SINGLE,
+                 Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE -> true;
             default -> false;
         };
     }

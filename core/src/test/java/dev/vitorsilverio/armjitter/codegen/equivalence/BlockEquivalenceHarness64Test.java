@@ -17,6 +17,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
 import dev.vitorsilverio.armjitter.ir64.Ir64ConditionalSelectOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64ExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
+import dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
@@ -1219,5 +1220,291 @@ class BlockEquivalenceHarness64Test {
         harness.run(asm, block, probe);
         assertEquals(0L, probe.fp().high64(0),
                 "escrever D<d> tem que zerar os bits 127:64 de V<d>");
+    }
+
+    // ---- C12.5: load/store FP/SIMD — FpLoad64/FpStore64/FpLoadStorePair/FpLoadLiteral64
+    // (escalares) + VectorLoadStoreMultiple/VectorLoadStoreSingle/VectorLoadSingleReplicate
+    // (estruturados LD1-LD4/ST1-ST4) — 7 Kind ----
+
+    @Test
+    void listOfC125KindsAllNativelySupported() {
+        List<Ir64Op> ops = List.of(
+                new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.DOUBLE, Ir64AddressingMode.OFFSET, 0L, -1, null, 0),
+                new Ir64Op.FpStore64(0, 1, Ir64FpMemSize.DOUBLE, Ir64AddressingMode.OFFSET, 0L, -1, null, 0),
+                new Ir64Op.FpLoadStorePair(true, 0, 1, 2, Ir64FpMemSize.DOUBLE, Ir64AddressingMode.OFFSET, 0L),
+                new Ir64Op.FpLoadLiteral64(0, 0x2000L, Ir64FpMemSize.DOUBLE),
+                new Ir64Op.VectorLoadStoreMultiple(true, 0, 1, -1, true, false, 3, 1, 1),
+                new Ir64Op.VectorLoadStoreSingle(true, 0, 1, -1, false, 3, 1, 0),
+                new Ir64Op.VectorLoadSingleReplicate(0, 1, -1, true, false, 3, 1));
+        for (Ir64Op op : ops) {
+            assertTrue(Ir64NativePolicy.supports(op), op.getClass().getSimpleName());
+        }
+    }
+
+    /// Aceite: as 5 larguras (`B`/`H`/`S`/`D`/`Q`), com a zeragem dos bits altos onde ela ocorre
+    /// (todas, EXCETO `Q`, que já escreve os 128 bits inteiros — Armadilha 2 da spec).
+    @Test
+    void fpLoad64AllWidthsWithDestructiveZeroingExceptQuad() {
+        Ir64Block byteLoad = blockOf(0x11000, new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.BYTE,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, byteLoad, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write8(0x10L, 0x7F);
+            core.fp().setQ(0, -1L, -1L); // sujo antes
+        }));
+
+        Ir64Block halfLoad = blockOf(0x11100, new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.HALF,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, halfLoad, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write16(0x10L, 0x1234);
+            core.fp().setQ(0, -1L, -1L);
+        }));
+
+        Ir64Block singleLoad = blockOf(0x11200, new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.SINGLE,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, singleLoad, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write32(0x10L, 0x89ABCDEF);
+            core.fp().setQ(0, -1L, -1L);
+        }));
+
+        Ir64Block doubleLoad = blockOf(0x11300, new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.DOUBLE,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, doubleLoad, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write64(0x10L, 0x0123_4567_89AB_CDEFL);
+            core.fp().setQ(0, -1L, -1L);
+        }));
+
+        // Q: os 128 bits inteiros SÃO o resultado — nunca "zera o resto" (não há resto).
+        Ir64Block quadLoad = blockOf(0x11400, new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.QUAD,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, quadLoad, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write64(0x10L, 0x1111_2222_3333_4444L);
+            core.memory().write64(0x18L, 0x5555_6666_7777_8888L);
+        }));
+
+        // Prova direta (não só equivalência) de que os 120 bits altos zeram para B.
+        Aarch64Core probe = newCore();
+        probe.setX(1, 0x10L);
+        probe.memory().write8(0x10L, 0x7F);
+        probe.fp().setQ(0, -1L, -1L);
+        harness.run(asm, byteLoad, probe);
+        assertEquals(0L, probe.fp().high64(0), "FpLoad64 B tem que zerar os 120 bits altos de V0");
+        assertEquals(0x7FL, probe.fp().low64(0));
+    }
+
+    /// Aceite: `FpStore64` não escreve além do tamanho do registro (mesma prova de
+    /// `Ir64BlockExecutorB813Test#storeDoubleWritesLow64WithoutTouchingMemoryAboveSize`, aqui via o
+    /// backend NATIVO).
+    @Test
+    void fpStore64AllWidthsDoNotWriteBeyondSize() {
+        Ir64Block byteStore = blockOf(0x11500, new Ir64Op.FpStore64(0, 1, Ir64FpMemSize.BYTE,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, byteStore, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.fp().setQ(0, 0x1122_3344_5566_7788L, 0x99AA_BBCC_DDEE_FF00L);
+        }));
+
+        Ir64Block quadStore = blockOf(0x11600, new Ir64Op.FpStore64(4, 5, Ir64FpMemSize.QUAD,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.assertEquivalent(interpreted, asm, quadStore, fpPair(core -> {
+            core.setX(5, 0x0L);
+            core.fp().setQ(4, 0x1111_2222_3333_4444L, 0x5555_6666_7777_8888L);
+        }));
+
+        Aarch64Core probe = newCore();
+        probe.setX(1, 0x10L);
+        probe.fp().setD(0, 0x1122_3344_5566_7788L);
+        probe.memory().write64(0x18L, 0xDEAD_BEEF_DEAD_BEEFL); // sentinela logo após o slot de 8 bytes
+        Ir64Block doubleStore = blockOf(0x11700, new Ir64Op.FpStore64(0, 1, Ir64FpMemSize.DOUBLE,
+                Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
+        harness.run(asm, doubleStore, probe);
+        assertEquals(0x1122_3344_5566_7788L, probe.memory().read64(0x10L));
+        assertEquals(0xDEAD_BEEF_DEAD_BEEFL, probe.memory().read64(0x18L), "STR D não pode escrever além de 8 bytes");
+    }
+
+    /// Aceite: `FpLoadStorePair` com offset positivo/negativo e pré/pós-indexado, com writeback.
+    @Test
+    void fpLoadStorePairOffsetsPreAndPostIndexWithWriteback() {
+        Ir64Block positiveOffset = blockOf(0x11800, new Ir64Op.FpLoadStorePair(true, 0, 1, 2,
+                Ir64FpMemSize.DOUBLE, Ir64AddressingMode.OFFSET, 16L));
+        harness.assertEquivalent(interpreted, asm, positiveOffset, fpPair(core -> {
+            core.setX(2, 0x0L);
+            core.memory().write64(0x10L, 0x1111_1111_1111_1111L);
+            core.memory().write64(0x18L, 0x2222_2222_2222_2222L);
+        }));
+
+        Ir64Block negativeOffset = blockOf(0x11900, new Ir64Op.FpLoadStorePair(true, 3, 4, 5,
+                Ir64FpMemSize.SINGLE, Ir64AddressingMode.OFFSET, -16L));
+        harness.assertEquivalent(interpreted, asm, negativeOffset, fpPair(core -> {
+            core.setX(5, 0x100L);
+            core.memory().write32(0xF0L, 0x3333_3333);
+            core.memory().write32(0xF4L, 0x4444_4444);
+        }));
+
+        Ir64Block preIndexStore = blockOf(0x11A00, new Ir64Op.FpLoadStorePair(false, 6, 7, 8,
+                Ir64FpMemSize.QUAD, Ir64AddressingMode.PRE_INDEX, 32L));
+        harness.assertEquivalent(interpreted, asm, preIndexStore, fpPair(core -> {
+            core.setX(8, 0x0L);
+            core.fp().setQ(6, 0xAAAA_AAAA_AAAA_AAAAL, 0xBBBB_BBBB_BBBB_BBBBL);
+            core.fp().setQ(7, 0xCCCC_CCCC_CCCC_CCCCL, 0xDDDD_DDDD_DDDD_DDDDL);
+        }));
+
+        Ir64Block postIndexLoad = blockOf(0x11B00, new Ir64Op.FpLoadStorePair(true, 9, 10, 11,
+                Ir64FpMemSize.DOUBLE, Ir64AddressingMode.POST_INDEX, 24L));
+        harness.assertEquivalent(interpreted, asm, postIndexLoad, fpPair(core -> {
+            core.setX(11, 0x40L);
+            core.memory().write64(0x40L, 0x5555_5555_5555_5555L);
+            core.memory().write64(0x48L, 0x6666_6666_6666_6666L);
+        }));
+
+        // Prova direta do writeback (Aceite explícito): pré-índice escreve o novo endereço em Rn.
+        Aarch64Core probe = newCore();
+        probe.setX(8, 0x0L);
+        probe.fp().setQ(6, 1L, 2L);
+        probe.fp().setQ(7, 3L, 4L);
+        harness.run(asm, preIndexStore, probe);
+        assertEquals(32L, probe.x(8), "pré-índice tem que escrever o novo endereço em Rn");
+    }
+
+    /// Aceite + Armadilha 6: `FpLoadLiteral64#address` já é o endereço ABSOLUTO resolvido pelo
+    /// decoder a partir do PC da PRÓPRIA instrução — bloco de 2 instruções onde o endereço do
+    /// literal (`0x300`) é DIFERENTE do PC do bloco (`0x100`), provando que o compilador usa o
+    /// campo do record (constante de compilação), nunca `block.startPc()`.
+    @Test
+    void fpLoadLiteralUsesInstructionResolvedAddressNotBlockStart() {
+        Ir64Block block = blockOf(0x100,
+                new Ir64Op.Alu64(Ir64AluOp.ADD, 2, 2, 0, true, false, false, false),
+                new Ir64Op.FpLoadLiteral64(1, 0x300L, Ir64FpMemSize.DOUBLE));
+        harness.assertEquivalent(interpreted, asm, block, fpPair(core ->
+                core.memory().write64(0x300L, 0x0102_0304_0506_0708L)));
+
+        Aarch64Core probe = newCore();
+        probe.memory().write64(0x300L, 0x0102_0304_0506_0708L);
+        harness.run(asm, block, probe);
+        assertEquals(0x0102_0304_0506_0708L, probe.fp().d(1));
+    }
+
+    /// Aceite: `LD1`-`LD4`/`ST1`-`ST4` com 1-4 registradores e writeback — rota "helper" (Armadilha
+    /// 4: {@link Ir64BlockCompiler#constructVectorLoadStoreMultiple} só reconstrói o record, os
+    /// laços vivem em {@code Ir64BlockExecutor}).
+    @Test
+    void vectorLoadStoreMultipleLd1ToLd4WithRegistersAndWriteback() {
+        // LD1 de 2 registradores (rpt=2, selem=1), arranjo .8B.
+        Ir64Block ld1TwoRegs = blockOf(0x13000, new Ir64Op.VectorLoadStoreMultiple(
+                true, 0, 1, -1, false, true, 0, 2, 1));
+        harness.assertEquivalent(interpreted, asm, ld1TwoRegs, fpPair(core -> {
+            core.setX(1, 0x10L);
+            for (int i = 0; i < 16; i++) {
+                core.memory().write8(0x10L + i, 0xA0 + i);
+            }
+        }));
+
+        // ST4 (rpt=1, selem=4), arranjo .16B, elementos de word intercalados, sem pós-índice.
+        Ir64Block st4 = blockOf(0x13100, new Ir64Op.VectorLoadStoreMultiple(
+                false, 4, 5, -1, true, false, 2, 1, 4));
+        harness.assertEquivalent(interpreted, asm, st4, fpPair(core -> {
+            core.setX(5, 0x0L);
+            for (int r = 0; r < 4; r++) {
+                core.fp().setQ(4 + r, (0x1111_1111_0000_0000L | (r + 1)), (0x2222_2222_0000_0000L | (r + 1)));
+            }
+        }));
+
+        // LD4 (rpt=1, selem=4) com pós-índice IMEDIATO (rm=-1, sentinela).
+        Ir64Block ld4PostIndexImmediate = blockOf(0x13200, new Ir64Op.VectorLoadStoreMultiple(
+                true, 8, 9, -1, false, true, 0, 1, 4));
+        harness.assertEquivalent(interpreted, asm, ld4PostIndexImmediate, fpPair(core -> {
+            core.setX(9, 0x100L);
+            for (int i = 0; i < 32; i++) {
+                core.memory().write8(0x100L + i, i);
+            }
+        }));
+
+        // Prova direta do pós-índice POR REGISTRADOR (rm != -1): avança X(rm), não o total fixo.
+        Aarch64Core probe = newCore();
+        probe.setX(1, 0x10L);
+        probe.setX(2, 0x40L);
+        for (int i = 0; i < 16; i++) {
+            probe.memory().write8(0x10L + i, i);
+        }
+        Ir64Block ld1RegOffsetPostIndex = blockOf(0x13300, new Ir64Op.VectorLoadStoreMultiple(
+                true, 0, 1, 2, true, true, 0, 1, 1));
+        harness.run(asm, ld1RegOffsetPostIndex, probe);
+        assertEquals(0x10L + 0x40L, probe.x(1), "pós-índice por registrador tem que somar X(rm), não o total fixo");
+
+        // Prova direta da zeragem dos bits altos quando !q (Armadilha 2: disciplina destrutiva).
+        Aarch64Core zeroProbe = newCore();
+        zeroProbe.setX(1, 0x10L);
+        zeroProbe.fp().setQ(0, 0L, 0xDEAD_BEEFL); // sujo antes
+        for (int i = 0; i < 8; i++) {
+            zeroProbe.memory().write8(0x10L + i, i);
+        }
+        Ir64Block ld1NonQuad = blockOf(0x13400, new Ir64Op.VectorLoadStoreMultiple(
+                true, 0, 1, -1, false, false, 0, 1, 1));
+        harness.run(asm, ld1NonQuad, zeroProbe);
+        assertEquals(0L, zeroProbe.fp().high64(0), "!q tem que zerar os bits 127:64 de V0");
+    }
+
+    /// Aceite: `LD1` de lane única PRESERVANDO o resto do registrador (Armadilha 2: disciplina
+    /// "preserva", diferente de `VectorLoadStoreMultiple`).
+    @Test
+    void vectorLoadStoreSingleLanePreservesRestOfRegister() {
+        Ir64Block block = blockOf(0x13500, new Ir64Op.VectorLoadStoreSingle(
+                true, 0, 1, -1, false, 2, 1, 2)); // lane 2, elemento de word (sizeLog2=2)
+        harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write32(0x10L, 0xCAFEBABE);
+            core.fp().setQ(0, 0x1111_1111_2222_2222L, 0x3333_3333_4444_4444L);
+        }));
+
+        Aarch64Core probe = newCore();
+        probe.setX(1, 0x10L);
+        probe.memory().write32(0x10L, 0xCAFEBABE);
+        probe.fp().setQ(0, 0x1111_1111_2222_2222L, 0x3333_3333_4444_4444L);
+        harness.run(asm, block, probe);
+        assertEquals(0x1111_1111_2222_2222L, probe.fp().low64(0),
+                "escrever a lane 2 (bits 64+) não pode tocar a palavra baixa");
+        assertEquals(0x3333_3333_CAFE_BABEL, probe.fp().high64(0),
+                "só a lane 2 (bits 64-95) muda; o resto da palavra alta é preservado");
+    }
+
+    /// Aceite: `LD1R`-`LD4R` (replicada) em todas as larguras (`B`/`H`/`S`/`D`, `elementSizeLog2`
+    /// `0`-`3`).
+    @Test
+    void vectorLoadSingleReplicateAllWidths() {
+        long[] pc = {0x13600L};
+        java.util.function.BiConsumer<Integer, Boolean> run = (elementSizeLog2, quad) -> {
+            Ir64Block block = blockOf(pc[0],
+                    new Ir64Op.VectorLoadSingleReplicate(0, 1, -1, quad, false, elementSizeLog2, 1));
+            pc[0] += 0x100;
+            harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+                core.setX(1, 0x10L);
+                switch (elementSizeLog2) {
+                    case 0 -> core.memory().write8(0x10L, 0x7F);
+                    case 1 -> core.memory().write16(0x10L, 0x1234);
+                    case 2 -> core.memory().write32(0x10L, 0x89AB_CDEF);
+                    case 3 -> core.memory().write64(0x10L, 0x0102_0304_0506_0708L);
+                    default -> throw new IllegalStateException();
+                }
+            }));
+        };
+        for (int elementSizeLog2 = 0; elementSizeLog2 <= 3; elementSizeLog2++) {
+            run.accept(elementSizeLog2, true);
+            run.accept(elementSizeLog2, false);
+        }
+    }
+
+    /// `LD2R` (`selem=2`, dois registradores replicados) — cobre `selem>1`, não só `LD1R`.
+    @Test
+    void vectorLoadSingleReplicateMultipleRegistersLd2R() {
+        Ir64Block block = blockOf(0x13A00, new Ir64Op.VectorLoadSingleReplicate(0, 1, -1, true, false, 1, 2));
+        harness.assertEquivalent(interpreted, asm, block, fpPair(core -> {
+            core.setX(1, 0x10L);
+            core.memory().write16(0x10L, 0x1111);
+            core.memory().write16(0x12L, 0x2222);
+        }));
     }
 }
