@@ -81,9 +81,11 @@ package dev.vitorsilverio.armjitter.arch;
 /// `R8F` (com VFPv3-D16) ficam de fora **deliberadamente**: `ARMV7R` não declara
 /// {@link ArmFeature#VFPV2} (ver Javadoc do preset), então mapear a variante "F" para ele seria
 /// entrada factualmente errada, mesmo critério que excluiu `Cortex-M3`/`SC300` em B12.4 —
-/// candidatas a uma task futura (`ARMV7R` + VFP composto). `Cortex-R52`/`R52+` (ARMv8-R AArch32)
-/// e `Cortex-R82` (ARMv8-R AArch64) também ficam de fora: são de outra versão de arquitetura, sem
-/// preset ainda (B20.7/B20.8).
+/// candidatas a uma task futura (`ARMV7R` + VFP composto). `Cortex-R82` (ARMv8-R AArch64) fica de
+/// fora: outra versão de arquitetura, sem preset ainda (B20.8).
+///
+/// **Escopo de B20.7** (ARMv8-R AArch32): {@link #CORTEX_R52}/{@link #CORTEX_R52PLUS} resolvem
+/// para {@link ArmArchitecture#ARMV8R_32} — PMSAv8-32 + EL2 obrigatório, ver Javadoc do preset.
 ///
 /// Fonte: [List of ARM processors](https://en.wikipedia.org/wiki/List_of_ARM_processors)
 /// (Wikipedia, consultada 2026-08-28) para a versão de arquitetura de cada núcleo.
@@ -240,6 +242,16 @@ public enum ArmProcessor {
     /// `ARMv7-R` (B20.6), mesma família do {@link #CORTEX_R4} — variante sem FPU (`Cortex-R8F`
     /// fica de fora).
     CORTEX_R8("Cortex-R8", ArmArchitecture.ARMV7R),
+
+    /// `ARMv8-R` AArch32 (B20.7) — PMSAv8-32 + EL2 obrigatório, resolve para
+    /// {@link ArmArchitecture#ARMV8R_32}. Fecha a pendência que o Javadoc da classe registrava
+    /// ("Cortex-R52/R52+ ficam de fora, sem preset ainda").
+    CORTEX_R52("Cortex-R52", ArmArchitecture.ARMV8R_32),
+
+    /// `ARMv8-R` AArch32, mesma família do {@link #CORTEX_R52} (variante com núcleos adicionais/
+    /// lockstep — mesmo conjunto de instruções, sem granularidade de SKU modelada aqui, mesma
+    /// simplificação de {@link #CORTEX_R4}..{@link #CORTEX_R8}).
+    CORTEX_R52PLUS("Cortex-R52+", ArmArchitecture.ARMV8R_32),
 
     /// SecurCore `SC000` — `ARMv6-M` (perfil M, T32-only), o único SecurCore junto de {@link #SC100}
     /// que este catálogo cobre por ora (B12.4; `SC300` fica de fora, ver Javadoc da classe).

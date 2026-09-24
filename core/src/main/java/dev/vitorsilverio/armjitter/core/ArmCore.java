@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
+import dev.vitorsilverio.armjitter.memory.mpu.Pmsav8AccessException;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 
@@ -575,6 +576,13 @@ public final class ArmCore {
             DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
             traceListener.afterInstruction(this, instruction);
             return new SingleInstructionExecution(instruction, 1);
+        } catch (Pmsav8AccessException fault) {
+            // B20.7: mesmo tratamento acima, para o formato de falha PMSAv8-32 (Pmsav8AddressSpace)
+            // — terceira classe irmã, catch à parte (mesmo motivo do Javadoc de PmsaAccessException).
+            enterPmsav8Abort(pc, fault);
+            DecodedInstruction instruction = DecodedInstruction.unimplemented(pc, 0, instructionSet, Condition.AL);
+            traceListener.afterInstruction(this, instruction);
+            return new SingleInstructionExecution(instruction, 1);
         }
         traceListener.afterInstruction(this, result.instruction());
         return new SingleInstructionExecution(result.instruction(), result.internalCycles());
@@ -674,6 +682,29 @@ public final class ArmCore {
     /// @param fault falha capturada de {@link AddressSpace#read32}/`write32`/etc. (via
     ///              `PmsaAddressSpace`)
     public void enterPmsaAbort(int instructionAddress, PmsaAccessException fault) {
+        traceListener.onMemoryAbort(this, instructionAddress, fault);
+        boolean isInstructionFetch = fault.accessType() == MemoryAccessType.INSTRUCTION_FETCH;
+        int faultStatusCode = fault.faultStatus().code();
+        if (isInstructionFetch) {
+            memoryAbortListener.onPrefetchAbort(fault.virtualAddress(), faultStatusCode);
+        } else {
+            boolean isWrite = fault.accessType() == MemoryAccessType.DATA_WRITE;
+            int dataFaultStatus = isWrite ? (faultStatusCode | DFSR_WNR_BIT) : faultStatusCode;
+            memoryAbortListener.onDataAbort(fault.virtualAddress(), dataFaultStatus);
+        }
+        setProgramCounter(instructionAddress);
+        requestException(isInstructionFetch ? ArmException.PREFETCH_ABORT : ArmException.DATA_ABORT);
+    }
+
+    /// Igual a {@link #enterPmsaAbort}, para o formato de falha PMSAv8-32 (B20.7,
+    /// `Pmsav8AddressSpace`) — terceiro catch separado nos motores (mesmo motivo do Javadoc de
+    /// `PmsaAccessException`): `Pmsav8AccessException` não compartilha hierarquia com nenhuma das
+    /// outras duas classes de falta de propósito.
+    ///
+    /// @param instructionAddress endereço da instrução que causou a falta
+    /// @param fault falha capturada de {@link AddressSpace#read32}/`write32`/etc. (via
+    ///              `Pmsav8AddressSpace`)
+    public void enterPmsav8Abort(int instructionAddress, Pmsav8AccessException fault) {
         traceListener.onMemoryAbort(this, instructionAddress, fault);
         boolean isInstructionFetch = fault.accessType() == MemoryAccessType.INSTRUCTION_FETCH;
         int faultStatusCode = fault.faultStatus().code();

@@ -16,6 +16,7 @@ import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
+import dev.vitorsilverio.armjitter.memory.mpu.Pmsav8AccessException;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -510,6 +511,9 @@ public final class JitRuntime {
             } catch (PmsaAccessException fault) {
                 core.enterPmsaAbort(pc, fault);
                 return LIFT_FAULT_CYCLES;
+            } catch (Pmsav8AccessException fault) {
+                core.enterPmsav8Abort(pc, fault);
+                return LIFT_FAULT_CYCLES;
             }
             block = emitter.emit(optimizer.optimize(irBlock));
             blockCache.put(key, block, irBlock.startPc(), irBlock.endPc());
@@ -552,6 +556,9 @@ public final class JitRuntime {
             } catch (PmsaAccessException fault) {
                 core.enterPmsaAbort(pc, fault);
                 return LIFT_FAULT_CYCLES;
+            } catch (Pmsav8AccessException fault) {
+                core.enterPmsav8Abort(pc, fault);
+                return LIFT_FAULT_CYCLES;
             }
             CompiledBlock cold = coldEmitter.emit(irBlock);
             blockCache.put(key, cold, false, irBlock.startPc(), irBlock.endPc());
@@ -577,7 +584,7 @@ public final class JitRuntime {
             // MemoryTranslationException pelo caminho estabelecido (IrBlockExecutor, B4.1.3).
             try {
                 submitCompile(key, cold, lift(pc, core.memory(), instructionSet, itState));
-            } catch (MemoryTranslationException | PmsaAccessException ignoredPromotionFault) {
+            } catch (MemoryTranslationException | PmsaAccessException | Pmsav8AccessException ignoredPromotionFault) {
                 compilingColdBlocks.remove(cold);
             }
         }

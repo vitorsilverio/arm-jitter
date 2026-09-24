@@ -67,6 +67,11 @@ public final class AsmBlockCompiler {
     private static final String PMSA_ACCESS_EXCEPTION = "dev/vitorsilverio/armjitter/memory/mpu/PmsaAccessException";
     private static final String ENTER_PMSA_ABORT_DESCRIPTOR =
             "(IL" + PMSA_ACCESS_EXCEPTION + ";)V";
+    /// B20.7: exceção que `Pmsav8AddressSpace` lança numa falta de permissão PMSAv8-32 — terceira
+    /// classe irmã, catch à parte no bloco compilado (mesmo padrão de {@link #PMSA_ACCESS_EXCEPTION}).
+    private static final String PMSAV8_ACCESS_EXCEPTION = "dev/vitorsilverio/armjitter/memory/mpu/Pmsav8AccessException";
+    private static final String ENTER_PMSAV8_ABORT_DESCRIPTOR =
+            "(IL" + PMSAV8_ACCESS_EXCEPTION + ";)V";
 
     // Slots
     private static final int CORE_LOCAL = 0;
@@ -240,8 +245,10 @@ public final class AsmBlockCompiler {
         Label tryEnd = new Label();
         Label abortHandler = new Label();
         Label pmsaAbortHandler = new Label();
+        Label pmsav8AbortHandler = new Label();
         method.visitTryCatchBlock(tryStart, tryEnd, abortHandler, MEMORY_TRANSLATION_EXCEPTION);
         method.visitTryCatchBlock(tryStart, tryEnd, pmsaAbortHandler, PMSA_ACCESS_EXCEPTION);
+        method.visitTryCatchBlock(tryStart, tryEnd, pmsav8AbortHandler, PMSAV8_ACCESS_EXCEPTION);
         // FAULT_PC_LOCAL precisa de um valor ANTES de `tryStart`: o verificador da JVM trata o
         // handler como alcançável a partir de QUALQUER bytecode dentro do range protegido,
         // inclusive o primeiro — sem este ISTORE aqui fora, o slot chegaria como `top` no merge
@@ -410,6 +417,18 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ILOAD, FAULT_PC_LOCAL);
         method.visitVarInsn(Opcodes.ALOAD, FAULT_EXCEPTION_LOCAL);
         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, CORE, "enterPmsaAbort", ENTER_PMSA_ABORT_DESCRIPTOR, false);
+        method.visitVarInsn(Opcodes.ILOAD, CYCLES_LOCAL);
+        method.visitInsn(Opcodes.IRETURN);
+
+        // B20.7: handler irmão dos dois acima, para Pmsav8AccessException (mesma semântica
+        // base-restored).
+        method.visitLabel(pmsav8AbortHandler);
+        method.visitVarInsn(Opcodes.ASTORE, FAULT_EXCEPTION_LOCAL);
+        emitCacheFlush(method);
+        method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
+        method.visitVarInsn(Opcodes.ILOAD, FAULT_PC_LOCAL);
+        method.visitVarInsn(Opcodes.ALOAD, FAULT_EXCEPTION_LOCAL);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, CORE, "enterPmsav8Abort", ENTER_PMSAV8_ABORT_DESCRIPTOR, false);
         method.visitVarInsn(Opcodes.ILOAD, CYCLES_LOCAL);
         method.visitInsn(Opcodes.IRETURN);
 

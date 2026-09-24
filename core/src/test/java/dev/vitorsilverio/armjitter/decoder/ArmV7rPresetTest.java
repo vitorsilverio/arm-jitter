@@ -94,7 +94,8 @@ class ArmV7rPresetTest {
     @Test
     void onlyArmv7rDeclaresPmsaOrRProfile() throws IllegalAccessException {
         for (ArmArchitecture preset : allPublicPresets()) {
-            if (preset == ArmArchitecture.ARMV7R) {
+            if (preset == ArmArchitecture.ARMV7R || preset == ArmArchitecture.ARMV8R_32) {
+                // ARMV8R_32 (B20.7) é o outro degrau do perfil R — também declara PMSA/R_PROFILE.
                 continue;
             }
             assertFalse(preset.has(ArmFeature.PMSA), preset + " não deve ter PMSA");
@@ -102,6 +103,8 @@ class ArmV7rPresetTest {
         }
         assertTrue(ArmArchitecture.ARMV7R.has(ArmFeature.PMSA));
         assertTrue(ArmArchitecture.ARMV7R.has(ArmFeature.R_PROFILE));
+        assertTrue(ArmArchitecture.ARMV8R_32.has(ArmFeature.PMSA));
+        assertTrue(ArmArchitecture.ARMV8R_32.has(ArmFeature.R_PROFILE));
     }
 
     // ── HVC/SMC/ERET continuam UNIMPLEMENTED sob ARMV7R (G8) — mesmos vetores de ArmDecoderTest/

@@ -53,21 +53,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após B20.6 fechar — catálogo do perfil R completo)
+## Onde estamos (atualizado 2026-09-24, após B20.7 fechar — ARMv8-R AArch32)
 
-**B20.6 FECHADA.** `ArmProcessor.CORTEX_R4`/`CORTEX_R5`/`CORTEX_R7`/`CORTEX_R8` resolvem para
-`ArmArchitecture.ARMV7R` (B20.1); coluna `v7-R` nova em `docs/COBERTURA-ISA.md` nasce em **89%
-(594/661)**, zero-diff auditado célula a célula nas 10 colunas antigas (script comparando tabela
-antiga vs nova), `HVC`/`SMC`/`ERET` confirmados `❌` sob `v7-R` (sem falso positivo — primeira
-medição independente da lista de features da B20.1). `mvn -o test` verde + G5 completo nos 5
-consumidores. Ver `## Resultado` da task.
+**B20.7 FECHADA.** Preset `ArmArchitecture.ARMV8R_32` (PMSAv8-32 do zero: `Pmsav8MpuRegisters`/
+`Cp15Pmsav8MpuCoprocessor`/`Pmsav8AddressSpace`, granule 64 bytes, limite inclusivo, sobreposição
+SEMPRE falha — confirmado lendo `pmsav8_mpu_lookup` inteiro no QEMU real) + catálogo
+`ArmProcessor.CORTEX_R52`/`CORTEX_R52PLUS`; coluna `v8-R` nasce em **96% (637/661)** na mesma
+sessão, zero-diff nas 12 colunas antigas. Achado real: `ARMV8_FP`/`FP16_ARITHMETIC` (2 das 5
+features de `ARMV8A_32`/B14.1) ficaram DE FORA da lista positiva — dependem do banco VFP, que este
+preset não tem (mesma decisão do `ARMV7R`); só `LOAD_ACQUIRE_STORE_RELEASE`/`CRC32`/`HALT` entraram.
+Terceira classe de falta de memória (`Pmsav8AccessException`) propagada nos 6 motores (`ArmCore`/
+`ArmTraceListener`/`IrBlockExecutor`/`AsmBlockCompiler`/`StandardIrBlockLifter`/`JitRuntime`),
+espelhando a B20.3. `mvn -o test` verde (4871 testes) + G5 em `gbaemu`/`ndsemu`/`armbox` (verdes);
+`virtual-arm-box`/`n3dsemu` não rodados (congelados/pausados). Ver `## Resultado` da task.
 
-**Pegáveis a seguir**: `B20.7`/`B20.8` (Cortex-R52/R82, ARMv8-R) seguem bloqueadas por decisão
-política/preset ainda não escrito; `B20.9` depende do desbloqueio do `virtual-arm-box` congelado.
-Com B20.6 fechada, o épico B20 (perfil R) não tem mais item solto pegável sem decisão do usuário —
-próxima prioridade de cobertura ISA pura vira as candidatas abaixo. `C12.5`/`C12.10` (emissão JIT
-nativa A64) seguem pegáveis, dimensão 2
-do roadmap. Candidata nova da
+**Manutenção feita nesta sessão**: `B6.5.1` (índice trilha B) estava `⬜` mas já tinha sido
+implementada há muito tempo (`core64/Aarch64FpRegisters.java` existe, `B6.5.2`/`3`/`4` já ✅
+dependiam dela) — corrigido para `✅`, índice estava só desatualizado.
+
+**Pegáveis a seguir**: `B20.8` (Cortex-R82, ARMv8-R AArch64) tem spec escrita e depende de `B20.7`
+✅ + `B19.9` ✅ — **pegável agora**, mas a spec avisa que nenhum campo de bit do lado A64 foi
+confirmado ainda (fonte ARM DDI 0600A não lida) — próxima sessão deve começar por aí. `B20.9`
+(validação N1-N4) segue bloqueada no usuário (runner natural é o `virtual-arm-box` congelado).
+`C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap. Candidata nova da
 B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
 `SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via
 `Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas

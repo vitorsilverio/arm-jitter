@@ -32,12 +32,12 @@ class IsaCoverageReportV7RColumnTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 11 colunas de 32 bits, na mesma ordem fixa que
+    /// As 12 colunas de 32 bits, na mesma ordem fixa que
     /// {@link IsaCoverageReport32BitCurationGuardTest} usa — `v7-R` (B20.6) fica entre
-    /// `v7-A+NEON` e `v6-M`.
+    /// `v7-A+NEON` e `v8-R`; `v8-R` (B20.7) fica entre `v7-R` e `v6-M`.
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v6-M", "v7-M", "ARMv8.1-M+MVE",
-            "v8-A/32");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v8-R", "v6-M", "v7-M",
+            "ARMv8.1-M+MVE", "v8-A/32");
     private static final int V7R_COLUMN = COLUMNS.indexOf("v7-R");
 
     private static final String SUPPORTED = "✅";

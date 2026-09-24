@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
+import dev.vitorsilverio.armjitter.memory.mpu.Pmsav8AccessException;
 
 /// Listener leve para observar execução sem acoplar o core a logging ou UI.
 public interface ArmTraceListener {
@@ -76,5 +77,15 @@ public interface ArmTraceListener {
     /// @param instructionAddress endereço da instrução que causou a falta (não o PC de retorno)
     /// @param fault falha capturada (tipo de acesso, endereço, status PMSAv7)
     default void onMemoryAbort(ArmCore core, int instructionAddress, PmsaAccessException fault) {
+    }
+
+    /// Igual a {@link #onMemoryAbort(ArmCore, int, PmsaAccessException)}, para o formato de falha
+    /// PMSAv8-32 (B20.7, {@link ArmCore#enterPmsav8Abort}) — terceiro overload separado, mesmo
+    /// motivo do Javadoc de {@link PmsaAccessException}.
+    ///
+    /// @param core core observado, ainda com o PC pré-abort (== `instructionAddress`)
+    /// @param instructionAddress endereço da instrução que causou a falta (não o PC de retorno)
+    /// @param fault falha capturada (tipo de acesso, endereço, status PMSAv8-32)
+    default void onMemoryAbort(ArmCore core, int instructionAddress, Pmsav8AccessException fault) {
     }
 }

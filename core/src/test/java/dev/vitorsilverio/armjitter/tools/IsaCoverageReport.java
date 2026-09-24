@@ -185,6 +185,11 @@ public final class IsaCoverageReport {
         // ARMV8_FP/M_PROFILE/MVE_INTEGER, então os grupos VFP/NEON/m-nocp/MVE não entram no
         // denominador (Applicability recusa antes de sondar); só a32/t16/t32 crescem.
         ARM_ARCHITECTURES.put("v7-R", ArmArchitecture.ARMV7R);
+        // B20.7: segunda coluna do perfil R — ARMV8R_32 soma as 5 features de ARMV8A_32 (B14.1-
+        // B14.6) mais HYPERVISOR_CALL/VIRTUALIZATION_EXTENSIONS (EL2 obrigatório) sobre a base do
+        // ARMV7R; ainda sem VFPV2/ADVANCED_SIMD/M_PROFILE/MVE_INTEGER, mesmo motivo do v7-R (só
+        // a32/t16/t32 crescem).
+        ARM_ARCHITECTURES.put("v8-R", ArmArchitecture.ARMV8R_32);
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
         ARM_ARCHITECTURES.put("ARMv8.1-M+MVE", ArmArchitecture.ARMV8_1M_MVE);

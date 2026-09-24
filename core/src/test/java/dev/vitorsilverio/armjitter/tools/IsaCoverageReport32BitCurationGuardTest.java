@@ -34,13 +34,13 @@ class IsaCoverageReport32BitCurationGuardTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 11 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
+    /// As 12 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
     /// originais; `v7-A+NEON` é a coluna que a B13.22 acrescentou; `ARMv8.1-M+MVE` é a coluna que a
     /// B16.14 acrescentou; `v8-A/32` é a coluna que a B14.7 acrescentou; `v7-R` é a coluna que a
-    /// B20.6 acrescentou).
+    /// B20.6 acrescentou; `v8-R` é a coluna que a B20.7 acrescentou, logo depois de `v7-R`).
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v6-M", "v7-M", "ARMv8.1-M+MVE",
-            "v8-A/32");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v8-R", "v6-M", "v7-M",
+            "ARMv8.1-M+MVE", "v8-A/32");
 
     private static final String SUPPORTED = "✅";
     private static final String FALLBACK = "⚠️";

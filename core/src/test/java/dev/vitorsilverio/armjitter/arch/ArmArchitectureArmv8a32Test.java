@@ -37,11 +37,12 @@ class ArmArchitectureArmv8a32Test {
         return presets;
     }
 
-    // ── composição de features: só ARMV8A_32 declara as 3 novas ─────────────────────────────
+    // ── composição de features: só ARMV8A_32 (e o ARMV8R_32 da B20.7, que soma as mesmas 3
+    // features sobre a base do perfil R) declaram as 3 novas ────────────────────────────────
     @Test
     void onlyArmv8a32DeclaresTheThreeNewFeatures() throws IllegalAccessException {
         for (ArmArchitecture preset : allPublicPresets()) {
-            if (preset == ArmArchitecture.ARMV8A_32) {
+            if (preset == ArmArchitecture.ARMV8A_32 || preset == ArmArchitecture.ARMV8R_32) {
                 continue;
             }
             assertFalse(preset.has(ArmFeature.ARMV8_FP), preset + " não deve ter ARMV8_FP");

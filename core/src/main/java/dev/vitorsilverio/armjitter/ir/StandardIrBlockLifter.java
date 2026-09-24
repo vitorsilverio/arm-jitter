@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException;
 import dev.vitorsilverio.armjitter.memory.mpu.PmsaAccessException;
+import dev.vitorsilverio.armjitter.memory.mpu.Pmsav8AccessException;
 
 import java.util.Objects;
 
@@ -55,7 +56,8 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             DecodedInstruction instruction;
             try {
                 instruction = decoder.decode(memory, pc);
-            } catch (IndexOutOfBoundsException | MemoryTranslationException | PmsaAccessException exception) {
+            } catch (IndexOutOfBoundsException | MemoryTranslationException | PmsaAccessException
+                    | Pmsav8AccessException exception) {
                 // Leitura ADIANTADA que saiu do mapa: o bloco simplesmente TERMINA aqui. A CPU
                 // pode nunca chegar a executar esta instrução (o bloco pode desviar antes), então
                 // levantar a falta agora seria uma exceção que o hardware real nunca geraria.

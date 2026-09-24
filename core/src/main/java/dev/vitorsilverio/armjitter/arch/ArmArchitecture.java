@@ -772,6 +772,88 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV7R_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
+    /// ARMv8-R **AArch32** (B20.7) — o salto de arquitetura do perfil R (`Cortex-R52`/`R52+`,
+    /// catálogo em {@link dev.vitorsilverio.armjitter.arch.ArmProcessor#CORTEX_R52}): PMSAv8-32
+    /// (base+limite, {@link dev.vitorsilverio.armjitter.memory.mpu.Pmsav8AddressSpace}) e EL2
+    /// OBRIGATÓRIO, inverso da {@link #ARMV7R} (que nunca tem Hyp mode).
+    ///
+    /// **Lista positiva via {@link #of}, nunca `extending({@link #ARMV7R}, ...)`** (Armadilha/Não
+    /// fazer da B20.7): embora `extending` só somasse aqui (`ARMV7R` já não tem
+    /// {@link ArmFeature#SECURE_MONITOR_CALL}, então não haveria nada a "subtrair"), a lista
+    /// positiva evita o risco de esquecer uma das features de {@link #ARMV8A_32} (B14.1) que o
+    /// conjunto de instruções de ARMv8-R exige de verdade (Achado 3 da B20.7: o perfil R a partir
+    /// do ARMv8 executa o A32/T32 **de ARMv8-A**, `LDA`/`STL`/`CRC32` inclusos — a MESMA razão que
+    /// fez a B12.6 recusar catalogar `Cortex-A32` sem elas).
+    ///
+    /// **Mesma base ARMv4T-ARMv7 "inteiro" do {@link #ARMV7R}** (repetida aqui por ser lista
+    /// positiva, não por terem divergido) **+ `LOAD_ACQUIRE_STORE_RELEASE`/`CRC32`/`HALT`** (as 3
+    /// das 5 features de {@link #ARMV8A_32} que NÃO dependem de um banco VFP existir) **+
+    /// `HYPERVISOR_CALL`/`VIRTUALIZATION_EXTENSIONS`** (EL2 existe de verdade em ARMv8-R — ao
+    /// contrário do `ARMV7R`, `HVC` decodifica e executa aqui) — **sem** `SECURE_MONITOR_CALL`
+    /// (ARMv8-R AArch32 não tem estado seguro/EL3, confirmado contra o manual: nenhum `SCR`/Monitor
+    /// mode citado no ARM DDI 0568A.c). **Sem VFP, e por isso sem `ARMV8_FP`/`FP16_ARITHMETIC`
+    /// também** (achado real desta rodada, pego pelo guard `IsaCoverageReportV8A32ColumnTest`: as
+    /// outras 2 das 5 features de `ARMV8A_32` — `VSEL`/`VMAXNM`/`VMINNM`/`VRINT`/`VCVT`
+    /// incondicionais e `VMOVX`/`VINS`/conversões FP16 — operam sobre registradores VFP que só
+    /// existem com `VFPV2`; declará-las sem o banco de registradores seria uma composição
+    /// inconsistente, pior que a ausência. Mesma decisão do `ARMV7R`: variantes "F" (com FPU)
+    /// ficam de fora, candidatas a task futura que componha VFP sobre este preset — quando isso
+    /// acontecer, `ARMV8_FP`/`FP16_ARITHMETIC` entram junto de `VFPV2`, nunca sozinhas.
+    ///
+    /// **Achado/limitação registrada (Armadilha 6 da B20.7)**: o modelo de exceção
+    /// ({@link dev.vitorsilverio.armjitter.core.AProfileExceptionModel#AProfileExceptionModel(boolean)})
+    /// usa UM booleano cobrindo HVC **e** SMC juntos para o caminho de
+    /// {@link dev.vitorsilverio.armjitter.core.ArmCore#requestException} direto (bypass de decode)
+    /// — não há como expressar "HVC sim, SMC não" nesse booleano. O caminho de DECODE normal está
+    /// correto (`ArmDecoder`/`Thumb2MiscDecoder` checam `HYPERVISOR_CALL` e `SECURE_MONITOR_CALL`
+    /// separadamente, confirmado lendo o código antes de escrever este preset — `SMC` decodifica
+    /// `UNDEFINED` sob este preset, `HVC` decodifica e executa). Quem constrói o `ArmCore` para
+    /// `ARMV8R_32` deve instalar `new AProfileExceptionModel(true)` (Hyp disponível) — o resíduo
+    /// (um host que chame `core.requestException(ArmException.SMC)` diretamente, sem passar pelo
+    /// decoder, seria indevidamente aceito) fica nomeado aqui, não resolvido: consertar exigiria
+    /// separar o booleano de `AProfileExceptionModel` em dois, mudança maior que o orçamento desta
+    /// task, candidata a task futura.
+    ///
+    /// **Coluna `v8-R` já entra em `ARM_ARCHITECTURES` de `IsaCoverageReport` nesta mesma task**
+    /// (ao contrário do `ARMV7R`/B20.6, que teve uma B20.6 própria de fechamento — aqui a medição
+    /// zero-diff nas 12 colunas antigas cabe no orçamento junto do preset).
+    private static final ArmArchitecture ARMV8R_32_FEATURES = of("ArmV8-R (AArch32)",
+            // ARMv5TE
+            ArmFeature.BLX, ArmFeature.BLX_IMMEDIATE, ArmFeature.CLZ, ArmFeature.DSP_MULTIPLY,
+            ArmFeature.SATURATING, ArmFeature.LDRD_STRD, ArmFeature.LOAD_PC_INTERWORKING,
+            ArmFeature.MUL_PRESERVES_CARRY, ArmFeature.LDM_WRITEBACK_BASE_IN_LIST,
+            ArmFeature.EMPTY_RLIST_NO_TRANSFER, ArmFeature.STM_BASE_IN_LIST_STORES_ORIGINAL,
+            ArmFeature.BREAKPOINT, ArmFeature.PRELOAD_HINTS,
+            // ARMv6K (menos SECURE_MONITOR_CALL)
+            ArmFeature.EXTEND_ROTATE, ArmFeature.BYTE_REVERSE, ArmFeature.UMAAL,
+            ArmFeature.PARALLEL_SIMD, ArmFeature.PACK_SATURATE, ArmFeature.EXCLUSIVE_WORD,
+            ArmFeature.EXCLUSIVE_SIZED, ArmFeature.MODE_CHANGE_INSTRUCTIONS,
+            ArmFeature.SETEND_BIG_ENDIAN_DATA, ArmFeature.WAIT_HINTS, ArmFeature.UNALIGNED_ACCESS,
+            ArmFeature.SIGNED_MULTIPLY_MEDIA,
+            // ARMv6K+Thumb2
+            ArmFeature.THUMB2, ArmFeature.MEMORY_BARRIERS, ArmFeature.MOVW_MOVT,
+            // ARMv7-A "inteiro v7" (menos VFPV2/VFP_FUSED_MULTIPLY_ACCUMULATE)
+            ArmFeature.MLS_MULTIPLY, ArmFeature.BIT_FIELD, ArmFeature.BIT_REVERSE, ArmFeature.DIVIDE,
+            // ARMv8-A de 32 bits (B14.1-B14.6) que NÃO dependem de VFP existir, obrigatórias no
+            // conjunto de instruções ARMv8-R (ARMV8_FP/FP16_ARITHMETIC ficam de fora — ver Javadoc)
+            ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT,
+            // EL2 obrigatório em ARMv8-R (inverso do ARMV7R) — sem SECURE_MONITOR_CALL (sem EL3)
+            ArmFeature.HYPERVISOR_CALL, ArmFeature.VIRTUALIZATION_EXTENSIONS,
+            // Perfil R
+            ArmFeature.R_PROFILE, ArmFeature.PMSA);
+
+    public static final ArmArchitecture ARMV8R_32 = ARMV8R_32_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8R_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8R_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8R_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8R_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8R_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     private final String name;
     private final EnumSet<ArmFeature> features;
     private final List<DecoderExtension> decoderExtensions;
