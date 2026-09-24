@@ -185,6 +185,65 @@ class Pmsav7MpuCoprocessorTest {
                 "bug do executor: read chamado sem consultar handles fino primeiro");
     }
 
+    /// Achado de cobertura JaCoCo: o `write()` tem o MESMO fallback `default -> throw
+    /// unsupported(...)` do `read()` (linha 146), mas nenhum teste tinha exercitado o lado
+    /// `write`, só o `read` (teste acima).
+    @Test
+    void unhandledEncodingOnWriteIsRejectedByExecutorBeforeReachingCoprocessor() {
+        Pmsav7MpuRegisters mpu = new Pmsav7MpuRegisters(8);
+        Pmsav7MpuCoprocessor cp15 = new Pmsav7MpuCoprocessor(mpu, coreWithoutCode(), ArmArchitecture.ARMV7R);
+
+        assertThrows(IllegalStateException.class, () -> cp15.write(15, 0, 2, 0, 0, 0x1234),
+                "bug do executor: write chamado sem consultar handles fino primeiro");
+    }
+
+    /// Achado de cobertura JaCoCo: a sobrecarga grosseira `handles(int coprocessor)` (o predicado
+    /// "atende este número de coprocessador?", usado pelo core antes de saber `crn`/`crm`/`opcode2`)
+    /// nunca era invocada por nenhum teste — só a sobrecarga fina de 5 argumentos.
+    @Test
+    void coarseHandlesOverloadMatchesOnlyCp15() {
+        Pmsav7MpuRegisters mpu = new Pmsav7MpuRegisters(8);
+        Pmsav7MpuCoprocessor cp15 = new Pmsav7MpuCoprocessor(mpu, coreWithoutCode(), ArmArchitecture.ARMV7R);
+
+        assertTrue(cp15.handles(15), "CP15 é o único coprocessador atendido");
+        assertFalse(cp15.handles(14), "CP14 (debug) não é atendido por este bus");
+    }
+
+    /// Achado de cobertura JaCoCo: `handles(coprocessor, ...)` de 5 argumentos nunca tinha sido
+    /// chamado com um `coprocessor` diferente de 15 — o `if (coprocessor != CP15) return false`
+    /// (linha 104) tinha só o ramo `false` (== CP15) exercitado.
+    @Test
+    void fineHandlesOverloadRejectsNonCp15Coprocessor() {
+        Pmsav7MpuRegisters mpu = new Pmsav7MpuRegisters(8);
+        Pmsav7MpuCoprocessor cp15 = new Pmsav7MpuCoprocessor(mpu, coreWithoutCode(), ArmArchitecture.ARMV7R);
+
+        assertFalse(cp15.handles(14, 0, 0, 0, 4), "MPUIR só existe sob CP15, não CP14");
+    }
+
+    /// Achado de cobertura JaCoCo: cada `case` de `handles(int,int,int,int,int)` é uma expressão
+    /// `&&`/`||` de curto-circuito (linhas 108-112); os testes anteriores só provavam o lado
+    /// verdadeiro (todos os campos batendo). Este teste prova o lado falso de cada campo
+    /// individualmente, sob os 3 `CRn` atendidos (`0`, `1`, `6`).
+    @Test
+    void handlesRejectsEveryFieldMismatchWithinEachHandledCrn() {
+        Pmsav7MpuRegisters mpu = new Pmsav7MpuRegisters(8);
+        Pmsav7MpuCoprocessor cp15 = new Pmsav7MpuCoprocessor(mpu, coreWithoutCode(), ArmArchitecture.ARMV7R);
+
+        // CRN_IDENTIFICATION (c0): MPUIR real é (crm=0, opcode2=4).
+        assertFalse(cp15.handles(15, 0, 0, 1, 4), "crm errado sob c0");
+        assertFalse(cp15.handles(15, 0, 0, 0, 0), "opcode2 errado sob c0");
+
+        // CRN_SYSTEM_CONTROL (c1): SCTLR real é (crm=0, opcode2=0).
+        assertFalse(cp15.handles(15, 0, 1, 1, 0), "crm errado sob c1");
+        assertFalse(cp15.handles(15, 0, 1, 0, 1), "opcode2 errado sob c1 (ex.: CPACR do VMSA)");
+
+        // CRN_MPU_REGION (c6): RGNR é (crm=2, opcode2=0); DRBAR/DRSR/DRACR são (crm=1, opcode2 em
+        // {0,2,4}).
+        assertFalse(cp15.handles(15, 0, 6, 2, 1), "RGNR com opcode2 errado");
+        assertFalse(cp15.handles(15, 0, 6, 1, 1), "região com opcode2 fora de {0,2,4}");
+        assertFalse(cp15.handles(15, 0, 6, 3, 0), "crm fora de {1,2} sob c6");
+    }
+
     private static ArmCore coreWithoutCode() {
         ArmCore core = new ArmCore(new TestAddressSpace(0x100), SwiDispatcher.empty(), ArmArchitecture.ARMV7R);
         core.configureExecutionState(0, CpuMode.SYSTEM, InstructionSet.ARM, false, false);
