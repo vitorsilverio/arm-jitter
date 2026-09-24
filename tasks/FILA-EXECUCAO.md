@@ -53,21 +53,20 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após B20.4 e B20.5 fecharem — só falta o catálogo/validação do épico B20)
+## Onde estamos (atualizado 2026-09-24, após B20.6 fechar — catálogo do perfil R completo)
 
-**B20.1-B20.5 FECHADAS.** B20.4 (TCM): `TcmAddressSpace` sobre o barramento físico +
-`Cp15TcmCoprocessor` decorator, composição `Pmsa(Tcm(físico))`, invalidação de JIT via
-`translationGeneration`. B20.5 (modelo de exceção do perfil R): `AProfileExceptionModel` ganhou
-`AProfileExceptionModel(boolean hypAndMonitorAvailable)` — rebaixa `HVC`/`SMC` para `UNDEFINED`
-antes de resolver modo/vetor (fecha o caminho de `requestException` direto que o decode da B20.1
-já não alcança); construtor sem argumento preserva o default (G3). `VBAR` deferido como task futura
-nomeada (nenhum consumidor real de perfil R o exige ainda). Ambas: `docs/COBERTURA-ISA.md`
-zero-diff + `mvn -o test` verde + G5 completo nos 5 consumidores. Ver `## Resultado` de cada task.
+**B20.6 FECHADA.** `ArmProcessor.CORTEX_R4`/`CORTEX_R5`/`CORTEX_R7`/`CORTEX_R8` resolvem para
+`ArmArchitecture.ARMV7R` (B20.1); coluna `v7-R` nova em `docs/COBERTURA-ISA.md` nasce em **89%
+(594/661)**, zero-diff auditado célula a célula nas 10 colunas antigas (script comparando tabela
+antiga vs nova), `HVC`/`SMC`/`ERET` confirmados `❌` sob `v7-R` (sem falso positivo — primeira
+medição independente da lista de features da B20.1). `mvn -o test` verde + G5 completo nos 5
+consumidores. Ver `## Resultado` da task.
 
-**Pegáveis a seguir**: `B20.6` (catálogo `ArmProcessor.CORTEX_R4/R5/R7/R8` + coluna `v7-R` em
-`docs/COBERTURA-ISA.md`) destravada, único item restante do épico B20 que não depende de decisão
-política do usuário (`B20.7`/`B20.8` dependem de `B20.6`+`B14.1`; `B20.9` depende do desbloqueio do
-`virtual-arm-box` congelado). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2
+**Pegáveis a seguir**: `B20.7`/`B20.8` (Cortex-R52/R82, ARMv8-R) seguem bloqueadas por decisão
+política/preset ainda não escrito; `B20.9` depende do desbloqueio do `virtual-arm-box` congelado.
+Com B20.6 fechada, o épico B20 (perfil R) não tem mais item solto pegável sem decisão do usuário —
+próxima prioridade de cobertura ISA pura vira as candidatas abaixo. `C12.5`/`C12.10` (emissão JIT
+nativa A64) seguem pegáveis, dimensão 2
 do roadmap. Candidata nova da
 B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
 `SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via

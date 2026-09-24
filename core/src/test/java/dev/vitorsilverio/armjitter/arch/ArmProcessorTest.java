@@ -79,6 +79,15 @@ class ArmProcessorTest {
     }
 
     @Test
+    void cortexRv7FamilyResolvesToArmv7r() {
+        // B20.6: variantes sem FPU (Cortex-R4F/R5F/R7F/R8F ficam de fora, ver Javadoc da classe).
+        assertSame(ArmArchitecture.ARMV7R, ArmProcessor.CORTEX_R4.architecture());
+        assertSame(ArmArchitecture.ARMV7R, ArmProcessor.CORTEX_R5.architecture());
+        assertSame(ArmArchitecture.ARMV7R, ArmProcessor.CORTEX_R7.architecture());
+        assertSame(ArmArchitecture.ARMV7R, ArmProcessor.CORTEX_R8.architecture());
+    }
+
+    @Test
     void armv6mFamilyResolvesToArmv6m() {
         assertSame(ArmArchitecture.ARMV6M, ArmProcessor.SC000.architecture());
         assertSame(ArmArchitecture.ARMV6M, ArmProcessor.CORTEX_M0.architecture());

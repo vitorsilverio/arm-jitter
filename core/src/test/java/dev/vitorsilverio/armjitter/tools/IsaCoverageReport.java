@@ -181,6 +181,10 @@ public final class IsaCoverageReport {
         // B13.22: coluna nova, fecha o épico B13 — mesma natureza não-zero-diff da B14.7 (denominador
         // cresce +325 linhas de NEON, cobertura global pode cair, ver `## Resultado` da task).
         ARM_ARCHITECTURES.put("v7-A+NEON", ArmArchitecture.ARMV7A_NEON);
+        // B20.6: primeira coluna do perfil R — ARMV7R (B20.1) não declara VFPV2/ADVANCED_SIMD/
+        // ARMV8_FP/M_PROFILE/MVE_INTEGER, então os grupos VFP/NEON/m-nocp/MVE não entram no
+        // denominador (Applicability recusa antes de sondar); só a32/t16/t32 crescem.
+        ARM_ARCHITECTURES.put("v7-R", ArmArchitecture.ARMV7R);
         ARM_ARCHITECTURES.put("v6-M", ArmArchitecture.ARMV6M);
         ARM_ARCHITECTURES.put("v7-M", ArmArchitecture.ARMV7M);
         ARM_ARCHITECTURES.put("ARMv8.1-M+MVE", ArmArchitecture.ARMV8_1M_MVE);
@@ -767,7 +771,9 @@ public final class IsaCoverageReport {
                 suspeitos; não prova o resto.
 
                 **Colunas** — as arquiteturas que o `ArmArchitecture` oferece como preset: `v4T` (GBA),
-                `v5TE` (NDS), `v6K`/`MPCore` (3DS), `v7-A` (armbox/virtual-arm-box), `v6-M`/`v7-M`
+                `v5TE` (NDS), `v6K`/`MPCore` (3DS), `v7-A` (armbox/virtual-arm-box), `v7-R` (perfil R,
+                Cortex-R4/R5/R7/R8, B20.6 — preset **sem VFP**: os grupos `vfp*`/`neon-*`/`m-nocp`/`mve`
+                não entram no denominador dela, só `a32`/`t16`/`t32`), `v6-M`/`v7-M`
                 (microcontrolador). O grupo `a64.decode` (B11.5) tem uma coluna por versão real
                 (`ARMv8.0-A`...`ARMv9.5-A`, presets de `Aarch64Architecture`, B11.1); um mnemônico só
                 é aplicável a partir da versão que a introduz (curadoria de B11.3, não o decoder —

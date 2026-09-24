@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// mnemônico HOMÔNIMO, mas DISTINTO, de `mve.decode` — sem `grupo`, a exclusão não sabe diferenciar.
 ///
 /// Mesmo papel do `IsaCoverageReportA64CurationGuardTest` (que a E12 escreveu para o lado A64) —
-/// este é o equivalente para as 9 colunas de 32 bits (`v4T`...`v7-M`, `ARMv8.1-M+MVE`, `v8-A/32` —
-/// a última acrescentada pela B14.7). Verifica o
+/// este é o equivalente para as 11 colunas de 32 bits (`v4T`...`v7-M`, `ARMv8.1-M+MVE`, `v8-A/32` —
+/// acrescentada pela B14.7 —, `v7-R` — acrescentada pela B20.6). Verifica o
 /// RESULTADO medido (a tabela versionada), não a mecânica da exclusão — mesma filosofia de "a
 /// tabela é medição, não opinião" que rege `IsaCoverageReport` inteiro.
 ///
@@ -34,18 +34,21 @@ class IsaCoverageReport32BitCurationGuardTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 10 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
+    /// As 11 colunas de 32 bits, na ordem fixa que toda seção de grupo usa (`v4T`...`v7-M` são as 7
     /// originais; `v7-A+NEON` é a coluna que a B13.22 acrescentou; `ARMv8.1-M+MVE` é a coluna que a
-    /// B16.14 acrescentou; `v8-A/32` é a coluna que a B14.7 acrescentou).
+    /// B16.14 acrescentou; `v8-A/32` é a coluna que a B14.7 acrescentou; `v7-R` é a coluna que a
+    /// B20.6 acrescentou).
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v6-M", "v7-M", "ARMv8.1-M+MVE", "v8-A/32");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v6-M", "v7-M", "ARMv8.1-M+MVE",
+            "v8-A/32");
 
     private static final String SUPPORTED = "✅";
     private static final String FALLBACK = "⚠️";
 
-    /// Uma linha de uma tabela de grupo de 32 bits: mnemônico e as 8 células, na ordem de
-    /// {@link #COLUMNS}. Só linhas com EXATAMENTE 8 células casam — isso descarta, de propósito, as
-    /// tabelas A64 (16 colunas) e SVE/SME (1 coluna monolítica `A64`, `NOT_IN_ANY_PRESET`).
+    /// Uma linha de uma tabela de grupo de 32 bits: mnemônico e as células, na ordem de
+    /// {@link #COLUMNS}. Só linhas com EXATAMENTE o número de colunas casam — isso descarta, de
+    /// propósito, as tabelas A64 (16 colunas) e SVE/SME (1 coluna monolítica `A64`,
+    /// `NOT_IN_ANY_PRESET`).
     private record Row(String name, List<String> cells) {
     }
 

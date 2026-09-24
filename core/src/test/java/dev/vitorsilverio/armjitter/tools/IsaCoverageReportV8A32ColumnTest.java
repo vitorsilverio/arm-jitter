@@ -36,10 +36,12 @@ class IsaCoverageReportV8A32ColumnTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 10 colunas de 32 bits, na mesma ordem fixa que
-    /// {@link IsaCoverageReport32BitCurationGuardTest} usa — `v8-A/32` (B14.7) é a última.
+    /// As 11 colunas de 32 bits, na mesma ordem fixa que
+    /// {@link IsaCoverageReport32BitCurationGuardTest} usa — `v8-A/32` (B14.7) é a última;
+    /// `v7-R` (B20.6) entra no meio, antes de `v6-M`.
     private static final List<String> COLUMNS = List.of(
-            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v6-M", "v7-M", "ARMv8.1-M+MVE", "v8-A/32");
+            "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v6-M", "v7-M", "ARMv8.1-M+MVE",
+            "v8-A/32");
     private static final int V8A32_COLUMN = COLUMNS.indexOf("v8-A/32");
 
     private static final String SUPPORTED = "✅";
@@ -107,8 +109,9 @@ class IsaCoverageReportV8A32ColumnTest {
                         + "ou tsv/Applicability revertidos): " + offenders);
     }
 
-    /// As 8 colunas ANTIGAS (`v4T`...`ARMv8.1-M+MVE`) continuam `·` para todo `vfp-uncond.decode` —
-    /// o grupo é `NOT_IN_ANY_PRESET` para elas, a coluna nova é estritamente aditiva.
+    /// As colunas ANTIGAS (`v4T`...`ARMv8.1-M+MVE`, incl. `v7-R` desde a B20.6) continuam `·` para
+    /// todo `vfp-uncond.decode` — o grupo é `NOT_IN_ANY_PRESET` para elas, a coluna nova é
+    /// estritamente aditiva.
     @Test
     void vfpUncondGroupStaysNotApplicableInAllEightOlderColumns() {
         List<Row> vfpUncond = readSection("## VFP — formas incondicionais");

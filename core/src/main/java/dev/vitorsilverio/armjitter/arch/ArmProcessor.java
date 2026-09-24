@@ -8,9 +8,9 @@ package dev.vitorsilverio.armjitter.arch;
 ///
 /// **Escopo de B12.3**: ARM clássico + linha Cortex-A 32-bit já cobertos por preset existente
 /// (`ARMV4T`/`ARMV5TE`/`ARM11_MPCORE`/`ARMV7A`) — nenhuma feature/arquitetura nova, só a tabela de
-/// resolução. Núcleos sem preset hoje (ARMv1/v2/v2a/v3, ARMv6/ARMv6T2/ARMv6Z puros, `Cortex-A32`
-/// AArch32-only) ficam para B12.5/B12.6; perfil R fica para um épico próprio (nunca modelado
-/// neste projeto).
+/// resolução. Núcleos sem preset hoje (ARMv1/v2/v2a/v3, ARMv6/ArmV6T2/ARMv6Z puros, `Cortex-A32`
+/// AArch32-only) ficam para B12.5/B12.6; perfil R foi modelado pelo épico B20 (ver "Escopo de
+/// B20.6" abaixo).
 ///
 /// **Escopo de B12.5** (núcleos clássicos sem preset): {@link #ARM1136J_S}/{@link #ARM1156T2_S}/
 /// {@link #ARM1176JZ_S} resolvem para os presets NOVOS {@link ArmArchitecture#ARMV6}/
@@ -74,6 +74,16 @@ package dev.vitorsilverio.armjitter.arch;
 /// em vez de a entrada existente mudar de arquitetura. Nenhuma das 7 features irmãs do épico
 /// (RDM/cripto/FCMA/DotProd/I8MM/FHM/BF16) entra em nenhuma entrada aqui — são extensões ARMv8.x que
 /// nenhum núcleo ARMv7-A real tem (ver Javadoc de {@link ArmArchitecture#ARMV7A_NEON}).
+///
+/// **Escopo de B20.6** (primeiro degrau do perfil R): {@link #CORTEX_R4}/{@link #CORTEX_R5}/
+/// {@link #CORTEX_R7}/{@link #CORTEX_R8} resolvem para {@link ArmArchitecture#ARMV7R} (B20.1) —
+/// a Wikipedia lista as quatro famílias como `ARMv7-R`. As variantes `Cortex-R4F`/`R5F`/`R7F`/
+/// `R8F` (com VFPv3-D16) ficam de fora **deliberadamente**: `ARMV7R` não declara
+/// {@link ArmFeature#VFPV2} (ver Javadoc do preset), então mapear a variante "F" para ele seria
+/// entrada factualmente errada, mesmo critério que excluiu `Cortex-M3`/`SC300` em B12.4 —
+/// candidatas a uma task futura (`ARMV7R` + VFP composto). `Cortex-R52`/`R52+` (ARMv8-R AArch32)
+/// e `Cortex-R82` (ARMv8-R AArch64) também ficam de fora: são de outra versão de arquitetura, sem
+/// preset ainda (B20.7/B20.8).
 ///
 /// Fonte: [List of ARM processors](https://en.wikipedia.org/wiki/List_of_ARM_processors)
 /// (Wikipedia, consultada 2026-08-28) para a versão de arquitetura de cada núcleo.
@@ -213,6 +223,23 @@ public enum ArmProcessor {
     /// `LDA`/`STL`/`CRC32` (B14.1-B14.3) fecham a lacuna que impedia mapear este núcleo para
     /// {@link ArmArchitecture#ARMV7A}.
     CORTEX_A32("Cortex-A32", ArmArchitecture.ARMV8A_32),
+
+    /// `ARMv7-R` (B20.6) — variante sem FPU do núcleo (a Wikipedia lista `Cortex-R4(F)` cobrindo
+    /// as duas; a variante `Cortex-R4F`, com VFPv3-D16, fica de fora, ver
+    /// {@link ArmArchitecture#ARMV7R}).
+    CORTEX_R4("Cortex-R4", ArmArchitecture.ARMV7R),
+
+    /// `ARMv7-R` (B20.6), mesma família do {@link #CORTEX_R4} — variante sem FPU (`Cortex-R5F`
+    /// fica de fora).
+    CORTEX_R5("Cortex-R5", ArmArchitecture.ARMV7R),
+
+    /// `ARMv7-R` (B20.6), mesma família do {@link #CORTEX_R4} — variante sem FPU (`Cortex-R7F`
+    /// fica de fora).
+    CORTEX_R7("Cortex-R7", ArmArchitecture.ARMV7R),
+
+    /// `ARMv7-R` (B20.6), mesma família do {@link #CORTEX_R4} — variante sem FPU (`Cortex-R8F`
+    /// fica de fora).
+    CORTEX_R8("Cortex-R8", ArmArchitecture.ARMV7R),
 
     /// SecurCore `SC000` — `ARMv6-M` (perfil M, T32-only), o único SecurCore junto de {@link #SC100}
     /// que este catálogo cobre por ora (B12.4; `SC300` fica de fora, ver Javadoc da classe).
