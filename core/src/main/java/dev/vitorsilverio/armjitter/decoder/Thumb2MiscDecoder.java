@@ -18,9 +18,8 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// confirmados contra o QEMU `target/arm/tcg/t32.decode` (seção "Hints, and CPS" / "Miscellaneous
 /// control" / `MRS_reg`/`MSR_reg`), que reproduz a ARM DDI 0406C A5.3.
 ///
-/// <p><b>Fora de escopo</b> (deliberado — ver `docs/isa-nao-aplicavel.tsv`): `SB` (`FEAT_SB`,
-/// ARMv8.0 opcional, genuinamente POSTERIOR a v7-A — critério de versão de arquitetura, não de
-/// consumidor).
+/// <p><b>Ainda não decodificado</b> (pendência, não exclusão): `SB` (`FEAT_SB`, A-profile —
+/// POSTERIOR a v7-A; ausente do perfil M, ARM DDI 0553B.y, ver `docs/isa-nao-aplicavel.tsv`).
 ///
 /// <p><b>B9.7</b> acrescenta `BXJ` (trivialmente equivalente a `BX`, Jazelle não implementado —
 /// mesmo `InstructionKind#BRANCH_EXCHANGE`), `UDF.W` (mesmo `InstructionKind#UDF` de B9.1) e

@@ -70,7 +70,7 @@ STLEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); imp
 STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `STLEXD_t32` (inventário do t32.decode)
 
 # ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
-CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
+CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,ARMv8.1-M+MVE	ARMv8-A; B22.8: ARM DDI 0553B.y (Armv8-M/v8.1-M ARM) não tem nenhuma ocorrência de CRC32 e ID_ISAR5 do perfil M só define PACBTI (sem campo CRC32); não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
 # B14.7: ESTREITADA de `*` para as colunas pré-v8-A. B22.7 IMPLEMENTOU `VRINTR`/`VRINTZ`/`VRINTX`
@@ -722,14 +722,14 @@ VCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
 LCTP	v7-M	ARMv8.1-M/MVE (Helium), posterior a ARMv7-M	t32.decode
 # B16.14: `BLX_i`/`BXJ`/`RFE`/`SRS`/`SUB_rri` são ausências ESTRUTURAIS do perfil M (modo de
 # execução ARM, Jazelle, modelo de exceção A/R-profile) — Helium não muda nada disso, mesma
-# curadoria de `v7-M` vale para `ARMv8.1-M+MVE`. `SB`/`CRC32*` ficam de fora desta lista de
-# propósito: são extensões OPCIONAIS reais do ARMv8-M (FEAT_SB/FEAT_CRC32), não implementadas por
-# este projeto no lado T32 ainda — gap pré-existente e genuíno, não curadoria (ver `## Resultado`).
+# curadoria de `v7-M` vale para `ARMv8.1-M+MVE`. B22.8 (2026-09-25): `SB`/`CRC32*` TAMBÉM não
+# existem no perfil M — ARM DDI 0553B.y não cita nenhum dos dois (só SSBB/PSSBB) e `ID_ISAR5` só
+# define `PACBTI`; a nota antiga "extensões opcionais do ARMv8-M" era falsa (ver `## Resultado`).
 BLX_i	v7-M,ARMv8.1-M+MVE	M-profile é Thumb-only por construção — nunca tem estado de execução ARM	t32.decode
 BXJ	v7-M,ARMv8.1-M+MVE	M-profile rejeita Jazelle (QEMU trans_BXJ: arm_dc_feature ARM_FEATURE_M ⇒ UNDEFINED)	t32.decode
 RFE	v7-M,ARMv8.1-M+MVE	modelo de exceção A/R-profile (retorno com writeback de SP banco); M-profile usa EXC_RETURN via BX/POP	t32.decode
 SRS	v7-M,ARMv8.1-M+MVE	modelo de exceção A/R-profile (stack de exceção manual); M-profile empilha automaticamente via hardware	t32.decode
-SB	v7-M	ARMv8.0-A/FEAT_SB (Speculation Barrier), posterior a ARMv7-M	t32.decode
+SB	v7-M,ARMv8.1-M+MVE	FEAT_SB é A-profile; B22.8: ARM DDI 0553B.y (Armv8-M/v8.1-M) não tem a instrução SB nem FEAT_SB — o perfil M só tem SSBB/PSSBB (variantes de DSB, C2.4.212/C2.4.146)	t32.decode
 SUB_rri	v7-M,ARMv8.1-M+MVE	alias de exception-return `SUBS PC,LR,#imm`; nenhum perfil M tem essa forma (B9.11), M-profile usa EXC_RETURN via BX/POP	t32.decode
 
 # ── B22.4 (2026-08-29): curadoria de denominador da coluna T16 — células ❌ de instruções que a

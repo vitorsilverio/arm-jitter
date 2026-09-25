@@ -30,44 +30,15 @@ sem checar o status real ali.**
 8. **"Onde estamos" é UMA seção só — SUBSTITUA o conteúdo dela, nunca empilhe outra `## Onde
    estamos` acima/abaixo.** A narrativa completa (achados, decisões, números) já vive no `##
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
-   linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma `## Onde estamos` no arquivo,
-   é sinal de manutenção atrasada — colapse tudo em uma só antes de continuar (o histórico removido
-   não se perde: já está no `## Resultado` da task e no `git log` deste arquivo).
+   linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma `## Onde estamos (atualizado 2026-09-25, B22.8 fechada)
 
-## Disciplina de custo
+**`B22.8` fechada nesta rodada** — `SB`/`CRC32*` NÃO existem no perfil M (ARM DDI 0553B.y, `ID_ISAR5` só tem
+`PACBTI`): 7 células `❌`→`·`, coluna `ARMv8.1-M+MVE` **100%** (735/735), global 23525/23776. Ver **Resultado** na task.
 
-1. **G5 "leve" durante iteração, G5 completo só uma vez por sessão**, pouco antes do commit final.
-2. **Backend INTERPRETED em boot de sistema real é caro** — rode só quando o JIT já confirmar o
-   marco; se não terminar em ~10-15min, documente "não concluído" e siga.
-3. **Nunca lance um teste/boot longo em background e pare a sessão "esperando notificação"** — rode
-   bloqueante com timeout alto, ou faça polling dentro da mesma chamada.
-4. **Orçamento de ~60-80 tool-calls por sessão de investigação aberta.** Se a causa raiz não foi
-   isolada, pare, documente o que foi descartado/aprendido e devolva.
-
-## 🔒 Congelamento de subprojetos até 100% de cobertura (decisão do usuário, 2026-08-27)
-
-**Nenhuma task de `armbox`/`gbaemu`/`ndsemu`/`virtual-arm-box`/`n3dsemu` deve ser pega** — nem
-investigação, nem feature, nem bugfix — **enquanto `docs/COBERTURA-ISA.md` não mostrar cobertura
-completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobertura de ISA no
-`arm-jitter` é elegível agora. Ver `tasks/README.md` e a memória do agente
-`feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
-para as regras de release (suspensas até lá).
-
-## Onde estamos (atualizado 2026-09-25, B16.16 fechada)
-
-**`B16.16` fechada nesta rodada** — os 19 "MVE long shifts" sobre GPR (`LSLL`/`UQSHL`/`SQRSHR`/...,
-`Thumb2MveLongShiftDecoder` + `MveWideShifts`); coluna `ARMv8.1-M+MVE` 96% → 99% (735/742), global
-23525/23783 (+19, zero `⚠️` novo). Sobram 7 células na coluna MVE: `SB`/`CRC32*` do perfil M (spec: **`B22.8`**,
-curadoria por fonte normativa). Ver **Resultado** na task (inclui 2 achados a verificar: corte de 0 em 48 bits do
-QEMU e `MOVS.W r0, sp`).
-
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B22.8`** (curadoria `SB`/`CRC32*` M, +7,
-fecha a coluna MVE), **`B17.3`** em diante (fundação SVE, RFC B17.2 decidida — Opção C, VL=256) e **`B21.2`** em
-diante (modelo de 26 bits, RFC B21.1 decidida — Opção c) — conferir dependências no `INDICE.md` de cada uma antes
-de pegar. Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/
-`AsmNativePolicy` sem cobertura de teste para NENHUMA instrução NEON), `C12.5`/`C12.10` (emissão JIT nativa A64),
-dimensão 2 do roadmap. `B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o
-`virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda.
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B22.9`** (a escrever: `SB` T32 em
+`v8-A/32`/`v8.6-A/32` + `VMOV_half`/`VMOV_to_gp` 8/16 + curadoria `LDA`/`STL`/`SMC`/`HVC`/`ERET`/`CLRM`/`CRC32`/`SB`
+em colunas ARMv7), **`B17.3`** em diante (SVE, Opção C, VL=256), **`B21.2`** em diante (modelo de 26 bits, Opção c),
+`E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Conferir dependências no `INDICE.md` antes de pegar.
 
 **Achados da B22.7 ainda sem task** (candidatos a uma "B22.8 — curadoria + resíduos de decode"):
 `VMOV_half` mede `❌` em `v8-A/32` (`decodeVmovHalf` exige `HALF_PRECISION_FP`, que `ARMV8A_32` não
