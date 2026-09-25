@@ -199,8 +199,8 @@ public final class AsmNativePolicy {
             case IrOp.VfpStore ignored -> true;
             case IrOp.VfpMultipleTransfer ignored -> true;
             // B22.2: a forma de 16 bits (`VMOV_half`) não tem emissão nativa — cai no interpretado
-            // por `AsmFallbackPolicy.PER_OP` (caminho inerte hoje, nenhum preset tem `HALF_PRECISION_FP`).
-            case IrOp.VfpCoreTransfer transfer -> !transfer.halfWidth();
+            // por `AsmFallbackPolicy.PER_OP` (`VMOV_half`); B22.10: as formas de lane NEON (8/16 bits) também não têm emissão nativa.
+            case IrOp.VfpCoreTransfer transfer -> !transfer.halfWidth() && !transfer.isLaneTransfer();
             case IrOp.VfpCorePairTransfer ignored -> true;
             case IrOp.VfpSystemTransfer ignored -> true;
             // VMOV_64_sp/VCVT_fix (B9.5): emitidas nativamente desde a task C12.7 — via

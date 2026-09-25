@@ -18,8 +18,8 @@ import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 /// confirmados contra o QEMU `target/arm/tcg/t32.decode` (seção "Hints, and CPS" / "Miscellaneous
 /// control" / `MRS_reg`/`MSR_reg`), que reproduz a ARM DDI 0406C A5.3.
 ///
-/// <p><b>Ainda não decodificado</b> (pendência, não exclusão): `SB` (`FEAT_SB`, A-profile —
-/// POSTERIOR a v7-A; ausente do perfil M, ARM DDI 0553B.y, ver `docs/isa-nao-aplicavel.tsv`).
+/// <p><b>B22.10</b>: `SB` decodifica sob `ArmFeature#SPECULATION_BARRIER` (B22.10);
+/// ausente do perfil M (ARM DDI 0553B.y, ver `docs/isa-nao-aplicavel.tsv`).
 ///
 /// <p><b>B9.7</b> acrescenta `BXJ` (trivialmente equivalente a `BX`, Jazelle não implementado —
 /// mesmo `InstructionKind#BRANCH_EXCHANGE`), `UDF.W` (mesmo `InstructionKind#UDF` de B9.1) e
@@ -100,6 +100,8 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
     private static final int BARRIER_OP_DSB = 0x4;
     private static final int BARRIER_OP_DMB = 0x5;
     private static final int BARRIER_OP_ISB = 0x6;
+    private static final int BARRIER_OP_SB = 0x7;
+    private static final int SB_LO = 0x8F70;
 
     /// `r` do subgrupo `MRS_reg`/`MRS_bank` é o bit menos significativo do terceiro nibble de `hi`
     /// (bits 7:4 = `111r`) — bit 4, não bit 8 (esse é parte do prefixo fixo `0011` do segundo
@@ -438,6 +440,14 @@ public final class Thumb2MiscDecoder implements DecoderExtension {
         }
         if (lo == CLREX_LO) {
             return decodeClearExclusive(raw, address, condition);
+        }
+        if (lo == SB_LO) {
+            // B22.10: `SB` (`FEAT_SB`) — barreira sem efeito observável; `SB` com `lo` diferente é reservado.
+            if (!architecture.has(ArmFeature.SPECULATION_BARRIER)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                    InstructionKind.MEMORY_BARRIER, -1, -1, -1, 0, false, false, false);
         }
         int barrierOp = (lo >>> BARRIER_OP_SHIFT) & BARRIER_OP_MASK;
         boolean isBarrier = barrierOp == BARRIER_OP_DSB || barrierOp == BARRIER_OP_DMB || barrierOp == BARRIER_OP_ISB;

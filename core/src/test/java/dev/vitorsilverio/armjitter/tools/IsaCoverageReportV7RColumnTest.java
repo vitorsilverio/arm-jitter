@@ -86,7 +86,7 @@ class IsaCoverageReportV7RColumnTest {
         return parsed;
     }
 
-    /// **A Armadilha 2 da B20.6, travada**: `HVC`/`SMC` (A32 e T32) e `ERET` (A32) medem `❌`
+    /// **A Armadilha 2 da B20.6, travada**: `HVC`/`SMC` (A32 e T32) e `ERET` (A32) medem `·` (B22.9: não existem em ARMv7-R)
     /// HONESTO sob `v7-R` — nunca `✅`. `ARMV7R_FEATURES` (B20.1) não declara
     /// `HYPERVISOR_CALL`/`VIRTUALIZATION_EXTENSIONS`/`SECURE_MONITOR_CALL`; se alguma sessão futura
     /// reintroduzir uma dessas features na lista por engano, o decoder passaria a aceitar o
@@ -104,7 +104,7 @@ class IsaCoverageReportV7RColumnTest {
                 }
                 found.add(sectionPrefix + "/" + rowEntry.name());
                 String cell = rowEntry.cells().get(V7R_COLUMN);
-                if (!MISSING.equals(cell)) {
+                if (!NOT_APPLICABLE.equals(cell)) {
                     offenders.add(sectionPrefix + "/" + rowEntry.name() + " = " + cell);
                 }
             }
@@ -112,7 +112,7 @@ class IsaCoverageReportV7RColumnTest {
         assertEquals(5, found.size(),
                 "nem todas as formas esperadas (HVC/SMC em A32+T32, ERET em A32) foram encontradas: " + found);
         assertTrue(offenders.isEmpty(),
-                "HVC/SMC/ERET deixaram de medir ❌ sob v7-R — ARMV7R_FEATURES pode ter ganhado "
+                "HVC/SMC/ERET deixaram de medir `·` (curadoria B22.9) sob v7-R — ARMV7R_FEATURES pode ter ganhado "
                         + "HYPERVISOR_CALL/VIRTUALIZATION_EXTENSIONS/SECURE_MONITOR_CALL sem task própria: "
                         + offenders);
     }
@@ -160,8 +160,8 @@ class IsaCoverageReportV7RColumnTest {
                         + "uma feature dessas sem task própria: " + offenders);
     }
 
-    /// **Os números da coluna nova, travados** (B22.7: `HLT` curado como `·` em v7-R): `a32.decode` 246/265, `t16.decode` 83/84,
-    /// `t32.decode` 265/310 — os únicos três grupos cuja `Applicability` (`CLASSIC_ARM`/`ALWAYS`/
+    /// **Os números da coluna nova, travados** (B22.7: `HLT` curado como `·` em v7-R): `a32.decode` 240/240, `t16.decode` 83/83,
+    /// `t32.decode` 265/265 (B22.9: instruções ARMv8 curadas como `·`) — os únicos três grupos cuja `Applicability` (`CLASSIC_ARM`/`ALWAYS`/
     /// `THUMB2`) `ARMV7R` satisfaz. Ver `## Resultado` da B20.6 para a explicação linha a linha.
     @Test
     void a32T16T32GroupsMeasureTheCountsRecordedInB20_6() {
@@ -176,9 +176,9 @@ class IsaCoverageReportV7RColumnTest {
         assertEquals(3, byGroup.size(), "linha de resumo de A32/T16/T32 não encontrada (todas as 3): " + byGroup.keySet());
 
         java.util.Map<String, String> expectedFragment = java.util.Map.of(
-                "A32 — instruções ARM de 32 bits", "v7-R 92% (246/265)",
-                "T16 — Thumb clássico", "v7-R 98% (83/84)",
-                "T32 — Thumb-2", "v7-R 85% (265/310)");
+                "A32 — instruções ARM de 32 bits", "v7-R 100% (240/240)",
+                "T16 — Thumb clássico", "v7-R 100% (83/83)",
+                "T32 — Thumb-2", "v7-R 100% (265/265)");
         List<String> offenders = new ArrayList<>();
         expectedFragment.forEach((group, fragment) -> {
             String cells = byGroup.get(group);

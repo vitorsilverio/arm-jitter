@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BankedRegisterSysm;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
+import dev.vitorsilverio.armjitter.decoder.VfpLaneTransferEncoding;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
@@ -634,8 +635,15 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     // B22.2: `immediate == 1` marca `VMOV_half` (16 bits); `VMOV_single`/
-                    // `VMOV_to_gp`/`VMOV_from_gp` passam `0` (32 bits). Ver `VfpDecoder`.
-                    instruction.immediate() != 0,
+                    // `VMOV_to_gp`/`VMOV_from_gp` passam `0` (32 bits). B22.10: `LANE_FLAG` marca as
+                    // formas NEON de 8/16 bits (ver `VfpLaneTransferEncoding`). Ver `VfpDecoder`.
+                    instruction.immediate() == 1,
+                    VfpLaneTransferEncoding.isLane(instruction.immediate())
+                            ? Byte.SIZE << VfpLaneTransferEncoding.sizeLog2(instruction.immediate()) : 0,
+                    VfpLaneTransferEncoding.isLane(instruction.immediate())
+                            ? VfpLaneTransferEncoding.lane(instruction.immediate()) : 0,
+                    VfpLaneTransferEncoding.isLane(instruction.immediate())
+                            && VfpLaneTransferEncoding.signExtend(instruction.immediate()),
                     instruction.condition()));
             case VFP_CORE_PAIR_TRANSFER -> block.add(new IrOp.VfpCorePairTransfer(
                     instruction.link(),

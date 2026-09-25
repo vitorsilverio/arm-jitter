@@ -600,7 +600,9 @@ public final class VfpDecoder implements DecoderExtension {
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp.VfpCoreTransfer#halfWidth}. Sem
     /// {@link ArmFeature#HALF_PRECISION_FP} → `UNIMPLEMENTED` explícito.
     private DecodedInstruction decodeVmovHalf(int raw, int address, Condition condition) {
-        if (!architecture.has(ArmFeature.HALF_PRECISION_FP)) {
+        // B22.10: `FEAT_FP16` (`FP16_ARITHMETIC`, ARMv8.2-A) implica a transferência de 16 bits, como já
+        // faz `supportsHalfPrecisionConversion` para `VCVTB`/`VCVTT`.
+        if (!supportsHalfPrecisionConversion()) {
             return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
         }
         boolean load = (raw & BIT20_MASK) != 0; // l=1: Sn[15:0] -> Rt; l=0: Rt[15:0] -> Sn[15:0].
@@ -616,6 +618,7 @@ public final class VfpDecoder implements DecoderExtension {
     private static final int BIT4_MASK = 1 << 4;
     private static final int BIT6_MASK = 1 << 6;
     private static final int BIT7_MASK = 1 << 7;
+    private static final int PC_REGISTER_NUMBER = 15;
     private static final int BIT20_MASK = 1 << 20;
     private static final int BIT21_MASK = 1 << 21;
     private static final int BIT23_MASK = 1 << 23;
@@ -930,7 +933,7 @@ public final class VfpDecoder implements DecoderExtension {
         boolean byteForm = (raw & SCALAR_SIZE_BIT22_MASK) != 0;
         boolean halfwordForm = !byteForm && (raw & SCALAR_SIZE_BIT5_MASK) != 0;
         if (byteForm || halfwordForm) {
-            return null; // NEON-gated — fora de escopo (B9.5), ver `docs/isa-nao-aplicavel.tsv`.
+            return decodeNeonScalarLaneTransfer(raw, address, condition, byteForm);
         }
         if ((raw & BIT6_MASK) != 0) {
             return null; // combinação reservada, nenhuma das 3 formas reais usa bit6=1 aqui.
@@ -945,6 +948,32 @@ public final class VfpDecoder implements DecoderExtension {
         int rt = (raw >>> VD_NIBBLE_SHIFT) & NIBBLE_MASK;
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CORE_TRANSFER,
                 rt, sRegister, -1, 0, false, false, toArmRegister);
+    }
+
+    /// B22.10 — `VMOV_to_gp`/`VMOV_from_gp` de **8 e 16 bits** (`VMOV.{S8,U8,S16,U16}` Rt, Dn[x] / `VMOV.{8,16}` Dn[x],
+    /// Rt; ARM DDI 0406C A8.8.343/A8.8.344): NEON de verdade (QEMU `insn_is_neon = size != MO_32`, gate
+    /// `aa32_simd`), então exigem {@link ArmFeature#ADVANCED_SIMD}; sem ela seguem recusadas (G8). O
+    /// índice do elemento é `bit21:bit6:bit5` (byte, 3 bits) ou `bit21:bit6` (halfword, 2 bits); `U`
+    /// (`bit23`) escolhe zero-extend na LEITURA (`VMOV_to_gp`). `Rt = r15` é UNPREDICTABLE — recusado.
+    private DecodedInstruction decodeNeonScalarLaneTransfer(int raw, int address, Condition condition,
+            boolean byteForm) {
+        if (!architecture.has(ArmFeature.ADVANCED_SIMD)) {
+            return null;
+        }
+        int rt = (raw >>> VD_NIBBLE_SHIFT) & NIBBLE_MASK;
+        if (rt == PC_REGISTER_NUMBER) {
+            return null;
+        }
+        int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, true);
+        int lane = (((raw & BIT21_MASK) != 0 ? 1 : 0) << 1) | ((raw & BIT6_MASK) != 0 ? 1 : 0);
+        if (byteForm) {
+            lane = (lane << 1) | ((raw & SCALAR_SIZE_BIT5_MASK) != 0 ? 1 : 0);
+        }
+        boolean toArmRegister = (raw & BIT20_MASK) != 0;
+        boolean signExtend = toArmRegister && (raw & BIT23_MASK) == 0;
+        int immediate = VfpLaneTransferEncoding.encode(byteForm ? 0 : 1, lane, signExtend);
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CORE_TRANSFER,
+                rt, vn, -1, immediate, false, false, toArmRegister);
     }
 
     // ── bits[27:24]=1101: VLDR/VSTR (bit21=0) ou VLDM/VSTM decrement-before/writeback (bit21=1) ──

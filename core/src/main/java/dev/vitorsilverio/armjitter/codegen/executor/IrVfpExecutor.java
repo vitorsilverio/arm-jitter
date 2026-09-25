@@ -534,6 +534,10 @@ public final class IrVfpExecutor {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
+        if (op.isLaneTransfer()) {
+            executeVfpLaneTransfer(core, op);
+            return;
+        }
         if (op.toArmRegister()) {
             int value = core.vfp().s(op.vn());
             core.setRegister(op.armRegister(), op.halfWidth() ? value & HALF_MASK : value);
@@ -542,6 +546,27 @@ public final class IrVfpExecutor {
             core.vfp().setS(op.vn(), (current & ~HALF_MASK) | (core.register(op.armRegister()) & HALF_MASK));
         } else {
             core.vfp().setS(op.vn(), core.register(op.armRegister()));
+        }
+    }
+
+    /// B22.10 — `VMOV.{S8,U8,S16,U16}` (`Rt = Dd[lane]`) e `VMOV.{8,16}` (`Dd[lane] = Rt`) do NEON: transfere
+    /// UM elemento de `D<vn>` (`0`-`31`). Leitura estende por sinal ou zero conforme `signExtend`;
+    /// escrita altera só o elemento, preservando o resto do `D`.
+    private void executeVfpLaneTransfer(ArmCore core, IrOp.VfpCoreTransfer op) {
+        int elementBits = op.laneBits();
+        int shift = op.lane() * elementBits;
+        long mask = (1L << elementBits) - 1;
+        long doubleword = core.vfp().d(op.vn());
+        if (op.toArmRegister()) {
+            long element = (doubleword >>> shift) & mask;
+            int value = (int) element;
+            if (op.signExtend()) {
+                value = (value << (Integer.SIZE - elementBits)) >> (Integer.SIZE - elementBits);
+            }
+            core.setRegister(op.armRegister(), value);
+        } else {
+            long inserted = core.register(op.armRegister()) & mask;
+            core.vfp().setD(op.vn(), (doubleword & ~(mask << shift)) | (inserted << shift));
         }
     }
 

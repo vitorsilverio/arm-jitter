@@ -42,6 +42,7 @@ public final class ArmDecoder implements InstructionDecoder {
     private static final int DSB_VALUE = 0xF57F_F040;
     private static final int DMB_VALUE = 0xF57F_F050;
     private static final int ISB_VALUE = 0xF57F_F060;
+    private static final int SB_VALUE = 0xF57F_F070;
 
     // MOVW/MOVT (B3.1) — `cccc 0011 0000 imm4 Rd imm12` / `cccc 0011 0100 imm4 Rd imm12`. Sem
     // este carve-out o padrão cai no dispatch ALU genérico (opcode 0x8/0xA = TST/CMP com S=0,
@@ -1062,6 +1063,15 @@ public final class ArmDecoder implements InstructionDecoder {
             int option = raw & 0xF;
             return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
                     InstructionKind.MEMORY_BARRIER, -1, -1, -1, option, false, false, false);
+        }
+
+        // SB (`FEAT_SB`, B22.10): `1111 0101 0111 1111 1111 0000 0111 0000` exato — barreira sem efeito observável.
+        if (raw == SB_VALUE) {
+            if (!architecture.has(ArmFeature.SPECULATION_BARRIER)) {
+                return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
+            }
+            return new DecodedInstruction(address, raw, InstructionSet.ARM, Condition.AL,
+                    InstructionKind.MEMORY_BARRIER, -1, -1, -1, 0, false, false, false);
         }
 
         // SRS (ARMv6): `1111 100 P U 1 W 0 1101 0000 0101 000 mode` — empilha LR e SPSR ATUAIS na

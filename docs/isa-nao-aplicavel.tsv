@@ -54,23 +54,23 @@
 # B14.2: implementadas sob ARMV8A_32 (ArmFeature.LOAD_ACQUIRE_STORE_RELEASE) — a exclusão ESTREITA
 # (não apaga) para as 7 colunas pré-v8 que nunca tiveram a instrução; a coluna v8-A/32 só nasce na
 # B14.7, então até lá esta linha ainda alcança tudo que existe hoje (zero-diff em COBERTURA-ISA.md).
-LDA	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2 — não existe em ARMv4T..ARMv7-A/v6-M/v7-M
-LDAB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2
-LDAH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2
-LDAEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
-LDAEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
-LDAEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2
-LDAEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `LDAEXD_t32` (inventário do t32.decode)
-STL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
-STLB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
-STLH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2
-STLEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
-STLEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
-STLEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2
-STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `STLEXD_t32` (inventário do t32.decode)
+LDA	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2 — não existe em ARMv4T..ARMv7-A/v6-M/v7-M; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+LDAEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (load-acquire exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `LDAEXD_t32` (inventário do t32.decode); B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLEX	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLEXB	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLEXH	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
+STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,v7-A+NEON,v7-R	ARMv8-A (store-release exclusive); implementada sob ARMV8A_32 na B14.2; `*` casa também `STLEXD_t32` (inventário do t32.decode); B22.9: idem em v7-A+NEON/v7-R (ARMv7, anterior ao ARMv8-A)
 
 # ── ARMv8-A: CRC32 (opcional em ARMv8.0-A, obrigatório em ARMv8.1-A) ─────────────────────────
-CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,ARMv8.1-M+MVE	ARMv8-A; B22.8: ARM DDI 0553B.y (Armv8-M/v8.1-M ARM) não tem nenhuma ocorrência de CRC32 e ID_ISAR5 do perfil M só define PACBTI (sem campo CRC32); não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
+CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M,ARMv8.1-M+MVE,v7-A+NEON,v7-R	ARMv8-A; B22.8: ARM DDI 0553B.y (Armv8-M/v8.1-M ARM) não tem nenhuma ocorrência de CRC32 e ID_ISAR5 do perfil M só define PACBTI (sem campo CRC32); não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão B22.9: idem em v7-A+NEON/v7-R (FEAT_CRC32 é ARMv8.0; nenhum núcleo ARMv7-A/R a tem)
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
 # B14.7: ESTREITADA de `*` para as colunas pré-v8-A. B22.7 IMPLEMENTOU `VRINTR`/`VRINTZ`/`VRINTX`
@@ -155,7 +155,7 @@ VCVT_hp_int	MPCore,v7-A,v7-A+NEON	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_
 # -- existe mas fica sem consumidor ate B14). O VfpDecoder passou a REIVINDICAR o encoding e a
 # -- recusa-lo (UNIMPLEMENTED explicito, G8) em vez de deixar cair no CoprocessorDecoder como
 # -- MCR/MRC generico para cp9 -- era o unico `warning` (decodifica como outra coisa) da tabela.
-VMOV_half	MPCore,v7-A	VFPv3 half-precision / FEAT_FP16 (ARM DDI 0487) -- extensao opcional nao declarada por nenhum preset	vfp.decode
+VMOV_half	MPCore,v7-A,v7-A+NEON	FEAT_FP16 (ARMv8.2-A, ARM DDI 0487) -- VFPv3 half-precision so converte (VCVTB/VCVTT); a transferencia VMOV de 16 bits nao existe em ARMv7. B22.10: decodifica sob ARMV8A_32/ARMV8_6A_32 (FP16_ARITHMETIC)	vfp.decode
 
 # -- VFP (B9.17, revisa a limitacao documentada pela B9.5): VMOV_to_gp/VMOV_from_gp formas
 # -- byte/halfword (size=0/1 do encoding NEON, 1a/2a linha de cada mnemonico em vfp.decode) sao
@@ -165,10 +165,10 @@ VMOV_half	MPCore,v7-A	VFPv3 half-precision / FEAT_FP16 (ARM DDI 0487) -- extensa
 # -- so por NOME+grupo, sem saber qual das 3 linhas identicas em nome era -- a coluna `ocorrencia`
 # -- nova (5a coluna, IsaCoverageReport) resolve isso contando a posicao 1-based de cada linha
 # -- entre as de mesmo nome+arquivo, na ordem do .decode.
-VMOV_to_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte	vfp.decode	1
-VMOV_to_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword	vfp.decode	2
-VMOV_from_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte	vfp.decode	1
-VMOV_from_gp	MPCore,v7-A	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword	vfp.decode	2
+VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
+VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
+VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
+VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
 
 # -- B9.1: "Signed multiply, signed and unsigned divide" (ARM DDI 0406C A5.2.6) e ARMv6 --
 # -- confirmado contra op_smlad/op_smlald/op_smmla reais em target/arm/tcg/translate.c do QEMU,
@@ -203,35 +203,35 @@ SMMLSR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 # ── T32 (B9.7): MVE (Helium) "long shift" — ARMv8.1-M, exigem `@mve_sh_ri`/`@mve_shl_ri`/ ──────
 # ── `@mve_sh_rr`/`@mve_shl_rr` (t32.decode), espaço reservado em ARMv7-A puro. CONFERIDO: o ────
 # ── grupo inteiro só existe sob `ARM_FEATURE_MVE`/`ARM_FEATURE_V8_1M` no QEMU. ──────────────────
-UQSHL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-LSLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-UQSHLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-URSHR_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-LSRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-URSHRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SRSHR_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-ASRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SRSHRL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SQSHL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SQSHLL_ri	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-UQRSHL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-LSLL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-UQRSHLL64_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SQRSHR_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-ASRL_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SQRSHRL64_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-UQRSHLL48_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
-SQRSHRL48_rr	v7-A,v7-M	ARMv8.1-M/MVE (Helium)
+UQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+URSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+URSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SRSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+ASRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SRSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSLL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHLL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHR_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+ASRL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHRL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHLL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHRL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
 
 # ── T32 (B9.7): CLRM — QEMU t32.decode comentário explícito "M-profile CLRM uses that encoding" ─
 # ── (mesmo bit-pattern de LDM_t32 com Rn=1111, que em A/R-profile é UNDEFINED — Rn=PC não pode ──
 # ── ser base de LDM). Não existe em v7-A. ────────────────────────────────────────────────────────
-CLRM	v7-A	ARMv8-M mainline (perfil M, não A/R-profile)
+CLRM	v7-A,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8-M mainline (perfil M, não A/R-profile); B22.9: idem em v7-A+NEON/v7-R/v8-R/v8-A/32/v8.6-A/32 — CLRM é do perfil M, em A/R-profile o encoding é UNPREDICTABLE
 
 # ── T32 (B9.7): SB (Speculation Barrier) — CONFERIDO via `dc_isar_feature(aa32_sb, s)` em ──────
 # ── `trans_SB` (target/arm/tcg/translate.c real do QEMU): FEAT_SB, extensão opcional ARMv8.0, ──
 # ── posterior a v7-A (backport arquitetural, não faz parte do ARMv7-A base). ────────────────────
-SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
+SB	v7-A,v7-A+NEON,v7-R	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A; B22.9: idem em v7-A+NEON/v7-R (ARMv7)
 # ── B16.15 (2026-09-25): auditoria — a linha `SB v7-A` acima continua correta (v7-A é anterior a FEAT_SB); o ❌ de `SB` em ARMv8.1-M+MVE/v8-A/32/v8.6-A/32 NÃO é exclusão: é pendência (decode T32 ausente, `Thumb2MiscDecoder` ainda recusa o subgrupo), destino = candidata B22.8 (exige confirmar por fonte em quais presets M/A o FEAT_SB existe).
 
 # ── B22.5 (2026-08-29): ERET/HVC/MRS_bank/MSR_bank — a exclusão "por decisão do usuário" das
@@ -796,6 +796,17 @@ SETEND	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem instrução de endianness (endi
 # ── 611-637); o próprio t16.decode do QEMU comenta que estes padrões só valem para CPU sem
 # ── Thumb-2. BL/BLX de 32 bits (LONG_BRANCH_32) seguem ✅ em v7-A/v6-M/v7-M — não são afetados.
 BLX_suffix	v4T	ARMv5T (BLX não existe em ARMv4T), anterior ao ARMv4T	t16.decode
-BLX_suffix	v7-A,v6-M,v7-M,ARMv8.1-M+MVE	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
+BLX_suffix	v7-A,v6-M,v7-M,ARMv8.1-M+MVE,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
 BL_BLX_prefix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
 BL_suffix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
+
+# ── B22.9 (2026-09-25): ARMv7-R e ARMv8-R não têm Virtualization Extensions (v7-R) nem EL3 (v7-R, v8-R) ──
+# ARMv7-R não implementa as Security Extensions nem as Virtualization Extensions (sem Monitor/Hyp mode, sem
+# ERET/HVC/MRS_bank/MSR_bank). ARMv8-R AArch32 tem EL2 (HVC/ERET/banked ✅) mas NÃO tem EL3 — "ARMv8-R
+# implementations cannot include EL3" (Arm DEN0130 Introducing the R-Profile architecture;
+# EL3 não implementado) — logo SMC é UNDEFINED. Sem `grupo`: vale para a32.decode e t32.decode.
+ERET	v7-R	ARMv7-R não tem Virtualization Extensions (ERET é ARMv7VE/ARMv8) — só a32.decode: o ERET T32 é o alias `SUBS PC,LR,#imm`, que ARMv7-R tem (mede ✅ como em v7-A)	a32.decode
+HVC	v7-R	ARMv7-R não tem Virtualization Extensions (HVC é ARMv7VE/ARMv8)
+MRS_bank	v7-R	ARMv7-R não tem Virtualization Extensions (registradores banked são ARMv7VE/ARMv8)
+MSR_bank	v7-R	ARMv7-R não tem Virtualization Extensions (registradores banked são ARMv7VE/ARMv8)
+SMC	v7-R,v8-R	ARMv7-R não tem Security Extensions; ARMv8-R não pode incluir EL3 (Arm DEN0130 / Cortex-R52 TRM) — SMC só existe com Monitor mode/EL3

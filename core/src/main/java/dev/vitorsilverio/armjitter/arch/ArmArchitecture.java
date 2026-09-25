@@ -628,7 +628,7 @@ public final class ArmArchitecture {
     /// `ARM_ARCHITECTURES` de `IsaCoverageReport` — fica para a B14.7 (fechamento do épico).
     private static final ArmArchitecture ARMV8A_32_FEATURES = extending(ARMV7A, "ARMv8-A (AArch32)",
             ArmFeature.ARMV8_FP, ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT,
-            ArmFeature.FP16_ARITHMETIC);
+            ArmFeature.FP16_ARITHMETIC, ArmFeature.SPECULATION_BARRIER);
 
     public static final ArmArchitecture ARMV8A_32 = ARMV8A_32_FEATURES
             .withDecoderExtensions(List.of(
@@ -871,6 +871,7 @@ public final class ArmArchitecture {
             // ARMv8-A de 32 bits (B14.1-B14.6) que NÃO dependem de VFP existir, obrigatórias no
             // conjunto de instruções ARMv8-R (ARMV8_FP/FP16_ARITHMETIC ficam de fora — ver Javadoc)
             ArmFeature.LOAD_ACQUIRE_STORE_RELEASE, ArmFeature.CRC32, ArmFeature.HALT,
+            ArmFeature.SPECULATION_BARRIER,
             // EL2 obrigatório em ARMv8-R (inverso do ARMV7R) — sem SECURE_MONITOR_CALL (sem EL3)
             ArmFeature.HYPERVISOR_CALL, ArmFeature.VIRTUALIZATION_EXTENSIONS,
             // Perfil R

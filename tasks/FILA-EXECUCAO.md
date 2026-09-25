@@ -30,21 +30,22 @@ sem checar o status real ali.**
 8. **"Onde estamos" é UMA seção só — SUBSTITUA o conteúdo dela, nunca empilhe outra `## Onde
    estamos` acima/abaixo.** A narrativa completa (achados, decisões, números) já vive no `##
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
-   linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma `## Onde estamos (atualizado 2026-09-25, B22.8 fechada)
+   linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-**`B22.8` fechada nesta rodada** — `SB`/`CRC32*` NÃO existem no perfil M (ARM DDI 0553B.y, `ID_ISAR5` só tem
-`PACBTI`): 7 células `❌`→`·`, coluna `ARMv8.1-M+MVE` **100%** (735/735), global 23525/23776. Ver **Resultado** na task.
+## Onde estamos (atualizado 2026-09-25, B22.9 + B22.10 fechadas)
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B22.9`** (a escrever: `SB` T32 em
-`v8-A/32`/`v8.6-A/32` + `VMOV_half`/`VMOV_to_gp` 8/16 + curadoria `LDA`/`STL`/`SMC`/`HVC`/`ERET`/`CLRM`/`CRC32`/`SB`
-em colunas ARMv7), **`B17.3`** em diante (SVE, Opção C, VL=256), **`B21.2`** em diante (modelo de 26 bits, Opção c),
-`E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Conferir dependências no `INDICE.md` antes de pegar.
+**`B22.9` (curadoria de denominador: 232 células) e `B22.10` (`SB` A32/T32, `VMOV` NEON 8/16 bits, `VMOV_half` sob
+FP16) fechadas** — `docs/COBERTURA-ISA.md`: **23522/23523**. **Única célula `❌` restante: `MSR_i_SVCR` em `ARMv9.2-A`**
+(exige o modo streaming/`ZA` da B18.2, que depende de B17 — SVE). Ver **Resultado** nas tasks.
 
-**Achados da B22.7 ainda sem task** (candidatos a uma "B22.8 — curadoria + resíduos de decode"):
-`VMOV_half` mede `❌` em `v8-A/32` (`decodeVmovHalf` exige `HALF_PRECISION_FP`, que `ARMV8A_32` não
-declara); `VMOV_to_gp`/`VMOV_from_gp` 8/16 bits (só NEON) medem `❌` em `v8-A/32` (deveria ser `·`) e em
-`v7-A+NEON` (gap real); instruções ARMv8 contadas como `❌` em colunas ARMv7 (`LDA`/`STL`/`CRC32`/
-`SMC`/`HVC`/`ERET`/`SB`/`CLRM` em `v7-A+NEON`/`v7-R`/`v8-R`) pedem curadoria de versão no tsv.
+**⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
+abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18** (SME, 623), **B20** (perfil R: PMSA/MPU), **B21**
+(ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses entra no
+denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
+
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.3`** em diante (SVE, Opção C, VL=256),
+**`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário.
+Conferir dependências no `INDICE.md` antes de pegar.
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,

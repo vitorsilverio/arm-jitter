@@ -1961,9 +1961,26 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// e `Sn[31:16]` fica **inalterado** (ao contrário da forma de 32 bits, que escreve o
             /// `S` inteiro). `false` para `VMOV_single`/`VMOV_to_gp`/`VMOV_from_gp` (32 bits).
             boolean halfWidth,
+            /// B22.10 (`VMOV.{S8,U8,S16,U16,8,16}`, NEON): largura em BITS (`8` ou `16`) do ELEMENTO de
+            /// um registrador `D` transferido; `0` = não é transferência de lane.
+            /// Com lane, `vn` é o índice do registrador `D` (`0`-`31`), não de um `S`.
+            int laneBits,
+            /// Índice do elemento dentro do `D` (ignorado quando `laneBits == 0`).
+            int lane,
+            /// Leitura com extensão de sinal (`S8`/`S16`); `false` = zero-extend (`U8`/`U16`).
+            boolean signExtend,
             /// Condição necessária para executar a transferência.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_CORE_TRANSFER; }
+
+        /// Forma sem lane (`VMOV_single`/`VMOV_half`/`VMOV_to_gp` de 32 bits) — mantém a assinatura anterior.
+        public VfpCoreTransfer(boolean toArmRegister, int armRegister, int vn, boolean halfWidth, Condition condition) {
+            this(toArmRegister, armRegister, vn, halfWidth, 0, 0, false, condition);
+        }
+
+        /// `true` para as formas NEON de 8/16 bits (transferência de UM elemento de um `D`).
+        public boolean isLaneTransfer() { return laneBits != 0; }
+
     }
 
     /// `VMOV Rt, Rt2, Dm` / `VMOV Dm, Rt, Rt2` (`FMRRD`/`FMDRR`): transfere um registrador `D`

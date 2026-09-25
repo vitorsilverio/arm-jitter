@@ -362,7 +362,8 @@ public final class IsaCoverageReport {
         // FEAT_PAuth (ARMv8.3-A) — autenticação de ponteiro (formas com efeito REAL; as hint-space
         // `PACIASP`/`AUTDZA`/… são RES NOP sem a feature e já decodificam desde B6.6.7)
         require(Aarch64Feature.POINTER_AUTHENTICATION, "BRAZ", "BLRAZ", "RETA", "BRA", "BLRA", "ERETA",
-                "AUTDA", "XPACD", "XPACI", "LDRA");
+                "AUTDA", "XPACD", "XPACI", "LDRA", "PACIA", "PACIB", "PACDA", "PACDB", "AUTIA", "AUTIB",
+                "AUTDB");
         // FEAT_LRCPC2 (ARMv8.4-A) — LDAPUR/STLUR (RCpc com offset imediato). `LDAPR_i` tem 6 linhas
         // no inventário e todas as 6 são desta feature — por isso casar por nome está certo aqui.
         require(Aarch64Feature.LRCPC2, "LDAPR_i", "STLR_i");
@@ -371,7 +372,7 @@ public final class IsaCoverageReport {
                 "FRINT64X_s", "FRINT32Z_v", "FRINT32X_v", "FRINT64Z_v", "FRINT64X_v");
         // FEAT_MTE2 (ARMv8.5-A) — Memory Tagging Extension
         require(Aarch64Feature.MEMORY_TAGGING, "STG", "LDG", "STZG", "ST2G", "STZ2G", "STGM", "LDGM",
-                "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS", "SETGP", "SETGM", "SETGE");
+                "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS");
         // FEAT_BF16 (ARMv8.6-A) — bfloat16
         require(Aarch64Feature.BFLOAT16, "BFCVT_s", "BFCVTN_v", "BFDOT_v", "BFDOT_vi", "BFMMLA",
                 "BFMLAL_v", "BFMLAL_vi");
@@ -380,7 +381,9 @@ public final class IsaCoverageReport {
                 "USMMLA");
         // FEAT_MOPS (ARMv8.8-A) — memcpy/memset acelerados
         require(Aarch64Feature.MEMORY_COPY_SET, "CPYE", "CPYM", "CPYP", "SETP", "SETM", "SETE", "CPYFP",
-                "CPYFM", "CPYFE");
+                "CPYFM", "CPYFE",
+                // B22.9: SETG* exigem FEAT_MOPS (ARMv8.8) E FEAT_MTE; o decoder já gateia por ambos
+                "SETGP", "SETGM", "SETGE");
         // FEAT_CSSC (ARMv8.9-A) — Common Short Sequence Compression
         require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "SMAX", "SMIN", "UMAX", "UMIN");
         // FEAT_SME (ARMv9.2-A) — MSR SVCR (estado streaming-SVE/ZA)
@@ -527,6 +530,11 @@ public final class IsaCoverageReport {
         // formas "3same_crypto" irmãs (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/`SHA256H_3s`/
         // `SHA256H2_3s`/`SHA256SU1_3s`) NÃO estão implementadas por nenhum decoder A32/T32 ainda
         // (achado da B13.22, fora do escopo desta task) — medem `❌` honesto sem curadoria, correto.
+        // B22.9: as 7 formas 3same_crypto JÁ decodificam (NeonDataProcessingDecoder) — só faltava o requisito.
+        for (String sha : new String[] {"SHA1C_3s", "SHA1P_3s", "SHA1M_3s", "SHA1SU0_3s", "SHA256H_3s",
+                "SHA256H2_3s", "SHA256SU1_3s"}) {
+            ARM32_VERSION_REQUIREMENTS.put(sha, ArmFeature.CRYPTO);
+        }
         ARM32_VERSION_REQUIREMENTS.put("AESE", ArmFeature.CRYPTO);
         ARM32_VERSION_REQUIREMENTS.put("AESD", ArmFeature.CRYPTO);
         ARM32_VERSION_REQUIREMENTS.put("AESMC", ArmFeature.CRYPTO);

@@ -141,14 +141,15 @@ class VfpUnconditionalMovxVinsTest {
     }
 
     /// `VMOV_half` (B22.2) mora no MESMO `bits[11:8]=1001`, espaço DIFERENTE de `VMOVX`/`VINS`
-    /// (`bits[11:8]=1010`, Armadilha 3/4 da task B14.6) — prova de não-regressão: sem
-    /// `HALF_PRECISION_FP`, o encoding de `VMOV_half` continua `UNIMPLEMENTED`, mesmo com
-    /// `FP16_ARITHMETIC` presente (as duas features são independentes).
+    /// (`bits[11:8]=1010`, Armadilha 3/4 da task B14.6). B22.10: `FEAT_FP16` (`FP16_ARITHMETIC`) IMPLICA a
+    /// transferência de 16 bits (como `VCVTB`/`VCVTT`), então com a feature ele decodifica; sem nenhuma das
+    /// duas (`VFP_TEST_ARCH`) continua `UNIMPLEMENTED`.
     @Test
-    void vmovHalfEncodingUnaffectedByFp16Arithmetic() {
+    void vmovHalfEncodingFollowsFp16Arithmetic() {
         // VMOV Sn, Rt (l=0): `---- 1110 000 0 vn(4) rt(4) 1001 . 001 0000`.
         int vmovHalf = (0xE << 24) | (0 << 20) | (3 << 16) | (0 << 12) | (0x9 << 8) | (1 << 4);
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(FP16_TEST_ARCH, vmovHalf).kind());
+        assertEquals(InstructionKind.VFP_CORE_TRANSFER, decodeArm(FP16_TEST_ARCH, vmovHalf).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(VFP_TEST_ARCH, vmovHalf).kind());
     }
 
     // ── 3. Execução: troca CRUA de metades, sem tocar FPSCR ─────────────────────────────────────

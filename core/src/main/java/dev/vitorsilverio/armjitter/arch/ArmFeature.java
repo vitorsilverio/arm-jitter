@@ -290,6 +290,12 @@ public enum ArmFeature {
     /// dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT} sem trabalho novo de decode.
     HALT,
 
+    /// **Speculation Barrier** (`FEAT_SB`, opcional em ARMv8.0-A/R e obrigatório desde ARMv8.5-A): `SB` em A32
+    /// (`0xF57FF070`) e T32 (`0xF3BF8F70`), B22.10. Sem modelo de especulação no emulador é uma barreira sem
+    /// efeito observável (mesma `InstructionKind#MEMORY_BARRIER` de `DSB`/`DMB`/`ISB`). Sem a feature o
+    /// encoding é recusado (`UNIMPLEMENTED`, G8) — ausente do perfil M (ARM DDI 0553B.y, ver B22.8).
+    SPECULATION_BARRIER,
+
     // ---- Onda 6, B22.7 (`VJCVT`) ----
     /// **Conversão FP→inteiro com semântica `ToInt32` do JavaScript** (`FEAT_JSCVT`, ARMv8.3-A) —
     /// `VJCVT.S32.F64 Sd, Dm` no lado A32/T32 (`vfp.decode`, espaço condicional). Mirror de
