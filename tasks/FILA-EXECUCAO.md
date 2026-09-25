@@ -32,7 +32,7 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-25, B22.9 + B22.10 + B17.1 + B17.3 fechadas)
+## Onde estamos (atualizado 2026-09-25, B22.9 + B22.10 + B17.1 + B17.3 + B18.1 fechadas)
 
 **`B22.9` (curadoria de denominador: 232 células) e `B22.10` (`SB` A32/T32, `VMOV` NEON 8/16 bits, `VMOV_half` sob
 FP16) fechadas** — `docs/COBERTURA-ISA.md`: **23522/23523**. **Única célula `❌` restante: `MSR_i_SVCR` em `ARMv9.2-A`**
@@ -43,7 +43,7 @@ abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18** (SME, 623), **B
 (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses entra no
 denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.4`** (predicados; B17.3 ✅ 2026-09-25: banco `Z`/`P`/`FFR` + `ZCR_ELx` + `sve_access_check`, sem decode) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.2`** (modo streaming — **é a única que ainda separa a tabela de 23523/23523**: transforma a recusa de `MSR SVCR` em efeito; B18.1 ✅ 2026-09-25: `SVCR`/`SMCR_ELx`/`ZA` preguiçoso/checagens SME, sem decode; ⚠️ o banco `Z` precisa comportar `max(VL, SVL)` — ver Resultado da B18.1), **`B17.4`** (predicados; B17.3 ✅ 2026-09-25: banco `Z`/`P`/`FFR` + `ZCR_ELx` + `sve_access_check`, sem decode) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário.
 Conferir dependências no `INDICE.md` antes de pegar.
 

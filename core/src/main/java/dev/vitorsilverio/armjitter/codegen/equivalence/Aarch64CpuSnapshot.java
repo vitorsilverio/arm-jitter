@@ -24,7 +24,25 @@ public record Aarch64CpuSnapshot(
         /// Estado escalável SVE (B17.3): `ZCR_EL1/2/3` + banco `Z`/`P`/`FFR` completos (vazio em
         /// presets sem `FEAT_SVE`) — o aliasing `V`≡`Z[127:0]` já está em `vRegisters`, aqui vão os bits
         /// altos e os predicados que o harness de B17.x precisa comparar.
-        long[] scalableState) {
+        long[] scalableState,
+        /// Estado matricial SME (B18.1): `SVCR`, `SMCR_EL1/2/3` e `ZA`/`ZT0` (vazio em presets sem
+        /// `FEAT_SME`; um `ZA` nunca alocado ocupa só dois marcadores de presença).
+        long[] matrixState) {
+    /// Construtor pré-B18.1 (sem estado matricial) — mantém a assinatura pública (G3).
+    public Aarch64CpuSnapshot(
+            long[] registers,
+            long sp,
+            long pc,
+            int nzcv,
+            long cycles,
+            long exclusiveMonitorAddress,
+            int exclusiveMonitorSizeBytes,
+            long[] vRegisters,
+            long[] scalableState) {
+        this(registers, sp, pc, nzcv, cycles, exclusiveMonitorAddress, exclusiveMonitorSizeBytes,
+                vRegisters, scalableState, new long[0]);
+    }
+
     /// Construtor pré-B17.3 (sem estado escalável) — mantém a assinatura pública (G3).
     public Aarch64CpuSnapshot(
             long[] registers,
@@ -36,7 +54,7 @@ public record Aarch64CpuSnapshot(
             int exclusiveMonitorSizeBytes,
             long[] vRegisters) {
         this(registers, sp, pc, nzcv, cycles, exclusiveMonitorAddress, exclusiveMonitorSizeBytes,
-                vRegisters, new long[0]);
+                vRegisters, new long[0], new long[0]);
     }
 
     /// Fotografa o estado atual do core.
@@ -54,13 +72,15 @@ public record Aarch64CpuSnapshot(
                 core.exclusiveMonitorAddress(),
                 core.exclusiveMonitorSizeBytes(),
                 core.fp().snapshot(),
-                core.scalableSnapshot());
+                core.scalableSnapshot(),
+                core.matrixSnapshot());
     }
 
     public Aarch64CpuSnapshot {
         registers = Arrays.copyOf(registers, registers.length);
         vRegisters = Arrays.copyOf(vRegisters, vRegisters.length);
         scalableState = Arrays.copyOf(scalableState, scalableState.length);
+        matrixState = Arrays.copyOf(matrixState, matrixState.length);
     }
 
     /// Compara com outro snapshot e lança {@link EquivalenceMismatchException} se divergir.
@@ -94,6 +114,10 @@ public record Aarch64CpuSnapshot(
         if (!Arrays.equals(scalableState, other.scalableState)) {
             throw EquivalenceMismatchException.of(
                     label, "scalableState", Arrays.toString(scalableState), Arrays.toString(other.scalableState));
+        }
+        if (!Arrays.equals(matrixState, other.matrixState)) {
+            throw EquivalenceMismatchException.of(
+                    label, "matrixState", Arrays.toString(matrixState), Arrays.toString(other.matrixState));
         }
         if (!Arrays.equals(vRegisters, other.vRegisters)) {
             throw EquivalenceMismatchException.of(

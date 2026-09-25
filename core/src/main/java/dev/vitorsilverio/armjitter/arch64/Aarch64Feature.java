@@ -128,11 +128,31 @@ public enum Aarch64Feature {
     /// Nenhum preset a declara ainda: a versão em que é mandatória não foi confirmada (B17.1,
     /// Armadilha 2); núcleos reais com SVE2 entram pelo catálogo `Aarch64Processor` (B17.26).
     SVE2,
-    /// `FEAT_SME` — Scalable Matrix Extension (estado ZA/streaming-SVE, controlado por `SVCR` via
-    /// `MSR (immediate)`). ARMv9.2-A. Nenhum estado ZA/SVE é modelado ainda — esta feature só
-    /// existe para permitir que `MSR SVCR` continue recusado (`UNIMPLEMENTED`) de forma
-    /// explicitamente rastreável, não silenciosa, quando o decoder passar a consultá-la.
+    /// `FEAT_SME` — Scalable Matrix Extension (armazenamento `ZA`, modo streaming, `SVCR`/`SMCR_ELx`).
+    /// ARMv9.2-A. Desde a B18.1 o estado existe no `Aarch64Core` (`SVCR`, `SMCR_EL1/2/3`, banco `ZA`
+    /// preguiçoso, `ID_AA64PFR1_EL1.SME`); ainda **sem efeito de modo streaming** (B18.2) e sem
+    /// decode de `sme.decode` (B18.3+) — `MSR SVCR` (imediato) segue recusado com mensagem nomeada.
+    /// É o primeiro dos oito predicados de gate que o QEMU fatia (`aa64_sme`, `aa64_sme2`,
+    /// `aa64_sme2p1`, `aa64_sme_i16i64`, `aa64_sme_f64f64`, `aa64_sme_lutv2`, `aa64_sme_mop4`,
+    /// `aa64_sme_tmop`); os outros sete vêm logo abaixo.
     SCALABLE_MATRIX_EXTENSION,
+    /// `FEAT_SME2` — SME2 (`ZT0`, instruções multi-vetor). **Nenhum preset a declara ainda**: a
+    /// versão de arquitetura que a torna mandatória/opcional não foi confirmada nesta sessão (B18.1,
+    /// Armadilha 1 — feature declarada errada é pior que ausente). Habilita `ZT0` e `SMCR_ELx.EZT0`.
+    SCALABLE_MATRIX_EXTENSION_2,
+    /// `FEAT_SME2p1` — SME2.1. Sem preset (mesma razão de {@link #SCALABLE_MATRIX_EXTENSION_2}).
+    SCALABLE_MATRIX_EXTENSION_2_1,
+    /// `FEAT_SME_I16I64` — outer product de inteiros 16 bits acumulando em 64. Sem preset; só é
+    /// anunciada em `ID_AA64SMFR0_EL1` pela task que a implementa (B18.5).
+    SME_I16I64,
+    /// `FEAT_SME_F64F64` — outer product de ponto flutuante de 64 bits. Sem preset (B18.5).
+    SME_F64F64,
+    /// `FEAT_SME_LUTv2` — `LUTI4` de quatro registradores/`MOVT` de `ZT0`. Sem preset (B18.6).
+    SME_LUTV2,
+    /// `FEAT_SME_MOP4` — outer product de quarto de tile (`MOP4`). Sem preset (B18.5).
+    SME_MOP4,
+    /// `FEAT_SME_TMOP` — outer product esparso (`TMOP`). Sem preset (B18.5).
+    SME_TMOP,
     /// `FEAT_FAMINMAX` — `FAMAX`/`FAMIN` (máximo/mínimo de valor absoluto em ponto flutuante).
     /// ARMv9.4-A.
     FP_ABSOLUTE_MAX_MIN,

@@ -122,6 +122,41 @@ public final class Aarch64Core {
     /// Versão do formato de {@link #saveScalableState}.
     private static final int SCALABLE_STATE_FORMAT_VERSION = 1;
 
+    // ── B18.1: SME. `EC` de "acesso a SME trapado" (`ARM DDI 0487 D17.2`, `EC=0x1D`); `ISS.SMTC`
+    // ── (`bits[2:0]`) escolhe o motivo — valores do `SMEExceptionType` de `syndrome.h` do QEMU.
+    private static final long ESR_EC_SME_ACCESS = 0x1DL;
+    private static final long SMTC_ACCESS_TRAP = 0L;
+    private static final long SMTC_NOT_STREAMING = 2L;
+    private static final long SMTC_INACTIVE_ZA = 3L;
+    private static final long SMTC_INACCESSIBLE_ZT0 = 4L;
+    /// `SVCR.SM` (bit 0, modo streaming) e `SVCR.ZA` (bit 1, armazenamento `ZA` habilitado); o resto
+    /// do registrador é `RES0`.
+    private static final long SVCR_SM_BIT = 1L;
+    private static final long SVCR_ZA_BIT = 1L << 1;
+    private static final long SVCR_MASK = SVCR_SM_BIT | SVCR_ZA_BIT;
+    /// `SMCR_ELx.LEN` (`bits[3:0]`, `SVL = (LEN+1) × 128`), `EZT0` (bit 30, `FEAT_SME2`) e `FA64`
+    /// (bit 31). Máscara de escrita do `smcr_write` do QEMU.
+    private static final long SMCR_LEN_MASK = 0xFL;
+    private static final long SMCR_EZT0_BIT = 1L << 30;
+    private static final long SMCR_FA64_BIT = 1L << 31;
+    /// Reset de `SMCR_ELx.LEN`: o máximo, então o `SVL` efetivo = implementado até o guest reduzir.
+    private static final long SMCR_LEN_RESET = SMCR_LEN_MASK;
+    /// `CPACR_EL1.SMEN` (`bits[25:24]`): mesma codificação de `ZEN` (`0b00`/`0b10` trapam tudo,
+    /// `0b01` só EL0, `0b11` nada).
+    private static final int CPACR_SMEN_SHIFT = 24;
+    /// `CPTR_EL2.TSM` (bit 12, forma `E2H=0`, a única modelada): `1` trapa SME para EL2.
+    private static final long CPTR_EL2_TSM_BIT = 1L << 12;
+    /// `CPTR_EL3.ESM` (bit 12): `0` trapa SME para EL3.
+    private static final long CPTR_EL3_ESM_BIT = 1L << 12;
+    /// `ID_AA64PFR1_EL1.SME` (`bits[27:24]`): `1` = SME, `2` = SME2.
+    private static final int ID_AA64PFR1_SME_SHIFT = 24;
+    private static final long ID_AA64PFR1_SME_SME2 = 2L;
+    private static final long ID_AA64PFR1_SME_SME = 1L;
+    /// `ID_AA64SMFR0_EL1.SMEver` (`bits[59:56]`): `0` = SME, `1` = SME2, `2` = SME2.1.
+    private static final int ID_AA64SMFR0_SMEVER_SHIFT = 56;
+    /// Versão do formato de {@link #saveMatrixState}.
+    private static final int MATRIX_STATE_FORMAT_VERSION = 1;
+
     // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
     // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
     /// `CurrentEL` quando em EL0 (`[3:2]=0b00`, ver {@link Aarch64SystemRegisterId#CURRENT_EL}).
@@ -233,6 +268,18 @@ public final class Aarch64Core {
     private long zcrEl1 = ZCR_LEN_RESET;
     private long zcrEl2 = ZCR_LEN_RESET;
     private long zcrEl3 = ZCR_LEN_RESET;
+    /// Armazenamento matricial (B18.1): `ZA`/`ZT0`, ambos `null` até `SVCR.ZA` ser ligado. Existe
+    /// (vazio) em todo core, mas só é usado em presets com `FEAT_SME`.
+    private final Aarch64MatrixRegisters matrix;
+    /// `SVCR` (`SM`/`ZA`, B18.1). **B18.1 só armazena `SM`**: o efeito do modo streaming (`VL`
+    /// efetivo = `SVL`, zerar `Z`/`P`/`FFR` ao atravessar a fronteira) é a B18.2. `ZA` 0→1 aloca o
+    /// armazenamento zerado e 1→0 o libera (esse SIM é o efeito de armazenamento desta task).
+    private long svcr;
+    /// `SMCR_EL1`/`SMCR_EL2`/`SMCR_EL3` (`LEN`/`EZT0`/`FA64`, B18.1) — `LEN` reseta para o máximo,
+    /// `EZT0` para `0` (`ZT0` inacessível até o firmware liberar).
+    private long smcrEl1 = SMCR_LEN_RESET;
+    private long smcrEl2 = SMCR_LEN_RESET;
+    private long smcrEl3 = SMCR_LEN_RESET;
     /// Barramento de registrador de sistema `MRS`/`MSR` (B6.6.1) — sem hospedeiro por padrão (ver
     /// {@link Aarch64SystemRegisterBus#none()}); B6.6.3 instala um real de MMU.
     private Aarch64SystemRegisterBus systemRegisterBus = Aarch64SystemRegisterBus.none();
@@ -319,6 +366,16 @@ public final class Aarch64Core {
     /// 128 bits, sem predicados) quando {@code architecture} não declara
     /// {@link Aarch64Feature#SVE} — um Cortex-A53 não paga pelo estado escalável.
     public Aarch64Core(AddressSpace64 memory, Aarch64Architecture architecture, int vectorLengthBits) {
+        this(memory, architecture, vectorLengthBits, Aarch64MatrixRegisters.DEFAULT_STREAMING_VECTOR_LENGTH_BITS);
+    }
+
+    /// Como {@link #Aarch64Core(AddressSpace64, Aarch64Architecture, int)}, com o `SVL` implementado
+    /// de SME escolhido também (B18.1): múltiplo de 128 bits entre 128 e 2048, **independente** do
+    /// `VL` (um núcleo real pode ter `VL=128` e `SVL=512`). Ignorado quando {@code architecture} não
+    /// declara {@link Aarch64Feature#SCALABLE_MATRIX_EXTENSION} — o `ZA` nunca é alocado sem
+    /// `SVCR.ZA`, então o valor só dimensiona o que seria alocado.
+    public Aarch64Core(AddressSpace64 memory, Aarch64Architecture architecture, int vectorLengthBits,
+            int streamingVectorLengthBits) {
         this.memory = Objects.requireNonNull(memory, "memory");
         this.architecture = Objects.requireNonNull(architecture, "architecture");
         boolean sve = architecture.has(Aarch64Feature.SVE);
@@ -326,6 +383,9 @@ public final class Aarch64Core {
                 ? new Aarch64ScalableRegisters(vectorLengthBits, true)
                 : new Aarch64ScalableRegisters(Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS, false);
         this.fp = new Aarch64FpRegisters(scalable);
+        this.matrix = new Aarch64MatrixRegisters(architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)
+                ? streamingVectorLengthBits
+                : Aarch64MatrixRegisters.MIN_STREAMING_VECTOR_LENGTH_BITS);
     }
 
     /// Retorna a arquitetura configurada para este core (B11.2).
@@ -555,6 +615,291 @@ public final class Aarch64Core {
         return out;
     }
 
+    /// `true` quando a arquitetura deste core declara {@link Aarch64Feature#SCALABLE_MATRIX_EXTENSION}.
+    public boolean hasSme() {
+        return architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
+    }
+
+    /// `true` quando a arquitetura declara {@link Aarch64Feature#SCALABLE_MATRIX_EXTENSION_2}
+    /// (habilita `ZT0` e `SMCR_ELx.EZT0`).
+    public boolean hasSme2() {
+        return architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2);
+    }
+
+    /// Armazenamento matricial (`ZA`/`ZT0`, B18.1) — vazio (nada alocado) enquanto `SVCR.ZA` for `0`.
+    public Aarch64MatrixRegisters matrix() {
+        return matrix;
+    }
+
+    /// `SVL` implementado em bits — `0` sem `FEAT_SME`. **Independente de `VL`** (Armadilha 4 da
+    /// B18.1): nunca use {@link #vectorLengthBits()} para dimensionar `ZA`.
+    public int implementedStreamingVectorLengthBits() {
+        return hasSme() ? matrix.streamingVectorLengthBits() : 0;
+    }
+
+    /// `SVL` EFETIVO em bits no EL atual: o menor entre o `SVL` implementado e
+    /// `(SMCR_ELx.LEN + 1) × 128` de cada `SMCR_ELx` que se aplica ao EL atual (mesma regra por nível
+    /// de {@link #vectorLengthBits()} para `ZCR_ELx`, `sve_vqm1_for_el_sm` do QEMU). `0` sem
+    /// `FEAT_SME`. Todo laço de tile/slice SME lê ISTO, nunca uma constante (G6).
+    public int streamingVectorLengthBits() {
+        if (!hasSme()) {
+            return 0;
+        }
+        int el = exceptionState.currentEl().ordinal();
+        long len = smcrEl3 & SMCR_LEN_MASK;
+        if (el <= Aarch64ExceptionLevel.EL2.ordinal()) {
+            len = Math.min(len, smcrEl2 & SMCR_LEN_MASK);
+        }
+        if (el <= Aarch64ExceptionLevel.EL1.ordinal()) {
+            len = Math.min(len, smcrEl1 & SMCR_LEN_MASK);
+        }
+        int requested = (int) (len + 1) * Aarch64MatrixRegisters.MIN_STREAMING_VECTOR_LENGTH_BITS;
+        return Math.min(requested, matrix.streamingVectorLengthBits());
+    }
+
+    /// {@link #streamingVectorLengthBits()} em bytes (`SVL/8`, que também é o número de linhas de `ZA`).
+    public int streamingVectorLengthBytes() {
+        return streamingVectorLengthBits() / Byte.SIZE;
+    }
+
+    /// `SVCR` atual (`bit0`=`SM`, `bit1`=`ZA`; o resto é `0`).
+    public long svcr() {
+        return svcr;
+    }
+
+    /// `SVCR.SM` (modo streaming). **Só armazenado na B18.1** — o efeito é da B18.2.
+    public boolean streamingModeEnabled() {
+        return (svcr & SVCR_SM_BIT) != 0;
+    }
+
+    /// `SVCR.ZA` (armazenamento `ZA` habilitado).
+    public boolean zaEnabled() {
+        return (svcr & SVCR_ZA_BIT) != 0;
+    }
+
+    /// `MSR SVCR` (forma registrador, B18.1). Só `SM`/`ZA` são guardados (`RES0` no resto). Como no
+    /// `aarch64_set_svcr` do QEMU, escrever um valor igual ao atual não faz nada; `ZA` 0→1 aloca
+    /// `ZA` zerado (e `ZT0` volta a zero) e 1→0 o libera. **`SM` só muda o bit** — zerar `Z`/`P`/`FFR`
+    /// e trocar o `VL` efetivo ao atravessar a fronteira de streaming é a B18.2.
+    ///
+    /// @throws IllegalStateException se o preset não declara `FEAT_SME`
+    public void setSvcr(long value) {
+        if (!hasSme()) {
+            throw new IllegalStateException("SVCR exige FEAT_SME: " + architecture.name());
+        }
+        long next = value & SVCR_MASK;
+        long change = svcr ^ next;
+        if ((change & SVCR_ZA_BIT) != 0) {
+            if ((next & SVCR_ZA_BIT) != 0) {
+                matrix.enableZa();
+            } else {
+                matrix.releaseZa();
+            }
+        }
+        svcr = next;
+    }
+
+    /// `ID_AA64PFR1_EL1.SME` (`bits[27:24]`) do preset: `0` sem SME, `1` = SME, `2` = SME2 ou melhor
+    /// (o `aarch64_cpu_sme_finalize` do QEMU faz o mesmo).
+    private long smeIdField() {
+        if (!hasSme()) {
+            return 0L;
+        }
+        boolean sme2OrBetter = hasSme2() || architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2_1);
+        return (sme2OrBetter ? ID_AA64PFR1_SME_SME2 : ID_AA64PFR1_SME_SME) << ID_AA64PFR1_SME_SHIFT;
+    }
+
+    /// `ID_AA64SMFR0_EL1` do preset (B18.1): SÓ `SMEver` (`bits[59:56]`); nenhum campo de capacidade
+    /// (`I16I64`/`F64F64`/`MOP4`/…) é aceso aqui — cada um é aceso pela task que fecha a família
+    /// (Armadilha 5: anunciar o que não existe faz software real escolher caminho que bate em
+    /// `UNIMPLEMENTED`). Zero sem SME e sob SME 1 (`SMEver = 0`).
+    private long smeVersionField() {
+        if (!hasSme()) {
+            return 0L;
+        }
+        long version = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2_1) ? 2L
+                : hasSme2() ? 1L : 0L;
+        return version << ID_AA64SMFR0_SMEVER_SHIFT;
+    }
+
+    /// `smcr_write` (B18.1): guarda `LEN`, `FA64` e — só com `FEAT_SME2` — `EZT0`; o resto é `RES0`.
+    /// **Não** estreita `Z`/`P`/`FFR` nem `ZA` (B18.2/B18.3): `ZA` mantém o conteúdo, a escolha
+    /// "manter" que o QEMU documenta para o caso CONSTRAINED UNPREDICTABLE.
+    private void writeSmcr(Aarch64SystemRegisterId register, long value) {
+        long validMask = SMCR_LEN_MASK | SMCR_FA64_BIT | (hasSme2() ? SMCR_EZT0_BIT : 0L);
+        long masked = value & validMask;
+        switch (register) {
+            case SMCR_EL1 -> smcrEl1 = masked;
+            case SMCR_EL2 -> smcrEl2 = masked;
+            default -> smcrEl3 = masked;
+        }
+    }
+
+    /// `CheckSMEAccess` (B18.1): o EL para o qual um acesso SME no EL atual seria TRAPADO, ou vazio se
+    /// permitido. Ordem do `sme_exception_el` do QEMU: `CPACR_EL1.SMEN` (EL0/EL1, trap para EL1),
+    /// `CPTR_EL2.TSM` (até EL2, trap para EL2), `CPTR_EL3.ESM` (qualquer EL, trap para EL3). Cada
+    /// registrador só é consultado se o {@link #systemRegisterBus()} o atende (mesma disciplina de
+    /// {@link #sveAccessTrapLevel()}). **Não é o trap de SVE** (Armadilha 6): bits e síndrome
+    /// próprios. Sempre vazio sem `FEAT_SME`.
+    public Optional<Aarch64ExceptionLevel> smeAccessTrapLevel() {
+        if (!hasSme()) {
+            return Optional.empty();
+        }
+        Aarch64ExceptionLevel el = exceptionState.currentEl();
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL1.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPACR_EL1)) {
+            long smen = (systemRegisterBus.read(Aarch64SystemRegisterId.CPACR_EL1) >>> CPACR_SMEN_SHIFT)
+                    & CPACR_ZEN_MASK;
+            boolean allowed = smen == CPACR_ZEN_NO_TRAP
+                    || (smen == CPACR_ZEN_TRAP_EL0_ONLY && el != Aarch64ExceptionLevel.EL0);
+            if (!allowed) {
+                return Optional.of(Aarch64ExceptionLevel.EL1);
+            }
+        }
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL2.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL2)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.CPTR_EL2) & CPTR_EL2_TSM_BIT) != 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL2);
+        }
+        if (systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL3)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.CPTR_EL3) & CPTR_EL3_ESM_BIT) == 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL3);
+        }
+        return Optional.empty();
+    }
+
+    /// EL para o qual `ZT0` está inacessível (`zt0_exception_el` do QEMU): o primeiro nível aplicável
+    /// cujo `SMCR_ELx.EZT0` é `0`. `EL2`/`EL3` só são consultados se o `systemRegisterBus` os modela
+    /// (`CPTR_EL2`/`CPTR_EL3` atendidos) — sem isso um core que boota direto em EL1 (sem firmware)
+    /// nunca conseguiria liberar `ZT0`. Vazio quando `ZT0` é acessível.
+    public Optional<Aarch64ExceptionLevel> zt0AccessTrapLevel() {
+        if (!hasSme2()) {
+            return Optional.empty();
+        }
+        Aarch64ExceptionLevel el = exceptionState.currentEl();
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL1.ordinal() && (smcrEl1 & SMCR_EZT0_BIT) == 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL1);
+        }
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL2.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL2)
+                && (smcrEl2 & SMCR_EZT0_BIT) == 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL2);
+        }
+        if (systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL3) && (smcrEl3 & SMCR_EZT0_BIT) == 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL3);
+        }
+        return Optional.empty();
+    }
+
+    /// `CheckSMEEnabled` — nível 0 das checagens SME: só a permissão de acesso (`SMEN`/`TSM`/`ESM`).
+    /// Se trapado, entra na exceção síncrona (`EC=0x1D`, `SMTC=0`) no EL alvo e devolve `false`.
+    ///
+    /// @param instructionAddress endereço da instrução SME (`ELR_ELx`)
+    /// @return `true` se o acesso é permitido
+    public boolean smeEnabledCheck(long instructionAddress) {
+        Optional<Aarch64ExceptionLevel> trap = smeAccessTrapLevel();
+        if (trap.isEmpty()) {
+            return true;
+        }
+        raiseSmeTrap(trap.get(), instructionAddress, SMTC_ACCESS_TRAP);
+        return false;
+    }
+
+    /// `CheckStreamingSVEEnabled` — {@link #smeEnabledCheck} mais `PSTATE.SM = 1`; com `SM = 0` a
+    /// instrução não executa (`SMTC=2`, "não está em modo streaming").
+    public boolean smeStreamingEnabledCheck(long instructionAddress) {
+        if (!smeEnabledCheck(instructionAddress)) {
+            return false;
+        }
+        if (!streamingModeEnabled()) {
+            raiseSmeTrap(smeSynchronousTarget(), instructionAddress, SMTC_NOT_STREAMING);
+            return false;
+        }
+        return true;
+    }
+
+    /// `CheckSMEAndZAEnabled` — {@link #smeEnabledCheck} mais `PSTATE.ZA = 1`; com `ZA = 0` a
+    /// instrução não executa (`SMTC=3`, "`ZA` inativo").
+    public boolean smeZaEnabledCheck(long instructionAddress) {
+        if (!smeEnabledCheck(instructionAddress)) {
+            return false;
+        }
+        if (!zaEnabled()) {
+            raiseSmeTrap(smeSynchronousTarget(), instructionAddress, SMTC_INACTIVE_ZA);
+            return false;
+        }
+        return true;
+    }
+
+    /// `CheckStreamingSVEAndZAEnabled` — as duas condições, `SM` antes de `ZA` (ordem do
+    /// `sme_enabled_check_with_svcr` do QEMU).
+    public boolean smeStreamingAndZaEnabledCheck(long instructionAddress) {
+        return smeStreamingEnabledCheck(instructionAddress) && smeZaEnabledCheck(instructionAddress);
+    }
+
+    /// `CheckSMEZT0Enabled` — {@link #smeZaEnabledCheck} mais `SMCR_ELx.EZT0` (`SMTC=4`, "`ZT0`
+    /// inacessível", entra no EL de {@link #zt0AccessTrapLevel()}).
+    public boolean smeZt0EnabledCheck(long instructionAddress) {
+        if (!smeZaEnabledCheck(instructionAddress)) {
+            return false;
+        }
+        Optional<Aarch64ExceptionLevel> trap = zt0AccessTrapLevel();
+        if (trap.isEmpty()) {
+            return true;
+        }
+        raiseSmeTrap(trap.get(), instructionAddress, SMTC_INACCESSIBLE_ZT0);
+        return false;
+    }
+
+    /// EL alvo das exceções de SME que não são de acesso: EL1, ou o EL atual se for mais privilegiado
+    /// (`enterSynchronousException` recusa redução de privilégio).
+    private Aarch64ExceptionLevel smeSynchronousTarget() {
+        Aarch64ExceptionLevel el = exceptionState.currentEl();
+        return el == Aarch64ExceptionLevel.EL0 ? Aarch64ExceptionLevel.EL1 : el;
+    }
+
+    private void raiseSmeTrap(Aarch64ExceptionLevel target, long instructionAddress, long smtc) {
+        enterSynchronousException(target, instructionAddress,
+                (ESR_EC_SME_ACCESS << ESR_EC_SHIFT) | ESR_IL_BIT | smtc);
+    }
+
+    /// Serializa o estado matricial (`SVCR`, `SMCR_EL1/2/3`, `ZA`/`ZT0` — formato versionado com o
+    /// `SVL`). Um core que nunca alocou `ZA` grava só os marcadores de presença.
+    public void saveMatrixState(DataOutputStream out) throws IOException {
+        out.writeInt(MATRIX_STATE_FORMAT_VERSION);
+        out.writeLong(svcr);
+        out.writeLong(smcrEl1);
+        out.writeLong(smcrEl2);
+        out.writeLong(smcrEl3);
+        matrix.saveState(out);
+    }
+
+    /// Restaura o que {@link #saveMatrixState} gravou. Um estado sem `ZA` **não** o aloca.
+    public void loadMatrixState(DataInputStream in) throws IOException {
+        int version = in.readInt();
+        if (version != MATRIX_STATE_FORMAT_VERSION) {
+            throw new IOException("Versão de estado matricial do core desconhecida: " + version);
+        }
+        svcr = in.readLong() & SVCR_MASK;
+        long smcrValidMask = SMCR_LEN_MASK | SMCR_FA64_BIT | SMCR_EZT0_BIT;
+        smcrEl1 = in.readLong() & smcrValidMask;
+        smcrEl2 = in.readLong() & smcrValidMask;
+        smcrEl3 = in.readLong() & smcrValidMask;
+        matrix.loadState(in);
+    }
+
+    /// Cópia defensiva do estado matricial para o harness de equivalência: `SVCR` e `SMCR_EL1/2/3`
+    /// seguidos de {@link Aarch64MatrixRegisters#snapshot()}. Vazio sem `FEAT_SME`.
+    public long[] matrixSnapshot() {
+        if (!hasSme()) {
+            return new long[0];
+        }
+        long[] bank = matrix.snapshot();
+        long[] out = Arrays.copyOf(new long[] {svcr, smcrEl1, smcrEl2, smcrEl3}, 4 + bank.length);
+        System.arraycopy(bank, 0, out, 4, bank.length);
+        return out;
+    }
+
     /// Retorna o barramento de memória conectado ao core.
     public AddressSpace64 memory() {
         return memory;
@@ -657,7 +1002,7 @@ public final class Aarch64Core {
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
                  TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
                  UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED, RGSR_EL1, GCR_EL1,
-                 ZCR_EL1, ZCR_EL2, ZCR_EL3 -> true;
+                 ZCR_EL1, ZCR_EL2, ZCR_EL3, SVCR, SMCR_EL1, SMCR_EL2, SMCR_EL3, ID_AA64SMFR0_EL1 -> true;
             default -> false;
         };
     }
@@ -683,7 +1028,12 @@ public final class Aarch64Core {
             case ID_AA64MMFR2_EL1 -> ID_AA64MMFR2_EL1_VALUE;
             case ID_AA64MMFR3_EL1 -> ID_AA64MMFR3_EL1_VALUE;
             case ID_AA64MMFR4_EL1 -> ID_AA64MMFR4_EL1_VALUE;
-            case ID_AA64PFR1_EL1 -> ID_AA64PFR1_EL1_VALUE;
+            case ID_AA64PFR1_EL1 -> ID_AA64PFR1_EL1_VALUE | smeIdField();
+            case ID_AA64SMFR0_EL1 -> smeVersionField();
+            case SVCR -> svcr;
+            case SMCR_EL1 -> smcrEl1;
+            case SMCR_EL2 -> smcrEl2;
+            case SMCR_EL3 -> smcrEl3;
             case ID_AA64ZFR0_EL1 -> !hasSve() ? ID_AA64ZFR0_EL1_VALUE
                     : architecture.has(Aarch64Feature.SVE2) ? ID_AA64ZFR0_SVEVER_SVE2 : ID_AA64ZFR0_EL1_VALUE;
             case ZCR_EL1 -> zcrEl1;
@@ -748,6 +1098,8 @@ public final class Aarch64Core {
             case ZCR_EL1 -> writeZcr(register, value);
             case ZCR_EL2 -> writeZcr(register, value);
             case ZCR_EL3 -> writeZcr(register, value);
+            case SVCR -> setSvcr(value);
+            case SMCR_EL1, SMCR_EL2, SMCR_EL3 -> writeSmcr(register, value);
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }

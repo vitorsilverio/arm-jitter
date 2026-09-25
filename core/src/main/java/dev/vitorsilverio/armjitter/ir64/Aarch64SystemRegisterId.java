@@ -149,6 +149,21 @@ public enum Aarch64SystemRegisterId {
     ZCR_EL2,
     /// `ZCR_EL3` (`op0=3,op1=6,CRn=1,CRm=2,op2=0`, B17.3) — idem, limite de EL3.
     ZCR_EL3,
+    /// `SVCR` (`op0=3,op1=3,CRn=4,CRm=2,op2=2`, B18.1) — `bit0`=`SM` (modo streaming), `bit1`=`ZA`
+    /// (armazenamento `ZA` habilitado); o resto é `RES0`. Acessível de EL0. Só existe com `FEAT_SME`.
+    /// Escrever `ZA` 0→1 aloca `ZA` zerado; o EFEITO de `SM` é da B18.2.
+    SVCR,
+    /// `SMCR_EL1` (`op0=3,op1=0,CRn=1,CRm=2,op2=6`, B18.1) — `LEN` (`bits[3:0]`, `SVL = (LEN+1) ×
+    /// 128`), `EZT0` (bit 30, `FEAT_SME2`) e `FA64` (bit 31). Só existe com `FEAT_SME`.
+    SMCR_EL1,
+    /// `SMCR_EL2` (`op0=3,op1=4,CRn=1,CRm=2,op2=6`, B18.1) — idem, limite de EL2.
+    SMCR_EL2,
+    /// `SMCR_EL3` (`op0=3,op1=6,CRn=1,CRm=2,op2=6`, B18.1) — idem, limite de EL3.
+    SMCR_EL3,
+    /// `ID_AA64SMFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=4,op2=5`, B18.1) — features de SME. Anuncia só
+    /// `SMEver` (`bits[59:56]`); os campos de capacidade ficam `0` até a task que implementa a
+    /// família correspondente (não anunciar o que não existe, G8).
+    ID_AA64SMFR0_EL1,
     /// `ID_AA64DFR1_EL1` (`CRn=0,CRm=5,op2=1`) — features de debug (parte 2). Constante `0`.
     ID_AA64DFR1_EL1,
     /// `ID_AA64ISAR1_EL1` (`CRn=0,CRm=6,op2=1`) — extensões de conjunto de instrução (parte 2:
