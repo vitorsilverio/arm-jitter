@@ -23,6 +23,8 @@ class TailPredicationTest {
     private static final int CODE_BASE = 0x100;
     private static final int MEMORY_SIZE = 0x8000;
     private static final int STEP_LIMIT = 64;
+    private static final int USAGE_FAULT_VECTOR_ADDRESS = 6 * 4;
+    private static final int USAGE_FAULT_HANDLER_PC = 0x400;
 
     private static ArmCore newCore(ArmArchitecture architecture) {
         TestAddressSpace memory = new TestAddressSpace(MEMORY_SIZE);
@@ -198,6 +200,121 @@ class TailPredicationTest {
         core.step();
 
         assertEquals(0x00FF, core.vpr().p0(), "VCTP também obedece a máscara de cauda do LTPSIZE/LR correntes");
+    }
+
+    @Test
+    void vctpOnlyRewritesBeatsNotYetExecutedByEci() {
+        ArmCore core = newMveCore();
+        core.vpr().setP0(0xFFFF);
+        core.cpsr().setEci(MveVptState.ECI_A0); // beat 0 (bytes 0-3) já executado
+        core.setRegister(1, 0);
+        put32(core, CODE_BASE, 0xF000E801 | (1 << 16)); // VCTP.8 R1 (zero elementos)
+
+        core.step();
+
+        assertEquals(0x000F, core.vpr().p0(), "só os bytes dos beats pendentes são zerados");
+    }
+
+    @Test
+    void vctpFaultsOnReservedEciWithoutTouchingVpr() {
+        ArmCore core = newMveCore();
+        ((TestAddressSpace) core.memory()).put32(USAGE_FAULT_VECTOR_ADDRESS, USAGE_FAULT_HANDLER_PC | 1);
+        MProfileExceptionModel model = new MProfileExceptionModel();
+        core.setExceptionModel(model);
+        core.cpsr().setEci(3); // valor reservado (mve_eci_check)
+        core.vpr().setP0(0xFFFF);
+
+        boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(
+                ArmArchitecture.ARMV8_1M_MVE)
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.Vctp(1, 0, Condition.AL),
+                        core.programCounter());
+
+        assertEquals(true, pcChanged);
+        assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
+        assertEquals(0xFFFF, core.vpr().p0());
+    }
+
+    @Test
+    void refusedLoopEncodings() {
+        Thumb2LowOverheadBranchDecoder mve = new Thumb2LowOverheadBranchDecoder(ArmArchitecture.ARMV8_1M_MVE);
+        int[] refused = {
+                0xF040C001 | (13 << 16),                    // WLS Rn=SP
+                0xF000C001 | (1 << 20) | (13 << 16),        // WLSTP Rn=SP
+                0xF000E001 | (1 << 20) | (13 << 16),        // DLSTP Rn=SP
+                0xF00FE001 | (1 << 20),                     // Rn=15 só é LCTP com size=0
+        };
+        for (int raw : refused) {
+            assertEquals(InstructionKind.UNIMPLEMENTED, mve.tryDecode(raw, CODE_BASE, Condition.AL).kind(),
+                    "0x" + Integer.toHexString(raw));
+        }
+        // Prefixo tail-predicated sem forma conhecida na metade baixa.
+        assertNull(mve.tryDecode(0xF000E401, CODE_BASE, Condition.AL));
+    }
+
+    /// G4: com a condição falsa (IT NE + Z=1) nenhuma das instruções novas tem efeito, mas o PC avança.
+    @Test
+    void newInstructionsAreNoOpsWhenTheirConditionFails() {
+        int itNe = 0xBF18;
+        int[] raws = {
+                0xF042E001,                                   // DLS R2
+                0xF042E001 | (1 << 20),                       // DLSTP.16 R2
+                0xF00FC001 | (3 << 1),                        // LE
+                0xF01FC001 | (3 << 1),                        // LETP
+                0xF00FE001,                                   // LCTP
+                0xF001E801,                                   // VCTP.8 R1
+                0xE89F0000 | 1,                               // CLRM {R0}
+        };
+        for (int raw : raws) {
+            ArmCore core = newMveCore();
+            core.cpsr().setNzcv(false, true, false, false);
+            core.setRegister(0, 5);
+            core.setRegister(1, 3);
+            core.setRegister(2, 9);
+            core.setRegister(LINK_REGISTER, 0x40);
+            core.fpscr().setLtpsize(1);
+            core.vpr().setP0(0xFFFF);
+            put16(core, CODE_BASE, itNe);
+            put32(core, CODE_BASE + 2, raw);
+
+            core.step();
+            core.step();
+
+            String id = "0x" + Integer.toHexString(raw);
+            assertEquals(CODE_BASE + 6, core.programCounter(), id);
+            assertEquals(0x40, core.register(LINK_REGISTER), id);
+            assertEquals(5, core.register(0), id);
+            assertEquals(1, core.fpscr().ltpsize(), id);
+            assertEquals(0xFFFF, core.vpr().p0(), id);
+        }
+    }
+
+    /// Os IrOp novos são interpretados apenas (sem emissão nativa), e o `executeOp` por padrão de
+    /// tipo (usado no fallback por op do ASM) os executa igual ao despacho por `Kind`.
+    @Test
+    void newOpsAreInterpretedOnlyAndRunThroughExecuteOp() {
+        dev.vitorsilverio.armjitter.ir.IrOp lctp =
+                new dev.vitorsilverio.armjitter.ir.IrOp.LoopClearTailPredication(Condition.AL);
+        dev.vitorsilverio.armjitter.ir.IrOp vctp = new dev.vitorsilverio.armjitter.ir.IrOp.Vctp(1, 0, Condition.AL);
+        dev.vitorsilverio.armjitter.ir.IrOp clrm = new dev.vitorsilverio.armjitter.ir.IrOp.ClearMultiple(1, Condition.AL);
+        for (dev.vitorsilverio.armjitter.ir.IrOp op : new dev.vitorsilverio.armjitter.ir.IrOp[] {lctp, vctp, clrm}) {
+            assertFalse(dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy.supports(op), op.toString());
+        }
+        ArmCore core = newMveCore();
+        core.fpscr().setLtpsize(2);
+        core.setRegister(0, 7);
+        var executor = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE);
+        assertFalse(executor.executeOp(core, lctp, CODE_BASE));
+        assertEquals(FpscrRegister.LTPSIZE_NONE, core.fpscr().ltpsize());
+        assertFalse(executor.executeOp(core, clrm, CODE_BASE));
+        assertEquals(0, core.register(0));
+    }
+
+    @Test
+    void pureLoopStartConstructorKeepsLtpsizeUntouched() {
+        var pure = new dev.vitorsilverio.armjitter.ir.IrOp.LoopStart(2, 0, false, Condition.AL);
+        assertEquals(dev.vitorsilverio.armjitter.ir.IrOp.LoopStart.NO_LTPSIZE, pure.ltpsize());
+        var pureEnd = new dev.vitorsilverio.armjitter.ir.IrOp.LoopEnd(0, false, Condition.AL);
+        assertFalse(pureEnd.tailPredicated());
     }
 
     // ── BF* ──────────────────────────────────────────────────────────────────────────────────────
