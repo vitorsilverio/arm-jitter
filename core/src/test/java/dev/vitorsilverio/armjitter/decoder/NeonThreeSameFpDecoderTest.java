@@ -231,6 +231,48 @@ class NeonThreeSameFpDecoderTest {
     }
 
     @Test
+    void b1324HalfPrecisionPairwiseMaxMinAndOddQuad() {
+        assertEquals(new IrOp.NeonFpPairwise(AdvSimdFpPairwiseOp.MAX, 1, 0, 1, 2),
+                liftedOf(neon3s(1, 1, 0b1111, 0, false, 0, 1, 2))); // vpmax.f16
+        assertEquals(new IrOp.NeonFpPairwise(AdvSimdFpPairwiseOp.MIN, 1, 0, 1, 2),
+                liftedOf(neon3s(1, 3, 0b1111, 0, false, 0, 1, 2))); // vpmin.f16
+        // pairwise só existe na forma D; Q ímpar em F16 é UNDEFINED como em F32
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1111, 0, true, 0, 2, 4)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1101, 1, true, 1, 2, 4)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1101, 1, true, 0, 3, 4)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(1, 1, 0b1101, 1, true, 0, 2, 5)).kind());
+        // combinação FP não alocada continua UNIMPLEMENTED também com sz=1
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(neon3s(0, 3, 0b1110, 0, false, 0, 1, 2)).kind());
+    }
+
+    @Test
+    void b1324HalfPrecisionQuadAndPairwiseExecute() {
+        ArmCore core = newCore();
+        // VMUL.F16 q0,q1,q2 — oito lanes: 1..4 em D2, 5..8 em D3, todas * 2.0
+        core.vfp().setD(2, halves(1, 2, 3, 4));
+        core.vfp().setD(3, halves(5, 6, 7, 8));
+        core.vfp().setD(4, halves(2, 2, 2, 2));
+        core.vfp().setD(5, halves(2, 2, 2, 2));
+        run(core, neon3s(1, 1, 0b1101, 1, true, 0, 2, 4));
+        assertEquals(halves(2, 4, 6, 8), core.vfp().d(0));
+        assertEquals(halves(10, 12, 14, 16), core.vfp().d(1));
+
+        // VPMAX.F16 d6,d1,d2 — pares de Vn (1,5 | 3,2) depois pares de Vm
+        core.vfp().setD(1, halves(1, 5, 3, 2));
+        core.vfp().setD(2, halves(7, 4, 0, 9));
+        run(core, neon3s(1, 1, 0b1111, 0, false, 6, 1, 2));
+        assertEquals(halves(5, 3, 7, 9), core.vfp().d(6));
+        // VPMIN.F16
+        run(core, neon3s(1, 3, 0b1111, 0, false, 6, 1, 2));
+        assertEquals(halves(1, 2, 4, 0), core.vfp().d(6));
+    }
+
+    private static long halves(float a, float b, float c, float d) {
+        return AdvSimdLanes.halfBits(a) | (AdvSimdLanes.halfBits(b) << 16)
+                | (AdvSimdLanes.halfBits(c) << 32) | (AdvSimdLanes.halfBits(d) << 48);
+    }
+
+    @Test
     void b1324HalfPrecisionWithoutTheFeatureStaysUnimplemented() {
         int word = neon3s(0, 1, 0b1101, 0, false, 0, 1, 2); // vadd.f16
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV7A, word).kind());

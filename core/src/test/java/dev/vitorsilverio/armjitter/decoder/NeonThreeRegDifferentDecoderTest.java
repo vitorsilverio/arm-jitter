@@ -568,6 +568,29 @@ class NeonThreeRegDifferentDecoderTest {
     }
 
     @Test
+    void b1324FpHalfPrecisionQuadMlsAndOddRegisters() {
+        assertEquals(AdvSimdFpThreeSameOp.MLS,
+                ((IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0101, 1, 0b0010))).op());
+        // Q com vd/vn ímpar é UNDEFINED em F16 também
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc2sc(1, 1, 3, 0, 0b1001, 1, 0b0010)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc2sc(1, 1, 2, 1, 0b1001, 1, 0b0010)).kind());
+
+        ArmCore core = newCore();
+        // VMUL.F16 q0,q1,d4[0] — q1 = D2:D3 = 1..8, escalar d4[0] = 2.0 (vmNibble=4, M=0)
+        core.vfp().setD(2, halves(1, 2, 3, 4));
+        core.vfp().setD(3, halves(5, 6, 7, 8));
+        core.vfp().setD(4, halves(2, 0, 0, 0));
+        run(core, enc2sc(1, 1, 2, 0, 0b1001, 0, 0b0100)); // vmul.f16 q0,q1,d4[0]
+        assertEquals(halves(2, 4, 6, 8), core.vfp().d(0));
+        assertEquals(halves(10, 12, 14, 16), core.vfp().d(1));
+    }
+
+    private static long halves(float a, float b, float c, float d) {
+        return AdvSimdLanes.halfBits(a) | (AdvSimdLanes.halfBits(b) << 16)
+                | (AdvSimdLanes.halfBits(c) << 32) | (AdvSimdLanes.halfBits(d) << 48);
+    }
+
+    @Test
     void b1324FpHalfPrecisionWithoutTheFeatureStaysUnimplemented() {
         int word = enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010); // vmla.f16
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(NEON_FEATURES, word).kind());
