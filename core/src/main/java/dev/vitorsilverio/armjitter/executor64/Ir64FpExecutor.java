@@ -381,29 +381,17 @@ final class Ir64FpExecutor {
     }
 
     /// `FJCVTZS` (B19.29, `FEAT_JSCVT`) — `ToInt32` do ECMAScript: trunca `Dn` (sempre precisão
-    /// dupla) para `int32` em direção a zero; `NaN`/infinito/overflow produzem `0` em vez de
-    /// saturar (diferente de {@link #executeFpIntegerConvert}); `PSTATE.Z` sinaliza se a conversão
-    /// foi EXATA (entrada já inteira e dentro de alcance) — não a semântica comum de "resultado
-    /// zero" (ver Javadoc de {@link Ir64Op.Fp64JavascriptConvert}, Armadilha nº2 da task).
+    /// dupla) para `int32` em direção a zero e reduz MÓDULO 2³² (`NaN`/infinito produzem `0`;
+    /// nunca satura, diferente de {@link #executeFpIntegerConvert}); `PSTATE.Z` sinaliza se a
+    /// conversão foi EXATA (entrada já inteira, dentro de alcance e não `-0.0`) — não a semântica
+    /// comum de "resultado zero" (ver Javadoc de {@link Ir64Op.Fp64JavascriptConvert}, Armadilha
+    /// nº2 da task). **Corrigido na B22.7**: a versão original devolvia `0` em overflow e tratava
+    /// `-0.0` como exato — o QEMU real reduz módulo 2³² e marca `-0.0` como inexato. Lógica
+    /// compartilhada com o `VJCVT` de 32 bits em {@link AdvSimdLanes#javascriptToInt32}.
     static boolean executeFpJavascriptConvert(Aarch64Core core, Ir64Op.Fp64JavascriptConvert op) {
         double value = core.fp().dDouble(op.rn());
-        int result;
-        boolean exact;
-        if (Double.isNaN(value) || Double.isInfinite(value)) {
-            result = 0;
-            exact = false;
-        } else {
-            double truncated = value < 0 ? Math.ceil(value) : Math.floor(value);
-            if (truncated < Integer.MIN_VALUE || truncated > Integer.MAX_VALUE) {
-                result = 0;
-                exact = false;
-            } else {
-                result = (int) truncated;
-                exact = truncated == value;
-            }
-        }
-        core.setXForWidth(op.rd(), result, false);
-        core.pstate().setNzcv(false, exact, false, false);
+        core.setXForWidth(op.rd(), AdvSimdLanes.javascriptToInt32(value), false);
+        core.pstate().setNzcv(false, AdvSimdLanes.javascriptToInt32IsExact(value), false, false);
         return false;
     }
 

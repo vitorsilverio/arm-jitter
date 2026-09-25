@@ -53,27 +53,29 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, B13.24 fechada)
+## Onde estamos (atualizado 2026-09-25, B22.7 fechada)
 
-**`B13.24` fechada nesta rodada** — NEON FP16 AArch32: os 4 `VCVT_*_2sh` que a B13.22 tinha medido
-como gap real fecham (`v7-A+NEON` 940→944, global +4 células). A remedição do Passo 2 achou que
-"3-reg-same FP" e "2-reg-and-scalar FP" TAMBÉM tinham F16 `UNIMPLEMENTED` no código, mas
-`IsaCoverageReport` nunca detectava (célula = 1 linha `.decode`; a forma F32 da MESMA linha já
-satisfaz `✅` antes do medidor chegar a testar `sz=1`) — implementadas mesmo assim (regra máxima do
-projeto: nunca presumir "não há mais F16 pendente"), zero-diff esperado e confirmado na tabela. Ver
-**Resultado** na task para o achado completo sobre o ponto cego do medidor (`FILL_STRATEGIES`).
+**`B22.7` fechada nesta rodada** — `VRINTR`/`VRINTZ`/`VRINTX` (`sp`/`dp`/`hp`), `VCVTR`, `VCVTB`/`VCVTT`
+(f16 + BF16), `VJCVT` (preset novo `ARMV8_6A_32`, coluna `v8.6-A/32`) e `ArmFeature.HALT` nos presets
+ARMv8-M; `v8-A/32` 94% → 96% (749/776), global 23484/23783. Achado de quebra: o `FJCVTZS` do A64
+reduzia a `0` em overflow (o correto é módulo 2³²) — corrigido junto. Ver **Resultado** na task, que
+também traz o mapa do que resta (259 células de 32 bits + 40 de A64 na tabela, boa parte é curadoria).
 
 **Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B16.15`** (épico B16
 reaberto: tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP`, `BF`/`BFL`/`BFCSEL`/`BFX`/`BFLX`
-restantes, `CLRM`, `SB`+`CRC32*` de perfil M), **`B22.7`** (épico B22 reaberto: `VRINTR`/`VRINTZ`/
-`VRINTX` incondicionais, `VJCVT`, conversões FP16/BF16 do VFPv3, `ArmFeature.HALT` nos presets
-ARMv8-M), **`B17.3`** em diante (fundação SVE, RFC B17.2 decidida — Opção C, VL=256) e **`B21.2`**
-em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c) — conferir dependências no `INDICE.md`
-de cada uma antes de pegar. Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23:
-`IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de teste para NENHUMA instrução NEON,
-lacuna estrutural do épico B13 inteiro). `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do
-roadmap. `B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o
-`virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda.
+restantes, `CLRM`, `SB`+`CRC32*` de perfil M), **`B17.3`** em diante (fundação SVE, RFC B17.2
+decidida — Opção C, VL=256) e **`B21.2`** em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c)
+— conferir dependências no `INDICE.md` de cada uma antes de pegar. Também seguem pegáveis: `E14`
+(achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de
+teste para NENHUMA instrução NEON), `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do roadmap.
+`B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o `virtual-arm-box`
+congelado, e QEMU não tem suporte a `cortex-r82` ainda.
+
+**Achados da B22.7 ainda sem task** (candidatos a uma "B22.8 — curadoria + resíduos de decode"):
+`VMOV_half` mede `❌` em `v8-A/32` (`decodeVmovHalf` exige `HALF_PRECISION_FP`, que `ARMV8A_32` não
+declara); `VMOV_to_gp`/`VMOV_from_gp` 8/16 bits (só NEON) medem `❌` em `v8-A/32` (deveria ser `·`) e em
+`v7-A+NEON` (gap real); instruções ARMv8 contadas como `❌` em colunas ARMv7 (`LDA`/`STL`/`CRC32`/
+`SMC`/`HVC`/`ERET`/`SB`/`CLRM` em `v7-A+NEON`/`v7-R`/`v8-R`) pedem curadoria de versão no tsv.
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,

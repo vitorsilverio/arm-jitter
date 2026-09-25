@@ -470,9 +470,9 @@ class VfpDecoderTest {
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xC, true, 0xA, 1, false, 5, false))));
         assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_S32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, true, 0xB, 1, false, 5, true))));
-        // bit7=0 (rz=0) é VCVTR, fora de escopo: UNDEFINED.
-        assertEquals(InstructionKind.UNIMPLEMENTED,
-                decodeArm(vfpAsymmetricTwoOperandWord(0xD, false, 0xA, 1, false, 5, false)).kind());
+        // bit7=0 (rz=0) é VCVTR (B22.7): arredonda pelo FPSCR.RMode, `direction == null` no IR.
+        assertEquals(new IrOp.VfpConvertRounded(null, true, false, 1, 5, Condition.AL),
+                liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, false, 0xA, 1, false, 5, false))));
     }
 
     @Test

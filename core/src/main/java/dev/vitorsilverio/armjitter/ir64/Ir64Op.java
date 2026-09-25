@@ -3249,12 +3249,13 @@ public sealed interface Ir64Op permits
     /// precisão dupla, nunca simples) para inteiro de 32 bits com sinal, truncando em direção a
     /// zero: EXATAMENTE `ToInt32` do ECMAScript. Difere de {@link Fp64IntegerConvert} com
     /// {@code rounding=TOWARD_ZERO}/{@code signed=true} em dois pontos — por isso é um record
-    /// próprio em vez de reaproveitar aquele: (1) `NaN`/infinito/overflow produzem `0`, nunca o
-    /// valor de saturação (`INT32_MAX`/`INT32_MIN`); (2) `PSTATE.Z` recebe um sinalizador de
-    /// EXATIDÃO da conversão (`1` se {@link #rn} já era um inteiro de 32 bits representável sem
-    /// parte fracionária nem overflow, `0` caso contrário) — não a semântica comum de "resultado é
-    /// zero" (um valor de entrada `0.0` exato também seta `Z=1`, mas um overflow que produz `Wd=0`
-    /// seta `Z=0`, já que a conversão NÃO foi exata). `N`/`C`/`V` são sempre zerados.
+    /// próprio em vez de reaproveitar aquele: (1) `NaN`/infinito produzem `0` e o overflow reduz
+    /// MÓDULO 2³² (B22.7 corrigiu a versão original, que devolvia `0`), nunca o valor de saturação
+    /// (`INT32_MAX`/`INT32_MIN`); (2) `PSTATE.Z` recebe um sinalizador de EXATIDÃO da conversão
+    /// (`1` se {@link #rn} já era um inteiro de 32 bits representável sem parte fracionária nem
+    /// overflow e não é `-0.0`, `0` caso contrário) — não a semântica comum de "resultado é zero"
+    /// (um valor de entrada `+0.0` exato seta `Z=1`, mas um overflow que produz `Wd=0` seta `Z=0`,
+    /// já que a conversão NÃO foi exata). `N`/`C`/`V` são sempre zerados.
     record Fp64JavascriptConvert(
             /// Registrador geral de destino (`Wd`, índice `0`-`31`; `31` é `WZR`). Sempre 32 bits.
             int rd,

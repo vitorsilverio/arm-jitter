@@ -254,17 +254,21 @@ class VfpHalfPrecisionArithmeticTest {
         assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F16_TO_U32, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, unsigned)));
     }
 
-    /// `VCVTR_hp_int` (`bit7=rz=0`) fica fora de escopo — mesma decisão de `decodeImmediateOrTwoOperandFamily`.
+    /// `VCVTR_hp_int` (`bit7=rz=0`, B22.7): arredonda pelo `FPSCR.RMode` — `direction == null` no IR.
     @Test
-    void vcvtHpIntWithoutRzIsUnimplemented() {
+    void vcvtHpIntWithoutRzDecodesToVcvtrHalf() {
         int word = twoOperandHalfWord(0xE, 0xD, false, 2, 3);
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(FP16_TEST_ARCH, word).kind());
+        assertEquals(new IrOp.VfpConvertRoundedHalf(null, true, 2, 3, Condition.AL),
+                liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
-    void vrintrHpVrintzHpVrintxHpRemainUnimplemented() {
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x6, false, 2, 3)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x7, false, 2, 3)).kind());
+    void vrintrHpAndVrintxHpDecodeToVfpRoundHalfWithFpscrDirection() {
+        // B22.7: `VRINTR_hp` (opc2=0x6, bit7=0) e `VRINTX_hp` (opc2=0x7, bit7=0) usam `FPSCR.RMode`.
+        assertEquals(new IrOp.VfpRoundHalf(null, 2, 3, Condition.AL),
+                liftSingleOp(decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x6, false, 2, 3))));
+        assertEquals(new IrOp.VfpRoundHalf(null, 2, 3, Condition.AL),
+                liftSingleOp(decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x7, false, 2, 3))));
     }
 
     @Test

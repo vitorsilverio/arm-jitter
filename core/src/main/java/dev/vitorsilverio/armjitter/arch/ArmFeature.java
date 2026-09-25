@@ -290,6 +290,15 @@ public enum ArmFeature {
     /// dev.vitorsilverio.armjitter.decoder.InstructionKind#HALT} sem trabalho novo de decode.
     HALT,
 
+    // ---- Onda 6, B22.7 (`VJCVT`) ----
+    /// **Conversão FP→inteiro com semântica `ToInt32` do JavaScript** (`FEAT_JSCVT`, ARMv8.3-A) —
+    /// `VJCVT.S32.F64 Sd, Dm` no lado A32/T32 (`vfp.decode`, espaço condicional). Mirror de
+    /// {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#JAVASCRIPT_CONVERT} (`FJCVTZS`,
+    /// B19.29). Declarada por {@link dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV8_6A_32}
+    /// — **não** por `ARMV8A_32` (ARMv8.0, G3). Sem a feature, o encoding é recusado com
+    /// `UNIMPLEMENTED` explícito (G8).
+    JAVASCRIPT_CONVERT,
+
     // ---- Onda 6, B13.17 (neon-shared: VCMLA/VCADD) ----
     /// **Aritmética de número complexo** (`FEAT_FCMA`, ARMv8.3-A) — `VCMLA`/`VCADD` NEON de 32
     /// bits (`neon-shared.decode`, mesmo encoding em A32 e T32). Mirror de

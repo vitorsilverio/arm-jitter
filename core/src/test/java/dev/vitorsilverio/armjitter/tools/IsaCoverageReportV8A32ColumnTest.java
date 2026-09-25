@@ -36,17 +36,16 @@ class IsaCoverageReportV8A32ColumnTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 12 colunas de 32 bits, na mesma ordem fixa que
+    /// As 13 colunas de 32 bits, na mesma ordem fixa que
     /// {@link IsaCoverageReport32BitCurationGuardTest} usa — `v8-A/32` (B14.7) é a última;
     /// `v7-R` (B20.6) entra no meio, antes de `v8-R`; `v8-R` (B20.7) entra logo depois, antes de
     /// `v6-M`.
     private static final List<String> COLUMNS = List.of(
             "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v8-R", "v6-M", "v7-M",
-            "ARMv8.1-M+MVE", "v8-A/32");
+            "ARMv8.1-M+MVE", "v8-A/32", "v8.6-A/32");
     private static final int V8A32_COLUMN = COLUMNS.indexOf("v8-A/32");
 
     private static final String SUPPORTED = "✅";
-    private static final String MISSING = "❌";
     private static final String NOT_APPLICABLE = "·";
 
     private record Row(String name, List<String> cells) {
@@ -146,30 +145,36 @@ class IsaCoverageReportV8A32ColumnTest {
         assertTrue(offenders.isEmpty(), "HLT deixou de medir ✅ em v8-A/32: " + offenders);
     }
 
-    /// `VJCVT`/`VRINTR*`/`VRINTZ*`/`VRINTX*` (`vfp.decode`, condicional) medem `❌` HONESTO na
-    /// coluna nova — nunca `·` (o tsv teria voltado a esconder trabalho pendente atrás de `*`) nem
-    /// `✅` (ninguém implementou por acidente sem passar pela task própria, ver `## Resultado` B14.7).
+    /// B22.7: `VRINTR*`/`VRINTZ*`/`VRINTX*` (`vfp.decode`, condicional) deixaram de ser trabalho
+    /// pendente — medem `✅` em `v8-A/32`. `VJCVT` (`FEAT_JSCVT`, ARMv8.3) mede `·` (não aplicável) em
+    /// `v8-A/32` (ARMv8.0) e `✅` na coluna `v8.6-A/32` — nunca `❌` nem `·` nas duas.
     @Test
-    void unimplementedArmv8FormsMeasureMissingNeverHiddenInV8a32Column() {
+    void armv8ResidualFormsMeasureSupportedInV8a32AndJscvtOnlyInV86Column() {
         List<Row> vfp = readSection("## VFP — ponto flutuante");
-        List<String> pendingNames = List.of("VJCVT", "VRINTR_hp", "VRINTR_sp", "VRINTR_dp",
+        List<String> rintNames = List.of("VRINTR_hp", "VRINTR_sp", "VRINTR_dp",
                 "VRINTZ_hp", "VRINTZ_sp", "VRINTZ_dp", "VRINTX_hp", "VRINTX_sp", "VRINTX_dp");
+        int v86Column = COLUMNS.indexOf("v8.6-A/32");
         List<String> offenders = new ArrayList<>();
         List<String> found = new ArrayList<>();
         for (Row rowEntry : vfp) {
-            if (!pendingNames.contains(rowEntry.name())) {
-                continue;
-            }
-            found.add(rowEntry.name());
-            String cell = rowEntry.cells().get(V8A32_COLUMN);
-            if (!MISSING.equals(cell)) {
-                offenders.add(rowEntry.name() + " = " + cell);
+            String name = rowEntry.name();
+            if (rintNames.contains(name)) {
+                found.add(name);
+                if (!SUPPORTED.equals(rowEntry.cells().get(V8A32_COLUMN))
+                        || !SUPPORTED.equals(rowEntry.cells().get(v86Column))) {
+                    offenders.add(name + " = " + rowEntry.cells().get(V8A32_COLUMN) + "/"
+                            + rowEntry.cells().get(v86Column));
+                }
+            } else if (name.equals("VJCVT") || name.equals("VCVT_b16_f32")) {
+                found.add(name);
+                if (!NOT_APPLICABLE.equals(rowEntry.cells().get(V8A32_COLUMN))
+                        || !SUPPORTED.equals(rowEntry.cells().get(v86Column))) {
+                    offenders.add(name + " = " + rowEntry.cells().get(V8A32_COLUMN) + "/"
+                            + rowEntry.cells().get(v86Column));
+                }
             }
         }
-        assertEquals(pendingNames.size(), found.size(),
-                "nem todos os mnemônicos pendentes esperados foram encontrados em vfp.decode: " + found);
-        assertTrue(offenders.isEmpty(),
-                "trabalho pendente ARMv8-A escondido (`·`) ou implementado sem task própria (`✅`) "
-                        + "na coluna v8-A/32: " + offenders);
+        assertEquals(rintNames.size() + 2, found.size(), "mnemônicos esperados em vfp.decode: " + found);
+        assertTrue(offenders.isEmpty(), "VRINT*/VJCVT/VCVT_b16_f32 fora do esperado: " + offenders);
     }
 }

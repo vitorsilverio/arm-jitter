@@ -3,6 +3,20 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
+
+### Adicionado
+- **VFP ARMv8-A de 32 bits** (`B22.7`): `VRINTR`/`VRINTZ`/`VRINTX` (`sp`/`dp`/`hp`), `VCVTR` (`rz=0`),
+  `VCVTB`/`VCVTT` entre meia precisão e simples/dupla, `VCVTB`/`VCVTT.BF16.F32` (`FEAT_BF16`) e `VJCVT`
+  (`FEAT_JSCVT`). Preset novo `ArmArchitecture.ARMV8_6A_32`; `ArmFeature.JAVASCRIPT_CONVERT`;
+  `ArmFeature.HALT` declarada nos presets ARMv8-M (`HLT`).
+
+### Corrigido
+- **A64 `FJCVTZS`** (`FEAT_JSCVT`): overflow devolvia `0` em vez de reduzir módulo 2³² (`ToInt32` do
+  ECMAScript), e `-0.0` marcava `PSTATE.Z` como exato (o QEMU real o trata como inexato).
+
 ## [1.3.0] — 2026-08-27
 
 Cobertura de ISA (`docs/COBERTURA-ISA.md`) desde o `1.2.0`: **global 71% → 73%**, **A64 61% → 68%**

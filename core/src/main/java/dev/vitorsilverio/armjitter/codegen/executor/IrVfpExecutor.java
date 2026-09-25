@@ -311,10 +311,10 @@ public final class IrVfpExecutor {
         }
         VfpRegisters vfp = core.vfp();
         if (op.doublePrecision()) {
-            double rounded = AdvSimdLanes.roundForConversion(vfp.dDouble(op.vm()), op.direction());
+            double rounded = AdvSimdLanes.roundForConversion(vfp.dDouble(op.vm()), effectiveDirection(core, op.direction()));
             vfp.setDDouble(op.vd(), rounded);
         } else {
-            double rounded = AdvSimdLanes.roundForConversion(vfp.sFloat(op.vm()), op.direction());
+            double rounded = AdvSimdLanes.roundForConversion(vfp.sFloat(op.vm()), effectiveDirection(core, op.direction()));
             vfp.setSFloat(op.vd(), (float) rounded);
         }
     }
@@ -330,7 +330,7 @@ public final class IrVfpExecutor {
         }
         VfpRegisters vfp = core.vfp();
         double value = op.doublePrecision() ? vfp.dDouble(op.vm()) : vfp.sFloat(op.vm());
-        double rounded = AdvSimdLanes.roundForConversion(value, op.direction());
+        double rounded = AdvSimdLanes.roundForConversion(value, effectiveDirection(core, op.direction()));
         long saturated = AdvSimdLanes.saturateToInteger(rounded, op.signed(), false);
         vfp.setS(op.vd(), (int) saturated);
     }
@@ -351,6 +351,68 @@ public final class IrVfpExecutor {
         } else {
             vfp.setS(op.vd(), vfp.s(op.vm()) >>> 16);
         }
+    }
+
+    /// Direção efetiva de `VRINT*`/`VCVT*` (B22.7): a da PRÓPRIA instrução quando ela a carrega
+    /// (`VRINTA/N/P/M`/`VRINTZ`/`VCVT{A,N,P,M}`, que já vêm resolvidos pelo decoder), ou — quando
+    /// `direction == null` (`VRINTR`/`VRINTX`/`VCVTR`) — o modo CORRENTE de `FPSCR.RMode`. As duas
+    /// tabelas de modo NÃO coincidem (a de `FPSCR.RMode` não tem "ties away"); o mapeamento é
+    /// explícito, nunca por ordinal.
+    private static AdvSimdLanes.RoundingMode effectiveDirection(ArmCore core, AdvSimdLanes.RoundingMode direction) {
+        if (direction != null) {
+            return direction;
+        }
+        return switch (core.fpscr().roundingMode()) {
+            case ROUND_TO_NEAREST -> AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN;
+            case ROUND_TOWARD_PLUS_INFINITY -> AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY;
+            case ROUND_TOWARD_MINUS_INFINITY -> AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY;
+            case ROUND_TOWARD_ZERO -> AdvSimdLanes.RoundingMode.TOWARD_ZERO;
+        };
+    }
+
+    /// `VCVTB`/`VCVTT` (B22.7): ver {@link IrOp.VfpConvertHalfPrecision}. As metades de 16 bits de um
+    /// `S` são `bits[15:0]` (`VCVTB`) e `bits[31:16]` (`VCVTT`); as formas "para half" gravam SÓ a
+    /// metade selecionada e preservam a outra (lendo o `vd` atual antes de escrever). `F64_TO_F16`
+    /// arredonda UMA vez de `double` para binary16 ({@link AdvSimdLanes#doubleToHalfBits}, nunca via
+    /// `float` intermediário — double rounding erraria os empates).
+    public void executeVfpConvertHalfPrecision(ArmCore core, IrOp.VfpConvertHalfPrecision op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        int halfShift = op.top() ? HALF_TOP_SHIFT : 0;
+        switch (op.conversion()) {
+            case F16_TO_F32 -> vfp.setSFloat(op.vd(), AdvSimdLanes.halfToFloat(vfp.s(op.vm()) >>> halfShift & HALF_MASK));
+            case F16_TO_F64 -> vfp.setDDouble(op.vd(), AdvSimdLanes.halfToFloat(vfp.s(op.vm()) >>> halfShift & HALF_MASK));
+            case F32_TO_F16 -> insertHalf(vfp, op.vd(), halfShift, AdvSimdLanes.halfBits(vfp.sFloat(op.vm())));
+            case F64_TO_F16 -> insertHalf(vfp, op.vd(), halfShift,
+                    AdvSimdLanes.doubleToHalfBits(vfp.dDouble(op.vm()), false));
+            case F32_TO_BF16 -> insertHalf(vfp, op.vd(), halfShift, AdvSimdLanes.bf16Bits(vfp.sFloat(op.vm())));
+        }
+    }
+
+    /// Deslocamento da metade ALTA de um `S` (`VCVTT`).
+    private static final int HALF_TOP_SHIFT = 16;
+
+    /// Grava `halfBits` (16 bits) em `Sd` deslocado por `halfShift`, preservando a outra metade.
+    private static void insertHalf(VfpRegisters vfp, int vd, int halfShift, long halfBits) {
+        int preserved = vfp.s(vd) & ~(HALF_MASK << halfShift);
+        vfp.setS(vd, preserved | (((int) halfBits & HALF_MASK) << halfShift));
+    }
+
+    /// `VJCVT` (B22.7, `FEAT_JSCVT`): `Sd = ToInt32(Dm)` (módulo 2³², ver
+    /// {@link AdvSimdLanes#javascriptToInt32}) e `FPSCR.{N,Z,C,V} = 0,exato,0,0` — QEMU
+    /// `HELPER(vjcvt)`: `Z` recebe a EXATIDÃO da conversão e os outros três são zerados. Os demais
+    /// bits do `FPSCR` permanecem intactos.
+    public void executeVfpJavascriptConvert(ArmCore core, IrOp.VfpJavascriptConvert op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        VfpRegisters vfp = core.vfp();
+        double value = vfp.dDouble(op.vm());
+        vfp.setS(op.vd(), AdvSimdLanes.javascriptToInt32(value));
+        int zeroFlag = AdvSimdLanes.javascriptToInt32IsExact(value) ? FpscrRegister.ZERO_FLAG : 0;
+        core.fpscr().setNzcv(zeroFlag);
     }
 
     /// `VCVT` (forma default, round-toward-zero para inteiro).
@@ -804,7 +866,7 @@ public final class IrVfpExecutor {
         }
         VfpRegisters vfp = core.vfp();
         float vm = AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF);
-        double rounded = AdvSimdLanes.roundForConversion(vm, op.direction());
+        double rounded = AdvSimdLanes.roundForConversion(vm, effectiveDirection(core, op.direction()));
         vfp.setS(op.vd(), (int) AdvSimdLanes.halfBits((float) rounded) & 0xFFFF);
     }
 
@@ -815,7 +877,7 @@ public final class IrVfpExecutor {
         }
         VfpRegisters vfp = core.vfp();
         double value = AdvSimdLanes.halfToFloat(vfp.s(op.vm()) & 0xFFFF);
-        double rounded = AdvSimdLanes.roundForConversion(value, op.direction());
+        double rounded = AdvSimdLanes.roundForConversion(value, effectiveDirection(core, op.direction()));
         long saturated = AdvSimdLanes.saturateToInteger(rounded, op.signed(), false);
         vfp.setS(op.vd(), (int) saturated);
     }

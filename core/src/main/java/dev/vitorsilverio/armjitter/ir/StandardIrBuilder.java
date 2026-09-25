@@ -484,7 +484,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // B14.5: `immediate`=ordinal de `AdvSimdLanes.RoundingMode` (direção do campo `rm`,
             // nunca `FPSCR.RMode`).
             case VFP_ROUND -> block.add(new IrOp.VfpRound(
-                    AdvSimdLanes.RoundingMode.values()[instruction.immediate()],
+                    roundingDirection(instruction.immediate()),
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
@@ -494,7 +494,7 @@ public final class StandardIrBuilder implements IrBuilder {
             case VFP_CONVERT_ROUNDED -> {
                 int packed = instruction.immediate();
                 block.add(new IrOp.VfpConvertRounded(
-                        AdvSimdLanes.RoundingMode.values()[packed & 0b111],
+                        roundingDirection(packed & 0b111),
                         (packed & 0b1000) != 0,
                         instruction.signedAccess(),
                         instruction.destinationRegister(),
@@ -533,14 +533,14 @@ public final class StandardIrBuilder implements IrBuilder {
                     vselCondition(instruction.immediate()),
                     instruction.condition()));
             case VFP_ROUND_HALF -> block.add(new IrOp.VfpRoundHalf(
-                    AdvSimdLanes.RoundingMode.values()[instruction.immediate()],
+                    roundingDirection(instruction.immediate()),
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
             case VFP_CONVERT_ROUNDED_HALF -> {
                 int packed = instruction.immediate();
                 block.add(new IrOp.VfpConvertRoundedHalf(
-                        AdvSimdLanes.RoundingMode.values()[packed & 0b111],
+                        roundingDirection(packed & 0b111),
                         (packed & 0b1000) != 0,
                         instruction.destinationRegister(),
                         instruction.secondSourceRegister(),
@@ -564,6 +564,21 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     instruction.immediate(),
+                    instruction.condition()));
+            // B22.7: `immediate` empacota bits 2:0 = ordinal de `IrOp.HalfPrecisionConversion`,
+            // bit 3 = `t` (`VCVTT`, metade alta).
+            case VFP_CONVERT_HALF_PRECISION -> {
+                int packed = instruction.immediate();
+                block.add(new IrOp.VfpConvertHalfPrecision(
+                        IrOp.HalfPrecisionConversion.values()[packed & 0b111],
+                        (packed & 0b1000) != 0,
+                        instruction.destinationRegister(),
+                        instruction.secondSourceRegister(),
+                        instruction.condition()));
+            }
+            case VFP_JAVASCRIPT_CONVERT -> block.add(new IrOp.VfpJavascriptConvert(
+                    instruction.destinationRegister(),
+                    instruction.secondSourceRegister(),
                     instruction.condition()));
             case VFP_STORE_HALF -> block.add(new IrOp.VfpStoreHalf(
                     instruction.destinationRegister(),
@@ -930,6 +945,13 @@ public final class StandardIrBuilder implements IrBuilder {
             case 2 -> Condition.GE;
             default -> Condition.GT;
         };
+    }
+
+    /// Campo empacotado de direção de arredondamento (B14.5/B22.7) → `AdvSimdLanes.RoundingMode`, ou
+    /// `null` quando o campo vale {@link IrOp#FPSCR_ROUNDING_DIRECTION_FIELD} (modo CORRENTE do
+    /// `FPSCR.RMode`, `VRINTR`/`VRINTX`/`VCVTR`).
+    private static AdvSimdLanes.RoundingMode roundingDirection(int field) {
+        return field == IrOp.FPSCR_ROUNDING_DIRECTION_FIELD ? null : AdvSimdLanes.RoundingMode.values()[field];
     }
 
     /// Converte os bits 7:5 do encoding de aritmética paralela ARMv6 na operação-base.

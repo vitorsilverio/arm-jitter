@@ -32,12 +32,12 @@ class IsaCoverageReportV7RColumnTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
 
-    /// As 12 colunas de 32 bits, na mesma ordem fixa que
+    /// As 13 colunas de 32 bits, na mesma ordem fixa que
     /// {@link IsaCoverageReport32BitCurationGuardTest} usa — `v7-R` (B20.6) fica entre
     /// `v7-A+NEON` e `v8-R`; `v8-R` (B20.7) fica entre `v7-R` e `v6-M`.
     private static final List<String> COLUMNS = List.of(
             "v4T", "v5TE", "v6K", "MPCore", "v7-A", "v7-A+NEON", "v7-R", "v8-R", "v6-M", "v7-M",
-            "ARMv8.1-M+MVE", "v8-A/32");
+            "ARMv8.1-M+MVE", "v8-A/32", "v8.6-A/32");
     private static final int V7R_COLUMN = COLUMNS.indexOf("v7-R");
 
     private static final String SUPPORTED = "✅";
@@ -160,7 +160,7 @@ class IsaCoverageReportV7RColumnTest {
                         + "uma feature dessas sem task própria: " + offenders);
     }
 
-    /// **Os números da coluna nova, travados**: `a32.decode` 246/266, `t16.decode` 83/85,
+    /// **Os números da coluna nova, travados** (B22.7: `HLT` curado como `·` em v7-R): `a32.decode` 246/265, `t16.decode` 83/84,
     /// `t32.decode` 265/310 — os únicos três grupos cuja `Applicability` (`CLASSIC_ARM`/`ALWAYS`/
     /// `THUMB2`) `ARMV7R` satisfaz. Ver `## Resultado` da B20.6 para a explicação linha a linha.
     @Test
@@ -176,8 +176,8 @@ class IsaCoverageReportV7RColumnTest {
         assertEquals(3, byGroup.size(), "linha de resumo de A32/T16/T32 não encontrada (todas as 3): " + byGroup.keySet());
 
         java.util.Map<String, String> expectedFragment = java.util.Map.of(
-                "A32 — instruções ARM de 32 bits", "v7-R 92% (246/266)",
-                "T16 — Thumb clássico", "v7-R 97% (83/85)",
+                "A32 — instruções ARM de 32 bits", "v7-R 92% (246/265)",
+                "T16 — Thumb clássico", "v7-R 98% (83/84)",
                 "T32 — Thumb-2", "v7-R 85% (265/310)");
         List<String> offenders = new ArrayList<>();
         expectedFragment.forEach((group, fragment) -> {

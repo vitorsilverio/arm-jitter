@@ -227,6 +227,9 @@ public final class AsmNativePolicy {
             case IrOp.VfpConvertFixedHalf ignored -> false;
             case IrOp.VfpLoadHalf ignored -> false;
             case IrOp.VfpStoreHalf ignored -> false;
+            // B22.7: `VCVTB`/`VCVTT`/`VJCVT` — decode + interpretado apenas (mesmo padrão de `_hp` acima).
+            case IrOp.VfpConvertHalfPrecision ignored -> false;
+            case IrOp.VfpJavascriptConvert ignored -> false;
             // MRS/MSR SYSm do perfil M (B7.4): emitido nativamente desde a task C12.7 — via
             // IrOpInterop (delega ao MProfileExceptionModel via IrSystemExecutor, sem duplicar).
             case IrOp.MProfileSystemRegister ignored -> true;

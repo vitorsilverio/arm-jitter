@@ -207,6 +207,8 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     VFP_ALU_HALF, VFP_MOVE_IMMEDIATE_HALF, VFP_COMPARE_HALF, VFP_SELECT_HALF,
                     VFP_ROUND_HALF, VFP_CONVERT_ROUNDED_HALF, VFP_CONVERT_FIXED_HALF,
                     VFP_LOAD_HALF, VFP_STORE_HALF,
+                    // B22.7: `VCVTB`/`VCVTT`/`VJCVT` — só tocam registradores VFP/FPSCR, nunca o PC.
+                    VFP_CONVERT_HALF_PRECISION, VFP_JAVASCRIPT_CONVERT,
                     VFP_LOAD_MULTIPLE, VFP_STORE_MULTIPLE, VFP_CORE_TRANSFER, VFP_CORE_PAIR_TRANSFER,
                     VFP_SYSTEM_TRANSFER,
                     // VLDR_sysreg/VSTR_sysreg (perfil M, B15.3): nunca tocam o PC (Rn=15 é

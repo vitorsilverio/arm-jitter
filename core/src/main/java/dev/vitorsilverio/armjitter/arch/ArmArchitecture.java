@@ -444,7 +444,7 @@ public final class ArmArchitecture {
     /// (`SG`/`BXNS`/`BLXNS`, banking de `MSP`/`PSP` por estado de segurança). **G3**: `ARMV7M_PURE`
     /// permanece intocado — este preset nasce AO LADO.
     private static final ArmArchitecture ARMV8M_BASELINE_FEATURES = extending(ARMV7M_PURE_FEATURES,
-            "ARMv8-M Baseline (Security Extension)", ArmFeature.M_PROFILE_SECURITY);
+            "ARMv8-M Baseline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT);
 
     public static final ArmArchitecture ARMV8M_BASELINE = ARMV8M_BASELINE_FEATURES
             .withThumb32DecoderExtensions(List.of(
@@ -462,7 +462,7 @@ public final class ArmArchitecture {
     /// {@link #ARMV7M_PURE}) + {@link ArmFeature#M_PROFILE_SECURITY}. **G3**: `ARMV7M` permanece
     /// intocado.
     private static final ArmArchitecture ARMV8M_MAINLINE_FEATURES = extending(ARMV7M_FEATURES,
-            "ARMv8-M Mainline (Security Extension)", ArmFeature.M_PROFILE_SECURITY);
+            "ARMv8-M Mainline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT);
 
     public static final ArmArchitecture ARMV8M_MAINLINE = ARMV8M_MAINLINE_FEATURES
             .withThumb32DecoderExtensions(List.of(
@@ -633,6 +633,31 @@ public final class ArmArchitecture {
                     new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV8A_32_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
+    /// ARMv8.6-A executando em AArch32 (B22.7) — {@link #ARMV8A_32} + {@link ArmFeature#JAVASCRIPT_CONVERT}
+    /// (`VJCVT`, `FEAT_JSCVT`, ARMv8.3-A) + {@link ArmFeature#BFLOAT16} (`VCVTB`/`VCVTT.BF16.F32`,
+    /// `FEAT_BF16`, ARMv8.6-A). **Preset CUMULATIVO** (mesma convenção das colunas A64: a versão N
+    /// contém tudo das anteriores) que fecha o que a coluna `v8-A/32` (ARMv8.0) não pode medir sem
+    /// violar a versão real de introdução. **Sem NEON**: `ADVANCED_SIMD` fica de fora (os grupos
+    /// `neon-*` seguem `·` nesta coluna, exatamente como em `ARMV8A_32`). **G3**: `ARMV8A_32`
+    /// permanece intocado — este preset nasce AO LADO, com as extensões de decoder parametrizadas
+    /// pelas features NOVAS (senão elas ficam invisíveis em tempo de decode, o bug da B4.0.3).
+    private static final ArmArchitecture ARMV8_6A_32_FEATURES = extending(ARMV8A_32_FEATURES,
+            "ARMv8.6-A (AArch32)", ArmFeature.JAVASCRIPT_CONVERT, ArmFeature.BFLOAT16);
+
+    public static final ArmArchitecture ARMV8_6A_32 = ARMV8_6A_32_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV8_6A_32_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8_6A_32_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
 
     /// ARMv7-A **com NEON/Advanced SIMD** (B13.22, fecha o épico B13) — `ARMV7A` +

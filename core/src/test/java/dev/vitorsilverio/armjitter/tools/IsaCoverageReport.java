@@ -196,6 +196,10 @@ public final class IsaCoverageReport {
         // B14.7: coluna nova, única não-zero-diff do épico B14 (ver `## Resultado` da task) —
         // mesma natureza da B13.22 para o épico B13 (denominador cresce, cobertura global pode cair).
         ARM_ARCHITECTURES.put("v8-A/32", ArmArchitecture.ARMV8A_32);
+        // B22.7: `ARMV8_6A_32` (`ARMV8A_32` + `FEAT_JSCVT` + `FEAT_BF16`) — a única coluna de 32 bits
+        // capaz de medir `VJCVT`/`VCVT_b16_f32` como `✅` sem violar a versão real de introdução
+        // (ver `ARM32_VERSION_REQUIREMENTS`). Mesmos grupos aplicáveis de `v8-A/32` (sem NEON).
+        ARM_ARCHITECTURES.put("v8.6-A/32", ArmArchitecture.ARMV8_6A_32);
         // ARMV8M_BASELINE/ARMV8M_MAINLINE (B15.4) NÃO entram aqui ainda — mesmo precedente da
         // B15.1 ("zero célula nova... os presets não entram no mapa ARM_ARCHITECTURES ainda").
         // Medido nesta sessão: adicioná-los sem uma rodada de curadoria própria faz ~180 células
@@ -558,6 +562,12 @@ public final class IsaCoverageReport {
         // decodetree, B13.20).
         ARM32_VERSION_REQUIREMENTS.put("VFML", ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG);
         ARM32_VERSION_REQUIREMENTS.put("VFML_scalar", ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG);
+        // B22.7: as duas formas do VFP CONDICIONAL (`vfp.decode`) que só existem a partir de ARMv8.x —
+        // `VJCVT` (`FEAT_JSCVT`, ARMv8.3) e `VCVT_b16_f32` (`FEAT_BF16`, ARMv8.6, mnemônico em
+        // minúsculas, DISTINTO do `VCVT_B16_F32` NEON acima). `·` em `v8-A/32` (ARMv8.0), `✅` em
+        // `v8.6-A/32`.
+        ARM32_VERSION_REQUIREMENTS.put("VJCVT", ArmFeature.JAVASCRIPT_CONVERT);
+        ARM32_VERSION_REQUIREMENTS.put("VCVT_b16_f32", ArmFeature.BFLOAT16);
     }
 
     /// Aplicabilidade curada por feature ARM32/T32 (B13.22, ver {@link #ARM32_VERSION_REQUIREMENTS}):

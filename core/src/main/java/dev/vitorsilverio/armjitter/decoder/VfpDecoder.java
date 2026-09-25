@@ -92,7 +92,8 @@ public final class VfpDecoder implements DecoderExtension {
             // devolveria `false`, `tryDecode` devolveria `null`, e o `CoprocessorDecoder` genérico
             // capturaria este `bit4=0` CDP-shape de cp9/cp10/cp11 como coprocessador arbitrário —
             // corrupção silenciosa, não `UNIMPLEMENTED`).
-            if (!architecture.has(ArmFeature.FP16_ARITHMETIC)) {
+            if (!architecture.has(ArmFeature.FP16_ARITHMETIC)
+                    && !(architecture.has(ArmFeature.BFLOAT16) && isBf16ConvertEncoding(raw))) {
                 return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
             }
             DecodedInstruction decoded = decodeHalfPrecisionConditionalSpace(raw, address, condition);
@@ -493,16 +494,29 @@ public final class VfpDecoder implements DecoderExtension {
             }
             // VCVT_int_hp: inteiro de 32 bits (`%vm_sp`, banco S comum) -> meia precisão; bit7=sinal.
             case 0x8 -> vfpConvert(bit7 ? IrOp.VfpConversion.S32_TO_F16 : IrOp.VfpConversion.U32_TO_F16, vd, vm, address, raw, condition);
-            // VCVT_hp_int: meia precisão -> inteiro de 32 bits; exige bit7=rz=1 (VCVTR fora de
-            // escopo, mesma decisão de `decodeImmediateOrTwoOperandFamily`); opc2 bit0=sinal.
+            // VCVT_hp_int: meia precisão -> inteiro de 32 bits; opc2 bit0=sinal. `bit7=rz=1` é o
+            // `VCVT` (trunca); `rz=0` é `VCVTR_hp` (B22.7), que arredonda pelo `FPSCR.RMode`.
             case 0xC, 0xD -> {
-                if (!bit7) {
-                    yield null;
-                }
                 boolean signedConvert = opc2 == 0xD;
+                if (!bit7) {
+                    int packed = IrOp.FPSCR_ROUNDING_DIRECTION_FIELD | (signedConvert ? 0b1000 : 0);
+                    yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                            InstructionKind.VFP_CONVERT_ROUNDED_HALF, vd, -1, vm, packed, false, false, false);
+                }
                 yield vfpConvert(signedConvert ? IrOp.VfpConversion.F16_TO_S32 : IrOp.VfpConversion.F16_TO_U32,
                         vd, vm, address, raw, condition);
             }
+            // VCVTB/VCVTT.BF16.F32 (`FEAT_BF16`, B22.7): `sz=1001` no espaço `_hp`, `bit7=t`. Só chega
+            // aqui sob `FP16_ARITHMETIC` OU `BFLOAT16` (ver `isBf16ConvertEncoding` em `tryDecode`);
+            // sem `BFLOAT16` cai em `null` → `UNIMPLEMENTED` (G8).
+            case 0x3 -> !architecture.has(ArmFeature.BFLOAT16) ? null
+                    : halfPrecisionConvert(IrOp.HalfPrecisionConversion.F32_TO_BF16, bit7, vd, vm(raw, false),
+                            address, raw, condition);
+            // VRINTR_hp (bit7=0) / VRINTZ_hp (bit7=1) e VRINTX_hp (opc2=0x7, bit7=0) (B22.7).
+            case 0x6 -> vrintHalf(bit7 ? AdvSimdLanes.RoundingMode.TOWARD_ZERO.ordinal()
+                    : IrOp.FPSCR_ROUNDING_DIRECTION_FIELD, vd, vm, address, raw, condition);
+            case 0x7 -> bit7 ? null
+                    : vrintHalf(IrOp.FPSCR_ROUNDING_DIRECTION_FIELD, vd, vm, address, raw, condition);
             case 0xA, 0xB, 0xE, 0xF -> {
                 boolean toFixedPoint = (raw & BIT18_MASK) != 0;
                 boolean unsignedFixedPoint = (raw & BIT16_MASK) != 0;
@@ -515,11 +529,37 @@ public final class VfpDecoder implements DecoderExtension {
                 yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                         InstructionKind.VFP_CONVERT_FIXED_HALF, vd, -1, -1, packed, false, false, false);
             }
-            // VRINTR_hp/VRINTZ_hp/VRINTX_hp (opc2 0x6/0x7) — EXCLUÍDAS (mesmo "Não inclui" de
-            // B14.6/B14.5: dependem de FPSCR.RMode, e nem as formas sp/dp estão implementadas).
             default -> null;
         };
     }
+
+    /// `VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` (B22.7): `directionField` é o ordinal de
+    /// `AdvSimdLanes.RoundingMode` (`VRINTZ` = `TOWARD_ZERO`) ou
+    /// {@link IrOp#FPSCR_ROUNDING_DIRECTION_FIELD} (`VRINTR`/`VRINTX`, modo corrente do `FPSCR`).
+    private static DecodedInstruction vrintHalf(int directionField, int vd, int vm, int address, int raw,
+            Condition condition) {
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ROUND_HALF,
+                vd, -1, vm, directionField, false, false, false);
+    }
+
+    /// `VCVTB`/`VCVTT` (B22.7): `t`=`top` (metade alta do `S` envolvido).
+    private static DecodedInstruction halfPrecisionConvert(IrOp.HalfPrecisionConversion conversion, boolean top,
+            int vd, int vm, int address, int raw, Condition condition) {
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                InstructionKind.VFP_CONVERT_HALF_PRECISION, vd, -1, vm,
+                conversion.ordinal() | (top ? 0b1000 : 0), false, false, false);
+    }
+
+    /// `VCVT_b16_f32` (`FEAT_BF16`, B22.7): `bits[27:23]=11101`, `bits[21:16]=11 0011`,
+    /// `bits[11:8]=1001` (`sz` de meia precisão), `bit6=1`, `bit4=0` — os demais campos (`D`, `t`,
+    /// `Vd`, `M`, `Vm`) são livres. Reconhecido ANTES do gate `FP16_ARITHMETIC` de {@link #tryDecode}:
+    /// `FEAT_BF16` não implica `FEAT_FP16`.
+    private static boolean isBf16ConvertEncoding(int raw) {
+        return (raw & BF16_CONVERT_MASK) == BF16_CONVERT_PATTERN;
+    }
+
+    private static final int BF16_CONVERT_MASK = 0x0FBF_0F50;
+    private static final int BF16_CONVERT_PATTERN = 0x0EB3_0940;
 
     /// B14.6b: `VLDR_VSTR_hp` (`bits2724=0xD`, único encoding `_hp` deste grupo — `VLDM`/`VSTM`
     /// decrement-before não têm forma de meia precisão, `bit21=1` aqui é reservado).
@@ -696,10 +736,11 @@ public final class VfpDecoder implements DecoderExtension {
             }
             // VCVT_sp/VCVT_dp (conversão de precisão simples<->dupla, `@vfp_dm_ds`/`@vfp_dm_sd`):
             // Vd e Vm têm precisões OPOSTAS — `size`(doublePrecision) descreve o lado DESTINO.
-            // Exige bit7=1 (bit7=0 é VRINTX, fora de escopo).
+            // `bit7=1`; `bit7=0` é `VRINTX` (B22.7, ARMv8-A).
             case 0x7 -> {
                 if (!bit7) {
-                    yield null;
+                    yield vrintCurrentMode(raw, address, condition, doublePrecision,
+                            IrOp.FPSCR_ROUNDING_DIRECTION_FIELD);
                 }
                 // `size=1010` (`doublePrecision=false`) é `VCVT_sp` (`@vfp_dm_ds`: `vm=%vm_sp`
                 // fonte simples, `vd=%vd_dp` destino dobro) = F32_TO_F64. `size=1011`
@@ -726,18 +767,22 @@ public final class VfpDecoder implements DecoderExtension {
                 yield vfpConvert(conversion, vd, vm, address, raw, condition);
             }
             // VCVT_{sp,dp}_int (ponto flutuante -> inteiro): Vd é SEMPRE simples (destino inteiro
-            // de 32 bits); `size`(doublePrecision) descreve a fonte Vm. Exige bit7=rz=1 (bit7=0 é
-            // VCVTR, que usaria FPSCR.RMode — fora de escopo). opc2 bit 0 = sinal.
+            // de 32 bits); `size`(doublePrecision) descreve a fonte Vm. `bit7=rz=1` é o `VCVT`
+            // (trunca); `bit7=0` é `VCVTR` (B22.7), que arredonda pelo `FPSCR.RMode`. opc2 bit 0 =
+            // sinal.
             case 0xC, 0xD -> {
-                if (!bit7) {
-                    yield null;
-                }
                 int vmSource = vm(raw, doublePrecision);
                 if (!validDoubleRegister(vmSource, doublePrecision)) {
                     yield null;
                 }
                 int vdSingle = vd(raw, false);
                 boolean signedConvert = opc2 == 0xD;
+                if (!bit7) {
+                    int packed = IrOp.FPSCR_ROUNDING_DIRECTION_FIELD | (signedConvert ? 0b1000 : 0);
+                    yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                            InstructionKind.VFP_CONVERT_ROUNDED, vdSingle, -1, vmSource, packed, false, false, false,
+                            0, doublePrecision);
+                }
                 IrOp.VfpConversion conversion = signedConvert
                         ? (doublePrecision ? IrOp.VfpConversion.F64_TO_S32 : IrOp.VfpConversion.F32_TO_S32)
                         : (doublePrecision ? IrOp.VfpConversion.F64_TO_U32 : IrOp.VfpConversion.F32_TO_U32);
@@ -767,8 +812,71 @@ public final class VfpDecoder implements DecoderExtension {
                 yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                         InstructionKind.VFP_CONVERT_FIXED, vd, -1, -1, packed, false, false, false, 0, doublePrecision);
             }
-            default -> null; // VRINT*/VCVT_f16*/VJCVT/VCVT_b16_f32/VCVT_hp_int — fora de escopo.
+            // VCVTB/VCVTT de meia precisão (B22.7, VFPv3 half-precision extension): `bit7=t`. `0x2`
+            // = FROM f16 (`Vm` é sempre `S`, `Vd` segue `size`); `0x3` = TO f16 (`Vd` é sempre `S`,
+            // `Vm` segue `size`).
+            case 0x2 -> {
+                if (!supportsHalfPrecisionConversion()) {
+                    yield null;
+                }
+                int vdWide = vd(raw, doublePrecision);
+                if (!validDoubleRegister(vdWide, doublePrecision)) {
+                    yield null;
+                }
+                yield halfPrecisionConvert(doublePrecision ? IrOp.HalfPrecisionConversion.F16_TO_F64
+                        : IrOp.HalfPrecisionConversion.F16_TO_F32, bit7, vdWide, vm(raw, false), address, raw,
+                        condition);
+            }
+            case 0x3 -> {
+                if (!supportsHalfPrecisionConversion() || !validDoubleRegister(vmSamePrecision, doublePrecision)) {
+                    yield null;
+                }
+                yield halfPrecisionConvert(doublePrecision ? IrOp.HalfPrecisionConversion.F64_TO_F16
+                        : IrOp.HalfPrecisionConversion.F32_TO_F16, bit7, vd(raw, false), vmSamePrecision, address,
+                        raw, condition);
+            }
+            // VRINTR (bit7=0) / VRINTZ (bit7=1) `sp`/`dp` (B22.7, ARMv8-A) — `VRINTX` é `opc2=0x7`.
+            case 0x6 -> vrintCurrentMode(raw, address, condition, doublePrecision,
+                    bit7 ? AdvSimdLanes.RoundingMode.TOWARD_ZERO.ordinal() : IrOp.FPSCR_ROUNDING_DIRECTION_FIELD);
+            // VJCVT (B22.7, `FEAT_JSCVT`): SEMPRE dp → sp (`size=1011`, `bit7:6=11`).
+            case 0x9 -> {
+                if (!architecture.has(ArmFeature.JAVASCRIPT_CONVERT) || !doublePrecision || !bit7
+                        || !validDoubleRegister(vm(raw, true), true)) {
+                    yield null;
+                }
+                yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
+                        InstructionKind.VFP_JAVASCRIPT_CONVERT, vd(raw, false), -1, vm(raw, true), 0, false, false,
+                        false);
+            }
+            default -> null;
         };
+    }
+
+    /// `VCVTB`/`VCVTT` de meia precisão (VFPv3-HP): exige a extensão de meia precisão de VFPv3
+    /// ({@link ArmFeature#HALF_PRECISION_FP}) ou `FEAT_FP16` ({@link ArmFeature#FP16_ARITHMETIC}, que a
+    /// implica em hardware real). Sem nenhuma das duas, o chamador devolve `null` → `UNIMPLEMENTED` (G8).
+    private boolean supportsHalfPrecisionConversion() {
+        return architecture.has(ArmFeature.HALF_PRECISION_FP) || architecture.has(ArmFeature.FP16_ARITHMETIC);
+    }
+
+    /// `VRINTR`/`VRINTZ`/`VRINTX` `sp`/`dp` (B22.7, ARMv8-A — {@link ArmFeature#ARMV8_FP}):
+    /// `directionField` é o ordinal de `AdvSimdLanes.RoundingMode` (`VRINTZ`=`TOWARD_ZERO`) ou
+    /// {@link IrOp#FPSCR_ROUNDING_DIRECTION_FIELD} (`VRINTR`/`VRINTX`, modo CORRENTE de `FPSCR.RMode`
+    /// — ao contrário de `VRINTA/N/P/M`, que carregam o modo no encoding, B14.5). `VRINTX` também
+    /// deveria levantar `IXC` quando o resultado difere da entrada; este projeto não modela flags de
+    /// exceção cumulativos de FP em nenhuma família VFP, então ela é igual a `VRINTR` no valor.
+    private DecodedInstruction vrintCurrentMode(int raw, int address, Condition condition, boolean doublePrecision,
+            int directionField) {
+        if (!architecture.has(ArmFeature.ARMV8_FP)) {
+            return null;
+        }
+        int vd = vd(raw, doublePrecision);
+        int vm = vm(raw, doublePrecision);
+        if (!validDoubleRegister(vd, doublePrecision) || !validDoubleRegister(vm, doublePrecision)) {
+            return null;
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ROUND,
+                vd, -1, vm, directionField, false, false, false, 0, doublePrecision);
     }
 
     // ── bits[27:24]=1110, bit4=1: VMOV_single (FMRS/FMSR) ou VMSR_VMRS (FMRX/FMXR, só FPSCR) ──

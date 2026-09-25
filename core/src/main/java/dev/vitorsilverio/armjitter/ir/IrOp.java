@@ -42,7 +42,14 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.VfpRound, IrOp.VfpConvertRounded, IrOp.VfpMoveHalfLane,
         IrOp.VfpAluHalf, IrOp.VfpMoveImmediateHalf, IrOp.VfpCompareHalf, IrOp.VfpSelectHalf,
         IrOp.VfpRoundHalf, IrOp.VfpConvertRoundedHalf, IrOp.VfpConvertFixedHalf, IrOp.VfpLoadHalf,
-        IrOp.VfpStoreHalf {
+        IrOp.VfpStoreHalf, IrOp.VfpConvertHalfPrecision, IrOp.VfpJavascriptConvert {
+    /// Valor do campo empacotado `immediate` (decoder → builder) que significa "usar o modo de
+    /// arredondamento CORRENTE de `FPSCR.RMode`" em {@link VfpRound}/{@link VfpConvertRounded}/
+    /// {@link VfpRoundHalf}/{@link VfpConvertRoundedHalf} — vira `direction == null` no IR (B22.7).
+    /// Os 5 ordinais de `AdvSimdLanes.RoundingMode` ocupam `0..4`; `7` é a maior codificação de
+    /// 3 bits, dentro da mesma máscara `0b111` que o campo já usa.
+    int FPSCR_ROUNDING_DIRECTION_FIELD = 0b111;
+
     /// Retorna a condição de execução da operação.
     /// {@link IrOp.Cycle} e {@link IrOp.Fetch} não possuem condição: retornam {@link Condition#AL}.
     default Condition condition() { return Condition.AL; }
@@ -420,6 +427,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` — ver
         /// {@link NeonCryptoShaThree} (B13.23).
         public static final int NEON_CRYPTO_SHA_THREE_REGISTER = 182;
+        /// B22.7: `VCVTB`/`VCVTT` entre meia precisão e simples/dupla + `VCVT_b16_f32` — ver
+        /// {@link VfpConvertHalfPrecision}.
+        public static final int VFP_CONVERT_HALF_PRECISION = 183;
+        /// B22.7: `VJCVT` (`FEAT_JSCVT`) — ver {@link VfpJavascriptConvert}.
+        public static final int VFP_JAVASCRIPT_CONVERT = 184;
     }
 
     /// Operacao ALU generica.
@@ -1495,7 +1507,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `RMODE` do FPSCR — não expressa "ties away", ver Armadilha 1 da task). `NaN`/infinito passam
     /// adiante inalterados (mesma decisão de {@code Ir64Op.Fp64Round}/`FRINTx` A64).
     record VfpRound(
-            /// Direção de arredondamento (do campo `rm` do encoding).
+            /// Direção de arredondamento (do campo `rm` do encoding), ou `null` para "modo CORRENTE
+            /// do `FPSCR.RMode`" (`VRINTR`/`VRINTX`, B22.7).
             AdvSimdLanes.RoundingMode direction,
             /// `true` para precisão dupla (registradores `D`), `false` para simples (`S`) — mesma
             /// precisão em `vd`/`vm`.
@@ -1516,7 +1529,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// instrução. Diferente de {@link VfpConvert} (forma default, sempre round-toward-zero
     /// implícito): aqui a direção é explícita e pode ser qualquer uma das 5.
     record VfpConvertRounded(
-            /// Direção de arredondamento (do campo `rm`).
+            /// Direção de arredondamento (do campo `rm`), ou `null` para "modo CORRENTE do
+            /// `FPSCR.RMode`" (`VCVTR`, B22.7).
             AdvSimdLanes.RoundingMode direction,
             /// `true` = conversão com sinal (`VCVTxS`), `false` = sem sinal (`VCVTxU`).
             boolean signed,
@@ -1630,7 +1644,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `VRINT{A,N,P,M}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de {@link VfpRound}
     /// em meia precisão: arredonda `vm` para valor integral MANTENDO ponto flutuante.
     record VfpRoundHalf(
-            /// Direção de arredondamento (do campo `rm` do encoding).
+            /// Direção de arredondamento (do campo `rm` do encoding), ou `null` para "modo CORRENTE
+            /// do `FPSCR.RMode`" (`VRINTR`/`VRINTX`, B22.7).
             AdvSimdLanes.RoundingMode direction,
             /// Registrador de destino.
             int vd,
@@ -1644,7 +1659,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de
     /// {@link VfpConvertRounded}: converte `vm` (meia precisão) para inteiro de 32 bits em `vd`.
     record VfpConvertRoundedHalf(
-            /// Direção de arredondamento (do campo `rm`).
+            /// Direção de arredondamento (do campo `rm`), ou `null` para "modo CORRENTE do
+            /// `FPSCR.RMode`" (`VCVTR`, B22.7).
             AdvSimdLanes.RoundingMode direction,
             /// `true` = conversão com sinal (`VCVTxS`), `false` = sem sinal (`VCVTxU`).
             boolean signed,
@@ -1706,6 +1722,58 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar o store.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.VFP_STORE_HALF; }
+    }
+
+    /// Direção de conversão de {@link VfpConvertHalfPrecision} (`VCVTB`/`VCVTT`, B22.7). O nome diz
+    /// origem→destino; qual banco (`S`/`D`) cada lado usa é fixo por membro.
+    enum HalfPrecisionConversion {
+        /// `VCVTB/T.F32.F16`: `Sd = f32(Sm.half[t])` (conversão exata).
+        F16_TO_F32,
+        /// `VCVTB/T.F64.F16`: `Dd = f64(Sm.half[t])` (conversão exata).
+        F16_TO_F64,
+        /// `VCVTB/T.F16.F32`: `Sd.half[t] = f16(Sm)`, a OUTRA metade de `Sd` é preservada.
+        F32_TO_F16,
+        /// `VCVTB/T.F16.F64`: `Sd.half[t] = f16(Dm)` (arredondamento ÚNICO double→half, nunca via
+        /// float), a OUTRA metade de `Sd` é preservada.
+        F64_TO_F16,
+        /// `VCVTB/T.BF16.F32` (`FEAT_BF16`): `Sd.half[t] = bf16(Sm)` (round-to-nearest-even), a
+        /// OUTRA metade de `Sd` é preservada.
+        F32_TO_BF16
+    }
+
+    /// `VCVTB`/`VCVTT` (B22.7, VFPv3 half-precision extension + `FEAT_BF16`): converte entre a metade
+    /// baixa (`top=false`, `VCVTB`) ou alta (`top=true`, `VCVTT`) de um `S` de 32 bits e um
+    /// registrador de precisão simples/dupla. As formas "para half" preservam a metade NÃO
+    /// selecionada do destino (é por isso que o executor lê o `vd` atual). Usa o modo de
+    /// arredondamento round-to-nearest-even (sem modelo de `FPSCR.RMode`/`AHP`/`FZ` nesta família,
+    /// mesma limitação documentada de `AdvSimdLanes#halfBits`).
+    record VfpConvertHalfPrecision(
+            /// Direção da conversão (fixa o banco de cada lado).
+            HalfPrecisionConversion conversion,
+            /// `true` para `VCVTT` (metade alta do `S` envolvido), `false` para `VCVTB` (baixa).
+            boolean top,
+            /// Registrador de destino (banco determinado por `conversion`).
+            int vd,
+            /// Registrador de origem (banco determinado por `conversion`).
+            int vm,
+            /// Condição necessária para executar a conversão.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_CONVERT_HALF_PRECISION; }
+    }
+
+    /// `VJCVT.S32.F64 Sd, Dm` (B22.7, `FEAT_JSCVT`, ARMv8.3-A): `ToInt32` do JavaScript — trunca
+    /// `Dm` em direção a zero e reduz módulo 2³² (NaN/infinito → 0; NÃO satura, ao contrário de
+    /// {@link VfpConvert}). Grava também `FPSCR.{N,Z,C,V} = 0,Z,0,0`, com `Z=1` só quando a
+    /// conversão foi EXATA (entrada finita, integral e representável em 32 bits com sinal do
+    /// mesmo valor). `vd` é `S`, `vm` é `D`.
+    record VfpJavascriptConvert(
+            /// Registrador de destino (`S`).
+            int vd,
+            /// Registrador de origem (`D`).
+            int vm,
+            /// Condição necessária para executar a operação.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VFP_JAVASCRIPT_CONVERT; }
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já

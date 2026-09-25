@@ -59,7 +59,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(183, kinds.size(), "IrOp.Kind deve ter 183 constantes contíguas");
+        assertEquals(185, kinds.size(), "IrOp.Kind deve ter 185 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -152,8 +152,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // VFP_ROUND_HALF, VFP_CONVERT_ROUNDED_HALF, VFP_CONVERT_FIXED_HALF, VFP_LOAD_HALF,
         // VFP_STORE_HALF (+9, aritmética `_hp`, mesmo "Não inclui": decode + interpretado apenas).
         // B13.23 acrescentou NEON_CRYPTO_SHA_THREE_REGISTER (+1, idem B13.15 — NEON também não tem
-        // nó Truffle).
-        assertEquals(117, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // nó Truffle). B22.7 acrescentou VFP_CONVERT_HALF_PRECISION, VFP_JAVASCRIPT_CONVERT (+2,
+        // `VCVTB`/`VCVTT`/`VJCVT`, mesmo "Não inclui": decode + interpretado apenas).
+        assertEquals(119, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -233,7 +234,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VFP_ROUND, IrOp.Kind.VFP_CONVERT_ROUNDED, IrOp.Kind.VFP_MOVE_HALF_LANE,
                         IrOp.Kind.VFP_ALU_HALF, IrOp.Kind.VFP_MOVE_IMMEDIATE_HALF, IrOp.Kind.VFP_COMPARE_HALF,
                         IrOp.Kind.VFP_SELECT_HALF, IrOp.Kind.VFP_ROUND_HALF, IrOp.Kind.VFP_CONVERT_ROUNDED_HALF,
-                        IrOp.Kind.VFP_CONVERT_FIXED_HALF, IrOp.Kind.VFP_LOAD_HALF, IrOp.Kind.VFP_STORE_HALF)),
+                        IrOp.Kind.VFP_CONVERT_FIXED_HALF, IrOp.Kind.VFP_LOAD_HALF, IrOp.Kind.VFP_STORE_HALF,
+                        IrOp.Kind.VFP_CONVERT_HALF_PRECISION, IrOp.Kind.VFP_JAVASCRIPT_CONVERT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -326,6 +328,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.VFP_CONVERT_FIXED_HALF -> new IrOp.VfpConvertFixedHalf(true, false, false, 8, 0, c);
             case IrOp.Kind.VFP_LOAD_HALF -> new IrOp.VfpLoadHalf(0, 1, -1, 0, c);
             case IrOp.Kind.VFP_STORE_HALF -> new IrOp.VfpStoreHalf(0, 1, -1, 0, c);
+            case IrOp.Kind.VFP_CONVERT_HALF_PRECISION ->
+                    new IrOp.VfpConvertHalfPrecision(IrOp.HalfPrecisionConversion.F16_TO_F32, false, 0, 1, c);
+            case IrOp.Kind.VFP_JAVASCRIPT_CONVERT -> new IrOp.VfpJavascriptConvert(0, 1, c);
             case IrOp.Kind.VFP_CONVERT -> new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 0, 1, c);
             case IrOp.Kind.VFP_LOAD -> new IrOp.VfpLoad(false, 0, 1, -1, 0, c);
             case IrOp.Kind.VFP_STORE -> new IrOp.VfpStore(false, 0, 1, -1, 0, c);

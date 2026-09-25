@@ -3428,6 +3428,45 @@ public final class AdvSimdLanes {
         return floatBits(rounded);
     }
 
+    /// Mesma largura, em bits, do resultado de `ToInt32` (`FJCVTZS`/`VJCVT`).
+    private static final int JAVASCRIPT_INT32_MODULUS_BITS = 32;
+
+    /// `ToInt32` do ECMAScript (`FPToFixedJS`, `FJCVTZS`/`VJCVT`, `FEAT_JSCVT`): trunca `value` em
+    /// direção a zero e reduz o inteiro resultante MÓDULO 2³² (não satura — `2³²+5` vira `5`,
+    /// `2³¹` vira `-2³¹`). `NaN` e infinito produzem `0`. Conferido contra o QEMU real
+    /// (`target/arm/tcg/vfp_helper.c`, `HELPER(fjcvtzs)`: "the result is supplied modulo 2^32",
+    /// via `float64_to_int32_modulo`).
+    public static int javascriptToInt32(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0;
+        }
+        double truncated = value < 0 ? Math.ceil(value) : Math.floor(value);
+        if (Math.abs(truncated) < LONG_EXACT_DOUBLE_LIMIT) {
+            return (int) (long) truncated;
+        }
+        return new java.math.BigDecimal(truncated).toBigInteger().intValue();
+    }
+
+    /// Menor magnitude a partir da qual um `double` inteiro deixa de caber em `long` sem perda
+    /// (`2⁶³`) — acima disso {@link #javascriptToInt32} usa `BigInteger` para reduzir módulo 2³².
+    private static final double LONG_EXACT_DOUBLE_LIMIT = 0x1p63;
+
+    /// `true` quando {@link #javascriptToInt32} foi EXATA no sentido de `FJCVTZS`/`VJCVT` — o flag
+    /// `Z` sinaliza EXATIDÃO, não "resultado zero": `value` finito, já inteiro, dentro de
+    /// `[-2³¹, 2³¹-1]` e **não `-0.0`** (que é exato para IEEE mas inexato para JavaScript,
+    /// `HELPER(fjcvtzs)`: `inexact |= value == float64_chs(float64_zero)`).
+    public static boolean javascriptToInt32IsExact(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return false;
+        }
+        if (value == 0.0 && Double.doubleToRawLongBits(value) < 0) {
+            return false;
+        }
+        return value == Math.rint(value)
+                && value >= -(double) (1L << (JAVASCRIPT_INT32_MODULUS_BITS - 1))
+                && value <= (double) ((1L << (JAVASCRIPT_INT32_MODULUS_BITS - 1)) - 1);
+    }
+
     /// `double → binary16` correto (round-to-nearest-even), com a mesma folga de guarda de
     /// {@link #doubleToFloatBits} sobre os 11 bits de destino — {@link Float#floatToFloat16} não
     /// serve aqui porque não expõe o modo "satura em vez de Infinito" que `osm` precisa. Estrutura
@@ -3435,7 +3474,7 @@ public final class AdvSimdLanes {
     /// {@link #fp8RoundToNearestEven}, resolve carry/overflow), mas para `binary16` PADRÃO (sem os
     /// desvios E4M3/E5M2 de FP8: `Infinito` sempre existe, `NaN` canonicalizado explicitamente —
     /// `default_nan_mode` do QEMU real).
-    private static long doubleToHalfBits(double value, boolean saturateToMaxNormal) {
+    public static long doubleToHalfBits(double value, boolean saturateToMaxNormal) {
         if (Double.isNaN(value)) {
             return FP8_FMA_HALF_CANONICAL_NAN_BITS;
         }

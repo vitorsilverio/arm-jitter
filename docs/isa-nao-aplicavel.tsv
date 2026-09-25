@@ -73,30 +73,31 @@ STLEXD*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (store-release exclusive); im
 CRC32*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A; não existe em ARMv4T..ARMv7-A. E12: arquitetura era `*` e alcançava as 16 colunas A64, escondendo 8 linhas (CRC32×4 + CRC32C×4) onde CRC32 é trabalho PENDENTE — requisito A64 agora é FEAT_CRC32/ARMv8.1-A, no mapa de versão
 
 # ── ARMv8-A de 32 bits: arredondamento dirigido e conversão Javascript ───────────────────────
-# B14.7: ESTREITADA de `*` para as 7 colunas pré-v8-A — `VRINTR_hp`/`_sp`/`_dp` são ARMv8-A reais
-# e NÃO implementadas (dependem de `FPSCR.RMode`, ver B14.5 "Não inclui"/B14.6 "Não inclui"), então
-# a coluna `v8-A/32` mede `❌` honesto (trabalho pendente, não exclusão) em vez de `·`.
-VRINTR*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)
+# B14.7: ESTREITADA de `*` para as colunas pré-v8-A. B22.7 IMPLEMENTOU `VRINTR`/`VRINTZ`/`VRINTX`
+# (`_hp`/`_sp`/`_dp`) sob `ARMV8A_32` (`FPSCR.RMode` corrente) e acrescentou `v7-A+NEON` à lista —
+# ARMv7-A com NEON é ARMv7, `VRINT*` é ARMv8-A. `v8-A/32` mede `✅`.
+VRINTR*	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v6-M,v7-M	ARMv8-A (VFP); implementado sob ARMV8A_32 na B22.7 (`FPSCR.RMode` corrente); ARMv7-A+NEON é ARMv7, não tem
 # B16.14: `VRINTZ`/`VRINTX` (bare, sem sufixo `_hp`/`_sp`/`_dp`) também existem como mnemônico
 # DISTINTO em `mve.decode` (Helium, ARMv8.1-M+MVE, real e implementado desde a B16.x) — sem
 # `grupo`, a exclusão pensada para as formas condicionais de `vfp.decode` (`VRINTZ_hp`/`_sp`/`_dp`,
 # `VRINTX_hp`/`_sp`/`_dp`) apagava a célula ✅ real da forma MVE. `vfp-uncond.decode` usa o
 # mnemônico `VRINT` (bare, sem X/Z) para as formas incondicionais — não precisa de linha aqui.
-# B14.7: mesma ESTREITADA de `*` que `VRINTR*` acima, mesmo motivo (não implementado sob ARMV8A_32).
-VRINTZ*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)	vfp.decode
-VRINTX*	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (VFP); não implementado sob ARMV8A_32 (B14.5/B14.6), mede ❌ na coluna v8-A/32 (B14.7)	vfp.decode
-# B14.7: ESTREITADA de `*` — VJCVT é ARMv8.3-A (posterior a ARMV8A_32, ARMv8.0) e não implementada;
-# mede ❌ honesto na coluna v8-A/32 em vez de `·`.
-VJCVT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8.3-A (conversão com semântica de JavaScript); não implementada, mede ❌ na coluna v8-A/32 (B14.7)
+# B14.7: mesma ESTREITADA de `*` que `VRINTR*` acima; B22.7 implementou (ver acima).
+VRINTZ*	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v6-M,v7-M	ARMv8-A (VFP); implementado sob ARMV8A_32 na B22.7; ARMv7-A+NEON é ARMv7, não tem	vfp.decode
+VRINTX*	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v6-M,v7-M	ARMv8-A (VFP); implementado sob ARMV8A_32 na B22.7; ARMv7-A+NEON é ARMv7, não tem	vfp.decode
+# B14.7: ESTREITADA de `*` — VJCVT é ARMv8.3-A (posterior a ARMV8A_32, ARMv8.0). B22.7 implementou-a
+# sob `ARMV8_6A_32` (coluna `v8.6-A/32`, ✅); em `v8-A/32` (ARMv8.0) o mnemônico mede `·` por
+# `ARM32_VERSION_REQUIREMENTS` (`ArmFeature.JAVASCRIPT_CONVERT`), não por linha deste arquivo.
+VJCVT	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v6-M,v7-M	ARMv8.3-A (conversão com semântica de JavaScript); implementada na B22.7 sob ARMV8_6A_32 (coluna v8.6-A/32); a coluna v8-A/32 (ARMv8.0) mede `·` via ARM32_VERSION_REQUIREMENTS
 
 # ── ARMv8.2-A FP16: as formas `_hp` (meia precisão) ──────────────────────────────────────────
 # B14.6b: ESTREITADA de `*` (todas as arquiteturas) para as 7 colunas pré-v8-A — `*` apagaria
 # também a célula ✅ real que a B14.6b acabou de implementar sob `ARMV8A_32` quando a B14.7 criar
 # a coluna `v8-A/32` (mesma operação que a B14.2 já fez para `LDA`/`STL`, e pelo mesmo motivo).
-# `VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` continuam de fora mesmo sob `ARMV8A_32` (dependem de
-# `FPSCR.RMode`, nem as formas `sp`/`dp` estão implementadas — B14.5 "Não inclui") — ficam para a
-# B14.7 registrar com linha própria quando a coluna nova expuser a lacuna.
-*_hp	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8.2-A FP16; VFPv2/VFPv3 só têm precisão simples e dupla
+# `VRINTR_hp`/`VRINTZ_hp`/`VRINTX_hp` foram implementadas pela B22.7 (`FPSCR.RMode` corrente) e
+# medem `✅` sob `ARMV8A_32`. `v7-A+NEON` entrou na lista pelo mesmo motivo de `VRINT*` acima:
+# ARMv7-A com NEON não tem FP16 (ARMv8.2-A).
+*_hp	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v6-M,v7-M	ARMv8.2-A FP16; VFPv2/VFPv3 só têm precisão simples e dupla
 
 # ── ARMv8-M Security Extension (perfil M) ────────────────────────────────────────────────────
 BXNS	*	ARMv8-M Security Extension
@@ -110,8 +111,8 @@ SEVL	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A (hint "send event local"). E12: 
 # ── `grupo` escopa a exclusão a cada `.decode` porque `HLT` também existe em `a64.decode` (já ✅,
 # ── B8.3). B14.7: ESTREITADA de `*` para as 7 colunas pré-v8-A — `ARMV8A_32` (B14.1) DECLARA
 # ── `ArmFeature.HALT`, então `HLT` mede `✅` de verdade na coluna v8-A/32 (t16.decode/a32.decode).
-HLT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 (ArmFeature.HALT)	t16.decode
-HLT	v4T,v5TE,v6K,MPCore,v7-A,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 (ArmFeature.HALT)	a32.decode
+HLT	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v7-R,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 e sob ARMV8M_BASELINE/ARMV8M_MAINLINE/ARMV8_1M(_MVE) na B22.7 (ArmFeature.HALT)	t16.decode
+HLT	v4T,v5TE,v6K,MPCore,v7-A,v7-A+NEON,v7-R,v6-M,v7-M	ARMv8-A / ARMv8-M, ARM DDI 0487; implementado sob ARMV8A_32 desde B14.1 e sob ARMV8M_BASELINE/ARMV8M_MAINLINE/ARMV8_1M(_MVE) na B22.7 (ArmFeature.HALT)	a32.decode
 
 # ── Advanced SIMD (NEON): encodings que moram no espaço VFP mas são de NEON ──────────────────
 # B16.14: o mnemônico `VDUP` (bare) vive em `vfp.decode` (não em `neon-dp.decode` — lá o inventário
@@ -143,12 +144,12 @@ VDUP	*	Advanced SIMD (NEON); nenhum preset declara NEON hoje	vfp.decode
 # -- (conversao inteiro<->meia precisao ARITMETICA, nao so bits) exigem aa32_fp16_arith
 # -- (ARMv8.2-A FP16 completo) -- so VCVT_int_hp casa com o padrao `*_hp` acima, VCVT_hp_int
 # -- precisa de linha propria (nome termina em "_int", nao em "_hp").
-VCVT_f32_f16	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
-VCVT_f16_f32	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
-VCVT_f64_f16	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
-VCVT_f16_f64	MPCore,v7-A	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
-VCVT_b16_f32	MPCore,v7-A	ARMv8.6-A BFloat16 (aa32_bf16)
-VCVT_hp_int	MPCore,v7-A	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
+VCVT_f32_f16	MPCore,v7-A,v7-A+NEON	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
+VCVT_f16_f32	MPCore,v7-A,v7-A+NEON	VFPv3 extensao opcional de meia precisao (aa32_fp16_spconv)
+VCVT_f64_f16	MPCore,v7-A,v7-A+NEON	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
+VCVT_f16_f64	MPCore,v7-A,v7-A+NEON	VFPv3 extensao opcional de meia precisao (aa32_fpdp_v2+aa32_fp16_dpconv)
+VCVT_b16_f32	MPCore,v7-A,v7-A+NEON	ARMv8.6-A BFloat16 (aa32_bf16)
+VCVT_hp_int	MPCore,v7-A,v7-A+NEON	ARMv8.2-A FP16 aritmetica completa (aa32_fp16_arith)
 # -- B22.2: VMOV_half (VMOV Sn,Rt / VMOV Rt,Sn de 16 bits) exige a extensao de meia precisao
 # -- (VFPv3-HP / FEAT_FP16, ARM DDI 0487) -- nenhum preset a declara (ArmFeature.HALF_PRECISION_FP
 # -- existe mas fica sem consumidor ate B14). O VfpDecoder passou a REIVINDICAR o encoding e a

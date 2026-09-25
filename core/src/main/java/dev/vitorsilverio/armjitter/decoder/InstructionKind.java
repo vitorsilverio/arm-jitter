@@ -240,6 +240,14 @@ public enum InstructionKind {
     /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate`=`1` para `VINS`, `0` para
     /// `VMOVX` (ver `IrOp.VfpMoveHalfLane#insert`).
     VFP_MOVE_HALF_LANE,
+    /// `VCVTB`/`VCVTT` entre meia precisão e simples/dupla (`VCVT_f32_f16`/`VCVT_f64_f16`/
+    /// `VCVT_f16_f32`/`VCVT_f16_f64`, VFPv3-HP) e `VCVT_b16_f32` (`FEAT_BF16`) — B22.7.
+    /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate` empacota bits 2:0 = ordinal
+    /// de `IrOp.HalfPrecisionConversion`, bit 3 = `t` (metade ALTA, `VCVTT`).
+    VFP_CONVERT_HALF_PRECISION,
+    /// `VJCVT.S32.F64 Sd, Dm` (`FEAT_JSCVT`, B22.7): `destinationRegister`=Vd (`S`),
+    /// `secondSourceRegister`=Vm (`D`).
+    VFP_JAVASCRIPT_CONVERT,
 
     // ── B14.6b: aritmética `_hp` (FEAT_FP16) — Kind/records PRÓPRIOS, sempre meia precisão (sem
     // `signedAccess` de precisão: só existe UMA precisão aqui) — ver o comentário equivalente em

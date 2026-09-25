@@ -182,6 +182,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VFP_CONVERT_FIXED_HALF -> vfp.executeVfpConvertFixedHalf(core, (IrOp.VfpConvertFixedHalf) op);
                 case IrOp.Kind.VFP_LOAD_HALF -> vfp.executeVfpLoadHalf(core, (IrOp.VfpLoadHalf) op);
                 case IrOp.Kind.VFP_STORE_HALF -> vfp.executeVfpStoreHalf(core, (IrOp.VfpStoreHalf) op);
+                case IrOp.Kind.VFP_CONVERT_HALF_PRECISION -> vfp.executeVfpConvertHalfPrecision(core, (IrOp.VfpConvertHalfPrecision) op);
+                case IrOp.Kind.VFP_JAVASCRIPT_CONVERT -> vfp.executeVfpJavascriptConvert(core, (IrOp.VfpJavascriptConvert) op);
                 case IrOp.Kind.M_PROFILE_SYSTEM_REGISTER -> system.executeMProfileSystemRegister(core, (IrOp.MProfileSystemRegister) op);
                 case IrOp.Kind.BREAKPOINT -> pcChanged |= system.executeBreakpoint(core, (IrOp.Breakpoint) op, block.endPc());
                 case IrOp.Kind.DSP_DUAL_MULTIPLY -> alu.executeDspDualMultiply(core, (IrOp.DspDualMultiply) op);
@@ -516,6 +518,8 @@ public final class IrBlockExecutor {
             case IrOp.VfpConvertFixedHalf vfpCvtFixedHalf -> { vfp.executeVfpConvertFixedHalf(core, vfpCvtFixedHalf); yield false; }
             case IrOp.VfpLoadHalf vfpLoadHalf -> { vfp.executeVfpLoadHalf(core, vfpLoadHalf); yield false; }
             case IrOp.VfpStoreHalf vfpStoreHalf -> { vfp.executeVfpStoreHalf(core, vfpStoreHalf); yield false; }
+            case IrOp.VfpConvertHalfPrecision vfpCvtHalfPrecision -> { vfp.executeVfpConvertHalfPrecision(core, vfpCvtHalfPrecision); yield false; }
+            case IrOp.VfpJavascriptConvert vfpJsCvt -> { vfp.executeVfpJavascriptConvert(core, vfpJsCvt); yield false; }
             case IrOp.MProfileSystemRegister m -> { system.executeMProfileSystemRegister(core, m); yield false; }
             case IrOp.Breakpoint bkpt -> system.executeBreakpoint(core, bkpt, blockEndPc);
             case IrOp.DspDualMultiply dual -> { alu.executeDspDualMultiply(core, dual); yield false; }
