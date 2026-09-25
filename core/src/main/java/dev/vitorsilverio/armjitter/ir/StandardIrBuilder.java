@@ -752,6 +752,15 @@ public final class StandardIrBuilder implements IrBuilder {
             case VCTP -> block.add(new IrOp.Vctp(
                     instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
             case CLEAR_MULTIPLE -> block.add(new IrOp.ClearMultiple(instruction.immediate(), instruction.condition()));
+            // MVE "long shift" (B16.16): ver o Javadoc de `InstructionKind#MVE_WIDE_SHIFT` para o
+            // empacotamento de `immediate` (ordinal nos bits 7:0, quantidade nos bits 15:8).
+            case MVE_WIDE_SHIFT -> block.add(new IrOp.MveWideShift(
+                    IrOp.WideShiftOperation.values()[instruction.immediate() & WIDE_SHIFT_OPERATION_MASK],
+                    instruction.immediate() >>> WIDE_SHIFT_AMOUNT_SHIFT,
+                    instruction.secondSourceRegister(),
+                    instruction.destinationRegister(),
+                    instruction.sourceRegister(),
+                    instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(
@@ -1228,6 +1237,10 @@ public final class StandardIrBuilder implements IrBuilder {
 
     /// `imm2` (bits 5:4) do offset de registrador Thumb-2 T2 (`[Rn, Rm, LSL #imm2]`) — ARM DDI
     /// 0406C A5.3.1 `@ldst_rr`.
+    /// Empacotamento de `immediate` em `InstructionKind#MVE_WIDE_SHIFT` (B16.16): ordinal da operação
+    /// nos bits 7:0, quantidade imediata nos bits 15:8.
+    private static final int WIDE_SHIFT_OPERATION_MASK = 0xFF;
+    private static final int WIDE_SHIFT_AMOUNT_SHIFT = 8;
     private static final int THUMB2_REGISTER_OFFSET_SHIFT_SHIFT = 4;
     private static final int THUMB2_REGISTER_OFFSET_SHIFT_MASK = 0x3;
 

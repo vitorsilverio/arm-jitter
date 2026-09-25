@@ -283,6 +283,8 @@ public final class AsmNativePolicy {
             case IrOp.Vctp ignored -> false;
             case IrOp.LoopClearTailPredication ignored -> false;
             case IrOp.ClearMultiple ignored -> false;
+            // MVE "long shift" sobre GPR (B16.16): sem emissão nativa nesta task (decode + interpretado).
+            case IrOp.MveWideShift ignored -> false;
             case IrOp.AdvanceVpt ignored -> false;
             case IrOp.VprTransfer ignored -> false;
             // VLDR_VSTR (B16.3, MVE/Helium): sem emissão nativa nesta task ("Não inclui" — decode +

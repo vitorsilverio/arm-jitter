@@ -515,6 +515,10 @@ public final class ArmArchitecture {
 
     public static final ArmArchitecture ARMV8_1M_MVE = ARMV8_1M_MVE_FEATURES
             .withThumb32DecoderExtensions(List.of(
+                    // Thumb2MveLongShiftDecoder (B16.16): os 19 "long shifts" sobre GPR vivem no espaço
+                    // de shifted-register EM CIMA de MOV/ORR (Rm 13/15) — TEM que vir ANTES de
+                    // Thumb2DataProcessingDecoder, que reivindicaria essas palavras como MOV/ORR.
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MveLongShiftDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8_1M_MVE_FEATURES),
                     new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8_1M_MVE_FEATURES),

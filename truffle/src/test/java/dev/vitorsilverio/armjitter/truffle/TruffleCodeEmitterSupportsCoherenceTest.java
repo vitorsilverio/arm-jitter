@@ -59,7 +59,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(188, kinds.size(), "IrOp.Kind deve ter 188 constantes contíguas");
+        assertEquals(189, kinds.size(), "IrOp.Kind deve ter 189 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -156,7 +156,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // `VCVTB`/`VCVTT`/`VJCVT`, mesmo "Não inclui": decode + interpretado apenas). B16.15
         // acrescentou LOOP_CLEAR_TAIL_PREDICATION, VCTP, CLEAR_MULTIPLE (+3, idem: decode +
         // interpretado apenas).
-        assertEquals(122, uncovered.size(), "Kinds descobertos: " + uncovered);
+        assertEquals(123, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -238,7 +238,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.VFP_SELECT_HALF, IrOp.Kind.VFP_ROUND_HALF, IrOp.Kind.VFP_CONVERT_ROUNDED_HALF,
                         IrOp.Kind.VFP_CONVERT_FIXED_HALF, IrOp.Kind.VFP_LOAD_HALF, IrOp.Kind.VFP_STORE_HALF,
                         IrOp.Kind.VFP_CONVERT_HALF_PRECISION, IrOp.Kind.VFP_JAVASCRIPT_CONVERT,
-                        IrOp.Kind.LOOP_CLEAR_TAIL_PREDICATION, IrOp.Kind.VCTP, IrOp.Kind.CLEAR_MULTIPLE)),
+                        IrOp.Kind.LOOP_CLEAR_TAIL_PREDICATION, IrOp.Kind.VCTP, IrOp.Kind.CLEAR_MULTIPLE,
+                        IrOp.Kind.MVE_WIDE_SHIFT)),
                 "lista dos Kinds descobertos mudou: " + uncovered);
     }
 
@@ -429,6 +430,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.LOOP_CLEAR_TAIL_PREDICATION -> new IrOp.LoopClearTailPredication(c);
             case IrOp.Kind.VCTP -> new IrOp.Vctp(0, 0, c);
             case IrOp.Kind.CLEAR_MULTIPLE -> new IrOp.ClearMultiple(1, c);
+            case IrOp.Kind.MVE_WIDE_SHIFT ->
+                    new IrOp.MveWideShift(IrOp.WideShiftOperation.LSLL_RI, 1, -1, 0, 1, c);
             case IrOp.Kind.MVE_LOAD_STORE -> new IrOp.MveLoadStore(0, 1, 0, true, false, false, c);
             case IrOp.Kind.MVE_WIDENING_LOAD_STORE ->
                     new IrOp.MveWideningLoadStore(0, 1, 0, 0, 1, true, true, false, false, c);

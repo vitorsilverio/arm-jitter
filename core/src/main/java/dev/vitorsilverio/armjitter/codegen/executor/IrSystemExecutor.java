@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.core.MProfileException;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.core.MveVptState;
+import dev.vitorsilverio.armjitter.core.MveWideShifts;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.core.VprRegister;
 import dev.vitorsilverio.armjitter.ir.IrOp;
@@ -520,6 +521,48 @@ public final class IrSystemExecutor {
             core.cpsr().setGe(0);
         }
     }
+
+    /// MVE "long shift" sobre GPR (perfil M, B16.16) — `do_mve_shl_ri`/`do_mve_shl_rr`/`do_mve_sh_ri`/
+    /// `do_mve_sh_rr` do QEMU. Escalar: não lê `VPR`/`ECI` nem toca `Q0`-`Q7`. Nas formas por registrador
+    /// a quantidade é o BYTE baixo de `Rm` COM SINAL (`(int8_t)`), negado nas operações à direita
+    /// (`SQRSHR*`/`ASRL`); a saturação seta `APSR.Q` (sticky), nunca `FPSCR.QC`.
+    public void executeMveWideShift(ArmCore core, IrOp.MveWideShift op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        IrOp.WideShiftOperation operation = op.operation();
+        int amount = operation.register() ? (byte) core.register(op.rm()) : op.shim();
+        int shift = operation.right() ? -amount : amount;
+        boolean sat = operation.saturating();
+        MveWideShifts.Result result;
+        if (!operation.wide()) {
+            int source = core.register(op.rdaLo());
+            result = operation.signed()
+                    ? MveWideShifts.signedShift32(source, shift, operation.round(), sat)
+                    : MveWideShifts.unsignedShift32(source, shift, operation.round(), sat);
+            core.setRegister(op.rdaLo(), (int) result.value());
+        } else {
+            long source = ((long) core.register(op.rdaHi()) << Integer.SIZE)
+                    | (core.register(op.rdaLo()) & 0xFFFF_FFFFL);
+            if (operation.bits() == NARROW_WIDE_SHIFT_BITS) {
+                result = operation.signed()
+                        ? MveWideShifts.signedShift48(source, shift)
+                        : MveWideShifts.unsignedShift48(source, shift);
+            } else {
+                result = operation.signed()
+                        ? MveWideShifts.signedShift64(source, shift, operation.round(), sat)
+                        : MveWideShifts.unsignedShift64(source, shift, operation.round(), sat);
+            }
+            core.setRegister(op.rdaLo(), (int) result.value());
+            core.setRegister(op.rdaHi(), (int) (result.value() >>> Integer.SIZE));
+        }
+        if (result.saturated()) {
+            core.cpsr().setSaturation(true);
+        }
+    }
+
+    /// Largura de saturação de `UQRSHLL48`/`SQRSHRL48` (B16.16).
+    private static final int NARROW_WIDE_SHIFT_BITS = 48;
 
     /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — {@link
     /// MveVptState#advance}. Emitido incondicionalmente (G4) depois de toda instrução MVE

@@ -204,6 +204,8 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.LOOP_CLEAR_TAIL_PREDICATION ->
                         system.executeLctp(core, (IrOp.LoopClearTailPredication) op);
                 case IrOp.Kind.CLEAR_MULTIPLE -> system.executeClrm(core, (IrOp.ClearMultiple) op);
+                // MVE_WIDE_SHIFT (B16.16): escalar (GPRs + APSR.Q), não beatwise, nunca troca o PC.
+                case IrOp.Kind.MVE_WIDE_SHIFT -> system.executeMveWideShift(core, (IrOp.MveWideShift) op);
                 // ADVANCE_VPT (B16.2): pulado quando a instrução MVE anterior no MESMO bloco já
                 // mudou o PC (fault de ECI reservado) — ver Javadoc de IrSystemExecutor#executeAdvanceVpt.
                 case IrOp.Kind.ADVANCE_VPT -> {
@@ -543,6 +545,7 @@ public final class IrBlockExecutor {
             case IrOp.Vctp vctp -> system.executeVctp(core, vctp);
             case IrOp.LoopClearTailPredication lctp -> { system.executeLctp(core, lctp); yield false; }
             case IrOp.ClearMultiple clrm -> { system.executeClrm(core, clrm); yield false; }
+            case IrOp.MveWideShift wideShift -> { system.executeMveWideShift(core, wideShift); yield false; }
             case IrOp.AdvanceVpt advanceVpt -> { system.executeAdvanceVpt(core, advanceVpt); yield false; }
             case IrOp.VprTransfer vprTransfer -> { system.executeVprTransfer(core, vprTransfer); yield false; }
             case IrOp.MveLoadStore mveLoadStore -> system.executeMveLoadStore(core, mveLoadStore);

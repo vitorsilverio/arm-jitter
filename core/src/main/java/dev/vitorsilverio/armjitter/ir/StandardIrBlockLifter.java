@@ -232,7 +232,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     CRC32,
                     // LCTP (B16.15): só grava `FPSCR.LTPSIZE`, lido em tempo de execução pelos
                     // executores MVE — nunca toca o PC. CLRM idem: só zera registradores/APSR.
-                    LOOP_CLEAR_TAIL_PREDICATION, CLEAR_MULTIPLE -> false;
+                    LOOP_CLEAR_TAIL_PREDICATION, CLEAR_MULTIPLE,
+                    // MVE_WIDE_SHIFT (B16.16): só GPRs e `APSR.Q`, nunca toca o PC (Rda/RdaLo/RdaHi
+                    // nunca são 15, recusado no decode).
+                    MVE_WIDE_SHIFT -> false;
         };
     }
 

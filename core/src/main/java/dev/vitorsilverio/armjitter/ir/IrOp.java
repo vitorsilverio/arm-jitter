@@ -43,7 +43,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.VfpAluHalf, IrOp.VfpMoveImmediateHalf, IrOp.VfpCompareHalf, IrOp.VfpSelectHalf,
         IrOp.VfpRoundHalf, IrOp.VfpConvertRoundedHalf, IrOp.VfpConvertFixedHalf, IrOp.VfpLoadHalf,
         IrOp.VfpStoreHalf, IrOp.VfpConvertHalfPrecision, IrOp.VfpJavascriptConvert,
-        IrOp.LoopClearTailPredication, IrOp.Vctp, IrOp.ClearMultiple {
+        IrOp.LoopClearTailPredication, IrOp.Vctp, IrOp.ClearMultiple, IrOp.MveWideShift {
     /// Valor do campo empacotado `immediate` (decoder → builder) que significa "usar o modo de
     /// arredondamento CORRENTE de `FPSCR.RMode`" em {@link VfpRound}/{@link VfpConvertRounded}/
     /// {@link VfpRoundHalf}/{@link VfpConvertRoundedHalf} — vira `direction == null` no IR (B22.7).
@@ -439,6 +439,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VCTP = 186;
         /// B16.15: `CLRM` (zera registradores/APSR) — ver {@link ClearMultiple}.
         public static final int CLEAR_MULTIPLE = 187;
+        /// B16.16: MVE "long shift" sobre GPR (`LSLL`/`UQSHL`/`SQRSHR`/...) — ver {@link MveWideShift}.
+        public static final int MVE_WIDE_SHIFT = 188;
     }
 
     /// Operacao ALU generica.
@@ -3468,6 +3470,98 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
         @Override public int kind() { return Kind.CLEAR_MULTIPLE; }
+    }
+
+    /// As 19 operações do MVE "long shift" sobre registradores de propósito geral (B16.16,
+    /// `target/isa-decode/t32.decode`, `mve_shl_ri`/`mve_shl_rr`/`mve_sh_ri`/`mve_sh_rr`). Cada
+    /// constante carrega as propriedades que o executor precisa, lidas dos helpers reais do QEMU
+    /// (`translate.c`/`mve_helper.c`): {@code wide} (par `RdaLo:RdaHi` de 64 bits vs `Rda` de 32),
+    /// {@code bits} (largura de saturação: 32/48/64), {@code signed}, {@code round}, {@code
+    /// saturating} (`true` = seta `APSR.Q`; as formas sem saturação passam `sat=NULL` no QEMU),
+    /// {@code right} (nega a quantidade: `SQRSHR*`/`ASRL`/`LSRL`/`*SHR*`) e {@code register} (a
+    /// quantidade vem do byte baixo de `Rm`, com sinal; senão é o imediato).
+    enum WideShiftOperation {
+        UQSHL_RI(false, 32, false, false, true, false, false),
+        URSHR_RI(false, 32, false, true, false, true, false),
+        SRSHR_RI(false, 32, true, true, false, true, false),
+        SQSHL_RI(false, 32, true, false, true, false, false),
+        LSLL_RI(true, 64, false, false, false, false, false),
+        LSRL_RI(true, 64, false, false, false, true, false),
+        ASRL_RI(true, 64, true, false, false, true, false),
+        URSHRL_RI(true, 64, false, true, false, true, false),
+        SRSHRL_RI(true, 64, true, true, false, true, false),
+        UQSHLL_RI(true, 64, false, false, true, false, false),
+        SQSHLL_RI(true, 64, true, false, true, false, false),
+        UQRSHL_RR(false, 32, false, true, true, false, true),
+        SQRSHR_RR(false, 32, true, true, true, true, true),
+        LSLL_RR(true, 64, false, false, false, false, true),
+        ASRL_RR(true, 64, true, false, false, true, true),
+        UQRSHLL64_RR(true, 64, false, true, true, false, true),
+        SQRSHRL64_RR(true, 64, true, true, true, true, true),
+        UQRSHLL48_RR(true, 48, false, true, true, false, true),
+        SQRSHRL48_RR(true, 48, true, true, true, true, true);
+
+        private final boolean wide;
+        private final int bits;
+        private final boolean signed;
+        private final boolean round;
+        private final boolean saturating;
+        private final boolean right;
+        private final boolean register;
+
+        WideShiftOperation(boolean wide, int bits, boolean signed, boolean round, boolean saturating,
+                boolean right, boolean register) {
+            this.wide = wide;
+            this.bits = bits;
+            this.signed = signed;
+            this.round = round;
+            this.saturating = saturating;
+            this.right = right;
+            this.register = register;
+        }
+
+        /// `true` para as formas de 64 bits (par `RdaLo:RdaHi`); `false` para `Rda` de 32 bits.
+        public boolean wide() { return wide; }
+
+        /// Largura de saturação: `32`, `48` (`*L48_RR`) ou `64`.
+        public int bits() { return bits; }
+
+        /// `true` para as formas com sinal (`S*`/`ASR*`).
+        public boolean signed() { return signed; }
+
+        /// `true` quando o deslocamento à direita arredonda (`*R*`).
+        public boolean round() { return round; }
+
+        /// `true` quando a operação pode setar `APSR.Q` (não `FPSCR.QC`).
+        public boolean saturating() { return saturating; }
+
+        /// `true` quando a quantidade é NEGADA antes do helper (deslocamento à direita).
+        public boolean right() { return right; }
+
+        /// `true` quando a quantidade vem de `Rm`; `false` quando é o imediato.
+        public boolean register() { return register; }
+    }
+
+    /// MVE "long shift" sobre GPR (perfil M, B16.16, `FEAT_MVE_INTEGER`): `LSLL`/`LSRL`/`ASRL`/
+    /// `URSHRL`/`SRSHRL`/`UQSHLL`/`SQSHLL`/`UQRSHLL`/`SQRSHRL` (par `RdaLo:RdaHi`),
+    /// `UQSHL`/`SQSHL`/`URSHR`/`SRSHR`/`UQRSHL`/`SQRSHR` (`Rda`). **Não** usa `Q0`-`Q7` nem `VPR`
+    /// e **não** é beatwise (o QEMU real nunca chama `mve_eci_check`/`mve_advance_vpt` aqui); satura
+    /// em `APSR.Q`, sticky. Condicionada por `IT` como qualquer instrução escalar.
+    record MveWideShift(
+            /// Qual das 19 operações.
+            WideShiftOperation operation,
+            /// Quantidade imediata `1..32` (`shim == 0` já convertido em `32` no decode); `0` nas
+            /// formas por registrador.
+            int shim,
+            /// `Rm` (o byte baixo, com sinal, é a quantidade) nas formas por registrador; `-1` nas demais.
+            int rm,
+            /// `Rda` (formas de 32 bits) ou `RdaLo` (formas de 64 bits).
+            int rdaLo,
+            /// `RdaHi` nas formas de 64 bits; `-1` nas de 32 bits.
+            int rdaHi,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.MVE_WIDE_SHIFT; }
     }
 
     /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — transcrição de

@@ -538,7 +538,14 @@ public enum InstructionKind {
     /// `CLRM {list}` (perfil M com Security Extension, B16.15): `immediate`=`list` (16 bits: bits
     /// 0-14 = `R0`-`R12`/`LR`, bit 15 = `APSR`) via `IrOp.ClearMultiple`. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
-    CLEAR_MULTIPLE;
+    CLEAR_MULTIPLE,
+    /// MVE "long shift" sobre GPR (perfil M, B16.16): `destinationRegister`=`Rda`/`RdaLo`,
+    /// `sourceRegister`=`RdaHi` (`-1` nas formas de 32 bits), `secondSourceRegister`=`Rm` (`-1` nas
+    /// formas por imediato); `immediate` empacota o ordinal de `IrOp.WideShiftOperation` nos bits
+    /// 7:0 e a quantidade imediata (`1..32`) nos bits 15:8, via `IrOp.MveWideShift`. NÃO é beatwise
+    /// (escalar, o QEMU nunca chama `mve_eci_check` aqui). Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
+    MVE_WIDE_SHIFT;
 
     /// Instruções MVE "beatwise" (Helium, B16.2+): o avanço de
     /// {@link dev.vitorsilverio.armjitter.core.MveVptState#advance} roda depois de QUALQUER uma

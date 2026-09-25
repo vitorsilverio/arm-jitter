@@ -53,22 +53,21 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-25, B16.15 parcial)
+## Onde estamos (atualizado 2026-09-25, B16.16 fechada)
 
-**`B16.15` parcial nesta rodada** — tail-predication (`DLSTP`/`WLSTP`/`LETP`/`LCTP`/`VCTP`, com `LTPSIZE` de
-verdade), `BF*`, `CLRM` e `LDA`/`STL` nos presets ARMv8-M; coluna `ARMv8.1-M+MVE` 93% → 96% (716/742),
-global 23506/23783. Sobram 26 células na coluna MVE: 19 do "MVE long shift" (spec escrita: **`B16.16`**),
-6 `CRC32*` e `SB` de perfil M (sem fonte confirmada; spec escrita: **`B22.8`**, curadoria por fonte normativa). Ver **Resultado** na task. A
-`B22.7` (anterior) deixou o mapa do que resta nos presets de 32 bits (259 células + 40 de A64, boa parte é
-curadoria).
+**`B16.16` fechada nesta rodada** — os 19 "MVE long shifts" sobre GPR (`LSLL`/`UQSHL`/`SQRSHR`/...,
+`Thumb2MveLongShiftDecoder` + `MveWideShifts`); coluna `ARMv8.1-M+MVE` 96% → 99% (735/742), global
+23525/23783 (+19, zero `⚠️` novo). Sobram 7 células na coluna MVE: `SB`/`CRC32*` do perfil M (spec: **`B22.8`**,
+curadoria por fonte normativa). Ver **Resultado** na task (inclui 2 achados a verificar: corte de 0 em 48 bits do
+QEMU e `MOVS.W r0, sp`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B16.16`** (long shift GPR, +19 células MVE), **`B22.8`** (curadoria `SB`/`CRC32*` M, +7), **`B17.3`** em diante (fundação SVE, RFC
-B17.2 decidida — Opção C, VL=256) e **`B21.2`** em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c)
-— conferir dependências no `INDICE.md` de cada uma antes de pegar. Também seguem pegáveis: `E14`
-(achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de
-teste para NENHUMA instrução NEON), `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do roadmap.
-`B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o `virtual-arm-box`
-congelado, e QEMU não tem suporte a `cortex-r82` ainda.
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B22.8`** (curadoria `SB`/`CRC32*` M, +7,
+fecha a coluna MVE), **`B17.3`** em diante (fundação SVE, RFC B17.2 decidida — Opção C, VL=256) e **`B21.2`** em
+diante (modelo de 26 bits, RFC B21.1 decidida — Opção c) — conferir dependências no `INDICE.md` de cada uma antes
+de pegar. Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/
+`AsmNativePolicy` sem cobertura de teste para NENHUMA instrução NEON), `C12.5`/`C12.10` (emissão JIT nativa A64),
+dimensão 2 do roadmap. `B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o
+`virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda.
 
 **Achados da B22.7 ainda sem task** (candidatos a uma "B22.8 — curadoria + resíduos de decode"):
 `VMOV_half` mede `❌` em `v8-A/32` (`decodeVmovHalf` exige `HALF_PRECISION_FP`, que `ARMV8A_32` não
