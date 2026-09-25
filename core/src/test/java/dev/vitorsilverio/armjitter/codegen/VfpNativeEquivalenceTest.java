@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -410,6 +411,34 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
                 });
             }
         }
+    }
+
+    // ── 14b. B22.10: formas sem emissão nativa (VMOV_half e VMOV NEON de lane) caem no interpretado ─
+
+    @Test
+    void halfWidthAndLaneCoreTransfersFallBackToInterpretedAndMatchReference() {
+        AsmCodeEmitter perOpEmitter = new AsmCodeEmitter(
+                ArmArchitecture.ARMV4T, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
+        IrBlock ir = block(
+                new IrOp.VfpCoreTransfer(true, 0, 1, true, Condition.AL),                        // VMOV_half Rt <- S1
+                new IrOp.VfpCoreTransfer(false, 2, 3, true, Condition.AL),                       // VMOV_half S3 <- Rt
+                new IrOp.VfpCoreTransfer(true, 4, 20, false, 8, 5, true, Condition.AL),          // VMOV.S8 Rt, D20[5]
+                new IrOp.VfpCoreTransfer(true, 5, 20, false, 16, 2, false, Condition.AL),        // VMOV.U16 Rt, D20[2]
+                new IrOp.VfpCoreTransfer(false, 6, 21, false, 8, 7, false, Condition.AL));       // VMOV.8 D21[7], Rt
+        assertFalse(perOpEmitter.isNativeSupported(ir));
+        perOpEmitter.emit(ir);
+        assertEquals(5, perOpEmitter.perOpFallbackOpCount());
+        TestAddressSpace memory = new TestAddressSpace(64);
+        harness.assertEquivalent(referenceEmitter, perOpEmitter, ir, EquivalenceTestSupport.independentPair(memory, core -> {
+            core.vfp().setS(1, 0xDEAD_BEEF);
+            core.vfp().setS(3, 0xCAFE_0000);
+            core.setRegister(2, 0x9999_1234);
+            core.vfp().setD(20, 0x8877_6655_4433_2211L | 0x0080_0000_0000_8000L);
+            core.vfp().setD(21, 0x1111_1111_1111_1111L);
+            core.setRegister(6, 0xABCD_EF5A);
+        }));
+        // Uma forma NATIVA (32 bits) continua nativa — o carve-out é só das duas formas acima.
+        assertTrue(asmEmitter.isNativeSupported(block(new IrOp.VfpCoreTransfer(true, 0, 1, false, Condition.AL))));
     }
 
     // ── 15. perOpFallbackOpCount() == 0 num bloco sintético com todos os 10 kinds ─
