@@ -15,7 +15,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.NeonFpThreeSameByElement, IrOp.NeonUnary, IrOp.NeonNarrowUnary, IrOp.NeonFpUnary,
         IrOp.NeonComplex, IrOp.NeonComplexByElement, IrOp.NeonDotProduct, IrOp.NeonDotProductByElement,
         IrOp.NeonSwapPermute, IrOp.NeonExtract, IrOp.NeonTableLookup, IrOp.NeonDuplicateScalar,
-        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonFpConvertPrecision,
+        IrOp.NeonCryptoAes, IrOp.NeonCryptoSha, IrOp.NeonCryptoShaThree, IrOp.NeonFpConvertPrecision,
         IrOp.NeonMatrixMultiplyAccumulate, IrOp.NeonFusedMultiplyAddLong,
         IrOp.NeonFusedMultiplyAddLongByElement, IrOp.NeonDotProductBFloat16,
         IrOp.NeonDotProductByElementBFloat16, IrOp.NeonMatrixMultiplyAccumulateBFloat16,
@@ -416,6 +416,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VFP_LOAD_HALF = 180;
         /// B14.6b: `VSTR_hp` — ver {@link VfpStoreHalf}.
         public static final int VFP_STORE_HALF = 181;
+
+        /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` — ver
+        /// {@link NeonCryptoShaThree} (B13.23).
+        public static final int NEON_CRYPTO_SHA_THREE_REGISTER = 182;
     }
 
     /// Operacao ALU generica.
@@ -3243,6 +3247,32 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
             int vm) implements IrOp {
         @Override public int kind() { return Kind.NEON_CRYPTO_SHA; }
+    }
+
+    /// NEON/Advanced SIMD de 32 bits — `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/
+    /// `SHA256SU1` (B13.23, ARMv8-A Cryptographic Extension, `neon-dp.decode` seção "3-reg-same"
+    /// `opc=1100`/`op=0`, discriminadas por `U`/`size`, `Q` fixo — sempre 128 bits, MESMA extensão de
+    /// {@link NeonCryptoAes}/{@link NeonCryptoSha}). Gate: {@link
+    /// dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}.
+    ///
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoShaThreeRegister} no
+    /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#shaThreeRegister}), RFC B13.2 D1 (o A64
+    /// passou a delegar também).
+    ///
+    /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
+    /// {@link Condition#AL}.
+    record NeonCryptoShaThree(
+            /// Operação a executar (núcleo compartilhado).
+            dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaThreeRegisterOp op,
+            /// Registrador de destino (e primeiro operando, lido em todas as 7 formas), em índice de
+            /// `D` PAR que inicia o `Q` (`0`-`31`).
+            int vd,
+            /// Segundo operando, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
+            int vn,
+            /// Terceiro operando, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
+            int vm) implements IrOp {
+        @Override public int kind() { return Kind.NEON_CRYPTO_SHA_THREE_REGISTER; }
     }
 
     /// `SG` (Secure Gateway, perfil M, B15.4): entra em estado Secure e limpa o `bit0` de `LR` —

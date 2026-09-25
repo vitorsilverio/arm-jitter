@@ -147,6 +147,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.NEON_DUPLICATE_SCALAR -> neon.executeNeonDuplicateScalar(core, (IrOp.NeonDuplicateScalar) op);
                 case IrOp.Kind.NEON_CRYPTO_AES -> neon.executeNeonCryptoAes(core, (IrOp.NeonCryptoAes) op);
                 case IrOp.Kind.NEON_CRYPTO_SHA -> neon.executeNeonCryptoSha(core, (IrOp.NeonCryptoSha) op);
+                case IrOp.Kind.NEON_CRYPTO_SHA_THREE_REGISTER -> neon.executeNeonCryptoShaThree(core, (IrOp.NeonCryptoShaThree) op);
                 case IrOp.Kind.NEON_FP_CONVERT_PRECISION -> neon.executeNeonFpConvertPrecision(core, (IrOp.NeonFpConvertPrecision) op);
                 case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE -> neon.executeNeonMatrixMultiplyAccumulate(core, (IrOp.NeonMatrixMultiplyAccumulate) op);
                 case IrOp.Kind.NEON_FUSED_MULTIPLY_ADD_LONG -> neon.executeNeonFusedMultiplyAddLong(core, (IrOp.NeonFusedMultiplyAddLong) op);
@@ -488,6 +489,7 @@ public final class IrBlockExecutor {
             case IrOp.NeonDuplicateScalar nds -> { neon.executeNeonDuplicateScalar(core, nds); yield false; }
             case IrOp.NeonCryptoAes nca -> { neon.executeNeonCryptoAes(core, nca); yield false; }
             case IrOp.NeonCryptoSha ncs -> { neon.executeNeonCryptoSha(core, ncs); yield false; }
+            case IrOp.NeonCryptoShaThree ncst -> { neon.executeNeonCryptoShaThree(core, ncst); yield false; }
             case IrOp.NeonFpConvertPrecision nfcp -> { neon.executeNeonFpConvertPrecision(core, nfcp); yield false; }
             case IrOp.VfpAlu vfpAlu -> { vfp.executeVfpAlu(core, vfpAlu); yield false; }
             case IrOp.VfpMoveImmediate vfpMovImm -> { vfp.executeVfpMoveImmediate(core, vfpMovImm); yield false; }

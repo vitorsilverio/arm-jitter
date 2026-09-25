@@ -5,9 +5,10 @@ package dev.vitorsilverio.armjitter.advsimd;
 /// Migrado de {@link dev.vitorsilverio.armjitter.executor64.Ir64CryptoExecutor} na task B13.15, que
 /// lhe dá o primeiro consumidor A32 — a semântica é IDÊNTICA, só a via de acesso ao registrador
 /// muda ({@link AdvSimdRegisterWords}, não mais {@code Aarch64FpRegisters} direto). As formas de
-/// TRÊS registradores (`SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1`) e o resto
-/// da Cryptographic Extension (`SHA3`/`SHA-512`/`SM3`/`SM4`, B11.12/B19.10) NÃO têm encoding A32 —
-/// continuam só no `Ir64CryptoExecutor`.
+/// TRÊS registradores (`SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1`) migraram
+/// também, na task B13.23 (mesmo encoding A32, seção "3-reg-same" de `neon-dp.decode`). O resto da
+/// Cryptographic Extension (`SHA3`/`SHA-512`/`SM3`/`SM4`, B11.12/B19.10) NÃO tem encoding A32 —
+/// continua só no `Ir64CryptoExecutor`.
 ///
 /// A tabela S-box e as matrizes `MixColumns`/`InvMixColumns` NÃO são copiadas de nenhuma fonte —
 /// são DERIVADAS matematicamente a partir da definição pública do AES (FIPS PUB 197, um padrão
@@ -163,6 +164,112 @@ public final class AdvSimdCrypto {
                 d[1] += sha256SmallSigma0(d[2]);
                 d[2] += sha256SmallSigma0(d[3]);
                 d[3] += sha256SmallSigma0(m[0]);
+                writeWords(regs, baseRd, d);
+            }
+        }
+    }
+
+    /// `Ch`/`Parity`/`Maj` do SHA1 (FIPS PUB 180-4 §4.1.1) — mesmos nomes de função do padrão.
+    private static int sha1Choose(int x, int y, int z) {
+        return (x & (y ^ z)) ^ z;
+    }
+
+    private static int sha1Parity(int x, int y, int z) {
+        return x ^ y ^ z;
+    }
+
+    private static int sha1Majority(int x, int y, int z) {
+        return (x & y) | ((x | y) & z);
+    }
+
+    /// `Σ0`/`Σ1` do SHA256 (FIPS PUB 180-4 §4.1.2), usados só pelas formas de TRÊS registradores
+    /// (`SHA256H`/`SHA256H2`/`SHA256SU1`). `σ0` (duas registradores, `SHA256SU0`) já vive acima.
+    private static int sha256BigSigma0(int x) {
+        return Integer.rotateRight(x, 2) ^ Integer.rotateRight(x, 13) ^ Integer.rotateRight(x, 22);
+    }
+
+    private static int sha256BigSigma1(int x) {
+        return Integer.rotateRight(x, 6) ^ Integer.rotateRight(x, 11) ^ Integer.rotateRight(x, 25);
+    }
+
+    private static int sha256SmallSigma1(int x) {
+        return Integer.rotateRight(x, 17) ^ Integer.rotateRight(x, 19) ^ (x >>> 10);
+    }
+
+    /// `log2` do tamanho de elemento "palavra dupla" (64 bits) na convenção de
+    /// {@link AdvSimdLanes#element}.
+    private static final int DOUBLEWORD_ESZ = 3;
+
+    /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` — `baseRd`/`baseRn`/
+    /// `baseRm` são índices de PALAVRA (ver {@link AdvSimdRegisterWords}), sempre um registrador `Q`
+    /// completo (128 bits). Migrado de {@code Ir64CryptoExecutor#executeShaThreeRegister} (B8.11b)
+    /// na task B13.23, que lhe dá o primeiro consumidor A32.
+    public static void shaThreeRegister(AdvSimdRegisterWords regs, AdvSimdCryptoShaThreeRegisterOp op,
+            int baseRd, int baseRn, int baseRm) {
+        switch (op) {
+            case SHA1C, SHA1P, SHA1M -> {
+                int[] d = readWords(regs, baseRd);
+                int n0 = (int) AdvSimdLanes.element(regs, baseRn, 0, WORD_ESZ);
+                int[] m = readWords(regs, baseRm);
+                for (int i = 0; i < WORDS_PER_Q; i++) {
+                    int t = switch (op) {
+                        case SHA1C -> sha1Choose(d[1], d[2], d[3]);
+                        case SHA1P -> sha1Parity(d[1], d[2], d[3]);
+                        default -> sha1Majority(d[1], d[2], d[3]);
+                    };
+                    t += Integer.rotateLeft(d[0], 5) + n0 + m[i];
+                    n0 = d[3];
+                    d[3] = d[2];
+                    d[2] = Integer.rotateRight(d[1], 2);
+                    d[1] = d[0];
+                    d[0] = t;
+                }
+                writeWords(regs, baseRd, d);
+            }
+            case SHA1SU0 -> {
+                long dLow = AdvSimdLanes.element(regs, baseRd, 0, DOUBLEWORD_ESZ);
+                long dHigh = AdvSimdLanes.element(regs, baseRd, 1, DOUBLEWORD_ESZ);
+                long nLow = AdvSimdLanes.element(regs, baseRn, 0, DOUBLEWORD_ESZ);
+                long mLow = AdvSimdLanes.element(regs, baseRm, 0, DOUBLEWORD_ESZ);
+                long mHigh = AdvSimdLanes.element(regs, baseRm, 1, DOUBLEWORD_ESZ);
+                AdvSimdLanes.setElement(regs, baseRd, 0, DOUBLEWORD_ESZ, dHigh ^ dLow ^ mLow);
+                AdvSimdLanes.setElement(regs, baseRd, 1, DOUBLEWORD_ESZ, nLow ^ dHigh ^ mHigh);
+            }
+            case SHA256H, SHA256H2 -> {
+                int[] d = readWords(regs, baseRd);
+                int[] n = readWords(regs, baseRn);
+                int[] m = readWords(regs, baseRm);
+                boolean h2 = op == AdvSimdCryptoShaThreeRegisterOp.SHA256H2;
+                for (int i = 0; i < WORDS_PER_Q; i++) {
+                    if (h2) {
+                        int t = sha1Choose(d[0], d[1], d[2]) + d[3] + sha256BigSigma1(d[0]) + m[i];
+                        d[3] = d[2];
+                        d[2] = d[1];
+                        d[1] = d[0];
+                        d[0] = n[3 - i] + t;
+                    } else {
+                        int t = sha1Choose(n[0], n[1], n[2]) + n[3] + sha256BigSigma1(n[0]) + m[i];
+                        n[3] = n[2];
+                        n[2] = n[1];
+                        n[1] = n[0];
+                        n[0] = d[3] + t;
+                        t += sha1Majority(d[0], d[1], d[2]) + sha256BigSigma0(d[0]);
+                        d[3] = d[2];
+                        d[2] = d[1];
+                        d[1] = d[0];
+                        d[0] = t;
+                    }
+                }
+                writeWords(regs, baseRd, d);
+            }
+            case SHA256SU1 -> {
+                int[] d = readWords(regs, baseRd);
+                int[] n = readWords(regs, baseRn);
+                int[] m = readWords(regs, baseRm);
+                d[0] += sha256SmallSigma1(m[2]) + n[1];
+                d[1] += sha256SmallSigma1(m[3]) + n[2];
+                d[2] += sha256SmallSigma1(d[0]) + n[3];
+                d[3] += sha256SmallSigma1(d[1]) + m[0];
                 writeWords(regs, baseRd, d);
             }
         }

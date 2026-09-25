@@ -53,37 +53,33 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após fechamento da B20.8)
+## Onde estamos (atualizado 2026-09-24, após fechamento da B13.23)
 
-**B20.8 FECHADA** (`Aarch64Architecture.ARMV8_R_64` + `Aarch64Processor.CORTEX_R82`, PMSAv8-64 no
-lado A64 — `Pmsav8SystemRegisters64`/`Pmsav8AddressSpace64`, 5 registradores de MPU de EL1). ARM DDI
-0600A.d lido de ponta a ponta via `curl` (não parafraseado). **Achado real que corrige a suposição
-do épico**: sobreposição de regiões em PMSAv8-64 é `Translation fault` (Table C1-4), NÃO
-`Permission fault` como no PMSAv8-32 (B20.7) — as duas versões de PMSA divergem nesse ponto, não são
-espelho perfeito. Reusa `MemoryTranslationException64`/`FaultStatus64` de VMSA64 diretamente (o
-manual confirma "reuses IFSC and DFSC fault encodings"), só um código novo (`PERMISSION_FAULT_L0`,
-nível 0, que VMSA64 nunca gera). QEMU não implementa `cortex-r82` ainda (confirmado por busca no
-código-fonte real) — região de fundo é decisão de implementação documentada, não fonte normativa
-(o DDI 0600A.d deixa o mapa padrão IMPLEMENTATION DEFINED). Coluna nova em `docs/COBERTURA-ISA.md`
-ADIADA para a B20.9 (Armadilha 6 da spec) — `./gerar-cobertura-isa.sh` rodado, zero-diff. `mvn -o
-test` verde (core) + `mvn -o install` local + G5 verde em `gbaemu`/`ndsemu`/`armbox`
-(`virtual-arm-box`/`n3dsemu` continuam congelados/pausados). Ver `## Resultado` da task
-(`b20.8-armv8r-aarch64.md`).
+**B13.23 FECHADA** (NEON cripto de TRÊS registradores A32: `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/
+`SHA256H`/`SHA256H2`/`SHA256SU1`). **Achado que corrige a B13.15**: aquela task media só o
+sub-espaço "2-reg-misc" de `neon-dp.decode` e concluiu, errado, que essas formas de 3 registradores
+não existiam em A32 — elas vivem na seção "3-reg-same" (`opc=1100 op=0`), MESMO arquivo, frame
+diferente, e `NeonDataProcessingDecoder` já reivindicava esse `opc` para `VFMA_fp`/`VQRDMLSH` sem
+tratar `op=0`. Decode + migração D1 (RFC B13.2) para `AdvSimdCrypto#shaThreeRegister`, zero
+semântica nova (A64 passou a delegar, zero-diff comprovado pelas suítes A64 existentes sem edição).
+`ArmFeature.CRYPTO` reusada (nenhum preset a declara, incl. `ARMV7A_NEON`) ⇒ zero-diff de runtime e
+`docs/COBERTURA-ISA.md` byte a byte idêntica. `docs/COBERTURA-JIT.md` regenerado (182→183
+`record`s). **Achado de processo**: `./gerar-cobertura-jit.sh` faz 2 invocações Maven separadas — a
+2ª resolve `core` via `~/.m2`, não o reactor; sem `mvn -o install -pl core` antes, a ferramenta mede
+contra o JAR ANTIGO mesmo com o fonte atualizado (reproduzido e corrigido nesta sessão). `mvn -o
+test` verde + `install` local + G5 verde em `gbaemu`/`ndsemu`/`armbox` (`virtual-arm-box`/`n3dsemu`
+continuam congelados/pausados). Ver `## Resultado` da task (`b13.23-neon-cripto-sha-tres-registradores.md`).
 
 **Pegáveis a seguir**: `B20.9` (validação N1-N4 + fechamento do épico B20, decide se a coluna `v8-R
 (AArch64)` de `docs/COBERTURA-ISA.md` entra aqui, adiada pela B20.8) segue bloqueada no usuário —
 runner natural é o `virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda (achado
 real da B20.8). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
-Candidata nova da
-B13.22: "NEON SHA de 3 registradores A32" (`SHA1C_3s`/`SHA1P_3s`/`SHA1M_3s`/`SHA1SU0_3s`/
-`SHA256H_3s`/`SHA256H2_3s`/`SHA256SU1_3s`, semântica já existe no núcleo A64 via
-`Ir64CryptoShaThreeRegisterOp`, migração D1 da RFC B13.2, sem spec escrita ainda). Candidatas
-gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19 encodings),
-tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`, `SB` de 32
-bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/`VJCVT` de
-32 bits, conversões FP16 do VFPv3 (`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets ARMv8-M
-modernos. Candidata nova da B13.8/B13.22: "NEON FP16 AArch32" (as 4 `VCVT_xx_2sh` + as formas F16
-que B13.6/B13.11/B13.13 também adiaram), depende de B19.5.1.
+Candidatas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19
+encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`,
+`SB` de 32 bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/
+`VJCVT` de 32 bits, conversões FP16 do VFPv3 (`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets
+ARMv8-M modernos. Candidata nova da B13.8/B13.22: "NEON FP16 AArch32" (as 4 `VCVT_xx_2sh` + as
+formas F16 que B13.6/B13.11/B13.13 também adiaram), depende de B19.5.1.
 
 **Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
 recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL

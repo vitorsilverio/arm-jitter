@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
@@ -58,7 +59,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
     @Test
     void everyKindHasCoherentSupportsAndCreate() {
         List<Integer> kinds = allKindConstants();
-        assertEquals(182, kinds.size(), "IrOp.Kind deve ter 182 constantes contíguas");
+        assertEquals(183, kinds.size(), "IrOp.Kind deve ter 183 constantes contíguas");
 
         for (int kind : kinds) {
             IrOp op = sampleOp(kind);
@@ -150,7 +151,9 @@ class TruffleCodeEmitterSupportsCoherenceTest {
         // acrescentou VFP_ALU_HALF, VFP_MOVE_IMMEDIATE_HALF, VFP_COMPARE_HALF, VFP_SELECT_HALF,
         // VFP_ROUND_HALF, VFP_CONVERT_ROUNDED_HALF, VFP_CONVERT_FIXED_HALF, VFP_LOAD_HALF,
         // VFP_STORE_HALF (+9, aritmética `_hp`, mesmo "Não inclui": decode + interpretado apenas).
-        assertEquals(116, uncovered.size(), "Kinds descobertos: " + uncovered);
+        // B13.23 acrescentou NEON_CRYPTO_SHA_THREE_REGISTER (+1, idem B13.15 — NEON também não tem
+        // nó Truffle).
+        assertEquals(117, uncovered.size(), "Kinds descobertos: " + uncovered);
         assertTrue(uncovered.containsAll(List.of(
                         IrOp.Kind.NOCP,
                         IrOp.Kind.VFP_SYSREG_MEMORY_TRANSFER,
@@ -197,6 +200,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
                         IrOp.Kind.NEON_SWAP_PERMUTE, IrOp.Kind.NEON_EXTRACT,
                         IrOp.Kind.NEON_TABLE_LOOKUP, IrOp.Kind.NEON_DUPLICATE_SCALAR,
                         IrOp.Kind.NEON_CRYPTO_AES, IrOp.Kind.NEON_CRYPTO_SHA,
+                        IrOp.Kind.NEON_CRYPTO_SHA_THREE_REGISTER,
                         IrOp.Kind.MVE_VECTOR_2OP, IrOp.Kind.MVE_VECTOR_2OP_WIDENING,
                         IrOp.Kind.MVE_VECTOR_CARRY, IrOp.Kind.MVE_VECTOR_COMPLEX_ADD,
                         IrOp.Kind.MVE_VECTOR_ABS_ACCUMULATE, IrOp.Kind.MVE_VECTOR_FP_ABS_ACCUMULATE,
@@ -382,6 +386,8 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_DUPLICATE_SCALAR -> new IrOp.NeonDuplicateScalar(0, 3, false, 0, 1);
             case IrOp.Kind.NEON_CRYPTO_AES -> new IrOp.NeonCryptoAes(AdvSimdCryptoAesOp.AESE, 0, 1);
             case IrOp.Kind.NEON_CRYPTO_SHA -> new IrOp.NeonCryptoSha(AdvSimdCryptoShaOp.SHA1H, 0, 1);
+            case IrOp.Kind.NEON_CRYPTO_SHA_THREE_REGISTER ->
+                    new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1C, 0, 2, 4);
             case IrOp.Kind.NEON_FP_CONVERT_PRECISION ->
                     new IrOp.NeonFpConvertPrecision(AdvSimdFpConvertPrecisionOp.NARROW_F16, 0, 2);
             case IrOp.Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE ->

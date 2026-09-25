@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdPairwiseOp;
@@ -31,14 +32,21 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `VMAX_fp`/`VRECPS`/`VPADD_fp`/... , B13.6) também é decodificada aqui, forma F32 apenas — F16
 /// (`FEAT_FP16`) vira `UNIMPLEMENTED` (task futura irmã da B19.5).
 ///
-/// Fora de escopo (viram `UNIMPLEMENTED` aqui, com destino registrado): cripto (`SHA1*`/`SHA256*`
-/// → B13.15). T32 é B13.16. `FPSCR.QC`/`FPSR.QC` (bit cumulativo de saturação) e `FPSCR.RMode`/`FZ`
-/// NÃO são modelados (paridade com o A64) — task futura própria.
+/// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` (`opc=1100 op=0`, "cripto de
+/// três registradores", B13.23) também são decodificadas aqui, gateadas por
+/// {@link ArmFeature#CRYPTO} ALÉM de `ADVANCED_SIMD` (sem ela: `UNIMPLEMENTED`, não `null` — o frame
+/// já bateu).
+///
+/// Fora de escopo (viram `UNIMPLEMENTED` aqui, com destino registrado): T32 é B13.16. `FPSCR.QC`/
+/// `FPSR.QC` (bit cumulativo de saturação) e `FPSCR.RMode`/`FZ` NÃO são modelados (paridade com o
+/// A64) — task futura própria.
 ///
 /// Gates: {@link ArmFeature#ADVANCED_SIMD} (todo o frame) e, ADEMAIS,
-/// {@link ArmFeature#ADVANCED_SIMD_RDM} para `VQRDMLAH`/`VQRDMLSH` (`FEAT_RDM`). **Nenhum preset os
-/// declara** (B13.22 é quem fecha isso), então sem a feature o frame volta a cair no
-/// `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
+/// {@link ArmFeature#ADVANCED_SIMD_RDM} para `VQRDMLAH`/`VQRDMLSH` (`FEAT_RDM`) e
+/// {@link ArmFeature#CRYPTO} para as 7 SHA de três registradores. **Nenhum preset os declara**
+/// (B13.22 fechou o épico sem eles — ver Javadoc de {@link
+/// dev.vitorsilverio.armjitter.arch.ArmArchitecture#ARMV7A_NEON}), então sem a feature o frame volta
+/// a cair no `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonDataProcessingDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -95,6 +103,13 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         // `opc` `1101`/`1110`/`1111` como `null`→`UNIMPLEMENTED` e `opc=1100 op=1 u=0` idem).
         if (isFloatingPoint(opc, op, u)) {
             return decodeFloatingPoint(raw, address, condition, u, opc, op, quad, vd, vn, vm);
+        }
+
+        // Subespaço "cripto de três registradores" (B13.23) — reivindicado ANTES do fluxo inteiro
+        // pela mesma razão do FP: `opc=1100 op=0` cairia em `threeSameOperation` → `null` →
+        // `UNIMPLEMENTED` sem isto.
+        if (opc == 0b1100 && op == 0) {
+            return decodeShaThreeRegister(raw, address, condition, u, size, quad, vd, vn, vm);
         }
 
         AdvSimdPairwiseOp pairwise = pairwiseOperation(opc, op, u);
@@ -157,11 +172,52 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         return DecodedInstruction.unimplemented(address, raw, InstructionSet.ARM, condition);
     }
 
+    // ────────────────── Cripto de três registradores (B13.23) ──────────────────
+
+    /// Decodifica as 7 linhas `@3same_crypto` (`opc=1100 op=0`): `U`/`size` selecionam o mnemônico
+    /// (`U=0`: SHA1, `U=1`: SHA256; `size=11` só existe para `U=0`, `SHA1SU0`). `Q` (bit6) é FIXO em
+    /// `1` no `.decode` real — encoding com `Q=0` não é nenhuma destas 7, então `UNIMPLEMENTED`
+    /// (mesma disciplina de G8 do resto do decoder).
+    private DecodedInstruction decodeShaThreeRegister(int raw, int address, Condition condition,
+            int u, int size, boolean quad, int vd, int vn, int vm) {
+        if (!architecture.has(ArmFeature.CRYPTO)) {
+            return unimplemented(address, raw, condition);
+        }
+        if (!quad || ((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
+        AdvSimdCryptoShaThreeRegisterOp op = shaThreeRegisterOperation(u, size);
+        if (op == null) {
+            return unimplemented(address, raw, condition);
+        }
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonCryptoShaThree(op, vd, vn, vm));
+    }
+
+    /// `(U, size)` → mnemônico. `size=11` (`0b11`) só existe do lado `U=0` (`SHA1SU0`); `U=1
+    /// size=11` não está alocado (o QEMU real recusa).
+    private static AdvSimdCryptoShaThreeRegisterOp shaThreeRegisterOperation(int u, int size) {
+        if (u == 0) {
+            return switch (size) {
+                case 0b00 -> AdvSimdCryptoShaThreeRegisterOp.SHA1C;
+                case 0b01 -> AdvSimdCryptoShaThreeRegisterOp.SHA1P;
+                case 0b10 -> AdvSimdCryptoShaThreeRegisterOp.SHA1M;
+                default -> AdvSimdCryptoShaThreeRegisterOp.SHA1SU0;
+            };
+        }
+        return switch (size) {
+            case 0b00 -> AdvSimdCryptoShaThreeRegisterOp.SHA256H;
+            case 0b01 -> AdvSimdCryptoShaThreeRegisterOp.SHA256H2;
+            case 0b10 -> AdvSimdCryptoShaThreeRegisterOp.SHA256SU1;
+            default -> null;
+        };
+    }
+
     // ─────────────────────────── Ponto flutuante (B13.6) ───────────────────────────
 
     /// O subespaço FP de "3-reg-same" (`@3same_fp`/`@3same_fp_q0` do `neon-dp.decode`): `opc` em
     /// `{1101, 1110, 1111}` (todas as combinações são FP) OU `opc=1100` só na forma `VFMA`/`VFMS`
-    /// (`op=1 u=0`) — `opc=1100 op=0` é cripto (B13.15) e `opc=1100 op=1 u=1` é `VQRDMLSH` (B13.5).
+    /// (`op=1 u=0`) — `opc=1100 op=0` é cripto (B13.23) e `opc=1100 op=1 u=1` é `VQRDMLSH` (B13.5).
     private static boolean isFloatingPoint(int opc, int op, int u) {
         if (opc == 0b1101 || opc == 0b1110 || opc == 0b1111) {
             return true;
@@ -293,7 +349,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
                 case 0b11 -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMLAH);
                 default -> null;
             };
-            // `opc=1100 op=0` é cripto (`SHA1*`/`SHA256*` → B13.15); `op=1 u=0` é `VFMA_fp` (B13.6);
+            // `opc=1100 op=0` é cripto (`SHA1*`/`SHA256*` de três registradores → B13.23, tratada ANTES desta função); `op=1 u=0` é `VFMA_fp` (B13.6);
             // só `op=1 u=1` é desta task (`VQRDMLSH`, H/S apenas).
             case 0b1100 -> (op == 1 && u == 1) ? halfOrWord(size, AdvSimdThreeSameOp.SQRDMLSH) : null;
             default -> null;

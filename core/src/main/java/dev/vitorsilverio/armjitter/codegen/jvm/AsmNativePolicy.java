@@ -187,6 +187,7 @@ public final class AsmNativePolicy {
             // NEON "two-register miscellaneous" cripto, `size==0b11` (B13.15): idem.
             case IrOp.NeonCryptoAes ignored -> false;
             case IrOp.NeonCryptoSha ignored -> false;
+            case IrOp.NeonCryptoShaThree ignored -> false;
             // MAXNM/MINNM (B14.4, ArmFeature.ARMV8_FP): sem emissor nativo ainda ("Não inclui" da
             // task — decode + interpretado apenas, mesmo padrão de VfpSelect/Crc32/Nocp abaixo).
             // O resto de VfpAlu (ADD/SUB/MUL/DIV/MLA/.../FNMS) segue nativo desde a B3.6.

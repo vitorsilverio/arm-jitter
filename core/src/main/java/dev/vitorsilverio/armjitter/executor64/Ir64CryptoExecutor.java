@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
@@ -19,9 +20,9 @@ import java.util.HexFormat;
 ///
 /// `AESE`/`AESD`/`AESMC`/`AESIMC` (B8.11) e `SHA1H`/`SHA1SU1`/`SHA256SU0` (B8.11b) foram MIGRADOS
 /// para o núcleo COMPARTILHADO {@link AdvSimdCrypto} na task B13.15 (RFC B13.2 D1, primeiro
-/// consumidor A32) — `mapAesOp`/`mapShaTwoRegisterOp` só traduzem o enum espelhado, a S-box e as
-/// matrizes `MixColumns`/`InvMixColumns` vivem só lá agora. As formas de TRÊS registradores
-/// continuam abaixo (sem encoding A32).
+/// consumidor A32); `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` seguiram na
+/// B13.23 — `mapAesOp`/`mapShaTwoRegisterOp`/`mapShaThreeRegisterOp` só traduzem o enum espelhado, a
+/// S-box, as matrizes `MixColumns`/`InvMixColumns` e as fórmulas SHA vivem só lá agora.
 final class Ir64CryptoExecutor {
     private Ir64CryptoExecutor() {
     }
@@ -67,21 +68,6 @@ final class Ir64CryptoExecutor {
         return (x & y) | ((x | y) & z);
     }
 
-    /// `Σ0`/`Σ1`/`σ1` do SHA256 (FIPS PUB 180-4 §4.1.2). `σ0` migrou para
-    /// {@link AdvSimdCrypto#shaTwoRegister} (B13.15, único consumidor era `SHA256SU0` de dois
-    /// registradores).
-    private static int sha256BigSigma0(int x) {
-        return Integer.rotateRight(x, 2) ^ Integer.rotateRight(x, 13) ^ Integer.rotateRight(x, 22);
-    }
-
-    private static int sha256BigSigma1(int x) {
-        return Integer.rotateRight(x, 6) ^ Integer.rotateRight(x, 11) ^ Integer.rotateRight(x, 25);
-    }
-
-    private static int sha256SmallSigma1(int x) {
-        return Integer.rotateRight(x, 17) ^ Integer.rotateRight(x, 19) ^ (x >>> 10);
-    }
-
     /// Lê os 4 elementos de 32 bits (`words[0]` = 32 bits mais baixos) de `V<reg>` — mesma ordem
     /// little-endian do `union CRYPTO_STATE` real do QEMU (`crypto_helper.c`).
     private static int[] readWords(Aarch64FpRegisters fp, int reg) {
@@ -101,74 +87,26 @@ final class Ir64CryptoExecutor {
     /// `log2` do tamanho de elemento "palavra" (32 bits) na convenção de {@link Aarch64FpRegisters}.
     private static final int WORD_SIZE_LOG2 = 2;
 
+    /// Mirror 1:1 de {@link Ir64CryptoShaThreeRegisterOp} → {@link AdvSimdCryptoShaThreeRegisterOp}
+    /// (núcleo compartilhado, migrado na task B13.23).
+    private static AdvSimdCryptoShaThreeRegisterOp mapShaThreeRegisterOp(Ir64CryptoShaThreeRegisterOp op) {
+        return switch (op) {
+            case SHA1C -> AdvSimdCryptoShaThreeRegisterOp.SHA1C;
+            case SHA1P -> AdvSimdCryptoShaThreeRegisterOp.SHA1P;
+            case SHA1M -> AdvSimdCryptoShaThreeRegisterOp.SHA1M;
+            case SHA1SU0 -> AdvSimdCryptoShaThreeRegisterOp.SHA1SU0;
+            case SHA256H -> AdvSimdCryptoShaThreeRegisterOp.SHA256H;
+            case SHA256H2 -> AdvSimdCryptoShaThreeRegisterOp.SHA256H2;
+            case SHA256SU1 -> AdvSimdCryptoShaThreeRegisterOp.SHA256SU1;
+        };
+    }
+
     static boolean executeShaThreeRegister(Aarch64Core core, Ir64Op.CryptoShaThreeRegister op) {
         Aarch64FpRegisters fp = core.fp();
-        switch (op.op()) {
-            case SHA1C, SHA1P, SHA1M -> {
-                int[] d = readWords(fp, op.rd());
-                int n0 = (int) fp.element(op.rn(), 0, WORD_SIZE_LOG2);
-                int[] m = readWords(fp, op.rm());
-                for (int i = 0; i < 4; i++) {
-                    int t = switch (op.op()) {
-                        case SHA1C -> sha1Choose(d[1], d[2], d[3]);
-                        case SHA1P -> sha1Parity(d[1], d[2], d[3]);
-                        default -> sha1Majority(d[1], d[2], d[3]);
-                    };
-                    t += Integer.rotateLeft(d[0], 5) + n0 + m[i];
-                    n0 = d[3];
-                    d[3] = d[2];
-                    d[2] = Integer.rotateRight(d[1], 2);
-                    d[1] = d[0];
-                    d[0] = t;
-                }
-                writeWords(fp, op.rd(), d);
-            }
-            case SHA1SU0 -> {
-                long dLow = fp.low64(op.rd());
-                long dHigh = fp.high64(op.rd());
-                long nLow = fp.low64(op.rn());
-                long mLow = fp.low64(op.rm());
-                long mHigh = fp.high64(op.rm());
-                fp.setQ(op.rd(), dHigh ^ dLow ^ mLow, nLow ^ dHigh ^ mHigh);
-            }
-            case SHA256H, SHA256H2 -> {
-                int[] d = readWords(fp, op.rd());
-                int[] n = readWords(fp, op.rn());
-                int[] m = readWords(fp, op.rm());
-                boolean h2 = op.op() == Ir64CryptoShaThreeRegisterOp.SHA256H2;
-                for (int i = 0; i < 4; i++) {
-                    if (h2) {
-                        int t = sha1Choose(d[0], d[1], d[2]) + d[3] + sha256BigSigma1(d[0]) + m[i];
-                        d[3] = d[2];
-                        d[2] = d[1];
-                        d[1] = d[0];
-                        d[0] = n[3 - i] + t;
-                    } else {
-                        int t = sha1Choose(n[0], n[1], n[2]) + n[3] + sha256BigSigma1(n[0]) + m[i];
-                        n[3] = n[2];
-                        n[2] = n[1];
-                        n[1] = n[0];
-                        n[0] = d[3] + t;
-                        t += sha1Majority(d[0], d[1], d[2]) + sha256BigSigma0(d[0]);
-                        d[3] = d[2];
-                        d[2] = d[1];
-                        d[1] = d[0];
-                        d[0] = t;
-                    }
-                }
-                writeWords(fp, op.rd(), d);
-            }
-            case SHA256SU1 -> {
-                int[] d = readWords(fp, op.rd());
-                int[] n = readWords(fp, op.rn());
-                int[] m = readWords(fp, op.rm());
-                d[0] += sha256SmallSigma1(m[2]) + n[1];
-                d[1] += sha256SmallSigma1(m[3]) + n[2];
-                d[2] += sha256SmallSigma1(d[0]) + n[3];
-                d[3] += sha256SmallSigma1(d[1]) + m[0];
-                writeWords(fp, op.rd(), d);
-            }
-        }
+        AdvSimdCrypto.shaThreeRegister(fp, mapShaThreeRegisterOp(op.op()),
+                op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rn() * Aarch64FpRegisters.WORDS_PER_REGISTER,
+                op.rm() * Aarch64FpRegisters.WORDS_PER_REGISTER);
         return false;
     }
 

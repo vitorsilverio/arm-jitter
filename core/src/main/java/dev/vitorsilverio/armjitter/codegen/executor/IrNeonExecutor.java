@@ -574,4 +574,11 @@ public final class IrNeonExecutor {
     public void executeNeonCryptoSha(ArmCore core, IrOp.NeonCryptoSha op) {
         AdvSimdCrypto.shaTwoRegister(core.vfp(), op.op(), op.vd(), op.vm());
     }
+
+    /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` (B13.23): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdCrypto#shaThreeRegister}) — a MESMA função que o executor A64
+    /// chama desde esta task (migração D1).
+    public void executeNeonCryptoShaThree(ArmCore core, IrOp.NeonCryptoShaThree op) {
+        AdvSimdCrypto.shaThreeRegister(core.vfp(), op.op(), op.vd(), op.vn(), op.vm());
+    }
 }
