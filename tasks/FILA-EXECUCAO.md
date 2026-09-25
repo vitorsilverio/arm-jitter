@@ -53,40 +53,36 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, após fechamento da B13.23)
+## Onde estamos (atualizado 2026-09-24, specs gap-driven escritas + 2 RFCs decididas)
 
-**B13.23 FECHADA** (NEON cripto de TRÊS registradores A32: `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/
-`SHA256H`/`SHA256H2`/`SHA256SU1`). **Achado que corrige a B13.15**: aquela task media só o
-sub-espaço "2-reg-misc" de `neon-dp.decode` e concluiu, errado, que essas formas de 3 registradores
-não existiam em A32 — elas vivem na seção "3-reg-same" (`opc=1100 op=0`), MESMO arquivo, frame
-diferente, e `NeonDataProcessingDecoder` já reivindicava esse `opc` para `VFMA_fp`/`VQRDMLSH` sem
-tratar `op=0`. Decode + migração D1 (RFC B13.2) para `AdvSimdCrypto#shaThreeRegister`, zero
-semântica nova (A64 passou a delegar, zero-diff comprovado pelas suítes A64 existentes sem edição).
-`ArmFeature.CRYPTO` reusada (nenhum preset a declara, incl. `ARMV7A_NEON`) ⇒ zero-diff de runtime e
-`docs/COBERTURA-ISA.md` byte a byte idêntica. `docs/COBERTURA-JIT.md` regenerado (182→183
-`record`s). **Achado de processo**: `./gerar-cobertura-jit.sh` faz 2 invocações Maven separadas — a
-2ª resolve `core` via `~/.m2`, não o reactor; sem `mvn -o install -pl core` antes, a ferramenta mede
-contra o JAR ANTIGO mesmo com o fonte atualizado (reproduzido e corrigido nesta sessão). `mvn -o
-test` verde + `install` local + G5 verde em `gbaemu`/`ndsemu`/`armbox` (`virtual-arm-box`/`n3dsemu`
-continuam congelados/pausados). Ver `## Resultado` da task (`b13.23-neon-cripto-sha-tres-registradores.md`).
+**3 specs novas escritas nesta rodada** (gaps que B16.14/B14.7/B13.22 já tinham medido e nomeado,
+agora com task executável):
 
-**Pegáveis a seguir**: `E14` (achado da auditoria JaCoCo pedida pelo usuário ao fechar a B13.23:
-`IrBlockExecutor#execute`/`AsmNativePolicy` não têm cobertura de teste para NENHUMA instrução NEON,
-lacuna estrutural do épico B13 inteiro, não regressão da B13.23 — spec escrita 2026-09-24). `B20.9`
-(validação N1-N4 + fechamento do épico B20, decide se a coluna `v8-R
-(AArch64)` de `docs/COBERTURA-ISA.md` entra aqui, adiada pela B20.8) segue bloqueada no usuário —
-runner natural é o `virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda (achado
-real da B20.8). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
-Candidatas gap-driven da B16.14 (specs ainda não escritas): decoder MVE "long shift" GPR-pair (19
-encodings), tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP` (4), `BF` 3 formas restantes, `CLRM`,
-`SB` de 32 bits. Candidatas novas da B14.7 (specs ainda não escritas): `VRINTR`/`VRINTZ`/`VRINTX`/
-`VJCVT` de 32 bits, conversões FP16 do VFPv3 (`VCVT_f32_f16`&cia), `ArmFeature.HALT` nos presets
-ARMv8-M modernos. Candidata nova da B13.8/B13.22: "NEON FP16 AArch32" (as 4 `VCVT_xx_2sh` + as
-formas F16 que B13.6/B13.11/B13.13 também adiaram), depende de B19.5.1.
+- **`B16.15`** (épico B16 reaberto): 4 das 5 famílias que a B16.14 expôs (15 células) — tail-
+  predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP`, `BF`/`BFL`/`BFCSEL`/`BFX`/`BFLX` (3 formas restantes),
+  `CLRM`, `SB`+`CRC32*` de perfil M. A 5ª família (long-shift GPR-pair, 19 encodings) segue como
+  candidata sem spec própria (`B16.16`).
+- **`B22.7`** (épico B22 reaberto — a coluna `v8-A/32` só nasceu depois do fechamento original de
+  B22): `VRINTR`/`VRINTZ`/`VRINTX` incondicionais, `VJCVT`, conversões FP16/BF16 do VFPv3, e
+  `ArmFeature.HALT` nos 4 presets ARMv8-M modernos.
+- **`B13.24`** (épico B13 reaberto): NEON FP16 AArch32 — os 4 `VCVT_xx_2sh` que a B13.22 confirmou
+  como gap real, mais a reconciliação com as formas F16 que B13.6/B13.11 tinham adiado em OUTRAS
+  seções (a task remede antes de assumir se ainda são gap ou já não-aplicável).
 
-**Duas decisões de RFC ainda pendentes do usuário** (specs downstream já escritas assumindo a
-recomendação — ver `tasks/README.md`): `B17.2` (comprimento de vetor SVE, recomendação: VL
-configurável 256 bits default) e `B21.1` (modelo 26-bit ARM, recomendação: `R15` como view composta).
+**As 2 RFCs pendentes foram DECIDIDAS pelo usuário em 2026-09-24** — nenhuma bloqueia mais nada:
+
+- **`B17.2`** (comprimento de vetor SVE): **Opção C aprovada**, `VL` default 256 bits. **B17.3-B17.26
+  desbloqueadas.**
+- **`B21.1`** (modelo de 26 bits): **Opção (c) aprovada**, `R15` como view composta, gate resolvido
+  em lift-time. **B21.2-B21.8 desbloqueadas.**
+
+**Pegáveis a seguir**: as 3 tasks novas acima (`B16.15`, `B22.7`, `B13.24`) + tudo que as 2 RFCs
+desbloquearam (`B17.3` em diante, `B21.2` em diante — conferir dependências no `INDICE.md` de cada
+uma antes de pegar). Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23:
+`IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de teste para NENHUMA instrução NEON,
+lacuna estrutural do épico B13 inteiro). `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do
+roadmap. `B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o
+`virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda.
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,
