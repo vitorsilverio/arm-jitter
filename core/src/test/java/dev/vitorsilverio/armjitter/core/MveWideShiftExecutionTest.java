@@ -360,4 +360,57 @@ class MveWideShiftExecutionTest {
         assertEquals(without.register(0), withDecoder.register(0));
         assertEquals(without.programCounter(), withDecoder.programCounter());
     }
+
+    // ── caminho de blocos (lifter + IrBlockExecutor + política ASM) ─────────────────────────────
+
+    private static dev.vitorsilverio.armjitter.ir.IrBlock liftThumb(ArmCore core, int count) {
+        return new dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter(
+                new dev.vitorsilverio.armjitter.decoder.ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE),
+                new dev.vitorsilverio.armjitter.ir.StandardIrBuilder())
+                .lift(core.memory(), CODE_BASE, count, 0);
+    }
+
+    @Test
+    void liftedBlockRunsThroughIrBlockExecutorLikeStep() {
+        ArmCore core = newCore();
+        setPair(core, 2, 5, 0x0000_0000_8000_0001L);
+        core.setRegister(3, 0x8000_0000);
+        put32(core, CODE_BASE, pairImmediate(LEFT, false, 2, 5, 4)); // LSLL
+        put32(core, CODE_BASE + 4, wordImmediate(LEFT, 3, 1)); // UQSHL (satura)
+        var block = liftThumb(core, 2);
+        assertEquals(2, block.operations().stream()
+                .filter(op -> op instanceof dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift).count());
+
+        new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
+                .execute(block, core);
+
+        assertEquals(0x0000_0008_0000_0010L, pair(core, 2, 5));
+        assertEquals(0xFFFF_FFFF, core.register(3));
+        assertTrue(core.cpsr().saturation());
+        assertEquals(CODE_BASE + 8, core.programCounter());
+    }
+
+    @Test
+    void wideShiftIsInterpretedOnlyAndRunsThroughExecuteOp() {
+        var op = new dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift(
+                dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.AL);
+        assertFalse(dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy.supports(op));
+        ArmCore core = newCore();
+        setPair(core, 2, 5, 1);
+        assertFalse(new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
+                .executeOp(core, op, CODE_BASE));
+        assertEquals(0x10L, pair(core, 2, 5));
+    }
+
+    @Test
+    void wideShiftWithFalseConditionDoesNothingInExecuteOp() {
+        var op = new dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift(
+                dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.NE);
+        ArmCore core = newCore();
+        core.cpsr().setNzcv(false, true, false, false);
+        setPair(core, 2, 5, 1);
+        new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
+                .executeOp(core, op, CODE_BASE);
+        assertEquals(1L, pair(core, 2, 5));
+    }
 }
