@@ -336,6 +336,12 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_CPACR = 1;
     private static final int SYSREG_CRM_CPACR = 0;
     private static final int SYSREG_OP2_CPACR = 2;
+    // B17.3: ZCR_EL1/2/3 (FEAT_SVE) — mesmos CRn/CRm/op2 nos 3 níveis (`op1` = 0/4/6 seleciona o
+    // nível, já resolvido antes de `decodeEl2RegisterId`/`decodeEl3RegisterId`); conferidos contra
+    // `zcr_reginfo` de `target/arm/helper.c` do QEMU.
+    private static final int SYSREG_CRN_ZCR = 1;
+    private static final int SYSREG_CRM_ZCR = 2;
+    private static final int SYSREG_OP2_ZCR = 0;
     // B19.14: RGSR_EL1/GCR_EL1 (FEAT_MTE2) — MESMO CRn/CRm de SCTLR_EL1/CPACR_EL1, só op2 muda.
     private static final int SYSREG_OP2_RGSR_EL1 = 5;
     private static final int SYSREG_OP2_GCR_EL1 = 6;
@@ -7224,6 +7230,11 @@ public final class Aarch64Decoder {
         if (register == Aarch64SystemRegisterId.FPMR && !architecture.has(Aarch64Feature.FP8)) {
             throw unsupported(word, address);
         }
+        // B17.3: ZCR_ELx são FEAT_SVE — sem ela continuam UNDEFINED (G8), mesmo padrão de FPMR.
+        if ((register == Aarch64SystemRegisterId.ZCR_EL1 || register == Aarch64SystemRegisterId.ZCR_EL2
+                || register == Aarch64SystemRegisterId.ZCR_EL3) && !architecture.has(Aarch64Feature.SVE)) {
+            throw unsupported(word, address);
+        }
         // B19.14: RGSR_EL1/GCR_EL1 são FEAT_MTE2 — gateados, mesmo padrão de FPMR acima.
         if ((register == Aarch64SystemRegisterId.RGSR_EL1 || register == Aarch64SystemRegisterId.GCR_EL1)
                 && !architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
@@ -7353,6 +7364,9 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_CPACR && crm == SYSREG_CRM_CPACR && op2 == SYSREG_OP2_CPACR) {
             return Aarch64SystemRegisterId.CPACR_EL1;
+        }
+        if (crn == SYSREG_CRN_ZCR && crm == SYSREG_CRM_ZCR && op2 == SYSREG_OP2_ZCR) {
+            return Aarch64SystemRegisterId.ZCR_EL1;
         }
         if (crn == SYSREG_CRN_SCTLR && crm == SYSREG_CRM_SCTLR && op2 == SYSREG_OP2_RGSR_EL1) {
             return Aarch64SystemRegisterId.RGSR_EL1;
@@ -7514,6 +7528,9 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_CPTR_EL2 && crm == SYSREG_CRM_CPTR_EL2 && op2 == SYSREG_OP2_CPTR_EL2) {
             return Aarch64SystemRegisterId.CPTR_EL2;
         }
+        if (crn == SYSREG_CRN_ZCR && crm == SYSREG_CRM_ZCR && op2 == SYSREG_OP2_ZCR) {
+            return Aarch64SystemRegisterId.ZCR_EL2;
+        }
         if (crn == SYSREG_CRN_TCR_EL2 && crm == SYSREG_CRM_TCR_EL2 && op2 == SYSREG_OP2_TCR_EL2) {
             return Aarch64SystemRegisterId.TCR_EL2;
         }
@@ -7558,6 +7575,9 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_CPTR_EL3 && crm == SYSREG_CRM_CPTR_EL3 && op2 == SYSREG_OP2_CPTR_EL3) {
             return Aarch64SystemRegisterId.CPTR_EL3;
+        }
+        if (crn == SYSREG_CRN_ZCR && crm == SYSREG_CRM_ZCR && op2 == SYSREG_OP2_ZCR) {
+            return Aarch64SystemRegisterId.ZCR_EL3;
         }
         if (crn == SYSREG_CRN_MDCR_EL3 && crm == SYSREG_CRM_MDCR_EL3 && op2 == SYSREG_OP2_MDCR_EL3) {
             return Aarch64SystemRegisterId.MDCR_EL3;

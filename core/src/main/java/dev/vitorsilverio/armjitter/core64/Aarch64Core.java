@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.core64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -8,9 +9,14 @@ import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /// Estado de uma CPU AArch64 (ARMv8-A), EL0 apenas — irmão de
 /// {@link dev.vitorsilverio.armjitter.core.ArmCore}, NÃO uma extensão dele (RFC-IR-64BIT.md §3.1:
@@ -92,6 +98,29 @@ public final class Aarch64Core {
     /// desabilita a rota para `EL3` a partir de `EL1`/`EL2`/`EL3`, mesmo raciocínio de
     /// {@link #HCR_EL2_HCD_BIT} para `HVC`; ver {@link #enterSecureMonitorCall}.
     private static final long SCR_EL3_SMD_BIT = 1L << 7;
+
+    // ── B17.3: SVE. `EC` de "acesso a SVE trapado" (`ARM DDI 0487 D17.2`, `EC=0x19`, `ISS=0`).
+    private static final long ESR_EC_SVE_ACCESS = 0x19L;
+    /// `ZCR_ELx.LEN` (`bits[3:0]`, `VL = (LEN+1) × 128`); o resto do registrador é `RES0`.
+    private static final long ZCR_LEN_MASK = 0xFL;
+    /// Valor de reset de `ZCR_ELx.LEN`: o máximo, então o `VL` efetivo = `VL` implementado até o
+    /// guest reduzir (mesmo default do QEMU, `sve_default_vq`).
+    private static final long ZCR_LEN_RESET = ZCR_LEN_MASK;
+    /// `CPACR_EL1.ZEN` (`bits[17:16]`): `0b00`/`0b10` trapam tudo, `0b01` só EL0, `0b11` nada.
+    private static final int CPACR_ZEN_SHIFT = 16;
+    private static final long CPACR_ZEN_MASK = 0b11L;
+    private static final long CPACR_ZEN_TRAP_EL0_ONLY = 0b01L;
+    private static final long CPACR_ZEN_NO_TRAP = 0b11L;
+    /// `CPTR_EL2.TZ` (bit 8, forma `E2H=0`, a única modelada): `1` trapa SVE para EL2.
+    private static final long CPTR_EL2_TZ_BIT = 1L << 8;
+    /// `CPTR_EL3.EZ` (bit 8): `0` trapa SVE para EL3.
+    private static final long CPTR_EL3_EZ_BIT = 1L << 8;
+    /// `ID_AA64PFR0_EL1.SVE` (`bits[35:32]`): `0b0001` = SVE implementada.
+    private static final long ID_AA64PFR0_SVE_IMPLEMENTED = 1L << 32;
+    /// `ID_AA64ZFR0_EL1.SVEver` (`bits[3:0]`): `0b0001` = SVE2 (`0b0000` = só SVE).
+    private static final long ID_AA64ZFR0_SVEVER_SVE2 = 1L;
+    /// Versão do formato de {@link #saveScalableState}.
+    private static final int SCALABLE_STATE_FORMAT_VERSION = 1;
 
     // ── B6.6.7: registradores de identidade da CPU, constantes fixas (sem hospedeiro plugável —
     // ── ver javadoc de Aarch64SystemRegisterId). Valores documentados registrador a registrador.
@@ -196,7 +225,14 @@ public final class Aarch64Core {
     /// {@link dev.vitorsilverio.armjitter.core.VfpRegisters} em
     /// {@link dev.vitorsilverio.armjitter.core.ArmCore} (sem flag de presença; quem gateia é o
     /// decoder por feature quando B6.5.3 chegar).
-    private final Aarch64FpRegisters fp = new Aarch64FpRegisters();
+    private final Aarch64FpRegisters fp;
+    /// Banco escalável (B17.3): dono do armazenamento de `Z`/`P`/`FFR`; {@link #fp} é a vista baixa
+    /// de 128 bits. Em presets sem `FEAT_SVE` é só o banco `Z` de 128 bits (sem predicados).
+    private final Aarch64ScalableRegisters scalable;
+    /// `ZCR_EL1`/`ZCR_EL2`/`ZCR_EL3` (`LEN`, B17.3) — resetam para o máximo.
+    private long zcrEl1 = ZCR_LEN_RESET;
+    private long zcrEl2 = ZCR_LEN_RESET;
+    private long zcrEl3 = ZCR_LEN_RESET;
     /// Barramento de registrador de sistema `MRS`/`MSR` (B6.6.1) — sem hospedeiro por padrão (ver
     /// {@link Aarch64SystemRegisterBus#none()}); B6.6.3 instala um real de MMU.
     private Aarch64SystemRegisterBus systemRegisterBus = Aarch64SystemRegisterBus.none();
@@ -275,8 +311,21 @@ public final class Aarch64Core {
     /// efeito observável ainda — ver o Javadoc de {@link #architecture}. Estado inicial: todos os
     /// registradores zerados, `PC = 0`, `PSTATE` zerado.
     public Aarch64Core(AddressSpace64 memory, Aarch64Architecture architecture) {
+        this(memory, architecture, Aarch64ScalableRegisters.DEFAULT_VECTOR_LENGTH_BITS);
+    }
+
+    /// Como {@link #Aarch64Core(AddressSpace64, Aarch64Architecture)}, com o `VL` implementado de
+    /// SVE escolhido (B17.3, RFC B17.2): múltiplo de 128 bits entre 128 e 2048. Ignorado (banco de
+    /// 128 bits, sem predicados) quando {@code architecture} não declara
+    /// {@link Aarch64Feature#SVE} — um Cortex-A53 não paga pelo estado escalável.
+    public Aarch64Core(AddressSpace64 memory, Aarch64Architecture architecture, int vectorLengthBits) {
         this.memory = Objects.requireNonNull(memory, "memory");
         this.architecture = Objects.requireNonNull(architecture, "architecture");
+        boolean sve = architecture.has(Aarch64Feature.SVE);
+        this.scalable = sve
+                ? new Aarch64ScalableRegisters(vectorLengthBits, true)
+                : new Aarch64ScalableRegisters(Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS, false);
+        this.fp = new Aarch64FpRegisters(scalable);
     }
 
     /// Retorna a arquitetura configurada para este core (B11.2).
@@ -371,6 +420,139 @@ public final class Aarch64Core {
     /// Retorna o banco de registradores FP escalar (`V0`-`V31`, B6.5.1).
     public Aarch64FpRegisters fp() {
         return fp;
+    }
+
+    /// Retorna o banco escalável (`Z`/`P`/`FFR`, B17.3). Em presets sem SVE só tem `Z` de 128 bits
+    /// (ver {@link #hasSve()}).
+    public Aarch64ScalableRegisters scalable() {
+        return scalable;
+    }
+
+    /// `true` quando a arquitetura deste core declara {@link Aarch64Feature#SVE}.
+    public boolean hasSve() {
+        return scalable.hasPredicates();
+    }
+
+    /// `VL` implementado em bits (o que o banco realmente guarda) — `128` sem SVE.
+    public int implementedVectorLengthBits() {
+        return scalable.vectorLengthBits();
+    }
+
+    /// `VL` EFETIVO em bits no EL atual: o menor entre o `VL` implementado e
+    /// `(ZCR_ELx.LEN + 1) × 128` de cada `ZCR_ELx` que se aplica ao EL atual (EL0/EL1 sofrem
+    /// `ZCR_EL1`, `ZCR_EL2` e `ZCR_EL3`; EL2 sofre `ZCR_EL2` e `ZCR_EL3`; EL3 só `ZCR_EL3`, mesma
+    /// regra de `sve_vqm1_for_el` do QEMU). Todo laço de lane SVE lê ISTO, nunca uma constante.
+    public int vectorLengthBits() {
+        int el = exceptionState.currentEl().ordinal();
+        long len = zcrEl3;
+        if (el <= Aarch64ExceptionLevel.EL2.ordinal()) {
+            len = Math.min(len, zcrEl2);
+        }
+        if (el <= Aarch64ExceptionLevel.EL1.ordinal()) {
+            len = Math.min(len, zcrEl1);
+        }
+        int requested = (int) (len + 1) * Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS;
+        return Math.min(requested, scalable.vectorLengthBits());
+    }
+
+    /// {@link #vectorLengthBits()} em bytes (`VL/8`).
+    public int vectorLengthBytes() {
+        return vectorLengthBits() / Byte.SIZE;
+    }
+
+    /// Tamanho de um predicado em bytes (`VL/64`), no `VL` efetivo.
+    public int predicateLengthBytes() {
+        return vectorLengthBytes() / Byte.SIZE;
+    }
+
+    /// Estreita o estado escalável ao `VL` efetivo do EL atual (zera `Z`/`P`/`FFR` acima dele) —
+    /// chamado quando `ZCR_ELx` diminui e a cada troca de EL (`aarch64_sve_change_el` do QEMU).
+    /// Não faz nada em presets sem SVE.
+    public void narrowScalableStateToCurrentVectorLength() {
+        if (hasSve()) {
+            scalable.narrowTo(vectorLengthBits());
+        }
+    }
+
+    /// `sve_access_check` (B17.3): o EL para o qual um acesso SVE no EL atual seria TRAPADO, ou
+    /// vazio se permitido. Ordem do `sve_exception_el` do QEMU: `CPACR_EL1.ZEN` (EL0/EL1, trap
+    /// para EL1), `CPTR_EL2.TZ` (até EL2, trap para EL2), `CPTR_EL3.EZ` (qualquer EL, trap para
+    /// EL3). Cada registrador só é consultado se o {@link #systemRegisterBus()} instalado o atende
+    /// (sem hospedeiro, não há estado de trap modelado — acesso permitido). Sempre vazio sem SVE
+    /// (o decoder já recusa a instrução, G8).
+    public Optional<Aarch64ExceptionLevel> sveAccessTrapLevel() {
+        if (!hasSve()) {
+            return Optional.empty();
+        }
+        Aarch64ExceptionLevel el = exceptionState.currentEl();
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL1.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPACR_EL1)) {
+            long zen = (systemRegisterBus.read(Aarch64SystemRegisterId.CPACR_EL1) >>> CPACR_ZEN_SHIFT)
+                    & CPACR_ZEN_MASK;
+            boolean allowed = zen == CPACR_ZEN_NO_TRAP
+                    || (zen == CPACR_ZEN_TRAP_EL0_ONLY && el != Aarch64ExceptionLevel.EL0);
+            if (!allowed) {
+                return Optional.of(Aarch64ExceptionLevel.EL1);
+            }
+        }
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL2.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL2)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.CPTR_EL2) & CPTR_EL2_TZ_BIT) != 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL2);
+        }
+        if (systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL3)
+                && (systemRegisterBus.read(Aarch64SystemRegisterId.CPTR_EL3) & CPTR_EL3_EZ_BIT) == 0) {
+            return Optional.of(Aarch64ExceptionLevel.EL3);
+        }
+        return Optional.empty();
+    }
+
+    /// `sve_access_check` completo: se o acesso é trapado, entra na exceção síncrona
+    /// (`EC=0x19`, `ISS=0`) no EL alvo e devolve `false` (a instrução NÃO executa).
+    ///
+    /// @param instructionAddress endereço da instrução SVE (`ELR_ELx`)
+    /// @return `true` se o acesso é permitido
+    public boolean sveAccessCheck(long instructionAddress) {
+        Optional<Aarch64ExceptionLevel> trap = sveAccessTrapLevel();
+        if (trap.isEmpty()) {
+            return true;
+        }
+        enterSynchronousException(trap.get(), instructionAddress, (ESR_EC_SVE_ACCESS << ESR_EC_SHIFT) | ESR_IL_BIT);
+        return false;
+    }
+
+    /// Serializa o estado escalável (banco `Z`/`P`/`FFR` + `ZCR_EL1/2/3`, formato versionado com o
+    /// `VL`). O banco `V` "de sempre" continua em {@link Aarch64FpRegisters#saveState}.
+    public void saveScalableState(DataOutputStream out) throws IOException {
+        out.writeInt(SCALABLE_STATE_FORMAT_VERSION);
+        out.writeLong(zcrEl1);
+        out.writeLong(zcrEl2);
+        out.writeLong(zcrEl3);
+        scalable.saveState(out);
+    }
+
+    /// Restaura o que {@link #saveScalableState} gravou.
+    public void loadScalableState(DataInputStream in) throws IOException {
+        int version = in.readInt();
+        if (version != SCALABLE_STATE_FORMAT_VERSION) {
+            throw new IOException("Versão de estado escalável do core desconhecida: " + version);
+        }
+        zcrEl1 = in.readLong() & ZCR_LEN_MASK;
+        zcrEl2 = in.readLong() & ZCR_LEN_MASK;
+        zcrEl3 = in.readLong() & ZCR_LEN_MASK;
+        scalable.loadState(in);
+    }
+
+    /// Cópia defensiva do estado escalável para o harness de equivalência: `ZCR_EL1/2/3` seguidos
+    /// de {@link Aarch64ScalableRegisters#snapshot()}. Vazio sem SVE.
+    public long[] scalableSnapshot() {
+        if (!hasSve()) {
+            return new long[0];
+        }
+        long[] bank = scalable.snapshot();
+        long[] out = Arrays.copyOf(new long[] {zcrEl1, zcrEl2, zcrEl3}, 3 + bank.length);
+        System.arraycopy(bank, 0, out, 3, bank.length);
+        return out;
     }
 
     /// Retorna o barramento de memória conectado ao core.
@@ -474,7 +656,8 @@ public final class Aarch64Core {
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
                  TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
-                 UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED, RGSR_EL1, GCR_EL1 -> true;
+                 UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED, RGSR_EL1, GCR_EL1,
+                 ZCR_EL1, ZCR_EL2, ZCR_EL3 -> true;
             default -> false;
         };
     }
@@ -493,7 +676,7 @@ public final class Aarch64Core {
             };
             case MPIDR_EL1 -> MPIDR_EL1_VALUE;
             case MIDR_EL1 -> MIDR_EL1_VALUE;
-            case ID_AA64PFR0_EL1 -> ID_AA64PFR0_EL1_VALUE;
+            case ID_AA64PFR0_EL1 -> ID_AA64PFR0_EL1_VALUE | (hasSve() ? ID_AA64PFR0_SVE_IMPLEMENTED : 0L);
             case ID_AA64ISAR0_EL1 -> ID_AA64ISAR0_EL1_VALUE;
             case ID_AA64MMFR0_EL1 -> ID_AA64MMFR0_EL1_VALUE;
             case ID_AA64MMFR1_EL1 -> ID_AA64MMFR1_EL1_VALUE;
@@ -501,7 +684,11 @@ public final class Aarch64Core {
             case ID_AA64MMFR3_EL1 -> ID_AA64MMFR3_EL1_VALUE;
             case ID_AA64MMFR4_EL1 -> ID_AA64MMFR4_EL1_VALUE;
             case ID_AA64PFR1_EL1 -> ID_AA64PFR1_EL1_VALUE;
-            case ID_AA64ZFR0_EL1 -> ID_AA64ZFR0_EL1_VALUE;
+            case ID_AA64ZFR0_EL1 -> !hasSve() ? ID_AA64ZFR0_EL1_VALUE
+                    : architecture.has(Aarch64Feature.SVE2) ? ID_AA64ZFR0_SVEVER_SVE2 : ID_AA64ZFR0_EL1_VALUE;
+            case ZCR_EL1 -> zcrEl1;
+            case ZCR_EL2 -> zcrEl2;
+            case ZCR_EL3 -> zcrEl3;
             case ID_AA64DFR1_EL1 -> ID_AA64DFR1_EL1_VALUE;
             case ID_AA64ISAR1_EL1 -> ID_AA64ISAR1_EL1_VALUE;
             case ID_AA64ISAR2_EL1 -> ID_AA64ISAR2_EL1_VALUE;
@@ -558,8 +745,26 @@ public final class Aarch64Core {
             case DEBUG_UNMODELED -> debugUnmodeled = value;
             case RGSR_EL1 -> rgsrEl1 = value;
             case GCR_EL1 -> gcrEl1 = value;
+            case ZCR_EL1 -> writeZcr(register, value);
+            case ZCR_EL2 -> writeZcr(register, value);
+            case ZCR_EL3 -> writeZcr(register, value);
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
+        }
+    }
+
+    /// `MSR ZCR_ELx` (B17.3): só `LEN` (`bits[3:0]`) é guardado (`RES0` no resto) e, se o `VL`
+    /// efetivo do EL atual diminuiu, o estado acima dele é zerado (`aarch64_sve_narrow_vq`).
+    private void writeZcr(Aarch64SystemRegisterId register, long value) {
+        int before = vectorLengthBits();
+        long len = value & ZCR_LEN_MASK;
+        switch (register) {
+            case ZCR_EL1 -> zcrEl1 = len;
+            case ZCR_EL2 -> zcrEl2 = len;
+            default -> zcrEl3 = len;
+        }
+        if (vectorLengthBits() < before) {
+            narrowScalableStateToCurrentVectorLength();
         }
     }
 
@@ -839,6 +1044,7 @@ public final class Aarch64Core {
         exceptionState.setElr(target, pc);
         exceptionState.setSpsr(target, pstate.toSpsrFormat() | source.spsrMode());
         exceptionState.setCurrentEl(target);
+        narrowScalableStateToCurrentVectorLength();
         pstate.setIrqDisabled(true);
         setProgramCounter(exceptionState.vbar(target) + vectorGroupBase(source, target)
                 + VECTOR_IRQ_OFFSET_WITHIN_GROUP);
@@ -1022,6 +1228,7 @@ public final class Aarch64Core {
         exceptionState.setSpsr(target, pstate.toSpsrFormat() | source.spsrMode());
         clearExclusiveMonitor();
         exceptionState.setCurrentEl(target);
+        narrowScalableStateToCurrentVectorLength();
         // B6.6.7: qualquer entrada de exceção mascara IRQ (`ARM DDI 0487` pseudocódigo
         // `AArch64.TakeException` seta `PSTATE.{D,A,I,F}=1`) — `spsr` acima já capturou o valor
         // ANTIGO da máscara (o que `ERET` deve restaurar), então esta linha só afeta o `PSTATE`

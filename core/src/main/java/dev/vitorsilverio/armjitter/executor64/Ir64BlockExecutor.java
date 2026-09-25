@@ -1784,6 +1784,7 @@ public final class Ir64BlockExecutor {
         long rawSpsr = exceptionState.spsr(source);
         core.pstate().setFromSpsrFormat(rawSpsr);
         exceptionState.setCurrentEl(Aarch64ExceptionLevel.fromSpsrValue(rawSpsr));
+        core.narrowScalableStateToCurrentVectorLength();
         core.setProgramCounter(returnAddress);
         return true;
     }

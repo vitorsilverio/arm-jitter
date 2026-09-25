@@ -136,9 +136,19 @@ public enum Aarch64SystemRegisterId {
     /// `ID_AA64PFR1_EL1` (`CRn=0,CRm=4,op2=1`) — features de processamento (parte 2: `BT`/`SSBS`/
     /// `MTE`/`SME`/...). Constante `0` (nenhuma extensão opcional implementada).
     ID_AA64PFR1_EL1,
-    /// `ID_AA64ZFR0_EL1` (`CRn=0,CRm=4,op2=4`) — features de SVE. Constante `0` (SVE não
-    /// implementada — coerente com {@link #ID_AA64PFR0_EL1}, que não anuncia SVE).
+    /// `ID_AA64ZFR0_EL1` (`CRn=0,CRm=4,op2=4`) — features de SVE. Desde a B17.3 anuncia só
+    /// `SVEver` (`bits[3:0]`: `0`=SVE, `1`=SVE2), e só quando o preset declara `FEAT_SVE`; os campos
+    /// `AES`/`BitPerm`/`BF16`/`SHA3`/`SM4`/`I8MM`/`F32MM`/`F64MM` ficam `0` até a task B17.x que
+    /// implementa a família correspondente (não anunciar o que não existe, G8).
     ID_AA64ZFR0_EL1,
+    /// `ZCR_EL1` (`op0=3,op1=0,CRn=1,CRm=2,op2=0`, B17.3) — comprimento de vetor SVE de EL1: só
+    /// `LEN` (`bits[3:0]`, `VL = (LEN+1) × 128`), o resto é `RES0`. Só existe em presets com
+    /// `FEAT_SVE` (UNDEFINED nos demais).
+    ZCR_EL1,
+    /// `ZCR_EL2` (`op0=3,op1=4,CRn=1,CRm=2,op2=0`, B17.3) — idem, limite de EL2.
+    ZCR_EL2,
+    /// `ZCR_EL3` (`op0=3,op1=6,CRn=1,CRm=2,op2=0`, B17.3) — idem, limite de EL3.
+    ZCR_EL3,
     /// `ID_AA64DFR1_EL1` (`CRn=0,CRm=5,op2=1`) — features de debug (parte 2). Constante `0`.
     ID_AA64DFR1_EL1,
     /// `ID_AA64ISAR1_EL1` (`CRn=0,CRm=6,op2=1`) — extensões de conjunto de instrução (parte 2:

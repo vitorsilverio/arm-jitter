@@ -20,7 +20,25 @@ public record Aarch64CpuSnapshot(
         int exclusiveMonitorSizeBytes,
         /// Banco `V0`-`V31` completo (bits 63:0 de cada, B6.5.1) — necessário para o harness de
         /// equivalência de B6.5.4 (ASM nativo) detectar divergência de FP.
-        long[] vRegisters) {
+        long[] vRegisters,
+        /// Estado escalável SVE (B17.3): `ZCR_EL1/2/3` + banco `Z`/`P`/`FFR` completos (vazio em
+        /// presets sem `FEAT_SVE`) — o aliasing `V`≡`Z[127:0]` já está em `vRegisters`, aqui vão os bits
+        /// altos e os predicados que o harness de B17.x precisa comparar.
+        long[] scalableState) {
+    /// Construtor pré-B17.3 (sem estado escalável) — mantém a assinatura pública (G3).
+    public Aarch64CpuSnapshot(
+            long[] registers,
+            long sp,
+            long pc,
+            int nzcv,
+            long cycles,
+            long exclusiveMonitorAddress,
+            int exclusiveMonitorSizeBytes,
+            long[] vRegisters) {
+        this(registers, sp, pc, nzcv, cycles, exclusiveMonitorAddress, exclusiveMonitorSizeBytes,
+                vRegisters, new long[0]);
+    }
+
     /// Fotografa o estado atual do core.
     public static Aarch64CpuSnapshot capture(Aarch64Core core) {
         long[] registers = new long[31];
@@ -35,12 +53,14 @@ public record Aarch64CpuSnapshot(
                 core.cycles(),
                 core.exclusiveMonitorAddress(),
                 core.exclusiveMonitorSizeBytes(),
-                core.fp().snapshot());
+                core.fp().snapshot(),
+                core.scalableSnapshot());
     }
 
     public Aarch64CpuSnapshot {
         registers = Arrays.copyOf(registers, registers.length);
         vRegisters = Arrays.copyOf(vRegisters, vRegisters.length);
+        scalableState = Arrays.copyOf(scalableState, scalableState.length);
     }
 
     /// Compara com outro snapshot e lança {@link EquivalenceMismatchException} se divergir.
@@ -70,6 +90,10 @@ public record Aarch64CpuSnapshot(
                     "exclusiveMonitor",
                     exclusiveMonitorAddress + "/" + exclusiveMonitorSizeBytes,
                     other.exclusiveMonitorAddress + "/" + other.exclusiveMonitorSizeBytes);
+        }
+        if (!Arrays.equals(scalableState, other.scalableState)) {
+            throw EquivalenceMismatchException.of(
+                    label, "scalableState", Arrays.toString(scalableState), Arrays.toString(other.scalableState));
         }
         if (!Arrays.equals(vRegisters, other.vRegisters)) {
             throw EquivalenceMismatchException.of(
