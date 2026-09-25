@@ -46,7 +46,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 23522 de 23523 células aplicáveis decodificam.
+> **100%** — 23523 de 23523 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -77,7 +77,7 @@ Por arquitetura:
 | ARMv8.9-A | **100%** (1113/1113) |
 | ARMv9.0-A | **100%** (1079/1079) |
 | ARMv9.1-A | **100%** (1092/1092) |
-| ARMv9.2-A | **99%** (1094/1095) |
+| ARMv9.2-A | **100%** (1095/1095) |
 | ARMv9.3-A | **100%** (1107/1107) |
 | ARMv9.4-A | **100%** (1121/1121) |
 | ARMv9.5-A | **100%** (1146/1146) |
@@ -96,7 +96,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 100% (11/11) · v7-M 100% (11/11) · ARMv8.1-M+MVE 100% (11/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | ARMv8.1-M+MVE 100% (352/352) |
-| A64 — AArch64 | 1161 | ARMv8.0-A 100% (851/851) · ARMv8.1-A 100% (883/883) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 99% (1094/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 100% (851/851) · ARMv8.1-A 100% (883/883) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 100% (1095/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
 | SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
@@ -1758,7 +1758,7 @@ Inventário: `a64.decode` · 1161 instruções.
 | `MSR_i_DAIFSET` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `MSR_i_DAIFCLEAR` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `MSR_i_ALLINT` | · | · | · | · | · | · | · | · | ✅ | ✅ | · | · | · | ✅ | ✅ | ✅ |
-| `MSR_i_SVCR` | · | · | · | · | · | · | · | · | · | · | · | · | ❌ | · | · | · |
+| `MSR_i_SVCR` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
 | `SYS` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SYS` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SYS` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

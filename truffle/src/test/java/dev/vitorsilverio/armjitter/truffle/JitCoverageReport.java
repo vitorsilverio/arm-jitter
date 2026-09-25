@@ -248,6 +248,9 @@ public final class JitCoverageReport {
         if (type == IrOperand.class) {
             return new IrOperand.Immediate(0);
         }
+        if (type == Ir64Op.class) {
+            return new Ir64Op.Cycle(0); // `StreamingRestricted.inner` (B18.2): qualquer operação serve
+        }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];
         }

@@ -135,18 +135,18 @@ class Aarch64MatrixStateTest {
         core.setSvcr(SVCR_ZA | SVCR_SM);
         assertEquals(0x77L, core.matrix().zaWord(1), "só transição de ZA zera (aarch64_set_svcr do QEMU)");
         core.setSvcr(SVCR_ZA);
-        assertEquals(0x77L, core.matrix().zaWord(1), "mudar SM não toca ZA na B18.1");
+        assertEquals(0x77L, core.matrix().zaWord(1), "mudar SM não toca ZA");
     }
 
     @Test
-    void svcrKeepsOnlySmAndZaAndDoesNotApplyStreamingEffectsYet() {
+    void svcrKeepsOnlySmAndZaAndCrossingIntoStreamingZeroesTheScalableState() {
         Aarch64Core core = smeCore(256);
         core.scalable().setZWord(2, 1, 0x1234L);
         core.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.SVCR, ~0L);
         assertEquals(SVCR_SM | SVCR_ZA, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.SVCR));
         assertTrue(core.streamingModeEnabled());
         assertTrue(core.zaEnabled());
-        assertEquals(0x1234L, core.scalable().zWord(2, 1), "o efeito destrutivo de SM é da B18.2");
+        assertEquals(0L, core.scalable().zWord(2, 1), "B18.2: atravessar a fronteira de streaming zera Z/P/FFR");
     }
 
     // ── SMCR_ELx e SVL efetivo ───────────────────────────────────────────────────────────────

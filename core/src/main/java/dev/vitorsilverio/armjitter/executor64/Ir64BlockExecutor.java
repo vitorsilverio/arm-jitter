@@ -331,6 +331,14 @@ public final class Ir64BlockExecutor {
                     executeRotateIntoFlags(core, (Ir64Op.RotateIntoFlags) op);
             case Ir64Op.Kind.CONVERT_FLAGS -> executeConvertFlags(core, (Ir64Op.ConvertFlags) op);
             case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (Ir64Op.InterruptMask) op);
+            case Ir64Op.Kind.STREAMING_MODE_CONTROL ->
+                    executeStreamingModeControl(core, (Ir64Op.StreamingModeControl) op);
+            case Ir64Op.Kind.STREAMING_RESTRICTED -> {
+                if (core.streamingRestrictionApplies()) {
+                    throw new Aarch64UndefinedInstructionException();
+                }
+                yield execute(core, ((Ir64Op.StreamingRestricted) op).inner());
+            }
             case Ir64Op.Kind.BREAKPOINT -> executeBreakpoint((Ir64Op.Breakpoint) op);
             case Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> executeUndefinedInstructionTrap();
             case Ir64Op.Kind.ADDRESS_TRANSLATE ->
@@ -1741,6 +1749,20 @@ public final class Ir64BlockExecutor {
         if ((op.mask() & DAIF_MASK_BIT_I) != 0) {
             core.pstate().setIrqDisabled(op.set());
         }
+        return false;
+    }
+
+    /// `SMSTART`/`SMSTOP` (`MSR SVCRSM/SVCRZA/SVCRSMZA, #imm`, B18.2). `CheckSMEAccess` primeiro: sem
+    /// permissão a instrução trapa (`EC=0x1D`, `SMTC=0`) em vez de executar, e o PC já é o do vetor.
+    /// Depois liga/desliga os bits pedidos por {@link Aarch64Core#setSvcr}, o único ponto que aplica
+    /// os efeitos destrutivos. O bit não citado pelo alias (ex.: `ZA` em `SVCRSM`) fica como está.
+    private boolean executeStreamingModeControl(Aarch64Core core, Ir64Op.StreamingModeControl op) {
+        if (!core.smeEnabledCheck(op.instructionAddress())) {
+            return true;
+        }
+        long selected = (op.streamingMode() ? Aarch64Core.SVCR_SM_BIT : 0L)
+                | (op.za() ? Aarch64Core.SVCR_ZA_BIT : 0L);
+        core.setSvcr(op.enable() ? core.svcr() | selected : core.svcr() & ~selected);
         return false;
     }
 

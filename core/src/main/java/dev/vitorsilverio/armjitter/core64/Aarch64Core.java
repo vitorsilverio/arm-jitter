@@ -131,9 +131,13 @@ public final class Aarch64Core {
     private static final long SMTC_INACCESSIBLE_ZT0 = 4L;
     /// `SVCR.SM` (bit 0, modo streaming) e `SVCR.ZA` (bit 1, armazenamento `ZA` habilitado); o resto
     /// do registrador é `RES0`.
-    private static final long SVCR_SM_BIT = 1L;
-    private static final long SVCR_ZA_BIT = 1L << 1;
+    /// `SVCR.SM` (bit 0).
+    public static final long SVCR_SM_BIT = 1L;
+    /// `SVCR.ZA` (bit 1).
+    public static final long SVCR_ZA_BIT = 1L << 1;
     private static final long SVCR_MASK = SVCR_SM_BIT | SVCR_ZA_BIT;
+    /// Valor de `FPSR` após `ResetSVEState` (mudança de `PSTATE.SM`): `0x0800009F`, o de `arm_reset_sve_state`.
+    private static final long FPSR_RESET_ON_STREAMING_MODE_CHANGE = 0x0800009FL;
     /// `SMCR_ELx.LEN` (`bits[3:0]`, `SVL = (LEN+1) × 128`), `EZT0` (bit 30, `FEAT_SME2`) e `FA64`
     /// (bit 31). Máscara de escrita do `smcr_write` do QEMU.
     private static final long SMCR_LEN_MASK = 0xFL;
@@ -264,6 +268,12 @@ public final class Aarch64Core {
     /// Banco escalável (B17.3): dono do armazenamento de `Z`/`P`/`FFR`; {@link #fp} é a vista baixa
     /// de 128 bits. Em presets sem `FEAT_SVE` é só o banco `Z` de 128 bits (sem predicados).
     private final Aarch64ScalableRegisters scalable;
+    /// `true` quando a arquitetura declara `FEAT_SVE` (B18.2: o banco escalável também existe em
+    /// SME-sem-SVE, então {@link Aarch64ScalableRegisters#hasPredicates()} deixou de responder isso).
+    private final boolean sve;
+    /// `VL` implementado de SVE, fora do modo streaming (B18.2). **Não** é a largura do banco: com
+    /// `FEAT_SME` o banco comporta `max(VL, SVL)`, porque em modo streaming `Z`/`P`/`FFR` têm `SVL` bits.
+    private final int implementedVectorLengthBits;
     /// `ZCR_EL1`/`ZCR_EL2`/`ZCR_EL3` (`LEN`, B17.3) — resetam para o máximo.
     private long zcrEl1 = ZCR_LEN_RESET;
     private long zcrEl2 = ZCR_LEN_RESET;
@@ -271,9 +281,8 @@ public final class Aarch64Core {
     /// Armazenamento matricial (B18.1): `ZA`/`ZT0`, ambos `null` até `SVCR.ZA` ser ligado. Existe
     /// (vazio) em todo core, mas só é usado em presets com `FEAT_SME`.
     private final Aarch64MatrixRegisters matrix;
-    /// `SVCR` (`SM`/`ZA`, B18.1). **B18.1 só armazena `SM`**: o efeito do modo streaming (`VL`
-    /// efetivo = `SVL`, zerar `Z`/`P`/`FFR` ao atravessar a fronteira) é a B18.2. `ZA` 0→1 aloca o
-    /// armazenamento zerado e 1→0 o libera (esse SIM é o efeito de armazenamento desta task).
+    /// `SVCR` (`SM`/`ZA`, B18.1/B18.2). Só muda por {@link #setSvcr}, que aplica os efeitos: `SM`
+    /// muda → `ResetSVEState` e `VL` efetivo = `SVL`; `ZA` 0→1 aloca o armazenamento zerado e 1→0 o libera.
     private long svcr;
     /// `SMCR_EL1`/`SMCR_EL2`/`SMCR_EL3` (`LEN`/`EZT0`/`FA64`, B18.1) — `LEN` reseta para o máximo,
     /// `EZT0` para `0` (`ZT0` inacessível até o firmware liberar).
@@ -378,12 +387,17 @@ public final class Aarch64Core {
             int streamingVectorLengthBits) {
         this.memory = Objects.requireNonNull(memory, "memory");
         this.architecture = Objects.requireNonNull(architecture, "architecture");
-        boolean sve = architecture.has(Aarch64Feature.SVE);
-        this.scalable = sve
-                ? new Aarch64ScalableRegisters(vectorLengthBits, true)
-                : new Aarch64ScalableRegisters(Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS, false);
+        this.sve = architecture.has(Aarch64Feature.SVE);
+        boolean sme = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
+        this.implementedVectorLengthBits = sve
+                ? vectorLengthBits
+                : Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS;
+        // B18.2: em modo streaming `Z`/`P`/`FFR` têm `SVL` bits — o banco tem que comportar o maior.
+        int bankBits = sme ? Math.max(implementedVectorLengthBits, streamingVectorLengthBits)
+                : implementedVectorLengthBits;
+        this.scalable = new Aarch64ScalableRegisters(bankBits, sve || sme);
         this.fp = new Aarch64FpRegisters(scalable);
-        this.matrix = new Aarch64MatrixRegisters(architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)
+        this.matrix = new Aarch64MatrixRegisters(sme
                 ? streamingVectorLengthBits
                 : Aarch64MatrixRegisters.MIN_STREAMING_VECTOR_LENGTH_BITS);
     }
@@ -490,19 +504,30 @@ public final class Aarch64Core {
 
     /// `true` quando a arquitetura deste core declara {@link Aarch64Feature#SVE}.
     public boolean hasSve() {
-        return scalable.hasPredicates();
+        return sve;
     }
 
-    /// `VL` implementado em bits (o que o banco realmente guarda) — `128` sem SVE.
+    /// `VL` implementado em bits FORA do modo streaming — `128` sem SVE. (A largura do banco pode ser
+    /// maior: com `FEAT_SME` ela é `max(VL, SVL)`, ver {@link #scalable()}.)
     public int implementedVectorLengthBits() {
-        return scalable.vectorLengthBits();
+        return implementedVectorLengthBits;
     }
 
-    /// `VL` EFETIVO em bits no EL atual: o menor entre o `VL` implementado e
-    /// `(ZCR_ELx.LEN + 1) × 128` de cada `ZCR_ELx` que se aplica ao EL atual (EL0/EL1 sofrem
-    /// `ZCR_EL1`, `ZCR_EL2` e `ZCR_EL3`; EL2 sofre `ZCR_EL2` e `ZCR_EL3`; EL3 só `ZCR_EL3`, mesma
-    /// regra de `sve_vqm1_for_el` do QEMU). Todo laço de lane SVE lê ISTO, nunca uma constante.
+    /// `VL` EFETIVO em bits — **o comprimento de vetor que todo laço de lane lê** (B18.2). Com
+    /// `PSTATE.SM = 1` (modo streaming) é o `SVL` efetivo ({@link #streamingVectorLengthBits()}); fora
+    /// dele, o menor entre o `VL` implementado e `(ZCR_ELx.LEN + 1) × 128` de cada `ZCR_ELx` que se
+    /// aplica ao EL atual (EL0/EL1 sofrem `ZCR_EL1`, `ZCR_EL2` e `ZCR_EL3`; EL2 sofre `ZCR_EL2` e
+    /// `ZCR_EL3`; EL3 só `ZCR_EL3`, mesma regra de `sve_vqm1_for_el` do QEMU).
+    ///
+    /// **Decisão de desenho da B18.2 (opção (a) da spec):** a troca `VL` → `SVL` mora AQUI, não em cada
+    /// executor — os executores SVE (B17.4+) leem sempre este método e saem corretos de graça, do mesmo
+    /// modo que o QEMU troca a fonte de tamanho uma vez no `DisasContext` (`vec_reg_size` vs
+    /// `streaming_vec_reg_size`) em vez de em cada `trans_`. O custo é este método deixar de ser função
+    /// só do `ZCR`; o ganho é que esquecer um executor deixou de ser possível.
     public int vectorLengthBits() {
+        if (streamingModeEnabled()) {
+            return streamingVectorLengthBits();
+        }
         int el = exceptionState.currentEl().ordinal();
         long len = zcrEl3;
         if (el <= Aarch64ExceptionLevel.EL2.ordinal()) {
@@ -512,7 +537,7 @@ public final class Aarch64Core {
             len = Math.min(len, zcrEl1);
         }
         int requested = (int) (len + 1) * Aarch64ScalableRegisters.MIN_VECTOR_LENGTH_BITS;
-        return Math.min(requested, scalable.vectorLengthBits());
+        return Math.min(requested, implementedVectorLengthBits);
     }
 
     /// {@link #vectorLengthBits()} em bytes (`VL/8`).
@@ -529,7 +554,7 @@ public final class Aarch64Core {
     /// chamado quando `ZCR_ELx` diminui e a cada troca de EL (`aarch64_sve_change_el` do QEMU).
     /// Não faz nada em presets sem SVE.
     public void narrowScalableStateToCurrentVectorLength() {
-        if (hasSve()) {
+        if (hasSve() || hasSme()) {
             scalable.narrowTo(vectorLengthBits());
         }
     }
@@ -667,7 +692,9 @@ public final class Aarch64Core {
         return svcr;
     }
 
-    /// `SVCR.SM` (modo streaming). **Só armazenado na B18.1** — o efeito é da B18.2.
+    /// `PSTATE.SM` / `SVCR.SM` (modo streaming): com ele ligado o `VL` efetivo é o `SVL`
+    /// ({@link #vectorLengthBits()}) e as instruções ilegais em streaming são recusadas
+    /// ({@link #streamingRestrictionApplies()}).
     public boolean streamingModeEnabled() {
         return (svcr & SVCR_SM_BIT) != 0;
     }
@@ -677,10 +704,19 @@ public final class Aarch64Core {
         return (svcr & SVCR_ZA_BIT) != 0;
     }
 
-    /// `MSR SVCR` (forma registrador, B18.1). Só `SM`/`ZA` são guardados (`RES0` no resto). Como no
-    /// `aarch64_set_svcr` do QEMU, escrever um valor igual ao atual não faz nada; `ZA` 0→1 aloca
-    /// `ZA` zerado (e `ZT0` volta a zero) e 1→0 o libera. **`SM` só muda o bit** — zerar `Z`/`P`/`FFR`
-    /// e trocar o `VL` efetivo ao atravessar a fronteira de streaming é a B18.2.
+    /// `MSR SVCR` (forma registrador) e o efeito de `MSR SVCR<mask>, #imm` (`SMSTART`/`SMSTOP`) — o
+    /// ÚNICO ponto que muda `PSTATE.SM`/`PSTATE.ZA` (B18.1/B18.2). Só `SM`/`ZA` são guardados (`RES0` no
+    /// resto). Como no `aarch64_set_svcr` do QEMU, escrever um valor igual ao atual não faz nada.
+    ///
+    /// - **`SM` mudando de valor (0→1 ou 1→0)** executa `ResetSVEState`: zera `Z0-Z31`, `P0-P15` e `FFR`,
+    ///   põe `FPSR = 0x0800009F` e `FPMR = 0` — é o que impede vazar dados de vetor entre a fronteira
+    ///   normal/streaming, e software real depende disso. O `VL` efetivo passa a ser o `SVL`
+    ///   ({@link #vectorLengthBits()}).
+    /// - **`ZA` 0→1** aloca `ZA` zerado (e `ZT0` volta a zero); **1→0** o libera.
+    ///
+    /// `SM` e `ZA` são eixos independentes. Exceção e `ERET` **não** tocam nenhum dos dois (nem o
+    /// `SPSR_ELx` os guarda, como no QEMU) — o sistema operacional salva/restaura `SVCR` na troca de
+    /// contexto.
     ///
     /// @throws IllegalStateException se o preset não declara `FEAT_SME`
     public void setSvcr(long value) {
@@ -689,6 +725,9 @@ public final class Aarch64Core {
         }
         long next = value & SVCR_MASK;
         long change = svcr ^ next;
+        if ((change & SVCR_SM_BIT) != 0) {
+            resetSveState();
+        }
         if ((change & SVCR_ZA_BIT) != 0) {
             if ((next & SVCR_ZA_BIT) != 0) {
                 matrix.enableZa();
@@ -697,6 +736,40 @@ public final class Aarch64Core {
             }
         }
         svcr = next;
+    }
+
+    /// `ResetSVEState` (B18.2, `arm_reset_sve_state` do QEMU): zera `Z`/`P`/`FFR` inteiros (a largura
+    /// do banco, não só o `VL` efetivo), `FPSR ← 0x0800009F` e `FPMR ← 0`.
+    private void resetSveState() {
+        scalable.reset();
+        fpsr = FPSR_RESET_ON_STREAMING_MODE_CHANGE;
+        fpmr = 0L;
+    }
+
+    /// `FEAT_SME_FA64` efetivo no EL atual (`sme_fa64` do QEMU): a feature E `SMCR_ELx.FA64` de cada
+    /// nível aplicável. `EL2`/`EL3` só entram quando o {@link #systemRegisterBus()} os modela (mesmo
+    /// critério de {@link #zt0AccessTrapLevel()}). Sempre `false` sem {@link Aarch64Feature#SME_FA64}.
+    public boolean fa64Enabled() {
+        if (!architecture.has(Aarch64Feature.SME_FA64)) {
+            return false;
+        }
+        Aarch64ExceptionLevel el = exceptionState.currentEl();
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL1.ordinal() && (smcrEl1 & SMCR_FA64_BIT) == 0) {
+            return false;
+        }
+        if (el.ordinal() <= Aarch64ExceptionLevel.EL2.ordinal()
+                && systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL2)
+                && (smcrEl2 & SMCR_FA64_BIT) == 0) {
+            return false;
+        }
+        return !systemRegisterBus.handles(Aarch64SystemRegisterId.CPTR_EL3) || (smcrEl3 & SMCR_FA64_BIT) != 0;
+    }
+
+    /// `true` quando as instruções ilegais em modo streaming (AdvSIMD vetorial, estruturas `LDn`/`STn`,
+    /// cripto, `FJCVTZS` — ver `Ir64Op.StreamingRestricted`) devem ser recusadas agora: `PSTATE.SM = 1`
+    /// e sem {@link #fa64Enabled()}.
+    public boolean streamingRestrictionApplies() {
+        return streamingModeEnabled() && !fa64Enabled();
     }
 
     /// `ID_AA64PFR1_EL1.SME` (`bits[27:24]`) do preset: `0` sem SME, `1` = SME, `2` = SME2 ou melhor
@@ -728,10 +801,17 @@ public final class Aarch64Core {
     private void writeSmcr(Aarch64SystemRegisterId register, long value) {
         long validMask = SMCR_LEN_MASK | SMCR_FA64_BIT | (hasSme2() ? SMCR_EZT0_BIT : 0L);
         long masked = value & validMask;
+        int before = vectorLengthBits();
         switch (register) {
             case SMCR_EL1 -> smcrEl1 = masked;
             case SMCR_EL2 -> smcrEl2 = masked;
             default -> smcrEl3 = masked;
+        }
+        // B18.2: em modo streaming o `SVL` efetivo É o `VL` efetivo — se encolheu, o estado acima dele
+        // é zerado (`smcr_write` do QEMU → `aarch64_sve_narrow_vq`). Fora de streaming, `SMCR` não afeta
+        // `Z`/`P`/`FFR` (`vectorLengthBits()` não muda) e o `ZA` mantém o conteúdo.
+        if (vectorLengthBits() < before) {
+            narrowScalableStateToCurrentVectorLength();
         }
     }
 

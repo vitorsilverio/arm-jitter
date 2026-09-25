@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SME, modo streaming** (`B18.2`): `SMSTART`/`SMSTOP` (`MSR SVCRSM/SVCRZA/SVCRSMZA, #imm`) com efeito real — `PSTATE.SM`/`PSTATE.ZA`,
+  zeramento de `Z`/`P`/`FFR`/`FPSR`/`FPMR` ao atravessar a fronteira de streaming e de `ZA`/`ZT0` ao habilitar,
+  `Aarch64Core.vectorLengthBits()` = `SVL` em streaming, banco escalável por `max(VL, SVL)` e instruções AdvSIMD
+  ilegais em streaming recusadas (`Ir64Op.StreamingRestricted`, `Aarch64Feature.SME_FA64`). **`docs/COBERTURA-ISA.md`:
+  23523/23523 (100%)** — `MSR_i_SVCR` era a última célula `❌`.
 - **VFP ARMv8-A de 32 bits** (`B22.7`): `VRINTR`/`VRINTZ`/`VRINTX` (`sp`/`dp`/`hp`), `VCVTR` (`rz=0`),
   `VCVTB`/`VCVTT` entre meia precisão e simples/dupla, `VCVTB`/`VCVTT.BF16.F32` (`FEAT_BF16`) e `VJCVT`
   (`FEAT_JSCVT`). Preset novo `ArmArchitecture.ARMV8_6A_32`; `ArmFeature.JAVASCRIPT_CONVERT`;

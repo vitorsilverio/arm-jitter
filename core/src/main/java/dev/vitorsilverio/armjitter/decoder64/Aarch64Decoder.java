@@ -86,6 +86,9 @@ import java.util.Objects;
 /// implementa incondicionalmente hoje.
 public final class Aarch64Decoder {
     private final Aarch64Architecture architecture;
+    /// `true` quando a arquitetura declara `FEAT_SME` (B18.2): só então as instruções ilegais em modo
+    /// streaming são embrulhadas em `Ir64Op.StreamingRestricted`.
+    private final boolean streamingModeRestrictions;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -97,6 +100,7 @@ public final class Aarch64Decoder {
     /// fiação) — ver o Javadoc da classe.
     public Aarch64Decoder(Aarch64Architecture architecture) {
         this.architecture = Objects.requireNonNull(architecture, "architecture");
+        this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
     }
 
     /// Retorna a arquitetura configurada para este decoder (B11.2).
@@ -710,6 +714,8 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_SHIFT = 1;
     private static final int SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_MASK = 0b11;
     private static final int SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK = 0b1;
+    private static final int SYSTEM_INSTRUCTION_SVCR_MASK_SM = 0b01;
+    private static final int SYSTEM_INSTRUCTION_SVCR_MASK_ZA = 0b10;
 
     // ── TLBI (`op0=1`, `SYS` — não `SYSL`, `L=0`): CRn=0b1000 fixo (grupo TLB maintenance),
     // ── `op1` seleciona o REGIME (EL1&0, EL2 — incl. stage-2 `IPAS2E1*`/`ALLE1`/`VMALLS12E1`,
@@ -2068,6 +2074,15 @@ public final class Aarch64Decoder {
     /// @throws UnsupportedOperationException quando o encoding está fora da fatia B6.1
     public Ir64Op decode(AddressSpace64 memory, long address) {
         int word = memory.read32(address);
+        Ir64Op op = decodeWord(word, address);
+        // B18.2: só presets com FEAT_SME ganham o embrulho (G3) — a decisão depende de `PSTATE.SM`, que
+        // só existe na execução.
+        return streamingModeRestrictions && StreamingModeRestrictions.isIllegalInStreamingMode(word)
+                ? new Ir64Op.StreamingRestricted(op)
+                : op;
+    }
+
+    private Ir64Op decodeWord(int word, long address) {
         // Loads and Stores (`x1x0`): bit27 fixo=1 e bit25 fixo=0 — único jeito de distinguir
         // esta classe do prefixo de 3 bits usado pelas outras (bit28 e bit26 são livres aqui,
         // então não cabe no switch de 3 bits abaixo sem risco de colisão com Data Processing
@@ -7035,19 +7050,22 @@ public final class Aarch64Decoder {
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new Ir64Op.InterruptMask(true, imm);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new Ir64Op.InterruptMask(false, imm);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_SVCR -> {
-                    // B19.28: sem arquitetura declarando FEAT_SME, isto cai no MESMO
-                    // `unsupported` genérico de qualquer outra feature ausente — comportamento
-                    // idêntico ao de antes desta task. A diferença só aparece quando a feature
-                    // ESTÁ presente (ARMV9_2_A): aí a recusa passa a ser NOMEADA — "reconhecida,
-                    // mas sem estado ZA/streaming-SVE modelado" — em vez de indistinguível de um
-                    // encoding realmente desconhecido (G8).
+                    // B19.28 decodificava e recusava; B18.2 dá o efeito (`SMSTART`/`SMSTOP`). Sem
+                    // FEAT_SME na arquitetura, continua caindo no `unsupported` genérico de qualquer
+                    // feature ausente (G3). `mask = 0b00` é encoding reservado (nem `SM` nem `ZA`).
                     if (!architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)) {
                         throw unsupported(word, address);
                     }
                     int svcrMask = (imm >>> SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_SHIFT)
                             & SYSTEM_INSTRUCTION_SVCR_MASK_FIELD_MASK;
-                    int svcrImmediate = imm & SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK;
-                    throw unsupportedScalableMatrixExtension(word, address, svcrMask, svcrImmediate);
+                    if (svcrMask == 0) {
+                        throw unsupported(word, address);
+                    }
+                    yield new Ir64Op.StreamingModeControl(
+                            (imm & SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK) != 0,
+                            (svcrMask & SYSTEM_INSTRUCTION_SVCR_MASK_SM) != 0,
+                            (svcrMask & SYSTEM_INSTRUCTION_SVCR_MASK_ZA) != 0,
+                            address);
                 }
                 default -> throw unsupported(word, address);
             };
@@ -7685,19 +7703,6 @@ public final class Aarch64Decoder {
     private static UnsupportedOperationException unsupported(int word, long address) {
         return new UnsupportedOperationException(
                 "AArch64: encoding fora da fatia B6.1 em 0x" + Long.toHexString(address)
-                        + ": 0x" + Integer.toHexString(word));
-    }
-
-    /// B19.28: recusa NOMEADA para `MSR SVCR`, distinta de {@link #unsupported} — o encoding FOI
-    /// reconhecido (`FEAT_SME` presente na arquitetura), mas nenhum estado ZA/streaming-SVE é
-    /// modelado ainda (ver o Javadoc de {@link Aarch64Feature#SCALABLE_MATRIX_EXTENSION}). G8:
-    /// diagnóstico rastreável em vez de indistinguível de "encoding desconhecido".
-    private static UnsupportedOperationException unsupportedScalableMatrixExtension(
-            int word, long address, int mask, int imm) {
-        return new UnsupportedOperationException(
-                "AArch64: MSR SVCR (mask=0b" + Integer.toBinaryString(mask) + ", imm=" + imm
-                        + ") reconhecida, mas FEAT_SME (estado ZA/streaming-SVE) ainda não é"
-                        + " modelado em 0x" + Long.toHexString(address)
                         + ": 0x" + Integer.toHexString(word));
     }
 

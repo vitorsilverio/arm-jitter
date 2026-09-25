@@ -77,7 +77,7 @@ public sealed interface Ir64Op permits
         Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt,
         Ir64Op.VectorFpAbsoluteMaxMin, Ir64Op.VectorFp8FusedMultiplyAddLong,
         Ir64Op.VectorFp8FusedMultiplyAddLongByElement, Ir64Op.VectorFp8DotProduct,
-        Ir64Op.VectorFp8DotProductByElement {
+        Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -426,6 +426,10 @@ public sealed interface Ir64Op permits
         public static final int VECTOR_FP8_DOT_PRODUCT = 148;
         /// B19.11c/B19.11d: `FDOT_hb_vi`/`FDOT_sb_vi` — ver {@link VectorFp8DotProductByElement}.
         public static final int VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT = 149;
+        /// B18.2: `MSR SVCRSM/SVCRZA/SVCRSMZA, #imm` (`SMSTART`/`SMSTOP`) — ver {@link StreamingModeControl}.
+        public static final int STREAMING_MODE_CONTROL = 150;
+        /// B18.2: instrução ilegal em modo streaming — ver {@link StreamingRestricted}.
+        public static final int STREAMING_RESTRICTED = 151;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3860,5 +3864,34 @@ public sealed interface Ir64Op permits
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements Ir64Op {
         @Override public int kind() { return Kind.MIN_MAX_GENERAL; }
+    }
+
+    /// `MSR SVCRSM`/`SVCRZA`/`SVCRSMZA, #imm` (`FEAT_SME`, B18.2) — os aliases `SMSTART`/`SMSTOP` do
+    /// manual. Liga (`enable = true`, `SMSTART`) ou desliga (`SMSTOP`) `PSTATE.SM` e/ou `PSTATE.ZA`, com
+    /// os efeitos destrutivos de {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#setSvcr}. Precede
+    /// a checagem de acesso SME (`CheckSMEAccess`): sem `CPACR_EL1.SMEN` etc. a instrução trapa em vez de
+    /// executar. **Terminal de bloco** (o `VL` efetivo das instruções seguintes muda).
+    record StreamingModeControl(
+            /// `true` para `SMSTART` (`imm = 1`), `false` para `SMSTOP`.
+            boolean enable,
+            /// `true` quando o alias afeta `PSTATE.SM` (`SVCRSM` e `SVCRSMZA`).
+            boolean streamingMode,
+            /// `true` quando o alias afeta `PSTATE.ZA` (`SVCRZA` e `SVCRSMZA`).
+            boolean za,
+            /// Endereço da própria instrução — a exceção de acesso SME (`EC=0x1D`) precisa dele, e o
+            /// executor não conhece o PC da instrução (mesmo precedente de {@link PcRelative}).
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.STREAMING_MODE_CONTROL; }
+    }
+
+    /// Instrução que `PSTATE.SM = 1` torna `UNDEFINED` quando `FEAT_SME_FA64` não está efetivo (B18.2):
+    /// AdvSIMD vetorial, estruturas `LDn`/`STn`, cripto e `FJCVTZS` (as listas `FAIL` de
+    /// `sme-fa64.decode` do QEMU, Apêndice E1.1 do DDI0616). O decoder embrulha a operação real em
+    /// {@code inner} porque a decisão depende de `SM`, que só existe na EXECUÇÃO (o bloco é decodificado
+    /// uma vez e pode rodar nos dois modos). Só é produzida em presets com `FEAT_SME` (G3).
+    record StreamingRestricted(
+            /// A operação que executa quando a restrição não se aplica.
+            Ir64Op inner) implements Ir64Op {
+        @Override public int kind() { return Kind.STREAMING_RESTRICTED; }
     }
 }

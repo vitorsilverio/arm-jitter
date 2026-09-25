@@ -153,6 +153,11 @@ public enum Aarch64Feature {
     SME_MOP4,
     /// `FEAT_SME_TMOP` — outer product esparso (`TMOP`). Sem preset (B18.5).
     SME_TMOP,
+    /// `FEAT_SME_FA64` — libera o conjunto completo de instruções A64 (AdvSIMD, estruturas `LDn`/`STn`,
+    /// cripto, `FJCVTZS`) também em modo streaming, quando `SMCR_ELx.FA64 = 1` (B18.2). Sem preset: a
+    /// versão de arquitetura não foi confirmada contra o manual (mesma disciplina das demais capacidades
+    /// SME); sem ela, `PSTATE.SM = 1` torna essas instruções `UNDEFINED`.
+    SME_FA64,
     /// `FEAT_FAMINMAX` — `FAMAX`/`FAMIN` (máximo/mínimo de valor absoluto em ponto flutuante).
     /// ARMv9.4-A.
     FP_ABSOLUTE_MAX_MIN,

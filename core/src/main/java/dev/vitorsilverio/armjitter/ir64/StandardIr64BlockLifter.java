@@ -63,12 +63,15 @@ public final class StandardIr64BlockLifter implements Ir64BlockLifter {
     /// `Branch64`/`CompareBranch64`/`CompareAndBranchRegister`/`CompareAndBranchImmediate` podem
     /// trocar o PC; `Svc` pode ter efeito colateral arbitrário via {@code Aarch64SvcHandler} —
     /// mesmo precedente de `IrOp.Swi`/`IrOp.Coprocessor` no lifter 32-bit terminarem o bloco.
-    /// Nenhum outro {@link Ir64Op.Kind} troca o PC (A64 não tem "MOV PC,..." genérico — só as
+    /// `StreamingModeControl` (`SMSTART`/`SMSTOP`, B18.2) não troca o PC, mas muda o `VL` efetivo das
+    /// instruções seguintes, então também fecha o bloco. Nenhum outro {@link Ir64Op.Kind} troca o PC
+    /// (A64 não tem "MOV PC,..." genérico — só as
     /// formas de desvio dedicadas).
     private boolean isTerminal(Ir64Op op) {
         return switch (op.kind()) {
             case Ir64Op.Kind.BRANCH64, Ir64Op.Kind.COMPARE_BRANCH64, Ir64Op.Kind.SVC,
-                    Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER, Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE -> true;
+                    Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER, Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE,
+                    Ir64Op.Kind.STREAMING_MODE_CONTROL -> true;
             default -> false;
         };
     }
