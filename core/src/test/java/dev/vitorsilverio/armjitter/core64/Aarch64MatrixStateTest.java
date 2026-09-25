@@ -240,6 +240,24 @@ class Aarch64MatrixStateTest {
         }
     }
 
+    @Test
+    void neighbouringEncodingsOfSmeRegistersAreNotMisdecoded() {
+        Aarch64Decoder sme = new Aarch64Decoder(Aarch64Architecture.ARMV9_2_A);
+        int[] neighbours = {
+                0xd5381220, // (op1=0,CRn=1,CRm=2,op2=1) — entre ZCR_EL1 e SMCR_EL1
+                0xd53c1220, // idem em EL2
+                0xd53e1220, // idem em EL3
+                0xd53c1300, // (op1=4,CRn=1,CRm=3,op2=0) — CRn de SMCR, CRm diferente (EL2)
+                0xd53e1300, // idem em EL3
+                0xd53804c0, // (0,0,4,6) — vizinho de ID_AA64SMFR0_EL1
+                0xd53b4260, // (op1=3,CRn=4,CRm=2,op2=3) — vizinho de SVCR
+        };
+        for (int word : neighbours) {
+            assertThrows(UnsupportedOperationException.class, () -> decodeWord(sme, word),
+                    "G8: " + Integer.toHexString(word) + " não pode virar outro registrador SME");
+        }
+    }
+
     // ── ID registers ─────────────────────────────────────────────────────────────────────────
 
     @Test
