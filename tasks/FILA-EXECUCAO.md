@@ -70,7 +70,10 @@ contra o JAR ANTIGO mesmo com o fonte atualizado (reproduzido e corrigido nesta 
 test` verde + `install` local + G5 verde em `gbaemu`/`ndsemu`/`armbox` (`virtual-arm-box`/`n3dsemu`
 continuam congelados/pausados). Ver `## Resultado` da task (`b13.23-neon-cripto-sha-tres-registradores.md`).
 
-**Pegáveis a seguir**: `B20.9` (validação N1-N4 + fechamento do épico B20, decide se a coluna `v8-R
+**Pegáveis a seguir**: `E14` (achado da auditoria JaCoCo pedida pelo usuário ao fechar a B13.23:
+`IrBlockExecutor#execute`/`AsmNativePolicy` não têm cobertura de teste para NENHUMA instrução NEON,
+lacuna estrutural do épico B13 inteiro, não regressão da B13.23 — spec escrita 2026-09-24). `B20.9`
+(validação N1-N4 + fechamento do épico B20, decide se a coluna `v8-R
 (AArch64)` de `docs/COBERTURA-ISA.md` entra aqui, adiada pela B20.8) segue bloqueada no usuário —
 runner natural é o `virtual-arm-box` congelado, e QEMU não tem suporte a `cortex-r82` ainda (achado
 real da B20.8). `C12.5`/`C12.10` (emissão JIT nativa A64) seguem pegáveis, dimensão 2 do roadmap.
