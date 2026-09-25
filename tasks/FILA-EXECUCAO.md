@@ -57,12 +57,12 @@ para as regras de release (suspensas até lá).
 
 **`B16.15` parcial nesta rodada** — tail-predication (`DLSTP`/`WLSTP`/`LETP`/`LCTP`/`VCTP`, com `LTPSIZE` de
 verdade), `BF*`, `CLRM` e `LDA`/`STL` nos presets ARMv8-M; coluna `ARMv8.1-M+MVE` 93% → 96% (716/742),
-global 23506/23783. Sobram 26 células na coluna MVE: 19 do "MVE long shift" (sem spec, candidata `B16.16`),
-6 `CRC32*` e `SB` de perfil M (sem fonte confirmada, candidata `B22.8`). Ver **Resultado** na task. A
+global 23506/23783. Sobram 26 células na coluna MVE: 19 do "MVE long shift" (spec escrita: **`B16.16`**),
+6 `CRC32*` e `SB` de perfil M (sem fonte confirmada; spec escrita: **`B22.8`**, curadoria por fonte normativa). Ver **Resultado** na task. A
 `B22.7` (anterior) deixou o mapa do que resta nos presets de 32 bits (259 células + 40 de A64, boa parte é
 curadoria).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.3`** em diante (fundação SVE, RFC
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B16.16`** (long shift GPR, +19 células MVE), **`B22.8`** (curadoria `SB`/`CRC32*` M, +7), **`B17.3`** em diante (fundação SVE, RFC
 B17.2 decidida — Opção C, VL=256) e **`B21.2`** em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c)
 — conferir dependências no `INDICE.md` de cada uma antes de pegar. Também seguem pegáveis: `E14`
 (achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de
