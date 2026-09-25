@@ -333,6 +333,16 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (Ir64Op.InterruptMask) op);
             case Ir64Op.Kind.STREAMING_MODE_CONTROL ->
                     executeStreamingModeControl(core, (Ir64Op.StreamingModeControl) op);
+            case Ir64Op.Kind.SVE_PREDICATE_LOGICAL ->
+                    SvePredicateOps.executeLogical(core, (Ir64Op.SvePredicateLogical) op);
+            case Ir64Op.Kind.SVE_PREDICATE_MISC ->
+                    SvePredicateOps.executeMisc(core, (Ir64Op.SvePredicateMisc) op);
+            case Ir64Op.Kind.SVE_PARTITION_BREAK ->
+                    SvePredicateOps.executePartitionBreak(core, (Ir64Op.SvePartitionBreak) op);
+            case Ir64Op.Kind.SVE_PREDICATE_COUNT ->
+                    SvePredicateOps.executePredicateCount(core, (Ir64Op.SvePredicateCount) op);
+            case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
+                    SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

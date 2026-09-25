@@ -77,7 +77,9 @@ public sealed interface Ir64Op permits
         Ir64Op.CompareAndBranchRegister, Ir64Op.CompareAndBranchImmediate, Ir64Op.VectorFpScaleByInt,
         Ir64Op.VectorFpAbsoluteMaxMin, Ir64Op.VectorFp8FusedMultiplyAddLong,
         Ir64Op.VectorFp8FusedMultiplyAddLongByElement, Ir64Op.VectorFp8DotProduct,
-        Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted {
+        Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
+        Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
+        Ir64Op.SvePredicateCount, Ir64Op.SveElementCount {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -430,6 +432,16 @@ public sealed interface Ir64Op permits
         public static final int STREAMING_MODE_CONTROL = 150;
         /// B18.2: instrução ilegal em modo streaming — ver {@link StreamingRestricted}.
         public static final int STREAMING_RESTRICTED = 151;
+        /// B17.4: predicados SVE — ver {@link SvePredicateLogical}.
+        public static final int SVE_PREDICATE_LOGICAL = 152;
+        /// B17.4: `PTEST`/`PTRUE`/`PFALSE`/`FFR`/`PFIRST`/`PNEXT` — ver {@link SvePredicateMisc}.
+        public static final int SVE_PREDICATE_MISC = 153;
+        /// B17.4: `BRKA`/`BRKB`/`BRKPA`/`BRKPB`/`BRKN` — ver {@link SvePartitionBreak}.
+        public static final int SVE_PARTITION_BREAK = 154;
+        /// B17.4: `CNTP`/`INCP`/`SQINCP`… — ver {@link SvePredicateCount}.
+        public static final int SVE_PREDICATE_COUNT = 155;
+        /// B17.4: `CNTB`/`INCB`/`SQINCB`… — ver {@link SveElementCount}.
+        public static final int SVE_ELEMENT_COUNT = 156;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -3893,5 +3905,122 @@ public sealed interface Ir64Op permits
             /// A operação que executa quando a restrição não se aplica.
             Ir64Op inner) implements Ir64Op {
         @Override public int kind() { return Kind.STREAMING_RESTRICTED; }
+    }
+
+    /// Lógica de predicado SVE (`FEAT_SVE`, B17.4): `AND`/`BIC`/`EOR`/`SEL`/`ORR`/`ORN`/`NOR`/`NAND`
+    /// sobre `P<n>`, byte a byte, governada por `pg`. Com `setFlags` (sufixo `S`) seta `NZCV` por
+    /// `PredTest` (granularidade de byte). `SEL` não tem forma `S`.
+    record SvePredicateLogical(
+            Op op,
+            /// Predicado destino.
+            int pd,
+            /// Predicado governante.
+            int pg,
+            /// Primeiro operando.
+            int pn,
+            /// Segundo operando.
+            int pm,
+            /// `true` nas formas `ANDS`/`ORRS`/….
+            boolean setFlags,
+            /// Endereço da instrução (exceção de acesso SVE, `ELR_ELx`).
+            long instructionAddress) implements Ir64Op {
+        /// Operação lógica.
+        public enum Op { AND, BIC, EOR, SEL, ORR, ORN, NOR, NAND }
+        @Override public int kind() { return Kind.SVE_PREDICATE_LOGICAL; }
+    }
+
+    /// Grupo "misc" de predicados SVE (B17.4): `PTEST`, `PTRUE`/`PTRUES`, `PFALSE`, `SETFFR`,
+    /// `RDFFR`/`RDFFRS`, `WRFFR`, `PFIRST`, `PNEXT`. Os campos que a operação não usa ficam `0`.
+    record SvePredicateMisc(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword) de `PTRUE`/`PNEXT`.
+            int esz,
+            /// Predicado destino (`Pd`; em `PFIRST`/`PNEXT` é também a fonte `Pdn`).
+            int pd,
+            /// Predicado governante (`PTEST`, `RDFFR` predicado, `PFIRST`, `PNEXT`).
+            int pg,
+            /// Predicado fonte (`PTEST` e `WRFFR`).
+            int pn,
+            /// `true` em `PTRUES`/`RDFFRS`.
+            boolean setFlags,
+            /// Padrão `pat:5` de `PTRUE`.
+            int pattern,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op { PTEST, PTRUE, PFALSE, SETFFR, RDFFR, RDFFR_PREDICATED, WRFFR, PFIRST, PNEXT }
+        @Override public int kind() { return Kind.SVE_PREDICATE_MISC; }
+    }
+
+    /// Partition break SVE (B17.4): `BRKA`/`BRKB` (zeroing ou merging), `BRKPA`/`BRKPB`, `BRKN`.
+    /// Sempre em granularidade de byte.
+    record SvePartitionBreak(
+            Op op,
+            /// Predicado destino (em `BRKN` é também `Pdm`, o segundo operando).
+            int pd,
+            /// Predicado governante.
+            int pg,
+            /// Primeiro operando.
+            int pn,
+            /// Segundo operando (`BRKPA`/`BRKPB`).
+            int pm,
+            /// `true` nas formas `BRKAS`/`BRKBS`/`BRKPAS`/`BRKPBS`/`BRKNS`.
+            boolean setFlags,
+            /// `true` em `BRKA`/`BRKB` com predicado `/M` (elementos inativos preservam `Pd`).
+            boolean merging,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op { BRKA, BRKB, BRKPA, BRKPB, BRKN }
+        @Override public int kind() { return Kind.SVE_PARTITION_BREAK; }
+    }
+
+    /// Contagem por predicado SVE (B17.4): `CNTP`, `FIRSTP`/`LASTP` (`FEAT_SVE2p2`), `INCP`/`DECP`
+    /// (escalar e vetor) e `SQINCP`/`UQINCP`/`SQDECP`/`UQDECP` (32/64 bits e vetor).
+    record SvePredicateCount(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword).
+            int esz,
+            /// Registrador destino: `Xd` (escalar) ou `Zdn` (vetor).
+            int rd,
+            /// Predicado governante (nas formas `INCP`/`SQINCP` é o único predicado).
+            int pg,
+            /// Predicado contado (`CNTP`/`FIRSTP`/`LASTP`).
+            int pn,
+            /// `true` nas formas de decremento.
+            boolean decrement,
+            /// `true` nas formas saturantes sem sinal (`UQINCP`/`UQDECP`).
+            boolean unsigned,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            CNTP, FIRSTP, LASTP, INCDECP_SCALAR, INCDECP_VECTOR,
+            SINCDECP_SCALAR_32, SINCDECP_SCALAR_64, SINCDECP_VECTOR
+        }
+        @Override public int kind() { return Kind.SVE_PREDICATE_COUNT; }
+    }
+
+    /// Contagem de elementos SVE (B17.4): `CNTB`/`CNTH`/`CNTW`/`CNTD`, `INC*`/`DEC*` e
+    /// `SQINC*`/`UQINC*`/`SQDEC*`/`UQDEC*` sobre um padrão `pat:5` e um multiplicador `1..16`.
+    record SveElementCount(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword).
+            int esz,
+            /// Registrador destino: `Xd`/`Xdn`/`Wdn` (escalar) ou `Zdn` (vetor).
+            int rd,
+            /// Padrão `pat:5` (`POW2`, `VL1`…`VL256`, `MUL4`, `MUL3`, `ALL`).
+            int pattern,
+            /// Multiplicador `imm4 + 1` (`1..16`).
+            int multiplier,
+            /// `true` nas formas de decremento.
+            boolean decrement,
+            /// `true` nas formas saturantes sem sinal.
+            boolean unsigned,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op { CNT, INCDEC_SCALAR, SINCDEC_SCALAR_32, SINCDEC_SCALAR_64, INCDEC_VECTOR, SINCDEC_VECTOR }
+        @Override public int kind() { return Kind.SVE_ELEMENT_COUNT; }
     }
 }

@@ -89,6 +89,7 @@ public final class Aarch64Decoder {
     /// `true` quando a arquitetura declara `FEAT_SME` (B18.2): só então as instruções ilegais em modo
     /// streaming são embrulhadas em `Ir64Op.StreamingRestricted`.
     private final boolean streamingModeRestrictions;
+    private final Aarch64SveDecoder sveDecoder;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -101,6 +102,7 @@ public final class Aarch64Decoder {
     public Aarch64Decoder(Aarch64Architecture architecture) {
         this.architecture = Objects.requireNonNull(architecture, "architecture");
         this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
+        this.sveDecoder = new Aarch64SveDecoder(architecture);
     }
 
     /// Retorna a arquitetura configurada para este decoder (B11.2).
@@ -113,6 +115,8 @@ public final class Aarch64Decoder {
     private static final int TOP_LEVEL_CLASS_3BIT_MASK = 0b111;
     private static final int CLASS_DATA_PROCESSING_IMMEDIATE = 0b100;
     private static final int CLASS_BRANCH_EXCEPTION_SYSTEM = 0b101;
+    /// B17.4: classe SVE (`op0 = 0010`, bits[28:26] = `001`). Roteada para {@link Aarch64SveDecoder}.
+    private static final int CLASS_SVE = 0b001;
 
     // ── Sub-grupos de "Data Processing Immediate" (bit 25 e bits 24:23) ─────────────────────
     private static final int BIT_25 = 1 << 25;
@@ -2100,8 +2104,18 @@ public final class Aarch64Decoder {
         return switch (topLevelClass) {
             case CLASS_DATA_PROCESSING_IMMEDIATE -> decodeDataProcessingImmediate(word, address);
             case CLASS_BRANCH_EXCEPTION_SYSTEM -> decodeBranchExceptionSystem(word, address);
+            case CLASS_SVE -> decodeSve(word, address);
             default -> throw unsupported(word, address);
         };
+    }
+
+    /// Classe SVE (B17.4): o que o {@link Aarch64SveDecoder} não reconhece é recusado (G8).
+    private Ir64Op decodeSve(int word, long address) {
+        Ir64Op op = sveDecoder.decode(word, address);
+        if (op == null) {
+            throw unsupported(word, address);
+        }
+        return op;
     }
 
     private static boolean isLoadsAndStoresClass(int word) {

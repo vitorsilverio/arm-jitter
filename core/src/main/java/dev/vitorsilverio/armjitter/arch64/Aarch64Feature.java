@@ -122,12 +122,16 @@ public enum Aarch64Feature {
     COMMON_SHORT_SEQUENCE_COMPRESSION,
     /// `FEAT_SVE` — Scalable Vector Extension (registradores `Z`/`P`/`FFR`, vetor de comprimento
     /// escalável). Opcional a partir de ARMv8.2-A, **mandatória em ARMv9.0-A** (B17.1). Anunciada
-    /// por `ID_AA64PFR0_EL1.SVE` (a fiação do registrador é B17.3). Nenhum decoder a consulta ainda.
+    /// por `ID_AA64PFR0_EL1.SVE` (a fiação do registrador é B17.3). Consultada pelo decoder SVE (B17.4+).
     SVE,
     /// `FEAT_SVE2` — SVE2 (inteiro/FP/cripto/memória sobre `Z`/`P`). Introduzida com ARMv9.0-A.
     /// Nenhum preset a declara ainda: a versão em que é mandatória não foi confirmada (B17.1,
     /// Armadilha 2); núcleos reais com SVE2 entram pelo catálogo `Aarch64Processor` (B17.26).
     SVE2,
+    /// `FEAT_SVE2p2` — SVE2.2 (Armv9.6-A). Nenhum preset a declara; entra por
+    /// `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. Gate de `FIRSTP`/`LASTP`
+    /// (B17.4).
+    SVE2_2,
     /// `FEAT_SME` — Scalable Matrix Extension (armazenamento `ZA`, modo streaming, `SVCR`/`SMCR_ELx`).
     /// ARMv9.2-A. Desde a B18.1 o estado existe no `Aarch64Core` (`SVCR`, `SMCR_EL1/2/3`, banco `ZA`
     /// preguiçoso, `ID_AA64PFR1_EL1.SME`); ainda **sem efeito de modo streaming** (B18.2) e sem

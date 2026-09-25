@@ -8,6 +8,13 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, predicados** (`B17.4`): lógica de predicado (`AND`/`BIC`/`EOR`/`SEL`/`ORR`/`ORN`/`NOR`/`NAND`, com sufixo `S`), `PTEST`,
+  `PTRUE`/`PTRUES` (32 padrões `pat:5`), `PFALSE`, `SETFFR`/`RDFFR`/`WRFFR`, `PFIRST`/`PNEXT`, partition break
+  (`BRKA`/`BRKB`/`BRKPA`/`BRKPB`/`BRKN`), contagem por predicado (`CNTP`, `INCP`/`DECP`, `SQINCP`/`UQINCP`…, e `FIRSTP`/`LASTP`
+  sob `Aarch64Feature.SVE2_2`) e contagem de elementos (`CNTB`/`INCB`/`SQINCB`… com padrão e multiplicador). Decoder
+  `Aarch64SveDecoder` (gate `FEAT_SVE`), substrato `SvePredicateOps` (`PredTest` = `NZCV` de `iter_predtest_fwd`,
+  `DecodePredCount`), sempre no `VL` efetivo (em streaming, o `SVL`). Pendência nomeada: `PTRUE`/`CNTP` de
+  predicado-como-contador (SVE2.1). `docs/COBERTURA-ISA.md` inalterada (`sve.decode` segue fora de preset até a B17.26).
 - **SME, modo streaming** (`B18.2`): `SMSTART`/`SMSTOP` (`MSR SVCRSM/SVCRZA/SVCRSMZA, #imm`) com efeito real — `PSTATE.SM`/`PSTATE.ZA`,
   zeramento de `Z`/`P`/`FFR`/`FPSR`/`FPMR` ao atravessar a fronteira de streaming e de `ZA`/`ZT0` ao habilitar,
   `Aarch64Core.vectorLengthBits()` = `SVL` em streaming, banco escalável por `max(VL, SVL)` e instruções AdvSIMD

@@ -32,19 +32,20 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-25, B18.2 fechada — tabela de ISA em 100%)
+## Onde estamos (atualizado 2026-09-25, B17.4 fechada — tabela de ISA segue em 100%)
 
-**`B18.2` (modo streaming: `SMSTART`/`SMSTOP`, `VL` efetivo = `SVL`, zeramento de `Z`/`P`/`FFR`/`ZA`, instruções ilegais em
-streaming) fechada** — `docs/COBERTURA-ISA.md`: **23523/23523 (100%)**; `MSR_i_SVCR` era a última célula `❌`. Ver
-**Resultado** na task.
+**`B17.4` (predicados SVE: lógica, `PTEST`/`PTRUE`/`FFR`/`PFIRST`/`PNEXT`, partition break, contagem por predicado e de elementos)
+fechada** — 38 dos 40 encodings; `PTRUE_cnt`/`CNTP_c` (predicado-como-contador, SVE2.1) ficam como pendência nomeada.
+`docs/COBERTURA-ISA.md` inalterada (23523/23523; `sve.decode` só entra na tabela na B17.26). Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.4`** (predicados; banco `Z`/`P`/`FFR` e `VL`
-efetivo já existem, agora também em streaming) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.5`/`B17.6`/`B17.9`/`B17.12`/`B17.13`/`B17.24`** (dependem
+de B17.4; `SvePredicateOps` já dá `PredTest`, `DecodePredCount` e acesso a elemento de `Z`) em diante (SVE, Opção C, VL=256; toda
+task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
 B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências no
