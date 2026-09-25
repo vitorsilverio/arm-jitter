@@ -53,18 +53,17 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-25, B22.7 fechada)
+## Onde estamos (atualizado 2026-09-25, B16.15 parcial)
 
-**`B22.7` fechada nesta rodada** — `VRINTR`/`VRINTZ`/`VRINTX` (`sp`/`dp`/`hp`), `VCVTR`, `VCVTB`/`VCVTT`
-(f16 + BF16), `VJCVT` (preset novo `ARMV8_6A_32`, coluna `v8.6-A/32`) e `ArmFeature.HALT` nos presets
-ARMv8-M; `v8-A/32` 94% → 96% (749/776), global 23484/23783. Achado de quebra: o `FJCVTZS` do A64
-reduzia a `0` em overflow (o correto é módulo 2³²) — corrigido junto. Ver **Resultado** na task, que
-também traz o mapa do que resta (259 células de 32 bits + 40 de A64 na tabela, boa parte é curadoria).
+**`B16.15` parcial nesta rodada** — tail-predication (`DLSTP`/`WLSTP`/`LETP`/`LCTP`/`VCTP`, com `LTPSIZE` de
+verdade), `BF*`, `CLRM` e `LDA`/`STL` nos presets ARMv8-M; coluna `ARMv8.1-M+MVE` 93% → 96% (716/742),
+global 23506/23783. Sobram 26 células na coluna MVE: 19 do "MVE long shift" (sem spec, candidata `B16.16`),
+6 `CRC32*` e `SB` de perfil M (sem fonte confirmada, candidata `B22.8`). Ver **Resultado** na task. A
+`B22.7` (anterior) deixou o mapa do que resta nos presets de 32 bits (259 células + 40 de A64, boa parte é
+curadoria).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B16.15`** (épico B16
-reaberto: tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP`, `BF`/`BFL`/`BFCSEL`/`BFX`/`BFLX`
-restantes, `CLRM`, `SB`+`CRC32*` de perfil M), **`B17.3`** em diante (fundação SVE, RFC B17.2
-decidida — Opção C, VL=256) e **`B21.2`** em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c)
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.3`** em diante (fundação SVE, RFC
+B17.2 decidida — Opção C, VL=256) e **`B21.2`** em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c)
 — conferir dependências no `INDICE.md` de cada uma antes de pegar. Também seguem pegáveis: `E14`
 (achado da auditoria JaCoCo da B13.23: `IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de
 teste para NENHUMA instrução NEON), `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do roadmap.

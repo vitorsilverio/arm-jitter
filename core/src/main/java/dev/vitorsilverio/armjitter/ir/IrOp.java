@@ -42,7 +42,8 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         IrOp.VfpRound, IrOp.VfpConvertRounded, IrOp.VfpMoveHalfLane,
         IrOp.VfpAluHalf, IrOp.VfpMoveImmediateHalf, IrOp.VfpCompareHalf, IrOp.VfpSelectHalf,
         IrOp.VfpRoundHalf, IrOp.VfpConvertRoundedHalf, IrOp.VfpConvertFixedHalf, IrOp.VfpLoadHalf,
-        IrOp.VfpStoreHalf, IrOp.VfpConvertHalfPrecision, IrOp.VfpJavascriptConvert {
+        IrOp.VfpStoreHalf, IrOp.VfpConvertHalfPrecision, IrOp.VfpJavascriptConvert,
+        IrOp.LoopClearTailPredication, IrOp.Vctp, IrOp.ClearMultiple {
     /// Valor do campo empacotado `immediate` (decoder → builder) que significa "usar o modo de
     /// arredondamento CORRENTE de `FPSCR.RMode`" em {@link VfpRound}/{@link VfpConvertRounded}/
     /// {@link VfpRoundHalf}/{@link VfpConvertRoundedHalf} — vira `direction == null` no IR (B22.7).
@@ -432,6 +433,12 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         public static final int VFP_CONVERT_HALF_PRECISION = 183;
         /// B22.7: `VJCVT` (`FEAT_JSCVT`) — ver {@link VfpJavascriptConvert}.
         public static final int VFP_JAVASCRIPT_CONVERT = 184;
+        /// B16.15: `LCTP` (restaura `FPSCR.LTPSIZE`) — ver {@link LoopClearTailPredication}.
+        public static final int LOOP_CLEAR_TAIL_PREDICATION = 185;
+        /// B16.15: `VCTP` (cria o predicado de cauda em `VPR.P0`) — ver {@link Vctp}.
+        public static final int VCTP = 186;
+        /// B16.15: `CLRM` (zera registradores/APSR) — ver {@link ClearMultiple}.
+        public static final int CLEAR_MULTIPLE = 187;
     }
 
     /// Operacao ALU generica.
@@ -3377,37 +3384,90 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.SECURE_BRANCH_EXCHANGE; }
     }
 
-    /// `DLS`/`WLS` (perfil M, B15.6, Low Overhead Branch Extension): grava `rn` em `LR` (contador
-    /// de loop); `WLS` (`hasSkipBranch=true`) desvia para `target` quando `rn==0` (loop "while",
-    /// pode nunca executar) — `DLS` (`hasSkipBranch=false`) nunca desvia, só inicializa `LR`. Ver
-    /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2LowOverheadBranchDecoder} para o achado
-    /// sobre por que `LCTP`/`WLSTP`/`DLSTP` (tail-predication) não produzem este `IrOp`.
+    /// `DLS`/`WLS`/`DLSTP`/`WLSTP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension): grava
+    /// `rn` em `LR` (contador de loop); `WLS`/`WLSTP` (`hasSkipBranch=true`) desviam para `target`
+    /// quando `rn==0` (loop "while", pode nunca executar) — `DLS`/`DLSTP` (`hasSkipBranch=false`)
+    /// nunca desviam, só inicializam `LR`. As formas `*TP` (tail-predication, `ltpsize` de `0` a
+    /// `3`) também gravam `FPSCR.LTPSIZE` — no `WLSTP` só quando o loop de fato começa (`rn!=0`,
+    /// `trans_WLS` do QEMU), no `DLSTP` sempre.
     record LoopStart(
             /// Registrador cujo valor inicializa o contador de loop (`LR`).
             int rn,
             /// Endereço absoluto de destino quando o branch é tomado (`WLS` com `rn==0`);
             /// irrelevante quando `hasSkipBranch` é `false`.
             int target,
-            /// `true` para `WLS` (pode desviar); `false` para `DLS` (nunca desvia).
+            /// `true` para `WLS`/`WLSTP` (pode desviar); `false` para `DLS`/`DLSTP` (nunca desvia).
             boolean hasSkipBranch,
+            /// `FPSCR.LTPSIZE` a gravar (`0`-`3`, formas `*TP`) ou {@link #NO_LTPSIZE} (formas puras,
+            /// `LTPSIZE` intocado).
+            int ltpsize,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
+        /// Sentinela de "forma pura": nenhum `LTPSIZE` a gravar.
+        public static final int NO_LTPSIZE = -1;
+
+        /// Forma pura (`DLS`/`WLS`), sem tail-predication — a assinatura anterior à B16.15 (G3).
+        public LoopStart(int rn, int target, boolean hasSkipBranch, Condition condition) {
+            this(rn, target, hasSkipBranch, NO_LTPSIZE, condition);
+        }
+
         @Override public int kind() { return Kind.LOOP_START; }
     }
 
-    /// `LE` (perfil M, B15.6, Low Overhead Branch Extension), forma pura (sem tail-predication —
-    /// ver {@link LoopStart}). **Achado medido contra `trans_LE` do QEMU real** (não deduzido do
-    /// nome do bit `f`): `forever=true` (`f=1`) desvia INCONDICIONALMENTE para `target` sem tocar
-    /// `LR`; `forever=false` decrementa `LR` e desvia de volta só se `LR` (não-assinado) era `> 1`
-    /// ANTES do decremento (a checagem ocorre antes de subtrair, não depois).
+    /// `LE`/`LETP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension). **Achado medido contra
+    /// `trans_LE` do QEMU real** (não deduzido do nome do bit `f`): `forever=true` (`f=1`) desvia
+    /// INCONDICIONALMENTE para `target` sem tocar `LR`; `forever=false` decrementa `LR` e desvia de
+    /// volta só se `LR` (não-assinado) era maior que o decremento ANTES de subtrair (a checagem
+    /// ocorre antes, não depois). Sem `tailPredicated` o decremento é `1`; com ele (`LETP`) é
+    /// `1 << (4 - LTPSIZE)` (elementos processados por iteração) e a saída do loop restaura
+    /// `LTPSIZE = 4`.
     record LoopEnd(
             /// Endereço absoluto de destino do desvio (para trás, início do corpo do loop).
             int target,
             /// `true` para a forma "loop-forever" (`f=1`, desvio incondicional, `LR` intocado).
             boolean forever,
+            /// `true` para `LETP` (decremento por `LTPSIZE`, restaura `LTPSIZE` ao sair).
+            boolean tailPredicated,
             /// Condição necessária para executar.
             Condition condition) implements IrOp {
+        /// Forma pura (`LE`), sem tail-predication — a assinatura anterior à B16.15 (G3).
+        public LoopEnd(int target, boolean forever, Condition condition) {
+            this(target, forever, false, condition);
+        }
+
         @Override public int kind() { return Kind.LOOP_END; }
+    }
+
+    /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4` (tail-predication inativa) —
+    /// única coisa que a instrução faz (`trans_LCTP` do QEMU, que não guarda cache de branch).
+    record LoopClearTailPredication(
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.LOOP_CLEAR_TAIL_PREDICATION; }
+    }
+
+    /// `VCTP.<size> Rn` (perfil M, B16.15, MVE, beatwise): cria o predicado de cauda em `VPR.P0` —
+    /// os primeiros `Rn << size` bytes ficam ativos (todos os 16 se `Rn > 16 >> size`), mascarados
+    /// pelo `elementMask` corrente e gravados só nos beats ainda não executados (`HELPER(mve_vctp)`
+    /// do QEMU real).
+    record Vctp(
+            /// Registrador com o número de elementos restantes.
+            int rn,
+            /// Log2 do tamanho de elemento em bytes (`0`=8 bits ... `3`=64 bits).
+            int size,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.VCTP; }
+    }
+
+    /// `CLRM {list}` (perfil M com Security Extension, B16.15): zera `R0`-`R12`/`LR` (bits 0-14 de
+    /// `list`) e o `APSR` (bit 15, como `MSR APSR_nzcvqg, #0`).
+    record ClearMultiple(
+            /// Lista de registradores (16 bits; bit 13 — `SP` — nunca é `1` aqui, recusado no decode).
+            int list,
+            /// Condição necessária para executar.
+            Condition condition) implements IrOp {
+        @Override public int kind() { return Kind.CLEAR_MULTIPLE; }
     }
 
     /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — transcrição de

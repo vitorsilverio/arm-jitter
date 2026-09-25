@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.executor;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Executa branches e interworking da IR interpretada.
@@ -125,9 +126,10 @@ public final class IrBranchExecutor {
         return true;
     }
 
-    /// `DLS`/`WLS` (perfil M, B15.6): grava `rn` em `LR` sempre; `WLS` (`hasSkipBranch`) desvia
-    /// para `target` quando `rn==0` (lido ANTES de sobrescrever `LR` — cobre o caso raro/válido de
-    /// `rn==LR`, ver Armadilha 4 da task).
+    /// `DLS`/`WLS`/`DLSTP`/`WLSTP` (perfil M, B15.6/B16.15) — `trans_DLS`/`trans_WLS` do QEMU. `WLS*`
+    /// (`hasSkipBranch`) com `rn==0` só desvia para `target`: NÃO grava `LR` nem `LTPSIZE` (o loop
+    /// nunca começa). Nos demais casos `LR = rn` (lido ANTES de sobrescrever `LR` — cobre o caso
+    /// raro/válido de `rn==LR`, ver Armadilha 4 da task) e, nas formas `*TP`, `LTPSIZE = size`.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
     public boolean executeLoopStart(ArmCore core, IrOp.LoopStart loopStart) {
@@ -135,17 +137,21 @@ public final class IrBranchExecutor {
             return false;
         }
         int count = core.register(loopStart.rn());
-        core.setRegister(LOOP_COUNTER_REGISTER, count);
         if (loopStart.hasSkipBranch() && count == 0) {
             core.setProgramCounter(loopStart.target());
             return true;
         }
+        core.setRegister(LOOP_COUNTER_REGISTER, count);
+        if (loopStart.ltpsize() != IrOp.LoopStart.NO_LTPSIZE) {
+            core.fpscr().setLtpsize(loopStart.ltpsize());
+        }
         return false;
     }
 
-    /// `LE` (perfil M, B15.6), forma pura: `forever` (`f=1`) desvia incondicionalmente sem tocar
-    /// `LR`; senão decrementa/testa `LR` como o QEMU real (`trans_LE`) — checagem ANTES do
-    /// decremento, `LR` (não-assinado) `<= 1` sai sem decrementar.
+    /// `LE`/`LETP` (perfil M, B15.6/B16.15) — `trans_LE` do QEMU: `forever` (`f=1`) desvia
+    /// incondicionalmente sem tocar `LR`; senão `LR` (não-assinado) `<=` decremento sai SEM
+    /// decrementar (checagem ANTES do decremento) e, no `LETP`, restaura `LTPSIZE = 4`; senão
+    /// `LR -= decremento` e desvia de volta. Decremento = `1` (`LE`) ou `1 << (4 - LTPSIZE)` (`LETP`).
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
     public boolean executeLoopEnd(ArmCore core, IrOp.LoopEnd loopEnd) {
@@ -156,11 +162,17 @@ public final class IrBranchExecutor {
             core.setProgramCounter(loopEnd.target());
             return true;
         }
+        int decrement = loopEnd.tailPredicated()
+                ? 1 << (FpscrRegister.LTPSIZE_NONE - core.fpscr().ltpsize())
+                : 1;
         int counter = core.register(LOOP_COUNTER_REGISTER);
-        if (Integer.compareUnsigned(counter, 1) <= 0) {
+        if (Integer.compareUnsigned(counter, decrement) <= 0) {
+            if (loopEnd.tailPredicated()) {
+                core.fpscr().setLtpsize(FpscrRegister.LTPSIZE_NONE);
+            }
             return false;
         }
-        core.setRegister(LOOP_COUNTER_REGISTER, counter - 1);
+        core.setRegister(LOOP_COUNTER_REGISTER, counter - decrement);
         core.setProgramCounter(loopEnd.target());
         return true;
     }

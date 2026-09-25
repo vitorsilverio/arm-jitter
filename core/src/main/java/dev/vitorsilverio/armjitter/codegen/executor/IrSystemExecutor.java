@@ -371,10 +371,14 @@ public final class IrSystemExecutor {
         core.cpsr().setItState(setItState.itState());
     }
 
-    /// `LTPSIZE` neutro (B16.2 "Não inclui": tail predication/`LOW_OVERHEAD_BRANCH` não modela
-    /// este estado ainda) — passado a {@link MveVptState#elementMask} para desligar a etapa de
-    /// tail predication (`ltpsize < 4` nunca é verdadeiro).
-    private static final int NO_TAIL_PREDICATION_LTPSIZE = 4;
+    /// `LR`/`R14`: contador de loop (`DLSTP`/`WLSTP`/`LE*`) que {@link MveVptState#elementMask}
+    /// consome quando {@link FpscrRegister#ltpsize()} `< 4` (B16.15 — antes a tail predication era
+    /// desligada passando `LTPSIZE=4` fixo).
+    private static final int LINK_REGISTER = 14;
+    /// Bytes de um registrador `Q` (16): largura do predicado `VPR.P0`, um bit por byte.
+    private static final int MVE_VECTOR_BYTES = 16;
+    /// Bit 15 da lista de `CLRM` = `APSR` (os bits 0-14 são `R0`-`R12`/`LR`).
+    private static final int CLRM_APSR_BIT = 15;
 
     /// Entra em `USAGE_FAULT` com `UFSR.INVSTATE` (`mve_eci_check` real: `ECI` reservado numa
     /// instrução MVE beatwise) — mesmo cast direto de {@link #executeNocp}.
@@ -431,8 +435,8 @@ public final class IrSystemExecutor {
 
     /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte — `@2op_nosz`
     /// não tem campo `size`) entre `Qn` e `Qm` conforme `VPR.P0`, escrevendo em `Qd` só nos bytes
-    /// que {@link MveVptState#elementMask} marca como ativos (`LTPSIZE` neutro, ver
-    /// {@link #NO_TAIL_PREDICATION_LTPSIZE}). **Semântica derivada, não confirmada byte a byte
+    /// que {@link MveVptState#elementMask} marca como ativos (`LTPSIZE` corrente, ver
+    /// {@link FpscrRegister#ltpsize()}). **Semântica derivada, não confirmada byte a byte
     /// contra `HELPER(mve_vpsel)` do QEMU real** (mesma limitação de {@link #executeVpnot}) — a
     /// derivação segue o pseudocódigo arquitetural (`Armv8-M ARM` B4.24): seleção sempre por byte,
     /// write-enable pelo `elementMask` corrente. Ver `## Resultado` da task B16.2.
@@ -449,7 +453,7 @@ public final class IrSystemExecutor {
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
         int p0 = (vpr & VprRegister.P0_MASK) >>> VprRegister.P0_SHIFT;
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         for (int byteIndex = 0; byteIndex < 16; byteIndex++) {
             if (((mask >>> byteIndex) & 1) == 0) {
                 continue;
@@ -459,6 +463,62 @@ public final class IrSystemExecutor {
             vfp.setElement(op.qd(), byteIndex, 0, value);
         }
         return false;
+    }
+
+    /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4`, a tail-predication inativa.
+    /// É TUDO o que o QEMU real faz (`trans_LCTP`: sem cache de branch a limpar).
+    public void executeLctp(ArmCore core, IrOp.LoopClearTailPredication op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        core.fpscr().setLtpsize(FpscrRegister.LTPSIZE_NONE);
+    }
+
+    /// `VCTP.<size> Rn` (perfil M, B16.15, MVE, beatwise) — `trans_VCTP` + `HELPER(mve_vctp)` do
+    /// QEMU: `masklen = Rn <= (16 >> size) ? Rn << size : 16` (comparação não-assinada), e
+    /// `VPR.P0 = (P0 & ~eciMask) | (bits[masklen-1:0] & elementMask & eciMask)` — só os beats ainda
+    /// não executados são reescritos. O avanço de `ECI`/`VPT` fica a cargo do {@code AdvanceVpt}
+    /// que o lifter emite depois de toda instrução beatwise.
+    ///
+    /// @return `true` quando faultou (`ECI` reservado, ver {@link #executeVpst}).
+    public boolean executeVctp(ArmCore core, IrOp.Vctp op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return false;
+        }
+        int itState = core.cpsr().itState();
+        if (MveVptState.isReservedEci(core.cpsr().eci())) {
+            return faultInvstate(core);
+        }
+        int remaining = core.register(op.rn());
+        int fullElements = MVE_VECTOR_BYTES >>> op.size();
+        int maskLength = Integer.compareUnsigned(remaining, fullElements) <= 0
+                ? remaining << op.size()
+                : MVE_VECTOR_BYTES;
+        int vpr = core.vpr().value();
+        int mask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
+        int eciMask = MveVptState.eciMask(itState);
+        int tailMask = maskLength == 0 ? 0 : (1 << maskLength) - 1;
+        core.vpr().setValue((vpr & ~eciMask) | (tailMask & mask & eciMask));
+        return false;
+    }
+
+    /// `CLRM {list}` (perfil M com Security Extension, B16.15) — `trans_CLRM` do QEMU: zera cada
+    /// `R0`-`R12`/`LR` marcado em bits 0-14 e, com o bit 15, o `APSR` inteiro (`N`/`Z`/`C`/`V`/`Q`
+    /// e `GE`, como `MSR APSR_nzcvqg, #0`). `SP`/`PC` na lista e lista vazia são recusados no decode.
+    public void executeClrm(ArmCore core, IrOp.ClearMultiple op) {
+        if (!core.cpsr().evalCond(op.condition())) {
+            return;
+        }
+        for (int register = 0; register < CLRM_APSR_BIT; register++) {
+            if (((op.list() >>> register) & 1) != 0) {
+                core.setRegister(register, 0);
+            }
+        }
+        if (((op.list() >>> CLRM_APSR_BIT) & 1) != 0) {
+            core.cpsr().setNzcv(false, false, false, false);
+            core.cpsr().setSaturation(false);
+            core.cpsr().setGe(0);
+        }
     }
 
     /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — {@link
@@ -492,8 +552,8 @@ public final class IrSystemExecutor {
 
     /// `VLDR_VSTR` (perfil M, B16.3, MVE/Helium): move os 128 bits de `Qd` de/para memória, BYTE a
     /// BYTE (Armadilha 5 da task — predicação por byte de memória, nunca um único acesso de 128
-    /// bits quando a máscara não é cheia), usando {@link #NO_TAIL_PREDICATION_LTPSIZE} (mesma
-    /// convenção de {@link #executeVpsel}: tail predication ainda não modelada, B15.6/B16.7+).
+    /// bits quando a máscara não é cheia), usando {@link FpscrRegister#ltpsize()} (mesma
+    /// convenção de {@link #executeVpsel}: `LTPSIZE`/`LR` correntes, B16.15).
     /// Mesma checagem de `ECI` reservado que toda instrução MVE beatwise faz ({@code
     /// mve_eci_check} real) ANTES de tocar memória/registrador — ver {@link #executeVpst}.
     ///
@@ -516,7 +576,7 @@ public final class IrSystemExecutor {
         int base = core.register(op.rn());
         int accessAddress = op.postIndexed() ? base : base + op.offset();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         VfpRegisters vfp = core.vfp();
         for (int byteIndex = 0; byteIndex < 16; byteIndex++) {
             if (((mask >>> byteIndex) & 1) == 0) {
@@ -567,7 +627,7 @@ public final class IrSystemExecutor {
         int accessAddress = op.postIndexed() ? base : base + op.offset();
         int vpr = core.vpr().value();
         int itState = core.cpsr().itState();
-        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int fullMask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int eciMask = MveVptState.eciMask(itState);
         VfpRegisters vfp = core.vfp();
         int registerSizeLog2 = op.registerSizeLog2();
@@ -630,7 +690,7 @@ public final class IrSystemExecutor {
         int base = core.register(op.rn());
         int vpr = core.vpr().value();
         int itState = core.cpsr().itState();
-        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int fullMask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int eciMask = MveVptState.eciMask(itState);
         VfpRegisters vfp = core.vfp();
         int memorySizeLog2 = op.memorySizeLog2();
@@ -705,7 +765,7 @@ public final class IrSystemExecutor {
         }
         int vpr = core.vpr().value();
         int itState = core.cpsr().itState();
-        int fullMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int fullMask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int eciMask = MveVptState.eciMask(itState);
         VfpRegisters vfp = core.vfp();
         int sizeLog2 = op.sizeLog2();
@@ -932,7 +992,7 @@ public final class IrSystemExecutor {
             return faultInvstate(core);
         }
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         VfpRegisters vfp = core.vfp();
         int sizeLog2 = op.sizeLog2();
         int offset = core.register(op.rn());
@@ -959,7 +1019,7 @@ public final class IrSystemExecutor {
             return faultInvstate(core);
         }
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         VfpRegisters vfp = core.vfp();
         int sizeLog2 = op.sizeLog2();
         int offset = core.register(op.rn());
@@ -1013,7 +1073,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1043,7 +1103,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1073,7 +1133,7 @@ public final class IrSystemExecutor {
         final int elementBytes = 1 << esz;
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
         int baseRn = op.qn() * VfpRegisters.WORDS_PER_QUAD;
         int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
@@ -1129,7 +1189,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1153,7 +1213,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1176,7 +1236,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1200,7 +1260,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int shift = 8 << esz;
         int outputElements = 8 >> esz;
@@ -1228,7 +1288,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1259,7 +1319,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1287,7 +1347,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1322,7 +1382,7 @@ public final class IrSystemExecutor {
         final int elementCount = 4; // 128 bits / 32 bits.
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
         int shift = op.imm() == 0 ? 32 : op.imm();
         long rdm = Integer.toUnsignedLong(core.register(op.rdm()));
@@ -1366,7 +1426,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1390,7 +1450,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1415,7 +1475,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1441,7 +1501,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1465,7 +1525,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
@@ -1523,7 +1583,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.size();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
@@ -1557,7 +1617,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         final int WORD_ESZ = 2;
         final int WORD_BYTES = 4;
         final int WORD_BYTE_MASK = 0xF;
@@ -1595,7 +1655,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.size();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
@@ -1631,7 +1691,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int wordLow = op.qd() * VfpRegisters.WORDS_PER_QUAD;
         applyMveModifiedImmediate(vfp, op, wordLow, byteMask & 0xFF);
         applyMveModifiedImmediate(vfp, op, wordLow + 1, (byteMask >>> 8) & 0xFF);
@@ -1668,7 +1728,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.size();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
@@ -1707,7 +1767,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.size();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : 0x3;
@@ -1750,7 +1810,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         final int WORD_ESZ = 2;
         final int WORD_BYTES = 4;
         final int WORD_BYTE_MASK = 0xF;
@@ -1798,7 +1858,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.size();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : (elementBytes == 2 ? 0x3 : 0x1);
@@ -1839,7 +1899,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int byteMask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int elementBytes = 1 << esz;
         int elementByteMask = elementBytes == 4 ? 0xF : 0x3;
@@ -1902,7 +1962,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1930,7 +1990,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
         int baseRm = op.qm() * VfpRegisters.WORDS_PER_QUAD;
         if (op.widen()) {
@@ -1955,7 +2015,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -1980,7 +2040,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2008,7 +2068,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2037,7 +2097,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2061,7 +2121,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2088,7 +2148,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2186,7 +2246,7 @@ public final class IrSystemExecutor {
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
         int itState = core.cpsr().itState();
-        int elementMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int elementMask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int elementBytes = 1 << esz;
         int lanes = 16 / elementBytes;
@@ -2223,7 +2283,7 @@ public final class IrSystemExecutor {
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
         int itState = core.cpsr().itState();
-        int elementMask = MveVptState.elementMask(vpr, itState, NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int elementMask = MveVptState.elementMask(vpr, itState, core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int elementBytes = 1 << esz;
         int lanes = 16 / elementBytes;
@@ -2261,7 +2321,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2288,7 +2348,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int outputElements = 8 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2316,7 +2376,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2340,7 +2400,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;
@@ -2366,7 +2426,7 @@ public final class IrSystemExecutor {
         }
         VfpRegisters vfp = core.vfp();
         int vpr = core.vpr().value();
-        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), NO_TAIL_PREDICATION_LTPSIZE, 0);
+        int mask = MveVptState.elementMask(vpr, core.cpsr().itState(), core.fpscr().ltpsize(), core.register(LINK_REGISTER));
         int esz = op.esz();
         int lanes = 16 >> esz;
         int baseRd = op.qd() * VfpRegisters.WORDS_PER_QUAD;

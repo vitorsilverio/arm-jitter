@@ -58,6 +58,12 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     private static final int SINGLE_UNSIGNED_TOP8 = 0b1111_1000;
     /// `raw[31:24]` fixo do grupo signed-only (`LDRSB`/`LDRSH` — sem forma de store).
     private static final int SINGLE_SIGNED_TOP8 = 0b1111_1001;
+    /// `CLRM`: `1110 1000 1001 1111 list:16` — só `list` (bits[15:0]) é livre.
+    private static final int CLRM_MASK = 0xFFFF_0000;
+    private static final int CLRM_VALUE = 0xE89F_0000;
+    private static final int CLRM_LIST_MASK = 0xFFFF;
+    /// Bit 13 da lista = `SP`: `CLRM` com `SP` é UNPREDICTABLE (QEMU: UNDEF).
+    private static final int CLRM_STACK_POINTER_BIT = 13;
     private static final int TOP8_SHIFT = 24;
     private static final int TOP8_MASK = 0xFF;
 
@@ -106,6 +112,11 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
+        // CLRM (B16.15) reusa o encoding de `LDM.W` com `Rn=15` (`.decode`: "Rn=15 UNDEFs for LDM;
+        // M-profile CLRM uses that encoding") — checada ANTES do caminho de LDM/STM abaixo.
+        if ((raw & CLRM_MASK) == CLRM_VALUE && architecture.has(ArmFeature.M_PROFILE_SECURITY)) {
+            return decodeClearMultiple(raw, address, condition);
+        }
         int top8 = (raw >>> TOP8_SHIFT) & TOP8_MASK;
         if (top8 == SINGLE_UNSIGNED_TOP8) {
             return decodeSingleTransfer(raw, address, condition, false);
@@ -656,5 +667,16 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
         InstructionKind kind = load ? InstructionKind.LOAD : InstructionKind.STORE;
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
                 rt, rn, -1, 0, true, false, false, sizeBytes, false);
+    }
+
+    /// `CLRM {list}` (B16.15, perfil M com Security Extension) — `trans_CLRM` do QEMU: `SP` na
+    /// lista (bit 13) e lista vazia são UNPREDICTABLE e viram UNDEF (G8). `immediate` = `list`.
+    private DecodedInstruction decodeClearMultiple(int raw, int address, Condition condition) {
+        int list = raw & CLRM_LIST_MASK;
+        if (list == 0 || ((list >>> CLRM_STACK_POINTER_BIT) & 1) != 0) {
+            return DecodedInstruction.unimplemented(address, raw, InstructionSet.THUMB, condition);
+        }
+        return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition,
+                InstructionKind.CLEAR_MULTIPLE, -1, -1, -1, list, false, false, false);
     }
 }

@@ -42,7 +42,7 @@ class LowOverheadBranchTest {
         core.step();
 
         assertEquals(CODE_BASE + 4 + 6, core.programCounter(), "R1==0 deve pular direto para depois do loop");
-        assertEquals(0, core.register(LOOP_COUNTER_REGISTER), "LR recebe o valor de Rn mesmo quando pula");
+        assertEquals(0, core.register(LOOP_COUNTER_REGISTER), "WLS com Rn==0 só desvia: LR fica como estava (trans_WLS do QEMU)");
     }
 
     @Test

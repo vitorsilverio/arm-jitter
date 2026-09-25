@@ -181,7 +181,9 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // `MveVptState#advance` escreve `ECI`, e sempre com um dos 5 valores válidos),
                     // mas terminal por precaução, mesmo critério de LOOP_START/LOOP_END ("podem
                     // trocar o PC").
-                    VPST, VPNOT, VPSEL -> true;
+                    // VCTP (B16.15): beatwise, mesma categoria de VPST/VPNOT/VPSEL (fault de ECI +
+                    // reescreve o VPR que as instruções seguintes leem).
+                    VPST, VPNOT, VPSEL, VCTP -> true;
             // LIFTED_IR_OP (RFC B13.2): geralmente `false` (ver o `case` abaixo), EXCETO
             // VCMP*/VCMP*_fp/VCMP*_scalar/VCMP*_fp_scalar (B16.8, `IrOp.MveVectorCompare`/
             // `MveVectorCompareScalar`) — o QEMU real seta `DISAS_UPDATE_NOCHAIN` em `do_vcmp`/
@@ -227,7 +229,10 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     VPR_TRANSFER,
                     // CRC32 (ARMv8-A, B14.3): puro cálculo sobre GPRs, nunca toca o PC (mesma
                     // categoria de SATURATING/DSP_MULTIPLY acima).
-                    CRC32 -> false;
+                    CRC32,
+                    // LCTP (B16.15): só grava `FPSCR.LTPSIZE`, lido em tempo de execução pelos
+                    // executores MVE — nunca toca o PC. CLRM idem: só zera registradores/APSR.
+                    LOOP_CLEAR_TAIL_PREDICATION, CLEAR_MULTIPLE -> false;
         };
     }
 

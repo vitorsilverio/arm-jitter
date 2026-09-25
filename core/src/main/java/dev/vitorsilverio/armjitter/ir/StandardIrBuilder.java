@@ -736,12 +736,22 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.link(),
+                    // B16.15: `destinationRegister` carrega o `size` das formas *TP (-1 = forma pura).
+                    instruction.destinationRegister() >= 0
+                            ? instruction.destinationRegister() : IrOp.LoopStart.NO_LTPSIZE,
                     instruction.condition()));
             // LOOP_END (LE, B15.6): `link` carrega forever (ver InstructionKind#LOOP_END).
             case LOOP_END -> block.add(new IrOp.LoopEnd(
                     instruction.immediate(),
                     instruction.link(),
+                    // B16.15: `immediateOperand` = `LETP` (tail-predicated).
+                    instruction.immediateOperand(),
                     instruction.condition()));
+            // LCTP/VCTP/CLRM (B16.15): ver os Javadocs de `InstructionKind`.
+            case LOOP_CLEAR_TAIL_PREDICATION -> block.add(new IrOp.LoopClearTailPredication(instruction.condition()));
+            case VCTP -> block.add(new IrOp.Vctp(
+                    instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
+            case CLEAR_MULTIPLE -> block.add(new IrOp.ClearMultiple(instruction.immediate(), instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
             case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(

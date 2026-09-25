@@ -444,7 +444,10 @@ public final class ArmArchitecture {
     /// (`SG`/`BXNS`/`BLXNS`, banking de `MSP`/`PSP` por estado de segurança). **G3**: `ARMV7M_PURE`
     /// permanece intocado — este preset nasce AO LADO.
     private static final ArmArchitecture ARMV8M_BASELINE_FEATURES = extending(ARMV7M_PURE_FEATURES,
-            "ARMv8-M Baseline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT);
+            "ARMv8-M Baseline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT,
+            // B16.15: `LDA`/`STL`/`LDAEX*`/`STLEX*` são baseline obrigatória de ARMv8-M (o gate real do
+            // QEMU é `ENABLE_ARCH_8`, que os cores M v8 satisfazem) — antes só os presets A declaravam.
+            ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
 
     public static final ArmArchitecture ARMV8M_BASELINE = ARMV8M_BASELINE_FEATURES
             .withThumb32DecoderExtensions(List.of(
@@ -462,7 +465,9 @@ public final class ArmArchitecture {
     /// {@link #ARMV7M_PURE}) + {@link ArmFeature#M_PROFILE_SECURITY}. **G3**: `ARMV7M` permanece
     /// intocado.
     private static final ArmArchitecture ARMV8M_MAINLINE_FEATURES = extending(ARMV7M_FEATURES,
-            "ARMv8-M Mainline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT);
+            "ARMv8-M Mainline (Security Extension)", ArmFeature.M_PROFILE_SECURITY, ArmFeature.HALT,
+            // B16.15: idem ARMV8M_BASELINE (herdado por ARMV8_1M/ARMV8_1M_MVE).
+            ArmFeature.LOAD_ACQUIRE_STORE_RELEASE);
 
     public static final ArmArchitecture ARMV8M_MAINLINE = ARMV8M_MAINLINE_FEATURES
             .withThumb32DecoderExtensions(List.of(

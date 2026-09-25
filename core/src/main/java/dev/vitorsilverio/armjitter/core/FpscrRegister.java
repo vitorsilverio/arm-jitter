@@ -60,7 +60,27 @@ public final class FpscrRegister {
     /// Bit IOC do FPSCR (cumulativo: invalid operation).
     public static final int INVALID_OPERATION_CUMULATIVE_FLAG = 1;
 
+    /// `LTPSIZE` neutro (`4`): tail-predication inativa. É o valor de reset arquitetural do campo
+    /// `FPSCR.LTPSIZE` (ARMv8.1-M) e o que `LCTP`/a saída de um `LETP` restauram.
+    public static final int LTPSIZE_NONE = 4;
+
     private int value;
+    /// `FPSCR.LTPSIZE` (B16.15, ARMv8.1-M): log2 do tamanho de elemento da tail-predication em
+    /// curso (`0`-`3`) ou {@link #LTPSIZE_NONE}. Guardado À PARTE de {@link #value} — o valor
+    /// bruto do FPSCR reseta a `0` em todo preset (G3), enquanto `LTPSIZE` reseta a `4`, e
+    /// reusar os bits 18:16 (`LEN`) mudaria o que `VMRS` devolve fora do MVE.
+    private int ltpsize = LTPSIZE_NONE;
+
+    /// `FPSCR.LTPSIZE` corrente (`0`-`3` = tail-predication ativa, `4` = inativa).
+    public int ltpsize() {
+        return ltpsize;
+    }
+
+    /// Grava `LTPSIZE` (`DLSTP`/`WLSTP` com `0`-`3`; `LCTP` e a saída de `LETP` com
+    /// {@link #LTPSIZE_NONE}).
+    public void setLtpsize(int ltpsize) {
+        this.ltpsize = ltpsize;
+    }
 
     /// Retorna o valor bruto de 32 bits do FPSCR.
     public int value() {
@@ -134,10 +154,15 @@ public final class FpscrRegister {
     /// Restaura o FPSCR gravado por {@link #saveState}.
     public void loadState(java.io.DataInputStream in) throws java.io.IOException {
         value = in.readInt();
+        // LTPSIZE não faz parte do formato de save state (mudar o layout quebraria estados já
+        // gravados, G3): volta ao neutro. Só perde um estado salvo NO MEIO de um loop
+        // tail-predicated.
+        ltpsize = LTPSIZE_NONE;
     }
 
     /// Zera o FPSCR (usado ao carregar um save state de formato anterior à B3.3).
     public void reset() {
         value = 0;
+        ltpsize = LTPSIZE_NONE;
     }
 }

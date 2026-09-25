@@ -48,8 +48,12 @@ class ArmArchitectureArmv8a32Test {
                 continue;
             }
             assertFalse(preset.has(ArmFeature.ARMV8_FP), preset + " não deve ter ARMV8_FP");
-            assertFalse(preset.has(ArmFeature.LOAD_ACQUIRE_STORE_RELEASE),
-                    preset + " não deve ter LOAD_ACQUIRE_STORE_RELEASE");
+            // B16.15: os presets ARMv8-M (Security Extension) declaram LDA/STL/LDAEX*/STLEX* — baseline
+            // obrigatória da v8-M, gate `ENABLE_ARCH_8` do QEMU. Os presets A/R pré-v8 continuam sem.
+            if (!preset.has(ArmFeature.M_PROFILE_SECURITY)) {
+                assertFalse(preset.has(ArmFeature.LOAD_ACQUIRE_STORE_RELEASE),
+                        preset + " não deve ter LOAD_ACQUIRE_STORE_RELEASE");
+            }
             assertFalse(preset.has(ArmFeature.CRC32), preset + " não deve ter CRC32");
         }
         assertTrue(ArmArchitecture.ARMV8A_32.has(ArmFeature.ARMV8_FP));

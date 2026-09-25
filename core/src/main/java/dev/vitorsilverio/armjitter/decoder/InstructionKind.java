@@ -478,11 +478,14 @@ public enum InstructionKind {
     /// `DLS`/`WLS` (perfil M, B15.6, Low Overhead Branch Extension, `t32.decode`): grava
     /// `sourceRegister` em `LR` (contador de loop) via `IrOp.LoopStart`; `link=true` (`WLS`) desvia
     /// para `immediate` (endereço já resolvido pelo decoder) quando `sourceRegister==0` — `DLS`
-    /// (`link=false`) nunca desvia. Só produzida sob
+    /// (`link=false`) nunca desvia. **B16.15**: `DLSTP`/`WLSTP` usam o MESMO `Kind` com
+    /// `destinationRegister` = `size` (`0`-`3`, vira `LTPSIZE`); as formas puras deixam `-1`. Só
+    /// produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#LOW_OVERHEAD_BRANCH}.
     LOOP_START,
-    /// `LE` (perfil M, B15.6, Low Overhead Branch Extension, `t32.decode`), forma pura (sem tail-
-    /// predication — `LETP` não decodifica, ver `Thumb2LowOverheadBranchDecoder`): via
+    /// `LE`/`LETP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension, `t32.decode`;
+    /// `immediateOperand=true` = `LETP`, tail-predicated, exige MVE) — antes só a forma pura (sem tail-
+    /// predication, ver `Thumb2LowOverheadBranchDecoder`): via
     /// `IrOp.LoopEnd`. `link=true` (`f=1`, "loop-forever") desvia incondicionalmente para
     /// `immediate` sem tocar `LR`; `link=false` decrementa `LR` e desvia de volta só se `LR`
     /// (não-assinado) `> 1` ANTES do decremento (achado medido contra `trans_LE` do QEMU, não
@@ -523,7 +526,19 @@ public enum InstructionKind {
     /// `immediate` empacota bits 1:0 = código de largura (0=8, 1=16, 2=32) e bit 2 = polinômio
     /// Castagnoli (`1`=CRC32C, `0`=IEEE 802.3). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#CRC32}.
-    CRC32;
+    CRC32,
+    /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4` via `IrOp.LoopClearTailPredication`.
+    /// Sem campos neutros. Só produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}
+    /// (e `LOW_OVERHEAD_BRANCH`).
+    LOOP_CLEAR_TAIL_PREDICATION,
+    /// `VCTP.<size> Rn` (perfil M, B16.15, MVE): `sourceRegister`=`Rn`, `immediate`=`size` (log2 do
+    /// tamanho de elemento em bytes) via `IrOp.Vctp`. Beatwise (ver {@link #isMveBeatwise()}). Só
+    /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
+    VCTP,
+    /// `CLRM {list}` (perfil M com Security Extension, B16.15): `immediate`=`list` (16 bits: bits
+    /// 0-14 = `R0`-`R12`/`LR`, bit 15 = `APSR`) via `IrOp.ClearMultiple`. Só produzida sob
+    /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
+    CLEAR_MULTIPLE;
 
     /// Instruções MVE "beatwise" (Helium, B16.2+): o avanço de
     /// {@link dev.vitorsilverio.armjitter.core.MveVptState#advance} roda depois de QUALQUER uma
@@ -531,7 +546,7 @@ public enum InstructionKind {
     /// (B16.3+) só precisa acrescentar seu {@code Kind} novo a este conjunto para herdar o gancho
     /// que {@code StandardIrBuilder#lift} instala (ver Javadoc lá).
     private static final java.util.EnumSet<InstructionKind> MVE_BEATWISE =
-            java.util.EnumSet.of(VPST, VPNOT, VPSEL);
+            java.util.EnumSet.of(VPST, VPNOT, VPSEL, VCTP);
 
     /// `true` quando esta instrução é MVE beatwise (avança `VPR`/`ECI` depois de executar, mesmo
     /// totalmente predicada — G4).

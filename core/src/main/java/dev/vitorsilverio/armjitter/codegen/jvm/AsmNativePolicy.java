@@ -279,6 +279,10 @@ public final class AsmNativePolicy {
             case IrOp.Vpst ignored -> false;
             case IrOp.Vpnot ignored -> false;
             case IrOp.Vpsel ignored -> false;
+            // VCTP/LCTP/CLRM (B16.15): sem emissão nativa nesta task (decode + interpretado apenas).
+            case IrOp.Vctp ignored -> false;
+            case IrOp.LoopClearTailPredication ignored -> false;
+            case IrOp.ClearMultiple ignored -> false;
             case IrOp.AdvanceVpt ignored -> false;
             case IrOp.VprTransfer ignored -> false;
             // VLDR_VSTR (B16.3, MVE/Helium): sem emissão nativa nesta task ("Não inclui" — decode +

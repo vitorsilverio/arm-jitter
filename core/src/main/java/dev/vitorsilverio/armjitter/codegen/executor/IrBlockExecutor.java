@@ -199,6 +199,11 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.VPST -> pcChanged |= system.executeVpst(core, (IrOp.Vpst) op);
                 case IrOp.Kind.VPNOT -> pcChanged |= system.executeVpnot(core, (IrOp.Vpnot) op);
                 case IrOp.Kind.VPSEL -> pcChanged |= system.executeVpsel(core, (IrOp.Vpsel) op);
+                // VCTP (B16.15): beatwise, pode faultar igual VPST/VPNOT/VPSEL.
+                case IrOp.Kind.VCTP -> pcChanged |= system.executeVctp(core, (IrOp.Vctp) op);
+                case IrOp.Kind.LOOP_CLEAR_TAIL_PREDICATION ->
+                        system.executeLctp(core, (IrOp.LoopClearTailPredication) op);
+                case IrOp.Kind.CLEAR_MULTIPLE -> system.executeClrm(core, (IrOp.ClearMultiple) op);
                 // ADVANCE_VPT (B16.2): pulado quando a instrução MVE anterior no MESMO bloco já
                 // mudou o PC (fault de ECI reservado) — ver Javadoc de IrSystemExecutor#executeAdvanceVpt.
                 case IrOp.Kind.ADVANCE_VPT -> {
@@ -535,6 +540,9 @@ public final class IrBlockExecutor {
             case IrOp.Vpst vpst -> system.executeVpst(core, vpst);
             case IrOp.Vpnot vpnot -> system.executeVpnot(core, vpnot);
             case IrOp.Vpsel vpsel -> system.executeVpsel(core, vpsel);
+            case IrOp.Vctp vctp -> system.executeVctp(core, vctp);
+            case IrOp.LoopClearTailPredication lctp -> { system.executeLctp(core, lctp); yield false; }
+            case IrOp.ClearMultiple clrm -> { system.executeClrm(core, clrm); yield false; }
             case IrOp.AdvanceVpt advanceVpt -> { system.executeAdvanceVpt(core, advanceVpt); yield false; }
             case IrOp.VprTransfer vprTransfer -> { system.executeVprTransfer(core, vprTransfer); yield false; }
             case IrOp.MveLoadStore mveLoadStore -> system.executeMveLoadStore(core, mveLoadStore);

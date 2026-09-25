@@ -232,6 +232,7 @@ CLRM	v7-A	ARMv8-M mainline (perfil M, não A/R-profile)
 # ── `trans_SB` (target/arm/tcg/translate.c real do QEMU): FEAT_SB, extensão opcional ARMv8.0, ──
 # ── posterior a v7-A (backport arquitetural, não faz parte do ARMv7-A base). ────────────────────
 SB	v7-A	ARMv8.0-A/FEAT_SB (Speculation Barrier), opcional/posterior a v7-A
+# ── B16.15 (2026-09-25): auditoria — a linha `SB v7-A` acima continua correta (v7-A é anterior a FEAT_SB); o ❌ de `SB` em ARMv8.1-M+MVE/v8-A/32/v8.6-A/32 NÃO é exclusão: é pendência (decode T32 ausente, `Thumb2MiscDecoder` ainda recusa o subgrupo), destino = candidata B22.8 (exige confirmar por fonte em quais presets M/A o FEAT_SB existe).
 
 # ── B22.5 (2026-08-29): ERET/HVC/MRS_bank/MSR_bank — a exclusão "por decisão do usuário" das
 # ── tasks B9.7/B9.15/B9.16/B9.17 FOI REVERTIDA. Em v7-A as 5 agora decodificam e executam
