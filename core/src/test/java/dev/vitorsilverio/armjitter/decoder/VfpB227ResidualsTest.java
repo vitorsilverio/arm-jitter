@@ -421,6 +421,47 @@ class VfpB227ResidualsTest {
                 kindOf(V80, word(COND_AL, OPC2_CVT_FROM_HALF, SIZE_DOUBLE, false, dField(16), sField(1))));
     }
 
+    @Test
+    void halfConversionsCoverTopHalfOfEveryFormAndFalseCondition() {
+        // VCVTT.F64.F16 / VCVTT.F32.F16 leem a metade ALTA.
+        Consumer<ArmCore> setup = c -> c.vfp().setS(1, (HALF_1_5 << 16) | HALF_2_5);
+        assertEquals(1.5, run(V80, word(COND_AL, OPC2_CVT_FROM_HALF, SIZE_DOUBLE, true, dField(2), sField(1)), setup)
+                .vfp().dDouble(2));
+        // VCVTT.F16.F64 grava a metade ALTA e preserva a baixa.
+        ArmCore top = run(V80, word(COND_AL, OPC2_CVT_TO_HALF, SIZE_DOUBLE, true, sField(0), dField(1)), c -> {
+            c.vfp().setS(0, 0x0000_ABCD);
+            c.vfp().setDDouble(1, 1.5);
+        });
+        assertEquals((HALF_1_5 << 16) | 0xABCD, top.vfp().s(0));
+        // condição falsa: nada muda.
+        ArmCore skipped = run(V80, word(COND_NE, OPC2_CVT_TO_HALF, SIZE_SINGLE, false, sField(0), sField(1)), c -> {
+            c.vfp().setS(0, 0x1234_5678);
+            c.vfp().setSFloat(1, 1.5f);
+            c.cpsr().setNzcv(false, true, false, false);
+        });
+        assertEquals(0x1234_5678, skipped.vfp().s(0));
+    }
+
+    @Test
+    void vcvtrHalfUnsignedDecodesAndSaturatesNegativeToZero() {
+        int word = word(COND_AL, OPC2_VCVT_TO_U32, SIZE_HALF, false, sField(0), sField(1));
+        assertEquals(new IrOp.VfpConvertRoundedHalf(null, false, 0, 1, Condition.AL), lift(decodeArm(V80, word)));
+        assertEquals(0, run(V80, word, c -> c.vfp().setS(1, 0xBC00)).vfp().s(0), "-1.0 sem sinal satura em 0");
+    }
+
+    @Test
+    void outOfRangeDRegistersWithoutD32AreUnimplementedForToHalfVjcvtAndVrint() {
+        // D16 exige VFPv3-D32, ausente nos presets de teste.
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                kindOf(V80, word(COND_AL, OPC2_CVT_TO_HALF, SIZE_DOUBLE, false, sField(0), dField(16))));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                kindOf(V86, word(COND_AL, OPC2_VJCVT, SIZE_DOUBLE, true, sField(0), dField(16))));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                kindOf(V80, word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_DOUBLE, true, dField(16), dField(1))));
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                kindOf(V80, word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_DOUBLE, true, dField(1), dField(16))));
+    }
+
     // ── 7. VJCVT ───────────────────────────────────────────────────────────────────────────────
 
     private static final int VJCVT_WORD = word(COND_AL, OPC2_VJCVT, SIZE_DOUBLE, true, sField(0), dField(1));
