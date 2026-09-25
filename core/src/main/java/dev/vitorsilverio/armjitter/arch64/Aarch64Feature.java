@@ -120,6 +120,14 @@ public enum Aarch64Feature {
     /// `FEAT_CSSC` — "Common Short Sequence Compression": `CTZ` (1 source), `SMAX`/`SMIN`/`UMAX`/
     /// `UMIN` (2 source), formas escalares GPR. ARMv8.9-A.
     COMMON_SHORT_SEQUENCE_COMPRESSION,
+    /// `FEAT_SVE` — Scalable Vector Extension (registradores `Z`/`P`/`FFR`, vetor de comprimento
+    /// escalável). Opcional a partir de ARMv8.2-A, **mandatória em ARMv9.0-A** (B17.1). Anunciada
+    /// por `ID_AA64PFR0_EL1.SVE` (a fiação do registrador é B17.3). Nenhum decoder a consulta ainda.
+    SVE,
+    /// `FEAT_SVE2` — SVE2 (inteiro/FP/cripto/memória sobre `Z`/`P`). Introduzida com ARMv9.0-A.
+    /// Nenhum preset a declara ainda: a versão em que é mandatória não foi confirmada (B17.1,
+    /// Armadilha 2); núcleos reais com SVE2 entram pelo catálogo `Aarch64Processor` (B17.26).
+    SVE2,
     /// `FEAT_SME` — Scalable Matrix Extension (estado ZA/streaming-SVE, controlado por `SVCR` via
     /// `MSR (immediate)`). ARMv9.2-A. Nenhum estado ZA/SVE é modelado ainda — esta feature só
     /// existe para permitir que `MSR SVCR` continue recusado (`UNIMPLEMENTED`) de forma

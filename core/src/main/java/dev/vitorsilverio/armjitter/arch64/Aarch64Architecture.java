@@ -96,19 +96,29 @@ public final class Aarch64Architecture {
             Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION);
 
     /// ARMv9.0-A: baseline mandatório = ARMv8.5-A (ver nota de correspondência de versão na
-    /// documentação da classe). SVE (mandatório em ARMv9.0-A real) não é modelado por nenhuma
-    /// {@link Aarch64Feature} ainda — fica para uma task própria da escada B11.x.
-    public static final Aarch64Architecture ARMV9_0_A = extending(ARMV8_5_A, "ARMv9.0-A");
+    /// documentação da classe), mais {@link Aarch64Feature#SVE} (mandatória em ARMv9.0-A, B17.1).
+    ///
+    /// {@link Aarch64Feature#SVE2} NÃO é declarada por nenhum preset: a versão em que ela passa a
+    /// ser mandatória não foi confirmada contra o manual (B17.1, Armadilha 2 — feature declarada
+    /// errada é pior que ausente). A constante e o gate existem; o preset vem com a evidência.
+    ///
+    /// Os presets `ARMV9_x_A` NÃO formam cadeia (cada um estende o `ARMV8_(x+4)_A`), então `SVE`
+    /// é declarada em cada um (`ARMV9_5_A` a herda de `ARMV9_4_A`).
+    public static final Aarch64Architecture ARMV9_0_A = extending(ARMV8_5_A, "ARMv9.0-A",
+            Aarch64Feature.SVE);
 
-    /// ARMv9.1-A: baseline mandatório = ARMv8.6-A.
-    public static final Aarch64Architecture ARMV9_1_A = extending(ARMV8_6_A, "ARMv9.1-A");
+    /// ARMv9.1-A: baseline mandatório = ARMv8.6-A, mais `SVE`.
+    public static final Aarch64Architecture ARMV9_1_A = extending(ARMV8_6_A, "ARMv9.1-A",
+            Aarch64Feature.SVE);
 
     /// ARMv9.2-A: baseline mandatório = ARMv8.7-A, mais `FEAT_SME` (introduzida nesta versão).
     public static final Aarch64Architecture ARMV9_2_A = extending(ARMV8_7_A, "ARMv9.2-A",
+            Aarch64Feature.SVE,
             Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
 
-    /// ARMv9.3-A: baseline mandatório = ARMv8.8-A.
-    public static final Aarch64Architecture ARMV9_3_A = extending(ARMV8_8_A, "ARMv9.3-A");
+    /// ARMv9.3-A: baseline mandatório = ARMv8.8-A, mais `SVE`.
+    public static final Aarch64Architecture ARMV9_3_A = extending(ARMV8_8_A, "ARMv9.3-A",
+            Aarch64Feature.SVE);
 
     /// ARMv9.4-A: baseline mandatório = ARMv8.9-A, mais máximo/mínimo de valor absoluto em ponto
     /// flutuante, a Guarded Control Stack e os atômicos de 128 bits `FEAT_LSE128` (introduzidas
@@ -118,6 +128,7 @@ public final class Aarch64Architecture {
     /// erro de fato corrigido pela E12 (ver {@link Aarch64Feature#LSE128}). Como `ARMV9_4_A` estende
     /// `ARMV8_9_A`, a diferença é observável na tabela de cobertura.
     public static final Aarch64Architecture ARMV9_4_A = extending(ARMV8_9_A, "ARMv9.4-A",
+            Aarch64Feature.SVE,
             Aarch64Feature.FP_ABSOLUTE_MAX_MIN,
             Aarch64Feature.GUARDED_CONTROL_STACK,
             Aarch64Feature.LSE128);

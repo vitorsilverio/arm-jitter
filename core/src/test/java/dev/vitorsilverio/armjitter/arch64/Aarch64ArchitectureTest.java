@@ -30,6 +30,27 @@ class Aarch64ArchitectureTest {
         }
     }
 
+    /// B17.1: os presets ARMv9 não formam cadeia (cada um estende o ARMv8 correspondente), então
+    /// `SVE` tem que estar declarada em todos; nenhum ARMv8.x a declara; `SVE2` em nenhum.
+    @Test
+    void sveIsDeclaredByEveryArmv9PresetAndNoArmv8Preset() {
+        Aarch64Architecture[] armv9 = {
+            Aarch64Architecture.ARMV9_0_A, Aarch64Architecture.ARMV9_1_A, Aarch64Architecture.ARMV9_2_A,
+            Aarch64Architecture.ARMV9_3_A, Aarch64Architecture.ARMV9_4_A, Aarch64Architecture.ARMV9_5_A};
+        for (Aarch64Architecture architecture : armv9) {
+            assertTrue(architecture.has(Aarch64Feature.SVE), architecture + " deve declarar SVE");
+            assertFalse(architecture.has(Aarch64Feature.SVE2), architecture + ": SVE2 não confirmada");
+        }
+        Aarch64Architecture[] armv8 = {
+            Aarch64Architecture.ARMV8_0_A, Aarch64Architecture.ARMV8_1_A, Aarch64Architecture.ARMV8_2_A,
+            Aarch64Architecture.ARMV8_3_A, Aarch64Architecture.ARMV8_4_A, Aarch64Architecture.ARMV8_5_A,
+            Aarch64Architecture.ARMV8_6_A, Aarch64Architecture.ARMV8_7_A, Aarch64Architecture.ARMV8_8_A,
+            Aarch64Architecture.ARMV8_9_A};
+        for (Aarch64Architecture architecture : armv8) {
+            assertFalse(architecture.has(Aarch64Feature.SVE), "SVE é opcional em " + architecture);
+        }
+    }
+
     /// E12: `FEAT_LSE128` é **Armv9.4-A**, não `ARMv8.9-A` como `docs/isa-nao-aplicavel.tsv`
     /// afirmava. Como `ARMV9_4_A` estende `ARMV8_9_A`, a diferença é observável.
     @Test
