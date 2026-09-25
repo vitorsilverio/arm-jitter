@@ -371,7 +371,7 @@ class TruffleCodeEmitterSupportsCoherenceTest {
             case IrOp.Kind.NEON_WIDENING_BY_ELEMENT ->
                     new IrOp.NeonWideningByElement(AdvSimdWideningOp.SMULL, 1, 0, 1, 2, 3);
             case IrOp.Kind.NEON_FP_THREE_SAME_BY_ELEMENT ->
-                    new IrOp.NeonFpThreeSameByElement(AdvSimdFpThreeSameOp.MUL, false, 0, 1, 2, 1);
+                    new IrOp.NeonFpThreeSameByElement(AdvSimdFpThreeSameOp.MUL, false, 2, 0, 1, 2, 1);
             case IrOp.Kind.NEON_UNARY -> new IrOp.NeonUnary(AdvSimdUnaryOp.ABS, false, 0, 0, 1);
             case IrOp.Kind.NEON_NARROW_UNARY -> new IrOp.NeonNarrowUnary(AdvSimdNarrowUnaryOp.XTN, 0, 0, 2);
             case IrOp.Kind.NEON_FP_UNARY -> new IrOp.NeonFpUnary(AdvSimdFpUnaryOp.ABS, false, 0, 1);

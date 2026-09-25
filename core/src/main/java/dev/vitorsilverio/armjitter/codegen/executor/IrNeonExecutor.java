@@ -116,10 +116,11 @@ public final class IrNeonExecutor {
         AdvSimdLanes.shiftWidenImmediate(vfp, op.op(), op.esz(), op.shift(), outputElements, 0, op.vd(), op.vm());
     }
 
-    /// NEON "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8): delega ao núcleo COMPARTILHADO
-    /// ({@link AdvSimdLanes#convertFixedPoint}) — a MESMA função que o executor A64 chama para
-    /// `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma `@fcvt_fixed`. `4` lanes na forma `Q`, `2` na `D`;
-    /// leitura e escrita na mesma largura (`esz=2`), sem escrita destrutiva depois.
+    /// NEON "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8) e F16 (B13.24): delega ao núcleo
+    /// COMPARTILHADO ({@link AdvSimdLanes#convertFixedPoint}) — a MESMA função que o executor A64
+    /// chama para `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma `@fcvt_fixed`. Lanes = bytes do arranjo
+    /// (`8`/`16`) dividido pelo tamanho do elemento (`1 << op.esz()`); leitura e escrita na mesma
+    /// largura, sem escrita destrutiva depois.
     public void executeNeonConvertFixedPoint(ArmCore core, IrOp.NeonConvertFixedPoint op) {
         VfpRegisters vfp = core.vfp();
         int elementBytes = 1 << op.esz();
@@ -209,13 +210,13 @@ public final class IrNeonExecutor {
         AdvSimdLanes.wideningByElement(vfp, op.op(), op.esz(), outputElements, 0, op.vd(), op.vn(), op.vm(), op.index());
     }
 
-    /// NEON "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (`VMLA_F`/`VMLS_F`/`VMUL_F`, B13.11): delega
-    /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameByElement}) — a MESMA função que o
-    /// executor A64 chama para `FMUL_vi`/... `MLA`/`MLS` chegam NÃO fundidos aqui (decisão 3 da
-    /// B13.6, já resolvida no decoder). `esz` é sempre `2` (F32, único tamanho real nesta forma A32).
+    /// NEON "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (`VMLA_F`/`VMLS_F`/`VMUL_F`, B13.11) e F16
+    /// (B13.24): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameByElement}) — a
+    /// MESMA função que o executor A64 chama para `FMUL_vi`/... `MLA`/`MLS` chegam NÃO fundidos aqui
+    /// (decisão 3 da B13.6, já resolvida no decoder).
     public void executeNeonFpThreeSameByElement(ArmCore core, IrOp.NeonFpThreeSameByElement op) {
         VfpRegisters vfp = core.vfp();
-        int esz = 2;
+        int esz = op.esz();
         int elementBytes = 1 << esz;
         int elements = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
         AdvSimdLanes.fpThreeSameByElement(vfp, op.op(), esz, elements, op.vd(), op.vn(), op.vm(), op.index());

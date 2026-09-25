@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
@@ -35,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 ///
 /// B13.11: `VMLA`/`VMLS`/`VMUL` inteiro e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` (mesma
 /// largura) → `IrOp.NeonThreeSameByElement`; `VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/
-/// `VQDMULL` (alargando) → `IrOp.NeonWideningByElement`; `VMLA_F`/`VMLS_F`/`VMUL_F` (F32) →
-/// `IrOp.NeonFpThreeSameByElement`.
+/// `VQDMULL` (alargando) → `IrOp.NeonWideningByElement`; `VMLA_F`/`VMLS_F`/`VMUL_F` (F32 e F16
+/// desde a B13.24) → `IrOp.NeonFpThreeSameByElement`.
 ///
 /// Execução pelo núcleo vetorial COMPARTILHADO com o lado A64 ({@code AdvSimdLanes.widening}/
 /// `wide`/`narrow`/`threeSameByElement`/`wideningByElement`/`fpThreeSameByElement`).
@@ -479,6 +480,7 @@ class NeonThreeRegDifferentDecoderTest {
                 (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b0001, 1, 0b0010));
         assertEquals(AdvSimdFpThreeSameOp.MLA, mlaF.op());
         assertFalse(mlaF.quad());
+        assertEquals(2, mlaF.esz());
         assertEquals(0, mlaF.vd());
         assertEquals(1, mlaF.vn());
         assertEquals(2, mlaF.vm());
@@ -488,6 +490,7 @@ class NeonThreeRegDifferentDecoderTest {
                 (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1001, 1, 0b0101));
         assertEquals(AdvSimdFpThreeSameOp.MUL, mulF.op());
         assertTrue(mulF.quad());
+        assertEquals(2, mulF.esz());
     }
 
     // ── Índice nos extremos (prova a montagem e o limite do registrador do escalar) ──
@@ -533,12 +536,53 @@ class NeonThreeRegDifferentDecoderTest {
         assertEquals(InstructionKind.LIFTED_IR_OP, decode(withRdmDecoders, qrdmlsh).kind());
     }
 
-    // ── F16 (size==0b01) na forma FP fica fora de escopo (task irmã) ──
+    // ── B13.24: F16 (size==0b01) na forma FP ──
+
+    /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon-fp-armv8 -mcpu=cortex-a55
+    /// -arch_extension fp16` (mesmo achado de ferramenta da B13.24: a diretiva `.arch_extension
+    /// fp16` é obrigatória mesmo com CPU ARMv8.2 selecionado).
+    @Test
+    void b1324FpHalfPrecisionEncodingsMatchTheAssembler() {
+        assertEquals(0xf2910162, enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010)); // vmla.f16 d0,d1,d2[2]
+        assertEquals(0xf2910562, enc2sc(0, 1, 1, 0, 0b0101, 1, 0b0010)); // vmls.f16 d0,d1,d2[2]
+        assertEquals(0xf3920962, enc2sc(1, 1, 2, 0, 0b1001, 1, 0b0010)); // vmul.f16 q0,q1,d2[2]
+    }
 
     @Test
-    void fpHalfPrecisionFormStaysUnimplemented() {
-        int word = enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010); // "vmla.f16" (size=01), fora de escopo
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(word).kind());
+    void b1324FpHalfPrecisionFormDecodesWithEszOne() {
+        IrOp.NeonFpThreeSameByElement mlaF16 =
+                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010));
+        assertEquals(AdvSimdFpThreeSameOp.MLA, mlaF16.op());
+        assertFalse(mlaF16.quad());
+        assertEquals(1, mlaF16.esz());
+        assertEquals(0, mlaF16.vd());
+        assertEquals(1, mlaF16.vn());
+        assertEquals(2, mlaF16.vm());
+        assertEquals(2, mlaF16.index());
+
+        IrOp.NeonFpThreeSameByElement mulF16 =
+                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(1, 1, 2, 0, 0b1001, 1, 0b0010));
+        assertEquals(AdvSimdFpThreeSameOp.MUL, mulF16.op());
+        assertTrue(mulF16.quad());
+        assertEquals(1, mulF16.esz());
+    }
+
+    @Test
+    void b1324FpHalfPrecisionWithoutTheFeatureStaysUnimplemented() {
+        int word = enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010); // vmla.f16
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(NEON_FEATURES, word).kind());
+    }
+
+    @Test
+    void b1324FpHalfPrecisionExecutesOverBinary16() {
+        ArmCore core = newCore();
+        // VMLA.F16 d0,d1,d2[2] — d0 (acc) = 1.0, d1[0]=2.0, d2[2]=3.0 → 1.0 + 2.0*3.0 = 7.0
+        core.vfp().setD(0, AdvSimdLanes.halfBits(1.0f));
+        core.vfp().setD(1, AdvSimdLanes.halfBits(2.0f));
+        long d2 = (AdvSimdLanes.halfBits(3.0f) & 0xFFFFL) << 32;
+        core.vfp().setD(2, d2);
+        run(core, enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010));
+        assertEquals(AdvSimdLanes.halfBits(7.0f), core.vfp().d(0) & 0xFFFFL);
     }
 
     // ── Registrador ímpar UNDEFINED nas formas quad/alargando ──

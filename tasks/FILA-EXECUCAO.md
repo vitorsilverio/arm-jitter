@@ -53,32 +53,23 @@ completa das arquiteturas/perfis/features/modos ARM alvo.** Só trabalho de cobe
 `feedback-100-cobertura-antes-subprojetos`. `1.4.0` fica reservada para 100% — ver `tasks/README.md`
 para as regras de release (suspensas até lá).
 
-## Onde estamos (atualizado 2026-09-24, specs gap-driven escritas + 2 RFCs decididas)
+## Onde estamos (atualizado 2026-09-24, B13.24 fechada)
 
-**3 specs novas escritas nesta rodada** (gaps que B16.14/B14.7/B13.22 já tinham medido e nomeado,
-agora com task executável):
+**`B13.24` fechada nesta rodada** — NEON FP16 AArch32: os 4 `VCVT_*_2sh` que a B13.22 tinha medido
+como gap real fecham (`v7-A+NEON` 940→944, global +4 células). A remedição do Passo 2 achou que
+"3-reg-same FP" e "2-reg-and-scalar FP" TAMBÉM tinham F16 `UNIMPLEMENTED` no código, mas
+`IsaCoverageReport` nunca detectava (célula = 1 linha `.decode`; a forma F32 da MESMA linha já
+satisfaz `✅` antes do medidor chegar a testar `sz=1`) — implementadas mesmo assim (regra máxima do
+projeto: nunca presumir "não há mais F16 pendente"), zero-diff esperado e confirmado na tabela. Ver
+**Resultado** na task para o achado completo sobre o ponto cego do medidor (`FILL_STRATEGIES`).
 
-- **`B16.15`** (épico B16 reaberto): 4 das 5 famílias que a B16.14 expôs (15 células) — tail-
-  predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP`, `BF`/`BFL`/`BFCSEL`/`BFX`/`BFLX` (3 formas restantes),
-  `CLRM`, `SB`+`CRC32*` de perfil M. A 5ª família (long-shift GPR-pair, 19 encodings) segue como
-  candidata sem spec própria (`B16.16`).
-- **`B22.7`** (épico B22 reaberto — a coluna `v8-A/32` só nasceu depois do fechamento original de
-  B22): `VRINTR`/`VRINTZ`/`VRINTX` incondicionais, `VJCVT`, conversões FP16/BF16 do VFPv3, e
-  `ArmFeature.HALT` nos 4 presets ARMv8-M modernos.
-- **`B13.24`** (épico B13 reaberto): NEON FP16 AArch32 — os 4 `VCVT_xx_2sh` que a B13.22 confirmou
-  como gap real, mais a reconciliação com as formas F16 que B13.6/B13.11 tinham adiado em OUTRAS
-  seções (a task remede antes de assumir se ainda são gap ou já não-aplicável).
-
-**As 2 RFCs pendentes foram DECIDIDAS pelo usuário em 2026-09-24** — nenhuma bloqueia mais nada:
-
-- **`B17.2`** (comprimento de vetor SVE): **Opção C aprovada**, `VL` default 256 bits. **B17.3-B17.26
-  desbloqueadas.**
-- **`B21.1`** (modelo de 26 bits): **Opção (c) aprovada**, `R15` como view composta, gate resolvido
-  em lift-time. **B21.2-B21.8 desbloqueadas.**
-
-**Pegáveis a seguir**: as 3 tasks novas acima (`B16.15`, `B22.7`, `B13.24`) + tudo que as 2 RFCs
-desbloquearam (`B17.3` em diante, `B21.2` em diante — conferir dependências no `INDICE.md` de cada
-uma antes de pegar). Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23:
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B16.15`** (épico B16
+reaberto: tail-predication `WLSTP`/`DLSTP`/`LCTP`/`VCTP`, `BF`/`BFL`/`BFCSEL`/`BFX`/`BFLX`
+restantes, `CLRM`, `SB`+`CRC32*` de perfil M), **`B22.7`** (épico B22 reaberto: `VRINTR`/`VRINTZ`/
+`VRINTX` incondicionais, `VJCVT`, conversões FP16/BF16 do VFPv3, `ArmFeature.HALT` nos presets
+ARMv8-M), **`B17.3`** em diante (fundação SVE, RFC B17.2 decidida — Opção C, VL=256) e **`B21.2`**
+em diante (modelo de 26 bits, RFC B21.1 decidida — Opção c) — conferir dependências no `INDICE.md`
+de cada uma antes de pegar. Também seguem pegáveis: `E14` (achado da auditoria JaCoCo da B13.23:
 `IrBlockExecutor#execute`/`AsmNativePolicy` sem cobertura de teste para NENHUMA instrução NEON,
 lacuna estrutural do épico B13 inteiro). `C12.5`/`C12.10` (emissão JIT nativa A64), dimensão 2 do
 roadmap. `B20.9` (fechamento do épico B20) segue bloqueada no usuário — runner natural é o

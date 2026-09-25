@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftWidenOp;
@@ -321,17 +322,14 @@ class NeonShiftImmediateDecoderTest {
     }
 
     @Test
-    void b138UnallocatedAndF16StayUnimplemented() {
-        // opc=1011 é UNALLOCATED real; opc=1100/1101 são VCVT F16 (task irmã, depende de B19.5.1).
-        for (int opc : new int[] {0b1011, 0b1100, 0b1101}) {
-            assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 7, opc, false, 0, 1)).kind(),
-                    "opc=" + Integer.toBinaryString(opc) + " U=0");
-            assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(1, 7, 7, opc, false, 0, 1)).kind(),
-                    "opc=" + Integer.toBinaryString(opc) + " U=1");
-            // e a mesma palavra sem a feature continua UNIMPLEMENTED (zero-diff)
-            assertEquals(InstructionKind.UNIMPLEMENTED,
-                    decode(ArmArchitecture.ARMV7A, enc(0, 7, 7, opc, false, 0, 1)).kind());
-        }
+    void b138UnallocatedStaysUnimplemented() {
+        // opc=1011 é UNALLOCATED real (opc=1100/1101 viraram VCVT F16, ver B13.24).
+        int opc = 0b1011;
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 7, opc, false, 0, 1)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(1, 7, 7, opc, false, 0, 1)).kind());
+        // e a mesma palavra sem a feature continua UNIMPLEMENTED (zero-diff)
+        assertEquals(InstructionKind.UNIMPLEMENTED,
+                decode(ArmArchitecture.ARMV7A, enc(0, 7, 7, opc, false, 0, 1)).kind());
     }
 
     /// `immh == 0` (`L=0 && immH=000`) é o `Vimm_1r` (B13.9), que mora no MESMO frame. Este decoder
@@ -447,9 +445,7 @@ class NeonShiftImmediateDecoderTest {
 
     @Test
     void b138UndefinedCases() {
-        // VCVT F16 e opc UNALLOCATED
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 0, 0b1100, false, 0, 1)).kind());
-        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 0, 0b1101, false, 0, 1)).kind());
+        // opc UNALLOCATED
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 7, 0b1011, false, 0, 1)).kind());
         // alargamento com Q=1 (bit6) — UNALLOCATED
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 1, 3, 0b1010, true, 0, 1)).kind());
@@ -560,5 +556,103 @@ class NeonShiftImmediateDecoderTest {
         assertEquals(Float.floatToRawIntBits(2.0f), (int) ((core.vfp().d(0) >>> 32) & 0xFFFF_FFFFL));
         assertEquals(Float.floatToRawIntBits(3.0f), (int) (core.vfp().d(1) & 0xFFFF_FFFFL));
         assertEquals(Float.floatToRawIntBits(4.0f), (int) ((core.vfp().d(1) >>> 32) & 0xFFFF_FFFFL));
+    }
+
+    // ══════════════════════════ B13.24: VCVT fixo↔float F16 ═══════════════════════════════════════
+
+    /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon-fp-armv8 -arch_extension fp16`
+    /// (`.cpu cortex-a55`, binutils 2.46 — o GAS só aceita a forma F16 com a diretiva
+    /// `.arch_extension fp16` explícita, mesmo já selecionando um CPU ARMv8.2; sem ela devolve
+    /// "selected processor does not support fp16 instruction"/"...in ARM mode", achado desta task).
+    @Test
+    void b1324EncodingsMatchTheAssembler() {
+        assertEquals(0xf2bc0c11, enc(0, 7, 4, 0b1100, false, 0, 1));  // vcvt.f16.s16 d0,d1,#4
+        assertEquals(0xf3b80c11, enc(1, 7, 0, 0b1100, false, 0, 1));  // vcvt.f16.u16 d0,d1,#8
+        assertEquals(0xf2bf0d11, enc(0, 7, 7, 0b1101, false, 0, 1));  // vcvt.s16.f16 d0,d1,#1
+        assertEquals(0xf3b80d11, enc(1, 7, 0, 0b1101, false, 0, 1));  // vcvt.u16.f16 d0,d1,#8
+        assertEquals(0xf2bc0c52, enc(0, 7, 4, 0b1100, true, 0, 2));   // vcvt.f16.s16 q0,q1,#4
+        assertEquals(0xf3b04d56, enc(1, 6, 0, 0b1101, true, 4, 6));   // vcvt.u16.f16 q2,q3,#16
+        assertEquals(0xf2b00d11, enc(0, 6, 0, 0b1101, false, 0, 1));  // vcvt.s16.f16 d0,d1,#16
+        assertEquals(0xf2bf2c16, enc(0, 7, 7, 0b1100, false, 2, 6));  // vcvt.f16.s16 d2,d6,#1
+    }
+
+    @Test
+    void b1324WithoutTheFeatureEveryEncodingStaysUnimplemented() {
+        int[] words = {
+                enc(0, 7, 4, 0b1100, false, 0, 1),  // vcvt.f16.s16
+                enc(1, 7, 0, 0b1101, false, 0, 1),  // vcvt.u16.f16
+        };
+        for (int w : words) {
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV7A, w).kind());
+            assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARM11_MPCORE, w).kind());
+        }
+    }
+
+    @Test
+    void b1324DecodesWithFractionBitsAndEszOne() {
+        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 4, true, true, 0, 1),
+                liftedOf(enc(0, 7, 4, 0b1100, false, 0, 1)));      // vcvt.f16.s16 d0,d1,#4
+        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 8, true, false, 0, 1),
+                liftedOf(enc(1, 7, 0, 0b1100, false, 0, 1)));      // vcvt.f16.u16 d0,d1,#8
+        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 1, false, true, 0, 1),
+                liftedOf(enc(0, 7, 7, 0b1101, false, 0, 1)));      // vcvt.s16.f16 d0,d1,#1
+        assertEquals(new IrOp.NeonConvertFixedPoint(true, 1, 16, false, false, 4, 6),
+                liftedOf(enc(1, 6, 0, 0b1101, true, 4, 6)));       // vcvt.u16.f16 q2,q3,#16
+    }
+
+    @Test
+    void b1324UndefinedCases() {
+        // immH[2:1] != 0b11 (immh4=3 ⇒ immH=0b011) — sem linha no .decode
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 3, 0, 0b1100, false, 0, 1)).kind());
+        // L=1 (immh4=15 ⇒ immH=0b111, L=1) — sem linha no .decode
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 15, 0, 0b1100, false, 0, 1)).kind());
+        // Q: registrador de destino/fonte ímpar
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 4, 0b1100, true, 1, 2)).kind());
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc(0, 7, 4, 0b1100, true, 0, 3)).kind());
+    }
+
+    @Test
+    void b1324FixedToHalfAndBack() {
+        ArmCore core = newCore();
+        // VCVT.F16.S16 d0,d1,#4 — lane0 (halfword) = 32, /2^4 = 2.0 (F16)
+        core.vfp().setD(1, 32L);
+        run(core, enc(0, 7, 4, 0b1100, false, 0, 1));
+        assertEquals(AdvSimdLanes.halfBits(2.0f), core.vfp().d(0) & 0xFFFFL);
+
+        // VCVT.U16.F16 d0,d1,#8 — 1.5 (F16) * 2^8 = 384.0 → 384 (toward zero)
+        core.vfp().setD(1, AdvSimdLanes.halfBits(1.5f));
+        run(core, enc(1, 7, 0, 0b1101, false, 0, 1));
+        assertEquals(384L, core.vfp().d(0) & 0xFFFFL);
+
+        // VCVT.U16.F16 d0,d1,#1 — +Inf satura em 0xFFFF (halfword sem sinal)
+        core.vfp().setD(1, AdvSimdLanes.halfBits(Float.POSITIVE_INFINITY));
+        run(core, enc(1, 7, 7, 0b1101, false, 0, 1));
+        assertEquals(0xFFFFL, core.vfp().d(0) & 0xFFFFL);
+
+        // VCVT.S16.F16 d0,d1,#1 — NaN → 0
+        core.vfp().setD(1, AdvSimdLanes.halfBits(Float.NaN));
+        run(core, enc(0, 7, 7, 0b1101, false, 0, 1));
+        assertEquals(0L, core.vfp().d(0) & 0xFFFFL);
+    }
+
+    @Test
+    void b1324QuadFormAllEightLanes() {
+        ArmCore core = newCore();
+        // VCVT.F16.S16 q0,q1,#1 — Q1 = D2:D3 = halfwords {2,4,6,8,10,12,14,16}, /2^1 → 1.0..8.0
+        core.vfp().setD(2, packHalfwords(2, 4, 6, 8));
+        core.vfp().setD(3, packHalfwords(10, 12, 14, 16));
+        run(core, enc(0, 7, 7, 0b1100, true, 0, 2));
+        long d0 = core.vfp().d(0);
+        long d1 = core.vfp().d(1);
+        assertEquals(AdvSimdLanes.halfBits(1.0f), d0 & 0xFFFFL);
+        assertEquals(AdvSimdLanes.halfBits(2.0f), (d0 >>> 16) & 0xFFFFL);
+        assertEquals(AdvSimdLanes.halfBits(3.0f), (d0 >>> 32) & 0xFFFFL);
+        assertEquals(AdvSimdLanes.halfBits(4.0f), (d0 >>> 48) & 0xFFFFL);
+        assertEquals(AdvSimdLanes.halfBits(5.0f), d1 & 0xFFFFL);
+        assertEquals(AdvSimdLanes.halfBits(8.0f), (d1 >>> 48) & 0xFFFFL);
+    }
+
+    private static long packHalfwords(long h0, long h1, long h2, long h3) {
+        return (h0 & 0xFFFFL) | ((h1 & 0xFFFFL) << 16) | ((h2 & 0xFFFFL) << 32) | ((h3 & 0xFFFFL) << 48);
     }
 }

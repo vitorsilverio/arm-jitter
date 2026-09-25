@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
@@ -20,12 +21,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-/// NEON 3-reg-same de PONTO FLUTUANTE A32 (task B13.6): `VADD.F32`/`VSUB.F32`/`VMUL.F32`/`VMLA.F32`/
-/// `VMLS.F32`/`VFMA.F32`/`VFMS.F32`/`VABD.F32`/`VMAX.F32`/`VMIN.F32`/`VMAXNM.F32`/`VMINNM.F32`/
-/// `VCEQ.F32`/`VCGE.F32`/`VCGT.F32`/`VACGE.F32`/`VACGT.F32`/`VRECPS.F32`/`VRSQRTS.F32` +
-/// pairwise `VPADD.F32`/`VPMAX.F32`/`VPMIN.F32` da seção `@3same_fp`/`@3same_fp_q0` de
-/// `neon-dp.decode` → `IrOp.NeonFpThreeSame` / `IrOp.NeonFpPairwise` → execução pelo núcleo vetorial
-/// COMPARTILHADO com o lado A64 ({@code AdvSimdLanes.fpThreeSame}/`fpPairwise`).
+/// NEON 3-reg-same de PONTO FLUTUANTE A32 (task B13.6, F16 pela B13.24): `VADD.F32`/`VSUB.F32`/
+/// `VMUL.F32`/`VMLA.F32`/`VMLS.F32`/`VFMA.F32`/`VFMS.F32`/`VABD.F32`/`VMAX.F32`/`VMIN.F32`/
+/// `VMAXNM.F32`/`VMINNM.F32`/`VCEQ.F32`/`VCGE.F32`/`VCGT.F32`/`VACGE.F32`/`VACGT.F32`/`VRECPS.F32`/
+/// `VRSQRTS.F32` + pairwise `VPADD.F32`/`VPMAX.F32`/`VPMIN.F32` da seção `@3same_fp`/`@3same_fp_q0`
+/// de `neon-dp.decode` (e as MESMAS 22 famílias em F16, `sz`=bit20=1) → `IrOp.NeonFpThreeSame` /
+/// `IrOp.NeonFpPairwise` → execução pelo núcleo vetorial COMPARTILHADO com o lado A64
+/// ({@code AdvSimdLanes.fpThreeSame}/`fpPairwise`, genérico em `esz` desde a B19.5.1).
 ///
 /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon-vfpv4 -mcpu=cortex-a8`
 /// (`-march=armv8-a` para `VMAXNM`/`VMINNM`) do devkitARM.
@@ -197,21 +199,51 @@ class NeonThreeSameFpDecoderTest {
 
     // ── UNDEFINED / G8 ──
 
+    // ── B13.24: F16 (`sz`=bit20=1, `size` com bit baixo 1) ──
+
+    /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon-fp-armv8 -mcpu=cortex-a55
+    /// -arch_extension fp16` (achado B13.24: o GAS exige a diretiva `.arch_extension fp16`
+    /// explícita, mesmo com um CPU ARMv8.2 já selecionado).
     @Test
-    void halfPrecisionFormsAreUnimplemented() {
-        // sz (bit20) = 1 → F16, task futura (irmã da B19.5). `size` com bit baixo 1 = sz=1.
-        int[] fp16 = {
-                neon3s(0, 1, 0b1100, 1, false, 0, 1, 2), // vfma.f16
-                neon3s(0, 1, 0b1101, 0, false, 0, 1, 2), // vadd.f16
-                neon3s(1, 1, 0b1101, 0, false, 0, 1, 2), // vpadd.f16
-                neon3s(0, 1, 0b1110, 0, false, 0, 1, 2), // vceq.f16
-                neon3s(1, 3, 0b1111, 1, false, 0, 1, 2), // vminnm.f16
-                neon3s(0, 3, 0b1111, 1, false, 0, 1, 2), // vrsqrts.f16
-        };
-        for (int w : fp16) {
-            assertEquals(InstructionKind.UNIMPLEMENTED, decode(w).kind());
-            assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV7A, w).kind());
-        }
+    void b1324HalfPrecisionEncodingsMatchTheAssembler() {
+        assertEquals(0xf2110c12, neon3s(0, 1, 0b1100, 1, false, 0, 1, 2)); // vfma.f16 d0,d1,d2
+        assertEquals(0xf2110d02, neon3s(0, 1, 0b1101, 0, false, 0, 1, 2)); // vadd.f16 d0,d1,d2
+        assertEquals(0xf3110d02, neon3s(1, 1, 0b1101, 0, false, 0, 1, 2)); // vpadd.f16 d0,d1,d2
+        assertEquals(0xf2110e02, neon3s(0, 1, 0b1110, 0, false, 0, 1, 2)); // vceq.f16 d0,d1,d2
+        assertEquals(0xf3310f12, neon3s(1, 3, 0b1111, 1, false, 0, 1, 2)); // vminnm.f16 d0,d1,d2
+        assertEquals(0xf2310f12, neon3s(0, 3, 0b1111, 1, false, 0, 1, 2)); // vrsqrts.f16 d0,d1,d2
+    }
+
+    @Test
+    void b1324HalfPrecisionFormsDecodeWithEszOne() {
+        assertEquals(new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.FMLA, false, 1, 0, 1, 2),
+                liftedOf(neon3s(0, 1, 0b1100, 1, false, 0, 1, 2))); // vfma.f16
+        assertEquals(new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.ADD, false, 1, 0, 1, 2),
+                liftedOf(neon3s(0, 1, 0b1101, 0, false, 0, 1, 2))); // vadd.f16
+        assertEquals(new IrOp.NeonFpPairwise(AdvSimdFpPairwiseOp.ADD, 1, 0, 1, 2),
+                liftedOf(neon3s(1, 1, 0b1101, 0, false, 0, 1, 2))); // vpadd.f16
+        assertEquals(new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.CMEQ, false, 1, 0, 1, 2),
+                liftedOf(neon3s(0, 1, 0b1110, 0, false, 0, 1, 2))); // vceq.f16
+        assertEquals(new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.MINNM, false, 1, 0, 1, 2),
+                liftedOf(neon3s(1, 3, 0b1111, 1, false, 0, 1, 2))); // vminnm.f16
+        assertEquals(new IrOp.NeonFpThreeSame(AdvSimdFpThreeSameOp.RSQRTS, false, 1, 0, 1, 2),
+                liftedOf(neon3s(0, 3, 0b1111, 1, false, 0, 1, 2))); // vrsqrts.f16
+    }
+
+    @Test
+    void b1324HalfPrecisionWithoutTheFeatureStaysUnimplemented() {
+        int word = neon3s(0, 1, 0b1101, 0, false, 0, 1, 2); // vadd.f16
+        assertEquals(InstructionKind.UNIMPLEMENTED, decode(ArmArchitecture.ARMV7A, word).kind());
+    }
+
+    @Test
+    void b1324HalfPrecisionExecutesOverBinary16() {
+        ArmCore core = newCore();
+        // VADD.F16 d0,d1,d2 — lane0 (halfword) 1.5+2.5=4.0, lane1..3 = 0
+        core.vfp().setD(1, AdvSimdLanes.halfBits(1.5f));
+        core.vfp().setD(2, AdvSimdLanes.halfBits(2.5f));
+        run(core, neon3s(0, 1, 0b1101, 0, false, 0, 1, 2));
+        assertEquals(AdvSimdLanes.halfBits(4.0f), core.vfp().d(0) & 0xFFFFL);
     }
 
     @Test

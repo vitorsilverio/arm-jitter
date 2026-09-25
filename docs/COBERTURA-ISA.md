@@ -46,7 +46,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **98%** — 22715 de 23048 células aplicáveis decodificam.
+> **98%** — 22719 de 23048 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -57,7 +57,7 @@ Por arquitetura:
 | v6K | **100%** (306/306) |
 | MPCore | **100%** (356/356) |
 | v7-A | **100%** (652/652) |
-| v7-A+NEON | **89%** (940/1051) |
+| v7-A+NEON | **89%** (944/1051) |
 | v7-R | **89%** (594/661) |
 | v8-R | **96%** (637/661) |
 | v8-A/32 | **94%** (736/778) |
@@ -90,7 +90,7 @@ Por arquitetura:
 | T32 — Thumb-2 | 310 | v7-A 100% (268/268) · v7-A+NEON 86% (269/310) · v7-R 85% (265/310) · v8-R 92% (288/310) · v6-M 100% (8/8) · v7-M 100% (242/242) · ARMv8.1-M+MVE 83% (248/296) · v8-A/32 93% (289/310) |
 | VFP — ponto flutuante (condicional) | 101 | MPCore 100% (50/50) · v7-A 100% (58/58) · v7-A+NEON 58% (58/100) · v8-A/32 80% (80/100) |
 | VFP — formas incondicionais (ARMv8-A) | 17 | v8-A/32 100% (17/17) |
-| NEON — processamento de dados | 297 | v7-A+NEON 96% (274/285) |
+| NEON — processamento de dados | 297 | v7-A+NEON 97% (278/285) |
 | NEON — load/store | 5 | v7-A+NEON 100% (5/5) |
 | NEON — formas compartilhadas VFP/NEON | 23 | não se aplica a nenhum preset atual |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 100% (11/11) · v7-M 100% (11/11) · ARMv8.1-M+MVE 100% (11/11) |
@@ -1101,10 +1101,10 @@ Inventário: `neon-dp.decode` · 297 instruções.
 | `VSHLL_U_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
 | `VSHLL_U_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
 | `VSHLL_U_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
-| `VCVT_SH_2sh` | · | · | · | · | · | ❌ | · | · | · | · | · | · |
-| `VCVT_UH_2sh` | · | · | · | · | · | ❌ | · | · | · | · | · | · |
-| `VCVT_HS_2sh` | · | · | · | · | · | ❌ | · | · | · | · | · | · |
-| `VCVT_HU_2sh` | · | · | · | · | · | ❌ | · | · | · | · | · | · |
+| `VCVT_SH_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
+| `VCVT_UH_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
+| `VCVT_HS_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
+| `VCVT_HU_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
 | `VCVT_SF_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
 | `VCVT_UF_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |
 | `VCVT_FS_2sh` | · | · | · | · | · | ✅ | · | · | · | · | · | · |

@@ -2217,11 +2217,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.NEON_PAIRWISE; }
     }
 
-    /// NEON/Advanced SIMD de 32 bits, "3-reg-same" de PONTO FLUTUANTE (B13.6): `VADD.F32`/
-    /// `VSUB.F32`/`VMUL.F32`/`VMLA.F32`/`VMLS.F32`/`VFMA.F32`/`VFMS.F32`/`VABD.F32`/`VMAX.F32`/
-    /// `VMIN.F32`/`VMAXNM.F32`/`VMINNM.F32`/`VCEQ.F32`/`VCGE.F32`/`VCGT.F32`/`VACGE.F32`/
-    /// `VACGT.F32`/`VRECPS.F32`/`VRSQRTS.F32`. Só a forma F32 (`esz=2`) — F16 (`FEAT_FP16`) é
-    /// recusada no decoder (task futura).
+    /// NEON/Advanced SIMD de 32 bits, "3-reg-same" de PONTO FLUTUANTE (B13.6 F32, B13.24 F16):
+    /// `VADD`/`VSUB`/`VMUL`/`VMLA`/`VMLS`/`VFMA`/`VFMS`/`VABD`/`VMAX`/`VMIN`/`VMAXNM`/`VMINNM`/
+    /// `VCEQ`/`VCGE`/`VCGT`/`VACGE`/`VACGT`/`VRECPS`/`VRSQRTS`, formas F32 (`esz=2`) E F16
+    /// (`esz=1`, `sz`=bit20=1 no encoding — MESMA linha `.decode` que F32, discriminada só pelo
+    /// bit, não uma linha separada).
     ///
     /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSame} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
@@ -2237,7 +2237,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`/`Q<m>`, bit `Q` do encoding),
             /// `false` para o de 64 bits (`D<d>`/`D<n>`/`D<m>`).
             boolean quad,
-            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32) nesta task.
+            /// `log2` do tamanho do elemento em bytes: `2` (F32, B13.6) ou `1` (F16, B13.24).
             int esz,
             /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
             /// inicia o `Q`.
@@ -2249,11 +2249,11 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.NEON_FP_THREE_SAME; }
     }
 
-    /// NEON/Advanced SIMD de 32 bits, "pairwise" de PONTO FLUTUANTE (B13.6): `VPADD.F32`/
-    /// `VPMAX.F32`/`VPMIN.F32`. Concatena `Vn:Vm` (`Vn` primeiro), combina pares de elementos
-    /// ADJACENTES nessa sequência de `2 * (8 >> esz)` elementos e grava `8 >> esz` resultados em
-    /// `Vd` (metade baixa vinda de `Vn`, metade alta de `Vm`). Só forma `D` no encoding A32
-    /// (`@3same_fp_q0`), por isso não há campo `quad`.
+    /// NEON/Advanced SIMD de 32 bits, "pairwise" de PONTO FLUTUANTE (B13.6 F32, B13.24 F16):
+    /// `VPADD`/`VPMAX`/`VPMIN`, formas F32 (`esz=2`) e F16 (`esz=1`). Concatena `Vn:Vm` (`Vn`
+    /// primeiro), combina pares de elementos ADJACENTES nessa sequência de `2 * (8 >> esz)`
+    /// elementos e grava `8 >> esz` resultados em `Vd` (metade baixa vinda de `Vn`, metade alta de
+    /// `Vm`). Só forma `D` no encoding A32 (`@3same_fp_q0`), por isso não há campo `quad`.
     ///
     /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticPairwise} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
@@ -2264,7 +2264,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     record NeonFpPairwise(
             /// Operação a executar (núcleo compartilhado).
             dev.vitorsilverio.armjitter.advsimd.AdvSimdFpPairwiseOp op,
-            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32) nesta task.
+            /// `log2` do tamanho do elemento em bytes: `2` (F32, B13.6) ou `1` (F16, B13.24).
             int esz,
             /// Registrador de destino, índice de `D` (`0`-`31`).
             int vd,
@@ -2365,16 +2365,17 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.NEON_SHIFT_WIDEN_IMMEDIATE; }
     }
 
-    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8):
-    /// `VCVT.F32.S32`/`VCVT.F32.U32` (`toFloat`, inteiro fixo `* 2^-fractionBits` → F32) e
-    /// `VCVT.S32.F32`/`VCVT.U32.F32` (`!toFloat`, F32 `* 2^fractionBits`, arredonda para zero,
-    /// satura → inteiro). Elementos de 32 bits nos dois lados (mesma largura), `4` ou `2` lanes
-    /// conforme {@link #quad}.
+    /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8) e F16 (B13.24):
+    /// `VCVT.F32.S32`/`VCVT.F32.U32`/`VCVT.F16.S16`/`VCVT.F16.U16` (`toFloat`, inteiro fixo
+    /// `* 2^-fractionBits` → FP) e `VCVT.S32.F32`/`VCVT.U32.F32`/`VCVT.S16.F16`/`VCVT.U16.F16`
+    /// (`!toFloat`, FP `* 2^fractionBits`, arredonda para zero, satura → inteiro). Elementos da MESMA
+    /// largura ({@link #esz}) nos dois lados, `4`/`2` (F32) ou `8`/`4` (F16) lanes conforme
+    /// {@link #quad}.
     ///
     /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpConvertFixedPoint} no
     /// ENCODING/IR (menos o campo `scalar`, que não existe em NEON A32); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPoint}),
-    /// RFC B13.2 D1. A forma de MEIA PRECISÃO (`VCVT` F16) é task irmã (depende de B19.5.1).
+    /// RFC B13.2 D1 — já genérico em `esz` desde a B19.5.1, sem mudança de executor para a forma F16.
     ///
     /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
     /// {@link Condition#AL}.
@@ -2382,10 +2383,10 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<m>`, bit `Q` do encoding), `false` para
             /// o de 64 bits (`D<d>`/`D<m>`).
             boolean quad,
-            /// `log2` do tamanho do elemento em bytes: sempre `2` (F32/32 bits) nesta task.
+            /// `log2` do tamanho do elemento em bytes: `2` (F32, B13.8) ou `1` (F16, B13.24).
             int esz,
-            /// Número de bits fracionários (`#fbits` do encoding, `1..32`). Fator de escala
-            /// `2^fractionBits`.
+            /// Número de bits fracionários (`#fbits` do encoding): `1..32` para F32, `1..16` para
+            /// F16. Fator de escala `2^fractionBits`.
             int fractionBits,
             /// `true` → `SCVTF`/`UCVTF` (inteiro → FP, depois `/ 2^fbits`); `false` → `FCVTZS`/
             /// `FCVTZU` (FP `* 2^fbits`, arredonda para zero, satura → inteiro).
@@ -2584,19 +2585,19 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
         @Override public int kind() { return Kind.NEON_WIDENING_BY_ELEMENT; }
     }
 
-    /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (B13.11):
-    /// `VMLA_F`/`VMLS_F`/`VMUL_F` — `MLA`/`MLS` NÃO fundidos (decisão 3 da B13.6: reusa
+    /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (B13.11) e F16
+    /// (B13.24): `VMLA_F`/`VMLS_F`/`VMUL_F` — `MLA`/`MLS` NÃO fundidos (decisão 3 da B13.6: reusa
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp#MLA}/{@link
     /// dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp#MLS}, nunca `FMLA`/`FMLS`). `Vd`/
-    /// `Vn` são `D` ou `Q` conforme {@link #quad}; {@link #vm} é o registrador do ESCALAR
-    /// (`D0`-`D15`, sempre F32 — a forma F16/`size==0b01` é recusada no decoder, task irmã "NEON
-    /// FP16 AArch32") e {@link #index} (`M`, 1 bit) já extraídos.
+    /// `Vn` são `D` ou `Q` conforme {@link #quad}; {@link #vm} é o registrador do ESCALAR (`D0`-
+    /// `D15` em F32, `D0`-`D7` em F16 — já restrito pelo decoder, mesma tabela `size` usada pelas
+    /// formas inteiras) e {@link #index} (`M`, 1 ou 2 bits conforme {@link #esz}) já extraídos.
     ///
     /// Espelho de {@link
     /// dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSameByElement} no ENCODING/IR
-    /// (sem `scalar`/`esz`, que não existem nesta seção do A32 — sempre F32/vetorial); a SEMÂNTICA
-    /// vem do núcleo COMPARTILHADO
-    /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameByElement}), RFC B13.2 D1.
+    /// (sem `scalar`, que não existe nesta seção do A32 — sempre vetorial); a SEMÂNTICA vem do
+    /// núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameByElement}),
+    /// RFC B13.2 D1, já genérico em `esz` desde a B19.5.1.
     ///
     /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
     /// {@link Condition#AL}.
@@ -2607,15 +2608,17 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
             /// `true` para o arranjo de 128 bits (`Q<d>`/`Q<n>`), `false` para o de 64 bits
             /// (`D<d>`/`D<n>`).
             boolean quad,
+            /// `log2` do tamanho do elemento em bytes: `2` (F32, B13.11) ou `1` (F16, B13.24).
+            int esz,
             /// Registrador de destino, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
             /// inicia o `Q`. Também é FONTE em `MLA`/`MLS` (lê `Vd` atual).
             int vd,
             /// Registrador fonte, em índice de `D` (`0`-`31`); na forma `quad` é o `D` par que
             /// inicia o `Q`.
             int vn,
-            /// Registrador do ESCALAR (`D0`-`D15` — já restrito pelo decoder).
+            /// Registrador do ESCALAR (já restrito pelo decoder, ver {@link #esz}).
             int vm,
-            /// Índice do elemento dentro de {@link #vm} (`M`, 1 bit — já extraído pelo decoder).
+            /// Índice do elemento dentro de {@link #vm} (já extraído pelo decoder).
             int index) implements IrOp {
         @Override public int kind() { return Kind.NEON_FP_THREE_SAME_BY_ELEMENT; }
     }

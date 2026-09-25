@@ -35,13 +35,15 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// **B13.8** acrescentou o ESTREITAMENTO (`opc=1000`/`1001` — `VSHRN`/`VRSHRN`/`VQSHRUN`/
 /// `VQRSHRUN`/`VQSHRN`/`VQRSHRN`), o ALARGAMENTO (`opc=1010` — `VSHLL`) e o `VCVT` fixo↔float **F32**
 /// (`opc=1110`/`1111`), todos migrados para o núcleo COMPARTILHADO
-/// ({@code AdvSimdLanes.shiftNarrowImmediate}/`shiftWidenImmediate`/`convertFixedPoint}).
+/// ({@code AdvSimdLanes.shiftNarrowImmediate}/`shiftWidenImmediate`/`convertFixedPoint}). **B13.24**
+/// fechou o `VCVT` fixo↔float **F16** (`opc=1100`/`1101` — `VCVT_SH`/`VCVT_UH`/`VCVT_HS`/`VCVT_HU`),
+/// reusando o MESMO núcleo com `esz=1` (já genérico desde a B19.5.1).
 ///
-/// Fora de escopo (viram `UNIMPLEMENTED` explícito aqui, G8): `VCVT` fixo↔float **F16**
-/// (`opc=1100`/`1101`) → task irmã "NEON FP16 AArch32" (depende de B19.5.1); os slots UNALLOCATED
-/// reais (`opc=0100 U=0`, `opc=0110 U=0`, `opc=1011`, `opc=1010` com `Q=1`); forma `Q` com
-/// registrador ímpar; T32 → B13.16. `FPSCR.QC` (bit cumulativo de saturação de `VQSHL`/`VQSHLU`/
-/// `VQSHRN`/...) NÃO é modelado — paridade com o A64 e com B13.5, task futura própria.
+/// Fora de escopo (viram `UNIMPLEMENTED` explícito aqui, G8): os slots UNALLOCATED reais
+/// (`opc=0100 U=0`, `opc=0110 U=0`, `opc=1011`, `opc=1010` com `Q=1`, `VCVT` F16 com `immH[2:1] !=
+/// 0b11` ou `L=1`); forma `Q` com registrador ímpar; T32 → B13.16. `FPSCR.QC` (bit cumulativo de
+/// saturação de `VQSHL`/`VQSHLU`/`VQSHRN`/...) NÃO é modelado — paridade com o A64 e com B13.5, task
+/// futura própria.
 /// `FPSCR.RMode`: `VCVT` para inteiro arredonda SEMPRE toward-zero (o encoding desta forma não tem
 /// variante de direção), `VCVT` para float usa round-to-nearest-even — mesma simplificação de
 /// B8.5/B19.3.
@@ -68,6 +70,9 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
     private static final int VD_EXTENSION_BIT = 22;
     private static final int VM_EXTENSION_BIT = 5;
     private static final int NIBBLE_MASK = 0xF;
+    /// Largura, em bits, do elemento de meia precisão (`VCVT` F16, B13.24) — `fractionBits = 16 -
+    /// campo` (G6: nomeado em vez de `16` solto em {@link #decodeConvertFixedF16}).
+    private static final int HALF_PRECISION_ELEMENT_BITS = 16;
 
     private final ArmArchitecture architecture;
 
@@ -158,8 +163,9 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         return switch (opc) {
             case 0b1000, 0b1001 -> decodeNarrowing(raw, address, condition, opc, u, q, esz, rightShift, vd, vm);
             case 0b1010 -> decodeWidening(raw, address, condition, u, q, esz, leftShift, vd, vm);
+            case 0b1100, 0b1101 -> decodeConvertFixedF16(raw, address, condition, opc, u, immh, immL, q, vd, vm);
             case 0b1110, 0b1111 -> decodeConvertFixedF32(raw, address, condition, opc, u, esz, rightShift, q, vd, vm);
-            // `opc=1100`/`1101` = `VCVT` F16 (task irmã, depende de B19.5.1); `opc=1011` = UNALLOCATED.
+            // `opc=1011` = UNALLOCATED.
             default -> unimplemented(address, raw, condition);
         };
     }
@@ -202,6 +208,33 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
                 new IrOp.NeonConvertFixedPoint(quad, 2, rightShift, opc == 0b1110, u == 0, vd, vm));
+    }
+
+    /// `opc=1100`/`1101` — `VCVT` fixo↔float **F16** (B13.24, `FEAT_FP16`-independente: é a mesma
+    /// convenção "meia precisão sem gate próprio" de B13.6/B19.5.1). `@2reg_vcvt_f16` NÃO deriva o
+    /// tamanho de elemento de `immh` como a família genérica de shift faz — fixa `size=1` (halfword)
+    /// e reserva só os bits `immH[1:0]:immL` (4 bits) para a fração via `%neon_rshift_i4`
+    /// (`fractionBits = 16 - campo`, faixa `1..16`); os bits `L` (bit7) e `immH[2]` (bit21) são
+    /// LITERAIS `0`/`1` do encoding — não fazem parte de `esz`/`combined` da família genérica, então
+    /// esta task NÃO reusa `highestSetImmhBit`/`rightShift` calculados por {@link
+    /// #decodeNarrowWidenConvert} (aqueles dariam `esz==2`, errado — o `1` fixo em `immH[2]` só
+    /// existe para distinguir este sub-espaço, não para indicar largura de 32 bits). `L=1` (ou
+    /// `immH[2]=0`, isto é `immh & 0b0110 != 0b0110`) ⇒ UNALLOCATED — o `.decode` real não tem linha
+    /// para esses valores. `toFloat = (opc == 1100)` (`VCVT_SH`/`VCVT_UH`), `signed = (U == 0)`. Core
+    /// de conversão via {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPoint}
+    /// com `esz=1`, já genérico desde a B19.5.1 (zero mudança de executor).
+    private DecodedInstruction decodeConvertFixedF16(int raw, int address, Condition condition,
+            int opc, int u, int immh, int immL, int q, int vd, int vm) {
+        boolean quad = q != 0;
+        int l = (immh >>> 3) & 1;
+        int immH = immh & 0x7;
+        if (l != 0 || (immH & 0b110) != 0b110 || (quad && ((vd | vm) & 1) != 0)) {
+            return unimplemented(address, raw, condition);
+        }
+        int fractionField = ((immH & 1) << 3) | immL;
+        int rightShift = HALF_PRECISION_ELEMENT_BITS - fractionField;
+        return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
+                new IrOp.NeonConvertFixedPoint(quad, 1, rightShift, opc == 0b1100, u == 0, vd, vm));
     }
 
     /// `(opc, U, Q)` → família de estreitamento (tabela do Escopo da B13.8). `opc∈{1000,1001}`.

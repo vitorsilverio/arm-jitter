@@ -23,8 +23,9 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 ///
 /// **"2-regs-plus-scalar"** (B13.11): `VMLA`/`VMLS`/`VMUL` inteiro (mesma largura, sem variante de
 /// sinal) e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` ("doubling high half"), `VMLAL`/`VMLSL`/
-/// `VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL` (forma **alargando**) e `VMLA_F`/`VMLS_F`/`VMUL_F` (F32,
-/// NÃO fundido) — 19 linhas de `target/isa-decode/neon-dp.decode:583-619`. O escalar é montado
+/// `VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL` (forma **alargando**) e `VMLA_F`/`VMLS_F`/`VMUL_F` (F32 e
+/// F16 desde a B13.24, NÃO fundido) — 19 linhas de `target/isa-decode/neon-dp.decode:583-619`. O
+/// escalar é montado
 /// diferente do índice `H:L:M` do A64 (B8.19): `Vm` restrito a `D0`-`D7` (halfword, índice
 /// `M:Vm[3]`, 2 bits) ou `D0`-`D15` (word, índice `M`, 1 bit) — `size==0b00` não existe nesta
 /// classe (G8).
@@ -94,6 +95,10 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
     /// #VM_EXTENSION_BIT}, papel diferente (parte do ÍNDICE, não do registrador).
     private static final int SCALAR_M_SHIFT = 5;
     private static final int SCALAR_VM_NIBBLE_MASK = 0xF;
+    /// `esz` da forma FP com `size==WORD_SIZE` (F32, B13.11).
+    private static final int WORD_ELEMENT_ESZ = 2;
+    /// `esz` da forma FP com `size==HALFWORD_SIZE` (F16, B13.24).
+    private static final int HALFWORD_ELEMENT_ESZ = 1;
 
     private final ArmArchitecture architecture;
 
@@ -236,15 +241,15 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
         }
         AdvSimdFpThreeSameOp fpOp = scalarFpThreeSameOperation(opc);
         if (fpOp != null) {
-            if (size != WORD_SIZE) {
-                // `size==0b01`: forma F16 (`sz=1`), fora de escopo — task irmã "NEON FP16 AArch32".
-                return unimplemented(address, raw, condition);
-            }
+            // `size==WORD_SIZE` (F32, B13.11) ou `HALFWORD_SIZE` (F16, B13.24) — MESMO `opc`, mesmo
+            // núcleo compartilhado, só `esz` muda. `size` já filtrado por {@link #tryDecode}/{@link
+            // #decodeTwoRegsPlusScalar} para `{HALFWORD_SIZE, WORD_SIZE}` neste ponto.
+            int esz = size == WORD_SIZE ? WORD_ELEMENT_ESZ : HALFWORD_ELEMENT_ESZ;
             if (quad && ((vd | vn) & 1) != 0) {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpThreeSameByElement(fpOp, quad, vd, vn, vm, index));
+                    new IrOp.NeonFpThreeSameByElement(fpOp, quad, esz, vd, vn, vm, index));
         }
         // As 3 tabelas acima cobrem exaustivamente os 16 valores de `opc` — inalcançável, mas
         // documenta o contrato (G8) caso uma tabela futura vire incompleta por engano.
@@ -283,7 +288,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
         };
     }
 
-    /// `opc` → família **mesma largura** de PONTO FLUTUANTE F32 do "2-regs-plus-scalar"
+    /// `opc` → família **mesma largura** de PONTO FLUTUANTE (F32/F16) do "2-regs-plus-scalar"
     /// (`VMLA_F`/`VMLS_F`/`VMUL_F`, NÃO fundido — decisão 3 da B13.6).
     private static AdvSimdFpThreeSameOp scalarFpThreeSameOperation(int opc) {
         return switch (opc) {

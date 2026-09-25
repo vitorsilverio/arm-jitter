@@ -29,8 +29,8 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// não tem essa inversão), então este decoder monta o record com `vn`↔`vm` trocados.
 ///
 /// A seção de PONTO FLUTUANTE (`@3same_fp`/`@3same_fp_q0`: `VADD_fp`/`VFMA_fp`/`VMLA_fp`/`VCEQ_fp`/
-/// `VMAX_fp`/`VRECPS`/`VPADD_fp`/... , B13.6) também é decodificada aqui, forma F32 apenas — F16
-/// (`FEAT_FP16`) vira `UNIMPLEMENTED` (task futura irmã da B19.5).
+/// `VMAX_fp`/`VRECPS`/`VPADD_fp`/... , B13.6) também é decodificada aqui, nas formas F32 (`sz=0`) E
+/// F16 (`sz=1`, B13.24 — reusa o núcleo compartilhado, já genérico em `esz` desde a B19.5.1).
 ///
 /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` (`opc=1100 op=0`, "cripto de
 /// três registradores", B13.23) também são decodificadas aqui, gateadas por
@@ -75,6 +75,11 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
     private static final int FP_A_BIT = 21;
     private static final int FP_SZ_BIT = 20;
     private static final int FP_ELEMENT_ESZ_F32 = 2;
+    /// `esz` de meia precisão (`sz`=1, B13.24) — `%3same_fp_size` do `.decode` real deriva o
+    /// tamanho do MESMO bit `sz` que a B13.6 usava só para rejeitar; a distinção NÃO é uma linha
+    /// separada (achado da medição B13.24: `IsaCoverageReport` amostra `sz=0` primeiro e nunca
+    /// chega a testar `sz=1`, então a célula desta família marcava `✅` mesmo com F16 UNIMPLEMENTED).
+    private static final int FP_ELEMENT_ESZ_F16 = 1;
     private static final int OPC_SHIFT = 8;
     private static final int OPC_MASK = 0xF;
     private static final int OP_BIT = 4;
@@ -225,16 +230,15 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         return opc == 0b1100 && op == 1 && u == 0;
     }
 
-    /// Decodifica as 22 linhas F32 de `@3same_fp`/`@3same_fp_q0`. F16 (`sz`=bit20=1) → `unimplemented`
-    /// (decisão 1 da task: `FEAT_FP16` é task futura, paridade com o A64). `sz`=0 → `esz=2` (F32).
+    /// Decodifica as 22 linhas de `@3same_fp`/`@3same_fp_q0`: `sz`(bit20)=`0` → F32 (`esz=2`),
+    /// `sz`=`1` → F16 (`esz=1`, B13.24 — reusa o MESMO núcleo {@link
+    /// dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}/{@code fpPairwise}, já genérico
+    /// em `esz` desde a B19.5.1, zero mudança de executor).
     private static DecodedInstruction decodeFloatingPoint(int raw, int address, Condition condition,
             int u, int opc, int op, boolean quad, int vd, int vn, int vm) {
         int sz = (raw >>> FP_SZ_BIT) & 1;
-        if (sz == 1) {
-            return unimplemented(address, raw, condition); // F16 → task futura (irmã da B19.5)
-        }
         int a = (raw >>> FP_A_BIT) & 1;
-        int esz = FP_ELEMENT_ESZ_F32;
+        int esz = sz == 0 ? FP_ELEMENT_ESZ_F32 : FP_ELEMENT_ESZ_F16;
 
         AdvSimdFpPairwiseOp pairwise = fpPairwiseOperation(opc, op, u, a);
         if (pairwise != null) {
