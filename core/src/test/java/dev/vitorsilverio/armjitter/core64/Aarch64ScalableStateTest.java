@@ -386,4 +386,110 @@ class Aarch64ScalableStateTest {
         core.fp().saveState(new DataOutputStream(buffer));
         assertEquals(Aarch64FpRegisters.V_REGISTER_COUNT * Aarch64FpRegisters.QUADWORD_BYTES, buffer.size());
     }
+
+    // ── Lacunas apontadas pelo JaCoCo ───────────────────────────────────────────────────────
+
+    @Test
+    void narrowingAWithoutPredicatesBankOnlyTouchesZ() {
+        Aarch64ScalableRegisters bank = new Aarch64ScalableRegisters(512, false);
+        bank.setZWord(0, 7, -1L);
+        bank.narrowTo(128);
+        assertEquals(0L, bank.zWord(0, 7));
+        assertEquals(0, bank.snapshot().length - 32 * bank.wordsPerVector(), "sem predicados");
+        bank.narrowTo(1024); // não estreita: no-op
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1024, 2048})
+    void narrowingMultiWordPredicatesMasksThePartialWordAndZeroesTheRest(int vl) {
+        Aarch64ScalableRegisters bank = new Aarch64ScalableRegisters(vl, true);
+        assertEquals(vl / 512, bank.wordsPerPredicate());
+        for (int w = 0; w < bank.wordsPerPredicate(); w++) {
+            bank.setPWord(1, w, -1L);
+        }
+        bank.narrowTo(640); // 80 bits de predicado: palavra 0 inteira, palavra 1 parcial (16 bits)
+        assertEquals(-1L, bank.pWord(1, 0));
+        assertEquals(0xFFFFL, bank.pWord(1, 1));
+        for (int w = 2; w < bank.wordsPerPredicate(); w++) {
+            assertEquals(0L, bank.pWord(1, w));
+        }
+    }
+
+    @Test
+    void loadStateRejectsUnknownVersionAndPredicatePresenceMismatch() throws IOException {
+        ByteArrayOutputStream bad = new ByteArrayOutputStream();
+        new DataOutputStream(bad).writeInt(99);
+        Aarch64ScalableRegisters bank = new Aarch64ScalableRegisters(256, true);
+        assertThrows(IOException.class,
+                () -> bank.loadState(new DataInputStream(new ByteArrayInputStream(bad.toByteArray()))));
+
+        ByteArrayOutputStream noPredicates = new ByteArrayOutputStream();
+        new Aarch64ScalableRegisters(256, false).saveState(new DataOutputStream(noPredicates));
+        assertThrows(IOException.class,
+                () -> bank.loadState(new DataInputStream(new ByteArrayInputStream(noPredicates.toByteArray()))));
+    }
+
+    @Test
+    void coreLoadScalableStateRejectsUnknownVersion() throws IOException {
+        ByteArrayOutputStream bad = new ByteArrayOutputStream();
+        new DataOutputStream(bad).writeInt(99);
+        assertThrows(IOException.class, () -> sveCore(256)
+                .loadScalableState(new DataInputStream(new ByteArrayInputStream(bad.toByteArray()))));
+    }
+
+    @Test
+    void effectiveVlAtEl2AndEl3IgnoresLowerLevelZcr() {
+        Aarch64Core core = sveCore(512);
+        core.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.ZCR_EL1, 0);
+        core.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.ZCR_EL2, 1);
+        core.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.ZCR_EL3, 2);
+        core.exceptionState().setCurrentEl(Aarch64ExceptionLevel.EL1);
+        assertEquals(128, core.vectorLengthBits());
+        core.exceptionState().setCurrentEl(Aarch64ExceptionLevel.EL2);
+        assertEquals(256, core.vectorLengthBits(), "EL2: min(ZCR_EL2, ZCR_EL3), sem ZCR_EL1");
+        core.exceptionState().setCurrentEl(Aarch64ExceptionLevel.EL3);
+        assertEquals(384, core.vectorLengthBits(), "EL3: só ZCR_EL3 (VL não é potência de 2)");
+    }
+
+    @Test
+    void elTransitionsNarrowTheStateToTheNewLevel() {
+        Aarch64Core core = sveCore(512);
+        core.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.ZCR_EL1, 0);
+        core.scalable().setZWord(4, 6, -1L);
+        core.exceptionState().setCurrentEl(Aarch64ExceptionLevel.EL1);
+        core.narrowScalableStateToCurrentVectorLength();
+        assertEquals(0L, core.scalable().zWord(4, 6));
+        Aarch64Core noSve = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)));
+        noSve.narrowScalableStateToCurrentVectorLength(); // no-op sem SVE
+    }
+
+    @Test
+    void zfr0AdvertisesSve2VersionWhenTheArchitectureDeclaresSve2() {
+        Aarch64Architecture sve2 = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_0_A, "teste-SVE2",
+                dev.vitorsilverio.armjitter.arch64.Aarch64Feature.SVE2);
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)), sve2, 256);
+        assertEquals(1L, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64ZFR0_EL1));
+    }
+
+    // ── Aarch64CpuSnapshot (harness de equivalência) ────────────────────────────────────────
+
+    @Test
+    void snapshotCapturesScalableStateAndDetectsDivergenceInIt() {
+        Aarch64Core a = sveCore(256);
+        Aarch64Core b = sveCore(256);
+        a.scalable().setZWord(9, 3, 0xABCL);
+        var snapA = dev.vitorsilverio.armjitter.codegen.equivalence.Aarch64CpuSnapshot.capture(a);
+        var snapB = dev.vitorsilverio.armjitter.codegen.equivalence.Aarch64CpuSnapshot.capture(b);
+        assertThrows(dev.vitorsilverio.armjitter.codegen.equivalence.EquivalenceMismatchException.class,
+                () -> snapA.assertEqualTo(snapB, "z-alto"));
+        b.scalable().setZWord(9, 3, 0xABCL);
+        snapA.assertEqualTo(dev.vitorsilverio.armjitter.codegen.equivalence.Aarch64CpuSnapshot.capture(b), "igual");
+    }
+
+    @Test
+    void legacyEightArgumentSnapshotConstructorStillWorks() {
+        var legacy = new dev.vitorsilverio.armjitter.codegen.equivalence.Aarch64CpuSnapshot(
+                new long[31], 0, 0, 0, 0, 0, 0, new long[64]);
+        assertEquals(0, legacy.scalableState().length);
+    }
 }
