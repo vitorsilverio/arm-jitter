@@ -364,6 +364,9 @@ class Aarch64SveIntegerPredicatedTest {
         }
         assertRefused(unaryWord(3, UNARY_MERGING | UNARY_BIT_OPS | 0x07), "bit-op com seletor 7 (_m)");
         assertRefused(unaryWord(3, UNARY_BIT_OPS | 0x07), "bit-op com seletor 7 (_z)");
+        // bit 21 = 1 e nenhuma linha da B17.5: cai no grupo predicado, que só aceita bit 21 = 0
+        assertRefused(0x04a07c61, "bit 21 = 1 fora do recorte");
+        assertRefused(0x04200861 | (0x18 << 16), "bit 21 = 1 com 15:13 = 000");
     }
 
     /// O `decodetree` deixa passar estes, o tradutor do QEMU recusa: precisam de recusa explícita (G8).
