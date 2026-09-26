@@ -6588,7 +6588,7 @@ public final class Aarch64Decoder {
     /// chega CONTÍGUO do encoding A64 (bits[20:13], ver {@link #decodeFpMoveImmediate}), diferente
     /// do VFP32 que precisa remontar `imm8` a partir de dois pedaços de 4 bits antes de expandir —
     /// os dois mundos não compartilham decoder (G2/G3), e a assinatura já recebe o valor pronto.
-    private static long expandFpImmediate(int imm8, boolean doublePrecision) {
+    static long expandFpImmediate(int imm8, boolean doublePrecision) {
         boolean sign = (imm8 & 0x80) != 0;
         boolean notBit6 = (imm8 & 0x40) == 0;
         int low6 = imm8 & 0x3F;
@@ -6651,7 +6651,7 @@ public final class Aarch64Decoder {
     /// `E-3` bits de replicação bastam para completar o expoente sozinhos, o que NÃO é o caso aqui
     /// — `imm8<5:4>` completa o expoente, só `imm8<3:0>` é mantissa) — pego pelo teste diferencial
     /// contra `#1.0` (`imm8=0x70`), que dava `1.75` em vez de `1.0` antes da correção.
-    private static long expandFpImmediateHalf(int imm8) {
+    static long expandFpImmediateHalf(int imm8) {
         boolean sign = (imm8 & 0x80) != 0;
         boolean bit6 = (imm8 & 0x40) != 0;
         long exponentReplicate = bit6 ? 0b11L : 0b00L;

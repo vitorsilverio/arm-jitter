@@ -80,7 +80,7 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
-        Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction {
+        Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -449,6 +449,10 @@ public sealed interface Ir64Op permits
         public static final int SVE_INTEGER_PREDICATED = 158;
         /// B17.7: redução inteira SVE (`SADDV`/`ORV`/`SMAXV`/… e as 8 `*QV` por segmento) — ver {@link SveIntegerReduction}.
         public static final int SVE_INTEGER_REDUCTION = 159;
+        /// B17.8: inteiro SVE com imediato (bitmask, cópia/broadcast, aritmética e min/max/`MUL` com imediato) — ver {@link SveImmediate}.
+        public static final int SVE_IMMEDIATE = 160;
+        /// B17.8: dot-product vetorial/indexado, multiply-add/long/saturante indexado e complexos — ver {@link SveMultiplyIndexed}.
+        public static final int SVE_MULTIPLY_INDEXED = 161;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4126,5 +4130,77 @@ public sealed interface Ir64Op permits
             ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV
         }
         @Override public int kind() { return Kind.SVE_INTEGER_REDUCTION; }
+    }
+
+    /// Inteiro SVE com imediato (B17.8, `sve.decode` `### SVE Bitwise Immediate Group` e os dois `### SVE
+    /// Integer Wide Immediate`): `AND`/`ORR`/`EOR` com bitmask, `DUPM`, cópia predicada (`CPY`/`FCPY`), broadcast
+    /// (`DUP`/`FDUP`), `ADD`/`SUB`/`SUBR`/`SQADD`/`UQADD`/`SQSUB`/`UQSUB`, `SMAX`/`UMAX`/`SMIN`/`UMIN` e `MUL`. Os
+    /// 33 encodings colapsam num `Kind` só. O decoder já entrega o imediato **expandido** (bitmask de 64 bits,
+    /// `sh8` aplicado, `VFPExpandImm` feito) — o executor só o replica/mascara no tamanho do elemento.
+    ///
+    /// As duas formas `_m` (`CPY_m_i`/`FCPY`) preservam o elemento inativo; `CPY_z_i` o zera. Os 8 padrões `INVALID`
+    /// do inventário (`esz = 0` com `sh = 1`) o decoder recusa — nunca chegam aqui.
+    record SveImmediate(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword). Nas formas de bitmask (`AND`/`ORR`/`EOR`/`DUPM`) vale `3`.
+            int esz,
+            /// Registrador vetorial destino (`Zd`/`Zdn`); a fonte, quando existe, é o próprio `rd`.
+            int rd,
+            /// Predicado governante de `CPY`/`FCPY` (`P0`-`P15`, 4 bits); sem significado nas demais.
+            int pg,
+            /// Imediato já expandido (bitmask de 64 bits; inteiro com sinal ou sem sinal já deslocado; bits do float).
+            long imm,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo (uma por mnemônico do `sve.decode`).
+        public enum Op {
+            AND, ORR, EOR, DUPM,
+            CPY_MERGING, CPY_ZEROING, FCPY, DUP, FDUP,
+            ADD, SUB, SUBR, SQADD, UQADD, SQSUB, UQSUB,
+            SMAX, UMAX, SMIN, UMIN, MUL
+        }
+        @Override public int kind() { return Kind.SVE_IMMEDIATE; }
+    }
+
+    /// Multiply SVE por elemento indexado (B17.8, `#### SVE Multiply - Indexed`) mais os dois dot-products
+    /// vetoriais do grupo (`DOT_zzzz`/`CDOT_zzzz`, que dividem a semântica com as formas indexadas). Os 71 + 3
+    /// encodings colapsam num `Kind` só; {@link #op()} escolhe.
+    ///
+    /// **O índice é por segmento de 128 bits**, não por vetor: cada segmento usa o elemento `index` DELE de `Zm`
+    /// (só `VL >= 256` distingue de "índice global"). `Zm` é restrito a `Z0`-`Z7` (`esz` de 16 bits) ou `Z0`-`Z15`,
+    /// o que o decoder já garante. O acumulador (`Zda`) é sempre o próprio `rd`.
+    record SveMultiplyIndexed(
+            Op op,
+            /// Tamanho do elemento **de destino** (`1` = half … `3` = doubleword); nos dots e nas formas alargantes as
+            /// fontes têm `esz / 2` (long) ou `esz / 4` (dot de 4 vias).
+            int esz,
+            /// Registrador vetorial destino/acumulador (`Zd`/`Zda`).
+            int rd,
+            /// Primeira fonte (`Zn`).
+            int rn,
+            /// Segunda fonte (`Zm`, já restrita).
+            int rm,
+            /// `true` nas formas indexadas; `false` em `DOT_zzzz`/`CDOT_zzzz` (`Zm` inteiro, elemento a elemento).
+            boolean indexed,
+            /// Índice do elemento (ou do par/grupo, conforme a operação) dentro de cada segmento de 128 bits.
+            int index,
+            /// Rotação (`0`-`3`) de `CDOT`/`CMLA`/`SQRDCMLAH`; sem significado nas demais.
+            int rot,
+            /// `true` nas formas `T` (elementos ímpares de `Zn`); `false` nas `B` (pares). Só nas alargantes.
+            boolean top,
+            /// Vias do dot-product (`2` ou `4`); sem significado nas demais.
+            int ways,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo. `MLA`/`MLS`/`MUL`/`SQDMULH`/`SQRDMULH`/`SQRDMLAH`/`SQRDMLSH` operam no tamanho do
+        /// elemento; `*MLAL`/`*MLSL`/`*MULL`/`SQDML*L` alargam (`B`/`T`); as demais são dots e complexos.
+        public enum Op {
+            SDOT, UDOT, USDOT, SUDOT, CDOT,
+            MLA, MLS, SQRDMLAH, SQRDMLSH,
+            SQDMLAL, SQDMLSL, SMLAL, UMLAL, SMLSL, UMLSL,
+            CMLA, SQRDCMLAH,
+            SMULL, UMULL, SQDMULL, SQDMULH, SQRDMULH, MUL
+        }
+        @Override public int kind() { return Kind.SVE_MULTIPLY_INDEXED; }
     }
 }

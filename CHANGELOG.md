@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, imediato e multiply indexado** (`B17.8`): `ORR`/`EOR`/`AND`/`DUPM` com bitmask (reusa `Aarch64LogicalImmediate`), `CPY`/`FCPY`/`DUP`/`FDUP`,
+  `ADD`/`SUB`/`SUBR`/`SQADD`/`UQADD`/`SQSUB`/`UQSUB`, `SMAX`/`UMAX`/`SMIN`/`UMIN`/`MUL` com imediato (os 10 padrões `INVALID` são recusados) e o
+  multiply por elemento indexado (`SDOT`/`UDOT`/`USDOT`/`SUDOT`/`CDOT`, `MLA`/`MLS`/`MUL`, `SQDMULH`/`SQRDMULH`/`SQRDMLAH`/`SQRDMLSH`, as alargantes `B`/`T`,
+  `CMLA`/`SQRDCMLAH`; índice por segmento de 128 bits) — 104 encodings. `Ir64Op.SveImmediate` (Kind 160) e `SveMultiplyIndexed` (Kind 161).
+  `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, reduções inteiras** (`B17.7`): `ORV`/`EORV`/`ANDV`/`SADDV`/`UADDV`/`SMAXV`/`UMAXV`/`SMINV`/`UMINV` (escrevem `V<d>`; só `SADDV`/`UADDV`
   em 64 bits), as 8 reduções por segmento de 128 bits `*QV` (atrás da nova `Aarch64Feature.SVE2_1`; `SVE2_2` a implica) e o `MOVPRFX`
   predicado `_z`/`_m` (19 encodings). `Ir64Op.SveIntegerReduction` (Kind 159) + `SveIntegerReductionOps`. `docs/COBERTURA-ISA.md` inalterada.

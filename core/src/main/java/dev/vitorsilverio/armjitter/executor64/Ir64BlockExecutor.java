@@ -347,6 +347,9 @@ public final class Ir64BlockExecutor {
                     SveIntegerPredicatedOps.execute(core, (Ir64Op.SveIntegerPredicated) op);
             case Ir64Op.Kind.SVE_INTEGER_REDUCTION ->
                     SveIntegerReductionOps.execute(core, (Ir64Op.SveIntegerReduction) op);
+            case Ir64Op.Kind.SVE_IMMEDIATE -> SveImmediateOps.execute(core, (Ir64Op.SveImmediate) op);
+            case Ir64Op.Kind.SVE_MULTIPLY_INDEXED ->
+                    SveMultiplyIndexedOps.execute(core, (Ir64Op.SveMultiplyIndexed) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
                     SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {

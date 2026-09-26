@@ -26,6 +26,8 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_MASK = 0xFF;
     private static final int PREFIX_PREDICATE = 0x25;
     private static final int PREFIX_ELEMENT_COUNT = 0x04;
+    private static final int PREFIX_IMMEDIATE = 0x05;
+    private static final int PREFIX_MULTIPLY = 0x44;
 
     // ── Campos comuns ─────────────────────────────────────────────────────────────────────────────
     private static final int ESZ_SHIFT = 22;
@@ -242,9 +244,11 @@ final class Aarch64SveDecoder {
     private static final int SINCDEC_V_VALUE = 0x0420C000;
 
     private final Aarch64Architecture architecture;
+    private final Aarch64SveMultiplyDecoder multiply;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
+        this.multiply = new Aarch64SveMultiplyDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -255,7 +259,12 @@ final class Aarch64SveDecoder {
             return null;
         }
         return switch ((word >>> PREFIX_SHIFT) & PREFIX_MASK) {
-            case PREFIX_PREDICATE -> decodePredicateGroup(word, address);
+            case PREFIX_PREDICATE -> {
+                Ir64Op predicate = decodePredicateGroup(word, address);
+                yield predicate != null ? predicate : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
+            }
+            case PREFIX_IMMEDIATE -> Aarch64SveImmediateDecoder.decodePrefix05(word, address);
+            case PREFIX_MULTIPLY -> multiply.decode(word, address);
             case PREFIX_ELEMENT_COUNT -> {
                 Ir64Op integer = decodeIntegerUnpredicated(word, address);
                 if (integer == null) {
