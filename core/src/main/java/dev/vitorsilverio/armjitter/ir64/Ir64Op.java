@@ -79,7 +79,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFp8FusedMultiplyAddLongByElement, Ir64Op.VectorFp8DotProduct,
         Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
-        Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated {
+        Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
+        Ir64Op.SveIntegerPredicated {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -444,6 +445,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_ELEMENT_COUNT = 156;
         /// B17.5: inteiro SVE sem predicado governante (`ADD`/`AND`/`XAR`/`INDEX`…) — ver {@link SveIntegerUnpredicated}.
         public static final int SVE_INTEGER_UNPREDICATED = 157;
+        /// B17.6: inteiro SVE predicado (aritmética binária, shifts, unárias) — ver {@link SveIntegerPredicated}.
+        public static final int SVE_INTEGER_PREDICATED = 158;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4059,5 +4062,41 @@ public sealed interface Ir64Op permits
             INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
         }
         @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }
+    }
+
+    /// Inteiro SVE com predicado governante (B17.6): aritmética binária (`ADD`/`SDIV`/`SMULH`…), shifts
+    /// (imediato, vetor e elemento largo) e unárias (`CLS`/`ABS`/`SXTB`/`FABS`…). Os 68 encodings colapsam
+    /// num `Kind` só; {@link #op()} escolhe. A semântica é **merging**: elemento inativo de `Zd` fica como
+    /// está — exceto nas unárias `_z` (`FEAT_SVE2p2`), cujo {@link #zeroing()} zera o elemento inativo.
+    ///
+    /// As formas **reversas** (`SUBR`/`SDIVR`/`UDIVR`/`ASRR`/`LSRR`/`LSLR`) usam o mesmo `Op` da forma
+    /// direta: o decoder já entrega `rn`/`rm` trocados, então o resultado é sempre `op(Zn, Zm)`.
+    record SveIntegerPredicated(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword).
+            int esz,
+            /// Registrador vetorial destino (`Zd`/`Zdn`).
+            int rd,
+            /// Primeira fonte (`Zn`); nas formas destrutivas diretas é o próprio `rd`.
+            int rn,
+            /// Segunda fonte (`Zm`); nas formas reversas é o próprio `rd`; sem significado nas unárias e no shift por imediato.
+            int rm,
+            /// Predicado governante (`P0`-`P7`).
+            int pg,
+            /// Contagem de shift por imediato já normalizada (`1..esize` à direita, `0..esize-1` à esquerda).
+            long imm,
+            /// `true` nas unárias `_z`: o elemento inativo é zerado em vez de preservado.
+            boolean zeroing,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo (uma por mnemônico; as formas reversas e `_m`/`_z` são campos do record).
+        public enum Op {
+            ORR, EOR, AND, BIC, ADD, SUB, SMAX, UMAX, SMIN, UMIN, SABD, UABD,
+            MUL, SMULH, UMULH, SDIV, UDIV,
+            ASR_IMM, LSR_IMM, LSL_IMM, ASRD, SQSHL_IMM, UQSHL_IMM, SRSHR, URSHR, SQSHLU,
+            ASR, LSR, LSL, ASR_WIDE, LSR_WIDE, LSL_WIDE,
+            CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW
+        }
+        @Override public int kind() { return Kind.SVE_INTEGER_PREDICATED; }
     }
 }

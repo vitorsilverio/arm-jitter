@@ -343,6 +343,8 @@ public final class Ir64BlockExecutor {
                     SvePredicateOps.executePredicateCount(core, (Ir64Op.SvePredicateCount) op);
             case Ir64Op.Kind.SVE_INTEGER_UNPREDICATED ->
                     SveIntegerOps.execute(core, (Ir64Op.SveIntegerUnpredicated) op);
+            case Ir64Op.Kind.SVE_INTEGER_PREDICATED ->
+                    SveIntegerPredicatedOps.execute(core, (Ir64Op.SveIntegerPredicated) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
                     SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {

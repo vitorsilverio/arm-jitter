@@ -119,24 +119,24 @@ final class SveIntegerOps {
 
     // ── Auxiliares de elemento ───────────────────────────────────────────────────────────────────
 
-    private static int elementBits(int esz) {
+    static int elementBits(int esz) {
         return BITS_PER_BYTE << esz;
     }
 
-    private static long elementMask(int esz) {
+    static long elementMask(int esz) {
         return esz == ESZ_DOUBLEWORD ? -1L : (1L << elementBits(esz)) - 1L;
     }
 
-    private static long signExtend(long value, int esz) {
+    static long signExtend(long value, int esz) {
         int shift = Long.SIZE - elementBits(esz);
         return (value << shift) >> shift;
     }
 
-    private static long get(Aarch64ScalableRegisters regs, int reg, int element, int esz) {
+    static long get(Aarch64ScalableRegisters regs, int reg, int element, int esz) {
         return SvePredicateOps.elementOf(regs, reg, element, esz);
     }
 
-    private static void set(Aarch64ScalableRegisters regs, int reg, int element, int esz, long value) {
+    static void set(Aarch64ScalableRegisters regs, int reg, int element, int esz, long value) {
         SvePredicateOps.setElementOf(regs, reg, element, esz, value & elementMask(esz));
     }
 

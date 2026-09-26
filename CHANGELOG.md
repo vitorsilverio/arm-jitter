@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, inteiro predicado** (`B17.6`): aritmética binária (`ADD`/`SUB`/`SUBR`, lógica, min/max, `SABD`/`UABD`, `MUL`/`SMULH`/`UMULH`,
+  `SDIV`/`UDIV` e reversas), shifts (imediato, vetor com as 3 reversas, elemento largo, `ASRD` e as 5 SVE2 `SQSHL`/`UQSHL`/`SRSHR`/`URSHR`/`SQSHLU`)
+  e unárias (`CLS`/`CLZ`/`CNT`/`CNOT`/`NOT`/`FABS`/`FNEG`/`ABS`/`NEG`/extensões) — 68 encodings, todos *merging*; as 15 unárias `_z`
+  (zeroing) atrás de `Aarch64Feature.SVE2_2`. `Ir64Op.SveIntegerPredicated` (Kind 158) + `SveIntegerPredicatedOps`. Pendência nomeada:
+  `FPCR.AH` no `FABS`/`FNEG`. `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, inteiro sem predicado** (`B17.5`): `ADD`/`SUB`/`SQADD`/`UQADD`/`SQSUB`/`UQSUB`, lógica de vetor (`AND`/`ORR`/`EOR`/`BIC`),
   shifts por imediato e por elemento largo, `MLA`/`MLS`/`MAD`/`MSB` (predicados), `MOVPRFX` (executado como `MOV`, como o QEMU),
   `FEXPA`/`FTSSEL` (tabelas do manual) e `INDEX` (4 formas), mais as 7 operações SVE2 (`XAR`/`EOR3`/`BCAX`/`BSL`/`BSL1N`/`BSL2N`/`NBSL`,

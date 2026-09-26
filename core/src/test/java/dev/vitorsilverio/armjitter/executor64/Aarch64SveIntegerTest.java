@@ -341,7 +341,6 @@ class Aarch64SveIntegerTest {
             0x04205061, // opcode 010100: não alocado
             0x04a07c61, // opcode 011111: não alocado (fora do recorte)
             0x04002061, // bit 21 = 0, 15:13 = 001: reduções (outra task), ainda recusadas
-            0x04000061, // bit 21 = 0, 15:13 = 000: aritmética predicada (B17.6), ainda recusada
     })
     void unallocatedEncodingsAreRefusedNotMisdecoded(int word) {
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE2, word));
