@@ -55,7 +55,7 @@ final class SveIntegerPredicatedOps {
                 case ASR_IMM, LSR_IMM, LSL_IMM, ASRD, SQSHL_IMM, UQSHL_IMM, SRSHR, URSHR, SQSHLU ->
                         immediateShift(op.op(), n, op.imm(), esz);
                 case ASR_WIDE, LSR_WIDE, LSL_WIDE -> shift(op.op(), n, wideAmount, esz);
-                case CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW ->
+                case CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW, MOVPRFX ->
                         unary(op.op(), n, esz);
                 default -> binary(op.op(), n, SveIntegerOps.get(regs, op.rm(), e, esz), esz);
             };
@@ -161,7 +161,8 @@ final class SveIntegerPredicatedOps {
             case SXTH -> SveIntegerOps.signExtend(n, ESZ_HALF);
             case UXTH -> n & SveIntegerOps.elementMask(ESZ_HALF);
             case SXTW -> SveIntegerOps.signExtend(n, ESZ_WORD);
-            default -> n & SveIntegerOps.elementMask(ESZ_WORD); // UXTW
+            case UXTW -> n & SveIntegerOps.elementMask(ESZ_WORD);
+            default -> n; // MOVPRFX: cópia predicada de Zn
         };
     }
 }

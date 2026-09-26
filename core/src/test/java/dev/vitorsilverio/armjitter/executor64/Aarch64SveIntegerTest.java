@@ -340,7 +340,7 @@ class Aarch64SveIntegerTest {
             0x0421bc61, // movprfx tem rm=00000 fixo
             0x04205061, // opcode 010100: não alocado
             0x04a07c61, // opcode 011111: não alocado (fora do recorte)
-            0x04002061, // bit 21 = 0, 15:13 = 001: reduções (outra task), ainda recusadas
+            0x04022061, // bit 21 = 0, 15:13 = 001, opcode 0x02: buraco do grupo de reduções (B17.7)
     })
     void unallocatedEncodingsAreRefusedNotMisdecoded(int word) {
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE2, word));

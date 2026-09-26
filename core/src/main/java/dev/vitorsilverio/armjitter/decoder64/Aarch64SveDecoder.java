@@ -116,6 +116,27 @@ final class Aarch64SveDecoder {
     private static final int PREDICATED_GROUP_BINARY = 0b000;
     private static final int PREDICATED_GROUP_SHIFT_OPS = 0b100;
     private static final int PREDICATED_GROUP_UNARY = 0b101;
+    private static final int PREDICATED_GROUP_REDUCTION = 0b001;
+    // B17.7: opcode (bits 20:16) do grupo de redução.
+    private static final int RED_SADDV = 0x00;
+    private static final int RED_UADDV = 0x01;
+    private static final int RED_ADDQV = 0x05;
+    private static final int RED_SMAXV = 0x08;
+    private static final int RED_UMAXV = 0x09;
+    private static final int RED_SMINV = 0x0A;
+    private static final int RED_UMINV = 0x0B;
+    private static final int RED_SMAXQV = 0x0C;
+    private static final int RED_UMAXQV = 0x0D;
+    private static final int RED_SMINQV = 0x0E;
+    private static final int RED_UMINQV = 0x0F;
+    private static final int RED_MOVPRFX_Z = 0x10;
+    private static final int RED_MOVPRFX_M = 0x11;
+    private static final int RED_ORV = 0x18;
+    private static final int RED_EORV = 0x19;
+    private static final int RED_ANDV = 0x1A;
+    private static final int RED_ORQV = 0x1C;
+    private static final int RED_EORQV = 0x1D;
+    private static final int RED_ANDQV = 0x1E;
     private static final int PREDICATED_OPCODE_SHIFT = 16;
     private static final int PREDICATED_OPCODE_MASK = 0b11111;
     private static final int PG_PREDICATED_SHIFT = 10;
@@ -493,7 +514,7 @@ final class Aarch64SveDecoder {
     }
 
     /// Grupo inteiro predicado da B17.6 (68 encodings): aritmética binária (`bits[15:13] = 000`), shifts
-    /// (`100`) e unárias (`101`), todos com `bit 21 = 0`. Devolve `null` para o que não reconhece — e para
+    /// (`100`) e unárias (`101`) e, desde a B17.7, as reduções (`001`), todos com `bit 21 = 0`. Devolve `null` para o que não reconhece — e para
     /// os buracos que o `decodetree` deixa passar mas o tradutor do QEMU recusa (G8).
     private Ir64Op decodeIntegerPredicated(int word, long address) {
         if (bit(word, BIT_PREDICATED_EXCLUDED)) {
@@ -503,8 +524,58 @@ final class Aarch64SveDecoder {
         return switch (field(word, PREDICATED_GROUP_SHIFT, PREDICATED_GROUP_MASK)) {
             case PREDICATED_GROUP_BINARY -> decodePredicatedBinary(word, address, opcode);
             case PREDICATED_GROUP_SHIFT_OPS -> decodePredicatedShift(word, address, opcode);
-            case PREDICATED_GROUP_UNARY -> decodePredicatedUnary(word, address, opcode);
+            case PREDICATED_GROUP_REDUCTION -> decodeReduction(word, address, opcode);
+            // `bits[15:13]` = `010`/`011`/`110`/`111` (MLA/MLS/MAD/MSB) já foram consumidos por
+            // `decodeIntegerUnpredicated` (as 4 estão alocadas com `bit 21 = 0`), então só `101` chega aqui.
+            default -> decodePredicatedUnary(word, address, opcode);
+        };
+    }
+
+    /// Grupo de redução (`bits[15:13] = 001`, 19 encodings): 9 reduções escalares, 8 por segmento (`FEAT_SVE2p1`) e
+    /// os 2 `MOVPRFX` predicados — que escrevem `Zd`, não `Vd`, e por isso viram {@link Ir64Op.SveIntegerPredicated}.
+    private Ir64Op decodeReduction(int word, long address, int opcode) {
+        int esz = field(word, ESZ_SHIFT, ESZ_MASK);
+        int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
+        int rn = field(word, RN_PREDICATED_SHIFT, REGISTER_FIELD_MASK);
+        int pg = field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK);
+        if (opcode == RED_MOVPRFX_Z || opcode == RED_MOVPRFX_M) {
+            return new Ir64Op.SveIntegerPredicated(Ir64Op.SveIntegerPredicated.Op.MOVPRFX, esz, rd, rn, 0, pg, 0,
+                    opcode == RED_MOVPRFX_Z, address);
+        }
+        Ir64Op.SveIntegerReduction.Op op = switch (opcode) {
+            case RED_ORV -> Ir64Op.SveIntegerReduction.Op.ORV;
+            case RED_EORV -> Ir64Op.SveIntegerReduction.Op.EORV;
+            case RED_ANDV -> Ir64Op.SveIntegerReduction.Op.ANDV;
+            case RED_SADDV -> Ir64Op.SveIntegerReduction.Op.SADDV;
+            case RED_UADDV -> Ir64Op.SveIntegerReduction.Op.UADDV;
+            case RED_SMAXV -> Ir64Op.SveIntegerReduction.Op.SMAXV;
+            case RED_UMAXV -> Ir64Op.SveIntegerReduction.Op.UMAXV;
+            case RED_SMINV -> Ir64Op.SveIntegerReduction.Op.SMINV;
+            case RED_UMINV -> Ir64Op.SveIntegerReduction.Op.UMINV;
+            case RED_ORQV -> Ir64Op.SveIntegerReduction.Op.ORQV;
+            case RED_EORQV -> Ir64Op.SveIntegerReduction.Op.EORQV;
+            case RED_ANDQV -> Ir64Op.SveIntegerReduction.Op.ANDQV;
+            case RED_ADDQV -> Ir64Op.SveIntegerReduction.Op.ADDQV;
+            case RED_SMAXQV -> Ir64Op.SveIntegerReduction.Op.SMAXQV;
+            case RED_UMAXQV -> Ir64Op.SveIntegerReduction.Op.UMAXQV;
+            case RED_SMINQV -> Ir64Op.SveIntegerReduction.Op.SMINQV;
+            case RED_UMINQV -> Ir64Op.SveIntegerReduction.Op.UMINQV;
             default -> null;
+        };
+        if (op == null || op == Ir64Op.SveIntegerReduction.Op.SADDV && esz == ESZ_DOUBLEWORD) {
+            return null; // SADDV exige esz != 3 (não há como alargar a soma com sinal além de 64 bits)
+        }
+        if (isSegmentReduction(op) && !architecture.has(Aarch64Feature.SVE2_1)
+                && !architecture.has(Aarch64Feature.SVE2_2)) {
+            return null; // `aa64_sme2p1_or_sve2p1`; SVE2p2 implica SVE2p1
+        }
+        return new Ir64Op.SveIntegerReduction(op, esz, rd, rn, pg, address);
+    }
+
+    private static boolean isSegmentReduction(Ir64Op.SveIntegerReduction.Op op) {
+        return switch (op) {
+            case ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV -> true;
+            default -> false;
         };
     }
 

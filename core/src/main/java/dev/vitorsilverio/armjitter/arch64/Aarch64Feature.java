@@ -128,6 +128,10 @@ public enum Aarch64Feature {
     /// Nenhum preset a declara ainda: a versão em que é mandatória não foi confirmada (B17.1,
     /// Armadilha 2); núcleos reais com SVE2 entram pelo catálogo `Aarch64Processor` (B17.26).
     SVE2,
+    /// `FEAT_SVE2p1` — SVE2.1 (Armv9.2-A): as reduções por segmento de 128 bits (`ORQV`/`ADDQV`/`SMAXQV`…,
+    /// B17.7) e as demais formas por quadword. Nenhum preset a declara; entra por
+    /// `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. `FEAT_SVE2p2` a implica.
+    SVE2_1,
     /// `FEAT_SVE2p2` — SVE2.2 (Armv9.6-A). Nenhum preset a declara; entra por
     /// `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. Gate de `FIRSTP`/`LASTP`
     /// (B17.4).

@@ -411,8 +411,9 @@ class Aarch64SveIntegerPredicatedTest {
     }
 
     @Test
-    void reductionsAndMovprfxOfTheSameEncodingSpaceStayRefused() {
-        assertThrows(UnsupportedOperationException.class, () -> decode(SVE2P2, 0x04002061)); // andv/uaddv…: B17.7
+    void unallocatedOpcodesOfTheReductionEncodingSpaceStayRefused() {
+        // As 19 linhas desse espaço (`bits[15:13] = 001`) são da B17.7; o buraco `opcode = 0x02` continua recusado.
+        assertThrows(UnsupportedOperationException.class, () -> decode(SVE2P2, 0x04022061));
     }
 
     // ── Binárias: merging + oráculo ─────────────────────────────────────────────────────────────

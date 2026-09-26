@@ -8,6 +8,9 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, reduções inteiras** (`B17.7`): `ORV`/`EORV`/`ANDV`/`SADDV`/`UADDV`/`SMAXV`/`UMAXV`/`SMINV`/`UMINV` (escrevem `V<d>`; só `SADDV`/`UADDV`
+  em 64 bits), as 8 reduções por segmento de 128 bits `*QV` (atrás da nova `Aarch64Feature.SVE2_1`; `SVE2_2` a implica) e o `MOVPRFX`
+  predicado `_z`/`_m` (19 encodings). `Ir64Op.SveIntegerReduction` (Kind 159) + `SveIntegerReductionOps`. `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, inteiro predicado** (`B17.6`): aritmética binária (`ADD`/`SUB`/`SUBR`, lógica, min/max, `SABD`/`UABD`, `MUL`/`SMULH`/`UMULH`,
   `SDIV`/`UDIV` e reversas), shifts (imediato, vetor com as 3 reversas, elemento largo, `ASRD` e as 5 SVE2 `SQSHL`/`UQSHL`/`SRSHR`/`URSHR`/`SQSHLU`)
   e unárias (`CLS`/`CLZ`/`CNT`/`CNOT`/`NOT`/`FABS`/`FNEG`/`ABS`/`NEG`/extensões) — 68 encodings, todos *merging*; as 15 unárias `_z`

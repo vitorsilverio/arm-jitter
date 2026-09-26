@@ -80,7 +80,7 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
-        Ir64Op.SveIntegerPredicated {
+        Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -447,6 +447,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_INTEGER_UNPREDICATED = 157;
         /// B17.6: inteiro SVE predicado (aritmética binária, shifts, unárias) — ver {@link SveIntegerPredicated}.
         public static final int SVE_INTEGER_PREDICATED = 158;
+        /// B17.7: redução inteira SVE (`SADDV`/`ORV`/`SMAXV`/… e as 8 `*QV` por segmento) — ver {@link SveIntegerReduction}.
+        public static final int SVE_INTEGER_REDUCTION = 159;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4095,8 +4097,34 @@ public sealed interface Ir64Op permits
             MUL, SMULH, UMULH, SDIV, UDIV,
             ASR_IMM, LSR_IMM, LSL_IMM, ASRD, SQSHL_IMM, UQSHL_IMM, SRSHR, URSHR, SQSHLU,
             ASR, LSR, LSL, ASR_WIDE, LSR_WIDE, LSL_WIDE,
-            CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW
+            CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW,
+            /// `MOVPRFX Zd, Pg/{M,Z}, Zn` (B17.7): cópia predicada de `Zn` — o `zeroing` escolhe `_z` ou `_m`.
+            MOVPRFX
         }
         @Override public int kind() { return Kind.SVE_INTEGER_PREDICATED; }
+    }
+
+    /// Redução inteira SVE (B17.7, `sve.decode` `### SVE Integer Reduction Group`): reduz os elementos ATIVOS de
+    /// `Zn` a um escalar `V<rd>` (`ORV`/`EORV`/`ANDV`/`SADDV`/`UADDV`/`SMAXV`/…) ou, nas 8 formas `*QV` (SVE2.1),
+    /// a um `V<rd>` de 128 bits com um resultado por posição dentro do segmento. Escreve SEMPRE `V<rd>` (os bits
+    /// acima são zerados) — nunca `Z<rd>`; o `MOVPRFX` predicado do mesmo grupo é {@link SveIntegerPredicated}.
+    record SveIntegerReduction(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword).
+            int esz,
+            /// Registrador `SIMD&FP` destino (`Vd`).
+            int rd,
+            /// Vetor de origem (`Zn`).
+            int rn,
+            /// Predicado governante (`P0`-`P7`).
+            int pg,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo: 9 escalares e 8 por segmento.
+        public enum Op {
+            ORV, EORV, ANDV, SADDV, UADDV, SMAXV, UMAXV, SMINV, UMINV,
+            ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV
+        }
+        @Override public int kind() { return Kind.SVE_INTEGER_REDUCTION; }
     }
 }
