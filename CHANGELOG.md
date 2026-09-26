@@ -8,6 +8,9 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, endereçamento** (`B17.12`): `ADDVL`/`ADDPL`/`RDVL` (`SP`-capazes; fatores `VL/8` e `VL/64` lidos do core) e as 4 formas de `ADR` vetorial
+  (`S32`/`U32`/`P32`/`P64`) — 7 encodings; `ADDSVL`/`ADDSPL`/`RDSVL` (SME) seguem recusadas até a B18. `Ir64Op.SveAddress` (Kind 162) + `SveAddressOps`.
+  `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, imediato e multiply indexado** (`B17.8`): `ORR`/`EOR`/`AND`/`DUPM` com bitmask (reusa `Aarch64LogicalImmediate`), `CPY`/`FCPY`/`DUP`/`FDUP`,
   `ADD`/`SUB`/`SUBR`/`SQADD`/`UQADD`/`SQSUB`/`UQSUB`, `SMAX`/`UMAX`/`SMIN`/`UMIN`/`MUL` com imediato (os 10 padrões `INVALID` são recusados) e o
   multiply por elemento indexado (`SDOT`/`UDOT`/`USDOT`/`SUDOT`/`CDOT`, `MLA`/`MLS`/`MUL`, `SQDMULH`/`SQRDMULH`/`SQRDMLAH`/`SQRDMLSH`, as alargantes `B`/`T`,

@@ -338,7 +338,7 @@ class Aarch64SveIntegerTest {
             0x04e33881, // EOR3/BCAX com seletor 11: não alocado
             0x0460bc61, // movprfx tem esz=00 fixo
             0x0421bc61, // movprfx tem rm=00000 fixo
-            0x04205061, // opcode 010100: não alocado
+            0x04205861, // ADDSVL (SME, usa SVL): recusada até a B18 — o antigo "opcode 010100" agora é ADDVL (B17.12)
             0x04a07c61, // opcode 011111: não alocado (fora do recorte)
             0x04022061, // bit 21 = 0, 15:13 = 001, opcode 0x02: buraco do grupo de reduções (B17.7)
     })

@@ -80,7 +80,8 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
-        Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed {
+        Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
+        Ir64Op.SveAddress {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -453,6 +454,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_IMMEDIATE = 160;
         /// B17.8: dot-product vetorial/indexado, multiply-add/long/saturante indexado e complexos — ver {@link SveMultiplyIndexed}.
         public static final int SVE_MULTIPLY_INDEXED = 161;
+        /// B17.12: `ADDVL`/`ADDPL`/`RDVL` e `ADR` vetorial — ver {@link SveAddress}.
+        public static final int SVE_ADDRESS = 162;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4202,5 +4205,28 @@ public sealed interface Ir64Op permits
             SMULL, UMULL, SQDMULL, SQDMULH, SQRDMULH, MUL
         }
         @Override public int kind() { return Kind.SVE_MULTIPLY_INDEXED; }
+    }
+
+    /// Endereçamento SVE (B17.12): `ADDVL`/`ADDPL`/`RDVL` (aritmética de ponteiro em múltiplos de `VL/8` e `VL/64`
+    /// bytes) e `ADR` vetorial (`Zd[i] = Zn[i] + (ext(Zm[i]) << msz)`). Não acessa memória.
+    /// `ADDSVL`/`ADDSPL`/`RDSVL` (SME, usam `SVL`) NÃO entram aqui — pendência nomeada da B18.
+    record SveAddress(
+            Op op,
+            /// Destino: `Xd` (`SP` em `ADDVL`/`ADDPL` quando `31`; `XZR` em `RDVL`) ou `Zd`.
+            int rd,
+            /// Base: `Xn` (`SP` quando `31`) ou `Zn`. Sem significado em `RDVL`.
+            int rn,
+            /// `Zm` do `ADR`; sem significado nas demais.
+            int rm,
+            /// Imediato de 6 bits COM sinal (`-32..31`) de `ADDVL`/`ADDPL`/`RDVL`; sem significado em `ADR`.
+            int imm,
+            /// Deslocamento de escala do `ADR` (`0..3`); sem significado nas demais.
+            int msz,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo. As quatro `ADR` são OPCODES (bits 23:22), não o `esz` genérico: `S32`/`U32` têm
+        /// elemento de 64 bits e offset de 32 (com/sem sinal); `P32`/`P64` têm offset do tamanho do elemento.
+        public enum Op { ADDVL, ADDPL, RDVL, ADR_S32, ADR_U32, ADR_P32, ADR_P64 }
+        @Override public int kind() { return Kind.SVE_ADDRESS; }
     }
 }

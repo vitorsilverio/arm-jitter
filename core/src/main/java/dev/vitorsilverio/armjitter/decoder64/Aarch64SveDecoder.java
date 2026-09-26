@@ -243,6 +243,23 @@ final class Aarch64SveDecoder {
     private static final int SINCDEC_V_MASK = 0xFF30F000;
     private static final int SINCDEC_V_VALUE = 0x0420C000;
 
+    // ── B17.12: endereçamento (prefixo 0x04, bit 21 = 1) ──────────────────────────────────────────────
+    private static final int ADDRESSING_IMM_SHIFT = 5;
+    private static final int ADDRESSING_IMM_MASK = 0b111111;
+    private static final int ADDRESSING_IMM_BITS = 6;
+    private static final int ADDVL_MASK = 0xFFE0F800;
+    private static final int ADDVL_VALUE = 0x04205000;
+    private static final int ADDPL_VALUE = 0x04605000;
+    private static final int RDVL_MASK = 0xFFFFF800;
+    private static final int RDVL_VALUE = 0x04BF5000;
+    private static final int ADR_MASK = 0xFF20F000;
+    private static final int ADR_VALUE = 0x0420A000;
+    private static final int ADR_OPCODE_S32 = 0b00;
+    private static final int ADR_OPCODE_U32 = 0b01;
+    private static final int ADR_OPCODE_P32 = 0b10;
+    private static final int ADR_MSZ_SHIFT = 10;
+    private static final int ADR_MSZ_MASK = 0b11;
+
     private final Aarch64Architecture architecture;
     private final Aarch64SveMultiplyDecoder multiply;
 
@@ -266,6 +283,10 @@ final class Aarch64SveDecoder {
             case PREFIX_IMMEDIATE -> Aarch64SveImmediateDecoder.decodePrefix05(word, address);
             case PREFIX_MULTIPLY -> multiply.decode(word, address);
             case PREFIX_ELEMENT_COUNT -> {
+                Ir64Op addressing = decodeAddressing(word, address);
+                if (addressing != null) {
+                    yield addressing;
+                }
                 Ir64Op integer = decodeIntegerUnpredicated(word, address);
                 if (integer == null) {
                     integer = decodeIntegerPredicated(word, address);
@@ -452,6 +473,37 @@ final class Aarch64SveDecoder {
                     ? null
                     : elementCount(Ir64Op.SveElementCount.Op.SINCDEC_VECTOR, esz, rd, pattern, multiplier, decrement,
                             unsigned, address);
+        }
+        return null;
+    }
+
+    /// Endereçamento da B17.12: `ADDVL`/`ADDPL`/`RDVL` e as 4 formas de `ADR`. `ADDSVL`/`ADDSPL`/`RDSVL`
+    /// (SME, `SVL`) têm os MESMOS bits com `bit 11 = 1` e NÃO são reconhecidas aqui: caem em `null` e são
+    /// recusadas (G8) até a B18 — decodificá-las como as formas SVE daria o comprimento errado em modo streaming.
+    private Ir64Op decodeAddressing(int word, long address) {
+        int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
+        int rn = field(word, PN_SHIFT, REGISTER_FIELD_MASK);
+        int stackBase = field(word, RM_SHIFT, REGISTER_FIELD_MASK);
+        int imm = (field(word, ADDRESSING_IMM_SHIFT, ADDRESSING_IMM_MASK) << (Integer.SIZE - ADDRESSING_IMM_BITS))
+                >> (Integer.SIZE - ADDRESSING_IMM_BITS);
+        if ((word & ADDVL_MASK) == ADDVL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDVL, rd, stackBase, 0, imm, 0, address);
+        }
+        if ((word & ADDVL_MASK) == ADDPL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDPL, rd, stackBase, 0, imm, 0, address);
+        }
+        if ((word & RDVL_MASK) == RDVL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.RDVL, rd, 0, 0, imm, 0, address);
+        }
+        if ((word & ADR_MASK) == ADR_VALUE) {
+            Ir64Op.SveAddress.Op op = switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
+                case ADR_OPCODE_S32 -> Ir64Op.SveAddress.Op.ADR_S32;
+                case ADR_OPCODE_U32 -> Ir64Op.SveAddress.Op.ADR_U32;
+                case ADR_OPCODE_P32 -> Ir64Op.SveAddress.Op.ADR_P32;
+                default -> Ir64Op.SveAddress.Op.ADR_P64;
+            };
+            return new Ir64Op.SveAddress(op, rd, rn, field(word, RM_SHIFT, REGISTER_FIELD_MASK), 0,
+                    field(word, ADR_MSZ_SHIFT, ADR_MSZ_MASK), address);
         }
         return null;
     }

@@ -33,8 +33,8 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 > **ASM 32 bits: 57 de 189** operações emitidas nativamente (mais 9 condicionais).
 > **Truffle 32 bits: 66 de 189** operações com nó especializado.
-> **ASM 64 bits: 53 de 162** `Kind` emitidos nativamente.
-> **Truffle 64 bits: 0 de 162** — o backend não existe (A10.8).
+> **ASM 64 bits: 53 de 163** `Kind` emitidos nativamente.
+> **Truffle 64 bits: 0 de 163** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
@@ -254,7 +254,7 @@ Cada `⚠️` acima recusa a emissão nativa só no caso listado; no resto é `�
 
 ## Tabela B — pipeline de 64 bits
 
-Linhas = os 162 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
+Linhas = os 163 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem carve-outs condicionais** (sem `⚠️` deste lado). A coluna Truffle é inteira `❌` (A10.8).
 
 | `Kind` | ASM (`Ir64NativePolicy`) | Truffle |
 |---|---|---|
@@ -420,6 +420,7 @@ Linhas = os 162 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 | `SVE_INTEGER_REDUCTION` | ❌ | ❌ |
 | `SVE_IMMEDIATE` | ❌ | ❌ |
 | `SVE_MULTIPLY_INDEXED` | ❌ | ❌ |
+| `SVE_ADDRESS` | ❌ | ❌ |
 
 ### `Kind` de 64 bits ainda interpretados
 
@@ -534,4 +535,5 @@ Entrada da escada C12.3-C12.6.
 - `SVE_INTEGER_REDUCTION`
 - `SVE_IMMEDIATE`
 - `SVE_MULTIPLY_INDEXED`
+- `SVE_ADDRESS`
 

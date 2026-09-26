@@ -32,11 +32,10 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-25, B17.8 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.12 fechada — tabela de ISA segue em 100%)
 
-**`B17.8` (SVE imediato + multiply indexado: bitmask/cópia/broadcast/aritmética com imediato e o multiply por elemento indexado, 104 encodings)** fechada —
-104 de 104, JaCoCo 100% no código novo, 4 mutações mortas. `docs/COBERTURA-ISA.md` inalterada (23523/23523; `sve.decode` só entra na tabela na
-B17.26). Achado: são **10** padrões `INVALID` (a spec dizia 8); o que o medidor fará com eles fica para a B17.26. Ver **Resultado** na task.
+**`B17.12` (SVE endereçamento: `ADDVL`/`ADDPL`/`RDVL` + 4 `ADR` vetorial, 7 encodings)** fechada — JaCoCo 100% no código novo, G5 verde.
+`ADDSVL`/`ADDSPL`/`RDSVL` (SME) seguem recusadas: pendência nomeada da B18. `docs/COBERTURA-ISA.md` inalterada (23523/23523). Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
