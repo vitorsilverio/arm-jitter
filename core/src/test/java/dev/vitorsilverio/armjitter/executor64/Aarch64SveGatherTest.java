@@ -915,6 +915,7 @@ class Aarch64SveGatherTest {
     private static final int ZPIZ = 3;
     private static final int LD1Q_KIND = 4;
     private static final int PRF_KIND = 5;
+    private static final int LDNT1_KIND = 6;
     private static final int FIELD = -1;
 
     /// Uma linha do `sve.decode` transcrita literalmente (com `.`/`-` = livre) mais os atributos que o `.decode` fixa
@@ -962,7 +963,10 @@ class Aarch64SveGatherTest {
             // SVE 64-bit gather prefetch
             new Pattern("1100010 00 11 ----- 1-- --- ----- 0 ----", PRF_KIND, 0, 0, 0, 0),
             new Pattern("1100010 00 -1 ----- 0-- --- ----- 0 ----", PRF_KIND, 0, 0, 0, 0),
-            new Pattern("1100010 -- 00 ----- 111 --- ----- 0 ----", PRF_KIND, 0, 0, 0, 0));
+            new Pattern("1100010 -- 00 ----- 111 --- ----- 0 ----", PRF_KIND, 0, 0, 0, 0),
+            // SVE2 non-temporal gather (vector plus scalar): o `u` é o bit 13 na forma de 32 bits e o 14 na de 64
+            new Pattern("1100010 .. 00 ..... 1.0 ... ..... .....", LDNT1_KIND, 3, FIELD, 0, FIELD),
+            new Pattern("1000010 .. 00 ..... 10. ... ..... .....", LDNT1_KIND, 2, FIELD, 0, FIELD));
 
     private static boolean bit(int word, int index) {
         return ((word >>> index) & 1) != 0;
@@ -972,7 +976,7 @@ class Aarch64SveGatherTest {
     void theAcceptedSetOfTheSixteenThousandWordsIsExactlyTheOneTheDecodeFileEnumerates() {
         Aarch64Decoder decoder = new Aarch64Decoder(SVE2P1);
         GatherMemory memory = new GatherMemory();
-        int[] acceptedPerKind = new int[PRF_KIND + 1];
+        int[] acceptedPerKind = new int[LDNT1_KIND + 1];
         for (int prefix : new int[] {0b1000010, 0b1100010}) {
             for (int field = 0; field < 1 << 12; field++) {
                 for (int rdLow : new int[] {0, 16}) {
@@ -1005,18 +1009,23 @@ class Aarch64SveGatherTest {
                 }
             }
         }
-        for (int kind = 0; kind <= PRF_KIND; kind++) {
+        for (int kind = 0; kind <= LDNT1_KIND; kind++) {
             assertTrue(acceptedPerKind[kind] > 0, "nenhuma palavra aceita da forma " + kind);
         }
     }
 
+    /// Posição do `u` do `LDNT1_zprz`: `10 u` (bit 13) no elemento de 32 bits, `1 u 0` (bit 14) no de 64.
+    private static int ntUnsignedBit(Pattern pattern) {
+        return pattern.esz() == 2 ? 13 : 14;
+    }
+
     /// `trans_LD1_zpiz`: `esz < msz || (esz == msz && !u)` é indefinido. As linhas de `LD1_zprz` já são enumeradas.
     private static boolean expectedValid(Pattern pattern, int word) {
-        if (pattern.kind() != ZPIZ) {
+        if (pattern.kind() != ZPIZ && pattern.kind() != LDNT1_KIND) {
             return true;
         }
         int msz = (word >>> 23) & 3;
-        boolean unsigned = bit(word, 14);
+        boolean unsigned = bit(word, pattern.kind() == LDNT1_KIND ? ntUnsignedBit(pattern) : 14);
         return !(pattern.esz() < msz || pattern.esz() == msz && !unsigned);
     }
 
@@ -1032,6 +1041,14 @@ class Aarch64SveGatherTest {
         assertEquals(word & 31, gather.rd(), hex);
         assertEquals((word >>> 5) & 31, gather.rn(), hex);
         assertEquals((word >>> 10) & 7, gather.pg(), hex);
+        if (pattern.kind() == LDNT1_KIND) {
+            assertEquals(Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR, gather.op(), hex);
+            assertEquals((word >>> 23) & 3, gather.msz(), hex);
+            assertEquals((word >>> 16) & 31, gather.rm(), hex);
+            assertEquals(!bit(word, ntUnsignedBit(pattern)), gather.signExtend(), hex);
+            assertFalse(gather.firstFault(), hex);
+            return;
+        }
         if (pattern.kind() == LD1Q_KIND) {
             assertEquals(Ir64Op.SveGather.Op.LD1Q, gather.op(), hex);
             assertEquals(4, gather.msz(), hex);

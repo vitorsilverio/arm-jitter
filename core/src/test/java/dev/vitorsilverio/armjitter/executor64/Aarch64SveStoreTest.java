@@ -700,7 +700,7 @@ class Aarch64SveStoreTest {
         assertFalse(decodes(SVE2P1, 0xe4638440), "scatter de 32 bits com msz = 0 escalado");
         assertFalse(decodes(SVE2P1, 0xe5e38440), "scatter de 32 bits com msz = 3 > esz = 2");
         assertFalse(decodes(SVE2P1, 0xe5ffa460), "vetor + imediato de 32 bits com msz = 3 > esz = 2");
-        assertFalse(decodes(SVE2P1, 0xe4402440), "opcode 001 que não é ST1Q (scatter não-temporal, B17.25)");
+        assertFalse(decodes(SVE2P1, 0xe4602440), "opcode 001 com bits[22:21] = 11 (nem ST1Q nem STNT1)");
         assertFalse(decodes(SVE2P1, 0xe49f6440), "stnt1h com Rm = 31");
     }
 

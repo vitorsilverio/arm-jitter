@@ -32,17 +32,16 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.19 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.25 fechada parcialmente — tabela de ISA segue em 100%)
 
-**`B17.19` (SVE memória III: gather `LD1_zprz`/`LD1_zpiz`/`LD1Q`, a forma first-fault `LDFF1` de cada um e os `PRF_ns` de 64 bits)** fechada — 17 de 17 encodings, G5 verde.
-Achado: a spec tinha `xs` invertido (`0` = UXTW), o mesmo erro da B17.18; a recusa de `msz`/`u` do `LD1_zpiz` mora no `trans_*` do QEMU, não no `.decode` — decoder conferido por varredura exaustiva das 16384 palavras dos dois prefixos. `docs/COBERTURA-ISA.md` inalterada (23523/23523); `docs/COBERTURA-JIT.md` regenerada (novo `Kind`). Ver **Resultado** na task.
+**`B17.25` (SVE2 `LDNT1_zprz`/`STNT1_zprz`)** fechada em 4 de 20 encodings, G5 verde. Os 16 multi-vec contíguos SVE2.1 seguem recusados (G8): exigem o predicado-como-contador (`PN8`-`PN15`), que nada modela — virou a task **`B17.28`** (24 encodings: estes 16 + `PTRUE_cnt`/`CNTP_c`, 4 `WHILE_*_cnt*` e 2 `PEXT`). `docs/COBERTURA-ISA.md` e `COBERTURA-JIT.md` inalteradas. Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.25`** (`LDNT1_zprz`/`STNT1_zprz`, agora que o gather e o scatter existem), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.28`** (predicado-como-contador, 24 encodings), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
 de B17.5) e **`B17.20`** (depende de B17.6) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da

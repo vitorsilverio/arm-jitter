@@ -87,10 +87,13 @@ final class SveGatherOps {
 
     /// `SCALAR_PLUS_VECTOR`: `Xn|SP + (Zm[e] estendido << (scaled ? msz : 0))`. Com `esz = 3` e `xs` = `UXTW`/`SXTW` só os
     /// 32 bits baixos de cada elemento de 64 bits são o deslocamento (`SveStoreOps.element` já devolve os 32 bits baixos
-    /// quando `esz = 2`). `VECTOR_PLUS_IMMEDIATE`: `Zn[e]` (zero-estendido em 32 bits quando `esz = 2`) `+ (imm5 << msz)`.
+    /// quando `esz = 2`). `VECTOR_PLUS_IMMEDIATE`: `Zn[e]` (zero-estendido em 32 bits quando `esz = 2`) `+ (imm5 << msz)`. `VECTOR_PLUS_SCALAR` (`LDNT1_zprz`): `Zn[e]` (idem) `+ Xm` (`XZR` se `31`).
     private static long address(Aarch64Core core, Ir64Op.SveGather op, Aarch64ScalableRegisters regs, int element) {
         if (op.op() == Ir64Op.SveGather.Op.VECTOR_PLUS_IMMEDIATE) {
             return SveStoreOps.element(regs, op.rn(), element, op.esz()) + (op.immediate() << op.msz());
+        }
+        if (op.op() == Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR) {
+            return SveStoreOps.element(regs, op.rn(), element, op.esz()) + core.x(op.rm());
         }
         long offset = SveStoreOps.element(regs, op.rm(), element, op.esz());
         offset = switch (op.offsetExtend()) {

@@ -87,8 +87,12 @@ final class Aarch64SveGatherDecoder {
             return scalarPlusVector(word, ESZ_WORD, bit(word, BIT_XS) ? Ir64Op.SveGather.OFFSET_SXTW
                     : Ir64Op.SveGather.OFFSET_UXTW, address);
         }
-        return ((word >>> SEL_SHIFT) & SEL_MASK) == SEL_VECTOR_IMMEDIATE ? vectorPlusImmediate(word, ESZ_WORD, address)
-                : null;
+        int sel = (word >>> SEL_SHIFT) & SEL_MASK;
+        if (sel == SEL_QUADWORD_OR_PREFETCH_VECTOR) {
+            // `LDNT1_zprz` de 32 bits: `10 u` em `bits[15:13]` — o `u` é o bit 13 e o 14 é opcode (0).
+            return bit(word, BIT_UNSIGNED) ? null : nonTemporal(word, ESZ_WORD, bit(word, BIT_FIRST_FAULT), address);
+        }
+        return sel == SEL_VECTOR_IMMEDIATE ? vectorPlusImmediate(word, ESZ_WORD, address) : null;
     }
 
     // ── Gather de 64 bits ────────────────────────────────────────────────────────────────────────
@@ -106,7 +110,9 @@ final class Aarch64SveGatherDecoder {
         return switch (sel) {
             case SEL_VECTOR_IMMEDIATE -> vectorPlusImmediate(word, ESZ_DOUBLE, address);
             case SEL_QUADWORD_OR_PREFETCH_VECTOR -> opcode == OPCODE_LD1Q && isLd1qTop(word) ? quadword(word, address)
-                    : opcode == OPCODE_PREFETCH_VECTOR && (word & PRF_BIT4_MASK) == 0 ? prefetch(address) : null;
+                    : opcode == OPCODE_PREFETCH_VECTOR && (word & PRF_BIT4_MASK) == 0 ? prefetch(address)
+                    // `LDNT1_zprz` de 64 bits: `1 u 0` em `bits[15:13]` — o `u` é o bit 14 e o 13 é opcode (0).
+                    : !bit(word, BIT_FIRST_FAULT) ? nonTemporal(word, ESZ_DOUBLE, bit(word, BIT_UNSIGNED), address) : null;
             case SEL_PREFETCH_SCALED_64 -> isScaledPrefetch(word) ? prefetch(address)
                     : scalarPlusVector(word, ESZ_DOUBLE, Ir64Op.SveGather.OFFSET_64, address);
             default -> scalarPlusVector(word, ESZ_DOUBLE, Ir64Op.SveGather.OFFSET_64, address); // `10`: bit 22 = 1
@@ -163,6 +169,19 @@ final class Aarch64SveGatherDecoder {
             return null;
         }
         return new Ir64Op.SveGather(Op.LD1Q, MSZ_QUAD, ESZ_QUAD, false, false, word & REGISTER_MASK,
+                (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, 0,
+                (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, address);
+    }
+
+    /// `LDNT1_zprz` (SVE2): a base é o VETOR `Zn` e o deslocamento é o ESCALAR `Xm` (`31` = `XZR`), como no `LD1Q` e ao
+    /// contrário do `LD1_zprz`. Sem forma first-fault (`ff = 0` fixo no `.decode`). A validade de (`esz`, `msz`, `u`) é a do
+    /// `trans_LDNT1_zprz` do QEMU (`esz >= msz + !u`); sem `FEAT_SVE2` o encoding é recusado.
+    private Ir64Op nonTemporal(int word, int esz, boolean unsigned, long address) {
+        int msz = (word >>> MSZ_SHIFT) & MSZ_MASK;
+        if (!architecture.has(Aarch64Feature.SVE2) || !validSizes(msz, esz, unsigned)) {
+            return null;
+        }
+        return new Ir64Op.SveGather(Op.VECTOR_PLUS_SCALAR, msz, esz, !unsigned, false, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, address);
     }

@@ -54,6 +54,9 @@ final class Aarch64SveStoreDecoder {
     private static final int OP_STORE_IMMEDIATE = 0b111;
 
     /// `ST1Q`: bits `31:21` = `11100100001`.
+    // `bits[22:21]` do `STNT1_zprz`.
+    private static final int NT_FIELD_DOUBLE = 0b00;
+    private static final int NT_FIELD_WORD = 0b10;
     private static final int ST1Q_TOP_SHIFT = 21;
     private static final int ST1Q_TOP_VALUE = 0b11100100001;
 
@@ -90,7 +93,7 @@ final class Aarch64SveStoreDecoder {
         }
         return switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
             case OP_STORE_PREDICATE_OR_QUAD -> decodeOpcode000(word, address);
-            case OP_SCATTER_QUAD -> word >>> ST1Q_TOP_SHIFT == ST1Q_TOP_VALUE ? decodeSt1q(word, address) : null;
+            case OP_SCATTER_QUAD -> decodeOpcode001(word, address);
             case OP_STORE_REGISTER -> decodeOpcode010(word, address);
             case OP_STRUCTURE_REGISTER -> structure(word, true, address);
             case OP_STORE_IMMEDIATE -> decodeOpcode111(word, address);
@@ -243,6 +246,31 @@ final class Aarch64SveStoreDecoder {
         }
         return new Ir64Op.SveStore(Op.SCATTER_VECTOR_BASE, msz, esz, 0, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, (word >>> RM_SHIFT) & IMM5_MASK,
+                (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, true, address);
+    }
+
+    /// `opcode = 001`: `ST1Q` (`bits[31:21]` = `11100100001`) e o `STNT1_zprz` (`bits[22:21]` = `10` para elemento de 32
+    /// bits, `00` para 64 bits, `msz` livre).
+    private Ir64Op decodeOpcode001(int word, long address) {
+        if (word >>> ST1Q_TOP_SHIFT == ST1Q_TOP_VALUE) {
+            return decodeSt1q(word, address);
+        }
+        return switch ((word >>> LOW_FIELD_SHIFT) & FIELD_MASK) {
+            case NT_FIELD_DOUBLE -> nonTemporal(ESZ_DOUBLE, word, address);
+            case NT_FIELD_WORD -> nonTemporal(ESZ_WORD, word, address);
+            default -> null;
+        };
+    }
+
+    /// `STNT1_zprz` (SVE2): a base é o VETOR `Zn` e o deslocamento é o ESCALAR `Xm` (`31` = `XZR`) — o contrário de
+    /// `ST1_zprz`. `msz > esz` recusado, como no `trans_STNT1_zprz` do QEMU; sem `FEAT_SVE2` o encoding é recusado.
+    private Ir64Op nonTemporal(int esz, int word, long address) {
+        int msz = (word >>> MSZ_SHIFT) & FIELD_MASK;
+        if (!architecture.has(Aarch64Feature.SVE2) || msz > esz) {
+            return null;
+        }
+        return new Ir64Op.SveStore(Op.SCATTER_VECTOR_PLUS_SCALAR, msz, esz, 0, word & REGISTER_MASK,
+                (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, false, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, true, address);
     }
 

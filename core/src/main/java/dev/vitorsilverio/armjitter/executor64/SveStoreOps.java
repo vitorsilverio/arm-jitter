@@ -53,6 +53,7 @@ final class SveStoreOps {
             case SCATTER_VECTOR_INDEX -> scatterVectorIndex(core, op);
             case SCATTER_VECTOR_BASE -> scatterVectorBase(core, op);
             case ST1Q -> scatterQuadword(core, op);
+            case SCATTER_VECTOR_PLUS_SCALAR -> scatterVectorPlusScalar(core, op);
         }
         return false;
     }
@@ -175,6 +176,22 @@ final class SveStoreOps {
             }
             long address = element(regs, op.rn(), e, op.esz()) + displacement;
             writeMemory(memory, address, op.msz(), element(regs, op.rt(), e, op.esz()));
+        }
+    }
+
+    /// `STNT1_zprz`: `Zn[e] (zero-estendido em 32 bits quando `esz = 2`) + Xm` (`XZR` se `31`). "Non-temporal" é só hint de
+    /// cache: sem modelo de cache, o acesso é o de um `ST1`.
+    private static void scatterVectorPlusScalar(Aarch64Core core, Ir64Op.SveStore op) {
+        Aarch64ScalableRegisters regs = core.scalable();
+        AddressSpace64 memory = core.memory();
+        int elements = core.vectorLengthBytes() >> op.esz();
+        long[] predicate = SvePredicateOps.read(regs, op.pg());
+        long offset = core.x(op.rm());
+        for (int e = 0; e < elements; e++) {
+            if (!active(predicate, e, op.esz())) {
+                continue;
+            }
+            writeMemory(memory, element(regs, op.rn(), e, op.esz()) + offset, op.msz(), element(regs, op.rt(), e, op.esz()));
         }
     }
 

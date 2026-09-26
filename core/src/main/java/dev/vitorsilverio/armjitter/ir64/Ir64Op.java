@@ -4609,7 +4609,10 @@ public sealed interface Ir64Op permits
             /// Scatter vetor + imediato (`ST1_zpiz`).
             SCATTER_VECTOR_BASE,
             /// `ST1Q` (SVE2.1): base VETORIAL, deslocamento ESCALAR.
-            ST1Q
+            ST1Q,
+            /// `STNT1_zprz` (SVE2, B17.25): `Zn[e] + Xm` — base VETORIAL, deslocamento ESCALAR. "Non-temporal" é só um
+            /// hint de cache: o acesso é o de um `ST1*`.
+            SCATTER_VECTOR_PLUS_SCALAR
         }
         @Override public int kind() { return Kind.SVE_STORE; }
     }
@@ -4630,10 +4633,11 @@ public sealed interface Ir64Op permits
             boolean firstFault,
             /// Vetor de destino `Zt`.
             int rd,
-            /// {@link Op#SCALAR_PLUS_VECTOR}: base `Xn|SP`. {@link Op#VECTOR_PLUS_IMMEDIATE} e {@link Op#LD1Q}: o vetor `Zn`
-            /// que carrega os endereços.
+            /// {@link Op#SCALAR_PLUS_VECTOR}: base `Xn|SP`. {@link Op#VECTOR_PLUS_IMMEDIATE}, {@link Op#LD1Q} e
+            /// {@link Op#VECTOR_PLUS_SCALAR}: o vetor `Zn` que carrega os endereços.
             int rn,
-            /// {@link Op#SCALAR_PLUS_VECTOR}: o vetor de deslocamentos `Zm`. {@link Op#LD1Q}: o escalar `Xm` (`31` = `XZR`).
+            /// {@link Op#SCALAR_PLUS_VECTOR}: o vetor de deslocamentos `Zm`. {@link Op#LD1Q} e {@link Op#VECTOR_PLUS_SCALAR}:
+            /// o escalar `Xm` (`31` = `XZR`).
             int rm,
             /// Só em {@link Op#VECTOR_PLUS_IMMEDIATE}: o `imm5` decodificado, sem escala e sem sinal (o endereço soma
             /// `imm5 << msz`).
@@ -4660,7 +4664,10 @@ public sealed interface Ir64Op permits
             /// `LD1_zpiz`: `Zn[e] + (imm5 << msz)`.
             VECTOR_PLUS_IMMEDIATE,
             /// `LD1Q` (SVE2.1): `Zn.D[2 × segmento] + Xm`, um quadword por segmento de 128 bits.
-            LD1Q
+            LD1Q,
+            /// `LDNT1_zprz` (SVE2, B17.25): `Zn[e] + Xm` — base VETORIAL, deslocamento ESCALAR (o inverso de
+            /// {@link #SCALAR_PLUS_VECTOR}). "Non-temporal" é só um hint de cache: o acesso é o de um `LD1*`.
+            VECTOR_PLUS_SCALAR
         }
         @Override public int kind() { return Kind.SVE_GATHER; }
     }
