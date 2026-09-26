@@ -83,7 +83,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
-        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce {
+        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -472,6 +472,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_FP_MULTIPLY_ADD = 168;
         /// B17.15: comparação FP SVE (vetores e com zero) que produz predicado e reduções FP (rápida, por quadword, acumulativa) — ver {@link SveFpCompareReduce}.
         public static final int SVE_FP_COMPARE_REDUCE = 169;
+        /// B17.16: unárias FP predicadas SVE (conversões de precisão e FP↔inteiro, `FRINT*`, `FRINT32/64`, `FRECPX`, `FSQRT`) — ver {@link SveFpUnary}.
+        public static final int SVE_FP_UNARY = 170;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4469,5 +4471,38 @@ public sealed interface Ir64Op permits
             FADDA
         }
         @Override public int kind() { return Kind.SVE_FP_COMPARE_REDUCE; }
+    }
+
+    /// Operações unárias de ponto flutuante SVE predicadas (B17.16) — 105 encodings: conversões de precisão (`FCVT`,
+    /// `FCVTX`, `BFCVT`), FP→inteiro (`FCVTZS`/`FCVTZU`), inteiro→FP (`SCVTF`/`UCVTF`), `FRINT*`, `FRINT32/64{X,Z}`,
+    /// `FRECPX` e `FSQRT`, cada uma nas formas merging (`_m`, elemento inativo preservado) e zeroing (`_z`, elemento
+    /// inativo zerado, `FEAT_SVE2p2`). Semântica em `SveFloat`/`SveFpUnaryOps`.
+    ///
+    /// O elemento do VETOR tem o maior dos dois tamanhos; o valor menor ocupa os bits baixos e, ao ESCREVER, o resto do
+    /// elemento é zero (nunca há extensão de sinal).
+    record SveFpUnary(
+            Op op,
+            /// Formato/largura de ORIGEM: `1` = 16 bits, `2` = 32, `3` = 64 (FP ou inteiro, conforme a operação).
+            int source,
+            /// Formato/largura de DESTINO, na mesma codificação; `0` = BFloat16 (só em `BFCVT`).
+            int destination,
+            /// `true` = zeroing (`_z`): elemento inativo vira zero em vez de manter o valor antigo.
+            boolean zeroing,
+            /// Vetor de destino `Zd`.
+            int rd,
+            /// Vetor de origem `Zn`.
+            int rn,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            FCVT, FCVTX, BFCVT, FCVTZS, FCVTZU, SCVTF, UCVTF,
+            FRINTN, FRINTP, FRINTM, FRINTZ, FRINTA, FRINTX, FRINTI,
+            FRINT32X, FRINT64X, FRINT32Z, FRINT64Z,
+            FRECPX, FSQRT
+        }
+        @Override public int kind() { return Kind.SVE_FP_UNARY; }
     }
 }

@@ -39,7 +39,13 @@ final class SveFloat {
     static final int RMODE_PLUS_INFINITY = 1;
     static final int RMODE_MINUS_INFINITY = 2;
     static final int RMODE_ZERO = 3;
+    /// `FPRounding_ODD` (`FCVTX`): trunca e, se inexato, força o bit menos significativo a `1`. Não existe em `FPCR.RMode`.
+    static final int RMODE_ODD = 4;
+    /// `FPRounding_TIEAWAY` (`FRINTA`): ao mais próximo, empate para longe do zero. Não existe em `FPCR.RMode`.
+    static final int RMODE_TIE_AWAY = 5;
 
+    /// `esz = 0` como formato: BFloat16 (8 bits de expoente, 7 de fração) — só como DESTINO de `BFCVT`.
+    static final int ESZ_BFLOAT16 = 0;
     static final int ESZ_HALF = 1;
     static final int ESZ_SINGLE = 2;
     static final int ESZ_DOUBLE = 3;
@@ -50,6 +56,8 @@ final class SveFloat {
     private static final int SINGLE_FRAC_BITS = 23;
     private static final int DOUBLE_EXP_BITS = 11;
     private static final int DOUBLE_FRAC_BITS = 52;
+    private static final int BFLOAT16_EXP_BITS = 8;
+    private static final int BFLOAT16_FRAC_BITS = 7;
     /// Limite do expoente de `FSCALE`: além dele qualquer formato já estourou/zerou.
     private static final int SCALE_CLAMP = 1 << 12;
 
@@ -72,6 +80,7 @@ final class SveFloat {
     private static final int DOUBLE_TOP_FRAC_BIT = 51;
 
     private static final int DIVISION_GUARD_BITS = 3;
+    private static final int SQRT_GUARD_BITS = 3;
 
     private SveFloat() {
     }
@@ -86,7 +95,9 @@ final class SveFloat {
         final int bias;
         final int maxBiasedExponent;
         final long fracMask;
-        final int rmode;
+        /// Modo de arredondamento. Mutável de propósito: `FRINTN`/`FRINTP`/…/`FCVTX` impõem o modo no opcode, e o
+        /// `Env` vive uma única instrução.
+        int rmode;
         final boolean flushToZero;
         final boolean defaultNan;
         int flags;
@@ -94,11 +105,13 @@ final class SveFloat {
         private Env(int esz, long fpcr) {
             this.esz = esz;
             this.expBits = switch (esz) {
+                case ESZ_BFLOAT16 -> BFLOAT16_EXP_BITS;
                 case ESZ_HALF -> HALF_EXP_BITS;
                 case ESZ_SINGLE -> SINGLE_EXP_BITS;
                 default -> DOUBLE_EXP_BITS;
             };
             this.fracBits = switch (esz) {
+                case ESZ_BFLOAT16 -> BFLOAT16_FRAC_BITS;
                 case ESZ_HALF -> HALF_FRAC_BITS;
                 case ESZ_SINGLE -> SINGLE_FRAC_BITS;
                 default -> DOUBLE_FRAC_BITS;
@@ -115,6 +128,13 @@ final class SveFloat {
         /// Lê o `FPCR` do core e monta o ambiente de um elemento de tamanho `esz` (`1`-`3`).
         static Env of(Aarch64Core core, int esz) {
             return new Env(esz, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.FPCR));
+        }
+
+        /// Ambiente do formato de ORIGEM de uma conversão de precisão: `FPUnpackCV` zera `FPCR.FZ16`, então uma
+        /// entrada meia-precisão denormal nunca é achatada (o `FZ` de simples/dupla continua valendo).
+        static Env ofConversionSource(Aarch64Core core, int esz) {
+            long fpcr = core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.FPCR);
+            return new Env(esz, fpcr & ~(1L << FPCR_FZ16_BIT));
         }
 
         /// Ambiente sobre um `FPCR` explícito (testes e usos sem core).
@@ -311,6 +331,9 @@ final class SveFloat {
             case RMODE_MINUS_INFINITY -> inexact && sign;
             default -> false;
         };
+        if (env.rmode == RMODE_ODD && inexact) {
+            kept = kept.or(BigInteger.ONE);
+        }
         if (up) {
             kept = kept.add(BigInteger.ONE);
         }
@@ -775,4 +798,198 @@ final class SveFloat {
         return ((long) resultExponent << env.fracBits) | (estimate << (env.fracBits - ESTIMATE_BITS));
     }
 
+
+    // ── Conversões, arredondamento a inteiro e raiz (B17.16) ─────────────────────────────────────
+
+    /// `FPConvert` entre precisões (`FCVT`, `BFCVT`; `roundToOdd` = `FCVTX`). `src` deve vir de
+    /// {@link Env#ofConversionSource} (sem `FZ16`) e `dst` é o ambiente do formato de destino, que acumula TAMBÉM as
+    /// flags da origem. NaN: `sNaN` levanta `IOC`; o resultado é o NaN de entrada com a fração re-escalada e o bit
+    /// silencioso ligado, ou o NaN padrão sob `DN`. Não modelado: `FPCR.AHP` (meia alternativa) — pendência nomeada.
+    static long convertPrecision(long bits, Env src, Env dst, boolean roundToOdd) {
+        Value v = unpack(bits, src);
+        long result;
+        switch (v.kind) {
+            case QUIET_NAN, SIGNALING_NAN -> {
+                if (v.kind == Kind.SIGNALING_NAN) {
+                    dst.flags |= FLAG_IOC;
+                }
+                result = dst.defaultNan ? dst.defaultNanBits() : convertNaN(bits, src, dst);
+            }
+            case INFINITY -> result = dst.infinity(v.sign);
+            case ZERO -> result = dst.zero(v.sign);
+            default -> {
+                int saved = dst.rmode;
+                if (roundToOdd) {
+                    dst.rmode = RMODE_ODD;
+                }
+                result = round(dst, v.sign, BigInteger.valueOf(v.mantissa), v.exponent, false);
+                dst.rmode = saved;
+            }
+        }
+        dst.flags |= src.flags;
+        src.flags = 0;
+        return result;
+    }
+
+    /// `FPConvertNaN`: sinal preservado, fração re-escalada (perde os bits baixos ao estreitar) e bit silencioso.
+    private static long convertNaN(long bits, Env src, Env dst) {
+        long fraction = bits & src.fracMask;
+        int delta = dst.fracBits - src.fracBits;
+        long rescaled = delta >= 0 ? fraction << delta : fraction >>> -delta;
+        return dst.withSign(((long) dst.maxBiasedExponent << dst.fracBits) | rescaled | dst.quietBit(), src.isNegative(bits));
+    }
+
+    /// `FPToFixed` com `fbits = 0` e arredondamento para zero (`FCVTZS`/`FCVTZU`), para um inteiro de `intBits` bits.
+    /// NaN dá `0` com `IOC`; infinito e fora de faixa saturam com `IOC` (sem `IXC`); dentro da faixa, `IXC` se houve
+    /// fração. Devolve o padrão de `intBits` bits (complemento de dois), sem estender.
+    static long toInteger(long bits, Env env, int intBits, boolean unsigned) {
+        Value v = unpack(bits, env);
+        if (v.isNaN()) {
+            env.flags |= FLAG_IOC;
+            return 0L;
+        }
+        BigInteger integer;
+        boolean inexact = false;
+        if (v.kind == Kind.INFINITY) {
+            integer = BigInteger.ONE.shiftLeft(intBits + 1); // fora de qualquer faixa: satura
+            integer = v.sign ? integer.negate() : integer;
+        } else if (v.kind == Kind.ZERO) {
+            integer = BigInteger.ZERO;
+        } else if (v.exponent >= 0) {
+            integer = BigInteger.valueOf(v.mantissa).shiftLeft(v.exponent);
+            integer = v.sign ? integer.negate() : integer;
+        } else {
+            BigInteger magnitude = BigInteger.valueOf(v.mantissa);
+            BigInteger truncated = magnitude.shiftRight(-v.exponent);
+            inexact = !truncated.shiftLeft(-v.exponent).equals(magnitude);
+            integer = v.sign ? truncated.negate() : truncated;
+        }
+        BigInteger min = unsigned ? BigInteger.ZERO : BigInteger.ONE.shiftLeft(intBits - 1).negate();
+        BigInteger max = (unsigned ? BigInteger.ONE.shiftLeft(intBits) : BigInteger.ONE.shiftLeft(intBits - 1))
+                .subtract(BigInteger.ONE);
+        if (integer.compareTo(min) < 0 || integer.compareTo(max) > 0) {
+            env.flags |= FLAG_IOC;
+            integer = integer.signum() < 0 ? min : max;
+        } else if (inexact) {
+            env.flags |= FLAG_IXC;
+        }
+        return integer.longValue() & (intBits == Long.SIZE ? -1L : (1L << intBits) - 1L);
+    }
+
+    /// `FixedToFP` com `fbits = 0` (`SCVTF`/`UCVTF`): `value` já vem estendido (com sinal ou sem) para 64 bits; o
+    /// arredondamento segue `FPCR.RMode` do `env` (formato de destino).
+    static long fromInteger(long value, boolean unsigned, Env env) {
+        BigInteger integer = unsigned ? new BigInteger(Long.toUnsignedString(value)) : BigInteger.valueOf(value);
+        if (integer.signum() == 0) {
+            return env.zero(false);
+        }
+        return round(env, integer.signum() < 0, integer.abs(), 0, false);
+    }
+
+    /// `FPRoundInt`: arredonda ao inteiro (`rounding` = um dos `RMODE_*`, inclusive `RMODE_TIE_AWAY`). `exact` liga o
+    /// `IXC` quando houve fração (`FRINTX`). Zero e infinito passam; o resultado zero mantém o sinal.
+    static long roundToIntegral(long bits, Env env, int rounding, boolean exact) {
+        Value v = unpack(bits, env);
+        switch (v.kind) {
+            case QUIET_NAN, SIGNALING_NAN -> {
+                return processNaN(v, env);
+            }
+            case INFINITY -> {
+                return env.infinity(v.sign);
+            }
+            case ZERO -> {
+                return env.zero(v.sign);
+            }
+            default -> {
+            }
+        }
+        if (v.exponent >= 0) {
+            return bits; // já é inteiro
+        }
+        int shift = -v.exponent;
+        BigInteger magnitude = BigInteger.valueOf(v.mantissa);
+        BigInteger integer = magnitude.shiftRight(shift);
+        BigInteger remainder = magnitude.subtract(integer.shiftLeft(shift));
+        boolean error = remainder.signum() != 0;
+        int againstHalf = remainder.compareTo(BigInteger.ONE.shiftLeft(shift - 1));
+        boolean up = switch (rounding) {
+            case RMODE_NEAREST -> againstHalf > 0 || (againstHalf == 0 && integer.testBit(0));
+            case RMODE_PLUS_INFINITY -> error && !v.sign;
+            case RMODE_MINUS_INFINITY -> error && v.sign;
+            case RMODE_TIE_AWAY -> againstHalf >= 0;
+            default -> false; // RMODE_ZERO
+        };
+        if (up) {
+            integer = integer.add(BigInteger.ONE);
+        }
+        if (exact && error) {
+            env.flags |= FLAG_IXC;
+        }
+        return integer.signum() == 0 ? env.zero(v.sign) : round(env, v.sign, integer, 0, false);
+    }
+
+    /// `FPRoundIntN` (`FRINT32X`/`FRINT32Z`/`FRINT64X`/`FRINT64Z`): arredonda ao inteiro que CABE em `intBits` bits
+    /// com sinal. NaN, infinito e fora de faixa levantam `IOC` (desfazendo o `IXC` do arredondamento) e devolvem
+    /// `-2^(intBits-1)` como ponto flutuante; o `IXC` é sinalizado sempre que há fração (não existe forma `exact`).
+    static long roundToIntegralBounded(long bits, Env env, int rounding, int intBits) {
+        int limit = env.bias - 1 + intBits;
+        long overflowResult = env.withSign((long) limit << env.fracBits, true);
+        Value v = unpack(bits, env);
+        if (v.isNaN() || v.kind == Kind.INFINITY) {
+            env.flags |= FLAG_IOC;
+            return overflowResult;
+        }
+        int before = env.flags;
+        long rounded = roundToIntegral(bits, env, rounding, true);
+        int exponent = (int) ((rounded >>> env.fracBits) & env.maxBiasedExponent);
+        if (exponent < limit || exponent == limit && env.isNegative(rounded) && (rounded & env.fracMask) == 0L) {
+            return rounded;
+        }
+        env.flags = before | FLAG_IOC;
+        return overflowResult;
+    }
+
+    /// `FPSqrt`: raiz quadrada exata, arredondada uma vez. Negativo não nulo (e `-∞`) é operação inválida; `√-0 = -0`.
+    static long squareRoot(long bits, Env env) {
+        Value v = unpack(bits, env);
+        switch (v.kind) {
+            case QUIET_NAN, SIGNALING_NAN -> {
+                return processNaN(v, env);
+            }
+            case ZERO -> {
+                return env.zero(v.sign);
+            }
+            case INFINITY -> {
+                return v.sign ? invalidOperation(env) : env.infinity(false);
+            }
+            default -> {
+            }
+        }
+        if (v.sign) {
+            return invalidOperation(env);
+        }
+        BigInteger radicand = BigInteger.valueOf(v.mantissa);
+        int exponent = v.exponent;
+        if ((exponent & 1) != 0) {
+            radicand = radicand.shiftLeft(1);
+            exponent--;
+        }
+        int extra = Math.max(0, 2 * (env.fracBits + SQRT_GUARD_BITS) - radicand.bitLength());
+        extra += extra & 1; // o expoente tem que continuar par
+        radicand = radicand.shiftLeft(extra);
+        exponent -= extra;
+        BigInteger root = radicand.sqrt();
+        return round(env, false, root, exponent / 2, !root.multiply(root).equals(radicand));
+    }
+
+    /// `FPRecpX` (`FRECPX`): inverte o expoente e zera a fração — `exp = 0` vira o maior expoente finito. NaN propaga.
+    static long reciprocalExponent(long bits, Env env) {
+        Value v = unpack(bits, env);
+        if (v.isNaN()) {
+            return processNaN(v, env);
+        }
+        long exponent = (bits >>> env.fracBits) & env.maxBiasedExponent;
+        long inverted = exponent == 0L ? env.maxBiasedExponent - 1L : ~exponent & env.maxBiasedExponent;
+        return env.withSign(inverted << env.fracBits, env.isNegative(bits));
+    }
 }

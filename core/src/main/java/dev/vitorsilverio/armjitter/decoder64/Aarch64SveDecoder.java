@@ -271,6 +271,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveFpArithmeticDecoder floatingPoint;
     private final Aarch64SveFpMultiplyAddDecoder floatingPointMultiplyAdd;
     private final Aarch64SveFpCompareReduceDecoder floatingPointCompareReduce;
+    private final Aarch64SveFpUnaryDecoder floatingPointUnary;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -281,6 +282,7 @@ final class Aarch64SveDecoder {
         this.floatingPoint = new Aarch64SveFpArithmeticDecoder(architecture);
         this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder();
         this.floatingPointCompareReduce = new Aarch64SveFpCompareReduceDecoder(architecture);
+        this.floatingPointUnary = new Aarch64SveFpUnaryDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -306,11 +308,19 @@ final class Aarch64SveDecoder {
                     yield arithmetic;
                 }
                 Ir64Op multiplyAdd = floatingPointMultiplyAdd.decodePrefix65(word, address);
-                yield multiplyAdd != null ? multiplyAdd : floatingPointCompareReduce.decodePrefix65(word, address);
+                if (multiplyAdd != null) {
+                    yield multiplyAdd;
+                }
+                Ir64Op compareReduce = floatingPointCompareReduce.decodePrefix65(word, address);
+                yield compareReduce != null ? compareReduce : floatingPointUnary.decode(word, address);
             }
             case PREFIX_FP_INDEXED_COMPLEX -> {
                 Ir64Op indexed = floatingPointMultiplyAdd.decodePrefix64(word, address);
-                yield indexed != null ? indexed : floatingPointCompareReduce.decodePrefix64(word, address);
+                if (indexed != null) {
+                    yield indexed;
+                }
+                Ir64Op quadword = floatingPointCompareReduce.decodePrefix64(word, address);
+                yield quadword != null ? quadword : floatingPointUnary.decode(word, address);
             }
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);

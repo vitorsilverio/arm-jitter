@@ -8,6 +8,7 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, unárias de ponto flutuante predicadas** (`B17.16`): as 105 linhas de `### SVE FP Unary Operations Predicated Group` — `FCVT`/`FCVTX`/`BFCVT` (conversão de precisão), `FCVTZS`/`FCVTZU` (FP→inteiro, saturante), `SCVTF`/`UCVTF`, `FRINTN`/`P`/`M`/`Z`/`A`/`X`/`I`, `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`, `FEAT_SVE2p2`); `Ir64Op.SveFpUnary` (Kind 170), tabela de decodificação gerada do `.decode`. Achados: as 16 `FRINT32/64` são SVE2p2 (não FRINTTS); `FPUnpackCV` zera `FZ16`; `FRINTA`/`FCVTX` ganharam modos de arredondamento internos (`docs/COBERTURA-ISA.md` inalterada)
 - **SVE, comparação e reduções de ponto flutuante** (`B17.15`): `FCMGE`/`FCMGT`/`FCMEQ`/`FCMNE`/`FCMUO`/`FACGE`/`FACGT` (vetor×vetor), `FCMGE`/`FCMGT`/`FCMLT`/`FCMLE`/`FCMEQ`/`FCMNE` com zero, reduções rápidas em árvore (`FADDV`/`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV`), as cinco `*QV` por segmento de 128 bits (`FEAT_SVE2p1`) e `FADDA` serial — as 24 linhas, em meia/simples/dupla. A comparação FP não altera `NZCV` (só pode sujar o `FPSR`); `FADDA` é ilegal em streaming. `Ir64Op.SveFpCompareReduce` (Kind 169). `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, multiply-add de ponto flutuante e aritmética complexa** (`B17.14`): `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados (as duas ordens de operando: `FMAD`/`FMSB`/`FNMAD`/`FNMSB`), `FMLA`/`FMLS`/`FMUL` por elemento indexado (índice por segmento de 128 bits), `FCADD`, `FCMLA` e `FCMLA` indexado — 21 das 24 linhas, em meia/simples/dupla, com multiplicação-acumulação FUNDIDA sobre o `SveFloat`. As 3 linhas indexadas de `esz = 0` (e a face `esz = 0` das predicadas) são BFloat16 (`FEAT_SVE_B16B16`) e ficam recusadas até a `B17.27`. `Ir64Op.SveFpMultiplyAdd` (Kind 168). `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, aritmética de ponto flutuante** (`B17.13`): `FADD`/`FSUB`/`FMUL` (não predicadas, predicadas e com imediato de 1 bit), `FSUBR`, `FDIV`/`FDIVR`, `FMAXNM`/`FMINNM`/`FMAX`/`FMIN`, `FABD`, `FSCALE`, `FMULX`, `FAMAX`/`FAMIN` (`FEAT_FAMINMAX`), `FTSMUL`, `FTMAD`, `FRECPS`/`FRSQRTS` e as estimativas `FRECPE`/`FRSQRTE` — 32 encodings, em meia/simples/dupla precisão. `SveFloat` traz ponto flutuante IEEE exato com `FPCR.RMode`, `FZ`/`FZ16`, `DN` e as flags cumulativas do `FPSR` (o A64 escalar/AdvSIMD ainda não as modela). `Ir64Op.SveFpArithmetic` (Kind 167). `docs/COBERTURA-ISA.md` inalterada.
@@ -71,6 +72,7 @@ Cobertura de ISA (`docs/COBERTURA-ISA.md`) desde o `1.2.0`: **global 71% → 73%
 (`tasks/README.md`: global ≥5pp OU arquitetura ≥10pp).
 
 ### Adicionado
+- **SVE, unárias de ponto flutuante predicadas** (`B17.16`): as 105 linhas de `### SVE FP Unary Operations Predicated Group` — `FCVT`/`FCVTX`/`BFCVT` (conversão de precisão), `FCVTZS`/`FCVTZU` (FP→inteiro, saturante), `SCVTF`/`UCVTF`, `FRINTN`/`P`/`M`/`Z`/`A`/`X`/`I`, `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`, `FEAT_SVE2p2`); `Ir64Op.SveFpUnary` (Kind 170), tabela de decodificação gerada do `.decode`. Achados: as 16 `FRINT32/64` são SVE2p2 (não FRINTTS); `FPUnpackCV` zera `FZ16`; `FRINTA`/`FCVTX` ganharam modos de arredondamento internos (`docs/COBERTURA-ISA.md` inalterada)
 - **A64 — Cryptographic Extension** (`B8.11`/`B8.11b`): `AESE`/`AESD`/`AESMC`/`AESIMC`/`PMULL`/
   `PMULL2` e `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA1H`/`SHA1SU1`/`SHA256H`/`SHA256H2`/`SHA256SU0`/
   `SHA256SU1` (Cortex-A53 tem a Crypto Extension base).
@@ -87,6 +89,7 @@ Cobertura de ISA (`docs/COBERTURA-ISA.md`) desde o `1.2.0`: **global 71% → 73%
 ## [1.2.0] — 2026-08-26
 
 ### Adicionado
+- **SVE, unárias de ponto flutuante predicadas** (`B17.16`): as 105 linhas de `### SVE FP Unary Operations Predicated Group` — `FCVT`/`FCVTX`/`BFCVT` (conversão de precisão), `FCVTZS`/`FCVTZU` (FP→inteiro, saturante), `SCVTF`/`UCVTF`, `FRINTN`/`P`/`M`/`Z`/`A`/`X`/`I`, `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`, `FEAT_SVE2p2`); `Ir64Op.SveFpUnary` (Kind 170), tabela de decodificação gerada do `.decode`. Achados: as 16 `FRINT32/64` são SVE2p2 (não FRINTTS); `FPUnpackCV` zera `FZ16`; `FRINTA`/`FCVTX` ganharam modos de arredondamento internos (`docs/COBERTURA-ISA.md` inalterada)
 - **`Gdb64Server`**: stub do protocolo de série remota GDB para {@code Aarch64Core} — irmão A64
   do `GdbServer` (ARM32) já existente, mesma capacidade (ler/escrever registradores e memória,
   breakpoints em PC, watchpoints de escrita, step/continue), layout de registrador `g`/`p`/`P`
@@ -111,6 +114,7 @@ Marco de cobertura de ISA (`docs/COBERTURA-ISA.md`): **global 53% → 59%**, **A
 desde o `1.0.0` — dispara release conforme a regra do `tasks/README.md`.
 
 ### Adicionado
+- **SVE, unárias de ponto flutuante predicadas** (`B17.16`): as 105 linhas de `### SVE FP Unary Operations Predicated Group` — `FCVT`/`FCVTX`/`BFCVT` (conversão de precisão), `FCVTZS`/`FCVTZU` (FP→inteiro, saturante), `SCVTF`/`UCVTF`, `FRINTN`/`P`/`M`/`Z`/`A`/`X`/`I`, `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`, `FEAT_SVE2p2`); `Ir64Op.SveFpUnary` (Kind 170), tabela de decodificação gerada do `.decode`. Achados: as 16 `FRINT32/64` são SVE2p2 (não FRINTTS); `FPUnpackCV` zera `FZ16`; `FRINTA`/`FCVTX` ganharam modos de arredondamento internos (`docs/COBERTURA-ISA.md` inalterada)
 - **EL2/EL3 completos** (épico B10): estado de exceção generalizado para os 4 níveis
   (`Aarch64ExceptionLevel`), registradores de sistema de EL2 e EL3, `HVC` (entra em EL2) e
   `SMC` (entra em EL3) reais com a árvore de decisão do manual, `AT` (`S1E0*`/`S1E1*` e
@@ -153,6 +157,7 @@ Primeira versão publicada. Consolida o que já estava em produção nos emulado
 `gbaemu` e `ndsemu`.
 
 ### Adicionado
+- **SVE, unárias de ponto flutuante predicadas** (`B17.16`): as 105 linhas de `### SVE FP Unary Operations Predicated Group` — `FCVT`/`FCVTX`/`BFCVT` (conversão de precisão), `FCVTZS`/`FCVTZU` (FP→inteiro, saturante), `SCVTF`/`UCVTF`, `FRINTN`/`P`/`M`/`Z`/`A`/`X`/`I`, `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`, `FEAT_SVE2p2`); `Ir64Op.SveFpUnary` (Kind 170), tabela de decodificação gerada do `.decode`. Achados: as 16 `FRINT32/64` são SVE2p2 (não FRINTTS); `FPUnpackCV` zera `FZ16`; `FRINTA`/`FCVTX` ganharam modos de arredondamento internos (`docs/COBERTURA-ISA.md` inalterada)
 - Pipeline `cache → decode → lift IR → otimizar → emit` com três backends:
   `INTERPRETED_IR` (oráculo/debug), `JVM_BYTECODE` (ASM, default recomendado,
   tiered com tier frio interpretado + tier quente compilado, fallback `PER_OP`,
