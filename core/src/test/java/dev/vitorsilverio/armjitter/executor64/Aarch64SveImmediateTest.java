@@ -298,6 +298,11 @@ class Aarch64SveImmediateTest {
     }
 
     @Test
+    void anSveClassWordWithAnUnknownPrefixIsRefused() {
+        assertTrue(refused(0x24000000), "prefixo 0x24 está na classe SVE mas não é de nenhum grupo");
+    }
+
+    @Test
     void otherPatternsOfTheSamePrefixStayForOtherGroups() {
         assertTrue(refused(0x05a01000), "prefixo 0x05 com bits[21:20] = 10 (CPY escalar etc.) não é deste grupo");
         assertTrue(refused(0x05300000), "prefixo 0x05 com bits[21:18] = 0011");
