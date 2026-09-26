@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, comparações** (`B17.9`): as 26 comparações inteiras que produzem predicado (vetor×vetor `CMPHS`/`HI`/`GE`/`GT`/`EQ`/`NE`, as 10 de elemento
+  largo com `LT`/`LE`/`LO`/`LS` reais, imediato com sinal `imm:s5` e sem sinal `imm:7`) e, dos escalares, `CTERM`, `WHILELT`/`LE`/`LO`/`LS`
+  (SVE), `WHILEGE`/`GT`/`HS`/`HI` e `WHILERW`/`WHILEWR` (SVE2) e as duas formas de par `WHILE*` `{Pd, Pd+1}` (SVE2.1) — 32 encodings. Toda comparação
+  seta `NZCV` pela mesma `PredTest` da B17.4. `WHILE_lt|gt_cnt2|cnt4` e `PEXT` (predicado-como-contador) seguem recusadas, pendência nomeada.
+  `Ir64Op.SveCompare` (Kind 164) + `SveScalarCompare` (Kind 165) + `SveCompareOps`. `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, permutação não predicada** (`B17.10`): `EXT`/`EXT_sve2`, `DUP` (de `Xn|SP` e indexado, com quadword), `DUPQ`, `EXTQ`, `INSR` (de `Xm` e de `Vm`),
   `REV`, `PMOV` (predicado↔vetor), `TBL`/`TBL_sve2`/`TBX`/`TBLQ`/`TBXQ`, `SUNPK*`/`UUNPK*` e as três granularidades de `ZIP`/`UZP`/`TRN` (vetor inteiro,
   elemento de 128 bits e dentro do segmento) — 42 encodings. As 6 formas `_q` exigem a nova `Aarch64Feature.F64MM` (não SVE2, como a spec supunha),

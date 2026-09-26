@@ -28,6 +28,7 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_ELEMENT_COUNT = 0x04;
     private static final int PREFIX_IMMEDIATE = 0x05;
     private static final int PREFIX_MULTIPLY = 0x44;
+    private static final int PREFIX_COMPARE = 0x24;
 
     // ── Campos comuns ─────────────────────────────────────────────────────────────────────────────
     private static final int ESZ_SHIFT = 22;
@@ -263,11 +264,13 @@ final class Aarch64SveDecoder {
     private final Aarch64Architecture architecture;
     private final Aarch64SveMultiplyDecoder multiply;
     private final Aarch64SvePermuteDecoder permute;
+    private final Aarch64SveCompareDecoder compare;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
         this.multiply = new Aarch64SveMultiplyDecoder(architecture);
         this.permute = new Aarch64SvePermuteDecoder(architecture);
+        this.compare = new Aarch64SveCompareDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -280,8 +283,13 @@ final class Aarch64SveDecoder {
         return switch ((word >>> PREFIX_SHIFT) & PREFIX_MASK) {
             case PREFIX_PREDICATE -> {
                 Ir64Op predicate = decodePredicateGroup(word, address);
-                yield predicate != null ? predicate : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
+                if (predicate != null) {
+                    yield predicate;
+                }
+                Ir64Op comparison = compare.decodePrefix25(word, address);
+                yield comparison != null ? comparison : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
             }
+            case PREFIX_COMPARE -> compare.decodePrefix24(word, address);
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
                 yield immediate != null ? immediate : permute.decodePrefix05(word, address);

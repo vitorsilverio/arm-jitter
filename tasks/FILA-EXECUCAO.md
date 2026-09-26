@@ -32,17 +32,17 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.10 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.9 fechada — tabela de ISA segue em 100%)
 
-**`B17.10` (SVE permutação não predicada: `EXT`/`DUP`/`DUPQ`/`EXTQ`/`INSR`/`REV`/`PMOV`/`TBL`/`TBX`/`UNPK` + `ZIP`/`UZP`/`TRN` nas 3 granularidades, 42 encodings)** fechada — G5 verde.
-Achado: as 6 `_q` são `FEAT_F64MM` (constante nova), não SVE2. `docs/COBERTURA-ISA.md` inalterada (23523/23523). Ver **Resultado** na task.
+**`B17.9` (SVE comparações inteiras + `WHILE*`/`CTERM`: 32 de 38 encodings; 6 de predicado-como-contador = pendência nomeada)** fechada — G5 verde.
+Achado: `WHILE_gt`/`WHILE_ptr` são SVE2 (spec dizia SVE); `docs/COBERTURA-ISA.md` inalterada (23523/23523). Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.9`/`B17.11`/`B17.13`/`B17.24`** (dependem
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.11`/`B17.13`/`B17.24`** (dependem
 de B17.4, B17.6 ou B17.10, todas fechadas) e **`B17.20`** (depende de B17.6) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da

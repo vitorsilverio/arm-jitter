@@ -81,7 +81,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
-        Ir64Op.SveAddress, Ir64Op.SvePermute {
+        Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -458,6 +458,10 @@ public sealed interface Ir64Op permits
         public static final int SVE_ADDRESS = 162;
         /// B17.10: permutação SVE não predicada (`EXT`/`DUP`/`INSR`/`REV`/`TBL`/`UNPK`/`ZIP`/`UZP`/`TRN`/`PMOV`…) — ver {@link SvePermute}.
         public static final int SVE_PERMUTE = 163;
+        /// B17.9: comparação SVE inteira que produz predicado (vetor×vetor, elemento largo, imediato) — ver {@link SveCompare}.
+        public static final int SVE_COMPARE = 164;
+        /// B17.9: `WHILE*`/`CTERM` (comparação de escalares: contagem-limite e terminação de laço) — ver {@link SveScalarCompare}.
+        public static final int SVE_SCALAR_COMPARE = 165;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4261,5 +4265,64 @@ public sealed interface Ir64Op permits
             ZIPQ1, ZIPQ2, UZPQ1, UZPQ2
         }
         @Override public int kind() { return Kind.SVE_PERMUTE; }
+    }
+
+    /// Comparação SVE inteira que PRODUZ UM PREDICADO (B17.9): `Pd[e] = Pg[e] && (Zn[e] <cond> operando)`, e as flags
+    /// `NZCV` saem SEMPRE (não existe forma sem `S`) pelo mesmo `PredTest` da B17.4. O operando é `Zm[e]` (vetor),
+    /// o elemento de 64 bits de `Zm` que cobre o elemento (largo, `esz != 3`) ou um imediato.
+    ///
+    /// `LT`/`LE`/`LO`/`LS` existem como instrução real nas formas larga e imediata (o operando não pode ser trocado); na
+    /// forma vetorial são só alias de assembler e o decoder nunca as produz.
+    record SveCompare(
+            Cond cond,
+            Form form,
+            /// Tamanho do elemento comparado (`0` = byte … `3` = doubleword; nunca `3` na forma larga).
+            int esz,
+            /// Predicado de destino (`P0`-`P15`).
+            int pd,
+            /// Predicado governante (`P0`-`P7`).
+            int pg,
+            /// Vetor `Zn`.
+            int rn,
+            /// Vetor `Zm` (formas vetorial e larga); sem significado no imediato.
+            int rm,
+            /// Imediato: COM sinal de 5 bits nas comparações com sinal (`-16..15`), SEM sinal de 7 bits nas sem sinal
+            /// (`0..127`); sem significado nas demais formas.
+            int imm,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// A condição. `EQ`/`NE` não distinguem sinal no resultado, mas o QEMU/manual comparam com sinal estendido nas formas
+        /// largas (ver o executor); `GE`/`GT`/`LT`/`LE` são COM sinal e `HS`/`HI`/`LO`/`LS` SEM sinal.
+        public enum Cond { EQ, NE, GE, GT, LT, LE, HS, HI, LO, LS }
+        /// A origem do segundo operando.
+        public enum Form { VECTOR, WIDE, IMMEDIATE }
+        @Override public int kind() { return Kind.SVE_COMPARE; }
+    }
+
+    /// Comparação SVE de ESCALARES (B17.9): `WHILE*` produz um predicado a partir de dois `Xn`/`Wn` (o que faz um laço VLA
+    /// terminar sem conhecer o `VL`), `CTERM` só seta flags. `PEXT` e `WHILE*` que escrevem predicado-como-contador
+    /// (`PN8`-`PN15`) NÃO entram aqui: dependem do estado de predicado-como-contador (pendência nomeada).
+    record SveScalarCompare(
+            Op op,
+            /// Tamanho do elemento do predicado (`0` = byte … `3` = doubleword); sem significado em `CTERM`.
+            int esz,
+            /// Predicado de destino (`P0`-`P15`); nas formas `_PAIR`, o PRIMEIRO do par (sempre par). Sem significado em `CTERM`.
+            int rd,
+            /// Primeiro escalar (`Xn`; `31` = `XZR`).
+            int rn,
+            /// Segundo escalar (`Xm`; `31` = `XZR`).
+            int rm,
+            /// `true` = operandos de 64 bits; `false` = 32 bits. Sempre `true` nas `_PAIR`; sem significado em `WHILE_PTR`.
+            boolean sf,
+            /// `true` = comparação SEM sinal (`WHILELO`/`WHILELS`/`WHILEHI`/`WHILEHS`). Sem significado em `WHILE_PTR`/`CTERM`.
+            boolean unsigned,
+            /// O bit 4 do encoding, que muda de nome conforme a operação: `eq` em `WHILE_LT`/`WHILE_GT` (`LT`≠`LE`; em `GT`
+            /// o sentido é INVERTIDO: `eq = 0` é `GE`), `rw` em `WHILE_PTR` (`1` = `WHILERW`), `ne` em `CTERM`.
+            boolean flag,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo. `WHILE_GT` (`WHILEGE`/`WHILEGT`/`WHILEHS`/`WHILEHI`) é SVE2; as `_PAIR`, SVE2.1.
+        public enum Op { WHILE_LT, WHILE_GT, WHILE_PTR, WHILE_LT_PAIR, WHILE_GT_PAIR, CTERM }
+        @Override public int kind() { return Kind.SVE_SCALAR_COMPARE; }
     }
 }

@@ -61,11 +61,11 @@ final class SvePredicateOps {
     }
 
     /// Predicado em bits (`PL = VL/8`), no `VL` efetivo do core.
-    private static int predicateBits(Aarch64Core core) {
+    static int predicateBits(Aarch64Core core) {
         return core.vectorLengthBytes();
     }
 
-    private static long[] read(Aarch64ScalableRegisters regs, int reg) {
+    static long[] read(Aarch64ScalableRegisters regs, int reg) {
         long[] out = new long[regs.wordsPerPredicate()];
         for (int w = 0; w < out.length; w++) {
             out[w] = regs.pWord(reg, w);
@@ -73,17 +73,17 @@ final class SvePredicateOps {
         return out;
     }
 
-    private static void write(Aarch64ScalableRegisters regs, int reg, long[] value) {
+    static void write(Aarch64ScalableRegisters regs, int reg, long[] value) {
         for (int w = 0; w < value.length; w++) {
             regs.setPWord(reg, w, value[w]);
         }
     }
 
-    private static boolean bit(long[] predicate, int index) {
+    static boolean bit(long[] predicate, int index) {
         return ((predicate[index >>> WORD_INDEX_SHIFT] >>> (index & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
-    private static void setBit(long[] predicate, int index, boolean value) {
+    static void setBit(long[] predicate, int index, boolean value) {
         long mask = 1L << (index & WORD_BIT_MASK);
         int word = index >>> WORD_INDEX_SHIFT;
         predicate[word] = value ? predicate[word] | mask : predicate[word] & ~mask;
