@@ -81,7 +81,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
-        Ir64Op.SveAddress {
+        Ir64Op.SveAddress, Ir64Op.SvePermute {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -456,6 +456,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_MULTIPLY_INDEXED = 161;
         /// B17.12: `ADDVL`/`ADDPL`/`RDVL` e `ADR` vetorial — ver {@link SveAddress}.
         public static final int SVE_ADDRESS = 162;
+        /// B17.10: permutação SVE não predicada (`EXT`/`DUP`/`INSR`/`REV`/`TBL`/`UNPK`/`ZIP`/`UZP`/`TRN`/`PMOV`…) — ver {@link SvePermute}.
+        public static final int SVE_PERMUTE = 163;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4228,5 +4230,36 @@ public sealed interface Ir64Op permits
         /// elemento de 64 bits e offset de 32 (com/sem sinal); `P32`/`P64` têm offset do tamanho do elemento.
         public enum Op { ADDVL, ADDPL, RDVL, ADR_S32, ADR_U32, ADR_P32, ADR_P64 }
         @Override public int kind() { return Kind.SVE_ADDRESS; }
+    }
+
+    /// Permutação SVE não predicada (B17.10): `EXT`/`DUP`/`DUPQ`/`EXTQ`/`INSR`/`REV`/`PMOV`/`TBL`/`TBX`/`UNPK` e as três
+    /// granularidades de intercalação — vetor INTEIRO (`ZIP1`…`TRN2`), elemento de 128 bits (`*_Q`, `FEAT_F64MM`) e
+    /// DENTRO de cada segmento de 128 bits (`ZIPQ1`…`UZPQ2`, `FEAT_SVE2p1`). Em `VL = 128` as três coincidem.
+    record SvePermute(
+            Op op,
+            /// Tamanho do elemento (`0` = byte … `3` = doubleword; em `DUP_X` também `4` = quadword). Sem significado nas
+            /// operações que não têm elemento (`EXT`, `EXTQ`, `PMOV_*`) e nas `*_Q`.
+            int esz,
+            /// Destino: `Zd`, ou `Pd` em `PMOV_PV`. Nas formas destrutivas (`EXT`, `EXTQ`) é também o operando baixo.
+            int rd,
+            /// Fonte: `Zn` (primeiro registrador da tabela em `TBL_SVE2`/`EXT_SVE2`), `Xn|SP` em `DUP_S`, `Pn` em
+            /// `PMOV_VP`. Sem significado em `EXT`, `EXTQ` e `INSR_*`.
+            int rn,
+            /// Segundo operando: `Zm` (`EXT`/`EXTQ` o trazem no campo `9:5`), `Vm`/`Xm` do `INSR_*`.
+            int rm,
+            /// Imediato: deslocamento em bytes (`EXT*`), índice do elemento (`DUP_X`/`DUPQ`) ou da fatia do vetor (`PMOV_*`).
+            int imm,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            EXT, EXT_SVE2, EXTQ, DUP_S, DUP_X, DUPQ, INSR_F, INSR_R, REV, PMOV_PV, PMOV_VP,
+            TBL, TBL_SVE2, TBX, TBLQ, TBXQ,
+            SUNPKLO, SUNPKHI, UUNPKLO, UUNPKHI,
+            ZIP1, ZIP2, UZP1, UZP2, TRN1, TRN2,
+            ZIP1_Q, ZIP2_Q, UZP1_Q, UZP2_Q, TRN1_Q, TRN2_Q,
+            ZIPQ1, ZIPQ2, UZPQ1, UZPQ2
+        }
+        @Override public int kind() { return Kind.SVE_PERMUTE; }
     }
 }

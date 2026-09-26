@@ -262,10 +262,12 @@ final class Aarch64SveDecoder {
 
     private final Aarch64Architecture architecture;
     private final Aarch64SveMultiplyDecoder multiply;
+    private final Aarch64SvePermuteDecoder permute;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
         this.multiply = new Aarch64SveMultiplyDecoder(architecture);
+        this.permute = new Aarch64SvePermuteDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -280,8 +282,14 @@ final class Aarch64SveDecoder {
                 Ir64Op predicate = decodePredicateGroup(word, address);
                 yield predicate != null ? predicate : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
             }
-            case PREFIX_IMMEDIATE -> Aarch64SveImmediateDecoder.decodePrefix05(word, address);
-            case PREFIX_MULTIPLY -> multiply.decode(word, address);
+            case PREFIX_IMMEDIATE -> {
+                Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
+                yield immediate != null ? immediate : permute.decodePrefix05(word, address);
+            }
+            case PREFIX_MULTIPLY -> {
+                Ir64Op product = multiply.decode(word, address);
+                yield product != null ? product : permute.decodePrefix44(word, address);
+            }
             case PREFIX_ELEMENT_COUNT -> {
                 Ir64Op addressing = decodeAddressing(word, address);
                 if (addressing != null) {

@@ -136,6 +136,11 @@ public enum Aarch64Feature {
     /// `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. Gate de `FIRSTP`/`LASTP`
     /// (B17.4).
     SVE2_2,
+    /// `FEAT_F64MM` — multiplicação de matriz de ponto flutuante de 64 bits e as formas `_q` de permutação SVE
+    /// (`ZIP1`/`ZIP2`/`UZP1`/`UZP2`/`TRN1`/`TRN2` com elemento de 128 bits, B17.10). Nenhum preset a declara; entra
+    /// por `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. `ID_AA64ZFR0_EL1.F64MM` continua 0
+    /// até a B17.23 fechar `FMMLA` (a leitura do registrador nunca anuncia mais do que o decoder aceita).
+    F64MM,
     /// `FEAT_SME` — Scalable Matrix Extension (armazenamento `ZA`, modo streaming, `SVCR`/`SMCR_ELx`).
     /// ARMv9.2-A. Desde a B18.1 o estado existe no `Aarch64Core` (`SVCR`, `SMCR_EL1/2/3`, banco `ZA`
     /// preguiçoso, `ID_AA64PFR1_EL1.SME`); ainda **sem efeito de modo streaming** (B18.2) e sem

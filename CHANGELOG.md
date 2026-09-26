@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, permutação não predicada** (`B17.10`): `EXT`/`EXT_sve2`, `DUP` (de `Xn|SP` e indexado, com quadword), `DUPQ`, `EXTQ`, `INSR` (de `Xm` e de `Vm`),
+  `REV`, `PMOV` (predicado↔vetor), `TBL`/`TBL_sve2`/`TBX`/`TBLQ`/`TBXQ`, `SUNPK*`/`UUNPK*` e as três granularidades de `ZIP`/`UZP`/`TRN` (vetor inteiro,
+  elemento de 128 bits e dentro do segmento) — 42 encodings. As 6 formas `_q` exigem a nova `Aarch64Feature.F64MM` (não SVE2, como a spec supunha),
+  `VL >= 256` e não-streaming; `ZIPQ*`/`UZPQ*`/`TBLQ`/`EXTQ`/`DUPQ`/`PMOV`/`TBXQ`, `FEAT_SVE2p1`. `Ir64Op.SvePermute` (Kind 163) + `SvePermuteOps`.
+  `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, endereçamento** (`B17.12`): `ADDVL`/`ADDPL`/`RDVL` (`SP`-capazes; fatores `VL/8` e `VL/64` lidos do core) e as 4 formas de `ADR` vetorial
   (`S32`/`U32`/`P32`/`P64`) — 7 encodings; `ADDSVL`/`ADDSPL`/`RDSVL` (SME) seguem recusadas até a B18. `Ir64Op.SveAddress` (Kind 162) + `SveAddressOps`.
   `docs/COBERTURA-ISA.md` inalterada.

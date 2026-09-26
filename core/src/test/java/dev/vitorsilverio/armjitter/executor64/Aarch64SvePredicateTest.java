@@ -323,7 +323,7 @@ class Aarch64SvePredicateTest {
             0x0420c3e1, // SQINCH vetorial com esz = 0
             0x2584c861, // BRKPA com o bit 23 ligado (não existe)
             0x25504871, // BRKA /M com S = 1 (as formas /M não têm S)
-            0x05a03800, // outra classe SVE ainda não implementada (prefixo 0x05)
+            0x05224020, // ZIP1 de PREDICADO (B17.11): outra classe SVE ainda não implementada (prefixo 0x05)
             0x04200800 // prefixo 0x04, opcode 000010 (buraco entre SUB e SQADD): não alocado
     })
     void unallocatedOrPendingEncodingsAreRefused(int word) {
