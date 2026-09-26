@@ -8,6 +8,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
 ### Adicionado
+- **SVE, inteiro sem predicado** (`B17.5`): `ADD`/`SUB`/`SQADD`/`UQADD`/`SQSUB`/`UQSUB`, lógica de vetor (`AND`/`ORR`/`EOR`/`BIC`),
+  shifts por imediato e por elemento largo, `MLA`/`MLS`/`MAD`/`MSB` (predicados), `MOVPRFX` (executado como `MOV`, como o QEMU),
+  `FEXPA`/`FTSSEL` (tabelas do manual) e `INDEX` (4 formas), mais as 7 operações SVE2 (`XAR`/`EOR3`/`BCAX`/`BSL`/`BSL1N`/`BSL2N`/`NBSL`,
+  atrás de `Aarch64Feature.SVE2`). `Ir64Op.SveIntegerUnpredicated` (Kind 157) + `SveIntegerOps`; sempre no `VL` efetivo.
+  Pendência nomeada: `FPCR.AH` (FEAT_AFP) no `FTSSEL`. `docs/COBERTURA-ISA.md` inalterada.
 - **SVE, predicados** (`B17.4`): lógica de predicado (`AND`/`BIC`/`EOR`/`SEL`/`ORR`/`ORN`/`NOR`/`NAND`, com sufixo `S`), `PTEST`,
   `PTRUE`/`PTRUES` (32 padrões `pat:5`), `PFALSE`, `SETFFR`/`RDFFR`/`WRFFR`, `PFIRST`/`PNEXT`, partition break
   (`BRKA`/`BRKB`/`BRKPA`/`BRKPB`/`BRKN`), contagem por predicado (`CNTP`, `INCP`/`DECP`, `SQINCP`/`UQINCP`…, e `FIRSTP`/`LASTP`

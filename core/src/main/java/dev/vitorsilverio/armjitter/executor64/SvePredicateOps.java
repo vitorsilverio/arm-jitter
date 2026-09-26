@@ -46,7 +46,7 @@ final class SvePredicateOps {
 
     /// Checagem de acesso da instrução: SME (`CheckSMEEnabled`) em modo streaming, SVE
     /// (`CPACR_EL1.ZEN`/`CPTR_ELx`) fora dele. `false` = a exceção JÁ foi tomada.
-    private static boolean accessAllowed(Aarch64Core core, long instructionAddress) {
+    static boolean accessAllowed(Aarch64Core core, long instructionAddress) {
         return core.streamingModeEnabled()
                 ? core.smeEnabledCheck(instructionAddress)
                 : core.sveAccessCheck(instructionAddress);
@@ -54,7 +54,7 @@ final class SvePredicateOps {
 
     /// `FFR` não existe em modo streaming: as 4 instruções que o tocam são `UNDEFINED` ali, a menos
     /// que `FEAT_SME_FA64` esteja efetivo (`TRANS_FEAT_NONSTREAMING` do QEMU).
-    private static void requireNonStreaming(Aarch64Core core) {
+    static void requireNonStreaming(Aarch64Core core) {
         if (core.streamingRestrictionApplies()) {
             throw new Aarch64UndefinedInstructionException();
         }

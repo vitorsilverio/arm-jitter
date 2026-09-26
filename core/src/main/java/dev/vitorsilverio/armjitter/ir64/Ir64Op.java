@@ -79,7 +79,7 @@ public sealed interface Ir64Op permits
         Ir64Op.VectorFp8FusedMultiplyAddLongByElement, Ir64Op.VectorFp8DotProduct,
         Ir64Op.VectorFp8DotProductByElement, Ir64Op.StreamingModeControl, Ir64Op.StreamingRestricted,
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
-        Ir64Op.SvePredicateCount, Ir64Op.SveElementCount {
+        Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -442,6 +442,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_PREDICATE_COUNT = 155;
         /// B17.4: `CNTB`/`INCB`/`SQINCB`… — ver {@link SveElementCount}.
         public static final int SVE_ELEMENT_COUNT = 156;
+        /// B17.5: inteiro SVE sem predicado governante (`ADD`/`AND`/`XAR`/`INDEX`…) — ver {@link SveIntegerUnpredicated}.
+        public static final int SVE_INTEGER_UNPREDICATED = 157;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4022,5 +4024,40 @@ public sealed interface Ir64Op permits
         /// Operação do grupo.
         public enum Op { CNT, INCDEC_SCALAR, SINCDEC_SCALAR_32, SINCDEC_SCALAR_64, INCDEC_VECTOR, SINCDEC_VECTOR }
         @Override public int kind() { return Kind.SVE_ELEMENT_COUNT; }
+    }
+
+    /// Inteiro SVE sem predicado governante (B17.5): aritmética/lógica/shift por elemento, lógica
+    /// ternária SVE2, `MLA`/`MLS`/`MAD`/`MSB` (estes COM predicado `pg`, apesar do grupo), `MOVPRFX`,
+    /// `FEXPA`/`FTSSEL` e `INDEX`. Os 34 encodings do recorte colapsam num `Kind` só; {@link #op()} escolhe.
+    record SveIntegerUnpredicated(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword). Nas formas bit-a-bit vale `0` e não é usado.
+            int esz,
+            /// Registrador vetorial destino (`Zd`/`Zdn`/`Zda`).
+            int rd,
+            /// Primeira fonte (`Zn`); nas formas destrutivas é o próprio `rd`; em `INDEX` é o `Xn` do início.
+            int rn,
+            /// Segunda fonte (`Zm`); em `INDEX` é o `Xm` do incremento.
+            int rm,
+            /// Terceira fonte (`Za`/`Zk`) das formas de três/quatro operandos.
+            int ra,
+            /// Predicado governante de `MLA`/`MLS`/`MAD`/`MSB` (`0`-`7`); sem significado nas demais.
+            int pg,
+            /// Imediato já normalizado: contagem de shift/rotação, ou (`INDEX`) o início/incremento imediato.
+            long imm,
+            /// Segundo imediato de `INDEX_ii` (o incremento).
+            long imm2,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo (uma por linha do `sve.decode`).
+        public enum Op {
+            ADD, SUB, SQADD, UQADD, SQSUB, UQSUB,
+            AND, ORR, EOR, BIC, XAR, EOR3, BSL, BCAX, BSL1N, BSL2N, NBSL,
+            ASR_IMM, LSR_IMM, LSL_IMM, ASR_WIDE, LSR_WIDE, LSL_WIDE,
+            MLA, MLS, MAD, MSB,
+            MOVPRFX, FEXPA, FTSSEL,
+            INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
+        }
+        @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }
     }
 }

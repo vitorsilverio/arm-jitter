@@ -56,6 +56,59 @@ final class Aarch64SveDecoder {
     private static final int ELEMENT_COUNT_D_BIT_PLAIN_FORMS = 10;
     private static final int RESERVED_ESZ_BYTE = 0;
 
+    // ── B17.5: inteiro sem predicado (prefixo 0x04) ──────────────────────────────────────────────
+    private static final int OPCODE_SHIFT = 10;
+    private static final int OPCODE_FIELD_MASK = 0b111111;
+    private static final int OP_ADD = 0b000000;
+    private static final int OP_SUB = 0b000001;
+    private static final int OP_SQADD = 0b000100;
+    private static final int OP_UQADD = 0b000101;
+    private static final int OP_SQSUB = 0b000110;
+    private static final int OP_UQSUB = 0b000111;
+    private static final int OP_LOGICAL = 0b001100;
+    private static final int OP_XAR = 0b001101;
+    private static final int OP_TERNARY_EOR3_BCAX = 0b001110;
+    private static final int OP_TERNARY_BSL = 0b001111;
+    private static final int OP_SHIFT_WIDE_ASR = 0b100000;
+    private static final int OP_SHIFT_WIDE_LSR = 0b100001;
+    private static final int OP_SHIFT_WIDE_LSL = 0b100011;
+    private static final int OP_SHIFT_IMM_ASR = 0b100100;
+    private static final int OP_SHIFT_IMM_LSR = 0b100101;
+    private static final int OP_SHIFT_IMM_LSL = 0b100111;
+    private static final int OP_INDEX_II = 0b010000;
+    private static final int OP_INDEX_RI = 0b010001;
+    private static final int OP_INDEX_IR = 0b010010;
+    private static final int OP_INDEX_RR = 0b010011;
+    private static final int OP_FTSSEL = 0b101100;
+    private static final int FEXPA_MASK = 0xFF3FFC00;
+    private static final int FEXPA_VALUE = 0x0420B800;
+    private static final int MOVPRFX_MASK = 0xFFFFFC00;
+    private static final int MOVPRFX_VALUE = 0x0420BC00;
+    private static final int MULTIPLY_ADD_MASK = 0xFF200000;
+    private static final int MULTIPLY_ADD_BASE = 0x04000000;
+    private static final int MULTIPLY_ADD_OPCODE_SHIFT = 13;
+    private static final int MULTIPLY_ADD_OPCODE_MASK = 0b111;
+    private static final int MULTIPLY_ADD_MLA = 0b010;
+    private static final int MULTIPLY_ADD_MLS = 0b011;
+    private static final int MULTIPLY_ADD_MAD = 0b110;
+    private static final int MULTIPLY_ADD_MSB = 0b111;
+    private static final int PG_MULTIPLY_SHIFT = 10;
+    private static final int PG_MULTIPLY_MASK = 0b111;
+    private static final int RM_SHIFT = 16;
+    private static final int RA_SHIFT = 5;
+    private static final int TSZ_HIGH_SHIFT = 22;
+    private static final int TSZ_LOW_SHIFT = 16;
+    private static final int TSZ_HIGH_MASK = 0b11;
+    private static final int TSZ_LOW_MASK = 0b11111;
+    private static final int TSZ_HIGH_FIELD_SHIFT = 5;
+    private static final int TSZ_ESZ_SHIFT = 3;
+    private static final int SIGNED_IMMEDIATE_BITS = 5;
+    private static final int INDEX_IMM_HIGH_SHIFT = 16;
+    private static final int INDEX_IMM_LOW_SHIFT = 5;
+    private static final int ESZ_DOUBLEWORD = 3;
+    private static final int ESIZE_BITS_BASE = 8;
+    private static final int ESIZE_SHR_BASE = 16;
+
     // ── Máscaras/valores (bits fixos de cada linha de sve.decode) ───────────────────────────────
     private static final int LOGICAL_MASK = 0xFF30C000;
     private static final int LOGICAL_VALUE = 0x25004000;
@@ -123,7 +176,10 @@ final class Aarch64SveDecoder {
         }
         return switch ((word >>> PREFIX_SHIFT) & PREFIX_MASK) {
             case PREFIX_PREDICATE -> decodePredicateGroup(word, address);
-            case PREFIX_ELEMENT_COUNT -> decodeElementCount(word, address);
+            case PREFIX_ELEMENT_COUNT -> {
+                Ir64Op integer = decodeIntegerUnpredicated(word, address);
+                yield integer != null ? integer : decodeElementCount(word, address);
+            }
             default -> null;
         };
     }
@@ -306,6 +362,167 @@ final class Aarch64SveDecoder {
                             unsigned, address);
         }
         return null;
+    }
+
+    /// Grupo inteiro sem predicado da B17.5 (34 encodings). Devolve `null` para o que não reconhece
+    /// (o chamador então tenta a contagem de elementos e, por fim, recusa — G8).
+    private Ir64Op decodeIntegerUnpredicated(int word, long address) {
+        int esz = field(word, ESZ_SHIFT, ESZ_MASK);
+        int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
+        int rn = field(word, PN_SHIFT, REGISTER_FIELD_MASK);
+        int rm = field(word, RM_SHIFT, REGISTER_FIELD_MASK);
+        if ((word & MULTIPLY_ADD_MASK) == MULTIPLY_ADD_BASE) {
+            return decodeMultiplyAdd(word, address, esz, rd, rn, rm);
+        }
+        if ((word & MOVPRFX_MASK) == MOVPRFX_VALUE) {
+            return integer(Ir64Op.SveIntegerUnpredicated.Op.MOVPRFX, 0, rd, rn, 0, 0, 0, 0, 0, address);
+        }
+        if ((word & FEXPA_MASK) == FEXPA_VALUE) {
+            return esz == RESERVED_ESZ_BYTE
+                    ? null
+                    : integer(Ir64Op.SveIntegerUnpredicated.Op.FEXPA, esz, rd, rn, 0, 0, 0, 0, 0, address);
+        }
+        // Daqui em diante bit 21 = 1: com bit 21 = 0 a palavra já foi consumida (ou recusada) pelo teste do MLA acima.
+        int opcode = field(word, OPCODE_SHIFT, OPCODE_FIELD_MASK);
+        Ir64Op.SveIntegerUnpredicated.Op arithmetic = switch (opcode) {
+            case OP_ADD -> Ir64Op.SveIntegerUnpredicated.Op.ADD;
+            case OP_SUB -> Ir64Op.SveIntegerUnpredicated.Op.SUB;
+            case OP_SQADD -> Ir64Op.SveIntegerUnpredicated.Op.SQADD;
+            case OP_UQADD -> Ir64Op.SveIntegerUnpredicated.Op.UQADD;
+            case OP_SQSUB -> Ir64Op.SveIntegerUnpredicated.Op.SQSUB;
+            case OP_UQSUB -> Ir64Op.SveIntegerUnpredicated.Op.UQSUB;
+            default -> null;
+        };
+        if (arithmetic != null) {
+            return integer(arithmetic, esz, rd, rn, rm, 0, 0, 0, 0, address);
+        }
+        return switch (opcode) {
+            case OP_LOGICAL -> integer(switch (esz) {
+                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.AND;
+                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.ORR;
+                case 2 -> Ir64Op.SveIntegerUnpredicated.Op.EOR;
+                default -> Ir64Op.SveIntegerUnpredicated.Op.BIC;
+            }, 0, rd, rn, rm, 0, 0, 0, 0, address);
+            case OP_XAR -> decodeXar(word, address, rd);
+            case OP_TERNARY_EOR3_BCAX -> decodeTernary(esz, rd, rm, word, address, false);
+            case OP_TERNARY_BSL -> decodeTernary(esz, rd, rm, word, address, true);
+            case OP_SHIFT_IMM_ASR ->
+                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.ASR_IMM, word, address, false);
+            case OP_SHIFT_IMM_LSR ->
+                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.LSR_IMM, word, address, false);
+            case OP_SHIFT_IMM_LSL ->
+                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.LSL_IMM, word, address, true);
+            case OP_SHIFT_WIDE_ASR -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.ASR_WIDE, esz, rd, rn, rm, address);
+            case OP_SHIFT_WIDE_LSR -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.LSR_WIDE, esz, rd, rn, rm, address);
+            case OP_SHIFT_WIDE_LSL -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.LSL_WIDE, esz, rd, rn, rm, address);
+            case OP_INDEX_II -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_II, esz, rd, 0, 0, 0, 0,
+                    signedImmediate(word, INDEX_IMM_LOW_SHIFT), signedImmediate(word, INDEX_IMM_HIGH_SHIFT), address);
+            case OP_INDEX_IR -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_IR, esz, rd, 0, rm, 0, 0,
+                    signedImmediate(word, INDEX_IMM_LOW_SHIFT), 0, address);
+            case OP_INDEX_RI -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_RI, esz, rd, rn, 0, 0, 0,
+                    signedImmediate(word, INDEX_IMM_HIGH_SHIFT), 0, address);
+            case OP_INDEX_RR ->
+                    integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_RR, esz, rd, rn, rm, 0, 0, 0, 0, address);
+            case OP_FTSSEL -> esz == RESERVED_ESZ_BYTE
+                    ? null
+                    : integer(Ir64Op.SveIntegerUnpredicated.Op.FTSSEL, esz, rd, rn, rm, 0, 0, 0, 0, address);
+            default -> null;
+        };
+    }
+
+    /// `MLA`/`MLS` (escrevem o acumulador `Zda`) e `MAD`/`MSB` (escrevem o multiplicando `Zdn`), sempre
+    /// com predicado: o grupo se chama "não predicado" pela partição do épico, mas estas 4 linhas têm `pg`.
+    private Ir64Op decodeMultiplyAdd(int word, long address, int esz, int rd, int rn, int rm) {
+        int pg = field(word, PG_MULTIPLY_SHIFT, PG_MULTIPLY_MASK);
+        return switch (field(word, MULTIPLY_ADD_OPCODE_SHIFT, MULTIPLY_ADD_OPCODE_MASK)) {
+            case MULTIPLY_ADD_MLA ->
+                    integer(Ir64Op.SveIntegerUnpredicated.Op.MLA, esz, rd, rn, rm, 0, pg, 0, 0, address);
+            case MULTIPLY_ADD_MLS ->
+                    integer(Ir64Op.SveIntegerUnpredicated.Op.MLS, esz, rd, rn, rm, 0, pg, 0, 0, address);
+            case MULTIPLY_ADD_MAD ->
+                    integer(Ir64Op.SveIntegerUnpredicated.Op.MAD, esz, rd, rd, rm, rn, pg, 0, 0, address);
+            case MULTIPLY_ADD_MSB ->
+                    integer(Ir64Op.SveIntegerUnpredicated.Op.MSB, esz, rd, rd, rm, rn, pg, 0, 0, address);
+            default -> null;
+        };
+    }
+
+    /// Lógica ternária SVE2 (`EOR3`/`BCAX`/`BSL`/`BSL1N`/`BSL2N`/`NBSL`): bits 23:22 escolhem a
+    /// operação (não são `esz`), `rn = rd` (destrutiva), `Zk` em 9:5. Exige `FEAT_SVE2`.
+    private Ir64Op decodeTernary(int selector, int rd, int rm, int word, long address, boolean bitSelect) {
+        if (!architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
+        Ir64Op.SveIntegerUnpredicated.Op op;
+        if (bitSelect) {
+            op = switch (selector) {
+                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.BSL;
+                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.BSL1N;
+                case 2 -> Ir64Op.SveIntegerUnpredicated.Op.BSL2N;
+                default -> Ir64Op.SveIntegerUnpredicated.Op.NBSL;
+            };
+        } else {
+            op = switch (selector) {
+                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.EOR3;
+                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.BCAX;
+                default -> null;
+            };
+        }
+        return op == null
+                ? null
+                : integer(op, 0, rd, rd, rm, field(word, RA_SHIFT, REGISTER_FIELD_MASK), 0, 0, 0, address);
+    }
+
+    /// `XAR` (SVE2): `Zm` em 9:5, `Zdn` destrutivo, `esz` e a rotação vêm do `tszimm` (bits 23:22 e 20:16).
+    private Ir64Op decodeXar(int word, long address, int rd) {
+        int tszimm = tszimm(word);
+        int esz = tszimmEsz(tszimm);
+        if (esz < 0 || !architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
+        return integer(Ir64Op.SveIntegerUnpredicated.Op.XAR, esz, rd, rd, field(word, RA_SHIFT, REGISTER_FIELD_MASK), 0,
+                0, (ESIZE_SHR_BASE << esz) - tszimm, 0, address);
+    }
+
+    /// `ASR`/`LSR`/`LSL` por imediato: `esz` e a contagem derivam do MESMO campo `tszimm` (não há `size`).
+    private static Ir64Op decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op op, int word, long address,
+            boolean left) {
+        int tszimm = tszimm(word);
+        int esz = tszimmEsz(tszimm);
+        if (esz < 0) {
+            return null;
+        }
+        long amount = left ? tszimm - (ESIZE_BITS_BASE << esz) : (ESIZE_SHR_BASE << esz) - tszimm;
+        return integer(op, esz, field(word, PD_SHIFT, REGISTER_FIELD_MASK), field(word, PN_SHIFT, REGISTER_FIELD_MASK),
+                0, 0, 0, amount, 0, address);
+    }
+
+    /// Shift por elemento largo (`_zzw`): `esz = 3` não existe (o `Zm` já é de doublewords).
+    private static Ir64Op wideShift(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm,
+            long address) {
+        return esz == ESZ_DOUBLEWORD ? null : integer(op, esz, rd, rn, rm, 0, 0, 0, 0, address);
+    }
+
+    /// `tszh:tszl:imm3` de 7 bits (`%tszimm16_*`: bits 23:22 e 20:16).
+    private static int tszimm(int word) {
+        return (field(word, TSZ_HIGH_SHIFT, TSZ_HIGH_MASK) << TSZ_HIGH_FIELD_SHIFT)
+                | field(word, TSZ_LOW_SHIFT, TSZ_LOW_MASK);
+    }
+
+    /// `tszimm_esz` do QEMU: posição do bit mais alto de `tsz` (`-1` quando `tsz = 0`, não alocado).
+    private static int tszimmEsz(int tszimm) {
+        int tsz = tszimm >>> TSZ_ESZ_SHIFT;
+        return tsz == 0 ? -1 : Integer.SIZE - 1 - Integer.numberOfLeadingZeros(tsz);
+    }
+
+    private static long signedImmediate(int word, int shift) {
+        int raw = field(word, shift, REGISTER_FIELD_MASK);
+        return (raw << (Integer.SIZE - SIGNED_IMMEDIATE_BITS)) >> (Integer.SIZE - SIGNED_IMMEDIATE_BITS);
+    }
+
+    private static Ir64Op integer(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, int ra, int pg,
+            long imm, long imm2, long address) {
+        return new Ir64Op.SveIntegerUnpredicated(op, esz, rd, rn, rm, ra, pg, imm, imm2, address);
     }
 
     private static Ir64Op misc(Ir64Op.SvePredicateMisc.Op op, int esz, int pd, int pg, int pn, boolean setFlags,
