@@ -270,6 +270,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveCompareDecoder compare;
     private final Aarch64SveFpArithmeticDecoder floatingPoint;
     private final Aarch64SveFpMultiplyAddDecoder floatingPointMultiplyAdd;
+    private final Aarch64SveFpCompareReduceDecoder floatingPointCompareReduce;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -279,6 +280,7 @@ final class Aarch64SveDecoder {
         this.compare = new Aarch64SveCompareDecoder(architecture);
         this.floatingPoint = new Aarch64SveFpArithmeticDecoder(architecture);
         this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder();
+        this.floatingPointCompareReduce = new Aarch64SveFpCompareReduceDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -300,9 +302,16 @@ final class Aarch64SveDecoder {
             case PREFIX_COMPARE -> compare.decodePrefix24(word, address);
             case PREFIX_FP_ARITHMETIC -> {
                 Ir64Op arithmetic = floatingPoint.decodePrefix65(word, address);
-                yield arithmetic != null ? arithmetic : floatingPointMultiplyAdd.decodePrefix65(word, address);
+                if (arithmetic != null) {
+                    yield arithmetic;
+                }
+                Ir64Op multiplyAdd = floatingPointMultiplyAdd.decodePrefix65(word, address);
+                yield multiplyAdd != null ? multiplyAdd : floatingPointCompareReduce.decodePrefix65(word, address);
             }
-            case PREFIX_FP_INDEXED_COMPLEX -> floatingPointMultiplyAdd.decodePrefix64(word, address);
+            case PREFIX_FP_INDEXED_COMPLEX -> {
+                Ir64Op indexed = floatingPointMultiplyAdd.decodePrefix64(word, address);
+                yield indexed != null ? indexed : floatingPointCompareReduce.decodePrefix64(word, address);
+            }
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
                 if (immediate != null) {

@@ -560,6 +560,27 @@ final class SveFloat {
                 .compareTo(BigInteger.valueOf(b.mantissa).shiftLeft(b.exponent - exponent));
     }
 
+    // ── Comparação ───────────────────────────────────────────────────────────────────────────────
+
+    /// Resultado de {@link #relation} quando um dos operandos é NaN.
+    static final int RELATION_UNORDERED = 2;
+
+    /// `FPCompare*` do manual / `float*_compare[_quiet]` do QEMU: `-1` (`a < b`), `0` (iguais, `+0 == -0`), `1`
+    /// (`a > b`) ou {@link #RELATION_UNORDERED}. Uma entrada denormal é achatada sob `FZ` (`IDC`). NaN levanta `IOC`
+    /// SEMPRE na forma sinalizante (`FCMGE`/`FCMGT`/`FCMLE`/`FCMLT`/`FACGE`/`FACGT`) e só para sNaN na quieta
+    /// (`FCMEQ`/`FCMNE`/`FCMUO`).
+    static int relation(long aBits, long bBits, boolean signaling, Env env) {
+        Value a = unpack(aBits, env);
+        Value b = unpack(bBits, env);
+        if (a.isNaN() || b.isNaN()) {
+            if (signaling || a.kind == Kind.SIGNALING_NAN || b.kind == Kind.SIGNALING_NAN) {
+                env.flags |= FLAG_IOC;
+            }
+            return RELATION_UNORDERED;
+        }
+        return compare(a, b);
+    }
+
     // ── Demais operações ─────────────────────────────────────────────────────────────────────────
 
     /// `FABD`: `|a − b|` (com `FPCR.AH = 0` o bit de sinal cai também num resultado NaN).

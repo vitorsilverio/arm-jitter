@@ -83,7 +83,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
-        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd {
+        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -470,6 +470,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_FP_ARITHMETIC = 167;
         /// B17.14: multiply-add FP SVE (predicado, indexado), `FMUL` indexado e aritmética complexa `FCADD`/`FCMLA` — ver {@link SveFpMultiplyAdd}.
         public static final int SVE_FP_MULTIPLY_ADD = 168;
+        /// B17.15: comparação FP SVE (vetores e com zero) que produz predicado e reduções FP (rápida, por quadword, acumulativa) — ver {@link SveFpCompareReduce}.
+        public static final int SVE_FP_COMPARE_REDUCE = 169;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4435,5 +4437,37 @@ public sealed interface Ir64Op permits
             FMLA, FMLS, FNMLA, FNMLS, FMUL, FCADD, FCMLA
         }
         @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD; }
+    }
+
+    /// Comparação de ponto flutuante SVE que produz predicado e reduções de ponto flutuante (B17.15) — 24 encodings:
+    /// `FCMGE`/`FCMGT`/`FCMEQ`/`FCMNE`/`FCMUO`/`FACGE`/`FACGT` (vetor×vetor) e `FCMGE`/`FCMGT`/`FCMLT`/`FCMLE`/`FCMEQ`/
+    /// `FCMNE` com zero; `FADDV`/`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (árvore), as cinco `*QV` por segmento de 128 bits
+    /// (`FEAT_SVE2p1`) e `FADDA` (serial). Semântica em `SveFloat`/`SveFpCompareReduceOps`.
+    ///
+    /// **A comparação FP NÃO altera `NZCV`** (só a inteira, da B17.9, tem forma que seta flags); ela pode sujar o `FPSR`.
+    record SveFpCompareReduce(
+            Op op,
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` nunca chega aqui).
+            int esz,
+            /// Predicado de destino (`P0`-`P15`) nas comparações; registrador `V` de destino nas reduções.
+            int rd,
+            /// Vetor `Zn` (em `FADDA`, o registrador escalar `Vdn` de entrada e de saída).
+            int rn,
+            /// Vetor `Zm` (comparação vetor×vetor e `FADDA`); sem significado nas demais.
+            int rm,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            /// Comparação com zero (`FCM<cc> Pd.T, Pg/Z, Zn.T, #0.0`): o segundo operando é `+0.0`, não `Zm`.
+            boolean zero,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo. As comparações com zero reusam `FCMGE`/`FCMGT`/`FCMLT`/`FCMLE`/`FCMEQ`/`FCMNE` com {@code zero}.
+        public enum Op {
+            FCMGE, FCMGT, FCMLT, FCMLE, FCMEQ, FCMNE, FCMUO, FACGE, FACGT,
+            FADDV, FMAXNMV, FMINNMV, FMAXV, FMINV,
+            FADDQV, FMAXNMQV, FMINNMQV, FMAXQV, FMINQV,
+            FADDA
+        }
+        @Override public int kind() { return Kind.SVE_FP_COMPARE_REDUCE; }
     }
 }
