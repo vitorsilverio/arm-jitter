@@ -83,7 +83,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
-        Ir64Op.SveFpArithmetic {
+        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -468,6 +468,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_PERMUTE_PREDICATED = 166;
         /// B17.13: aritmética de ponto flutuante SVE (não predicada, predicada, com imediato de 1 bit, `FTMAD`, `FRECPE`/`FRSQRTE`) — ver {@link SveFpArithmetic}.
         public static final int SVE_FP_ARITHMETIC = 167;
+        /// B17.14: multiply-add FP SVE (predicado, indexado), `FMUL` indexado e aritmética complexa `FCADD`/`FCMLA` — ver {@link SveFpMultiplyAdd}.
+        public static final int SVE_FP_MULTIPLY_ADD = 168;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4398,5 +4400,40 @@ public sealed interface Ir64Op permits
             TSMUL, RECPS, RSQRTS, RECPE, RSQRTE, TMAD
         }
         @Override public int kind() { return Kind.SVE_FP_ARITHMETIC; }
+    }
+
+    /// Multiply-add de ponto flutuante SVE, `FMUL` indexado e aritmética complexa (B17.14) — 24 encodings:
+    /// `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados (as 4 do acumulador e as 4 do multiplicando `FMAD`/`FMSB`/`FNMAD`/`FNMSB`),
+    /// `FMLA`/`FMLS`/`FMUL` indexados, `FCADD`, `FCMLA` e `FCMLA` indexado. Semântica em `SveFloat`.
+    ///
+    /// **A conta é sempre `Zd = ra + rn × rm`** (fundida); as formas que "escrevem o multiplicando" só mudam QUAIS
+    /// campos do encoding viram `rn`/`rm`/`ra` no decoder. Nas formas destrutivas o `ra`/`rn` traz o próprio `rd`.
+    record SveFpMultiplyAdd(
+            Op op,
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` — BFloat16 — é `FEAT_SVE_B16B16` e nunca chega aqui).
+            int esz,
+            int rd,
+            /// Multiplicando (`Zn`); em `FCADD`/`FCMLA` o primeiro operando complexo.
+            int rn,
+            /// Multiplicador (`Zm`); nas formas indexadas o registrador do qual se lê o elemento.
+            int rm,
+            /// Addend (`Za`, ou `Zda` = `rd` nas destrutivas); sem significado em `FMUL` indexado e `FCADD`.
+            int ra,
+            /// Predicado governante `P0`-`P7`; sem significado quando {@code predicated} é falso.
+            int pg,
+            boolean predicated,
+            /// Formas por elemento indexado (`FMLA`/`FMLS`/`FMUL`/`FCMLA`): `index` escolhe o elemento (ou o par) DENTRO de cada segmento de 128 bits.
+            boolean indexed,
+            /// Índice do elemento (ou do par real/imaginário, em `FCMLA` indexado).
+            int index,
+            /// Rotação: 1 bit em `FCADD` (`0` = 90°, `1` = 270°), 2 bits em `FCMLA` (`0`/`90`/`180`/`270` graus ÷ 90).
+            int rot,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            FMLA, FMLS, FNMLA, FNMLS, FMUL, FCADD, FCMLA
+        }
+        @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD; }
     }
 }

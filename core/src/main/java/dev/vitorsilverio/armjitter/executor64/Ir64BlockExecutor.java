@@ -357,6 +357,7 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SVE_PERMUTE_PREDICATED ->
                     SvePermutePredicatedOps.execute(core, (Ir64Op.SvePermutePredicated) op);
             case Ir64Op.Kind.SVE_FP_ARITHMETIC -> SveFpArithmeticOps.execute(core, (Ir64Op.SveFpArithmetic) op);
+            case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD -> SveFpMultiplyAddOps.execute(core, (Ir64Op.SveFpMultiplyAdd) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
                     SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {

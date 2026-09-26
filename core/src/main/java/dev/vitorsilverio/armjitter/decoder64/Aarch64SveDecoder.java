@@ -30,6 +30,7 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_MULTIPLY = 0x44;
     private static final int PREFIX_COMPARE = 0x24;
     private static final int PREFIX_FP_ARITHMETIC = 0x65;
+    private static final int PREFIX_FP_INDEXED_COMPLEX = 0x64;
 
     // ── Campos comuns ─────────────────────────────────────────────────────────────────────────────
     private static final int ESZ_SHIFT = 22;
@@ -268,6 +269,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SvePredicatedPermuteDecoder predicatedPermute;
     private final Aarch64SveCompareDecoder compare;
     private final Aarch64SveFpArithmeticDecoder floatingPoint;
+    private final Aarch64SveFpMultiplyAddDecoder floatingPointMultiplyAdd;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -276,6 +278,7 @@ final class Aarch64SveDecoder {
         this.predicatedPermute = new Aarch64SvePredicatedPermuteDecoder(architecture);
         this.compare = new Aarch64SveCompareDecoder(architecture);
         this.floatingPoint = new Aarch64SveFpArithmeticDecoder(architecture);
+        this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder();
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -295,7 +298,11 @@ final class Aarch64SveDecoder {
                 yield comparison != null ? comparison : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
             }
             case PREFIX_COMPARE -> compare.decodePrefix24(word, address);
-            case PREFIX_FP_ARITHMETIC -> floatingPoint.decodePrefix65(word, address);
+            case PREFIX_FP_ARITHMETIC -> {
+                Ir64Op arithmetic = floatingPoint.decodePrefix65(word, address);
+                yield arithmetic != null ? arithmetic : floatingPointMultiplyAdd.decodePrefix65(word, address);
+            }
+            case PREFIX_FP_INDEXED_COMPLEX -> floatingPointMultiplyAdd.decodePrefix64(word, address);
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
                 if (immediate != null) {
