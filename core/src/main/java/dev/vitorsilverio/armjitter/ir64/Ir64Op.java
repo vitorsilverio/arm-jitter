@@ -83,7 +83,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
-        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary {
+        Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
+        Ir64Op.SveLoad {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -474,6 +475,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_FP_COMPARE_REDUCE = 169;
         /// B17.16: unárias FP predicadas SVE (conversões de precisão e FP↔inteiro, `FRINT*`, `FRINT32/64`, `FRECPX`, `FSQRT`) — ver {@link SveFpUnary}.
         public static final int SVE_FP_UNARY = 170;
+        /// B17.17: load contíguo SVE (`LD1`/`LD[234]`/`LDNT1`, `LD1R*`, `LD1RQ`/`LD1RO`), first-fault/non-fault (`LDFF1`/`LDNF1`), `LDR` de vetor e de predicado e `PRF*` — ver {@link SveLoad}.
+        public static final int SVE_LOAD = 171;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4504,5 +4507,45 @@ public sealed interface Ir64Op permits
             FRECPX, FSQRT
         }
         @Override public int kind() { return Kind.SVE_FP_UNARY; }
+    }
+
+    /// Load SVE contíguo (B17.17) — 27 encodings: `LD1` (todos os `dtype`) e `LD2`/`LD3`/`LD4` desentrelaçados (as formas
+    /// `LDNT1`, sem modelo de cache, são `LD1`), `LD1R*` (replicante), `LD1RQ`/`LD1RO`, `LDFF1`/`LDNF1` (first-fault e
+    /// non-fault, **classe própria**: a falha vai para o `FFR` em vez de abortar), `LDR` de vetor e de predicado, e
+    /// `PRF*` (hint: no-op). Semântica em `SveLoadOps`.
+    ///
+    /// O `immediate` é o valor JÁ decodificado do encoding (sem escala): cada operação o multiplica pelo tamanho que lhe
+    /// cabe (`VL`, `PL`, `VL/elemento × acesso`, `16`, `32` ou o tamanho do elemento).
+    record SveLoad(
+            Op op,
+            /// Log2 do tamanho do acesso à memória por elemento (`0`-`3`; `4` = 128 bits em `LD[234]Q`).
+            int msz,
+            /// Log2 do tamanho do elemento do vetor (`0`-`3`; `4` = elemento de 128 bits, formas `.Q`).
+            int esz,
+            /// `true` = o dado da memória é estendido com sinal até o elemento (`LD1SB`/`LD1SH`/`LD1SW`); senão, zero.
+            boolean signExtend,
+            /// Número de registradores menos um (`0` = `LD1`, `1`-`3` = `LD2`-`LD4`).
+            int nreg,
+            /// Vetor de destino `Zt` (`Pt` em `LDR` de predicado; sem significado em `PRF`).
+            int rd,
+            /// Base `Xn|SP`.
+            int rn,
+            /// Registrador de índice `Xm` (`31` = `XZR`, só em `LDFF1`); vale quando {@code registerOffset}.
+            int rm,
+            /// `true` = escalar mais escalar (`Xn + (Xm << msz)`); `false` = escalar mais imediato.
+            boolean registerOffset,
+            /// Imediato decodificado, sem escala (ver acima).
+            long immediate,
+            /// Predicado governante `P0`-`P7` (sem significado em `LDR`).
+            int pg,
+            /// `true` = ilegal em modo streaming (a menos que `FEAT_SME_FA64` esteja efetivo).
+            boolean nonStreaming,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            LD1, LDFF1, LDNF1, LD1R, LD1RQ, LD1RO, LDR_Z, LDR_P, PRF
+        }
+        @Override public int kind() { return Kind.SVE_LOAD; }
     }
 }

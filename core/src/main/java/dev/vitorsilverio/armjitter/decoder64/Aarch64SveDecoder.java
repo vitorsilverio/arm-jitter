@@ -31,6 +31,10 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_COMPARE = 0x24;
     private static final int PREFIX_FP_ARITHMETIC = 0x65;
     private static final int PREFIX_FP_INDEXED_COMPLEX = 0x64;
+    private static final int PREFIX_LOAD_UNSIZED_LOW = 0x84;
+    private static final int PREFIX_LOAD_UNSIZED_HIGH = 0x85;
+    private static final int PREFIX_LOAD_CONTIGUOUS_LOW = 0xA4;
+    private static final int PREFIX_LOAD_CONTIGUOUS_HIGH = 0xA5;
 
     // ── Campos comuns ─────────────────────────────────────────────────────────────────────────────
     private static final int ESZ_SHIFT = 22;
@@ -272,6 +276,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveFpMultiplyAddDecoder floatingPointMultiplyAdd;
     private final Aarch64SveFpCompareReduceDecoder floatingPointCompareReduce;
     private final Aarch64SveFpUnaryDecoder floatingPointUnary;
+    private final Aarch64SveLoadDecoder load;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -283,6 +288,7 @@ final class Aarch64SveDecoder {
         this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder();
         this.floatingPointCompareReduce = new Aarch64SveFpCompareReduceDecoder(architecture);
         this.floatingPointUnary = new Aarch64SveFpUnaryDecoder(architecture);
+        this.load = new Aarch64SveLoadDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -345,6 +351,8 @@ final class Aarch64SveDecoder {
                 }
                 yield integer != null ? integer : decodeElementCount(word, address);
             }
+            case PREFIX_LOAD_UNSIZED_LOW, PREFIX_LOAD_UNSIZED_HIGH, PREFIX_LOAD_CONTIGUOUS_LOW,
+                    PREFIX_LOAD_CONTIGUOUS_HIGH -> load.decode(word, address);
             default -> null;
         };
     }
