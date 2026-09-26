@@ -82,7 +82,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
-        Ir64Op.SvePermutePredicated {
+        Ir64Op.SvePermutePredicated,
+        Ir64Op.SveFpArithmetic {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -465,6 +466,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_SCALAR_COMPARE = 165;
         /// B17.11: permutação de predicado, permutação predicada (`COMPACT`/`LAST*`/`CLAST*`/`REV*`/`SPLICE`/`EXPAND`) e `SEL` — ver {@link SvePermutePredicated}.
         public static final int SVE_PERMUTE_PREDICATED = 166;
+        /// B17.13: aritmética de ponto flutuante SVE (não predicada, predicada, com imediato de 1 bit, `FTMAD`, `FRECPE`/`FRSQRTE`) — ver {@link SveFpArithmetic}.
+        public static final int SVE_FP_ARITHMETIC = 167;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4361,5 +4364,39 @@ public sealed interface Ir64Op permits
             REVB_M, REVH_M, REVW_M, RBIT_M, REVD_M, REVB_Z, REVH_Z, REVW_Z, RBIT_Z, REVD_Z
         }
         @Override public int kind() { return Kind.SVE_PERMUTE_PREDICATED; }
+    }
+
+    /// Aritmética de ponto flutuante SVE (B17.13) — 32 encodings: as 6 não predicadas (`FADD`/`FSUB`/`FMUL`/`FTSMUL`/`FRECPS`/`FRSQRTS`),
+    /// `FRECPE`/`FRSQRTE`, as 15 predicadas por vetor, as 8 com imediato de UM bit e `FTMAD`. Semântica em `SveFloat`.
+    ///
+    /// As formas destrutivas trazem `rn` = `rd`. As reversas (`FSUBR`/`FDIVR`) NÃO trocam operandos aqui: `reversed`
+    /// manda calcular `op(Zm, Zn)` — assim o registrador e o imediato usam a mesma regra.
+    record SveFpArithmetic(
+            Op op,
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` é não alocado e nunca chega aqui).
+            int esz,
+            int rd,
+            /// Primeiro operando (`Zn`; `Zdn` nas formas destrutivas).
+            int rn,
+            /// Segundo operando (`Zm`); sem significado nas formas com imediato e nas unárias.
+            int rm,
+            /// Predicado governante `P0`-`P7`; sem significado quando {@code predicated} é falso.
+            int pg,
+            /// `false` nas 6 não predicadas e nas unárias (todos os elementos ativos).
+            boolean predicated,
+            /// Forma reversa (`FSUBR`/`FDIVR`): o resultado é `op(Zm, Zn)`.
+            boolean reversed,
+            /// `FADD_zpzi`…`FMIN_zpzi`: o segundo operando é a constante escolhida por {@code immediate} (`0`/`1`).
+            boolean immediateForm,
+            /// Bit do imediato de 1 bit (formas `_zpzi`) ou `imm3` do `FTMAD` (índice do coeficiente).
+            int immediate,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            ADD, SUB, MUL, DIV, MAXNM, MINNM, MAX, MIN, ABD, SCALE, MULX, AMAX, AMIN,
+            TSMUL, RECPS, RSQRTS, RECPE, RSQRTE, TMAD
+        }
+        @Override public int kind() { return Kind.SVE_FP_ARITHMETIC; }
     }
 }
