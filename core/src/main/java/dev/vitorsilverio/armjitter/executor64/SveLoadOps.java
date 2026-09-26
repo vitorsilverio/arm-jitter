@@ -97,7 +97,7 @@ final class SveLoadOps {
 
     private static long signExtend(long value, int msz) {
         int shift = Long.SIZE - (BITS_PER_BYTE << msz);
-        return shift == 0 ? value : (value << shift) >> shift;
+        return (value << shift) >> shift;
     }
 
     /// Lê UM elemento (`msz`/`esz`/extensão da instrução) de `address` e o grava no elemento `element` de `words`. Em

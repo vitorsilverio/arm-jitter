@@ -806,6 +806,13 @@ class Aarch64SveLoadTest {
         assertFalse(decodes(FULL, 0xa41f4440), "LD1B com Rm = 31");
         assertFalse(decodes(FULL, 0x841fc440), "PRF_rr com Rm = 31");
         assertTrue(decodes(FULL, 0xa5ff6440), "LDFF1 com Rm = 31 (XZR)");
+        assertFalse(decodes(FULL, 0x85800c51), "LDR de predicado com o bit 4 ligado");
+        assertFalse(decodes(FULL, 0xa4038440), "100 com bits[24:21] = 0000 e sel = 00");
+        assertFalse(decodes(FULL, 0xa4438440), "100 com sel = 10");
+        assertFalse(decodes(FULL, 0xa5e03440), "prefixo 0xA5 com opcode 001 e sel = 11");
+        assertTrue(decodes(SVE2P1, 0xa5132440), "ld1w {z.q} com imediato");
+        assertTrue(decodes(SVE2P1, 0xa5932440), "ld1d {z.q} com imediato");
+        assertFalse(decodes(SVE, 0xa5132440), "ld1w {z.q} com imediato exige SVE2p1");
     }
 
     @Test
@@ -835,5 +842,40 @@ class Aarch64SveLoadTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         return decodeOrNull(architecture, word) instanceof Ir64Op.SveLoad;
+    }
+
+    /// `CPACR_EL1.ZEN` negando SVE: a exceção é tomada e NENHUM estado (nem `FFR`, nem memória) é tocado.
+    @ParameterizedTest
+    @ValueSource(ints = {0xa4034440, 0xa4036440, 0xa410a440, 0x847f8440, 0xa5030440, 0x85804c41, 0x85800c41, 0x8403c440})
+    void everyLoadTrapsWithTheSveAccessExceptionWhenCpacrDeniesIt(int word) {
+        FaultingMemory memory = randomMemory(30);
+        Aarch64Core core = core(FULL, 256, memory);
+        core.setSystemRegisterBus(new dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus() {
+            @Override
+            public boolean handles(dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId register) {
+                return register == dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId.CPACR_EL1;
+            }
+
+            @Override
+            public long read(dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId register) {
+                return 0L; // CPACR_EL1 = 0: ZEN = 00
+            }
+
+            @Override
+            public void write(dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId register, long newValue) {
+                throw new UnsupportedOperationException();
+            }
+        });
+        setPredicate(core, P1, 0, allActive(32));
+        setFfr(core, 0x77L);
+        fillZ(core, Z0, 0x3333333333333333L);
+        core.setX(2, DATA);
+        core.setX(3, 0);
+        run(FULL, core, memory, word);
+        assertEquals(HANDLER, core.pc());
+        assertEquals(0x19L, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) >>> 26, "EC = acesso SVE");
+        assertEquals(0x3333333333333333L, core.scalable().zWord(Z0, 0));
+        assertEquals(0x77L, core.scalable().ffrWord(0));
+        assertTrue(memory.touched.isEmpty());
     }
 }
