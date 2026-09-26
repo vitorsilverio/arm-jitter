@@ -264,12 +264,14 @@ final class Aarch64SveDecoder {
     private final Aarch64Architecture architecture;
     private final Aarch64SveMultiplyDecoder multiply;
     private final Aarch64SvePermuteDecoder permute;
+    private final Aarch64SvePredicatedPermuteDecoder predicatedPermute;
     private final Aarch64SveCompareDecoder compare;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
         this.multiply = new Aarch64SveMultiplyDecoder(architecture);
         this.permute = new Aarch64SvePermuteDecoder(architecture);
+        this.predicatedPermute = new Aarch64SvePredicatedPermuteDecoder(architecture);
         this.compare = new Aarch64SveCompareDecoder(architecture);
     }
 
@@ -292,7 +294,11 @@ final class Aarch64SveDecoder {
             case PREFIX_COMPARE -> compare.decodePrefix24(word, address);
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
-                yield immediate != null ? immediate : permute.decodePrefix05(word, address);
+                if (immediate != null) {
+                    yield immediate;
+                }
+                Ir64Op permutation = permute.decodePrefix05(word, address);
+                yield permutation != null ? permutation : predicatedPermute.decodePrefix05(word, address);
             }
             case PREFIX_MULTIPLY -> {
                 Ir64Op product = multiply.decode(word, address);

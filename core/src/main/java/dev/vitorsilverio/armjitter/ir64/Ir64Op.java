@@ -81,7 +81,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SvePredicateLogical, Ir64Op.SvePredicateMisc, Ir64Op.SvePartitionBreak,
         Ir64Op.SvePredicateCount, Ir64Op.SveElementCount, Ir64Op.SveIntegerUnpredicated,
         Ir64Op.SveIntegerPredicated, Ir64Op.SveIntegerReduction, Ir64Op.SveImmediate, Ir64Op.SveMultiplyIndexed,
-        Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare {
+        Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
+        Ir64Op.SvePermutePredicated {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -462,6 +463,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_COMPARE = 164;
         /// B17.9: `WHILE*`/`CTERM` (comparação de escalares: contagem-limite e terminação de laço) — ver {@link SveScalarCompare}.
         public static final int SVE_SCALAR_COMPARE = 165;
+        /// B17.11: permutação de predicado, permutação predicada (`COMPACT`/`LAST*`/`CLAST*`/`REV*`/`SPLICE`/`EXPAND`) e `SEL` — ver {@link SvePermutePredicated}.
+        public static final int SVE_PERMUTE_PREDICATED = 166;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4324,5 +4327,39 @@ public sealed interface Ir64Op permits
         /// Operação do grupo. `WHILE_GT` (`WHILEGE`/`WHILEGT`/`WHILEHS`/`WHILEHI`) é SVE2; as `_PAIR`, SVE2.1.
         public enum Op { WHILE_LT, WHILE_GT, WHILE_PTR, WHILE_LT_PAIR, WHILE_GT_PAIR, CTERM }
         @Override public int kind() { return Kind.SVE_SCALAR_COMPARE; }
+    }
+
+    /// Permutação SVE de predicado, permutação predicada e `SEL` (B17.11) — 36 encodings. Junta três famílias que
+    /// só compartilham o fato de o resultado depender de QUAIS elementos estão ativos (ou de como o predicado é
+    /// embaralhado): as 9 permutações de predicado (`ZIP1_p`…`PUNPKHI`), as 26 predicadas (`COMPACT`, `LAST*`/`CLAST*`
+    /// nos três destinos `Z`/`V`/`X`, `CPY` merging, `REV*`/`RBIT`/`REVD`, `SPLICE`, `EXPAND`) e `SEL_zpzz`.
+    ///
+    /// Os campos seguem o `sve.decode`: nas formas destrutivas (`CLAST_Z`, `SPLICE`) `rd` é também o primeiro operando
+    /// (`Zdn`) e o segundo vem em `rm`; nas demais o vetor fonte é `rn`.
+    record SvePermutePredicated(
+            Op op,
+            /// Tamanho do elemento (`0` = byte … `3` = doubleword). Sem significado em `REVD_*` (opera em quadwords) e
+            /// em `PUNPKLO`/`PUNPKHI` (o elemento dobra sozinho).
+            int esz,
+            /// Destino: `Zd`/`Zdn`, `Pd`, `Vd` (`*_V`) ou `Xd` (`*_R`; `31` = `XZR`, a escrita se perde).
+            int rd,
+            /// Fonte: `Zn`, `Pn`, o `Vn`/`Xn|SP` copiado por `CPY_M_*`, ou o vetor lido por `LAST*`/`CLAST_V`/`CLAST_R`.
+            int rn,
+            /// Segundo operando: `Zm` (`CLAST_Z`, `SPLICE`, `SEL`) ou `Pm` (`ZIP`/`UZP`/`TRN` de predicado).
+            int rm,
+            /// Predicado que governa a operação: `P0`-`P7`, ou `P0`-`P15` em `SEL` (o único com 4 bits). Sem
+            /// significado nas permutações de predicado.
+            int pg,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo.
+        public enum Op {
+            ZIP1_P, ZIP2_P, UZP1_P, UZP2_P, TRN1_P, TRN2_P, REV_P, PUNPKLO, PUNPKHI,
+            COMPACT, EXPAND, SPLICE, SPLICE_SVE2, SEL,
+            CLASTA_Z, CLASTB_Z, CLASTA_V, CLASTB_V, CLASTA_R, CLASTB_R,
+            LASTA_V, LASTB_V, LASTA_R, LASTB_R, CPY_M_V, CPY_M_R,
+            REVB_M, REVH_M, REVW_M, RBIT_M, REVD_M, REVB_Z, REVH_Z, REVW_Z, RBIT_Z, REVD_Z
+        }
+        @Override public int kind() { return Kind.SVE_PERMUTE_PREDICATED; }
     }
 }
