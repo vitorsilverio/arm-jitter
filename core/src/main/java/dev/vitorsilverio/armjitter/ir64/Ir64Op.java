@@ -84,7 +84,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
         Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
-        Ir64Op.SveLoad {
+        Ir64Op.SveLoad, Ir64Op.SveStore {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -477,6 +477,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_FP_UNARY = 170;
         /// B17.17: load contíguo SVE (`LD1`/`LD[234]`/`LDNT1`, `LD1R*`, `LD1RQ`/`LD1RO`), first-fault/non-fault (`LDFF1`/`LDNF1`), `LDR` de vetor e de predicado e `PRF*` — ver {@link SveLoad}.
         public static final int SVE_LOAD = 171;
+        /// B17.18: store SVE (`ST1`/`ST[234]`/`STNT1` contíguos, `STR` de vetor e de predicado, scatter `ST1_zprz`/`ST1_zpiz` e `ST1Q`) — ver {@link SveStore}.
+        public static final int SVE_STORE = 172;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4547,5 +4549,66 @@ public sealed interface Ir64Op permits
             LD1, LDFF1, LDNF1, LD1R, LD1RQ, LD1RO, LDR_Z, LDR_P, PRF
         }
         @Override public int kind() { return Kind.SVE_LOAD; }
+    }
+
+    /// Store SVE (B17.18) — 37 encodings: `ST1` contíguo (todos os pares `msz`/`esz`, escalar+escalar e escalar+imediato,
+    /// incl. `STNT1`, que sem modelo de cache é `ST1`), `ST2`/`ST3`/`ST4` entrelaçados, `STR` de vetor e de predicado e
+    /// o **scatter** (`ST1_zprz`, `ST1_zpiz`, `ST1Q`). Semântica em `SveStoreOps`.
+    ///
+    /// O `immediate` é o valor JÁ decodificado do encoding (sem escala). Diferente do load, o store não tem `dtype`: o
+    /// tamanho do acesso (`msz`) e o do elemento (`esz`) são enumerados no `.decode`, com `msz <= esz`.
+    record SveStore(
+            Op op,
+            /// Log2 do tamanho do acesso à memória por elemento (`0`-`3`; `4` = 128 bits em `ST[234]Q`).
+            int msz,
+            /// Log2 do tamanho do elemento do vetor (`0`-`3`; `4` = elemento de 128 bits, formas `.Q`).
+            int esz,
+            /// Número de registradores menos um (`0` = `ST1`, `1`-`3` = `ST2`-`ST4`).
+            int nreg,
+            /// Vetor de origem `Zt` (`Pt` em `STR` de predicado).
+            int rt,
+            /// {@link Op#ST1}/`STR`: base `Xn|SP`. {@link Op#SCATTER_VECTOR_INDEX}: base `Xn|SP`. {@link Op#SCATTER_VECTOR_BASE}
+            /// e {@link Op#ST1Q}: o vetor `Zn` que carrega os endereços.
+            int rn,
+            /// {@link Op#ST1} escalar+escalar: índice `Xm` (`31` recusado). {@link Op#SCATTER_VECTOR_INDEX}: vetor de
+            /// deslocamentos `Zm`. {@link Op#ST1Q}: `Xm` escalar (`31` = `XZR`).
+            int rm,
+            /// `true` = escalar mais escalar (`Xn + (Xm << msz)`); `false` = escalar mais imediato.
+            boolean registerOffset,
+            /// Imediato decodificado, sem escala (ver acima).
+            long immediate,
+            /// Predicado governante `P0`-`P7` (sem significado em `STR`).
+            int pg,
+            /// Só no {@link Op#SCATTER_VECTOR_INDEX}: extensão do deslocamento (`OFFSET_UXTW`, `OFFSET_SXTW` ou `OFFSET_64`).
+            int offsetExtend,
+            /// Só no {@link Op#SCATTER_VECTOR_INDEX}: `true` = deslocamento escalado por `msz`.
+            boolean scaled,
+            /// `true` = ilegal em modo streaming (a menos que `FEAT_SME_FA64` esteja efetivo).
+            boolean nonStreaming,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// `xs` = `0`: os 32 bits baixos de cada elemento do vetor de deslocamentos, sem sinal (`UXTW`).
+        public static final int OFFSET_UXTW = 0;
+        /// `xs` = `1`: os 32 bits baixos de cada elemento do vetor de deslocamentos, com sinal (`SXTW`).
+        public static final int OFFSET_SXTW = 1;
+        /// `xs` = `2`: elemento de 64 bits inteiro.
+        public static final int OFFSET_64 = 2;
+
+        /// Operação do grupo.
+        public enum Op {
+            /// `ST1`/`ST2`/`ST3`/`ST4`/`STNT1` contíguo.
+            ST1,
+            /// `STR` de vetor.
+            STR_Z,
+            /// `STR` de predicado.
+            STR_P,
+            /// Scatter escalar + vetor (`ST1_zprz`).
+            SCATTER_VECTOR_INDEX,
+            /// Scatter vetor + imediato (`ST1_zpiz`).
+            SCATTER_VECTOR_BASE,
+            /// `ST1Q` (SVE2.1): base VETORIAL, deslocamento ESCALAR.
+            ST1Q
+        }
+        @Override public int kind() { return Kind.SVE_STORE; }
     }
 }

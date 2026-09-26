@@ -32,17 +32,17 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.17 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.18 fechada — tabela de ISA segue em 100%)
 
-**`B17.17` (SVE memória I: load contíguo `LD1`/`LD[234]`/`LDNT1`/`LD1R*`/`LD1RQ`/`LD1RO`/`LDR`/`PRF` e a classe própria `LDFF1`/`LDNF1` com `FFR`)** fechada — 27 de 27 encodings, G5 verde.
-Achado: o "traduzir sem abortar" já existia (a `MemoryTranslationException64` é sem estado; basta capturá-la por elemento) — nenhuma API nova, aborto preciso intacto. `docs/COBERTURA-ISA.md` inalterada (23523/23523). Ver **Resultado** na task.
+**`B17.18` (SVE memória II: store contíguo `ST1`/`STNT1`/`ST[234]`/`ST[234]Q`, `STR` e scatter `ST1_zprz`/`ST1_zpiz`/`ST1Q`)** fechada — 37 de 37 encodings, G5 verde.
+Achado: a spec tinha `xs` invertido (`0` = UXTW); scatter e `ST1Q` são ilegais em streaming; sem sonda no `AddressSpace64`, o aborto deixa escritos os elementos anteriores (permitido pelo manual). `docs/COBERTURA-ISA.md` inalterada (23523/23523); `docs/COBERTURA-JIT.md` regenerada (novo `Kind`). Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.18`** (store contíguo/scatter, depende da B17.17 ✅) e **`B17.19`** (gather, exige o `FFR` da B17.17 ✅), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.19`** (gather, exige o `FFR` da B17.17 ✅; o `STNT1_zprz` da B17.25 depende dela), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
 de B17.5) e **`B17.20`** (depende de B17.6) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
