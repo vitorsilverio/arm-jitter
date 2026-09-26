@@ -64,7 +64,7 @@ final class SveLoadOps {
 
     // ── Endereço ─────────────────────────────────────────────────────────────────────────────────
 
-    private static long base(Aarch64Core core, Ir64Op.SveLoad op) {
+    static long base(Aarch64Core core, Ir64Op.SveLoad op) {
         return op.rn() == STACK_POINTER_ENCODING ? core.sp() : core.x(op.rn());
     }
 
@@ -79,14 +79,14 @@ final class SveLoadOps {
         return base + ((op.immediate() * elements * multiplier) << op.msz());
     }
 
-    private static boolean active(long[] predicate, int element, int esz) {
+    static boolean active(long[] predicate, int element, int esz) {
         int bit = element << esz;
         return ((predicate[bit >>> WORD_INDEX_SHIFT] >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
     // ── Acesso à memória ─────────────────────────────────────────────────────────────────────────
 
-    private static long readMemory(AddressSpace64 memory, long address, int msz) {
+    static long readMemory(AddressSpace64 memory, long address, int msz) {
         return switch (msz) {
             case 0 -> Byte.toUnsignedLong((byte) memory.read8(address));
             case 1 -> Short.toUnsignedLong((short) memory.read16(address));
@@ -95,7 +95,7 @@ final class SveLoadOps {
         };
     }
 
-    private static long signExtend(long value, int msz) {
+    static long signExtend(long value, int msz) {
         int shift = Long.SIZE - (BITS_PER_BYTE << msz);
         return (value << shift) >> shift;
     }
@@ -114,7 +114,7 @@ final class SveLoadOps {
         putElement(words, element, op.esz(), op.signExtend() ? signExtend(value, op.msz()) : value);
     }
 
-    private static void putElement(long[] words, int element, int esz, long value) {
+    static void putElement(long[] words, int element, int esz, long value) {
         int elementBits = BITS_PER_BYTE << esz;
         int bitOffset = element * elementBits;
         if (elementBits == Long.SIZE) {
@@ -125,14 +125,14 @@ final class SveLoadOps {
         words[bitOffset >>> WORD_INDEX_SHIFT] |= (value & mask) << (bitOffset & WORD_BIT_MASK);
     }
 
-    private static void commitVector(Aarch64Core core, int register, long[] words) {
+    static void commitVector(Aarch64Core core, int register, long[] words) {
         Aarch64ScalableRegisters regs = core.scalable();
         for (int w = 0; w < words.length; w++) {
             regs.setZWord(register, w, words[w]);
         }
     }
 
-    private static int vectorWords(Aarch64Core core) {
+    static int vectorWords(Aarch64Core core) {
         return core.vectorLengthBytes() / WORD_BYTES;
     }
 
@@ -193,7 +193,7 @@ final class SveLoadOps {
     }
 
     /// Zera os bits do `FFR` do bit `bit` em diante (nunca liga um bit, nunca mexe nos de baixo).
-    private static void recordFault(Aarch64ScalableRegisters regs, int bit) {
+    static void recordFault(Aarch64ScalableRegisters regs, int bit) {
         int word = bit >>> WORD_INDEX_SHIFT;
         int inWord = bit & WORD_BIT_MASK;
         if (inWord != 0) {

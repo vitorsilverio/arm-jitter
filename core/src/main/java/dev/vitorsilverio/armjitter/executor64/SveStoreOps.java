@@ -80,7 +80,7 @@ final class SveStoreOps {
 
     /// Os 64 bits baixos do elemento `element` (de `esz` bytes-log2) do vetor `register`. Em `esz = 4` devolve só a
     /// metade baixa; a alta vem de {@link #highWord}.
-    private static long element(Aarch64ScalableRegisters regs, int register, int element, int esz) {
+    static long element(Aarch64ScalableRegisters regs, int register, int element, int esz) {
         if (esz == ESZ_DOUBLE) {
             return regs.zWord(register, element);
         }

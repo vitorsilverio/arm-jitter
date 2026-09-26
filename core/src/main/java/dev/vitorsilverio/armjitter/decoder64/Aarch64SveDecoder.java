@@ -37,6 +37,8 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_LOAD_CONTIGUOUS_HIGH = 0xA5;
     private static final int PREFIX_STORE_LOW = 0xE4;
     private static final int PREFIX_STORE_HIGH = 0xE5;
+    private static final int PREFIX_GATHER_64_LOW = 0xC4;
+    private static final int PREFIX_GATHER_64_HIGH = 0xC5;
 
     // ── Campos comuns ─────────────────────────────────────────────────────────────────────────────
     private static final int ESZ_SHIFT = 22;
@@ -280,6 +282,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveFpUnaryDecoder floatingPointUnary;
     private final Aarch64SveLoadDecoder load;
     private final Aarch64SveStoreDecoder store;
+    private final Aarch64SveGatherDecoder gather;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -293,6 +296,7 @@ final class Aarch64SveDecoder {
         this.floatingPointUnary = new Aarch64SveFpUnaryDecoder(architecture);
         this.load = new Aarch64SveLoadDecoder(architecture);
         this.store = new Aarch64SveStoreDecoder(architecture);
+        this.gather = new Aarch64SveGatherDecoder(architecture);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -355,8 +359,12 @@ final class Aarch64SveDecoder {
                 }
                 yield integer != null ? integer : decodeElementCount(word, address);
             }
-            case PREFIX_LOAD_UNSIZED_LOW, PREFIX_LOAD_UNSIZED_HIGH, PREFIX_LOAD_CONTIGUOUS_LOW,
-                    PREFIX_LOAD_CONTIGUOUS_HIGH -> load.decode(word, address);
+            case PREFIX_LOAD_UNSIZED_LOW, PREFIX_LOAD_UNSIZED_HIGH -> {
+                Ir64Op unsized = load.decode(word, address);
+                yield unsized != null ? unsized : gather.decode(word, address);
+            }
+            case PREFIX_LOAD_CONTIGUOUS_LOW, PREFIX_LOAD_CONTIGUOUS_HIGH -> load.decode(word, address);
+            case PREFIX_GATHER_64_LOW, PREFIX_GATHER_64_HIGH -> gather.decode(word, address);
             case PREFIX_STORE_LOW, PREFIX_STORE_HIGH -> store.decode(word, address);
             default -> null;
         };

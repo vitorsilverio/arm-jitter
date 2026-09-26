@@ -84,7 +84,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
         Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
-        Ir64Op.SveLoad, Ir64Op.SveStore {
+        Ir64Op.SveLoad, Ir64Op.SveStore, Ir64Op.SveGather {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -479,6 +479,8 @@ public sealed interface Ir64Op permits
         public static final int SVE_LOAD = 171;
         /// B17.18: store SVE (`ST1`/`ST[234]`/`STNT1` contíguos, `STR` de vetor e de predicado, scatter `ST1_zprz`/`ST1_zpiz` e `ST1Q`) — ver {@link SveStore}.
         public static final int SVE_STORE = 172;
+        /// B17.19: gather load SVE (`LD1_zprz`, `LD1_zpiz`, `LD1Q` e as formas first-fault `LDFF1`) — ver {@link SveGather}.
+        public static final int SVE_GATHER = 173;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4610,5 +4612,56 @@ public sealed interface Ir64Op permits
             ST1Q
         }
         @Override public int kind() { return Kind.SVE_STORE; }
+    }
+
+    /// Gather load SVE (B17.19) — um acesso à memória por ELEMENTO, cada um com endereço próprio: `LD1_zprz` (escalar +
+    /// vetor de deslocamentos), `LD1_zpiz` (vetor de endereços + imediato) e `LD1Q` (SVE2.1, vetor + escalar), cada uma
+    /// nas duas formas `LD1*` e first-fault `LDFF1*` (o bit `ff` do encoding). Semântica em `SveGatherOps`. Os `PRF*` de
+    /// gather são hints e vêm como {@link SveLoad} com {@code Op.PRF}. Todo gather é ilegal em modo streaming.
+    record SveGather(
+            Op op,
+            /// Log2 do tamanho do acesso à memória por elemento (`0`-`3`; `4` = 128 bits em `LD1Q`).
+            int msz,
+            /// Log2 do tamanho do elemento do vetor (`2` = 32 bits, `3` = 64 bits, `4` = elemento de 128 bits em `LD1Q`).
+            int esz,
+            /// `true` = o dado da memória é estendido com sinal até o elemento (`LD1SB`/`LD1SH`/`LD1SW`); senão, zero.
+            boolean signExtend,
+            /// `true` = forma first-fault (`LDFF1*`): o primeiro elemento ativo aborta, os demais escrevem o `FFR`.
+            boolean firstFault,
+            /// Vetor de destino `Zt`.
+            int rd,
+            /// {@link Op#SCALAR_PLUS_VECTOR}: base `Xn|SP`. {@link Op#VECTOR_PLUS_IMMEDIATE} e {@link Op#LD1Q}: o vetor `Zn`
+            /// que carrega os endereços.
+            int rn,
+            /// {@link Op#SCALAR_PLUS_VECTOR}: o vetor de deslocamentos `Zm`. {@link Op#LD1Q}: o escalar `Xm` (`31` = `XZR`).
+            int rm,
+            /// Só em {@link Op#VECTOR_PLUS_IMMEDIATE}: o `imm5` decodificado, sem escala e sem sinal (o endereço soma
+            /// `imm5 << msz`).
+            long immediate,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            /// Só em {@link Op#SCALAR_PLUS_VECTOR}: extensão do deslocamento (`OFFSET_UXTW`, `OFFSET_SXTW` ou `OFFSET_64`).
+            int offsetExtend,
+            /// Só em {@link Op#SCALAR_PLUS_VECTOR}: `true` = deslocamento escalado por `msz`.
+            boolean scaled,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// `xs` = `0`: os 32 bits baixos de cada elemento do vetor de deslocamentos, sem sinal (`UXTW`).
+        public static final int OFFSET_UXTW = 0;
+        /// `xs` = `1`: os 32 bits baixos de cada elemento do vetor de deslocamentos, com sinal (`SXTW`).
+        public static final int OFFSET_SXTW = 1;
+        /// `xs` = `2`: elemento de 64 bits inteiro.
+        public static final int OFFSET_64 = 2;
+
+        /// Forma de endereçamento — as três são estruturalmente diferentes.
+        public enum Op {
+            /// `LD1_zprz`: `Xn|SP + (Zm[e] estendido << escala)`.
+            SCALAR_PLUS_VECTOR,
+            /// `LD1_zpiz`: `Zn[e] + (imm5 << msz)`.
+            VECTOR_PLUS_IMMEDIATE,
+            /// `LD1Q` (SVE2.1): `Zn.D[2 × segmento] + Xm`, um quadword por segmento de 128 bits.
+            LD1Q
+        }
+        @Override public int kind() { return Kind.SVE_GATHER; }
     }
 }
