@@ -21,5 +21,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [E13](e13-t16-hint-space-undef-antes-v6t2.md) | Espaço de hint T1 (Thumb 16 bits, `1011 1111 ---- 0000`) deve UNDEF antes de v6T2 em perfil A — **reverte a decisão da B9.14** para `v6K`/`MPCore` à luz do commit QEMU `2931a675e9d3…` ("Make Thumb T1 hint space UNDEF before v6T2", `trans_MAYBE_UNDEF_T1_HINT`: UNDEF sem `ARM_FEATURE_M` nem `ARM_FEATURE_THUMB2`). Gate novo `THUMB2 \|\| M_PROFILE` na sub-forma hint do `ThumbDecoder`; inverte os testes v6K/MPCore da B9.14 + regressão negativa; curadoria TSV | E11 | ✅ (2026-09-04) — ver **Resultado** na task |
 
 | [E14](e14-neon-cobertura-execute-block-e-asmnativepolicy.md) | 🆕 Cobertura de teste de NEON em `IrBlockExecutor#execute`/`AsmNativePolicy` — toda entrada `NEON_*` amostrada aparece `nc` (não coberta) no relatório JaCoCo; achado ao fechar a B13.23, mas pré-existente desde B13.4 (lacuna estrutural do épico B13 inteiro, não regressão) | — | ⬜ |
+| [E15](e15-quebrar-arquivos-gigantes.md) | 🆕 [REFINAR] Quebrar os arquivos-fonte gigantes (`Aarch64Decoder` 7741 linhas, `IrOp` 5036, `Ir64Op` 4769, `AdvSimdLanes` 3677, ...) citados por quase toda task de decoder/IR — causa raiz do estouro de orçamento de contexto por sessão, medido 2026-09-27 a pedido do usuário | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

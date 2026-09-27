@@ -157,9 +157,19 @@ Regras do release:
   não mudam. Recurso novo entra por factory/flag/preset novo.
 - **G4 — `Cycle`/`Fetch` nunca recebem guard condicional** no codegen: instrução com
   condição falsa ainda consome ciclo e fetch.
-- **G5 — gbaemu e ndsemu são o gate de regressão.** Mudança no arm-jitter exige
-  `mvn install` local e suites verdes nos dois consumidores (peça ao usuário se não
-  puder rodar).
+- **G5 — gbaemu e ndsemu são o gate de regressão, quando podem ser afetados.**
+  `mvn install` local é sempre obrigatório. As suites dos dois consumidores (peça ao
+  usuário se não puder rodar) só são obrigatórias quando o diff toca algo **fora** desta
+  lista de pacotes AArch64-only (2026-09-27, medido: gbaemu = ARMv4T puro, ndsemu =
+  ARMv4T/v5TE — nenhum dos dois executa uma instrução A64 sequer):
+  `decoder64/`, `executor64/`, `ir64/` (`Ir64Op` e o que só ele referencia),
+  `codegen64/`, `core64/`, e qualquer classe cujo nome comece com `Sve`/`Sve2`/`Sme`
+  (predicados, `Aarch64Sve*`, `Aarch64Sme*`). Se o diff tocar QUALQUER arquivo fora
+  dessa lista (ex.: `ArmDecoder`, `IrOp`, `StandardIrBuilder`, `AsmBlockCompiler`,
+  qualquer coisa em `codegen/` sem o `64`, `AdvSimdLanes`), G5 volta a ser obrigatório
+  inteiro. Na dúvida sobre se um arquivo é compartilhado, tratar como compartilhado
+  (G5 obrigatório) — a lista acima é a única exceção, não um critério a interpretar caso
+  a caso. Registrar na task qual dos dois casos se aplicou e por quê.
 - **G6 — Sem números mágicos.** Constantes arquiteturais (registradores PC/LR, máscaras,
   offsets) recebem nome.
 - **G7 — Javadoc `///` (markdown, Java 25) em toda API pública**, em português.
@@ -176,6 +186,15 @@ Regras do release:
 Tasks marcadas com **[REFINAR]** são especificações de alto nível que devem ser
 detalhadas (nova rodada de spec) quando suas dependências concluírem — não execute
 uma task [REFINAR] diretamente.
+
+**Validação inclui JaCoCo, sempre, na primeira rodada — não é um passo extra a pedido do
+usuário.** (2026-09-27: até aqui isso vinha sendo cobrado manualmente task após task porque
+não estava escrito aqui; parar de repetir esse ciclo.) Antes de declarar a task fechada:
+`mvn -o -pl core -am test jacoco:report` (ajustar módulo conforme onde o diff caiu) e conferir
+no `jacoco.csv`/relatório HTML que as classes tocadas pela task têm 0 linha e 0 branch `MISSED`
+no código novo. Gap real → fechar com teste antes de seguir (ver
+`feedback-testes-falhando-prioridade-cobertura`). Gap num branch pré-existente que a task não
+tocou → registrar no `## Resultado`, não bloqueia o fechamento desta task.
 
 ## Issues do GitHub × `tasks/`
 

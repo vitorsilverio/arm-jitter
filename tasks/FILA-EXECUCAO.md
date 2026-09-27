@@ -15,6 +15,13 @@ sem checar o status real ali.**
 2. Toda sessão começa lendo `tasks/README.md` INTEIRO (protocolo + invariantes G1-G8), depois o
    `INDICE.md` da trilha (confirma que a task está ⬜/não pega uma já ✅), depois SÓ o arquivo da
    task + os fontes que ela cita. Não explorar o repo além disso.
+   **Fonte citada com mais de ~1500 linhas (`Aarch64Decoder`, `IrOp`, `Ir64Op`,
+   `AdvSimdLanes`, `AsmBlockCompiler`, `IrSystemExecutor`, `StandardIrBuilder`,
+   `Aarch64Core`, `Aarch64DecoderCorpusTest`, ...): NUNCA `Read` o arquivo inteiro
+   (2026-09-27, medido: isso sozinho já consome uma fatia grande do orçamento de contexto
+   da sessão). Primeiro `Grep` pelo nome do encoding/opcode/método que a task cita para
+   achar a(s) linha(s); depois `Read` só essa faixa com `offset`/`limit`. Só ler o arquivo
+   inteiro se a própria task pedir isso explicitamente.
 3. Se a task mandar "PARE e pergunte/reporte", encerrar a sessão e devolver ao usuário.
 4. Nunca pegar itens de "Pendências que EXIGEM modelo forte" (`tasks/README.md`) nem da seção
    "🧑 Bloqueadas no usuário" abaixo.
@@ -32,9 +39,18 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.21 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-27, protocolo revisado por custo de contexto)
 
 **`B17.21` (SVE2 inteiro II)** fechada em 122 de 122 encodings (21a: predicadas + Accumulate; 21b: widening 43 + narrowing 33), G5 verde. `docs/COBERTURA-ISA.md` inalterada. Ver **Resultado** na task.
+
+**Protocolo mudou (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):**
+G5 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
+`decoder64`/`executor64`/`ir64`/`codegen64`/`core64`/`Sve*`/`Sme*` (código que nenhum dos dois
+consumidores executa); fora dessa lista, G5 continua obrigatório inteiro. JaCoCo virou passo fixo de
+`Validação` no template de task (não é mais pedido manual). Regra 2 desta fila agora proíbe `Read`
+de fonte >~1500 linhas inteiro — Grep+offset primeiro. **`E15`** (nova, [REFINAR]) abre a causa
+estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por quase toda task de
+decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
@@ -44,7 +60,7 @@ entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 **Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.22`** (depende de B17.20), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14) e **`B17.24`** (depende
 de B17.5) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
-diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
+diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] — decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
 B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências no
 `INDICE.md` antes de pegar.
 
