@@ -303,8 +303,9 @@ class Aarch64SveIntegerTest {
         for (int word : words) {
             seen.add(((Ir64Op.SveIntegerUnpredicated) decode(SVE2, word)).op());
         }
-        // As 6 constantes de multiply não-predicado (B17.20) e as 14 de Accumulate (B17.21a) são SVE2, fora deste recorte de 34.
-        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.values().length - 6 - 14, seen.size());
+        // As 6 constantes de multiply não-predicado (B17.20), as 14 de Accumulate (B17.21a) e as 42 de Widening/Narrowing
+        // (B17.21b: 24 + 18) são SVE2, fora deste recorte de 34.
+        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.values().length - 6 - 14 - 42, seen.size());
         assertEquals(34, seen.size());
     }
 

@@ -4104,6 +4104,20 @@ public sealed interface Ir64Op permits
             /// (`imm` = `1` em `*T`), add/sub long com carry (`imm` = `1` em `*T`), shifts com acumulação/inserção
             /// (`imm` = contagem) e `SABA`/`UABA`. O destino `rd` é também o acumulador (o `.decode` não modela isso).
             CADD, SQCADD, SABAL, UABAL, ADCL, SBCL, SSRA, USRA, SRSRA, URSRA, SRI, SLI, SABA, UABA,
+            /// SVE2 Widening (B17.21b). {@link #esz()} é o tamanho do elemento de DESTINO (`0` só em `PMULL`, onde vale o
+            /// elemento de 128 bits); as fontes têm metade dele. {@link #imm()}: bit 0 = `Zn` lê o elemento ímpar (top),
+            /// bit 1 = `Zm` lê o ímpar. Nas formas largas (`*ADDW`/`*SUBW`) só o bit 1 vale (`Zn` já é largo).
+            /// `SSHLL`/`USHLL`: `imm` = deslocamento, `imm2` = `1` em `*T`. `EORBT`/`EORTB` escrevem só um elemento do par.
+            SADDL, UADDL, SSUBL, USUBL, SABDL, UABDL, SADDW, UADDW, SSUBW, USUBW,
+            SQDMULL, SMULL, UMULL, PMULL, SSHLL, USHLL, EORBT, EORTB,
+            /// Matriz 8-bit SVE (`FEAT_I8MM`): `Zda += Zn · Zm^T` por segmento de 128 bits; `BitPerm` por elemento.
+            SMMLA, USMMLA, UMMLA, BEXT, BDEP, BGRP,
+            /// SVE2 Narrowing (B17.21b). {@link #esz()} é o tamanho do elemento LARGO (fonte). `imm` = `1` em `*T`
+            /// (escreve só o elemento ímpar do par, preservando o par); nas de shift, `imm` = deslocamento e `imm2` = `1`
+            /// em `*T`. `SQCVTN`/`UQCVTN`/`SQCVTUN` (SVE2.1/SME2) leem o PAR `Zn`,`Zn+1` e intercalam.
+            SQXTN, UQXTN, SQXTUN, SQCVTN, UQCVTN, SQCVTUN,
+            SHRN, RSHRN, SQSHRN, SQRSHRN, UQSHRN, UQRSHRN, SQSHRUN, SQRSHRUN,
+            ADDHN, RADDHN, SUBHN, RSUBHN,
             INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
         }
         @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }

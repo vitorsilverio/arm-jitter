@@ -119,6 +119,12 @@ public final class Aarch64Core {
     private static final long ID_AA64PFR0_SVE_IMPLEMENTED = 1L << 32;
     /// `ID_AA64ZFR0_EL1.SVEver` (`bits[3:0]`): `0b0001` = SVE2 (`0b0000` = só SVE).
     private static final long ID_AA64ZFR0_SVEVER_SVE2 = 1L;
+    /// `ID_AA64ZFR0_EL1.AES` (`bits[7:4]`): `0b0010` = `PMULLB`/`PMULLT` de 128 bits (`FEAT_SVE_PMULL128`).
+    private static final long ID_AA64ZFR0_AES_PMULL128 = 2L << 4;
+    /// `ID_AA64ZFR0_EL1.BitPerm` (`bits[19:16]`): `0b0001` = `BEXT`/`BDEP`/`BGRP` (`FEAT_SVE_BitPerm`).
+    private static final long ID_AA64ZFR0_BITPERM = 1L << 16;
+    /// `ID_AA64ZFR0_EL1.I8MM` (`bits[47:44]`): `0b0001` = `SMMLA`/`UMMLA`/`USMMLA` SVE (`FEAT_I8MM`).
+    private static final long ID_AA64ZFR0_I8MM = 1L << 44;
     /// Versão do formato de {@link #saveScalableState}.
     private static final int SCALABLE_STATE_FORMAT_VERSION = 1;
 
@@ -772,6 +778,21 @@ public final class Aarch64Core {
         return streamingModeEnabled() && !fa64Enabled();
     }
 
+    /// `ID_AA64ZFR0_EL1` de um preset com SVE: `SVEver` (SVE2) mais os campos das sub-features que o preset declara.
+    private long sveFeatureRegister() {
+        long value = architecture.has(Aarch64Feature.SVE2) ? ID_AA64ZFR0_SVEVER_SVE2 : ID_AA64ZFR0_EL1_VALUE;
+        if (architecture.has(Aarch64Feature.SVE_PMULL128)) {
+            value |= ID_AA64ZFR0_AES_PMULL128;
+        }
+        if (architecture.has(Aarch64Feature.SVE_BITPERM)) {
+            value |= ID_AA64ZFR0_BITPERM;
+        }
+        if (architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
+            value |= ID_AA64ZFR0_I8MM;
+        }
+        return value;
+    }
+
     /// `ID_AA64PFR1_EL1.SME` (`bits[27:24]`) do preset: `0` sem SME, `1` = SME, `2` = SME2 ou melhor
     /// (o `aarch64_cpu_sme_finalize` do QEMU faz o mesmo).
     private long smeIdField() {
@@ -1114,8 +1135,7 @@ public final class Aarch64Core {
             case SMCR_EL1 -> smcrEl1;
             case SMCR_EL2 -> smcrEl2;
             case SMCR_EL3 -> smcrEl3;
-            case ID_AA64ZFR0_EL1 -> !hasSve() ? ID_AA64ZFR0_EL1_VALUE
-                    : architecture.has(Aarch64Feature.SVE2) ? ID_AA64ZFR0_SVEVER_SVE2 : ID_AA64ZFR0_EL1_VALUE;
+            case ID_AA64ZFR0_EL1 -> !hasSve() ? ID_AA64ZFR0_EL1_VALUE : sveFeatureRegister();
             case ZCR_EL1 -> zcrEl1;
             case ZCR_EL2 -> zcrEl2;
             case ZCR_EL3 -> zcrEl3;

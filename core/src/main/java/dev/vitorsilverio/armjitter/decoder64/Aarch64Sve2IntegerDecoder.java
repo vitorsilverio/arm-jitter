@@ -98,10 +98,15 @@ final class Aarch64Sve2IntegerDecoder {
     private static final int ESZ_ADCL_WORD = 2;
     private static final int ESZ_ADCL_DOUBLEWORD = 3;
 
+    /// `bit 21` do prefixo `0x45`: `1` = `#### SVE2 Narrowing` (B17.21b), `0` = Widening/Accumulate.
+    private static final int NARROWING_SPACE_BIT = 1 << 21;
+
     private final Aarch64Architecture architecture;
+    private final Aarch64Sve2WideningDecoder widening;
 
     Aarch64Sve2IntegerDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
+        this.widening = new Aarch64Sve2WideningDecoder(architecture);
     }
 
     /// Multiply não-predicado (prefixo `0x04`). `null` quando a palavra não é uma destas 6 linhas.
@@ -254,6 +259,9 @@ final class Aarch64Sve2IntegerDecoder {
             // `@rdn_rm`: `Zm` em `bits[9:5]`, destrutiva em `Zdn`. `bit 10` = rotação 270.
             return unpredicated(op, esz, rd, rd, rn, top, address);
         }
+        if ((word & NARROWING_SPACE_BIT) != 0) {
+            return widening.decode(word, address); // B17.21b: `#### SVE2 Narrowing` (e o espaço MATCH, recusado)
+        }
         if ((word & ACCUMULATE_FIXED_MASK) != ACCUMULATE_FIXED_VALUE) {
             return null;
         }
@@ -278,7 +286,7 @@ final class Aarch64Sve2IntegerDecoder {
                             : Ir64Op.SveIntegerUnpredicated.Op.SABAL,
                     esz, rd, rn, rm, top, address);
             case FAMILY_SHIFT_ACCUMULATE -> shiftAccumulate(word, rd, rn, address);
-            default -> null;
+            default -> widening.decode(word, address); // B17.21b: `#### SVE2 Widening Integer Arithmetic`
         };
     }
 
@@ -316,13 +324,13 @@ final class Aarch64Sve2IntegerDecoder {
     }
 
     /// `tsz` = `bits[23:22]`:`bits[20:19]` (o `imm3` são `bits[18:16]`).
-    private static int tsz(int word) {
+    static int tsz(int word) {
         return ((word >>> TSZ_HIGH_SHIFT) & TSZ_FIELD_MASK) << TSZ_LOW_FIELD_BITS
                 | (word >>> TSZ_LOW_SHIFT) & TSZ_FIELD_MASK;
     }
 
     /// `esz` = posição do bit mais alto de `tsz` (`%tszimm_esz`).
-    private static int tszEsz(int tsz) {
+    static int tszEsz(int tsz) {
         return Integer.SIZE - 1 - Integer.numberOfLeadingZeros(tsz);
     }
 
@@ -332,12 +340,12 @@ final class Aarch64Sve2IntegerDecoder {
     }
 
     /// `%tszimm_shr`: `(16 << esz) - tszimm` (1 a `esize`).
-    private static int rightShift(int word, int esz) {
+    static int rightShift(int word, int esz) {
         return (ESZ_BYTE_BITS_DOUBLE << esz) - tszimm(word);
     }
 
     /// `%tszimm_shl`: `tszimm - (8 << esz)` (0 a `esize - 1`).
-    private static int leftShift(int word, int esz) {
+    static int leftShift(int word, int esz) {
         return tszimm(word) - (ESZ_BYTE_BITS << esz);
     }
 }

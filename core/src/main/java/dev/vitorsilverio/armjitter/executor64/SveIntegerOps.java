@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -95,10 +96,14 @@ final class SveIntegerOps {
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
     static boolean execute(Aarch64Core core, Ir64Op.SveIntegerUnpredicated op) {
-        if (op.op() == Ir64Op.SveIntegerUnpredicated.Op.FEXPA || op.op() == Ir64Op.SveIntegerUnpredicated.Op.FTSSEL) {
-            SvePredicateOps.requireNonStreaming(core); // sem FEAT_SSVE_FEXPA: ilegais em streaming
+        if (op.op() == Ir64Op.SveIntegerUnpredicated.Op.FEXPA || op.op() == Ir64Op.SveIntegerUnpredicated.Op.FTSSEL
+                || nonStreamingWidening(op)) {
+            SvePredicateOps.requireNonStreaming(core); // sem FEAT_SSVE_FEXPA/BitPerm/AES: ilegais em streaming
         }
-        if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
+        // `SQCVTN`/`UQCVTN`/`SQCVTUN` sem FEAT_SVE2p1 (só SME2) existem SÓ em modo streaming.
+        boolean streamingOnly = isPairConvert(op.op()) && !core.architecture().has(Aarch64Feature.SVE2_1);
+        if (!(streamingOnly ? core.smeStreamingEnabledCheck(op.instructionAddress())
+                : SvePredicateOps.accessAllowed(core, op.instructionAddress()))) {
             return true;
         }
         Aarch64ScalableRegisters regs = core.scalable();
@@ -107,6 +112,11 @@ final class SveIntegerOps {
             case ADD, SUB, SQADD, UQADD, SQSUB, UQSUB -> arithmetic(regs, op, elements);
             case CADD, SQCADD, SABAL, UABAL, ADCL, SBCL, SSRA, USRA, SRSRA, URSRA, SRI, SLI, SABA, UABA ->
                     Sve2AccumulateOps.execute(regs, op, elements);
+            case SADDL, UADDL, SSUBL, USUBL, SABDL, UABDL, SADDW, UADDW, SSUBW, USUBW, SQDMULL, SMULL, UMULL, PMULL,
+                    SSHLL, USHLL, EORBT, EORTB, SMMLA, USMMLA, UMMLA, BEXT, BDEP, BGRP ->
+                    Sve2WideningOps.execute(regs, op, elements);
+            case SQXTN, UQXTN, SQXTUN, SQCVTN, UQCVTN, SQCVTUN, SHRN, RSHRN, SQSHRN, SQRSHRN, UQSHRN, UQRSHRN, SQSHRUN,
+                    SQRSHRUN, ADDHN, RADDHN, SUBHN, RSUBHN -> Sve2NarrowingOps.execute(regs, op, elements);
             case MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH -> multiply(regs, op, elements);
             case AND, ORR, EOR, BIC, EOR3, BSL, BCAX, BSL1N, BSL2N, NBSL -> bitwise(core, regs, op);
             case XAR -> exclusiveOrRotate(regs, op, elements);
@@ -119,6 +129,21 @@ final class SveIntegerOps {
             default -> index(core, regs, op, elements); // INDEX_II/IR/RI/RR
         }
         return false;
+    }
+
+    /// `BEXT`/`BDEP`/`BGRP`, `PMULL` de 128 bits e `SMMLA`/`USMMLA`/`UMMLA` não existem em streaming sem `FEAT_SME_FA64`
+    /// (`TRANS_FEAT_STREAMING_IF`/`TRANS_FEAT_NONSTREAMING` do QEMU; nenhuma das sub-features `SSVE_*` está modelada).
+    private static boolean nonStreamingWidening(Ir64Op.SveIntegerUnpredicated op) {
+        return switch (op.op()) {
+            case SMMLA, USMMLA, UMMLA, BEXT, BDEP, BGRP -> true;
+            case PMULL -> op.esz() == 0;
+            default -> false;
+        };
+    }
+
+    private static boolean isPairConvert(Ir64Op.SveIntegerUnpredicated.Op operation) {
+        return operation == Ir64Op.SveIntegerUnpredicated.Op.SQCVTN || operation == Ir64Op.SveIntegerUnpredicated.Op.UQCVTN
+                || operation == Ir64Op.SveIntegerUnpredicated.Op.SQCVTUN;
     }
 
     // ── Auxiliares de elemento ───────────────────────────────────────────────────────────────────
