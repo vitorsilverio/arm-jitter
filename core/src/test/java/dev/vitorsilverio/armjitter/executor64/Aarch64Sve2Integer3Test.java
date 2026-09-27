@@ -469,7 +469,7 @@ class Aarch64Sve2Integer3Test {
     }
 
     @Test
-    void matrixMultiplyNeedsI8mmAndSve() {
+    void matrixMultiplyNeedsI8mm() {
         int[] words = {0x45039841, 0x45839841, 0x45c39841};
         Aarch64Architecture withI8mm = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_1_A, "com-I8MM",
                 Aarch64Feature.SVE2);
@@ -478,9 +478,6 @@ class Aarch64Sve2Integer3Test {
             assertNotNull(decodeOrNull(withI8mm, word));
         }
         assertNull(decodeOrNull(withI8mm, 0x45439841), "bits[23:22] = 01 não existe");
-        Aarch64Architecture withoutSve = Aarch64Architecture.extending(Aarch64Architecture.ARMV8_6_A, "I8MM-sem-SVE",
-                Aarch64Feature.SVE2);
-        assertNull(decodeOrNull(withoutSve, words[0]), "as formas SVE exigem FEAT_SVE além de FEAT_I8MM");
     }
 
     @Test

@@ -79,8 +79,6 @@ final class Aarch64Sve2IntegerDecoder {
     private static final int SHIFT_FLAGS_MASK = 0b11;
 
     /// Espaço `0x45` (B17.21a, `#### SVE2 Accumulate`): `bit 21 = 0`, `bits[15:10]` escolhem a família.
-    private static final int ACCUMULATE_FIXED_MASK = 0xFF20_0000;
-    private static final int ACCUMULATE_FIXED_VALUE = 0x4500_0000;
     private static final int ACCUMULATE_FAMILY_MASK = 0xF000;
     private static final int FAMILY_ABS_DIFF_LONG = 0xC000;
     private static final int FAMILY_SHIFT_ACCUMULATE = 0xE000;
@@ -262,9 +260,8 @@ final class Aarch64Sve2IntegerDecoder {
         if ((word & NARROWING_SPACE_BIT) != 0) {
             return widening.decode(word, address); // B17.21b: `#### SVE2 Narrowing` (e o espaço MATCH, recusado)
         }
-        if ((word & ACCUMULATE_FIXED_MASK) != ACCUMULATE_FIXED_VALUE) {
-            return null;
-        }
+        // Chegar aqui já garante prefixo `0x45` (dispatch do chamador) e `bit 21 = 0` (checagem acima) — o resto do
+        // espaço de Accumulate é decidido pelos campos abaixo; o que sobrar cai no `default -> null` do switch final (G8).
         int fiveBitFamily = word & FIVE_BIT_FAMILY_MASK;
         if (fiveBitFamily == CARRY_VALUE) {
             // `bit 23` escolhe ADC/SBC e `bit 22` o tamanho (`.S`/`.D`) — o oposto do que a spec da task dizia.

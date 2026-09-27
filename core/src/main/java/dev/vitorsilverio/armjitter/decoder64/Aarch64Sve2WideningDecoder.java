@@ -199,9 +199,11 @@ final class Aarch64Sve2WideningDecoder {
         };
     }
 
-    /// `SMMLA`/`USMMLA`/`UMMLA` (`@rda_rn_rm_ex esz=2`): `bits[23:22]` escolhem os sinais; `01` não existe.
+    /// `SMMLA`/`USMMLA`/`UMMLA` (`@rda_rn_rm_ex esz=2`): `bits[23:22]` escolhem os sinais; `01` não existe. Sem checagem
+    /// de `FEAT_SVE` aqui — `Aarch64SveDecoder.decode` já recusa o espaço inteiro sem ela antes de chegar neste decoder
+    /// (checar de novo seria código morto, nunca `false` neste ponto — achado do JaCoCo desta task).
     private Ir64Op matrixMultiply(int esz, int rd, int rn, int rm, long address) {
-        if (!architecture.has(Aarch64Feature.SVE) || !architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
+        if (!architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
             return null;
         }
         Ir64Op.SveIntegerUnpredicated.Op operation = switch (esz) {
