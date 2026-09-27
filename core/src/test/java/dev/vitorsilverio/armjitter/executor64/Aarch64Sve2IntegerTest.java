@@ -22,6 +22,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// B17.20 — SVE2 inteiro I (21 encodings): multiply não-predicado, `SADALP`/`UADALP`, unárias `URECPE`/`URSQRTE`/`SQABS`/
@@ -284,6 +285,36 @@ class Aarch64Sve2IntegerTest {
     private static boolean isNew(Ir64Op.SveIntegerPredicated.Op op) {
         return switch (op) {
             case SQABS, SQNEG, URECPE, URSQRTE, SADALP, UADALP, ADDP, SMAXP, UMAXP, SMINP, UMINP -> true;
+            default -> false;
+        };
+    }
+
+    /// Os espaços vizinhos (`bits[15:13]` diferente de `011` no prefixo `0x04` e de `101` no `0x44`) nunca viram uma das
+    /// operações novas: exercita o ramo "máscara não bate" do decoder (G8).
+    @Test
+    void neighbouringSpacesAreNotClaimed() {
+        for (int esz = 0; esz < 4; esz++) {
+            for (int opcode = 0; opcode < 64; opcode++) {
+                int prefix04 = 0x04200000 | (esz << ESZ_SHIFT) | (opcode << OPCODE_SHIFT) | 0x41;
+                if (opcode >> 3 != 0b011) {
+                    Ir64Op op = decodeOrNull(SVE2P2, prefix04);
+                    assertFalse(op instanceof Ir64Op.SveIntegerUnpredicated u && isNewMultiply(u.op()), "0x04 " + opcode);
+                }
+                int prefix44 = 0x44000000 | (esz << ESZ_SHIFT) | (opcode << PREDICATED_OPCODE_SHIFT) | 0x0861;
+                for (int high = 0; high < 8; high++) {
+                    if (high == 0b101) {
+                        continue;
+                    }
+                    Ir64Op op = decodeOrNull(SVE2P2, prefix44 | (high << 13));
+                    assertFalse(op instanceof Ir64Op.SveIntegerPredicated p && isNew(p.op()), "0x44 " + opcode + "/" + high);
+                }
+            }
+        }
+    }
+
+    private static boolean isNewMultiply(Ir64Op.SveIntegerUnpredicated.Op op) {
+        return switch (op) {
+            case MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH -> true;
             default -> false;
         };
     }
