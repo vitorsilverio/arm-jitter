@@ -116,12 +116,25 @@ final class SveCompareOps {
     }
 
     /// `WHILE<cond>`: quantos elementos, a partir do 0 (`LT`) ou do último (`GT`), satisfazem a condição — limitado
-    /// ao que cabe no(s) predicado(s). As formas `_PAIR` escrevem `Pd` e `Pd+1` e contam sobre `2 * VL`.
+    /// ao que cabe no(s) predicado(s). As formas `_PAIR` escrevem `Pd` e `Pd+1` e contam sobre `2 * VL`; as `_CNT2`/`_CNT4`
+    /// (B17.28) escrevem UM predicado-como-contador (`SveCounterOps.encode`) sobre 2 ou 4 vetores.
     private static void whileCount(Aarch64Core core, Ir64Op.SveScalarCompare op) {
-        boolean less = op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT
-                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_PAIR;
+        boolean less = switch (op.op()) {
+            case WHILE_LT, WHILE_LT_PAIR, WHILE_LT_CNT2, WHILE_LT_CNT4 -> true;
+            default -> false;
+        };
         boolean pair = op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_PAIR
                 || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_PAIR;
+        // Quantos vetores o resultado cobre, em log2: as `_PAIR` e `CNT2` valem 2, as `CNT4`, 4.
+        int lg2Vectors = switch (op.op()) {
+            case WHILE_LT_PAIR, WHILE_GT_PAIR, WHILE_LT_CNT2, WHILE_GT_CNT2 -> 1;
+            case WHILE_LT_CNT4, WHILE_GT_CNT4 -> 2;
+            default -> 0;
+        };
+        boolean counter = op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2
+                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4
+                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2
+                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4;
         // `flag` é o bit `eq` cru; nas formas `GT` o sentido é invertido (`eq = 0` é `GE`/`HS`).
         boolean orEqual = op.flag() == less;
         long left = core.x(op.rn());
@@ -155,7 +168,7 @@ final class SveCompareOps {
             }
         }
         int vectorBytes = core.vectorLengthBytes();
-        long maxElements = ((long) vectorBytes << (pair ? 1 : 0)) >> op.esz();
+        long maxElements = ((long) vectorBytes << lg2Vectors) >> op.esz();
         if (orEqual) {
             difference += 1; // a igualdade conta uma iteração a mais
             if (right == maxValue) {
@@ -166,6 +179,11 @@ final class SveCompareOps {
             difference = maxElements;
         }
         int elements = holds ? (int) difference : 0;
+        if (counter) {
+            SveCounterOps.writeCounter(core, op.rd(), SveCounterOps.encode((int) maxElements, elements, op.esz(), !less));
+            predCountTest(core, (int) maxElements, elements, !less);
+            return;
+        }
         writeWhile(core, op.rd(), op.esz(), elements, pair, !less);
     }
 
@@ -230,7 +248,7 @@ final class SveCompareOps {
     }
 
     /// `pred_count_test` do QEMU (`PredCountTest` do manual).
-    private static void predCountTest(Aarch64Core core, int elements, int count, boolean invert) {
+    static void predCountTest(Aarch64Core core, int elements, int count, boolean invert) {
         boolean negative;
         boolean zero = count == 0;
         boolean carry;

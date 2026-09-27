@@ -117,6 +117,8 @@ public final class Aarch64Decoder {
     private static final int CLASS_BRANCH_EXCEPTION_SYSTEM = 0b101;
     /// B17.4: classe SVE (`op0 = 0010`, bits[28:26] = `001`). Roteada para {@link Aarch64SveDecoder}.
     private static final int CLASS_SVE = 0b001;
+    /// B17.28: `bits[28:26] = 000` — o espaço da SME (com `bit31 = 1`), onde moram os `LD1`/`ST1` multi-vetor de SVE2.1.
+    private static final int CLASS_SME_SPACE = 0b000;
 
     // ── Sub-grupos de "Data Processing Immediate" (bit 25 e bits 24:23) ─────────────────────
     private static final int BIT_25 = 1 << 25;
@@ -2105,8 +2107,19 @@ public final class Aarch64Decoder {
             case CLASS_DATA_PROCESSING_IMMEDIATE -> decodeDataProcessingImmediate(word, address);
             case CLASS_BRANCH_EXCEPTION_SYSTEM -> decodeBranchExceptionSystem(word, address);
             case CLASS_SVE -> decodeSve(word, address);
+            case CLASS_SME_SPACE -> decodeMultiVector(word, address);
             default -> throw unsupported(word, address);
         };
+    }
+
+    /// B17.28: os `LD1`/`ST1` multi-vetor governados por predicado-como-contador vivem no espaço `bits[28:26] = 000` (o da
+    /// SME), fora da classe SVE. O que o {@link Aarch64SveDecoder} não reconhece é recusado (G8).
+    private Ir64Op decodeMultiVector(int word, long address) {
+        Ir64Op op = sveDecoder.decodeMultiVector(word, address);
+        if (op == null) {
+            throw unsupported(word, address);
+        }
+        return op;
     }
 
     /// Classe SVE (B17.4): o que o {@link Aarch64SveDecoder} não reconhece é recusado (G8).

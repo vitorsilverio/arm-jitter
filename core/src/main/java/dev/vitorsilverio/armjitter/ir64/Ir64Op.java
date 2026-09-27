@@ -84,7 +84,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveAddress, Ir64Op.SvePermute, Ir64Op.SveCompare, Ir64Op.SveScalarCompare,
         Ir64Op.SvePermutePredicated,
         Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
-        Ir64Op.SveLoad, Ir64Op.SveStore, Ir64Op.SveGather {
+        Ir64Op.SveLoad, Ir64Op.SveStore, Ir64Op.SveGather, Ir64Op.SveCounterPredicate,
+        Ir64Op.SveMultiVectorMemory {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -481,6 +482,10 @@ public sealed interface Ir64Op permits
         public static final int SVE_STORE = 172;
         /// B17.19: gather load SVE (`LD1_zprz`, `LD1_zpiz`, `LD1Q` e as formas first-fault `LDFF1`) — ver {@link SveGather}.
         public static final int SVE_GATHER = 173;
+        /// B17.28: predicado-como-contador SVE2.1 (`PTRUE`/`CNTP`/`PEXT` sobre `PN8`-`PN15`) — ver {@link SveCounterPredicate}.
+        public static final int SVE_COUNTER_PREDICATE = 174;
+        /// B17.28: `LD1`/`ST1` multi-vetor contíguo (2 ou 4 registradores) governado por predicado-como-contador — ver {@link SveMultiVectorMemory}.
+        public static final int SVE_MULTI_VECTOR_MEMORY = 175;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4320,7 +4325,7 @@ public sealed interface Ir64Op permits
 
     /// Comparação SVE de ESCALARES (B17.9): `WHILE*` produz um predicado a partir de dois `Xn`/`Wn` (o que faz um laço VLA
     /// terminar sem conhecer o `VL`), `CTERM` só seta flags. `PEXT` e `WHILE*` que escrevem predicado-como-contador
-    /// (`PN8`-`PN15`) NÃO entram aqui: dependem do estado de predicado-como-contador (pendência nomeada).
+    /// (`PN8`-`PN15`) entram aqui desde a B17.28 (`WHILE_*_CNT2`/`CNT4`, com `rd` = o índice `8`-`15` do `PN`); `PEXT` fica em {@link SveCounterPredicate}.
     record SveScalarCompare(
             Op op,
             /// Tamanho do elemento do predicado (`0` = byte … `3` = doubleword); sem significado em `CTERM`.
@@ -4341,7 +4346,11 @@ public sealed interface Ir64Op permits
             /// Endereço da instrução.
             long instructionAddress) implements Ir64Op {
         /// Operação do grupo. `WHILE_GT` (`WHILEGE`/`WHILEGT`/`WHILEHS`/`WHILEHI`) é SVE2; as `_PAIR`, SVE2.1.
-        public enum Op { WHILE_LT, WHILE_GT, WHILE_PTR, WHILE_LT_PAIR, WHILE_GT_PAIR, CTERM }
+        public enum Op {
+            WHILE_LT, WHILE_GT, WHILE_PTR, WHILE_LT_PAIR, WHILE_GT_PAIR, CTERM,
+            /// SVE2.1: `WHILE` que escreve um predicado-COMO-CONTADOR (`PN8`-`PN15`) sobre 2 (`CNT2`) ou 4 (`CNT4`) vetores.
+            WHILE_LT_CNT2, WHILE_LT_CNT4, WHILE_GT_CNT2, WHILE_GT_CNT4
+        }
         @Override public int kind() { return Kind.SVE_SCALAR_COMPARE; }
     }
 
@@ -4670,5 +4679,64 @@ public sealed interface Ir64Op permits
             VECTOR_PLUS_SCALAR
         }
         @Override public int kind() { return Kind.SVE_GATHER; }
+    }
+
+    /// Predicado-como-contador SVE2.1 (B17.28), o que NÃO é `WHILE`: `PTRUE` (`PN8`-`PN15`), `CNTP` (conta os elementos que
+    /// um `PNn` descreve) e `PEXT` (extrai uma máscara comum de um `PNn`). Um `PNn` é o registrador `Pn` (`n = 8..15`)
+    /// lido como CONTADOR — não como máscara de bits — nos 16 bits baixos (ver `SveCounterOps`). Os campos que a operação
+    /// não usa ficam `0`.
+    record SveCounterPredicate(
+            Op op,
+            /// Tamanho de elemento (`0` = byte … `3` = doubleword).
+            int esz,
+            /// Destino predicado: `PN8`-`PN15` em `PTRUE` (índice `8`-`15`); `Pd` em `PEXT` (o PRIMEIRO do par em `PEXT_2`).
+            int pd,
+            /// Fonte `PNn` (índice `8`-`15`) de `CNTP` e `PEXT`.
+            int pn,
+            /// Destino `Xd` de `CNTP` (`31` = `XZR`).
+            int rd,
+            /// `CNTP`: log2 do número de vetores contados (`1` = `vlx2`, `2` = `vlx4`). `PEXT`: o índice `imm` do segmento.
+            int index,
+            /// `true` = sem `FEAT_SVE2p1` (só `FEAT_SME2`): a instrução exige modo streaming (`CNTP`).
+            boolean streamingOnly,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        /// Operação. `PEXT_1` escreve um predicado; `PEXT_2`, o par `Pd`, `Pd+1`.
+        public enum Op { PTRUE, CNTP, PEXT_1, PEXT_2 }
+        @Override public int kind() { return Kind.SVE_COUNTER_PREDICATE; }
+    }
+
+    /// `LD1`/`ST1` (e `LDNT1`/`STNT1`, sem modelo de cache) de 2 ou 4 registradores CONSECUTIVOS de memória contígua,
+    /// governados por um predicado-como-contador `PN8`-`PN15` (B17.28) — 16 encodings: {escalar+escalar, escalar+imediato}
+    /// × {consecutivo, `_stride`} × {2, 4 registradores} × {load, store}. Semântica em `SveCounterOps`.
+    ///
+    /// No `_stride` (SME2) os registradores são `Zt`, `Zt + s`, … com `s = 8` (2 registradores) ou `4` (4 registradores);
+    /// no consecutivo, `s = 1`. O decoder JÁ desembaralhou o `rd` cru (o bit não temporal e o bit 0/2 misturados).
+    record SveMultiVectorMemory(
+            /// `true` = `ST1`.
+            boolean store,
+            /// Log2 do tamanho do elemento (`0` = byte … `3` = doubleword); o acesso à memória tem o mesmo tamanho.
+            int esz,
+            /// Número de registradores: `2` ou `4`.
+            int registers,
+            /// Primeiro registrador `Zt`.
+            int rt,
+            /// Distância entre os registradores (`1`, `8` ou `4`).
+            int registerStride,
+            /// Índice `8`-`15` do `PNg` governante.
+            int pg,
+            /// Base `Xn|SP`.
+            int rn,
+            /// Índice `Xm` (`31` = `XZR`), quando {@code registerOffset}.
+            int rm,
+            /// `true` = escalar mais escalar (`Xn + (Xm << esz)`); `false` = escalar mais imediato.
+            boolean registerOffset,
+            /// Imediato com sinal de 4 bits, sem escala (multiplicado por `registers × VL`).
+            long immediate,
+            /// `true` = a instrução exige modo streaming (formas `_stride`, ou sem `FEAT_SVE2p1`).
+            boolean streamingOnly,
+            /// Endereço da instrução.
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_MULTI_VECTOR_MEMORY; }
     }
 }

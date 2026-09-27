@@ -12,7 +12,9 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// feature é POR LINHA (não pelo grupo): `CTERM`/`WHILE_lt`/comparações, `FEAT_SVE`; `WHILE_gt` e `WHILE_ptr`,
 /// `FEAT_SVE2` (`aa64_sme_or_sve2`); as `_pair`, `FEAT_SVE2p1`.
 ///
-/// **Pendência nomeada:** `WHILE_lt|gt_cnt2|cnt4` e `PEXT_1|2` escrevem/leem predicado-COMO-CONTADOR (`PN8`-`PN15`),
+/// `WHILE_lt|gt_cnt2|cnt4` (B17.28) escrevem um predicado-COMO-CONTADOR (`PN8`-`PN15`), estado que NÃO é máscara de bits
+/// (Armadilha 4 da B17.4): `FEAT_SVE2p1` ou `FEAT_SME2`. `PEXT` vive em {@link Aarch64SveCounterDecoder}. Tudo o que não
+/// bate exatamente devolve `null` (G8).|gt_cnt2|cnt4` e `PEXT_1|2` escrevem/leem predicado-COMO-CONTADOR (`PN8`-`PN15`),
 /// estado que NÃO é máscara de bits (Armadilha 4 da B17.4). Devolvem `null` e são recusadas — nunca decodificadas como
 /// `WHILE` comum escrevendo `P<n>`. Tudo o que não bate exatamente devolve `null` (G8).
 final class Aarch64SveCompareDecoder {
@@ -65,6 +67,14 @@ final class Aarch64SveCompareDecoder {
     private static final int PAIR_INDEX_SHIFT = 1;
     private static final int PAIR_INDEX_MASK = 0b111;
     private static final int PAIR_STRIDE = 2;
+    private static final int WHILE_COUNTER_MASK = 0xFF20F410;
+    private static final int WHILE_COUNTER_LT_CNT2 = 0x25204410;
+    private static final int WHILE_COUNTER_LT_CNT4 = 0x25206410;
+    private static final int WHILE_COUNTER_GT_CNT2 = 0x25204010;
+    private static final int WHILE_COUNTER_GT_CNT4 = 0x25206010;
+    private static final int WHILE_COUNTER_EQ_BIT = 3;
+    private static final int COUNTER_BASE = 8;
+    private static final int COUNTER_FIELD_MASK = 0b111;
 
     private final Aarch64Architecture architecture;
 
@@ -166,6 +176,20 @@ final class Aarch64SveCompareDecoder {
             return new Ir64Op.SveScalarCompare(op, esz,
                     field(word, PAIR_INDEX_SHIFT, PAIR_INDEX_MASK) * PAIR_STRIDE, rn, rm, true,
                     bit(word, WHILE_UNSIGNED_BIT), bit(word, 0), address);
+        }
+        Ir64Op.SveScalarCompare.Op counterOp = switch (word & WHILE_COUNTER_MASK) {
+            case WHILE_COUNTER_LT_CNT2 -> Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2;
+            case WHILE_COUNTER_LT_CNT4 -> Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4;
+            case WHILE_COUNTER_GT_CNT2 -> Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2;
+            case WHILE_COUNTER_GT_CNT4 -> Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4;
+            default -> null;
+        };
+        if (counterOp != null) {
+            // B17.28: destino é um predicado-COMO-CONTADOR (`PN8`-`PN15`), sempre com operandos de 64 bits.
+            return architecture.has(Aarch64Feature.SVE2_1) || architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2)
+                    ? new Ir64Op.SveScalarCompare(counterOp, esz, COUNTER_BASE + (word & COUNTER_FIELD_MASK), rn, rm, true,
+                            bit(word, WHILE_UNSIGNED_BIT), bit(word, WHILE_COUNTER_EQ_BIT), address)
+                    : null;
         }
         return null;
     }

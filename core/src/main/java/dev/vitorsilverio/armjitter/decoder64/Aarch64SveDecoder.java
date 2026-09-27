@@ -13,9 +13,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// de `sve.decode`, medidos contra `aarch64-none-elf-as`); nada é derivado por analogia. Tudo que não
 /// bate exatamente devolve `null` e o chamador recusa a instrução (G8) — em particular:
 ///
-/// - `PTRUE` na forma predicado-como-contador (`PTRUE_cnt`, `PN8`-`PN15`) e `CNTP` na forma
-///   predicado-como-contador (`CNTP_c`), ambos SVE2.1: **pendência nomeada**, dependem do estado de
-///   predicado-como-contador (B17.25 o cita), que NÃO é uma máscara de bits (Armadilha 4 da B17.4);
+/// - `PTRUE` e `CNTP` na forma predicado-como-contador (`PTRUE_cnt`, `CNTP_c`, `PN8`-`PN15`) são SVE2.1 e vivem em
+///   {@link Aarch64SveCounterDecoder} (B17.28): o contador NÃO é uma máscara de bits (Armadilha 4 da B17.4);
 /// - `SEL` com `S = 1` (não alocado) e `INCP`/`SQINCP` vetoriais com `esz = 0` (não alocados).
 ///
 /// `FIRSTP`/`LASTP` exigem `FEAT_SVE2p2` ({@link Aarch64Feature#SVE2_2}); o resto exige só
@@ -283,6 +282,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveLoadDecoder load;
     private final Aarch64SveStoreDecoder store;
     private final Aarch64SveGatherDecoder gather;
+    private final Aarch64SveCounterDecoder counter;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -297,6 +297,13 @@ final class Aarch64SveDecoder {
         this.load = new Aarch64SveLoadDecoder(architecture);
         this.store = new Aarch64SveStoreDecoder(architecture);
         this.gather = new Aarch64SveGatherDecoder(architecture);
+        this.counter = new Aarch64SveCounterDecoder(architecture);
+    }
+
+    /// Os `LD1`/`ST1` multi-vetor governados por predicado-como-contador (B17.28) moram fora da classe `001` (prefixos
+    /// `0xA0`/`0xA1`, `bits[28:26] = 000`, o espaço que a SME compartilha): o `Aarch64Decoder` chama este ponto de entrada.
+    Ir64Op decodeMultiVector(int word, long address) {
+        return counter.decodeMultiVector(word, address);
     }
 
     /// Decodifica uma palavra da classe SVE. Devolve `null` quando a palavra não é (ainda) uma
@@ -308,6 +315,10 @@ final class Aarch64SveDecoder {
         }
         return switch ((word >>> PREFIX_SHIFT) & PREFIX_MASK) {
             case PREFIX_PREDICATE -> {
+                Ir64Op counterPredicate = counter.decodePrefix25(word, address);
+                if (counterPredicate != null) {
+                    yield counterPredicate;
+                }
                 Ir64Op predicate = decodePredicateGroup(word, address);
                 if (predicate != null) {
                     yield predicate;

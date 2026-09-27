@@ -223,7 +223,8 @@ class Aarch64SveCompareTest {
     @Test
     void theTableCoversEveryOperationAndEveryComparisonKind() {
         assertEquals(46, rows().count());
-        assertEquals(Ir64Op.SveScalarCompare.Op.values().length, rows().map(Row::expected)
+        // As quatro formas com contador (`WHILE_*_CNT2`/`CNT4`, B17.28) têm a tabela própria em `Aarch64SveCounterTest`.
+        assertEquals(Ir64Op.SveScalarCompare.Op.values().length - 4, rows().map(Row::expected)
                 .filter(Ir64Op.SveScalarCompare.class::isInstance).map(o -> ((Ir64Op.SveScalarCompare) o).op())
                 .distinct().count());
         assertEquals(26, rows().map(Row::expected).filter(Ir64Op.SveCompare.class::isInstance).count());
@@ -252,7 +253,8 @@ class Aarch64SveCompareTest {
                         () -> decode(SVE2P1, r.word() | (3 << 22)), r.asm()));
     }
 
-    /// Predicado-como-contador (`PN8`-`PN15`) é uma pendência nomeada: recusado, nunca lido como `WHILE` comum.
+    /// Predicado-como-contador (`PN8`-`PN15`) exige `FEAT_SVE2p1` ou `FEAT_SME2` (B17.28 os decodifica, ver
+    /// `Aarch64SveCounterTest`): sem elas, o espaço é recusado — nunca lido como `WHILE` comum escrevendo `P<n>`.
     @ParameterizedTest
     @ValueSource(ints = {
             0x25224430, // whilelt pn8.b, x1, x2, vlx2
@@ -262,8 +264,8 @@ class Aarch64SveCompareTest {
             0x25207010, // pext p0.b, pn8[0]
             0x25607530, // pext { p0.h, p1.h }, pn9[1]
     })
-    void predicateAsCounterFormsAreRefusedEvenWithEveryFeature(int word) {
-        assertThrows(UnsupportedOperationException.class, () -> decode(SVE2P1, word), Integer.toHexString(word));
+    void predicateAsCounterFormsAreRefusedWithoutSve2p1OrSme2(int word) {
+        assertThrows(UnsupportedOperationException.class, () -> decode(SVE2, word), Integer.toHexString(word));
     }
 
     // ── Comparação que produz predicado ─────────────────────────────────────────────────────────

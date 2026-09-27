@@ -363,6 +363,10 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SVE_LOAD -> SveLoadOps.execute(core, (Ir64Op.SveLoad) op);
             case Ir64Op.Kind.SVE_STORE -> SveStoreOps.execute(core, (Ir64Op.SveStore) op);
             case Ir64Op.Kind.SVE_GATHER -> SveGatherOps.execute(core, (Ir64Op.SveGather) op);
+            case Ir64Op.Kind.SVE_COUNTER_PREDICATE ->
+                    SveCounterOps.execute(core, (Ir64Op.SveCounterPredicate) op);
+            case Ir64Op.Kind.SVE_MULTI_VECTOR_MEMORY ->
+                    SveCounterOps.execute(core, (Ir64Op.SveMultiVectorMemory) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
                     SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {

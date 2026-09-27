@@ -32,16 +32,16 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.25 fechada parcialmente — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.28 fechada — tabela de ISA segue em 100%)
 
-**`B17.25` (SVE2 `LDNT1_zprz`/`STNT1_zprz`)** fechada em 4 de 20 encodings, G5 verde. Os 16 multi-vec contíguos SVE2.1 seguem recusados (G8): exigem o predicado-como-contador (`PN8`-`PN15`), que nada modela — virou a task **`B17.28`** (24 encodings: estes 16 + `PTRUE_cnt`/`CNTP_c`, 4 `WHILE_*_cnt*` e 2 `PEXT`). `docs/COBERTURA-ISA.md` e `COBERTURA-JIT.md` inalteradas. Ver **Resultado** na task.
+**`B17.28` (predicado-como-contador `PN8`-`PN15`)** fechada em 24 de 24 encodings, G5 verde: `PTRUE`/`CNTP`/`PEXT`/`WHILE` com contador e os 16 `LD1`/`ST1` multi-vetor (`_stride` = SME2 pura, sempre streaming). Isso também fecha os 16 multi-vec que a B17.25 recusou. `docs/COBERTURA-ISA.md` inalterada. Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.28`** (predicado-como-contador, 24 encodings), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
 de B17.5) e **`B17.20`** (depende de B17.6) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
