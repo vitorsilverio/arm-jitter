@@ -27,6 +27,7 @@ final class Aarch64SveDecoder {
     private static final int PREFIX_ELEMENT_COUNT = 0x04;
     private static final int PREFIX_IMMEDIATE = 0x05;
     private static final int PREFIX_MULTIPLY = 0x44;
+    private static final int PREFIX_SVE2_ACCUMULATE = 0x45;
     private static final int PREFIX_COMPARE = 0x24;
     private static final int PREFIX_FP_ARITHMETIC = 0x65;
     private static final int PREFIX_FP_INDEXED_COMPLEX = 0x64;
@@ -364,6 +365,7 @@ final class Aarch64SveDecoder {
                 }
                 yield product != null ? product : permute.decodePrefix44(word, address);
             }
+            case PREFIX_SVE2_ACCUMULATE -> sve2Integer.decodePrefix45(word, address);
             case PREFIX_ELEMENT_COUNT -> {
                 Ir64Op addressing = decodeAddressing(word, address);
                 if (addressing != null) {

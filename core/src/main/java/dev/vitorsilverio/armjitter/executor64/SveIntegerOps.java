@@ -105,6 +105,8 @@ final class SveIntegerOps {
         int elements = core.vectorLengthBytes() >> op.esz();
         switch (op.op()) {
             case ADD, SUB, SQADD, UQADD, SQSUB, UQSUB -> arithmetic(regs, op, elements);
+            case CADD, SQCADD, SABAL, UABAL, ADCL, SBCL, SSRA, USRA, SRSRA, URSRA, SRI, SLI, SABA, UABA ->
+                    Sve2AccumulateOps.execute(regs, op, elements);
             case MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH -> multiply(regs, op, elements);
             case AND, ORR, EOR, BIC, EOR3, BSL, BCAX, BSL1N, BSL2N, NBSL -> bitwise(core, regs, op);
             case XAR -> exclusiveOrRotate(regs, op, elements);
@@ -165,7 +167,7 @@ final class SveIntegerOps {
         }
     }
 
-    private static long saturateSigned(long n, long m, int esz, boolean subtract) {
+    static long saturateSigned(long n, long m, int esz, boolean subtract) {
         long a = signExtend(n, esz);
         long b = signExtend(m, esz);
         long result = subtract ? a - b : a + b;
@@ -178,7 +180,7 @@ final class SveIntegerOps {
         return Math.max(min, Math.min(max, result));
     }
 
-    private static long saturateUnsigned(long n, long m, int esz, boolean subtract) {
+    static long saturateUnsigned(long n, long m, int esz, boolean subtract) {
         if (esz == ESZ_DOUBLEWORD) {
             if (subtract) {
                 return Long.compareUnsigned(n, m) < 0 ? 0L : n - m;

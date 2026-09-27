@@ -4100,6 +4100,10 @@ public sealed interface Ir64Op permits
             MOVPRFX, FEXPA, FTSSEL,
             /// Multiply não-predicado SVE2 (B17.20): `MUL`/`SMULH`/`UMULH`/`PMUL` (polinomial, só byte)/`SQDMULH`/`SQRDMULH`.
             MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH,
+            /// SVE2 Accumulate (B17.21a): adição complexa (`imm` = `1` na rotação 270), acumulação absoluta longa
+            /// (`imm` = `1` em `*T`), add/sub long com carry (`imm` = `1` em `*T`), shifts com acumulação/inserção
+            /// (`imm` = contagem) e `SABA`/`UABA`. O destino `rd` é também o acumulador (o `.decode` não modela isso).
+            CADD, SQCADD, SABAL, UABAL, ADCL, SBCL, SSRA, USRA, SRSRA, URSRA, SRI, SLI, SABA, UABA,
             INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
         }
         @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }
@@ -4140,7 +4144,12 @@ public sealed interface Ir64Op permits
             /// `MOVPRFX Zd, Pg/{M,Z}, Zn` (B17.7): cópia predicada de `Zn` — o `zeroing` escolhe `_z` ou `_m`.
             MOVPRFX,
             /// SVE2 (B17.20): unárias saturantes/estimativas, soma-par acumulativa e pairwise predicado.
-            SQABS, SQNEG, URECPE, URSQRTE, SADALP, UADALP, ADDP, SMAXP, UMAXP, SMINP, UMINP
+            SQABS, SQNEG, URECPE, URSQRTE, SADALP, UADALP, ADDP, SMAXP, UMAXP, SMINP, UMINP,
+            /// SVE2 (B17.21a): shift por vetor saturante/arredondado, halving e saturating add/sub (as formas reversas
+            /// chegam com `rn`/`rm` trocados, como sempre).
+            SRSHL, URSHL, SQSHL_VECTOR, UQSHL_VECTOR, SQRSHL, UQRSHL,
+            SHADD, UHADD, SHSUB, UHSUB, SRHADD, URHADD,
+            SQADD, UQADD, SQSUB, UQSUB, SUQADD, USQADD
         }
         @Override public int kind() { return Kind.SVE_INTEGER_PREDICATED; }
     }

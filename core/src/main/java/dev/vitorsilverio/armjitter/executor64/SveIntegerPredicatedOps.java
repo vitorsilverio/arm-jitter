@@ -159,6 +159,8 @@ final class SveIntegerPredicatedOps {
             case UDIV -> m == 0L ? 0L : Long.divideUnsigned(n, m);
             case SADALP -> m + halfSum(n, esz, true);
             case UADALP -> m + halfSum(n, esz, false);
+            case SRSHL, URSHL, SQSHL_VECTOR, UQSHL_VECTOR, SQRSHL, UQRSHL, SHADD, UHADD, SHSUB, UHSUB, SRHADD,
+                    URHADD, SQADD, UQADD, SQSUB, UQSUB, SUQADD, USQADD -> Sve2VectorOps.apply(kind, n, m, esz);
             default -> shift(kind, n, m, esz); // ASR/LSR/LSL por vetor
         };
     }
@@ -181,7 +183,7 @@ final class SveIntegerPredicatedOps {
 
     /// Shifts por imediato: `ASR`/`LSR`/`LSL` (shift por `esize` é válido: `ASR` clampa, `LSR` zera), `ASRD`
     /// (arredonda para zero) e as 5 formas SVE2 (saturantes e com arredondamento), sem efeito em `FPSR.QC`.
-    private static long immediateShift(Ir64Op.SveIntegerPredicated.Op kind, long value, long amount, int esz) {
+    static long immediateShift(Ir64Op.SveIntegerPredicated.Op kind, long value, long amount, int esz) {
         int bits = SveIntegerOps.elementBits(esz);
         long signed = SveIntegerOps.signExtend(value, esz);
         long unsignedMax = SveIntegerOps.elementMask(esz);

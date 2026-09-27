@@ -64,6 +64,40 @@ final class Aarch64Sve2IntegerDecoder {
     private static final int PRED_SMINP = 0b010110;
     private static final int PRED_UMINP = 0b010111;
 
+    /// `01000100 .. ...... 100 ...`: prefixo `0x44` e `bits[15:13] = 100` (B17.21a) — shift por vetor saturante/arredondado,
+    /// halving e saturating add/sub predicados.
+    private static final int VECTOR_FIXED_VALUE = 0x4400_8000;
+    private static final int TSZ_HIGH_SHIFT = 22;
+    private static final int TSZ_LOW_SHIFT = 19;
+    private static final int TSZ_FIELD_MASK = 0b11;
+    private static final int TSZ_LOW_FIELD_BITS = 2;
+    private static final int TSZIMM_HIGH_SHIFT_BITS = 5;
+    private static final int TSZIMM_LOW_MASK = 0b11111;
+    private static final int ESZ_BYTE_BITS = 8;
+    private static final int ESZ_BYTE_BITS_DOUBLE = 16;
+    private static final int SHIFT_FLAGS_SHIFT = 10;
+    private static final int SHIFT_FLAGS_MASK = 0b11;
+
+    /// Espaço `0x45` (B17.21a, `#### SVE2 Accumulate`): `bit 21 = 0`, `bits[15:10]` escolhem a família.
+    private static final int ACCUMULATE_FIXED_MASK = 0xFF20_0000;
+    private static final int ACCUMULATE_FIXED_VALUE = 0x4500_0000;
+    private static final int ACCUMULATE_FAMILY_MASK = 0xF000;
+    private static final int FAMILY_ABS_DIFF_LONG = 0xC000;
+    private static final int FAMILY_SHIFT_ACCUMULATE = 0xE000;
+    private static final int COMPLEX_ADD_MASK = 0xFF3E_F800;
+    private static final int COMPLEX_ADD_VALUE = 0x4500_D800;
+    private static final int COMPLEX_SATURATE_BIT = 1 << 16;
+    private static final int TOP_BIT = 1 << 10;
+    private static final int UNSIGNED_BIT = 1 << 11;
+    private static final int FIVE_BIT_FAMILY_MASK = 0xFF20_F800;
+    private static final int CARRY_VALUE = 0x4500_D000;
+    private static final int INSERT_VALUE = 0x4500_F000;
+    private static final int ABS_DIFF_VALUE = 0x4500_F800;
+    private static final int SUBTRACT_BIT = 1 << 23;
+    private static final int CARRY_SIZE_BIT = 1 << 22;
+    private static final int ESZ_ADCL_WORD = 2;
+    private static final int ESZ_ADCL_DOUBLEWORD = 3;
+
     private final Aarch64Architecture architecture;
 
     Aarch64Sve2IntegerDecoder(Aarch64Architecture architecture) {
@@ -95,6 +129,9 @@ final class Aarch64Sve2IntegerDecoder {
     /// `SADALP`/`UADALP`, unárias e pairwise predicados (prefixo `0x44`). `null` quando não é uma destas 15 linhas
     /// (a palavra segue para os outros decoders do prefixo, ou é recusada).
     Ir64Op decodePrefix44(int word, long address) {
+        if ((word & PREDICATED_FIXED_MASK) == VECTOR_FIXED_VALUE) {
+            return decodeVectorPredicated(word, address);
+        }
         if ((word & PREDICATED_FIXED_MASK) != PREDICATED_FIXED_VALUE || !architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
@@ -145,5 +182,162 @@ final class Aarch64Sve2IntegerDecoder {
     private static Ir64Op pairwise(Ir64Op.SveIntegerPredicated.Op op, int esz, int rd, int rm, int pg,
             long address) {
         return new Ir64Op.SveIntegerPredicated(op, esz, rd, rd, rm, pg, 0, false, address);
+    }
+
+    /// B17.21a: as 28 linhas predicadas de `bits[15:13] = 100` (`@rdn_pg_rm`, `@rdm_pg_rn` nas reversas — o decoder entrega
+    /// `rn`/`rm` já trocados, então o resultado é sempre `op(Zn, Zm)`). Todas `FEAT_SVE2`, todos os tamanhos.
+    private Ir64Op decodeVectorPredicated(int word, long address) {
+        if (!architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
+        int opcode = (word >>> PREDICATED_OPCODE_SHIFT) & PREDICATED_OPCODE_MASK;
+        Ir64Op.SveIntegerPredicated.Op op = vectorOperation(opcode);
+        if (op == null) {
+            return null;
+        }
+        int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
+        int rd = word & RD_MASK;
+        int field = (word >>> RN_SHIFT) & RN_MASK;
+        int pg = (word >>> PG_SHIFT) & PG_MASK;
+        return isReversed(opcode)
+                ? new Ir64Op.SveIntegerPredicated(op, esz, rd, field, rd, pg, 0, false, address)
+                : new Ir64Op.SveIntegerPredicated(op, esz, rd, rd, field, pg, 0, false, address);
+    }
+
+    private static Ir64Op.SveIntegerPredicated.Op vectorOperation(int opcode) {
+        return switch (opcode) {
+            case 0b000010, 0b000110 -> Ir64Op.SveIntegerPredicated.Op.SRSHL;
+            case 0b000011, 0b000111 -> Ir64Op.SveIntegerPredicated.Op.URSHL;
+            case 0b001000, 0b001100 -> Ir64Op.SveIntegerPredicated.Op.SQSHL_VECTOR;
+            case 0b001001, 0b001101 -> Ir64Op.SveIntegerPredicated.Op.UQSHL_VECTOR;
+            case 0b001010, 0b001110 -> Ir64Op.SveIntegerPredicated.Op.SQRSHL;
+            case 0b001011, 0b001111 -> Ir64Op.SveIntegerPredicated.Op.UQRSHL;
+            case 0b010000 -> Ir64Op.SveIntegerPredicated.Op.SHADD;
+            case 0b010001 -> Ir64Op.SveIntegerPredicated.Op.UHADD;
+            case 0b010010, 0b010110 -> Ir64Op.SveIntegerPredicated.Op.SHSUB;
+            case 0b010011, 0b010111 -> Ir64Op.SveIntegerPredicated.Op.UHSUB;
+            case 0b010100 -> Ir64Op.SveIntegerPredicated.Op.SRHADD;
+            case 0b010101 -> Ir64Op.SveIntegerPredicated.Op.URHADD;
+            case 0b011000 -> Ir64Op.SveIntegerPredicated.Op.SQADD;
+            case 0b011001 -> Ir64Op.SveIntegerPredicated.Op.UQADD;
+            case 0b011010, 0b011110 -> Ir64Op.SveIntegerPredicated.Op.SQSUB;
+            case 0b011011, 0b011111 -> Ir64Op.SveIntegerPredicated.Op.UQSUB;
+            case 0b011100 -> Ir64Op.SveIntegerPredicated.Op.SUQADD;
+            case 0b011101 -> Ir64Op.SveIntegerPredicated.Op.USQADD;
+            default -> null;
+        };
+    }
+
+    /// As 10 formas reversas (`SRSHLR`, `URSHLR`, `SQSHLR`, `UQSHLR`, `SQRSHLR`, `UQRSHLR`, `SHSUBR`, `UHSUBR`,
+    /// `SQSUBR`, `UQSUBR`): `Zdn` é o SEGUNDO operando.
+    private static boolean isReversed(int opcode) {
+        return switch (opcode) {
+            case 0b000110, 0b000111, 0b001100, 0b001101, 0b001110, 0b001111, 0b010110, 0b010111, 0b011110,
+                    0b011111 -> true;
+            default -> false;
+        };
+    }
+
+    /// B17.21a: as 18 linhas de `#### SVE2 Accumulate` (prefixo `0x45`, `bit 21 = 0`). `null` para o resto do espaço (G8).
+    Ir64Op decodePrefix45(int word, long address) {
+        if (!architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
+        int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
+        int rd = word & RD_MASK;
+        int rn = (word >>> RN_SHIFT) & RN_MASK;
+        int rm = (word >>> RM_SHIFT) & RM_MASK;
+        long top = (word & TOP_BIT) != 0 ? 1 : 0;
+        if ((word & COMPLEX_ADD_MASK) == COMPLEX_ADD_VALUE) {
+            Ir64Op.SveIntegerUnpredicated.Op op = (word & COMPLEX_SATURATE_BIT) != 0
+                    ? Ir64Op.SveIntegerUnpredicated.Op.SQCADD : Ir64Op.SveIntegerUnpredicated.Op.CADD;
+            // `@rdn_rm`: `Zm` em `bits[9:5]`, destrutiva em `Zdn`. `bit 10` = rotação 270.
+            return unpredicated(op, esz, rd, rd, rn, top, address);
+        }
+        if ((word & ACCUMULATE_FIXED_MASK) != ACCUMULATE_FIXED_VALUE) {
+            return null;
+        }
+        int fiveBitFamily = word & FIVE_BIT_FAMILY_MASK;
+        if (fiveBitFamily == CARRY_VALUE) {
+            // `bit 23` escolhe ADC/SBC e `bit 22` o tamanho (`.S`/`.D`) — o oposto do que a spec da task dizia.
+            Ir64Op.SveIntegerUnpredicated.Op op = (word & SUBTRACT_BIT) != 0
+                    ? Ir64Op.SveIntegerUnpredicated.Op.SBCL : Ir64Op.SveIntegerUnpredicated.Op.ADCL;
+            int size = (word & CARRY_SIZE_BIT) != 0 ? ESZ_ADCL_DOUBLEWORD : ESZ_ADCL_WORD;
+            return unpredicated(op, size, rd, rn, rm, top, address);
+        }
+        if (fiveBitFamily == ABS_DIFF_VALUE) {
+            return unpredicated(top != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABA
+                    : Ir64Op.SveIntegerUnpredicated.Op.SABA, esz, rd, rn, rm, 0, address);
+        }
+        if (fiveBitFamily == INSERT_VALUE) {
+            return shiftInsert(word, rd, rn, top != 0, address);
+        }
+        return switch (word & ACCUMULATE_FAMILY_MASK) {
+            case FAMILY_ABS_DIFF_LONG -> esz == 0 ? null : unpredicated(
+                    (word & UNSIGNED_BIT) != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABAL
+                            : Ir64Op.SveIntegerUnpredicated.Op.SABAL,
+                    esz, rd, rn, rm, top, address);
+            case FAMILY_SHIFT_ACCUMULATE -> shiftAccumulate(word, rd, rn, address);
+            default -> null;
+        };
+    }
+
+    private static Ir64Op unpredicated(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, long imm,
+            long address) {
+        return new Ir64Op.SveIntegerUnpredicated(op, esz, rd, rn, rm, 0, 0, imm, 0, address);
+    }
+
+    /// `SSRA`/`USRA`/`SRSRA`/`URSRA` (`bits[11:10]` = `U`,`R`): acumulam o shift à direita de `Zn` em `Zda`.
+    private static Ir64Op shiftAccumulate(int word, int rd, int rn, long address) {
+        int tsz = tsz(word);
+        if (tsz == 0) {
+            return null;
+        }
+        Ir64Op.SveIntegerUnpredicated.Op op = switch ((word >>> SHIFT_FLAGS_SHIFT) & SHIFT_FLAGS_MASK) {
+            case 0b00 -> Ir64Op.SveIntegerUnpredicated.Op.SSRA;
+            case 0b01 -> Ir64Op.SveIntegerUnpredicated.Op.USRA;
+            case 0b10 -> Ir64Op.SveIntegerUnpredicated.Op.SRSRA;
+            default -> Ir64Op.SveIntegerUnpredicated.Op.URSRA;
+        };
+        int esz = tszEsz(tsz);
+        return unpredicated(op, esz, rd, rn, 0, rightShift(word, esz), address);
+    }
+
+    /// `SRI` (`bit 10 = 0`) e `SLI` (`bit 10 = 1`). `tsz = 0` é não alocado.
+    private static Ir64Op shiftInsert(int word, int rd, int rn, boolean left, long address) {
+        int tsz = tsz(word);
+        if (tsz == 0) {
+            return null;
+        }
+        int esz = tszEsz(tsz);
+        return left
+                ? unpredicated(Ir64Op.SveIntegerUnpredicated.Op.SLI, esz, rd, rn, 0, leftShift(word, esz), address)
+                : unpredicated(Ir64Op.SveIntegerUnpredicated.Op.SRI, esz, rd, rn, 0, rightShift(word, esz), address);
+    }
+
+    /// `tsz` = `bits[23:22]`:`bits[20:19]` (o `imm3` são `bits[18:16]`).
+    private static int tsz(int word) {
+        return ((word >>> TSZ_HIGH_SHIFT) & TSZ_FIELD_MASK) << TSZ_LOW_FIELD_BITS
+                | (word >>> TSZ_LOW_SHIFT) & TSZ_FIELD_MASK;
+    }
+
+    /// `esz` = posição do bit mais alto de `tsz` (`%tszimm_esz`).
+    private static int tszEsz(int tsz) {
+        return Integer.SIZE - 1 - Integer.numberOfLeadingZeros(tsz);
+    }
+
+    private static int tszimm(int word) {
+        return ((word >>> TSZ_HIGH_SHIFT) & TSZ_FIELD_MASK) << TSZIMM_HIGH_SHIFT_BITS
+                | (word >>> RM_SHIFT) & TSZIMM_LOW_MASK;
+    }
+
+    /// `%tszimm_shr`: `(16 << esz) - tszimm` (1 a `esize`).
+    private static int rightShift(int word, int esz) {
+        return (ESZ_BYTE_BITS_DOUBLE << esz) - tszimm(word);
+    }
+
+    /// `%tszimm_shl`: `tszimm - (8 << esz)` (0 a `esize - 1`).
+    private static int leftShift(int word, int esz) {
+        return tszimm(word) - (ESZ_BYTE_BITS << esz);
     }
 }
