@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -104,6 +105,7 @@ final class SveIntegerOps {
         int elements = core.vectorLengthBytes() >> op.esz();
         switch (op.op()) {
             case ADD, SUB, SQADD, UQADD, SQSUB, UQSUB -> arithmetic(regs, op, elements);
+            case MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH -> multiply(regs, op, elements);
             case AND, ORR, EOR, BIC, EOR3, BSL, BCAX, BSL1N, BSL2N, NBSL -> bitwise(core, regs, op);
             case XAR -> exclusiveOrRotate(regs, op, elements);
             case ASR_IMM, LSR_IMM, LSL_IMM -> shiftImmediate(regs, op, elements);
@@ -186,6 +188,35 @@ final class SveIntegerOps {
         }
         long result = subtract ? n - m : n + m;
         return Math.max(0L, Math.min(elementMask(esz), result));
+    }
+
+    /// Multiply não-predicado SVE2 (B17.20). `SMULH`/`UMULH` vêm de {@link #multiplyHigh} (as mesmas do grupo predicado);
+    /// `SQDMULH`/`SQRDMULH` reusam o `sqrdmlah` do multiply indexado (B17.8) com acumulador zero; `PMUL` é o produto
+    /// polinomial de `PMULL` (`AdvSimdLanes`) truncado ao byte.
+    private static void multiply(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+        int esz = op.esz();
+        for (int e = 0; e < elements; e++) {
+            long n = get(regs, op.rn(), e, esz);
+            long m = get(regs, op.rm(), e, esz);
+            long result = switch (op.op()) {
+                case MUL -> n * m;
+                case SMULH -> multiplyHigh(n, m, esz, true);
+                case UMULH -> multiplyHigh(n, m, esz, false);
+                case PMUL -> AdvSimdLanes.polynomialMultiply8(n, m);
+                case SQDMULH -> SveMultiplyIndexedOps.sqrdmlah(signExtend(n, esz), signExtend(m, esz), 0L, false, false, esz);
+                default -> SveMultiplyIndexedOps.sqrdmlah(signExtend(n, esz), signExtend(m, esz), 0L, false, true, esz); // SQRDMULH
+            };
+            set(regs, op.rd(), e, esz, result);
+        }
+    }
+
+    /// Metade alta do produto de dois elementos de `esz`, com ou sem sinal; em 64 bits usa a instrução de 128 bits do JDK.
+    static long multiplyHigh(long n, long m, int esz, boolean signed) {
+        int bits = elementBits(esz);
+        if (esz == ESZ_DOUBLEWORD) {
+            return signed ? Math.multiplyHigh(n, m) : Math.unsignedMultiplyHigh(n, m);
+        }
+        return signed ? (signExtend(n, esz) * signExtend(m, esz)) >> bits : (n * m) >>> bits;
     }
 
     // ── Lógica ───────────────────────────────────────────────────────────────────────────────────

@@ -4098,6 +4098,8 @@ public sealed interface Ir64Op permits
             ASR_IMM, LSR_IMM, LSL_IMM, ASR_WIDE, LSR_WIDE, LSL_WIDE,
             MLA, MLS, MAD, MSB,
             MOVPRFX, FEXPA, FTSSEL,
+            /// Multiply não-predicado SVE2 (B17.20): `MUL`/`SMULH`/`UMULH`/`PMUL` (polinomial, só byte)/`SQDMULH`/`SQRDMULH`.
+            MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH,
             INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
         }
         @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }
@@ -4136,7 +4138,9 @@ public sealed interface Ir64Op permits
             ASR, LSR, LSL, ASR_WIDE, LSR_WIDE, LSL_WIDE,
             CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW,
             /// `MOVPRFX Zd, Pg/{M,Z}, Zn` (B17.7): cópia predicada de `Zn` — o `zeroing` escolhe `_z` ou `_m`.
-            MOVPRFX
+            MOVPRFX,
+            /// SVE2 (B17.20): unárias saturantes/estimativas, soma-par acumulativa e pairwise predicado.
+            SQABS, SQNEG, URECPE, URSQRTE, SADALP, UADALP, ADDP, SMAXP, UMAXP, SMINP, UMINP
         }
         @Override public int kind() { return Kind.SVE_INTEGER_PREDICATED; }
     }

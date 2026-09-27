@@ -32,17 +32,17 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-09-26, B17.28 fechada — tabela de ISA segue em 100%)
+## Onde estamos (atualizado 2026-09-26, B17.20 fechada — tabela de ISA segue em 100%)
 
-**`B17.28` (predicado-como-contador `PN8`-`PN15`)** fechada em 24 de 24 encodings, G5 verde: `PTRUE`/`CNTP`/`PEXT`/`WHILE` com contador e os 16 `LD1`/`ST1` multi-vetor (`_stride` = SME2 pura, sempre streaming). Isso também fecha os 16 multi-vec que a B17.25 recusou. `docs/COBERTURA-ISA.md` inalterada. Ver **Resultado** na task.
+**`B17.20` (SVE2 inteiro I)** fechada em 21 de 21 encodings (multiply não-predicado, `SADALP`/`UADALP`, unárias e pairwise predicadas; `_z` = SVE2p2), G5 verde. `docs/COBERTURA-ISA.md` inalterada. Ver **Resultado** na task.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
 abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14), **`B17.24`** (depende
-de B17.5) e **`B17.20`** (depende de B17.6) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.21`/`B17.22`** (dependem de B17.20), **`B17.27`** (BFloat16 SVE, depende de B17.13/B17.14) e **`B17.24`** (depende
+de B17.5) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
 B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências no

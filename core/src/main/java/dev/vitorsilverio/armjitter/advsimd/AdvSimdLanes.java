@@ -2524,7 +2524,7 @@ public final class AdvSimdLanes {
 
     /// `URECPE`/`UnsignedRecipEstimate` (ARM DDI 0487) — `input`/`estimate` são campos de 9 bits,
     /// posicionados em `bits[31:23]` do resultado de 32 bits.
-    private static long unsignedRecipEstimate32(long a) {
+    public static long unsignedRecipEstimate32(long a) {
         if ((a & URECPE_TOP_BIT_MASK) == 0) {
             return URECPE_ALL_ONES;
         }
@@ -2540,7 +2540,7 @@ public final class AdvSimdLanes {
     }
 
     /// `URSQRTE`/`UnsignedRSqrtEstimate` — mesma disciplina de {@link #unsignedRecipEstimate32}.
-    private static long unsignedRSqrtEstimate32(long a) {
+    public static long unsignedRSqrtEstimate32(long a) {
         if ((a & URSQRTE_TOP_BITS_MASK) == 0) {
             return URECPE_ALL_ONES;
         }

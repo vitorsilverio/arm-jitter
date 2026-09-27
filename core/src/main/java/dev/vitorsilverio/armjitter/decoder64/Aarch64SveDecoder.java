@@ -283,6 +283,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveStoreDecoder store;
     private final Aarch64SveGatherDecoder gather;
     private final Aarch64SveCounterDecoder counter;
+    private final Aarch64Sve2IntegerDecoder sve2Integer;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -298,6 +299,7 @@ final class Aarch64SveDecoder {
         this.store = new Aarch64SveStoreDecoder(architecture);
         this.gather = new Aarch64SveGatherDecoder(architecture);
         this.counter = new Aarch64SveCounterDecoder(architecture);
+        this.sve2Integer = new Aarch64Sve2IntegerDecoder(architecture);
     }
 
     /// Os `LD1`/`ST1` multi-vetor governados por predicado-como-contador (B17.28) moram fora da classe `001` (prefixos
@@ -357,6 +359,9 @@ final class Aarch64SveDecoder {
             }
             case PREFIX_MULTIPLY -> {
                 Ir64Op product = multiply.decode(word, address);
+                if (product == null) {
+                    product = sve2Integer.decodePrefix44(word, address);
+                }
                 yield product != null ? product : permute.decodePrefix44(word, address);
             }
             case PREFIX_ELEMENT_COUNT -> {
@@ -367,6 +372,9 @@ final class Aarch64SveDecoder {
                 Ir64Op integer = decodeIntegerUnpredicated(word, address);
                 if (integer == null) {
                     integer = decodeIntegerPredicated(word, address);
+                }
+                if (integer == null) {
+                    integer = sve2Integer.decodePrefix04(word, address);
                 }
                 yield integer != null ? integer : decodeElementCount(word, address);
             }

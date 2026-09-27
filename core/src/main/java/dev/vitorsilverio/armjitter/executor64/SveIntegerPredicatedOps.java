@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.executor64;
 
+import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -34,6 +35,10 @@ final class SveIntegerPredicatedOps {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;
+        if (isPairwise(op.op())) {
+            pairwise(regs, op, elements);
+            return false;
+        }
         int perDoubleword = Long.BYTES >> esz;
         boolean wide = isWide(op.op());
         long wideAmount = 0L;
@@ -55,13 +60,72 @@ final class SveIntegerPredicatedOps {
                 case ASR_IMM, LSR_IMM, LSL_IMM, ASRD, SQSHL_IMM, UQSHL_IMM, SRSHR, URSHR, SQSHLU ->
                         immediateShift(op.op(), n, op.imm(), esz);
                 case ASR_WIDE, LSR_WIDE, LSL_WIDE -> shift(op.op(), n, wideAmount, esz);
-                case CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW, MOVPRFX ->
+                case CLS, CLZ, CNT, CNOT, NOT, FABS, FNEG, ABS, NEG, SXTB, UXTB, SXTH, UXTH, SXTW, UXTW, MOVPRFX,
+                        SQABS, SQNEG, URECPE, URSQRTE ->
                         unary(op.op(), n, esz);
                 default -> binary(op.op(), n, SveIntegerOps.get(regs, op.rm(), e, esz), esz);
             };
             SveIntegerOps.set(regs, op.rd(), e, esz, result);
         }
         return false;
+    }
+
+    private static boolean isPairwise(Ir64Op.SveIntegerPredicated.Op op) {
+        return switch (op) {
+            case ADDP, SMAXP, UMAXP, SMINP, UMINP -> true;
+            default -> false;
+        };
+    }
+
+    /// Pairwise SVE2 (B17.20, `DO_ZPZZ_PAIR` do QEMU): os elementos vizinhos `(2k, 2k+1)` de `Zn` viram o elemento `2k` do
+    /// destino e os de `Zm` o `2k+1` — dentro de cada segmento de 128 bits, que tem sempre um número par de elementos.
+    /// O predicado governa o elemento de DESTINO; o inativo é preservado. As quatro fontes do par são lidas ANTES de
+    /// qualquer escrita (`Zm` e `Zn` podem ser o próprio `Zdn`).
+    private static void pairwise(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerPredicated op, int elements) {
+        int esz = op.esz();
+        for (int e = 0; e < elements; e += 2) {
+            long n0 = SveIntegerOps.get(regs, op.rn(), e, esz);
+            long n1 = SveIntegerOps.get(regs, op.rn(), e + 1, esz);
+            long m0 = SveIntegerOps.get(regs, op.rm(), e, esz);
+            long m1 = SveIntegerOps.get(regs, op.rm(), e + 1, esz);
+            if (elementActive(regs, op.pg(), e, esz)) {
+                SveIntegerOps.set(regs, op.rd(), e, esz, pair(op.op(), n0, n1, esz));
+            }
+            if (elementActive(regs, op.pg(), e + 1, esz)) {
+                SveIntegerOps.set(regs, op.rd(), e + 1, esz, pair(op.op(), m0, m1, esz));
+            }
+        }
+    }
+
+    private static boolean elementActive(Aarch64ScalableRegisters regs, int pg, int element, int esz) {
+        int bit = element << esz;
+        return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
+    }
+
+    private static long pair(Ir64Op.SveIntegerPredicated.Op kind, long a, long b, int esz) {
+        long sa = SveIntegerOps.signExtend(a, esz);
+        long sb = SveIntegerOps.signExtend(b, esz);
+        return switch (kind) {
+            case ADDP -> a + b;
+            case SMAXP -> sa >= sb ? a : b;
+            case UMAXP -> Long.compareUnsigned(a, b) >= 0 ? a : b;
+            case SMINP -> sa >= sb ? b : a;
+            default -> Long.compareUnsigned(a, b) >= 0 ? b : a; // UMINP
+        };
+    }
+
+    /// `SADALP`/`UADALP`: soma as duas METADES (de `esize/2` bits) de `n`, com ou sem sinal; o chamador acumula em `Zda`.
+    private static long halfSum(long n, int esz, boolean signed) {
+        int half = SveIntegerOps.elementBits(esz) / 2;
+        long mask = (1L << half) - 1L;
+        long low = n & mask;
+        long high = (n >>> half) & mask;
+        if (signed) {
+            int shift = Long.SIZE - half;
+            low = (low << shift) >> shift;
+            high = (high << shift) >> shift;
+        }
+        return low + high;
     }
 
     private static boolean isWide(Ir64Op.SveIntegerPredicated.Op op) {
@@ -89,10 +153,12 @@ final class SveIntegerPredicatedOps {
             case SABD -> sn >= sm ? sn - sm : sm - sn;
             case UABD -> Long.compareUnsigned(n, m) >= 0 ? n - m : m - n;
             case MUL -> n * m;
-            case SMULH -> esz == ESZ_DOUBLEWORD ? Math.multiplyHigh(sn, sm) : (sn * sm) >> bits;
-            case UMULH -> esz == ESZ_DOUBLEWORD ? Math.unsignedMultiplyHigh(n, m) : (n * m) >>> bits;
+            case SMULH -> SveIntegerOps.multiplyHigh(n, m, esz, true);
+            case UMULH -> SveIntegerOps.multiplyHigh(n, m, esz, false);
             case SDIV -> sm == 0L ? 0L : sn / sm; // MIN / -1 dá MIN em Java (sem exceção), como o Arm exige
             case UDIV -> m == 0L ? 0L : Long.divideUnsigned(n, m);
+            case SADALP -> m + halfSum(n, esz, true);
+            case UADALP -> m + halfSum(n, esz, false);
             default -> shift(kind, n, m, esz); // ASR/LSR/LSL por vetor
         };
     }
@@ -156,6 +222,10 @@ final class SveIntegerPredicatedOps {
             case FNEG -> n ^ signBit;
             case ABS -> signed < 0L ? -signed : signed;
             case NEG -> -n;
+            case SQABS -> signed == Long.MIN_VALUE >> (Long.SIZE - bits) ? Long.MAX_VALUE >>> (Long.SIZE - bits) : Math.abs(signed);
+            case SQNEG -> signed == Long.MIN_VALUE >> (Long.SIZE - bits) ? Long.MAX_VALUE >>> (Long.SIZE - bits) : -signed;
+            case URECPE -> AdvSimdLanes.unsignedRecipEstimate32(n);
+            case URSQRTE -> AdvSimdLanes.unsignedRSqrtEstimate32(n);
             case SXTB -> SveIntegerOps.signExtend(n, ESZ_BYTE);
             case UXTB -> n & SveIntegerOps.elementMask(ESZ_BYTE);
             case SXTH -> SveIntegerOps.signExtend(n, ESZ_HALF);
