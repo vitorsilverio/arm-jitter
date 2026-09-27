@@ -41,7 +41,11 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-09-27, protocolo revisado por custo de contexto)
 
-**`B17.21` (SVE2 inteiro II)** fechada em 122 de 122 encodings (21a: predicadas + Accumulate; 21b: widening 43 + narrowing 33), G5 verde. `docs/COBERTURA-ISA.md` inalterada. Ver **Resultado** na task.
+**`B17.22` (SVE2 misc)** fechada em 37 de 37 encodings (`MATCH`/`NMATCH`, `HISTCNT`/`HISTSEG`/`LUTI2`/`LUTI4`,
+21 linhas de multiply-add long não-indexado reusando a B17.8, `PSEL`, `SCLAMP`/`UCLAMP`/`FCLAMP`), G5
+condicional (diff só em `decoder64`/`executor64`/`ir64`). Achado que corrige a spec: `HISTCNT` **não** é por
+segmento de 128 bits (era a Armadilha 1) — é histograma prefixo do vetor inteiro; só `MATCH`/`NMATCH`/`HISTSEG`
+são por segmento (medido no `sve_helper.c` do QEMU). `FCLAMP esz=0` (BFloat16) deferido para a B17.27. `docs/COBERTURA-ISA.md` inalterada (`sve.decode` fora do medidor até B17.26). Ver **Resultado** na task.
 
 **Protocolo mudou (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):**
 G5 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
