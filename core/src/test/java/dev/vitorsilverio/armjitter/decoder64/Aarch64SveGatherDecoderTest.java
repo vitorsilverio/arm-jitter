@@ -16,4 +16,11 @@ class Aarch64SveGatherDecoderTest {
         assertNull(decoder.decode(0xA4034440, 0)); // load contíguo (B17.17)
         assertNull(decoder.decode(0xE4034440, 0)); // store (B17.18)
     }
+
+    /// Gather de 32 bits com `bit 15 = 1` só existe com `bits[22:21]` = `00` (`LDNT1_zprz`) ou `01` (`LD1_zpiz`).
+    @Test
+    void thirtyTwoBitWordsWithBit15AndAHoleInBits22To21AreRefused() {
+        assertNull(decoder.decode(0x84C08000, 0)); // bits[22:21] = 10
+        assertNull(decoder.decode(0x84E08000, 0)); // bits[22:21] = 11
+    }
 }
