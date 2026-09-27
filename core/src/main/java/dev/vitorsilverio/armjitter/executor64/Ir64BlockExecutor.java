@@ -369,6 +369,12 @@ public final class Ir64BlockExecutor {
                     SveCounterOps.execute(core, (Ir64Op.SveMultiVectorMemory) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
                     SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
+            case Ir64Op.Kind.SVE_MATCH -> SveMiscOps.executeMatch(core, (Ir64Op.SveMatch) op);
+            case Ir64Op.Kind.SVE_HISTOGRAM -> SveMiscOps.executeHistogram(core, (Ir64Op.SveHistogram) op);
+            case Ir64Op.Kind.SVE_LOOKUP_TABLE -> SveMiscOps.executeLookupTable(core, (Ir64Op.SveLookupTable) op);
+            case Ir64Op.Kind.SVE_PREDICATE_SELECT ->
+                    SveMiscOps.executePredicateSelect(core, (Ir64Op.SvePredicateSelect) op);
+            case Ir64Op.Kind.SVE_CLAMP -> SveMiscOps.executeClamp(core, (Ir64Op.SveClamp) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

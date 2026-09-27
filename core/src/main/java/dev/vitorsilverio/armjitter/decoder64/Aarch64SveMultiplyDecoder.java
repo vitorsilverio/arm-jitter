@@ -121,7 +121,119 @@ final class Aarch64SveMultiplyDecoder {
                             (word >>> INDEX_PAIR_SHIFT) & INDEX_PAIR_MASK, 0, false, WAYS_TWO, address)
                     : null;
         }
-        return null;
+        return decodeMultiplyAddLong(word, address, esz, family, rd, rn, rm5);
+    }
+
+    // ── B17.22: as 21 linhas de "SVE Integer Multiply-Add (unpredicated)" NÃO-indexadas ────────────
+
+    private static final int ESZ_BYTE = 0;
+    private static final int LOW_SDOT_ZZZZ_2S = 0b10;
+    private static final int LOW_UDOT_ZZZZ_2S = 0b11;
+    private static final int FAMILY_INTERLEAVED_LONG = 0b0000;
+    private static final int LOW_INTERLEAVED_LONG_ADD = 0b10;
+    private static final int LOW_INTERLEAVED_LONG_SUB = 0b11;
+    private static final int FAMILY_CMLA_VECTOR = 0b0010;
+    private static final int FAMILY_SQRDCMLAH_VECTOR = 0b0011;
+    private static final int FAMILY_SQDMLAL_STRAIGHT = 0b0110;
+    private static final int FAMILY_LONG_SIGNED_UNSIGNED_ADD = 0b0100;
+    private static final int FAMILY_LONG_SIGNED_UNSIGNED_SUB = 0b0101;
+    private static final int FAMILY_HIGH_MULTIPLY = 0b0111;
+    private static final int LOW_SQRDMLAH = 0b00;
+    private static final int LOW_SQRDMLSH = 0b01;
+    private static final int LOW_USDOT_ZZZZ_4S = 0b10;
+    /// `bit 0` de `low` (`bits[11:10]`): `0` = metade BAIXA (`B`) de `Zn`/`Zm`; `1` = ALTA (`T`).
+    private static final int LOW_TOP_MASK = 0b01;
+    /// `bit 1` de `low`: nas famílias `0100`/`0101` escolhe sinal (`0` = signed, `1` = unsigned); na `0110`
+    /// escolhe soma/subtração (`0` = `SQDMLAL`, `1` = `SQDMLSL`).
+    private static final int LOW_SECOND_SELECTOR_MASK = 0b10;
+
+    /// As 21 linhas de multiply-add long NÃO-indexado (par sem índice das 71 linhas indexadas da B17.8) — MESMA
+    /// operação (`Ir64Op.SveMultiplyIndexed`, `indexed = false`), reusando a semântica em `SveMultiplyIndexedOps`
+    /// (Achado 4 da task: só a leitura de `Zm` muda). `rm` aqui é sempre `Z0`-`Z31` (`@rda_rn_rm`/`@rda_rn_rm_ex`,
+    /// sem a restrição de 3/4 bits das formas indexadas). Feature por linha (`TRANS_FEAT` do QEMU): tudo
+    /// `FEAT_SVE2`, exceto `USDOT_zzzz_4s` (`FEAT_I8MM`) e `SDOT_zzzz_2s`/`UDOT_zzzz_2s` (`FEAT_SVE2p1`).
+    private Ir64Op decodeMultiplyAddLong(int word, long address, int esz, int family, int rd, int rn, int rm) {
+        int low = (word >>> LOW_SHIFT) & LOW_MASK;
+        boolean top = (low & LOW_TOP_MASK) != 0;
+        return switch (family) {
+            case FAMILY_INTERLEAVED_LONG -> switch (low) {
+                case LOW_INTERLEAVED_LONG_ADD ->
+                        wideningVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLALBT, rd, rn, rm, false, 1, address);
+                case LOW_INTERLEAVED_LONG_SUB ->
+                        wideningVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLSLBT, rd, rn, rm, false, 1, address);
+                default -> null;
+            };
+            case FAMILY_CMLA_VECTOR -> // esz 0..3 todos válidos — sem restrição (`cmla_fns` do QEMU tem as 4).
+                    architecture.has(Aarch64Feature.SVE2)
+                            ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.CMLA, esz, rd, rn, rm, false,
+                                    0, low, false, 0, address)
+                            : null;
+            case FAMILY_SQRDCMLAH_VECTOR ->
+                    architecture.has(Aarch64Feature.SVE2)
+                            ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH, esz, rd, rn, rm,
+                                    false, 0, low, false, 0, address)
+                            : null;
+            case FAMILY_LONG_SIGNED_UNSIGNED_ADD -> wideningVector(esz,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SMLAL
+                            : Ir64Op.SveMultiplyIndexed.Op.UMLAL,
+                    rd, rn, rm, top, top ? 1 : 0, address);
+            case FAMILY_LONG_SIGNED_UNSIGNED_SUB -> wideningVector(esz,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SMLSL
+                            : Ir64Op.SveMultiplyIndexed.Op.UMLSL,
+                    rd, rn, rm, top, top ? 1 : 0, address);
+            case FAMILY_SQDMLAL_STRAIGHT -> wideningVector(esz,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SQDMLAL
+                            : Ir64Op.SveMultiplyIndexed.Op.SQDMLSL,
+                    rd, rn, rm, top, top ? 1 : 0, address);
+            case FAMILY_HIGH_MULTIPLY -> switch (low) {
+                case LOW_SQRDMLAH -> sameSizeVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQRDMLAH, rd, rn, rm, address);
+                case LOW_SQRDMLSH -> sameSizeVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQRDMLSH, rd, rn, rm, address);
+                case LOW_USDOT_ZZZZ_4S -> esz == ESZ_WORD && architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)
+                        ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.USDOT, ESZ_WORD, rd, rn, rm,
+                                false, 0, 0, false, WAYS_FOUR, address)
+                        : null;
+                default -> null;
+            };
+            // `1100`: `low` distingue `SCLAMP`(00)/`UCLAMP`(01) — B17.22, sem relação com multiply — de
+            // `SDOT_zzzz_2s`(10)/`UDOT_zzzz_2s`(11), mesmo family bits que o dot de 2 vias indexado.
+            case DOT_TWO_WAY_FAMILY -> switch (low) {
+                case 0b00 -> clamp(Ir64Op.SveClamp.Op.SCLAMP, esz, rd, rn, rm, address);
+                case 0b01 -> clamp(Ir64Op.SveClamp.Op.UCLAMP, esz, rd, rn, rm, address);
+                default -> esz == ESZ_BYTE && architecture.has(Aarch64Feature.SVE2_1)
+                        ? new Ir64Op.SveMultiplyIndexed(
+                                low == LOW_UDOT_ZZZZ_2S ? Ir64Op.SveMultiplyIndexed.Op.UDOT
+                                        : Ir64Op.SveMultiplyIndexed.Op.SDOT,
+                                ESZ_WORD, rd, rn, rm, false, 0, 0, false, WAYS_TWO, address)
+                        : null;
+            };
+            default -> null;
+        };
+    }
+
+    /// `SCLAMP`/`UCLAMP` (B17.22, `FEAT_SME`/`FEAT_SVE2p1`): `Zd = min(max(Zd, Zn), Zm)`. Mora aqui (não num
+    /// decoder próprio) porque compartilha o family `1100` do prefixo `0x44`/`bit 21 = 0` com o dot de 2 vias.
+    private Ir64Op clamp(Ir64Op.SveClamp.Op op, int esz, int rd, int rn, int rm, long address) {
+        return architecture.has(Aarch64Feature.SVE2_1) || architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)
+                ? new Ir64Op.SveClamp(op, esz, rd, rn, rm, address)
+                : null;
+    }
+
+    /// `SMLALB/T`/`UMLALB/T`/`SMLSLB/T`/`UMLSLB/T`/`SQDMLALB/T`/`SQDMLSLB/T`/`SQDMLALBT`/`SQDMLSLBT` não-indexados:
+    /// `esz = 0` (byte) não é alocado (`fns[0] = NULL` no QEMU — só `H`/`S`/`D`, ao contrário das formas indexadas
+    /// da B17.8 que exigem `S`/`D`).
+    private Ir64Op wideningVector(int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn, int rm, boolean topN,
+            int topM, long address) {
+        if (esz == ESZ_BYTE || !architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
+        return new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm, false, topM, 0, topN, 0, address);
+    }
+
+    /// `SQRDMLAH_zzzz`/`SQRDMLSH_zzzz`: todo `esz` (`B`/`H`/`S`/`D`) é válido — os 4 helpers do QEMU existem.
+    private Ir64Op sameSizeVector(int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn, int rm, long address) {
+        return architecture.has(Aarch64Feature.SVE2)
+                ? new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm, false, 0, 0, false, 0, address)
+                : null;
     }
 
     // ── bit 21 = 1: multiply indexado ────────────────────────────────────────────────────────────

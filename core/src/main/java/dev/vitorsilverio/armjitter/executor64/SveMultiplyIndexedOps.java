@@ -13,6 +13,11 @@ import java.math.BigInteger;
 /// **O índice é por segmento de 128 bits**: cada segmento lê o elemento `index` DELE em `Zm`. Com `VL = 128` isso
 /// é indistinguível de "índice global"; só `VL >= 256` (como nos testes) mostra a diferença.
 ///
+/// **B17.22 reusa esta classe para as 21 linhas de multiply-add long NÃO-indexado** (`op.indexed() = false`):
+/// mesma matemática, só a leitura de `Zm` muda de "elemento `index` do segmento" para "elemento `e` direto"
+/// (`sameSize`/`complexMultiplyAdd`) ou "`2e + index()`" nas alargantes (`widening`, onde `index()` é reusado como
+/// o bit `B`/`T` do lado de `Zm` — ver o javadoc do campo em {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.SveMultiplyIndexed}).
+///
 /// Todas as fontes (`Zn`, `Zm` e o acumulador `Zda` = `Zd`) são lidas de um **instantâneo** tirado antes da
 /// primeira escrita, então o resultado é função só dos valores antigos mesmo com `Zd == Zn` ou `Zd == Zm` — que é
 /// o que o pseudocódigo do manual descreve (o QEMU obtém o mesmo lendo o operando indexado antes de cada
@@ -48,7 +53,7 @@ final class SveMultiplyIndexedOps {
             case SDOT, UDOT, USDOT, SUDOT -> dot(core, regs, op, n, m, a);
             case CDOT -> complexDot(core, regs, op, n, m, a);
             case CMLA, SQRDCMLAH -> complexMultiplyAdd(core, regs, op, n, m, a);
-            case SQDMLAL, SQDMLSL, SMLAL, UMLAL, SMLSL, UMLSL, SMULL, UMULL, SQDMULL ->
+            case SQDMLAL, SQDMLSL, SMLAL, UMLAL, SMLSL, UMLSL, SMULL, UMULL, SQDMULL, SQDMLALBT, SQDMLSLBT ->
                     widening(core, regs, op, n, m, a);
             default -> sameSize(core, regs, op, n, m, a);
         }
@@ -142,11 +147,19 @@ final class SveMultiplyIndexedOps {
         boolean subtractReal = op.rot() == ROTATION_SUBTRACT_REAL_LOW || op.rot() == ROTATION_SUBTRACT_REAL_HIGH;
         boolean subtractImaginary = op.rot() >= ROTATION_SUBTRACT_IMAGINARY_FROM;
         boolean saturating = op.op() == Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH;
+        // Indexado: `m2a`/`m2b` são FIXOS por segmento (o par escolhido por `op.index()`). Não-indexado
+        // (`CMLA_zzzz`/`SQRDCMLAH_zzzz`): `Zm` é lido elemento a elemento, junto com `Zn` (mesmo `j`).
+        long fixedM2a = 0;
+        long fixedM2b = 0;
         for (int segment = 0; segment < elements; segment += perSegment) {
-            long m2a = signed(element(m, segment + op.index() * COMPLEX_PAIR + selA, bits), bits);
-            long m2b = signed(element(m, segment + op.index() * COMPLEX_PAIR + selB, bits), bits);
+            if (op.indexed()) {
+                fixedM2a = signed(element(m, segment + op.index() * COMPLEX_PAIR + selA, bits), bits);
+                fixedM2b = signed(element(m, segment + op.index() * COMPLEX_PAIR + selB, bits), bits);
+            }
             for (int j = 0; j < perSegment; j += COMPLEX_PAIR) {
                 long n1a = signed(element(n, segment + j + selA, bits), bits);
+                long m2a = op.indexed() ? fixedM2a : signed(element(m, segment + j + selA, bits), bits);
+                long m2b = op.indexed() ? fixedM2b : signed(element(m, segment + j + selB, bits), bits);
                 long real = complexTerm(n1a, m2a, signed(element(a, segment + j, bits), bits), subtractReal,
                         saturating, esz);
                 long imaginary = complexTerm(n1a, m2b, signed(element(a, segment + j + 1, bits), bits),
@@ -178,8 +191,13 @@ final class SveMultiplyIndexedOps {
         boolean unsigned = op.op() == Ir64Op.SveMultiplyIndexed.Op.UMLAL
                 || op.op() == Ir64Op.SveMultiplyIndexed.Op.UMLSL || op.op() == Ir64Op.SveMultiplyIndexed.Op.UMULL;
         for (int e = 0; e < elements; e++) {
+            // `Zn` usa sempre `top()` (B/T normal). `Zm`: forma indexada usa o índice por segmento; não-indexada
+            // usa `2e + index()` — para `SQDMLAL*BT`/`SQDMLSL*BT` o decoder força `top()=0` (base) e `index()=1`
+            // (topo), o par interleaved; nas demais não-indexadas `index() == (top()?1:0)` (B/T casado).
             long nn = element(n, 2 * e + (op.top() ? 1 : 0), narrowBits);
-            long mm = element(m, (e / perSegment) * perSegment * 2 + op.index(), narrowBits);
+            long mm = op.indexed()
+                    ? element(m, (e / perSegment) * perSegment * 2 + op.index(), narrowBits)
+                    : element(m, 2 * e + op.index(), narrowBits);
             if (!unsigned) {
                 nn = signed(nn, narrowBits);
                 mm = signed(mm, narrowBits);
@@ -190,8 +208,9 @@ final class SveMultiplyIndexedOps {
                 case SMLSL, UMLSL -> acc - nn * mm;
                 case SMULL, UMULL -> nn * mm;
                 case SQDMULL -> doublingMultiply(nn, mm, esz);
-                case SQDMLAL -> saturatingAdd(signed(acc, destBits), doublingMultiply(nn, mm, esz), esz, false);
-                default -> saturatingAdd(signed(acc, destBits), doublingMultiply(nn, mm, esz), esz, true); // SQDMLSL
+                case SQDMLAL, SQDMLALBT ->
+                        saturatingAdd(signed(acc, destBits), doublingMultiply(nn, mm, esz), esz, false);
+                default -> saturatingAdd(signed(acc, destBits), doublingMultiply(nn, mm, esz), esz, true); // SQDMLSL[BT]
             };
             SveIntegerOps.set(regs, op.rd(), e, esz, result);
         }
@@ -230,7 +249,7 @@ final class SveMultiplyIndexedOps {
         int perSegment = SEGMENT_BYTES >> esz;
         for (int e = 0; e < elements; e++) {
             long nn = element(n, e, bits);
-            long mm = element(m, (e / perSegment) * perSegment + op.index(), bits);
+            long mm = op.indexed() ? element(m, (e / perSegment) * perSegment + op.index(), bits) : element(m, e, bits);
             long acc = element(a, e, bits);
             long result = switch (op.op()) {
                 case MLA -> acc + nn * mm;

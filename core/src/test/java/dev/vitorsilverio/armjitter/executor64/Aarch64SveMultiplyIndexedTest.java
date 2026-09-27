@@ -493,10 +493,11 @@ class Aarch64SveMultiplyIndexedTest {
             0x44a02060 & ~(1 << 23), // SQDMLALB com esz = 0x: alargante não existe em half
             0x44bf0060 | (0b0101 << 12), // família 0101: não alocada
             0x44bf0060 | (0b1111 << 12) | (0b11 << 10), // família 1111 com low = 11: não alocada
-            0x44802060, // bit 21 = 0, família 0010: não é deste grupo
-            0x44000060, // bit 21 = 0, bit 23 = 0, família 0000: não é dot vetorial
+            // `0x44802060` (bit 21 = 0, família 0010) e `0x44800060 | (0b1100 << 12)` (família 1100, low = 00)
+            // SAÍRAM desta lista na B17.22: agora são `CMLA_zzzz` não-indexado e `SCLAMP`, respectivamente — ver
+            // `Aarch64SveMultiplyDecoder#decodeMultiplyAddLong`.
+            0x44000060, // bit 21 = 0, bit 23 = 0, família 0000, low = 00: não é dot vetorial nem SQDMLALBT/SQDMLSLBT
             0x44c0c860, // dot de 2 vias com esz = 11 (só existe .S)
-            0x44800060 | (0b1100 << 12), // esz = 10, família 1100, bit 11 = 0: nenhum dot de 2 vias
             0x44206000, // CMLA com esz = 00: os complexos só existem em .H/.S (esz = 10/11)
             0x44606000, // CMLA com esz = 01
             0x44401060, // CDOT vetorial com esz = 01 (só .S/.D)

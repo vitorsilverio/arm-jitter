@@ -85,7 +85,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SvePermutePredicated,
         Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
         Ir64Op.SveLoad, Ir64Op.SveStore, Ir64Op.SveGather, Ir64Op.SveCounterPredicate,
-        Ir64Op.SveMultiVectorMemory {
+        Ir64Op.SveMultiVectorMemory, Ir64Op.SveMatch, Ir64Op.SveHistogram, Ir64Op.SveLookupTable,
+        Ir64Op.SvePredicateSelect, Ir64Op.SveClamp {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -486,6 +487,16 @@ public sealed interface Ir64Op permits
         public static final int SVE_COUNTER_PREDICATE = 174;
         /// B17.28: `LD1`/`ST1` multi-vetor contíguo (2 ou 4 registradores) governado por predicado-como-contador — ver {@link SveMultiVectorMemory}.
         public static final int SVE_MULTI_VECTOR_MEMORY = 175;
+        /// B17.22: `MATCH`/`NMATCH` (busca de caractere vetorial, por segmento de 128 bits) — ver {@link SveMatch}.
+        public static final int SVE_MATCH = 176;
+        /// B17.22: `HISTCNT` (histograma prefixo, VETOR INTEIRO)/`HISTSEG` (por segmento de 128 bits) — ver {@link SveHistogram}.
+        public static final int SVE_HISTOGRAM = 177;
+        /// B17.22: `LUTI2`/`LUTI4` (`FEAT_LUT`) — ver {@link SveLookupTable}.
+        public static final int SVE_LOOKUP_TABLE = 178;
+        /// B17.22: `PSEL` — ver {@link SvePredicateSelect}.
+        public static final int SVE_PREDICATE_SELECT = 179;
+        /// B17.22: `SCLAMP`/`UCLAMP`/`FCLAMP` — ver {@link SveClamp}.
+        public static final int SVE_CLAMP = 180;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4240,9 +4251,14 @@ public sealed interface Ir64Op permits
             int rn,
             /// Segunda fonte (`Zm`, já restrita).
             int rm,
-            /// `true` nas formas indexadas; `false` em `DOT_zzzz`/`CDOT_zzzz` (`Zm` inteiro, elemento a elemento).
+            /// `true` nas formas indexadas; `false` em `DOT_zzzz`/`CDOT_zzzz` e nas 21 linhas não-indexadas da
+            /// B17.22 (`Zm` inteiro, elemento a elemento).
             boolean indexed,
-            /// Índice do elemento (ou do par/grupo, conforme a operação) dentro de cada segmento de 128 bits.
+            /// Índice do elemento (ou do par/grupo, conforme a operação) dentro de cada segmento de 128 bits
+            /// quando `indexed = true`. **Reusado** (B17.22) nas formas alargantes NÃO indexadas
+            /// (`*MLAL`/`*MLSL`/`SQDML*L`/`SQDML*LBT`) como o bit `B`/`T` do lado de `Zm` (`0` = metade
+            /// baixa, `1` = alta) — em `SQDMLALBT`/`SQDMLSLBT` esse bit é sempre `1` (`Zm` = topo)
+            /// enquanto {@link #top} (o lado de `Zn`) é sempre `0` (`Zn` = base).
             int index,
             /// Rotação (`0`-`3`) de `CDOT`/`CMLA`/`SQRDCMLAH`; sem significado nas demais.
             int rot,
@@ -4259,7 +4275,11 @@ public sealed interface Ir64Op permits
             MLA, MLS, SQRDMLAH, SQRDMLSH,
             SQDMLAL, SQDMLSL, SMLAL, UMLAL, SMLSL, UMLSL,
             CMLA, SQRDCMLAH,
-            SMULL, UMULL, SQDMULL, SQDMULH, SQRDMULH, MUL
+            SMULL, UMULL, SQDMULL, SQDMULH, SQRDMULH, MUL,
+            /// B17.22: `SQDMLALBT`/`SQDMLSLBT` — a interleaved (`Zn` sempre a metade BAIXA, `Zm` sempre a
+            /// metade ALTA, ao contrário de `B`/`T` normal onde as duas metades casam). Só formas
+            /// não-indexadas (`indexed = false`).
+            SQDMLALBT, SQDMLSLBT
         }
         @Override public int kind() { return Kind.SVE_MULTIPLY_INDEXED; }
     }
@@ -4765,5 +4785,124 @@ public sealed interface Ir64Op permits
             /// Endereço da instrução.
             long instructionAddress) implements Ir64Op {
         @Override public int kind() { return Kind.SVE_MULTI_VECTOR_MEMORY; }
+    }
+
+    /// `MATCH`/`NMATCH` (B17.22, `FEAT_SVE2`): busca de caractere vetorial. Para cada elemento ATIVO (por `pg`) de
+    /// `Zn`, o bit do predicado destino é `1` se aquele valor aparece em QUALQUER elemento do MESMO segmento de
+    /// 128 bits de `Zm` (`Zm` não é filtrado por predicado nenhum — todo o segmento é varrido); `NMATCH` inverte.
+    /// `esz ∈ {0, 1}` só (byte/halfword — `helper_sve2_{,n}match_ppzz_{b,h}` do QEMU, não existem formas `.S`/`.D`).
+    /// Sempre seta `NZCV` por `predTest` (é uma comparação). Ilegal em modo streaming sem `FEAT_SME_FA64`
+    /// (`TRANS_FEAT_NONSTREAMING`).
+    record SveMatch(
+            /// `true` = `NMATCH`.
+            boolean invert,
+            int esz,
+            /// Predicado destino (`Pd`).
+            int pd,
+            /// Predicado governante (`Pg`) — filtra só `Zn`.
+            int pg,
+            /// `Zn`: o valor buscado, elemento a elemento.
+            int rn,
+            /// `Zm`: o "alfabeto" (segmento de 128 bits inteiro, ignorando `pg`).
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_MATCH; }
+    }
+
+    /// `HISTCNT`/`HISTSEG` (B17.22, `FEAT_SVE2`): histogramas prefixo.
+    ///
+    /// **`HISTCNT` (`esz ∈ {2, 3}`, `.S`/`.D`) opera no VETOR INTEIRO, não por segmento** (achado que corrige a
+    /// spec original da task — medido em `helper_sve2_histcnt_{s,d}` do QEMU: os laços `i`/`j` varrem `0..opr_sz`
+    /// sem reiniciar a cada 16 bytes). Para cada elemento ATIVO `i` de `Zn` (por `pg`), `Zd[i]` = quantos
+    /// elementos ATIVOS `j <= i` (`j` também filtrado por `pg`) têm `Zn[j] == Zm[i]`— conta só índices MENORES OU
+    /// IGUAIS a `i`, nunca maiores; elemento inativo de `Zn` grava `Zd[i] = 0`. `pg` filtra tanto `Zn[i]`/`Zm[i]`
+    /// (o comparado) quanto cada `Zn[j]`/`Zm[j]` candidato.
+    ///
+    /// **`HISTSEG` (só `esz = 0`, byte — `helper_sve2_histseg`) opera POR SEGMENTO de 128 bits, sem predicado**:
+    /// `Zd[e]` = quantos bytes do MESMO segmento de `Zm` são iguais a `Zn[e]` (conta todos os 16 bytes do
+    /// segmento, incluindo o próprio). Os bits de `esz` de `HISTSEG` são tecnicamente livres no `.decode` (o
+    /// `trans_HISTSEG` do QEMU não os lê) — transcrito como aceito para os 4 valores, igual ao QEMU.
+    record SveHistogram(
+            /// `true` = `HISTCNT` (vetor inteiro, com predicado); `false` = `HISTSEG` (por segmento, sem predicado).
+            boolean counting,
+            int esz,
+            /// Destino (`Zd`).
+            int rd,
+            /// Predicado governante (`Pg`); sem significado em `HISTSEG`.
+            int pg,
+            int rn,
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_HISTOGRAM; }
+    }
+
+    /// `LUTI2`/`LUTI4` (B17.22, `FEAT_LUT` — {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#LOOKUP_TABLE}):
+    /// tabela de consulta vetorial. `Zn` é a TABELA (só os primeiros `2^indexBits` elementos são alcançáveis —
+    /// `LUTI2` = 4 entradas, `LUTI4` = 16); `Zm` guarda os índices empacotados a `indexBits` bits por elemento de
+    /// SAÍDA, com `elements × indexBits × (2^indexBits / elements-por-grupo)` = `VL` bits — o campo `index` do
+    /// encoding seleciona qual GRUPO de índices dentro de `Zm` (não é o índice de um elemento individual). Medido
+    /// em `do_lut_b`/`do_lut_h`/`HELPER(gvec_luti{2,4}_{b,h})` do QEMU. `LUTI4_2h` concatena a tabela de DOIS
+    /// registradores (`Zn` e `Zn+1 mod 32`) para alcançar as 16 entradas de halfword (256 bits) mesmo com
+    /// `VL = 128` — {@link #tableRegisters} `= 2` sinaliza essa forma.
+    record SveLookupTable(
+            /// `true` = `LUTI4` (índice de 4 bits, 16 entradas); `false` = `LUTI2` (2 bits, 4 entradas).
+            boolean four,
+            /// `0` = byte, `1` = halfword. `LUTI4_1b`/`LUTI2_1b` só `esz = 0`; os demais só `esz = 1`.
+            int esz,
+            int rd,
+            /// `Zn`: primeiro (ou único) registrador da tabela.
+            int rn,
+            /// `Zm`: os índices empacotados.
+            int rm,
+            /// Grupo de índices dentro de `Zm` (largura depende da forma: `2` bits em `LUTI2_1b`, `3` em
+            /// `LUTI2_1h`, `1` em `LUTI4_1b`, `2` em `LUTI4_1h`/`LUTI4_2h`).
+            int index,
+            /// `1` (tabela num registrador só) ou `2` (`LUTI4_2h`: tabela em `Zn` e `Zn+1`).
+            int tableRegisters,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_LOOKUP_TABLE; }
+    }
+
+    /// `PSEL` (B17.22, `FEAT_SME`/`FEAT_SVE2p1`): decodificação posicional pura (Achado análogo ao `PMOV` da
+    /// B17.10) — NÃO escreve vetor nenhum, só predicado. `Pd = Pm[(Wrv + imm) mod elements] ? Pn : 0` (o bit
+    /// TESTADO de `Pm`, no elemento calculado, escolhe entre copiar `Pn` inteiro ou zerar `Pd` inteiro — não é uma
+    /// seleção elemento-a-elemento entre `Pn`/`Pm`, é um "AND" de `Pn` por UM bit de `Pm` replicado). `elements =
+    /// VL >> esz`. `%psel_rv` restringe o GPR a `W12`-`W15` (a extração real é `16:2 !function=plus_12` — ler
+    /// `rv:2` cru daria `X0`-`X3`, Armadilha 5 da task). Medido em `trans_PSEL` do QEMU.
+    record SvePredicateSelect(
+            int esz,
+            /// Predicado destino (`Pd`).
+            int pd,
+            /// `Pn`: o predicado copiado (ou zerado).
+            int pn,
+            /// `Pm`: de onde vem o bit testado.
+            int pm,
+            /// `Wrv` — já resolvido para `W12`-`W15` pelo decoder (`%psel_rv`).
+            int rv,
+            /// Deslocamento somado a `Wrv` antes do `mod elements` (`%psel_imm_*`, largura depende de `esz`).
+            int imm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_PREDICATE_SELECT; }
+    }
+
+    /// `SCLAMP`/`UCLAMP`/`FCLAMP` (B17.22): `Zd = clamp(Zd, min = Zn, max = Zm)` — `Zd = min(max(Zd, Zn), Zm)`.
+    /// `SCLAMP`/`UCLAMP` são `FEAT_SME`/`FEAT_SVE2p1` (inteiro, com/sem sinal); `FCLAMP` é `FEAT_SME2`/
+    /// `FEAT_SVE2p1` (`esz ∈ {1, 2, 3}` = H/S/D) e usa `minNum`/`maxNum` (a variante NÃO propagadora de NaN — as
+    /// mesmas primitivas de `FMAXNM`/`FMINNM`, `SveFloat.maxMinNumber`), medido em `FCLAMP` do `sme_helper.c` do
+    /// QEMU (`TYPE_minnum(TYPE_maxnum(nn, *dd), mm)`). `esz = 0` de `FCLAMP` codifica `BFloat16`
+    /// (`FEAT_SVE_B16B16`) — **pendência nomeada** (nenhuma arquitetura declara essa feature ainda; entra junto
+    /// com a trilha BFloat16/B17.27).
+    record SveClamp(
+            Op op,
+            int esz,
+            /// Acumulador E destino (`Zda` = `Zd`, `MOVPRFX`-construtivo).
+            int rd,
+            /// `Zn`: o limite MÍNIMO.
+            int rn,
+            /// `Zm`: o limite MÁXIMO.
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        public enum Op { SCLAMP, UCLAMP, FCLAMP }
+        @Override public int kind() { return Kind.SVE_CLAMP; }
     }
 }

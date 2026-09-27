@@ -285,6 +285,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveGatherDecoder gather;
     private final Aarch64SveCounterDecoder counter;
     private final Aarch64Sve2IntegerDecoder sve2Integer;
+    private final Aarch64Sve2MiscDecoder sve2Misc;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -301,6 +302,7 @@ final class Aarch64SveDecoder {
         this.gather = new Aarch64SveGatherDecoder(architecture);
         this.counter = new Aarch64SveCounterDecoder(architecture);
         this.sve2Integer = new Aarch64Sve2IntegerDecoder(architecture);
+        this.sve2Misc = new Aarch64Sve2MiscDecoder(architecture);
     }
 
     /// Os `LD1`/`ST1` multi-vetor governados por predicado-como-contador (B17.28) moram fora da classe `001` (prefixos
@@ -327,7 +329,11 @@ final class Aarch64SveDecoder {
                     yield predicate;
                 }
                 Ir64Op comparison = compare.decodePrefix25(word, address);
-                yield comparison != null ? comparison : Aarch64SveImmediateDecoder.decodePrefix25(word, address);
+                if (comparison != null) {
+                    yield comparison;
+                }
+                Ir64Op immediate25 = Aarch64SveImmediateDecoder.decodePrefix25(word, address);
+                yield immediate25 != null ? immediate25 : sve2Misc.decodePrefix25(word, address);
             }
             case PREFIX_COMPARE -> compare.decodePrefix24(word, address);
             case PREFIX_FP_ARITHMETIC -> {
@@ -348,7 +354,11 @@ final class Aarch64SveDecoder {
                     yield indexed;
                 }
                 Ir64Op quadword = floatingPointCompareReduce.decodePrefix64(word, address);
-                yield quadword != null ? quadword : floatingPointUnary.decode(word, address);
+                if (quadword != null) {
+                    yield quadword;
+                }
+                Ir64Op unary = floatingPointUnary.decode(word, address);
+                yield unary != null ? unary : sve2Misc.decodePrefix64(word, address);
             }
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
@@ -365,7 +375,10 @@ final class Aarch64SveDecoder {
                 }
                 yield product != null ? product : permute.decodePrefix44(word, address);
             }
-            case PREFIX_SVE2_ACCUMULATE -> sve2Integer.decodePrefix45(word, address);
+            case PREFIX_SVE2_ACCUMULATE -> {
+                Ir64Op accumulate = sve2Integer.decodePrefix45(word, address);
+                yield accumulate != null ? accumulate : sve2Misc.decodePrefix45(word, address);
+            }
             case PREFIX_ELEMENT_COUNT -> {
                 Ir64Op addressing = decodeAddressing(word, address);
                 if (addressing != null) {
