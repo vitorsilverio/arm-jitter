@@ -41,11 +41,15 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-09-27, protocolo revisado por custo de contexto)
 
-**`B17.22` (SVE2 misc)** fechada em 37 de 37 encodings (`MATCH`/`NMATCH`, `HISTCNT`/`HISTSEG`/`LUTI2`/`LUTI4`,
-21 linhas de multiply-add long não-indexado reusando a B17.8, `PSEL`, `SCLAMP`/`UCLAMP`/`FCLAMP`), G5
-condicional (diff só em `decoder64`/`executor64`/`ir64`). Achado que corrige a spec: `HISTCNT` **não** é por
-segmento de 128 bits (era a Armadilha 1) — é histograma prefixo do vetor inteiro; só `MATCH`/`NMATCH`/`HISTSEG`
-são por segmento (medido no `sve_helper.c` do QEMU). `FCLAMP esz=0` (BFloat16) deferido para a B17.27. `docs/COBERTURA-ISA.md` inalterada (`sve.decode` fora do medidor até B17.26). Ver **Resultado** na task.
+**`B17.23` (SVE2 FP)** fechada em 65 de 65 encodings (conversões FP8/BF16, odd elements, `FLOGB`, pairwise,
+matmul, multiply-add long e dot-product, vetorial e indexado) — **G5 completo** (não a exceção condicional:
+o diff tocou `Aarch64Feature.java`, fora da lista AArch64-only), `gbaemu`/`ndsemu` verdes. Todo mask/value
+conferido byte a byte contra `aarch64-none-elf-as` real (devkitA64 disponível nesta sessão). Achados que
+corrigem a spec: a feature das conversões `fp8` sem produto é `FEAT_SVE_F8CVT` (nova constante), não
+`FEAT_FP8`; `BFMLSLB`/`BFMLSLT` exigem `SVE2p1`/`SME2`, não `BFLOAT16` como `BFMLALB`/`BFMLALT` (mesma
+família, features diferentes por linha); `FMMLA_s`/`FMMLA_d` NÃO são fundidas (QEMU usa `mul`+`add`
+separados). `docs/COBERTURA-ISA.md` inalterada (`sve.decode` fora do medidor até B17.26). Ver **Resultado**
+na task.
 
 **Protocolo mudou (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):**
 G5 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em

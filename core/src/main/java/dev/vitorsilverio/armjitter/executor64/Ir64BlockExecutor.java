@@ -375,6 +375,27 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SVE_PREDICATE_SELECT ->
                     SveMiscOps.executePredicateSelect(core, (Ir64Op.SvePredicateSelect) op);
             case Ir64Op.Kind.SVE_CLAMP -> SveMiscOps.executeClamp(core, (Ir64Op.SveClamp) op);
+            case Ir64Op.Kind.SVE_FP_CONVERT_FP8 -> SveFpConvertFp8Ops.executeWiden(core, (Ir64Op.SveFpConvertFp8) op);
+            case Ir64Op.Kind.SVE_FP_CONVERT_TO_FP8 ->
+                    SveFpConvertFp8Ops.executeNarrow(core, (Ir64Op.SveFpConvertToFp8) op);
+            case Ir64Op.Kind.SVE_FP_PAIRWISE -> SveFpPairwiseOps.execute(core, (Ir64Op.SveFpPairwise) op);
+            case Ir64Op.Kind.SVE_FP_MATRIX_MULTIPLY ->
+                    SveFpMatrixMultiplyOps.execute(core, (Ir64Op.SveFpMatrixMultiply) op);
+            case Ir64Op.Kind.SVE_FP_CONVERT_ODD_ELEMENTS ->
+                    SveFpConvertOddElementsOps.execute(core, (Ir64Op.SveFpConvertOddElements) op);
+            case Ir64Op.Kind.SVE_FP_LOGB -> SveFpLogBOps.execute(core, (Ir64Op.SveFpLogB) op);
+            case Ir64Op.Kind.SVE_FP8_FUSED_MULTIPLY_ADD_LONG ->
+                    SveFp8MultiplyOps.executeFusedMultiplyAdd(core, (Ir64Op.SveFp8FusedMultiplyAddLong) op);
+            case Ir64Op.Kind.SVE_FP8_DOT_PRODUCT ->
+                    SveFp8MultiplyOps.executeDotProduct(core, (Ir64Op.SveFp8DotProduct) op);
+            case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN ->
+                    SveFpWidenOps.executeMultiplyAddLong(core, (Ir64Op.SveFpMultiplyAddLongWiden) op);
+            case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN_BFLOAT16 -> SveFpWidenOps.executeMultiplyAddLongBFloat16(
+                    core, (Ir64Op.SveFpMultiplyAddLongWidenBFloat16) op);
+            case Ir64Op.Kind.SVE_FP_DOT_PRODUCT_WIDEN ->
+                    SveFpWidenOps.executeDotProduct(core, (Ir64Op.SveFpDotProductWiden) op);
+            case Ir64Op.Kind.SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16 ->
+                    SveFpWidenOps.executeDotProductBFloat16(core, (Ir64Op.SveFpDotProductWidenBFloat16) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

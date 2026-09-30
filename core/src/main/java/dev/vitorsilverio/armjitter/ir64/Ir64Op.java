@@ -86,7 +86,11 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFpArithmetic, Ir64Op.SveFpMultiplyAdd, Ir64Op.SveFpCompareReduce, Ir64Op.SveFpUnary,
         Ir64Op.SveLoad, Ir64Op.SveStore, Ir64Op.SveGather, Ir64Op.SveCounterPredicate,
         Ir64Op.SveMultiVectorMemory, Ir64Op.SveMatch, Ir64Op.SveHistogram, Ir64Op.SveLookupTable,
-        Ir64Op.SvePredicateSelect, Ir64Op.SveClamp {
+        Ir64Op.SvePredicateSelect, Ir64Op.SveClamp,
+        Ir64Op.SveFpConvertFp8, Ir64Op.SveFpConvertToFp8, Ir64Op.SveFpPairwise, Ir64Op.SveFpMatrixMultiply,
+        Ir64Op.SveFpConvertOddElements, Ir64Op.SveFpLogB, Ir64Op.SveFp8FusedMultiplyAddLong,
+        Ir64Op.SveFp8DotProduct, Ir64Op.SveFpMultiplyAddLongWiden, Ir64Op.SveFpMultiplyAddLongWidenBFloat16,
+        Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -497,6 +501,33 @@ public sealed interface Ir64Op permits
         public static final int SVE_PREDICATE_SELECT = 179;
         /// B17.22: `SCLAMP`/`UCLAMP`/`FCLAMP` — ver {@link SveClamp}.
         public static final int SVE_CLAMP = 180;
+        /// B17.23: `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` — ver
+        /// {@link SveFpConvertFp8}.
+        public static final int SVE_FP_CONVERT_FP8 = 181;
+        /// B17.23: `FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT` (não predicadas) — ver {@link SveFpConvertToFp8}.
+        public static final int SVE_FP_CONVERT_TO_FP8 = 182;
+        /// B17.23: `FADDP`/`FMAXNMP`/`FMINNMP`/`FMAXP`/`FMINP` — ver {@link SveFpPairwise}.
+        public static final int SVE_FP_PAIRWISE = 183;
+        /// B17.23: `BFMMLA`/`FMMLA_s`/`FMMLA_d`/`FMMLA_sb`/`FMMLA_hb` — ver {@link SveFpMatrixMultiply}.
+        public static final int SVE_FP_MATRIX_MULTIPLY = 184;
+        /// B17.23: `FCVTNT_sh`/`FCVTLT_hs`/`FCVTNT_ds`/`FCVTLT_sd`/`FCVTXNT_ds`/`BFCVTNT` (`_m`/`_z`) — ver
+        /// {@link SveFpConvertOddElements}.
+        public static final int SVE_FP_CONVERT_ODD_ELEMENTS = 185;
+        /// B17.23: `FLOGB` (`_m`/`_z`) — ver {@link SveFpLogB}.
+        public static final int SVE_FP_LOGB = 186;
+        /// B17.23: `FMLAL_hb`/`FMLALL_sb` (vetorial e indexado) — ver {@link SveFp8FusedMultiplyAddLong}.
+        public static final int SVE_FP8_FUSED_MULTIPLY_ADD_LONG = 187;
+        /// B17.23: `FDOT_hb`/`FDOT_sb` (vetorial e indexado) — ver {@link SveFp8DotProduct}.
+        public static final int SVE_FP8_DOT_PRODUCT = 188;
+        /// B17.23: `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT` (`_zzzw`/`_zzxw`) — ver {@link SveFpMultiplyAddLongWiden}.
+        public static final int SVE_FP_MULTIPLY_ADD_LONG_WIDEN = 189;
+        /// B17.23: `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT` (`_zzzw`/`_zzxw`) — ver
+        /// {@link SveFpMultiplyAddLongWidenBFloat16}.
+        public static final int SVE_FP_MULTIPLY_ADD_LONG_WIDEN_BFLOAT16 = 190;
+        /// B17.23: `FDOT_zzzz`/`FDOT_zzxz` — ver {@link SveFpDotProductWiden}.
+        public static final int SVE_FP_DOT_PRODUCT_WIDEN = 191;
+        /// B17.23: `BFDOT_zzzz`/`BFDOT_zzxz` — ver {@link SveFpDotProductWidenBFloat16}.
+        public static final int SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16 = 192;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4904,5 +4935,259 @@ public sealed interface Ir64Op permits
             long instructionAddress) implements Ir64Op {
         public enum Op { SCLAMP, UCLAMP, FCLAMP }
         @Override public int kind() { return Kind.SVE_CLAMP; }
+    }
+
+    /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)
+    /// — alarga `fp8` para `binary16`/`bfloat16`, **sem predicado**, lendo UM byte de cada par adjacente de
+    /// `Zn.B` por elemento de destino: {@code F1CVT}/{@code F2CVT} leem o byte PAR (`2i`), {@code F1CVTLT}/
+    /// {@code F2CVTLT} o byte ÍMPAR (`2i+1`, `top`). O `1`/`2` do mnemônico escolhe o formato `FPMR.F8S1`/`F8S2`
+    /// (via {@link #stream2}) — inclusive a escala (`FPMR.LSCALE`/`LSCALE2`, mascarada a 4 bits para destino
+    /// `binary16` e a 6 para `bfloat16`, `Aarch64Core#fp8WidenScale`/`#fp8WidenScaleForBFloat16`; medido contra
+    /// `sve2_fcvt_hb`/`sve2_bfcvt` do QEMU real). `Zd` tem `VL/2` elementos (metade dos bytes de `Zn`).
+    record SveFpConvertFp8(
+            int rd,
+            int rn,
+            /// `false` = formato/escala do stream 1 (`FPMR.F8S1`/`LSCALE`); `true` = stream 2 (`F8S2`/`LSCALE2`).
+            boolean stream2,
+            /// `false` = lê o byte PAR de cada par (`F1CVT`/`F2CVT`); `true` = o ÍMPAR (`F1CVTLT`/`F2CVTLT`).
+            boolean top,
+            /// `false` = destino `binary16` (`F*CVT*`); `true` = `bfloat16` (`BF*CVT*`).
+            boolean bfloat16Destination,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP_CONVERT_FP8; }
+    }
+
+    /// SVE2 `FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT` (B17.23, `FEAT_SVE_F8CVT`) — estreita PARA `fp8`, **sem
+    /// predicado**, lendo um PAR de registradores fonte (`Zn`, `Zn+1` — `%rn_ax2`). Formato/escala de destino
+    /// vêm de `FPMR.F8D`/`NSCALE` (`Aarch64Core#fp8DestinationFormat`/`#fp8NarrowScale`, compartilhados pelas
+    /// quatro), `FPMR.OSC` decide se overflow satura (`Aarch64Core#fp8OverflowSaturatesToMaxNormal`).
+    ///
+    /// {@code FCVTN}/{@code BFCVTN} ({@link #wideSource} falso) leem `Zn`/`Zn+1` como `VL/2` elementos
+    /// `binary16`/`bfloat16` cada e enchem `Zd` por inteiro: `Zd.B[2i] = FP8(Zn[i])`, `Zd.B[2i+1] =
+    /// FP8(Zn+1[i])` — medido contra `sve2_fcvtn_bh`/`sve2_bfcvtn_bh` do QEMU real. {@code FCVTNB}/
+    /// {@code FCVTNT} ({@link #wideSource} verdadeiro) leem `Zn`/`Zn+1` como `VL/4` elementos `binary32` cada e
+    /// empacotam DOIS `fp8` por slot de 16 bits de `Zd`: {@code FCVTNB} ({@link #top} falso) escreve o byte
+    /// BAIXO de cada slot `H` e ZERA o alto; {@code FCVTNT} ({@link #top} verdadeiro) escreve só o byte ALTO,
+    /// PRESERVANDO o baixo (idioma "bottom depois top" para popular `Zd` inteiro com duas instruções, medido
+    /// contra `sve2_fcvtnb_bs`/`sve2_fcvtnt_bs`).
+    record SveFpConvertToFp8(
+            int rd,
+            /// Base do par fonte (`Zn`; `Zn+1` é lido também).
+            int rn,
+            /// Só quando {@code !wideSource}: `false` = fonte `binary16` (`FCVTN`); `true` = `bfloat16` (`BFCVTN`).
+            boolean bfloat16Source,
+            /// `false` = fonte `binary16`/`bfloat16`, escreve `Zd` inteiro (`FCVTN`/`BFCVTN`); `true` = fonte
+            /// `binary32`, escreve metade dos slots `H` de `Zd` (`FCVTNB`/`FCVTNT`).
+            boolean wideSource,
+            /// Só quando {@code wideSource}: `false` = byte baixo, zera o alto (`FCVTNB`); `true` = só o byte
+            /// alto, preserva o baixo (`FCVTNT`).
+            boolean top,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP_CONVERT_TO_FP8; }
+    }
+
+    /// SVE2 `FADDP`/`FMAXNMP`/`FMINNMP`/`FMAXP`/`FMINP` (B17.23, `FEAT_SVE2`) — soma/máximo/mínimo par a par
+    /// DENTRO de cada segmento de 128 bits, forma destrutiva `@rdn_pg_rm` (`rd` = `rn` = `Zdn`). Só MERGING
+    /// (não há forma `_z`): elemento inativo preserva o valor antigo de `Zdn`. Padrão de escrita, medido contra
+    /// `DO_ZPZZ_PAIR_FP` do QEMU real: para cada posição de PAR `p` (`0`, `2`, `4`, … dentro do segmento),
+    /// `Zdn[p] = op(Zn[p], Zn[p+1])` (par de `Zn`) e `Zdn[p+1] = op(Zm[p], Zm[p+1])` (par de `Zm`, MESMOS
+    /// índices) — intercalado, não "primeira metade de `Zn`, segunda de `Zm`".
+    record SveFpPairwise(
+            Op op,
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` é BFloat16, `FEAT_SVE_B16B16`,
+            /// pendência nomeada — nunca chega aqui).
+            int esz,
+            /// Acumulador e destino (`Zdn` = `Zd` = `Zn`).
+            int rd,
+            /// Segundo operando (`Zm`).
+            int rm,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo. `FMAXP`/`FMINP` usam a variante NÃO "Number" (propaga `NaN`, `SveFloat.maxMin`);
+        /// `FMAXNMP`/`FMINNMP` usam a "Number" (`SveFloat.maxMinNumber`).
+        public enum Op { FADDP, FMAXNMP, FMINNMP, FMAXP, FMINP }
+        @Override public int kind() { return Kind.SVE_FP_PAIRWISE; }
+    }
+
+    /// SVE2 `BFMMLA`/`FMMLA_s`/`FMMLA_d`/`FMMLA_sb`/`FMMLA_hb` (B17.23) — multiplicação de matriz `2×2`
+    /// acumulada por segmento de 128 bits (`Zda += Zn × Zm`, `Zda` = `Zd`, `@rda_rn_rm_ex`). `BFMMLA`
+    /// (`FEAT_SVE_BF16`) e as `fp8` (`FMMLA_sb`/`FMMLA_hb`, `FEAT_F8F32MM`/`FEAT_F8F16MM`) somam os `K` produtos
+    /// FUNDIDOS (um único arredondamento, `double`/`f8dotadd_*` do QEMU real). **`FMMLA_s`/`FMMLA_d`
+    /// (`FEAT_F32MM`/`FEAT_F64MM`) NÃO são fundidas**: cada produto é arredondado separadamente e a soma dos
+    /// dois também — medido contra `HELPER(fmmla_s)`/`HELPER(fmmla_d)` do QEMU real (`float32_mul`/
+    /// `float32_add` em sequência, nunca `muladd`).
+    record SveFpMatrixMultiply(
+            Op op,
+            /// Formato do elemento de DESTINO/acumulador: `1` = meia (`FMMLA_hb`), `2` = simples (`FMMLA_s`/
+            /// `FMMLA_sb`), `3` = dupla (`FMMLA_d`). `BFMMLA` também usa `2` (acumulador `f32`, fonte `bf16`).
+            int esz,
+            /// Acumulador e destino (`Zda` = `Zd`).
+            int rd,
+            int rn,
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        /// Operação do grupo (a fonte/formato de cada uma é fixo, não configurável em tempo de execução).
+        public enum Op { BFMMLA, FMMLA_S, FMMLA_D, FMMLA_SB, FMMLA_HB }
+        @Override public int kind() { return Kind.SVE_FP_MATRIX_MULTIPLY; }
+    }
+
+    /// SVE2 `FCVTNT_sh`/`FCVTLT_hs`/`FCVTNT_ds`/`FCVTLT_sd`/`FCVTXNT_ds`/`BFCVTNT` (`_m`/`_z`, B17.23) — as 12
+    /// conversões de precisão "odd elements" (`FCVTX_ds_m`, a 13ª linha do recorte, reusa {@link SveFpUnary}
+    /// direto — MESMO helper que `FCVTX_ds_z` da B17.16, `gen_helper_sve_fcvt_ds` do QEMU real, só decodificada
+    /// de um layout de bits diferente). O predicado é testado na granularidade LARGA (`wideEsz`, medido contra
+    /// `DO_FCVTNT`/`DO_FCVTLT` do QEMU real: o laço decrementa por `sizeof(TYPEW)`).
+    ///
+    /// `FCVTNT`/`BFCVTNT` (estreita: fonte larga, destino estreito) escrevem SÓ o elemento estreito de ÍNDICE
+    /// ÍMPAR (topo) de cada par e PRESERVAM o par (zerar é bug); `FCVTLT` (alarga) LÊ o elemento estreito
+    /// ÍMPAR e escreve o elemento largo inteiro. Merging (`!zeroing`): elemento inativo não é tocado (nem
+    /// escrito, nem lido) — o `Zd` fica exatamente como estava.
+    record SveFpConvertOddElements(
+            Op op,
+            /// Tamanho do elemento LARGO/contêiner: `2` = simples (`_sh`), `3` = dupla (`_ds`). O estreito é
+            /// sempre {@code wideEsz - 1}.
+            int wideEsz,
+            /// `true` só em `FCVTXNT_ds`: usa arredondamento "para ímpar" (`FPROUNDING_ODD`) em vez do modo de
+            /// `FPCR.RMode` — mesmo helper de `FCVTX_ds`, `do_frint_mode` do QEMU real.
+            boolean roundToOdd,
+            /// `true` só em `BFCVTNT`: destino/origem estreito é `bfloat16`, não `binary16`.
+            boolean bfloat16,
+            boolean zeroing,
+            int rd,
+            int rn,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            long instructionAddress) implements Ir64Op {
+        public enum Op { FCVTNT, FCVTLT, FCVTXNT }
+        @Override public int kind() { return Kind.SVE_FP_CONVERT_ODD_ELEMENTS; }
+    }
+
+    /// SVE2 `FLOGB` (`_m`/`_z`, B17.23, `FEAT_SVE2`) — expoente (base 2) de `Zn` como INTEIRO da MESMA largura
+    /// (`&rpr_esz`, um único `esz` para fonte e destino). Casos especiais medidos contra
+    /// `do_float{16,32,64}_logb_as_int` do QEMU real: zero e `NaN` ⇒ o mínimo `int` representável na largura
+    /// (levanta `Invalid`); Infinito ⇒ o máximo `int`; subnormal com `FZ` desligado ⇒ `-viés - clz(fração)`
+    /// (com `FZ` ligado, tratado como zero); normal ⇒ `expoente_não_enviesado - viés`.
+    record SveFpLogB(
+            /// Largura do elemento fonte E destino: `1` = meia, `2` = simples, `3` = dupla.
+            int esz,
+            boolean zeroing,
+            int rd,
+            int rn,
+            /// Predicado governante `P0`-`P7`.
+            int pg,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP_LOGB; }
+    }
+
+    /// SVE2 `FMLAL_hb`/`FMLALL_sb`, vetorial e indexado (B17.23, `FEAT_FP8FMA`) — multiply-accumulate `fp8`
+    /// FUNDIDO por TODO o vetor (sem segmentação): `Zda[i] += fp8(Zn[byte i]) × fp8(Zm[byte i])`, escalado por
+    /// `FPMR.LSCALE`/downscale e somado num único arredondamento (reusa {@code AdvSimdLanes#fp8FusedMultiplyAdd}).
+    /// Medido contra `gvec_fmla_hb`/`gvec_fmla_sb`/`gvec_fmla_idx_hb`/`gvec_fmla_idx_sb` do QEMU real.
+    ///
+    /// **Não indexado**: o MESMO {@link #sourceSelect} (`idxn` do encoding) escolhe, para AMBOS `Zn` e `Zm`, o
+    /// byte par (`0`) ou ímpar (`1`, `FMLAL_hb`) — ou um de 4 (`FMLALL_sb`) — de cada slot de destino.
+    /// **Indexado**: {@link #sourceSelect} continua valendo só para `Zn`; `Zm` contribui um ÚNICO byte fixo
+    /// por SEGMENTO de 128 bits, escolhido por {@link #index} (byte absoluto dentro do segmento).
+    record SveFp8FusedMultiplyAddLong(
+            /// `false` = destino meia precisão (`FMLAL_hb`); `true` = simples (`FMLALL_sb`).
+            boolean wideDestination,
+            int rd,
+            int rn,
+            int rm,
+            /// Seletor `idxn` do encoding — aplicado a `Zn` sempre, e a `Zm` só quando {@code !indexed}.
+            int sourceSelect,
+            boolean indexed,
+            /// Byte fixo dentro do segmento de 128 bits de `Zm`; sem significado quando {@code !indexed}.
+            int index,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP8_FUSED_MULTIPLY_ADD_LONG; }
+    }
+
+    /// SVE2 `FDOT_hb`/`FDOT_sb`, vetorial e indexado (B17.23, `FEAT_FP8DOT2`/`FEAT_FP8DOT4`) — produto escalar
+    /// `fp8` (2 ou 4 vias) FUNDIDO por TODO o vetor (sem segmentação no vetorial): `Zda[i] += Σ fp8(Zn[i]byte_k)
+    /// × fp8(Zm[i]byte_k)`, reusa {@code AdvSimdLanes#fp8DotProduct}. Medido contra `gvec_fdot_hb`/
+    /// `gvec_fdot_sb`/`gvec_fdot_idx_hb`/`gvec_fdot_idx_sb` do QEMU real.
+    ///
+    /// **Indexado**: `Zm` contribui um ÚNICO grupo (2 ou 4 bytes) fixo por SEGMENTO de 128 bits, escolhido por
+    /// {@link #index} (índice de grupo dentro do segmento); `Zn` continua lido elemento a elemento.
+    record SveFp8DotProduct(
+            /// `false` = destino meia precisão, 2 vias (`FDOT_hb`); `true` = simples, 4 vias (`FDOT_sb`).
+            boolean wideDestination,
+            int rd,
+            int rn,
+            int rm,
+            boolean indexed,
+            /// Índice do grupo fixo de `Zm` dentro do segmento; sem significado quando {@code !indexed}.
+            int index,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP8_DOT_PRODUCT; }
+    }
+
+    /// SVE2 `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT`, vetorial (`_zzzw`) e indexado (`_zzxw`) (B17.23,
+    /// `FEAT_SVE2`/`FEAT_SME`) — multiply-add-long de `binary16` para `binary32`: `Zda[i] += (float)Zn[2i+sel]
+    /// × (float)Zm[…]`, elemento largo (destino) SEMPRE `esz=2`. `top` ({@code sel}) escolhe o elemento
+    /// estreito PAR (`B`, `false`) ou ÍMPAR (`T`, `true`) de `Zn` — e de `Zm` também, no vetorial. **Vetorial**:
+    /// `Zm` lido no MESMO índice de `Zn` (`sve2_fmlal_zzzw_s`, sem segmentação). **Indexado**: `Zm` contribui um
+    /// elemento fixo por SEGMENTO de 128 bits ({@link #index}, `sve2_fmlal_zzxw_s`).
+    record SveFpMultiplyAddLongWiden(
+            Op op,
+            /// `false` = elemento estreito PAR (`B`); `true` = ÍMPAR (`T`).
+            boolean top,
+            int rd,
+            int rn,
+            int rm,
+            boolean indexed,
+            /// Índice do elemento estreito fixo de `Zm` dentro do segmento; sem significado quando
+            /// {@code !indexed}.
+            int index,
+            long instructionAddress) implements Ir64Op {
+        public enum Op { FMLAL, FMLSL }
+        @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN; }
+    }
+
+    /// SVE2 `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT`, vetorial (`_zzzw`) e indexado (`_zzxw`) (B17.23,
+    /// `FEAT_SVE_BF16`/`FEAT_SVE2p1`) — mesma forma de {@link SveFpMultiplyAddLongWiden}, mas fonte `bfloat16`
+    /// (`gvec_bfmlal`/`gvec_bfmlal_idx`, MESMO helper compartilhado com o AdvSIMD, B19.7/B13.21) em vez de
+    /// `binary16`. **Achado**: `BFMLALB`/`BFMLALT` exigem só `FEAT_SVE_BF16`; `BFMLSLB`/`BFMLSLT` (a forma
+    /// subtrativa) exigem `FEAT_SVE2p1`/`FEAT_SME2` — features DIFERENTES (`aa64_sme_sve_bf16` vs
+    /// `aa64_sme2_or_sve2p1` no QEMU real), gatear por linha.
+    record SveFpMultiplyAddLongWidenBFloat16(
+            Op op,
+            boolean top,
+            int rd,
+            int rn,
+            int rm,
+            boolean indexed,
+            int index,
+            long instructionAddress) implements Ir64Op {
+        public enum Op { BFMLAL, BFMLSL }
+        @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN_BFLOAT16; }
+    }
+
+    /// SVE2.1 `FDOT_zzzz`/`FDOT_zzxz` (B17.23, `FEAT_SVE2p1`/`FEAT_SME2`) — produto escalar de DUAS vias
+    /// `binary16`→`binary32` (`gen_helper_sme2_fdot_h` do QEMU real — helper NOVO, não compartilhado com o
+    /// AdvSIMD `BFDOT`/inteiro). **Indexado**: `Zm` contribui um par fixo por segmento de 128 bits.
+    record SveFpDotProductWiden(
+            int rd,
+            int rn,
+            int rm,
+            boolean indexed,
+            /// Índice do par fixo de `Zm` dentro do segmento; sem significado quando {@code !indexed}.
+            int index,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP_DOT_PRODUCT_WIDEN; }
+    }
+
+    /// SVE `BFDOT_zzzz`/`BFDOT_zzxz` (B17.23, `FEAT_SVE_BF16`) — produto escalar de DUAS vias
+    /// `bfloat16`→`binary32` (`gvec_bfdot`/`gvec_bfdot_idx`, MESMO helper compartilhado com o AdvSIMD, B19.7).
+    /// Mesma forma de {@link SveFpDotProductWiden}.
+    record SveFpDotProductWidenBFloat16(
+            int rd,
+            int rn,
+            int rm,
+            boolean indexed,
+            int index,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16; }
     }
 }

@@ -237,6 +237,9 @@ public final class Aarch64Core {
     /// `F1CVTL` só consome os 4 bits BAIXOS de `LSCALE` (confirmado via pseudocódigo real: `2^-
     /// UInt(FPMR.LSCALE[3:0])`), apesar do campo arquitetural ter 7 bits (`[22:16]`).
     private static final long FPMR_LSCALE_CONSUMED_MASK = 0xFL;
+    /// Máscara de 6 bits que os destinos `bfloat16` das conversões FP8 (B17.23) consomem de
+    /// `FPMR.LSCALE`/`LSCALE2` — ver {@link #fp8WidenScaleForBFloat16()}.
+    private static final long FPMR_LSCALE_BFLOAT16_MASK = 0x3FL;
     /// `FMLALL_sb` (B19.11b) consome o campo `LSCALE` de 7 bits INTEIRO, sem máscara — achado real
     /// medido no `HELPER(gvec_fmla_sb)`/`fp8_mul_start` do QEMU (`scale_mask=-1`, contra `0xf` de
     /// `F1CVTL`/`FMLAL_hb`): a Armadilha 2 da task B19.11b especulava reuso cego de
@@ -1265,6 +1268,20 @@ public final class Aarch64Core {
     /// nesta sessão — ver `## Resultado`).
     public int fp8WidenScale2() {
         return (int) ((fpmr >>> FPMR_LSCALE2_SHIFT) & FPMR_LSCALE2_CONSUMED_MASK);
+    }
+
+    /// `FPMR.LSCALE[5:0]` (B17.23) — mesmo campo de {@link #fp8WidenScale()}, mas com a máscara de
+    /// **6** bits que `BF1CVT`/`BF1CVTLT` (destino `bfloat16`) consomem em vez dos 4 bits de
+    /// `F1CVT`/`F1CVTLT` (destino `binary16`) — confirmado via `fp8_src_start(env, desc, 0x3f)` do
+    /// QEMU real (`sve2_bfcvt`), contra `0xf` de `sve2_fcvt_hb`.
+    public int fp8WidenScaleForBFloat16() {
+        return (int) ((fpmr >>> FPMR_LSCALE_SHIFT) & FPMR_LSCALE_BFLOAT16_MASK);
+    }
+
+    /// `FPMR.LSCALE2[5:0]` (B17.23) — mesmo papel de {@link #fp8WidenScaleForBFloat16()}, mas para o
+    /// SEGUNDO stream FP8 (`BF2CVT`/`BF2CVTLT`).
+    public int fp8WidenScale2ForBFloat16() {
+        return (int) ((fpmr >>> FPMR_LSCALE2_SHIFT) & FPMR_LSCALE_BFLOAT16_MASK);
     }
 
     /// `FPMR.OSC` (B19.11a) — `true` quando overflow numa conversão PARA FP8 satura no máximo

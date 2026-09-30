@@ -148,6 +148,16 @@ public enum Aarch64Feature {
     /// por `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. `ID_AA64ZFR0_EL1.F64MM` continua 0
     /// até a B17.23 fechar `FMMLA` (a leitura do registrador nunca anuncia mais do que o decoder aceita).
     F64MM,
+    /// `FEAT_F32MM` — multiplicação de matriz de ponto flutuante de 32 bits (`FMMLA_s`, B17.23).
+    /// Irmã de {@link #F64MM} (`aa64_sve_f32mm` no QEMU, mesmo padrão de gate). Nenhum preset a
+    /// declara; entra por `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`.
+    F32MM,
+    /// `FEAT_SVE_F8CVT` — conversões `fp8` da B17.23 SEM produto/soma (`F1CVT`/`F2CVT`/`F1CVTLT`/
+    /// `F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT`/`FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT`).
+    /// Confirmado via `aa64_sme2_or_sve2_f8cvt` do QEMU real (`translate-sve.c`) — **separada** de
+    /// {@link #FP8} (que gateia só `FSCALE`/AdvSIMD `FCVTN`/`FCVTL`, B19.11): a versão SVE destas
+    /// conversões exige SME2 OU esta feature própria, nunca `FEAT_FP8` puro.
+    FP8_CONVERT,
     /// `FEAT_SME` — Scalable Matrix Extension (armazenamento `ZA`, modo streaming, `SVCR`/`SMCR_ELx`).
     /// ARMv9.2-A. Desde a B18.1 o estado existe no `Aarch64Core` (`SVCR`, `SMCR_EL1/2/3`, banco `ZA`
     /// preguiçoso, `ID_AA64PFR1_EL1.SME`); ainda **sem efeito de modo streaming** (B18.2) e sem

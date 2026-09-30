@@ -286,6 +286,11 @@ final class Aarch64SveDecoder {
     private final Aarch64SveCounterDecoder counter;
     private final Aarch64Sve2IntegerDecoder sve2Integer;
     private final Aarch64Sve2MiscDecoder sve2Misc;
+    private final Aarch64SveFpConvertFp8Decoder floatingPointConvertFp8;
+    private final Aarch64SveFpMatrixDecoder floatingPointMatrix;
+    private final Aarch64SveFpConvertOddDecoder floatingPointConvertOdd;
+    private final Aarch64SveFp8MultiplyDecoder fp8Multiply;
+    private final Aarch64SveFpWidenDecoder floatingPointWiden;
 
     Aarch64SveDecoder(Aarch64Architecture architecture) {
         this.architecture = architecture;
@@ -303,6 +308,11 @@ final class Aarch64SveDecoder {
         this.counter = new Aarch64SveCounterDecoder(architecture);
         this.sve2Integer = new Aarch64Sve2IntegerDecoder(architecture);
         this.sve2Misc = new Aarch64Sve2MiscDecoder(architecture);
+        this.floatingPointConvertFp8 = new Aarch64SveFpConvertFp8Decoder(architecture);
+        this.floatingPointMatrix = new Aarch64SveFpMatrixDecoder(architecture);
+        this.floatingPointConvertOdd = new Aarch64SveFpConvertOddDecoder(architecture);
+        this.fp8Multiply = new Aarch64SveFp8MultiplyDecoder(architecture);
+        this.floatingPointWiden = new Aarch64SveFpWidenDecoder(architecture);
     }
 
     /// Os `LD1`/`ST1` multi-vetor governados por predicado-como-contador (B17.28) moram fora da classe `001` (prefixos
@@ -346,7 +356,18 @@ final class Aarch64SveDecoder {
                     yield multiplyAdd;
                 }
                 Ir64Op compareReduce = floatingPointCompareReduce.decodePrefix65(word, address);
-                yield compareReduce != null ? compareReduce : floatingPointUnary.decode(word, address);
+                if (compareReduce != null) {
+                    yield compareReduce;
+                }
+                Ir64Op unaryBase = floatingPointUnary.decode(word, address);
+                if (unaryBase != null) {
+                    yield unaryBase;
+                }
+                Ir64Op convertFp8 = floatingPointConvertFp8.decode(word, address);
+                if (convertFp8 != null) {
+                    yield convertFp8;
+                }
+                yield floatingPointConvertOdd.decodePrefix65(word, address);
             }
             case PREFIX_FP_INDEXED_COMPLEX -> {
                 Ir64Op indexed = floatingPointMultiplyAdd.decodePrefix64(word, address);
@@ -358,7 +379,23 @@ final class Aarch64SveDecoder {
                     yield quadword;
                 }
                 Ir64Op unary = floatingPointUnary.decode(word, address);
-                yield unary != null ? unary : sve2Misc.decodePrefix64(word, address);
+                if (unary != null) {
+                    yield unary;
+                }
+                Ir64Op misc = sve2Misc.decodePrefix64(word, address);
+                if (misc != null) {
+                    yield misc;
+                }
+                Ir64Op matrix = floatingPointMatrix.decode(word, address);
+                if (matrix != null) {
+                    yield matrix;
+                }
+                Ir64Op convertOdd = floatingPointConvertOdd.decodePrefix64(word, address);
+                if (convertOdd != null) {
+                    yield convertOdd;
+                }
+                Ir64Op fp8 = fp8Multiply.decode(word, address);
+                yield fp8 != null ? fp8 : floatingPointWiden.decode(word, address);
             }
             case PREFIX_IMMEDIATE -> {
                 Ir64Op immediate = Aarch64SveImmediateDecoder.decodePrefix05(word, address);
