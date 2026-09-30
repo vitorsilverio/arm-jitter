@@ -329,7 +329,9 @@ final class Ir64CryptoExecutor {
     /// separados, reduzindo a chance de erro de transcrição silencioso citada pela Armadilha 5 da
     /// task — o vetor de teste de `SM4E`/`SM4EKEY` (round-trip completo contra o vetor de exemplo
     /// oficial do padrão) é a verificação independente.
-    private static final byte[] SM4_SBOX = HexFormat.of().parseHex(
+    /// Visibilidade de pacote (não `private`): reusada por {@link SveCryptoOps} (B17.24, `SM4E`/`SM4EKEY`
+    /// vetoriais SVE2 — mesma S-box, sem tabela nova).
+    static final byte[] SM4_SBOX = HexFormat.of().parseHex(
             "d690e9fecce13db716b614c228fb2c052b679a762abe04c3aa441326498606999c4250f491ef987a33540b43edcfac62"
             + "e4b31ca9c908e89580df94fa758f3fa64707a7fcf37317ba83593c19e6854fa8686b81b27164da8bf8eb0f4b70569d35"
             + "1e240e5e6358d1a225227c3b01217887d40046579fd327524c3602e7a0c4c89eeabf8ad240c738b5a3f7f2cef96115a1"
@@ -337,8 +339,9 @@ final class Ir64CryptoExecutor {
             + "8d1baf92bbddbc7f11d95c411f105ad80ac13188a5cd7bbd2d74d012b8e5b4b08969974a0c96777e65b9f109c56ec684"
             + "18f07dec3adc4d2079ee5f3ed7cb3948");
 
-    /// `sm4_subword` do QEMU (`include/crypto/sm4.h`): substituição byte a byte via {@link #SM4_SBOX}.
-    private static int sm4SubWord(int word) {
+    /// `sm4_subword` do QEMU (`include/crypto/sm4.h`): substituição byte a byte via {@link #SM4_SBOX}. Visibilidade
+    /// de pacote (não `private`): reusada por {@link SveCryptoOps} (B17.24).
+    static int sm4SubWord(int word) {
         return (SM4_SBOX[word & 0xFF] & 0xFF)
                 | ((SM4_SBOX[(word >>> 8) & 0xFF] & 0xFF) << 8)
                 | ((SM4_SBOX[(word >>> 16) & 0xFF] & 0xFF) << 16)

@@ -286,6 +286,7 @@ final class Aarch64SveDecoder {
     private final Aarch64SveCounterDecoder counter;
     private final Aarch64Sve2IntegerDecoder sve2Integer;
     private final Aarch64Sve2MiscDecoder sve2Misc;
+    private final Aarch64SveCryptoDecoder sve2Crypto;
     private final Aarch64SveFpConvertFp8Decoder floatingPointConvertFp8;
     private final Aarch64SveFpMatrixDecoder floatingPointMatrix;
     private final Aarch64SveFpConvertOddDecoder floatingPointConvertOdd;
@@ -308,6 +309,7 @@ final class Aarch64SveDecoder {
         this.counter = new Aarch64SveCounterDecoder(architecture);
         this.sve2Integer = new Aarch64Sve2IntegerDecoder(architecture);
         this.sve2Misc = new Aarch64Sve2MiscDecoder(architecture);
+        this.sve2Crypto = new Aarch64SveCryptoDecoder(architecture);
         this.floatingPointConvertFp8 = new Aarch64SveFpConvertFp8Decoder(architecture);
         this.floatingPointMatrix = new Aarch64SveFpMatrixDecoder(architecture);
         this.floatingPointConvertOdd = new Aarch64SveFpConvertOddDecoder(architecture);
@@ -414,7 +416,11 @@ final class Aarch64SveDecoder {
             }
             case PREFIX_SVE2_ACCUMULATE -> {
                 Ir64Op accumulate = sve2Integer.decodePrefix45(word, address);
-                yield accumulate != null ? accumulate : sve2Misc.decodePrefix45(word, address);
+                if (accumulate != null) {
+                    yield accumulate;
+                }
+                Ir64Op misc = sve2Misc.decodePrefix45(word, address);
+                yield misc != null ? misc : sve2Crypto.decodePrefix45(word, address);
             }
             case PREFIX_ELEMENT_COUNT -> {
                 Ir64Op addressing = decodeAddressing(word, address);

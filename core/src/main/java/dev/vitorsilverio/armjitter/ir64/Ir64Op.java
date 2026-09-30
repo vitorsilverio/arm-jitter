@@ -90,7 +90,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFpConvertFp8, Ir64Op.SveFpConvertToFp8, Ir64Op.SveFpPairwise, Ir64Op.SveFpMatrixMultiply,
         Ir64Op.SveFpConvertOddElements, Ir64Op.SveFpLogB, Ir64Op.SveFp8FusedMultiplyAddLong,
         Ir64Op.SveFp8DotProduct, Ir64Op.SveFpMultiplyAddLongWiden, Ir64Op.SveFpMultiplyAddLongWidenBFloat16,
-        Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16 {
+        Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16,
+        Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1 {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -528,6 +529,14 @@ public sealed interface Ir64Op permits
         public static final int SVE_FP_DOT_PRODUCT_WIDEN = 191;
         /// B17.23: `BFDOT_zzzz`/`BFDOT_zzxz` — ver {@link SveFpDotProductWidenBFloat16}.
         public static final int SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16 = 192;
+        /// B17.24: `AESE`/`AESD`/`AESMC`/`AESIMC` vetoriais (`FEAT_SVE_AES`) — ver {@link SveCryptoAes}.
+        public static final int SVE_CRYPTO_AES = 193;
+        /// B17.24: `SM4E` vetorial (`FEAT_SVE_SM4`) — ver {@link SveCryptoSm4Encrypt}.
+        public static final int SVE_CRYPTO_SM4_ENCRYPT = 194;
+        /// B17.24: `SM4EKEY` vetorial (`FEAT_SVE_SM4`) — ver {@link SveCryptoSm4KeyUpdate}.
+        public static final int SVE_CRYPTO_SM4_KEY_UPDATE = 195;
+        /// B17.24: `RAX1` vetorial (`FEAT_SVE_SHA3`) — ver {@link SveCryptoRax1}.
+        public static final int SVE_CRYPTO_RAX1 = 196;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -4935,6 +4944,67 @@ public sealed interface Ir64Op permits
             long instructionAddress) implements Ir64Op {
         public enum Op { SCLAMP, UCLAMP, FCLAMP }
         @Override public int kind() { return Kind.SVE_CLAMP; }
+    }
+
+    /// `AESE`/`AESD`/`AESMC`/`AESIMC` vetoriais (B17.24, `FEAT_SVE_AES`) — opera POR SEGMENTO de 128 bits
+    /// (`VL/128` blocos AES independentes numa instrução só), reusando o núcleo
+    /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto} do A64 (mesma S-box, sem tabela nova). Mirror do
+    /// formato de {@link CryptoAes}: para `AESE`/`AESD`, {@link #rn} é o SEGUNDO operando por segmento (`Zm` no
+    /// encoding real, `@rdn_rm_e0` — `Zd` é lido E escrito, escrita destrutiva real); para `AESMC`/`AESIMC`,
+    /// {@link #rn} é o MESMO registrador que {@link #rd} (o `.decode` não tem campo de origem, `00000` fixo — o
+    /// decoder resolve essa auto-referência). Recusado em modo streaming (`TRANS_FEAT_STREAMING_IF` do QEMU real
+    /// libera um subconjunto sob `FEAT_SSVE_AES`, não modelado ainda — **pendência nomeada**).
+    record SveCryptoAes(
+            Ir64CryptoAesOp op,
+            /// `Zd`: destino (e, para `AESE`/`AESD`, primeiro operando lido).
+            int rd,
+            /// `Zm` (`AESE`/`AESD`) ou o próprio `rd` repetido (`AESMC`/`AESIMC`, sem operando de origem real).
+            int rn,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_CRYPTO_AES; }
+    }
+
+    /// `SM4E` vetorial (B17.24, `FEAT_SVE_SM4`) — rodada de cifra SM4 por segmento de 128 bits, reusando a S-box
+    /// de {@link dev.vitorsilverio.armjitter.executor64} (sem tabela nova). Mesma forma de 2 operandos do A64
+    /// escalar ({@link CryptoSm4Encrypt}): {@link #rd} é o estado ATUAL do bloco (lido E escrito, destrutivo —
+    /// `@rdn_rm_e0`), {@link #rn} carrega as 4 subchaves de rodada POR SEGMENTO. Sempre não-streaming
+    /// (`TRANS_FEAT_NONSTREAMING` do QEMU real, sem exceção SME).
+    record SveCryptoSm4Encrypt(
+            /// `Zd`: destino (e primeiro operando — estado atual do bloco).
+            int rd,
+            /// `Zm`: as 4 subchaves de rodada por segmento.
+            int rn,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_CRYPTO_SM4_ENCRYPT; }
+    }
+
+    /// `SM4EKEY` vetorial (B17.24, `FEAT_SVE_SM4`) — expansão de chave SM4 por segmento de 128 bits. Mesma forma
+    /// de 3 operandos do A64 escalar ({@link CryptoSm4KeyUpdate}): função PURA de {@link #rn} (estado atual da
+    /// chave) e {@link #rm} (constantes de rodada `CK`) por segmento — {@link #rd} NUNCA é lido. Sempre
+    /// não-streaming (`TRANS_FEAT_NONSTREAMING`, igual a {@link SveCryptoSm4Encrypt}).
+    record SveCryptoSm4KeyUpdate(
+            int rd,
+            /// `Zn`: estado atual da chave.
+            int rn,
+            /// `Zm`: as 4 constantes de rodada `CK`.
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_CRYPTO_SM4_KEY_UPDATE; }
+    }
+
+    /// `RAX1` vetorial (B17.24, `FEAT_SVE_SHA3`) — `Zd = Zn XOR rotateLeft(Zm, 1)`, elemento a elemento de
+    /// **64 bits** (`esz` do formato é `0` mas a operação é sempre em doubleword — mesma armadilha de `REVD`,
+    /// B17.11), sem predicado, por toda a largura de `VL` (não por segmento: é uma XOR/rotação elemento a
+    /// elemento, sem interação entre elementos vizinhos). Mesma fórmula do caso `RAX1` de
+    /// {@link CryptoSha3TwoSourceRotate} do A64 escalar, rotação à ESQUERDA fixa em `1` (sem campo de
+    /// imediato no encoding real). Recusado em modo streaming (`FEAT_SME2p1` libera um subconjunto, não modelado
+    /// ainda — **pendência nomeada**, mesma disciplina de {@link SveCryptoAes}).
+    record SveCryptoRax1(
+            int rd,
+            int rn,
+            int rm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SVE_CRYPTO_RAX1; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

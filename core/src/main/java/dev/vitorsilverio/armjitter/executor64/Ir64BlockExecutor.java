@@ -396,6 +396,12 @@ public final class Ir64BlockExecutor {
                     SveFpWidenOps.executeDotProduct(core, (Ir64Op.SveFpDotProductWiden) op);
             case Ir64Op.Kind.SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16 ->
                     SveFpWidenOps.executeDotProductBFloat16(core, (Ir64Op.SveFpDotProductWidenBFloat16) op);
+            case Ir64Op.Kind.SVE_CRYPTO_AES -> SveCryptoOps.executeAes(core, (Ir64Op.SveCryptoAes) op);
+            case Ir64Op.Kind.SVE_CRYPTO_SM4_ENCRYPT ->
+                    SveCryptoOps.executeSm4Encrypt(core, (Ir64Op.SveCryptoSm4Encrypt) op);
+            case Ir64Op.Kind.SVE_CRYPTO_SM4_KEY_UPDATE ->
+                    SveCryptoOps.executeSm4KeyUpdate(core, (Ir64Op.SveCryptoSm4KeyUpdate) op);
+            case Ir64Op.Kind.SVE_CRYPTO_RAX1 -> SveCryptoOps.executeRax1(core, (Ir64Op.SveCryptoRax1) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

@@ -143,6 +143,19 @@ public enum Aarch64Feature {
     /// `FEAT_SVE_PMULL128` — `PMULLB`/`PMULLT` com elemento de 128 bits (`.Q` de `.D`, B17.21b), anunciada por
     /// `ID_AA64ZFR0_EL1.AES = 0b0010`. Sub-feature separada de {@link #SVE2}; nenhum preset a declara.
     SVE_PMULL128,
+    /// `FEAT_SVE_AES` — `AESE`/`AESD`/`AESMC`/`AESIMC` vetoriais SVE2 (B17.24), anunciada por
+    /// `ID_AA64ZFR0_EL1.AES = 0b0001` (`0b0010` quando {@link #SVE_PMULL128} também presente — o
+    /// campo é cumulativo, `aa64_sve_pmull128` do QEMU exige `aa64_sve_aes`). Sub-feature separada
+    /// de {@link #SVE2}; nenhum preset a declara.
+    SVE_AES,
+    /// `FEAT_SVE_SM4` — `SM4E`/`SM4EKEY` vetoriais SVE2 (B17.24), anunciada por
+    /// `ID_AA64ZFR0_EL1.SM4`. Separada de {@link #SM4} (que gateia as formas ESCALARES/AdvSIMD, B19.10)
+    /// — um núcleo pode ter uma sem a outra. Nenhum preset a declara.
+    SVE_SM4,
+    /// `FEAT_SVE_SHA3` — `RAX1` vetorial SVE2 (B17.24), anunciada por `ID_AA64ZFR0_EL1.SHA3`.
+    /// Separada de {@link #SHA3} (que gateia `EOR3`/`RAX1`/`XAR`/`BCAX` ESCALARES/AdvSIMD, B11.12) —
+    /// um núcleo pode ter uma sem a outra. Nenhum preset a declara.
+    SVE_SHA3,
     /// `FEAT_F64MM` — multiplicação de matriz de ponto flutuante de 64 bits e as formas `_q` de permutação SVE
     /// (`ZIP1`/`ZIP2`/`UZP1`/`UZP2`/`TRN1`/`TRN2` com elemento de 128 bits, B17.10). Nenhum preset a declara; entra
     /// por `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor`. `ID_AA64ZFR0_EL1.F64MM` continua 0

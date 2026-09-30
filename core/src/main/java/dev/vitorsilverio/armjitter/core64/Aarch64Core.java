@@ -119,10 +119,17 @@ public final class Aarch64Core {
     private static final long ID_AA64PFR0_SVE_IMPLEMENTED = 1L << 32;
     /// `ID_AA64ZFR0_EL1.SVEver` (`bits[3:0]`): `0b0001` = SVE2 (`0b0000` = só SVE).
     private static final long ID_AA64ZFR0_SVEVER_SVE2 = 1L;
-    /// `ID_AA64ZFR0_EL1.AES` (`bits[7:4]`): `0b0010` = `PMULLB`/`PMULLT` de 128 bits (`FEAT_SVE_PMULL128`).
+    /// `ID_AA64ZFR0_EL1.AES` (`bits[7:4]`): `0b0001` = `FEAT_SVE_AES`.
+    private static final long ID_AA64ZFR0_AES_BASE = 1L << 4;
+    /// `ID_AA64ZFR0_EL1.AES` (`bits[7:4]`): `0b0010` = `PMULLB`/`PMULLT` de 128 bits (`FEAT_SVE_PMULL128`,
+    /// que exige `FEAT_SVE_AES` — campo cumulativo, `isar_feature_aa64_sve_pmull128` do QEMU real).
     private static final long ID_AA64ZFR0_AES_PMULL128 = 2L << 4;
     /// `ID_AA64ZFR0_EL1.BitPerm` (`bits[19:16]`): `0b0001` = `BEXT`/`BDEP`/`BGRP` (`FEAT_SVE_BitPerm`).
     private static final long ID_AA64ZFR0_BITPERM = 1L << 16;
+    /// `ID_AA64ZFR0_EL1.SHA3` (`bits[35:32]`): `0b0001` = `RAX1` vetorial (`FEAT_SVE_SHA3`, B17.24).
+    private static final long ID_AA64ZFR0_SHA3 = 1L << 32;
+    /// `ID_AA64ZFR0_EL1.SM4` (`bits[43:40]`): `0b0001` = `SM4E`/`SM4EKEY` vetoriais (`FEAT_SVE_SM4`, B17.24).
+    private static final long ID_AA64ZFR0_SM4 = 1L << 40;
     /// `ID_AA64ZFR0_EL1.I8MM` (`bits[47:44]`): `0b0001` = `SMMLA`/`UMMLA`/`USMMLA` SVE (`FEAT_I8MM`).
     private static final long ID_AA64ZFR0_I8MM = 1L << 44;
     /// Versão do formato de {@link #saveScalableState}.
@@ -786,9 +793,17 @@ public final class Aarch64Core {
         long value = architecture.has(Aarch64Feature.SVE2) ? ID_AA64ZFR0_SVEVER_SVE2 : ID_AA64ZFR0_EL1_VALUE;
         if (architecture.has(Aarch64Feature.SVE_PMULL128)) {
             value |= ID_AA64ZFR0_AES_PMULL128;
+        } else if (architecture.has(Aarch64Feature.SVE_AES)) {
+            value |= ID_AA64ZFR0_AES_BASE;
         }
         if (architecture.has(Aarch64Feature.SVE_BITPERM)) {
             value |= ID_AA64ZFR0_BITPERM;
+        }
+        if (architecture.has(Aarch64Feature.SVE_SHA3)) {
+            value |= ID_AA64ZFR0_SHA3;
+        }
+        if (architecture.has(Aarch64Feature.SVE_SM4)) {
+            value |= ID_AA64ZFR0_SM4;
         }
         if (architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
             value |= ID_AA64ZFR0_I8MM;
