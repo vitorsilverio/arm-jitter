@@ -298,7 +298,11 @@ class Aarch64SmeArrayVectorDecoderTest {
         List<Case> all = cases();
         assertEquals(VARIANTS_PER_ENCODING * EXPECTED_ENCODINGS, all.size());
         assertEquals(EXPECTED_MNEMONICS, all.stream().map(Case::op).distinct().count());
-        assertEquals(EnumSet.allOf(Op.class), EnumSet.copyOf(all.stream().map(Case::op).toList()));
+        // B18.10 acrescentou 8 `Op` que só existem na forma `_nn` (`FADD`/`FSUB`/`BFADD`/`BFSUB`).
+        EnumSet<Op> expected = EnumSet.allOf(Op.class);
+        expected.removeAll(EnumSet.of(Op.FADD_H, Op.FADD_S, Op.FADD_D, Op.BFADD, Op.FSUB_H, Op.FSUB_S, Op.FSUB_D,
+                Op.BFSUB));
+        assertEquals(expected, EnumSet.copyOf(all.stream().map(Case::op).toList()));
     }
 
     @ParameterizedTest(name = "{0}")

@@ -298,6 +298,15 @@ final class Aarch64SmeDecoder {
     private static final int ARRAY_VECTOR_ZN_SHIFT = 5;
     private static final int ARRAY_VECTOR_ZM_SHIFT = 16;
     private static final int ARRAY_VECTOR_ZM_MASK = 0b1111;
+    /// Grupos alinhados da forma `_nn` (B18.10): `%zn_ax2` = `bits[9:6]×2`, `%zn_ax4` = `bits[9:7]×4`, `%zm_ax2` =
+    /// `bits[20:17]×2`, `%zm_ax4` = `bits[20:18]×4` — quatro bases de bits distintas.
+    private static final int GROUP_PAIR = 2;
+    private static final int GROUP_ZN_SHIFT_X2 = 6;
+    private static final int GROUP_ZN_SHIFT_X4 = 7;
+    private static final int GROUP_ZM_SHIFT_X2 = 17;
+    private static final int GROUP_ZM_SHIFT_X4 = 18;
+    private static final int GROUP_FIELD_MASK_X2 = 0b1111;
+    private static final int GROUP_FIELD_MASK_X4 = 0b111;
 
     /// Linha de `ZERO_za`: máscara/valor de 32 bits + `ngrp`/`nvec` + a largura e a escala do `off` DESTA linha.
     private record ZeroArrayRow(int mask, int value, int ngrp, int nvec, int offMask, int offScale) {
@@ -635,15 +644,36 @@ final class Aarch64SmeDecoder {
             case BFMLA, BFMLS -> Aarch64Feature.SME_B16B16;
             case FMLALL_B, FDOT_SB -> Aarch64Feature.SME_F8F32;
             case FMLAL_HB, FDOT_HB -> Aarch64Feature.SME_F8F16;
+            case FADD_D, FSUB_D -> Aarch64Feature.SME_F64F64;
+            case BFADD, BFSUB -> Aarch64Feature.SME_B16B16;
             default -> null;
         };
         if (extra != null && !architecture.has(extra)) {
             return null;
         }
-        return new Ir64Op.SmeArrayMultiVector(row.op(), row.count(),
-                MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK), row.offset(word),
-                (word >>> ARRAY_VECTOR_ZN_SHIFT) & REGISTER_MASK,
-                (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address);
+        // `FADD_h`/`FSUB_h`: `aa64_sme_f16f16_or_f8f16` — QUALQUER uma das duas features basta.
+        if ((row.op() == Ir64Op.SmeArrayMultiVector.Op.FADD_H || row.op() == Ir64Op.SmeArrayMultiVector.Op.FSUB_H)
+                && !architecture.has(Aarch64Feature.SME_F16F16) && !architecture.has(Aarch64Feature.SME_F8F16)) {
+            return null;
+        }
+        int registerIndex = MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
+        int off = row.offset(word);
+        return switch (row.form()) {
+            case SINGLE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off,
+                    (word >>> ARRAY_VECTOR_ZN_SHIFT) & REGISTER_MASK,
+                    (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address);
+            case MULTIPLE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off,
+                    alignedGroup(word, row.count(), GROUP_ZN_SHIFT_X2, GROUP_ZN_SHIFT_X4),
+                    alignedGroup(word, row.count(), GROUP_ZM_SHIFT_X2, GROUP_ZM_SHIFT_X4), address, true);
+            case ACCUMULATE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off, 0,
+                    alignedGroup(word, row.count(), GROUP_ZN_SHIFT_X2, GROUP_ZN_SHIFT_X4), address, true);
+        };
+    }
+
+    /// Base do grupo alinhado de `count` registradores (`times_2`/`times_4` do `.decode`).
+    private static int alignedGroup(int word, int count, int shiftX2, int shiftX4) {
+        return count == GROUP_PAIR ? ((word >>> shiftX2) & GROUP_FIELD_MASK_X2) * count
+                : ((word >>> shiftX4) & GROUP_FIELD_MASK_X4) * count;
     }
 
     /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits

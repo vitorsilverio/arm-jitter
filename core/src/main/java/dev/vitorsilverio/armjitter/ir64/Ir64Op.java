@@ -5381,11 +5381,22 @@ public sealed interface Ir64Op permits
             /// `off` JÁ escalado pelo número de vetores escritos por membro (`%off3_x2`, `%off2_x4`, …).
             int off,
             int zn,
-            /// `Zm` (`Z0`-`Z15`).
+            /// `Zm` (`Z0`-`Z15` nas formas `_n1`; base ALINHADA do grupo nas `_nn`).
             int zm,
-            long instructionAddress) implements Ir64Op {
-        /// Os 44 mnemônicos da seção `### SME2 Multi-vector Multiple and Single Array Vectors`, com o tamanho de
-        /// elemento do vetor de `ZA` e o número de vetores de `ZA` escritos POR MEMBRO do grupo.
+            long instructionAddress,
+            /// `true` nas formas `_nn` (B18.10): `Zm` também é um grupo e o membro `r` usa `Z(zm + r)`; `false` nas `_n1`
+            /// (B18.9), onde `Zm` é um vetor único.
+            boolean multipleZm) implements Ir64Op {
+        /// Forma `_n1` (B18.9): `Zm` é um vetor único.
+        public SmeArrayMultiVector(Op op, int count, int registerIndex, int off, int zn, int zm,
+                long instructionAddress) {
+            this(op, count, registerIndex, off, zn, zm, instructionAddress, false);
+        }
+
+        /// Os 50 mnemônicos das seções `### SME2 Multi-vector Multiple and Single Array Vectors` (B18.9) e
+        /// `### SME2 Multi-vector Multiple Array Vectors` (B18.10), com o tamanho de elemento do vetor de `ZA` e o
+        /// número de vetores de `ZA` escritos POR MEMBRO do grupo. `FADD`/`FSUB`/`BFADD`/`BFSUB` só existem na forma
+        /// `_nn` e NÃO têm `Zn`: `ZA ±= Zm` (o campo {@link #zn} fica `0` e é ignorado).
         public enum Op {
             ADD_S(2, 1), ADD_D(3, 1), SUB_S(2, 1), SUB_D(3, 1),
             FMLAL(2, 2), FMLSL(2, 2), BFMLAL(2, 2), BFMLSL(2, 2),
@@ -5396,7 +5407,9 @@ public sealed interface Ir64Op permits
             UMLALL_S(2, 4), UMLALL_D(3, 4), UMLSLL_S(2, 4), UMLSLL_D(3, 4), USMLALL(2, 4), SUMLALL(2, 4),
             BFMLA(1, 1), BFMLS(1, 1), FMLA_H(1, 1), FMLA_S(2, 1), FMLA_D(3, 1), FMLS_H(1, 1), FMLS_S(2, 1),
             FMLS_D(3, 1),
-            FMLALL_B(2, 4), FDOT_SB(2, 1), FMLAL_HB(1, 2), FDOT_HB(1, 1);
+            FMLALL_B(2, 4), FDOT_SB(2, 1), FMLAL_HB(1, 2), FDOT_HB(1, 1),
+            FADD_H(1, 1), FADD_S(2, 1), FADD_D(3, 1), BFADD(1, 1), FSUB_H(1, 1), FSUB_S(2, 1), FSUB_D(3, 1),
+            BFSUB(1, 1);
 
             private final int accumulatorEsz;
             private final int vectorsPerMember;

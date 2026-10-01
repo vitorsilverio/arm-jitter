@@ -8,7 +8,8 @@ import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
-/// SME2 multi-vetor "multiple and single, array vectors" (B18.9): `ZA[W<rv> + off, VGx<n>] (+)= f(Zn…, Zm)` — o laço
+/// SME2 multi-vetor "multiple and single, array vectors" (B18.9) e "multiple, array vectors" (B18.10, o `Zm` também é
+/// um grupo e o membro `r` usa `Z(zm + r)`; `FADD`/`FSUB`/`BFADD`/`BFSUB` fazem `ZA ±= Zm`, sem `Zn`): `ZA[W<rv> + off, VGx<n>] (+)= f(Zn…, Zm)` — o laço
 /// interno de um `gemm` SME2, sem tile nem predicado (`do_azz_n1`/`do_azz_acc*`/`do_azz_fp` do `translate-sme.c`).
 ///
 /// - Exige modo streaming **e** `ZA` habilitado (`sme_smza_enabled_check`); o comprimento é o `SVL`, nunca o `VL`.
@@ -68,11 +69,12 @@ final class SmeArrayMultiVectorOps {
         Context context = contextFor(core, kind);
         for (int member = 0; member < op.count(); member++) {
             int zn = (op.zn() + member) % Z_REGISTER_COUNT;
+            int zm = op.multipleZm() ? op.zm() + member : op.zm();
             for (int select = 0; select < perMember; select++) {
                 int row = base + member * rowsPerMember + select;
                 for (int e = 0; e < elements; e++) {
                     long accumulator = SmeMovaOps.zaElement(matrix, row, e << esz, esz);
-                    long result = lane(kind, context, regs, zn, op.zm(), e, select, accumulator);
+                    long result = lane(kind, context, regs, zn, zm, e, select, accumulator);
                     SmeMovaOps.setZaElement(matrix, row, e << esz, esz, result);
                 }
             }
@@ -91,7 +93,10 @@ final class SmeArrayMultiVectorOps {
             case FMLA_H, FMLS_H -> context.fma = SveFloat.Env.ofZa(core, ESZ_HALF);
             case FMLA_S, FMLS_S -> context.fma = SveFloat.Env.ofZa(core, ESZ_SINGLE);
             case FMLA_D, FMLS_D -> context.fma = SveFloat.Env.ofZa(core, ESZ_DOUBLE);
-            case BFMLA, BFMLS -> context.fma = SveFloat.Env.ofZa(core, SveFloat.ESZ_BFLOAT16);
+            case BFMLA, BFMLS, BFADD, BFSUB -> context.fma = SveFloat.Env.ofZa(core, SveFloat.ESZ_BFLOAT16);
+            case FADD_H, FSUB_H -> context.fma = SveFloat.Env.ofZa(core, ESZ_HALF);
+            case FADD_S, FSUB_S -> context.fma = SveFloat.Env.ofZa(core, ESZ_SINGLE);
+            case FADD_D, FSUB_D -> context.fma = SveFloat.Env.ofZa(core, ESZ_DOUBLE);
             case FMLALL_B, FMLAL_HB -> {
                 context.nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
                 context.mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
@@ -185,6 +190,10 @@ final class SmeArrayMultiVectorOps {
             case BFMLS, FMLS_H, FMLS_S, FMLS_D -> SveFloat.fusedMultiplyAdd(accumulator,
                     SveIntegerOps.get(regs, zn, e, esz) ^ (1L << ((Byte.SIZE << esz) - 1)),
                     SveIntegerOps.get(regs, zm, e, esz), 0, context.fma);
+            case FADD_H, FADD_S, FADD_D, BFADD -> SveFloat.add(accumulator, SveIntegerOps.get(regs, zm, e, esz), false,
+                    context.fma);
+            case FSUB_H, FSUB_S, FSUB_D, BFSUB -> SveFloat.add(accumulator, SveIntegerOps.get(regs, zm, e, esz), true,
+                    context.fma);
             case FMLALL_B -> AdvSimdLanes.fp8FusedMultiplyAdd(
                     (int) SveIntegerOps.get(regs, zn, LANES_PER_FP8_WORD * e + select, ESZ_BYTE), context.nE4m3,
                     (int) SveIntegerOps.get(regs, zm, LANES_PER_FP8_WORD * e + select, ESZ_BYTE), context.mE4m3,

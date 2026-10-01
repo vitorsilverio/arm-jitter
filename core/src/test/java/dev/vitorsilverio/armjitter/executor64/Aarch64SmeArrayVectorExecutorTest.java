@@ -22,8 +22,10 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/// B18.9 — SME2 multi-vetor "multiple and single, array vectors". As palavras-base de cada uma das 107 linhas vêm do
-/// `aarch64-none-elf-as` (devkitA64; ver {@code Aarch64SmeArrayVectorDecoderTest}); os campos `Wv`/`off`/`zn`/`zm`
+/// B18.9 + B18.10 — SME2 multi-vetor com resultado em `ZA`: "multiple and single" (`_n1`, 107 linhas) e "multiple"
+/// (`_nn`, 100 linhas, `Zm` também é um grupo e o membro `r` usa `Z(zm + r)`; `FADD`/`FSUB`/`BFADD`/`BFSUB` não têm
+/// `Zn`). As palavras-base de cada linha vêm do `aarch64-none-elf-as` (devkitA64; ver {@code
+/// Aarch64SmeArrayVectorDecoderTest} e {@code Aarch64SmeArrayMultipleDecoderTest}); os campos `Wv`/`off`/`zn`/`zm`
 /// são montados por {@link #word}. Cada operação é conferida contra uma referência escrita AQUI (inteiros em `long`,
 /// ponto flutuante em `Math.fma`/`float`/`double` e decodificação própria de `FP8`) — NÃO contra
 /// {@code SmeOuterProductOps} nem contra as operações de lane que o executor reusa. O endereçamento
@@ -168,7 +170,114 @@ class Aarch64SmeArrayVectorExecutorTest {
             FDOT_HB; 4; 0xC1301008
             """;
 
-    private record Shape(Op op, int n, int base) {
+    /// Como `Zn`/`Zm` são codificados (espelha as três formas de `SmeArrayVectorRows.Form`, mas aqui escrito à parte).
+    private enum Form { SINGLE, MULTIPLE, ACCUMULATE }
+
+    /// As 100 linhas `_nn` (B18.10): `operação; n; palavra-base; forma` — os bits FIXOS do `.decode`.
+    private static final String NN_BASES = """
+            ADD_S; 2; 0xC1A01810; MULTIPLE
+            ADD_S; 4; 0xC1A11810; MULTIPLE
+            ADD_D; 2; 0xC1E01810; MULTIPLE
+            ADD_D; 4; 0xC1E11810; MULTIPLE
+            SUB_S; 2; 0xC1A01818; MULTIPLE
+            SUB_S; 4; 0xC1A11818; MULTIPLE
+            SUB_D; 2; 0xC1E01818; MULTIPLE
+            SUB_D; 4; 0xC1E11818; MULTIPLE
+            FMLAL; 2; 0xC1A00800; MULTIPLE
+            FMLAL; 4; 0xC1A10800; MULTIPLE
+            FMLSL; 2; 0xC1A00808; MULTIPLE
+            FMLSL; 4; 0xC1A10808; MULTIPLE
+            BFMLAL; 2; 0xC1A00810; MULTIPLE
+            BFMLAL; 4; 0xC1A10810; MULTIPLE
+            BFMLSL; 2; 0xC1A00818; MULTIPLE
+            BFMLSL; 4; 0xC1A10818; MULTIPLE
+            FDOT; 2; 0xC1A01000; MULTIPLE
+            FDOT; 4; 0xC1A11000; MULTIPLE
+            BFDOT; 2; 0xC1A01010; MULTIPLE
+            BFDOT; 4; 0xC1A11010; MULTIPLE
+            USDOT; 2; 0xC1A01408; MULTIPLE
+            USDOT; 4; 0xC1A11408; MULTIPLE
+            SDOT_4B; 2; 0xC1A01400; MULTIPLE
+            SDOT_4B; 4; 0xC1A11400; MULTIPLE
+            SDOT_4H; 2; 0xC1E01400; MULTIPLE
+            SDOT_4H; 4; 0xC1E11400; MULTIPLE
+            SDOT_2H; 2; 0xC1E01408; MULTIPLE
+            SDOT_2H; 4; 0xC1E11408; MULTIPLE
+            UDOT_4B; 2; 0xC1A01410; MULTIPLE
+            UDOT_4B; 4; 0xC1A11410; MULTIPLE
+            UDOT_4H; 2; 0xC1E01410; MULTIPLE
+            UDOT_4H; 4; 0xC1E11410; MULTIPLE
+            UDOT_2H; 2; 0xC1E01418; MULTIPLE
+            UDOT_2H; 4; 0xC1E11418; MULTIPLE
+            SMLAL; 2; 0xC1E00800; MULTIPLE
+            SMLAL; 4; 0xC1E10800; MULTIPLE
+            SMLSL; 2; 0xC1E00808; MULTIPLE
+            SMLSL; 4; 0xC1E10808; MULTIPLE
+            UMLAL; 2; 0xC1E00810; MULTIPLE
+            UMLAL; 4; 0xC1E10810; MULTIPLE
+            UMLSL; 2; 0xC1E00818; MULTIPLE
+            UMLSL; 4; 0xC1E10818; MULTIPLE
+            SMLALL_S; 2; 0xC1A00000; MULTIPLE
+            SMLALL_D; 2; 0xC1E00000; MULTIPLE
+            SMLALL_S; 4; 0xC1A10000; MULTIPLE
+            SMLALL_D; 4; 0xC1E10000; MULTIPLE
+            SMLSLL_S; 2; 0xC1A00008; MULTIPLE
+            SMLSLL_D; 2; 0xC1E00008; MULTIPLE
+            SMLSLL_S; 4; 0xC1A10008; MULTIPLE
+            SMLSLL_D; 4; 0xC1E10008; MULTIPLE
+            UMLALL_S; 2; 0xC1A00010; MULTIPLE
+            UMLALL_D; 2; 0xC1E00010; MULTIPLE
+            UMLALL_S; 4; 0xC1A10010; MULTIPLE
+            UMLALL_D; 4; 0xC1E10010; MULTIPLE
+            UMLSLL_S; 2; 0xC1A00018; MULTIPLE
+            UMLSLL_D; 2; 0xC1E00018; MULTIPLE
+            UMLSLL_S; 4; 0xC1A10018; MULTIPLE
+            UMLSLL_D; 4; 0xC1E10018; MULTIPLE
+            USMLALL; 2; 0xC1A00004; MULTIPLE
+            USMLALL; 4; 0xC1A10004; MULTIPLE
+            BFMLA; 2; 0xC1E01008; MULTIPLE
+            FMLA_H; 2; 0xC1A01008; MULTIPLE
+            FMLA_S; 2; 0xC1A01800; MULTIPLE
+            FMLA_D; 2; 0xC1E01800; MULTIPLE
+            BFMLA; 4; 0xC1E11008; MULTIPLE
+            FMLA_H; 4; 0xC1A11008; MULTIPLE
+            FMLA_S; 4; 0xC1A11800; MULTIPLE
+            FMLA_D; 4; 0xC1E11800; MULTIPLE
+            BFMLS; 2; 0xC1E01018; MULTIPLE
+            FMLS_H; 2; 0xC1A01018; MULTIPLE
+            FMLS_S; 2; 0xC1A01808; MULTIPLE
+            FMLS_D; 2; 0xC1E01808; MULTIPLE
+            BFMLS; 4; 0xC1E11018; MULTIPLE
+            FMLS_H; 4; 0xC1A11018; MULTIPLE
+            FMLS_S; 4; 0xC1A11808; MULTIPLE
+            FMLS_D; 4; 0xC1E11808; MULTIPLE
+            FMLALL_B; 2; 0xC1A00020; MULTIPLE
+            FMLALL_B; 4; 0xC1A10020; MULTIPLE
+            FDOT_SB; 2; 0xC1A01030; MULTIPLE
+            FDOT_SB; 4; 0xC1A11030; MULTIPLE
+            FMLAL_HB; 2; 0xC1A00820; MULTIPLE
+            FMLAL_HB; 4; 0xC1A10820; MULTIPLE
+            FDOT_HB; 2; 0xC1A01020; MULTIPLE
+            FDOT_HB; 4; 0xC1A11020; MULTIPLE
+            FADD_H; 2; 0xC1A41C00; ACCUMULATE
+            FADD_S; 2; 0xC1A01C00; ACCUMULATE
+            FADD_D; 2; 0xC1E01C00; ACCUMULATE
+            FADD_H; 4; 0xC1A51C00; ACCUMULATE
+            FADD_S; 4; 0xC1A11C00; ACCUMULATE
+            FADD_D; 4; 0xC1E11C00; ACCUMULATE
+            FSUB_H; 2; 0xC1A41C08; ACCUMULATE
+            FSUB_S; 2; 0xC1A01C08; ACCUMULATE
+            FSUB_D; 2; 0xC1E01C08; ACCUMULATE
+            FSUB_H; 4; 0xC1A51C08; ACCUMULATE
+            FSUB_S; 4; 0xC1A11C08; ACCUMULATE
+            FSUB_D; 4; 0xC1E11C08; ACCUMULATE
+            BFADD; 2; 0xC1E41C00; ACCUMULATE
+            BFADD; 4; 0xC1E51C00; ACCUMULATE
+            BFSUB; 2; 0xC1E41C08; ACCUMULATE
+            BFSUB; 4; 0xC1E51C08; ACCUMULATE
+            """;
+
+    private record Shape(Op op, int n, int base, Form form) {
         int offsetBits() {
             int step = step(op);
             return step == 1 ? 3 : step == 2 ? (n == 1 ? 3 : 2) : (n == 1 ? 2 : 1);
@@ -176,15 +285,20 @@ class Aarch64SmeArrayVectorExecutorTest {
 
         @Override
         public String toString() {
-            return op + " n=" + n;
+            return op + " n=" + n + (form == Form.SINGLE ? "" : " " + form);
         }
     }
 
     private static List<Shape> shapes() {
-        return BASES.lines().map(String::strip).filter(line -> !line.isEmpty()).map(line -> {
+        return Stream.concat(shapesOf(BASES, Form.SINGLE), shapesOf(NN_BASES, null)).toList();
+    }
+
+    private static Stream<Shape> shapesOf(String table, Form fixed) {
+        return table.lines().map(String::strip).filter(line -> !line.isEmpty()).map(line -> {
             String[] f = line.split("; ");
-            return new Shape(Op.valueOf(f[0]), Integer.parseInt(f[1]), (int) Long.decode(f[2]).longValue());
-        }).toList();
+            return new Shape(Op.valueOf(f[0]), Integer.parseInt(f[1]), (int) Long.decode(f[2]).longValue(),
+                    fixed != null ? fixed : Form.valueOf(f[3]));
+        });
     }
 
     static Stream<Arguments> shapesAndSvl() {
@@ -192,7 +306,14 @@ class Aarch64SmeArrayVectorExecutorTest {
     }
 
     private static Shape shape(Op op, int n) {
-        return shapes().stream().filter(s -> s.op() == op && s.n() == n).findFirst().orElseThrow();
+        return shapes().stream().filter(s -> s.op() == op && s.n() == n && s.form() == Form.SINGLE).findFirst()
+                .orElseThrow();
+    }
+
+    /// A forma `_nn` (B18.10) da operação.
+    private static Shape shapeNn(Op op, int n) {
+        return shapes().stream().filter(s -> s.op() == op && s.n() == n && s.form() != Form.SINGLE).findFirst()
+                .orElseThrow();
     }
 
     /// Vetores de `ZA` escritos POR MEMBRO (`nsel`) — re-derivado do número de produtos de cada mnemônico, não do IR.
@@ -208,14 +329,31 @@ class Aarch64SmeArrayVectorExecutorTest {
     /// Tamanho do elemento do vetor de `ZA` (`1` = half/bfloat16, `2` = word, `3` = doubleword).
     private static int accumulatorEsz(Op op) {
         return switch (op) {
-            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D, FMLA_D, FMLS_D -> ESZ_DOUBLE;
-            case FMLA_H, FMLS_H, BFMLA, BFMLS, FMLAL_HB, FDOT_HB -> ESZ_HALF;
+            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D, FMLA_D, FMLS_D, FADD_D,
+                    FSUB_D -> ESZ_DOUBLE;
+            case FMLA_H, FMLS_H, BFMLA, BFMLS, FMLAL_HB, FDOT_HB, FADD_H, FSUB_H, BFADD, BFSUB -> ESZ_HALF;
             default -> ESZ_SINGLE;
         };
     }
 
+    /// `%zn_ax2`/`%zn_ax4`: grupo alinhado em `bits[9:6]`×2 / `bits[9:7]`×4.
+    private static int groupZnField(int n, int firstRegister) {
+        return n == 2 ? firstRegister / 2 << 6 : firstRegister / 4 << 7;
+    }
+
+    /// `%zm_ax2`/`%zm_ax4`: grupo alinhado em `bits[20:17]`×2 / `bits[20:18]`×4.
+    private static int groupZmField(int n, int firstRegister) {
+        return n == 2 ? firstRegister / 2 << 17 : firstRegister / 4 << 18;
+    }
+
+    /// `zn`/`zm` nas formas `_nn` são a PRIMEIRA `Z` de cada grupo (alinhada a `n`). Em `ACCUMULATE` só `zm` conta.
     private static int word(Shape shape, int register, int off, int zn, int zm) {
-        return shape.base() | zm << ZM_SHIFT | (register - RV_FIRST) << RV_SHIFT | zn << ZN_SHIFT | off;
+        int common = shape.base() | (register - RV_FIRST) << RV_SHIFT | off;
+        return switch (shape.form()) {
+            case SINGLE -> common | zm << ZM_SHIFT | zn << ZN_SHIFT;
+            case MULTIPLE -> common | groupZnField(shape.n(), zn) | groupZmField(shape.n(), zm);
+            case ACCUMULATE -> common | groupZnField(shape.n(), zm);
+        };
     }
 
     private static Aarch64Core core(int svlBits, long svcr) {
@@ -244,7 +382,10 @@ class Aarch64SmeArrayVectorExecutorTest {
             case FMLAL, FMLSL, FDOT, FMLA_H, FMLS_H -> Fmt.HALF;
             case BFMLAL, BFMLSL, BFDOT, BFMLA, BFMLS -> Fmt.BF16;
             case FMLA_S, FMLS_S -> Fmt.SINGLE_RANDOM;
-            case FMLA_D, FMLS_D -> Fmt.DOUBLE;
+            case FMLA_D, FMLS_D, FADD_D, FSUB_D -> Fmt.DOUBLE;
+            case FADD_H, FSUB_H -> Fmt.HALF;
+            case BFADD, BFSUB -> Fmt.BF16;
+            case FADD_S, FSUB_S -> Fmt.SINGLE;
             case FMLALL_B, FDOT_SB, FMLAL_HB, FDOT_HB -> Fmt.FP8;
             default -> Fmt.INT;
         };
@@ -253,10 +394,11 @@ class Aarch64SmeArrayVectorExecutorTest {
     private static Fmt accumulator(Op op) {
         return switch (op) {
             case FMLAL, FMLSL, BFMLAL, BFMLSL, FDOT, BFDOT, FMLALL_B, FDOT_SB -> Fmt.SINGLE;
-            case FMLA_H, FMLS_H, FMLAL_HB, FDOT_HB -> Fmt.HALF;
-            case BFMLA, BFMLS -> Fmt.BF16;
+            case FMLA_H, FMLS_H, FMLAL_HB, FDOT_HB, FADD_H, FSUB_H -> Fmt.HALF;
+            case BFMLA, BFMLS, BFADD, BFSUB -> Fmt.BF16;
             case FMLA_S, FMLS_S -> Fmt.SINGLE_RANDOM;
-            case FMLA_D, FMLS_D -> Fmt.DOUBLE;
+            case FMLA_D, FMLS_D, FADD_D, FSUB_D -> Fmt.DOUBLE;
+            case FADD_S, FSUB_S -> Fmt.SINGLE;
             default -> Fmt.INT;
         };
     }
@@ -469,6 +611,15 @@ class Aarch64SmeArrayVectorExecutorTest {
                 }
                 yield hb((float) sum);
             }
+            // `FADD`/`FSUB`/`BFADD`/`BFSUB` (B18.10): `ZA ±= Zm`, SEM `Zn` (só `m` entra).
+            case FADD_H -> hb(h(acc) + h(lane(m, ESZ_HALF, e)));
+            case FSUB_H -> hb(h(acc) - h(lane(m, ESZ_HALF, e)));
+            case FADD_S -> fb(f(acc) + f(lane(m, ESZ_SINGLE, e)));
+            case FSUB_S -> fb(f(acc) - f(lane(m, ESZ_SINGLE, e)));
+            case FADD_D -> Double.doubleToRawLongBits(d(acc) + d(lane(m, ESZ_DOUBLE, e)));
+            case FSUB_D -> Double.doubleToRawLongBits(d(acc) - d(lane(m, ESZ_DOUBLE, e)));
+            case BFADD -> bb(bf(acc) + bf(lane(m, ESZ_HALF, e)));
+            case BFSUB -> bb(bf(acc) - bf(lane(m, ESZ_HALF, e)));
         };
     }
 
@@ -507,12 +658,13 @@ class Aarch64SmeArrayVectorExecutorTest {
         }
         for (int member = 0; member < shape.n(); member++) {
             long[] n = z[(zn + member) % Z_REGISTERS];
+            long[] m = z[shape.form() == Form.SINGLE ? zm : zm + member];
             for (int sel = 0; sel < step; sel++) {
                 int row = base + member * rowsPerMember + sel;
                 written.add(row);
                 for (int e = 0; e < (svlBytes >>> accEsz); e++) {
                     long acc = lane(expected[row], accEsz, e);
-                    put(expected[row], accEsz, e, reference(op, acc, e, sel, n, z[zm]));
+                    put(expected[row], accEsz, e, reference(op, acc, e, sel, n, m));
                 }
             }
         }
@@ -537,7 +689,7 @@ class Aarch64SmeArrayVectorExecutorTest {
         }
     }
 
-    // ── todas as 107 formas × SVL 256/512 contra a referência ────────────────────────────────────
+    // ── todas as 207 formas (107 `_n1` + 100 `_nn`) × SVL 256/512 contra a referência ────────────────────────────────────
 
     @ParameterizedTest(name = "{0} @SVL{1}")
     @MethodSource("shapesAndSvl")
@@ -550,8 +702,17 @@ class Aarch64SmeArrayVectorExecutorTest {
             long registerValue = trial == 0 ? 0L : random.nextLong();
             core.setX(register, registerValue);
             int off = random.nextInt(1 << shape.offsetBits());
-            int zn = trial == 1 ? Z_REGISTERS - 1 : random.nextInt(Z_REGISTERS);
-            int zm = random.nextInt(ZM_COUNT);
+            int zn;
+            int zm;
+            if (shape.form() == Form.SINGLE) {
+                zn = trial == 1 ? Z_REGISTERS - 1 : random.nextInt(Z_REGISTERS);
+                zm = random.nextInt(ZM_COUNT);
+            } else {
+                // Grupos ALINHADOS a n: o último grupo do banco no trial 1, qualquer um nos demais (podem coincidir).
+                int groups = Z_REGISTERS / shape.n();
+                zn = (trial == 1 ? groups - 1 : random.nextInt(groups)) * shape.n();
+                zm = (trial == 1 ? 0 : random.nextInt(groups)) * shape.n();
+            }
             long[][] z = snapshotZ(core);
             Set<Integer> written = new HashSet<>();
             int scaledOff = off * step(shape.op());
@@ -775,6 +936,103 @@ class Aarch64SmeArrayVectorExecutorTest {
         fillZ(e5m2, 9, ESZ_BYTE, 0x40L);
         run(e5m2, word(fmlall, RV_FIRST, 0, 3, 9));
         assertEquals(fb(1.0f), lane(snapshotZa(e5m2)[0], ESZ_SINGLE, 0));
+    }
+
+    // ── forma `_nn` (B18.10) ─────────────────────────────────────────────────────────────────────
+
+    private static void fillZaRow(Aarch64Core core, int row, int esz, long value) {
+        int rowWords = core.streamingVectorLengthBytes() / Long.BYTES;
+        long[] words = new long[rowWords];
+        for (int i = 0; i < (core.streamingVectorLengthBytes() >>> esz); i++) {
+            put(words, esz, i, value);
+        }
+        for (int w = 0; w < rowWords; w++) {
+            core.matrix().setZaWord(row * rowWords + w, words[w]);
+        }
+    }
+
+    @Test
+    void theTwoGroupsAreIndependentAndNeitherIsModified() {
+        for (int svl : SVLS) {
+            int rowsPerMember = svl / Byte.SIZE / 4;
+            Aarch64Core core = zeroedCore(svl);
+            // Zn = Z0..Z3 (1..4), Zm = Z8..Z11 (10..40): cada vetor de ZA recebe Zn[i] + Zm[i].
+            for (int i = 0; i < 4; i++) {
+                fillZ(core, i, ESZ_SINGLE, i + 1);
+                fillZ(core, 8 + i, ESZ_SINGLE, 10L * (i + 1));
+            }
+            long[][] z = snapshotZ(core);
+            long[][] before = snapshotZa(core);
+            Shape add = shapeNn(Op.ADD_S, 4);
+            run(core, word(add, RV_FIRST, 0, 0, 8));
+            run(core, word(add, RV_FIRST, 0, 0, 8));
+            long[][] za = snapshotZa(core);
+            Set<Integer> rows = new HashSet<>();
+            for (int member = 0; member < 4; member++) {
+                int row = member * rowsPerMember;
+                rows.add(row);
+                assertEquals(11L * (member + 1), lane(za[row], ESZ_SINGLE, 0),
+                        "membro " + member + ": Zn[i] + Zm[i], e executar duas vezes NÃO dobra (ADD escreve)");
+            }
+            assertEquals(rows, changedRows(core, before));
+            assertZUnchanged(z, core);
+        }
+    }
+
+    @Test
+    void eachMemberUsesItsOwnZmRegister() {
+        for (int svl : SVLS) {
+            int rowsPerMember = svl / Byte.SIZE / 2;
+            Aarch64Core core = zeroedCore(svl);
+            fillZ(core, 2, ESZ_HALF, 1);
+            fillZ(core, 3, ESZ_HALF, 1);
+            fillZ(core, 8, ESZ_HALF, 1);
+            fillZ(core, 9, ESZ_HALF, 2);
+            long[][] before = snapshotZa(core);
+            // SMLAL vgx2, campo off = 1 (× 2 = 2): 2 vetores por membro; membro 0 usa Zm = Z8 (1), membro 1 usa Z9 (2).
+            run(core, word(shapeNn(Op.SMLAL, 2), RV_FIRST, 1, 2, 8));
+            long[][] za = snapshotZa(core);
+            assertEquals(Set.of(2, 3, 2 + rowsPerMember, 3 + rowsPerMember), changedRows(core, before));
+            assertEquals(1L, lane(za[2], ESZ_SINGLE, 0));
+            assertEquals(1L, lane(za[3], ESZ_SINGLE, 0));
+            assertEquals(2L, lane(za[2 + rowsPerMember], ESZ_SINGLE, 0));
+            assertEquals(2L, lane(za[3 + rowsPerMember], ESZ_SINGLE, 0));
+        }
+    }
+
+    @Test
+    void faddAndFsubAccumulateDirectlyWithoutMultiplyingAndWithoutZn() {
+        for (int svl : SVLS) {
+            int rowsPerMember = svl / Byte.SIZE / 2;
+            Aarch64Core core = zeroedCore(svl);
+            // Z4/Z5 = 0,5; todos os OUTROS Z recebem lixo — como não há Zn, nada disso pode entrar na conta.
+            for (int zr = 0; zr < Z_REGISTERS; zr++) {
+                fillZ(core, zr, ESZ_SINGLE, fb(123.0f));
+            }
+            fillZ(core, 4, ESZ_SINGLE, fb(0.5f));
+            fillZ(core, 5, ESZ_SINGLE, fb(0.5f));
+            long[][] before = snapshotZa(core);
+            Shape fadd = shapeNn(Op.FADD_S, 2);
+            run(core, word(fadd, RV_FIRST, 0, 0, 4));
+            run(core, word(fadd, RV_FIRST, 0, 0, 4));
+            assertEquals(fb(1.0f), lane(snapshotZa(core)[0], ESZ_SINGLE, 0), "FADD ACUMULA: 0 + 0,5 + 0,5");
+            assertEquals(fb(1.0f), lane(snapshotZa(core)[rowsPerMember], ESZ_SINGLE, 0));
+            assertEquals(Set.of(0, rowsPerMember), changedRows(core, before));
+            run(core, word(shapeNn(Op.FSUB_S, 2), RV_FIRST, 0, 0, 4));
+            assertEquals(fb(0.5f), lane(snapshotZa(core)[0], ESZ_SINGLE, 0), "FSUB: 1,0 − 0,5");
+        }
+    }
+
+    @Test
+    void faddFsubUseTheZaVectorAlreadyThereAsTheFirstOperand() {
+        Aarch64Core core = zeroedCore(256);
+        fillZaRow(core, 0, ESZ_HALF, hb(2.0f));
+        fillZaRow(core, 16, ESZ_HALF, hb(3.0f));
+        fillZ(core, 4, ESZ_HALF, hb(0.5f));
+        fillZ(core, 5, ESZ_HALF, hb(1.0f));
+        run(core, word(shapeNn(Op.FSUB_H, 2), RV_FIRST, 0, 0, 4));
+        assertEquals(hb(1.5f), lane(snapshotZa(core)[0], ESZ_HALF, 0), "2,0 − 0,5");
+        assertEquals(hb(2.0f), lane(snapshotZa(core)[16], ESZ_HALF, 0), "3,0 − 1,0");
     }
 
     // ── acesso ───────────────────────────────────────────────────────────────────────────────────
