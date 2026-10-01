@@ -471,4 +471,97 @@ class Aarch64SmeConstructiveExecutorTest {
         assertEquals(100, SmeMovaOps.zaElement(core.matrix(), 1, 0, 2));
         assertEquals(100, SmeMovaOps.zaElement(core.matrix(), 1 + rowsPerMember, 0, 2));
     }
+
+    private static final long FPMR_ALL_E4M3 = 1L | (1L << 3) | (1L << 6);
+
+    @Test
+    void fp8E4m3AndSecondStreamVariants() {
+        Aarch64Core core = core(256, Aarch64Core.SVCR_SM_BIT);
+        core.writeIntrinsicSystemRegister(dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId.FPMR, FPMR_ALL_E4M3);
+        int bytes = core.streamingVectorLengthBytes();
+        for (int i = 0; i < bytes; i++) {
+            put(core, 7, i, 0, 0x38); // E4M3: 1.0
+        }
+        run(core, 0xc1a6e0e4); // f2cvt
+        assertEquals(0x3C00, get(core, 4, 0, 1));
+        run(core, 0xc126e0e5); // f1cvtl
+        assertEquals(0x3C00, get(core, 5, 0, 1));
+        run(core, 0xc1e6e0e4); // bf2cvt
+        assertEquals(0x3F80, get(core, 4, 0, 1));
+        run(core, 0xc166e0e5); // bf1cvtl
+        assertEquals(0x3F80, get(core, 5, 0, 1));
+        int halves = elements(core, 1);
+        for (int i = 0; i < halves; i++) {
+            put(core, 4, i, 1, 0x3C00);
+            put(core, 5, i, 1, 0x3C00);
+        }
+        run(core, 0xc124e083); // fcvt z3.b, {z4.h-z5.h} para E4M3
+        assertEquals(0x38, get(core, 3, 0, 0));
+        int n = elements(core, 2);
+        for (int z = 4; z < 8; z++) {
+            put(core, z, 0, 2, Float.floatToRawIntBits(1f));
+        }
+        run(core, 0xc134e083); // fcvt z3.b, {z4.s-z7.s} para E4M3
+        assertEquals(0x38, get(core, 3, 0, 0));
+        assertEquals(0x38, get(core, 3, n, 0));
+    }
+
+    @Test
+    void signedShiftOfSixtyFourAndUnsignedShiftBelowSixtyFour() {
+        Aarch64Core core = core(256, Aarch64Core.SVCR_SM_BIT);
+        for (int z = 4; z < 8; z++) {
+            put(core, z, 0, 3, -1L);
+            put(core, z, 1, 3, Long.MAX_VALUE);
+            put(core, z, 2, 3, Long.MIN_VALUE);
+        }
+        run(core, 0xc1a0d883); // sqrshr z3.h, {z4.d-z7.d}, #64
+        assertEquals(0, get(core, 3, 0, 1));
+        assertEquals(0, get(core, 3, 1, 1));
+        assertEquals(0, get(core, 3, 2, 1));
+        for (int z = 4; z < 8; z++) {
+            put(core, z, 0, 3, 3L << 29);
+            put(core, z, 1, 3, -1L);
+        }
+        run(core, 0xc1e3d8a3); // uqrshr z3.h, {z4.d-z7.d}, #29
+        assertEquals(3, get(core, 3, 0, 1));
+        assertEquals(0xFFFF, get(core, 3, 1, 1));
+    }
+
+    @Test
+    void deniedAccessTakesTheExceptionAndSharedFormsRunOutsideStreaming() {
+        Aarch64Core core = core(256, 0);
+        put(core, 3, 0, 1, 0x1234);
+        run(core, 0xc1e3d483); // sqrshr fora de streaming: SME-only, acesso negado
+        assertEquals(0x1234, get(core, 3, 0, 1));
+        assertEquals(true, core.pc() >= VBAR, "a exceção de acesso desvia para o vetor");
+        Aarch64Core sve = core(256, 0);
+        put(sve, 4, 0, 2, 100000);
+        put(sve, 5, 0, 2, -100000);
+        run(sve, 0x45b32883); // sqrshrn compartilhada com SVE2p1: executa sem streaming
+        assertEquals(12, get(sve, 3, 0, 1));
+    }
+
+    @Test
+    void quadwordZipNeedsEnoughVectorLength() {
+        Aarch64Core core = core(256, Aarch64Core.SVCR_SM_BIT);
+        long before = core.scalable().zWord(4, 0);
+        core.memory().write32(0, 0xc137e104); // zip {z4.q-z7.q}: 64 bytes por operação, SVL = 32
+        core.setProgramCounter(0);
+        new Ir64BlockExecutor(ALL).step(core);
+        assertEquals(true, core.pc() >= VBAR, "UNDEFINED desvia para o vetor de exceções");
+        assertEquals(before, core.scalable().zWord(4, 0));
+    }
+
+    @Test
+    void sharedUnsignedAndSignedToUnsignedRoundingNarrowRunOutsideStreaming() {
+        Aarch64Core core = core(256, 0);
+        put(core, 4, 0, 2, 0x20000);
+        put(core, 5, 0, 2, -5);
+        run(core, 0x45bd3883); // uqrshrn z3.h, {z4.s-z5.s}, #3 (intercalado, sem sinal)
+        assertEquals(0x4000, get(core, 3, 0, 1));
+        assertEquals(0xFFFF, get(core, 3, 1, 1)); // -5 como sem sinal satura
+        run(core, 0x45b00883); // sqrshrun z3.h, {z4.s-z5.s}, #16 (com sinal para sem sinal)
+        assertEquals(2, get(core, 3, 0, 1));
+        assertEquals(0, get(core, 3, 1, 1));
+    }
 }

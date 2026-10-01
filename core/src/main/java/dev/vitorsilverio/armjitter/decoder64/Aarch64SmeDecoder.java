@@ -797,7 +797,7 @@ final class Aarch64SmeDecoder {
                     zm = groupBase(word, MV_ZM_GROUP_X2_SHIFT, 2);
                     pg = SEL_PG_BASE + ((word >>> SEL_PG_SHIFT) & SEL_PG_MASK);
                 }
-                case SEL4 -> {
+                default -> { // SEL4
                     zd = groupBase(word, ZD_X4_SHIFT, 4);
                     zn = groupBase(word, ZN_X4_SHIFT, 4);
                     zm = groupBase(word, MV_ZM_GROUP_X4_SHIFT, 4);
