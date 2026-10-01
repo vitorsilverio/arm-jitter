@@ -117,6 +117,11 @@ public final class Aarch64Architecture {
             Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
 
     /// ARMv9.3-A: baseline mandatório = ARMv8.8-A, mais `SVE`.
+    ///
+    /// ⚠️ `FEAT_SME` (introduzida na ARMv9.2-A) é **opcional** em toda ARMv9.2+ e NÃO é declarada aqui
+    /// (B18.13): declará-la mudaria o decode de quem já usa `ARMV9_3_A`+ (G3 — as instruções SVE passam a
+    /// ser restritas em modo streaming). Núcleos com SME usam {@link #ARMV9_3_A_SME2}; os ARMv9.2 sem SME,
+    /// {@link #ARMV9_2_A_WITHOUT_SME}.
     public static final Aarch64Architecture ARMV9_3_A = extending(ARMV8_8_A, "ARMv9.3-A",
             Aarch64Feature.SVE);
 
@@ -150,8 +155,20 @@ public final class Aarch64Architecture {
             Aarch64Feature.FP8_FUSED_MULTIPLY_ADD,
             Aarch64Feature.LOOKUP_TABLE);
 
+    /// **ARMv9.2-A sem `FEAT_SME`** (B18.13) — `FEAT_SME` é opcional e a maioria dos núcleos ARMv9.2
+    /// (Cortex-A320/A520/A720/A725/X4/X925, Neoverse N3/V3) não a implementa; {@link #ARMV9_2_A} a declara
+    /// por ser a versão que a introduz (coluna do medidor). Preset de catálogo, aditivo (G3).
+    public static final Aarch64Architecture ARMV9_2_A_WITHOUT_SME = extending(ARMV8_7_A, "ARMv9.2-A (sem SME)",
+            Aarch64Feature.SVE);
+
+    /// **ARMv9.3-A + SME2** (B18.13) — a família C1 (Ultra/Premium/Pro/Nano) é a primeira com SME2 em silício.
+    /// Só `FEAT_SME`/`FEAT_SME2` são declaradas: sub-features (`I16I64`, `F64F64`, ...) por núcleo não foram
+    /// confirmadas — ausência é melhor que entrada errada (B12.4/B12.6).
+    public static final Aarch64Architecture ARMV9_3_A_SME2 = extending(ARMV9_3_A, "ARMv9.3-A+SME2",
+            Aarch64Feature.SCALABLE_MATRIX_EXTENSION,
+            Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2);
+
     /// **ARMv8.2-A + SVE** (B17.26) — o **Fujitsu A64FX**, primeiro silício SVE do mundo
-    /// (anunciado 2018, usado no supercomputador Fugaku), é ARMv8.2-A com `FEAT_SVE` (`VL=512`
     /// bits) — SVE é OPCIONAL a partir de ARMv8.2-A (RFC B17.2/B17.1), e nenhum dos 16 presets de
     /// versão acima o declara (só os `ARMV9_x_A`, ver o Javadoc deles). Preset dedicado, aditivo,
     /// mesmo padrão que `ARMV7A_NEON` deu ao lado de 32 bits (B13.22) — **não** entra na escada de

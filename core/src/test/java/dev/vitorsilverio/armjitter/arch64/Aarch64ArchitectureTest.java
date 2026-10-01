@@ -196,6 +196,22 @@ class Aarch64ArchitectureTest {
         assertFalse(Aarch64Architecture.ARMV8_2_A_SVE.has(Aarch64Feature.SVE2), "SVE2 não confirmada");
     }
 
+    /// B18.13: `FEAT_SME` é opcional em ARMv9.2+; só `ARMV9_2_A` a declara (G3: declarar em 9.3+ mudaria o decode
+    /// dos presets existentes), `ARMV9_2_A_WITHOUT_SME` não a tem e `ARMV9_3_A_SME2` acrescenta SME e SME2.
+    @Test
+    void smeLadderAndCatalogPresetsAreConsistent() {
+        assertFalse(Aarch64Architecture.ARMV9_1_A.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertFalse(Aarch64Architecture.ARMV9_3_A.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertFalse(Aarch64Architecture.ARMV9_4_A.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertTrue(Aarch64Architecture.ARMV9_2_A.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertFalse(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertTrue(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME.has(Aarch64Feature.SVE));
+        assertTrue(Aarch64Architecture.ARMV9_3_A_SME2.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION));
+        assertTrue(Aarch64Architecture.ARMV9_3_A_SME2.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2));
+        assertFalse(Aarch64Architecture.ARMV9_3_A.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2),
+                "a base não pode ser mutada");
+    }
+
     /// B20.8: `ARMV8_R_64` estende `ARMV8_0_A` (não é uma escada de versão) acrescentando
     /// `R_PROFILE`/`PMSA`, sem mutar `ARMV8_0_A` nem qualquer outro preset (G3).
     @Test

@@ -9,7 +9,7 @@ Javadoc dessa classe para o comando e para a questão de licença do inventário
 |---|---|
 | ✅ | o decoder reconhece o encoding |
 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
-| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — só para `sve.decode`, B17.26 — medida por sonda dupla, ver `probeSveApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
+| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — para `sve.decode` (B17.26) e `sme.decode` (B18.13) — medida por sonda dupla, ver `probeScalableApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
 
 **`⚠️` voltou a ocorrer na E12**, e a previsão de que ele voltaria "ao abrir um novo
@@ -37,8 +37,8 @@ não entram no denominador dela, só `a32`/`t16`/`t32`), `v6-M`/`v7-M`
 só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode` (B17.26) também tem
 coluna por versão, mas a aplicabilidade é MEDIDA por sonda dupla (nenhum preset
 declara `SVE2`/sub-features — só `SVE`, a partir de `ARMv9.0-A`), não curada por
-mnemônico — ver `probeSveApplicability`. `sme.decode` continua uma coluna monolítica
-`A64` (nada decodifica ainda, épico B18).
+mnemônico — ver `probeScalableApplicability`. `sme.decode` (B18.13) usa a mesma sonda,
+com `FEAT_SME` como feature-base.
 
 > **Inventário medido contra a revisão do QEMU `2931a675e9d3fcddedf673509fe9759955fc616d`** — fixada em `gerar-cobertura-isa.sh` (variável `QEMU_REV`). A tabela só é reproduzível contra ESSA revisão; um bump de `QEMU_REV` é um commit próprio, com o diff lido linha a linha (ver o cabeçalho do script).
 
@@ -49,7 +49,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 25986 de 26064 células aplicáveis decodificam.
+> **99%** — 28478 de 28556 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -80,10 +80,10 @@ Por arquitetura:
 | ARMv8.9-A | **100%** (1113/1113) |
 | ARMv9.0-A | **99%** (1474/1487) |
 | ARMv9.1-A | **99%** (1501/1514) |
-| ARMv9.2-A | **99%** (1510/1523) |
-| ARMv9.3-A | **99%** (1516/1529) |
-| ARMv9.4-A | **99%** (1532/1545) |
-| ARMv9.5-A | **99%** (1570/1583) |
+| ARMv9.2-A | **99%** (2133/2146) |
+| ARMv9.3-A | **99%** (2139/2152) |
+| ARMv9.4-A | **99%** (2155/2168) |
+| ARMv9.5-A | **99%** (2193/2206) |
 
 ## Resumo
 
@@ -101,7 +101,7 @@ Por arquitetura:
 | MVE (Helium) — ARMv8.1-M | 352 | ARMv8.1-M+MVE 100% (352/352) |
 | A64 — AArch64 | 1161 | ARMv8.0-A 100% (851/851) · ARMv8.1-A 100% (883/883) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 100% (1095/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
 | SVE/SVE2 — vetor escalável | 929 | ARMv9.0-A 96% (395/408) · ARMv9.1-A 96% (409/422) · ARMv9.2-A 96% (415/428) · ARMv9.3-A 96% (409/422) · ARMv9.4-A 96% (411/424) · ARMv9.5-A 97% (424/437) |
-| SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
+| SME — extensão matricial | 623 | ARMv9.2-A 100% (623/623) · ARMv9.3-A 100% (623/623) · ARMv9.4-A 100% (623/623) · ARMv9.5-A 100% (623/623) |
 
 
 
@@ -2826,7 +2826,7 @@ Inventário: `a64.decode` · 1161 instruções.
 
 ## SVE/SVE2 — vetor escalável
 
-Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE. `Applicability` continua `NOT_IN_ANY_PRESET` (nenhum `ArmArchitecture` de 32 bits tem SVE), mas B17.26 liga colunas por versão A64 mesmo assim — ver `appendGroup`/`probeSveApplicability`.
+Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE. `Applicability` continua `NOT_IN_ANY_PRESET` (nenhum `ArmArchitecture` de 32 bits tem SVE), mas B17.26 liga colunas por versão A64 mesmo assim — ver `appendGroup`/`probeScalableApplicability`.
 
 Inventário: `sve.decode` · 929 instruções.
 
@@ -3764,632 +3764,632 @@ Inventário: `sve.decode` · 929 instruções.
 
 ## SME — extensão matricial
 
-Extensão opcional do ARMv9; nenhum alvo atual a tem.
+Extensão opcional do ARMv9.2+ (`FEAT_SME`); `Applicability` continua `NOT_IN_ANY_PRESET` (nenhum `ArmArchitecture` de 32 bits tem SME), mas B18.13 liga colunas por versão A64 — ver `appendGroup`/`probeScalableApplicability`.
 
 Inventário: `sme.decode` · 623 instruções.
 
-| Instrução | A64 |
-|---|---|
-| `ZERO` | · |
-| `ZERO_zt0` | · |
-| `MOVA_tz` | · |
-| `MOVA_tz` | · |
-| `MOVA_tz` | · |
-| `MOVA_tz` | · |
-| `MOVA_tz` | · |
-| `MOVA_zt` | · |
-| `MOVA_zt` | · |
-| `MOVA_zt` | · |
-| `MOVA_zt` | · |
-| `MOVA_zt` | · |
-| `MOVA_tz2` | · |
-| `MOVA_tz2` | · |
-| `MOVA_tz2` | · |
-| `MOVA_tz2` | · |
-| `MOVA_zt2` | · |
-| `MOVA_zt2` | · |
-| `MOVA_zt2` | · |
-| `MOVA_zt2` | · |
-| `MOVA_tz4` | · |
-| `MOVA_tz4` | · |
-| `MOVA_tz4` | · |
-| `MOVA_tz4` | · |
-| `MOVA_zt4` | · |
-| `MOVA_zt4` | · |
-| `MOVA_zt4` | · |
-| `MOVA_zt4` | · |
-| `MOVA_az2` | · |
-| `MOVA_az4` | · |
-| `MOVA_za2` | · |
-| `MOVA_za4` | · |
-| `MOVAZ_za2` | · |
-| `MOVAZ_za4` | · |
-| `MOVAZ_zt` | · |
-| `MOVAZ_zt` | · |
-| `MOVAZ_zt` | · |
-| `MOVAZ_zt` | · |
-| `MOVAZ_zt` | · |
-| `MOVAZ_zt2` | · |
-| `MOVAZ_zt2` | · |
-| `MOVAZ_zt2` | · |
-| `MOVAZ_zt2` | · |
-| `MOVAZ_zt4` | · |
-| `MOVAZ_zt4` | · |
-| `MOVAZ_zt4` | · |
-| `MOVAZ_zt4` | · |
-| `MOVT_rzt` | · |
-| `MOVT_ztr` | · |
-| `MOVT_ztz` | · |
-| `LDST1` | · |
-| `LDST1` | · |
-| `LDST1` | · |
-| `LDST1` | · |
-| `LDST1` | · |
-| `LDR` | · |
-| `STR` | · |
-| `LDR_zt0` | · |
-| `STR_zt0` | · |
-| `ADDHA_s` | · |
-| `ADDVA_s` | · |
-| `ADDHA_d` | · |
-| `ADDVA_d` | · |
-| `FMOPA_h` | · |
-| `FMOPA_s` | · |
-| `FMOPA_d` | · |
-| `BFMOPA` | · |
-| `BFMOPA_w` | · |
-| `FMOPA_w_h` | · |
-| `FMOPA_sb` | · |
-| `FMOPA_hb` | · |
-| `SMOPA_s` | · |
-| `SUMOPA_s` | · |
-| `USMOPA_s` | · |
-| `UMOPA_s` | · |
-| `SMOPA_d` | · |
-| `SUMOPA_d` | · |
-| `USMOPA_d` | · |
-| `UMOPA_d` | · |
-| `BMOPA` | · |
-| `SMOPA2_s` | · |
-| `UMOPA2_s` | · |
-| `SMAX_n1` | · |
-| `SMAX_n1` | · |
-| `UMAX_n1` | · |
-| `UMAX_n1` | · |
-| `SMIN_n1` | · |
-| `SMIN_n1` | · |
-| `UMIN_n1` | · |
-| `UMIN_n1` | · |
-| `FMAX_n1` | · |
-| `FMAX_n1` | · |
-| `FMIN_n1` | · |
-| `FMIN_n1` | · |
-| `FMAXNM_n1` | · |
-| `FMAXNM_n1` | · |
-| `FMINNM_n1` | · |
-| `FMINNM_n1` | · |
-| `SRSHL_n1` | · |
-| `SRSHL_n1` | · |
-| `URSHL_n1` | · |
-| `URSHL_n1` | · |
-| `ADD_n1` | · |
-| `ADD_n1` | · |
-| `SQDMULH_n1` | · |
-| `SQDMULH_n1` | · |
-| `FSCALE_n1` | · |
-| `FSCALE_n1` | · |
-| `SMAX_nn` | · |
-| `SMAX_nn` | · |
-| `UMAX_nn` | · |
-| `UMAX_nn` | · |
-| `SMIN_nn` | · |
-| `SMIN_nn` | · |
-| `UMIN_nn` | · |
-| `UMIN_nn` | · |
-| `FMAX_nn` | · |
-| `FMAX_nn` | · |
-| `FMIN_nn` | · |
-| `FMIN_nn` | · |
-| `FMAXNM_nn` | · |
-| `FMAXNM_nn` | · |
-| `FMINNM_nn` | · |
-| `FMINNM_nn` | · |
-| `SRSHL_nn` | · |
-| `SRSHL_nn` | · |
-| `URSHL_nn` | · |
-| `URSHL_nn` | · |
-| `SQDMULH_nn` | · |
-| `SQDMULH_nn` | · |
-| `FAMAX_nn` | · |
-| `FAMAX_nn` | · |
-| `FAMIN_nn` | · |
-| `FAMIN_nn` | · |
-| `FSCALE_nn` | · |
-| `FSCALE_nn` | · |
-| `ADD_azz_n1_s` | · |
-| `ADD_azz_n1_s` | · |
-| `ADD_azz_n1_d` | · |
-| `ADD_azz_n1_d` | · |
-| `SUB_azz_n1_s` | · |
-| `SUB_azz_n1_s` | · |
-| `SUB_azz_n1_d` | · |
-| `SUB_azz_n1_d` | · |
-| `FMLAL_n1_sh` | · |
-| `FMLAL_n1_sh` | · |
-| `FMLAL_n1_sh` | · |
-| `FMLSL_n1_sh` | · |
-| `FMLSL_n1_sh` | · |
-| `FMLSL_n1_sh` | · |
-| `BFMLAL_n1` | · |
-| `BFMLAL_n1` | · |
-| `BFMLAL_n1` | · |
-| `BFMLSL_n1` | · |
-| `BFMLSL_n1` | · |
-| `BFMLSL_n1` | · |
-| `FDOT_n1` | · |
-| `FDOT_n1` | · |
-| `BFDOT_n1` | · |
-| `BFDOT_n1` | · |
-| `USDOT_n1` | · |
-| `USDOT_n1` | · |
-| `SUDOT_n1` | · |
-| `SUDOT_n1` | · |
-| `SDOT_n1_4b` | · |
-| `SDOT_n1_4b` | · |
-| `SDOT_n1_4h` | · |
-| `SDOT_n1_4h` | · |
-| `SDOT_n1_2h` | · |
-| `SDOT_n1_2h` | · |
-| `UDOT_n1_4b` | · |
-| `UDOT_n1_4b` | · |
-| `UDOT_n1_4h` | · |
-| `UDOT_n1_4h` | · |
-| `UDOT_n1_2h` | · |
-| `UDOT_n1_2h` | · |
-| `SMLAL_n1` | · |
-| `SMLAL_n1` | · |
-| `SMLAL_n1` | · |
-| `SMLSL_n1` | · |
-| `SMLSL_n1` | · |
-| `SMLSL_n1` | · |
-| `UMLAL_n1` | · |
-| `UMLAL_n1` | · |
-| `UMLAL_n1` | · |
-| `UMLSL_n1` | · |
-| `UMLSL_n1` | · |
-| `UMLSL_n1` | · |
-| `SMLALL_n1_s` | · |
-| `SMLALL_n1_d` | · |
-| `SMLALL_n1_s` | · |
-| `SMLALL_n1_d` | · |
-| `SMLALL_n1_s` | · |
-| `SMLALL_n1_d` | · |
-| `SMLSLL_n1_s` | · |
-| `SMLSLL_n1_d` | · |
-| `SMLSLL_n1_s` | · |
-| `SMLSLL_n1_d` | · |
-| `SMLSLL_n1_s` | · |
-| `SMLSLL_n1_d` | · |
-| `UMLALL_n1_s` | · |
-| `UMLALL_n1_d` | · |
-| `UMLALL_n1_s` | · |
-| `UMLALL_n1_d` | · |
-| `UMLALL_n1_s` | · |
-| `UMLALL_n1_d` | · |
-| `UMLSLL_n1_s` | · |
-| `UMLSLL_n1_d` | · |
-| `UMLSLL_n1_s` | · |
-| `UMLSLL_n1_d` | · |
-| `UMLSLL_n1_s` | · |
-| `UMLSLL_n1_d` | · |
-| `USMLALL_n1_s` | · |
-| `USMLALL_n1_s` | · |
-| `USMLALL_n1_s` | · |
-| `SUMLALL_n1_s` | · |
-| `SUMLALL_n1_s` | · |
-| `BFMLA_n1` | · |
-| `FMLA_n1_h` | · |
-| `FMLA_n1_s` | · |
-| `FMLA_n1_d` | · |
-| `BFMLA_n1` | · |
-| `FMLA_n1_h` | · |
-| `FMLA_n1_s` | · |
-| `FMLA_n1_d` | · |
-| `BFMLS_n1` | · |
-| `FMLS_n1_h` | · |
-| `FMLS_n1_s` | · |
-| `FMLS_n1_d` | · |
-| `BFMLS_n1` | · |
-| `FMLS_n1_h` | · |
-| `FMLS_n1_s` | · |
-| `FMLS_n1_d` | · |
-| `FMLALL_n1_b` | · |
-| `FMLALL_n1_b` | · |
-| `FMLALL_n1_b` | · |
-| `FDOT_n1_sb` | · |
-| `FDOT_n1_sb` | · |
-| `FMLAL_n1_hb` | · |
-| `FMLAL_n1_hb` | · |
-| `FMLAL_n1_hb` | · |
-| `FDOT_n1_hb` | · |
-| `FDOT_n1_hb` | · |
-| `ADD_azz_nn_s` | · |
-| `ADD_azz_nn_s` | · |
-| `ADD_azz_nn_d` | · |
-| `ADD_azz_nn_d` | · |
-| `SUB_azz_nn_s` | · |
-| `SUB_azz_nn_s` | · |
-| `SUB_azz_nn_d` | · |
-| `SUB_azz_nn_d` | · |
-| `FMLAL_nn_sh` | · |
-| `FMLAL_nn_sh` | · |
-| `FMLSL_nn_sh` | · |
-| `FMLSL_nn_sh` | · |
-| `BFMLAL_nn` | · |
-| `BFMLAL_nn` | · |
-| `BFMLSL_nn` | · |
-| `BFMLSL_nn` | · |
-| `FDOT_nn` | · |
-| `FDOT_nn` | · |
-| `BFDOT_nn` | · |
-| `BFDOT_nn` | · |
-| `USDOT_nn` | · |
-| `USDOT_nn` | · |
-| `SDOT_nn_4b` | · |
-| `SDOT_nn_4b` | · |
-| `SDOT_nn_4h` | · |
-| `SDOT_nn_4h` | · |
-| `SDOT_nn_2h` | · |
-| `SDOT_nn_2h` | · |
-| `UDOT_nn_4b` | · |
-| `UDOT_nn_4b` | · |
-| `UDOT_nn_4h` | · |
-| `UDOT_nn_4h` | · |
-| `UDOT_nn_2h` | · |
-| `UDOT_nn_2h` | · |
-| `SMLAL_nn` | · |
-| `SMLAL_nn` | · |
-| `SMLSL_nn` | · |
-| `SMLSL_nn` | · |
-| `UMLAL_nn` | · |
-| `UMLAL_nn` | · |
-| `UMLSL_nn` | · |
-| `UMLSL_nn` | · |
-| `SMLALL_nn_s` | · |
-| `SMLALL_nn_d` | · |
-| `SMLALL_nn_s` | · |
-| `SMLALL_nn_d` | · |
-| `SMLSLL_nn_s` | · |
-| `SMLSLL_nn_d` | · |
-| `SMLSLL_nn_s` | · |
-| `SMLSLL_nn_d` | · |
-| `UMLALL_nn_s` | · |
-| `UMLALL_nn_d` | · |
-| `UMLALL_nn_s` | · |
-| `UMLALL_nn_d` | · |
-| `UMLSLL_nn_s` | · |
-| `UMLSLL_nn_d` | · |
-| `UMLSLL_nn_s` | · |
-| `UMLSLL_nn_d` | · |
-| `USMLALL_nn_s` | · |
-| `USMLALL_nn_s` | · |
-| `BFMLA_nn` | · |
-| `FMLA_nn_h` | · |
-| `FMLA_nn_s` | · |
-| `FMLA_nn_d` | · |
-| `BFMLA_nn` | · |
-| `FMLA_nn_h` | · |
-| `FMLA_nn_s` | · |
-| `FMLA_nn_d` | · |
-| `BFMLS_nn` | · |
-| `FMLS_nn_h` | · |
-| `FMLS_nn_s` | · |
-| `FMLS_nn_d` | · |
-| `BFMLS_nn` | · |
-| `FMLS_nn_h` | · |
-| `FMLS_nn_s` | · |
-| `FMLS_nn_d` | · |
-| `FMLALL_nn_b` | · |
-| `FMLALL_nn_b` | · |
-| `FDOT_nn_sb` | · |
-| `FDOT_nn_sb` | · |
-| `FMLAL_nn_hb` | · |
-| `FMLAL_nn_hb` | · |
-| `FDOT_nn_hb` | · |
-| `FDOT_nn_hb` | · |
-| `FADD_nn_h` | · |
-| `FADD_nn_s` | · |
-| `FADD_nn_d` | · |
-| `FADD_nn_h` | · |
-| `FADD_nn_s` | · |
-| `FADD_nn_d` | · |
-| `FSUB_nn_h` | · |
-| `FSUB_nn_s` | · |
-| `FSUB_nn_d` | · |
-| `FSUB_nn_h` | · |
-| `FSUB_nn_s` | · |
-| `FSUB_nn_d` | · |
-| `BFADD_nn` | · |
-| `BFADD_nn` | · |
-| `BFSUB_nn` | · |
-| `BFSUB_nn` | · |
-| `FMLAL_nx_sh` | · |
-| `FMLAL_nx_sh` | · |
-| `FMLAL_nx_sh` | · |
-| `FMLSL_nx_sh` | · |
-| `FMLSL_nx_sh` | · |
-| `FMLSL_nx_sh` | · |
-| `BFMLAL_nx` | · |
-| `BFMLAL_nx` | · |
-| `BFMLAL_nx` | · |
-| `BFMLSL_nx` | · |
-| `BFMLSL_nx` | · |
-| `BFMLSL_nx` | · |
-| `FDOT_nx` | · |
-| `FDOT_nx` | · |
-| `BFDOT_nx` | · |
-| `BFDOT_nx` | · |
-| `FVDOT_sh` | · |
-| `BFVDOT` | · |
-| `SDOT_nx_2h` | · |
-| `SDOT_nx_2h` | · |
-| `SDOT_nx_4b` | · |
-| `SDOT_nx_4b` | · |
-| `SDOT_nx_4h` | · |
-| `SDOT_nx_4h` | · |
-| `UDOT_nx_2h` | · |
-| `UDOT_nx_2h` | · |
-| `UDOT_nx_4b` | · |
-| `UDOT_nx_4b` | · |
-| `UDOT_nx_4h` | · |
-| `UDOT_nx_4h` | · |
-| `USDOT_nx` | · |
-| `USDOT_nx` | · |
-| `SUDOT_nx` | · |
-| `SUDOT_nx` | · |
-| `SVDOT_nx_2h` | · |
-| `SVDOT_nx_4b` | · |
-| `SVDOT_nx_4h` | · |
-| `UVDOT_nx_2h` | · |
-| `UVDOT_nx_4b` | · |
-| `UVDOT_nx_4h` | · |
-| `SUVDOT_nx_4b` | · |
-| `USVDOT_nx_4b` | · |
-| `SMLAL_nx` | · |
-| `SMLAL_nx` | · |
-| `SMLAL_nx` | · |
-| `SMLSL_nx` | · |
-| `SMLSL_nx` | · |
-| `SMLSL_nx` | · |
-| `UMLAL_nx` | · |
-| `UMLAL_nx` | · |
-| `UMLAL_nx` | · |
-| `UMLSL_nx` | · |
-| `UMLSL_nx` | · |
-| `UMLSL_nx` | · |
-| `SMLALL_nx_s` | · |
-| `SMLALL_nx_d` | · |
-| `SMLALL_nx_s` | · |
-| `SMLALL_nx_d` | · |
-| `SMLALL_nx_s` | · |
-| `SMLALL_nx_d` | · |
-| `SMLSLL_nx_s` | · |
-| `SMLSLL_nx_d` | · |
-| `SMLSLL_nx_s` | · |
-| `SMLSLL_nx_d` | · |
-| `SMLSLL_nx_s` | · |
-| `SMLSLL_nx_d` | · |
-| `UMLALL_nx_s` | · |
-| `UMLALL_nx_d` | · |
-| `UMLALL_nx_s` | · |
-| `UMLALL_nx_d` | · |
-| `UMLALL_nx_s` | · |
-| `UMLALL_nx_d` | · |
-| `UMLSLL_nx_s` | · |
-| `UMLSLL_nx_d` | · |
-| `UMLSLL_nx_s` | · |
-| `UMLSLL_nx_d` | · |
-| `UMLSLL_nx_s` | · |
-| `UMLSLL_nx_d` | · |
-| `USMLALL_nx_s` | · |
-| `USMLALL_nx_s` | · |
-| `USMLALL_nx_s` | · |
-| `SUMLALL_nx_s` | · |
-| `SUMLALL_nx_s` | · |
-| `SUMLALL_nx_s` | · |
-| `BFMLA_nx` | · |
-| `FMLA_nx_h` | · |
-| `FMLA_nx_s` | · |
-| `FMLA_nx_d` | · |
-| `BFMLA_nx` | · |
-| `FMLA_nx_h` | · |
-| `FMLA_nx_s` | · |
-| `FMLA_nx_d` | · |
-| `BFMLS_nx` | · |
-| `FMLS_nx_h` | · |
-| `FMLS_nx_s` | · |
-| `FMLS_nx_d` | · |
-| `BFMLS_nx` | · |
-| `FMLS_nx_h` | · |
-| `FMLS_nx_s` | · |
-| `FMLS_nx_d` | · |
-| `FMLALL_nx_b` | · |
-| `FMLALL_nx_b` | · |
-| `FMLALL_nx_b` | · |
-| `FDOT_nx_b` | · |
-| `FDOT_nx_b` | · |
-| `FMLAL_nx_hb` | · |
-| `FMLAL_nx_hb` | · |
-| `FMLAL_nx_hb` | · |
-| `FDOT_nx_hb` | · |
-| `FDOT_nx_hb` | · |
-| `FVDOTB_sb` | · |
-| `FVDOTT_sb` | · |
-| `FVDOT_hb` | · |
-| `ADD_aaz_s` | · |
-| `ADD_aaz_s` | · |
-| `ADD_aaz_d` | · |
-| `ADD_aaz_d` | · |
-| `SUB_aaz_s` | · |
-| `SUB_aaz_s` | · |
-| `SUB_aaz_d` | · |
-| `SUB_aaz_d` | · |
-| `BFCVT_hs` | · |
-| `BFCVTN` | · |
-| `FCVT_n` | · |
-| `FCVTN` | · |
-| `FCVT_w` | · |
-| `FCVTL` | · |
-| `FCVTZS` | · |
-| `FCVTZS` | · |
-| `FCVTZU` | · |
-| `FCVTZU` | · |
-| `SCVTF` | · |
-| `SCVTF` | · |
-| `UCVTF` | · |
-| `UCVTF` | · |
-| `FRINTN` | · |
-| `FRINTN` | · |
-| `FRINTP` | · |
-| `FRINTP` | · |
-| `FRINTM` | · |
-| `FRINTM` | · |
-| `FRINTA` | · |
-| `FRINTA` | · |
-| `SQCVT_sh` | · |
-| `UQCVT_sh` | · |
-| `SQCVTU_sh` | · |
-| `SQCVT_sb` | · |
-| `UQCVT_sb` | · |
-| `SQCVTU_sb` | · |
-| `SQCVT_dh` | · |
-| `UQCVT_dh` | · |
-| `SQCVTU_dh` | · |
-| `SQCVTN_sb` | · |
-| `UQCVTN_sb` | · |
-| `SQCVTUN_sb` | · |
-| `SQCVTN_dh` | · |
-| `UQCVTN_dh` | · |
-| `SQCVTUN_dh` | · |
-| `SUNPK_2bh` | · |
-| `SUNPK_2hs` | · |
-| `SUNPK_2sd` | · |
-| `UUNPK_2bh` | · |
-| `UUNPK_2hs` | · |
-| `UUNPK_2sd` | · |
-| `SUNPK_4bh` | · |
-| `SUNPK_4hs` | · |
-| `SUNPK_4sd` | · |
-| `UUNPK_4bh` | · |
-| `UUNPK_4hs` | · |
-| `UUNPK_4sd` | · |
-| `F1CVT` | · |
-| `F2CVT` | · |
-| `F1CVTL` | · |
-| `F2CVTL` | · |
-| `BF1CVT` | · |
-| `BF2CVT` | · |
-| `BF1CVTL` | · |
-| `BF2CVTL` | · |
-| `FCVT_bh` | · |
-| `FCVT_bs` | · |
-| `FCVTN_bs` | · |
-| `ZIP_4` | · |
-| `ZIP_4` | · |
-| `UZP_4` | · |
-| `UZP_4` | · |
-| `SQRSHR_sh` | · |
-| `UQRSHR_sh` | · |
-| `SQRSHRU_sh` | · |
-| `SQRSHR_sb` | · |
-| `SQRSHR_dh` | · |
-| `UQRSHR_sb` | · |
-| `UQRSHR_dh` | · |
-| `SQRSHRU_sb` | · |
-| `SQRSHRU_dh` | · |
-| `SQRSHRN_sh` | · |
-| `UQRSHRN_sh` | · |
-| `SQRSHRUN_sh` | · |
-| `SQRSHRN_sb` | · |
-| `SQRSHRN_dh` | · |
-| `UQRSHRN_sb` | · |
-| `UQRSHRN_dh` | · |
-| `SQRSHRUN_sb` | · |
-| `SQRSHRUN_dh` | · |
-| `ZIP_2` | · |
-| `ZIP_2` | · |
-| `UZP_2` | · |
-| `UZP_2` | · |
-| `FCLAMP` | · |
-| `FCLAMP` | · |
-| `SCLAMP` | · |
-| `SCLAMP` | · |
-| `UCLAMP` | · |
-| `UCLAMP` | · |
-| `SEL` | · |
-| `SEL` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `ZERO_za` | · |
-| `LUTI2_c_1b` | · |
-| `LUTI2_c_1h` | · |
-| `LUTI2_c_1s` | · |
-| `LUTI2_c_2b` | · |
-| `LUTI2_c_2h` | · |
-| `LUTI2_c_2s` | · |
-| `LUTI2_c_4b` | · |
-| `LUTI2_c_4h` | · |
-| `LUTI2_c_4s` | · |
-| `LUTI2_s_2b` | · |
-| `LUTI2_s_2h` | · |
-| `LUTI2_s_4b` | · |
-| `LUTI2_s_4h` | · |
-| `LUTI4_c_1b` | · |
-| `LUTI4_c_1h` | · |
-| `LUTI4_c_1s` | · |
-| `LUTI4_c_2b` | · |
-| `LUTI4_c_2h` | · |
-| `LUTI4_c_2s` | · |
-| `LUTI4_c_4h` | · |
-| `LUTI4_c_4s` | · |
-| `LUTI4_c_4b` | · |
-| `LUTI4_s_2b` | · |
-| `LUTI4_s_2h` | · |
-| `LUTI4_s_4h` | · |
-| `LUTI4_s_4b` | · |
-| `BFMOP4_hh` | · |
-| `FMOP4_hh` | · |
-| `FMOP4_ss` | · |
-| `FMOP4_dd` | · |
-| `BFMOP4_sh` | · |
-| `FMOP4_sh` | · |
-| `FMOP4A_sb` | · |
-| `FMOP4A_hb` | · |
-| `SMOP4_sh` | · |
-| `UMOP4_sh` | · |
-| `SMOP4_sb` | · |
-| `SMOP4_dh` | · |
-| `SUMOP4_sb` | · |
-| `SUMOP4_dh` | · |
-| `UMOP4_sb` | · |
-| `UMOP4_dh` | · |
-| `USMOP4_sb` | · |
-| `USMOP4_dh` | · |
-| `BFTMOPA_hh` | · |
-| `FTMOPA_hh` | · |
-| `FTMOPA_ss` | · |
-| `BFTMOPA_sh` | · |
-| `FTMOPA_sh` | · |
-| `FTMOPA_hb` | · |
-| `FTMOPA_sb` | · |
-| `STMOPA_sh` | · |
-| `UTMOPA_sh` | · |
-| `STMOPA_sb` | · |
-| `SUTMOPA_sb` | · |
-| `USTMOPA_sb` | · |
-| `UTMOPA_sb` | · |
+| Instrução | ARMv8.0-A | ARMv8.1-A | ARMv8.2-A | ARMv8.3-A | ARMv8.4-A | ARMv8.5-A | ARMv8.6-A | ARMv8.7-A | ARMv8.8-A | ARMv8.9-A | ARMv9.0-A | ARMv9.1-A | ARMv9.2-A | ARMv9.3-A | ARMv9.4-A | ARMv9.5-A |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `ZERO` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_zt0` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_tz4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_az2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_az4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_za2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVA_za4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_za2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_za4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVAZ_zt4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVT_rzt` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVT_ztr` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `MOVT_ztz` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDST1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDST1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDST1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDST1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDST1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDR` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `STR` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LDR_zt0` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `STR_zt0` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADDHA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADDVA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADDHA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADDVA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMOPA` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMOPA_w` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_w_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOPA_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOPA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMOPA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMOPA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOPA_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOPA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMOPA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMOPA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOPA_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BMOPA` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOPA2_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOPA2_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SRSHL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SRSHL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `URSHL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `URSHL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQDMULH_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQDMULH_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSCALE_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSCALE_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SRSHL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SRSHL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `URSHL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `URSHL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQDMULH_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQDMULH_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FAMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FAMAX_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FAMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FAMIN_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSCALE_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSCALE_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_n1_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUDOT_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_n1_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_n1_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMLALL_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_n1` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_n1_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_n1_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_n1_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_n1_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_n1_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_n1_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_azz_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_azz_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nn_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nn_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_nn_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_nn_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nn_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nn_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_nn_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_nn_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nn_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nn_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nn_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FADD_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_nn_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFADD_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFADD_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFSUB_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFSUB_nn` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLSL_nx_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FVDOT_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFVDOT` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUDOT_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SVDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SVDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SVDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UVDOT_nx_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UVDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UVDOT_nx_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUVDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USVDOT_nx_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLAL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSL_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLALL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMLSLL_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMLALL_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLA_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMLS_nx` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_nx_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_nx_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_nx_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLALL_nx_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx_b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMLAL_nx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_nx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FVDOTB_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FVDOTT_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FVDOT_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_aaz_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_aaz_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_aaz_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ADD_aaz_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_aaz_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_aaz_s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_aaz_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUB_aaz_d` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFCVT_hs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFCVTN` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_n` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTN` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_w` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTN` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTN` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTM` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTM` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTA` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FRINTA` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVT_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQCVT_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTU_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVT_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQCVT_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTU_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVT_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQCVT_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTU_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQCVTN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTUN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQCVTN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQCVTUN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_2bh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_2hs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_2sd` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_2bh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_2hs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_2sd` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_4bh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_4hs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUNPK_4sd` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_4bh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_4hs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UUNPK_4sd` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `F1CVT` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `F2CVT` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `F1CVTL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `F2CVTL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BF1CVT` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BF2CVT` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BF1CVTL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BF2CVTL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_bh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_bs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCVTN_bs` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZIP_4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZIP_4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UZP_4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UZP_4` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHR_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHR_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRU_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHR_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHR_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHR_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHR_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRU_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRU_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHRN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRUN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHRN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UQRSHRN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRUN_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SQRSHRUN_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZIP_2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZIP_2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UZP_2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UZP_2` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `ZERO_za` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_1b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_1h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_1s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_2b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_2s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_c_4s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_s_2b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_s_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_s_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI2_s_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_1b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_1h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_1s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_2b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_2s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_4s` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_c_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_s_2b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_s_2h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_s_4h` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `LUTI4_s_4b` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMOP4_hh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4_hh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4_ss` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4_dd` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFMOP4_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4A_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FMOP4A_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOP4_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOP4_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOP4_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SMOP4_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMOP4_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUMOP4_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOP4_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UMOP4_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMOP4_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USMOP4_dh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFTMOPA_hh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FTMOPA_hh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FTMOPA_ss` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `BFTMOPA_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FTMOPA_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FTMOPA_hb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `FTMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `STMOPA_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UTMOPA_sh` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `STMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `SUTMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `USTMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |
+| `UTMOPA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ |

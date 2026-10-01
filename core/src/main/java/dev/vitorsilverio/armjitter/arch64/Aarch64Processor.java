@@ -23,6 +23,11 @@ package dev.vitorsilverio.armjitter.arch64;
 /// existente. Quem quiser usar hoje faz
 /// `new Aarch64Core(memory, Aarch64Processor.CORTEX_A53.architecture())` manualmente.
 ///
+/// **SME (B18.13)**: `FEAT_SME` é opcional em ARMv9.2+. Os núcleos C1 declaram SME2
+/// ([ARM C-series](https://en.wikipedia.org/wiki/ARM_C-series), consultada 2026-10-01; o Cortex-X925 é o
+/// último núcleo pré-SME2); os demais ARMv9.2 mapeiam para presets `*_WITHOUT_SME` — ausência segundo a
+/// ficha pública, não conferida contra o TRM de cada núcleo.
+///
 /// Fonte: [List of ARM processors](https://en.wikipedia.org/wiki/List_of_ARM_processors)
 /// (Wikipedia, consultada 2026-08-28) para a versão de arquitetura de cada núcleo.
 public enum Aarch64Processor {
@@ -117,40 +122,40 @@ public enum Aarch64Processor {
     NEOVERSE_V2("Neoverse V2", Aarch64Architecture.ARMV9_0_A),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_A320("Cortex-A320", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_A320("Cortex-A320", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_A520("Cortex-A520", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_A520("Cortex-A520", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_A720("Cortex-A720", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_A720("Cortex-A720", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_A725("Cortex-A725", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_A725("Cortex-A725", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_X4("Cortex-X4", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_X4("Cortex-X4", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A`.
-    CORTEX_X925("Cortex-X925", Aarch64Architecture.ARMV9_2_A),
+    CORTEX_X925("Cortex-X925", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A` — núcleo de servidor.
-    NEOVERSE_N3("Neoverse N3", Aarch64Architecture.ARMV9_2_A),
+    NEOVERSE_N3("Neoverse N3", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.2-A` — núcleo de servidor.
-    NEOVERSE_V3("Neoverse V3", Aarch64Architecture.ARMV9_2_A),
+    NEOVERSE_V3("Neoverse V3", Aarch64Architecture.ARMV9_2_A_WITHOUT_SME),
 
     /// A64-only, `ARMv9.3-A` — branding C-Series (pós-2025), variante de alto desempenho.
-    C1_ULTRA("C1-Ultra", Aarch64Architecture.ARMV9_3_A),
+    C1_ULTRA("C1-Ultra", Aarch64Architecture.ARMV9_3_A_SME2),
 
     /// A64-only, `ARMv9.3-A` — branding C-Series (pós-2025).
-    C1_PREMIUM("C1-Premium", Aarch64Architecture.ARMV9_3_A),
+    C1_PREMIUM("C1-Premium", Aarch64Architecture.ARMV9_3_A_SME2),
 
     /// A64-only, `ARMv9.3-A` — branding C-Series (pós-2025).
-    C1_PRO("C1-Pro", Aarch64Architecture.ARMV9_3_A),
+    C1_PRO("C1-Pro", Aarch64Architecture.ARMV9_3_A_SME2),
 
     /// A64-only, `ARMv9.3-A` — branding C-Series (pós-2025), variante de baixo consumo.
-    C1_NANO("C1-Nano", Aarch64Architecture.ARMV9_3_A),
+    C1_NANO("C1-Nano", Aarch64Architecture.ARMV9_3_A_SME2),
 
     /// **AArch64-only** (B20.8) — ao contrário do `Cortex-R52`/`R52+` (32-bit, B20.7), o `R82` NÃO
     /// executa A32 em nenhum EL: não catalogado em `arch.ArmProcessor` (Armadilha 5 da task).

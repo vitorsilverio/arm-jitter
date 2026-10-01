@@ -68,23 +68,23 @@ class Aarch64ProcessorTest {
     }
 
     @Test
-    void armv92aFamilyResolvesToArmv92a() {
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_A320.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_A520.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_A720.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_A725.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_X4.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.CORTEX_X925.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.NEOVERSE_N3.architecture());
-        assertSame(Aarch64Architecture.ARMV9_2_A, Aarch64Processor.NEOVERSE_V3.architecture());
+    void armv92aFamilyResolvesToArmv92aWithoutSme() {
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_A320.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_A520.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_A720.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_A725.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_X4.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.CORTEX_X925.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.NEOVERSE_N3.architecture());
+        assertSame(Aarch64Architecture.ARMV9_2_A_WITHOUT_SME, Aarch64Processor.NEOVERSE_V3.architecture());
     }
 
     @Test
-    void cSeriesFamilyResolvesToArmv93a() {
-        assertSame(Aarch64Architecture.ARMV9_3_A, Aarch64Processor.C1_ULTRA.architecture());
-        assertSame(Aarch64Architecture.ARMV9_3_A, Aarch64Processor.C1_PREMIUM.architecture());
-        assertSame(Aarch64Architecture.ARMV9_3_A, Aarch64Processor.C1_PRO.architecture());
-        assertSame(Aarch64Architecture.ARMV9_3_A, Aarch64Processor.C1_NANO.architecture());
+    void cSeriesFamilyResolvesToArmv93aWithSme2() {
+        assertSame(Aarch64Architecture.ARMV9_3_A_SME2, Aarch64Processor.C1_ULTRA.architecture());
+        assertSame(Aarch64Architecture.ARMV9_3_A_SME2, Aarch64Processor.C1_PREMIUM.architecture());
+        assertSame(Aarch64Architecture.ARMV9_3_A_SME2, Aarch64Processor.C1_PRO.architecture());
+        assertSame(Aarch64Architecture.ARMV9_3_A_SME2, Aarch64Processor.C1_NANO.architecture());
     }
 
     @Test

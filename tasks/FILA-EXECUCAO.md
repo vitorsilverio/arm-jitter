@@ -39,9 +39,13 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-10-01, B18.12)
+## Onde estamos (atualizado 2026-10-01, B18.13)
 
-**`B18.12` fechada (102/102: `ADD_aaz`/`SUB_aaz` + SVE construtivas + `SEL`)** — última task de conteúdo do B18; os 623 encodings de `sme.decode` estão atribuídos. Pendências nomeadas e lacunas de JaCoCo no **Resultado** da task. `COBERTURA-ISA.md` só muda na B18.13.
+**`B18.13` fechada** (`sme.decode` 100% em ARMv9.2–9.5, catálogo corrigido). **Achado: `neon-shared.decode` é o último grupo "não se aplica a nenhum preset"** (não o SME) — vira **`B13.25`** (spec escrita). Detalhes no **Resultado** da B18.13.
+
+**⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B13.25**, **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada.
+
+**Pegáveis a seguir:** **`B13.25`**, `B21.2` em diante, `E14`, `E15` ([REFINAR]), `C12.5`/`C12.10`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -51,18 +55,6 @@ consumidores executa); fora dessa lista, G5 continua obrigatório inteiro. JaCoC
 de fonte >~1500 linhas inteiro — Grep+offset primeiro. **`E15`** (nova, [REFINAR]) abre a causa
 estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por quase toda task de
 decoder/IR e sozinhos já são caros de carregar.
-
-**⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B18.7+** (SME, ~476 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
-achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
-e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
-
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.13`** (fechamento SME;
-(`SVCR`/`ZA`/`ZT0`/streaming/`MOVA`/`ZERO`/`LUTI`
-já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
-decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências
-nomeadas da B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com
-`SM=1`. Conferir dependências no `INDICE.md` antes de pegar.
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,
