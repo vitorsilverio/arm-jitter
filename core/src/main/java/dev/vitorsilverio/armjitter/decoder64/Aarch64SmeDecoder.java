@@ -65,11 +65,38 @@ final class Aarch64SmeDecoder {
 
         /// SME2 puro quando não é a forma predicada de 1 vetor (`FEAT_SME`) nem já exige SME2.1.
         boolean requiresSme2() {
-            return !zero && count > 1;
+            return count > 1; // só consultado quando !zero (MOVAZ já exige SME2.1 antes)
         }
     }
 
     private static final int V_BIT_SHIFT = 15;
+
+    // ── `### SME Memory` (B18.4) — prefixo `0xE0`/`0xE1` ───────────────────────────────────────────
+    /// `LDST1` com `esz = 0`..`3`: `bits[31:24] = 11100000`, `bit 4 = 0`; `bits[23:22] = esz`.
+    private static final int LDST1_MASK = 0xFF000010;
+    private static final int LDST1_VALUE = 0xE0000000;
+    /// `LDST1` com `esz = 4` (`LD1Q`/`ST1Q`): `bits[31:22] = 1110000111`, `bit 4 = 0` — `bit 24 = 1`, não `0`.
+    private static final int LDST1_Q_MASK = 0xFFC00010;
+    private static final int LDST1_Q_VALUE = 0xE1C00000;
+    private static final int LDST1_ESZ_SHIFT = 22;
+    private static final int LDST1_ESZ_MASK = 0b11;
+    private static final int ESZ_QUAD = 4;
+    /// `za:esz` + `off:(4 - esz)` ocupam sempre os 4 bits baixos.
+    private static final int LDST1_SPAN_BITS = 4;
+    private static final int STORE_BIT_SHIFT = 21;
+    private static final int RM_SHIFT = 16;
+    private static final int REGISTER_MASK = 0b11111;
+    private static final int PG_SHIFT = 10;
+    private static final int PG_MASK = 0b111;
+    private static final int RN_SHIFT = 5;
+    /// `LDR`/`STR` de vetor de `ZA`: `bits[31:22] = 1110000100`, `bits[20:15] = 0`, `bits[12:10] = 0`,
+    /// `bit 4 = 0`; `bit 21` = `st`.
+    private static final int LDR_ZA_MASK = 0xFFDF9C10;
+    private static final int LDR_ZA_VALUE = 0xE1000000;
+    private static final int LDR_ZA_IMM_MASK = 0b1111;
+    /// `LDR`/`STR` de `ZT0`: `bits[20:15] = 111111`, `bits[14:10] = 0`, `bits[4:0] = 0`.
+    private static final int LDR_ZT0_MASK = 0xFFDFFC1F;
+    private static final int LDR_ZT0_VALUE = 0xE11F8000;
 
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 27-138 (ver javadoc da
     // classe) — NÃO editar à mão sem regerar e reconferir.
@@ -150,6 +177,10 @@ final class Aarch64SmeDecoder {
         if ((word & ZERO_ZT0_MASK) == ZERO_ZT0_VALUE) {
             return hasSme2() ? new Ir64Op.SmeZeroZt0(address) : null;
         }
+        Ir64Op memory = decodeMemory(word, address);
+        if (memory != null) {
+            return memory;
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -165,5 +196,33 @@ final class Aarch64SmeDecoder {
                     row.array() ? -1 : row.tile(word), vertical, row.zr(word), registerIndex, row.off(word), address);
         }
         return null;
+    }
+
+    /// `LD1`/`ST1` de tile, `LDR`/`STR` de `ZA` e de `ZT0` (B18.4). `null` = não é desta família (ou
+    /// `LDR`/`STR ZT0` sem `FEAT_SME2`).
+    private Ir64Op decodeMemory(int word, long address) {
+        boolean store = ((word >>> STORE_BIT_SHIFT) & 1) != 0;
+        int rn = (word >>> RN_SHIFT) & REGISTER_MASK;
+        int registerIndex = MOVA_RS_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
+        if ((word & LDR_ZT0_MASK) == LDR_ZT0_VALUE) {
+            return hasSme2() ? new Ir64Op.SmeZt0LoadStore(store, rn, address) : null;
+        }
+        if ((word & LDR_ZA_MASK) == LDR_ZA_VALUE) {
+            return new Ir64Op.SmeArrayLoadStore(store, rn, registerIndex, word & LDR_ZA_IMM_MASK, address);
+        }
+        int esz;
+        if ((word & LDST1_Q_MASK) == LDST1_Q_VALUE) {
+            esz = ESZ_QUAD;
+        } else if ((word & LDST1_MASK) == LDST1_VALUE) {
+            esz = (word >>> LDST1_ESZ_SHIFT) & LDST1_ESZ_MASK;
+        } else {
+            return null;
+        }
+        int offsetWidth = LDST1_SPAN_BITS - esz;
+        int tile = (word >>> offsetWidth) & ((1 << esz) - 1);
+        int offset = word & ((1 << offsetWidth) - 1);
+        return new Ir64Op.SmeTileLoadStore(store, esz, tile, ((word >>> V_BIT_SHIFT) & 1) != 0,
+                (word >>> PG_SHIFT) & PG_MASK, rn, (word >>> RM_SHIFT) & REGISTER_MASK, registerIndex, offset,
+                address);
     }
 }

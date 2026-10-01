@@ -41,12 +41,10 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-10-01)
 
-**`B18.3` fechada** — `ZERO`/`ZERO_zt0`/`MOVA`/`MOVAZ` (47 encodings) decodificam e executam contra o
-banco `ZA` da B18.1, endereçamento de tile/slice reusável (`Aarch64MatrixTileAddressing`), 100% JaCoCo,
-palavras conferidas contra `aarch64-none-elf-as`. **`docs/COBERTURA-ISA.md` não mudou** (achado: a
-ferramenta marca `sme.decode` inteiro como "não aplicável" enquanto ele for `NOT_IN_ANY_PRESET` — só a
-**B18.13** liga a curadoria por versão, como já fez para `sve.decode` na B17.26; implementação real já
-pronta, só falta a medição reconhecer). Ver **Resultado** na task para detalhe.
+**`B18.4` fechada** — `LD1`/`ST1` de slice de tile (5 `esz` × 2 eixos), `LDR`/`STR` de vetor de `ZA` e `LDR`/`STR ZT0` (9 encodings)
+decodificam e executam, palavras conferidas contra `aarch64-none-elf-as`, 100% JaCoCo. **Achado que corrige a spec:** `LD1` de tile
+ZERA a lane inativa (não "não escreve") — medido no `sme_helper.c` do QEMU. **`docs/COBERTURA-ISA.md` não mudou** (`sme.decode`
+segue `NOT_IN_ANY_PRESET` na medição até a **B18.13**, que depende de B18.5-B18.12). Ver **Resultado** na task.
 
 **`B17.29` fechada** (resíduo do fechamento SVE da B17.26) — corrigido o gate `SVE2` indevido que
 escondia `SMMLA`/`USMMLA`/`UMMLA` (só exigem `SVE`+`FEAT_I8MM`) e triados os ~30 `❌` restantes de
@@ -67,12 +65,12 @@ estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por qua
 decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B18.4+** (SME, 576 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
+abertos: **B18.5+** (SME, ~567 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
 achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
 e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.4`** em diante (SME:
-memória `LD1`/`ST1` de tile, outer product, SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.5`** em diante (SME:
+outer product, SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
 já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
 decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências
 nomeadas da B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com

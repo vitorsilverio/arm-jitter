@@ -95,7 +95,7 @@ final class SveStoreOps {
         return regs.zWord(register, quadword * WORDS_PER_QUADWORD + 1);
     }
 
-    private static void writeMemory(AddressSpace64 memory, long address, int msz, long value) {
+    static void writeMemory(AddressSpace64 memory, long address, int msz, long value) {
         switch (msz) {
             case 0 -> memory.write8(address, (int) value);
             case 1 -> memory.write16(address, (int) value);

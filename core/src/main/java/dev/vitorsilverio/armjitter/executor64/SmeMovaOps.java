@@ -209,17 +209,17 @@ final class SmeMovaOps {
         }
     }
 
-    private static long zaWordAt(Aarch64MatrixRegisters matrix, int row, int wordInRow) {
+    static long zaWordAt(Aarch64MatrixRegisters matrix, int row, int wordInRow) {
         int rowWords = matrix.zaRowBytes() / WORD_BYTES;
         return matrix.zaWord(row * rowWords + wordInRow);
     }
 
-    private static void setZaWordAt(Aarch64MatrixRegisters matrix, int row, int wordInRow, long value) {
+    static void setZaWordAt(Aarch64MatrixRegisters matrix, int row, int wordInRow, long value) {
         int rowWords = matrix.zaRowBytes() / WORD_BYTES;
         matrix.setZaWord(row * rowWords + wordInRow, value);
     }
 
-    private static long zaElement(Aarch64MatrixRegisters matrix, int row, int byteOffset, int esz) {
+    static long zaElement(Aarch64MatrixRegisters matrix, int row, int byteOffset, int esz) {
         int elementBits = Byte.SIZE << esz;
         int bitOffset = byteOffset * Byte.SIZE;
         long word = zaWordAt(matrix, row, bitOffset >>> WORD_INDEX_SHIFT);
@@ -227,7 +227,7 @@ final class SmeMovaOps {
         return elementBits == Long.SIZE ? shifted : shifted & ((1L << elementBits) - 1L);
     }
 
-    private static void setZaElement(Aarch64MatrixRegisters matrix, int row, int byteOffset, int esz, long value) {
+    static void setZaElement(Aarch64MatrixRegisters matrix, int row, int byteOffset, int esz, long value) {
         int elementBits = Byte.SIZE << esz;
         int bitOffset = byteOffset * Byte.SIZE;
         int wordInRow = bitOffset >>> WORD_INDEX_SHIFT;
@@ -244,7 +244,7 @@ final class SmeMovaOps {
     /// Bit de predicado do elemento `index` (tamanho `1 << esz` bytes): `P` guarda um bit por BYTE
     /// do vetor, no byte INICIAL do elemento (`e << esz`) — mesma convenção de
     /// {@code SveIntegerPredicatedOps}.
-    private static boolean predicateActive(Aarch64ScalableRegisters regs, int pg, int index, int esz) {
+    static boolean predicateActive(Aarch64ScalableRegisters regs, int pg, int index, int esz) {
         int bit = index << esz;
         return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }

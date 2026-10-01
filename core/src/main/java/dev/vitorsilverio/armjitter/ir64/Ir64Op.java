@@ -92,7 +92,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFp8DotProduct, Ir64Op.SveFpMultiplyAddLongWiden, Ir64Op.SveFpMultiplyAddLongWidenBFloat16,
         Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16,
         Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
-        Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova {
+        Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
+        Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -544,6 +545,12 @@ public sealed interface Ir64Op permits
         public static final int SME_ZERO_ZT0 = 198;
         /// B18.3: `MOVA`/`MOVAZ` (`FEAT_SME`/`FEAT_SME2`/`FEAT_SME2p1`) — ver {@link SmeMova}.
         public static final int SME_MOVA = 199;
+        /// B18.4: `LD1`/`ST1` de slice de tile (`FEAT_SME`) — ver {@link SmeTileLoadStore}.
+        public static final int SME_TILE_LOAD_STORE = 200;
+        /// B18.4: `LDR`/`STR` de vetor do array `ZA` (`FEAT_SME`) — ver {@link SmeArrayLoadStore}.
+        public static final int SME_ARRAY_LOAD_STORE = 201;
+        /// B18.4: `LDR`/`STR` de `ZT0` (`FEAT_SME2`) — ver {@link SmeZt0LoadStore}.
+        public static final int SME_ZT0_LOAD_STORE = 202;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5086,6 +5093,59 @@ public sealed interface Ir64Op permits
             int offset,
             long instructionAddress) implements Ir64Op {
         @Override public int kind() { return Kind.SME_MOVA; }
+    }
+
+    /// SME `LD1B`/`LD1H`/`LD1W`/`LD1D`/`LD1Q` e `ST1*` de slice de tile (B18.4, `FEAT_SME`) — uma única linha
+    /// de `sme.decode` por `esz`; `store` escolhe load/store e `vertical` o eixo (4 mnemônicos por linha).
+    /// Endereço = `X<rn>|SP + (X<rm> << esz)` (`rm = 31` é `XZR`); slice `(W<registerIndex> + off) MOD
+    /// (SVL >> esz)` do tile (`Aarch64MatrixTileAddressing`). **Load: elemento com `pg` falso vira ZERO na
+    /// slice** (QEMU `sme_ld1`; a spec original dizia "não escreve" — errada); **store: elemento com `pg`
+    /// falso não toca a memória.**
+    record SmeTileLoadStore(
+            /// `true` = `ST1*` (`ZA` → memória); `false` = `LD1*`.
+            boolean store,
+            /// Tamanho de elemento (`0` = `B` … `4` = `Q`).
+            int esz,
+            /// Índice do tile `ZAn` (`0`..`(1 << esz) - 1`).
+            int tile,
+            /// `true` = slice vertical (coluna); `false` = horizontal (linha).
+            boolean vertical,
+            /// Predicado `P0`-`P7` governante.
+            int pg,
+            /// Registrador-base (`31` = `SP`).
+            int rn,
+            /// Registrador de índice (`31` = `XZR`), escalado por `esz`.
+            int rm,
+            /// `W12`-`W15` (`%mova_rs`), já resolvido.
+            int registerIndex,
+            /// O campo `off` do encoding.
+            int offset,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_TILE_LOAD_STORE; }
+    }
+
+    /// SME `LDR`/`STR` (B18.4, `FEAT_SME`) de UM vetor do array `ZA` (`SVL/8` bytes): `ZA[(W<registerIndex> +
+    /// imm) MOD (SVL/8)]` de/para `X<rn>|SP + imm × SVL/8`. Sem predicado, sem exigir modo streaming (só
+    /// `ZA` habilitado). Atenção: o registrador de índice é `W12`-`W15` (`%mova_rs`) apesar do campo se
+    /// chamar `rv`.
+    record SmeArrayLoadStore(
+            /// `true` = `STR`; `false` = `LDR`.
+            boolean store,
+            int rn,
+            /// `W12`-`W15`, já resolvido.
+            int registerIndex,
+            int imm,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_ARRAY_LOAD_STORE; }
+    }
+
+    /// SME2 `LDR ZT0`/`STR ZT0` (B18.4, `FEAT_SME2`): 64 bytes de/para `X<rn>|SP`, sem offset.
+    record SmeZt0LoadStore(
+            /// `true` = `STR`; `false` = `LDR`.
+            boolean store,
+            int rn,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_ZT0_LOAD_STORE; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)
