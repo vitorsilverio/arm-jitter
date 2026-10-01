@@ -300,7 +300,7 @@ final class Aarch64SveDecoder {
         this.predicatedPermute = new Aarch64SvePredicatedPermuteDecoder(architecture);
         this.compare = new Aarch64SveCompareDecoder(architecture);
         this.floatingPoint = new Aarch64SveFpArithmeticDecoder(architecture);
-        this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder();
+        this.floatingPointMultiplyAdd = new Aarch64SveFpMultiplyAddDecoder(architecture);
         this.floatingPointCompareReduce = new Aarch64SveFpCompareReduceDecoder(architecture);
         this.floatingPointUnary = new Aarch64SveFpUnaryDecoder(architecture);
         this.load = new Aarch64SveLoadDecoder(architecture);

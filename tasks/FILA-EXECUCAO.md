@@ -41,13 +41,10 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-09-30, protocolo revisado por custo de contexto)
 
-**`B17.24` (SVE2 cripto)** fechada em 7 de 7 encodings (`AESE`/`AESD`/`AESMC`/`AESIMC`/`SM4E`/`SM4EKEY`/`RAX1`) —
-zero tabela criptográfica nova (reuso de `AdvSimdCrypto`/`Ir64CryptoExecutor.sm4SubWord`), mask/value conferidos
-byte a byte contra `aarch64-none-elf-as` real. **G5 completo** (diff tocou `Aarch64Feature.java`/`Aarch64Core.java`,
-fora da lista AArch64-only), `gbaemu`/`ndsemu` verdes. Achado que estende a spec: `FEAT_SSVE_AES`/`FEAT_SME2p1`
-liberariam `AESE`/`AESD`/`AESMC`/`AESIMC`/`RAX1` em modo streaming no hardware real — não modelado ainda,
-recusadas em streaming via `requireNonStreaming` (pendência nomeada para quando SME2 ganhar essas features).
-`docs/COBERTURA-ISA.md` inalterada (`sve.decode` fora do medidor até B17.26). Ver **Resultado** na task.
+**`B17.27` (SVE BFloat16)** fechada — 11 encodings de aritmética + `FMLA`/`FMLS` predicados/indexados do
+multiply-add; achado que corrige a spec E o QEMU (`FSUBR`/`FNMLA`/`FNMLS`/`FMAD`-família são `UNDEFINED` em
+BFloat16 mesmo o QEMU anotar helper para elas; `BFSCALE` existe apesar do QEMU não anotá-la) — ver **Resultado**
+na task.
 
 **Protocolo mudou (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):**
 G5 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -63,9 +60,8 @@ abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 en
 PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
 entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.27`** (BFloat16 SVE, depende de
-B17.13/B17.14) e **`B17.26`** (fechamento do épico SVE — depende de B17.25 ✅; conferir se B17.27 deve entrar
-antes) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.26`** (fechamento do épico SVE —
+depende de B17.25 ✅ e agora B17.27 ✅ também fechada) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
 **`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] — decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
 B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências no

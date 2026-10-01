@@ -39,7 +39,7 @@ final class SveFpMultiplyAddOps {
         }
         Aarch64ScalableRegisters regs = core.scalable();
         SveFloat.Env env = SveFloat.Env.of(core, op.esz());
-        int elements = core.vectorLengthBytes() >> op.esz();
+        int elements = core.vectorLengthBytes() >> storageEsz(op.esz());
         switch (op.op()) {
             case FCADD -> complexAdd(regs, op, elements, env);
             case FCMLA -> {
@@ -68,11 +68,19 @@ final class SveFpMultiplyAddOps {
         return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
+    /// BFloat16 (`esz = 0`) tem 16 bits de LARGURA DE ARMAZENAMENTO — igual a `esz = 1` — mesmo sendo um formato
+    /// distinto na matemática (`SveFloat.Env`): confundir os dois faria `elements`/indexação de registrador tratarem
+    /// o elemento como um BYTE (B17.27, achado da B17.14). `FCADD`/`FCMLA` nunca chegam aqui com `esz = 0`
+    /// (não alocado para BFloat16): a troca é inócua para eles.
+    private static int storageEsz(int esz) {
+        return esz == SveFloat.ESZ_BFLOAT16 ? SveFloat.ESZ_HALF : esz;
+    }
+
     // ── FMLA/FMLS/FNMLA/FNMLS predicados ─────────────────────────────────────────────────────────
 
     private static void multiplyAdd(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
             SveFloat.Env env) {
-        int esz = op.esz();
+        int esz = storageEsz(op.esz());
         boolean negateProduct = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FMLS
                 || op.op() == Ir64Op.SveFpMultiplyAdd.Op.FNMLA;
         boolean negateAddend = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FNMLA
@@ -93,7 +101,7 @@ final class SveFpMultiplyAddOps {
 
     private static void multiplyAddIndexed(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
             SveFloat.Env env) {
-        int esz = op.esz();
+        int esz = storageEsz(op.esz());
         int perSegment = SEGMENT_BYTES >> esz;
         boolean negateProduct = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FMLS;
         for (int base = 0; base < elements; base += perSegment) {
@@ -109,7 +117,7 @@ final class SveFpMultiplyAddOps {
 
     private static void multiplyIndexed(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
             SveFloat.Env env) {
-        int esz = op.esz();
+        int esz = storageEsz(op.esz());
         int perSegment = SEGMENT_BYTES >> esz;
         for (int base = 0; base < elements; base += perSegment) {
             long m = SveIntegerOps.get(regs, op.rm(), base + op.index(), esz);

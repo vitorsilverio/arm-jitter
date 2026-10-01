@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 /// Decoder SVE do multiply-add de ponto flutuante da B17.14: `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados (prefixo
@@ -7,10 +9,11 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// indexado, `FCADD`, `FCMLA` e `FCMLA` indexado. Cada padrão é o `decodetree` do `sve.decode` do QEMU transcrito em
 /// `máscara`/`valor`.
 ///
-/// **`esz = 0` nas linhas que o aceitam NÃO é "meia precisão" nem não alocado: é BFloat16** (`FEAT_SVE_B16B16` — o
-/// QEMU comenta "These insns use MO_8 to encode BFloat16" e exige `aa64_sve_b16b16`). Nenhum preset declara essa
-/// feature ainda e não há semântica de BFloat16 no {@code SveFloat}, então essas linhas são RECUSADAS (`null`, G8) —
-/// pendência nomeada, não exclusão. Em `FCADD`/`FCMLA` `esz = 0` é não alocado de fato.
+/// **`esz = 0` nas linhas que o aceitam NÃO é "meia precisão" nem não alocado: é BFloat16** (`FEAT_SVE_B16B16`,
+/// B17.27 — o QEMU comenta "These insns use MO_8 to encode BFloat16" e exige `aa64_sve_b16b16`): `FMLA`/`FMLS`/
+/// `FNMLA`/`FNMLS` predicados (`FMAD`/`FMSB`/`FNMAD`/`FNMSB` inclusive) e `FMLA`/`FMLS`/`FMUL` indexados. Sem a
+/// feature essas linhas continuam `null` (G8). Em `FCADD`/`FCMLA` `esz = 0` é não alocado de fato, com ou sem a
+/// feature.
 ///
 /// Os formatos indexados, por linha (errar qual é silencioso, só `index`/`rm` altos mostram):
 ///
@@ -71,6 +74,16 @@ final class Aarch64SveFpMultiplyAddDecoder {
     private static final int INDEXED_FMLA = 0b000000;
     private static final int INDEXED_FMLS = 0b000001;
     private static final int INDEXED_FMUL = 0b001000;
+    private static final int PREDICATED_BFLOAT16_MAX_OPCODE = 0b001; // só FMLA(000)/FMLS(001), ver decodePrefix65
+    private static final int INDEXED_FMLA_BFLOAT16 = 0b000010;
+    private static final int INDEXED_FMLS_BFLOAT16 = 0b000011;
+    private static final int INDEXED_FMUL_BFLOAT16 = 0b001010;
+
+    private final Aarch64Architecture architecture;
+
+    Aarch64SveFpMultiplyAddDecoder(Aarch64Architecture architecture) {
+        this.architecture = architecture;
+    }
 
     /// Prefixo `0x65`: as oito linhas de `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados. `null` = não é deste grupo.
     Ir64Op decodePrefix65(int word, long address) {
@@ -78,10 +91,20 @@ final class Aarch64SveFpMultiplyAddDecoder {
             return null;
         }
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
-        if (esz == ESZ_BFLOAT16) {
-            return null; // BFMLA/BFMLS/BFNMLA/BFNMLS: FEAT_SVE_B16B16 (pendência)
+        boolean bfloat16 = esz == ESZ_BFLOAT16;
+        if (bfloat16 && !architecture.has(Aarch64Feature.SVE_B16B16)) {
+            return null; // BFMLA/BFMLS: FEAT_SVE_B16B16 (B17.27)
         }
         int opcode = field(word, OPCODE_SHIFT, OPCODE_MASK);
+        if (bfloat16 && opcode > PREDICATED_BFLOAT16_MAX_OPCODE) {
+            // Só `BFMLA`/`BFMLS` (`@rda_pg_rn_rm`, opcode 000/001) existem de verdade: `BFNMLA`/`BFNMLS` (opcode
+            // 010/011) e as 4 formas `@rdn_pg_rm_ra` (`BFMAD`/`BFMSB`/`BFNMAD`/`BFNMSB`, opcode 100-111) são
+            // UNALLOCATED — confirmado contra `aarch64-none-elf-as`/`objdump` reais (binutils 2.46): `.inst` dessas
+            // 6 palavras desmonta "undefined", apesar de o QEMU (`translate-sve.c`, `DO_FMLA`) ter helper `_b16`
+            // para as 4 primeiras. O assembler/desmontador real é o oráculo mais forte aqui (acha o QEMU permissivo
+            // demais nesta família).
+            return null;
+        }
         Ir64Op.SveFpMultiplyAdd.Op op = switch (opcode & OPCODE_KIND_MASK) {
             case 0b00 -> Ir64Op.SveFpMultiplyAdd.Op.FMLA;
             case 0b01 -> Ir64Op.SveFpMultiplyAdd.Op.FMLS;
@@ -159,11 +182,17 @@ final class Aarch64SveFpMultiplyAddDecoder {
     }
 
     private Ir64Op decodeIndexed(int word, long address) {
-        Ir64Op.SveFpMultiplyAdd.Op op = switch (field(word, INDEXED_OPCODE_SHIFT, INDEXED_OPCODE_MASK)) {
-            case INDEXED_FMLA -> Ir64Op.SveFpMultiplyAdd.Op.FMLA;
-            case INDEXED_FMLS -> Ir64Op.SveFpMultiplyAdd.Op.FMLS;
-            case INDEXED_FMUL -> Ir64Op.SveFpMultiplyAdd.Op.FMUL;
-            default -> null; // inclui `000010`/`000011`/`001010`: BFMLA/BFMLS/BFMUL (FEAT_SVE_B16B16, pendência)
+        int opcodeField = field(word, INDEXED_OPCODE_SHIFT, INDEXED_OPCODE_MASK);
+        boolean bfloat16 = opcodeField == INDEXED_FMLA_BFLOAT16 || opcodeField == INDEXED_FMLS_BFLOAT16
+                || opcodeField == INDEXED_FMUL_BFLOAT16;
+        if (bfloat16 && !architecture.has(Aarch64Feature.SVE_B16B16)) {
+            return null; // BFMLA/BFMLS/BFMUL indexados: FEAT_SVE_B16B16 (B17.27)
+        }
+        Ir64Op.SveFpMultiplyAdd.Op op = switch (opcodeField) {
+            case INDEXED_FMLA, INDEXED_FMLA_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMLA;
+            case INDEXED_FMLS, INDEXED_FMLS_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMLS;
+            case INDEXED_FMUL, INDEXED_FMUL_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMUL;
+            default -> null;
         };
         if (op == null) {
             return null;
@@ -171,9 +200,10 @@ final class Aarch64SveFpMultiplyAddDecoder {
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, RN_SHIFT, REGISTER_MASK);
         int ra = op == Ir64Op.SveFpMultiplyAdd.Op.FMUL ? 0 : rd;
+        int halfLikeEsz = bfloat16 ? ESZ_BFLOAT16 : ESZ_HALF;
         return switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
-            case 0b00, 0b01 -> new Ir64Op.SveFpMultiplyAdd(op, ESZ_HALF, rd, rn, field(word, RM_SHIFT, RM3_MASK), ra,
-                    0, false, true, (((word >>> INDEX_HIGH_BIT) & 1) << INDEX_2_BITS)
+            case 0b00, 0b01 -> new Ir64Op.SveFpMultiplyAdd(op, halfLikeEsz, rd, rn, field(word, RM_SHIFT, RM3_MASK),
+                    ra, 0, false, true, (((word >>> INDEX_HIGH_BIT) & 1) << INDEX_2_BITS)
                             | field(word, INDEX_LOW_SHIFT, INDEX_2_MASK), 0, address);
             case ESZ_FIELD_HALF_INDEXED -> new Ir64Op.SveFpMultiplyAdd(op, ESZ_SINGLE, rd, rn,
                     field(word, RM_SHIFT, RM3_MASK), ra, 0, false, true, field(word, INDEX_LOW_SHIFT, INDEX_2_MASK),

@@ -52,18 +52,24 @@ final class SveFpArithmeticOps {
         }
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
-        int elements = core.vectorLengthBytes() >> esz;
+        // BFloat16 (`esz = 0`) tem 16 bits de LARGURA DE ARMAZENAMENTO — igual a `esz = 1` (meia precisão) — mesmo
+        // sendo um formato distinto na matemática (`SveFloat.Env`): confundir os dois faria `elements`/leitura de
+        // registrador tratarem o elemento como um BYTE (B17.27, achado da B17.14).
+        int storageEsz = esz == SveFloat.ESZ_BFLOAT16 ? SveFloat.ESZ_HALF : esz;
+        int elements = core.vectorLengthBytes() >> storageEsz;
         SveFloat.Env env = SveFloat.Env.of(core, esz);
         for (int e = 0; e < elements; e++) {
             if (op.predicated()) {
-                int bit = e << esz;
+                int bit = e << storageEsz;
                 if (((regs.pWord(op.pg(), bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) == 0L) {
                     continue;
                 }
             }
-            long n = SveIntegerOps.get(regs, op.rn(), e, esz);
-            long m = operandM(regs, op, e, esz, env);
-            SveIntegerOps.set(regs, op.rd(), e, esz, compute(op, n, m, esz, env));
+            long n = SveIntegerOps.get(regs, op.rn(), e, storageEsz);
+            long m = operandM(regs, op, e, storageEsz, env);
+            // `compute` recebe a largura de ARMAZENAMENTO (não o formato): só `SCALE` a usa, para
+            // sign-extend do expoente inteiro de `Zm` — em BFloat16 esse inteiro tem 16 bits, não 0.
+            SveIntegerOps.set(regs, op.rd(), e, storageEsz, compute(op, n, m, storageEsz, env));
         }
         env.commit(core);
         return false;

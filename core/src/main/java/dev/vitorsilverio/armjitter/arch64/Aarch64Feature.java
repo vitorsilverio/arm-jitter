@@ -171,6 +171,13 @@ public enum Aarch64Feature {
     /// {@link #FP8} (que gateia só `FSCALE`/AdvSIMD `FCVTN`/`FCVTL`, B19.11): a versão SVE destas
     /// conversões exige SME2 OU esta feature própria, nunca `FEAT_FP8` puro.
     FP8_CONVERT,
+    /// `FEAT_SVE_B16B16` — aritmética `BFloat16` do SVE (B17.27): `esz = 0` nas linhas de ponto flutuante que o
+    /// aceitam (`aa64_sve_b16b16` no QEMU, "These insns use MO_8 to encode BFloat16") — `FADD`/`FSUB`/`FMUL`
+    /// não-predicados, `FADD`/`FSUB`/`FMUL`/`FMIN`/`FMAX`/`FMAXNM`/`FMINNM` predicados, `FMLA`/`FMLS`/`FNMLA`/`FNMLS`
+    /// predicados e `FMLA`/`FMLS`/`FMUL` indexados. Introduzida com SVE2.1/ARMv9.4. Nenhum preset a declara ainda;
+    /// entra por `Aarch64Architecture.extending` ou pelo catálogo `Aarch64Processor` (mesmo padrão de
+    /// {@link #SVE_AES}/{@link #SVE_SM4}/{@link #F64MM}).
+    SVE_B16B16,
     /// `FEAT_SME` — Scalable Matrix Extension (armazenamento `ZA`, modo streaming, `SVCR`/`SMCR_ELx`).
     /// ARMv9.2-A. Desde a B18.1 o estado existe no `Aarch64Core` (`SVCR`, `SMCR_EL1/2/3`, banco `ZA`
     /// preguiçoso, `ID_AA64PFR1_EL1.SME`); ainda **sem efeito de modo streaming** (B18.2) e sem

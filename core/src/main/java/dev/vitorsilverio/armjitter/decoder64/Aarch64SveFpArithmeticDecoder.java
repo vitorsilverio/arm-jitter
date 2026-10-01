@@ -9,9 +9,11 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// `FRECPE`/`FRSQRTE` do `## SVE Floating Point Unary Operations - Unpredicated Group` do `sve.decode` do QEMU.
 ///
 /// **Cada padrão é o `decodetree` transcrito em `máscara`/`valor`**, conferido contra `aarch64-none-elf-as`. Em FP o
-/// campo `esz` é `1` = meia, `2` = simples, `3` = dupla: **`esz = 0` não é alocado em nenhuma das 32** (não é "meia
-/// precisão por analogia com o inteiro") e devolve `null` (G8). `FAMAX`/`FAMIN` exigem `FEAT_FAMINMAX`
-/// ({@link Aarch64Feature#FP_ABSOLUTE_MAX_MIN}); o resto vale sob `FEAT_SVE` (o gate de SVE é do chamador).
+/// campo `esz` é `1` = meia, `2` = simples, `3` = dupla; `0` é **`BFloat16`** (`FEAT_SVE_B16B16`, B17.27) só em
+/// `ADD`/`SUB`/`MUL` não predicadas e `ADD`/`SUB`/`MUL`/`MAXNM`/`MINNM`/`MAX`/`MIN`/`SCALE` predicadas (`FSUBR`
+/// reversa excluída — ver {@link #decodeBFloat16}) — sem a feature, ou em qualquer outra linha, `esz = 0` devolve
+/// `null` (G8). `FAMAX`/`FAMIN` exigem `FEAT_FAMINMAX` ({@link Aarch64Feature#FP_ABSOLUTE_MAX_MIN}); o resto vale
+/// sob `FEAT_SVE` (o gate de SVE é do chamador).
 ///
 /// As formas reversas (`FSUBR`/`FDIVR`) chegam como `SUB`/`DIV` com `reversed = true` — o `rn` é sempre o registrador
 /// destrutivo (`Zdn`) e o resultado é `op(Zm, Zdn)`. Tudo o que não bate exatamente devolve `null` e é recusado.
@@ -91,7 +93,7 @@ final class Aarch64SveFpArithmeticDecoder {
     Ir64Op decodePrefix65(int word, long address) {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
         if (esz == ESZ_RESERVED) {
-            return null;
+            return decodeBFloat16(word, address);
         }
         if ((word & UNPREDICATED_MASK) == UNPREDICATED_VALUE) {
             return decodeUnpredicated(word, esz, address);
@@ -192,6 +194,52 @@ final class Aarch64SveFpArithmeticDecoder {
         int rd = field(word, 0, REGISTER_MASK);
         return new Ir64Op.SveFpArithmetic(op, esz, rd, rd, field(word, RN_SHIFT, REGISTER_MASK),
                 field(word, PG_SHIFT, PREDICATE_MASK), true, reversed, false, 0, address);
+    }
+
+    /// `esz = 0`: `BFLOAT16` (`FEAT_SVE_B16B16`, B17.27), **não** "meia por analogia com o inteiro". **Achado que
+    /// corrige tanto a spec da task quanto a leitura ingênua do QEMU** (`translate-sve.c` usa `DO_ZPZZ_FP` sem
+    /// `_B16` para `FSCALE`, sugerindo que ela NÃO teria BFloat16): conferido palavra a palavra contra
+    /// `aarch64-none-elf-as`/`objdump` reais (binutils 2.46, varredura exaustiva dos 16 opcodes predicados e dos 8
+    /// não predicados), só existem: não predicadas `ADD`/`SUB`/`MUL`; predicadas `ADD`/`SUB`/`MUL`/`MAXNM`/`MINNM`/
+    /// `MAX`/`MIN`/`SCALE`. **`SCALE` (`BFSCALE`) existe de verdade** apesar do QEMU não anotar `_b16` nela — o
+    /// QEMU está incompleto aqui, não o contrário. `FSUBR` (reversa, opcode `0b0011`) **não** existe em BFloat16
+    /// (`.inst` desmonta "undefined") mesmo decodificando para o MESMO `trans_FSUB_zpzz` que `FSUB` direta — a
+    /// reversão em si não é um formato válido para este formato. `FTSMUL`/`FRECPS`/`FRSQRTS`, a unária
+    /// `FRECPE`/`FRSQRTE`, `FTMAD`, o imediato de 1 bit e `FABD`/`FMULX`/`FDIV`/`FAMAX`/`FAMIN` continuam não
+    /// alocados (`null`).
+    private Ir64Op decodeBFloat16(int word, long address) {
+        if (!architecture.has(Aarch64Feature.SVE_B16B16)) {
+            return null;
+        }
+        if ((word & UNPREDICATED_MASK) == UNPREDICATED_VALUE) {
+            Ir64Op op = decodeUnpredicated(word, ESZ_RESERVED, address);
+            return op instanceof Ir64Op.SveFpArithmetic arithmetic && isBFloat16CapableUnpredicated(arithmetic.op())
+                    ? op : null;
+        }
+        if ((word & PREDICATED_MASK) == PREDICATED_VALUE) {
+            Ir64Op op = decodePredicated(word, ESZ_RESERVED, address);
+            return op instanceof Ir64Op.SveFpArithmetic arithmetic && isBFloat16CapablePredicated(arithmetic)
+                    ? op : null;
+        }
+        return null; // unária/`FTMAD`/imediato: `esz = 0` não alocado mesmo com a feature
+    }
+
+    private static boolean isBFloat16CapableUnpredicated(Ir64Op.SveFpArithmetic.Op op) {
+        return switch (op) {
+            case ADD, SUB, MUL -> true;
+            default -> false;
+        };
+    }
+
+    /// `FSUBR` chega aqui como `Op.SUB` com `reversed = true` — undefined em BFloat16 mesmo a forma direta valendo.
+    private static boolean isBFloat16CapablePredicated(Ir64Op.SveFpArithmetic arithmetic) {
+        if (arithmetic.op() == Ir64Op.SveFpArithmetic.Op.SUB && arithmetic.reversed()) {
+            return false;
+        }
+        return switch (arithmetic.op()) {
+            case ADD, SUB, MUL, MAX, MIN, MAXNM, MINNM, SCALE -> true;
+            default -> false;
+        };
     }
 
     private static boolean bit(int word, int index) {

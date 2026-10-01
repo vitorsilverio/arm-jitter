@@ -4482,7 +4482,9 @@ public sealed interface Ir64Op permits
     /// manda calcular `op(Zm, Zn)` — assim o registrador e o imediato usam a mesma regra.
     record SveFpArithmetic(
             Op op,
-            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` é não alocado e nunca chega aqui).
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla; `0` = `BFloat16` (`FEAT_SVE_B16B16`,
+            /// B17.27) só em `ADD`/`SUB`/`MUL` não predicadas e `ADD`/`SUB`/`MUL`/`MAXNM`/`MINNM`/`MAX`/`MIN`/
+            /// `SCALE` predicadas — nas demais linhas `0` continua não alocado e nunca chega aqui.
             int esz,
             int rd,
             /// Primeiro operando (`Zn`; `Zdn` nas formas destrutivas).
@@ -4517,7 +4519,10 @@ public sealed interface Ir64Op permits
     /// campos do encoding viram `rn`/`rm`/`ra` no decoder. Nas formas destrutivas o `ra`/`rn` traz o próprio `rd`.
     record SveFpMultiplyAdd(
             Op op,
-            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla (`0` — BFloat16 — é `FEAT_SVE_B16B16` e nunca chega aqui).
+            /// Formato do elemento: `1` = meia, `2` = simples, `3` = dupla; `0` = `BFloat16` (`FEAT_SVE_B16B16`,
+            /// B17.27) só em `FMLA`/`FMLS` predicados e `FMLA`/`FMLS`/`FMUL` indexados — `FNMLA`/`FNMLS`, as formas
+            /// `FMAD`/`FMSB`/`FNMAD`/`FNMSB` e `FCADD`/`FCMLA` continuam sem BFloat16 (confirmado via
+            /// `aarch64-none-elf-as`/`objdump` reais).
             int esz,
             int rd,
             /// Multiplicando (`Zn`); em `FCADD`/`FCMLA` o primeiro operando complexo.
