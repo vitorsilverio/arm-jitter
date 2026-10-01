@@ -95,7 +95,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
         Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct,
         Ir64Op.SmeMop4, Ir64Op.SmeTmop, Ir64Op.SmeZeroArray, Ir64Op.SmeMovt, Ir64Op.SmeLut,
-        Ir64Op.SmeMultiVectorSingle {
+        Ir64Op.SmeMultiVectorSingle, Ir64Op.SmeArrayMultiVector {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -569,6 +569,9 @@ public sealed interface Ir64Op permits
         /// B18.7: SME2 multi-vetor "multiple-and-single" destrutivo (`SMAX_n1`/`FMAX_n1`/`ADD_n1`/…) — ver
         /// {@link SmeMultiVectorSingle}.
         public static final int SME_MULTI_VECTOR_SINGLE = 209;
+        /// B18.9: SME2 multi-vetor com resultado em vetores do array `ZA` (`ADD_azz_n1`/`FDOT_n1`/`SMLALL_n1`/…) — ver
+        /// {@link SmeArrayMultiVector}.
+        public static final int SME_ARRAY_MULTI_VECTOR = 210;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5358,6 +5361,69 @@ public sealed interface Ir64Op permits
         }
 
         @Override public int kind() { return Kind.SME_MULTI_VECTOR_SINGLE; }
+    }
+
+    /// SME2 multi-vetor "multiple and single, array vectors" (B18.9, `FEAT_SME2`): grupo de {@link #count}
+    /// (`2`/`4`; `1` nas formas widening/FMA/dot) registradores `Z` a partir de {@link #zn} (SEM alinhamento — pode
+    /// dar a volta em `Z31`), UM `Zm` avulso (`Z0`-`Z15`), resultado em vetores do array `ZA`. **Sem predicado.**
+    ///
+    /// **Endereçamento** (`get_zarray` do QEMU, não o de tile da B18.3): o membro `r` do grupo escreve os
+    /// {@link Op#vectorsPerMember()} vetores `ZA[base + r × (SVL/count) + i]`, `base = ((W<rv> arredondado para baixo a
+    /// um múltiplo de vectorsPerMember) + off) MOD (SVL/count)`. Os vetores de membros diferentes **não são
+    /// consecutivos** — ficam `SVL/count` linhas distantes.
+    ///
+    /// `ADD`/`SUB` ESCREVEM `Zn ± Zm` no vetor (`do_azz_n1`); todas as demais ACUMULAM (`ZA += f(Zn, Zm)`).
+    record SmeArrayMultiVector(
+            Op op,
+            int count,
+            /// Índice do registrador geral `W8`-`W11` que seleciona o vetor (`%mova_rv`, já somado a 8).
+            int registerIndex,
+            /// `off` JÁ escalado pelo número de vetores escritos por membro (`%off3_x2`, `%off2_x4`, …).
+            int off,
+            int zn,
+            /// `Zm` (`Z0`-`Z15`).
+            int zm,
+            long instructionAddress) implements Ir64Op {
+        /// Os 44 mnemônicos da seção `### SME2 Multi-vector Multiple and Single Array Vectors`, com o tamanho de
+        /// elemento do vetor de `ZA` e o número de vetores de `ZA` escritos POR MEMBRO do grupo.
+        public enum Op {
+            ADD_S(2, 1), ADD_D(3, 1), SUB_S(2, 1), SUB_D(3, 1),
+            FMLAL(2, 2), FMLSL(2, 2), BFMLAL(2, 2), BFMLSL(2, 2),
+            FDOT(2, 1), BFDOT(2, 1), USDOT(2, 1), SUDOT(2, 1),
+            SDOT_4B(2, 1), SDOT_4H(3, 1), SDOT_2H(2, 1), UDOT_4B(2, 1), UDOT_4H(3, 1), UDOT_2H(2, 1),
+            SMLAL(2, 2), SMLSL(2, 2), UMLAL(2, 2), UMLSL(2, 2),
+            SMLALL_S(2, 4), SMLALL_D(3, 4), SMLSLL_S(2, 4), SMLSLL_D(3, 4),
+            UMLALL_S(2, 4), UMLALL_D(3, 4), UMLSLL_S(2, 4), UMLSLL_D(3, 4), USMLALL(2, 4), SUMLALL(2, 4),
+            BFMLA(1, 1), BFMLS(1, 1), FMLA_H(1, 1), FMLA_S(2, 1), FMLA_D(3, 1), FMLS_H(1, 1), FMLS_S(2, 1),
+            FMLS_D(3, 1),
+            FMLALL_B(2, 4), FDOT_SB(2, 1), FMLAL_HB(1, 2), FDOT_HB(1, 1);
+
+            private final int accumulatorEsz;
+            private final int vectorsPerMember;
+
+            Op(int accumulatorEsz, int vectorsPerMember) {
+                this.accumulatorEsz = accumulatorEsz;
+                this.vectorsPerMember = vectorsPerMember;
+            }
+
+            /// Tamanho do elemento do vetor de `ZA` (`1` = half/`bfloat16`, `2` = word, `3` = doubleword).
+            public int accumulatorEsz() {
+                return accumulatorEsz;
+            }
+
+            /// Quantos vetores de `ZA` cada membro do grupo escreve (`nsel` do QEMU: `1` = aritmética/dot/FMA, `2` =
+            /// widening ×2, `4` = widening ×4).
+            public int vectorsPerMember() {
+                return vectorsPerMember;
+            }
+
+            /// `BFMLA`/`BFMLS`: o vetor de `ZA` é `bfloat16`, não `binary16` (mesma largura, formato diferente).
+            public boolean bfloat16() {
+                return this == BFMLA || this == BFMLS;
+            }
+        }
+
+        @Override public int kind() { return Kind.SME_ARRAY_MULTI_VECTOR; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

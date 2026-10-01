@@ -289,6 +289,16 @@ final class Aarch64SmeDecoder {
     /// `FAMAX_nn`/`FAMIN_nn` (`bits[10:5] = 001010`) — só existem na forma `_nn`.
     private static final int MV_KEY_FAMAX = 0b001010;
 
+    // ── `### SME2 Multi-vector Multiple and Single Array Vectors` (B18.9) ─────────────────────────────────────
+    /// `bits[31:24] = 1100_0001` e `bit 15 = 0` (a forma de B18.7/B18.8 tem `bit 15 = 1`): prefixo comum às 107 linhas,
+    /// só para não percorrer a tabela inteira em palavras de outras famílias.
+    private static final int ARRAY_VECTOR_PREFIX_MASK = 0xFF008000;
+    private static final int ARRAY_VECTOR_PREFIX_VALUE = 0xC1000000;
+    /// `zn:5` em `bits[9:5]` (SEM alinhamento, ao contrário de `%zn_ax2`) e `zm:4` em `bits[19:16]` (`Z0`-`Z15`).
+    private static final int ARRAY_VECTOR_ZN_SHIFT = 5;
+    private static final int ARRAY_VECTOR_ZM_SHIFT = 16;
+    private static final int ARRAY_VECTOR_ZM_MASK = 0b1111;
+
     /// Linha de `ZERO_za`: máscara/valor de 32 bits + `ngrp`/`nvec` + a largura e a escala do `off` DESTA linha.
     private record ZeroArrayRow(int mask, int value, int ngrp, int nvec, int offMask, int offScale) {
     }
@@ -461,6 +471,13 @@ final class Aarch64SmeDecoder {
         if ((word & MV_MULTIPLE_MASK) == MV_MULTIPLE_VALUE) {
             return decodeMultiVector(word, address, true);
         }
+        if ((word & ARRAY_VECTOR_PREFIX_MASK) == ARRAY_VECTOR_PREFIX_VALUE) {
+            for (SmeArrayVectorRows.Row row : SmeArrayVectorRows.ROWS) {
+                if (row.matches(word)) {
+                    return decodeArrayVector(row, word, address);
+                }
+            }
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -600,6 +617,33 @@ final class Aarch64SmeDecoder {
                 ? groupBase(word, count == 2 ? MV_ZM_GROUP_X2_SHIFT : MV_ZM_GROUP_X4_SHIFT, count)
                 : (word >>> MV_ZM_SHIFT) & MV_ZM_MASK;
         return new Ir64Op.SmeMultiVectorSingle(op, esz, count, zdn, zm, multipleVectors, address);
+    }
+
+    /// As 107 linhas de "multiple and single, array vectors" (B18.9). `null` = a feature da linha está ausente
+    /// (G8 cai em `UNIMPLEMENTED`). Gates medidos no `translate-sme.c`, instrução a instrução (não por família):
+    /// tudo `FEAT_SME2`; as formas `_d`/`4h` (acumulam em 64 bits) exigem `FEAT_SME_I16I64`, `FMLA_d`/`FMLS_d`
+    /// `FEAT_SME_F64F64`, `FMLA_h`/`FMLS_h` `FEAT_SME_F16F16`, `BFMLA`/`BFMLS` `FEAT_SME_B16B16`, `FMLALL_b`/`FDOT_sb`
+    /// `FEAT_SME_F8F32` e `FMLAL_hb`/`FDOT_hb` `FEAT_SME_F8F16`.
+    private Ir64Op decodeArrayVector(SmeArrayVectorRows.Row row, int word, long address) {
+        if (!hasSme2()) {
+            return null;
+        }
+        Aarch64Feature extra = switch (row.op()) {
+            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D -> Aarch64Feature.SME_I16I64;
+            case FMLA_D, FMLS_D -> Aarch64Feature.SME_F64F64;
+            case FMLA_H, FMLS_H -> Aarch64Feature.SME_F16F16;
+            case BFMLA, BFMLS -> Aarch64Feature.SME_B16B16;
+            case FMLALL_B, FDOT_SB -> Aarch64Feature.SME_F8F32;
+            case FMLAL_HB, FDOT_HB -> Aarch64Feature.SME_F8F16;
+            default -> null;
+        };
+        if (extra != null && !architecture.has(extra)) {
+            return null;
+        }
+        return new Ir64Op.SmeArrayMultiVector(row.op(), row.count(),
+                MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK), row.offset(word),
+                (word >>> ARRAY_VECTOR_ZN_SHIFT) & REGISTER_MASK,
+                (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address);
     }
 
     /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits
