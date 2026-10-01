@@ -300,6 +300,7 @@ class Aarch64SmeArrayVectorDecoderTest {
         assertEquals(EXPECTED_MNEMONICS, all.stream().map(Case::op).distinct().count());
         // B18.10 acrescentou 8 `Op` que só existem na forma `_nn` (`FADD`/`FSUB`/`BFADD`/`BFSUB`).
         EnumSet<Op> expected = EnumSet.allOf(Op.class);
+        expected.removeIf(Op::vertical); // dot vertical só existe na forma indexada (B18.11)
         expected.removeAll(EnumSet.of(Op.FADD_H, Op.FADD_S, Op.FADD_D, Op.BFADD, Op.FSUB_H, Op.FSUB_S, Op.FSUB_D,
                 Op.BFSUB));
         assertEquals(expected, EnumSet.copyOf(all.stream().map(Case::op).toList()));
@@ -346,7 +347,7 @@ class Aarch64SmeArrayVectorDecoderTest {
     @ValueSource(strings = {
             "0xC12924B7", // SUMLALL n=1 NÃO existe (só n=2/4): USMLALL n=1 com bits[4:2] = 101
             "0xC129286F", // FMLAL x2 com bits[4:2] = 011 (000/001/010/100/110 existem; 011 não)
-            "0xC1092863", // FMLAL x2 com bit 21 desligado: fora do prefixo 001x
+            "0xC129A863", // FMLAL x2 com bit 15 ligado: o prefixo 001x só existe com bit 15 = 0 (B18.11: 0xC109… virou SMLALL indexado)
             "0xE1292863", // bit 29 ligado: fora do prefixo 11000001
             "0xC1293C73", // bits[12:10] = 111 com bits[4:3] = 10 (só 00/01 existem: FMLA_h/FMLS_h)
     })

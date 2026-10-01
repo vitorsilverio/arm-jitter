@@ -487,6 +487,13 @@ final class Aarch64SmeDecoder {
                 }
             }
         }
+        if ((word & SmeArrayIndexedRows.PREFIX_MASK) == SmeArrayIndexedRows.PREFIX_VALUE) {
+            for (SmeArrayIndexedRows.Row row : SmeArrayIndexedRows.ROWS) {
+                if (row.matches(word)) {
+                    return decodeArrayVectorIndexed(row, word, address);
+                }
+            }
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -634,26 +641,7 @@ final class Aarch64SmeDecoder {
     /// `FEAT_SME_F64F64`, `FMLA_h`/`FMLS_h` `FEAT_SME_F16F16`, `BFMLA`/`BFMLS` `FEAT_SME_B16B16`, `FMLALL_b`/`FDOT_sb`
     /// `FEAT_SME_F8F32` e `FMLAL_hb`/`FDOT_hb` `FEAT_SME_F8F16`.
     private Ir64Op decodeArrayVector(SmeArrayVectorRows.Row row, int word, long address) {
-        if (!hasSme2()) {
-            return null;
-        }
-        Aarch64Feature extra = switch (row.op()) {
-            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D -> Aarch64Feature.SME_I16I64;
-            case FMLA_D, FMLS_D -> Aarch64Feature.SME_F64F64;
-            case FMLA_H, FMLS_H -> Aarch64Feature.SME_F16F16;
-            case BFMLA, BFMLS -> Aarch64Feature.SME_B16B16;
-            case FMLALL_B, FDOT_SB -> Aarch64Feature.SME_F8F32;
-            case FMLAL_HB, FDOT_HB -> Aarch64Feature.SME_F8F16;
-            case FADD_D, FSUB_D -> Aarch64Feature.SME_F64F64;
-            case BFADD, BFSUB -> Aarch64Feature.SME_B16B16;
-            default -> null;
-        };
-        if (extra != null && !architecture.has(extra)) {
-            return null;
-        }
-        // `FADD_h`/`FSUB_h`: `aa64_sme_f16f16_or_f8f16` — QUALQUER uma das duas features basta.
-        if ((row.op() == Ir64Op.SmeArrayMultiVector.Op.FADD_H || row.op() == Ir64Op.SmeArrayMultiVector.Op.FSUB_H)
-                && !architecture.has(Aarch64Feature.SME_F16F16) && !architecture.has(Aarch64Feature.SME_F8F16)) {
+        if (!arrayVectorFeaturesPresent(row.op())) {
             return null;
         }
         int registerIndex = MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
@@ -668,6 +656,43 @@ final class Aarch64SmeDecoder {
             case ACCUMULATE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off, 0,
                     alignedGroup(word, row.count(), GROUP_ZN_SHIFT_X2, GROUP_ZN_SHIFT_X4), address, true);
         };
+    }
+
+    /// `FEAT_SME2` mais a capacidade EXTRA de cada operação (B18.9/B18.10/B18.11). `SVDOT_4h`/`UVDOT_4h` exigem
+    /// `FEAT_SME_I16I64` e `FVDOT_sh`/`BFVDOT` exigem `FEAT_SME2` pelo manual (`IsFeatureImplemented` do decode de cada
+    /// uma) — o `translate-sme.c` do QEMU as gateia só em `aa64_sme2`/`aa64_sme`, frouxo demais.
+    private boolean arrayVectorFeaturesPresent(Ir64Op.SmeArrayMultiVector.Op op) {
+        if (!hasSme2()) {
+            return false;
+        }
+        Aarch64Feature extra = switch (op) {
+            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SVDOT_4H, UVDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D ->
+                    Aarch64Feature.SME_I16I64;
+            case FMLA_D, FMLS_D -> Aarch64Feature.SME_F64F64;
+            case FMLA_H, FMLS_H -> Aarch64Feature.SME_F16F16;
+            case BFMLA, BFMLS -> Aarch64Feature.SME_B16B16;
+            case FMLALL_B, FDOT_SB, FVDOTB, FVDOTT -> Aarch64Feature.SME_F8F32;
+            case FMLAL_HB, FDOT_HB, FVDOT_HB -> Aarch64Feature.SME_F8F16;
+            case FADD_D, FSUB_D -> Aarch64Feature.SME_F64F64;
+            case BFADD, BFSUB -> Aarch64Feature.SME_B16B16;
+            default -> null;
+        };
+        if (extra != null && !architecture.has(extra)) {
+            return false;
+        }
+        // `FADD_h`/`FSUB_h`: `aa64_sme_f16f16_or_f8f16` — QUALQUER uma das duas features basta.
+        return (op != Ir64Op.SmeArrayMultiVector.Op.FADD_H && op != Ir64Op.SmeArrayMultiVector.Op.FSUB_H)
+                || architecture.has(Aarch64Feature.SME_F16F16) || architecture.has(Aarch64Feature.SME_F8F16);
+    }
+
+    /// `_nx` (B18.11): `null` = não é desta família OU a feature da linha falha (G8).
+    private Ir64Op decodeArrayVectorIndexed(SmeArrayIndexedRows.Row row, int word, long address) {
+        if (!arrayVectorFeaturesPresent(row.op())) {
+            return null;
+        }
+        return new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), MOVA_RV_BASE
+                + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK), row.offset(word), row.znBase(word),
+                (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address, false, row.index(word));
     }
 
     /// Base do grupo alinhado de `count` registradores (`times_2`/`times_4` do `.decode`).

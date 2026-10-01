@@ -303,6 +303,7 @@ class Aarch64SmeArrayMultipleDecoderTest {
         assertEquals(EXPECTED_ENCODINGS / 2, all.stream().filter(c -> c.count() == 4).map(Case::op).distinct().count());
         // `SUDOT_nn`/`SUMLALL_nn_s` NÃO existem: todo `Op` menos esses dois é coberto.
         Set<Op> expected = EnumSet.allOf(Op.class);
+        expected.removeIf(Op::vertical); // dot vertical só existe na forma indexada (B18.11)
         expected.remove(Op.SUDOT);
         expected.remove(Op.SUMLALL);
         assertEquals(expected, EnumSet.copyOf(all.stream().map(Case::op).toList()));

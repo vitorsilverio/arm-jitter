@@ -5386,11 +5386,29 @@ public sealed interface Ir64Op permits
             long instructionAddress,
             /// `true` nas formas `_nn` (B18.10): `Zm` também é um grupo e o membro `r` usa `Z(zm + r)`; `false` nas `_n1`
             /// (B18.9), onde `Zm` é um vetor único.
-            boolean multipleZm) implements Ir64Op {
+            boolean multipleZm,
+            /// Forma `_nx` (B18.11): índice do elemento de `Zm` dentro de cada segmento de 128 bits (já montado dos bits
+            /// não contíguos do `.decode`); {@link #NOT_INDEXED} nas formas `_n1`/`_nn`.
+            int index) implements Ir64Op {
+        /// Valor de {@link #index} das formas SEM índice.
+        public static final int NOT_INDEXED = -1;
+
         /// Forma `_n1` (B18.9): `Zm` é um vetor único.
         public SmeArrayMultiVector(Op op, int count, int registerIndex, int off, int zn, int zm,
                 long instructionAddress) {
-            this(op, count, registerIndex, off, zn, zm, instructionAddress, false);
+            this(op, count, registerIndex, off, zn, zm, instructionAddress, false, NOT_INDEXED);
+        }
+
+        /// Formas `_n1`/`_nn` (B18.9/B18.10): sem índice.
+        public SmeArrayMultiVector(Op op, int count, int registerIndex, int off, int zn, int zm,
+                long instructionAddress, boolean multipleZm) {
+            this(op, count, registerIndex, off, zn, zm, instructionAddress, multipleZm, NOT_INDEXED);
+        }
+
+        /// `true` na forma `_nx` (B18.11): `Zm` é UM vetor e o segundo operando é o elemento {@link #index} de cada
+        /// segmento de 128 bits dele.
+        public boolean indexed() {
+            return index != NOT_INDEXED;
         }
 
         /// Os 50 mnemônicos das seções `### SME2 Multi-vector Multiple and Single Array Vectors` (B18.9) e
@@ -5409,7 +5427,10 @@ public sealed interface Ir64Op permits
             FMLS_D(3, 1),
             FMLALL_B(2, 4), FDOT_SB(2, 1), FMLAL_HB(1, 2), FDOT_HB(1, 1),
             FADD_H(1, 1), FADD_S(2, 1), FADD_D(3, 1), BFADD(1, 1), FSUB_H(1, 1), FSUB_S(2, 1), FSUB_D(3, 1),
-            BFSUB(1, 1);
+            BFSUB(1, 1),
+            // ── B18.11: dot VERTICAL (só existe na forma indexada) ──
+            SVDOT_2H(2, 1), SVDOT_4B(2, 1), SVDOT_4H(3, 1), UVDOT_2H(2, 1), UVDOT_4B(2, 1), UVDOT_4H(3, 1),
+            SUVDOT(2, 1), USVDOT(2, 1), FVDOT_SH(2, 1), BFVDOT(2, 1), FVDOTB(2, 1), FVDOTT(2, 1), FVDOT_HB(1, 1);
 
             private final int accumulatorEsz;
             private final int vectorsPerMember;
@@ -5428,6 +5449,13 @@ public sealed interface Ir64Op permits
             /// widening ×2, `4` = widening ×4).
             public int vectorsPerMember() {
                 return vectorsPerMember;
+            }
+
+            /// Dot VERTICAL (B18.11): o produto escalar atravessa os registradores do grupo de `Zn` (um elemento de
+            /// cada), e o membro `r` do grupo de `ZA` consome o elemento `k*e + r` de cada um — não os elementos de
+            /// UM vetor.
+            public boolean vertical() {
+                return ordinal() >= SVDOT_2H.ordinal();
             }
 
             /// `BFMLA`/`BFMLS`: o vetor de `ZA` é `bfloat16`, não `binary16` (mesma largura, formato diferente).

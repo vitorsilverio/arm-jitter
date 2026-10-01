@@ -620,6 +620,8 @@ class Aarch64SmeArrayVectorExecutorTest {
             case FSUB_D -> Double.doubleToRawLongBits(d(acc) - d(lane(m, ESZ_DOUBLE, e)));
             case BFADD -> bb(bf(acc) + bf(lane(m, ESZ_HALF, e)));
             case BFSUB -> bb(bf(acc) - bf(lane(m, ESZ_HALF, e)));
+            case SVDOT_2H, SVDOT_4B, SVDOT_4H, UVDOT_2H, UVDOT_4B, UVDOT_4H, SUVDOT, USVDOT, FVDOT_SH, BFVDOT, FVDOTB,
+                    FVDOTT, FVDOT_HB -> throw new IllegalArgumentException(op + " só existe na forma indexada (B18.11)");
         };
     }
 

@@ -270,7 +270,7 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
             "0xC124B102", // fmax .b: o espaço esz = 0 de ponto flutuante é de BFMAX_nn (outro gate)
             "0xC124B142", // famax .b
             "0xC124B182", // fscale .b
-            "0xC104B002", // bit 21 desligado: fora desta família
+            "0xC174A002", // não alocada pelo binutils 2.46 (0xC104B002 virou SMLALL indexado, B18.11)
             "0xC324B002", // bit 25 ligado: fora do prefixo 1100000
             "0xC124C002", // bits[15:12] = 1100: nenhuma das duas famílias
     })
