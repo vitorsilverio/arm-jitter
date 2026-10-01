@@ -2133,6 +2133,9 @@ public final class Aarch64Decoder {
     private Ir64Op decodeSve(int word, long address) {
         Ir64Op op = sveDecoder.decode(word, address);
         if (op == null) {
+            op = smeDecoder.decodeSveSpace(word, address);
+        }
+        if (op == null) {
             throw unsupported(word, address);
         }
         return op;

@@ -300,6 +300,7 @@ class Aarch64SmeArrayVectorDecoderTest {
         assertEquals(EXPECTED_MNEMONICS, all.stream().map(Case::op).distinct().count());
         // B18.10 acrescentou 8 `Op` que só existem na forma `_nn` (`FADD`/`FSUB`/`BFADD`/`BFSUB`).
         EnumSet<Op> expected = EnumSet.allOf(Op.class);
+        expected.removeAll(EnumSet.of(Op.ADD_AAZ_S, Op.ADD_AAZ_D, Op.SUB_AAZ_S, Op.SUB_AAZ_D)); // B18.12: têm teste próprio
         expected.removeIf(Op::vertical); // dot vertical só existe na forma indexada (B18.11)
         expected.removeAll(EnumSet.of(Op.FADD_H, Op.FADD_S, Op.FADD_D, Op.BFADD, Op.FSUB_H, Op.FSUB_S, Op.FSUB_D,
                 Op.BFSUB));

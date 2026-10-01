@@ -243,7 +243,17 @@ final class SmeArrayVectorRows {
             row(0xFFFF9C38, 0xC1E41C00, Op.BFADD, 2, 3, 1, Form.ACCUMULATE),
             row(0xFFFF9C78, 0xC1E51C00, Op.BFADD, 4, 3, 1, Form.ACCUMULATE),
             row(0xFFFF9C38, 0xC1E41C08, Op.BFSUB, 2, 3, 1, Form.ACCUMULATE),
-            row(0xFFFF9C78, 0xC1E51C08, Op.BFSUB, 4, 3, 1, Form.ACCUMULATE)
+            row(0xFFFF9C78, 0xC1E51C08, Op.BFSUB, 4, 3, 1, Form.ACCUMULATE),
+            // B18.12 `ADD_aaz`/`SUB_aaz` (`### SME2 Add / Sub array accumulators`, `.decode` 826-837): mesmo formato
+            // `@az_2x2_o3`/`@az_4x4_o3` do `FADD_nn`, aritmética INTEIRA.
+            row(0xFFFF9C38, 0xC1A01C10, Op.ADD_AAZ_S, 2, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C78, 0xC1A11C10, Op.ADD_AAZ_S, 4, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C38, 0xC1E01C10, Op.ADD_AAZ_D, 2, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C78, 0xC1E11C10, Op.ADD_AAZ_D, 4, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C38, 0xC1A01C18, Op.SUB_AAZ_S, 2, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C78, 0xC1A11C18, Op.SUB_AAZ_S, 4, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C38, 0xC1E01C18, Op.SUB_AAZ_D, 2, 3, 1, Form.ACCUMULATE),
+            row(0xFFFF9C78, 0xC1E11C18, Op.SUB_AAZ_D, 4, 3, 1, Form.ACCUMULATE)
     );
 
     private SmeArrayVectorRows() {

@@ -39,9 +39,9 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-10-01, B18.11)
+## Onde estamos (atualizado 2026-10-01, B18.12)
 
-**`B18.11` fechada (113/113: SME2 multi-vetor indexado + dot vertical, 53 mnemônicos)** — reusa `SmeArrayMultiVectorOps` da B18.9/B18.10 (novo componente `index`, `Op.vertical()`). **Em 3 pontos o manual da Arm venceu o QEMU** (`FVDOTB`/`FVDOTT`/`FVDOT_hb` semântica; gates de `SVDOT_4h`/`FVDOT_sh`) — ver **Resultado** na task. Oráculo dos testes: `objdump` do devkitA64 (palavras geradas dos padrões do `.decode`, campos lidos do texto). `COBERTURA-ISA.md` não mudou (`sme.decode` segue `NOT_IN_ANY_PRESET` até a B18.13). ⚠️ A guarda `JitCoverageReportGuardTest` está no módulo `truffle`: rodar `mvn -o test` na RAIZ (não só `-pl core`) e `./gerar-cobertura-jit.sh` quando surgir `Ir64Op.Kind` novo.
+**`B18.12` fechada (102/102: `ADD_aaz`/`SUB_aaz` + SVE construtivas + `SEL`)** — última task de conteúdo do B18; os 623 encodings de `sme.decode` estão atribuídos. Pendências nomeadas e lacunas de JaCoCo no **Resultado** da task. `COBERTURA-ISA.md` só muda na B18.13.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -57,8 +57,8 @@ abertos: **B18.7+** (SME, ~476 encodings restantes de `sme.decode`, ainda `NOT_I
 achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
 e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.12`** em diante (SME:
-SME2 add/sub de acumuladores e SVE construtivas, depois fechamento B18.13; `SVCR`/`ZA`/`ZT0`/streaming/`MOVA`/`ZERO`/`LUTI`
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.13`** (fechamento SME;
+(`SVCR`/`ZA`/`ZT0`/streaming/`MOVA`/`ZERO`/`LUTI`
 já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
 decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências
 nomeadas da B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com

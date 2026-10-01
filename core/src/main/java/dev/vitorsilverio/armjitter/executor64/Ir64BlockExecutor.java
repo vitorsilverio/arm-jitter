@@ -416,6 +416,8 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SME_LUT -> SmeZt0Ops.execute(core, (Ir64Op.SmeLut) op);
             case Ir64Op.Kind.SME_MULTI_VECTOR_SINGLE ->
                     SmeMultiVectorOps.execute(core, (Ir64Op.SmeMultiVectorSingle) op);
+            case Ir64Op.Kind.SME_CONSTRUCTIVE ->
+                    SmeConstructiveOps.execute(core, (Ir64Op.SmeConstructive) op);
             case Ir64Op.Kind.SME_ARRAY_MULTI_VECTOR ->
                     SmeArrayMultiVectorOps.execute(core, (Ir64Op.SmeArrayMultiVector) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {

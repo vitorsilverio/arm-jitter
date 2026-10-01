@@ -199,6 +199,8 @@ final class SmeArrayMultiVectorOps {
             case BFMLS, FMLS_H, FMLS_S, FMLS_D -> SveFloat.fusedMultiplyAdd(accumulator,
                     SveIntegerOps.get(regs, zn, e, esz) ^ (1L << ((Byte.SIZE << esz) - 1)),
                     SveIntegerOps.get(regs, zm, zmPosition(e, 0, 1, esz, index), esz), 0, context.fma);
+            case ADD_AAZ_S, ADD_AAZ_D -> (accumulator + SveIntegerOps.get(regs, zm, e, esz)) & mask;
+            case SUB_AAZ_S, SUB_AAZ_D -> (accumulator - SveIntegerOps.get(regs, zm, e, esz)) & mask;
             case FADD_H, FADD_S, FADD_D, BFADD -> SveFloat.add(accumulator, SveIntegerOps.get(regs, zm, e, esz), false,
                     context.fma);
             case FSUB_H, FSUB_S, FSUB_D, BFSUB -> SveFloat.add(accumulator, SveIntegerOps.get(regs, zm, e, esz), true,

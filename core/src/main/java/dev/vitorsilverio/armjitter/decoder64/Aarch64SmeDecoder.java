@@ -494,6 +494,10 @@ final class Aarch64SmeDecoder {
                 }
             }
         }
+        Ir64Op constructive = decodeConstructive(word, address);
+        if (constructive != null) {
+            return constructive;
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -666,7 +670,8 @@ final class Aarch64SmeDecoder {
             return false;
         }
         Aarch64Feature extra = switch (op) {
-            case ADD_D, SUB_D, SDOT_4H, UDOT_4H, SVDOT_4H, UVDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D ->
+            case ADD_D, SUB_D, ADD_AAZ_D, SUB_AAZ_D, SDOT_4H, UDOT_4H, SVDOT_4H, UVDOT_4H, SMLALL_D, SMLSLL_D, UMLALL_D,
+                    UMLSLL_D ->
                     Aarch64Feature.SME_I16I64;
             case FMLA_D, FMLS_D -> Aarch64Feature.SME_F64F64;
             case FMLA_H, FMLS_H -> Aarch64Feature.SME_F16F16;
@@ -693,6 +698,132 @@ final class Aarch64SmeDecoder {
         return new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), MOVA_RV_BASE
                 + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK), row.offset(word), row.znBase(word),
                 (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address, false, row.index(word));
+    }
+
+    /// As três `*RSHRN_sh` (B18.12) vivem no espaço SVE (`0x45`), compartilhadas com `FEAT_SVE2p1`: o decoder SVE as
+    /// recusa e cai aqui. `null` = não é delas ou a feature falha (G8).
+    Ir64Op decodeSveSpace(int word, long address) {
+        return decodeConstructive(word, address);
+    }
+
+    private static final int CONSTRUCTIVE_ESZ_SHIFT = 22;
+    private static final int ESZ_MASK_2BITS = 0b11;
+    private static final int SEL_PG_BASE = 8;
+    private static final int SEL_PG_SHIFT = 10;
+    private static final int SEL_PG_MASK = 0b111;
+    private static final int ZM5_SHIFT = 16;
+    private static final int ZN5_SHIFT = 5;
+    private static final int ZN_X2_SHIFT = 6;
+    private static final int ZN_X4_SHIFT = 7;
+    private static final int ZD_X2_SHIFT = 1;
+    private static final int ZD_X4_SHIFT = 2;
+    private static final int RSHR_SH_BASE = 16;
+    private static final int RSHR_SB_BASE = 32;
+    private static final int RSHR_DH_BASE = 64;
+    private static final int RSHR_DH_HIGH_BIT_SHIFT = 22;
+    private static final int RSHR_DH_HIGH_BIT_POSITION = 5;
+    private static final int RSHR_SH_FIELD_MASK = 0b1111;
+    private static final int RSHR_FIELD_MASK = 0b11111;
+    private static final int ESZ_BFLOAT16 = 0;
+
+    private Ir64Op decodeConstructive(int word, long address) {
+        for (SmeConstructiveRows.Row row : SmeConstructiveRows.ROWS) {
+            if (!row.matches(word)) {
+                continue;
+            }
+            int esz = row.esz() < 0 ? (word >>> CONSTRUCTIVE_ESZ_SHIFT) & ESZ_MASK_2BITS : row.esz();
+            if (!constructiveGate(row, esz)) {
+                return null;
+            }
+            int zd = 0;
+            int zn = 0;
+            int zm = 0;
+            int shift = 0;
+            int pg = 0;
+            switch (row.form()) {
+                case ZD5_ZN2 -> {
+                    zd = word & REGISTER_MASK;
+                    zn = groupBase(word, ZN_X2_SHIFT, 2);
+                }
+                case ZD5_ZN4 -> {
+                    zd = word & REGISTER_MASK;
+                    zn = groupBase(word, ZN_X4_SHIFT, 4);
+                }
+                case ZD2_ZN5 -> {
+                    zd = groupBase(word, ZD_X2_SHIFT, 2);
+                    zn = (word >>> ZN5_SHIFT) & REGISTER_MASK;
+                }
+                case ZD2_ZN2 -> {
+                    zd = groupBase(word, ZD_X2_SHIFT, 2);
+                    zn = groupBase(word, ZN_X2_SHIFT, 2);
+                }
+                case ZD4_ZN4 -> {
+                    zd = groupBase(word, ZD_X4_SHIFT, 4);
+                    zn = groupBase(word, ZN_X4_SHIFT, 4);
+                }
+                case ZD4_ZN2 -> {
+                    zd = groupBase(word, ZD_X4_SHIFT, 4);
+                    zn = groupBase(word, ZN_X2_SHIFT, 2);
+                }
+                case RSHR_SH -> {
+                    zd = word & REGISTER_MASK;
+                    zn = groupBase(word, ZN_X2_SHIFT, 2);
+                    shift = RSHR_SH_BASE - ((word >>> ZM5_SHIFT) & RSHR_SH_FIELD_MASK);
+                }
+                case RSHR_SB -> {
+                    zd = word & REGISTER_MASK;
+                    zn = groupBase(word, ZN_X4_SHIFT, 4);
+                    shift = RSHR_SB_BASE - ((word >>> ZM5_SHIFT) & RSHR_FIELD_MASK);
+                }
+                case RSHR_DH -> {
+                    zd = word & REGISTER_MASK;
+                    zn = groupBase(word, ZN_X4_SHIFT, 4);
+                    shift = RSHR_DH_BASE - ((((word >>> RSHR_DH_HIGH_BIT_SHIFT) & 1) << RSHR_DH_HIGH_BIT_POSITION)
+                            | ((word >>> ZM5_SHIFT) & RSHR_FIELD_MASK));
+                }
+                case ZD2_ZN5_ZM5 -> {
+                    zd = groupBase(word, ZD_X2_SHIFT, 2);
+                    zn = (word >>> ZN5_SHIFT) & REGISTER_MASK;
+                    zm = (word >>> ZM5_SHIFT) & REGISTER_MASK;
+                }
+                case ZD4_ZN5_ZM5 -> {
+                    zd = groupBase(word, ZD_X4_SHIFT, 4);
+                    zn = (word >>> ZN5_SHIFT) & REGISTER_MASK;
+                    zm = (word >>> ZM5_SHIFT) & REGISTER_MASK;
+                }
+                case SEL2 -> {
+                    zd = groupBase(word, ZD_X2_SHIFT, 2);
+                    zn = groupBase(word, ZN_X2_SHIFT, 2);
+                    zm = groupBase(word, MV_ZM_GROUP_X2_SHIFT, 2);
+                    pg = SEL_PG_BASE + ((word >>> SEL_PG_SHIFT) & SEL_PG_MASK);
+                }
+                case SEL4 -> {
+                    zd = groupBase(word, ZD_X4_SHIFT, 4);
+                    zn = groupBase(word, ZN_X4_SHIFT, 4);
+                    zm = groupBase(word, MV_ZM_GROUP_X4_SHIFT, 4);
+                    pg = SEL_PG_BASE + ((word >>> SEL_PG_SHIFT) & SEL_PG_MASK);
+                }
+            }
+            return new Ir64Op.SmeConstructive(row.op(), esz, row.sources(), row.destinations(), zd, zn, zm, shift, pg,
+                    address);
+        }
+        return null;
+    }
+
+    /// Gates medidos no `translate-sme.c`, linha a linha: `FCVT_w`/`FCVTL` `FEAT_SME_F16F16`; FP8 `FEAT_SME2` +
+    /// `FEAT_FP8` (`aa64_sme2_f8cvt`); `*RSHRN_sh` `FEAT_SME2` OU `FEAT_SVE2p1`; `FCLAMP` com `esz = 0` (`bfloat16`)
+    /// `FEAT_SVE_B16B16`; o resto `FEAT_SME2`.
+    private boolean constructiveGate(SmeConstructiveRows.Row row, int esz) {
+        if (row.op() == Ir64Op.SmeConstructive.Op.FCLAMP && esz == ESZ_BFLOAT16
+                && !architecture.has(Aarch64Feature.SVE_B16B16)) {
+            return false;
+        }
+        return switch (row.gate()) {
+            case SME2 -> hasSme2();
+            case SME_F16F16 -> hasSme2() && architecture.has(Aarch64Feature.SME_F16F16);
+            case SME2_OR_SVE2P1 -> hasSme2() || architecture.has(Aarch64Feature.SVE2_1);
+            case SME2_FP8 -> hasSme2() && architecture.has(Aarch64Feature.FP8);
+        };
     }
 
     /// Base do grupo alinhado de `count` registradores (`times_2`/`times_4` do `.decode`).

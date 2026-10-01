@@ -95,7 +95,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
         Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct,
         Ir64Op.SmeMop4, Ir64Op.SmeTmop, Ir64Op.SmeZeroArray, Ir64Op.SmeMovt, Ir64Op.SmeLut,
-        Ir64Op.SmeMultiVectorSingle, Ir64Op.SmeArrayMultiVector {
+        Ir64Op.SmeMultiVectorSingle, Ir64Op.SmeArrayMultiVector, Ir64Op.SmeConstructive {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -572,6 +572,9 @@ public sealed interface Ir64Op permits
         /// B18.9: SME2 multi-vetor com resultado em vetores do array `ZA` (`ADD_azz_n1`/`FDOT_n1`/`SMLALL_n1`/…) — ver
         /// {@link SmeArrayMultiVector}.
         public static final int SME_ARRAY_MULTI_VECTOR = 210;
+        /// B18.12: SME2 multi-vetor SVE "constructive" (conversões, estreitamento/alargamento, `ZIP`/`UZP`, `*CLAMP`,
+        /// `SEL`) com resultado em registradores `Z` — ver {@link SmeConstructive}.
+        public static final int SME_CONSTRUCTIVE = 211;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5428,6 +5431,8 @@ public sealed interface Ir64Op permits
             FMLALL_B(2, 4), FDOT_SB(2, 1), FMLAL_HB(1, 2), FDOT_HB(1, 1),
             FADD_H(1, 1), FADD_S(2, 1), FADD_D(3, 1), BFADD(1, 1), FSUB_H(1, 1), FSUB_S(2, 1), FSUB_D(3, 1),
             BFSUB(1, 1),
+            // ── B18.12: `ADD_aaz`/`SUB_aaz` — acumula `Zm` INTEIRO sobre o vetor de `ZA` (`ZA ±= Zm`, sem `Zn`) ──
+            ADD_AAZ_S(2, 1), ADD_AAZ_D(3, 1), SUB_AAZ_S(2, 1), SUB_AAZ_D(3, 1),
             // ── B18.11: dot VERTICAL (só existe na forma indexada) ──
             SVDOT_2H(2, 1), SVDOT_4B(2, 1), SVDOT_4H(3, 1), UVDOT_2H(2, 1), UVDOT_4B(2, 1), UVDOT_4H(3, 1),
             SUVDOT(2, 1), USVDOT(2, 1), FVDOT_SH(2, 1), BFVDOT(2, 1), FVDOTB(2, 1), FVDOTT(2, 1), FVDOT_HB(1, 1);
@@ -5465,6 +5470,51 @@ public sealed interface Ir64Op permits
         }
 
         @Override public int kind() { return Kind.SME_ARRAY_MULTI_VECTOR; }
+    }
+
+    /// SME2 multi-vetor SVE "constructive" (B18.12, `FEAT_SME2` + o gate de cada linha): grupos de `2`/`4` registradores
+    /// `Z` CONSECUTIVOS (`%zd_ax2`/`%zd_ax4`/`%zn_ax*`, já multiplicados) lidos e escritos como UM operando só, sem
+    /// predicado (a exceção é {@link Op#SEL}, governado por `PN8`-`PN15`). **Não toca `ZA`** — exige modo streaming
+    /// (`SVL`, nunca `VL`), exceto as três `*RSHRN_sh` compartilhadas com `FEAT_SVE2p1`.
+    ///
+    /// {@link #sources}/{@link #destinations} são quantos registradores a instrução LÊ/ESCREVE (`1`/`2`, `2`/`1`,
+    /// `4`/`1`, `1`/`2`, `2`/`4`, `n`/`n`) — o `n` do `&zz_n` do `.decode` NÃO é isso (vale `1` nos formatos de
+    /// estreitar/alargar). {@link #esz} é o tamanho do elemento da operação (o do ELEMENTO LARGO nas estreitas, o do
+    /// DESTINO nas `*UNPK`, `4` = 128 bits só em `ZIP`/`UZP`).
+    record SmeConstructive(
+            Op op,
+            int esz,
+            int sources,
+            int destinations,
+            /// Primeiro registrador de destino — JÁ multiplicado pelo alinhamento do grupo.
+            int zd,
+            /// Primeiro registrador do grupo de origem (ou o `Zn` único nas formas `zn:5`).
+            int zn,
+            /// `Zm` (`ZIP_2`/`UZP_2`/`*CLAMP`: registrador único; `SEL`: base do grupo); `0` onde não existe.
+            int zm,
+            /// Deslocamento à direita (`*RSHR*`, JÁ calculado como `N - campo`); `0` nas demais.
+            int shift,
+            /// `PNg` de `SEL` (`8`-`15`); `0` nas demais.
+            int pg,
+            long instructionAddress) implements Ir64Op {
+        /// As operações das seções `### SME2 Multi-vector SVE Constructive Unary`/`Binary`/`Select`.
+        public enum Op {
+            // conversão FP: precisão (estreitar sequencial/intercalado e alargar sequencial/intercalado)
+            BFCVT, BFCVTN, FCVT_N, FCVTN, FCVT_W, FCVTL,
+            // FP ↔ inteiro e arredondamento (mesma largura, `binary32`)
+            FCVTZS, FCVTZU, SCVTF, UCVTF, FRINTN, FRINTP, FRINTM, FRINTA,
+            // estreitamento inteiro saturante: `*CVT*` sem deslocamento, `*RSHR*` com; `N` = intercalado
+            SQCVT, UQCVT, SQCVTU, SQCVTN, UQCVTN, SQCVTUN,
+            SQRSHR, UQRSHR, SQRSHRU, SQRSHRN, UQRSHRN, SQRSHRUN,
+            // alargamento inteiro
+            SUNPK, UUNPK,
+            // FP8
+            F1CVT, F2CVT, F1CVTL, F2CVTL, BF1CVT, BF2CVT, BF1CVTL, BF2CVTL, FCVT_BH, FCVT_BS, FCVTN_BS,
+            // permutação, clamp e seleção
+            ZIP, UZP, FCLAMP, SCLAMP, UCLAMP, SEL
+        }
+
+        @Override public int kind() { return Kind.SME_CONSTRUCTIVE; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

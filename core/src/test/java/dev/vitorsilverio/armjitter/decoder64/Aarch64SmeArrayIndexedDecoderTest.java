@@ -77,6 +77,7 @@ class Aarch64SmeArrayIndexedDecoderTest {
         assertEquals(EXPECTED_MNEMONICS, all.stream().map(Word::op).distinct().count());
         // `ADD`/`SUB`/`FADD`/`FSUB`/`BFADD`/`BFSUB` (B18.9/B18.10) NÃO existem na forma indexada.
         EnumSet<Op> expected = EnumSet.allOf(Op.class);
+        expected.removeAll(EnumSet.of(Op.ADD_AAZ_S, Op.ADD_AAZ_D, Op.SUB_AAZ_S, Op.SUB_AAZ_D)); // B18.12: têm teste próprio
         expected.removeAll(EnumSet.of(Op.ADD_S, Op.ADD_D, Op.SUB_S, Op.SUB_D, Op.FADD_H, Op.FADD_S, Op.FADD_D,
                 Op.BFADD, Op.FSUB_H, Op.FSUB_S, Op.FSUB_D, Op.BFSUB));
         assertEquals(expected, EnumSet.copyOf(all.stream().map(Word::op).toList()));
