@@ -402,6 +402,9 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SVE_CRYPTO_SM4_KEY_UPDATE ->
                     SveCryptoOps.executeSm4KeyUpdate(core, (Ir64Op.SveCryptoSm4KeyUpdate) op);
             case Ir64Op.Kind.SVE_CRYPTO_RAX1 -> SveCryptoOps.executeRax1(core, (Ir64Op.SveCryptoRax1) op);
+            case Ir64Op.Kind.SME_ZERO -> SmeMovaOps.execute(core, (Ir64Op.SmeZero) op);
+            case Ir64Op.Kind.SME_ZERO_ZT0 -> SmeMovaOps.execute(core, (Ir64Op.SmeZeroZt0) op);
+            case Ir64Op.Kind.SME_MOVA -> SmeMovaOps.execute(core, (Ir64Op.SmeMova) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

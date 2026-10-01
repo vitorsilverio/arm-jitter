@@ -90,6 +90,7 @@ public final class Aarch64Decoder {
     /// streaming são embrulhadas em `Ir64Op.StreamingRestricted`.
     private final boolean streamingModeRestrictions;
     private final Aarch64SveDecoder sveDecoder;
+    private final Aarch64SmeDecoder smeDecoder;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -103,6 +104,7 @@ public final class Aarch64Decoder {
         this.architecture = Objects.requireNonNull(architecture, "architecture");
         this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
         this.sveDecoder = new Aarch64SveDecoder(architecture);
+        this.smeDecoder = new Aarch64SmeDecoder(architecture);
     }
 
     /// Retorna a arquitetura configurada para este decoder (B11.2).
@@ -2113,9 +2115,14 @@ public final class Aarch64Decoder {
     }
 
     /// B17.28: os `LD1`/`ST1` multi-vetor governados por predicado-como-contador vivem no espaço `bits[28:26] = 000` (o da
-    /// SME), fora da classe SVE. O que o {@link Aarch64SveDecoder} não reconhece é recusado (G8).
+    /// SME), fora da classe SVE. B18.3: `ZERO`/`MOVA`/`MOVAZ` (prefixo `0xC0`) também vivem aqui — tentados
+    /// DEPOIS do {@link Aarch64SveDecoder} (prefixos `0xA0`/`0xA1`, sem colisão de máscara). O que nenhum
+    /// dos dois reconhece é recusado (G8).
     private Ir64Op decodeMultiVector(int word, long address) {
         Ir64Op op = sveDecoder.decodeMultiVector(word, address);
+        if (op == null) {
+            op = smeDecoder.decode(word, address);
+        }
         if (op == null) {
             throw unsupported(word, address);
         }

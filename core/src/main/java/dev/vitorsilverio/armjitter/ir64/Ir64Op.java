@@ -91,7 +91,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFpConvertOddElements, Ir64Op.SveFpLogB, Ir64Op.SveFp8FusedMultiplyAddLong,
         Ir64Op.SveFp8DotProduct, Ir64Op.SveFpMultiplyAddLongWiden, Ir64Op.SveFpMultiplyAddLongWidenBFloat16,
         Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16,
-        Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1 {
+        Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
+        Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -537,6 +538,12 @@ public sealed interface Ir64Op permits
         public static final int SVE_CRYPTO_SM4_KEY_UPDATE = 195;
         /// B17.24: `RAX1` vetorial (`FEAT_SVE_SHA3`) — ver {@link SveCryptoRax1}.
         public static final int SVE_CRYPTO_RAX1 = 196;
+        /// B18.3: `ZERO` (`FEAT_SME`) — ver {@link SmeZero}.
+        public static final int SME_ZERO = 197;
+        /// B18.3: `ZERO_zt0` (`FEAT_SME2`) — ver {@link SmeZeroZt0}.
+        public static final int SME_ZERO_ZT0 = 198;
+        /// B18.3: `MOVA`/`MOVAZ` (`FEAT_SME`/`FEAT_SME2`/`FEAT_SME2p1`) — ver {@link SmeMova}.
+        public static final int SME_MOVA = 199;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5010,6 +5017,75 @@ public sealed interface Ir64Op permits
             int rm,
             long instructionAddress) implements Ir64Op {
         @Override public int kind() { return Kind.SVE_CRYPTO_RAX1; }
+    }
+
+    /// SME `ZERO` (B18.3, `FEAT_SME`): zera linhas de `ZA` por máscara de 8 bits — a linha `i`
+    /// (`0`..`SVL-1`) é zerada quando o bit `i MOD 8` de {@link #imm8} está ligado (`helper_sme_zero`
+    /// do QEMU: `i % 8`, sempre 8 grupos, independente de `esz` — não há campo `esz` nesta
+    /// instrução). `imm8 == 0xFF` zera `ZA` inteiro.
+    record SmeZero(
+            /// Máscara de 8 bits; o bit `n` governa as linhas `n`, `n+8`, `n+16`, ….
+            int imm8,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_ZERO; }
+    }
+
+    /// SME2 `ZERO_zt0` (B18.3, `FEAT_SME2`): zera o registrador `ZT0` (512 bits) inteiro.
+    record SmeZeroZt0(long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_ZERO_ZT0; }
+    }
+
+    /// SME `MOVA`/`MOVAZ` (B18.3): move entre o array `ZA` e o banco `Z` — três formas no mesmo record
+    /// (campos não usados por uma forma ficam no valor documentado, mesma disciplina de
+    /// {@link SveCounterPredicate}):
+    ///
+    /// - **Predicada de 1 vetor** ({@link #predicated} `true`, `FEAT_SME`): `MOVA_tz`/`MOVA_zt`. Elemento
+    ///   com {@link #pg} falso não é escrito (merging).
+    /// - **Multi-vetor de tile** ({@link #predicated} `false`, {@link #tile} `≥ 0`, `FEAT_SME2`):
+    ///   `MOVA_tz2`/`MOVA_zt2`/`MOVA_tz4`/`MOVA_zt4` e, com {@link #zero} `true` (`FEAT_SME2p1`),
+    ///   `MOVAZ_zt`/`MOVAZ_zt2`/`MOVAZ_zt4` — sem predicado, {@link #count} vetores `Z<zr×count>`..
+    ///   `Z<zr×count+count-1>` consecutivos.
+    /// - **Array-vetor** ({@link #predicated} `false`, {@link #tile} `-1`, `FEAT_SME2`): `MOVA_az2`/
+    ///   `MOVA_az4`/`MOVA_za2`/`MOVA_za4` e, com {@link #zero} `true` (`FEAT_SME2p1`), `MOVAZ_za2`/
+    ///   `MOVAZ_za4` — move {@link #count} LINHAS INTEIRAS de `ZA` (sem tile/`esz`/eixo), endereçadas por
+    ///   `W8`-`W11` (`Aarch64MatrixTileAddressing#resolveArrayBaseRow`, `core64`).
+    ///
+    /// `MOVAZ` sempre tem {@link #toVector} `true` (lê `ZA`, nunca escreve) e zera a origem lida — a
+    /// slice/linha INTEIRA acessada, não só os elementos que a instrução lê (ver `zero` nos `TRANS_FEAT`
+    /// de `translate-sme.c`: o mesmo span lido é zerado, estenda-se ele por uma linha inteira ou por uma
+    /// coluna inteira do tile).
+    record SmeMova(
+            /// `true` = resultado vai para `Z<zr>` (`..._zt...`); `false` = vai para `ZA` (`..._tz...`/
+            /// `..._az...`).
+            boolean toVector,
+            /// `true` = zera a origem lida (`MOVAZ`, `FEAT_SME2p1`); implica {@link #toVector}.
+            boolean zero,
+            /// `true` = forma predicada de 1 vetor (`MOVA_tz`/`MOVA_zt`); `false` = multi-vetor ou
+            /// array-vetor (sem predicado — {@link #pg} vale `-1`).
+            boolean predicated,
+            /// Índice do predicado `Pg` governante (só {@link #predicated}); `-1` nas outras formas.
+            int pg,
+            /// `1` (forma predicada), `2` ou `4` — número de vetores `Z`/linhas de `ZA` movidos.
+            int count,
+            /// Tamanho de elemento (`0` = `B` … `4` = `Q`); `-1` nas formas array-vetor (sempre linha
+            /// inteira, granularidade de byte).
+            int esz,
+            /// Índice do tile `ZAn` (`0`..`(1 << esz) - 1`); `-1` nas formas array-vetor.
+            int tile,
+            /// `true` = slice vertical (`ZAn.V`, coluna do tile); `false` = horizontal (`ZAn.H`, linha).
+            /// Sempre `false` nas formas array-vetor (não têm eixo).
+            boolean vertical,
+            /// Primeiro registrador `Z` do grupo (o grupo é `Z<zr×count>`..`Z<zr×count+count-1>` quando
+            /// `count > 1`; o próprio `Z<zr>` quando `count == 1`).
+            int zr,
+            /// Índice do registrador geral que fornece o deslocamento dinâmico: `W12`-`W15`
+            /// (`%mova_rs`, formas predicada/multi-vetor de tile) ou `W8`-`W11` (`%mova_rv`, formas
+            /// array-vetor) — já resolvido pelo decoder.
+            int registerIndex,
+            /// O campo `off` do encoding.
+            int offset,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_MOVA; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

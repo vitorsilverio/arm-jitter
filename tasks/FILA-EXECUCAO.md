@@ -39,7 +39,14 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-10-01, protocolo revisado por custo de contexto)
+## Onde estamos (atualizado 2026-10-01)
+
+**`B18.3` fechada** — `ZERO`/`ZERO_zt0`/`MOVA`/`MOVAZ` (47 encodings) decodificam e executam contra o
+banco `ZA` da B18.1, endereçamento de tile/slice reusável (`Aarch64MatrixTileAddressing`), 100% JaCoCo,
+palavras conferidas contra `aarch64-none-elf-as`. **`docs/COBERTURA-ISA.md` não mudou** (achado: a
+ferramenta marca `sme.decode` inteiro como "não aplicável" enquanto ele for `NOT_IN_ANY_PRESET` — só a
+**B18.13** liga a curadoria por versão, como já fez para `sve.decode` na B17.26; implementação real já
+pronta, só falta a medição reconhecer). Ver **Resultado** na task para detalhe.
 
 **`B17.29` fechada** (resíduo do fechamento SVE da B17.26) — corrigido o gate `SVE2` indevido que
 escondia `SMMLA`/`USMMLA`/`UMMLA` (só exigem `SVE`+`FEAT_I8MM`) e triados os ~30 `❌` restantes de
@@ -48,7 +55,7 @@ só alcançáveis via `%extrator` do QEMU, ficavam sempre `0`; ganhou campo sint
 `FILL_STRATEGIES` para nunca retroagir sobre as estratégias antigas — ver **Resultado** na task para o
 quase-regressão achado em `VCVT_F16_F32` do NEON e como foi evitado). Global **98%→99%**, A64 por
 versão `ARMv9.0-A`-`ARMv9.5-A` **95%→99%**, grupo SVE/SVE2 **84-85%→96-97%**. `sme.decode` segue o
-ÚNICO grupo `NOT_IN_ANY_PRESET` da tabela.
+ÚNICO grupo `NOT_IN_ANY_PRESET` da tabela (mas já tem decode/execução reais desde a B18.3 acima).
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -60,16 +67,16 @@ estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por qua
 decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B18.3+** (SME, 623 encodings de `sme.decode`, ainda `NOT_IN_ANY_PRESET` — ÚNICO grupo nesse estado),
-**B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo,
-Truffle).
+abertos: **B18.4+** (SME, 576 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
+achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
+e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.3`** em diante (SME:
-`MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em diante
-(modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] — decompor em sub-tasks executáveis),
-`C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da B18.2: ligar
-`FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências
-no `INDICE.md` antes de pegar.
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.4`** em diante (SME:
+memória `LD1`/`ST1` de tile, outer product, SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
+já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
+decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências
+nomeadas da B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com
+`SM=1`. Conferir dependências no `INDICE.md` antes de pegar.
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,
