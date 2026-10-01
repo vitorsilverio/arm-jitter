@@ -411,6 +411,9 @@ public final class Ir64BlockExecutor {
             case Ir64Op.Kind.SME_OUTER_PRODUCT -> SmeOuterProductOps.execute(core, (Ir64Op.SmeOuterProduct) op);
             case Ir64Op.Kind.SME_MOP4 -> SmeMop4Ops.execute(core, (Ir64Op.SmeMop4) op);
             case Ir64Op.Kind.SME_TMOP -> SmeMop4Ops.execute(core, (Ir64Op.SmeTmop) op);
+            case Ir64Op.Kind.SME_ZERO_ARRAY -> SmeZt0Ops.execute(core, (Ir64Op.SmeZeroArray) op);
+            case Ir64Op.Kind.SME_MOVT -> SmeZt0Ops.execute(core, (Ir64Op.SmeMovt) op);
+            case Ir64Op.Kind.SME_LUT -> SmeZt0Ops.execute(core, (Ir64Op.SmeLut) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();

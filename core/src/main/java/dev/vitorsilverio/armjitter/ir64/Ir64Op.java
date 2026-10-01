@@ -94,7 +94,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
         Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct,
-        Ir64Op.SmeMop4, Ir64Op.SmeTmop {
+        Ir64Op.SmeMop4, Ir64Op.SmeTmop, Ir64Op.SmeZeroArray, Ir64Op.SmeMovt, Ir64Op.SmeLut {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -559,6 +559,12 @@ public sealed interface Ir64Op permits
         public static final int SME_MOP4 = 204;
         /// B18.5b: produto externo esparso (`TMOP`, `FEAT_SME_TMOP`) — ver {@link SmeTmop}.
         public static final int SME_TMOP = 205;
+        /// B18.6: `ZERO` multi-vetor de `ZA` (`FEAT_SME2p1`) — ver {@link SmeZeroArray}.
+        public static final int SME_ZERO_ARRAY = 206;
+        /// B18.6: `MOVT` de/para `ZT0` (`FEAT_SME2`/`FEAT_SME_LUTv2`) — ver {@link SmeMovt}.
+        public static final int SME_MOVT = 207;
+        /// B18.6: `LUTI2`/`LUTI4` (`FEAT_SME2`/`SME2p1`/`SME_LUTv2`) — ver {@link SmeLut}.
+        public static final int SME_LUT = 208;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5268,6 +5274,54 @@ public sealed interface Ir64Op permits
         }
 
         @Override public int kind() { return Kind.SME_TMOP; }
+    }
+
+    /// SME `ZERO` multi-vetor de `ZA` (B18.6, `FEAT_SME2p1`): zera {@link #ngrp} grupos de {@link #nvec} linhas de `ZA`.
+    /// A linha-base é `((W<rv> & ~(nvec-1)) + off) MOD (SVL_B / ngrp)` (`get_zarray` do QEMU) e o grupo `r` começa
+    /// em `base + r × (SVL_B / ngrp)`. `off` já vem ESCALADO pelo decoder (`%off3_x2`/`%off2_x2`/`%off2_x4`/`%off1_x4`).
+    record SmeZeroArray(
+            int ngrp,
+            int nvec,
+            /// `W8`-`W11` (`%mova_rv`).
+            int registerIndex,
+            int off,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_ZERO_ARRAY; }
+    }
+
+    /// SME2 `MOVT` (B18.6): move entre `ZT0` e um registrador. `ZT_TO_X`/`X_TO_ZT` (`FEAT_SME2`) transferem a palavra
+    /// de 64 bits `off` (`0`-`7`) de `ZT0`; `Rt = 31` é `XZR`. `VECTOR_TO_ZT` (`FEAT_SME_LUTv2`, exige modo streaming)
+    /// copia `MIN(SVL_B, 64)` bytes de `Z<rt>` para o segmento `off MOD (64 / tsize)` de `ZT0` e, com `off = 0`,
+    /// zera o resto de `ZT0` (`trans_MOVT_ztz` do QEMU, `maxsz = offset ? tsize : 64`).
+    record SmeMovt(
+            Form form,
+            int rt,
+            int off,
+            long instructionAddress) implements Ir64Op {
+        /// As três formas do `.decode`: `MOVT_rzt`, `MOVT_ztr` e `MOVT_ztz`.
+        public enum Form { ZT_TO_X, X_TO_ZT, VECTOR_TO_ZT }
+
+        @Override public int kind() { return Kind.SME_MOVT; }
+    }
+
+    /// SME2 `LUTI2`/`LUTI4` (B18.6): para cada elemento do destino, um índice de 2/4 bits tirado de `Zn` escolhe uma
+    /// entrada de 32 bits de `ZT0` (a tabela, 16 entradas) e o destino recebe os {@link #esz} bytes baixos dela.
+    /// {@link #count} destinos (`1`/`2`/`4`); consecutivos (`zd`, `zd+1`, …) ou, em {@link #strided}, espaçados de
+    /// `8` (2 vetores) / `4` (4 vetores). `index` escolhe o segmento (`index & (segmentos - 1)`, `segmentos =
+    /// bitsElemento / (bitsIndice × count)`); `LUTI4_*_4b` lê os índices de `Zn`/`Zn+1` e tem `index = 0` fixo
+    /// (`helper_sme2_luti4_4b`).
+    record SmeLut(
+            /// `false` = `LUTI2` (índice de 2 bits), `true` = `LUTI4` (4 bits).
+            boolean fourBit,
+            /// Tamanho do elemento de destino: `0` = byte, `1` = half, `2` = word.
+            int esz,
+            int count,
+            boolean strided,
+            int zd,
+            int zn,
+            int index,
+            long instructionAddress) implements Ir64Op {
+        @Override public int kind() { return Kind.SME_LUT; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

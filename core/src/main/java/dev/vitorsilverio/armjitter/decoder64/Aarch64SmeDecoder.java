@@ -224,6 +224,93 @@ final class Aarch64SmeDecoder {
         return new TmopRow(mask, value, op, extra);
     }
 
+    // ── `### SME Multiple Zero` + `### SME Lookup Table Read` + `### SME Move into/from ZT0` (B18.6) ─────────
+    private static final int MOVT_OFF_SHIFT = 12;
+    private static final int MOVT_OFF_MASK = 0b111;
+    private static final int MOVT_VECTOR_OFF_MASK = 0b11;
+    private static final int MOVT_RT_MASK = 0b11111;
+    private static final int LUT_ESZ_SHIFT = 12;
+    private static final int LUT_ESZ_MASK = 0b11;
+    /// `idx` termina sempre no bit 14 e perde um bit por duplicação de `count`: `LUTI2` tem `4 - log2(count)` bits,
+    /// `LUTI4` tem `3 - log2(count)`, a partir do bit `14 + log2(count)`.
+    private static final int LUT_IDX_BASE_SHIFT = 14;
+    private static final int LUTI2_IDX_BITS = 4;
+    private static final int LUTI4_IDX_BITS = 3;
+    private static final int LUT_ZN_SHIFT = 5;
+    private static final int LUT_ZN_PAIR_SHIFT = 6;
+    private static final int LUT_ZN_PAIR_MASK = 0b1111;
+    private static final int LUT_ZD_X2_SHIFT = 1;
+    private static final int LUT_ZD_X2_MASK = 0b1111;
+    private static final int LUT_ZD_X4_SHIFT = 2;
+    private static final int LUT_ZD_X4_MASK = 0b111;
+    /// `do_lut_s8`/`do_lut_s4` do QEMU: nas formas strided `zd` precisa estar alinhado ao espaçamento.
+    private static final int LUT_STRIDED_X2_ZD_ALIGN_MASK = 0b01000;
+    private static final int LUT_STRIDED_X4_ZD_ALIGN_MASK = 0b01100;
+
+    /// Linha de `ZERO_za`: máscara/valor de 32 bits + `ngrp`/`nvec` + a largura e a escala do `off` DESTA linha.
+    private record ZeroArrayRow(int mask, int value, int ngrp, int nvec, int offMask, int offScale) {
+    }
+
+    // Geradas por script a partir de `target/isa-decode/sme.decode` linhas 1019-1041 — NÃO editar à mão.
+    private static final ZeroArrayRow[] ZERO_ARRAY_ROWS = {
+            new ZeroArrayRow(0xFFFF9FF8, 0xC00C0000, 2, 1, 0b111, 1),
+            new ZeroArrayRow(0xFFFF9FF8, 0xC00E0000, 4, 1, 0b111, 1),
+            new ZeroArrayRow(0xFFFF9FF8, 0xC00C8000, 1, 2, 0b111, 2),
+            new ZeroArrayRow(0xFFFF9FFC, 0xC00D0000, 2, 2, 0b11, 2),
+            new ZeroArrayRow(0xFFFF9FFC, 0xC00D8000, 4, 2, 0b11, 2),
+            new ZeroArrayRow(0xFFFF9FFC, 0xC00E8000, 1, 4, 0b11, 4),
+            new ZeroArrayRow(0xFFFF9FFE, 0xC00F0000, 2, 4, 0b1, 4),
+            new ZeroArrayRow(0xFFFF9FFE, 0xC00F8000, 4, 4, 0b1, 4),
+    };
+
+    private static final int MOVT_RZT_MASK = 0xFFFF8FE0;
+    private static final int MOVT_RZT_VALUE = 0xC04C03E0;
+    private static final int MOVT_ZTR_VALUE = 0xC04E03E0;
+    private static final int MOVT_ZTZ_MASK = 0xFFFFCFE0;
+    private static final int MOVT_ZTZ_VALUE = 0xC04F03E0;
+
+    /// Linha de `LUTI2`/`LUTI4`: máscara/valor + variante. Gates: consecutivas = `FEAT_SME2`; strided =
+    /// `FEAT_SME2p1`; `LUTI4_*_4b` ainda exige `FEAT_SME_LUTv2` (`aa64_sme_lutv2`/`aa64_sme2p1_lutv2` do QEMU).
+    private record LutRow(int mask, int value, boolean fourBit, int esz, int count, boolean strided,
+                          boolean needsLutv2) {
+    }
+
+    // Geradas por script a partir de `target/isa-decode/sme.decode` linhas 1042-1089 — NÃO editar à mão. NÃO é
+    // produto cartesiano (Armadilha 3): não existe `LUTI2_s_4s` e `LUTI4_*_4b` tem `idx = 0` fixo.
+    private static final LutRow[] LUT_ROWS = {
+            lut(0xFFFC3C00, 0xC0CC0000, false, 0, 1, false, false), // LUTI2_c_1b
+            lut(0xFFFC3C00, 0xC0CC1000, false, 1, 1, false, false), // LUTI2_c_1h
+            lut(0xFFFC3C00, 0xC0CC2000, false, 2, 1, false, false), // LUTI2_c_1s
+            lut(0xFFFC7C01, 0xC08C4000, false, 0, 2, false, false), // LUTI2_c_2b
+            lut(0xFFFC7C01, 0xC08C5000, false, 1, 2, false, false), // LUTI2_c_2h
+            lut(0xFFFC7C01, 0xC08C6000, false, 2, 2, false, false), // LUTI2_c_2s
+            lut(0xFFFCFC03, 0xC08C8000, false, 0, 4, false, false), // LUTI2_c_4b
+            lut(0xFFFCFC03, 0xC08C9000, false, 1, 4, false, false), // LUTI2_c_4h
+            lut(0xFFFCFC03, 0xC08CA000, false, 2, 4, false, false), // LUTI2_c_4s
+            lut(0xFFFC7C00, 0xC09C4000, false, 0, 2, true, false), // LUTI2_s_2b
+            lut(0xFFFC7C00, 0xC09C5000, false, 1, 2, true, false), // LUTI2_s_2h
+            lut(0xFFFCFC00, 0xC09C8000, false, 0, 4, true, false), // LUTI2_s_4b
+            lut(0xFFFCFC00, 0xC09C9000, false, 1, 4, true, false), // LUTI2_s_4h
+            lut(0xFFFE3C00, 0xC0CA0000, true, 0, 1, false, false), // LUTI4_c_1b
+            lut(0xFFFE3C00, 0xC0CA1000, true, 1, 1, false, false), // LUTI4_c_1h
+            lut(0xFFFE3C00, 0xC0CA2000, true, 2, 1, false, false), // LUTI4_c_1s
+            lut(0xFFFE7C01, 0xC08A4000, true, 0, 2, false, false), // LUTI4_c_2b
+            lut(0xFFFE7C01, 0xC08A5000, true, 1, 2, false, false), // LUTI4_c_2h
+            lut(0xFFFE7C01, 0xC08A6000, true, 2, 2, false, false), // LUTI4_c_2s
+            lut(0xFFFEFC03, 0xC08A9000, true, 1, 4, false, false), // LUTI4_c_4h
+            lut(0xFFFEFC03, 0xC08AA000, true, 2, 4, false, false), // LUTI4_c_4s
+            lut(0xFFFFFC23, 0xC08B0000, true, 0, 4, false, true), // LUTI4_c_4b (zn par, idx = 0)
+            lut(0xFFFE7C00, 0xC09A4000, true, 0, 2, true, false), // LUTI4_s_2b
+            lut(0xFFFE7C00, 0xC09A5000, true, 1, 2, true, false), // LUTI4_s_2h
+            lut(0xFFFEFC00, 0xC09A9000, true, 1, 4, true, false), // LUTI4_s_4h
+            lut(0xFFFFFC20, 0xC09B0000, true, 0, 4, true, true), // LUTI4_s_4b (zn par, idx = 0)
+    };
+
+    private static LutRow lut(int mask, int value, boolean fourBit, int esz, int count, boolean strided,
+            boolean needsLutv2) {
+        return new LutRow(mask, value, fourBit, esz, count, strided, needsLutv2);
+    }
+
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 27-138 (ver javadoc da
     // classe) — NÃO editar à mão sem regerar e reconferir.
     private static final Row[] MOVA_ROWS = {
@@ -322,6 +409,10 @@ final class Aarch64SmeDecoder {
                 return decodeTmop(row, word, address);
             }
         }
+        Ir64Op zt0Family = decodeZt0Family(word, address);
+        if (zt0Family != null) {
+            return zt0Family;
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -337,6 +428,70 @@ final class Aarch64SmeDecoder {
                     row.array() ? -1 : row.tile(word), vertical, row.zr(word), registerIndex, row.off(word), address);
         }
         return null;
+    }
+
+    /// `ZERO` multi-vetor, `MOVT` e `LUTI2`/`LUTI4` (B18.6). `null` = não é desta família OU a feature/alinhamento
+    /// da linha falha (G8: cai em `UNIMPLEMENTED`, nunca é confundida com outra instrução).
+    private Ir64Op decodeZt0Family(int word, long address) {
+        for (ZeroArrayRow row : ZERO_ARRAY_ROWS) {
+            if ((word & row.mask()) == row.value()) {
+                if (!hasSme2p1()) {
+                    return null;
+                }
+                int rv = MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
+                return new Ir64Op.SmeZeroArray(row.ngrp(), row.nvec(), rv, (word & row.offMask()) * row.offScale(),
+                        address);
+            }
+        }
+        if ((word & MOVT_RZT_MASK) == MOVT_RZT_VALUE || (word & MOVT_RZT_MASK) == MOVT_ZTR_VALUE) {
+            if (!hasSme2()) {
+                return null;
+            }
+            Ir64Op.SmeMovt.Form form = (word & MOVT_RZT_MASK) == MOVT_RZT_VALUE ? Ir64Op.SmeMovt.Form.ZT_TO_X
+                    : Ir64Op.SmeMovt.Form.X_TO_ZT;
+            return new Ir64Op.SmeMovt(form, word & MOVT_RT_MASK, (word >>> MOVT_OFF_SHIFT) & MOVT_OFF_MASK, address);
+        }
+        if ((word & MOVT_ZTZ_MASK) == MOVT_ZTZ_VALUE) {
+            return architecture.has(Aarch64Feature.SME_LUTV2)
+                    ? new Ir64Op.SmeMovt(Ir64Op.SmeMovt.Form.VECTOR_TO_ZT, word & MOVT_RT_MASK,
+                            (word >>> MOVT_OFF_SHIFT) & MOVT_VECTOR_OFF_MASK, address)
+                    : null;
+        }
+        for (LutRow row : LUT_ROWS) {
+            if ((word & row.mask()) == row.value()) {
+                return decodeLut(row, word, address);
+            }
+        }
+        return null;
+    }
+
+    private Ir64Op decodeLut(LutRow row, int word, long address) {
+        boolean supported = row.strided() ? hasSme2p1() : hasSme2();
+        if (!supported || row.needsLutv2() && !architecture.has(Aarch64Feature.SME_LUTV2)) {
+            return null;
+        }
+        int countLog2 = Integer.numberOfTrailingZeros(row.count());
+        int zd = word & REGISTER_MASK;
+        if (row.strided()) {
+            int alignMask = row.count() == 2 ? LUT_STRIDED_X2_ZD_ALIGN_MASK : LUT_STRIDED_X4_ZD_ALIGN_MASK;
+            if ((zd & alignMask) != 0) {
+                return null;
+            }
+        } else if (row.count() == 2) {
+            zd = ((word >>> LUT_ZD_X2_SHIFT) & LUT_ZD_X2_MASK) * 2;
+        } else if (row.count() == 4) {
+            zd = ((word >>> LUT_ZD_X4_SHIFT) & LUT_ZD_X4_MASK) * 4;
+        }
+        boolean pairSource = row.fourBit() && row.esz() == 0 && row.count() == 4;
+        int zn = pairSource ? ((word >>> LUT_ZN_PAIR_SHIFT) & LUT_ZN_PAIR_MASK) * 2
+                : (word >>> LUT_ZN_SHIFT) & REGISTER_MASK;
+        int index = 0;
+        if (!pairSource) {
+            int idxBits = (row.fourBit() ? LUTI4_IDX_BITS : LUTI2_IDX_BITS) - countLog2;
+            index = (word >>> (LUT_IDX_BASE_SHIFT + countLog2)) & ((1 << idxBits) - 1);
+        }
+        return new Ir64Op.SmeLut(row.fourBit(), (word >>> LUT_ESZ_SHIFT) & LUT_ESZ_MASK, row.count(),
+                row.strided(), zd, zn, index, address);
     }
 
     /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits

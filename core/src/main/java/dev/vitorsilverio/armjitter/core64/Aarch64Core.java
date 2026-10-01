@@ -181,6 +181,7 @@ public final class Aarch64Core {
     private static final long ID_AA64SMFR0_I8I32 = 0xFL << 36;
     private static final long ID_AA64SMFR0_SMOP4 = 1L << 0;
     private static final long ID_AA64SMFR0_STMOP = 1L << 16;
+    private static final long ID_AA64SMFR0_LUTV2 = 1L << 60;
     private static final long ID_AA64SMFR0_F8F32 = 1L << 40;
     private static final long ID_AA64SMFR0_F8F16 = 1L << 41;
     private static final long ID_AA64SMFR0_F16F16 = 1L << 42;
@@ -842,7 +843,7 @@ public final class Aarch64Core {
     /// software real escolher caminho que bate em `UNIMPLEMENTED`). Hoje (B18.5): o produto externo base
     /// (`F32F32`/`B16F32`/`F16F32`/`I8I32`, mandatórios em `FEAT_SME`), `BI32I32` (`BMOPA`, SME2) e os campos das
     /// features fatiadas `I16I64`/`F64F64`/`F16F16`/`B16B16`/`F8F32`/`F8F16`. Pendentes para as próximas tasks:
-    /// `I16I32` (SME2 multi-vetor), `LUTv2`/`FA64`; `SMOP4`/`STMOP` acendem com `SME_MOP4`/`SME_TMOP` (B18.5b). Zero sem SME.
+    /// `I16I32` (SME2 multi-vetor), `FA64`; `LUTv2` acende com `SME_LUTV2` (B18.6); `SMOP4`/`STMOP` acendem com `SME_MOP4`/`SME_TMOP` (B18.5b). Zero sem SME.
     private long smeVersionField() {
         if (!hasSme()) {
             return 0L;
@@ -862,6 +863,7 @@ public final class Aarch64Core {
         field |= architecture.has(Aarch64Feature.SME_F8F16) ? ID_AA64SMFR0_F8F16 : 0L;
         field |= architecture.has(Aarch64Feature.SME_MOP4) ? ID_AA64SMFR0_SMOP4 : 0L;
         field |= architecture.has(Aarch64Feature.SME_TMOP) ? ID_AA64SMFR0_STMOP : 0L;
+        field |= architecture.has(Aarch64Feature.SME_LUTV2) ? ID_AA64SMFR0_LUTV2 : 0L;
         return field;
     }
 
