@@ -185,6 +185,17 @@ class Aarch64ArchitectureTest {
         assertEquals("ARMv8.0-A", Aarch64Architecture.ARMV8_0_A.toString());
     }
 
+    /// B17.26: presets de catálogo (não entram na escada `AARCH64_ARCHITECTURES` do medidor) para
+    /// núcleos ARMv8.x reais com SVE opcional — A64FX e Neoverse V1.
+    @Test
+    void sveCatalogPresetsAddSveWithoutMutatingTheBase() {
+        assertTrue(Aarch64Architecture.ARMV8_2_A_SVE.has(Aarch64Feature.SVE));
+        assertFalse(Aarch64Architecture.ARMV8_2_A.has(Aarch64Feature.SVE), "a base não pode ser mutada");
+        assertTrue(Aarch64Architecture.ARMV8_4_A_SVE.has(Aarch64Feature.SVE));
+        assertFalse(Aarch64Architecture.ARMV8_4_A.has(Aarch64Feature.SVE), "a base não pode ser mutada");
+        assertFalse(Aarch64Architecture.ARMV8_2_A_SVE.has(Aarch64Feature.SVE2), "SVE2 não confirmada");
+    }
+
     /// B20.8: `ARMV8_R_64` estende `ARMV8_0_A` (não é uma escada de versão) acrescentando
     /// `R_PROFILE`/`PMSA`, sem mutar `ARMV8_0_A` nem qualquer outro preset (G3).
     @Test

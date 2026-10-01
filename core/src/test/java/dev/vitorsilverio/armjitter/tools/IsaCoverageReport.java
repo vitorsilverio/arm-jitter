@@ -165,7 +165,10 @@ public final class IsaCoverageReport {
             new Group("mve.decode", "MVE (Helium) — ARMv8.1-M", 32, Probe.THUMB32, true, MVE_INTEGER, ""),
             new Group("a64.decode", "A64 — AArch64", 32, Probe.A64, false, ALWAYS, ""),
             new Group("sve.decode", "SVE/SVE2 — vetor escalável", 32, Probe.A64, false, NOT_IN_ANY_PRESET,
-                    "Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE."),
+                    "Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE. "
+                            + "`Applicability` continua `NOT_IN_ANY_PRESET` (nenhum `ArmArchitecture` de "
+                            + "32 bits tem SVE), mas B17.26 liga colunas por versão A64 mesmo assim — "
+                            + "ver `appendGroup`/`probeSveApplicability`."),
             new Group("sme.decode", "SME — extensão matricial", 32, Probe.A64, false, NOT_IN_ANY_PRESET,
                     "Extensão opcional do ARMv9; nenhum alvo atual a tem."));
 
@@ -775,7 +778,7 @@ public final class IsaCoverageReport {
                 |---|---|
                 | ✅ | o decoder reconhece o encoding |
                 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
-                | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
+                | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — só para `sve.decode`, B17.26 — medida por sonda dupla, ver `probeSveApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
                 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
 
                 **`⚠️` voltou a ocorrer na E12**, e a previsão de que ele voltaria "ao abrir um novo
@@ -800,8 +803,11 @@ public final class IsaCoverageReport {
                 (microcontrolador). O grupo `a64.decode` (B11.5) tem uma coluna por versão real
                 (`ARMv8.0-A`...`ARMv9.5-A`, presets de `Aarch64Architecture`, B11.1); um mnemônico só
                 é aplicável a partir da versão que a introduz (curadoria de B11.3, não o decoder —
-                só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode`/`sme.decode`
-                continuam uma coluna monolítica `A64` (nada decodifica ainda).
+                só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode` (B17.26) também tem
+                coluna por versão, mas a aplicabilidade é MEDIDA por sonda dupla (nenhum preset
+                declara `SVE2`/sub-features — só `SVE`, a partir de `ARMv9.0-A`), não curada por
+                mnemônico — ver `probeSveApplicability`. `sme.decode` continua uma coluna monolítica
+                `A64` (nada decodifica ainda, épico B18).
 
                 """);
         report.append("> **Inventário medido contra a revisão do QEMU `")
@@ -815,10 +821,14 @@ public final class IsaCoverageReport {
     private static String appendGroup(StringBuilder report, Group group,
                                        List<DecodeTreeSpec.Instruction> instructions) {
         boolean aarch64 = group.probe() == Probe.A64;
-        // B11.5: só `a64.decode` (o único grupo A64 com `applicability() != NOT_IN_ANY_PRESET`,
-        // ver GROUPS) ganha colunas por versão — `sve.decode`/`sme.decode` continuam "não se
+        // B17.26: `sve.decode` ganha coluna por versão mesmo sendo `NOT_IN_ANY_PRESET` — ver o
+        // Javadoc de `probeSveApplicability` sobre por que o mecanismo é diferente do de B11.5.
+        // `sme.decode` continua de fora (épico B18, ainda NADA decodifica).
+        boolean sveVersioned = aarch64 && group.decodeFile().equals("sve.decode");
+        // B11.5: `a64.decode` (o grupo A64 com `applicability() != NOT_IN_ANY_PRESET`, ver GROUPS)
+        // e agora `sve.decode` (B17.26) ganham colunas por versão — `sme.decode` continua "não se
         // aplica a nenhum preset" (nada decodifica hoje, versionar não traria informação nova).
-        boolean aarch64Versioned = aarch64 && group.applicability() != NOT_IN_ANY_PRESET;
+        boolean aarch64Versioned = aarch64 && (group.applicability() != NOT_IN_ANY_PRESET || sveVersioned);
         List<String> columns = aarch64Versioned ? List.copyOf(AARCH64_ARCHITECTURES.keySet())
                 : aarch64 ? List.of("A64") : List.copyOf(ARM_ARCHITECTURES.keySet());
 
@@ -837,12 +847,20 @@ public final class IsaCoverageReport {
             for (String column : columns) {
                 ArmArchitecture architecture = aarch64 ? null : ARM_ARCHITECTURES.get(column);
                 Aarch64Architecture aarch64Architecture = aarch64Versioned ? AARCH64_ARCHITECTURES.get(column) : null;
-                boolean applicable = aarch64
-                        ? (aarch64Versioned
-                                ? isApplicableToAarch64Version(instruction.name(), occurrence, aarch64Architecture)
-                                : group.applicability() != NOT_IN_ANY_PRESET)
-                        : group.applicability().appliesTo(architecture)
-                                && isApplicableToArm32Version(instruction.name(), architecture);
+                boolean applicable;
+                Status status = null;
+                if (sveVersioned) {
+                    SveCell cell = probeSveApplicability(instruction, occurrence, aarch64Architecture);
+                    applicable = cell.applicable();
+                    status = cell.status();
+                } else {
+                    applicable = aarch64
+                            ? (aarch64Versioned
+                                    ? isApplicableToAarch64Version(instruction.name(), occurrence, aarch64Architecture)
+                                    : group.applicability() != NOT_IN_ANY_PRESET)
+                            : group.applicability().appliesTo(architecture)
+                                    && isApplicableToArm32Version(instruction.name(), architecture);
+                }
                 if (!applicable || isExcluded(instruction.name(), column, group.decodeFile(), occurrence)) {
                     rows.append(" · |");
                     continue;
@@ -850,9 +868,11 @@ public final class IsaCoverageReport {
                 applicablePerColumn.merge(column, 1, Integer::sum);
                 globalPerArchitecture.computeIfAbsent(column, unused -> new int[2])[1]++;
                 totalApplicable++;
-                Status status = aarch64
-                        ? probeAarch64(instruction, occurrence, aarch64Architecture)
-                        : probeArm(instruction, architecture, group);
+                if (status == null) {
+                    status = aarch64
+                            ? probeAarch64(instruction, occurrence, aarch64Architecture)
+                            : probeArm(instruction, architecture, group);
+                }
                 if (status == Status.SUPPORTED) {
                     supportedPerColumn.merge(column, 1, Integer::sum);
                     globalPerArchitecture.get(column)[0]++;
@@ -1061,12 +1081,99 @@ public final class IsaCoverageReport {
         // MISDECODE.
     }
 
-    /// `architecture` é `null` para os grupos A64 não versionados ainda (`sve.decode`/
-    /// `sme.decode`, ver {@link #appendGroup}) — nesse caso usa o decoder default (B11.2:
-    /// equivalente a `ARMV8_0_A`, mesmo comportamento de antes de B11.5).
+    /// **B17.26** — features SVE/SVE2 "extras" que NENHUM dos 16 presets de `AARCH64_ARCHITECTURES`
+    /// declara hoje (nem os `ARMV9_x_A`, que só têm `SVE` — ver o Javadoc de `Aarch64Architecture`
+    /// sobre `SVE2` "não confirmada"). Usadas só pela sonda interna de
+    /// {@link #probeSveApplicability} — nunca uma coluna real da tabela nem um preset exposto a
+    /// clientes da biblioteca.
+    private static final Aarch64Feature[] SVE_PROBE_EXTRA_FEATURES = {
+            Aarch64Feature.SVE2, Aarch64Feature.SVE2_1, Aarch64Feature.SVE2_2,
+            Aarch64Feature.SVE_BITPERM, Aarch64Feature.SVE_PMULL128, Aarch64Feature.SVE_AES,
+            Aarch64Feature.SVE_SM4, Aarch64Feature.SVE_SHA3, Aarch64Feature.F64MM, Aarch64Feature.F32MM,
+            Aarch64Feature.FP8_CONVERT, Aarch64Feature.SVE_B16B16,
+            Aarch64Feature.SCALABLE_MATRIX_EXTENSION, Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2,
+            Aarch64Feature.FP8_MATRIX_MULTIPLY_FP16, Aarch64Feature.FP8_MATRIX_MULTIPLY_FP32,
+            // B17.26, achado: features que NÃO são "família SVE2" mas que o `sve.decode` também
+            // gateia (`FEAT_I8MM`/`FEAT_BF16`/`FEAT_FAMINMAX`/família `FEAT_FP8*`/`FEAT_LUT`) —
+            // sem elas aqui, a sonda "máxima" concluía (ERRADO) que uma coluna sem essas features
+            // tinha um GAP REAL (❌), quando na verdade é só "esta versão ainda não tem a
+            // sub-feature" (`·`) — achado via diagnóstico ad-hoc desta task em `BFCVT_m`/`FAMAX`.
+            Aarch64Feature.INT8_MATRIX_MULTIPLY, Aarch64Feature.BFLOAT16, Aarch64Feature.FP_ABSOLUTE_MAX_MIN,
+            Aarch64Feature.FP8, Aarch64Feature.FP8_DOT_PRODUCT_2WAY, Aarch64Feature.FP8_DOT_PRODUCT_4WAY,
+            Aarch64Feature.FP8_FUSED_MULTIPLY_ADD, Aarch64Feature.LOOKUP_TABLE,
+    };
+
+    private static final Map<Aarch64Architecture, Aarch64Architecture> SVE_MAXIMAL_PROBE_CACHE =
+            new LinkedHashMap<>();
+
+    /// A mesma arquitetura `base`, mas com TODAS as sub-features SVE/SVE2 conhecidas acrescentadas —
+    /// sonda interna, nunca uma coluna real da tabela. Serve só para
+    /// {@link #probeSveApplicability} distinguir "esta versão não tem a sub-feature que o encoding
+    /// exige" (não aplicável) de "isto não está implementado em lugar nenhum" (gap real).
+    private static Aarch64Architecture maximalSveProbeArchitecture(Aarch64Architecture base) {
+        return SVE_MAXIMAL_PROBE_CACHE.computeIfAbsent(base, b -> Aarch64Architecture.extending(b,
+                b.name() + " (sonda SVE máxima, interna)", SVE_PROBE_EXTRA_FEATURES));
+    }
+
+    /// Resultado de uma célula `sve.decode`: se é **aplicável** à coluna (a instrução existe na ISA
+    /// daquela versão) e, quando aplicável, o {@link Status} medido sob a arquitetura REAL da
+    /// coluna.
+    private record SveCell(boolean applicable, Status status) {
+        private static final SveCell NOT_APPLICABLE = new SveCell(false, Status.MISSING);
+    }
+
+    /// **B17.26 — achado confirmado por leitura de fonte, não só pela sonda**: `SMMLA`/`USMMLA`/
+    /// `UMMLA` (`decoder64/Aarch64Sve2WideningDecoder#matrixMultiply`) exigem só `FEAT_SVE` +
+    /// `FEAT_I8MM` pelo manual ARM — mas o despacho que chega até elas
+    /// (`Aarch64Sve2IntegerDecoder#decodePrefix45`) tem um gate `architecture.has(SVE2)` amplo demais
+    /// ANTES de alcançar o `matrixMultiply`, que bloqueia as 3 mesmo quando `INT8_MATRIX_MULTIPLY`
+    /// está presente e `SVE2` não é exigida de verdade. **Sem esta lista**, a sonda dupla de
+    /// {@link #probeSveApplicability} concluiria "·" para as 3 em TODAS as 16 colunas (porque a sonda
+    /// "máxima" — que liga `SVE2` — decodifica, então parece "só falta uma sub-feature"), escondendo
+    /// um bug de decoder real atrás de "não aplicável" — o oposto da disciplina do `tasks/README.md`.
+    /// Com a lista, elas aparecem como `❌` (aplicável, pendente) a partir de onde `INT8_MATRIX_MULTIPLY`
+    /// existe — pendência nomeada na task de fechamento (destino: nova task, split do gate de
+    /// `decodePrefix45` por sub-feature em vez de um `SVE2` só).
+    private static final java.util.Set<String> SVE_FEATURE_GATE_BUG_NAMES =
+            java.util.Set.of("SMMLA", "USMMLA", "UMMLA");
+
+    /// **B17.26** — aplicabilidade de uma instrução `sve.decode` numa coluna de versão A64, medida
+    /// em vez de transcrita à mão: nenhum dos 16 presets declara `SVE2`/sub-features (só `SVE`),
+    /// mas o `Aarch64Decoder` já gateia cada encoding SVE2/cripto/BF16/F64MM/etc. pela feature real
+    /// dele (`Aarch64SveXxxDecoder`, confirmado por grep nesta task). Retranscrever esse mapa à mão
+    /// por mnemônico (929 linhas) é exatamente o risco que o `tasks/README.md` chama de "entrada
+    /// factualmente errada pior que ausência" — em vez disso, a aplicabilidade É a sonda dupla:
+    ///
+    /// 1. Sem `SVE` na coluna: não aplicável (`sve.decode` inteiro é opcional desde ARMv8.2-A).
+    /// 2. A sonda sob a arquitetura REAL da coluna decodifica: aplicável, status = o que decodificou.
+    /// 3. Não decodifica sob a coluna, mas decodifica sob {@link #maximalSveProbeArchitecture}
+    ///    (todas as sub-features SVE2 ligadas): a coluna genuinamente não tem a sub-feature exigida
+    ///    — **não aplicável** (vira `·`, não `❌`), EXCETO para {@link #SVE_FEATURE_GATE_BUG_NAMES}
+    ///    (passo 3b): aí o "não aplicável" da sonda é descartado de propósito — é o próprio bug.
+    /// 4. Não decodifica nem sob a sonda máxima: gap de implementação real — **aplicável** (a
+    ///    baseline `SVE` já presente justifica medir a célula) e `❌`.
+    private static SveCell probeSveApplicability(DecodeTreeSpec.Instruction instruction, int occurrence,
+                                                  Aarch64Architecture architecture) {
+        if (!architecture.has(Aarch64Feature.SVE)) {
+            return SveCell.NOT_APPLICABLE;
+        }
+        Status direct = probeAarch64(instruction, occurrence, architecture);
+        if (direct != Status.MISSING) {
+            return new SveCell(true, direct);
+        }
+        if (SVE_FEATURE_GATE_BUG_NAMES.contains(instruction.name())) {
+            return new SveCell(true, Status.MISSING);
+        }
+        Status maximal = probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture));
+        return maximal != Status.MISSING ? SveCell.NOT_APPLICABLE : new SveCell(true, Status.MISSING);
+    }
+
+    /// `architecture` é `null` para os grupos A64 não versionados ainda (`sme.decode`, ver
+    /// {@link #appendGroup}) — nesse caso usa o decoder default (B11.2: equivalente a `ARMV8_0_A`,
+    /// mesmo comportamento de antes de B11.5).
     ///
     /// `occurrence` serve só para consultar {@link #AARCH64_MISDECODED} — ver o Javadoc de lá.
-    private static Status probeAarch64(DecodeTreeSpec.Instruction instruction, int occurrence,
+    static Status probeAarch64(DecodeTreeSpec.Instruction instruction, int occurrence,
                                         Aarch64Architecture architecture) {
         Aarch64Decoder decoder = architecture == null ? new Aarch64Decoder() : new Aarch64Decoder(architecture);
         for (int[] strategy : FILL_STRATEGIES) {

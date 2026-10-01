@@ -41,10 +41,11 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-09-30, protocolo revisado por custo de contexto)
 
-**`B17.27` (SVE BFloat16)** fechada — 11 encodings de aritmética + `FMLA`/`FMLS` predicados/indexados do
-multiply-add; achado que corrige a spec E o QEMU (`FSUBR`/`FNMLA`/`FNMLS`/`FMAD`-família são `UNDEFINED` em
-BFloat16 mesmo o QEMU anotar helper para elas; `BFSCALE` existe apesar do QEMU não anotá-la) — ver **Resultado**
-na task.
+**`B17.26` (fechamento do épico SVE)** fechada — `sve.decode` deixa de ser `NOT_IN_ANY_PRESET` (mecanismo real
+foi uma **sonda dupla**, não curadoria por mnemônico — ver **Resultado** na task); global 100%→98% (esperado,
+precedente B9.11/B19.5.2); `sme.decode` agora é o ÚNICO grupo `NOT_IN_ANY_PRESET` da tabela (marco). Achou um
+bug real de decoder (`SMMLA`/`USMMLA`/`UMMLA` presos atrás de gate `SVE2` indevido) + ~30 mnemônicos a triar —
+nova task **B17.29** (spec escrita, pegável, depende só de B17.26 ✅).
 
 **Protocolo mudou (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):**
 G5 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -56,13 +57,14 @@ estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por qua
 decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B17** (SVE/SVE2, `sve.decode` 929 encodings), **B18.3+** (SME, 623 encodings de `sme.decode`), **B20** (perfil R:
-PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Nenhum desses
-entra no denominador da tabela hoje (`NOT_IN_ANY_PRESET`).
+abertos: **B17.29** (resíduo do SVE — bug de decoder + triagem, ~30 células, `sve.decode` JÁ entra no denominador
+desde B17.26), **B18.3+** (SME, 623 encodings de `sme.decode`, ainda `NOT_IN_ANY_PRESET` — ÚNICO grupo nesse estado
+agora), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT
+nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.26`** (fechamento do épico SVE —
-depende de B17.25 ✅ e agora B17.27 ✅ também fechada) em diante (SVE, Opção C, VL=256; toda task testa em VL 256 e 512),
-**`B18.3`** em diante (SME: `MOVA`/`ZERO`, memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B17.29`** (corrige o gate `SVE2` indevido
+de `SMMLA`/`USMMLA`/`UMMLA` + triagem de ~30 `❌`, achado pela B17.26), **`B18.3`** em diante (SME: `MOVA`/`ZERO`,
+memória, outer product; `SVCR`/`ZA`/streaming já têm efeito), **`B21.2`** em
 diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] — decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências nomeadas da
 B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`. Conferir dependências no
 `INDICE.md` antes de pegar.

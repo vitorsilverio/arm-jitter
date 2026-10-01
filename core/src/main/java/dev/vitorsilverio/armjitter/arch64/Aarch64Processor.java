@@ -85,8 +85,12 @@ public enum Aarch64Processor {
     /// A64-only, `ARMv8.2-A` — variante voltada a Chromebooks (B12.2: gap-fill de B12.1).
     CORTEX_A78C("Cortex-A78C", Aarch64Architecture.ARMV8_2_A),
 
-    /// A64-only, `ARMv8.4-A` — núcleo de servidor.
-    NEOVERSE_V1("Neoverse V1", Aarch64Architecture.ARMV8_4_A),
+    /// A64-only, `ARMv8.4-A` **com `FEAT_SVE`** (`VL=256` bits) — núcleo de servidor. **Revisado
+    /// pela B17.26**: a entrada anterior (`ARMV8_4_A` puro) omitia o SVE que o núcleo real tem —
+    /// SVE é opcional a partir de ARMv8.2-A (não implícito em nenhum preset de versão), e o V1 o
+    /// implementa de verdade (fonte: ARM "Neoverse V1 Platform" TRM/anúncios públicos, `SVE`
+    /// `VL=256`; sem SVE2, que só chega com Armv9 nos núcleos Neoverse N2/V2).
+    NEOVERSE_V1("Neoverse V1", Aarch64Architecture.ARMV8_4_A_SVE),
 
     /// A64-only, `"ARMv9-A"` genérico na Wikipedia — mapeado para {@link Aarch64Architecture#ARMV9_0_A}
     /// (aproximação conservadora, ver o Javadoc da classe).
@@ -152,7 +156,14 @@ public enum Aarch64Processor {
     /// executa A32 em nenhum EL: não catalogado em `arch.ArmProcessor` (Armadilha 5 da task).
     /// `ARMv8-R AArch64`, perfil de tempo real (PMSA/MPU, sem VMSA neste preset — ver Javadoc de
     /// {@link Aarch64Architecture#ARMV8_R_64}).
-    CORTEX_R82("Cortex-R82", Aarch64Architecture.ARMV8_R_64);
+    CORTEX_R82("Cortex-R82", Aarch64Architecture.ARMV8_R_64),
+
+    /// **Fujitsu A64FX** (B17.26) — ARMv8.2-A com `FEAT_SVE` (`VL=512` bits), o primeiro silício
+    /// SVE do mundo (2018, usado no supercomputador Fugaku/RIKEN). Não estava no catálogo (achado
+    /// desta task); sem SVE2 (predata a extensão). `VL` real fica registrado só no Javadoc — o
+    /// catálogo ainda não tem um eixo `VL` por núcleo (Armadilha 5 da B17.26: decisão de registrar
+    /// isso vira task própria, não aditiva o bastante para entrar aqui sem RFC).
+    A64FX("A64FX", Aarch64Architecture.ARMV8_2_A_SVE);
 
     private final String displayName;
     private final Aarch64Architecture architecture;

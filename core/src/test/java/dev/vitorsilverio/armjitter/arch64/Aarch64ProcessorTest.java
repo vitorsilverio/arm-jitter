@@ -3,7 +3,9 @@ package dev.vitorsilverio.armjitter.arch64;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Aarch64ProcessorTest {
     @Test
@@ -38,8 +40,20 @@ class Aarch64ProcessorTest {
     }
 
     @Test
-    void armv84aFamilyResolvesToArmv84a() {
-        assertSame(Aarch64Architecture.ARMV8_4_A, Aarch64Processor.NEOVERSE_V1.architecture());
+    void armv84aFamilyResolvesToArmv84aWithSve() {
+        // B17.26: Neoverse V1 tem FEAT_SVE de verdade (VL=256) — a entrada anterior (ARMV8_4_A
+        // puro) omitia isso; o preset de catálogo soma SVE sobre a base ARMv8.4-A.
+        assertSame(Aarch64Architecture.ARMV8_4_A_SVE, Aarch64Processor.NEOVERSE_V1.architecture());
+        assertTrue(Aarch64Processor.NEOVERSE_V1.architecture().has(Aarch64Feature.SVE));
+    }
+
+    @Test
+    void a64fxResolvesToArmv82aWithSve() {
+        // B17.26: Fujitsu A64FX — primeiro silício SVE do mundo, ARMv8.2-A + FEAT_SVE (VL=512),
+        // sem SVE2 (predata a extensão). Não estava no catálogo antes desta task.
+        assertSame(Aarch64Architecture.ARMV8_2_A_SVE, Aarch64Processor.A64FX.architecture());
+        assertTrue(Aarch64Processor.A64FX.architecture().has(Aarch64Feature.SVE));
+        assertFalse(Aarch64Processor.A64FX.architecture().has(Aarch64Feature.SVE2));
     }
 
     @Test

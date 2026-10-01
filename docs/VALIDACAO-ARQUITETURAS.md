@@ -44,14 +44,18 @@ verde.** N1/N2 = "implementada". N4 = "provada em produção".
 > a questão de v6K/MPCore virou a task **E13**. Ressalvas
 > obrigatórias: as colunas `v6-M`/`v7-M` param em 88%/96% porque o grupo `m-nocp`
 > (`NOCP`/`VLLDM`/`VSCCLRM`/`VLDR_sysreg`) é território da **B15** (ARMv7E-M/ARMv8-M), não
-> resíduo de B22; NEON/SVE/SME (**B13**/**B17**/**B18**) nem entram no denominador
-> (`NOT_IN_ANY_PRESET`) — **MVE (Helium) e VFP incondicional ARMv8-A são exceção**: MVE desde a
+> resíduo de B22; NEON (**B13**) e SME (**B18**) nem entram no denominador
+> (`NOT_IN_ANY_PRESET`) — **MVE (Helium), VFP incondicional ARMv8-A e SVE/SVE2 são exceção**: MVE desde a
 > B16.14 tem coluna própria (`ARMv8.1-M+MVE`) e mede **352/352** no grupo `mve.decode`, 95%
 > (693/727) contando os grupos T16/T32/VFP/`m-nocp` que a coluna nova também passou a medir; VFP
 > incondicional desde a **B14.7** tem coluna própria (`v8-A/32`, preset `ARMV8A_32`) e mede
 > **17/17** no grupo `vfp-uncond.decode`, **96%** (749/776) no preset inteiro (depois da
 > B22.7, que fechou `VRINTR*`/`VRINTZ*`/`VRINTX*`/`VCVTR`/conversões FP16 do VFPv3; `VJCVT`/
-> `VCVT_b16_f32` medem `✅` na coluna `v8.6-A/32`, preset `ARMV8_6A_32`, e `·` em `v8-A/32`). E o A64
+> `VCVT_b16_f32` medem `✅` na coluna `v8.6-A/32`, preset `ARMV8_6A_32`, e `·` em `v8-A/32`); SVE/SVE2
+> desde a **B17.26** tem coluna por versão A64 (`ARMv9.0-A`-`ARMv9.5-A`, medida por sonda dupla, não
+> curadoria por mnemônico — ver `IsaCoverageReport#probeSveApplicability`), 84-85% no grupo
+> `sve.decode` (~30 células a triar pela **B17.29**, incl. um bug de decoder confirmado em
+> `SMMLA`/`USMMLA`/`UMMLA`). E o A64
 > ainda tem 2020 células `❌` (épico **B19**). Fechar B22 **não** descongela os subprojetos — o
 > congelamento (`tasks/README.md`) é sobre a cobertura TOTAL.
 

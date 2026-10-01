@@ -9,7 +9,7 @@ Javadoc dessa classe para o comando e para a questão de licença do inventário
 |---|---|
 | ✅ | o decoder reconhece o encoding |
 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
-| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
+| · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — só para `sve.decode`, B17.26 — medida por sonda dupla, ver `probeSveApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
 
 **`⚠️` voltou a ocorrer na E12**, e a previsão de que ele voltaria "ao abrir um novo
@@ -34,8 +34,11 @@ não entram no denominador dela, só `a32`/`t16`/`t32`), `v6-M`/`v7-M`
 (microcontrolador). O grupo `a64.decode` (B11.5) tem uma coluna por versão real
 (`ARMv8.0-A`...`ARMv9.5-A`, presets de `Aarch64Architecture`, B11.1); um mnemônico só
 é aplicável a partir da versão que a introduz (curadoria de B11.3, não o decoder —
-só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode`/`sme.decode`
-continuam uma coluna monolítica `A64` (nada decodifica ainda).
+só `FEAT_RDM` é gateado de verdade hoje, ver B11.4). `sve.decode` (B17.26) também tem
+coluna por versão, mas a aplicabilidade é MEDIDA por sonda dupla (nenhum preset
+declara `SVE2`/sub-features — só `SVE`, a partir de `ARMv9.0-A`), não curada por
+mnemônico — ver `probeSveApplicability`. `sme.decode` continua uma coluna monolítica
+`A64` (nada decodifica ainda, épico B18).
 
 > **Inventário medido contra a revisão do QEMU `2931a675e9d3fcddedf673509fe9759955fc616d`** — fixada em `gerar-cobertura-isa.sh` (variável `QEMU_REV`). A tabela só é reproduzível contra ESSA revisão; um bump de `QEMU_REV` é um commit próprio, com o diff lido linha a linha (ver o cabeçalho do script).
 
@@ -46,7 +49,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **100%** — 23523 de 23523 células aplicáveis decodificam.
+> **98%** — 25905 de 26319 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -75,12 +78,12 @@ Por arquitetura:
 | ARMv8.7-A | **100%** (1094/1094) |
 | ARMv8.8-A | **100%** (1107/1107) |
 | ARMv8.9-A | **100%** (1113/1113) |
-| ARMv9.0-A | **100%** (1079/1079) |
-| ARMv9.1-A | **100%** (1092/1092) |
-| ARMv9.2-A | **100%** (1095/1095) |
-| ARMv9.3-A | **100%** (1107/1107) |
-| ARMv9.4-A | **100%** (1121/1121) |
-| ARMv9.5-A | **100%** (1146/1146) |
+| ARMv9.0-A | **95%** (1463/1532) |
+| ARMv9.1-A | **95%** (1487/1556) |
+| ARMv9.2-A | **95%** (1496/1565) |
+| ARMv9.3-A | **95%** (1502/1571) |
+| ARMv9.4-A | **95%** (1518/1587) |
+| ARMv9.5-A | **95%** (1556/1625) |
 
 ## Resumo
 
@@ -97,7 +100,7 @@ Por arquitetura:
 | ARMv7-M — coprocessador ausente | 11 | v6-M 100% (11/11) · v7-M 100% (11/11) · ARMv8.1-M+MVE 100% (11/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | ARMv8.1-M+MVE 100% (352/352) |
 | A64 — AArch64 | 1161 | ARMv8.0-A 100% (851/851) · ARMv8.1-A 100% (883/883) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 100% (1095/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
-| SVE/SVE2 — vetor escalável | 929 | não se aplica a nenhum preset atual |
+| SVE/SVE2 — vetor escalável | 929 | ARMv9.0-A 84% (384/453) · ARMv9.1-A 85% (395/464) · ARMv9.2-A 85% (401/470) · ARMv9.3-A 85% (395/464) · ARMv9.4-A 85% (397/466) · ARMv9.5-A 85% (410/479) |
 | SME — extensão matricial | 623 | não se aplica a nenhum preset atual |
 
 
@@ -2823,941 +2826,941 @@ Inventário: `a64.decode` · 1161 instruções.
 
 ## SVE/SVE2 — vetor escalável
 
-Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE.
+Extensão opcional do ARMv8.2+; o Cortex-A53 do Raspberry Pi 3 NÃO tem SVE. `Applicability` continua `NOT_IN_ANY_PRESET` (nenhum `ArmArchitecture` de 32 bits tem SVE), mas B17.26 liga colunas por versão A64 mesmo assim — ver `appendGroup`/`probeSveApplicability`.
 
 Inventário: `sve.decode` · 929 instruções.
 
-| Instrução | A64 |
-|---|---|
-| `ORR_zpzz` | · |
-| `EOR_zpzz` | · |
-| `AND_zpzz` | · |
-| `BIC_zpzz` | · |
-| `ADD_zpzz` | · |
-| `SUB_zpzz` | · |
-| `SUB_zpzz` | · |
-| `SMAX_zpzz` | · |
-| `UMAX_zpzz` | · |
-| `SMIN_zpzz` | · |
-| `UMIN_zpzz` | · |
-| `SABD_zpzz` | · |
-| `UABD_zpzz` | · |
-| `MUL_zpzz` | · |
-| `SMULH_zpzz` | · |
-| `UMULH_zpzz` | · |
-| `SDIV_zpzz` | · |
-| `UDIV_zpzz` | · |
-| `SDIV_zpzz` | · |
-| `UDIV_zpzz` | · |
-| `ORV` | · |
-| `EORV` | · |
-| `ANDV` | · |
-| `ORQV` | · |
-| `EORQV` | · |
-| `ANDQV` | · |
-| `MOVPRFX_z` | · |
-| `MOVPRFX_m` | · |
-| `UADDV` | · |
-| `SADDV` | · |
-| `SMAXV` | · |
-| `UMAXV` | · |
-| `SMINV` | · |
-| `UMINV` | · |
-| `ADDQV` | · |
-| `SMAXQV` | · |
-| `SMINQV` | · |
-| `UMAXQV` | · |
-| `UMINQV` | · |
-| `ASR_zpzi` | · |
-| `LSR_zpzi` | · |
-| `LSL_zpzi` | · |
-| `ASRD` | · |
-| `SQSHL_zpzi` | · |
-| `UQSHL_zpzi` | · |
-| `SRSHR` | · |
-| `URSHR` | · |
-| `SQSHLU` | · |
-| `ASR_zpzz` | · |
-| `LSR_zpzz` | · |
-| `LSL_zpzz` | · |
-| `ASR_zpzz` | · |
-| `LSR_zpzz` | · |
-| `LSL_zpzz` | · |
-| `ASR_zpzw` | · |
-| `LSR_zpzw` | · |
-| `LSL_zpzw` | · |
-| `CLS_m` | · |
-| `CLZ_m` | · |
-| `CNT_zpz_m` | · |
-| `CNOT_m` | · |
-| `NOT_zpz_m` | · |
-| `FABS_m` | · |
-| `FNEG_m` | · |
-| `CLS_z` | · |
-| `CLZ_z` | · |
-| `CNT_zpz_z` | · |
-| `CNOT_z` | · |
-| `NOT_zpz_z` | · |
-| `FABS_z` | · |
-| `FNEG_z` | · |
-| `ABS_m` | · |
-| `NEG_m` | · |
-| `SXTB_m` | · |
-| `UXTB_m` | · |
-| `SXTH_m` | · |
-| `UXTH_m` | · |
-| `SXTW_m` | · |
-| `UXTW_m` | · |
-| `ABS_z` | · |
-| `NEG_z` | · |
-| `SXTB_z` | · |
-| `UXTB_z` | · |
-| `SXTH_z` | · |
-| `UXTH_z` | · |
-| `SXTW_z` | · |
-| `UXTW_z` | · |
-| `FCMGE_ppzz` | · |
-| `FCMGT_ppzz` | · |
-| `FCMEQ_ppzz` | · |
-| `FCMNE_ppzz` | · |
-| `FCMUO_ppzz` | · |
-| `FACGE_ppzz` | · |
-| `FACGT_ppzz` | · |
-| `MLA` | · |
-| `MLS` | · |
-| `MLA` | · |
-| `MLS` | · |
-| `ADD_zzz` | · |
-| `SUB_zzz` | · |
-| `SQADD_zzz` | · |
-| `UQADD_zzz` | · |
-| `SQSUB_zzz` | · |
-| `UQSUB_zzz` | · |
-| `AND_zzz` | · |
-| `ORR_zzz` | · |
-| `EOR_zzz` | · |
-| `BIC_zzz` | · |
-| `XAR` | · |
-| `EOR3` | · |
-| `BSL` | · |
-| `BCAX` | · |
-| `BSL1N` | · |
-| `BSL2N` | · |
-| `NBSL` | · |
-| `INDEX_ii` | · |
-| `INDEX_ir` | · |
-| `INDEX_ri` | · |
-| `INDEX_rr` | · |
-| `ADDVL` | · |
-| `ADDSVL` | · |
-| `ADDPL` | · |
-| `ADDSPL` | · |
-| `RDVL` | · |
-| `RDSVL` | · |
-| `ASR_zzi` | · |
-| `LSR_zzi` | · |
-| `LSL_zzi` | · |
-| `ASR_zzw` | · |
-| `LSR_zzw` | · |
-| `LSL_zzw` | · |
-| `ADR_s32` | · |
-| `ADR_u32` | · |
-| `ADR_p32` | · |
-| `ADR_p64` | · |
-| `MOVPRFX` | · |
-| `FEXPA` | · |
-| `FTSSEL` | · |
-| `CNT_r` | · |
-| `INCDEC_r` | · |
-| `SINCDEC_r_32` | · |
-| `SINCDEC_r_64` | · |
-| `INCDEC_v` | · |
-| `SINCDEC_v` | · |
-| `ORR_zzi` | · |
-| `EOR_zzi` | · |
-| `AND_zzi` | · |
-| `DUPM` | · |
-| `FCPY` | · |
-| `INVALID` | · |
-| `CPY_m_i` | · |
-| `INVALID` | · |
-| `CPY_z_i` | · |
-| `EXT` | · |
-| `EXT_sve2` | · |
-| `DUP_s` | · |
-| `DUP_x` | · |
-| `DUPQ` | · |
-| `DUPQ` | · |
-| `DUPQ` | · |
-| `DUPQ` | · |
-| `EXTQ` | · |
-| `INSR_f` | · |
-| `INSR_r` | · |
-| `REV_v` | · |
-| `PMOV_pv` | · |
-| `PMOV_pv` | · |
-| `PMOV_pv` | · |
-| `PMOV_pv` | · |
-| `PMOV_vp` | · |
-| `PMOV_vp` | · |
-| `PMOV_vp` | · |
-| `PMOV_vp` | · |
-| `TBL` | · |
-| `UNPK` | · |
-| `TBL_sve2` | · |
-| `TBX` | · |
-| `ZIP1_p` | · |
-| `ZIP2_p` | · |
-| `UZP1_p` | · |
-| `UZP2_p` | · |
-| `TRN1_p` | · |
-| `TRN2_p` | · |
-| `REV_p` | · |
-| `PUNPKLO` | · |
-| `PUNPKHI` | · |
-| `ZIP1_z` | · |
-| `ZIP2_z` | · |
-| `UZP1_z` | · |
-| `UZP2_z` | · |
-| `TRN1_z` | · |
-| `TRN2_z` | · |
-| `ZIP1_q` | · |
-| `ZIP2_q` | · |
-| `UZP1_q` | · |
-| `UZP2_q` | · |
-| `TRN1_q` | · |
-| `TRN2_q` | · |
-| `ZIPQ1` | · |
-| `ZIPQ2` | · |
-| `UZPQ1` | · |
-| `UZPQ2` | · |
-| `TBLQ` | · |
-| `TBXQ` | · |
-| `COMPACT` | · |
-| `CLASTA_z` | · |
-| `CLASTB_z` | · |
-| `CLASTA_v` | · |
-| `CLASTB_v` | · |
-| `CLASTA_r` | · |
-| `CLASTB_r` | · |
-| `LASTA_v` | · |
-| `LASTB_v` | · |
-| `LASTA_r` | · |
-| `LASTB_r` | · |
-| `CPY_m_v` | · |
-| `CPY_m_r` | · |
-| `REVB_m` | · |
-| `REVH_m` | · |
-| `REVW_m` | · |
-| `RBIT_m` | · |
-| `REVD_m` | · |
-| `REVB_z` | · |
-| `REVH_z` | · |
-| `REVW_z` | · |
-| `RBIT_z` | · |
-| `REVD_z` | · |
-| `SPLICE` | · |
-| `SPLICE_sve2` | · |
-| `EXPAND` | · |
-| `SEL_zpzz` | · |
-| `CMPHS_ppzz` | · |
-| `CMPHI_ppzz` | · |
-| `CMPGE_ppzz` | · |
-| `CMPGT_ppzz` | · |
-| `CMPEQ_ppzz` | · |
-| `CMPNE_ppzz` | · |
-| `CMPEQ_ppzw` | · |
-| `CMPNE_ppzw` | · |
-| `CMPGE_ppzw` | · |
-| `CMPGT_ppzw` | · |
-| `CMPLT_ppzw` | · |
-| `CMPLE_ppzw` | · |
-| `CMPHS_ppzw` | · |
-| `CMPHI_ppzw` | · |
-| `CMPLO_ppzw` | · |
-| `CMPLS_ppzw` | · |
-| `CMPHS_ppzi` | · |
-| `CMPHI_ppzi` | · |
-| `CMPLO_ppzi` | · |
-| `CMPLS_ppzi` | · |
-| `CMPGE_ppzi` | · |
-| `CMPGT_ppzi` | · |
-| `CMPLT_ppzi` | · |
-| `CMPLE_ppzi` | · |
-| `CMPEQ_ppzi` | · |
-| `CMPNE_ppzi` | · |
-| `AND_pppp` | · |
-| `BIC_pppp` | · |
-| `EOR_pppp` | · |
-| `SEL_pppp` | · |
-| `ORR_pppp` | · |
-| `ORN_pppp` | · |
-| `NOR_pppp` | · |
-| `NAND_pppp` | · |
-| `PTEST` | · |
-| `PTRUE` | · |
-| `PTRUE_cnt` | · |
-| `SETFFR` | · |
-| `PFALSE` | · |
-| `RDFFR_p` | · |
-| `RDFFR` | · |
-| `WRFFR` | · |
-| `PFIRST` | · |
-| `PNEXT` | · |
-| `BRKPA` | · |
-| `BRKPB` | · |
-| `BRKA_z` | · |
-| `BRKB_z` | · |
-| `BRKA_m` | · |
-| `BRKB_m` | · |
-| `BRKN` | · |
-| `CNTP` | · |
-| `CNTP_c` | · |
-| `FIRSTP` | · |
-| `LASTP` | · |
-| `INCDECP_r` | · |
-| `INCDECP_z` | · |
-| `SINCDECP_r_32` | · |
-| `SINCDECP_r_64` | · |
-| `SINCDECP_z` | · |
-| `CTERM` | · |
-| `WHILE_lt` | · |
-| `WHILE_gt` | · |
-| `WHILE_ptr` | · |
-| `WHILE_lt_pair` | · |
-| `WHILE_gt_pair` | · |
-| `WHILE_lt_cnt2` | · |
-| `WHILE_lt_cnt4` | · |
-| `WHILE_gt_cnt2` | · |
-| `WHILE_gt_cnt4` | · |
-| `PEXT_1` | · |
-| `PEXT_2` | · |
-| `FDUP` | · |
-| `INVALID` | · |
-| `DUP_i` | · |
-| `INVALID` | · |
-| `ADD_zzi` | · |
-| `INVALID` | · |
-| `SUB_zzi` | · |
-| `INVALID` | · |
-| `SUBR_zzi` | · |
-| `INVALID` | · |
-| `SQADD_zzi` | · |
-| `INVALID` | · |
-| `UQADD_zzi` | · |
-| `INVALID` | · |
-| `SQSUB_zzi` | · |
-| `INVALID` | · |
-| `UQSUB_zzi` | · |
-| `SMAX_zzi` | · |
-| `UMAX_zzi` | · |
-| `SMIN_zzi` | · |
-| `UMIN_zzi` | · |
-| `MUL_zzi` | · |
-| `DOT_zzzz` | · |
-| `CDOT_zzzz` | · |
-| `SDOT_zzxw_4s` | · |
-| `SDOT_zzxw_4d` | · |
-| `UDOT_zzxw_4s` | · |
-| `UDOT_zzxw_4d` | · |
-| `SDOT_zzxw_2s` | · |
-| `UDOT_zzxw_2s` | · |
-| `MLA_zzxz_h` | · |
-| `MLA_zzxz_s` | · |
-| `MLA_zzxz_d` | · |
-| `MLS_zzxz_h` | · |
-| `MLS_zzxz_s` | · |
-| `MLS_zzxz_d` | · |
-| `SQRDMLAH_zzxz_h` | · |
-| `SQRDMLAH_zzxz_s` | · |
-| `SQRDMLAH_zzxz_d` | · |
-| `SQRDMLSH_zzxz_h` | · |
-| `SQRDMLSH_zzxz_s` | · |
-| `SQRDMLSH_zzxz_d` | · |
-| `USDOT_zzxw_4s` | · |
-| `SUDOT_zzxw_4s` | · |
-| `SQDMLALB_zzxw_s` | · |
-| `SQDMLALB_zzxw_d` | · |
-| `SQDMLALT_zzxw_s` | · |
-| `SQDMLALT_zzxw_d` | · |
-| `SQDMLSLB_zzxw_s` | · |
-| `SQDMLSLB_zzxw_d` | · |
-| `SQDMLSLT_zzxw_s` | · |
-| `SQDMLSLT_zzxw_d` | · |
-| `CDOT_zzxw_s` | · |
-| `CDOT_zzxw_d` | · |
-| `CMLA_zzxz_h` | · |
-| `CMLA_zzxz_s` | · |
-| `SQRDCMLAH_zzxz_h` | · |
-| `SQRDCMLAH_zzxz_s` | · |
-| `SMLALB_zzxw_s` | · |
-| `SMLALB_zzxw_d` | · |
-| `SMLALT_zzxw_s` | · |
-| `SMLALT_zzxw_d` | · |
-| `UMLALB_zzxw_s` | · |
-| `UMLALB_zzxw_d` | · |
-| `UMLALT_zzxw_s` | · |
-| `UMLALT_zzxw_d` | · |
-| `SMLSLB_zzxw_s` | · |
-| `SMLSLB_zzxw_d` | · |
-| `SMLSLT_zzxw_s` | · |
-| `SMLSLT_zzxw_d` | · |
-| `UMLSLB_zzxw_s` | · |
-| `UMLSLB_zzxw_d` | · |
-| `UMLSLT_zzxw_s` | · |
-| `UMLSLT_zzxw_d` | · |
-| `SMULLB_zzx_s` | · |
-| `SMULLB_zzx_d` | · |
-| `SMULLT_zzx_s` | · |
-| `SMULLT_zzx_d` | · |
-| `UMULLB_zzx_s` | · |
-| `UMULLB_zzx_d` | · |
-| `UMULLT_zzx_s` | · |
-| `UMULLT_zzx_d` | · |
-| `SQDMULLB_zzx_s` | · |
-| `SQDMULLB_zzx_d` | · |
-| `SQDMULLT_zzx_s` | · |
-| `SQDMULLT_zzx_d` | · |
-| `SQDMULH_zzx_h` | · |
-| `SQDMULH_zzx_s` | · |
-| `SQDMULH_zzx_d` | · |
-| `SQRDMULH_zzx_h` | · |
-| `SQRDMULH_zzx_s` | · |
-| `SQRDMULH_zzx_d` | · |
-| `MUL_zzx_h` | · |
-| `MUL_zzx_s` | · |
-| `MUL_zzx_d` | · |
-| `FCADD` | · |
-| `FCMLA_zpzzz` | · |
-| `FCMLA_zzxz` | · |
-| `FCMLA_zzxz` | · |
-| `FMLA_zzxz` | · |
-| `FMLA_zzxz` | · |
-| `FMLA_zzxz` | · |
-| `FMLA_zzxz` | · |
-| `FMLS_zzxz` | · |
-| `FMLS_zzxz` | · |
-| `FMLS_zzxz` | · |
-| `FMLS_zzxz` | · |
-| `FMUL_zzx` | · |
-| `FMUL_zzx` | · |
-| `FMUL_zzx` | · |
-| `FMUL_zzx` | · |
-| `FADDV` | · |
-| `FMAXNMV` | · |
-| `FMINNMV` | · |
-| `FMAXV` | · |
-| `FMINV` | · |
-| `FADDQV` | · |
-| `FMAXNMQV` | · |
-| `FMINNMQV` | · |
-| `FMAXQV` | · |
-| `FMINQV` | · |
-| `FRECPE` | · |
-| `FRSQRTE` | · |
-| `F1CVT` | · |
-| `F2CVT` | · |
-| `F1CVTLT` | · |
-| `F2CVTLT` | · |
-| `BF1CVT` | · |
-| `BF2CVT` | · |
-| `BF1CVTLT` | · |
-| `BF2CVTLT` | · |
-| `FCVTN` | · |
-| `BFCVTN` | · |
-| `FCVTNB` | · |
-| `FCVTNT` | · |
-| `FCMGE_ppz0` | · |
-| `FCMGT_ppz0` | · |
-| `FCMLT_ppz0` | · |
-| `FCMLE_ppz0` | · |
-| `FCMEQ_ppz0` | · |
-| `FCMNE_ppz0` | · |
-| `FADDA` | · |
-| `FADD_zzz` | · |
-| `FSUB_zzz` | · |
-| `FMUL_zzz` | · |
-| `FTSMUL` | · |
-| `FRECPS` | · |
-| `FRSQRTS` | · |
-| `FADD_zpzz` | · |
-| `FSUB_zpzz` | · |
-| `FMUL_zpzz` | · |
-| `FSUB_zpzz` | · |
-| `FMAXNM_zpzz` | · |
-| `FMINNM_zpzz` | · |
-| `FMAX_zpzz` | · |
-| `FMIN_zpzz` | · |
-| `FABD` | · |
-| `FSCALE` | · |
-| `FMULX` | · |
-| `FDIV` | · |
-| `FDIV` | · |
-| `FAMAX` | · |
-| `FAMIN` | · |
-| `FADD_zpzi` | · |
-| `FSUB_zpzi` | · |
-| `FMUL_zpzi` | · |
-| `FSUBR_zpzi` | · |
-| `FMAXNM_zpzi` | · |
-| `FMINNM_zpzi` | · |
-| `FMAX_zpzi` | · |
-| `FMIN_zpzi` | · |
-| `FTMAD` | · |
-| `FMLA_zpzzz` | · |
-| `FMLS_zpzzz` | · |
-| `FNMLA_zpzzz` | · |
-| `FNMLS_zpzzz` | · |
-| `FMLA_zpzzz` | · |
-| `FMLS_zpzzz` | · |
-| `FNMLA_zpzzz` | · |
-| `FNMLS_zpzzz` | · |
-| `FCVT_sh_m` | · |
-| `FCVT_hs_m` | · |
-| `BFCVT_m` | · |
-| `FCVT_dh_m` | · |
-| `FCVT_hd_m` | · |
-| `FCVT_ds_m` | · |
-| `FCVT_sd_m` | · |
-| `FCVTX_ds_z` | · |
-| `FCVT_sh_z` | · |
-| `FCVT_hs_z` | · |
-| `BFCVT_z` | · |
-| `FCVT_dh_z` | · |
-| `FCVT_hd_z` | · |
-| `FCVT_ds_z` | · |
-| `FCVT_sd_z` | · |
-| `FCVTZS_hh_m` | · |
-| `FCVTZU_hh_m` | · |
-| `FCVTZS_hs_m` | · |
-| `FCVTZU_hs_m` | · |
-| `FCVTZS_hd_m` | · |
-| `FCVTZU_hd_m` | · |
-| `FCVTZS_ss_m` | · |
-| `FCVTZU_ss_m` | · |
-| `FCVTZS_ds_m` | · |
-| `FCVTZU_ds_m` | · |
-| `FCVTZS_sd_m` | · |
-| `FCVTZU_sd_m` | · |
-| `FCVTZS_dd_m` | · |
-| `FCVTZU_dd_m` | · |
-| `FCVTZS_hh_z` | · |
-| `FCVTZU_hh_z` | · |
-| `FCVTZS_hs_z` | · |
-| `FCVTZU_hs_z` | · |
-| `FCVTZS_hd_z` | · |
-| `FCVTZU_hd_z` | · |
-| `FCVTZS_ss_z` | · |
-| `FCVTZU_ss_z` | · |
-| `FCVTZS_sd_z` | · |
-| `FCVTZU_sd_z` | · |
-| `FCVTZS_ds_z` | · |
-| `FCVTZU_ds_z` | · |
-| `FCVTZS_dd_z` | · |
-| `FCVTZU_dd_z` | · |
-| `FRINTN_m` | · |
-| `FRINTP_m` | · |
-| `FRINTM_m` | · |
-| `FRINTZ_m` | · |
-| `FRINTA_m` | · |
-| `FRINTX_m` | · |
-| `FRINTI_m` | · |
-| `FRINTN_z` | · |
-| `FRINTP_z` | · |
-| `FRINTM_z` | · |
-| `FRINTZ_z` | · |
-| `FRINTA_z` | · |
-| `FRINTX_z` | · |
-| `FRINTI_z` | · |
-| `FRINT32X_s_m` | · |
-| `FRINT32X_d_m` | · |
-| `FRINT64X_s_m` | · |
-| `FRINT64X_d_m` | · |
-| `FRINT32X_s_z` | · |
-| `FRINT32X_d_z` | · |
-| `FRINT64X_s_z` | · |
-| `FRINT64X_d_z` | · |
-| `FRINT32Z_s_m` | · |
-| `FRINT32Z_d_m` | · |
-| `FRINT64Z_s_m` | · |
-| `FRINT64Z_d_m` | · |
-| `FRINT32Z_s_z` | · |
-| `FRINT32Z_d_z` | · |
-| `FRINT64Z_s_z` | · |
-| `FRINT64Z_d_z` | · |
-| `FRECPX_m` | · |
-| `FSQRT_m` | · |
-| `FRECPX_z` | · |
-| `FSQRT_z` | · |
-| `SCVTF_hh_m` | · |
-| `SCVTF_sh_m` | · |
-| `SCVTF_dh_m` | · |
-| `SCVTF_ss_m` | · |
-| `SCVTF_sd_m` | · |
-| `SCVTF_ds_m` | · |
-| `SCVTF_dd_m` | · |
-| `UCVTF_hh_m` | · |
-| `UCVTF_sh_m` | · |
-| `UCVTF_dh_m` | · |
-| `UCVTF_ss_m` | · |
-| `UCVTF_sd_m` | · |
-| `UCVTF_ds_m` | · |
-| `UCVTF_dd_m` | · |
-| `SCVTF_hh_z` | · |
-| `SCVTF_sh_z` | · |
-| `SCVTF_ss_z` | · |
-| `SCVTF_sd_z` | · |
-| `SCVTF_dh_z` | · |
-| `SCVTF_ds_z` | · |
-| `SCVTF_dd_z` | · |
-| `UCVTF_hh_z` | · |
-| `UCVTF_sh_z` | · |
-| `UCVTF_ss_z` | · |
-| `UCVTF_sd_z` | · |
-| `UCVTF_dh_z` | · |
-| `UCVTF_ds_z` | · |
-| `UCVTF_dd_z` | · |
-| `LDR_pri` | · |
-| `LDR_zri` | · |
-| `LD1R_zpri` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zpiz` | · |
-| `LD_zprr` | · |
-| `LD_zprr` | · |
-| `LD_zprr` | · |
-| `LDFF1_zprr` | · |
-| `LD_zpri` | · |
-| `LD_zpri` | · |
-| `LD_zpri` | · |
-| `LDNF1_zpri` | · |
-| `LD_zprr` | · |
-| `LD_zprr` | · |
-| `LD_zprr` | · |
-| `LD_zprr` | · |
-| `LD_zpri` | · |
-| `LD_zpri` | · |
-| `LD_zpri` | · |
-| `LD_zpri` | · |
-| `LD1RQ_zprr` | · |
-| `LD1RO_zprr` | · |
-| `LD1RQ_zpri` | · |
-| `LD1RO_zpri` | · |
-| `PRF_ns` | · |
-| `PRF_ns` | · |
-| `PRF` | · |
-| `PRF_rr` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1_zprz` | · |
-| `LD1Q` | · |
-| `LD1_zpiz` | · |
-| `PRF_ns` | · |
-| `PRF_ns` | · |
-| `PRF_ns` | · |
-| `STR_pri` | · |
-| `STR_zri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zpri` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST_zprr` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1Q` | · |
-| `ST1_zpiz` | · |
-| `ST1_zpiz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `ST1_zprz` | · |
-| `MUL_zzz` | · |
-| `SMULH_zzz` | · |
-| `UMULH_zzz` | · |
-| `PMUL_zzz` | · |
-| `SQDMULH_zzz` | · |
-| `SQRDMULH_zzz` | · |
-| `SADALP_zpzz` | · |
-| `UADALP_zpzz` | · |
-| `URECPE_m` | · |
-| `URSQRTE_m` | · |
-| `SQABS_m` | · |
-| `SQNEG_m` | · |
-| `URECPE_z` | · |
-| `URSQRTE_z` | · |
-| `SQABS_z` | · |
-| `SQNEG_z` | · |
-| `SRSHL` | · |
-| `URSHL` | · |
-| `SRSHL` | · |
-| `URSHL` | · |
-| `SQSHL` | · |
-| `UQSHL` | · |
-| `SQSHL` | · |
-| `UQSHL` | · |
-| `SQRSHL` | · |
-| `UQRSHL` | · |
-| `SQRSHL` | · |
-| `UQRSHL` | · |
-| `SHADD` | · |
-| `UHADD` | · |
-| `SHSUB` | · |
-| `UHSUB` | · |
-| `SRHADD` | · |
-| `URHADD` | · |
-| `SHSUB` | · |
-| `UHSUB` | · |
-| `ADDP` | · |
-| `SMAXP` | · |
-| `UMAXP` | · |
-| `SMINP` | · |
-| `UMINP` | · |
-| `SQADD_zpzz` | · |
-| `UQADD_zpzz` | · |
-| `SQSUB_zpzz` | · |
-| `UQSUB_zpzz` | · |
-| `SUQADD` | · |
-| `USQADD` | · |
-| `SQSUB_zpzz` | · |
-| `UQSUB_zpzz` | · |
-| `SADDLB` | · |
-| `SADDLT` | · |
-| `UADDLB` | · |
-| `UADDLT` | · |
-| `SSUBLB` | · |
-| `SSUBLT` | · |
-| `USUBLB` | · |
-| `USUBLT` | · |
-| `SABDLB` | · |
-| `SABDLT` | · |
-| `UABDLB` | · |
-| `UABDLT` | · |
-| `SADDLBT` | · |
-| `SSUBLBT` | · |
-| `SSUBLTB` | · |
-| `SADDWB` | · |
-| `SADDWT` | · |
-| `UADDWB` | · |
-| `UADDWT` | · |
-| `SSUBWB` | · |
-| `SSUBWT` | · |
-| `USUBWB` | · |
-| `USUBWT` | · |
-| `SQDMULLB_zzz` | · |
-| `SQDMULLT_zzz` | · |
-| `PMULLB` | · |
-| `PMULLT` | · |
-| `SMULLB_zzz` | · |
-| `SMULLT_zzz` | · |
-| `UMULLB_zzz` | · |
-| `UMULLT_zzz` | · |
-| `SSHLLB` | · |
-| `SSHLLT` | · |
-| `USHLLB` | · |
-| `USHLLT` | · |
-| `EORBT` | · |
-| `EORTB` | · |
-| `SMMLA` | · |
-| `USMMLA` | · |
-| `UMMLA` | · |
-| `BEXT` | · |
-| `BDEP` | · |
-| `BGRP` | · |
-| `CADD_rot90` | · |
-| `CADD_rot270` | · |
-| `SQCADD_rot90` | · |
-| `SQCADD_rot270` | · |
-| `SABALB` | · |
-| `SABALT` | · |
-| `UABALB` | · |
-| `UABALT` | · |
-| `ADCLB` | · |
-| `ADCLT` | · |
-| `SSRA` | · |
-| `USRA` | · |
-| `SRSRA` | · |
-| `URSRA` | · |
-| `SRI` | · |
-| `SLI` | · |
-| `SABA` | · |
-| `UABA` | · |
-| `SQCVTN_sh` | · |
-| `SQXTNB` | · |
-| `SQXTNT` | · |
-| `UQCVTN_sh` | · |
-| `UQXTNB` | · |
-| `UQXTNT` | · |
-| `SQCVTUN_sh` | · |
-| `SQXTUNB` | · |
-| `SQXTUNT` | · |
-| `SQSHRUNB` | · |
-| `SQSHRUNT` | · |
-| `SQRSHRUNB` | · |
-| `SQRSHRUNT` | · |
-| `SHRNB` | · |
-| `SHRNT` | · |
-| `RSHRNB` | · |
-| `RSHRNT` | · |
-| `SQSHRNB` | · |
-| `SQSHRNT` | · |
-| `SQRSHRNB` | · |
-| `SQRSHRNT` | · |
-| `UQSHRNB` | · |
-| `UQSHRNT` | · |
-| `UQRSHRNB` | · |
-| `UQRSHRNT` | · |
-| `ADDHNB` | · |
-| `ADDHNT` | · |
-| `RADDHNB` | · |
-| `RADDHNT` | · |
-| `SUBHNB` | · |
-| `SUBHNT` | · |
-| `RSUBHNB` | · |
-| `RSUBHNT` | · |
-| `MATCH` | · |
-| `NMATCH` | · |
-| `HISTCNT` | · |
-| `HISTSEG` | · |
-| `LUTI2_1b` | · |
-| `LUTI2_1h` | · |
-| `LUTI4_1b` | · |
-| `LUTI4_1h` | · |
-| `LUTI4_2h` | · |
-| `FADDP` | · |
-| `FMAXNMP` | · |
-| `FMINNMP` | · |
-| `FMAXP` | · |
-| `FMINP` | · |
-| `SQDMLALB_zzzw` | · |
-| `SQDMLALT_zzzw` | · |
-| `SQDMLSLB_zzzw` | · |
-| `SQDMLSLT_zzzw` | · |
-| `SQDMLALBT` | · |
-| `SQDMLSLBT` | · |
-| `SQRDMLAH_zzzz` | · |
-| `SQRDMLSH_zzzz` | · |
-| `SMLALB_zzzw` | · |
-| `SMLALT_zzzw` | · |
-| `UMLALB_zzzw` | · |
-| `UMLALT_zzzw` | · |
-| `SMLSLB_zzzw` | · |
-| `SMLSLT_zzzw` | · |
-| `UMLSLB_zzzw` | · |
-| `UMLSLT_zzzw` | · |
-| `CMLA_zzzz` | · |
-| `SQRDCMLAH_zzzz` | · |
-| `SDOT_zzzz_2s` | · |
-| `UDOT_zzzz_2s` | · |
-| `USDOT_zzzz_4s` | · |
-| `BFMMLA` | · |
-| `FMMLA_s` | · |
-| `FMMLA_d` | · |
-| `FMMLA_sb` | · |
-| `FMMLA_hb` | · |
-| `LDNT1_zprz` | · |
-| `LDNT1_zprz` | · |
-| `STNT1_zprz` | · |
-| `STNT1_zprz` | · |
-| `AESMC` | · |
-| `AESIMC` | · |
-| `AESE` | · |
-| `AESD` | · |
-| `SM4E` | · |
-| `SM4EKEY` | · |
-| `RAX1` | · |
-| `FCVTXNT_ds_m` | · |
-| `FCVTX_ds_m` | · |
-| `FCVTNT_sh_m` | · |
-| `BFCVTNT_m` | · |
-| `FCVTLT_hs_m` | · |
-| `FCVTNT_ds_m` | · |
-| `FCVTLT_sd_m` | · |
-| `FCVTXNT_ds_z` | · |
-| `FCVTNT_sh_z` | · |
-| `FCVTNT_ds_z` | · |
-| `BFCVTNT_z` | · |
-| `FCVTLT_hs_z` | · |
-| `FCVTLT_sd_z` | · |
-| `FLOGB_m` | · |
-| `FLOGB_z` | · |
-| `FMLALB_zzzw` | · |
-| `FMLALT_zzzw` | · |
-| `FMLSLB_zzzw` | · |
-| `FMLSLT_zzzw` | · |
-| `BFMLALB_zzzw` | · |
-| `BFMLALT_zzzw` | · |
-| `BFMLSLB_zzzw` | · |
-| `BFMLSLT_zzzw` | · |
-| `FMLAL_hb` | · |
-| `FMLALL_sb` | · |
-| `FDOT_zzzz` | · |
-| `BFDOT_zzzz` | · |
-| `FDOT_sb` | · |
-| `FDOT_hb` | · |
-| `FMLALB_zzxw` | · |
-| `FMLALT_zzxw` | · |
-| `FMLSLB_zzxw` | · |
-| `FMLSLT_zzxw` | · |
-| `BFMLALB_zzxw` | · |
-| `BFMLALT_zzxw` | · |
-| `BFMLSLB_zzxw` | · |
-| `BFMLSLT_zzxw` | · |
-| `FMLAL_idx_hb` | · |
-| `FMLALL_idx_sb` | · |
-| `FDOT_zzxz` | · |
-| `BFDOT_zzxz` | · |
-| `FDOT_idx_sb` | · |
-| `FDOT_idx_hb` | · |
-| `PSEL` | · |
-| `PSEL` | · |
-| `PSEL` | · |
-| `PSEL` | · |
-| `SCLAMP` | · |
-| `UCLAMP` | · |
-| `FCLAMP` | · |
-| `LD1_zcrr` | · |
-| `LD1_zcrr` | · |
-| `ST1_zcrr` | · |
-| `ST1_zcrr` | · |
-| `LD1_zcri` | · |
-| `LD1_zcri` | · |
-| `ST1_zcri` | · |
-| `ST1_zcri` | · |
-| `LD1_zcrr_stride` | · |
-| `LD1_zcrr_stride` | · |
-| `ST1_zcrr_stride` | · |
-| `ST1_zcrr_stride` | · |
-| `LD1_zcri_stride` | · |
-| `LD1_zcri_stride` | · |
-| `ST1_zcri_stride` | · |
-| `ST1_zcri_stride` | · |
+| Instrução | ARMv8.0-A | ARMv8.1-A | ARMv8.2-A | ARMv8.3-A | ARMv8.4-A | ARMv8.5-A | ARMv8.6-A | ARMv8.7-A | ARMv8.8-A | ARMv8.9-A | ARMv9.0-A | ARMv9.1-A | ARMv9.2-A | ARMv9.3-A | ARMv9.4-A | ARMv9.5-A |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `ORR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EOR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AND_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BIC_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADD_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUB_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUB_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SABD_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UABD_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MUL_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMULH_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMULH_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SDIV_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UDIV_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SDIV_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UDIV_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EORV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ANDV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `EORQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ANDQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MOVPRFX_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MOVPRFX_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UADDV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SADDV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMAXV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMAXV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMINV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMINV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADDQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMAXQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMINQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMAXQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMINQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ASR_zpzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `LSR_zpzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `LSL_zpzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ASRD` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHL_zpzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQSHL_zpzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SRSHR` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `URSHR` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHLU` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ASR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSL_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ASR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSR_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSL_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ASR_zpzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSR_zpzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSL_zpzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLS_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLZ_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CNT_zpz_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CNOT_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NOT_zpz_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FABS_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FNEG_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLS_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CLZ_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CNT_zpz_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CNOT_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `NOT_zpz_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FABS_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FNEG_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ABS_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NEG_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SXTB_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UXTB_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SXTH_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UXTH_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SXTW_m` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UXTW_m` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ABS_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `NEG_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SXTB_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UXTB_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SXTH_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UXTH_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SXTW_z` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UXTW_z` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `FCMGE_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMGT_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMEQ_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMNE_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMUO_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FACGE_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FACGT_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MLA` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MLS` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MLA` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MLS` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADD_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUB_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SQADD_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UQADD_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SQSUB_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UQSUB_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AND_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORR_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EOR_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BIC_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `XAR` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `EOR3` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BSL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BCAX` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BSL1N` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BSL2N` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `NBSL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `INDEX_ii` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INDEX_ir` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INDEX_ri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INDEX_rr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADDVL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADDSVL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ADDPL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADDSPL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RDVL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `RDSVL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ASR_zzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `LSR_zzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `LSL_zzi` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ASR_zzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSR_zzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LSL_zzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADR_s32` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADR_u32` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADR_p32` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADR_p64` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MOVPRFX` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FEXPA` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FTSSEL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CNT_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INCDEC_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDEC_r_32` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDEC_r_64` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INCDEC_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDEC_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EOR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AND_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `DUPM` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCPY` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `CPY_m_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `CPY_z_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EXT` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EXT_sve2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `DUP_s` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `DUP_x` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `DUPQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `DUPQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `DUPQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `DUPQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `EXTQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `INSR_f` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INSR_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REV_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PMOV_pv` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_pv` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_pv` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_pv` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_vp` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_vp` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_vp` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMOV_vp` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TBL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UNPK` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `TBL_sve2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TBX` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ZIP1_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ZIP2_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UZP1_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UZP2_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `TRN1_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `TRN2_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REV_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PUNPKLO` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PUNPKHI` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ZIP1_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ZIP2_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UZP1_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UZP2_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `TRN1_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `TRN2_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ZIP1_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ZIP2_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UZP1_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UZP2_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TRN1_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TRN2_q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ZIPQ1` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ZIPQ2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UZPQ1` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UZPQ2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TBLQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `TBXQ` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `COMPACT` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTA_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTB_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTA_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTB_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTA_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CLASTB_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LASTA_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LASTB_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LASTA_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LASTB_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CPY_m_v` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CPY_m_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REVB_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REVH_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REVW_m` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RBIT_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `REVD_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `REVB_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `REVH_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `REVW_z` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RBIT_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `REVD_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SPLICE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SPLICE_sve2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `EXPAND` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SEL_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHS_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHI_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGE_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGT_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPEQ_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPNE_ppzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPEQ_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPNE_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGE_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGT_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLT_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLE_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHS_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHI_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLO_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLS_ppzw` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHS_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPHI_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLO_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLS_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGE_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPGT_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLT_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPLE_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPEQ_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CMPNE_ppzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AND_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BIC_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `EOR_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SEL_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORR_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ORN_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NOR_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `NAND_pppp` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PTEST` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PTRUE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PTRUE_cnt` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SETFFR` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PFALSE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `RDFFR_p` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `RDFFR` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `WRFFR` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PFIRST` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PNEXT` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKPA` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKPB` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKA_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKB_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKA_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKB_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BRKN` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CNTP` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CNTP_c` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `FIRSTP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LASTP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `INCDECP_r` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INCDECP_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDECP_r_32` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDECP_r_64` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SINCDECP_z` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CTERM` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `WHILE_lt` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `WHILE_gt` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_ptr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_lt_pair` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_gt_pair` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_lt_cnt2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_lt_cnt4` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_gt_cnt2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `WHILE_gt_cnt4` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PEXT_1` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PEXT_2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FDUP` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `DUP_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SUBR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQSUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMAX_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMIN_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UMIN_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MUL_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `DOT_zzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CDOT_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SDOT_zzxw_4s` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_zzxw_4d` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_zzxw_4s` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UDOT_zzxw_4d` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SDOT_zzxw_2s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UDOT_zzxw_2s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLA_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLA_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLA_zzxz_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLS_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLS_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MLS_zzxz_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLAH_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLAH_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLAH_zzxz_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLSH_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLSH_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLSH_zzxz_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USDOT_zzxw_4s` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUDOT_zzxw_4s` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SQDMLALB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CDOT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CDOT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CMLA_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CMLA_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDCMLAH_zzxz_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDCMLAH_zzxz_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLB_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLB_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLT_zzxw_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLT_zzxw_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLB_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLB_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLT_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLT_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLB_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLB_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLT_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLT_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLB_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLB_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLT_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLT_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULH_zzx_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULH_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULH_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMULH_zzx_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMULH_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMULH_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MUL_zzx_h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MUL_zzx_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MUL_zzx_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCADD` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMLA_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_zzxz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLS_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_zzxz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zzx` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMUL_zzx` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zzx` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zzx` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FADDV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNMV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMINNMV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAXV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMINV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FADDQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMAXNMQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMINNMQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMAXQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMINQV` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRECPE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRSQRTE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `F1CVT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `F2CVT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `F1CVTLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `F2CVTLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BF1CVT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BF2CVT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BF1CVTLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BF2CVTLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTN` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFCVTN` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCMGE_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMGT_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMLT_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMLE_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMEQ_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCMNE_ppz0` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FADDA` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FADD_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FTSMUL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRECPS` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRSQRTS` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FADD_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_zpzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FABD` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSCALE` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMULX` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FDIV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FDIV` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FAMAX` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ |
+| `FAMIN` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ |
+| `FADD_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSUB_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMUL_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSUBR_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAXNM_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMINNM_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMAX_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMIN_zpzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FTMAD` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FNMLA_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FNMLS_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLA_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMLS_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FNMLA_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FNMLS_zpzzz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_sh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_hs_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFCVT_m` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_dh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_hd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_ds_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVT_sd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTX_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_sh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_hs_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFCVT_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_dh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_hd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVT_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_hh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_hh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_hs_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_hs_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_hd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_hd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_ss_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_ss_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_ds_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_ds_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_sd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_sd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_dd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZU_dd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FCVTZS_hh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_hh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_hs_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_hs_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_hd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_hd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_ss_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_ss_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZS_dd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTZU_dd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTN_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTP_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTM_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTZ_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTA_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTX_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTI_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRINTN_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTP_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTM_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTZ_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTA_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTX_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINTI_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32X_s_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32X_d_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64X_s_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64X_d_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32X_s_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32X_d_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64X_s_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64X_d_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32Z_s_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32Z_d_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64Z_s_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64Z_d_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32Z_s_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT32Z_d_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64Z_s_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRINT64Z_d_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FRECPX_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FSQRT_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FRECPX_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FSQRT_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_hh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_sh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_dh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_ss_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_sd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_ds_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_dd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_hh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_sh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_dh_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_ss_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_sd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_ds_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `UCVTF_dd_m` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SCVTF_hh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_sh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_ss_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_dh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SCVTF_dd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_hh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_sh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_ss_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_dh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UCVTF_dd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LDR_pri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LDR_zri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1R_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zpiz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LDFF1_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LDNF1_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1RQ_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1RO_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1RQ_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1RO_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PRF_ns` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF_ns` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF_rr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `LD1Q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zpiz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF_ns` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF_ns` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `PRF_ns` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `STR_pri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `STR_zri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zpri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST_zprr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1Q` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zpiz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zpiz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ST1_zprz` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MUL_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULH_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULH_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMUL_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULH_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMULH_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADALP_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UADALP_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URECPE_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URSQRTE_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQABS_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQNEG_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URECPE_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URSQRTE_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQABS_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQNEG_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQRSHL` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SHADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UHADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SHSUB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UHSUB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SRHADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `URHADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SHSUB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UHSUB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ADDP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMAXP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMAXP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMINP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMINP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQADD_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQADD_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SUQADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USQADD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQSUB_zpzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADDLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADDLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UADDLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UADDLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USUBLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USUBLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SABDLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SABDLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UABDLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UABDLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADDLBT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBLBT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBLTB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADDWB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SADDWT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UADDWB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UADDWT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBWB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSUBWT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USUBWB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USUBWT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLB_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMULLT_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMULLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `PMULLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLB_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMULLT_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLB_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMULLT_zzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSHLLB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SSHLLT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `USHLLB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `USHLLT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `EORBT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `EORTB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMMLA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `USMMLA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UMMLA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `BEXT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BDEP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BGRP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CADD_rot90` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CADD_rot270` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQCADD_rot90` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQCADD_rot270` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SABALB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SABALT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UABALB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UABALT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ADCLB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ADCLT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SSRA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `USRA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SRSRA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `URSRA` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SRI` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SLI` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SABA` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UABA` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQCVTN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQXTNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQXTNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQCVTN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UQXTNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQXTNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQCVTUN_sh` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQXTUNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQXTUNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHRUNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHRUNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQRSHRUNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQRSHRUNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RSHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RSHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQSHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQRSHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SQRSHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQSHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQSHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQRSHRNB` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `UQRSHRNT` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ADDHNB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ADDHNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `RADDHNB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `RADDHNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SUBHNB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SUBHNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `RSUBHNB` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `RSUBHNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `MATCH` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `NMATCH` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `HISTCNT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `HISTSEG` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LUTI2_1b` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `LUTI2_1h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `LUTI4_1b` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `LUTI4_1h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `LUTI4_2h` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FADDP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMAXNMP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMINNMP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMAXP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMINP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLALBT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQDMLSLBT` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLAH_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDMLSH_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLALT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLALT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SMLSLT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UMLSLT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `CMLA_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SQRDCMLAH_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SDOT_zzzz_2s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `UDOT_zzzz_2s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `USDOT_zzzz_4s` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFMMLA` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FMMLA_s` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMMLA_d` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMMLA_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMMLA_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LDNT1_zprz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LDNT1_zprz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `STNT1_zprz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `STNT1_zprz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `AESMC` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `AESIMC` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `AESE` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `AESD` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SM4E` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `SM4EKEY` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `RAX1` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTXNT_ds_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTX_ds_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNT_sh_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFCVTNT_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTLT_hs_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNT_ds_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTLT_sd_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTXNT_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNT_sh_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTNT_ds_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFCVTNT_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTLT_hs_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FCVTLT_sd_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FLOGB_m` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FLOGB_z` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLALB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLALT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLSLB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLSLT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFMLALB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFMLALT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSLB_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFMLSLT_zzzw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLAL_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FMLALL_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FDOT_zzzz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFDOT_zzzz` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FDOT_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FMLALB_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLALT_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLSLB_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLSLT_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFMLALB_zzxw` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFMLALT_zzxw` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `BFMLSLB_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFMLSLT_zzxw` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `FMLAL_idx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FMLALL_idx_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FDOT_zzxz` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `BFDOT_zzxz` | · | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `FDOT_idx_sb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `FDOT_idx_hb` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | ✅ |
+| `PSEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `PSEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `PSEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `PSEL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `SCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `UCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
+| `FCLAMP` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcrr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcrr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcrr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcrr` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcri` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcrr_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcrr_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcrr_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcrr_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcri_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `LD1_zcri_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcri_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| `ST1_zcri_stride` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 
 ## SME — extensão matricial
 

@@ -150,6 +150,24 @@ public final class Aarch64Architecture {
             Aarch64Feature.FP8_FUSED_MULTIPLY_ADD,
             Aarch64Feature.LOOKUP_TABLE);
 
+    /// **ARMv8.2-A + SVE** (B17.26) — o **Fujitsu A64FX**, primeiro silício SVE do mundo
+    /// (anunciado 2018, usado no supercomputador Fugaku), é ARMv8.2-A com `FEAT_SVE` (`VL=512`
+    /// bits) — SVE é OPCIONAL a partir de ARMv8.2-A (RFC B17.2/B17.1), e nenhum dos 16 presets de
+    /// versão acima o declara (só os `ARMV9_x_A`, ver o Javadoc deles). Preset dedicado, aditivo,
+    /// mesmo padrão que `ARMV7A_NEON` deu ao lado de 32 bits (B13.22) — **não** entra na escada de
+    /// versão `AARCH64_ARCHITECTURES` do medidor de cobertura (que mede a linha de base oficial de
+    /// cada versão ARM, não SKUs individuais de catálogo); existe só para o catálogo
+    /// {@link Aarch64Processor#A64FX}.
+    public static final Aarch64Architecture ARMV8_2_A_SVE = extending(ARMV8_2_A, "ARMv8.2-A+SVE",
+            Aarch64Feature.SVE);
+
+    /// **ARMv8.4-A + SVE** (B17.26) — o **Neoverse V1** é ARMv8.4-A com `FEAT_SVE` (`VL=256`
+    /// bits), não só o `ARMV8_4_A` puro que {@link Aarch64Processor} usava até aqui (achado desta
+    /// task: entrada factualmente incompleta, SVE é parte real do núcleo). Mesmo padrão de
+    /// {@link #ARMV8_2_A_SVE} — preset de catálogo, fora da escada de versão do medidor.
+    public static final Aarch64Architecture ARMV8_4_A_SVE = extending(ARMV8_4_A, "ARMv8.4-A+SVE",
+            Aarch64Feature.SVE);
+
     /// **ARMv8-R AArch64** (`Cortex-R82`, B20.8) — estende {@link #ARMV8_0_A} (a B19.9 mediu o
     /// conjunto A64 dela em 99%, baseline suficiente para um perfil R não nascer cheio de buracos)
     /// acrescentando {@link Aarch64Feature#R_PROFILE}/{@link Aarch64Feature#PMSA}. **Não** é uma
