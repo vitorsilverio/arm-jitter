@@ -135,7 +135,7 @@ final class SveIntegerPredicatedOps {
 
     // ── Binárias (inclui os shifts por vetor) ───────────────────────────────────────────────────
 
-    private static long binary(Ir64Op.SveIntegerPredicated.Op kind, long n, long m, int esz) {
+    static long binary(Ir64Op.SveIntegerPredicated.Op kind, long n, long m, int esz) {
         long sn = SveIntegerOps.signExtend(n, esz);
         long sm = SveIntegerOps.signExtend(m, esz);
         int bits = SveIntegerOps.elementBits(esz);

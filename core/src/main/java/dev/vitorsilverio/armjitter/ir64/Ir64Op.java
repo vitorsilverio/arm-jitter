@@ -94,7 +94,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
         Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct,
-        Ir64Op.SmeMop4, Ir64Op.SmeTmop, Ir64Op.SmeZeroArray, Ir64Op.SmeMovt, Ir64Op.SmeLut {
+        Ir64Op.SmeMop4, Ir64Op.SmeTmop, Ir64Op.SmeZeroArray, Ir64Op.SmeMovt, Ir64Op.SmeLut,
+        Ir64Op.SmeMultiVectorSingle {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -565,6 +566,9 @@ public sealed interface Ir64Op permits
         public static final int SME_MOVT = 207;
         /// B18.6: `LUTI2`/`LUTI4` (`FEAT_SME2`/`SME2p1`/`SME_LUTv2`) — ver {@link SmeLut}.
         public static final int SME_LUT = 208;
+        /// B18.7: SME2 multi-vetor "multiple-and-single" destrutivo (`SMAX_n1`/`FMAX_n1`/`ADD_n1`/…) — ver
+        /// {@link SmeMultiVectorSingle}.
+        public static final int SME_MULTI_VECTOR_SINGLE = 209;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5322,6 +5326,31 @@ public sealed interface Ir64Op permits
             int index,
             long instructionAddress) implements Ir64Op {
         @Override public int kind() { return Kind.SME_LUT; }
+    }
+
+    /// SME2 multi-vetor "multiple-and-single" destrutivo (B18.7, `FEAT_SME2`): `Zdn[i] = op(Zdn[i], Zm)` para cada um
+    /// dos {@link #count} (`2`/`4`) registradores `Z` CONSECUTIVOS a partir de {@link #zdn}, com UM `Zm` avulso
+    /// (`Z0`-`Z15`). **Sem predicado.** `esz` é o tamanho do elemento (`0` = byte … `3` = doubleword; nas operações de
+    /// ponto flutuante `0` não existe — é o espaço de `BFMAX_n1` e afins). Exige modo streaming (`SVL`, nunca `VL`).
+    record SmeMultiVectorSingle(
+            Op op,
+            int esz,
+            int count,
+            /// Primeiro registrador do grupo — JÁ multiplicado por `count` (`%zd_ax2`/`%zd_ax4`).
+            int zdn,
+            int zm,
+            long instructionAddress) implements Ir64Op {
+        /// As 13 operações da seção `### SME2 Multi-vector Multiple and Single SVE Destructive`.
+        public enum Op {
+            SMAX, UMAX, SMIN, UMIN, ADD, SRSHL, URSHL, SQDMULH, FMAX, FMIN, FMAXNM, FMINNM, FSCALE;
+
+            /// `true` nas operações de ponto flutuante (`esz = 0` não existe nelas).
+            public boolean isFloatingPoint() {
+                return ordinal() >= FMAX.ordinal();
+            }
+        }
+
+        @Override public int kind() { return Kind.SME_MULTI_VECTOR_SINGLE; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

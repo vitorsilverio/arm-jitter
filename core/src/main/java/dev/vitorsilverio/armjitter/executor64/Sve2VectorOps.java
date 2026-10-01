@@ -40,6 +40,22 @@ final class Sve2VectorOps {
 
     // ── Shift por vetor ──────────────────────────────────────────────────────────────────────────
 
+    /// Maior magnitude de deslocamento que ainda distingue resultados: acima de `128` (e de qualquer `esz`) o
+    /// elemento já foi inteiro empurrado para fora, então o valor é limitado a isto para caber em `int`.
+    private static final int MAX_SHIFT_MAGNITUDE = 255;
+
+    /// `SRSHL`/`URSHL` do SME2 multi-vetor (`sme2_srshl_{h,s,d}`/`sme2_urshl_{h,s,d}` do QEMU): ao contrário do SVE, a
+    /// quantidade é o ELEMENTO INTEIRO de `Zm` com sinal (`(int16_t)`/`int32_t`/`int64_t`), não só o byte baixo;
+    /// em bytes os dois coincidem. Sempre arredonda, nunca satura.
+    static long roundingShiftByElement(long n, long m, int esz, boolean signed) {
+        int bits = SveIntegerOps.elementBits(esz);
+        long amount = SveIntegerOps.signExtend(m, esz);
+        long v = signed ? SveIntegerOps.signExtend(n, esz) : n & SveIntegerOps.elementMask(esz);
+        long magnitude = amount == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(amount);
+        int k = (int) Math.min(magnitude, MAX_SHIFT_MAGNITUDE);
+        return amount < 0 ? shiftRight(v, k, bits, signed, true) : shiftLeft(v, k, esz, signed, false);
+    }
+
     /// A quantidade é o BYTE baixo do elemento de `Zm`, com sinal (`(int8_t)m` do QEMU), em todos os tamanhos: positivo
     /// desloca à esquerda (saturando se `saturate`), negativo à direita (com arredondamento se `round`).
     private static long shift(long value, long amountElement, int esz, boolean signed, boolean round,

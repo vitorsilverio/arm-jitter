@@ -247,6 +247,35 @@ final class Aarch64SmeDecoder {
     private static final int LUT_STRIDED_X2_ZD_ALIGN_MASK = 0b01000;
     private static final int LUT_STRIDED_X4_ZD_ALIGN_MASK = 0b01100;
 
+    // ── `### SME2 Multi-vector Multiple and Single SVE Destructive` (B18.7) ──────────────────────────────────
+    /// `bits[31:20] = 1100_0001_0010` (`esz` em `[23:22]` livre) e `bits[15:12] = 1010`; `bit 11` escolhe `x2`/`x4`
+    /// (`@z2z_2x1` x `@z2z_4x1`) e os bits `[10:5]`/`[0]` escolhem a operação.
+    private static final int MV_SINGLE_MASK = 0xFF30F000;
+    private static final int MV_SINGLE_VALUE = 0xC120A000;
+    private static final int MV_COUNT_BIT_SHIFT = 11;
+    private static final int MV_ESZ_SHIFT = 22;
+    private static final int MV_ESZ_MASK = 0b11;
+    private static final int MV_ZM_SHIFT = 16;
+    /// `zm:4` — o operando avulso só alcança `Z0`-`Z15` (Armadilha 2 da task).
+    private static final int MV_ZM_MASK = 0b1111;
+    private static final int MV_ZDN_X2_SHIFT = 1;
+    private static final int MV_ZDN_X4_SHIFT = 2;
+    /// No `x4` o `bit 1` é fixo em `0` (`@z2z_4x1`: `...0 .`); no `x2` ele faz parte de `zdn`.
+    private static final int MV_X4_ZERO_BIT = 0b10;
+    private static final int MV_OPERATION_SHIFT = 5;
+    private static final int MV_OPERATION_MASK = 0b111111;
+    private static final int MV_UNSIGNED_BIT = 1;
+    /// Chave `bits[10:5]`: `bit 10` separa `SQDMULH` do resto; `[9:5]` é o `op5` do `.decode`.
+    private static final int MV_KEY_SMAX = 0b000000;
+    private static final int MV_KEY_SMIN = 0b000001;
+    private static final int MV_KEY_FMAX = 0b001000;
+    private static final int MV_KEY_FMAXNM = 0b001001;
+    private static final int MV_KEY_FSCALE = 0b001100;
+    private static final int MV_KEY_SRSHL = 0b010001;
+    private static final int MV_KEY_ADD = 0b011000;
+    private static final int MV_KEY_SQDMULH = 0b100000;
+    private static final int MV_ESZ_BYTE = 0;
+
     /// Linha de `ZERO_za`: máscara/valor de 32 bits + `ngrp`/`nvec` + a largura e a escala do `off` DESTA linha.
     private record ZeroArrayRow(int mask, int value, int ngrp, int nvec, int offMask, int offScale) {
     }
@@ -413,6 +442,9 @@ final class Aarch64SmeDecoder {
         if (zt0Family != null) {
             return zt0Family;
         }
+        if ((word & MV_SINGLE_MASK) == MV_SINGLE_VALUE) {
+            return decodeMultiVectorSingle(word, address);
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -492,6 +524,56 @@ final class Aarch64SmeDecoder {
         }
         return new Ir64Op.SmeLut(row.fourBit(), (word >>> LUT_ESZ_SHIFT) & LUT_ESZ_MASK, row.count(),
                 row.strided(), zd, zn, index, address);
+    }
+
+    /// Base de um grupo de `count` registradores consecutivos (`%zd_ax2`/`%zd_ax4`, `%zm_ax2`/`%zm_ax4`, … — as
+    /// funções `times_2`/`times_4` do `.decode`): o campo NÃO tem os `log2(count)` bits baixos (é assim que o
+    /// alinhamento do grupo é garantido por construção), então o registrador-base é `campo × count`, com o campo de
+    /// `5 - log2(count)` bits a partir de `shift`. Ler o campo como um registrador cru endereça o `Z` errado em
+    /// TODAS as instruções da família (Armadilha 1 da B18.7). Compartilhado por B18.7-B18.12.
+    ///
+    /// @param word  a palavra de instrução
+    /// @param shift bit baixo do campo (`1`/`2` para `zdn`, `17`/`18` para `zm`, `6`/`7` para `zn`)
+    /// @param count `2` ou `4`
+    static int groupBase(int word, int shift, int count) {
+        int fieldBits = Integer.SIZE - Integer.numberOfLeadingZeros(REGISTER_MASK) - Integer.numberOfTrailingZeros(count);
+        return ((word >>> shift) & ((1 << fieldBits) - 1)) * count;
+    }
+
+    /// `SMAX_n1`/`UMAX_n1`/`SMIN_n1`/`UMIN_n1`/`FMAX_n1`/`FMIN_n1`/`FMAXNM_n1`/`FMINNM_n1`/`SRSHL_n1`/`URSHL_n1`/
+    /// `ADD_n1`/`SQDMULH_n1`/`FSCALE_n1` (B18.7). `null` = fora da família: `bit 1` do `x4` ligado, combinação de
+    /// opção/`U` que o `.decode` não define, ponto flutuante com `esz = 0` (`BFMAX_n1` e afins — outro gate) ou
+    /// feature ausente (G8 cai em `UNIMPLEMENTED`). Gates (`translate-sme.c`): `FEAT_SME2`; `FSCALE_n1` exige também
+    /// `FEAT_FP8` (`aa64_sme2_f8cvt`).
+    private Ir64Op decodeMultiVectorSingle(int word, long address) {
+        if (!hasSme2()) {
+            return null;
+        }
+        int count = ((word >>> MV_COUNT_BIT_SHIFT) & 1) == 0 ? 2 : 4;
+        if (count == 4 && (word & MV_X4_ZERO_BIT) != 0) {
+            return null;
+        }
+        boolean unsigned = (word & MV_UNSIGNED_BIT) != 0;
+        Ir64Op.SmeMultiVectorSingle.Op op = switch ((word >>> MV_OPERATION_SHIFT) & MV_OPERATION_MASK) {
+            case MV_KEY_SMAX -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.UMAX : Ir64Op.SmeMultiVectorSingle.Op.SMAX;
+            case MV_KEY_SMIN -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.UMIN : Ir64Op.SmeMultiVectorSingle.Op.SMIN;
+            case MV_KEY_FMAX -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FMIN : Ir64Op.SmeMultiVectorSingle.Op.FMAX;
+            case MV_KEY_FMAXNM ->
+                    unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FMINNM : Ir64Op.SmeMultiVectorSingle.Op.FMAXNM;
+            case MV_KEY_SRSHL ->
+                    unsigned ? Ir64Op.SmeMultiVectorSingle.Op.URSHL : Ir64Op.SmeMultiVectorSingle.Op.SRSHL;
+            case MV_KEY_ADD -> unsigned ? null : Ir64Op.SmeMultiVectorSingle.Op.ADD;
+            case MV_KEY_SQDMULH -> unsigned ? null : Ir64Op.SmeMultiVectorSingle.Op.SQDMULH;
+            case MV_KEY_FSCALE -> unsigned || !architecture.has(Aarch64Feature.FP8) ? null
+                    : Ir64Op.SmeMultiVectorSingle.Op.FSCALE;
+            default -> null;
+        };
+        int esz = (word >>> MV_ESZ_SHIFT) & MV_ESZ_MASK;
+        if (op == null || op.isFloatingPoint() && esz == MV_ESZ_BYTE) {
+            return null;
+        }
+        int zdn = groupBase(word, count == 2 ? MV_ZDN_X2_SHIFT : MV_ZDN_X4_SHIFT, count);
+        return new Ir64Op.SmeMultiVectorSingle(op, esz, count, zdn, (word >>> MV_ZM_SHIFT) & MV_ZM_MASK, address);
     }
 
     /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits
