@@ -276,6 +276,19 @@ final class Aarch64SmeDecoder {
     private static final int MV_KEY_SQDMULH = 0b100000;
     private static final int MV_ESZ_BYTE = 0;
 
+    // ── `### SME2 Multi-vector Multiple Vectors SVE Destructive` (B18.8) ─────────────────────────────────────
+    /// `bits[31:24] = 1100_0001`, `bit 21 = 1` (`bit 20` e acima fazem parte de `zm`) e `bits[15:12] = 1011` — um bit
+    /// de diferença do prefixo `1010` da forma `_n1` (Armadilha 3 da B18.8). `bit 11` escolhe `x2`/`x4`.
+    private static final int MV_MULTIPLE_MASK = 0xFF20F000;
+    private static final int MV_MULTIPLE_VALUE = 0xC120B000;
+    /// `%zm_ax2 = bits[20:17] × 2` (`bit 16` fixo em `0`); `%zm_ax4 = bits[20:18] × 4` (`bits[17:16]` fixos em `0`).
+    private static final int MV_ZM_GROUP_X2_SHIFT = 17;
+    private static final int MV_ZM_GROUP_X4_SHIFT = 18;
+    private static final int MV_ZM_GROUP_X2_ZERO_MASK = 0b01 << MV_ZM_SHIFT;
+    private static final int MV_ZM_GROUP_X4_ZERO_MASK = 0b11 << MV_ZM_SHIFT;
+    /// `FAMAX_nn`/`FAMIN_nn` (`bits[10:5] = 001010`) — só existem na forma `_nn`.
+    private static final int MV_KEY_FAMAX = 0b001010;
+
     /// Linha de `ZERO_za`: máscara/valor de 32 bits + `ngrp`/`nvec` + a largura e a escala do `off` DESTA linha.
     private record ZeroArrayRow(int mask, int value, int ngrp, int nvec, int offMask, int offScale) {
     }
@@ -443,7 +456,10 @@ final class Aarch64SmeDecoder {
             return zt0Family;
         }
         if ((word & MV_SINGLE_MASK) == MV_SINGLE_VALUE) {
-            return decodeMultiVectorSingle(word, address);
+            return decodeMultiVector(word, address, false);
+        }
+        if ((word & MV_MULTIPLE_MASK) == MV_MULTIPLE_VALUE) {
+            return decodeMultiVector(word, address, true);
         }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
@@ -540,17 +556,22 @@ final class Aarch64SmeDecoder {
         return ((word >>> shift) & ((1 << fieldBits) - 1)) * count;
     }
 
-    /// `SMAX_n1`/`UMAX_n1`/`SMIN_n1`/`UMIN_n1`/`FMAX_n1`/`FMIN_n1`/`FMAXNM_n1`/`FMINNM_n1`/`SRSHL_n1`/`URSHL_n1`/
-    /// `ADD_n1`/`SQDMULH_n1`/`FSCALE_n1` (B18.7). `null` = fora da família: `bit 1` do `x4` ligado, combinação de
-    /// opção/`U` que o `.decode` não define, ponto flutuante com `esz = 0` (`BFMAX_n1` e afins — outro gate) ou
-    /// feature ausente (G8 cai em `UNIMPLEMENTED`). Gates (`translate-sme.c`): `FEAT_SME2`; `FSCALE_n1` exige também
-    /// `FEAT_FP8` (`aa64_sme2_f8cvt`).
-    private Ir64Op decodeMultiVectorSingle(int word, long address) {
+    /// `SMAX`/`UMAX`/`SMIN`/`UMIN`/`FMAX`/`FMIN`/`FMAXNM`/`FMINNM`/`SRSHL`/`URSHL`/`ADD`/`SQDMULH`/`FSCALE` na forma
+    /// `_n1` — `Zm` avulso (B18.7) — e, com {@code multipleVectors}, na forma `_nn` — `Zm` é outro grupo — mais
+    /// `FAMAX`/`FAMIN` (B18.8, só `_nn`; `ADD` só existe em `_n1`). `null` = fora da família: `bit 1` do `x4` ligado,
+    /// `zm` do grupo desalinhado, combinação de opção/`U` que o `.decode` não define, ponto flutuante com `esz = 0`
+    /// (`BFMAX_*` e afins — outro gate) ou feature ausente (G8 cai em `UNIMPLEMENTED`). Gates (`translate-sme.c`):
+    /// `FEAT_SME2`; `FSCALE` exige também `FEAT_FP8` (`aa64_sme2_f8cvt`) e `FAMAX`/`FAMIN` `FEAT_FAMINMAX`
+    /// (`aa64_sme2_faminmax`).
+    private Ir64Op decodeMultiVector(int word, long address, boolean multipleVectors) {
         if (!hasSme2()) {
             return null;
         }
         int count = ((word >>> MV_COUNT_BIT_SHIFT) & 1) == 0 ? 2 : 4;
         if (count == 4 && (word & MV_X4_ZERO_BIT) != 0) {
+            return null;
+        }
+        if (multipleVectors && (word & (count == 2 ? MV_ZM_GROUP_X2_ZERO_MASK : MV_ZM_GROUP_X4_ZERO_MASK)) != 0) {
             return null;
         }
         boolean unsigned = (word & MV_UNSIGNED_BIT) != 0;
@@ -562,10 +583,12 @@ final class Aarch64SmeDecoder {
                     unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FMINNM : Ir64Op.SmeMultiVectorSingle.Op.FMAXNM;
             case MV_KEY_SRSHL ->
                     unsigned ? Ir64Op.SmeMultiVectorSingle.Op.URSHL : Ir64Op.SmeMultiVectorSingle.Op.SRSHL;
-            case MV_KEY_ADD -> unsigned ? null : Ir64Op.SmeMultiVectorSingle.Op.ADD;
+            case MV_KEY_ADD -> unsigned || multipleVectors ? null : Ir64Op.SmeMultiVectorSingle.Op.ADD;
             case MV_KEY_SQDMULH -> unsigned ? null : Ir64Op.SmeMultiVectorSingle.Op.SQDMULH;
             case MV_KEY_FSCALE -> unsigned || !architecture.has(Aarch64Feature.FP8) ? null
                     : Ir64Op.SmeMultiVectorSingle.Op.FSCALE;
+            case MV_KEY_FAMAX -> !multipleVectors || !architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN) ? null
+                    : unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FAMIN : Ir64Op.SmeMultiVectorSingle.Op.FAMAX;
             default -> null;
         };
         int esz = (word >>> MV_ESZ_SHIFT) & MV_ESZ_MASK;
@@ -573,7 +596,10 @@ final class Aarch64SmeDecoder {
             return null;
         }
         int zdn = groupBase(word, count == 2 ? MV_ZDN_X2_SHIFT : MV_ZDN_X4_SHIFT, count);
-        return new Ir64Op.SmeMultiVectorSingle(op, esz, count, zdn, (word >>> MV_ZM_SHIFT) & MV_ZM_MASK, address);
+        int zm = multipleVectors
+                ? groupBase(word, count == 2 ? MV_ZM_GROUP_X2_SHIFT : MV_ZM_GROUP_X4_SHIFT, count)
+                : (word >>> MV_ZM_SHIFT) & MV_ZM_MASK;
+        return new Ir64Op.SmeMultiVectorSingle(op, esz, count, zdn, zm, multipleVectors, address);
     }
 
     /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits

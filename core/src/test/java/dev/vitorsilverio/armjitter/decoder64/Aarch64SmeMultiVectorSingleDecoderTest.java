@@ -170,7 +170,7 @@ class Aarch64SmeMultiVectorSingleDecoderTest {
             "0xC134A002", // bit 20 ligado (zm:4 não alcança Z16): [21:20] = 11 não é desta família
             "0xC104A002", // bits[21:20] = 00
             "0xC324A002", // bit 25 ligado: fora do prefixo 1100000
-            "0xC124B002", // bit 12 ligado: fora de 1010
+            "0xC124E002", // bits[15:12] = 1110: fora de 1010 (e de 1011, que é a B18.8)
     })
     void neighbourEncodingsStayUnimplemented(String hex) {
         int word = (int) Long.decode(hex).longValue();

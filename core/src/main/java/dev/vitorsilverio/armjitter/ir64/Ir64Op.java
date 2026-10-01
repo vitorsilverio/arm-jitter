@@ -5332,6 +5332,10 @@ public sealed interface Ir64Op permits
     /// dos {@link #count} (`2`/`4`) registradores `Z` CONSECUTIVOS a partir de {@link #zdn}, com UM `Zm` avulso
     /// (`Z0`-`Z15`). **Sem predicado.** `esz` é o tamanho do elemento (`0` = byte … `3` = doubleword; nas operações de
     /// ponto flutuante `0` não existe — é o espaço de `BFMAX_n1` e afins). Exige modo streaming (`SVL`, nunca `VL`).
+    ///
+    /// **B18.8 reusa o mesmo record** para a forma "multiple vectors" (`_nn`, grupo × grupo): com
+    /// {@link #zmIsGroup} ligado, {@link #zm} é o primeiro registrador de um SEGUNDO grupo de {@link #count}
+    /// registradores (`%zm_ax2`/`%zm_ax4`, já multiplicado) e o membro `i` de `Zdn` opera contra o membro `i` dele.
     record SmeMultiVectorSingle(
             Op op,
             int esz,
@@ -5339,10 +5343,13 @@ public sealed interface Ir64Op permits
             /// Primeiro registrador do grupo — JÁ multiplicado por `count` (`%zd_ax2`/`%zd_ax4`).
             int zdn,
             int zm,
+            /// `false` = `_n1` (um `Zm` avulso, `Z0`-`Z15`); `true` = `_nn` (`zm` é a base de outro grupo).
+            boolean zmIsGroup,
             long instructionAddress) implements Ir64Op {
-        /// As 13 operações da seção `### SME2 Multi-vector Multiple and Single SVE Destructive`.
+        /// As 13 operações da seção `### SME2 Multi-vector Multiple and Single SVE Destructive` mais `FAMAX`/`FAMIN`
+        /// (só existem na forma `_nn`, `FEAT_FAMINMAX`) da `Multiple Vectors SVE Destructive`.
         public enum Op {
-            SMAX, UMAX, SMIN, UMIN, ADD, SRSHL, URSHL, SQDMULH, FMAX, FMIN, FMAXNM, FMINNM, FSCALE;
+            SMAX, UMAX, SMIN, UMIN, ADD, SRSHL, URSHL, SQDMULH, FMAX, FMIN, FMAXNM, FMINNM, FSCALE, FAMAX, FAMIN;
 
             /// `true` nas operações de ponto flutuante (`esz = 0` não existe nelas).
             public boolean isFloatingPoint() {

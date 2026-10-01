@@ -15,12 +15,12 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/// B18.7 — SME2 multi-vetor "multiple-and-single" destrutivo. As palavras são montadas campo a campo por {@link #word}
+/// B18.7/B18.8 — SME2 multi-vetor destrutivo, formas "multiple-and-single" (`_n1`) e "multiple vectors" (`_nn`). As palavras são montadas campo a campo por {@link #word}
 /// (a montagem é amarrada ao assembler em {@link #wordBuilderMatchesAssembler}) e cada operação é conferida contra uma
 /// referência escrita em `BigInteger`/`Math` — NÃO contra as operações de lane do SVE que o executor reusa.
 class Aarch64SmeMultiVectorSingleExecutorTest {
     private static final Aarch64Architecture ALL = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_2_A,
-            "teste-mvs-exec", Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, Aarch64Feature.FP8);
+            "teste-mvs-exec", Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, Aarch64Feature.FP8, Aarch64Feature.FP_ABSOLUTE_MAX_MIN);
 
     private static final long SVCR_SM = Aarch64Core.SVCR_SM_BIT;
     private static final long VBAR = 0x400L;
@@ -33,6 +33,9 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
 
     private static final int FAMILY_BASE = 0xC120A000;
+    private static final int MULTIPLE_FAMILY_BASE = 0xC120B000;
+    private static final int ZM_GROUP_X2_SHIFT = 17;
+    private static final int ZM_GROUP_X4_SHIFT = 18;
     private static final int ESZ_SHIFT = 22;
     private static final int ZM_SHIFT = 16;
     private static final int X4_BIT = 1 << 11;
@@ -69,6 +72,8 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
             case ADD -> 0b011000 << 5;
             case SQDMULH -> 0b100000 << 5;
             case FSCALE -> 0b001100 << 5;
+            case FAMAX -> 0b001010 << 5;
+            case FAMIN -> 0b001010 << 5 | 1;
         };
     }
 
@@ -78,8 +83,21 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
         return FAMILY_BASE | esz << ESZ_SHIFT | zm << ZM_SHIFT | (count == 4 ? X4_BIT : 0) | operationBits(op) | field;
     }
 
+    /// Forma `_nn`: `zm` também é o registrador-base de um grupo (campo = `zm / count` a partir do bit 17/18).
+    private static int multipleWord(Op op, int esz, int count, int zdn, int zm) {
+        int zdnField = zdn / count << (count == 2 ? 1 : 2);
+        int zmField = zm / count << (count == 2 ? ZM_GROUP_X2_SHIFT : ZM_GROUP_X4_SHIFT);
+        return MULTIPLE_FAMILY_BASE | esz << ESZ_SHIFT | zmField | (count == 4 ? X4_BIT : 0) | operationBits(op)
+                | zdnField;
+    }
+
     @Test
     void wordBuilderMatchesAssembler() {
+        // aarch64-none-elf-as: smax {z2.b-z3.b}, {z2.b-z3.b}, {z4.b-z5.b}
+        assertEquals(0xC124B002, multipleWord(Op.SMAX, 0, 2, 2, 4));
+        // famin {z28.s-z31.s}, {z28.s-z31.s}, {z24.s-z27.s}
+        int famin = multipleWord(Op.FAMIN, 2, 4, 28, 24);
+        assertEquals(0xC1B8B95D, famin);
         // aarch64-none-elf-as: smax {z2.b-z3.b}, {z2.b-z3.b}, z4.b
         assertEquals(0xC124A002, word(Op.SMAX, 0, 2, 2, 4));
         // umin {z4.d-z7.d}, {z4.d-z7.d}, z9.d
@@ -198,6 +216,15 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
         return switch (op) {
             case FMAX, FMAXNM -> encodeFp(Math.max(a, b), esz);
             case FMIN, FMINNM -> encodeFp(Math.min(a, b), esz);
+            case FAMAX, FAMIN -> {
+                boolean max = op == Op.FAMAX;
+                double magnitudeA = Math.abs(a);
+                double magnitudeB = Math.abs(b);
+                if (magnitudeA == magnitudeB) {
+                    yield encodeFp(max ? Math.max(a, b) : Math.min(a, b), esz);
+                }
+                yield (magnitudeA > magnitudeB) == max ? n : m;
+            }
             default -> throw new IllegalArgumentException(op.name());
         };
     }
@@ -241,6 +268,9 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
         Random random = new Random(0x18_07);
         for (int svl : SVLS) {
             for (Op op : Op.values()) {
+                if (op == Op.FAMAX || op == Op.FAMIN) {
+                    continue; // só existem na forma _nn
+                }
                 for (int esz = op.isFloatingPoint() ? 1 : 0; esz <= 3; esz++) {
                     for (int count : new int[] {2, 4}) {
                         checkOperation(svl, op, esz, count, count == 2 ? 6 : 12, 9, random);
@@ -419,6 +449,183 @@ class Aarch64SmeMultiVectorSingleExecutorTest {
         core.scalable().setZWord(2, 0, 1);
         long[][] before = snapshot(core);
         run(core, word(Op.ADD, 0, 2, 2, 4));
+        assertEquals(EC_SME, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) >>> ESR_EC_SHIFT);
+        assertEquals(SMTC_NOT_STREAMING, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) & SMTC_MASK);
+        for (int z = 0; z < Z_REGISTERS; z++) {
+            assertRegisterUnchanged(core, before, z);
+        }
+    }
+
+    // ── forma "multiple vectors" (_nn, B18.8) ────────────────────────────────────────────────────
+
+    @Test
+    void everyMultipleVectorsOperationMatchesTheReferenceForEveryElementSize() {
+        Random random = new Random(0x18_08);
+        for (int svl : SVLS) {
+            for (Op op : Op.values()) {
+                if (op == Op.ADD) {
+                    continue; // ADD só existe na forma _n1
+                }
+                for (int esz = op.isFloatingPoint() ? 1 : 0; esz <= 3; esz++) {
+                    for (int count : new int[] {2, 4}) {
+                        checkMultiple(svl, op, esz, count, count == 2 ? 6 : 12, count == 2 ? 10 : 20, random);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void checkMultiple(int svl, Op op, int esz, int count, int zdn, int zm, Random random) {
+        Aarch64Core core = core(svl, SVCR_SM);
+        fillRandom(core, random);
+        for (int i = 0; i < count; i++) {
+            if (op == Op.FSCALE) {
+                fillScaleMantissas(core, zdn + i, esz, random);
+                fillScaleExponents(core, zm + i, esz, random);
+            } else if (op.isFloatingPoint()) {
+                fillFpOperand(core, zdn + i, esz, random);
+                fillFpOperand(core, zm + i, esz, random);
+                // Magnitudes iguais com sinais opostos: o desempate de FAMAX/FAMIN.
+                put(core, zm + i, 1, esz, encodeFp(-decodeFp(get(core, zdn + i, 1, esz), esz), esz));
+            } else {
+                fillIntegerOperand(core, zdn + i, esz, random);
+                fillIntegerOperand(core, zm + i, esz, random);
+            }
+        }
+        long[][] before = snapshot(core);
+
+        run(core, multipleWord(op, esz, count, zdn, zm));
+
+        String context = op + " nn esz=" + esz + " x" + count + " svl=" + svl;
+        for (int z = 0; z < Z_REGISTERS; z++) {
+            if (z < zdn || z >= zdn + count) {
+                assertRegisterUnchanged(core, before, z);
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            for (int e = 0; e < elements(core, esz); e++) {
+                long n = elementOf(before, zdn + i, e, esz);
+                long m = elementOf(before, zm + i, e, esz);
+                long expected = switch (op) {
+                    case FMAX, FMIN, FMAXNM, FMINNM, FAMAX, FAMIN -> referenceFp(op, n, m, esz);
+                    case FSCALE -> referenceScale(n, m, esz);
+                    default -> referenceInteger(op, n, m, esz);
+                };
+                assertEquals(expected, get(core, zdn + i, e, esz),
+                        context + " Z" + (zdn + i) + "[" + e + "] contra Z" + (zm + i));
+            }
+        }
+    }
+
+    @Test
+    void eachMemberPairsWithTheMemberAtTheSamePositionOfTheOtherGroup() {
+        // smax {z0.d-z3.d}, {z0.d-z3.d}, {z8.d-z11.d}: Z0..Z3 = max(Z0..Z3, Z8..Z11) elemento a elemento.
+        Aarch64Core core = core(512, SVCR_SM);
+        for (int i = 0; i < 4; i++) {
+            put(core, i, 0, 3, 10L * (i + 1));
+            put(core, 8 + i, 0, 3, 25);
+        }
+        long[][] before = snapshot(core);
+        run(core, multipleWord(Op.SMAX, 3, 4, 0, 8));
+        assertEquals(25L, get(core, 0, 0, 3));
+        assertEquals(25L, get(core, 1, 0, 3));
+        assertEquals(30L, get(core, 2, 0, 3));
+        assertEquals(40L, get(core, 3, 0, 3));
+        for (int z = 8; z < 12; z++) {
+            assertRegisterUnchanged(core, before, z);
+        }
+    }
+
+    @Test
+    void zmGroupExtractorsAddressTheirOwnBitBases() {
+        // %zm_ax2 com campo 0b0011 endereça Z6/Z7 e %zm_ax4 com campo 0b011 endereça Z12..Z15.
+        Aarch64Core x2 = core(256, SVCR_SM);
+        for (int z = 0; z < 8; z++) {
+            put(x2, z, 0, 3, z == 6 || z == 7 ? 100 + z : 1);
+        }
+        run(x2, 0xC120B000 | 0b0011 << ZM_GROUP_X2_SHIFT | 0b11 << ESZ_SHIFT | operationBits(Op.SMAX));
+        assertEquals(106L, get(x2, 0, 0, 3), "Z0 = max(Z0, Z6)");
+        assertEquals(107L, get(x2, 1, 0, 3), "Z1 = max(Z1, Z7)");
+
+        Aarch64Core x4 = core(256, SVCR_SM);
+        for (int z = 12; z < 16; z++) {
+            put(x4, z, 0, 3, 200 + z);
+        }
+        run(x4, 0xC120B800 | 0b011 << ZM_GROUP_X4_SHIFT | 0b11 << ESZ_SHIFT | operationBits(Op.SMAX));
+        assertEquals(212L, get(x4, 0, 0, 3), "Z0 = max(Z0, Z12)");
+        assertEquals(215L, get(x4, 3, 0, 3), "Z3 = max(Z3, Z15)");
+    }
+
+    @Test
+    void identicalGroupsAreReadBeforeAnyWrite() {
+        Aarch64Core core = core(256, SVCR_SM);
+        long[] values = {3, -4, 100, -128};
+        for (int i = 0; i < 4; i++) {
+            put(core, 4 + i, 0, 0, values[i]);
+        }
+        // sqdmulh {z4.b-z7.b}, {z4.b-z7.b}, {z4.b-z7.b}: cada membro opera contra ele mesmo, original.
+        run(core, multipleWord(Op.SQDMULH, 0, 4, 4, 4));
+        for (int i = 0; i < 4; i++) {
+            assertEquals(referenceInteger(Op.SQDMULH, values[i], values[i], 0), get(core, 4 + i, 0, 0), "Z" + (4 + i));
+        }
+    }
+
+    @Test
+    void famaxComparesMagnitudesWhereFmaxComparesValues() {
+        float minusFive = -5.0f;
+        float three = 3.0f;
+        for (Op op : new Op[] {Op.FMAX, Op.FAMAX, Op.FMIN, Op.FAMIN}) {
+            Aarch64Core core = core(256, SVCR_SM);
+            put(core, 2, 0, 2, Float.floatToRawIntBits(minusFive));
+            put(core, 4, 0, 2, Float.floatToRawIntBits(three));
+            run(core, multipleWord(op, 2, 2, 2, 4));
+            float expected = switch (op) {
+                case FMAX -> three;      // valor: 3 > -5
+                case FAMAX -> minusFive; // módulo: 5 > 3, devolve o operando ORIGINAL (com sinal)
+                case FMIN -> minusFive;  // valor: -5 < 3
+                default -> three;        // FAMIN: módulo 3 < 5
+            };
+            assertEquals(Float.floatToRawIntBits(expected), (int) get(core, 2, 0, 2), op.name());
+        }
+    }
+
+    @Test
+    void famaxAndFaminBreakMagnitudeTiesLikeFpMaxAndFpMin() {
+        for (boolean max : new boolean[] {true, false}) {
+            Aarch64Core core = core(256, SVCR_SM);
+            put(core, 2, 0, 2, Float.floatToRawIntBits(-3.0f));
+            put(core, 4, 0, 2, Float.floatToRawIntBits(3.0f));
+            put(core, 2, 1, 2, Float.floatToRawIntBits(0.0f));
+            put(core, 4, 1, 2, Float.floatToRawIntBits(-0.0f));
+            run(core, multipleWord(max ? Op.FAMAX : Op.FAMIN, 2, 2, 2, 4));
+            assertEquals(Float.floatToRawIntBits(max ? 3.0f : -3.0f), (int) get(core, 2, 0, 2), "±3 max=" + max);
+            assertEquals(Float.floatToRawIntBits(max ? 0.0f : -0.0f), (int) get(core, 2, 1, 2), "±0 max=" + max);
+        }
+    }
+
+    @Test
+    void multipleVectorsFmaxPropagatesTheNanWhileFmaxnmReturnsTheNumber() {
+        long quietNan = 0x7FC00000L;
+        long one = Float.floatToRawIntBits(1.0f);
+        for (Op op : new Op[] {Op.FMAX, Op.FMAXNM, Op.FMIN, Op.FMINNM}) {
+            boolean propagates = op == Op.FMAX || op == Op.FMIN;
+            Aarch64Core core = core(256, SVCR_SM);
+            put(core, 2, 0, 2, quietNan);
+            put(core, 4, 0, 2, one);
+            put(core, 3, 0, 2, one);
+            put(core, 5, 0, 2, quietNan);
+            run(core, multipleWord(op, 2, 2, 2, 4));
+            assertEquals(propagates ? quietNan : one, get(core, 2, 0, 2), op + " NaN no grupo de destino");
+            assertEquals(propagates ? quietNan : one, get(core, 3, 0, 2), op + " NaN no segundo grupo");
+        }
+    }
+
+    @Test
+    void multipleVectorsOutsideStreamingModeEntersTheSmeTrapAndWritesNothing() {
+        Aarch64Core core = core(256, 0);
+        core.scalable().setZWord(2, 0, 1);
+        long[][] before = snapshot(core);
+        run(core, multipleWord(Op.SMAX, 0, 2, 2, 4));
         assertEquals(EC_SME, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) >>> ESR_EC_SHIFT);
         assertEquals(SMTC_NOT_STREAMING, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) & SMTC_MASK);
         for (int z = 0; z < Z_REGISTERS; z++) {

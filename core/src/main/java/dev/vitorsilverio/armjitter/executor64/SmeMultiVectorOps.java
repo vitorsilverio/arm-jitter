@@ -4,8 +4,12 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
-/// SME2 multi-vetor (B18.7): `SMAX`/`UMAX`/`SMIN`/`UMIN`/`ADD`/`SRSHL`/`URSHL`/`SQDMULH`/`FMAX`/`FMIN`/`FMAXNM`/
-/// `FMINNM`/`FSCALE` na forma "multiple-and-single" (`do_zzz_n1`/`do_zzz_n1_fpst` do `translate-sme.c`).
+import java.util.Arrays;
+
+/// SME2 multi-vetor (B18.7/B18.8): `SMAX`/`UMAX`/`SMIN`/`UMIN`/`ADD`/`SRSHL`/`URSHL`/`SQDMULH`/`FMAX`/`FMIN`/`FMAXNM`/
+/// `FMINNM`/`FSCALE` na forma "multiple-and-single" (`do_zzz_n1`/`do_zzz_n1_fpst` do `translate-sme.c`) e, na B18.8,
+/// as mesmas operações + `FAMAX`/`FAMIN` na forma "multiple vectors" grupo × grupo (`do_zzz_nn`/`do_zzz_nn_fpst`:
+/// o membro `i` de `Zdn` opera contra o membro `i` de `Zm`).
 ///
 /// - Exige modo streaming e SME habilitado (`sme_sm_enabled_check`) — **não** `ZA`; o comprimento é o `SVL`.
 /// - **Sem predicado**: toda lane de todo membro do grupo é operada.
@@ -30,13 +34,22 @@ final class SmeMultiVectorOps {
         int svlBytes = core.streamingVectorLengthBytes();
         int elements = svlBytes >>> op.esz();
         SmeVectorGroup group = new SmeVectorGroup(op.zdn(), op.count());
-        long[] single = SmeVectorGroup.snapshot(regs, op.zm(), svlBytes / WORD_BYTES);
+        int words = svlBytes / WORD_BYTES;
+        long[][] second = new long[group.count()][];
+        if (op.zmIsGroup()) {
+            SmeVectorGroup zm = new SmeVectorGroup(op.zm(), op.count());
+            for (int member = 0; member < zm.count(); member++) {
+                second[member] = SmeVectorGroup.snapshot(regs, zm.register(member), words);
+            }
+        } else {
+            Arrays.fill(second, SmeVectorGroup.snapshot(regs, op.zm(), words));
+        }
         SveFloat.Env env = op.op().isFloatingPoint() ? SveFloat.Env.of(core, op.esz()) : null;
         for (int member = 0; member < group.count(); member++) {
             int register = group.register(member);
             for (int e = 0; e < elements; e++) {
                 long n = SveIntegerOps.get(regs, register, e, op.esz());
-                long m = SmeVectorGroup.element(single, e, op.esz());
+                long m = SmeVectorGroup.element(second[member], e, op.esz());
                 SveIntegerOps.set(regs, register, e, op.esz(), compute(op, n, m, env));
             }
         }
@@ -63,6 +76,8 @@ final class SmeMultiVectorOps {
             case FMAXNM -> SveFloat.maxMinNumber(n, m, true, env);
             case FMINNM -> SveFloat.maxMinNumber(n, m, false, env);
             case FSCALE -> SveFloat.scale(n, SveIntegerOps.signExtend(m, esz), env);
+            case FAMAX -> SveFloat.absoluteMaxMin(n, m, true, env);
+            case FAMIN -> SveFloat.absoluteMaxMin(n, m, false, env);
         };
     }
 }
