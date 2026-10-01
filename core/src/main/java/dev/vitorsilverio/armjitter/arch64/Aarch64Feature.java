@@ -203,6 +203,18 @@ public enum Aarch64Feature {
     SME_MOP4,
     /// `FEAT_SME_TMOP` — outer product esparso (`TMOP`). Sem preset (B18.5).
     SME_TMOP,
+    /// `FEAT_SME_F16F16` — `FMOPA` de meia precisão com acumulação em meia precisão (tiles `ZAH`, `FMOPA_h`). Sem
+    /// preset (B18.5; `aa64_sme_f16f16` no QEMU).
+    SME_F16F16,
+    /// `FEAT_SME_B16B16` — `BFMOPA` de `BFloat16` com acumulação em `BFloat16` (`BFMOPA`, tiles `ZAH`). Sem preset
+    /// (B18.5; `aa64_sme_b16b16` no QEMU).
+    SME_B16B16,
+    /// `FEAT_SME_F8F32` — `FMOPA` `fp8` com acumulação em precisão simples (`FMOPA_sb`, quatro vias). Depende de
+    /// `FPMR` (B19.11a). Sem preset (B18.5; `aa64_sme_f8f32` no QEMU).
+    SME_F8F32,
+    /// `FEAT_SME_F8F16` — `FMOPA` `fp8` com acumulação em meia precisão (`FMOPA_hb`, duas vias). Depende de `FPMR`
+    /// (B19.11a). Sem preset (B18.5; `aa64_sme_f8f16` no QEMU).
+    SME_F8F16,
     /// `FEAT_SME_FA64` — libera o conjunto completo de instruções A64 (AdvSIMD, estruturas `LDn`/`STn`,
     /// cripto, `FJCVTZS`) também em modo streaming, quando `SMCR_ELx.FA64 = 1` (B18.2). Sem preset: a
     /// versão de arquitetura não foi confirmada contra o manual (mesma disciplina das demais capacidades

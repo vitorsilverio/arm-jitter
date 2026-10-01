@@ -171,6 +171,20 @@ public final class Aarch64Core {
     private static final long ID_AA64PFR1_SME_SME = 1L;
     /// `ID_AA64SMFR0_EL1.SMEver` (`bits[59:56]`): `0` = SME, `1` = SME2, `2` = SME2.1.
     private static final int ID_AA64SMFR0_SMEVER_SHIFT = 56;
+    /// Campos de capacidade de `ID_AA64SMFR0_EL1` que o produto externo (B18.5) acende — posições do `cpu-features.h`
+    /// do QEMU. `F32F32`/`B16F32`/`F16F32` valem `1`, `I8I32`/`I16I64` valem `0xF` (`FEAT_SME` base mandata os 4
+    /// primeiros; os de `I16I64`/`F64F64`/`F16F16`/`B16B16`/`F8F32`/`F8F16` seguem as features fatiadas).
+    private static final long ID_AA64SMFR0_F32F32 = 1L << 32;
+    private static final long ID_AA64SMFR0_BI32I32 = 1L << 33;
+    private static final long ID_AA64SMFR0_B16F32 = 1L << 34;
+    private static final long ID_AA64SMFR0_F16F32 = 1L << 35;
+    private static final long ID_AA64SMFR0_I8I32 = 0xFL << 36;
+    private static final long ID_AA64SMFR0_F8F32 = 1L << 40;
+    private static final long ID_AA64SMFR0_F8F16 = 1L << 41;
+    private static final long ID_AA64SMFR0_F16F16 = 1L << 42;
+    private static final long ID_AA64SMFR0_B16B16 = 1L << 43;
+    private static final long ID_AA64SMFR0_F64F64 = 1L << 48;
+    private static final long ID_AA64SMFR0_I16I64 = 0xFL << 52;
     /// Versão do formato de {@link #saveMatrixState}.
     private static final int MATRIX_STATE_FORMAT_VERSION = 1;
 
@@ -821,17 +835,30 @@ public final class Aarch64Core {
         return (sme2OrBetter ? ID_AA64PFR1_SME_SME2 : ID_AA64PFR1_SME_SME) << ID_AA64PFR1_SME_SHIFT;
     }
 
-    /// `ID_AA64SMFR0_EL1` do preset (B18.1): SÓ `SMEver` (`bits[59:56]`); nenhum campo de capacidade
-    /// (`I16I64`/`F64F64`/`MOP4`/…) é aceso aqui — cada um é aceso pela task que fecha a família
-    /// (Armadilha 5: anunciar o que não existe faz software real escolher caminho que bate em
-    /// `UNIMPLEMENTED`). Zero sem SME e sob SME 1 (`SMEver = 0`).
+    /// `ID_AA64SMFR0_EL1` do preset: `SMEver` (`bits[59:56]`, B18.1) mais os campos de capacidade que alguma
+    /// instrução JÁ implementada acende — cada família fecha o seu (Armadilha 5: anunciar o que não existe faz
+    /// software real escolher caminho que bate em `UNIMPLEMENTED`). Hoje (B18.5): o produto externo base
+    /// (`F32F32`/`B16F32`/`F16F32`/`I8I32`, mandatórios em `FEAT_SME`), `BI32I32` (`BMOPA`, SME2) e os campos das
+    /// features fatiadas `I16I64`/`F64F64`/`F16F16`/`B16B16`/`F8F32`/`F8F16`. Pendentes para as próximas tasks:
+    /// `I16I32` (SME2 multi-vetor), `SMOP4`/`STMOP` (B18.5b), `LUTv2`/`FA64`. Zero sem SME.
     private long smeVersionField() {
         if (!hasSme()) {
             return 0L;
         }
         long version = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2_1) ? 2L
                 : hasSme2() ? 1L : 0L;
-        return version << ID_AA64SMFR0_SMEVER_SHIFT;
+        long field = version << ID_AA64SMFR0_SMEVER_SHIFT
+                | ID_AA64SMFR0_F32F32 | ID_AA64SMFR0_B16F32 | ID_AA64SMFR0_F16F32 | ID_AA64SMFR0_I8I32;
+        if (hasSme2()) {
+            field |= ID_AA64SMFR0_BI32I32;
+        }
+        field |= architecture.has(Aarch64Feature.SME_I16I64) ? ID_AA64SMFR0_I16I64 : 0L;
+        field |= architecture.has(Aarch64Feature.SME_F64F64) ? ID_AA64SMFR0_F64F64 : 0L;
+        field |= architecture.has(Aarch64Feature.SME_F16F16) ? ID_AA64SMFR0_F16F16 : 0L;
+        field |= architecture.has(Aarch64Feature.SME_B16B16) ? ID_AA64SMFR0_B16B16 : 0L;
+        field |= architecture.has(Aarch64Feature.SME_F8F32) ? ID_AA64SMFR0_F8F32 : 0L;
+        field |= architecture.has(Aarch64Feature.SME_F8F16) ? ID_AA64SMFR0_F8F16 : 0L;
+        return field;
     }
 
     /// `smcr_write` (B18.1): guarda `LEN`, `FA64` e — só com `FEAT_SME2` — `EZT0`; o resto é `RES0`.

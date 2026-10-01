@@ -98,6 +98,56 @@ final class Aarch64SmeDecoder {
     private static final int LDR_ZT0_MASK = 0xFFDFFC1F;
     private static final int LDR_ZT0_VALUE = 0xE11F8000;
 
+    // ── `### SME Add Vector to Array` + `### SME Outer Product` (B18.5) ──────────────────────────────
+    private static final int PM_SHIFT = 13;
+    private static final int SUB_BIT_SHIFT = 4;
+
+    /// Uma linha de `ADDHA`/`ADDVA`/produto externo: máscara/valor de 32 bits (gerados mecanicamente dos padrões do
+    /// `.decode`, nunca à mão — Armadilha 3: `SMOPA`/`SUMOPA`/`USMOPA`/`UMOPA` diferem em dois bits espalhados) +
+    /// a feature EXTRA além de `FEAT_SME` (`null` = só `FEAT_SME`). `hasSubtract` é falso nas linhas sem o bit `sub`
+    /// (`ADDHA`/`ADDVA` e as duas `fp8`, que o `.decode` fixa em `sub = 0`).
+    private record OuterProductRow(int mask, int value, Ir64Op.SmeOuterProduct.Op op, Aarch64Feature extra,
+                                   boolean hasSubtract, boolean hasSecondVector) {
+        boolean matches(int word) {
+            return (word & mask) == value;
+        }
+    }
+
+    // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 174-217 — NÃO editar à mão.
+    private static final OuterProductRow[] OUTER_PRODUCT_ROWS = {
+            outer(0xFFFF001C, 0xC0900000, Ir64Op.SmeOuterProduct.Op.ADDHA_S, null, false, false),
+            outer(0xFFFF001C, 0xC0910000, Ir64Op.SmeOuterProduct.Op.ADDVA_S, null, false, false),
+            outer(0xFFFF0018, 0xC0D00000, Ir64Op.SmeOuterProduct.Op.ADDHA_D, Aarch64Feature.SME_I16I64, false, false),
+            outer(0xFFFF0018, 0xC0D10000, Ir64Op.SmeOuterProduct.Op.ADDVA_D, Aarch64Feature.SME_I16I64, false, false),
+            outer(0xFFE0000E, 0x81800008, Ir64Op.SmeOuterProduct.Op.FMOPA_H, Aarch64Feature.SME_F16F16, true, true),
+            outer(0xFFE0000C, 0x80800000, Ir64Op.SmeOuterProduct.Op.FMOPA_S, null, true, true),
+            outer(0xFFE00008, 0x80C00000, Ir64Op.SmeOuterProduct.Op.FMOPA_D, Aarch64Feature.SME_F64F64, true, true),
+            outer(0xFFE0000E, 0x81A00008, Ir64Op.SmeOuterProduct.Op.BFMOPA, Aarch64Feature.SME_B16B16, true, true),
+            outer(0xFFE0000C, 0x81800000, Ir64Op.SmeOuterProduct.Op.BFMOPA_W, null, true, true),
+            outer(0xFFE0000C, 0x81A00000, Ir64Op.SmeOuterProduct.Op.FMOPA_W_H, null, true, true),
+            outer(0xFFE0001C, 0x80A00000, Ir64Op.SmeOuterProduct.Op.FMOPA_SB, Aarch64Feature.SME_F8F32, false, true),
+            outer(0xFFE0001E, 0x80A00008, Ir64Op.SmeOuterProduct.Op.FMOPA_HB, Aarch64Feature.SME_F8F16, false, true),
+            outer(0xFFE0000C, 0xA0800000, Ir64Op.SmeOuterProduct.Op.SMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA0A00000, Ir64Op.SmeOuterProduct.Op.SUMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA1800000, Ir64Op.SmeOuterProduct.Op.USMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA1A00000, Ir64Op.SmeOuterProduct.Op.UMOPA_S, null, true, true),
+            outer(0xFFE00008, 0xA0C00000, Ir64Op.SmeOuterProduct.Op.SMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA0E00000, Ir64Op.SmeOuterProduct.Op.SUMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA1C00000, Ir64Op.SmeOuterProduct.Op.USMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA1E00000, Ir64Op.SmeOuterProduct.Op.UMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE0000C, 0x80800008, Ir64Op.SmeOuterProduct.Op.BMOPA, Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2,
+                    true, true),
+            outer(0xFFE0000C, 0xA0800008, Ir64Op.SmeOuterProduct.Op.SMOPA2_S,
+                    Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, true, true),
+            outer(0xFFE0000C, 0xA1800008, Ir64Op.SmeOuterProduct.Op.UMOPA2_S,
+                    Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, true, true),
+    };
+
+    private static OuterProductRow outer(int mask, int value, Ir64Op.SmeOuterProduct.Op op, Aarch64Feature extra,
+            boolean hasSubtract, boolean hasSecondVector) {
+        return new OuterProductRow(mask, value, op, extra, hasSubtract, hasSecondVector);
+    }
+
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 27-138 (ver javadoc da
     // classe) — NÃO editar à mão sem regerar e reconferir.
     private static final Row[] MOVA_ROWS = {
@@ -181,6 +231,11 @@ final class Aarch64SmeDecoder {
         if (memory != null) {
             return memory;
         }
+        for (OuterProductRow row : OUTER_PRODUCT_ROWS) {
+            if (row.matches(word)) {
+                return decodeOuterProduct(row, word, address);
+            }
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -196,6 +251,21 @@ final class Aarch64SmeDecoder {
                     row.array() ? -1 : row.tile(word), vertical, row.zr(word), registerIndex, row.off(word), address);
         }
         return null;
+    }
+
+    /// `null` = a feature EXTRA da linha está ausente (G8 trata como recusa). O índice do tile tem `esz` bits
+    /// (`zad:1`/`zad:2`/`zad:3` ⇒ 2/4/8 tiles) — o tamanho do elemento do ACUMULADOR, não o da origem
+    /// (Armadilha 4: `@op_16`/`@op_32`/`@op_64` diferem só na largura de `zad`).
+    private Ir64Op decodeOuterProduct(OuterProductRow row, int word, long address) {
+        if (row.extra() != null && !architecture.has(row.extra())) {
+            return null;
+        }
+        int esz = row.op().accumulatorEsz();
+        int tile = word & ((1 << esz) - 1);
+        int zm = row.hasSecondVector() ? (word >>> RM_SHIFT) & REGISTER_MASK : 0;
+        boolean subtract = row.hasSubtract() && ((word >>> SUB_BIT_SHIFT) & 1) != 0;
+        return new Ir64Op.SmeOuterProduct(row.op(), tile, (word >>> RN_SHIFT) & REGISTER_MASK, zm,
+                (word >>> PG_SHIFT) & PG_MASK, (word >>> PM_SHIFT) & PG_MASK, subtract, address);
     }
 
     /// `LD1`/`ST1` de tile, `LDR`/`STR` de `ZA` e de `ZT0` (B18.4). `null` = não é desta família (ou

@@ -33,6 +33,7 @@ final class SveFloat {
     private static final int FPCR_FZ_BIT = 24;
     private static final int FPCR_DN_BIT = 25;
     private static final int FPCR_FZ16_BIT = 19;
+    private static final int FPCR_EBF_BIT = 13;
 
     // ── Modos de arredondamento (FPCR.RMode) ─────────────────────────────────────────────────────
     static final int RMODE_NEAREST = 0;
@@ -43,6 +44,9 @@ final class SveFloat {
     static final int RMODE_ODD = 4;
     /// `FPRounding_TIEAWAY` (`FRINTA`): ao mais próximo, empate para longe do zero. Não existe em `FPCR.RMode`.
     static final int RMODE_TIE_AWAY = 5;
+    /// `float_round_to_odd_inf` do QEMU (`BFDOT`/`BFMOPA` com `FPCR.EBF = 0`): como {@link #RMODE_ODD}, mas o estouro vai
+    /// para infinito em vez de para o maior finito. Não existe em `FPCR.RMode`.
+    static final int RMODE_ODD_INF = 6;
 
     /// `esz = 0` como formato: BFloat16 (8 bits de expoente, 7 de fração) — só como DESTINO de `BFCVT`.
     static final int ESZ_BFLOAT16 = 0;
@@ -140,6 +144,37 @@ final class SveFloat {
         /// Ambiente sobre um `FPCR` explícito (testes e usos sem core).
         static Env ofFpcr(long fpcr, int esz) {
             return new Env(esz, fpcr);
+        }
+
+        /// Ambiente das instruções que escrevem em `ZA` (`FPST_ZA`/`FPST_ZA_F16` do QEMU): `FPCR.DN` é SEMPRE `1`
+        /// (o NaN padrão, independente do `FPCR`), `RMode`/`FZ`/`FZ16` vêm do `FPCR`, e as flags acumuladas
+        /// **nunca** vão para `FPSR` ("insns that must not set the cumulative exception bits") — quem usa este
+        /// ambiente simplesmente não chama {@link #commit}.
+        static Env ofZa(Aarch64Core core, int esz) {
+            return new Env(esz, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.FPCR) | (1L << FPCR_DN_BIT));
+        }
+
+        /// Ambiente de precisão simples cujo `FZ` é o `FPCR.FZ16` — o `float_status` de MEIA precisão que
+        /// `f16_dotadd` do QEMU também usa para arredondar a soma intermediária de `binary32` (quirk deliberado:
+        /// a conversão/soma dos produtos `binary16` obedece a `FZ16`, só a acumulação final obedece a `FZ`).
+        static Env ofZaSingleWithHalfFlush(Aarch64Core core) {
+            long fpcr = core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.FPCR);
+            long flush = ((fpcr >>> FPCR_FZ16_BIT) & 1L) << FPCR_FZ_BIT;
+            return new Env(ESZ_SINGLE, (fpcr & ~(1L << FPCR_FZ_BIT)) | flush | (1L << FPCR_DN_BIT));
+        }
+
+        /// `is_ebf` do QEMU, ramo `FPCR.EBF = 0`: ignora `RMode`/`FZ`, usa arredondamento ÍMPAR (com estouro para
+        /// infinito), `FZ` ligado e NaN padrão. Cada produto e cada soma arredonda — o chamador usa
+        /// {@link SveFloat#multiply}/{@link SveFloat#add}.
+        static Env ofBFloat16NonExtended() {
+            Env env = new Env(ESZ_SINGLE, (1L << FPCR_FZ_BIT) | (1L << FPCR_DN_BIT));
+            env.rmode = RMODE_ODD_INF;
+            return env;
+        }
+
+        /// `FPCR.EBF` (`FEAT_EBF16`): comportamento estendido de `BFDOT`/`BFMOPA`.
+        static boolean extendedBFloat16(Aarch64Core core) {
+            return ((core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.FPCR) >>> FPCR_EBF_BIT) & 1L) != 0L;
         }
 
         /// Acumula as flags levantadas em `FPSR` (só escreve se houve alguma).
@@ -331,7 +366,7 @@ final class SveFloat {
             case RMODE_MINUS_INFINITY -> inexact && sign;
             default -> false;
         };
-        if (env.rmode == RMODE_ODD && inexact) {
+        if ((env.rmode == RMODE_ODD || env.rmode == RMODE_ODD_INF) && inexact) {
             kept = kept.or(BigInteger.ONE);
         }
         if (up) {
@@ -361,6 +396,7 @@ final class SveFloat {
             case RMODE_NEAREST -> true;
             case RMODE_PLUS_INFINITY -> !sign;
             case RMODE_MINUS_INFINITY -> sign;
+            case RMODE_ODD_INF -> true;
             default -> false;
         };
     }
@@ -498,6 +534,67 @@ final class SveFloat {
             return env.zero(exactZeroSign(env));
         }
         return round(env, sum.signum() < 0, sum.abs(), exponent + scale, false);
+    }
+
+    /// `FPDot` de duas vias (`FMOPA` widening, `BFMOPA` com `FPCR.EBF = 1`): `a0 × b0 + a1 × b1` com **um único
+    /// arredondamento** (soma exata em `BigInteger`). `in` desempacota os quatro operandos (formato de origem);
+    /// `out` arredonda o resultado e deve ter `DN` ligado (qualquer NaN de entrada vira o NaN padrão de `out`, que
+    /// é o que os dois chamadores — `FPST_ZA*` e `is_ebf` — sempre configuram). A acumulação com o `ZA` é um
+    /// passo À PARTE, NÃO fundido ({@link #add}).
+    static long fusedDotProduct2(long a0, long b0, long a1, long b1, Env in, Env out) {
+        Value[] v = {unpack(a0, in), unpack(b0, in), unpack(a1, in), unpack(b1, in)};
+        boolean anyNaN = false;
+        for (Value operand : v) {
+            if (operand.kind == Kind.SIGNALING_NAN) {
+                out.flags |= FLAG_IOC;
+            }
+            anyNaN |= operand.isNaN();
+        }
+        if (anyNaN) {
+            return out.defaultNanBits();
+        }
+        boolean[] sign = new boolean[2];
+        boolean[] infinite = new boolean[2];
+        boolean[] zero = new boolean[2];
+        for (int k = 0; k < 2; k++) {
+            Value a = v[2 * k];
+            Value b = v[2 * k + 1];
+            sign[k] = a.sign != b.sign;
+            boolean anyInfinity = a.kind == Kind.INFINITY || b.kind == Kind.INFINITY;
+            zero[k] = a.kind == Kind.ZERO || b.kind == Kind.ZERO;
+            if (anyInfinity && zero[k]) {
+                return invalidOperation(out);
+            }
+            infinite[k] = anyInfinity;
+        }
+        if (infinite[0] && infinite[1] && sign[0] != sign[1]) {
+            return invalidOperation(out);
+        }
+        if (infinite[0] || infinite[1]) {
+            return out.infinity(infinite[0] ? sign[0] : sign[1]);
+        }
+        if (zero[0] && zero[1]) {
+            return out.zero(sign[0] == sign[1] ? sign[0] : exactZeroSign(out));
+        }
+        int exponent = Integer.MAX_VALUE;
+        for (int k = 0; k < 2; k++) {
+            if (!zero[k]) {
+                exponent = Math.min(exponent, v[2 * k].exponent + v[2 * k + 1].exponent);
+            }
+        }
+        BigInteger sum = BigInteger.ZERO;
+        for (int k = 0; k < 2; k++) {
+            if (zero[k]) {
+                continue;
+            }
+            BigInteger product = BigInteger.valueOf(v[2 * k].mantissa).multiply(BigInteger.valueOf(v[2 * k + 1].mantissa))
+                    .shiftLeft(v[2 * k].exponent + v[2 * k + 1].exponent - exponent);
+            sum = sum.add(sign[k] ? product.negate() : product);
+        }
+        if (sum.signum() == 0) {
+            return out.zero(exactZeroSign(out));
+        }
+        return round(out, sum.signum() < 0, sum.abs(), exponent, false);
     }
 
     // ── Máximo/mínimo ────────────────────────────────────────────────────────────────────────────

@@ -93,7 +93,7 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16,
         Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
-        Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore {
+        Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -551,6 +551,9 @@ public sealed interface Ir64Op permits
         public static final int SME_ARRAY_LOAD_STORE = 201;
         /// B18.4: `LDR`/`STR` de `ZT0` (`FEAT_SME2`) — ver {@link SmeZt0LoadStore}.
         public static final int SME_ZT0_LOAD_STORE = 202;
+        /// B18.5: `ADDHA`/`ADDVA` e produto externo (`FMOPA`/`SMOPA`/`BMOPA`/…) sobre um tile de `ZA` — ver
+        /// {@link SmeOuterProduct}.
+        public static final int SME_OUTER_PRODUCT = 203;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5146,6 +5149,47 @@ public sealed interface Ir64Op permits
             int rn,
             long instructionAddress) implements Ir64Op {
         @Override public int kind() { return Kind.SME_ZT0_LOAD_STORE; }
+    }
+
+    /// SME `ADDHA`/`ADDVA` e produto externo acumulado sobre UM tile inteiro de `ZA` (B18.5): `ZA<tile>[i][j]` é
+    /// atualizado a partir de `Zn[i]` e `Zm[j]` (`Zn` sozinho em `ADDHA`/`ADDVA`) onde `Pn[i]` e `Pm[j]` permitem.
+    /// **Tile inteiro, não slice** — não há `rs`/`off`/`v` nestes encodings. `subtract` escolhe `…OPS` (subtrai) em
+    /// vez de `…OPA` (acumula); `ADDHA`/`ADDVA` e `FMOPA_sb`/`_hb` não têm esse bit (sempre `false`).
+    record SmeOuterProduct(
+            Op op,
+            /// Índice do tile `ZAn` (largura do campo depende do acumulador: 1/2/3 bits ⇒ 2/4/8 tiles).
+            int tile,
+            int zn,
+            /// `Zm` (ignorado em `ADDHA`/`ADDVA`).
+            int zm,
+            /// Predicado de linhas (`P0`-`P7`).
+            int pn,
+            /// Predicado de colunas (`P0`-`P7`).
+            int pm,
+            boolean subtract,
+            long instructionAddress) implements Ir64Op {
+        /// Os 23 mnemônicos de `sme.decode` (`### SME Add Vector to Array` + `### SME Outer Product`), com o
+        /// tamanho de elemento do ACUMULADOR (que fixa quantos tiles existem e o formato do `ZA`).
+        public enum Op {
+            ADDHA_S(2), ADDVA_S(2), ADDHA_D(3), ADDVA_D(3),
+            FMOPA_H(1), BFMOPA(1), FMOPA_S(2), FMOPA_D(3), FMOPA_W_H(2), BFMOPA_W(2), FMOPA_SB(2), FMOPA_HB(1),
+            SMOPA_S(2), SUMOPA_S(2), USMOPA_S(2), UMOPA_S(2),
+            SMOPA_D(3), SUMOPA_D(3), USMOPA_D(3), UMOPA_D(3),
+            BMOPA(2), SMOPA2_S(2), UMOPA2_S(2);
+
+            private final int accumulatorEsz;
+
+            Op(int accumulatorEsz) {
+                this.accumulatorEsz = accumulatorEsz;
+            }
+
+            /// `0` = byte … `3` = doubleword — o elemento do tile que o produto atualiza.
+            public int accumulatorEsz() {
+                return accumulatorEsz;
+            }
+        }
+
+        @Override public int kind() { return Kind.SME_OUTER_PRODUCT; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

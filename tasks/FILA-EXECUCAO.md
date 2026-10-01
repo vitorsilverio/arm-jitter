@@ -41,19 +41,10 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-10-01)
 
-**`B18.4` fechada** — `LD1`/`ST1` de slice de tile (5 `esz` × 2 eixos), `LDR`/`STR` de vetor de `ZA` e `LDR`/`STR ZT0` (9 encodings)
-decodificam e executam, palavras conferidas contra `aarch64-none-elf-as`, 100% JaCoCo. **Achado que corrige a spec:** `LD1` de tile
-ZERA a lane inativa (não "não escreve") — medido no `sme_helper.c` do QEMU. **`docs/COBERTURA-ISA.md` não mudou** (`sme.decode`
-segue `NOT_IN_ANY_PRESET` na medição até a **B18.13**, que depende de B18.5-B18.12). Ver **Resultado** na task.
-
-**`B17.29` fechada** (resíduo do fechamento SVE da B17.26) — corrigido o gate `SVE2` indevido que
-escondia `SMMLA`/`USMMLA`/`UMMLA` (só exigem `SVE`+`FEAT_I8MM`) e triados os ~30 `❌` restantes de
-`sve.decode`: **nenhum era gap real**, todos falso-negativo do medidor (`DecodeTreeSpec` ignorava bits
-só alcançáveis via `%extrator` do QEMU, ficavam sempre `0`; ganhou campo sintético com slot PRÓPRIO em
-`FILL_STRATEGIES` para nunca retroagir sobre as estratégias antigas — ver **Resultado** na task para o
-quase-regressão achado em `VCVT_F16_F32` do NEON e como foi evitado). Global **98%→99%**, A64 por
-versão `ARMv9.0-A`-`ARMv9.5-A` **95%→99%**, grupo SVE/SVE2 **84-85%→96-97%**. `sme.decode` segue o
-ÚNICO grupo `NOT_IN_ANY_PRESET` da tabela (mas já tem decode/execução reais desde a B18.3 acima).
+**`B18.5` fechada em parte (23/54)** — `ADDHA`/`ADDVA` + produto externo clássico decodificam e executam (palavras conferidas contra
+`aarch64-none-elf-as`, 100% JaCoCo no código novo, 10958 testes verdes, G5 rodado). **Achados que corrigem a spec**: as ops de `ZA` NÃO
+acumulam em `FPSR` e têm `DN` sempre 1; `BFMOPA_w` depende de `FPCR.EBF`. As 31 de `MOP4`/`TMOP` viraram a **`B18.5b`** (spec nova).
+`COBERTURA-ISA.md` não mudou (`sme.decode` segue `NOT_IN_ANY_PRESET` até a B18.13). Ver **Resultado** na task.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -65,12 +56,12 @@ estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por qua
 decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B18.5+** (SME, ~567 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
+abertos: **B18.5b+** (SME, ~544 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
 achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
 e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.5`** em diante (SME:
-outer product, SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.5b`** (SME `MOP4`/`TMOP`) e **`B18.6`** em diante (SME:
+SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
 já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
 decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências
 nomeadas da B18.2: ligar `FEAT_SME_FA64` a preset(s); `ResetSVEState` na troca AArch64↔AArch32 com

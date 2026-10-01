@@ -273,19 +273,40 @@ class Aarch64MatrixStateTest {
                 & ID_AA64PFR1_SME_FIELD, "ARMv9.0-A tem SVE mas não SME");
     }
 
+    /// `F32F32`/`B16F32`/`F16F32` (bits 32/34/35) e `I8I32` (`bits[39:36]` = 0xF): o produto externo base (B18.5).
+    private static final long SMFR0_BASE_OUTER_PRODUCT = (1L << 32) | (1L << 34) | (1L << 35) | (0xFL << 36);
+
     @Test
-    void smfr0AdvertisesOnlySmeVersionAndNoCapabilityField() {
-        assertEquals(0L, smeCore(256).readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1),
-                "SME 1: SMEver=0 e nenhum campo de capacidade (Armadilha 5)");
+    void smfr0AdvertisesTheSmeVersionAndOnlyTheCapabilitiesAlreadyImplemented() {
+        assertEquals(SMFR0_BASE_OUTER_PRODUCT,
+                smeCore(256).readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1),
+                "SME 1: SMEver=0 e só o produto externo base — nada de I16I64/F64F64/BI32I32 (Armadilha 5)");
         assertEquals(0L, plainCore().readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1));
         Aarch64Core sme2 = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)), SME2, 256, 256);
-        assertEquals(1L << 56, sme2.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1));
+        assertEquals((1L << 56) | SMFR0_BASE_OUTER_PRODUCT | (1L << 33),
+                sme2.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1), "SME2 acende BI32I32 (BMOPA)");
         assertEquals(2L << 24, sme2.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64PFR1_EL1)
                 & ID_AA64PFR1_SME_FIELD);
         Aarch64Core sme21 = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)), SME2P1, 256, 256);
-        assertEquals(2L << 56, sme21.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1));
+        assertEquals((2L << 56) | SMFR0_BASE_OUTER_PRODUCT | (1L << 33),
+                sme21.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1));
         assertThrows(UnsupportedOperationException.class,
                 () -> sme21.writeIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1, 1));
+    }
+
+    @Test
+    void smfr0LightsEachSlicedCapabilityFieldOnlyWhenItsFeatureIsDeclared() {
+        long[] fields = {0xFL << 52, 1L << 48, 1L << 42, 1L << 43, 1L << 40, 1L << 41};
+        Aarch64Feature[] features = {Aarch64Feature.SME_I16I64, Aarch64Feature.SME_F64F64,
+                Aarch64Feature.SME_F16F16, Aarch64Feature.SME_B16B16, Aarch64Feature.SME_F8F32,
+                Aarch64Feature.SME_F8F16};
+        for (int i = 0; i < features.length; i++) {
+            Aarch64Architecture only = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_2_A,
+                    "teste-smfr0-" + features[i], features[i]);
+            Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)), only, 256, 256);
+            assertEquals(SMFR0_BASE_OUTER_PRODUCT | fields[i],
+                    core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1), features[i].name());
+        }
     }
 
     // ── Checagens de acesso SME ──────────────────────────────────────────────────────────────
@@ -521,7 +542,9 @@ class Aarch64MatrixStateTest {
         assertFalse(core.hasSme2());
         assertEquals(2L << 24, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64PFR1_EL1)
                 & ID_AA64PFR1_SME_FIELD);
-        assertEquals(2L << 56, core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1));
+        assertEquals((2L << 56) | SMFR0_BASE_OUTER_PRODUCT,
+                core.readIntrinsicSystemRegister(Aarch64SystemRegisterId.ID_AA64SMFR0_EL1),
+                "SME2.1 sem SME2: SMEver = 2, mas sem BI32I32 (BMOPA exige FEAT_SME2)");
     }
 
     @Test
