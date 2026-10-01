@@ -30,6 +30,13 @@ import java.util.Map;
 ///   mudam os padrões contidos.
 public final class DecodeTreeSpec {
 
+    /// Prefixo dos campos sintéticos que {@link #addFreeBitFields} cria — nunca colide com um campo
+    /// real do `decodetree` (nenhum começa com `~`) nem com `IsaCoverageReport.REGISTER_FIELDS`.
+    /// {@link IsaCoverageReport#encode} usa este prefixo para dar a estes campos um slot de
+    /// preenchimento PRÓPRIO, separado do campo não-registrador NOMEADO — ver o Javadoc de
+    /// `FILL_STRATEGIES` para o porquê.
+    static final String SYNTHETIC_FIELD_PREFIX = "~free";
+
     /// Uma instrução do inventário: o mnemônico do QEMU e o encoding com os bits fixos aplicados.
     ///
     /// @param name        mnemônico (ex.: `AND_rrri`)
@@ -67,6 +74,7 @@ public final class DecodeTreeSpec {
                 continue;
             }
             Pattern merged = merge(own, referencedFormat(tokens, formats), width);
+            addFreeBitFields(merged, width);
             instructions.add(new Instruction(head, merged.ones, merged.zeros, merged.fields, width));
         }
         return instructions;
@@ -98,6 +106,47 @@ public final class DecodeTreeSpec {
         int ones;
         int zeros;
         Map<String, int[]> fields = new LinkedHashMap<>();
+    }
+
+    /// **B17.29 — achado**: um bit coberto só por `.`/`-` (nem literal `0`/`1`, nem campo `nome:largura`) não gera
+    /// NENHUM campo — nem no padrão próprio nem no `@formato` — quando o valor real da instrução é montado por um
+    /// `%extrator` (ex. `imm=%tszimm_shl`, ignorado de propósito pelo cabeçalho desta classe). Sem isto,
+    /// {@link IsaCoverageReport#encode} nunca escreve nada nessas posições: ficam `0` SEMPRE, em TODAS as
+    /// estratégias de preenchimento — e várias famílias de `sve.decode` (`SSHLLB`/`SSRA`/`SRI`/`XAR`/`DUP_x`/os
+    /// narrowing `*NB`/`*NT`/...) recusam `tsz = 0` por desenho (`UNALLOCATED` real do manual), medindo `❌` mesmo
+    /// já implementadas e testadas com encoding real — falso negativo do MEDIDOR, mesma classe do achado B9.7.
+    ///
+    /// Em vez de reproduzir cada `%extrator` (acoplaria o leitor à semântica do QEMU, o que o cabeçalho da classe
+    /// rejeita de propósito), esta correção é estrutural: qualquer bit que sobrar sem dono depois do merge
+    /// própria+formato vira um campo SINTÉTICO (nome `~freeAA_BB`, nunca colide com `REGISTER_FIELDS` nem com um
+    /// campo real, já que nenhum campo real do `decodetree` começa com `~`) agrupado por posição CONTÍGUA, preenchido pelas
+    /// mesmas estratégias genéricas dos demais campos não-registrador. Como o `decodetree` já garante que um `.`
+    /// solto é "qualquer valor serve" (nunca um bit reservado à parte), isto só pode tornar a medição mais fiel —
+    /// nunca pode fazer uma célula já `✅`/`⚠️` regredir (a estratégia que já decodificava continua decodificando).
+    private static void addFreeBitFields(Pattern pattern, int width) {
+        int claimed = pattern.ones | pattern.zeros;
+        for (int[] positions : pattern.fields.values()) {
+            for (int bit : positions) {
+                claimed |= 1 << bit;
+            }
+        }
+        int bit = width - 1;
+        while (bit >= 0) {
+            if ((claimed & (1 << bit)) != 0) {
+                bit--;
+                continue;
+            }
+            int high = bit;
+            while (bit >= 0 && (claimed & (1 << bit)) == 0) {
+                bit--;
+            }
+            int low = bit + 1;
+            int[] positions = new int[high - low + 1];
+            for (int i = 0; i < positions.length; i++) {
+                positions[i] = high - i; // MSB primeiro, mesma convenção de `readPattern`.
+            }
+            pattern.fields.put(SYNTHETIC_FIELD_PREFIX + high + "_" + low, positions);
+        }
     }
 
     /// Lê os tokens de bits da esquerda (bit mais significativo) para a direita. Devolve `null` se

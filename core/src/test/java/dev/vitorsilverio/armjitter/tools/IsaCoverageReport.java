@@ -596,13 +596,28 @@ public final class IsaCoverageReport {
             "rd", "rn", "rm", "rt", "rt2", "ra", "rs", "rdlo", "rdhi", "rd2", "vd", "vn", "vm",
             "qd", "qn", "qm", "zd", "zn", "zm", "za", "pd", "pn", "pm", "pg");
 
-    /// Estratégias de preenchimento dos campos livres. Uma instrução conta como suportada se
-    /// QUALQUER uma decodificar — ver o Javadoc da classe.
+    /// Estratégias de preenchimento dos campos livres: 4 valores de REGISTRADOR, 1 valor para campo
+    /// não-registrador NOMEADO (ex. `size`/`esz`/`imm` de um `nome:largura` real do `.decode`) e 1
+    /// valor para campo SINTÉTICO `~freeAA_BB` (ver {@link DecodeTreeSpec#addFreeBitFields}). Uma
+    /// instrução conta como suportada se QUALQUER estratégia decodificar — ver o Javadoc da classe.
+    ///
+    /// **B17.29 — por que o sintético é uma COLUNA PRÓPRIA, não reaproveita a do nomeado**: antes de
+    /// existir campo sintético, um bit `.` sem dono (`%extrator` do QEMU, ex. `imm=%tszimm_shl`)
+    /// ficava sempre `0`, nunca escrito por estratégia nenhuma. Dar ao sintético o MESMO valor do
+    /// nomeado reescreveria retroativamente esse `0` implícito nas 5 estratégias já existentes —
+    /// achado real: isso MUDA o resultado de instruções que já decodificavam por acidente com esse
+    /// bit em `0` (ex. `VCVT_F16_F32`/`VCVT_F32_F16` do NEON, cujo bit `D`/`M` de extensão de
+    /// registrador também é um `.` sem dono do mesmo jeito — um valor não-zero ali quebra a
+    /// paridade de registrador que a instrução exige). Por isso as 5 estratégias ORIGINAIS fixam o
+    /// sintético em `0` (byte a byte idêntico ao comportamento de antes desta task — nenhuma célula
+    /// já `✅`/`⚠️` pode regredir) e só as estratégias NOVAS, acrescentadas ao final, experimentam um
+    /// valor não-zero ali — como só entram em jogo quando as 5 originais já falharam (a função
+    /// devolve no primeiro sucesso), elas só podem ACRESCENTAR cobertura, nunca tirar.
     private static final int[][] FILL_STRATEGIES = {
-            {1, 2, 3, 4, 0},
-            {1, 2, 3, 4, 1},
-            {0, 0, 0, 0, 0},
-            {2, 4, 6, 8, 2},
+            {1, 2, 3, 4, 0, 0},
+            {1, 2, 3, 4, 1, 0},
+            {0, 0, 0, 0, 0, 0},
+            {2, 4, 6, 8, 2, 0},
             // B9.7: achado real — nenhuma das 4 estratégias acima produz >=2 bits setados num
             // campo NÃO-registrador (ex. `list:16` de LDM/STM), então qualquer instrução cuja
             // UNPREDICTABLE-check exija >=2 bits (`Thumb2LoadStoreDecoder#decodeMultipleTransfer`,
@@ -610,7 +625,27 @@ public final class IsaCoverageReport {
             // (`STM_t32`/`LDM_t32`, confirmado por `Thumb2LoadStoreDecoderTest` linhas 668+) — falso
             // negativo do MEDIDOR, não da implementação. `6` (0b110) garante 2 bits num campo de
             // 16 bits sem quebrar campos de 1 bit já cobertos por outras estratégias (0/1 acima).
-            {1, 2, 3, 4, 6},
+            {1, 2, 3, 4, 6, 0},
+            // B17.29: `SXTW_m`/`UXTW_m`/`REVW_m` e as formas `_z` só existem com `esz = 3` (campo
+            // NOMEADO `esz:2`, já visível antes desta task) — `3` é o único valor, entre os usados
+            // acima, cujo `mod 4` dá `11` binário (`0`,`1`,`0`,`2`,`6` nunca dão `3`).
+            {1, 2, 3, 4, 3, 0},
+            // B17.29: o campo SINTÉTICO `tsz`/`imm` de `sve.decode` (`%tszimm_shl`/`%tszimm_shr`/
+            // `%tszimm_esz`/variantes `16`, 2+5 bits combinados — ver `DecodeTreeSpec#addFreeBitFields`)
+            // trata `tsz = 0` como UNALLOCATED de propósito (`SSHLLB`/`SSRA`/`SRI`/`XAR`/`DUP_x`/os
+            // narrowing `*NB`/`*NT` recusam) — por isso media `❌` mesmo já implementada e testada com
+            // encoding real. `8` (`0b01000` no campo de 5 bits) dá `tszEsz = 0` com deslocamento
+            // EXATAMENTE `0` (`tszimm - (8 << 0) = 0`), a restrição exclusiva dos extracts
+            // (`SQXTNB`/`SQXTNT`/`UQXTNB`/`UQXTNT`/`SQXTUNB`/`SQXTUNT`: "`imm` diferente de 0" é a
+            // UNPREDICTABLE que nenhuma estratégia anterior satisfazia) — e serve às demais do grupo
+            // (que só exigem `tsz != 0`, qualquer deslocamento) de brinde.
+            {1, 2, 3, 4, 0, 8},
+            // B17.29: `CNTP_c` exige `bits[9:8] = 11` no campo de REGISTRADOR `rn:4` do `sve.decode`
+            // (`PN8`-`PN15`, nunca `P0`-`P7`, ver `Aarch64SveCounterDecoder`) — nenhuma estratégia
+            // acima usa valor `>= 8` num campo de registrador, então o bit mais alto desse campo de
+            // 4 bits nunca liga. `8`-`11` evitam os registros especiais (`SP`/`LR`/`PC` = 13-15) como
+            // as outras estratégias já evitam `0`.
+            {8, 9, 10, 11, 0, 0},
     };
 
     private IsaCoverageReport() {
@@ -1122,21 +1157,6 @@ public final class IsaCoverageReport {
         private static final SveCell NOT_APPLICABLE = new SveCell(false, Status.MISSING);
     }
 
-    /// **B17.26 — achado confirmado por leitura de fonte, não só pela sonda**: `SMMLA`/`USMMLA`/
-    /// `UMMLA` (`decoder64/Aarch64Sve2WideningDecoder#matrixMultiply`) exigem só `FEAT_SVE` +
-    /// `FEAT_I8MM` pelo manual ARM — mas o despacho que chega até elas
-    /// (`Aarch64Sve2IntegerDecoder#decodePrefix45`) tem um gate `architecture.has(SVE2)` amplo demais
-    /// ANTES de alcançar o `matrixMultiply`, que bloqueia as 3 mesmo quando `INT8_MATRIX_MULTIPLY`
-    /// está presente e `SVE2` não é exigida de verdade. **Sem esta lista**, a sonda dupla de
-    /// {@link #probeSveApplicability} concluiria "·" para as 3 em TODAS as 16 colunas (porque a sonda
-    /// "máxima" — que liga `SVE2` — decodifica, então parece "só falta uma sub-feature"), escondendo
-    /// um bug de decoder real atrás de "não aplicável" — o oposto da disciplina do `tasks/README.md`.
-    /// Com a lista, elas aparecem como `❌` (aplicável, pendente) a partir de onde `INT8_MATRIX_MULTIPLY`
-    /// existe — pendência nomeada na task de fechamento (destino: nova task, split do gate de
-    /// `decodePrefix45` por sub-feature em vez de um `SVE2` só).
-    private static final java.util.Set<String> SVE_FEATURE_GATE_BUG_NAMES =
-            java.util.Set.of("SMMLA", "USMMLA", "UMMLA");
-
     /// **B17.26** — aplicabilidade de uma instrução `sve.decode` numa coluna de versão A64, medida
     /// em vez de transcrita à mão: nenhum dos 16 presets declara `SVE2`/sub-features (só `SVE`),
     /// mas o `Aarch64Decoder` já gateia cada encoding SVE2/cripto/BF16/F64MM/etc. pela feature real
@@ -1148,8 +1168,7 @@ public final class IsaCoverageReport {
     /// 2. A sonda sob a arquitetura REAL da coluna decodifica: aplicável, status = o que decodificou.
     /// 3. Não decodifica sob a coluna, mas decodifica sob {@link #maximalSveProbeArchitecture}
     ///    (todas as sub-features SVE2 ligadas): a coluna genuinamente não tem a sub-feature exigida
-    ///    — **não aplicável** (vira `·`, não `❌`), EXCETO para {@link #SVE_FEATURE_GATE_BUG_NAMES}
-    ///    (passo 3b): aí o "não aplicável" da sonda é descartado de propósito — é o próprio bug.
+    ///    — **não aplicável** (vira `·`, não `❌`).
     /// 4. Não decodifica nem sob a sonda máxima: gap de implementação real — **aplicável** (a
     ///    baseline `SVE` já presente justifica medir a célula) e `❌`.
     private static SveCell probeSveApplicability(DecodeTreeSpec.Instruction instruction, int occurrence,
@@ -1160,9 +1179,6 @@ public final class IsaCoverageReport {
         Status direct = probeAarch64(instruction, occurrence, architecture);
         if (direct != Status.MISSING) {
             return new SveCell(true, direct);
-        }
-        if (SVE_FEATURE_GATE_BUG_NAMES.contains(instruction.name())) {
-            return new SveCell(true, Status.MISSING);
         }
         Status maximal = probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture));
         return maximal != Status.MISSING ? SveCell.NOT_APPLICABLE : new SveCell(true, Status.MISSING);
@@ -1232,9 +1248,13 @@ public final class IsaCoverageReport {
             if (name.equals("cond")) {
                 value = thumbConditionalBranch ? 0b0000 : 0b1110;
             } else if (REGISTER_FIELDS.contains(name)) {
-                value = strategy[Math.min(registerIndex++, strategy.length - 2)];
-            } else {
+                value = strategy[Math.min(registerIndex++, strategy.length - 3)];
+            } else if (name.startsWith(DecodeTreeSpec.SYNTHETIC_FIELD_PREFIX)) {
+                // B17.29: campo sintético (`~freeAA_BB`, ver `DecodeTreeSpec#addFreeBitFields`) — slot
+                // PRÓPRIO, nunca o do campo nomeado (ver o Javadoc de `FILL_STRATEGIES`).
                 value = strategy[strategy.length - 1];
+            } else {
+                value = strategy[strategy.length - 2];
             }
             word = writeField(word, field.getValue(), value, instruction.fixedZeros());
         }

@@ -106,6 +106,15 @@ final class Aarch64Sve2WideningDecoder {
         int rd = word & RD_MASK;
         int rn = (word >>> RN_SHIFT) & RN_MASK;
         int rm = (word >>> RM_SHIFT) & RM_MASK;
+        if (opcode == MATRIX_MULTIPLY) {
+            // B17.29: `SMMLA`/`USMMLA`/`UMMLA` exigem `FEAT_SVE`+`FEAT_I8MM` (`matrixMultiply` já checa), NÃO
+            // `FEAT_SVE2` — por isso decide ANTES do gate de `SVE2` abaixo, que vale para o resto deste decoder
+            // (o chamador, `Aarch64Sve2IntegerDecoder#decodePrefix45`, não filtra mais por `SVE2` nesse caminho).
+            return matrixMultiply(esz, rd, rn, rm, address);
+        }
+        if (!architecture.has(Aarch64Feature.SVE2)) {
+            return null;
+        }
         boolean top = (opcode & OPCODE_TOP_BIT) != 0;
         boolean unsigned = (opcode & OPCODE_UNSIGNED_BIT) != 0;
         if (opcode < LONG_ADD_SUB_LIMIT) {
@@ -145,7 +154,7 @@ final class Aarch64Sve2WideningDecoder {
             // `EORBT`: escreve o elemento PAR (`Zn` par ^ `Zm` ímpar); `EORTB`: o ímpar (`Zn` ímpar ^ `Zm` par).
             case EOR_BT -> op(Ir64Op.SveIntegerUnpredicated.Op.EORBT, esz, rd, rn, rm, SELECT_M_TOP, 0L, address);
             case EOR_TB -> op(Ir64Op.SveIntegerUnpredicated.Op.EORTB, esz, rd, rn, rm, SELECT_N_TOP, 0L, address);
-            case MATRIX_MULTIPLY -> matrixMultiply(esz, rd, rn, rm, address);
+            // `MATRIX_MULTIPLY` já foi tratado no topo de `decodeWidening` (não exige `SVE2`) — nunca chega aqui.
             default -> null;
         };
     }

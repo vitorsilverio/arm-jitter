@@ -242,28 +242,39 @@ final class Aarch64Sve2IntegerDecoder {
     }
 
     /// B17.21a: as 18 linhas de `#### SVE2 Accumulate` (prefixo `0x45`, `bit 21 = 0`). `null` para o resto do espaço (G8).
+    ///
+    /// **B17.29**: ao contrário do resto deste método (todo `FEAT_SVE2` de verdade), o `default` do switch final
+    /// também alcança `SMMLA`/`USMMLA`/`UMMLA` (via {@link Aarch64Sve2WideningDecoder#decode}), que exigem só
+    /// `FEAT_SVE`+`FEAT_I8MM` — por isso o gate de `SVE2` não pode mais ser único no topo do método; cada ramo que
+    /// NÃO alcança essas três instruções checa `SVE2` por conta própria, e `widening.decode` decide sozinho (tem
+    /// `architecture`) se a instrução específica exige `SVE2` ou não.
     Ir64Op decodePrefix45(int word, long address) {
-        if (!architecture.has(Aarch64Feature.SVE2)) {
-            return null;
-        }
+        boolean sve2 = architecture.has(Aarch64Feature.SVE2);
         int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
         int rd = word & RD_MASK;
         int rn = (word >>> RN_SHIFT) & RN_MASK;
         int rm = (word >>> RM_SHIFT) & RM_MASK;
         long top = (word & TOP_BIT) != 0 ? 1 : 0;
         if ((word & COMPLEX_ADD_MASK) == COMPLEX_ADD_VALUE) {
+            if (!sve2) {
+                return null;
+            }
             Ir64Op.SveIntegerUnpredicated.Op op = (word & COMPLEX_SATURATE_BIT) != 0
                     ? Ir64Op.SveIntegerUnpredicated.Op.SQCADD : Ir64Op.SveIntegerUnpredicated.Op.CADD;
             // `@rdn_rm`: `Zm` em `bits[9:5]`, destrutiva em `Zdn`. `bit 10` = rotação 270.
             return unpredicated(op, esz, rd, rd, rn, top, address);
         }
         if ((word & NARROWING_SPACE_BIT) != 0) {
-            return widening.decode(word, address); // B17.21b: `#### SVE2 Narrowing` (e o espaço MATCH, recusado)
+            // B17.21b: `#### SVE2 Narrowing` (e o espaço MATCH, recusado) — sem `SMMLA`/`USMMLA`/`UMMLA` aqui, SVE2 de verdade.
+            return sve2 ? widening.decode(word, address) : null;
         }
         // Chegar aqui já garante prefixo `0x45` (dispatch do chamador) e `bit 21 = 0` (checagem acima) — o resto do
         // espaço de Accumulate é decidido pelos campos abaixo; o que sobrar cai no `default -> null` do switch final (G8).
         int fiveBitFamily = word & FIVE_BIT_FAMILY_MASK;
         if (fiveBitFamily == CARRY_VALUE) {
+            if (!sve2) {
+                return null;
+            }
             // `bit 23` escolhe ADC/SBC e `bit 22` o tamanho (`.S`/`.D`) — o oposto do que a spec da task dizia.
             Ir64Op.SveIntegerUnpredicated.Op op = (word & SUBTRACT_BIT) != 0
                     ? Ir64Op.SveIntegerUnpredicated.Op.SBCL : Ir64Op.SveIntegerUnpredicated.Op.ADCL;
@@ -271,19 +282,21 @@ final class Aarch64Sve2IntegerDecoder {
             return unpredicated(op, size, rd, rn, rm, top, address);
         }
         if (fiveBitFamily == ABS_DIFF_VALUE) {
-            return unpredicated(top != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABA
-                    : Ir64Op.SveIntegerUnpredicated.Op.SABA, esz, rd, rn, rm, 0, address);
+            return sve2 ? unpredicated(top != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABA
+                    : Ir64Op.SveIntegerUnpredicated.Op.SABA, esz, rd, rn, rm, 0, address) : null;
         }
         if (fiveBitFamily == INSERT_VALUE) {
-            return shiftInsert(word, rd, rn, top != 0, address);
+            return sve2 ? shiftInsert(word, rd, rn, top != 0, address) : null;
         }
         return switch (word & ACCUMULATE_FAMILY_MASK) {
-            case FAMILY_ABS_DIFF_LONG -> esz == 0 ? null : unpredicated(
+            case FAMILY_ABS_DIFF_LONG -> !sve2 || esz == 0 ? null : unpredicated(
                     (word & UNSIGNED_BIT) != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABAL
                             : Ir64Op.SveIntegerUnpredicated.Op.SABAL,
                     esz, rd, rn, rm, top, address);
-            case FAMILY_SHIFT_ACCUMULATE -> shiftAccumulate(word, rd, rn, address);
-            default -> widening.decode(word, address); // B17.21b: `#### SVE2 Widening Integer Arithmetic`
+            case FAMILY_SHIFT_ACCUMULATE -> sve2 ? shiftAccumulate(word, rd, rn, address) : null;
+            // B17.21b: `#### SVE2 Widening Integer Arithmetic` — EXCETO `SMMLA`/`USMMLA`/`UMMLA`, que não exigem
+            // `SVE2` (B17.29); `widening.decode` checa a feature certa para cada caso, por isso roda sem o gate daqui.
+            default -> widening.decode(word, address);
         };
     }
 

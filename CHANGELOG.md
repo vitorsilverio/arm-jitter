@@ -7,6 +7,9 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
 
+### Corrigido
+- **SVE, gate `SVE2` indevido + falso-negativo do medidor** (`B17.29`): `SMMLA`/`USMMLA`/`UMMLA` (só exigem `SVE`+`FEAT_I8MM`) não dependem mais de `FEAT_SVE2` em `Aarch64Sve2WideningDecoder`/`Aarch64Sve2IntegerDecoder`. `DecodeTreeSpec` (ferramenta de medição) ganhou campo sintético para bits só alcançáveis via `%extrator` do QEMU, antes sempre `0` — triados os ~30 `❌` restantes de `sve.decode`, nenhum gap real. `docs/COBERTURA-ISA.md`: global 98%→99%, A64 `ARMv9.0-A`-`ARMv9.5-A` 95%→99%, SVE/SVE2 84-85%→96-97%.
+
 ### Adicionado
 - **SVE2 inteiro II, metade 21b** (`B17.21b`): `#### SVE2 Widening Integer Arithmetic` (add/sub/abs-diff long, interleaved long, add/sub wide, multiply long incl. `PMULL`, `SSHLL`/`USHLL`, `EORBT`/`EORTB`, `SMMLA`/`USMMLA`/`UMMLA`, `BEXT`/`BDEP`/`BGRP`) e `#### SVE2 Narrowing` (extract narrow, shift right narrow, add/sub narrow high part, `SQCVTN`/`UQCVTN`/`SQCVTUN`) — 76 encodings; features novas `SVE_BITPERM` e `SVE_PMULL128`, `ID_AA64ZFR0_EL1` anuncia `AES`/`BitPerm`/`I8MM`. Tabela de ISA inalterada.
 - **SVE2 inteiro II, metade 21a** (`B17.21a`): shift por vetor saturante/arredondado (`SRSHL`/`URSHL`/`SQSHL`/`UQSHL`/`SQRSHL`/`UQRSHL` e as formas reversas), halving (`SHADD`/`SRHADD`/`SHSUB` e sem sinal), saturating add/sub (incl. `SUQADD`/`USQADD`) e `#### SVE2 Accumulate` (`CADD`/`SQCADD`, `SABAL*`/`UABAL*`, `ADCL*`/`SBCL*`, `SSRA`/`USRA`/`SRSRA`/`URSRA`, `SRI`/`SLI`, `SABA`/`UABA`) — 46 encodings sob `FEAT_SVE2`. Tabela de ISA inalterada.

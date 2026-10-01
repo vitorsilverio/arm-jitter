@@ -23,13 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// **O que esta task mudou e por que precisa de guarda**: `sve.decode` deixou de ser "não se aplica
 /// a nenhum preset atual" e ganhou coluna por versão A64 via `probeSveApplicability` — uma sonda
 /// dupla (arquitetura real vs. arquitetura com toda sub-feature SVE2 ligada), não uma curadoria por
-/// mnemônico como `AARCH64_VERSION_REQUIREMENTS`. Dois jeitos de regredir silenciosamente:
-/// 1. esquecer uma feature "irmã" (`FEAT_I8MM`/`FEAT_BF16`/`FEAT_FAMINMAX`/`FEAT_FP8*`/`FEAT_LUT`) na
-///    lista `SVE_PROBE_EXTRA_FEATURES` faz a sonda "máxima" concluir "gap real" (`❌`) quando é só
-///    "esta versão ainda não tem a sub-feature" (`·`) — `FAMAX`/`FAMIN` é o caso que pegou isso.
-/// 2. remover `SVE_FEATURE_GATE_BUG_NAMES` (o registro de `SMMLA`/`USMMLA`/`UMMLA`) deixa a sonda
-///    dupla concluir "·" para as 3 em TODAS as colunas — um bug real de decoder (gate `SVE2` amplo
-///    demais em `Aarch64Sve2IntegerDecoder#decodePrefix45`) escondido atrás de "não aplicável".
+/// mnemônico como `AARCH64_VERSION_REQUIREMENTS`. Jeito de regredir silenciosamente: esquecer uma
+/// feature "irmã" (`FEAT_I8MM`/`FEAT_BF16`/`FEAT_FAMINMAX`/`FEAT_FP8*`/`FEAT_LUT`) na lista
+/// `SVE_PROBE_EXTRA_FEATURES` faz a sonda "máxima" concluir "gap real" (`❌`) quando é só "esta
+/// versão ainda não tem a sub-feature" (`·`) — `FAMAX`/`FAMIN` é o caso que pegou isso.
+///
+/// **B17.29**: `SMMLA`/`USMMLA`/`UMMLA` mediam `❌` (visível, de propósito — ver
+/// `IsaCoverageReport.SVE_FEATURE_GATE_BUG_NAMES`, histórico) porque `decodePrefix45` as escondia
+/// atrás de um gate `SVE2` que elas não exigem (só `FEAT_SVE`+`FEAT_I8MM`). Com o gate corrigido
+/// (`Aarch64Sve2WideningDecoder#decodeWidening` decide `MATRIX_MULTIPLY` antes do gate de `SVE2`),
+/// a sonda DIRETA já decodifica sob `INT8_MATRIX_MULTIPLY` sem precisar de `SVE2` — viraram `✅` a
+/// partir de onde essa feature existe (`ARMv9.1-A`; `ARMv9.0-A` continua `·`, não a declara), e o
+/// registro de bug (`SVE_FEATURE_GATE_BUG_NAMES`) foi removido por não ser mais necessário.
 class IsaCoverageReportSveColumnTest {
 
     private static final Path TABLE = Path.of("..", "docs", "COBERTURA-ISA.md");
@@ -155,12 +160,12 @@ class IsaCoverageReportSveColumnTest {
         assertTrue(offenders.isEmpty(), "FAMAX/FAMIN fora do esperado: " + offenders);
     }
 
-    /// **Regressão-alvo 2**: `SMMLA`/`USMMLA`/`UMMLA` ficam **visíveis** como `❌` (aplicável,
-    /// pendente) em toda coluna `ARMv9.x-A`, nunca `·` — ver `SVE_FEATURE_GATE_BUG_NAMES`. Um `·`
-    /// aqui significaria que o registro do bug foi removido e o gap de decoder voltou a ficar
-    /// invisível atrás de "não aplicável".
+    /// **Regressão-alvo 2 (B17.29)**: `SMMLA`/`USMMLA`/`UMMLA` decodificam (`✅`) a partir de
+    /// `ARMv9.1-A` (primeira coluna A64 com `FEAT_I8MM`) e são `·` em `ARMv9.0-A` (não a declara) —
+    /// nunca `❌`. Um `❌` aqui significaria que o gate `SVE2` indevido de `decodePrefix45`
+    /// (`Aarch64Sve2WideningDecoder#decodeWidening`) voltou a esconder as 3.
     @Test
-    void theConfirmedDecoderGateBugStaysVisibleAsMissingNeverHiddenAsNotApplicable() {
+    void matrixMultiplyDecodesFromArmv91aOnwardNeverMissing() {
         List<String> names = List.of("SMMLA", "USMMLA", "UMMLA");
         List<String> offenders = new ArrayList<>();
         List<String> found = new ArrayList<>();
@@ -169,14 +174,18 @@ class IsaCoverageReportSveColumnTest {
                 continue;
             }
             found.add(rowEntry.name());
-            for (int i = ARMV9_0_A; i < AARCH64_COLUMNS.size(); i++) {
-                if (!MISSING.equals(rowEntry.cells().get(i))) {
+            if (!NOT_APPLICABLE.equals(rowEntry.cells().get(ARMV9_0_A))) {
+                offenders.add(rowEntry.name() + " @ " + AARCH64_COLUMNS.get(ARMV9_0_A) + " = "
+                        + rowEntry.cells().get(ARMV9_0_A));
+            }
+            for (int i = ARMV9_0_A + 1; i < AARCH64_COLUMNS.size(); i++) {
+                if (!SUPPORTED.equals(rowEntry.cells().get(i))) {
                     offenders.add(rowEntry.name() + " @ " + AARCH64_COLUMNS.get(i) + " = " + rowEntry.cells().get(i));
                 }
             }
         }
         assertEquals(names.size(), found.size(), "SMMLA/USMMLA/UMMLA não encontrados em sve.decode: " + found);
         assertTrue(offenders.isEmpty(),
-                "SMMLA/USMMLA/UMMLA deixaram de medir ❌ visível (achado B17.26 escondido de novo): " + offenders);
+                "SMMLA/USMMLA/UMMLA fora do esperado (gate SVE2 indevido voltou? ver B17.29): " + offenders);
     }
 }

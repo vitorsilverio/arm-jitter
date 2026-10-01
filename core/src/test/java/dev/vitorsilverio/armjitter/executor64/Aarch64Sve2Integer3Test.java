@@ -45,7 +45,8 @@ class Aarch64Sve2Integer3Test {
     private static final long VBAR = 0x400L;
     private static final long HANDLER = VBAR + 0x400L;
 
-    /// SVE puro (com `I8MM`, sem `SVE2`): tudo isto é recusado (G8).
+    /// SVE puro (com `I8MM`, sem `SVE2`): tudo isto é recusado (G8), EXCETO `SMMLA`/`USMMLA`/`UMMLA`
+    /// (B17.29: exigem só `SVE`+`I8MM`, nunca `SVE2`).
     private static final Aarch64Architecture SVE = Aarch64Architecture.ARMV9_1_A;
     /// `SVE2` sem nenhuma sub-feature (e sem `I8MM`).
     private static final Aarch64Architecture SVE2 = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_0_A,
@@ -411,6 +412,10 @@ class Aarch64Sve2Integer3Test {
     }
 
     private static final Set<String> CONVERT_PAIR = Set.of("SQCVTN", "UQCVTN", "SQCVTUN");
+    /// **B17.29**: `SMMLA`/`USMMLA`/`UMMLA` exigem só `FEAT_SVE`+`FEAT_I8MM`, NÃO `FEAT_SVE2` — ao contrário de
+    /// todo o resto deste grupo, decodificam sob {@link #SVE} (que tem `I8MM`, não `SVE2`). Antes da B17.29, um
+    /// gate `SVE2` indevido em `decodePrefix45` escondia as 3 (achado da B17.26).
+    private static final Set<String> MATRIX_MULTIPLY = Set.of("SMMLA", "USMMLA", "UMMLA");
 
     @ParameterizedTest
     @MethodSource("assemblerWords")
@@ -427,7 +432,11 @@ class Aarch64Sve2Integer3Test {
         if (!CONVERT_PAIR.contains(expected)) {
             assertEquals(Z2, op.rn());
         }
-        assertNull(decodeOrNull(SVE, word), "recusada sob SVE puro (G8)");
+        if (MATRIX_MULTIPLY.contains(expected)) {
+            assertNotNull(decodeOrNull(SVE, word), "SMMLA/USMMLA/UMMLA exigem só SVE+I8MM (B17.29), não SVE2");
+        } else {
+            assertNull(decodeOrNull(SVE, word), "recusada sob SVE puro (G8)");
+        }
     }
 
     @Test
@@ -683,7 +692,14 @@ class Aarch64Sve2Integer3Test {
                     if (!expected) {
                         continue;
                     }
-                    assertNull(decodeOrNull(SVE, word), "recusada sem SVE2: 0x" + Integer.toHexString(word));
+                    // B17.29: `SMMLA`/`USMMLA`/`UMMLA` são a ÚNICA exceção do grupo que não exige `SVE2`.
+                    Ir64Op underSve = decodeOrNull(SVE, word);
+                    if (decoded instanceof Ir64Op.SveIntegerUnpredicated u && MATRIX_MULTIPLY.contains(u.op().name())) {
+                        assertNotNull(underSve, "SMMLA/USMMLA/UMMLA deveriam decodificar sob SVE+I8MM: 0x"
+                                + Integer.toHexString(word));
+                    } else {
+                        assertNull(underSve, "recusada sem SVE2: 0x" + Integer.toHexString(word));
+                    }
                 }
             }
         }
