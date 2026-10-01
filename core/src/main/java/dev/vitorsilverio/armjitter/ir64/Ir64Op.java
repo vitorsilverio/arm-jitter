@@ -93,7 +93,8 @@ public sealed interface Ir64Op permits
         Ir64Op.SveFpDotProductWiden, Ir64Op.SveFpDotProductWidenBFloat16,
         Ir64Op.SveCryptoAes, Ir64Op.SveCryptoSm4Encrypt, Ir64Op.SveCryptoSm4KeyUpdate, Ir64Op.SveCryptoRax1,
         Ir64Op.SmeZero, Ir64Op.SmeZeroZt0, Ir64Op.SmeMova,
-        Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct {
+        Ir64Op.SmeTileLoadStore, Ir64Op.SmeArrayLoadStore, Ir64Op.SmeZt0LoadStore, Ir64Op.SmeOuterProduct,
+        Ir64Op.SmeMop4, Ir64Op.SmeTmop {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
@@ -554,6 +555,10 @@ public sealed interface Ir64Op permits
         /// B18.5: `ADDHA`/`ADDVA` e produto externo (`FMOPA`/`SMOPA`/`BMOPA`/…) sobre um tile de `ZA` — ver
         /// {@link SmeOuterProduct}.
         public static final int SME_OUTER_PRODUCT = 203;
+        /// B18.5b: produto externo de quarto de tile (`MOP4`, `FEAT_SME_MOP4`) — ver {@link SmeMop4}.
+        public static final int SME_MOP4 = 204;
+        /// B18.5b: produto externo esparso (`TMOP`, `FEAT_SME_TMOP`) — ver {@link SmeTmop}.
+        public static final int SME_TMOP = 205;
     }
 
     /// `ADD`/`SUB`/`AND`/`ORR`/`EOR` na forma imediata (`ARM DDI 0487 C6.2.4/C6.2.339/...`). Só
@@ -5190,6 +5195,79 @@ public sealed interface Ir64Op permits
         }
 
         @Override public int kind() { return Kind.SME_OUTER_PRODUCT; }
+    }
+
+    /// SME `MOP4` — produto externo de QUARTO de tile, **sem predicado** (B18.5b, `FEAT_SME_MOP4`): o tile
+    /// `ZA<tile>` é dividido em 4 quadrantes `(linhaMetade, colunaMetade)`; o quadrante usa `Zn` (ou `Zn+1` se
+    /// `nPair` e a coluna é a metade alta) para a linha e `Zm` (ou `Zm+1` se `mPair` e a linha é a metade alta)
+    /// para a coluna. `zn` já vem de `%mop4_zn` (par, `0`..`14`) e `zm` de `%mop4_zm` (`16`..`30`).
+    record SmeMop4(
+            Op op,
+            /// Índice do tile `ZAn` (`0`..`(1 << accumulatorEsz) - 1`).
+            int tile,
+            int zn,
+            int zm,
+            /// `true` = `…MOP4S` (subtrai); `false` = `…MOP4A` (acumula). Sempre `false` em `FMOP4A_sb`/`_hb`.
+            boolean subtract,
+            /// Bit `n` do encoding: a metade alta de colunas lê `Zn+1`.
+            boolean nPair,
+            /// Bit `m` do encoding: a metade alta de linhas lê `Zm+1`.
+            boolean mPair,
+            long instructionAddress) implements Ir64Op {
+        /// Os 18 mnemônicos de `# SME MOP4 Quarter-tile outer products`, com o tamanho de elemento do
+        /// ACUMULADOR (`0` = byte … `3` = doubleword).
+        public enum Op {
+            FMOP4_HH(1), BFMOP4_HH(1), FMOP4_SS(2), FMOP4_DD(3), BFMOP4_SH(2), FMOP4_SH(2), FMOP4A_SB(2), FMOP4A_HB(1),
+            SMOP4_SH(2), UMOP4_SH(2), SMOP4_SB(2), SMOP4_DH(3), SUMOP4_SB(2), SUMOP4_DH(3), UMOP4_SB(2), UMOP4_DH(3),
+            USMOP4_SB(2), USMOP4_DH(3);
+
+            private final int accumulatorEsz;
+
+            Op(int accumulatorEsz) {
+                this.accumulatorEsz = accumulatorEsz;
+            }
+
+            public int accumulatorEsz() {
+                return accumulatorEsz;
+            }
+        }
+
+        @Override public int kind() { return Kind.SME_MOP4; }
+    }
+
+    /// SME `TMOP` — produto externo ESPARSO (B18.5b, `FEAT_SME_TMOP`): a linha vem do par `Zn`/`Zn+1` (`zn` par,
+    /// de `%zn_ax2`), a coluna de `Zm`, e os bits de controle de `Zk` (`Z20`-`Z23`/`Z28`-`Z31`, `expand_tmop_zk`)
+    /// escolhem, por elemento, qual das origens entra (2 bits em `hh`/`ss`, 4 em `sh`/`hb`, 8 em `sb`), no segmento
+    /// `idx` (bit inicial `idx × elementos × bits por elemento`). Segue a ARM DDI 0602 (`FTMOPA`/`STMOPA`), que
+    /// diverge do QEMU em dois pontos: lê `Zk` (`op3 = Z[k]`), não `Zm`; e o segmento começa em `idx × csize`, não em
+    /// `(idx × VL em bytes) >> 1`. Só acumula (não existe `…TMOPS`).
+    record SmeTmop(
+            Op op,
+            int tile,
+            int zn,
+            int zm,
+            /// Registrador de controle, já expandido por `expand_tmop_zk`.
+            int zk,
+            /// Segmento (`0`..`3`) do vetor de controle.
+            int index,
+            long instructionAddress) implements Ir64Op {
+        /// Os 13 mnemônicos de `# SME TMOP Sparse outer products`, com o tamanho de elemento do acumulador.
+        public enum Op {
+            BFTMOPA_HH(1), FTMOPA_HH(1), FTMOPA_SS(2), BFTMOPA_SH(2), FTMOPA_SH(2), FTMOPA_HB(1), FTMOPA_SB(2),
+            STMOPA_SH(2), UTMOPA_SH(2), STMOPA_SB(2), SUTMOPA_SB(2), USTMOPA_SB(2), UTMOPA_SB(2);
+
+            private final int accumulatorEsz;
+
+            Op(int accumulatorEsz) {
+                this.accumulatorEsz = accumulatorEsz;
+            }
+
+            public int accumulatorEsz() {
+                return accumulatorEsz;
+            }
+        }
+
+        @Override public int kind() { return Kind.SME_TMOP; }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)

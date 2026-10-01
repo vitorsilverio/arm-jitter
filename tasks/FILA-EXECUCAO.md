@@ -41,10 +41,7 @@ sem checar o status real ali.**
 
 ## Onde estamos (atualizado 2026-10-01)
 
-**`B18.5` fechada em parte (23/54)** — `ADDHA`/`ADDVA` + produto externo clássico decodificam e executam (palavras conferidas contra
-`aarch64-none-elf-as`, 100% JaCoCo no código novo, 10958 testes verdes, G5 rodado). **Achados que corrigem a spec**: as ops de `ZA` NÃO
-acumulam em `FPSR` e têm `DN` sempre 1; `BFMOPA_w` depende de `FPCR.EBF`. As 31 de `MOP4`/`TMOP` viraram a **`B18.5b`** (spec nova).
-`COBERTURA-ISA.md` não mudou (`sme.decode` segue `NOT_IN_ANY_PRESET` até a B18.13). Ver **Resultado** na task.
+**`B18.5b` fechada (31/31 `MOP4`/`TMOP`)** — decode (94 palavras conferidas no `aarch64-none-elf-as`) + execução, 11104 testes verdes, JaCoCo 0/0, G5 dispensado (só `decoder64`/`executor64`/`ir64`/`core64`). **Achado**: o QEMU diverge da ARM no `TMOP` (lê `Zm` em vez de `Zk`; segmento de controle em `idx×VL/2` em vez de `idx×csize`) — seguiu-se a ARM, ver **Resultado** na task. `COBERTURA-ISA.md` não mudou (`sme.decode` segue `NOT_IN_ANY_PRESET` até a B18.13).
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
@@ -56,11 +53,11 @@ estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por qua
 decoder/IR e sozinhos já são caros de carregar.
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: a regra reservada exige 100% de TODA a arquitetura ARM alvo. Seguem
-abertos: **B18.5b+** (SME, ~544 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
+abertos: **B18.6+** (SME, ~513 encodings restantes de `sme.decode`, ainda `NOT_IN_ANY_PRESET` na MEDIÇÃO — ver
 achado da B18.3 acima, a implementação real já começou), **B20** (perfil R: PMSA/MPU), **B21** (ARMv1-v3, 26 bits)
 e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle).
 
-**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.5b`** (SME `MOP4`/`TMOP`) e **`B18.6`** em diante (SME:
+**Pegáveis a seguir** (specs já escritas, dependências satisfeitas): **`B18.6`** em diante (SME:
 SME2 multi-vector; `SVCR`/`ZA`/streaming/`MOVA`/`ZERO`
 já têm efeito), **`B21.2`** em diante (modelo de 26 bits, Opção c), `E14`, `E15` ([REFINAR] —
 decompor em sub-tasks executáveis), `C12.5`/`C12.10`. `B20.9` segue bloqueada no usuário. Pendências

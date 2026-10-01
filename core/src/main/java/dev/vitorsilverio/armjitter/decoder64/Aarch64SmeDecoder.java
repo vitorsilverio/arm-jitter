@@ -148,6 +148,82 @@ final class Aarch64SmeDecoder {
         return new OuterProductRow(mask, value, op, extra, hasSubtract, hasSecondVector);
     }
 
+    // ── `# SME MOP4 Quarter-tile outer products` + `# SME TMOP Sparse outer products` (B18.5b) ───────
+    private static final int MOP4_N_SHIFT = 9;
+    private static final int MOP4_M_SHIFT = 20;
+    private static final int MOP4_ZN_SHIFT = 6;
+    private static final int MOP4_ZN_MASK = 0b111;
+    private static final int MOP4_ZM_SHIFT = 17;
+    private static final int MOP4_ZM_MASK = 0b111;
+    /// `%mop4_zm = times_2_plus_16` (`Z16`-`Z30`).
+    private static final int MOP4_ZM_BASE = 16;
+    private static final int TMOP_ZN_SHIFT = 6;
+    private static final int TMOP_ZN_MASK = 0b1111;
+    private static final int TMOP_ZK_SHIFT = 10;
+    private static final int TMOP_ZK_MASK = 0b111;
+    /// `expand_tmop_zk`: o pseudocódigo `1:K:1:zk` — `0b10100 | ((x & 4) << 1) | (x & 3)` (`Z20`-`Z23`/`Z28`-`Z31`).
+    private static final int TMOP_ZK_BASE = 0b10100;
+    private static final int TMOP_ZK_HIGH_BIT = 0b100;
+    private static final int TMOP_ZK_LOW_MASK = 0b11;
+    private static final int TMOP_IDX_SHIFT = 4;
+    private static final int TMOP_IDX_MASK = 0b11;
+    private static final int PAIR_FACTOR = 2;
+
+    /// Linha de `MOP4`/`TMOP`: máscara/valor de 32 bits + feature de formato EXTRA (a feature `MOP4`/`TMOP` em si é
+    /// sempre exigida — `aa64_sme_mop4_*`/`aa64_sme_tmop_*` do QEMU são a conjunção das duas).
+    private record Mop4Row(int mask, int value, Ir64Op.SmeMop4.Op op, Aarch64Feature extra) {
+    }
+
+    private record TmopRow(int mask, int value, Ir64Op.SmeTmop.Op op, Aarch64Feature extra) {
+    }
+
+    // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 1090-1134 — NÃO editar à mão.
+    private static final Mop4Row[] MOP4_ROWS = {
+            mop4Row(0xFFE1FC2E, 0x81200008, Ir64Op.SmeMop4.Op.BFMOP4_HH, Aarch64Feature.SME_B16B16),
+            mop4Row(0xFFE1FC2E, 0x81000008, Ir64Op.SmeMop4.Op.FMOP4_HH, Aarch64Feature.SME_F16F16),
+            mop4Row(0xFFE1FC2C, 0x80000000, Ir64Op.SmeMop4.Op.FMOP4_SS, null),
+            mop4Row(0xFFE1FC28, 0x80C00008, Ir64Op.SmeMop4.Op.FMOP4_DD, Aarch64Feature.SME_F64F64),
+            mop4Row(0xFFE1FC2C, 0x81000000, Ir64Op.SmeMop4.Op.BFMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x81200000, Ir64Op.SmeMop4.Op.FMOP4_SH, null),
+            mop4Row(0xFFE1FC3C, 0x80200000, Ir64Op.SmeMop4.Op.FMOP4A_SB, Aarch64Feature.SME_F8F32),
+            mop4Row(0xFFE1FC3E, 0x80200008, Ir64Op.SmeMop4.Op.FMOP4A_HB, Aarch64Feature.SME_F8F16),
+            mop4Row(0xFFE1FC2C, 0x80008008, Ir64Op.SmeMop4.Op.SMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x81008008, Ir64Op.SmeMop4.Op.UMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x80008000, Ir64Op.SmeMop4.Op.SMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA0C00008, Ir64Op.SmeMop4.Op.SMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x80208000, Ir64Op.SmeMop4.Op.SUMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA0E00008, Ir64Op.SmeMop4.Op.SUMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x81208000, Ir64Op.SmeMop4.Op.UMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA1E00008, Ir64Op.SmeMop4.Op.UMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x81008000, Ir64Op.SmeMop4.Op.USMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA1C00008, Ir64Op.SmeMop4.Op.USMOP4_DH, Aarch64Feature.SME_I16I64),
+    };
+
+    // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 1135-1161 — NÃO editar à mão.
+    private static final TmopRow[] TMOP_ROWS = {
+            tmopRow(0xFFE0E00E, 0x81600008, Ir64Op.SmeTmop.Op.BFTMOPA_HH, Aarch64Feature.SME_B16B16),
+            tmopRow(0xFFE0E00E, 0x81400008, Ir64Op.SmeTmop.Op.FTMOPA_HH, Aarch64Feature.SME_F16F16),
+            tmopRow(0xFFE0E00C, 0x80400000, Ir64Op.SmeTmop.Op.FTMOPA_SS, null),
+            tmopRow(0xFFE0E00C, 0x81400000, Ir64Op.SmeTmop.Op.BFTMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x81600000, Ir64Op.SmeTmop.Op.FTMOPA_SH, null),
+            tmopRow(0xFFE0E00E, 0x80600008, Ir64Op.SmeTmop.Op.FTMOPA_HB, Aarch64Feature.SME_F8F16),
+            tmopRow(0xFFE0E00C, 0x80600000, Ir64Op.SmeTmop.Op.FTMOPA_SB, Aarch64Feature.SME_F8F32),
+            tmopRow(0xFFE0E00C, 0x80408008, Ir64Op.SmeTmop.Op.STMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x81408008, Ir64Op.SmeTmop.Op.UTMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x80408000, Ir64Op.SmeTmop.Op.STMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x80608000, Ir64Op.SmeTmop.Op.SUTMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x81408000, Ir64Op.SmeTmop.Op.USTMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x81608000, Ir64Op.SmeTmop.Op.UTMOPA_SB, null),
+    };
+
+    private static Mop4Row mop4Row(int mask, int value, Ir64Op.SmeMop4.Op op, Aarch64Feature extra) {
+        return new Mop4Row(mask, value, op, extra);
+    }
+
+    private static TmopRow tmopRow(int mask, int value, Ir64Op.SmeTmop.Op op, Aarch64Feature extra) {
+        return new TmopRow(mask, value, op, extra);
+    }
+
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 27-138 (ver javadoc da
     // classe) — NÃO editar à mão sem regerar e reconferir.
     private static final Row[] MOVA_ROWS = {
@@ -236,6 +312,16 @@ final class Aarch64SmeDecoder {
                 return decodeOuterProduct(row, word, address);
             }
         }
+        for (Mop4Row row : MOP4_ROWS) {
+            if ((word & row.mask()) == row.value()) {
+                return decodeMop4(row, word, address);
+            }
+        }
+        for (TmopRow row : TMOP_ROWS) {
+            if ((word & row.mask()) == row.value()) {
+                return decodeTmop(row, word, address);
+            }
+        }
         for (Row row : MOVA_ROWS) {
             if (!row.matches(word)) {
                 continue;
@@ -266,6 +352,33 @@ final class Aarch64SmeDecoder {
         boolean subtract = row.hasSubtract() && ((word >>> SUB_BIT_SHIFT) & 1) != 0;
         return new Ir64Op.SmeOuterProduct(row.op(), tile, (word >>> RN_SHIFT) & REGISTER_MASK, zm,
                 (word >>> PG_SHIFT) & PG_MASK, (word >>> PM_SHIFT) & PG_MASK, subtract, address);
+    }
+
+    /// `null` = `FEAT_SME_MOP4` ou a feature de formato ausente (G8 trata como recusa). `n`/`m` escolhem a metade
+    /// do par; `s` (bit 4) é subtrair — nas linhas `FMOP4A_*` o `.decode` fixa esse bit em `0`.
+    private Ir64Op decodeMop4(Mop4Row row, int word, long address) {
+        if (!architecture.has(Aarch64Feature.SME_MOP4) || row.extra() != null && !architecture.has(row.extra())) {
+            return null;
+        }
+        int esz = row.op().accumulatorEsz();
+        return new Ir64Op.SmeMop4(row.op(), word & ((1 << esz) - 1),
+                ((word >>> MOP4_ZN_SHIFT) & MOP4_ZN_MASK) * PAIR_FACTOR,
+                ((word >>> MOP4_ZM_SHIFT) & MOP4_ZM_MASK) * PAIR_FACTOR + MOP4_ZM_BASE,
+                ((word >>> SUB_BIT_SHIFT) & 1) != 0, ((word >>> MOP4_N_SHIFT) & 1) != 0,
+                ((word >>> MOP4_M_SHIFT) & 1) != 0, address);
+    }
+
+    /// `null` = `FEAT_SME_TMOP` ou a feature de formato ausente. `zk` NUNCA é o índice cru (`expand_tmop_zk`).
+    private Ir64Op decodeTmop(TmopRow row, int word, long address) {
+        if (!architecture.has(Aarch64Feature.SME_TMOP) || row.extra() != null && !architecture.has(row.extra())) {
+            return null;
+        }
+        int esz = row.op().accumulatorEsz();
+        int rawZk = (word >>> TMOP_ZK_SHIFT) & TMOP_ZK_MASK;
+        int zk = TMOP_ZK_BASE | ((rawZk & TMOP_ZK_HIGH_BIT) << 1) | (rawZk & TMOP_ZK_LOW_MASK);
+        return new Ir64Op.SmeTmop(row.op(), word & ((1 << esz) - 1),
+                ((word >>> TMOP_ZN_SHIFT) & TMOP_ZN_MASK) * PAIR_FACTOR, (word >>> RM_SHIFT) & REGISTER_MASK, zk,
+                (word >>> TMOP_IDX_SHIFT) & TMOP_IDX_MASK, address);
     }
 
     /// `LD1`/`ST1` de tile, `LDR`/`STR` de `ZA` e de `ZT0` (B18.4). `null` = não é desta família (ou

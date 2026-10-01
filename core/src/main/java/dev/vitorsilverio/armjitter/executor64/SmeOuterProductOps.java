@@ -46,7 +46,7 @@ final class SmeOuterProductOps {
     }
 
     /// Formatos e ambientes FP/`fp8` de UMA instrução (o `FPCR`/`FPMR` são lidos uma única vez).
-    private static final class Context {
+    static final class Context {
         SveFloat.Env accumulate;
         SveFloat.Env source;
         SveFloat.Env roundedByHalf;
@@ -87,7 +87,7 @@ final class SmeOuterProductOps {
         return false;
     }
 
-    private static Context contextFor(Aarch64Core core, Ir64Op.SmeOuterProduct.Op kind) {
+    static Context contextFor(Aarch64Core core, Ir64Op.SmeOuterProduct.Op kind) {
         Context context = new Context();
         switch (kind) {
             case FMOPA_W_H -> {
@@ -117,6 +117,16 @@ final class SmeOuterProductOps {
             }
         }
         return context;
+    }
+
+    /// Todos os bits de predicado ligados — as formas `MOP4`/`TMOP` (B18.5b) não têm predicado.
+    private static final int ALL_ACTIVE = -1;
+
+    /// Mesma aritmética de {@link #combine}, para as formas SEM predicado (`MOP4`/`TMOP`, B18.5b): reaproveita o
+    /// mesmo núcleo (`f16_dotadd`, `bfdotadd*`, `fp8`, produtos inteiros) em vez de duplicá-lo.
+    static long combineUnpredicated(Ir64Op.SmeOuterProduct.Op kind, Context context, boolean subtract, long n,
+            long m, long accumulator) {
+        return combine(kind, context, subtract, n, m, accumulator, ALL_ACTIVE, ALL_ACTIVE);
     }
 
     /// Novo valor do elemento do acumulador. `pa`/`pb` são os grupos de bits de predicado do elemento de linha/coluna.
