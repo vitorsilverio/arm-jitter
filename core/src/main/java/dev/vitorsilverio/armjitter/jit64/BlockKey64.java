@@ -32,4 +32,13 @@ public record BlockKey64(long pc, int translationGeneration) {
     public BlockKey64(long pc) {
         this(pc, 0);
     }
+
+    /// Hash misturado: o `hashCode` padrão do record (`31*hash(pc) + geração`) colide em PCs
+    /// alinhados a 4 bytes com gerações pequenas — o perfil do boot raspi3-64 mostrava buckets
+    /// virando árvore (`HashMap$TreeNode.find`). Só muda a distribuição, nunca a igualdade.
+    @Override
+    public int hashCode() {
+        long h = pc * 0x9E3779B97F4A7C15L ^ translationGeneration * 0xC2B2AE3D27D4EB4FL;
+        return (int) (h ^ (h >>> 32));
+    }
 }

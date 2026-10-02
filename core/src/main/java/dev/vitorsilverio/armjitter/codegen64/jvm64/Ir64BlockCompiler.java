@@ -192,7 +192,8 @@ public final class Ir64BlockCompiler {
                 }
                 default -> {
                     long nextPc = lastFetchAddress + lastFetchSizeBytes;
-                    if (perOpFallback && !Ir64NativePolicy.supports(op)) {
+                    if (Ir64NativePolicy.isSystemViaHelper(op)
+                            || (perOpFallback && !Ir64NativePolicy.supports(op))) {
                         emitPerOpFallback(mv, op, nextPc);
                     } else {
                         emitOp(mv, op, nextPc);

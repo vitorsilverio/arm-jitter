@@ -9,9 +9,9 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// B6.4 (PR1).
 ///
 /// ## Cobertura — NÃO é exaustiva (medida em 2026-09-02 / C12.1; +16 pela C12.3; +6 pela C12.4;
-/// +7 pela C12.5)
+/// +7 pela C12.5; +8 pela C12.10)
 ///
-/// O `switch` abaixo cobre **53 dos 96 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
+/// O `switch` abaixo cobre **61 dos 212 {@link Ir64Op.Kind}**: os conjuntos das tasks B6.1 (reta +
 /// desvios), B6.2 (loads/stores + `Svc`), B6.3.1-B6.3.4 (registrador deslocado/estendido,
 /// `CSEL`, bitfield, `MADD`, `SDIV`, exclusivos), B6.5.2-B6.5.4 (FP escalar `FP64_ALU`/
 /// `FP64_MOVE_IMMEDIATE`/`FP64_COMPARE`/`FP64_CONVERT`), **C12.3** (inteiro restante: ALU de
@@ -22,8 +22,10 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// {@code c12.4-a64-fp-escalar-nativo.md}) e **C12.5** (load/store FP/SIMD: `FpLoad64`/
 /// `FpStore64`/`FpLoadStorePair`/`FpLoadLiteral64` escalares e `VectorLoadStoreMultiple`/
 /// `VectorLoadStoreSingle`/`VectorLoadSingleReplicate` estruturados (`LD1`-`LD4`/`ST1`-`ST4`) — 7
-/// `Kind`, ver {@code c12.5-a64-loadstore-fp-simd-nativo.md}). Os 43 que ainda faltam — AdvSIMD
-/// aritmético (C12.6) e sistema (C12.10) — caem no
+/// `Kind`, ver {@code c12.5-a64-loadstore-fp-simd-nativo.md}). **C12.10** (8 `Kind` de sistema: aceitos, mas emitidos como CHAMADA ao helper do interpretado
+/// dentro do `try` — ver {@link #isSystemViaHelper}).
+///  Os que ainda faltam — AdvSIMD
+/// aritmético (C12.6), SVE/SME e crípto — caem no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter}.
 ///
 /// Agravava porque a política padrão do {@code Asm64CodeEmitter} era `WHOLE_BLOCK`: **UMA op não
@@ -104,7 +106,32 @@ public final class Ir64NativePolicy {
                  Ir64Op.Kind.FP_LOAD_LITERAL64,
                  Ir64Op.Kind.VECTOR_LOAD_STORE_MULTIPLE,
                  Ir64Op.Kind.VECTOR_LOAD_STORE_SINGLE,
-                 Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE -> true;
+                 Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE,
+                 Ir64Op.Kind.SYSTEM_REGISTER,
+                 Ir64Op.Kind.SYSTEM_INSTRUCTION,
+                 Ir64Op.Kind.EXCEPTION_RETURN,
+                 Ir64Op.Kind.PRIVILEGED_CALL,
+                 Ir64Op.Kind.INTERRUPT_MASK,
+                 Ir64Op.Kind.BREAKPOINT,
+                 Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP,
+                 Ir64Op.Kind.ADDRESS_TRANSLATE -> true;
+            default -> false;
+        };
+    }
+
+    /// `true` para os 8 `Kind` de sistema (C12.10): suportados, mas emitidos como chamada ao helper
+    /// do interpretado ({@code Ir64OpInterop}) dentro do range `try` — nunca reimplementados em
+    /// bytecode (troca de nível de exceção, MMU e bus de registrador de sistema ficam no `core`).
+    public static boolean isSystemViaHelper(Ir64Op op) {
+        return switch (op.kind()) {
+            case Ir64Op.Kind.SYSTEM_REGISTER,
+                 Ir64Op.Kind.SYSTEM_INSTRUCTION,
+                 Ir64Op.Kind.EXCEPTION_RETURN,
+                 Ir64Op.Kind.PRIVILEGED_CALL,
+                 Ir64Op.Kind.INTERRUPT_MASK,
+                 Ir64Op.Kind.BREAKPOINT,
+                 Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP,
+                 Ir64Op.Kind.ADDRESS_TRANSLATE -> true;
             default -> false;
         };
     }
