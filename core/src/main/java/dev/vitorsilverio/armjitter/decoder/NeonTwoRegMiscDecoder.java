@@ -282,7 +282,9 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
         if (opc1 == 0b01 && opc2 == 0b0101 && bit6) {
             return AdvSimdCryptoShaOp.SHA1H;
         }
-        if (opc1 == 0b10 && opc2 == 0b0111) {
+        // `opc1=10` chega aqui só com `opc2=0111`: permuta/`VMOVN`/`VSHLL`/precisão já consumiram (ou
+        // recusaram) todo o resto antes de `cryptoShaOperation` ser chamada.
+        if (opc1 == 0b10) {
             return bit6 ? AdvSimdCryptoShaOp.SHA256SU0 : AdvSimdCryptoShaOp.SHA1SU1;
         }
         return null;
@@ -327,10 +329,10 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
             };
             case 0b11 -> switch (opc2) {
                 case 0b1000 -> AdvSimdUnaryOp.URECPE;
-                case 0b1001 -> AdvSimdUnaryOp.URSQRTE;
-                // `0000`-`0111`: `VCVTA/N/P/M{S,U}` — B13.13. `1010`-`1111`: `VRECPE_F`/`VRSQRTE_F`
-                // ({@link #fpUnaryOperation}) e `VCVT_{FS,FU,SF,UF}` — B13.13.
-                default -> null;
+                // `opc2=1001` é o único outro valor que sobra: `0000`-`0111` (`VCVTA/N/P/M{S,U}`) e
+                // `1010`-`1111` (`VRECPE_F`/`VRSQRTE_F`, `VCVT_{FS,FU,SF,UF}`, B13.13) são todos
+                // tratados por `fpUnaryOperation` ANTES de `integerUnaryOperation` ser chamada.
+                default -> AdvSimdUnaryOp.URSQRTE;
             };
             // `opc1=10`: `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14), `VMOVN`-família/`VSHLL`,
             // `SHA1SU1`/`SHA256SU0` (B13.15), conversão de precisão (B13.13) — todos tratados ANTES

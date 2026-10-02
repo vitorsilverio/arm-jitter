@@ -264,12 +264,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
     /// A64) — o encoding A32 deriva o tamanho do elemento do mesmo jeito (`ARM DDI 0406C`, "shift by
     /// immediate"). Aqui `immh` NUNCA é `0` (o chamador já devolveu `null` nesse caso).
     private static int highestSetImmhBit(int immh) {
-        for (int bit = 3; bit >= 0; bit--) {
-            if (((immh >>> bit) & 1) != 0) {
-                return bit;
-            }
-        }
-        return -1;
+        return Integer.SIZE - 1 - Integer.numberOfLeadingZeros(immh);
     }
 
     private static int doubleRegister(int raw, int nibbleShift, int extensionBit) {

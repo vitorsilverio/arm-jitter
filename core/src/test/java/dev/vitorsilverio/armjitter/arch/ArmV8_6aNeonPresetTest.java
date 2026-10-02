@@ -74,4 +74,22 @@ class ArmV8_6aNeonPresetTest {
         assertEquals(InstructionKind.COPROCESSOR, decode(ArmArchitecture.ARMV8_6A_32_NEON, MCR_P15).kind());
         assertEquals(InstructionKind.COPROCESSOR, decode(ArmArchitecture.ARMV8_6A_32_NEON, MCR2_P15).kind());
     }
+
+    /// Forma `Q` com `Vd` ímpar é UNDEFINED nas 4 linhas de `neon-shared` que o JaCoCo mostrou sem
+    /// teste (B13.25): `VFML`/`VFML_scalar`/`VDOT_b16_scal` com `q=1` e `VFMA_b16_scal` (sempre `Q`).
+    /// Sob o preset novo as 4 palavras chegam ao `NeonSharedDecoder` (as features existem) e são
+    /// recusadas explicitamente, nunca confundidas com outra instrução (G8).
+    @Test
+    void quadFormsWithOddDestinationRegisterAreUnimplemented() {
+        int oddVd = 1 << 12;
+        int quad = 1 << 6;
+        for (int word : new int[] {
+                0xFC20_0810 | quad | oddVd, // VFML, q=1
+                0xFE00_0810 | quad | oddVd, // VFML_scalar, q=1
+                0xFE00_0D00 | quad | oddVd, // VDOT_b16_scal, q=1
+                VFMA_B16_SCALAR | oddVd}) { // VFMA_b16_scal
+            assertEquals(InstructionKind.UNIMPLEMENTED,
+                    decode(ArmArchitecture.ARMV8_6A_32_NEON, word).kind(), Integer.toHexString(word));
+        }
+    }
 }

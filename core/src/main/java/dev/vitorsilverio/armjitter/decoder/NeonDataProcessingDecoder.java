@@ -275,7 +275,8 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         if (opc == 0b1111 && a == 0) {
             return AdvSimdFpPairwiseOp.MAX;
         }
-        if (opc == 0b1111 && a == 1) {
+        if (opc == 0b1111) {
+            // `a == 0` já virou MAX acima, então aqui `a == 1` por construção.
             return AdvSimdFpPairwiseOp.MIN;
         }
         return null;
@@ -291,7 +292,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
             case 0b1100 -> a == 0 ? AdvSimdFpThreeSameOp.FMLA : AdvSimdFpThreeSameOp.FMLS;
             case 0b1101 -> op == 0
                     ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.ADD : AdvSimdFpThreeSameOp.SUB)
-                             : (a == 1 ? AdvSimdFpThreeSameOp.ABD : null))
+                             : AdvSimdFpThreeSameOp.ABD)
                     // `op=1`: NÃO fundido (`VMLA.F32`/`VMLS.F32`, dois arredondamentos).
                     : (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.MLA : AdvSimdFpThreeSameOp.MLS)
                              : (a == 0 ? AdvSimdFpThreeSameOp.MUL : null));
@@ -299,11 +300,11 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
                     ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.CMEQ : null)
                              : (a == 0 ? AdvSimdFpThreeSameOp.CMGE : AdvSimdFpThreeSameOp.CMGT))
                     : (u == 1 ? (a == 0 ? AdvSimdFpThreeSameOp.FACGE : AdvSimdFpThreeSameOp.FACGT) : null);
-            case 0b1111 -> op == 0
-                    ? (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.MAX : AdvSimdFpThreeSameOp.MIN) : null)
+            // `opc=1111` é o último valor possível (`isFloatingPoint` só deixa passar `1100`-`1111`).
+            default -> op == 0
+                    ? (a == 0 ? AdvSimdFpThreeSameOp.MAX : AdvSimdFpThreeSameOp.MIN)
                     : (u == 0 ? (a == 0 ? AdvSimdFpThreeSameOp.RECPS : AdvSimdFpThreeSameOp.RSQRTS)
                              : (a == 0 ? AdvSimdFpThreeSameOp.MAXNM : AdvSimdFpThreeSameOp.MINNM));
-            default -> null;
         };
     }
 
@@ -350,13 +351,14 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
             case 0b1011 -> switch ((op << 1) | u) {
                 case 0b00 -> halfOrWord(size, AdvSimdThreeSameOp.SQDMULH);
                 case 0b01 -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMULH);
-                case 0b11 -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMLAH);
-                default -> null;
+                // `op=1 u=1` (`0b10` é `VPADD`, resolvido antes de chegar aqui).
+                default -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMLAH);
             };
             // `opc=1100 op=0` é cripto (`SHA1*`/`SHA256*` de três registradores → B13.23, tratada ANTES desta função); `op=1 u=0` é `VFMA_fp` (B13.6);
             // só `op=1 u=1` é desta task (`VQRDMLSH`, H/S apenas).
-            case 0b1100 -> (op == 1 && u == 1) ? halfOrWord(size, AdvSimdThreeSameOp.SQRDMLSH) : null;
-            default -> null;
+            // `opc` só chega até `1100` aqui (`1101`-`1111` são FP, `isFloatingPoint`), então `default` é
+            // `opc=1100` — e `op=1 u=1` é a única forma que sobra (`op=0` é cripto, `op=1 u=0` é FP).
+            default -> halfOrWord(size, AdvSimdThreeSameOp.SQRDMLSH);
         };
     }
 

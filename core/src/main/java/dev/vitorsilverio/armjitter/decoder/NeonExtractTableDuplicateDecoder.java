@@ -102,6 +102,11 @@ public final class NeonExtractTableDuplicateDecoder implements DecoderExtension 
         int vd = doubleRegister(raw, VD_NIBBLE_SHIFT, VD_EXTENSION_BIT);
         int vn = doubleRegister(raw, 16, VN_EXTENSION_BIT);
         int vm = doubleRegister(raw, 0, VM_EXTENSION_BIT);
+        // `Q=1` com `Vd`/`Vn`/`Vm` ímpar é UNDEFINED (ARM DDI 0406C, VEXT): sem esta recusa o
+        // executor lia/escrevia `D32` (achado da varredura da B13.25, `ArrayIndexOutOfBounds`).
+        if (q && ((vd | vn | vm) & 1) != 0) {
+            return unimplemented(address, raw, condition);
+        }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
                 new IrOp.NeonExtract(q, imm, vd, vn, vm));
     }
