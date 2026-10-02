@@ -40,6 +40,17 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.PSR_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executePsrTransfer(core, this); return false; }
+        @Override public int regUse() {
+            if (read) return 0;
+            int mask = !immediateOperand && registerValueOverride < 0 ? (1 << register) : 0;
+            // Escrever o campo de controle (bit 0) do CPSR pode trocar o modo da CPU, o que salva
+            // o banco de registradores r8-r14 atual. Trata todos os r0-r14 como vivos para que a
+            // DCE não elimine escritas em registradores bancados que parecem mortas só porque o
+            // registrador de mesmo índice do novo modo é escrito depois no mesmo bloco.
+            if (!spsr && (fieldMask & 1) != 0) mask |= GprMask.BANKED_R8_R14;
+            return mask;
+        }
+        @Override public int regDef() { return read ? (1 << register) : 0; }
     }
 
     /// `HVC` (B9.8.2, ARM DDI 0406C A8.8.65): entra em Hyp mode via `ArmException#HVC` — ao
@@ -136,6 +147,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SWI; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeSwi(core, this, blockEndPc); }
+        // SWI dispara exceção — todos os registradores podem ser inspecionados
+        @Override public int regUse() { return GprMask.ALL; }
     }
 
     /// `BKPT` (B7.5, ARMv5T+) **e** `HLT` (B14.1b, ARMv8-A de 32 bits) — imediato delegado ao
@@ -175,6 +188,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.COPROCESSOR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeCoprocessor(core, this); }
+        @Override public int regUse() { return load ? 0 : (1 << register); }
+        @Override public int regDef() { return load && register != GprMask.PC_INDEX ? (1 << register) : 0; }
     }
 
     /// Transferência DUPLA de registrador de coprocessador (`MCRR`/`MRRC`, F3), delegada ao
@@ -200,6 +215,9 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.COPROCESSOR_DOUBLE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeCoprocessorDouble(core, this); }
+        // MCRR (F3) lê os dois registradores ARM (Rt/Rt2) e MRRC escreve os dois.
+        @Override public int regUse() { return load ? 0 : (1 << rt) | (1 << rt2); }
+        @Override public int regDef() { return load ? (1 << rt) | (1 << rt2) : 0; }
     }
 
     /// Instrução não implementada/indefinida que deve entrar no vetor `0x04`.
@@ -210,6 +228,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.UNDEFINED; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeUndefined(core, this); }
+        // Undefined dispara exceção — todos os registradores podem ser inspecionados
+        @Override public int regUse() { return GprMask.ALL; }
     }
 
     /// `CPS`/`CPSIE`/`CPSID` (ARMv6): altera os bits A/I/F e/ou o modo do CPSR pelo mesmo
@@ -345,6 +365,10 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.M_PROFILE_SYSTEM_REGISTER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeMProfileSystemRegister(core, this); return false; }
+        // MSR lê o registrador ARM fonte e MRS escreve o destino; o registrador especial fica
+        // fora deste bitmask (B7.4).
+        @Override public int regUse() { return read ? 0 : (1 << armRegister); }
+        @Override public int regDef() { return read ? (1 << armRegister) : 0; }
     }
 
     /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de acessar

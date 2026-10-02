@@ -2,12 +2,20 @@ package dev.vitorsilverio.armjitter.ir;
 
 /// Operando usado por operações IR.
 public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediate, IrOperand.ShiftedRegister {
+    /// Registradores ARM lidos pelo operando, um bit por registrador (`r0..r15`) — a parte do
+    /// operando em {@link IrOp#regUse()} (task E15.6). Registrador com `valueOverride` não é lido.
+    ///
+    /// @return bitmask dos registradores lidos
+    int regUse();
+
     /// Operando que referencia um registrador ARM.
     record Register(
             /// Índice do registrador ARM.
             int index,
             /// Valor fixo para usar no lugar do registrador, ou `-1`.
             int valueOverride) implements IrOperand {
+        @Override public int regUse() { return valueOverride < 0 ? (1 << index) : 0; }
+
         /// Cria uma referência direta a registrador.
         /// @param index índice do registrador ARM.
         public Register(int index) {
@@ -23,6 +31,8 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
             boolean carryOutKnown,
             /// Carry produzido pelo barrel shifter ARM quando conhecido.
             boolean carryOut) implements IrOperand {
+        @Override public int regUse() { return 0; }
+
         /// Cria um imediato sem carry explícito do barrel shifter.
         /// @param value valor imediato de 32 bits.
         public Immediate(int value) {
@@ -48,6 +58,12 @@ public sealed interface IrOperand permits IrOperand.Register, IrOperand.Immediat
             boolean rrx,
             /// Indica que o resultado deslocado deve ser negado.
             boolean negated) implements IrOperand {
+        @Override public int regUse() {
+            int mask = valueOverride < 0 ? (1 << index) : 0;
+            if (amountRegister >= 0 && amountValueOverride < 0) mask |= 1 << amountRegister;
+            return mask;
+        }
+
         /// Cria um operando deslocado positivo.
         /// @param index índice do registrador ARM.
         /// @param shiftType tipo de deslocamento aplicado.

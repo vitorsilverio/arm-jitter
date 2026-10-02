@@ -38,6 +38,27 @@ public sealed interface IrOp permits IntegerOp, MemoryOp, BranchOp, SystemOp, Vf
     /// @return `true` se a operação alterou o PC
     boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc);
 
+    /// Registradores de propósito geral que a operação lê, um bit por registrador (`r0..r15`) — o
+    /// conjunto *use* da {@link dev.vitorsilverio.armjitter.ir.opt.DeadCodeEliminationPass} (task E15.6).
+    ///
+    /// Registrador com `valueOverride` (valor fixado pelo builder) não é lido. O default `0` só é
+    /// correto para operação que não toca registrador ARM (banco S/D/Q, `Cycle`, `Fetch`, ...): um
+    /// `record` que lê GPR e não sobrescreve este método deixa a DCE apagar a escrita anterior.
+    ///
+    /// @return bitmask dos registradores lidos
+    default int regUse() { return 0; }
+
+    /// Registradores de propósito geral que a operação escreve **quando executa**, um bit por
+    /// registrador (`r0..r15`) — o conjunto *def* da
+    /// {@link dev.vitorsilverio.armjitter.ir.opt.DeadCodeEliminationPass} (task E15.6).
+    ///
+    /// Não considera {@link #condition()}: tratar uma operação predicada como "pode não escrever" é
+    /// política de quem consome a máscara. O default `0` é conservador (nenhuma escrita mata a
+    /// vivência de outra).
+    ///
+    /// @return bitmask dos registradores escritos
+    default int regDef() { return 0; }
+
     /// Constantes de {@link IrOp#kind()} — uma por subtipo selado, contíguas a partir de 0
     /// para que o `switch` do interpretador compile como `tableswitch`.
     final class Kind {

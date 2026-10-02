@@ -41,6 +41,8 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.LOAD; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeLoad(core, this); }
+        @Override public int regUse() { return (baseValueOverride < 0 ? (1 << base) : 0) | offset.regUse(); }
+        @Override public int regDef() { return (1 << dst) | (writeback ? (1 << base) : 0); }
     }
 
     /// Operação de escrita de memória.
@@ -67,6 +69,12 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.STORE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeStore(core, this); return false; }
+        @Override public int regUse() {
+            int mask = baseValueOverride < 0 ? (1 << base) : 0;
+            if (srcValueOverride < 0) mask |= 1 << src;
+            return mask | offset.regUse();
+        }
+        @Override public int regDef() { return writeback ? (1 << base) : 0; }
     }
 
     /// `LDREX{,B,H,D}` (ARMv6/v6K) e `LDREX` de 32 bits Thumb-2 (B2.7 PR3): lê a memória no
@@ -89,6 +97,10 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeLoadExclusive(core, this); return false; }
+        /// Tamanho de acesso de `LDREXD`, que carrega o par `dst`, `dst+1`.
+        private static final int DOUBLEWORD_BYTES = 8;
+        @Override public int regUse() { return 1 << base; }
+        @Override public int regDef() { return (1 << dst) | (sizeBytes == DOUBLEWORD_BYTES ? (1 << (dst + 1)) : 0); }
     }
 
     /// `STREX{,B,H,D}` (ARMv6/v6K) e `STREX` de 32 bits Thumb-2 (B2.7 PR3): escreve a memória em
@@ -111,6 +123,10 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeStoreExclusive(core, this); return false; }
+        /// Tamanho de acesso de `STREXD`, que grava o par `src`, `src+1`.
+        private static final int DOUBLEWORD_BYTES = 8;
+        @Override public int regUse() { return (1 << base) | (1 << src) | (sizeBytes == DOUBLEWORD_BYTES ? (1 << (src + 1)) : 0); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `CLREX` (ARMv6K): abre o monitor de exclusividade do core.
@@ -146,6 +162,17 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.DOUBLE_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeDoubleTransfer(core, this); }
+        @Override public int regUse() {
+            int mask = baseValueOverride < 0 ? (1 << base) : 0;
+            mask |= offset.regUse();
+            if (!load) mask |= (1 << first) | (1 << second); // STRD lê o par
+            return mask;
+        }
+        @Override public int regDef() {
+            int mask = load ? (1 << first) | (1 << second) : 0;
+            if (writeback) mask |= 1 << base;
+            return mask;
+        }
     }
 
     /// Troca valor de memória com registrador.
@@ -166,6 +193,12 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.SWAP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeSwap(core, this); }
+        @Override public int regUse() {
+            int mask = baseValueOverride < 0 ? (1 << base) : 0;
+            if (srcValueOverride < 0) mask |= 1 << src;
+            return mask;
+        }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Lê um valor de endereço absoluto literal (pool de constantes relativo ao PC).
@@ -189,6 +222,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
 
         @Override public int kind() { return Kind.LOAD_LITERAL; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeLoadLiteral(core, this); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Transferência sequencial de múltiplos registradores.
@@ -213,6 +247,17 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.MULTIPLE_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeMultipleTransfer(core, this); }
+        // Store lê todos os registradores da lista.
+        @Override public int regUse() { return (1 << base) | (load ? 0 : registerMask); }
+        @Override public int regDef() {
+            int mask = load ? registerMask : 0;
+            if (writeback) mask |= 1 << base;
+            // LDM user-mode (^ sem PC) carrega no banco USER/SYS de r8-r14, não no r8-r14
+            // bancado do modo atual. Exclui r8-r14 do conjunto def para que a DCE não elimine
+            // escritas no r8-r14 do modo atual que precedem essa op.
+            if (load && userMode && (registerMask & GprMask.PC) == 0) mask &= GprMask.UNBANKED_R0_R7;
+            return mask;
+        }
     }
 
     /// Operação de push THUMB.
@@ -225,6 +270,8 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.PUSH; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.transferExecutor().executePush(core, this); return false; }
+        @Override public int regUse() { return GprMask.SP | registerMask | (includeLr ? GprMask.LR : 0); }
+        @Override public int regDef() { return GprMask.SP; }
     }
 
     /// Operação de pop THUMB.
@@ -237,5 +284,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.POP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executePop(core, this); }
+        @Override public int regUse() { return GprMask.SP; }
+        @Override public int regDef() { return registerMask | GprMask.SP | (includePc ? GprMask.PC : 0); }
     }
 }

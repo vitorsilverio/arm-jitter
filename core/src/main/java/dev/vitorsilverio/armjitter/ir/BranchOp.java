@@ -29,6 +29,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             InstructionSet targetSet) implements BranchOp {
         @Override public int kind() { return Kind.BRANCH; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeBranch(core, this); }
+        @Override public int regDef() { return GprMask.PC | (link ? GprMask.LR : 0); }
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).
@@ -45,6 +46,8 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.BRANCH_EXCHANGE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeBranchExchange(core, this); }
+        @Override public int regUse() { return sourceValueOverride < 0 ? (1 << sourceRegister) : 0; }
+        @Override public int regDef() { return GprMask.PC | (link ? GprMask.LR : 0); }
     }
 
     /// Primeira metade de `BL` THUMB.
@@ -57,6 +60,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.THUMB_BL_PREFIX; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.branchExecutor().executeThumbBlPrefix(core, this); return false; }
+        @Override public int regDef() { return GprMask.LR; }
     }
 
     /// Segunda metade de `BL`/`BLX` THUMB.
@@ -71,6 +75,8 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.THUMB_BL_SUFFIX; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeThumbBlSuffix(core, this); }
+        @Override public int regUse() { return GprMask.LR; }
+        @Override public int regDef() { return GprMask.PC; }
     }
 
     /// `TBB`/`TBH` (Thumb-2, ARMv6T2+, B2.4): lê um byte (`TBB`) ou halfword (`TBH`) sem sinal de
@@ -105,6 +111,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.TABLE_BRANCH; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeTableBranch(core, this); }
+        @Override public int regUse() { return (rnValueOverride < 0 ? (1 << rn) : 0) | (rmValueOverride < 0 ? (1 << rm) : 0); }
     }
 
     /// `CBZ`/`CBNZ` (Thumb-1, ARMv6T2+, B2.4): desvia para `target` (já resolvido pelo decoder)
@@ -126,6 +133,8 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.COMPARE_BRANCH_ZERO; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeCompareBranchZero(core, this); }
+        // CBZ/CBNZ (B2.4) lê rn (nunca tem value override — sempre R0-R7).
+        @Override public int regUse() { return 1 << rn; }
     }
 
     /// `BXNS`/`BLXNS` (perfil M, B15.4): branch-exchange com troca de estado Secure/Non-secure —

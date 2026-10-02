@@ -35,6 +35,22 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.ALU; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.aluExecutor().execute(core, this); }
+        @Override public int regUse() {
+            // MOV/MVN/NEG usam só src2; todos os outros também leem src1
+            boolean usesSrc1 = switch (opcode) {
+                case MOV, MVN, NEG -> false;
+                default -> true;
+            };
+            int mask = (usesSrc1 && src1ValueOverride < 0) ? (1 << src1) : 0;
+            return mask | src2.regUse();
+        }
+        @Override public int regDef() {
+            return switch (opcode) {
+                // Ops de comparação só atualizam o CPSR — nenhum registrador de propósito geral escrito
+                case CMP, CMN, TST, TEQ -> 0;
+                default -> 1 << dst;
+            };
+        }
     }
 
     /// Operacao de multiplicacao baixa, com acumulador opcional.
@@ -64,6 +80,13 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeMultiply(core, this); return false; }
+        @Override public int regUse() {
+            int mask = rmValueOverride < 0 ? (1 << rm) : 0;
+            if (rsValueOverride < 0) mask |= 1 << rs;
+            if (accumulate && rnValueOverride < 0) mask |= 1 << rn;
+            return mask;
+        }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Operação de multiplicação longa, com acumulador opcional.
@@ -105,6 +128,16 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
 
         @Override public int kind() { return Kind.LONG_MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeLongMultiply(core, this); return false; }
+        @Override public int regUse() {
+            int mask = rmValueOverride < 0 ? (1 << rm) : 0;
+            if (rsValueOverride < 0) mask |= 1 << rs;
+            if (accumulate || accumulateDouble) {
+                if (dstHighValueOverride < 0) mask |= 1 << dstHigh;
+                if (dstLowValueOverride < 0) mask |= 1 << dstLow;
+            }
+            return mask;
+        }
+        @Override public int regDef() { return (1 << dstLow) | (1 << dstHigh); }
     }
 
     /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB). `op`: 0=QADD, 1=QSUB,
@@ -122,6 +155,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SATURATING; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSaturating(core, this); return false; }
+        @Override public int regUse() { return (1 << rm) | (1 << rn); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A, B14.3) — espelho de 32 bits de
@@ -167,6 +202,10 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspMultiply(core, this); return false; }
+        @Override public int regUse() { return (1 << rm) | (1 << rs) | (1 << rn); }
+        /// `SMLALxy` (`op2 == 2`) — única forma que também escreve `rn` (RdLo).
+        private static final int SMLAL_XY = 2;
+        @Override public int regDef() { return (1 << dst) | (op2 == SMLAL_XY ? (1 << rn) : 0); }
     }
 
     /// `SMLAD{X}`/`SMLSD{X}`/`SMLALD{X}`/`SMLSLD{X}` (B9.1, ARMv6). Ver Javadoc de
@@ -190,6 +229,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_DUAL_MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspDualMultiply(core, this); return false; }
+        @Override public int regUse() { return (1 << rm) | (1 << rn) | (1 << ra); }
+        @Override public int regDef() { return (1 << dst) | (longForm ? (1 << ra) : 0); }
     }
 
     /// `SMMLA{R}`/`SMMLS{R}` (B9.1, ARMv6). Ver Javadoc de
@@ -211,6 +252,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_TOP_WORD_MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspTopWordMultiply(core, this); return false; }
+        @Override public int regUse() { return (1 << rn) | (1 << rm) | (1 << ra); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Aritmética paralela ARMv6 em lanes de 8/16 bits (SADD16/UQSUB8/SHASX/...). A operação-base
@@ -232,6 +275,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.PARALLEL_ALU; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeParallelAlu(core, this); return false; }
+        @Override public int regUse() { return (1 << rn) | (1 << rm); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `SEL` (ARMv6): seleciona cada byte do resultado de Rn ou Rm conforme o flag GE
@@ -247,6 +292,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SEL; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSel(core, this); return false; }
+        @Override public int regUse() { return (1 << rn) | (1 << rm); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Saturação ARMv6 (`SSAT`/`USAT`/`SSAT16`/`USAT16`): satura o operando (possivelmente
@@ -271,6 +318,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SATURATE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSaturate(core, this); return false; }
+        @Override public int regUse() { return operand.regUse(); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `USAD8`/`USADA8` (ARMv6): soma das diferenças absolutas dos quatro bytes (sem sinal)
@@ -288,6 +337,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.ABS_DIFF_SUM; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeAbsDiffSum(core, this); return false; }
+        @Override public int regUse() { return (1 << rm) | (1 << rs) | (rn >= 0 ? (1 << rn) : 0); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `MOVT` (Thumb-2, B2.2): escreve um imediato de 16 bits na metade ALTA de `dst`,
@@ -320,6 +371,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_FIELD_EXTRACT; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitFieldExtract(core, this); return false; }
+        @Override public int regUse() { return 1 << src; }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `BFI`/`BFC` (ARM/Thumb-2, ARMv6T2+, B3.1): substitui `width` bits de `dst` a partir do bit
@@ -338,6 +391,10 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_FIELD_INSERT; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitFieldInsert(core, this); return false; }
+        // BFI/BFC (B3.1) também lê `dst` para preservar os bits fora do campo; BFC (src=-1)
+        // não lê nenhum registrador-fonte.
+        @Override public int regUse() { return (1 << dst) | (src >= 0 ? (1 << src) : 0); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `RBIT` (ARM/Thumb-2, ARMv6T2+, B3.1): inverte a ordem dos 32 bits de `src`. Nunca toca flags.
@@ -350,6 +407,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_REVERSE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitReverse(core, this); return false; }
+        @Override public int regUse() { return 1 << src; }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `SDIV`/`UDIV` (ARM/Thumb-2, ARMv7, B3.1): divisão inteira truncada para zero. Divisão por
@@ -368,6 +427,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DIVIDE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDivide(core, this); return false; }
+        @Override public int regUse() { return (1 << dividend) | (1 << divisor); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `CLRM {list}` (perfil M com Security Extension, B16.15): zera `R0`-`R12`/`LR` (bits 0-14 de

@@ -8,6 +8,10 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
 
 ### Adicionado
+- **`IrOp#regUse()`/`IrOp#regDef()` e `IrOperand#regUse()`** (`E15.6`): cada operação do IR de 32 bits declara os
+  registradores `r0..r15` que lê e escreve (bitmask; default `0` = não toca GPR). `DeadCodeEliminationPass` perdeu os
+  três `switch` por tipo e virou só o laço de vivência; a predicação (`condition() != AL` não mata vivência) continua
+  sendo política da passagem. Comportamento idêntico, conferido por oráculo diferencial contra a DCE anterior.
 - **`IrOp#execute(IrBlockExecutor, ArmCore, int blockEndPc)`** (`E15.5`): cada operação do IR de 32 bits se roteia sozinha
   para o executor da sua família, numa ponte de uma linha; devolve se o PC mudou. Os dois `switch` de 189 casos de
   `IrBlockExecutor` saíram: `executeOp` equivale a `op.execute(this, core, blockEndPc)`, e o laço de `execute` mantém caso

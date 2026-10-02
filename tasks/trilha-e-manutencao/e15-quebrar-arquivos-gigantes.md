@@ -120,7 +120,8 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | [E15.3](e15.3-irop-por-familia.md) | `IrOp` idem (D4) | sim | ✅ 2026-10-02 |
 | [E15.4](e15.4-ir64op-execute.md) | A64: `Ir64Op#execute` (D1), remove o dispatch duplo; `Ir64BlockExecutor` dividido por família | não | ✅ 2026-10-02 |
 | [E15.5](e15.5-irop-execute.md) | 32 bits: `IrOp#execute` (D1), funde `execute`+`executeOp`; **gate: `InterpretedThroughputBenchTest` (gbaemu, C8) ≥ −1%**, senão manter `switch` para os `Kind` quentes medidos | sim | ✅ 2026-10-02 (12 `Kind` quentes ficaram no laço) |
-| E15.6 | `regUse`/`regDef` nos records (D2); DCE sem `switch` | sim | ⬜ [REFINAR] |
+| [E15.6](e15.6-regmask-nos-records.md) | `regUse`/`regDef` nos records (D2); DCE sem `switch` | sim | ✅ 2026-10-02 |
+| [E15.6b](e15.6b-dce-gpr-nao-declarados.md) | DCE: ~39 records que leem GPR sem declarar `regUse()` (bug latente do JIT) + teste-guarda | sim | ⬜ |
 | E15.7 | Registro de emissores ASM 32 bits + política derivada (D3); `AsmBlockCompiler`/`AsmRuntimeHelpers` por família | sim | ⬜ [REFINAR] |
 | E15.8 | `IrSystemExecutor` (2508) → `IrMveExecutor` + sistema; `IrBlockExecutor` final | sim | ⬜ [REFINAR] |
 | E15.9 | Infra `DecodeTable` (D5) + **piloto**: a cascata `bit21=0` de `decodeAdvancedSimdInteger` (FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/FP8DOT4/FCMA). Gate de go/no-go: linhas, branches e tempo de lift antes/depois | não | ⬜ [REFINAR] |

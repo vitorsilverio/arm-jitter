@@ -150,4 +150,14 @@ class DeadCodeEliminationPassTest {
         assertEquals(1, after.operations().size());
         assertInstanceOf(MemoryOp.MultipleTransfer.class, after.operations().getFirst());
     }
+
+    @Test
+    void predicatedWriteDoesNotKillEarlierWrite() {
+        // MOV r0, #1 ; MOVEQ r0, #2 — com Z=0 o MOVEQ não roda e r0 continua sendo o primeiro valor
+        IntegerOp.Alu movEq = new IntegerOp.Alu(IrOpCode.MOV, 0, 0, -1,
+                new IrOperand.Immediate(2), false, Condition.EQ);
+        IrBlock block = block(mov(0, 1), movEq);
+
+        assertSame(block, pass.optimize(block));
+    }
 }

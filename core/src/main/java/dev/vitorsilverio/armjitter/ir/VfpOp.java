@@ -536,6 +536,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_LOAD; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpLoad(core, this); return false; }
+        @Override public int regUse() { return 1 << base; }
     }
 
     /// `VSTR`: grava `Vd` em `[base + offsetBytes]` (ver {@link Load}).
@@ -555,6 +556,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_STORE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpStore(core, this); return false; }
+        @Override public int regUse() { return 1 << base; }
     }
 
     /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: transfere `count` registradores consecutivos
@@ -585,6 +587,8 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_MULTIPLE_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpMultipleTransfer(core, this); return false; }
+        @Override public int regUse() { return 1 << base; }
+        @Override public int regDef() { return writeback ? (1 << base) : 0; }
     }
 
     /// `VMOV Rt, Sn` / `VMOV Sn, Rt` (`FMRS`/`FMSR`): transfere um único registrador `S` de/para
@@ -613,6 +617,8 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCoreTransfer(core, this); return false; }
+        @Override public int regUse() { return toArmRegister ? 0 : (1 << armRegister); }
+        @Override public int regDef() { return toArmRegister ? (1 << armRegister) : 0; }
 
         /// Forma sem lane (`VMOV_single`/`VMOV_half`/`VMOV_to_gp` de 32 bits) — mantém a assinatura anterior.
         public CoreTransfer(boolean toArmRegister, int armRegister, int vn, boolean halfWidth, Condition condition) {
@@ -640,6 +646,8 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCorePairTransfer(core, this); return false; }
+        @Override public int regUse() { return toArmRegisters ? 0 : (1 << armLow) | (1 << armHigh); }
+        @Override public int regDef() { return toArmRegisters ? (1 << armLow) | (1 << armHigh) : 0; }
     }
 
     /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`): transfere o FPSCR completo de/para um registrador ARM.
@@ -655,6 +663,10 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SYSTEM_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSystemTransfer(core, this); return false; }
+        // VMRS Rt,FPSCR escreve Rt — exceto o caso especial APSR_nzcv (Rt=15), que escreve o
+        // CPSR.NZCV em vez de R15.
+        @Override public int regUse() { return read ? 0 : (1 << armRegister); }
+        @Override public int regDef() { return read && armRegister != GprMask.PC_INDEX ? (1 << armRegister) : 0; }
     }
 
     // -- VFP (B9.5): VMOV_64_sp (par de S consecutivos) e VCVT_fix (fixed-point). --
@@ -726,6 +738,8 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SYSREG_MEMORY_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSysregMemoryTransfer(core, this); return false; }
+        @Override public int regUse() { return 1 << base; }
+        @Override public int regDef() { return writeback ? (1 << base) : 0; }
     }
 
     /// `VLLDM`/`VLSTM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): salva/restaura o banco
