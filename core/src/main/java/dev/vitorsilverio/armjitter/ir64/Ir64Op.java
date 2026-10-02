@@ -1436,7 +1436,18 @@ public sealed interface Ir64Op permits
     /// mas o decoder não precisou dele para o subconjunto coberto aqui).
     record SystemInstruction(
             /// Sub-operação identificada pelo decoder.
-            Ir64SystemInstructionOp opcode) implements Ir64Op {
+            Ir64SystemInstructionOp opcode,
+            /// Registrador de origem do operando (`Xt`, `31` = `XZR`) para as sub-operações que o
+            /// leem (`IC IVAU`); {@link #NO_REGISTER} nas demais.
+            int rt) implements Ir64Op {
+        /// Valor de {@link #rt} das sub-operações que não leem registrador nenhum.
+        public static final int NO_REGISTER = -1;
+
+        /// Sub-operação sem operando de registrador.
+        public SystemInstruction(Ir64SystemInstructionOp opcode) {
+            this(opcode, NO_REGISTER);
+        }
+
         @Override public int kind() { return Kind.SYSTEM_INSTRUCTION; }
     }
 

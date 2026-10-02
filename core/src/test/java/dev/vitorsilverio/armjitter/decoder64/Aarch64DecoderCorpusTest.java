@@ -2827,19 +2827,30 @@ class Aarch64DecoderCorpusTest {
         assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
     }
 
+    /// `IC IALLUIS`/`IC IALLU`/`IC IVAU` NÃO são mais NOP (F11): o JIT precisa descartar o código
+    /// compilado que o guest acabou de reescrever. O resto de `IC`/`DC` segue NOP (ver acima).
+    private static void assertInstructionCacheInvalidate(long offset, Ir64SystemInstructionOp expected, int rt) {
+        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        assertEquals(expected, op.opcode());
+        assertEquals(rt, op.rt());
+    }
+
     @Test
     void icIalluis() {
-        assertCacheMaintenanceNoop(0x474);
+        assertInstructionCacheInvalidate(0x474, Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL,
+                Ir64Op.SystemInstruction.NO_REGISTER);
     }
 
     @Test
     void icIallu() {
-        assertCacheMaintenanceNoop(0x478);
+        assertInstructionCacheInvalidate(0x478, Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL,
+                Ir64Op.SystemInstruction.NO_REGISTER);
     }
 
     @Test
     void icIvau() {
-        assertCacheMaintenanceNoop(0x47c);
+        // o corpus assembla `ic ivau, x0` neste offset: Xt=0
+        assertInstructionCacheInvalidate(0x47c, Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA, 0);
     }
 
     @Test
@@ -2939,12 +2950,12 @@ class Aarch64DecoderCorpusTest {
     }
 
     @Test
-    void icIalluisContinuaCacheMaintenanceNoopAposOCarveOutDeAt() {
-        // Regressão do achado real: ic ialluis (CRm=1, != AT CRm=8) precisa continuar caindo no
-        // bucket genérico de cache maintenance, não ser afetada pelo carve-out de AT que também
-        // vive em CRn=0b0111.
+    void icIalluisContinuaForaDoCarveOutDeAt() {
+        // Regressão do achado real: ic ialluis (CRm=1, != AT CRm=8) precisa continuar no bucket de
+        // manutenção de cache, não ser afetada pelo carve-out de AT que também vive em CRn=0b0111
+        // (agora decodificada como invalidação total do cache de instruções, F11).
         Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decodeAt(0xd5087100);
-        assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
+        assertEquals(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL, op.opcode());
     }
 
     // ── B10.6b/B10.6c: AT S1E2R/S1E2W/S1E3R/S1E3W — regimes EL2/EL3 puros, sem stage-2

@@ -448,6 +448,115 @@ class TranslatingAddressSpace64Test {
     }
 
     @Test
+    void vaDe39BitsComecaOWalkEmL1() {
+        // Achado real da F11 (Raspberry Pi 3, kernel8.img): Linux/arm64 com VA_BITS=39 programa
+        // T0SZ/T1SZ=25 e aponta TTBRn direto para uma tabela L1 — sem L0. Antes, o walk sempre
+        // começava em L0 e lia a tabela L1 como se fosse L0 (falta de tradução nível 0).
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        final long t0sz39 = 25;
+        mmu.setTcr(t0sz39 | (t0sz39 << 16));
+        mmu.setTtbr0(L1_BASE); // L1 é a raiz: L1[0]→L2[0]→L3[0x100] mapeia VA_IDENTITY
+
+        mmu.write32(VA_IDENTITY, 0x0BAD_F00D);
+
+        assertEquals(0x0BAD_F00D, physical.read32(PA_IDENTITY));
+        // Mesmo VA alto (TTBR1, bit 55) com T1SZ=25 usa a raiz L1 de TTBR1.
+        mmu.setTtbr1(L1_BASE);
+        assertEquals(0x0BAD_F00D, mmu.read32((1L << 55) | VA_IDENTITY));
+    }
+
+    @Test
+    void vaDe39BitsFaltaDeTraducaoNoNivelDaRaizEhL1() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setTcr(25);
+        mmu.setTtbr0(L1_BASE);
+
+        // L1[2] é inválido na raiz: falta deve ser reportada como nível 1, nunca nível 0.
+        var fault = assertThrows(MemoryTranslationException64.class, () -> mmu.read32(VA_L1_FAULT));
+        assertEquals(FaultStatus64.translationFault(1), fault.faultStatus());
+    }
+
+    @Test
+    void t1szUsaTamanhoDeVaIndependenteDeT0sz() {
+        // T0SZ=16 (48 bits, raiz L0) e T1SZ=25 (39 bits, raiz L1) coexistem: cada metade do VA
+        // usa o próprio tamanho.
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setTcr(16L | (25L << 16));
+        mmu.setTtbr1(L1_BASE);
+
+        mmu.write32(VA_IDENTITY, 0x0102_0304);
+        assertEquals(0x0102_0304, mmu.read32((1L << 55) | VA_IDENTITY));
+    }
+
+    @Test
+    void tszMenorQue16CaiNoPadraoDe48Bits() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setTcr(0); // nunca configurado: T0SZ=0 não é válido, mantém L0 como raiz
+
+        mmu.write32(VA_IDENTITY, 0x0A0B_0C0D);
+        assertEquals(0x0A0B_0C0D, physical.read32(PA_IDENTITY));
+    }
+
+    @Test
+    void vaDe30BitsComecaOWalkEmL2() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setTcr(34); // 64-34 = 30 bits: raiz L2
+        mmu.setTtbr0(L2_BASE); // L2[0]→L3[0x100] mapeia VA_IDENTITY
+
+        mmu.write32(VA_IDENTITY, 0x1357_9BDF);
+        assertEquals(0x1357_9BDF, physical.read32(PA_IDENTITY));
+    }
+
+    @Test
+    void vaMinimoDeTszAltoComecaOWalkEmL3() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        physical.write64(L3_BASE, pageDescriptor(PA_IDENTITY, AP_FULL_ACCESS, false, false));
+        mmu.setTcr(63); // clampa em 13 bits de VA (1 bit de índice): raiz L3
+        mmu.setTtbr0(L3_BASE);
+
+        mmu.write32(0, 0x2468_ACE0);
+        assertEquals(0x2468_ACE0, physical.read32(PA_IDENTITY));
+    }
+
+    @Test
+    void physicalAddressTraduzSemEfeitoNaTlbNemChecagemDePermissao() {
+        AddressSpace64 physical = newPhysical();
+        TranslatingAddressSpace64 mmu = newMmu(physical);
+        mmu.setPrivileged(false); // EL0: VA_EL1_ONLY falharia num acesso de dados normal
+
+        assertEquals(PA_REMAP_TARGET, mmu.physicalAddress(VA_REMAP));
+        assertEquals(PA_EL1_ONLY, mmu.physicalAddress(VA_EL1_ONLY), "permissão não é checada");
+        assertEquals(PA_PXN | 0x24, mmu.physicalAddress(VA_PXN | 0x24), "preserva o offset na página");
+        assertEquals(0, mmu.pageWalkCount() - mmu.pageWalkCount()); // sanidade: sem estado extra
+    }
+
+    @Test
+    void physicalAddressSemMmuEhIdentidade() {
+        TranslatingAddressSpace64 mmu = newMmu(newPhysical());
+        mmu.setMmuEnabled(false);
+
+        assertEquals(0x1234_5678L, mmu.physicalAddress(0x1234_5678L));
+    }
+
+    @Test
+    void physicalAddressSemDescritorLancaFaltaDeTraducao() {
+        TranslatingAddressSpace64 mmu = newMmu(newPhysical());
+
+        assertThrows(MemoryTranslationException64.class, () -> mmu.physicalAddress(VA_L3_FAULT));
+    }
+
+    @Test
+    void barramentoFisicoPuroTemPhysicalAddressIdentidade() {
+        assertEquals(0xABCDL, newPhysical().physicalAddress(0xABCDL));
+    }
+
+    @Test
     void fisicoContinuaAcessivelDiretamenteSemMmu() {
         // G3: TranslatingAddressSpace64 é um wrapper novo; o AddressSpace64 físico continua
         // funcionando sozinho para quem (armbox Aarch64LinuxMachine, B6.2) não usa MMU.

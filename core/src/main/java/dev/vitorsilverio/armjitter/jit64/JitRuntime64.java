@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.jit64;
 
 import dev.vitorsilverio.armjitter.codegen64.Ir64CodeEmitter;
+import dev.vitorsilverio.armjitter.core.CpuSleepState;
+import dev.vitorsilverio.armjitter.core64.Aarch64InstructionCacheListener;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
@@ -19,7 +21,7 @@ import java.util.Objects;
 ///
 /// {@link ExecutionThreshold} é reaproveitado DIRETAMENTE do pacote `jit` (32 bits) — é genérico
 /// o bastante (só `int hotCount`, nenhuma referência a `ArmCore`/`int pc`), decisão D0 da spec.
-public final class JitRuntime64 {
+public final class JitRuntime64 implements Aarch64InstructionCacheListener {
     /// Ciclos reportados quando o `lift()` de um bloco NUNCA-antes-visto falta na tradução —
     /// MESMO achado (e mesmo valor) de `JitRuntime#LIFT_FAULT_CYCLES` (32-bit, B4.1.5): o
     /// {@link BlockCache64} só ganha proteção de {@link MemoryTranslationException64} DEPOIS que um
@@ -32,6 +34,11 @@ public final class JitRuntime64 {
     /// exatamente por isto (`TRANSLATION_FAULT_L3 em 0x200`, um bloco quente cujo lookahead de
     /// lifting cruzava para uma página ainda não mapeada, nunca de fato alcançada pela execução).
     private static final int LIFT_FAULT_CYCLES = 1;
+    /// Ciclos cobrados quando a chamada só serviu uma IRQ ou encontrou o core dormindo (WFI) —
+    /// mesmo "uma instrução" de {@code Ir64BlockExecutor#CYCLES_PER_INSTRUCTION}.
+    private static final int IRQ_OR_SLEEP_CYCLES = 1;
+    /// Granularidade (4KiB) do índice de invalidação por página física.
+    private static final int PAGE_SHIFT = 12;
     private final BlockCache64 blockCache;
     private final Ir64BlockLifter lifter;
     private final Ir64BlockExecutor coldExecutor;
@@ -82,6 +89,20 @@ public final class JitRuntime64 {
     /// @return ciclos internos consumidos (mesma convenção do mundo 32-bit: só `Ir64Op.Cycle`;
     ///         fetch/waitstates vão direto para {@link Aarch64Core#cycles()})
     public int execute(long pc, Aarch64Core core) {
+        // IRQ pendente / core dormindo (WFI): checado ANTES de tocar o cache, no limite do bloco —
+        // mesmo ponto e mesma convenção de `Ir64BlockExecutor#executeBlock`/`#step`. Achado real da
+        // F11: só o caminho FRIO (`coldExecutor.step`) servia IRQ; um bloco já compilado nunca
+        // olhava `interruptLine`, então um laço quente esperando um tick de timer nunca era
+        // interrompido (o JIT travava onde o interpretado seguia). O core serve a IRQ trocando o
+        // PC, então o chamador reenvia `core.pc()` na próxima chamada, como no caminho frio.
+        if (core.servicePendingIrq() || core.sleepState() != CpuSleepState.RUNNING) {
+            core.addCycles(IRQ_OR_SLEEP_CYCLES);
+            return IRQ_OR_SLEEP_CYCLES;
+        }
+        if (core.instructionCacheListener() != this) {
+            // Torna este runtime o destino de `IC IALLU`/`IC IVAU` do guest (código auto-modificável).
+            core.setInstructionCacheListener(this);
+        }
         int translationGeneration = core.memory().translationGeneration();
         BlockKey64 key = new BlockKey64(pc, translationGeneration);
         CompiledBlock64 block = blockCache.getOrNull(key);
@@ -99,11 +120,36 @@ public final class JitRuntime64 {
                 return LIFT_FAULT_CYCLES;
             }
             block = emitter.emit(irBlock);
-            blockCache.put(key, block);
+            blockCache.put(key, block, physicalPagesOf(core, irBlock));
         }
         int cycles = block.execute(core);
         core.addCycles(cycles);
         return cycles;
+    }
+
+    /// `IC IALLU`/`IC IALLUIS`: todo bloco compilado é obsoleto.
+    @Override
+    public void invalidateAll() {
+        blockCache.clear();
+    }
+
+    /// `IC IVAU`: descarta os blocos que cobrem a página física {@code physicalPage}.
+    @Override
+    public void invalidatePhysicalPage(long physicalPage) {
+        blockCache.invalidatePhysicalPage(physicalPage);
+    }
+
+    /// Páginas físicas que o código do bloco ocupa (uma por página virtual percorrida de
+    /// {@code startPc} a {@code endPc}). Toda página do intervalo já foi lida pelo `lift`, então
+    /// está mapeada e a tradução abaixo não falta.
+    private static long[] physicalPagesOf(Aarch64Core core, Ir64Block block) {
+        long firstPage = block.startPc() >>> PAGE_SHIFT;
+        long lastPage = Math.max(block.startPc(), block.endPc() - 1) >>> PAGE_SHIFT;
+        long[] pages = new long[(int) (lastPage - firstPage + 1)];
+        for (int i = 0; i < pages.length; i++) {
+            pages[i] = core.memory().physicalAddress((firstPage + i) << PAGE_SHIFT) >>> PAGE_SHIFT;
+        }
+        return pages;
     }
 
     /// Retorna o cache de blocos usado pelo runtime.

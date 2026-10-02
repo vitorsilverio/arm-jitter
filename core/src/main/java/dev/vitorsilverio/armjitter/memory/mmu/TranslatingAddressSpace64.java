@@ -92,6 +92,10 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
     // ── seleção TTBR0/TTBR1 (achado real da F11/B6.13): bit 55 do VA, não bit 63 ──────
     private static final int VA_TTBR_SELECT_BIT = 55;
 
+    // ── TCR_EL1: campos de tamanho de VA ──────────────────────────────────────────────
+    private static final int TCR_T1SZ_SHIFT = 16;
+    private static final int TCR_TSZ_MASK = 0x3F;
+
     // ── micro-TLB: granularidade fixa de 4KiB, direto-mapeada, 256 entradas ─────────
     private static final int TLB_ENTRIES = 256;
     private static final long TLB_INDEX_MASK = TLB_ENTRIES - 1;
@@ -147,8 +151,8 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
         translationGeneration++;
     }
 
-    /// Define `TCR_EL1`. Armazenamento simples (D2): esta task fixa granule 4KiB/VA 48 bits, sem
-    /// ler os campos de tamanho/granule do valor recebido.
+    /// Define `TCR_EL1`. Só `T0SZ`/`T1SZ` são lidos (tamanho de VA e, por consequência, nível
+    /// inicial do walk — ver {@link #walk}); granule fixo em 4KiB, `TG0`/`TG1` ignorados.
     public void setTcr(long tcr) {
         this.tcr = tcr;
     }
@@ -308,6 +312,13 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
         return (tlb.ppn(idx) << PAGE_BITS) | (va & PAGE_OFFSET_MASK);
     }
 
+    /// Ver {@link AddressSpace64#physicalAddress}: walk como um acesso de dados PRIVILEGIADO (que
+    /// nunca falha por permissão), sem tocar a micro-TLB.
+    @Override
+    public long physicalAddress(long address) {
+        return mmuEnabled ? translateForAddressTranslate(address, MemoryAccessType.DATA_READ, false) : address;
+    }
+
     /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6): mesmo page-walk de {@link #walk}, mas SEM
     /// consultar/preencher a micro-TLB (`AT` não deve ter efeito colateral na TLB — mesmo raciocínio
     /// de "efeito mínimo" já aplicado ao precedente 32-bit) e com o `privileged` usado na checagem
@@ -376,9 +387,19 @@ public final class TranslatingAddressSpace64 implements AddressSpace64 {
 
     private WalkResult walk(long va, MemoryAccessType type) {
         walkCount++;
-        long tableBase = ((va >>> VA_TTBR_SELECT_BIT) & 1L) != 0 ? ttbr1Base : ttbr0Base;
-        for (int level = LEVEL_L0; level <= LEVEL_L3; level++) {
-            int index = (int) ((va >>> indexShift(level)) & LEVEL_INDEX_MASK);
+        boolean upperHalf = ((va >>> VA_TTBR_SELECT_BIT) & 1L) != 0;
+        long tableBase = upperHalf ? ttbr1Base : ttbr0Base;
+        // TCR_EL1.T0SZ/T1SZ definem o tamanho do VA (64 - TnSZ bits) e, com granule de 4KiB, o nível
+        // inicial do walk: VA de 39 bits (Linux/arm64 VA_BITS=39, ex.: Raspberry Pi) começa em L1,
+        // não em L0. TnSZ < 16 (inclusive TCR=0, nunca configurado) cai no default de 48 bits.
+        int tnsz = (int) (upperHalf ? (tcr >>> TCR_T1SZ_SHIFT) : tcr) & TCR_TSZ_MASK;
+        int vaBits = Math.min(OUTPUT_ADDRESS_HIGH_BIT + 1, Math.max(PAGE_BITS + 1, 64 - Math.max(tnsz, 16)));
+        int firstLevel = LEVEL_L3 - (vaBits - PAGE_BITS - 1) / LEVEL_INDEX_BITS;
+        for (int level = firstLevel; level <= LEVEL_L3; level++) {
+            long indexMask = level == firstLevel
+                    ? (1L << (vaBits - indexShift(level))) - 1
+                    : LEVEL_INDEX_MASK;
+            int index = (int) ((va >>> indexShift(level)) & indexMask);
             long descriptor = physical.read64(tableBase + index * (long) DESCRIPTOR_SIZE_BYTES);
             if ((descriptor & DESC_VALID_BIT) == 0) {
                 throw new MemoryTranslationException64(va, type, FaultStatus64.translationFault(level));

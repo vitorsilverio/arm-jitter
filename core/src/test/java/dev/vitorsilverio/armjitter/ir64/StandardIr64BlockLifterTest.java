@@ -109,4 +109,62 @@ class StandardIr64BlockLifterTest {
         assertEquals(4L, block.endPc());
         assertEquals(3, block.operations().size());
     }
+
+    // ── Fim de bloco em instruções que redirecionam o fluxo (F11, achado real) ─────────────────────
+
+    private static final int ERET = 0xd69f03e0;
+    private static final int HVC_0 = 0xd4000002;
+    private static final int SMC_0 = 0xd4000003;
+    private static final int BRK_1 = 0xd4200020;
+    private static final int WFI = 0xd503207f;
+    private static final int HLT = 0xd44acf00; // hlt #0x5678: decodifica como UndefinedInstructionTrap
+    private static final int ISB = 0xd5033fdf;
+    private static final int NOP = 0xd503201f;
+    private static final int B_SELF = 0x14000000; // b .
+
+    /// `movz; <instrução>; movz; movz; b .` — com uma instrução terminal o bloco acaba logo depois dela
+    /// (`endPc == 8`); sem, vai até o `b .` do fim (`endPc == 20`).
+    private Ir64Block liftAroundTerminal(int terminal) {
+        AddressSpace64 memory = newMemory(64);
+        putWord(memory, 0, MOVZ_X0_1);
+        putWord(memory, 4, terminal);
+        putWord(memory, 8, MOVZ_X0_1);
+        putWord(memory, 12, MOVZ_X0_1);
+        putWord(memory, 16, B_SELF);
+        return lifter.lift(memory, 0, 10);
+    }
+
+    @Test
+    void blockEndsRightAfterEret() {
+        Ir64Block block = liftAroundTerminal(ERET);
+
+        assertEquals(8, block.endPc(), "nada depois do eret pode entrar no bloco");
+        assertEquals(Ir64Op.Kind.EXCEPTION_RETURN, lastOp(block).kind());
+    }
+
+    @Test
+    void blockEndsRightAfterHvcAndSmc() {
+        assertEquals(8, liftAroundTerminal(HVC_0).endPc());
+        assertEquals(Ir64Op.Kind.PRIVILEGED_CALL, lastOp(liftAroundTerminal(HVC_0)).kind());
+        assertEquals(8, liftAroundTerminal(SMC_0).endPc());
+    }
+
+    @Test
+    void blockEndsRightAfterBrkAndUndefined() {
+        assertEquals(8, liftAroundTerminal(BRK_1).endPc());
+        assertEquals(Ir64Op.Kind.BREAKPOINT, lastOp(liftAroundTerminal(BRK_1)).kind());
+        assertEquals(8, liftAroundTerminal(HLT).endPc());
+        assertEquals(Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP, lastOp(liftAroundTerminal(HLT)).kind());
+    }
+
+    @Test
+    void blockEndsRightAfterWfiButNotAfterOtherSystemInstructions() {
+        assertEquals(8, liftAroundTerminal(WFI).endPc());
+        assertEquals(20, liftAroundTerminal(ISB).endPc(), "ISB não redireciona o fluxo");
+        assertEquals(20, liftAroundTerminal(NOP).endPc(), "NOP não redireciona o fluxo");
+    }
+
+    private static Ir64Op lastOp(Ir64Block block) {
+        return block.operations().get(block.operations().size() - 1);
+    }
 }

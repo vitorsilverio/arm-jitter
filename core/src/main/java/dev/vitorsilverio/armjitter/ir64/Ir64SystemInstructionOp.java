@@ -33,6 +33,20 @@ public enum Ir64SystemInstructionOp {
     /// motivo). `DC ZVA` fica FORA deste grupo (tem efeito observável real, já anunciada como
     /// indisponível via `DCZID_EL0.DZP=1`, B6.10).
     CACHE_MAINTENANCE_NOP,
+    /// `IC IALLU`/`IC IALLUIS` (`op1=0,CRn=7,CRm=5|1,op2=0`): invalida TODO o cache de instruções.
+    /// Ao contrário do resto de `IC`/`DC`, NÃO é NOP para um backend JIT: o guest usa isto para
+    /// publicar código que acabou de escrever (jump labels/`alternatives`/módulos/páginas
+    /// executáveis do Linux) e os blocos já compilados do JIT são exatamente o "cache de
+    /// instruções" que o hardware real também deixaria obsoleto sem a manutenção — achado real da
+    /// F11: sem isto o JIT A64 executava um `b` que o kernel já tinha trocado por `nop`.
+    /// Delega em {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#invalidateInstructionCacheAll()}.
+    INSTRUCTION_CACHE_INVALIDATE_ALL,
+    /// `IC IVAU, Xt` (`op1=3,CRn=7,CRm=5,op2=1`): invalida o cache de instruções para o endereço
+    /// virtual em `Xt`, até o Ponto de Unificação — ver {@link #INSTRUCTION_CACHE_INVALIDATE_ALL}.
+    /// Resolvida por endereço FÍSICO (o guest costuma invalidar por um alias diferente do VA onde o
+    /// código executa). Delega em
+    /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#invalidateInstructionCacheByVirtualAddress(long)}.
+    INSTRUCTION_CACHE_INVALIDATE_BY_VA,
     /// `CLREX` (B8.3, `ARM DDI 0487 C6.2.62`): fecha o monitor de exclusividade sem completar
     /// nenhum `STXR`/`STLXR` — mesmo efeito observável de uma exceção/`ERET` sobre o monitor
     /// (`Aarch64Core#clearExclusiveMonitor`, já usado por `enterMemoryAbort`/`enterIrq`), só que

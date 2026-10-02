@@ -387,6 +387,9 @@ public final class Aarch64Decoder {
     private static final int SYSREG_CRN_ELR = 4;
     private static final int SYSREG_CRM_ELR = 0;
     private static final int SYSREG_OP2_ELR = 1;
+    private static final int SYSREG_CRN_SP_EL0 = 4;
+    private static final int SYSREG_CRM_SP_EL0 = 1;
+    private static final int SYSREG_OP2_SP_EL0 = 0;
     private static final int SYSREG_CRN_SPSR = 4;
     private static final int SYSREG_CRM_SPSR = 0;
     private static final int SYSREG_OP2_SPSR = 0;
@@ -619,6 +622,19 @@ public final class Aarch64Decoder {
     // ── identificação EL0, distinto do grupo timer por CRn) — valores conferidos contra
     // ── `target/arm/helper.c` real do QEMU (`id_cp_reginfo`/`DCZID_EL0`), ver a task.
     private static final int SYSREG_CRN_CACHE_IDENTITY = 0;
+    private static final int SYSREG_CRM_CACHE_SIZE_ID = 0;
+    private static final int SYSREG_CRN_CNTKCTL_EL1 = 14;
+    private static final int SYSREG_CRM_CNTKCTL_EL1 = 1;
+    private static final int SYSREG_OP2_CNTKCTL_EL1 = 0;
+    private static final int SYSREG_CRN_ID_SPACE = 0;
+    private static final int SYSREG_CRM_ID_SPACE_FIRST = 1;
+    private static final int SYSREG_CRM_ID_SPACE_LAST = 7;
+    private static final int SYSREG_OP1_CACHE_SIZE_ID = 1;
+    private static final int SYSREG_OP1_CACHE_SIZE_SELECT = 2;
+    private static final int SYSREG_OP2_CCSIDR_EL1 = 0;
+    private static final int SYSREG_OP2_CLIDR_EL1 = 1;
+    private static final int SYSREG_OP2_AIDR_EL1 = 7;
+    private static final int SYSREG_OP2_CSSELR_EL1 = 0;
     private static final int SYSREG_CRM_CTR = 0;
     private static final int SYSREG_OP2_CTR_EL0 = 1;
     private static final int SYSREG_CRM_DCZID = 0;
@@ -746,6 +762,13 @@ public final class Aarch64Decoder {
     // ── indisponível via `DCZID_EL0.DZP=1` (B6.10) — se algum guest ignorar isso e emitir `DC ZVA`
     // ── mesmo assim, deve cair no `throw unsupported` (não presumir NOP silencioso).
     private static final int SYSTEM_INSTRUCTION_CACHE_CRN = 0b0111;
+    private static final int SYSTEM_INSTRUCTION_IC_OP1_ALL = 0b000;
+    private static final int SYSTEM_INSTRUCTION_IC_OP2_ALL = 0b000;
+    private static final int SYSTEM_INSTRUCTION_IC_CRM_IALLUIS = 0b0001;
+    /// `IC IALLU` e `IC IVAU` compartilham `CRm=0b0101` (diferem em `op1`/`op2`).
+    private static final int SYSTEM_INSTRUCTION_IC_CRM_IALLU = 0b0101;
+    private static final int SYSTEM_INSTRUCTION_IC_OP1_IVAU = 0b011;
+    private static final int SYSTEM_INSTRUCTION_IC_OP2_IVAU = 0b001;
     private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_CRM = 0b0100;
     private static final int SYSTEM_INSTRUCTION_CACHE_DC_ZVA_OP2 = 0b001;
 
@@ -2771,7 +2794,12 @@ public final class Aarch64Decoder {
         // check de PRFM não olha `idx`/`bit21`, só `size`/`opc`).
         int idxField = (word >>> SINGLE_IDX_SHIFT) & SINGLE_IDX_MASK;
         boolean bit21Early = ((word >>> SINGLE_BIT21_SHIFT) & 1) != 0;
-        if (bit21Early && sizeField == SIZE_DOUBLEWORD
+        // Na forma "unsigned offset" (bit24==1) `bit21` e `idx` (bits[11:10]) são bits do `imm12`,
+        // não campos de modo de endereçamento: sem esta guarda um `ldr x0, [x0, #31624]` (imm12 com
+        // bit11==1 e bits[1:0]==0b01/0b11) era lido como `LDRAA/LDRAB` — achado real da F11, o
+        // Linux 6.18 do Raspberry Pi 3 acessa um campo desses (`0xf97dc400`) logo após o `usbcore`.
+        boolean unsignedOffsetForm = ((word >>> SINGLE_SCALED_OFFSET_BIT_SHIFT) & 1) != 0;
+        if (!unsignedOffsetForm && bit21Early && sizeField == SIZE_DOUBLEWORD
                 && (idxField == IDX_POST_INDEX || idxField == IDX_PRE_INDEX)) {
             if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
                 throw unsupported(word, address);
@@ -7146,6 +7174,25 @@ public final class Aarch64Decoder {
     /// `IPAS2E1`, etc. (Nota histórica desta task, B10.9: na época, `AT S1E2*`/`S1E3*` ainda
     /// estavam fora — implementadas depois por B10.6b/B10.6c, ver o carve-out de `CRn=0b0111`
     /// acima.)
+    /// `IC IALLUIS`/`IC IALLU` (invalidação total) e `IC IVAU, Xt` (por VA) — as únicas
+    /// manutenções de cache que um backend JIT precisa tratar de verdade (ver
+    /// {@link Ir64SystemInstructionOp#INSTRUCTION_CACHE_INVALIDATE_ALL}); `null` para o resto do
+    /// bucket `CRn=7`, que continua NOP.
+    private static Ir64Op decodeInstructionCacheInvalidate(int word, int op1) {
+        int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+        int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
+        if (op1 == SYSTEM_INSTRUCTION_IC_OP1_ALL && op2 == SYSTEM_INSTRUCTION_IC_OP2_ALL
+                && (crm == SYSTEM_INSTRUCTION_IC_CRM_IALLUIS || crm == SYSTEM_INSTRUCTION_IC_CRM_IALLU)) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL);
+        }
+        if (op1 == SYSTEM_INSTRUCTION_IC_OP1_IVAU && crm == SYSTEM_INSTRUCTION_IC_CRM_IALLU
+                && op2 == SYSTEM_INSTRUCTION_IC_OP2_IVAU) {
+            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA,
+                    word & REGISTER_FIELD_MASK);
+        }
+        return null;
+    }
+
     private Ir64Op decodeSystemInstructionSys(int word, long address) {
         boolean isSysl = ((word >>> SYSTEM_REGISTER_L_SHIFT) & 1) != 0;
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
@@ -7172,6 +7219,10 @@ public final class Aarch64Decoder {
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN) {
             if (isDataCacheZva(word)) {
                 throw unsupported(word, address);
+            }
+            Ir64Op instructionCacheOp = decodeInstructionCacheInvalidate(word, op1);
+            if (instructionCacheOp != null) {
+                return instructionCacheOp;
             }
             return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
@@ -7296,12 +7347,17 @@ public final class Aarch64Decoder {
                 || register == Aarch64SystemRegisterId.ZCR_EL3) && !architecture.has(Aarch64Feature.SVE)) {
             throw unsupported(word, address);
         }
-        // B18.1: SVCR/SMCR_ELx/ID_AA64SMFR0_EL1 são FEAT_SME — sem ela continuam UNDEFINED (G8).
+        // B18.1: SVCR/SMCR_ELx são FEAT_SME — sem ela continuam UNDEFINED (G8).
         if ((register == Aarch64SystemRegisterId.SVCR || register == Aarch64SystemRegisterId.SMCR_EL1
-                || register == Aarch64SystemRegisterId.SMCR_EL2 || register == Aarch64SystemRegisterId.SMCR_EL3
-                || register == Aarch64SystemRegisterId.ID_AA64SMFR0_EL1)
+                || register == Aarch64SystemRegisterId.SMCR_EL2 || register == Aarch64SystemRegisterId.SMCR_EL3)
                 && !architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)) {
             throw unsupported(word, address);
+        }
+        // ID_AA64SMFR0_EL1 vive no espaço de identidade: sem FEAT_SME ele não é UNDEFINED, é RAZ
+        // (achado real da F11 — o `cpufeature.c` do Linux lê no boot de um Cortex-A53, sem SME).
+        if (register == Aarch64SystemRegisterId.ID_AA64SMFR0_EL1
+                && !architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)) {
+            register = Aarch64SystemRegisterId.ID_RESERVED_RAZ;
         }
         // B19.14: RGSR_EL1/GCR_EL1 são FEAT_MTE2 — gateados, mesmo padrão de FPMR acima.
         if ((register == Aarch64SystemRegisterId.RGSR_EL1 || register == Aarch64SystemRegisterId.GCR_EL1)
@@ -7353,6 +7409,12 @@ public final class Aarch64Decoder {
         }
         if (op1 == SYSREG_OP1_EL3) {
             return decodeEl3RegisterId(crn, crm, op2);
+        }
+        if (crn == SYSREG_CRN_CACHE_IDENTITY && crm == SYSREG_CRM_CACHE_SIZE_ID) {
+            Aarch64SystemRegisterId cacheSizeRegister = decodeCacheSizeRegisterId(op1, op2);
+            if (cacheSizeRegister != null) {
+                return cacheSizeRegister;
+            }
         }
         if (op1 != SYSREG_OP1_EL1) {
             return null;
@@ -7475,6 +7537,12 @@ public final class Aarch64Decoder {
         if (crn == SYSREG_CRN_SPSR && crm == SYSREG_CRM_SPSR && op2 == SYSREG_OP2_SPSR) {
             return Aarch64SystemRegisterId.SPSR_EL1;
         }
+        if (crn == SYSREG_CRN_CNTKCTL_EL1 && crm == SYSREG_CRM_CNTKCTL_EL1 && op2 == SYSREG_OP2_CNTKCTL_EL1) {
+            return Aarch64SystemRegisterId.CNTKCTL_EL1;
+        }
+        if (crn == SYSREG_CRN_SP_EL0 && crm == SYSREG_CRM_SP_EL0 && op2 == SYSREG_OP2_SP_EL0) {
+            return Aarch64SystemRegisterId.SP_EL0;
+        }
         // B20.8: PMSAv8-64. Gate por Aarch64Feature.PMSA fica em decodeSystemRegister (mesmo padrão
         // de ALLINT/PAN/UAO/DIT acima) — aqui só resolve o encoding cru, sem checar arquitetura.
         if (crn == SYSREG_CRN_MPUIR_EL1 && crm == SYSREG_CRM_MPUIR_EL1 && op2 == SYSREG_OP2_MPUIR_EL1) {
@@ -7491,6 +7559,13 @@ public final class Aarch64Decoder {
         }
         if (crn == SYSREG_CRN_PRENR_EL1 && crm == SYSREG_CRM_PRENR_EL1 && op2 == SYSREG_OP2_PRENR_EL1) {
             return Aarch64SystemRegisterId.PRENR_EL1;
+        }
+        // Espaço de identidade `op0=3,op1=0,CRn=0,CRm=1..7` (ID_PFR*/ID_ISAR*/ID_AA64*): tudo o que não
+        // tem registrador próprio acima é "reserved, RAZ" (DDI 0487 D24.2.* "System register
+        // encodings"; achado real da F11 — `ID_AA64ISAR3_EL1`, `CRm=6,op2=3`, lido pelo
+        // `cpufeature.c` do Linux 6.x) e lê como zero em vez de virar decode gap a cada novo ID.
+        if (crn == SYSREG_CRN_ID_SPACE && crm >= SYSREG_CRM_ID_SPACE_FIRST && crm <= SYSREG_CRM_ID_SPACE_LAST) {
+            return Aarch64SystemRegisterId.ID_RESERVED_RAZ;
         }
         return null;
     }
@@ -7718,6 +7793,22 @@ public final class Aarch64Decoder {
     /// disciplina de {@link Aarch64SystemRegisterId#MIDR_EL1}, não passa pelo
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus} do hospedeiro como o
     /// timer genérico vizinho — ver javadoc da classe).
+    /// `CCSIDR_EL1`/`CLIDR_EL1`/`AIDR_EL1` (`op1=1`) e `CSSELR_EL1` (`op1=2`) — `CRn=0,CRm=0`.
+    private static Aarch64SystemRegisterId decodeCacheSizeRegisterId(int op1, int op2) {
+        if (op1 == SYSREG_OP1_CACHE_SIZE_ID) {
+            return switch (op2) {
+                case SYSREG_OP2_CCSIDR_EL1 -> Aarch64SystemRegisterId.CCSIDR_EL1;
+                case SYSREG_OP2_CLIDR_EL1 -> Aarch64SystemRegisterId.CLIDR_EL1;
+                case SYSREG_OP2_AIDR_EL1 -> Aarch64SystemRegisterId.AIDR_EL1;
+                default -> null;
+            };
+        }
+        if (op1 == SYSREG_OP1_CACHE_SIZE_SELECT && op2 == SYSREG_OP2_CSSELR_EL1) {
+            return Aarch64SystemRegisterId.CSSELR_EL1;
+        }
+        return null;
+    }
+
     private static Aarch64SystemRegisterId decodeCacheIdentityRegisterId(int crm, int op2) {
         if (crm == SYSREG_CRM_CTR && op2 == SYSREG_OP2_CTR_EL0) {
             return Aarch64SystemRegisterId.CTR_EL0;

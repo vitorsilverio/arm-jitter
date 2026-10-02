@@ -1514,6 +1514,9 @@ public final class Ir64BlockExecutor {
             case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP, PSTATE_FIELD_NOP, MAINTENANCE_UNMODELED_NOP -> {
                 /* NOP observável — sem cache/pipeline/event-stream/campo de PSTATE modelado. */
             }
+            case INSTRUCTION_CACHE_INVALIDATE_ALL -> core.invalidateInstructionCacheAll();
+            case INSTRUCTION_CACHE_INVALIDATE_BY_VA ->
+                    core.invalidateInstructionCacheByVirtualAddress(core.x(op.rt()));
             case WFI -> core.setSleepState(CpuSleepState.HALTED);
             case CLEAR_EXCLUSIVE -> core.clearExclusiveMonitor();
         }

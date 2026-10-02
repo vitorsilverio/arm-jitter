@@ -244,6 +244,19 @@ public final class Aarch64Core {
     /// {@link Aarch64SystemRegisterId#DCZID_EL0}).
     private static final long DCZID_EL0_VALUE = 0x10L;
 
+    /// `CLIDR_EL1` constante do Cortex-A53 (ver {@link Aarch64SystemRegisterId#CLIDR_EL1}).
+    private static final long CLIDR_EL1_VALUE = 0x0a20_0023L;
+    /// `CCSIDR_EL1` (formato legado) do A53: `WT|WB|RA|WA`<<28 | (conjuntos-1)<<13 | (vias-1)<<3 |
+    /// (log2(linha)-4). L1D 32KiB/4 vias/128 conjuntos; L1I idem (só `RA`); L2 512KiB/16 vias/512.
+    private static final long CCSIDR_L1_DATA = 0x700F_E01AL;
+    private static final long CCSIDR_L1_INSTRUCTION = 0x200F_E01AL;
+    private static final long CCSIDR_L2_UNIFIED = 0x703F_E07AL;
+    /// `CSSELR_EL1` valores que escolhem cada cache acima (`Level`<<1 | `InD`).
+    private static final long CSSELR_SELECTOR_MASK = 0xFL; // Level[3:1] | InD[0]
+    private static final long CSSELR_L1_DATA = 0;
+    private static final long CSSELR_L1_INSTRUCTION = 1;
+    private static final long CSSELR_L2_UNIFIED = 2;
+
     // ── B19.11a: campos de `FPMR` (`ARM DDI 0487`, confirmados byte a byte contra pseudocódigo
     // ── real em `## Resultado` da task) — ver javadoc de {@link Aarch64SystemRegisterId#FPMR}.
     private static final int FPMR_F8S1_SHIFT = 0;
@@ -282,6 +295,8 @@ public final class Aarch64Core {
     /// `SP_EL0` — pilha de EL0. Só usada por {@link #sp()}/{@link #setSp(long)} quando
     /// {@code !exceptionState.inEl1()}; dentro de um handler de abort (B6.6.4), as duas leem/
     /// escrevem {@link Aarch64ExceptionState#sp1()} (`SP_EL1`) em vez deste campo.
+    /// Granularidade (4KiB) em que o JIT agrupa código compilado para a invalidação do `IC`.
+    private static final int PAGE_SHIFT = 12;
     private long spEl0;
     private long pc;
     private final PstateRegister pstate = new PstateRegister();
@@ -335,6 +350,8 @@ public final class Aarch64Core {
     /// kernel), armazenamento puro sem host plugável (ver javadoc de
     /// {@link Aarch64SystemRegisterId#TPIDR_EL1}).
     private long tpidrEl1;
+    private long csselrEl1;
+    private long cntkctlEl1;
     /// `TPIDR_EL0`/`TPIDRRO_EL0` (B8.14) — mesmos escaninhos de {@link #tpidrEl1}, mas o par
     /// acessível de EL0 (o TLS base que TODO `crt0` real grava antes de `main()` — ver javadoc de
     /// {@link Aarch64SystemRegisterId#TPIDR_EL0}).
@@ -1152,7 +1169,7 @@ public final class Aarch64Core {
                  ID_AA64ISAR0_EL1, ID_AA64ISAR1_EL1, ID_AA64ISAR2_EL1, ID_AA64MMFR0_EL1,
                  ID_AA64MMFR1_EL1, ID_AA64MMFR2_EL1, ID_AA64MMFR3_EL1, ID_AA64MMFR4_EL1,
                  ID_AA64ZFR0_EL1, ID_AA64DFR0_EL1, ID_AA64DFR1_EL1, REVIDR_EL1, TPIDR_EL1,
-                 TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
+                 SP_EL0, CNTKCTL_EL1, ID_RESERVED_RAZ, CLIDR_EL1, CCSIDR_EL1, CSSELR_EL1, AIDR_EL1, TPIDR_EL0, TPIDRRO_EL0, FPCR, FPSR, FPMR, NZCV, DAIF, DIT, SSBS, TCO, SPSEL, PAN,
                  UAO, ALLINT, CTR_EL0, DCZID_EL0, DEBUG_UNMODELED, RGSR_EL1, GCR_EL1,
                  ZCR_EL1, ZCR_EL2, ZCR_EL3, SVCR, SMCR_EL1, SMCR_EL2, SMCR_EL3, ID_AA64SMFR0_EL1 -> true;
             default -> false;
@@ -1196,6 +1213,8 @@ public final class Aarch64Core {
             case REVIDR_EL1 -> REVIDR_EL1_VALUE;
             case ID_AA64DFR0_EL1 -> ID_AA64DFR0_EL1_VALUE;
             case TPIDR_EL1 -> tpidrEl1;
+            case SP_EL0 -> spEl0;
+            case CNTKCTL_EL1 -> cntkctlEl1;
             case TPIDR_EL0 -> tpidrEl0;
             case TPIDRRO_EL0 -> tpidrRoEl0;
             case FPCR -> fpcr;
@@ -1214,6 +1233,11 @@ public final class Aarch64Core {
             case RGSR_EL1 -> rgsrEl1;
             case GCR_EL1 -> gcrEl1;
             case CTR_EL0 -> CTR_EL0_VALUE;
+            case CLIDR_EL1 -> CLIDR_EL1_VALUE;
+            case ID_RESERVED_RAZ -> 0L;
+            case CCSIDR_EL1 -> selectedCcsidr();
+            case CSSELR_EL1 -> csselrEl1;
+            case AIDR_EL1 -> 0L;
             case DCZID_EL0 -> DCZID_EL0_VALUE;
             default -> throw new IllegalArgumentException(
                     "Não é uma identidade intrínseca: " + register);
@@ -1227,6 +1251,9 @@ public final class Aarch64Core {
     public void writeIntrinsicSystemRegister(Aarch64SystemRegisterId register, long value) {
         switch (register) {
             case TPIDR_EL1 -> tpidrEl1 = value;
+            case SP_EL0 -> spEl0 = value;
+            case CNTKCTL_EL1 -> cntkctlEl1 = value;
+            case CSSELR_EL1 -> csselrEl1 = value;
             case TPIDR_EL0 -> tpidrEl0 = value;
             // TPIDRRO_EL0 é RO de EL0/RW de EL1 no hardware real — este emulador não modela essa
             // distinção de privilégio (mesma simplificação de B10.7), aceita escrita dos 2 lados.
@@ -1254,6 +1281,17 @@ public final class Aarch64Core {
             default -> throw new UnsupportedOperationException(
                     "AArch64: registrador de identidade é somente leitura: " + register);
         }
+    }
+
+    private long selectedCcsidr() {
+        long selector = csselrEl1 & CSSELR_SELECTOR_MASK;
+        if (selector == CSSELR_L1_DATA) {
+            return CCSIDR_L1_DATA;
+        }
+        if (selector == CSSELR_L1_INSTRUCTION) {
+            return CCSIDR_L1_INSTRUCTION;
+        }
+        return selector == CSSELR_L2_UNIFIED ? CCSIDR_L2_UNIFIED : 0L;
     }
 
     /// `MSR ZCR_ELx` (B17.3): só `LEN` (`bits[3:0]`) é guardado (`RES0` no resto) e, se o `VL`
@@ -1520,6 +1558,38 @@ public final class Aarch64Core {
     /// {@link #enterIrq}/{@link #enterMemoryAbort} (uma exceção sempre acorda o core).
     public void setSleepState(CpuSleepState sleepState) {
         this.sleepState = Objects.requireNonNull(sleepState, "sleepState");
+    }
+
+    /// Ouvinte da invalidação do cache de instruções (`IC IALLU(IS)`/`IC IVAU`) — instalado pelo
+    /// backend JIT, que é quem guarda código compilado que a manutenção torna obsoleto. `null`
+    /// (sem JIT, só interpretador, que sempre decodifica da memória) transforma as invalidações
+    /// em no-op.
+    private Aarch64InstructionCacheListener instructionCacheListener;
+
+    /// Instala (ou remove, com `null`) o {@link Aarch64InstructionCacheListener}.
+    public void setInstructionCacheListener(Aarch64InstructionCacheListener listener) {
+        this.instructionCacheListener = listener;
+    }
+
+    /// Ouvinte instalado por {@link #setInstructionCacheListener}, ou `null`.
+    public Aarch64InstructionCacheListener instructionCacheListener() {
+        return instructionCacheListener;
+    }
+
+    /// `IC IALLU`/`IC IALLUIS`: descarta todo o código compilado.
+    public void invalidateInstructionCacheAll() {
+        if (instructionCacheListener != null) {
+            instructionCacheListener.invalidateAll();
+        }
+    }
+
+    /// `IC IVAU, Xt`: descarta o código compilado da página física que contém {@code virtualAddress}
+    /// (resolvida pela MMU atual; uma falta de tradução propaga como num acesso de dados, igual ao
+    /// hardware).
+    public void invalidateInstructionCacheByVirtualAddress(long virtualAddress) {
+        if (instructionCacheListener != null) {
+            instructionCacheListener.invalidatePhysicalPage(memory.physicalAddress(virtualAddress) >>> PAGE_SHIFT);
+        }
     }
 
     /// Checa e, se pendente e não mascarada, entrega uma IRQ — chamado pelo executor ANTES de

@@ -61,6 +61,15 @@ public interface AddressSpace64 {
     default void notifyWrite(long address) {
     }
 
+    /// Endereço físico para o qual {@code address} é traduzido (sem efeito colateral na TLB e sem
+    /// checar permissão — só falta de tradução lança). O padrão é a identidade: todo barramento
+    /// sem MMU já é físico. Só {@code TranslatingAddressSpace64} traduz de verdade. Usado pela
+    /// invalidação do cache de instruções (`IC IVAU`), que precisa casar um alias virtual com os
+    /// blocos compilados por página física.
+    default long physicalAddress(long address) {
+        return address;
+    }
+
     /// Geração de tradução MMU atual — espelha {@link AddressSpace#translationGeneration()}
     /// (B4.1.4, 32-bit) para o mundo A64 (B6.6.2, `TranslatingAddressSpace64`). O padrão retorna
     /// `0` (constante) para todo barramento sem MMU — zero mudança de comportamento para os

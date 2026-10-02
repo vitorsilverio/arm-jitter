@@ -73,7 +73,8 @@ class Aarch64B196DiversosDecoderTest {
         Ir64Op.SystemInstruction tlbi = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, TLBI_VMALLE1);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, tlbi.opcode());
         Ir64Op.SystemInstruction ic = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, IC_IALLUIS);
-        assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, ic.opcode());
+        // `IC IALLUIS` deixou de ser NOP (F11): invalida os blocos compilados do JIT.
+        assertEquals(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL, ic.opcode());
     }
 
     // ── Bloco B: PRFM (literal) ─────────────────────────────────────────────────────────────────

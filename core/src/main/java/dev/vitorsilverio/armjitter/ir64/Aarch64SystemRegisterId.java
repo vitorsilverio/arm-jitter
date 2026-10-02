@@ -46,6 +46,10 @@ public enum Aarch64SystemRegisterId {
     VBAR_EL1,
     /// `ELR_EL1` (`op0=3,op1=0,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção.
     ELR_EL1,
+    /// `SP_EL0` (`op0=3,op1=0,CRn=4,CRm=1,op2=0`) — pilha de EL0, acessível de EL1. O Linux/arm64
+    /// grava aqui o ponteiro `current` (`task_struct`) durante todo o tempo em que roda em EL1 (achado
+    /// real da F11, `__primary_switched`: `msr sp_el0, x4`) — armazenamento puro no `Aarch64Core`.
+    SP_EL0,
     /// `SPSR_EL1` (`op0=3,op1=0,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção.
     SPSR_EL1,
     /// `CPACR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=2`) — controle de trap de FP/SIMD/SVE para EL1
@@ -242,6 +246,29 @@ public enum Aarch64SystemRegisterId {
     /// guest tente usá-la e bata num `UnsupportedOperationException` de decode em vez de
     /// simplesmente não usar o caminho otimizado.
     DCZID_EL0,
+    /// Qualquer registrador do espaço de identidade `op0=3,op1=0,CRn=0,CRm=1..7` sem identidade
+    /// própria neste enum (ex.: `ID_AA64ISAR3_EL1`, `ID_PFR*`): "reserved, RAZ" — lê zero.
+    /// Somente leitura (escrita é UNDEFINED no hardware).
+    ID_RESERVED_RAZ,
+    /// `CNTKCTL_EL1` (`op0=3,op1=0,CRn=14,CRm=1,op2=0`) — controle do timer genérico visto de EL1
+    /// (acesso de EL0 aos contadores, event stream). Armazenamento puro leitura/escrita no
+    /// `Aarch64Core` — achado real da F11: `arch_counter_register`/`arch_timer_starting_cpu` do
+    /// Linux lê-modifica-escreve no boot.
+    CNTKCTL_EL1,
+    /// `CLIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=1`) — Cache Level ID, somente leitura. Constante do
+    /// Cortex-A53 (`0x0a200023`: L1 separado I+D, L2 unificado, LoC=2, LoUU=1, LoUIS=1, valor de
+    /// referência do QEMU) — achado real da F11: o `cacheinfo` do Linux/arm64 lê no boot.
+    CLIDR_EL1,
+    /// `CCSIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=0`) — geometria do cache escolhido por
+    /// {@link #CSSELR_EL1}, somente leitura (L1D 32KiB/4 vias, L1I 32KiB/4 vias, L2 512KiB/16 vias,
+    /// linhas de 64 bytes — A53, formato legado sem `CCIDX`). Seleção sem cache: 0.
+    CCSIDR_EL1,
+    /// `CSSELR_EL1` (`op0=3,op1=2,CRn=0,CRm=0,op2=0`) — seleciona qual cache {@link #CCSIDR_EL1}
+    /// descreve (`InD` bit 0, `Level` bits [3:1]). Armazenamento puro leitura/escrita.
+    CSSELR_EL1,
+    /// `AIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=7`) — Auxiliary ID, `IMPLEMENTATION DEFINED`;
+    /// o Cortex-A53 devolve 0. Somente leitura.
+    AIDR_EL1,
     /// `RGSR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=5`, B19.14, `FEAT_MTE2`) — Random Allocation Tag
     /// Seed Register: `TAG[3:0]`/`SEED[23:8]` que alimentam o algoritmo determinístico de `IRG` (ver
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#insertRandomTag}). Armazenamento

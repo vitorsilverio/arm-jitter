@@ -64,14 +64,24 @@ public final class StandardIr64BlockLifter implements Ir64BlockLifter {
     /// trocar o PC; `Svc` pode ter efeito colateral arbitrário via {@code Aarch64SvcHandler} —
     /// mesmo precedente de `IrOp.Swi`/`IrOp.Coprocessor` no lifter 32-bit terminarem o bloco.
     /// `StreamingModeControl` (`SMSTART`/`SMSTOP`, B18.2) não troca o PC, mas muda o `VL` efetivo das
-    /// instruções seguintes, então também fecha o bloco. Nenhum outro {@link Ir64Op.Kind} troca o PC
-    /// (A64 não tem "MOV PC,..." genérico — só as
-    /// formas de desvio dedicadas).
+    /// instruções seguintes, então também fecha o bloco.
+    ///
+    /// **Achado real da F11 (2026-10-02)**: `ExceptionReturn` (`ERET`), `PrivilegedCall` (`HVC`/
+    /// `SMC`), `Breakpoint` (`BRK`), `UndefinedInstructionTrap` (`UDF`/encoding indefinido) e o
+    /// `WFI` também redirecionam o fluxo (ou param o core), e não estavam aqui: o bloco lifted de
+    /// `kernel_exit` do Linux seguia lendo as instruções DEPOIS do `eret` (`dsb; isb; ldr x19,[x28];
+    /// tbz …`), e o JIT executava esse resto linearmente com o PC já trocado pelo `ERET`, clobberando
+    /// `x0`/`x19` — o interpretado, que decodifica uma instrução por vez, nunca via isso. Fechar
+    /// aqui também evita decodificar lixo depois de um `UDF`/`BRK` no lookahead do lifter.
     private boolean isTerminal(Ir64Op op) {
         return switch (op.kind()) {
             case Ir64Op.Kind.BRANCH64, Ir64Op.Kind.COMPARE_BRANCH64, Ir64Op.Kind.SVC,
                     Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER, Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE,
-                    Ir64Op.Kind.STREAMING_MODE_CONTROL -> true;
+                    Ir64Op.Kind.STREAMING_MODE_CONTROL, Ir64Op.Kind.EXCEPTION_RETURN,
+                    Ir64Op.Kind.PRIVILEGED_CALL, Ir64Op.Kind.BREAKPOINT,
+                    Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> true;
+            case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
+                    ((Ir64Op.SystemInstruction) op).opcode() == Ir64SystemInstructionOp.WFI;
             default -> false;
         };
     }

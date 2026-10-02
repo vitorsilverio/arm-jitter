@@ -235,6 +235,15 @@ class Aarch64MatrixStateTest {
             Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(sme, word);
             assertEquals(row[1], op.read(), Integer.toHexString(word));
             assertEquals(row[2], op.register(), Integer.toHexString(word));
+            if (row[2] == Aarch64SystemRegisterId.ID_AA64SMFR0_EL1) {
+                // espaço de ID: sem SME é RAZ, não UNDEFINED
+                for (Aarch64Decoder withoutSme : new Aarch64Decoder[] {noSme, plain}) {
+                    Ir64Op.SystemRegister raz = (Ir64Op.SystemRegister) decodeWord(withoutSme, word);
+                    assertEquals(Aarch64SystemRegisterId.ID_RESERVED_RAZ, raz.register());
+                    assertEquals(true, raz.read());
+                }
+                continue;
+            }
             assertThrows(UnsupportedOperationException.class, () -> decodeWord(noSme, word));
             assertThrows(UnsupportedOperationException.class, () -> decodeWord(plain, word));
         }
@@ -249,7 +258,6 @@ class Aarch64MatrixStateTest {
                 0xd53e1220, // idem em EL3
                 0xd53c1300, // (op1=4,CRn=1,CRm=3,op2=0) — CRn de SMCR, CRm diferente (EL2)
                 0xd53e1300, // idem em EL3
-                0xd53804c0, // (0,0,4,6) — vizinho de ID_AA64SMFR0_EL1
                 0xd53b4260, // (op1=3,CRn=4,CRm=2,op2=3) — vizinho de SVCR
         };
         for (int word : neighbours) {
