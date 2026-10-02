@@ -39,11 +39,11 @@ sem checar o status real ali.**
    Resultado` da task fechada — aqui entra só o ponteiro mínimo: task(s) fechada(s) nesta rodada (1
    linha) + "Pegáveis a seguir". Se ao editar você notar mais de uma seção dessas, consolide numa só.
 
-## Onde estamos (atualizado 2026-10-01, B13.25)
+## Onde estamos (atualizado 2026-10-01, ADDSVL/ADDSPL/RDSVL + INVALID)
 
-**`B13.25` fechada** (preset `ARMV8_6A_32_NEON`, coluna `v8.6-A/32+NEON` 100%; nenhum grupo mais "não se aplica a nenhum preset atual"). Resta no global (99%, 78 células `❌`) só A64: SME `ADDSVL`/`ADDSPL`/`RDSVL` e linhas `INVALID`. Detalhes no **Resultado** da B13.25.
+**`docs/COBERTURA-ISA.md` = 100% (29619/29619)**: `ADDSVL`/`ADDSPL`/`RDSVL` implementadas (ver **Resultado** da B17.12) e as 60 células `INVALID` passaram a medir "encoding reservado recusado" (`IsaCoverageReport`). Detalhes no **Resultado** da B17.12.
 
-**⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada.
+**⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada — decisão do usuário pendente se a tabela a 100% basta.
 
 **Pegáveis a seguir:** `B21.2` em diante, `E14`, `E15` ([REFINAR]), `C12.5`/`C12.10`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
 

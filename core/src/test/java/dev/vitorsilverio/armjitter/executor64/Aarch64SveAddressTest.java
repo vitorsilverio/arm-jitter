@@ -28,7 +28,9 @@ class Aarch64SveAddressTest {
     private static final long VBAR = 0x400L;
     private static final long HANDLER = VBAR + 0x400L;
     private static final long ESR_EC_SVE = 0x19L;
+    private static final long ESR_EC_SME = 0x1DL;
     private static final Aarch64Architecture SVE = Aarch64Architecture.ARMV9_0_A;
+    private static final Aarch64Architecture SME = Aarch64Architecture.ARMV9_2_A;
     private static final long INITIAL_SP = 0x10_0000L;
 
     private record Row(int word, String asm, Ir64Op.SveAddress.Op op, int rd, int rn, int rm, int imm, int msz) {
@@ -75,9 +77,13 @@ class Aarch64SveAddressTest {
     }
 
     private static void run(Aarch64Core core, int word) {
+        run(core, word, SVE);
+    }
+
+    private static void run(Aarch64Core core, int word, Aarch64Architecture architecture) {
         core.memory().write32(0, word);
         core.setProgramCounter(0);
-        new Ir64BlockExecutor(SVE).step(core);
+        new Ir64BlockExecutor(architecture).step(core);
     }
 
     private static Ir64Op decode(Aarch64Architecture architecture, int word) {
@@ -106,9 +112,52 @@ class Aarch64SveAddressTest {
 
     @ParameterizedTest
     @ValueSource(ints = {0x04215840, 0x04615840, 0x04bf5820})
-    void theStreamingFormsAreRefusedUntilSme(int word) {
-        // ADDSVL / ADDSPL / RDSVL usam SVL, não VL: decodificá-las como ADDVL daria o valor errado (G8).
+    void theStreamingFormsAreRefusedWithoutSme(int word) {
+        // ADDSVL / ADDSPL / RDSVL são FEAT_SME: sem ela (mesmo com SVE) continuam recusadas (G8).
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE, word));
+    }
+
+    @ParameterizedTest
+    @MethodSource("streamingRows")
+    void theStreamingFormsDecodeUnderSme(Row row) {
+        assertEquals(row.expected(), decode(SME, row.word()), row.asm());
+    }
+
+    private static Stream<Row> streamingRows() {
+        return Stream.of(
+                row(0x04215840, "addsvl x0, x1, #2", "ADDSVL", 0, 1, 0, 2, 0),
+                row(0x043f5f9f, "addsvl sp, sp, #-4", "ADDSVL", 31, 31, 0, -4, 0),
+                row(0x04615fa0, "addspl x0, x1, #-3", "ADDSPL", 0, 1, 0, -3, 0),
+                row(0x047f5be2, "addspl x2, sp, #31", "ADDSPL", 2, 31, 0, 31, 0),
+                row(0x04bf5820, "rdsvl x0, #1", "RDSVL", 0, 0, 0, 1, 0),
+                row(0x04bf5c03, "rdsvl x3, #-32", "RDSVL", 3, 0, 0, -32, 0),
+                row(0x04bf581f, "rdsvl xzr, #0", "RDSVL", 31, 0, 0, 0, 0));
+    }
+
+    /// `SVL` ≠ `VL` de propósito (`VL = 512`, `SVL` varia): se o executor usasse o `VL` o resultado erraria.
+    @Test
+    void streamingFormsScaleBySvlNotVlAndWorkOutsideStreamingMode() {
+        for (int svl : VECTOR_LENGTHS) {
+            Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x1000)), SME, 512, svl);
+            core.exceptionState().setVbar(Aarch64ExceptionLevel.EL1, VBAR);
+            core.setSp(INITIAL_SP);
+            core.setX(1, 1000L);
+            long svlBytes = svl / 8;
+            run(core, 0x04bf5820, SME); // rdsvl x0, #1
+            assertEquals(svlBytes, core.x(0), "RDSVL SVL=" + svl);
+            run(core, 0x04bf5c03, SME); // rdsvl x3, #-32
+            assertEquals(-32 * svlBytes, core.x(3), "RDSVL SVL=" + svl);
+            run(core, 0x04215840, SME); // addsvl x0, x1, #2
+            assertEquals(1000L + 2 * svlBytes, core.x(0), "ADDSVL SVL=" + svl);
+            run(core, 0x04615fa0, SME); // addspl x0, x1, #-3
+            assertEquals(1000L - 3 * (svlBytes / 8), core.x(0), "ADDSPL SVL=" + svl);
+            run(core, 0x043f5f9f, SME); // addsvl sp, sp, #-4
+            assertEquals(INITIAL_SP - 4 * svlBytes, core.sp(), "ADDSVL sp SVL=" + svl);
+            run(core, 0x047f5be2, SME); // addspl x2, sp, #31 — Xn = 31 é SP
+            assertEquals(INITIAL_SP - 4 * svlBytes + 31 * (svlBytes / 8), core.x(2), "ADDSPL SVL=" + svl);
+            run(core, 0x04bf581f, SME); // rdsvl xzr, #0 — destino 31 é XZR
+            assertEquals(INITIAL_SP - 4 * svlBytes, core.sp(), "RDSVL xzr não escreve SP");
+        }
     }
 
     @ParameterizedTest
@@ -307,6 +356,19 @@ class Aarch64SveAddressTest {
         run(core, word);
         assertEquals(HANDLER, core.pc());
         assertEquals(ESR_EC_SVE, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) >>> 26);
+        assertEquals(0x1234L, core.x(0), "a instrução não executou");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0x04215840, 0x04615fa0, 0x04bf5820})
+    void streamingFormsTrapWithTheSmeAccessExceptionNotTheSveOne(int word) {
+        Aarch64Core core = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(0x1000)), SME, 256, 256);
+        core.exceptionState().setVbar(Aarch64ExceptionLevel.EL1, VBAR);
+        core.setSystemRegisterBus(new Cpacr());
+        core.setX(0, 0x1234L);
+        run(core, word, SME);
+        assertEquals(HANDLER, core.pc());
+        assertEquals(ESR_EC_SME, core.exceptionState().esr(Aarch64ExceptionLevel.EL1) >>> 26);
         assertEquals(0x1234L, core.x(0), "a instrução não executou");
     }
 }

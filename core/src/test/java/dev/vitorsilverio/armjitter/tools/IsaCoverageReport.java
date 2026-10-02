@@ -816,7 +816,7 @@ public final class IsaCoverageReport {
 
                 | | significado |
                 |---|---|
-                | ✅ | o decoder reconhece o encoding |
+                | ✅ | o decoder reconhece o encoding (linha `INVALID` de `sve`/`sme`: encoding RESERVADO que o decoder recusa, como deve — G8) |
                 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
                 | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — para `sve.decode` (B17.26) e `sme.decode` (B18.13) — medida por sonda dupla, ver `probeScalableApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
                 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
@@ -1230,6 +1230,9 @@ public final class IsaCoverageReport {
     static Status probeAarch64(DecodeTreeSpec.Instruction instruction, int occurrence,
                                         Aarch64Architecture architecture) {
         Aarch64Decoder decoder = architecture == null ? new Aarch64Decoder() : new Aarch64Decoder(architecture);
+        if (instruction.name().equals(RESERVED_ENCODING_NAME)) {
+            return probeReservedAarch64(instruction, decoder);
+        }
         for (int[] strategy : FILL_STRATEGIES) {
             int word = encode(instruction, strategy);
             try {
@@ -1245,6 +1248,30 @@ public final class IsaCoverageReport {
             }
         }
         return Status.MISSING;
+    }
+
+    /// Nome que o QEMU dá, nos `.decode`, aos encodings **reservados** (`INVALID`): não são instruções, são
+    /// espaço que a ARM marca como não alocado, e o decoder correto tem que RECUSAR (G8).
+    private static final String RESERVED_ENCODING_NAME = "INVALID";
+
+    /// Mede uma linha `INVALID` ao contrário das demais: `✅` = o decoder recusa o encoding reservado em TODAS as
+    /// estratégias de preenchimento (era o que o `❌` antigo já fazia, só que lido como "falta implementar");
+    /// `⚠️` = decodificou algo — dívida de G8, a mesma classe das {@link #AARCH64_MISDECODED}. Nenhuma linha
+    /// sai do denominador: se o decoder passar a aceitar um reservado, a célula denuncia.
+    private static Status probeReservedAarch64(DecodeTreeSpec.Instruction instruction, Aarch64Decoder decoder) {
+        for (int[] strategy : FILL_STRATEGIES) {
+            int word = encode(instruction, strategy);
+            try {
+                TestAddressSpace raw = new TestAddressSpace(8);
+                raw.put32(0, word);
+                if (decoder.decode(AddressSpace64.wrapping(raw), 0) != null) {
+                    return Status.FALLBACK;
+                }
+            } catch (RuntimeException e) {
+                // recusa: é o comportamento esperado para um encoding reservado.
+            }
+        }
+        return Status.SUPPORTED;
     }
 
     /// Aplicabilidade curada por versão A64 (B11.5, ver {@link #AARCH64_VERSION_REQUIREMENTS}):

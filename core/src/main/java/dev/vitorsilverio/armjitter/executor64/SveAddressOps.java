@@ -24,10 +24,20 @@ final class SveAddressOps {
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
     static boolean execute(Aarch64Core core, Ir64Op.SveAddress op) {
-        if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
+        boolean streamingVariant = op.op() == Ir64Op.SveAddress.Op.ADDSVL
+                || op.op() == Ir64Op.SveAddress.Op.ADDSPL || op.op() == Ir64Op.SveAddress.Op.RDSVL;
+        // As formas SME exigem só o acesso à SME (CheckSMEAccess) — valem fora do modo streaming.
+        if (streamingVariant
+                ? !core.smeEnabledCheck(op.instructionAddress())
+                : !SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
         switch (op.op()) {
+            case ADDSVL -> writeStackCapable(core, op.rd(),
+                    readStackCapable(core, op.rn()) + (long) op.imm() * core.streamingVectorLengthBytes());
+            case ADDSPL -> writeStackCapable(core, op.rd(),
+                    readStackCapable(core, op.rn()) + (long) op.imm() * (core.streamingVectorLengthBytes() / Byte.SIZE));
+            case RDSVL -> core.setX(op.rd(), (long) op.imm() * core.streamingVectorLengthBytes());
             case ADDVL -> writeStackCapable(core, op.rd(),
                     readStackCapable(core, op.rn()) + (long) op.imm() * core.vectorLengthBytes());
             case ADDPL -> writeStackCapable(core, op.rd(),

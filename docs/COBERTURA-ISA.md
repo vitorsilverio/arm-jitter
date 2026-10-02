@@ -7,7 +7,7 @@ Javadoc dessa classe para o comando e para a questão de licença do inventário
 
 | | significado |
 |---|---|
-| ✅ | o decoder reconhece o encoding |
+| ✅ | o decoder reconhece o encoding (linha `INVALID` de `sve`/`sme`: encoding RESERVADO que o decoder recusa, como deve — G8) |
 | ❌ | o decoder devolve `UNIMPLEMENTED` — falta implementar |
 | · | **não se aplica**: o grupo não faz parte daquela arquitetura, ou a instrução é de uma versão POSTERIOR (lista curada em `docs/isa-nao-aplicavel.tsv`, com a versão que a introduziu, ou — para `sve.decode` (B17.26) e `sme.decode` (B18.13) — medida por sonda dupla, ver `probeScalableApplicability`). Não conta como falta. Ver ali a regra de curadoria: na dúvida a instrução fica ❌ e vira trabalho |
 | ⚠️ | decodifica como OUTRA coisa: o encoding de SIMD caiu no caminho genérico de coprocessador (`MCR`/`CDP`), que ocupa o mesmo espaço `cp10`/`cp11`. Não é suporte — é o decoder não sabendo recusar |
@@ -49,7 +49,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **99%** — 29556 de 29634 células aplicáveis decodificam.
+> **100%** — 29619 de 29619 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -79,12 +79,12 @@ Por arquitetura:
 | ARMv8.7-A | **100%** (1094/1094) |
 | ARMv8.8-A | **100%** (1107/1107) |
 | ARMv8.9-A | **100%** (1113/1113) |
-| ARMv9.0-A | **99%** (1474/1487) |
-| ARMv9.1-A | **99%** (1501/1514) |
-| ARMv9.2-A | **99%** (2133/2146) |
-| ARMv9.3-A | **99%** (2139/2152) |
-| ARMv9.4-A | **99%** (2155/2168) |
-| ARMv9.5-A | **99%** (2193/2206) |
+| ARMv9.0-A | **100%** (1484/1484) |
+| ARMv9.1-A | **100%** (1511/1511) |
+| ARMv9.2-A | **100%** (2146/2146) |
+| ARMv9.3-A | **100%** (2149/2149) |
+| ARMv9.4-A | **100%** (2165/2165) |
+| ARMv9.5-A | **100%** (2203/2203) |
 
 ## Resumo
 
@@ -101,7 +101,7 @@ Por arquitetura:
 | ARMv7-M — coprocessador ausente | 11 | v6-M 100% (11/11) · v7-M 100% (11/11) · ARMv8.1-M+MVE 100% (11/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | ARMv8.1-M+MVE 100% (352/352) |
 | A64 — AArch64 | 1161 | ARMv8.0-A 100% (851/851) · ARMv8.1-A 100% (883/883) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 100% (1095/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
-| SVE/SVE2 — vetor escalável | 929 | ARMv9.0-A 96% (395/408) · ARMv9.1-A 96% (409/422) · ARMv9.2-A 96% (415/428) · ARMv9.3-A 96% (409/422) · ARMv9.4-A 96% (411/424) · ARMv9.5-A 97% (424/437) |
+| SVE/SVE2 — vetor escalável | 929 | ARMv9.0-A 100% (405/405) · ARMv9.1-A 100% (419/419) · ARMv9.2-A 100% (428/428) · ARMv9.3-A 100% (419/419) · ARMv9.4-A 100% (421/421) · ARMv9.5-A 100% (434/434) |
 | SME — extensão matricial | 623 | ARMv9.2-A 100% (623/623) · ARMv9.3-A 100% (623/623) · ARMv9.4-A 100% (623/623) · ARMv9.5-A 100% (623/623) |
 
 
@@ -2953,11 +2953,11 @@ Inventário: `sve.decode` · 929 instruções.
 | `INDEX_ri` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `INDEX_rr` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ADDVL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `ADDSVL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ADDSVL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
 | `ADDPL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `ADDSPL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ADDSPL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
 | `RDVL` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `RDSVL` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `RDSVL` | · | · | · | · | · | · | · | · | · | · | · | · | ✅ | · | · | · |
 | `ASR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `LSR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `LSL_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -2982,9 +2982,9 @@ Inventário: `sve.decode` · 929 instruções.
 | `AND_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `DUPM` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `FCPY` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `CPY_m_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `CPY_z_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `EXT` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `EXT_sve2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -3137,21 +3137,21 @@ Inventário: `sve.decode` · 929 instruções.
 | `PEXT_1` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `PEXT_2` | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `FDUP` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `DUP_i` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SUBR_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SQADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `UQADD_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SQSUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `INVALID` | · | · | · | · | · | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `INVALID` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `UQSUB_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SMAX_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `UMAX_zzi` | · | · | · | · | · | · | · | · | · | · | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

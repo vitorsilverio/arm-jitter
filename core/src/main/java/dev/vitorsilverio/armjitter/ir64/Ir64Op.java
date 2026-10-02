@@ -4364,7 +4364,7 @@ public sealed interface Ir64Op permits
 
     /// Endereçamento SVE (B17.12): `ADDVL`/`ADDPL`/`RDVL` (aritmética de ponteiro em múltiplos de `VL/8` e `VL/64`
     /// bytes) e `ADR` vetorial (`Zd[i] = Zn[i] + (ext(Zm[i]) << msz)`). Não acessa memória.
-    /// `ADDSVL`/`ADDSPL`/`RDSVL` (SME, usam `SVL`) NÃO entram aqui — pendência nomeada da B18.
+    /// `ADDSVL`/`ADDSPL`/`RDSVL` (SME) são as mesmas contas com o `SVL` no lugar do `VL`.
     record SveAddress(
             Op op,
             /// Destino: `Xd` (`SP` em `ADDVL`/`ADDPL` quando `31`; `XZR` em `RDVL`) ou `Zd`.
@@ -4381,7 +4381,7 @@ public sealed interface Ir64Op permits
             long instructionAddress) implements Ir64Op {
         /// Operação do grupo. As quatro `ADR` são OPCODES (bits 23:22), não o `esz` genérico: `S32`/`U32` têm
         /// elemento de 64 bits e offset de 32 (com/sem sinal); `P32`/`P64` têm offset do tamanho do elemento.
-        public enum Op { ADDVL, ADDPL, RDVL, ADR_S32, ADR_U32, ADR_P32, ADR_P64 }
+        public enum Op { ADDVL, ADDPL, RDVL, ADDSVL, ADDSPL, RDSVL, ADR_S32, ADR_U32, ADR_P32, ADR_P64 }
         @Override public int kind() { return Kind.SVE_ADDRESS; }
     }
 

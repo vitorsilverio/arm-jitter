@@ -263,6 +263,10 @@ final class Aarch64SveDecoder {
     private static final int ADDPL_VALUE = 0x04605000;
     private static final int RDVL_MASK = 0xFFFFF800;
     private static final int RDVL_VALUE = 0x04BF5000;
+    /// Formas SME (`SVL`): os mesmos bits das SVE com `bit 11 = 1`.
+    private static final int ADDSVL_VALUE = 0x04205800;
+    private static final int ADDSPL_VALUE = 0x04605800;
+    private static final int RDSVL_VALUE = 0x04BF5800;
     private static final int ADR_MASK = 0xFF20F000;
     private static final int ADR_VALUE = 0x0420A000;
     private static final int ADR_OPCODE_S32 = 0b00;
@@ -328,7 +332,7 @@ final class Aarch64SveDecoder {
     /// recusa como qualquer encoding desconhecido (G8).
     Ir64Op decode(int word, long address) {
         if (!architecture.has(Aarch64Feature.SVE)) {
-            return null;
+            return decodeStreamingAddressing(word, address);
         }
         return switch ((word >>> PREFIX_SHIFT) & PREFIX_MASK) {
             case PREFIX_PREDICATE -> {
@@ -627,9 +631,9 @@ final class Aarch64SveDecoder {
         return null;
     }
 
-    /// Endereçamento da B17.12: `ADDVL`/`ADDPL`/`RDVL` e as 4 formas de `ADR`. `ADDSVL`/`ADDSPL`/`RDSVL`
-    /// (SME, `SVL`) têm os MESMOS bits com `bit 11 = 1` e NÃO são reconhecidas aqui: caem em `null` e são
-    /// recusadas (G8) até a B18 — decodificá-las como as formas SVE daria o comprimento errado em modo streaming.
+    /// Endereçamento da B17.12: `ADDVL`/`ADDPL`/`RDVL` e as 4 formas de `ADR`, mais `ADDSVL`/`ADDSPL`/`RDSVL`
+    /// (SME, usam o `SVL`), que têm os MESMOS bits com `bit 11 = 1` e vão para `Op` PRÓPRIOS — reusar os da SVE
+    /// daria o comprimento errado em modo streaming.
     private Ir64Op decodeAddressing(int word, long address) {
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
         int rn = field(word, PN_SHIFT, REGISTER_FIELD_MASK);
@@ -645,6 +649,10 @@ final class Aarch64SveDecoder {
         if ((word & RDVL_MASK) == RDVL_VALUE) {
             return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.RDVL, rd, 0, 0, imm, 0, address);
         }
+        Ir64Op streaming = decodeStreamingAddressing(word, address);
+        if (streaming != null) {
+            return streaming;
+        }
         if ((word & ADR_MASK) == ADR_VALUE) {
             Ir64Op.SveAddress.Op op = switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
                 case ADR_OPCODE_S32 -> Ir64Op.SveAddress.Op.ADR_S32;
@@ -654,6 +662,28 @@ final class Aarch64SveDecoder {
             };
             return new Ir64Op.SveAddress(op, rd, rn, field(word, RM_SHIFT, REGISTER_FIELD_MASK), 0,
                     field(word, ADR_MSZ_SHIFT, ADR_MSZ_MASK), address);
+        }
+        return null;
+    }
+
+    /// `ADDSVL`/`ADDSPL`/`RDSVL`: pertencem à `FEAT_SME` (não exigem `FEAT_SVE`), então {@link #decode} as tenta
+    /// mesmo quando a arquitetura não declara SVE.
+    private Ir64Op decodeStreamingAddressing(int word, long address) {
+        if (!architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)) {
+            return null;
+        }
+        int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
+        int stackBase = field(word, RM_SHIFT, REGISTER_FIELD_MASK);
+        int imm = (field(word, ADDRESSING_IMM_SHIFT, ADDRESSING_IMM_MASK) << (Integer.SIZE - ADDRESSING_IMM_BITS))
+                >> (Integer.SIZE - ADDRESSING_IMM_BITS);
+        if ((word & ADDVL_MASK) == ADDSVL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDSVL, rd, stackBase, 0, imm, 0, address);
+        }
+        if ((word & ADDVL_MASK) == ADDSPL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDSPL, rd, stackBase, 0, imm, 0, address);
+        }
+        if ((word & RDVL_MASK) == RDSVL_VALUE) {
+            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.RDSVL, rd, 0, 0, imm, 0, address);
         }
         return null;
     }
