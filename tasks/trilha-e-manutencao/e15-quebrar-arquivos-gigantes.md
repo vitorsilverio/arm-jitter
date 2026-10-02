@@ -115,7 +115,7 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 
 | Task | Escopo | G5 | Status |
 |---|---|---|---|
-| [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md) | Testes de contrato por `record` do IR (absorve a E14) + catraca JaCoCo + guarda de tamanho. Zero mudança em `src/main` | não | ⬜ |
+| [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md) | Testes de contrato por `record` do IR (absorve a E14) + catraca JaCoCo + guarda de tamanho. Zero mudança em `src/main` | não | ✅ 2026-10-02 |
 | [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` em sub-interfaces seladas por família (D4) | não | ⬜ |
 | [E15.3](e15.3-irop-por-familia.md) | `IrOp` idem (D4) | sim | ⬜ |
 | E15.4 | A64: `Ir64Op#execute` (D1), remove o dispatch duplo; `Ir64BlockExecutor` dividido por família | não | ⬜ [REFINAR] após E15.2 |

@@ -45,7 +45,9 @@ sem checar o status real ali.**
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada — decisão do usuário pendente se a tabela a 100% basta.
 
-**Pegáveis a seguir:** `B21.2` em diante, `E15.1` (absorve a `E14`; épico `E15` replanejado em 2026-10-02, depois `E15.2` → `E15.3`), `C12.5`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
+**Fechada em 2026-10-02:** `E15.1` (absorveu a `E14`) — `mvn verify` agora tem piso de cobertura (`jacoco:check`) e guarda de tamanho de fonte; ver **Resultado** da task.
+
+**Pegáveis a seguir:** `B21.2` em diante, `E15.2` → `E15.3` (épico `E15`), `E16` (`ERET` em `EL0` derruba o host), `C12.5`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em

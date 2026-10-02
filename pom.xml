@@ -136,6 +136,14 @@
                             <goals>
                                 <goal>prepare-agent</goal>
                             </goals>
+                            <!-- E15.1: sem `append`, cada execução mede só a si mesma. O default
+                                 (`true`) acumulava em `target/jacoco.exec` as sessões de rodadas
+                                 anteriores: um teste removido continuava "cobrindo" as classes que
+                                 não mudaram, e o piso do `jacoco:check` (ver `core/pom.xml`) passaria
+                                 local e falharia num checkout limpo. -->
+                            <configuration>
+                                <append>false</append>
+                            </configuration>
                         </execution>
                         <execution>
                             <id>jacoco-report</id>

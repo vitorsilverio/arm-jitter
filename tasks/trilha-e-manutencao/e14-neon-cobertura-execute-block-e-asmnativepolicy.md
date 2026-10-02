@@ -1,7 +1,10 @@
 # E14 — Cobertura de teste de NEON em `IrBlockExecutor#execute`/`AsmNativePolicy` — família inteira, não só cripto
 
 **Trilha:** E · **Repo:** arm-jitter (+ revalidação G5) · **Depende de:** —
-**Status:** ⬜ (registrada 2026-09-24, achado da auditoria JaCoCo pós-B13.23)
+**Status:** ✅ 2026-10-02 — absorvida pela [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md)
+(`IrOpContractTest` passa TODO record, não só NEON, pelos dois dispatchers e pela política;
+`IrBlockExecutor` e `AsmNativePolicy` ficaram sem `case` descoberto). Registrada em 2026-09-24,
+achado da auditoria JaCoCo pós-B13.23.
 
 ## Contexto
 
