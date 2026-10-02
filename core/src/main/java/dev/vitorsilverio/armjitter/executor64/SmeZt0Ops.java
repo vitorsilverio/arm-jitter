@@ -15,7 +15,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 /// - **`ZT0` é lido como 16 entradas de 32 bits** (`tsize = 32` no QEMU): a entrada `i` mora na palavra `i / 2`,
 ///   metade `i % 2`; `b`/`h` usam os `8`/`16` bits BAIXOS da entrada, `s` a entrada inteira.
 /// - **`SVL`, nunca `VL`**, em todo comprimento de vetor.
-final class SmeZt0Ops {
+public final class SmeZt0Ops {
     private static final int WORD_BYTES = Long.BYTES;
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
@@ -39,7 +39,7 @@ final class SmeZt0Ops {
     /// `r × (SVL_B / ngrp)` linhas dela (`get_zarray`).
     ///
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.ZeroArray op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.ZeroArray op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -61,7 +61,8 @@ final class SmeZt0Ops {
 
     // ── `MOVT` ───────────────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, SmeOp64.Movt op) {
+    /// Executa {@link SmeOp64.Movt}.
+    public static boolean execute(Aarch64Core core, SmeOp64.Movt op) {
         if (op.form() == SmeOp64.Movt.Form.VECTOR_TO_ZT) {
             return executeVectorToZt0(core, op);
         }
@@ -107,7 +108,8 @@ final class SmeZt0Ops {
 
     // ── `LUTI2` / `LUTI4` ────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, SmeOp64.Lut op) {
+    /// Executa {@link SmeOp64.Lut}.
+    public static boolean execute(Aarch64Core core, SmeOp64.Lut op) {
         if (!core.smeStreamingEnabledCheck(op.instructionAddress())
                 || !core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;

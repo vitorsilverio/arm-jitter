@@ -19,7 +19,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 ///   row`), a escolha `Zn`/`Zn+1` depende só da metade de COLUNA (`n`) e `Zm`/`Zm+1` só da de LINHA (`m`).
 /// - **`TMOP`:** a linha vem de `Zn`/`Zn+1` selecionada por bits de `Zk` do segmento `idx`; origem não selecionada
 ///   vale `0`.
-final class SmeMop4Ops {
+public final class SmeMop4Ops {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int ESZ_BYTE = 0;
@@ -42,7 +42,7 @@ final class SmeMop4Ops {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.Mop4 op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.Mop4 op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -77,7 +77,7 @@ final class SmeMop4Ops {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.Tmop op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.Tmop op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }

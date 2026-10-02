@@ -8,7 +8,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// Medido contra `do_float{16,32,64}_logb_as_int` do QEMU real: zero/`NaN` levantam `Invalid` e devolvem o
 /// `int` mínimo representável; Infinito devolve o máximo; subnormal com `FZ` desligado devolve
 /// `-viés - clz(fração)`; normal devolve `expoente_não_enviesado - viés`.
-final class SveFpLogBOps {
+public final class SveFpLogBOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
 
@@ -16,7 +16,7 @@ final class SveFpLogBOps {
     }
 
     /// Executa. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpLogB op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpLogB op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

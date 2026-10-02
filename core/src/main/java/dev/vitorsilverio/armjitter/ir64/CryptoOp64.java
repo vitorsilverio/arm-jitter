@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64CryptoExecutor;
+
 /// Operações da Cryptographic Extension do A64 (AES, SHA-1/SHA-2, SHA-3, SHA-512, SM3, SM4).
 ///
 /// Sub-interface selada de {@link AdvSimdOp64} (task E15.2): os records desta família vivem aqui, e
@@ -25,6 +28,7 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// `AESMC`/`AESIMC`).
             int rn) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_AES; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64CryptoExecutor.executeAes(core, this); }
     }
 
     /// "Cryptographic three-register SHA" (B8.11b, mesma ARMv8-A Cryptographic Extension de
@@ -43,6 +47,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Terceiro operando (fonte, nunca modificado — bloco de mensagem `W`).
             int rm) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA_THREE_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeShaThreeRegister(core, this);
+        }
     }
 
     /// "Cryptographic two-register SHA" (B8.11b, mesma extensão) — `SHA1H`/`SHA1SU1`/`SHA256SU0`.
@@ -56,6 +63,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Registrador `V` fonte.
             int rn) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA_TWO_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeShaTwoRegister(core, this);
+        }
     }
 
     /// "Cryptographic four-register" (`FEAT_SHA3`, ARMv8.2-A, B11.12) — `EOR3`/`BCAX`. Sempre opera
@@ -76,6 +86,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
             int ra) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA3_FOUR_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSha3FourRegister(core, this);
+        }
     }
 
     /// "Cryptographic three-register, imm2" (`FEAT_SHA3`, ARMv8.2-A, B11.12) — `RAX1`/`XAR`. Opera
@@ -95,6 +108,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Quantidade de rotação à direita usada só por `XAR`, `0`-`63` (ver javadoc da classe).
             int rotateAmount) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA3_TWO_SOURCE_ROTATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSha3TwoSourceRotate(core, this);
+        }
     }
 
     /// "Cryptographic three-register SHA512" (`FEAT_SHA512`, ARMv8.2-A, B19.10) — `SHA512H`/
@@ -112,6 +128,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Terceiro operando (fonte, nunca modificado).
             int rm) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA512_THREE_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSha512ThreeRegister(core, this);
+        }
     }
 
     /// `SHA512SU0` (`FEAT_SHA512`, ARMv8.2-A, B19.10) — atualização de agenda de mensagem SHA-512,
@@ -123,6 +142,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Registrador `V` fonte.
             int rn) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA512_TWO_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSha512TwoRegister(core, this);
+        }
     }
 
     /// "Cryptographic three-register SM3" (`FEAT_SM3`, ARMv8.2-A, B19.10) — `SM3PARTW1`/
@@ -138,6 +160,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Terceiro operando (fonte, nunca modificado).
             int rm) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM3_THREE_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSm3ThreeRegister(core, this);
+        }
     }
 
     /// `SM3SS1` (`FEAT_SM3`, ARMv8.2-A, B19.10) — função pura de {@link #rn}/{@link #rm}/
@@ -156,6 +181,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
             int ra) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM3_FOUR_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSm3FourRegister(core, this);
+        }
     }
 
     /// "Cryptographic three-register SM3, imm2" (`FEAT_SM3`, ARMv8.2-A, B19.10) — `SM3TT1A`/
@@ -175,6 +203,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Seleciona qual das 4 palavras de {@link #rm} entra na fórmula (`0`-`3`).
             int imm2) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM3_THREE_REGISTER_IMM2; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSm3ThreeRegisterImm2(core, this);
+        }
     }
 
     /// `SM4E` (`FEAT_SM4`, ARMv8.2-A, B19.10) — rodada de cifra SM4 (GB/T 32907-2016), forma de 2
@@ -187,6 +218,7 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Registrador `V` fonte — as 4 subchaves de rodada.
             int rn) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM4_ENCRYPT; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64CryptoExecutor.executeSm4Encrypt(core, this); }
     }
 
     /// `SM4EKEY` (`FEAT_SM4`, ARMv8.2-A, B19.10) — expansão de chave SM4, forma de 3 registradores:
@@ -201,5 +233,8 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             /// Segundo operando fonte — as 4 constantes de rodada `CK`.
             int rm) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM4_KEY_UPDATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64CryptoExecutor.executeSm4KeyUpdate(core, this);
+        }
     }
 }

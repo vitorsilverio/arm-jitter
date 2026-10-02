@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64IntegerExecutor;
+
 /// Operações A64 de processamento de dados em registrador geral: aritmética, lógica, deslocamento,
 /// seleção/comparação condicional, multiplicação/divisão, manipulação de `NZCV`, PAuth, CRC32 e as
 /// formas de MTE que só tocam registradores (`SUBP`/`IRG`/`GMI`).
@@ -46,6 +49,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// formas `ADD`/`SUB (immediate)` isto vale SEMPRE (`Rn|SP` independente de `S`).
             boolean src1IsStackPointer) implements IntegerOp64 {
         @Override public int kind() { return Kind.ALU64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeAlu(core, this); }
     }
 
     /// `MOVZ`/`MOVN`/`MOVK` (`ARM DDI 0487 C6.2.203/205/206`): grava (ou compõe, no caso de
@@ -66,6 +70,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `true` para operação de 64 bits (`X`), `false` para 32 bits (`W`).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.MOVE_WIDE; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeMoveWide(core, this); }
     }
 
     /// `ADR`/`ADRP` (`ARM DDI 0487 C6.2.10/11`): calcula um endereço relativo ao PC da própria
@@ -87,6 +92,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// {@link #immediate}); `false` para `ADR` (soma direta, sem alinhamento).
             boolean page) implements IntegerOp64 {
         @Override public int kind() { return Kind.PC_RELATIVE; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executePcRelative(core, this); }
     }
 
     /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "shifted register" (`ARM DDI 0487 C6.2.4`/`C6.2.339`
@@ -118,6 +124,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Indica se `NZCV` deve ser atualizado (`ADDS`/`SUBS` vs `ADD`/`SUB`).
             boolean setFlags) implements IntegerOp64 {
         @Override public int kind() { return Kind.ALU_SHIFTED_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeAluShiftedRegister(core, this);
+        }
     }
 
     /// `ADD`/`SUB`/`ADDS`/`SUBS` na forma "extended register" (`ARM DDI 0487 C6.2.4`/`C6.2.339`
@@ -158,6 +167,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// sempre `Rd` normal/`XZR`, nunca `SP` — mesma regra de {@link Alu64#dstIsStackPointer}).
             boolean dstIsStackPointer) implements IntegerOp64 {
         @Override public int kind() { return Kind.ALU_EXTENDED_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeAluExtendedRegister(core, this);
+        }
     }
 
     /// `AND`/`ORR`/`EOR`/`ANDS` e `BIC`/`ORN`/`EON`/`BICS` (`ARM DDI 0487 C6.2.9`/`C6.2.13`/
@@ -205,6 +217,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// sempre quando `true` (nunca há cálculo de carry/overflow em operação lógica).
             boolean setFlags) implements IntegerOp64 {
         @Override public int kind() { return Kind.LOGICAL_SHIFTED_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeLogicalShiftedRegister(core, this);
+        }
     }
 
     /// `LSLV`/`LSRV`/`ASRV`/`RORV` (`ARM DDI 0487 C6.2.221/223/26/300`, "Data-processing (2
@@ -229,6 +244,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// (`W`, quantidade `mod 32`, resultado zero-estendido para os 64 bits altos).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.SHIFT_VARIABLE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeShiftVariable(core, this);
+        }
     }
 
     /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (`ARM DDI 0487 C6.2.34-37`, B6.3.2) — a única família de A64
@@ -259,6 +277,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `f(`{@link #src2}`)`.
             Ir64Condition condition) implements IntegerOp64 {
         @Override public int kind() { return Kind.CONDITIONAL_SELECT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeConditionalSelect(core, this);
+        }
     }
 
     /// `SBFM`/`BFM`/`UBFM` (`ARM DDI 0487 C6.2`, B6.3.2) — extração/inserção de campo de bits.
@@ -287,6 +308,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.BITFIELD; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeBitfield(core, this); }
     }
 
     /// `MADD`/`MSUB` (`ARM DDI 0487 C6.2.197/226`, B6.3.3, subgrupo "Data-processing (3 source)").
@@ -312,6 +334,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.MULTIPLY_ACCUMULATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeMultiplyAccumulate(core, this);
+        }
     }
 
     /// `SDIV`/`UDIV` (`ARM DDI 0487 C6.2.375/404`, B6.3.3, subgrupo "Data-processing (2 source)").
@@ -333,6 +358,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.DIVIDE; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeDivide(core, this); }
     }
 
     /// `CCMP`/`CCMN` (`ARM DDI 0487 C6.2.25/24`, B6.8) — gap achado por uma sessão de F11
@@ -380,6 +406,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// como `NZCV` quando {@link #condition} é falsa.
             int nzcv) implements IntegerOp64 {
         @Override public int kind() { return Kind.CONDITIONAL_COMPARE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeConditionalCompare(core, this);
+        }
     }
 
     /// `ADC`/`ADCS`/`SBC`/`SBCS` (`ARM DDI 0487 C6.2.2/1/242/244`, B8.2, subgrupo "Add/subtract
@@ -409,6 +438,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Indica se `NZCV` deve ser atualizado (`ADCS`/`SBCS` vs `ADC`/`SBC`).
             boolean setFlags) implements IntegerOp64 {
         @Override public int kind() { return Kind.ALU_WITH_CARRY; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeAluWithCarry(core, this);
+        }
     }
 
     /// `EXTR` (`ARM DDI 0487 C6.2.113`, B8.2, subgrupo "Extract" de "Data Processing —
@@ -434,6 +466,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.EXTRACT; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeExtract(core, this); }
     }
 
     /// `RBIT`/`REV16`/`CLZ`/`CLS`/`CNT` (B8.2, subgrupo "Data-processing (1 source)" de "Data
@@ -453,6 +486,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.DATA_PROCESSING_1_SOURCE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeDataProcessing1Source(core, this);
+        }
     }
 
     /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (`ARM DDI 0487 C6.2.` — multiplicação 32×32→64 com
@@ -480,6 +516,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `SMULL`/`SMNEGL`/`UMULL`/`UMNEGL` chegam aqui sem `case` de decode dedicado).
             int accumulator) implements IntegerOp64 {
         @Override public int kind() { return Kind.MULTIPLY_ACCUMULATE_LONG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeMultiplyAccumulateLong(core, this);
+        }
     }
 
     /// `SMULH`/`UMULH` (`ARM DDI 0487 C6.2.373/402`, B8.2, subgrupo "Data-processing (3 source)")
@@ -500,6 +539,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Segundo multiplicando, sempre `X` (`Rm`, índice `0`-`31`; `31` é sempre `XZR`).
             int src2) implements IntegerOp64 {
         @Override public int kind() { return Kind.MULTIPLY_HIGH; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeMultiplyHigh(core, this);
+        }
     }
 
     /// `SETF8`/`SETF16` (`ARM DDI 0487 C6.2.` — "Evaluate into flags", B8.2, `FEAT_FlagM`) —
@@ -513,6 +555,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `Aarch64Decoder#EVALUATE_FLAGS_SIZE_8`/`_16`.
             int sizeBits) implements IntegerOp64 {
         @Override public int kind() { return Kind.EVALUATE_INTO_FLAGS; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeEvaluateIntoFlags(core, this);
+        }
     }
 
     /// `RMIF` (`ARM DDI 0487 C6.2.` — "Rotate right into flags", B8.2, `FEAT_FlagM`) — rotaciona
@@ -532,6 +577,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// quais flags são atualizados.
             int mask) implements IntegerOp64 {
         @Override public int kind() { return Kind.ROTATE_INTO_FLAGS; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeRotateIntoFlags(core, this);
+        }
     }
 
     /// `CFINV`/`XAFLAG`/`AXFLAG` (B8.2, `FEAT_FlagM2`, classe "System") — as 3 instruções que
@@ -542,6 +590,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Sub-operação.
             Ir64FlagConversionOp opcode) implements IntegerOp64 {
         @Override public int kind() { return Kind.CONVERT_FLAGS; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeConvertFlags(core, this);
+        }
     }
 
     /// `PACGA Xd, Xn, Xm` (`ARM DDI 0487 C6.2.232`, B19.6 bloco C, `FEAT_PAuth`) — autenticação de
@@ -557,6 +608,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Segundo operando (`Xm`, o modificador).
             int rm) implements IntegerOp64 {
         @Override public int kind() { return Kind.POINTER_AUTH_GENERIC; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executePointerAuthGeneric(core, this);
+        }
     }
 
     /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (`ARM DDI
@@ -579,6 +633,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// cujo `Rn` é fixo/reservado no encoding, não um operando real).
             int rn) implements IntegerOp64 {
         @Override public int kind() { return Kind.POINTER_AUTH_IN_PLACE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executePointerAuthInPlace(core, this);
+        }
     }
 
     /// `ABS Xd, Xn` (`ARM DDI 0487`, B19.6 bloco D, `FEAT_CSSC`) — valor absoluto de registrador
@@ -593,6 +650,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `true` para `X` (64 bits), `false` para `W` (32, zero-estendido).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.ABS_GENERAL; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeAbsGeneral(core, this); }
     }
 
     /// `CRC32{B,H,W,X} Wd, Wn, Rm` / `CRC32C{B,H,W,X} Wd, Wn, Rm` (`ARM DDI 0487 C6.2.75/76`,
@@ -615,6 +673,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// `true` para o polinômio Castagnoli (`CRC32C*`), `false` para IEEE 802.3 (`CRC32*`).
             boolean castagnoli) implements IntegerOp64 {
         @Override public int kind() { return Kind.CRC32; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64IntegerExecutor.executeCrc32(core, this); }
     }
 
     /// `SUBP`/`SUBPS` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — subtrai dois ponteiros
@@ -632,6 +691,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Segundo operando (`Rm|SP`).
             int rm) implements IntegerOp64 {
         @Override public int kind() { return Kind.SUBTRACT_POINTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeSubtractPointer(core, this);
+        }
     }
 
     /// `IRG` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — gera uma tag lógica pseudoaleatória
@@ -648,6 +710,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Máscara de exclusão adicional (`Rm`, comum — combinada por OR com `GCR_EL1.Exclude`).
             int rm) implements IntegerOp64 {
         @Override public int kind() { return Kind.INSERT_RANDOM_TAG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeInsertRandomTag(core, this);
+        }
     }
 
     /// `GMI` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — "Tag Mask Insert": marca em
@@ -661,6 +726,9 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// Máscara já acumulada (`Rm`, comum).
             int rm) implements IntegerOp64 {
         @Override public int kind() { return Kind.TAG_MASK_INSERT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeTagMaskInsert(core, this);
+        }
     }
 
     /// `SMAX`/`SMIN`/`UMAX`/`UMIN Rd, Rn, Rm` (`ARM DDI 0487`, B19.21, `FEAT_CSSC`) — máximo/mínimo
@@ -681,5 +749,8 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             /// zero-estendido para os 64 bits altos do destino).
             boolean wide) implements IntegerOp64 {
         @Override public int kind() { return Kind.MIN_MAX_GENERAL; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64IntegerExecutor.executeMinMaxGeneral(core, this);
+        }
     }
 }

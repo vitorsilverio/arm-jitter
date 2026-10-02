@@ -10,7 +10,7 @@ package dev.vitorsilverio.armjitter.ir64;
 /// `DecodeBitMasks`) chegou em B6.3.1. `ANDS` (imediato) reaproveita {@link #AND} com
 /// `IntegerOp64.Alu64#setFlags() setFlags=true` (D2 da task B6.3.1) — não há uma constante `ANDS`
 /// dedicada: os flags `C=0,V=0` sempre, para as 3 operações lógicas, já são resolvidos pelo
-/// EXECUTOR (`Ir64BlockExecutor#logicalWithFlags`), não pelo opcode.
+/// EXECUTOR (`Ir64IntegerExecutor#logicalWithFlags`), não pelo opcode.
 public enum Ir64AluOp {
     /// `ADD` (imediato, shifted register, extended register).
     ADD,

@@ -396,7 +396,7 @@ class BlockEquivalenceHarness64Test {
     }
 
     /// `AluExtendedRegister` com `Rn|SP`: cobre a resolução POR ÍNDICE (não pela flag) descrita em
-    /// {@code Ir64BlockExecutor#executeAluExtendedRegister} — `src1=31` sempre lê `SP`.
+    /// {@code Ir64IntegerExecutor#executeAluExtendedRegister} — `src1=31` sempre lê `SP`.
     @Test
     void aluExtendedRegisterReadsAndWritesStackPointer() {
         Ir64Block block = blockOf(0x9200,

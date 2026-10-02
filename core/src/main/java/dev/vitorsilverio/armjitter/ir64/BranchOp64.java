@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64BranchExecutor;
+
 /// Operações A64 de desvio: `B`/`BL`/`B.cond`/`BR`/`BLR`/`RET`, `CBZ`/`CBNZ`/`TBZ`/`TBNZ` e as
 /// formas fundidas de comparação + desvio do `FEAT_CMPBR`.
 ///
@@ -32,6 +35,7 @@ public sealed interface BranchOp64 extends Ir64Op permits BranchOp64.Branch64,
             /// `B.cond`).
             Ir64Condition condition) implements BranchOp64 {
         @Override public int kind() { return Kind.BRANCH64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64BranchExecutor.executeBranch(core, this); }
     }
 
     /// `CBZ`/`CBNZ`/`TBZ`/`TBNZ` (`ARM DDI 0487 C6.2.36/38/369/370`) — ver
@@ -57,6 +61,9 @@ public sealed interface BranchOp64 extends Ir64Op permits BranchOp64.Branch64,
             /// Destino absoluto já resolvido pelo decoder.
             long target) implements BranchOp64 {
         @Override public int kind() { return Kind.COMPARE_BRANCH64; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64BranchExecutor.executeCompareBranch(core, this);
+        }
     }
 
     /// `CB_cond Rt, Rm, <cc>, label` (`FEAT_CMPBR`, B19.22, `ARM DDI 0487 C6.2.53`) — funde
@@ -80,6 +87,9 @@ public sealed interface BranchOp64 extends Ir64Op permits BranchOp64.Branch64,
             /// Destino absoluto já resolvido pelo decoder.
             long target) implements BranchOp64 {
         @Override public int kind() { return Kind.COMPARE_AND_BRANCH_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64BranchExecutor.executeCompareAndBranchRegister(core, this);
+        }
     }
 
     /// `CB_cond_imm Rt, #imm, <cc>, label` (`FEAT_CMPBR`, B19.22, `ARM DDI 0487 C6.2.54`) — mesma
@@ -101,5 +111,8 @@ public sealed interface BranchOp64 extends Ir64Op permits BranchOp64.Branch64,
             /// Destino absoluto já resolvido pelo decoder.
             long target) implements BranchOp64 {
         @Override public int kind() { return Kind.COMPARE_AND_BRANCH_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64BranchExecutor.executeCompareAndBranchImmediate(core, this);
+        }
     }
 }

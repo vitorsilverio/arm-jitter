@@ -17,7 +17,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// - o `COMPACT`/`EXPAND` percorrem o vetor INTEIRO com um contador só (não reiniciam por segmento de 128 bits).
 ///
 /// Os elementos são `long[]` zero-estendidos; o executor não tem constante de `VL` — tudo lê o `VL` efetivo do core.
-final class SvePermutePredicatedOps {
+public final class SvePermutePredicatedOps {
     private static final int STACK_POINTER_ENCODING = 31;
     private static final int Z_REGISTER_MASK = 0b11111;
     private static final int QUADWORD_BYTES = 16;
@@ -31,7 +31,7 @@ final class SvePermutePredicatedOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.PermutePredicated op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.PermutePredicated op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

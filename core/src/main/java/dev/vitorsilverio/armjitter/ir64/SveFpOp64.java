@@ -1,5 +1,18 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.SveFp8MultiplyOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpArithmeticOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpCompareReduceOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpConvertFp8Ops;
+import dev.vitorsilverio.armjitter.executor64.SveFpConvertOddElementsOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpLogBOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpMatrixMultiplyOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpMultiplyAddOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpPairwiseOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpUnaryOps;
+import dev.vitorsilverio.armjitter.executor64.SveFpWidenOps;
+
 /// Operações SVE/SVE2 de ponto flutuante: aritmética, multiply-add, comparação e redução, unárias,
 /// conversões, `BFloat16` e `FP8`.
 ///
@@ -47,6 +60,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             TSMUL, RECPS, RSQRTS, RECPE, RSQRTE, TMAD
         }
         @Override public int kind() { return Kind.SVE_FP_ARITHMETIC; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpArithmeticOps.execute(core, this); }
     }
 
     /// Multiply-add de ponto flutuante SVE, `FMUL` indexado e aritmética complexa (B17.14) — 24 encodings:
@@ -85,6 +99,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             FMLA, FMLS, FNMLA, FNMLS, FMUL, FCADD, FCMLA
         }
         @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpMultiplyAddOps.execute(core, this); }
     }
 
     /// Comparação de ponto flutuante SVE que produz predicado e reduções de ponto flutuante (B17.15) — 24 encodings:
@@ -117,6 +132,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             FADDA
         }
         @Override public int kind() { return Kind.SVE_FP_COMPARE_REDUCE; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpCompareReduceOps.execute(core, this); }
     }
 
     /// Operações unárias de ponto flutuante SVE predicadas (B17.16) — 105 encodings: conversões de precisão (`FCVT`,
@@ -150,6 +166,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             FRECPX, FSQRT
         }
         @Override public int kind() { return Kind.SVE_FP_UNARY; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpUnaryOps.execute(core, this); }
     }
 
     /// SVE2 `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT` (B17.23, `FEAT_SVE_F8CVT`)
@@ -170,6 +187,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             boolean bfloat16Destination,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP_CONVERT_FP8; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpConvertFp8Ops.executeWiden(core, this); }
     }
 
     /// SVE2 `FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT` (B17.23, `FEAT_SVE_F8CVT`) — estreita PARA `fp8`, **sem
@@ -199,6 +217,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             boolean top,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP_CONVERT_TO_FP8; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpConvertFp8Ops.executeNarrow(core, this); }
     }
 
     /// SVE2 `FADDP`/`FMAXNMP`/`FMINNMP`/`FMAXP`/`FMINP` (B17.23, `FEAT_SVE2`) — soma/máximo/mínimo par a par
@@ -223,6 +242,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
         /// `FMAXNMP`/`FMINNMP` usam a "Number" (`SveFloat.maxMinNumber`).
         public enum Op { FADDP, FMAXNMP, FMINNMP, FMAXP, FMINP }
         @Override public int kind() { return Kind.SVE_FP_PAIRWISE; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpPairwiseOps.execute(core, this); }
     }
 
     /// SVE2 `BFMMLA`/`FMMLA_s`/`FMMLA_d`/`FMMLA_sb`/`FMMLA_hb` (B17.23) — multiplicação de matriz `2×2`
@@ -245,6 +265,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
         /// Operação do grupo (a fonte/formato de cada uma é fixo, não configurável em tempo de execução).
         public enum Op { BFMMLA, FMMLA_S, FMMLA_D, FMMLA_SB, FMMLA_HB }
         @Override public int kind() { return Kind.SVE_FP_MATRIX_MULTIPLY; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpMatrixMultiplyOps.execute(core, this); }
     }
 
     /// SVE2 `FCVTNT_sh`/`FCVTLT_hs`/`FCVTNT_ds`/`FCVTLT_sd`/`FCVTXNT_ds`/`BFCVTNT` (`_m`/`_z`, B17.23) — as 12
@@ -275,6 +296,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             long instructionAddress) implements SveFpOp64 {
         public enum Op { FCVTNT, FCVTLT, FCVTXNT }
         @Override public int kind() { return Kind.SVE_FP_CONVERT_ODD_ELEMENTS; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpConvertOddElementsOps.execute(core, this); }
     }
 
     /// SVE2 `FLOGB` (`_m`/`_z`, B17.23, `FEAT_SVE2`) — expoente (base 2) de `Zn` como INTEIRO da MESMA largura
@@ -292,6 +314,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             int pg,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP_LOGB; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpLogBOps.execute(core, this); }
     }
 
     /// SVE2 `FMLAL_hb`/`FMLALL_sb`, vetorial e indexado (B17.23, `FEAT_FP8FMA`) — multiply-accumulate `fp8`
@@ -316,6 +339,9 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             int index,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP8_FUSED_MULTIPLY_ADD_LONG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return SveFp8MultiplyOps.executeFusedMultiplyAdd(core, this);
+        }
     }
 
     /// SVE2 `FDOT_hb`/`FDOT_sb`, vetorial e indexado (B17.23, `FEAT_FP8DOT2`/`FEAT_FP8DOT4`) — produto escalar
@@ -336,6 +362,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             int index,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP8_DOT_PRODUCT; }
+        @Override public boolean execute(Aarch64Core core) { return SveFp8MultiplyOps.executeDotProduct(core, this); }
     }
 
     /// SVE2 `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT`, vetorial (`_zzzw`) e indexado (`_zzxw`) (B17.23,
@@ -358,6 +385,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             long instructionAddress) implements SveFpOp64 {
         public enum Op { FMLAL, FMLSL }
         @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpWidenOps.executeMultiplyAddLong(core, this); }
     }
 
     /// SVE2 `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT`, vetorial (`_zzzw`) e indexado (`_zzxw`) (B17.23,
@@ -377,6 +405,9 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             long instructionAddress) implements SveFpOp64 {
         public enum Op { BFMLAL, BFMLSL }
         @Override public int kind() { return Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN_BFLOAT16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return SveFpWidenOps.executeMultiplyAddLongBFloat16(core, this);
+        }
     }
 
     /// SVE2.1 `FDOT_zzzz`/`FDOT_zzxz` (B17.23, `FEAT_SVE2p1`/`FEAT_SME2`) — produto escalar de DUAS vias
@@ -391,6 +422,7 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             int index,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP_DOT_PRODUCT_WIDEN; }
+        @Override public boolean execute(Aarch64Core core) { return SveFpWidenOps.executeDotProduct(core, this); }
     }
 
     /// SVE `BFDOT_zzzz`/`BFDOT_zzxz` (B17.23, `FEAT_SVE_BF16`) — produto escalar de DUAS vias
@@ -404,5 +436,8 @@ public sealed interface SveFpOp64 extends SveOp64 permits SveFpOp64.FpArithmetic
             int index,
             long instructionAddress) implements SveFpOp64 {
         @Override public int kind() { return Kind.SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return SveFpWidenOps.executeDotProductBFloat16(core, this);
+        }
     }
 }

@@ -10,7 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// escalar `fp8`), vetorial e indexado (B17.23) — reusa {@code AdvSimdLanes#fp8FusedMultiplyAdd}/
 /// {@code #fp8DotProduct}, os MESMOS núcleos já validados pelo AdvSIMD (B19.11b/c/d), só trocando o laço por
 /// elemento pela largura do vetor SVE inteiro.
-final class SveFp8MultiplyOps {
+public final class SveFp8MultiplyOps {
     private static final int ESZ_BYTE = 0;
     private static final int FP8_BYTE_MASK = 0xFF;
     private static final int SEGMENT_BYTES = 16;
@@ -19,7 +19,7 @@ final class SveFp8MultiplyOps {
     }
 
     /// `FMLAL_hb`/`FMLALL_sb`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeFusedMultiplyAdd(Aarch64Core core, SveFpOp64.Fp8FusedMultiplyAddLong op) {
+    public static boolean executeFusedMultiplyAdd(Aarch64Core core, SveFpOp64.Fp8FusedMultiplyAddLong op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -54,7 +54,7 @@ final class SveFp8MultiplyOps {
     }
 
     /// `FDOT_hb`/`FDOT_sb`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProduct(Aarch64Core core, SveFpOp64.Fp8DotProduct op) {
+    public static boolean executeDotProduct(Aarch64Core core, SveFpOp64.Fp8DotProduct op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

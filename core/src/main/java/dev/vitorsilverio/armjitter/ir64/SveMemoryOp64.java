@@ -1,5 +1,11 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.SveCounterOps;
+import dev.vitorsilverio.armjitter.executor64.SveGatherOps;
+import dev.vitorsilverio.armjitter.executor64.SveLoadOps;
+import dev.vitorsilverio.armjitter.executor64.SveStoreOps;
+
 /// Operações SVE de acesso à memória: load, store, gather/scatter e as formas multi-vetor.
 ///
 /// Sub-interface selada de {@link SveOp64} (task E15.2): os records desta família vivem aqui, e
@@ -45,6 +51,7 @@ public sealed interface SveMemoryOp64 extends SveOp64 permits SveMemoryOp64.Load
             LD1, LDFF1, LDNF1, LD1R, LD1RQ, LD1RO, LDR_Z, LDR_P, PRF
         }
         @Override public int kind() { return Kind.SVE_LOAD; }
+        @Override public boolean execute(Aarch64Core core) { return SveLoadOps.execute(core, this); }
     }
 
     /// Store SVE (B17.18) — 37 encodings: `ST1` contíguo (todos os pares `msz`/`esz`, escalar+escalar e escalar+imediato,
@@ -109,6 +116,7 @@ public sealed interface SveMemoryOp64 extends SveOp64 permits SveMemoryOp64.Load
             SCATTER_VECTOR_PLUS_SCALAR
         }
         @Override public int kind() { return Kind.SVE_STORE; }
+        @Override public boolean execute(Aarch64Core core) { return SveStoreOps.execute(core, this); }
     }
 
     /// Gather load SVE (B17.19) — um acesso à memória por ELEMENTO, cada um com endereço próprio: `LD1_zprz` (escalar +
@@ -164,6 +172,7 @@ public sealed interface SveMemoryOp64 extends SveOp64 permits SveMemoryOp64.Load
             VECTOR_PLUS_SCALAR
         }
         @Override public int kind() { return Kind.SVE_GATHER; }
+        @Override public boolean execute(Aarch64Core core) { return SveGatherOps.execute(core, this); }
     }
 
     /// `LD1`/`ST1` (e `LDNT1`/`STNT1`, sem modelo de cache) de 2 ou 4 registradores CONSECUTIVOS de memória contígua,
@@ -198,5 +207,6 @@ public sealed interface SveMemoryOp64 extends SveOp64 permits SveMemoryOp64.Load
             /// Endereço da instrução.
             long instructionAddress) implements SveMemoryOp64 {
         @Override public int kind() { return Kind.SVE_MULTI_VECTOR_MEMORY; }
+        @Override public boolean execute(Aarch64Core core) { return SveCounterOps.execute(core, this); }
     }
 }

@@ -8,7 +8,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// cada segmento de 128 bits. Medido contra `DO_ZPZZ_PAIR_FP` do QEMU real: para cada par de posições `(p,
 /// p+1)` dentro do segmento, o destino em `p` vem do par de `Zn` e o destino em `p+1` vem do MESMO par de
 /// `Zm` — sempre MERGING (elemento inativo preserva `Zdn`).
-final class SveFpPairwiseOps {
+public final class SveFpPairwiseOps {
     private static final int SEGMENT_BYTES = 16;
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
@@ -18,7 +18,7 @@ final class SveFpPairwiseOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpPairwise op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpPairwise op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

@@ -8,7 +8,7 @@ public enum Ir64FlagConversionOp {
     /// `XAFLAG` (`ARM DDI 0487 C6.2.416`, "conversão de flags eXternal para Arm"): recalcula
     /// `PSTATE.{N,Z,C,V}` a partir do formato "eXternal" (usado por sequências vetoriais de
     /// comparação lane-a-lane que produzem flags per-lane e depois reduzem para um resultado
-    /// escalar via `AND`/`ORR`) — ver {@code Ir64BlockExecutor#executeConvertFlags}.
+    /// escalar via `AND`/`ORR`) — ver {@code Ir64IntegerExecutor#executeConvertFlags}.
     EXTERNAL_TO_ARM,
     /// `AXFLAG` (`ARM DDI 0487 C6.2.16`, "conversão de flags Arm para eXternal"): inverso de
     /// {@link #EXTERNAL_TO_ARM}.

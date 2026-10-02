@@ -12,7 +12,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// `SveFloat.multiply`/`SveFloat.add` em sequência). `BFMMLA` (fonte `bf16`, acumulador SEMPRE `f32`) e as
 /// duas `fp8` (`FMMLA_sb`/`FMMLA_hb`) SÃO fundidas (um único arredondamento por célula, reusando
 /// {@code AdvSimdLanes#fp8DotProduct}, `f8dotadd_*` do QEMU real).
-final class SveFpMatrixMultiplyOps {
+public final class SveFpMatrixMultiplyOps {
     private static final int BLOCK_ROWS_COLS = 2;
     private static final int BFLOAT16_K = 4;
     private static final int BFLOAT16_SOURCE_ESZ = 1;
@@ -25,7 +25,7 @@ final class SveFpMatrixMultiplyOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpMatrixMultiply op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpMatrixMultiply op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

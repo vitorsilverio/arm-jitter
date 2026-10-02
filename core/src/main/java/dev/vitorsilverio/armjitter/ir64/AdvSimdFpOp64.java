@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64VectorFpArithmeticExecutor;
+
 /// Operações AdvSIMD de ponto flutuante: aritmética, conversão, números complexos (`FEAT_FCMA`),
 /// `BFloat16` e `FP8`.
 ///
@@ -44,6 +47,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeThreeSame(core, this);
+        }
     }
 
     /// AdvSIMD "vector/scalar × indexed element" de ponto flutuante (B8.19) — `FMUL`/`FMLA`/
@@ -71,6 +77,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// `0`-`1` para dupla).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeThreeSameByElement(core, this);
+        }
     }
 
     /// `FCADD_90`/`FCADD_270` (B19.20, `FEAT_FCMA`) — trata PARES de lanes adjacentes de {@link
@@ -98,6 +107,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (rotacionado antes de somar).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_ADD; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeComplexAdd(core, this);
+        }
     }
 
     /// `FSCALE` (B19.11e, `FEAT_FP8`, `a64.decode:1213-1214`) — escala cada lane de ponto
@@ -127,6 +139,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte do expoente (inteiro com sinal, não ponto flutuante).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_SCALE_BY_INT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeScaleByInt(core, this);
+        }
     }
 
     /// `FAMAX`/`FAMIN` (B19.24, `FEAT_FAMINMAX`, `a64.decode:1208-1211`) — `Vd[i] = |Vn[i]| >=
@@ -154,6 +169,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ABSOLUTE_MAX_MIN; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeAbsoluteMaxMin(core, this);
+        }
     }
 
     /// `FMLAL_hb_v`/`FMLALL_sb_v` (B19.11b, `FEAT_FP8FMA`) — multiply-accumulate FP8 FUNDIDO num
@@ -187,6 +205,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (`Vm.16B`, mesma seleção de {@link #sourceByteSelect}).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFp8FusedMultiplyAddLong(core, this);
+        }
     }
 
     /// `FMLAL_hb_vi`/`FMLALL_sb_vi` (B19.11b, `FEAT_FP8FMA`) — como
@@ -212,6 +233,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Índice do byte FP8 de {@link #rm} usado em TODA a operação (`0`-`15`).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFp8FusedMultiplyAddLongByElement(core, this);
+        }
     }
 
     /// `FDOT_hb_v`/`FDOT_sb_v` (B19.11c/B19.11d, `FEAT_FP8DOT2`/`FEAT_FP8DOT4`) — produto escalar
@@ -241,6 +265,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 — mesma disposição de {@link #rn}.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP8_DOT_PRODUCT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFp8DotProduct(core, this);
+        }
     }
 
     /// `FDOT_hb_vi`/`FDOT_sb_vi` (B19.11c/B19.11d) — como {@link Fp8DotProduct}, mas
@@ -265,6 +292,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// {@code !wideDestination}, `0`-`3` se {@code wideDestination}).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFp8DotProductByElement(core, this);
+        }
     }
 
     /// `FCMLA_v` (B19.20, `FEAT_FCMA`) — multiplicação-acumulação complexa FUNDIDA: como {@link
@@ -289,6 +319,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulate(core, this);
+        }
     }
 
     /// `FCMLA_vi` (B19.20, `FEAT_FCMA`) — como {@link FpComplexMultiplyAccumulate}, mas
@@ -313,6 +346,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Índice do PAR complexo de {@link #rm} (não do elemento individual real/imaginário).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulateByElement(core, this);
+        }
     }
 
     /// AdvSIMD "three same" de ponto flutuante, pareado (`FADDP_v`/`FMAXP_v`/`FMINP_v`/
@@ -338,6 +374,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (metade ALTA do resultado).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_PAIRWISE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executePairwise(core, this);
+        }
     }
 
     /// AdvSIMD "two-register miscellaneous" de ponto flutuante (`FABS_v`/`FNEG_v`/`FSQRT_v`/
@@ -367,6 +406,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ARITHMETIC_UNARY; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeUnary(core, this);
+        }
     }
 
     /// AdvSIMD conversão FP↔ponto fixo (`@fcvt_fixed`, B19.3) — `SCVTF`/`UCVTF` (inteiro→FP) e
@@ -400,6 +442,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_FIXED_POINT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeConvertFixedPoint(core, this);
+        }
     }
 
     /// AdvSIMD conversão de PRECISÃO vetorial (`FCVTL`/`FCVTN`/`FCVTXN`, B19.4) — origem e destino
@@ -424,6 +469,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_PRECISION; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeConvertPrecision(core, this);
+        }
     }
 
     /// `FCVTN_bh`/`FCVTN_bs` (AdvSIMD "three same (FP8 convert)", `FEAT_FP8`, B19.11) — ESTREITA
@@ -451,6 +499,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 — preenche os bytes ALTOS do resultado.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_TO_FP8; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeConvertToFp8(core, this);
+        }
     }
 
     /// `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` (AdvSIMD "two-register miscellaneous (FP8 widen)",
@@ -480,6 +531,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_CONVERT_FROM_FP8; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeConvertFromFp8(core, this);
+        }
     }
 
     /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (AdvSIMD across lanes de ponto flutuante) — reduz os
@@ -500,6 +554,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_ACROSS_LANES; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpAcrossLanes(core, this);
+        }
     }
 
     /// `BFDOT` vetorial (`FEAT_BF16`, B19.7) — produto escalar de PARES `bf16`, acumulando em `f32`
@@ -516,6 +573,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (lido par a par de `bf16`).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16(core, this);
+        }
     }
 
     /// `BFDOT` indexado (`BFDOT_vi`, `FEAT_BF16`, B19.7) — como {@link FpDotProductBFloat16},
@@ -533,6 +593,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Índice do par `bf16` de {@link #rm} usado em TODA a operação (`0`-`1`).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16ByElement(core, this);
+        }
     }
 
     /// `BFMLALB`/`BFMLALT` (`FEAT_BF16`, B19.7) — multiply-accumulate LONG: lanes `bf16` de `Rn`/
@@ -552,6 +615,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (`Vm.8H`, lido elemento a elemento).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16(core, this);
+        }
     }
 
     /// `BFMLALB`/`BFMLALT` indexado (`BFMLAL_vi`, `FEAT_BF16`, B19.7) — como
@@ -569,6 +635,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Índice do elemento `bf16` de {@link #rm} usado em TODA a operação (`0`-`7`).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16ByElement(core, this);
+        }
     }
 
     /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`, B19.13) — multiply-accumulate LONG FUNDIDO
@@ -599,6 +668,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLong(core, this);
+        }
     }
 
     /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` (`FEAT_FHM`, B19.13) — como
@@ -621,6 +693,9 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// Índice do elemento `f16` de {@link #rm} usado em TODA a operação (`0`-`7`).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongByElement(core, this);
+        }
     }
 
     /// `BFMMLA` (`FEAT_BF16`, B19.7) — multiplicação de matriz `2×4 · 4×2` de pares `bf16`,
@@ -636,5 +711,8 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             /// coluna `c` = elementos `4c..4c+3`).
             int rm) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeFpMatrixMultiplyAccumulateBFloat16(core, this);
+        }
     }
 }

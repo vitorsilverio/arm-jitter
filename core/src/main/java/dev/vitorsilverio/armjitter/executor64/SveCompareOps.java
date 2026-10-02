@@ -20,7 +20,7 @@ import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 /// - `WHILE*` colapsa a condição numa CONTAGEM de iterações verdadeiras; `WHILE_gt` gera o predicado de trás para a frente
 ///   e tem `PredCountTest` invertido; o caso `op1 == maxval` (a soma de `eq` estouraria) vira predicado todo verdadeiro;
 /// - `CTERM` só mexe em `N` e `V` (`N = cond`, `V = !cond && !C`); `Z` e `C` ficam como estão.
-final class SveCompareOps {
+public final class SveCompareOps {
     private static final int ESZ_DOUBLEWORD = 3;
     private static final int LOG2_BYTES_PER_DOUBLEWORD = 3;
     private static final long LOW_32_BITS = 0xFFFF_FFFFL;
@@ -32,7 +32,7 @@ final class SveCompareOps {
     // ── Comparação que produz predicado ─────────────────────────────────────────────────────────
 
     /// Executa `CMP<cond>` (vetor, largo ou imediato). `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SvePredicateOp64.Compare op) {
+    public static boolean execute(Aarch64Core core, SvePredicateOp64.Compare op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -94,7 +94,7 @@ final class SveCompareOps {
     // ── WHILE* / CTERM ──────────────────────────────────────────────────────────────────────────
 
     /// Executa `WHILE*`/`CTERM`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
+    public static boolean execute(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

@@ -19,7 +19,7 @@ import java.util.Arrays;
 ///   coincide com a escalar em vetor; com `VL >= 256` só o teste distingue.
 ///
 /// O predicado é lido no bit do byte mais baixo de cada elemento (`P` guarda um bit por byte).
-final class SveIntegerReductionOps {
+public final class SveIntegerReductionOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int ESZ_DOUBLEWORD = 3;
@@ -29,7 +29,7 @@ final class SveIntegerReductionOps {
     }
 
     /// Executa uma redução. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerReduction op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerReduction op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

@@ -14,7 +14,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 ///
 /// `FTMAD`/`FTSMUL` são ilegais em modo streaming sem `FEAT_SME_FA64` (`TRANS_FEAT_NONSTREAMING` do QEMU). `FPCR.AH`
 /// não é modelado (pendência nomeada): valem os caminhos `AH = 0`.
-final class SveFpArithmeticOps {
+public final class SveFpArithmeticOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int TMAD_NEGATIVE_BANK = 8;
@@ -43,7 +43,7 @@ final class SveFpArithmeticOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpArithmetic op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpArithmetic op) {
         if (op.op() == SveFpOp64.FpArithmetic.Op.TSMUL || op.op() == SveFpOp64.FpArithmetic.Op.TMAD) {
             SvePredicateOps.requireNonStreaming(core);
         }

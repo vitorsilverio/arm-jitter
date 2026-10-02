@@ -25,7 +25,7 @@ import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 /// `AddressSpace64` não informa o tipo de memória — um `LDNF1` sobre MMIO PODE, portanto, atingir o dispositivo.
 ///
 /// `LDFF1`, `LDNF1`, `LD1RO`, `LD1W`/`LD1D` de elemento de 128 bits e `PRF_ns` são ilegais em modo streaming.
-final class SveLoadOps {
+public final class SveLoadOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int BITS_PER_BYTE = Byte.SIZE;
@@ -43,7 +43,7 @@ final class SveLoadOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveMemoryOp64.Load op) {
+    public static boolean execute(Aarch64Core core, SveMemoryOp64.Load op) {
         if (op.nonStreaming()) {
             SvePredicateOps.requireNonStreaming(core);
         }

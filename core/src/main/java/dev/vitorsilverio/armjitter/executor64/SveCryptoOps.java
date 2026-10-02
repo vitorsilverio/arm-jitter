@@ -23,7 +23,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// `RAX1` liberariam um subconjunto sob `FEAT_SSVE_AES`/`FEAT_SME2p1` no hardware real (`TRANS_FEAT_STREAMING_IF`
 /// do QEMU), não modelado ainda — **pendência nomeada**; `SM4E`/`SM4EKEY` são sempre não-streaming mesmo no
 /// hardware real (`TRANS_FEAT_NONSTREAMING`, sem exceção SME).
-final class SveCryptoOps {
+public final class SveCryptoOps {
     /// Palavras de 64 bits por segmento de 128 bits — mesma convenção `V<n>` = `2n`/`2n+1` de
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters#WORDS_PER_REGISTER}.
     private static final int WORDS_PER_SEGMENT = 2;
@@ -50,7 +50,8 @@ final class SveCryptoOps {
         };
     }
 
-    static boolean executeAes(Aarch64Core core, SveIntegerOp64.CryptoAes op) {
+    /// Executa {@link SveIntegerOp64.CryptoAes}.
+    public static boolean executeAes(Aarch64Core core, SveIntegerOp64.CryptoAes op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -65,7 +66,8 @@ final class SveCryptoOps {
         return false;
     }
 
-    static boolean executeSm4Encrypt(Aarch64Core core, SveIntegerOp64.CryptoSm4Encrypt op) {
+    /// Executa {@link SveIntegerOp64.CryptoSm4Encrypt}.
+    public static boolean executeSm4Encrypt(Aarch64Core core, SveIntegerOp64.CryptoSm4Encrypt op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -94,7 +96,8 @@ final class SveCryptoOps {
         return false;
     }
 
-    static boolean executeSm4KeyUpdate(Aarch64Core core, SveIntegerOp64.CryptoSm4KeyUpdate op) {
+    /// Executa {@link SveIntegerOp64.CryptoSm4KeyUpdate}.
+    public static boolean executeSm4KeyUpdate(Aarch64Core core, SveIntegerOp64.CryptoSm4KeyUpdate op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -125,7 +128,7 @@ final class SveCryptoOps {
     /// `RAX1`: `Zd = Zn XOR rotateLeft(Zm, 1)`, elemento a elemento de 64 bits por TODA a largura de `VL` — sem
     /// segmentação (Achado 4 da task: `esz` do formato é `0`, a operação real é doubleword, e não há interação
     /// entre elementos vizinhos, ao contrário de `AES`/`SM4`).
-    static boolean executeRax1(Aarch64Core core, SveIntegerOp64.CryptoRax1 op) {
+    public static boolean executeRax1(Aarch64Core core, SveIntegerOp64.CryptoRax1 op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;

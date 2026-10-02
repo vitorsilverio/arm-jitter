@@ -20,7 +20,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 ///
 /// Só os stores contíguos e o `STR` valem em modo streaming; o scatter e o `ST1Q` são ilegais nele (a menos que
 /// `FEAT_SME_FA64` esteja efetivo), assim como o `ST1` de elemento de 128 bits (`.Q`).
-final class SveStoreOps {
+public final class SveStoreOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int BITS_PER_BYTE = Byte.SIZE;
@@ -39,7 +39,7 @@ final class SveStoreOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveMemoryOp64.Store op) {
+    public static boolean execute(Aarch64Core core, SveMemoryOp64.Store op) {
         if (op.nonStreaming()) {
             SvePredicateOps.requireNonStreaming(core);
         }

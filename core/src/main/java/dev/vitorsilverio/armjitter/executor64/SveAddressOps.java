@@ -13,7 +13,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// `ADR` só CALCULA endereços por elemento — não toca memória: `Zd[i] = Zn[i] + (ext(Zm[i]) << msz)`, com o offset
 /// de 32 bits estendido com sinal (`S32`) ou sem sinal (`U32`) nos elementos de 64 bits, ou do tamanho do próprio
 /// elemento (`P32` = word, `P64` = doubleword).
-final class SveAddressOps {
+public final class SveAddressOps {
     private static final int STACK_POINTER_ENCODING = 31;
     private static final int ESZ_WORD = 2;
     private static final int ESZ_DOUBLEWORD = 3;
@@ -23,7 +23,7 @@ final class SveAddressOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.Address op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.Address op) {
         boolean streamingVariant = op.op() == SveIntegerOp64.Address.Op.ADDSVL
                 || op.op() == SveIntegerOp64.Address.Op.ADDSPL || op.op() == SveIntegerOp64.Address.Op.RDSVL;
         // As formas SME exigem só o acesso à SME (CheckSMEAccess) — valem fora do modo streaming.

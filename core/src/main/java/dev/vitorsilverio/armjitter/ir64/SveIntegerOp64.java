@@ -1,5 +1,18 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.SveAddressOps;
+import dev.vitorsilverio.armjitter.executor64.SveCryptoOps;
+import dev.vitorsilverio.armjitter.executor64.SveImmediateOps;
+import dev.vitorsilverio.armjitter.executor64.SveIntegerOps;
+import dev.vitorsilverio.armjitter.executor64.SveIntegerPredicatedOps;
+import dev.vitorsilverio.armjitter.executor64.SveIntegerReductionOps;
+import dev.vitorsilverio.armjitter.executor64.SveMiscOps;
+import dev.vitorsilverio.armjitter.executor64.SveMultiplyIndexedOps;
+import dev.vitorsilverio.armjitter.executor64.SvePermuteOps;
+import dev.vitorsilverio.armjitter.executor64.SvePermutePredicatedOps;
+import dev.vitorsilverio.armjitter.executor64.SvePredicateOps;
+
 /// Operações SVE/SVE2 inteiras: aritmética predicada e não predicada, reduções, imediatos,
 /// multiplicação indexada, endereçamento, permutação, contagem de elementos e as formas de
 /// criptografia do SVE2.
@@ -35,6 +48,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
         /// Operação do grupo.
         public enum Op { CNT, INCDEC_SCALAR, SINCDEC_SCALAR_32, SINCDEC_SCALAR_64, INCDEC_VECTOR, SINCDEC_VECTOR }
         @Override public int kind() { return Kind.SVE_ELEMENT_COUNT; }
+        @Override public boolean execute(Aarch64Core core) { return SvePredicateOps.executeElementCount(core, this); }
     }
 
     /// Inteiro SVE sem predicado governante (B17.5): aritmética/lógica/shift por elemento, lógica
@@ -90,6 +104,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             INDEX_II, INDEX_IR, INDEX_RI, INDEX_RR
         }
         @Override public int kind() { return Kind.SVE_INTEGER_UNPREDICATED; }
+        @Override public boolean execute(Aarch64Core core) { return SveIntegerOps.execute(core, this); }
     }
 
     /// Inteiro SVE com predicado governante (B17.6): aritmética binária (`ADD`/`SDIV`/`SMULH`…), shifts
@@ -135,6 +150,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             SQADD, UQADD, SQSUB, UQSUB, SUQADD, USQADD
         }
         @Override public int kind() { return Kind.SVE_INTEGER_PREDICATED; }
+        @Override public boolean execute(Aarch64Core core) { return SveIntegerPredicatedOps.execute(core, this); }
     }
 
     /// Redução inteira SVE (B17.7, `sve.decode` `### SVE Integer Reduction Group`): reduz os elementos ATIVOS de
@@ -159,6 +175,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV
         }
         @Override public int kind() { return Kind.SVE_INTEGER_REDUCTION; }
+        @Override public boolean execute(Aarch64Core core) { return SveIntegerReductionOps.execute(core, this); }
     }
 
     /// Inteiro SVE com imediato (B17.8, `sve.decode` `### SVE Bitwise Immediate Group` e os dois `### SVE
@@ -189,6 +206,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             SMAX, UMAX, SMIN, UMIN, MUL
         }
         @Override public int kind() { return Kind.SVE_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) { return SveImmediateOps.execute(core, this); }
     }
 
     /// Multiply SVE por elemento indexado (B17.8, `#### SVE Multiply - Indexed`) mais os dois dot-products
@@ -240,6 +258,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             SQDMLALBT, SQDMLSLBT
         }
         @Override public int kind() { return Kind.SVE_MULTIPLY_INDEXED; }
+        @Override public boolean execute(Aarch64Core core) { return SveMultiplyIndexedOps.execute(core, this); }
     }
 
     /// Endereçamento SVE (B17.12): `ADDVL`/`ADDPL`/`RDVL` (aritmética de ponteiro em múltiplos de `VL/8` e `VL/64`
@@ -263,6 +282,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
         /// elemento de 64 bits e offset de 32 (com/sem sinal); `P32`/`P64` têm offset do tamanho do elemento.
         public enum Op { ADDVL, ADDPL, RDVL, ADDSVL, ADDSPL, RDSVL, ADR_S32, ADR_U32, ADR_P32, ADR_P64 }
         @Override public int kind() { return Kind.SVE_ADDRESS; }
+        @Override public boolean execute(Aarch64Core core) { return SveAddressOps.execute(core, this); }
     }
 
     /// Permutação SVE não predicada (B17.10): `EXT`/`DUP`/`DUPQ`/`EXTQ`/`INSR`/`REV`/`PMOV`/`TBL`/`TBX`/`UNPK` e as três
@@ -294,6 +314,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             ZIPQ1, ZIPQ2, UZPQ1, UZPQ2
         }
         @Override public int kind() { return Kind.SVE_PERMUTE; }
+        @Override public boolean execute(Aarch64Core core) { return SvePermuteOps.execute(core, this); }
     }
 
     /// Permutação SVE de predicado, permutação predicada e `SEL` (B17.11) — 36 encodings. Junta três famílias que
@@ -328,6 +349,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             REVB_M, REVH_M, REVW_M, RBIT_M, REVD_M, REVB_Z, REVH_Z, REVW_Z, RBIT_Z, REVD_Z
         }
         @Override public int kind() { return Kind.SVE_PERMUTE_PREDICATED; }
+        @Override public boolean execute(Aarch64Core core) { return SvePermutePredicatedOps.execute(core, this); }
     }
 
     /// `HISTCNT`/`HISTSEG` (B17.22, `FEAT_SVE2`): histogramas prefixo.
@@ -355,6 +377,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int rm,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_HISTOGRAM; }
+        @Override public boolean execute(Aarch64Core core) { return SveMiscOps.executeHistogram(core, this); }
     }
 
     /// `LUTI2`/`LUTI4` (B17.22, `FEAT_LUT` — {@link dev.vitorsilverio.armjitter.arch64.Aarch64Feature#LOOKUP_TABLE}):
@@ -382,6 +405,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int tableRegisters,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_LOOKUP_TABLE; }
+        @Override public boolean execute(Aarch64Core core) { return SveMiscOps.executeLookupTable(core, this); }
     }
 
     /// `SCLAMP`/`UCLAMP`/`FCLAMP` (B17.22): `Zd = clamp(Zd, min = Zn, max = Zm)` — `Zd = min(max(Zd, Zn), Zm)`.
@@ -403,6 +427,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             long instructionAddress) implements SveIntegerOp64 {
         public enum Op { SCLAMP, UCLAMP, FCLAMP }
         @Override public int kind() { return Kind.SVE_CLAMP; }
+        @Override public boolean execute(Aarch64Core core) { return SveMiscOps.executeClamp(core, this); }
     }
 
     /// `AESE`/`AESD`/`AESMC`/`AESIMC` vetoriais (B17.24, `FEAT_SVE_AES`) — opera POR SEGMENTO de 128 bits
@@ -421,6 +446,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int rn,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_CRYPTO_AES; }
+        @Override public boolean execute(Aarch64Core core) { return SveCryptoOps.executeAes(core, this); }
     }
 
     /// `SM4E` vetorial (B17.24, `FEAT_SVE_SM4`) — rodada de cifra SM4 por segmento de 128 bits, reusando a S-box
@@ -435,6 +461,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int rn,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_CRYPTO_SM4_ENCRYPT; }
+        @Override public boolean execute(Aarch64Core core) { return SveCryptoOps.executeSm4Encrypt(core, this); }
     }
 
     /// `SM4EKEY` vetorial (B17.24, `FEAT_SVE_SM4`) — expansão de chave SM4 por segmento de 128 bits. Mesma forma
@@ -449,6 +476,7 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int rm,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_CRYPTO_SM4_KEY_UPDATE; }
+        @Override public boolean execute(Aarch64Core core) { return SveCryptoOps.executeSm4KeyUpdate(core, this); }
     }
 
     /// `RAX1` vetorial (B17.24, `FEAT_SVE_SHA3`) — `Zd = Zn XOR rotateLeft(Zm, 1)`, elemento a elemento de
@@ -464,5 +492,6 @@ public sealed interface SveIntegerOp64 extends SveOp64 permits SveIntegerOp64.El
             int rm,
             long instructionAddress) implements SveIntegerOp64 {
         @Override public int kind() { return Kind.SVE_CRYPTO_RAX1; }
+        @Override public boolean execute(Aarch64Core core) { return SveCryptoOps.executeRax1(core, this); }
     }
 }

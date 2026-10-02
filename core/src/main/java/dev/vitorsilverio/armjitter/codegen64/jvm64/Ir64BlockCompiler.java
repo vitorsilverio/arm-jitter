@@ -1017,7 +1017,7 @@ public final class Ir64BlockCompiler {
     /// trocando {@link #IR64_MEM_SIZE} por {@link #IR64_FP_MEM_SIZE} (tamanho `QUAD` extra) e sem
     /// `signExtend`/`wide` (SIMD&FP não tem forma com sinal nem eixo `W`/`X` — Armadilha 2 da spec:
     /// a disciplina de escrita destrutiva/zeragem vive inteira em
-    /// {@code Ir64BlockExecutor#executeFpLoad}, intocada aqui).
+    /// {@code Ir64FpMemoryExecutor#executeFpLoad}, intocada aqui).
     private void constructFpLoad64(MethodVisitor mv, FpOp64.Load64 op) {
         String type = IR64_PACKAGE + "FpOp64$Load64";
         mv.visitTypeInsn(Opcodes.NEW, type);
@@ -1085,7 +1085,7 @@ public final class Ir64BlockCompiler {
 
     /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, C12.5, B8.6) — Armadilha 4
     /// da spec: reconstrói só o record (campos constantes de compilação) e delega a
-    /// {@code Ir64AsmRuntimeHelpers#executeOp}/{@code Ir64BlockExecutor#executeVectorLoadStoreMultiple}
+    /// {@code Ir64AsmRuntimeHelpers#executeOp}/{@code Ir64VectorMemoryExecutor#executeVectorLoadStoreMultiple}
     /// — os laços de `rpt`/`selem`/elementos (com a passada separada de zeragem dos bits altos,
     /// Armadilha 2) NÃO são reimplementados em bytecode, mesmo padrão de "chamar helper" que a
     /// C12.3 usou para atomicidade.
@@ -1108,7 +1108,7 @@ public final class Ir64BlockCompiler {
     /// `LD1`-`LD4`/`ST1`-`ST4` de lane única (AdvSIMD load/store SINGLE structure, C12.5, B8.6) —
     /// mesma rota "helper" de {@link #constructVectorLoadStoreMultiple} (Armadilha 4): o laço de
     /// `selem` registradores e a escrita de UMA lane sem tocar o resto do registro (Armadilha 2,
-    /// disciplina "preserva") vivem só em {@code Ir64BlockExecutor#executeVectorLoadStoreSingle}.
+    /// disciplina "preserva") vivem só em {@code Ir64VectorMemoryExecutor#executeVectorLoadStoreSingle}.
     private void constructVectorLoadStoreSingle(MethodVisitor mv, AdvSimdMoveOp64.LoadStoreSingle op) {
         String type = IR64_PACKAGE + "AdvSimdMoveOp64$LoadStoreSingle";
         mv.visitTypeInsn(Opcodes.NEW, type);

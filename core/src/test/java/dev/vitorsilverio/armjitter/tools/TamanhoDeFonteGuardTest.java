@@ -44,12 +44,14 @@ class TamanhoDeFonteGuardTest {
     /// e o teto deles subiu nessa medida exata — 7 arquivos `*64`, de 1 a 14 linhas, na E15.2
     /// (a entrada de `Ir64Op`, 5784, saiu no mesmo commit); `AsmBlockCompiler` +5,
     /// `IrSystemExecutor` +8, `VfpDecoder` +1 e `IrVfpExecutor` +1 na E15.3 (saiu a de `IrOp`, 5036).
+    /// Na E15.4 (saiu a de `Ir64BlockExecutor`, 2349) os métodos de entrada dos executores A64
+    /// ficaram `public` e os que não tinham Javadoc ganharam uma linha (G7):
+    /// `Ir64VectorArithmeticExecutor` +5 e `Ir64VectorFpArithmeticExecutor` +4.
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
             entry("decoder64/Aarch64Decoder.java", 7851),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("codegen/jvm/AsmBlockCompiler.java", 2580),
             entry("codegen/executor/IrSystemExecutor.java", 2516),
-            entry("executor64/Ir64BlockExecutor.java", 2349),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),
             entry("decoder/ArmDecoder.java", 1174),
@@ -60,10 +62,10 @@ class TamanhoDeFonteGuardTest {
             entry("executor64/SveFloat.java", 1092),
             entry("core/ArmCore.java", 1048),
             entry("arch/ArmArchitecture.java", 1001),
-            entry("executor64/Ir64VectorArithmeticExecutor.java", 963),
+            entry("executor64/Ir64VectorArithmeticExecutor.java", 968),
             entry("codegen/executor/IrVfpExecutor.java", 928),
             entry("decoder64/Aarch64SmeDecoder.java", 905),
-            entry("executor64/Ir64VectorFpArithmeticExecutor.java", 842),
+            entry("executor64/Ir64VectorFpArithmeticExecutor.java", 846),
             entry("core/MProfileExceptionModel.java", 841),
             entry("jit/JitRuntime.java", 810));
 

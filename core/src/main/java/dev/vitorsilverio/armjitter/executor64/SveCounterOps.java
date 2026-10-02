@@ -17,7 +17,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 /// e `sve2p1_cont_ldst_elements` (`sve_helper.c`) do QEMU, que seguem o `CounterToPredicate` do manual.
 ///
 /// **Elemento inativo não acessa memória**, e os loads leem tudo para um buffer antes de gravar `Z` (aborto preciso).
-final class SveCounterOps {
+public final class SveCounterOps {
     private static final int COUNTER_REGISTER_MASK = 0xFFFF;
     private static final int COUNTER_ESZ_FIELD_MASK = 0b1111;
     private static final int COUNTER_INVERT_BIT = 15;
@@ -98,7 +98,7 @@ final class SveCounterOps {
     // ── PTRUE / CNTP / PEXT ──────────────────────────────────────────────────────────────────────
 
     /// Executa `PTRUE`/`CNTP`/`PEXT` sobre contador. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SvePredicateOp64.CounterPredicate op) {
+    public static boolean execute(Aarch64Core core, SvePredicateOp64.CounterPredicate op) {
         boolean allowed = op.streamingOnly()
                 ? core.smeStreamingEnabledCheck(op.instructionAddress())
                 : SvePredicateOps.accessAllowed(core, op.instructionAddress());
@@ -177,7 +177,7 @@ final class SveCounterOps {
     // ── LD1 / ST1 multi-vetor ────────────────────────────────────────────────────────────────────
 
     /// Executa `LD1`/`ST1` multi-vetor governado por contador. `true` = a instrução já entrou numa exceção.
-    static boolean execute(Aarch64Core core, SveMemoryOp64.MultiVectorMemory op) {
+    public static boolean execute(Aarch64Core core, SveMemoryOp64.MultiVectorMemory op) {
         boolean allowed = op.streamingOnly()
                 ? core.smeStreamingEnabledCheck(op.instructionAddress())
                 : SvePredicateOps.accessAllowed(core, op.instructionAddress());

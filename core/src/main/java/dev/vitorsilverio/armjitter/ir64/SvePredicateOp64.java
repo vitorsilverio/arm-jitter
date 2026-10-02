@@ -1,5 +1,11 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.SveCompareOps;
+import dev.vitorsilverio.armjitter.executor64.SveCounterOps;
+import dev.vitorsilverio.armjitter.executor64.SveMiscOps;
+import dev.vitorsilverio.armjitter.executor64.SvePredicateOps;
+
 /// Operações SVE cujo resultado é um predicado (ou que só manipulam predicados): lógica, quebra de
 /// partição, contagem, comparações vetoriais e escalares (`WHILE*`), `MATCH`/`NMATCH` e `PSEL`.
 ///
@@ -31,6 +37,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
         /// Operação lógica.
         public enum Op { AND, BIC, EOR, SEL, ORR, ORN, NOR, NAND }
         @Override public int kind() { return Kind.SVE_PREDICATE_LOGICAL; }
+        @Override public boolean execute(Aarch64Core core) { return SvePredicateOps.executeLogical(core, this); }
     }
 
     /// Grupo "misc" de predicados SVE (B17.4): `PTEST`, `PTRUE`/`PTRUES`, `PFALSE`, `SETFFR`,
@@ -54,6 +61,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
         /// Operação do grupo.
         public enum Op { PTEST, PTRUE, PFALSE, SETFFR, RDFFR, RDFFR_PREDICATED, WRFFR, PFIRST, PNEXT }
         @Override public int kind() { return Kind.SVE_PREDICATE_MISC; }
+        @Override public boolean execute(Aarch64Core core) { return SvePredicateOps.executeMisc(core, this); }
     }
 
     /// Partition break SVE (B17.4): `BRKA`/`BRKB` (zeroing ou merging), `BRKPA`/`BRKPB`, `BRKN`.
@@ -77,6 +85,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
         /// Operação do grupo.
         public enum Op { BRKA, BRKB, BRKPA, BRKPB, BRKN }
         @Override public int kind() { return Kind.SVE_PARTITION_BREAK; }
+        @Override public boolean execute(Aarch64Core core) { return SvePredicateOps.executePartitionBreak(core, this); }
     }
 
     /// Contagem por predicado SVE (B17.4): `CNTP`, `FIRSTP`/`LASTP` (`FEAT_SVE2p2`), `INCP`/`DECP`
@@ -103,6 +112,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
             SINCDECP_SCALAR_32, SINCDECP_SCALAR_64, SINCDECP_VECTOR
         }
         @Override public int kind() { return Kind.SVE_PREDICATE_COUNT; }
+        @Override public boolean execute(Aarch64Core core) { return SvePredicateOps.executePredicateCount(core, this); }
     }
 
     /// Comparação SVE inteira que PRODUZ UM PREDICADO (B17.9): `Pd[e] = Pg[e] && (Zn[e] <cond> operando)`, e as flags
@@ -135,6 +145,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
         /// A origem do segundo operando.
         public enum Form { VECTOR, WIDE, IMMEDIATE }
         @Override public int kind() { return Kind.SVE_COMPARE; }
+        @Override public boolean execute(Aarch64Core core) { return SveCompareOps.execute(core, this); }
     }
 
     /// Comparação SVE de ESCALARES (B17.9): `WHILE*` produz um predicado a partir de dois `Xn`/`Wn` (o que faz um laço VLA
@@ -166,6 +177,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
             WHILE_LT_CNT2, WHILE_LT_CNT4, WHILE_GT_CNT2, WHILE_GT_CNT4
         }
         @Override public int kind() { return Kind.SVE_SCALAR_COMPARE; }
+        @Override public boolean execute(Aarch64Core core) { return SveCompareOps.execute(core, this); }
     }
 
     /// Predicado-como-contador SVE2.1 (B17.28), o que NÃO é `WHILE`: `PTRUE` (`PN8`-`PN15`), `CNTP` (conta os elementos que
@@ -191,6 +203,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
         /// Operação. `PEXT_1` escreve um predicado; `PEXT_2`, o par `Pd`, `Pd+1`.
         public enum Op { PTRUE, CNTP, PEXT_1, PEXT_2 }
         @Override public int kind() { return Kind.SVE_COUNTER_PREDICATE; }
+        @Override public boolean execute(Aarch64Core core) { return SveCounterOps.execute(core, this); }
     }
 
     /// `MATCH`/`NMATCH` (B17.22, `FEAT_SVE2`): busca de caractere vetorial. Para cada elemento ATIVO (por `pg`) de
@@ -213,6 +226,7 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
             int rm,
             long instructionAddress) implements SvePredicateOp64 {
         @Override public int kind() { return Kind.SVE_MATCH; }
+        @Override public boolean execute(Aarch64Core core) { return SveMiscOps.executeMatch(core, this); }
     }
 
     /// `PSEL` (B17.22, `FEAT_SME`/`FEAT_SVE2p1`): decodificação posicional pura (Achado análogo ao `PMOV` da
@@ -235,5 +249,6 @@ public sealed interface SvePredicateOp64 extends SveOp64 permits SvePredicateOp6
             int imm,
             long instructionAddress) implements SvePredicateOp64 {
         @Override public int kind() { return Kind.SVE_PREDICATE_SELECT; }
+        @Override public boolean execute(Aarch64Core core) { return SveMiscOps.executePredicateSelect(core, this); }
     }
 }

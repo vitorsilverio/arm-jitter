@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// B10.5: `SMC` real (entra em EL3) — ver `tasks/trilha-b-arquiteturas/b10.5-smc-real.md`. Mesmo
 /// estilo de {@link Aarch64HypervisorCallTest} (`step()` real sobre memória, provando o caminho de
-/// captura completo: decoder→`Ir64BlockExecutor#executePrivilegedCall`→
+/// captura completo: decoder→`Ir64SystemExecutor#executePrivilegedCall`→
 /// `Aarch64SecureMonitorCallException`→`step()`).
 class Aarch64SecureMonitorCallTest {
     private static final Ir64BlockExecutor EXECUTOR = new Ir64BlockExecutor();

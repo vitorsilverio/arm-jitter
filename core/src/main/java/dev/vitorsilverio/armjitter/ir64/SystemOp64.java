@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64SystemExecutor;
+
 /// Operações A64 de sistema: geração e retorno de exceção, acesso a registrador de sistema,
 /// instruções de sistema (`SYS`/`AT`/hints), máscara de interrupção e controle do modo streaming.
 ///
@@ -17,6 +20,7 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
             /// Imediato de 16 bits da instrução `SVC`.
             int immediate) implements SystemOp64 {
         @Override public int kind() { return Kind.SVC; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64SystemExecutor.executeSvc(core, this); }
     }
 
     /// `MRS`/`MSR (register)` (`ARM DDI 0487 C5.2.3`, B6.6.1) — leitura/escrita de um registrador
@@ -34,6 +38,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
             /// `31` é `XZR`).
             int rt) implements SystemOp64 {
         @Override public int kind() { return Kind.SYSTEM_REGISTER; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeSystemRegister(core, this);
+        }
     }
 
     /// `SYS`/`SYS(L)` (`ARM DDI 0487 C5.2.3`, task B6.6.3) — subconjunto mínimo reconhecido:
@@ -56,6 +63,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
         }
 
         @Override public int kind() { return Kind.SYSTEM_INSTRUCTION; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeSystemInstruction(core, this);
+        }
     }
 
     /// `ERET` (`ARM DDI 0487 C6.2.111`, task B6.6.4) — retorna de EL1 para EL0:
@@ -67,6 +77,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
     /// encoding fixa `Rn=31` (não lido, `ARM DDI 0487` pseudocódigo de `ERET`).
     record ExceptionReturn() implements SystemOp64 {
         @Override public int kind() { return Kind.EXCEPTION_RETURN; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeExceptionReturn(core, this);
+        }
     }
 
     /// `HVC`/`SMC` (`ARM DDI 0487 C6.2.148/C6.2.294`, task B6.6.7; `HVC` real desde B10.4, `SMC`
@@ -74,7 +87,7 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#enterHypervisorCall}; `SMC` entra em
     /// EL3 de verdade via
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#enterSecureMonitorCall} — ver
-    /// `Ir64BlockExecutor#executePrivilegedCall`. Sem campo de imediato: o `imm16` do encoding só
+    /// `Ir64SystemExecutor#executePrivilegedCall`. Sem campo de imediato: o `imm16` do encoding só
     /// teria sentido para um handler em EL2/EL3 que leia a própria instrução, que este emulador não
     /// modela (ver Armadilhas das tasks B10.4/B10.5).
     ///
@@ -82,6 +95,7 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
     ///              B10.5)
     record PrivilegedCall(boolean isHvc) implements SystemOp64 {
         @Override public int kind() { return Kind.PRIVILEGED_CALL; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64SystemExecutor.executePrivilegedCall(this); }
     }
 
     /// `AT` (`ARM DDI 0487 C6.2.23`, task B10.6) — traduz `Xt` (VA) pelo regime real (EL1&0, EL2
@@ -96,6 +110,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
     ///             {@link SystemRegister#rt})
     record AddressTranslate(Aarch64AddressTranslateForm form, int rt) implements SystemOp64 {
         @Override public int kind() { return Kind.ADDRESS_TRANSLATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeAddressTranslate(core, this);
+        }
     }
 
     /// `MSR (immediate) DAIFSet`/`DAIFClr` (`ARM DDI 0487 C6.2.149/C6.2.150`, B8.3, subgrupo
@@ -116,6 +133,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
             /// tomada para o resto de `DAIF` em B6.6.7).
             int mask) implements SystemOp64 {
         @Override public int kind() { return Kind.INTERRUPT_MASK; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeInterruptMask(core, this);
+        }
     }
 
     /// `BRK` (`ARM DDI 0487 C6.2.29`, B8.3) — gera uma exceção síncrona de "Breakpoint Instruction"
@@ -132,6 +152,7 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
             /// convenção do Linux/GDB para identificar o motivo do trap).
             int immediate) implements SystemOp64 {
         @Override public int kind() { return Kind.BREAKPOINT; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64SystemExecutor.executeBreakpoint(this); }
     }
 
     /// `HLT` (`ARM DDI 0487 C6.2.148`, B8.3) — instrução de "Halting debug": sem estado de debug
@@ -144,6 +165,9 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
     /// `HVC`/`SMC` descartado em {@link PrivilegedCall}).
     record UndefinedInstructionTrap() implements SystemOp64 {
         @Override public int kind() { return Kind.UNDEFINED_INSTRUCTION_TRAP; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeUndefinedInstructionTrap();
+        }
     }
 
     /// `MSR SVCRSM`/`SVCRZA`/`SVCRSMZA, #imm` (`FEAT_SME`, B18.2) — os aliases `SMSTART`/`SMSTOP` do
@@ -162,5 +186,8 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
             /// executor não conhece o PC da instrução (mesmo precedente de {@link IntegerOp64.PcRelative}).
             long instructionAddress) implements SystemOp64 {
         @Override public int kind() { return Kind.STREAMING_MODE_CONTROL; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeStreamingModeControl(core, this);
+        }
     }
 }

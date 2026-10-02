@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /// B10.4: `HVC` real (entra em EL2) — ver `tasks/trilha-b-arquiteturas/b10.4-hvc-real.md`. Espelha
 /// o estilo de {@link Ir64BlockExecutorB101Test} (`step()` real sobre memória, não chamada direta a
 /// `Aarch64Core#enterHypervisorCall`, para provar o caminho de captura completo:
-/// decoder→`Ir64BlockExecutor#executePrivilegedCall`→`Aarch64HypervisorCallException`→`step()`).
+/// decoder→`Ir64SystemExecutor#executePrivilegedCall`→`Aarch64HypervisorCallException`→`step()`).
 /// `SMC` (B10.5, real desde então) tem sua própria árvore de decisão coberta em
 /// {@link Aarch64SecureMonitorCallTest} — este arquivo só mantém um teste de regressão rápido para
 /// confirmar que a mudança de `HVC` não afetou `SMC`.

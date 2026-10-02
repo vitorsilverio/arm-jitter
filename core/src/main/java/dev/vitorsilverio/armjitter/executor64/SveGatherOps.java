@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 /// o tipo de memória), então um `LDFF1` sobre MMIO PODE atingir o dispositivo.
 ///
 /// Todo gather (e `LD1Q`) é ilegal em modo streaming.
-final class SveGatherOps {
+public final class SveGatherOps {
     private static final int WORDS_PER_QUADWORD = 2;
     private static final int QUADWORD_BYTES = 16;
     private static final int STACK_POINTER_ENCODING = 31;
@@ -34,7 +34,7 @@ final class SveGatherOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveMemoryOp64.Gather op) {
+    public static boolean execute(Aarch64Core core, SveMemoryOp64.Gather op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;

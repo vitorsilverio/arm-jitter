@@ -13,7 +13,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// arquitetura define (`SQADD Zdn.B, Zdn.B, #255` satura em 127 para elemento não negativo; o valor NÃO vira `-1`).
 /// As formas `_m` (`CPY_m_i`/`FCPY`) preservam o elemento inativo; `CPY_z_i` o zera. Um elemento está ativo quando
 /// o bit do byte MAIS BAIXO dele em `P[pg]` está ligado. Os auxiliares de elemento vêm de {@link SveIntegerOps}.
-final class SveImmediateOps {
+public final class SveImmediateOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int ESZ_DOUBLEWORD = 3;
@@ -22,7 +22,7 @@ final class SveImmediateOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.Immediate op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.Immediate op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

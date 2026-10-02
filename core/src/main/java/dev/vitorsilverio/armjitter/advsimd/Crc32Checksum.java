@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.advsimd;
 
 /// Núcleo compartilhado do algoritmo `CRC32`/`CRC32C` (B14.3), extraído de
-/// `Ir64BlockExecutor#executeCrc32` (B19.17) para o lado A64 delegar aqui em vez de manter uma
+/// `Ir64IntegerExecutor#executeCrc32` (B19.17) para o lado A64 delegar aqui em vez de manter uma
 /// segunda cópia do laço — mesma disciplina "D1" da RFC `b13.2-rfc-nucleo-vetorial.md` (extrair
 /// para um núcleo neutro e fazer as duas larguras delegarem), aplicada ao pacote `advsimd` por já
 /// ser o único hoje importado tanto pelo lado de 32 bits (`codegen.executor.IrNeonExecutor`/

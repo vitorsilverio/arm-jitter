@@ -16,7 +16,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// As formas reversas (`SUBR`/`SDIVR`/`ASRR`…) já chegam com `rn`/`rm` trocados pelo decoder; aqui o
 /// resultado é sempre `op(Zn, Zm)`. `FABS`/`FNEG` são bit-ops (limpam/invertem o bit de sinal);
 /// `FPCR.AH` (FEAT_AFP, onde NaN é preservado) não é modelado no core — pendência nomeada da task.
-final class SveIntegerPredicatedOps {
+public final class SveIntegerPredicatedOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int ESZ_BYTE = 0;
@@ -28,7 +28,7 @@ final class SveIntegerPredicatedOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerPredicated op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerPredicated op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

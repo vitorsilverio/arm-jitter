@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
 /// deste último (mesmo pacote) em vez de duplicá-las. Sem estado próprio, métodos estáticos. É o
 /// oráculo semântico (G1) — nenhum `Kind` desta task entra em `Ir64NativePolicy` (cai no
 /// interpretador, mesma decisão de todo `Kind` novo desde B8.4).
-final class Ir64VectorFpArithmeticExecutor {
+public final class Ir64VectorFpArithmeticExecutor {
     private Ir64VectorFpArithmeticExecutor() {
     }
 
@@ -116,7 +116,8 @@ final class Ir64VectorFpArithmeticExecutor {
         };
     }
 
-    static boolean executeThreeSame(Aarch64Core core, AdvSimdFpOp64.FpArithmeticThreeSame op) {
+    /// Executa {@link AdvSimdFpOp64.FpArithmeticThreeSame}.
+    public static boolean executeThreeSame(Aarch64Core core, AdvSimdFpOp64.FpArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -149,7 +150,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// AdvSimdFpThreeSameOp#FMLS}, mesma convenção de {@link #executeThreeSame}) — diferente do NEON
     /// de 32 bits, que usa `MLA`/`MLS` NÃO fundido (decisão 3 da B13.6). A forma ESCALAR processa só
     /// o elemento `0`.
-    static boolean executeThreeSameByElement(Aarch64Core core, AdvSimdFpOp64.FpArithmeticThreeSameByElement op) {
+    public static boolean executeThreeSameByElement(Aarch64Core core, AdvSimdFpOp64.FpArithmeticThreeSameByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -164,7 +165,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270` — delega 100% ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpComplexAdd}, já escrito pela B13.17 para `VCADD` do NEON de 32 bits). Sem
     /// forma escalar (ver Javadoc de {@link AdvSimdFpOp64.FpComplexAdd}).
-    static boolean executeComplexAdd(Aarch64Core core, AdvSimdFpOp64.FpComplexAdd op) {
+    public static boolean executeComplexAdd(Aarch64Core core, AdvSimdFpOp64.FpComplexAdd op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -178,7 +179,7 @@ final class Ir64VectorFpArithmeticExecutor {
 
     /// B19.11e (`FEAT_FP8`): `FSCALE` — delega 100% ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpScaleByInt}). Sem forma escalar (ver Javadoc de {@link AdvSimdFpOp64.FpScaleByInt}).
-    static boolean executeScaleByInt(Aarch64Core core, AdvSimdFpOp64.FpScaleByInt op) {
+    public static boolean executeScaleByInt(Aarch64Core core, AdvSimdFpOp64.FpScaleByInt op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -193,7 +194,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// B19.24 (`FEAT_FAMINMAX`): `FAMAX`/`FAMIN` — delega ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpAbsoluteMaxMin}). Sem forma escalar (ver Javadoc de
     /// {@link AdvSimdFpOp64.FpAbsoluteMaxMin}).
-    static boolean executeAbsoluteMaxMin(Aarch64Core core, AdvSimdFpOp64.FpAbsoluteMaxMin op) {
+    public static boolean executeAbsoluteMaxMin(Aarch64Core core, AdvSimdFpOp64.FpAbsoluteMaxMin op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -207,7 +208,7 @@ final class Ir64VectorFpArithmeticExecutor {
 
     /// B19.20 (`FEAT_FCMA`): `FCMLA_v` — delega ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpComplexMultiplyAccumulate}, B13.17).
-    static boolean executeComplexMultiplyAccumulate(Aarch64Core core, AdvSimdFpOp64.FpComplexMultiplyAccumulate op) {
+    public static boolean executeComplexMultiplyAccumulate(Aarch64Core core, AdvSimdFpOp64.FpComplexMultiplyAccumulate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -223,7 +224,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// AdvSimdLanes#fpComplexMultiplyAccumulateByElement}, B13.17); {@link
     /// AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement#index} já é o índice do PAR (o núcleo
     /// multiplica por `2` internamente).
-    static boolean executeComplexMultiplyAccumulateByElement(
+    public static boolean executeComplexMultiplyAccumulateByElement(
             Aarch64Core core, AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
@@ -236,7 +237,8 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
-    static boolean executePairwise(Aarch64Core core, AdvSimdFpOp64.FpArithmeticPairwise op) {
+    /// Executa {@link AdvSimdFpOp64.FpArithmeticPairwise}.
+    public static boolean executePairwise(Aarch64Core core, AdvSimdFpOp64.FpArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         AdvSimdFpPairwiseOp shared = sharedFpPairwiseOp(op.op());
@@ -258,7 +260,8 @@ final class Ir64VectorFpArithmeticExecutor {
         return false;
     }
 
-    static boolean executeUnary(Aarch64Core core, AdvSimdFpOp64.FpArithmeticUnary op) {
+    /// Executa {@link AdvSimdFpOp64.FpArithmeticUnary}.
+    public static boolean executeUnary(Aarch64Core core, AdvSimdFpOp64.FpArithmeticUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         // B19.3: `FCVTXN` (só forma escalar nesta task) tem `esz` de ENTRADA (`f64`) ≠ `esz` de
@@ -443,7 +446,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// MESMA função que o NEON de 32 bits (`VCVT` fixo↔float) chama. Serve tanto a forma ESCALAR
     /// (B19.3, `op.scalar()`) quanto a VETORIAL `_vf` (B19.4, `!op.scalar()`, `q` real) — a única
     /// diferença é `elements` e a finalização destrutiva, ambas do lado A64.
-    static boolean executeConvertFixedPoint(Aarch64Core core, AdvSimdFpOp64.FpConvertFixedPoint op) {
+    public static boolean executeConvertFixedPoint(Aarch64Core core, AdvSimdFpOp64.FpConvertFixedPoint op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -461,7 +464,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// estreitar) e a finalização (só ao estreitar — alargar escreve os 128 bits inteiros). Os
     /// resultados são bufferizados num `long[]` antes de qualquer escrita, porque `Rd` pode ser `Rn`
     /// e ao alargar a escrita de `Rd[0]` (largo) cobre `Rn[0]` E `Rn[1]` (estreitos).
-    static boolean executeConvertPrecision(Aarch64Core core, AdvSimdFpOp64.FpConvertPrecision op) {
+    public static boolean executeConvertPrecision(Aarch64Core core, AdvSimdFpOp64.FpConvertPrecision op) {
         Aarch64FpRegisters fp = core.fp();
         int narrowEsz = op.esz();
         int wideEsz = narrowEsz + 1;
@@ -511,7 +514,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// contrário do resto deste executor, nenhum dos três é decidido em tempo de decodificação
     /// (Armadilha 3 da task: são valores de um REGISTRADOR, não do encoding). Resultado bufferizado
     /// (E10) antes de qualquer escrita — `Rd` pode ser `Rn`/`Rm`.
-    static boolean executeConvertToFp8(Aarch64Core core, AdvSimdFpOp64.FpConvertToFp8 op) {
+    public static boolean executeConvertToFp8(Aarch64Core core, AdvSimdFpOp64.FpConvertToFp8 op) {
         Aarch64FpRegisters fp = core.fp();
         boolean e4m3 = core.fp8DestinationFormat() == Aarch64Fp8Format.E4M3;
         int scaleExponent = core.fp8NarrowScale();
@@ -548,7 +551,8 @@ final class Ir64VectorFpArithmeticExecutor {
     /// ({@link Ir64VectorFpConvertPrecisionOp#FCVTL}), sem finalização (nada a zerar/preservar).
     private static final int FP8_WIDEN_SOURCE_ELEMENTS = 8;
 
-    static boolean executeConvertFromFp8(Aarch64Core core, AdvSimdFpOp64.FpConvertFromFp8 op) {
+    /// Executa {@link AdvSimdFpOp64.FpConvertFromFp8}.
+    public static boolean executeConvertFromFp8(Aarch64Core core, AdvSimdFpOp64.FpConvertFromFp8 op) {
         Aarch64FpRegisters fp = core.fp();
         Aarch64Fp8Format format = op.secondStream() ? core.fp8SourceFormat2() : core.fp8SourceFormat1();
         boolean e4m3 = format == Aarch64Fp8Format.E4M3;
@@ -574,7 +578,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// mista FP8→meia/simples precisão). Sempre os 128 bits inteiros de `Rd` (sem finalização —
     /// mesma disciplina de {@link #executeConvertFromFp8}, `do_fmla_fp8` do QEMU não tem forma de
     /// 64 bits).
-    static boolean executeFp8FusedMultiplyAddLong(Aarch64Core core, AdvSimdFpOp64.Fp8FusedMultiplyAddLong op) {
+    public static boolean executeFp8FusedMultiplyAddLong(Aarch64Core core, AdvSimdFpOp64.Fp8FusedMultiplyAddLong op) {
         Aarch64FpRegisters fp = core.fp();
         boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
         boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
@@ -603,7 +607,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// ({@link AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement#index}), lido UMA vez e replicado para
     /// todas as lanes — achado real (`HELPER(gvec_fmla_idx_*)` do QEMU): o byte de `Rm` é calculado
     /// FORA do laço de lanes, não recalculado por lane.
-    static boolean executeFp8FusedMultiplyAddLongByElement(
+    public static boolean executeFp8FusedMultiplyAddLongByElement(
             Aarch64Core core, AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement op) {
         Aarch64FpRegisters fp = core.fp();
         boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
@@ -636,7 +640,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// {@link #executeFp8FusedMultiplyAddLong}, onde a largura de `Rn`/`Rm` é sempre FP8 cru). `Rd`
     /// é RMW; finalização "destructive" padrão (zera os bits altos quando `!q`), diferente de
     /// {@link #executeFp8FusedMultiplyAddLong} (sempre 128 bits, sem `Q` real).
-    static boolean executeFp8DotProduct(Aarch64Core core, AdvSimdFpOp64.Fp8DotProduct op) {
+    public static boolean executeFp8DotProduct(Aarch64Core core, AdvSimdFpOp64.Fp8DotProduct op) {
         Aarch64FpRegisters fp = core.fp();
         boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
         boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
@@ -665,7 +669,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// ({@link AdvSimdFpOp64.Fp8DotProductByElement#index}), lido UMA vez e replicado para todas as
     /// lanes (achado real: `HELPER(gvec_fdot_idx_*)` do QEMU calcula o grupo de `Rm` FORA do laço
     /// de lanes).
-    static boolean executeFp8DotProductByElement(Aarch64Core core, AdvSimdFpOp64.Fp8DotProductByElement op) {
+    public static boolean executeFp8DotProductByElement(Aarch64Core core, AdvSimdFpOp64.Fp8DotProductByElement op) {
         Aarch64FpRegisters fp = core.fp();
         boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
         boolean mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
@@ -693,7 +697,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// `Rd`. B8.10: precisão simples, `esz=2` fixo, sempre 4 elementos (`4S`, único arranjo real).
     /// B19.5.3 (`FEAT_FP16`): `esz=1`, `elements` `4` ou `8` conforme {@link AdvSimdFpOp64.FpAcrossLanes#q()}
     /// — daí o uso de {@link #elementsPerRegister} em vez do `4` fixo de antes desta task.
-    static boolean executeFpAcrossLanes(Aarch64Core core, AdvSimdFpOp64.FpAcrossLanes op) {
+    public static boolean executeFpAcrossLanes(Aarch64Core core, AdvSimdFpOp64.FpAcrossLanes op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -743,7 +747,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// `setSFloat`/`setDDouble`; `bf16` não tem via de registrador nativa no banco, por isso usa
     /// {@link Aarch64FpRegisters#setScalar} diretamente (zera o resto de `Vd`, mesma disciplina
     /// "SIMD&FP destructive write").
-    static boolean executeConvertToBf16(Aarch64Core core, FpOp64.ConvertToBf16 op) {
+    public static boolean executeConvertToBf16(Aarch64Core core, FpOp64.ConvertToBf16 op) {
         Aarch64FpRegisters fp = core.fp();
         float value = fp.sFloat(op.vn());
         fp.setScalar(op.vd(), 1, AdvSimdLanes.bf16Bits(value));
@@ -752,7 +756,7 @@ final class Ir64VectorFpArithmeticExecutor {
 
     /// `BFDOT` vetorial (B19.7) — sempre `esz=2`/word (o resultado é sempre uma lane `f32`, mesma
     /// convenção do produto escalar inteiro).
-    static boolean executeFpDotProductBFloat16(Aarch64Core core, AdvSimdFpOp64.FpDotProductBFloat16 op) {
+    public static boolean executeFpDotProductBFloat16(Aarch64Core core, AdvSimdFpOp64.FpDotProductBFloat16 op) {
         Aarch64FpRegisters fp = core.fp();
         int elements = elementsPerRegister(op.q(), 2);
         AdvSimdLanes.bfDotProduct(fp, elements,
@@ -764,7 +768,7 @@ final class Ir64VectorFpArithmeticExecutor {
     }
 
     /// `BFDOT` indexado (`BFDOT_vi`, B19.7).
-    static boolean executeFpDotProductBFloat16ByElement(
+    public static boolean executeFpDotProductBFloat16ByElement(
             Aarch64Core core, AdvSimdFpOp64.FpDotProductBFloat16ByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int elements = elementsPerRegister(op.q(), 2);
@@ -779,7 +783,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// `BFMLALB`/`BFMLALT` (B19.7) — `Vd.4S` é SEMPRE 128 bits inteiros (nunca escrita destrutiva
     /// parcial, `op.top()` seleciona par/ímpar em vez de largura — ver Javadoc de
     /// {@link AdvSimdFpOp64.FpMultiplyAddLongBFloat16#top}).
-    static boolean executeFpMultiplyAddLongBFloat16(
+    public static boolean executeFpMultiplyAddLongBFloat16(
             Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLongBFloat16 op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdLanes.bfMultiplyAddLong(fp, op.top(),
@@ -790,7 +794,7 @@ final class Ir64VectorFpArithmeticExecutor {
     }
 
     /// `BFMLALB`/`BFMLALT` indexado (`BFMLAL_vi`, B19.7).
-    static boolean executeFpMultiplyAddLongBFloat16ByElement(
+    public static boolean executeFpMultiplyAddLongBFloat16ByElement(
             Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdLanes.bfMultiplyAddLongByElement(fp, op.top(),
@@ -803,7 +807,7 @@ final class Ir64VectorFpArithmeticExecutor {
     /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (B19.13) — ao contrário de `BFMLALB`/`BFMLALT` acima, `q`
     /// aqui controla largura de VERDADE (`Vd.2S`/`Vd.4S`), não só a metade — escrita "destructive"
     /// como o resto de {@link #executeThreeSame} quando `!q`.
-    static boolean executeFpMultiplyAddLong(Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLong op) {
+    public static boolean executeFpMultiplyAddLong(Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLong op) {
         Aarch64FpRegisters fp = core.fp();
         int lanes = elementsPerRegister(op.q(), 2);
         int laneOffset = op.top() ? lanes : 0;
@@ -816,7 +820,7 @@ final class Ir64VectorFpArithmeticExecutor {
     }
 
     /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` indexado (B19.13).
-    static boolean executeFpMultiplyAddLongByElement(Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLongByElement op) {
+    public static boolean executeFpMultiplyAddLongByElement(Aarch64Core core, AdvSimdFpOp64.FpMultiplyAddLongByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int lanes = elementsPerRegister(op.q(), 2);
         int laneOffset = op.top() ? lanes : 0;
@@ -830,7 +834,7 @@ final class Ir64VectorFpArithmeticExecutor {
 
     /// `BFMMLA` (B19.7) — `Q` fixo em `1` no encoding (sem forma de 64 bits), mesma disciplina de
     /// `SMMLA`/`UMMLA`/`USMMLA` (B19.12).
-    static boolean executeFpMatrixMultiplyAccumulateBFloat16(
+    public static boolean executeFpMatrixMultiplyAccumulateBFloat16(
             Aarch64Core core, AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16 op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdLanes.bfMatrixMultiplyAccumulate(fp,

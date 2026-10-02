@@ -20,7 +20,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// bits, com o elemento de `Zm` lido uma vez por segmento antes de qualquer escrita (vale com `Zd == Zm`).
 ///
 /// Nada disto é ilegal em modo streaming.
-final class SveFpMultiplyAddOps {
+public final class SveFpMultiplyAddOps {
     private static final int SEGMENT_BYTES = 16;
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
@@ -33,7 +33,7 @@ final class SveFpMultiplyAddOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpMultiplyAdd op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpMultiplyAdd op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

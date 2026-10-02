@@ -16,7 +16,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 /// - Estreitamento "sequencial" põe o registrador `k` no bloco `k` do destino; o `N` ("narrow and interleave") intercala.
 /// - Ponto flutuante reusa {@link SveFloat} (`FPCR` lido uma vez, flags acumuladas no fim). `FPCR.AH` e `fpmr_access_check`
 ///   não são modelados (pendências nomeadas, como no SVE).
-final class SmeConstructiveOps {
+public final class SmeConstructiveOps {
     private static final int BYTES_PER_WORD = Long.BYTES;
     private static final int ESZ_BYTE = 0;
     private static final int ESZ_HALF = 1;
@@ -36,7 +36,7 @@ final class SmeConstructiveOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.Constructive op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.Constructive op) {
         boolean sharedWithSve = isSharedRshrn(op);
         boolean allowed = sharedWithSve ? SvePredicateOps.accessAllowed(core, op.instructionAddress())
                 : core.smeStreamingEnabledCheck(op.instructionAddress());

@@ -17,7 +17,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// OPCODE e ignoram `FPCR.RMode`; `FRINTI`, `FRINTX`, `FRINT32X`/`FRINT64X`, `FCVT` (estreitando) e `SCVTF`/`UCVTF`
 /// seguem `FPCR.RMode`; `FCVTX` é sempre "ímpar"; `FCVTZS`/`FCVTZU` sempre truncam. `FRINTX` é a única `FRINT*` que
 /// levanta `IXC`. Não modelados (pendências nomeadas): `FPCR.AHP` (meia alternativa) e `FPCR.AH`.
-final class SveFpUnaryOps {
+public final class SveFpUnaryOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int INT32_BITS = 32;
@@ -27,7 +27,7 @@ final class SveFpUnaryOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpUnary op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpUnary op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

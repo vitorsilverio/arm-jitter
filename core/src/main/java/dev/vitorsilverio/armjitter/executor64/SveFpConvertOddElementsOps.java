@@ -11,7 +11,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// leem o elemento LARGO `e` e escrevem SÓ o elemento estreito ÍMPAR `2e+1` (PRESERVAM o par `2e` — não
 /// escrever nada nele, mesmo em zeroing); `FCVTLT` (alarga) lê o elemento estreito ÍMPAR `2e+1` e escreve o
 /// elemento largo `e` inteiro.
-final class SveFpConvertOddElementsOps {
+public final class SveFpConvertOddElementsOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
 
@@ -19,7 +19,7 @@ final class SveFpConvertOddElementsOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpConvertOddElements op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpConvertOddElements op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

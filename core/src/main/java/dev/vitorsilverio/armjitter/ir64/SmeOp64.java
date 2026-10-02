@@ -1,5 +1,15 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.SmeArrayMultiVectorOps;
+import dev.vitorsilverio.armjitter.executor64.SmeConstructiveOps;
+import dev.vitorsilverio.armjitter.executor64.SmeMemoryOps;
+import dev.vitorsilverio.armjitter.executor64.SmeMop4Ops;
+import dev.vitorsilverio.armjitter.executor64.SmeMovaOps;
+import dev.vitorsilverio.armjitter.executor64.SmeMultiVectorOps;
+import dev.vitorsilverio.armjitter.executor64.SmeOuterProductOps;
+import dev.vitorsilverio.armjitter.executor64.SmeZt0Ops;
+
 /// Operações SME/SME2: acesso ao array `ZA` e a `ZT0`, produtos externos e as formas multi-vetor.
 ///
 /// Sub-interface selada de {@link Ir64Op} (task E15.2): os records desta família vivem aqui, e
@@ -18,11 +28,13 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int imm8,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_ZERO; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMovaOps.execute(core, this); }
     }
 
     /// SME2 `ZERO_zt0` (B18.3, `FEAT_SME2`): zera o registrador `ZT0` (512 bits) inteiro.
     record ZeroZt0(long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_ZERO_ZT0; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMovaOps.execute(core, this); }
     }
 
     /// SME `MOVA`/`MOVAZ` (B18.3): move entre o array `ZA` e o banco `Z` — três formas no mesmo record
@@ -76,6 +88,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int offset,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_MOVA; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMovaOps.execute(core, this); }
     }
 
     /// SME `LD1B`/`LD1H`/`LD1W`/`LD1D`/`LD1Q` e `ST1*` de slice de tile (B18.4, `FEAT_SME`) — uma única linha
@@ -105,6 +118,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int offset,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_TILE_LOAD_STORE; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMemoryOps.execute(core, this); }
     }
 
     /// SME `LDR`/`STR` (B18.4, `FEAT_SME`) de UM vetor do array `ZA` (`SVL/8` bytes): `ZA[(W<registerIndex> +
@@ -120,6 +134,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int imm,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_ARRAY_LOAD_STORE; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMemoryOps.execute(core, this); }
     }
 
     /// SME2 `LDR ZT0`/`STR ZT0` (B18.4, `FEAT_SME2`): 64 bytes de/para `X<rn>|SP`, sem offset.
@@ -129,6 +144,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int rn,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_ZT0_LOAD_STORE; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMemoryOps.execute(core, this); }
     }
 
     /// SME `ADDHA`/`ADDVA` e produto externo acumulado sobre UM tile inteiro de `ZA` (B18.5): `ZA<tile>[i][j]` é
@@ -170,6 +186,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_OUTER_PRODUCT; }
+        @Override public boolean execute(Aarch64Core core) { return SmeOuterProductOps.execute(core, this); }
     }
 
     /// SME `MOP4` — produto externo de QUARTO de tile, **sem predicado** (B18.5b, `FEAT_SME_MOP4`): o tile
@@ -208,6 +225,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_MOP4; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMop4Ops.execute(core, this); }
     }
 
     /// SME `TMOP` — produto externo ESPARSO (B18.5b, `FEAT_SME_TMOP`): a linha vem do par `Zn`/`Zn+1` (`zn` par,
@@ -243,6 +261,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_TMOP; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMop4Ops.execute(core, this); }
     }
 
     /// SME `ZERO` multi-vetor de `ZA` (B18.6, `FEAT_SME2p1`): zera {@link #ngrp} grupos de {@link #nvec} linhas de `ZA`.
@@ -256,6 +275,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int off,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_ZERO_ARRAY; }
+        @Override public boolean execute(Aarch64Core core) { return SmeZt0Ops.execute(core, this); }
     }
 
     /// SME2 `MOVT` (B18.6): move entre `ZT0` e um registrador. `ZT_TO_X`/`X_TO_ZT` (`FEAT_SME2`) transferem a palavra
@@ -271,6 +291,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         public enum Form { ZT_TO_X, X_TO_ZT, VECTOR_TO_ZT }
 
         @Override public int kind() { return Kind.SME_MOVT; }
+        @Override public boolean execute(Aarch64Core core) { return SmeZt0Ops.execute(core, this); }
     }
 
     /// SME2 `LUTI2`/`LUTI4` (B18.6): para cada elemento do destino, um índice de 2/4 bits tirado de `Zn` escolhe uma
@@ -291,6 +312,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
             int index,
             long instructionAddress) implements SmeOp64 {
         @Override public int kind() { return Kind.SME_LUT; }
+        @Override public boolean execute(Aarch64Core core) { return SmeZt0Ops.execute(core, this); }
     }
 
     /// SME2 multi-vetor "multiple-and-single" destrutivo (B18.7, `FEAT_SME2`): `Zdn[i] = op(Zdn[i], Zm)` para cada um
@@ -323,6 +345,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_MULTI_VECTOR_SINGLE; }
+        @Override public boolean execute(Aarch64Core core) { return SmeMultiVectorOps.execute(core, this); }
     }
 
     /// SME2 multi-vetor "multiple and single, array vectors" (B18.9, `FEAT_SME2`): grupo de {@link #count}
@@ -429,6 +452,7 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_ARRAY_MULTI_VECTOR; }
+        @Override public boolean execute(Aarch64Core core) { return SmeArrayMultiVectorOps.execute(core, this); }
     }
 
     /// SME2 multi-vetor SVE "constructive" (B18.12, `FEAT_SME2` + o gate de cada linha): grupos de `2`/`4` registradores
@@ -474,5 +498,6 @@ public sealed interface SmeOp64 extends Ir64Op permits SmeOp64.Zero, SmeOp64.Zer
         }
 
         @Override public int kind() { return Kind.SME_CONSTRUCTIVE; }
+        @Override public boolean execute(Aarch64Core core) { return SmeConstructiveOps.execute(core, this); }
     }
 }

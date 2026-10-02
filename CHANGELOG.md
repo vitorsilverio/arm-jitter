@@ -7,6 +7,19 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
 
+### Adicionado
+- **`Ir64Op#execute(Aarch64Core)`** (`E15.4`): cada operação do IR A64 executa a si mesma, delegando numa linha para o
+  executor da sua família. É o único dispatch do interpretador A64 — o `switch` de 212 casos de `Ir64BlockExecutor` saiu —
+  e esquecer a ponte num record novo é erro de compilação, não `IllegalStateException` em runtime. `Ir64Op.Cycle` e
+  `Ir64Op.Fetch` lançam `IllegalStateException` (não são instrução). `Ir64BlockExecutor#executeOp` continua existindo e
+  equivale a `op.execute(core)`; `step`/`run`/`executeBlock` não mudam.
+- **Executores A64 por família, públicos** (`E15.4`): a semântica que vivia em métodos privados de `Ir64BlockExecutor`
+  (2349 → 217 linhas) passou para `Ir64IntegerExecutor`, `Ir64MemoryExecutor`, `Ir64BranchExecutor`, `Ir64SystemExecutor`,
+  `Ir64FpMemoryExecutor` e `Ir64VectorMemoryExecutor`. Essas seis classes e as 39 que já existiam no pacote `executor64`
+  como package-private (`Ir64FpExecutor`, `Ir64Vector*Executor`, `Ir64CryptoExecutor`, `Sve*Ops`, `Sme*Ops`) agora são
+  `public final`, com o método de entrada de cada record `public static` — é o que a ponte em `ir64` chama. São detalhe de
+  execução: o ponto de entrada estável continua sendo `Ir64Op#execute`/`Ir64BlockExecutor`.
+
 ### Alterado
 - **Quebra de nome no pacote `ir64`** (`E15.2`, exceção ao G3 aceita pelo usuário em 2026-10-02): os 209 records de instrução
   e os 7 enums que viviam aninhados em `Ir64Op` (5784 linhas) passaram para sub-interfaces seladas por família, um arquivo

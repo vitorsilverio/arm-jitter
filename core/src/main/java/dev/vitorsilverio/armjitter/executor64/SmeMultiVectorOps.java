@@ -20,14 +20,14 @@ import java.util.Arrays;
 /// - Ponto flutuante usa o `FPCR` do core (`FPST_A64`) e acumula as flags em `FPSR` uma vez no fim; `FPCR.AH` não é
 ///   modelado (pendência nomeada, igual ao SVE).
 /// - `Zm` é copiado ANTES de qualquer escrita: ele pode ser membro do grupo de destino (ver {@link SmeVectorGroup}).
-final class SmeMultiVectorOps {
+public final class SmeMultiVectorOps {
     private static final int WORD_BYTES = Long.BYTES;
 
     private SmeMultiVectorOps() {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.MultiVectorSingle op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.MultiVectorSingle op) {
         if (!core.smeStreamingEnabledCheck(op.instructionAddress())) {
             return true;
         }

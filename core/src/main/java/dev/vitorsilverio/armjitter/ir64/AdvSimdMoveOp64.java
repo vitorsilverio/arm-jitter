@@ -1,6 +1,9 @@
 package dev.vitorsilverio.armjitter.ir64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64VectorArithmeticExecutor;
+import dev.vitorsilverio.armjitter.executor64.Ir64VectorMemoryExecutor;
 
 /// Operações AdvSIMD de movimentação de dados: load/store de estruturas, `DUP`/`INS`/`SMOV`/`UMOV`,
 /// permutação, extração, consulta a tabela e imediato modificado.
@@ -55,6 +58,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// `ST1`, `2`=`LD2`/`ST2`, `3`=`LD3`/`ST3`, `4`=`LD4`/`ST4`).
             int selem) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_LOAD_STORE_MULTIPLE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorMemoryExecutor.executeVectorLoadStoreMultiple(core, this);
+        }
     }
 
     /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store SINGLE structure, sem replicar, B8.6) —
@@ -89,6 +95,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// encoding real, resolvido pelo decoder).
             int index) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_LOAD_STORE_SINGLE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorMemoryExecutor.executeVectorLoadStoreSingle(core, this);
+        }
     }
 
     /// `LD1R`-`LD4R` (AdvSIMD load single structure and Replicate to all lanes, B8.6) — lê UM
@@ -117,6 +126,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// `3`=`LD3R`, `4`=`LD4R`).
             int selem) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_LOAD_SINGLE_REPLICATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorMemoryExecutor.executeVectorLoadSingleReplicate(core, this);
+        }
     }
 
     /// `EXT` (AdvSIMD extract, B8.10) — concatena `Rm:Rn` (`Rn` ocupa os bits BAIXOS, `Rm` os
@@ -138,6 +150,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (metade ALTA da concatenação).
             int rm) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_EXTRACT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeExtract(core, this);
+        }
     }
 
     /// `UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2` (AdvSIMD permute, B8.10) — reorganiza os elementos
@@ -158,6 +173,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_PERMUTE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executePermute(core, this);
+        }
     }
 
     /// `TBL`/`TBX` (AdvSIMD table lookup, B8.10) — trata os registradores `Rn`, `Rn+1`, ...,
@@ -185,6 +203,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Registrador `V` com os índices (um por byte).
             int rm) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_TABLE_LOOKUP; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeTableLookup(core, this);
+        }
     }
 
     /// `DUP` (AdvSIMD copy, elemento vetorial, B8.12) — replica o elemento `esz` de `Vn[index]`
@@ -204,6 +225,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Índice do elemento fonte dentro de {@link #rn}.
             int index) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_DUPLICATE_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeDuplicateElement(core, this);
+        }
     }
 
     /// `DUP` (AdvSIMD copy, registrador geral, B8.12) — replica `Wn`/`Xn` (`esz`{@code ==3}
@@ -218,6 +242,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Registrador geral fonte (índice `0`-`31`; `31` é `WZR`/`XZR`, sem forma `SP`).
             int rn) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_DUPLICATE_GENERAL; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeDuplicateGeneral(core, this);
+        }
     }
 
     /// `INS` (AdvSIMD copy, registrador geral, B8.12) — grava `Wn`/`Xn` no elemento `esz` de
@@ -234,6 +261,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Índice do elemento de destino dentro de {@link #rd}.
             int index) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_INSERT_GENERAL; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeInsertGeneral(core, this);
+        }
     }
 
     /// `INS` (AdvSIMD copy, elemento vetorial, B8.12) — copia o elemento `esz` de
@@ -251,6 +281,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Índice do elemento fonte dentro de {@link #rn}.
             int srcIndex) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_INSERT_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeInsertElement(core, this);
+        }
     }
 
     /// `SMOV`/`UMOV` (AdvSIMD copy, B8.12) — lê o elemento `esz` de `Vn[index]` e grava em `Rd`
@@ -276,6 +309,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Índice do elemento fonte dentro de {@link #rn}.
             int index) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_MOVE_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeMoveElement(core, this);
+        }
     }
 
     /// `DUP <V><d>, <Vn>.<T>[<index>]` (`ARM DDI 0487`, B19.6 bloco E, "Advanced SIMD scalar copy")
@@ -294,6 +330,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Índice do elemento fonte dentro de {@link #rn}.
             int index) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorMemoryExecutor.executeDuplicateElementScalar(core, this);
+        }
     }
 
     /// `MOVI`/`MVNI`/`ORR`/`BIC` imediato AdvSIMD (`Vimm`) + `FMOV` de meia precisão imediato
@@ -317,6 +356,9 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Imediato de 64 bits já expandido (aplicado por METADE, não replicado cru).
             long imm64) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorMemoryExecutor.executeAdvSimdModifiedImmediate64(core, this);
+        }
     }
 
     /// `LUTI2`/`LUTI4` (AdvSIMD lookup table, `FEAT_LUT`, B19.8) — consulta de tabela por lane com
@@ -346,5 +388,8 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
             /// Registrador `V` com os índices empacotados.
             int rm) implements AdvSimdMoveOp64 {
         @Override public int kind() { return Kind.VECTOR_LOOKUP_TABLE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeLookupTable(core, this);
+        }
     }
 }

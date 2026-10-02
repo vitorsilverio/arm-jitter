@@ -31,7 +31,7 @@ import java.util.Arrays;
 /// não).
 ///
 /// `FADDA` é ilegal em modo streaming (a menos que `FEAT_SME_FA64` esteja efetivo); o resto vale nos dois modos.
-final class SveFpCompareReduceOps {
+public final class SveFpCompareReduceOps {
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
     private static final int SEGMENT_BYTES = 16;
@@ -41,7 +41,7 @@ final class SveFpCompareReduceOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveFpOp64.FpCompareReduce op) {
+    public static boolean execute(Aarch64Core core, SveFpOp64.FpCompareReduce op) {
         if (op.op() == SveFpOp64.FpCompareReduce.Op.FADDA) {
             SvePredicateOps.requireNonStreaming(core);
         }

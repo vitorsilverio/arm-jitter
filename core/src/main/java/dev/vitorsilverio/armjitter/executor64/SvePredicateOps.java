@@ -23,7 +23,7 @@ import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 ///
 /// Todas as fórmulas foram transcritas do `sve_helper.c`/`translate-sve.c` do QEMU (a mesma revisão
 /// fixada em `gerar-cobertura-isa.sh`), inclusive as escolhas de flags de `PTRUES`, `BRKN` e `PNEXT`.
-final class SvePredicateOps {
+public final class SvePredicateOps {
     private static final int BITS_PER_WORD = Long.SIZE;
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = BITS_PER_WORD - 1;
@@ -160,7 +160,8 @@ final class SvePredicateOps {
 
     // ── Lógica de predicado ─────────────────────────────────────────────────────────────────────
 
-    static boolean executeLogical(Aarch64Core core, SvePredicateOp64.PredicateLogical op) {
+    /// Executa {@link SvePredicateOp64.PredicateLogical}.
+    public static boolean executeLogical(Aarch64Core core, SvePredicateOp64.PredicateLogical op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -195,7 +196,8 @@ final class SvePredicateOps {
 
     // ── Misc: PTEST / PTRUE / PFALSE / FFR / PFIRST / PNEXT ──────────────────────────────────────
 
-    static boolean executeMisc(Aarch64Core core, SvePredicateOp64.PredicateMisc op) {
+    /// Executa {@link SvePredicateOp64.PredicateMisc}.
+    public static boolean executeMisc(Aarch64Core core, SvePredicateOp64.PredicateMisc op) {
         boolean usesFfr = switch (op.op()) {
             case SETFFR, RDFFR, RDFFR_PREDICATED, WRFFR -> true;
             default -> false;
@@ -299,7 +301,8 @@ final class SvePredicateOps {
 
     // ── Partition break ─────────────────────────────────────────────────────────────────────────
 
-    static boolean executePartitionBreak(Aarch64Core core, SvePredicateOp64.PartitionBreak op) {
+    /// Executa {@link SvePredicateOp64.PartitionBreak}.
+    public static boolean executePartitionBreak(Aarch64Core core, SvePredicateOp64.PartitionBreak op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -374,7 +377,8 @@ final class SvePredicateOps {
 
     // ── Contagem por predicado ──────────────────────────────────────────────────────────────────
 
-    static boolean executePredicateCount(Aarch64Core core, SvePredicateOp64.PredicateCount op) {
+    /// Executa {@link SvePredicateOp64.PredicateCount}.
+    public static boolean executePredicateCount(Aarch64Core core, SvePredicateOp64.PredicateCount op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -442,7 +446,8 @@ final class SvePredicateOps {
 
     // ── Contagem de elementos ───────────────────────────────────────────────────────────────────
 
-    static boolean executeElementCount(Aarch64Core core, SveIntegerOp64.ElementCount op) {
+    /// Executa {@link SveIntegerOp64.ElementCount}.
+    public static boolean executeElementCount(Aarch64Core core, SveIntegerOp64.ElementCount op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }

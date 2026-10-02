@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64MemoryExecutor;
+
 /// Operações A64 de acesso à memória por registrador geral: load/store (simples, par, literal),
 /// exclusivos, `CAS`, atômicas (`FEAT_LSE`), `FEAT_MOPS` (`SET*`/`CPY*`) e as formas de MTE que
 /// leem ou gravam tags de alocação.
@@ -53,6 +56,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// válido só em {@link Ir64AddressingMode#REGISTER_OFFSET}.
             int shiftAmount) implements MemoryOp64 {
         @Override public int kind() { return Kind.LOAD64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeLoad(core, this); }
     }
 
     /// `STR`/`STRB`/`STRH` de registrador geral — mesmo formato de {@link Load64} sem
@@ -80,6 +84,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
             int shiftAmount) implements MemoryOp64 {
         @Override public int kind() { return Kind.STORE64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeStore(core, this); }
     }
 
     /// `LDP`/`STP`/`LDPSW` (`ARM DDI 0487 C6.2.126/337/125`, B8.1) — o idioma de prólogo/epílogo de
@@ -111,6 +116,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// correspondente, ignorando {@link #wide}.
             boolean signExtend) implements MemoryOp64 {
         @Override public int kind() { return Kind.LOAD_STORE_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeLoadStorePair(core, this);
+        }
     }
 
     /// `LDR (literal)`/`LDRSW (literal)` (`ARM DDI 0487 C6.2.121/134`): carrega um valor de um
@@ -131,6 +139,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// para os 64 bits do destino.
             boolean signExtend) implements MemoryOp64 {
         @Override public int kind() { return Kind.LOAD_LITERAL64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeLoadLiteral(core, this); }
     }
 
     /// `LDXR`/`LDAXR` (`ARM DDI 0487 C6.2.145/141`, B6.3.4) — carrega a memória em `rn`+0 (SEM
@@ -151,6 +160,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para `LDAXR` (bit `lasr`=1); `false` para `LDXR`.
             boolean acquireRelease) implements MemoryOp64 {
         @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeLoadExclusive(core, this);
+        }
     }
 
     /// `STXR`/`STLXR` (`ARM DDI 0487 C6.2.363/360`, B6.3.4) — consulta o monitor de exclusividade
@@ -171,6 +183,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para `STLXR` (bit `lasr`=1); `false` para `STXR`.
             boolean acquireRelease) implements MemoryOp64 {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeStoreExclusive(core, this);
+        }
     }
 
     /// `LDXP`/`LDAXP` (`ARM DDI 0487 C6.2.144/140`, B8.1) — mesmo espírito de {@link LoadExclusive}
@@ -190,6 +205,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// convenção de {@link LoadExclusive#acquireRelease}.
             boolean acquireRelease) implements MemoryOp64 {
         @Override public int kind() { return Kind.LOAD_EXCLUSIVE_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeLoadExclusivePair(core, this);
+        }
     }
 
     /// `STXP`/`STLXP` (`ARM DDI 0487 C6.2.364/361`, B8.1) — mesmo espírito de {@link StoreExclusive}
@@ -209,6 +227,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para `STLXP` (bit `lasr`=1); `false` para `STXP` — NOP observável.
             boolean acquireRelease) implements MemoryOp64 {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeStoreExclusivePair(core, this);
+        }
     }
 
     /// `CAS`/`CASA`/`CASL`/`CASAL` (`ARM DDI 0487 C6.2.31`, B8.1, extensão LSE ARMv8.1 — decisão
@@ -230,6 +251,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// diferente de {@link CompareAndSwapPair}, `CAS` aceita as 4 larguras).
             Ir64MemSize size) implements MemoryOp64 {
         @Override public int kind() { return Kind.COMPARE_AND_SWAP; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeCompareAndSwap(core, this);
+        }
     }
 
     /// `CASP`/`CASPA`/`CASPL`/`CASPAL` (`ARM DDI 0487 C6.2.32`, B8.1, mesma extensão LSE de
@@ -250,6 +274,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para o par de 64 bits (`X`); `false` para o par de 32 bits (`W`).
             boolean wide) implements MemoryOp64 {
         @Override public int kind() { return Kind.COMPARE_AND_SWAP_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeCompareAndSwapPair(core, this);
+        }
     }
 
     /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`ARM DDI 0487
@@ -280,6 +307,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para as formas `LD<op>L`/`LD<op>AL` (bit `R`=1) — NOP observável.
             boolean release) implements MemoryOp64 {
         @Override public int kind() { return Kind.ATOMIC_MEMORY_OP; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeAtomicMemoryOp(core, this);
+        }
     }
 
     /// `LDCLRP`/`LDSETP`/`SWPP` (`ARM DDI 0487`, `FEAT_LSE128`, ARMv9.4-A, B19.25) — versão em PAR
@@ -313,6 +343,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `true` para as formas com bit `R`=1 — NOP observável.
             boolean release) implements MemoryOp64 {
         @Override public int kind() { return Kind.ATOMIC_MEMORY_OP_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeAtomicMemoryOpPair(core, this);
+        }
     }
 
     /// Fase de uma instrução `FEAT_MOPS` (`SETP`/`SETM`/`SETE`, `CPYFP`/`CPYFM`/`CPYFE`,
@@ -347,6 +380,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// `31` é `XZR`, preenche com `0`).
             int rs) implements MemoryOp64 {
         @Override public int kind() { return Kind.MEMORY_SET; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeMemorySet(core, this); }
     }
 
     /// `CPYFP`/`CPYFM`/`CPYFE` (sempre para frente) e `CPYP`/`CPYM`/`CPYE` (direção decidida por
@@ -370,6 +404,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// Registrador de contador de bytes (`Xn`, índice `0`-`31`; `31` é `XZR`).
             int rn) implements MemoryOp64 {
         @Override public int kind() { return Kind.MEMORY_COPY; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeMemoryCopy(core, this); }
     }
 
     /// Direção de {@link MemoryTag} (`FEAT_MTE2`, B19.14).
@@ -411,6 +446,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// Deslocamento já escalado por 16 bytes (granule), com sinal.
             long immediate) implements MemoryOp64 {
         @Override public int kind() { return Kind.MEMORY_TAG; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64MemoryExecutor.executeMemoryTag(core, this); }
     }
 
     /// Direção de {@link MemoryTagMultiple} (`FEAT_MTE2`, B19.14).
@@ -441,6 +477,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// Registrador base de endereço (`Rn|SP`).
             int rn) implements MemoryOp64 {
         @Override public int kind() { return Kind.MEMORY_TAG_MULTIPLE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeMemoryTagMultiple(core, this);
+        }
     }
 
     /// `STGP` (`ARM DDI 0487`, `FEAT_MTE2`, ARMv8.5-A, B19.14) — como `STP` de 64 bits (grava
@@ -464,6 +503,9 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// Deslocamento já escalado por 16 bytes (granule), com sinal.
             long immediate) implements MemoryOp64 {
         @Override public int kind() { return Kind.STORE_PAIR_TAG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeStorePairTag(core, this);
+        }
     }
 
     /// `SETGP`/`SETGM`/`SETGE` (`ARM DDI 0487`, `FEAT_MTE2`+`FEAT_MOPS`, ARMv8.8-A, B19.14) — irmãs
@@ -484,5 +526,8 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
             /// Registrador com o byte de preenchimento nos 8 bits baixos (`Xs`/`XZR`).
             int rs) implements MemoryOp64 {
         @Override public int kind() { return Kind.MEMORY_SET_TAGGED; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64MemoryExecutor.executeMemorySetTagged(core, this);
+        }
     }
 }

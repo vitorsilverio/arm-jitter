@@ -11,7 +11,7 @@ import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 /// `translate-sve.c` do QEMU (revisão fixada), a parte menos verificada da rodada de spec — ver `## Resultado`
 /// da task para as correções encontradas (a mais importante: `HISTCNT`, ao contrário de `MATCH`/`HISTSEG`, NÃO é
 /// por segmento de 128 bits — é um histograma prefixo do VETOR INTEIRO).
-final class SveMiscOps {
+public final class SveMiscOps {
     private static final int SEGMENT_BYTES = 16;
     private static final int TABLE_REGISTER_COUNT = 32;
     /// `LUTI4_1h` (16 entradas × 16 bits = 256 bits de tabela) exige `VL >= 256` — a ÚNICA das 5 formas com essa
@@ -33,7 +33,7 @@ final class SveMiscOps {
     /// cada elemento ATIVO de `Zn` (por `Pg`), o bit do predicado é `1` se aquele valor aparece em QUALQUER
     /// elemento do MESMO segmento de `Zm` — `Zm` não é filtrado por predicado nenhum (o segmento inteiro é
     /// varrido). `NMATCH` inverte o resultado (não a máscara de ativos). Sempre seta `NZCV` por `predTest`.
-    static boolean executeMatch(Aarch64Core core, SvePredicateOp64.Match op) {
+    public static boolean executeMatch(Aarch64Core core, SvePredicateOp64.Match op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -72,7 +72,7 @@ final class SveMiscOps {
     /// `HISTSEG` (`.B`, sem predicado): por segmento de 128 bits — `Zd[e]` = quantos bytes do MESMO segmento de
     /// `Zm` são iguais a `Zn[e]`. Ambas leem `Zn`/`Zm` de um instantâneo (o QEMU faz o mesmo com `memcpy` quando
     /// `Zd` colide com `Zn`/`Zm`).
-    static boolean executeHistogram(Aarch64Core core, SveIntegerOp64.Histogram op) {
+    public static boolean executeHistogram(Aarch64Core core, SveIntegerOp64.Histogram op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -140,7 +140,7 @@ final class SveMiscOps {
     /// (`ibase = elements × index`, `do_lut_b`/`do_lut_h` do QEMU). `LUTI4_1h` (`tableRegisters = 1`, halfword)
     /// exige `VL >= 256` em tempo de execução; `LUTI4_2h` (`tableRegisters = 2`) concatena `Zn` e `Zn+1 mod 32`
     /// (só os 128 bits BAIXOS de cada) e não tem essa restrição.
-    static boolean executeLookupTable(Aarch64Core core, SveIntegerOp64.LookupTable op) {
+    public static boolean executeLookupTable(Aarch64Core core, SveIntegerOp64.LookupTable op) {
         if (op.four() && op.esz() == SveFloat.ESZ_HALF && op.tableRegisters() == 1
                 && core.vectorLengthBytes() < LUTI4_1H_MINIMUM_VL_BYTES) {
             throw new Aarch64UndefinedInstructionException();
@@ -190,7 +190,7 @@ final class SveMiscOps {
     /// `PSEL Pd, Pn, Pm[Wrv, imm]`: **não escreve vetor nenhum**. `Pd = Pm[(Wrv + imm) mod elements] ? Pn : 0` —
     /// o bit TESTADO de `Pm`, no elemento calculado, escolhe entre copiar `Pn` inteiro ou zerar `Pd` inteiro (não
     /// é seleção elemento-a-elemento). `elements = VL >> esz`; `Wrv` já chega resolvido a `W12`-`W15` do decoder.
-    static boolean executePredicateSelect(Aarch64Core core, SvePredicateOp64.PredicateSelect op) {
+    public static boolean executePredicateSelect(Aarch64Core core, SvePredicateOp64.PredicateSelect op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -210,7 +210,7 @@ final class SveMiscOps {
     /// `FCLAMP`: `minNum(maxNum(Zn, Zd), Zm)` — a variante NÃO propagadora de NaN (mesma primitiva de
     /// `FMAXNM`/`FMINNM`), ordem dos operandos exatamente como o `FCLAMP` do `sme_helper.c` (comentário do QEMU:
     /// "a ordem dos argumentos deve casar com o pseudocódigo do ARM para propagar NaN corretamente").
-    static boolean executeClamp(Aarch64Core core, SveIntegerOp64.Clamp op) {
+    public static boolean executeClamp(Aarch64Core core, SveIntegerOp64.Clamp op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

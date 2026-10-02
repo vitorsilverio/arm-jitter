@@ -67,7 +67,7 @@ class Ir64BlockExecutorB82Test {
     @Test
     void sbcsMinValueMinusMinusOnePlusCarryDoesNotOverflow() {
         // Contra-exemplo que invalidou a composição ingênua de 2 somas encadeadas (ver Javadoc de
-        // Ir64BlockExecutor#addWithCarryFlags): MIN_VALUE - (-1) - 0 (C=1, sem borrow) = MIN_VALUE
+        // Ir64IntegerExecutor#addWithCarryFlags): MIN_VALUE - (-1) - 0 (C=1, sem borrow) = MIN_VALUE
         // + 1, dentro do range — NÃO deve sinalizar overflow.
         Aarch64Core core = newCore();
         core.setX(1, Long.MIN_VALUE);

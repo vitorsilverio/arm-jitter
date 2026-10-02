@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 ///   `FPSR` (`FPST_ZA*` do QEMU) — {@link SveFloat.Env#ofZa}. **Não modelados** (pendências nomeadas, como no resto de
 ///   {@link SveFloat}): `FPCR.AH` (só muda o sinal de NaN — irrelevante com `DN = 1` — e o modo de denormais) e a
 ///   checagem de acesso a `FPMR` das formas `fp8`.
-final class SmeOuterProductOps {
+public final class SmeOuterProductOps {
     private static final int ESZ_BFLOAT16 = SveFloat.ESZ_BFLOAT16;
     private static final int ESZ_HALF = SveFloat.ESZ_HALF;
     private static final int ESZ_SINGLE = SveFloat.ESZ_SINGLE;
@@ -59,7 +59,7 @@ final class SmeOuterProductOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.OuterProduct op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.OuterProduct op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }

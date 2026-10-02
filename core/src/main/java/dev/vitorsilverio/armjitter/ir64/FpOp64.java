@@ -1,5 +1,10 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64FpExecutor;
+import dev.vitorsilverio.armjitter.executor64.Ir64FpMemoryExecutor;
+import dev.vitorsilverio.armjitter.executor64.Ir64VectorFpArithmeticExecutor;
+
 /// Operações A64 de ponto flutuante escalar: aritmética, comparação, conversão, arredondamento,
 /// `FMOV` e os load/store de registrador SIMD&amp;FP.
 ///
@@ -40,6 +45,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
             int shiftAmount) implements FpOp64 {
         @Override public int kind() { return Kind.FP_LOAD64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpMemoryExecutor.executeFpLoad(core, this); }
     }
 
     /// `STR` SIMD&FP registrador-imediato — mesmo formato de {@link Load64}, fonte em vez de
@@ -65,6 +71,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// {@link Ir64AddressingMode#REGISTER_OFFSET}.
             int shiftAmount) implements FpOp64 {
         @Override public int kind() { return Kind.FP_STORE64; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpMemoryExecutor.executeFpStore(core, this); }
     }
 
     /// `LDP`/`STP` SIMD&FP (`ARM DDI 0487 C6.2.127`/`C6.2.338`, `V=1` — B8.13): mesmo idioma de
@@ -88,6 +95,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Deslocamento imediato em bytes, já escalado pelo decoder (`imm7` × `size.bytes()`).
             long immediate) implements FpOp64 {
         @Override public int kind() { return Kind.FP_LOAD_STORE_PAIR; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpMemoryExecutor.executeFpLoadStorePair(core, this);
+        }
     }
 
     /// `LDR (literal)` SIMD&FP (`ARM DDI 0487 C6.2.122`, `V=1` — B8.13): mesmo idioma de
@@ -102,6 +112,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Tamanho do registro (`SINGLE`/`DOUBLE`/`QUAD`).
             Ir64FpMemSize size) implements FpOp64 {
         @Override public int kind() { return Kind.FP_LOAD_LITERAL64; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpMemoryExecutor.executeFpLoadLiteral(core, this);
+        }
     }
 
     /// Sub-operação de {@link Alu} — leitura literal do épico B6.5 ("FMOV/FADD/FMUL/FDIV/
@@ -135,6 +148,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Segundo operando (`Vm`), ou único operando nas unárias.
             int vm) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_ALU; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpAlu(core, this); }
     }
 
     /// `FMOV Sd, #imm`/`FMOV Dd, #imm` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3): grava
@@ -149,6 +163,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// (bits altos ignorados), 64 bits completos quando `doublePrecision`.
             long immediateBits) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_MOVE_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpMoveImmediate(core, this); }
     }
 
     /// `FCMP`/`FCMPE` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3), com ou sem comparação
@@ -172,6 +187,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Segundo operando da comparação (`Vm`), ignorado quando {@link #compareWithZero}.
             int vm) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_COMPARE; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpCompare(core, this); }
     }
 
     /// Sub-operação de {@link Convert} — leitura literal de "FCVT": só conversão float↔float
@@ -192,6 +208,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador de origem (índice `0`-`31`, `V<n>`).
             int vm) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_CONVERT; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpConvert(core, this); }
     }
 
     /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (`ARM DDI 0487 C6.2` "Floating-point data-processing,
@@ -218,6 +235,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Acumulador (somado — ou subtraído, ver {@link #negateAddend} — ao produto).
             int va) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_MULTIPLY_ADD; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpMultiplyAdd(core, this); }
     }
 
     /// `FCSEL` (`ARM DDI 0487 C6.2.75`, "Floating-point conditional select", B8.5) — seleciona
@@ -236,6 +254,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Condição avaliada contra `PSTATE.{N,Z,C,V}`.
             Ir64Condition condition) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_CONDITIONAL_SELECT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpConditionalSelect(core, this);
+        }
     }
 
     /// `FCCMP`/`FCCMPE` (`ARM DDI 0487 C6.2.74`, "Floating-point conditional compare", B8.5) —
@@ -260,6 +281,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// é falsa.
             int nzcv) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_CONDITIONAL_COMPARE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpConditionalCompare(core, this);
+        }
     }
 
     /// Direção de arredondamento de {@link Round} e (no sentido float→inteiro) de
@@ -290,6 +314,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador de origem.
             int vn) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_ROUND; }
+        @Override public boolean execute(Aarch64Core core) { return Ir64FpExecutor.executeFpRound(core, this); }
     }
 
     /// `FRINT32Z`/`FRINT32X`/`FRINT64Z`/`FRINT64X` (`ARM DDI 0487` "Floating-point data-processing
@@ -319,6 +344,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador de origem.
             int vn) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_ROUND_RANGE_LIMITED; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpRoundRangeLimited(core, this);
+        }
     }
 
     /// `SCVTF`/`UCVTF`/`FCVTNS`/`FCVTNU`/`FCVTPS`/`FCVTPU`/`FCVTMS`/`FCVTMU`/`FCVTZS`/`FCVTZU`/
@@ -358,6 +386,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// senão.
             int gpReg) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_INTEGER_CONVERT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpIntegerConvert(core, this);
+        }
     }
 
     /// `FMOV` entre registrador geral e FP escalar SEM conversão de valor — cópia CRUA de bits
@@ -376,6 +407,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador geral (índice `0`-`31`).
             int gpReg) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_GENERAL_REGISTER_MOVE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpGeneralRegisterMove(core, this);
+        }
     }
 
     /// `FJCVTZS Wd, Dn` (`ARM DDI 0487 C6.2.92`, B19.29, `FEAT_JSCVT`) — converte `Dn` (sempre
@@ -395,6 +429,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador FP de origem (`Dn`, índice `0`-`31`). Sempre precisão dupla.
             int rn) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_JAVASCRIPT_CONVERT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpJavascriptConvert(core, this);
+        }
     }
 
     /// `FMOV Xd, Vn.D[1]` / `FMOV Vd.D[1], Xn` (`ARM DDI 0487`, B19.6 bloco F) — move entre
@@ -411,6 +448,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador geral (índice `0`-`31`).
             int gpReg) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_HIGH_HALF_MOVE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpMemoryExecutor.executeFpHighHalfMove(core, this);
+        }
     }
 
     /// `BFCVT` (`FEAT_BF16`, B19.7) — converte `Sn` (`binary32`) para `bf16` (16 bits) na metade
@@ -423,6 +463,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador `V` fonte (`Sn`, `binary32`).
             int vn) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_CONVERT_TO_BF16; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorFpArithmeticExecutor.executeConvertToBf16(core, this);
+        }
     }
 
     /// `FMOV_hx`/`FMOV_xh` (`ARM DDI 0487`, `FEAT_FP16`, ARMv8.2-A, B19.26) — cópia CRUA de bits
@@ -445,6 +488,9 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador geral (índice `0`-`31`).
             int gpReg) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpHalfPrecisionGeneralRegisterMove(core, this);
+        }
     }
 
     /// Direção de {@link ConvertHalfPrecision} — as 4 combinações de `FCVT` entre meia precisão
@@ -477,5 +523,8 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             /// Registrador de origem (índice `0`-`31`, `V<n>`).
             int vn) implements FpOp64 {
         @Override public int kind() { return Kind.FP64_CONVERT_HALF_PRECISION; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64FpExecutor.executeFpConvertHalfPrecision(core, this);
+        }
     }
 }

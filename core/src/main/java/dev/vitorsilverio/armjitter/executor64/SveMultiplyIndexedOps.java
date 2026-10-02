@@ -23,7 +23,7 @@ import java.math.BigInteger;
 /// o que o pseudocódigo do manual descreve (o QEMU obtém o mesmo lendo o operando indexado antes de cada
 /// segmento). As operações saturantes NÃO tocam `FPSR.QC` (só o AdvSIMD o faz; medido em `do_sqrdmlah_*` do QEMU,
 /// que descarta `sat` nas formas SVE).
-final class SveMultiplyIndexedOps {
+public final class SveMultiplyIndexedOps {
     private static final int SEGMENT_BYTES = 16;
     private static final int WORD_INDEX_SHIFT = 6;
     private static final int WORD_BIT_MASK = Long.SIZE - 1;
@@ -40,7 +40,7 @@ final class SveMultiplyIndexedOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.MultiplyIndexed op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.MultiplyIndexed op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

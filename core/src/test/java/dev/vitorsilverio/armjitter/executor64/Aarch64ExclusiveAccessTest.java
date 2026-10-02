@@ -225,7 +225,7 @@ class Aarch64ExclusiveAccessTest {
     void ordinaryStoreOverlappingPendingReservationOpensTheMonitor() {
         // ldxr x1,[x0]; str x2,[x0] (escrita comum sobrepondo a reserva); stxr w3,x4,[x0] deve
         // falhar — auditoria da Especificação #2 da task: sem a chamada a notifyOrdinaryWrite em
-        // Ir64BlockExecutor#executeStore, este teste falharia (o STXR sucederia indevidamente).
+        // Ir64MemoryExecutor#executeStore, este teste falharia (o STXR sucederia indevidamente).
         Aarch64Core core = newCore(64);
         core.setX(0, 0x10);
         core.setX(2, 0x2222222222222222L);

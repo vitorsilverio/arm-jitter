@@ -15,7 +15,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 /// alinhado — um elemento de 16 bytes começa sempre num múltiplo de 16, logo num limite de palavra
 /// par) e os demais `esz` via {@link SvePredicateOps#elementOf}/{@link SvePredicateOps#setElementOf}
 /// (mesmo utilitário que o resto do SVE usa para `Z`).
-final class SmeMovaOps {
+public final class SmeMovaOps {
     private static final int WORD_BYTES = Long.BYTES;
     private static final int ESZ_QUAD = 4;
     private static final int ROWS_PER_ZERO_GROUP = 8;
@@ -33,7 +33,7 @@ final class SmeMovaOps {
     /// depende de `esz`, e essa interpretação não importa para `ZERO` zerar bytes).
     ///
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.Zero op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.Zero op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -53,7 +53,7 @@ final class SmeMovaOps {
     }
 
     /// `ZERO_zt0`: zera o registrador `ZT0` (512 bits) inteiro.
-    static boolean execute(Aarch64Core core, SmeOp64.ZeroZt0 op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.ZeroZt0 op) {
         if (!core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -67,7 +67,7 @@ final class SmeMovaOps {
     // ── `MOVA`/`MOVAZ` ───────────────────────────────────────────────────────────────────────────
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.Mova op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.Mova op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }

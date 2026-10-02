@@ -9,7 +9,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// Semântica das conversões `fp8` sem predicado da B17.23: alargar ({@link SveFpOp64.FpConvertFp8}) e
 /// estreitar ({@link SveFpOp64.FpConvertToFp8}). Reusa os núcleos escalares de {@link AdvSimdLanes}
 /// (`fp8ToFloat`/`floatToFp8`) já validados pelo AdvSIMD (B19.11a) — só o laço por elemento é novo.
-final class SveFpConvertFp8Ops {
+public final class SveFpConvertFp8Ops {
     private static final int ESZ_BYTE = 0;
     private static final int ESZ_HALF = 1;
     private static final int ESZ_WORD = 2;
@@ -20,7 +20,7 @@ final class SveFpConvertFp8Ops {
 
     /// `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT`. `true` = a instrução já
     /// entrou numa exceção (acesso negado).
-    static boolean executeWiden(Aarch64Core core, SveFpOp64.FpConvertFp8 op) {
+    public static boolean executeWiden(Aarch64Core core, SveFpOp64.FpConvertFp8 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -40,7 +40,7 @@ final class SveFpConvertFp8Ops {
     }
 
     /// `FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeNarrow(Aarch64Core core, SveFpOp64.FpConvertToFp8 op) {
+    public static boolean executeNarrow(Aarch64Core core, SveFpOp64.FpConvertToFp8 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

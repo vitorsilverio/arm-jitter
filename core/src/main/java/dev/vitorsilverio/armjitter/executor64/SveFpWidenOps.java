@@ -11,7 +11,7 @@ import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 /// `float32_muladd` do QEMU real, `sve2_fmlal_zzzw_s`); o produto escalar soma os 2 produtos em `double`
 /// (exatos, dado o pouco alcance de `binary16`/`bfloat16`) antes de UM arredondamento final na soma com o
 /// acumulador.
-final class SveFpWidenOps {
+public final class SveFpWidenOps {
     private static final int ESZ_HALF = 1;
     private static final int ESZ_SINGLE = 2;
     private static final int SEGMENT_BYTES = 16;
@@ -21,7 +21,7 @@ final class SveFpWidenOps {
     }
 
     /// `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeMultiplyAddLong(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWiden op) {
+    public static boolean executeMultiplyAddLong(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWiden op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -32,7 +32,7 @@ final class SveFpWidenOps {
     }
 
     /// `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeMultiplyAddLongBFloat16(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWidenBFloat16 op) {
+    public static boolean executeMultiplyAddLongBFloat16(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWidenBFloat16 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -72,7 +72,7 @@ final class SveFpWidenOps {
     }
 
     /// `FDOT_zzzz`/`FDOT_zzxz`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProduct(Aarch64Core core, SveFpOp64.FpDotProductWiden op) {
+    public static boolean executeDotProduct(Aarch64Core core, SveFpOp64.FpDotProductWiden op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -81,7 +81,7 @@ final class SveFpWidenOps {
     }
 
     /// `BFDOT_zzzz`/`BFDOT_zzxz`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProductBFloat16(Aarch64Core core, SveFpOp64.FpDotProductWidenBFloat16 op) {
+    public static boolean executeDotProductBFloat16(Aarch64Core core, SveFpOp64.FpDotProductWidenBFloat16 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

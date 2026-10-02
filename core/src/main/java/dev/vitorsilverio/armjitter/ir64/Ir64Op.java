@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64SystemExecutor;
+
 /// Operação de representação intermediária para AArch64 (A64) — espelho estrutural de
 /// {@link dev.vitorsilverio.armjitter.ir.IrOp}, mas um frontend IRMÃO e independente (Opção B da
 /// RFC-IR-64BIT.md, aprovada 2026-07-10): registradores de 64 bits (`X0`-`X30` + `SP`/`XZR`),
@@ -20,14 +23,32 @@ package dev.vitorsilverio.armjitter.ir64;
 /// o record carrega um `boolean` companheiro (`dstIsStackPointer`/`src1IsStackPointer` em
 /// {@link IntegerOp64.Alu64}) setado pelo DECODER a partir do próprio encoding — nunca inferido depois. A
 /// resolução final (ler `0`, descartar escrita, ou redirecionar para `SP`) acontece só no
-/// EXECUTOR ({@code Ir64BlockExecutor}), nunca no decoder.
+/// EXECUTOR (pacote `executor64`), nunca no decoder.
 public sealed interface Ir64Op permits IntegerOp64, MemoryOp64, BranchOp64, SystemOp64, FpOp64,
         AdvSimdOp64, SveOp64, SmeOp64, Ir64Op.Cycle, Ir64Op.Fetch, Ir64Op.StreamingRestricted {
 
     /// Discriminador de tipo para dispatch O(1) no interpretador — mesma técnica de
     /// {@link dev.vitorsilverio.armjitter.ir.IrOp#kind()} (constantes contíguas a partir de `0`
-    /// em {@link Kind}, permitindo `tableswitch` no executor).
+    /// em {@link Kind}, permitindo `tableswitch` no executor). Desde a E15.4 o interpretador só o usa
+    /// para separar `Fetch`/`Cycle` das instruções; o dispatch por op é {@link #execute}.
     int kind();
+
+    /// Executa a semântica desta operação sobre o core — o único dispatch do interpretador A64
+    /// (task E15.4): cada record delega, numa linha, para o método estático do executor da sua
+    /// família em `executor64`, e esquecer a ponte num record novo é erro de compilação. Não há
+    /// parâmetro de "modo": o backend ASM não executa a op, ele emite bytecode (ou chama este mesmo
+    /// método como fallback por-op).
+    ///
+    /// {@link Cycle} e {@link Fetch} não são instrução — quem percorre o bloco os contabiliza à
+    /// parte (G4) — e lançam {@link IllegalStateException}.
+    ///
+    /// @param core core a executar
+    /// @return `true` se a própria operação já alterou o PC (desvio tomado)
+    boolean execute(Aarch64Core core);
+
+    private static IllegalStateException notAnInstruction() {
+        return new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
+    }
 
     /// Constantes de {@link Ir64Op#kind()} — uma por subtipo selado, contíguas a partir de `0`.
     final class Kind {
@@ -511,6 +532,7 @@ public sealed interface Ir64Op permits IntegerOp64, MemoryOp64, BranchOp64, Syst
             /// Quantidade de ciclos somada.
             int count) implements Ir64Op {
         @Override public int kind() { return Kind.CYCLE; }
+        @Override public boolean execute(Aarch64Core core) { throw notAnInstruction(); }
     }
 
     /// Custo de busca da instrução original na memória do dispositivo — mesma disciplina de
@@ -523,6 +545,7 @@ public sealed interface Ir64Op permits IntegerOp64, MemoryOp64, BranchOp64, Syst
             /// resto do executor).
             int sizeBytes) implements Ir64Op {
         @Override public int kind() { return Kind.FETCH; }
+        @Override public boolean execute(Aarch64Core core) { throw notAnInstruction(); }
     }
 
     /// Instrução que `PSTATE.SM = 1` torna `UNDEFINED` quando `FEAT_SME_FA64` não está efetivo (B18.2):
@@ -534,5 +557,8 @@ public sealed interface Ir64Op permits IntegerOp64, MemoryOp64, BranchOp64, Syst
             /// A operação que executa quando a restrição não se aplica.
             Ir64Op inner) implements Ir64Op {
         @Override public int kind() { return Kind.STREAMING_RESTRICTED; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64SystemExecutor.executeStreamingRestricted(core, this);
+        }
     }
 }

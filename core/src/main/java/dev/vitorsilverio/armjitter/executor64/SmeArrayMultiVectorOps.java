@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 ///   2/4 vias, só que sem predicado. Ponto flutuante usa o ambiente `FPST_ZA` ({@link SveFloat.Env#ofZa}): `DN`
 ///   sempre ligado e flags NUNCA acumuladas em `FPSR`. `FPCR.AH` e o acesso a `FPMR` (`fpmr_access_check`) não são
 ///   modelados (pendências nomeadas, como nos outer products).
-final class SmeArrayMultiVectorOps {
+public final class SmeArrayMultiVectorOps {
     private static final int ESZ_BYTE = 0;
     private static final int ESZ_HALF = 1;
     private static final int ESZ_SINGLE = 2;
@@ -55,7 +55,7 @@ final class SmeArrayMultiVectorOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.ArrayMultiVector op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.ArrayMultiVector op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }

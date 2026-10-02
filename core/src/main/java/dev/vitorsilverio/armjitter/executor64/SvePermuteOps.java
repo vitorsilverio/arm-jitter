@@ -12,7 +12,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// spec): o vetor INTEIRO (`ZIP1`, elemento `esz`), o segmento de 128 bits COMO elemento (`ZIP1_Q`, elemento de 16
 /// bytes) e a permutação DENTRO de cada segmento (`ZIPQ1`, o mesmo algoritmo com operando de 16 bytes). Em
 /// `VL = 128` as três coincidem. Nunca há constante `128` no laço: tudo lê o `VL` efetivo do core (G6).
-final class SvePermuteOps {
+public final class SvePermuteOps {
     private static final int SEGMENT_BYTES = 16;
     private static final int STACK_POINTER_ENCODING = 31;
     private static final int ZERO_REGISTER_ENCODING = 31;
@@ -25,7 +25,7 @@ final class SvePermuteOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.Permute op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.Permute op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

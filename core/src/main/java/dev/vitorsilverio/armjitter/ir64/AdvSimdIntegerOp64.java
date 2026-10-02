@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.executor64.Ir64VectorArithmeticExecutor;
+
 /// Operações AdvSIMD de aritmética inteira: "three same", pareadas, alargantes, estreitantes,
 /// deslocamento por imediato, redução entre lanes, produto escalar e multiplicação polinomial.
 ///
@@ -49,6 +52,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (índice `0`-`31`).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_THREE_SAME; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeThreeSame(core, this);
+        }
     }
 
     /// AdvSIMD "vector/scalar × indexed element" (B8.19), subconjunto SEM alargamento —
@@ -83,6 +89,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// `0`-`3` para word).
             int index) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_THREE_SAME_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeThreeSameByElement(core, this);
+        }
     }
 
     /// AdvSIMD "three same" pareado (`ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/`UMINP_v`, B8.7) —
@@ -102,6 +111,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (metade ALTA do resultado).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_PAIRWISE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executePairwise(core, this);
+        }
     }
 
     /// AdvSIMD "three different" alargando (`SMULL`/`UMULL`/`SMLAL`/.../`SABDL`/`UABDL`, B8.7) —
@@ -130,6 +142,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2 (elementos `esz`).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDENING; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeWidening(core, this);
+        }
     }
 
     /// AdvSIMD "vector/scalar × indexed element" (B8.19), subconjunto ALARGANTE —
@@ -163,6 +178,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// `0`-`3` para word).
             int index) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDENING_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeWideningByElement(core, this);
+        }
     }
 
     /// AdvSIMD "three different" largo+estreito (`SADDW`/`UADDW`/`SSUBW`/`USUBW`, B8.7) — `Rd`/
@@ -183,6 +201,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2, estreito (elementos `esz`).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_WIDE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeWide(core, this);
+        }
     }
 
     /// AdvSIMD "three different" estreitando (`ADDHN`/`RADDHN`/`SUBHN`/`RSUBHN`, B8.7) — `Rn`/`Rm`
@@ -205,6 +226,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2, largo (elementos `esz+1`).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_NARROW; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeNarrow(core, this);
+        }
     }
 
     /// AdvSIMD "across lanes" (`ADDV`/`SADDLV`/`UADDLV`/`SMAXV`/`UMAXV`/`SMINV`/`UMINV`, B8.7) —
@@ -225,6 +249,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ACROSS_LANES; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeAcrossLanes(core, this);
+        }
     }
 
     /// AdvSIMD "two-register miscellaneous" inteiro (`ABS_v`/`NEG_v`/`CM**0_v`/`SADDLP_v`/
@@ -252,6 +279,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_UNARY; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeUnary(core, this);
+        }
     }
 
     /// `ADDP_s` (AdvSIMD scalar pairwise, B8.7) — único mnemônico inteiro desta forma: reduz os
@@ -263,6 +293,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte (lido como `.2d`, 2 elementos doubleword).
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_SCALAR_PAIRWISE_ADD; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeScalarPairwiseAdd(core, this);
+        }
     }
 
     /// AdvSIMD "narrow unary" saturante (`SQXTN`/`SQXTUN`/`UQXTN`, B8.8) — reduz um elemento de
@@ -288,6 +321,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte, largo (elementos `esz+1`).
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_ARITHMETIC_NARROW_UNARY; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeNarrowUnary(core, this);
+        }
     }
 
     /// AdvSIMD "shift by immediate" não-largo/não-estreito (B8.8) — `Rd`/`Rn` têm o MESMO tamanho
@@ -317,6 +353,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte.
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_SHIFT_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeShiftImmediate(core, this);
+        }
     }
 
     /// AdvSIMD "shift by immediate" estreitando (`SHRN`/`RSHRN`/`SQSHRN`/`UQSHRN`/`SQSHRUN`/
@@ -342,6 +381,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte, largo (elementos `esz+1`).
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_SHIFT_NARROW_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeShiftNarrowImmediate(core, this);
+        }
     }
 
     /// AdvSIMD "shift by immediate" alargando (`SSHLL`/`USHLL`, B8.8) — `Rn` tem elementos de `esz`
@@ -362,6 +404,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte (elementos `esz`).
             int rn) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_SHIFT_WIDEN_IMMEDIATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeShiftWidenImmediate(core, this);
+        }
     }
 
     /// `PMULL`/`PMULL2` (B8.11, ARMv8-A Cryptographic Extension — `PMULL_p64` tecnicamente exige
@@ -388,6 +433,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executePolynomialMultiplyLong(core, this);
+        }
     }
 
     /// `USDOT`/`SDOT`/`UDOT` vetorial (`FEAT_I8MM`/`FEAT_DotProd`, B19.12/B19.23) — produto escalar
@@ -412,6 +460,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Registrador `V` fonte 2.
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_INTEGER_DOT_PRODUCT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeIntegerDotProduct(core, this);
+        }
     }
 
     /// `USDOT`/`SUDOT` indexados (`FEAT_I8MM`, B19.12) — como {@link IntegerDotProduct}, mas
@@ -437,6 +488,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// Índice do grupo de 4 bytes de {@link #rm} usado em TODA a operação (`0`-`3`).
             int index) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_INTEGER_DOT_PRODUCT_BY_ELEMENT; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeIntegerDotProductByElement(core, this);
+        }
     }
 
     /// `SMMLA`/`UMMLA`/`USMMLA` (`FEAT_I8MM`, B19.12) — multiplicação de matriz `2×8 · 8×2` de
@@ -461,5 +515,8 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
             /// coluna `c` = elementos `8c..8c+7`).
             int rm) implements AdvSimdIntegerOp64 {
         @Override public int kind() { return Kind.VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE; }
+        @Override public boolean execute(Aarch64Core core) {
+            return Ir64VectorArithmeticExecutor.executeIntegerMatrixMultiplyAccumulate(core, this);
+        }
     }
 }

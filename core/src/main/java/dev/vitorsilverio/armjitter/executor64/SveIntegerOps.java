@@ -17,7 +17,7 @@ import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 /// **`MOVPRFX`** é executado como um `MOV Zd, Zn` comum (estratégia (a) da Armadilha 1 da task, a mesma
 /// do `trans_MOVPRFX` do QEMU: `do_mov_z`): a instrução seguinte lê `Zd` como uma fonte destrutiva
 /// qualquer, então o resultado é idêntico ao da forma construtiva.
-final class SveIntegerOps {
+public final class SveIntegerOps {
     private static final int BITS_PER_BYTE = Byte.SIZE;
     private static final int ESZ_HALF = 1;
     private static final int ESZ_WORD = 2;
@@ -95,7 +95,7 @@ final class SveIntegerOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerUnpredicated op) {
+    public static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerUnpredicated op) {
         if (op.op() == SveIntegerOp64.IntegerUnpredicated.Op.FEXPA || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.FTSSEL
                 || nonStreamingWidening(op)) {
             SvePredicateOps.requireNonStreaming(core); // sem FEAT_SSVE_FEXPA/BitPerm/AES: ilegais em streaming

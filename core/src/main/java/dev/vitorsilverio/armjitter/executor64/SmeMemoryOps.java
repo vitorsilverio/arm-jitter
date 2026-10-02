@@ -20,7 +20,7 @@ import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 ///   habilitado (podem rodar fora do modo streaming — é o que um salvamento de contexto faz); `LDR`/`STR ZT0` exigem
 ///   `ZT0` habilitado.
 /// - **Sem checagem de tag MTE** (mesma disciplina do resto do projeto, ver `memoryTags`).
-final class SmeMemoryOps {
+public final class SmeMemoryOps {
     private static final int STACK_POINTER_ENCODING = 31;
     private static final int WORD_BYTES = Long.BYTES;
     private static final int ESZ_QUAD = 4;
@@ -35,7 +35,7 @@ final class SmeMemoryOps {
     // ── LD1 / ST1 ────────────────────────────────────────────────────────────────────────────────
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, SmeOp64.TileLoadStore op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.TileLoadStore op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -115,7 +115,7 @@ final class SmeMemoryOps {
     /// `ZA[(W<rv> + imm) MOD SVL_B]` ↔ `X<rn>|SP + imm × SVL_B`: a linha é `ZA0H.B[(W + imm) MOD SVL_B]` (o QEMU
     /// usa `get_tile_rowcol` com `esz = byte`, a mesma resolução de {@link
     /// Aarch64MatrixTileAddressing#resolveSliceIndex}).
-    static boolean execute(Aarch64Core core, SmeOp64.ArrayLoadStore op) {
+    public static boolean execute(Aarch64Core core, SmeOp64.ArrayLoadStore op) {
         if (!core.smeZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -143,7 +143,8 @@ final class SmeMemoryOps {
 
     // ── LDR / STR de ZT0 ─────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, SmeOp64.Zt0LoadStore op) {
+    /// Executa {@link SmeOp64.Zt0LoadStore}.
+    public static boolean execute(Aarch64Core core, SmeOp64.Zt0LoadStore op) {
         if (!core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
         }
