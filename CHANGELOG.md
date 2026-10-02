@@ -5,7 +5,11 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
-A release `1.4.0` fica reservada para cobertura de ISA completa (`tasks/README.md`).
+## [1.4.0] — 2026-10-01
+
+Cobertura de ISA completa: `docs/COBERTURA-ISA.md` mede 100% (29619/29619 células aplicáveis decodificam).
+A tabela prova que o decoder reconhece os encodings, não que a semântica está correta; PMSA/MPU (B20), ARMv1-v3 (B21),
+JIT nativo e Truffle seguem como trabalho aberto no `ROADMAP-100-ARM.md`.
 
 ### Corrigido
 - **SVE, gate `SVE2` indevido + falso-negativo do medidor** (`B17.29`): `SMMLA`/`USMMLA`/`UMMLA` (só exigem `SVE`+`FEAT_I8MM`) não dependem mais de `FEAT_SVE2` em `Aarch64Sve2WideningDecoder`/`Aarch64Sve2IntegerDecoder`. `DecodeTreeSpec` (ferramenta de medição) ganhou campo sintético para bits só alcançáveis via `%extrator` do QEMU, antes sempre `0` — triados os ~30 `❌` restantes de `sve.decode`, nenhum gap real. `docs/COBERTURA-ISA.md`: global 98%→99%, A64 `ARMv9.0-A`-`ARMv9.5-A` 95%→99%, SVE/SVE2 84-85%→96-97%.
