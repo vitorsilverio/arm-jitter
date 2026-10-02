@@ -53,11 +53,24 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// respectiva o encoding cai no `UNIMPLEMENTED` de `ArmDecoder#decodeUnconditional` (zero-diff).
 public final class NeonSharedDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
+    private final boolean claimUnmatched;
 
     /// Decoder ligado à arquitetura que o registra — precisa consultar
-    /// {@link ArmFeature#COMPLEX_NUMBER_ARITHMETIC}.
+    /// {@link ArmFeature#COMPLEX_NUMBER_ARITHMETIC}. Reivindica TODO encoding que não bate em linha
+    /// nenhuma (devolve `UNIMPLEMENTED`, nunca `null`) — por isso tem que vir POR ÚLTIMO na lista.
     public NeonSharedDecoder(ArmArchitecture architecture) {
+        this(architecture, true);
+    }
+
+    /// Variante que escolhe o destino do que não bate em linha nenhuma. Com `claimUnmatched = false`
+    /// devolve `null` (deixa o próximo decoder tentar), o que permite registrá-lo ANTES de
+    /// {@link CoprocessorDecoder} — necessário num preset que declara as 5 features irmãs (B13.25):
+    /// as formas `_scalar` com bit 4 = 1 (`VUDOT_scalar`/`VSUDOT_scalar`/`VFML_scalar`/`VFMA_b16_scal`)
+    /// têm o mesmo formato de `MCR2`/`MRC2` e seriam engolidas como `COPROCESSOR` se o decoder de
+    /// coprocessador viesse primeiro.
+    public NeonSharedDecoder(ArmArchitecture architecture, boolean claimUnmatched) {
         this.architecture = architecture;
+        this.claimUnmatched = claimUnmatched;
     }
 
     // ── Campos comuns (convenção `D:Vd` de VfpDecoder em precisão dupla) ──
@@ -250,8 +263,9 @@ public final class NeonSharedDecoder implements DecoderExtension {
         }
         // B13.21 fechou o arquivo (23 linhas: B13.17-B13.21 todas com dono): qualquer encoding
         // dentro do frame `neon-shared` que não bateu em nenhum `if` acima é UNIMPLEMENTED de
-        // verdade (G8), não mais `null` — não há trabalho pendente restando neste arquivo.
-        return unimplemented(address, raw, condition);
+        // verdade (G8), não mais `null` — não há trabalho pendente restando neste arquivo. Só a
+        // variante `claimUnmatched = false` (B13.25) devolve `null` aqui.
+        return claimUnmatched ? unimplemented(address, raw, condition) : null;
     }
 
     /// `VCMLA`/`VCADD` (forma vetorial, 3 registradores): rotação já convertida para GRAUS

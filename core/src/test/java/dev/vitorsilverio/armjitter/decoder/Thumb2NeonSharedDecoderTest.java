@@ -50,4 +50,14 @@ class Thumb2NeonSharedDecoderTest {
         assertNotNull(DECODER.tryDecode(0x0000_0000, 0, Condition.AL));
         assertEquals(InstructionKind.UNIMPLEMENTED, DECODER.tryDecode(0x0000_0000, 0, Condition.AL).kind());
     }
+
+    /// B13.25: com `claimUnmatched = false` o que não bate em linha nenhuma devolve `null` (deixa o
+    /// decoder de coprocessador tentar), e o que bate continua relabelado como Thumb.
+    @Test
+    void fallThroughVariantReturnsNullForUnmatchedAndStillRelabelsMatches() {
+        Thumb2NeonSharedDecoder fallThrough = new Thumb2NeonSharedDecoder(FEATURES, false);
+        assertEquals(null, fallThrough.tryDecode(0x0000_0000, 0, Condition.AL));
+        assertEquals(InstructionSet.THUMB, fallThrough.tryDecode(VCMLA, 0, Condition.AL).instructionSet());
+        assertEquals(null, new NeonSharedDecoder(FEATURES, false).tryDecode(0x0000_0000, 0, Condition.AL));
+    }
 }

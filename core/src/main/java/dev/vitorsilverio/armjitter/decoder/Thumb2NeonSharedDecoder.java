@@ -26,11 +26,18 @@ public final class Thumb2NeonSharedDecoder implements DecoderExtension {
     private final NeonSharedDecoder delegate;
 
     public Thumb2NeonSharedDecoder(ArmArchitecture architecture) {
-        this.delegate = new NeonSharedDecoder(architecture);
+        this(architecture, true);
+    }
+
+    /// Ver {@link NeonSharedDecoder#NeonSharedDecoder(ArmArchitecture, boolean)}: com
+    /// `claimUnmatched = false` devolve `null` para o que não bate em linha nenhuma (B13.25).
+    public Thumb2NeonSharedDecoder(ArmArchitecture architecture, boolean claimUnmatched) {
+        this.delegate = new NeonSharedDecoder(architecture, claimUnmatched);
     }
 
     @Override
     public DecodedInstruction tryDecode(int raw, int address, Condition condition) {
-        return delegate.tryDecode(raw, address, condition).withInstructionSet(InstructionSet.THUMB);
+        DecodedInstruction decoded = delegate.tryDecode(raw, address, condition);
+        return decoded == null ? null : decoded.withInstructionSet(InstructionSet.THUMB);
     }
 }

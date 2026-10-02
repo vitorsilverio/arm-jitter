@@ -736,6 +736,50 @@ public final class ArmArchitecture {
                     // acima (delega a NeonSharedDecoder, herda o mesmo comportamento "nunca null").
                     new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV7A_NEON_FEATURES)));
 
+    /// ARMv8.6-A executando em AArch32 **com NEON/Advanced SIMD** (B13.25) — {@link #ARMV8_6A_32} +
+    /// {@link ArmFeature#ADVANCED_SIMD} + {@link ArmFeature#VFPV3_D32} + as features irmãs do épico B13
+    /// que {@link #ARMV7A_NEON} deixou de fora por serem ARMv8.x: {@link ArmFeature#ADVANCED_SIMD_RDM}
+    /// (`FEAT_RDM`), {@link ArmFeature#CRYPTO}, {@link ArmFeature#COMPLEX_NUMBER_ARITHMETIC}
+    /// (`FEAT_FCMA`), {@link ArmFeature#DOT_PRODUCT}, {@link ArmFeature#INT8_MATRIX_MULTIPLY}
+    /// (`FEAT_I8MM`) e {@link ArmFeature#FP16_FUSED_MULTIPLY_ADD_LONG} (`FEAT_FHM`);
+    /// {@link ArmFeature#BFLOAT16} já vem de {@link #ARMV8_6A_32}. É o preset que torna as 23 linhas de
+    /// `neon-shared.decode` MEDÍVEIS (em {@link #ARMV7A_NEON} todas medem `·`). **G3**: os presets
+    /// existentes ficam intocados — este nasce AO LADO, com a mesma lista de extensões de decoder de
+    /// {@link #ARMV7A_NEON} reparametrizada pelas features novas (senão elas ficam invisíveis em tempo
+    /// de decode, o bug da B4.0.3), `NeonSharedDecoder`/`Thumb2NeonSharedDecoder` POR ÚLTIMO pelo mesmo
+    /// motivo documentado em {@link #ARMV7A_NEON}.
+    private static final ArmArchitecture ARMV8_6A_32_NEON_FEATURES = extending(ARMV8_6A_32_FEATURES,
+            "ARMv8.6-A (AArch32)+NEON", ArmFeature.ADVANCED_SIMD, ArmFeature.VFPV3_D32,
+            ArmFeature.ADVANCED_SIMD_RDM, ArmFeature.CRYPTO, ArmFeature.COMPLEX_NUMBER_ARITHMETIC,
+            ArmFeature.DOT_PRODUCT, ArmFeature.INT8_MATRIX_MULTIPLY, ArmFeature.FP16_FUSED_MULTIPLY_ADD_LONG);
+
+    public static final ArmArchitecture ARMV8_6A_32_NEON = ARMV8_6A_32_NEON_FEATURES
+            .withDecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.VfpDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonDataProcessingDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonShiftImmediateDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonModifiedImmediateDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonThreeRegDifferentDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonTwoRegMiscDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonExtractTableDuplicateDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.NeonLoadStoreDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    // `claimUnmatched = false` + ANTES de `CoprocessorDecoder`: aqui as 5 features irmãs
+                    // existem, e as formas `_scalar` com bit 4 = 1 têm formato de `MCR2`/`MRC2` —
+                    // com o coprocessador na frente elas medem `⚠️` (`COPROCESSOR`), não `✅`.
+                    new dev.vitorsilverio.armjitter.decoder.NeonSharedDecoder(ARMV8_6A_32_NEON_FEATURES, false),
+                    new dev.vitorsilverio.armjitter.decoder.CoprocessorDecoder()))
+            .withThumb32DecoderExtensions(List.of(
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2DataProcessingDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2RegisterDataProcessingDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MultiplyDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2LoadStoreDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2VfpDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2BranchDecoder(),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder(ARMV8_6A_32_NEON_FEATURES),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2NeonSharedDecoder(ARMV8_6A_32_NEON_FEATURES, false),
+                    new dev.vitorsilverio.armjitter.decoder.Thumb2CoprocessorDecoder()));
+
     /// ARMv7-R **user-level** (B20.1) — primeiro degrau do perfil R (Cortex-R4/R5/R7/R8, catálogo na
     /// B20.6). O conjunto de instruções é o de {@link #ARMV7A} MENOS as extensões que o perfil R real
     /// não tem: **sem** {@link ArmFeature#HYPERVISOR_CALL}/{@link ArmFeature#VIRTUALIZATION_EXTENSIONS}

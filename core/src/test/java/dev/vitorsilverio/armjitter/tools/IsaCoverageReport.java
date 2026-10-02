@@ -205,6 +205,9 @@ public final class IsaCoverageReport {
         // capaz de medir `VJCVT`/`VCVT_b16_f32` como `✅` sem violar a versão real de introdução
         // (ver `ARM32_VERSION_REQUIREMENTS`). Mesmos grupos aplicáveis de `v8-A/32` (sem NEON).
         ARM_ARCHITECTURES.put("v8.6-A/32", ArmArchitecture.ARMV8_6A_32);
+        // B13.25: `ARMV8_6A_32_NEON` — a única coluna de 32 bits com NEON + as 7 features irmãs, onde as
+        // 23 linhas de `neon-shared.decode` deixam de medir `·`.
+        ARM_ARCHITECTURES.put("v8.6-A/32+NEON", ArmArchitecture.ARMV8_6A_32_NEON);
         // ARMV8M_BASELINE/ARMV8M_MAINLINE (B15.4) NÃO entram aqui ainda — mesmo precedente da
         // B15.1 ("zero célula nova... os presets não entram no mapa ARM_ARCHITECTURES ainda").
         // Medido nesta sessão: adicioná-los sem uma rodada de curadoria própria faz ~180 células

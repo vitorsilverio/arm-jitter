@@ -165,10 +165,10 @@ VMOV_half	MPCore,v7-A,v7-A+NEON	FEAT_FP16 (ARMv8.2-A, ARM DDI 0487) -- VFPv3 hal
 # -- so por NOME+grupo, sem saber qual das 3 linhas identicas em nome era -- a coluna `ocorrencia`
 # -- nova (5a coluna, IsaCoverageReport) resolve isso contando a posicao 1-based de cada linha
 # -- entre as de mesmo nome+arquivo, na ordem do .decode.
-VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
-VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
-VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
-VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
+VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
+VMOV_to_gp	MPCore,v7-A,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
+VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma byte; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	1
+VMOV_from_gp	MPCore,v7-A,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	Advanced SIMD (insn_is_neon, ARM_FEATURE_NEON) -- forma halfword; B22.10: os presets ARMV8A_32/ARMV8_6A_32 não declaram ADVANCED_SIMD (gate real do decoder), como todo o NEON nessas colunas	vfp.decode	2
 
 # -- B9.1: "Signed multiply, signed and unsigned divide" (ARM DDI 0406C A5.2.6) e ARMv6 --
 # -- confirmado contra op_smlad/op_smlald/op_smmla reais em target/arm/tcg/translate.c do QEMU,
@@ -203,30 +203,30 @@ SMMLSR	v4T,v5TE	ARMv6 (op_smmla, ENABLE_ARCH_6)
 # ── T32 (B9.7): MVE (Helium) "long shift" — ARMv8.1-M, exigem `@mve_sh_ri`/`@mve_shl_ri`/ ──────
 # ── `@mve_sh_rr`/`@mve_shl_rr` (t32.decode), espaço reservado em ARMv7-A puro. CONFERIDO: o ────
 # ── grupo inteiro só existe sob `ARM_FEATURE_MVE`/`ARM_FEATURE_V8_1M` no QEMU. ──────────────────
-UQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-LSLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-UQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-URSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-LSRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-URSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SRSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-ASRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SRSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-UQRSHL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-LSLL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-UQRSHLL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SQRSHR_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-ASRL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SQRSHRL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-UQRSHLL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
-SQRSHRL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+URSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+URSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SRSHR_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+ASRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SRSHRL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQSHL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQSHLL_ri	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+LSLL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHLL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHR_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+ASRL_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHRL64_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+UQRSHLL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
+SQRSHRL48_rr	v7-A,v7-M,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8.1-M/MVE (Helium); B22.9: instrução do perfil M (Armv8.1-M), não existe em A/R-profile
 
 # ── T32 (B9.7): CLRM — QEMU t32.decode comentário explícito "M-profile CLRM uses that encoding" ─
 # ── (mesmo bit-pattern de LDM_t32 com Rn=1111, que em A/R-profile é UNDEFINED — Rn=PC não pode ──
 # ── ser base de LDM). Não existe em v7-A. ────────────────────────────────────────────────────────
-CLRM	v7-A,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	ARMv8-M mainline (perfil M, não A/R-profile); B22.9: idem em v7-A+NEON/v7-R/v8-R/v8-A/32/v8.6-A/32 — CLRM é do perfil M, em A/R-profile o encoding é UNPREDICTABLE
+CLRM	v7-A,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	ARMv8-M mainline (perfil M, não A/R-profile); B22.9: idem em v7-A+NEON/v7-R/v8-R/v8-A/32/v8.6-A/32 — CLRM é do perfil M, em A/R-profile o encoding é UNPREDICTABLE
 
 # ── T32 (B9.7): SB (Speculation Barrier) — CONFERIDO via `dc_isar_feature(aa32_sb, s)` em ──────
 # ── `trans_SB` (target/arm/tcg/translate.c real do QEMU): FEAT_SB, extensão opcional ARMv8.0, ──
@@ -796,7 +796,7 @@ SETEND	v6-M,v7-M,ARMv8.1-M+MVE	perfil M não tem instrução de endianness (endi
 # ── 611-637); o próprio t16.decode do QEMU comenta que estes padrões só valem para CPU sem
 # ── Thumb-2. BL/BLX de 32 bits (LONG_BRANCH_32) seguem ✅ em v7-A/v6-M/v7-M — não são afetados.
 BLX_suffix	v4T	ARMv5T (BLX não existe em ARMv4T), anterior ao ARMv4T	t16.decode
-BLX_suffix	v7-A,v6-M,v7-M,ARMv8.1-M+MVE,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
+BLX_suffix	v7-A,v6-M,v7-M,ARMv8.1-M+MVE,v7-A+NEON,v7-R,v8-R,v8-A/32,v8.6-A/32,v8.6-A/32+NEON	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2 o par legado BL/BLX de meio-halfword vira LONG_BRANCH_32 de 32 bits em tryDecodeThumb32, antes das linhas legadas (ThumbDecoder.decode:170)	t16.decode
 BL_BLX_prefix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
 BL_suffix	v6-M	inalcançável por decisão de decode (B2.6): sob ArmFeature.THUMB2, BL de 32 bits é LONG_BRANCH_32 (ThumbDecoder.decode:170); a linha legada de 16 bits nunca é alcançada	t16.decode
 

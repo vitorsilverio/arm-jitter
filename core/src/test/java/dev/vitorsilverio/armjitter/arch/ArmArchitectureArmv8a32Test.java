@@ -44,7 +44,7 @@ class ArmArchitectureArmv8a32Test {
     void onlyArmv8a32DeclaresTheThreeNewFeatures() throws IllegalAccessException {
         for (ArmArchitecture preset : allPublicPresets()) {
             if (preset == ArmArchitecture.ARMV8A_32 || preset == ArmArchitecture.ARMV8R_32
-                    || preset == ArmArchitecture.ARMV8_6A_32) {
+                    || preset == ArmArchitecture.ARMV8_6A_32 || preset == ArmArchitecture.ARMV8_6A_32_NEON) {
                 continue;
             }
             assertFalse(preset.has(ArmFeature.ARMV8_FP), preset + " não deve ter ARMV8_FP");
