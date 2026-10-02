@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operacao de representacao intermediaria usada antes da emissao de codigo.
@@ -23,6 +25,18 @@ public sealed interface IrOp permits IntegerOp, MemoryOp, BranchOp, SystemOp, Vf
     /// linear de `instanceof` (via `SwitchBootstraps.typeSwitch`) custava ~13% do tempo no
     /// loop quente do interpretador.
     int kind();
+
+    /// Executa esta operação no executor da sua família e devolve se o PC foi alterado (task E15.5).
+    ///
+    /// É o único ponto de roteamento op → executor do pipeline de 32 bits: cada `record` implementa
+    /// com uma ponte de uma linha para o método do executor de família correspondente, de modo que
+    /// um `record` novo sem ponte não compila. A semântica continua nos executores.
+    ///
+    /// @param executor   executor da arquitetura em uso (dono dos executores de família)
+    /// @param core       núcleo ARM em execução
+    /// @param blockEndPc PC sequencial do fim do bloco (endereço de retorno de `SWI`/`HVC`/`SMC`/...)
+    /// @return `true` se a operação alterou o PC
+    boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc);
 
     /// Constantes de {@link IrOp#kind()} — uma por subtipo selado, contíguas a partir de 0
     /// para que o `switch` do interpretador compile como `tableswitch`.
@@ -409,6 +423,7 @@ public sealed interface IrOp permits IntegerOp, MemoryOp, BranchOp, SystemOp, Vf
             /// Quantidade de ciclos somada ao bloco.
             int count) implements IrOp {
         @Override public int kind() { return Kind.CYCLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.cycleExecutor().executeCycle(this); return false; }
     }
 
     /// Custo de fetch da instrução original na memória do dispositivo.
@@ -418,5 +433,6 @@ public sealed interface IrOp permits IntegerOp, MemoryOp, BranchOp, SystemOp, Vf
             /// Tamanho da instrução em bytes.
             int sizeBytes) implements IrOp {
         @Override public int kind() { return Kind.FETCH; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.cycleExecutor().executeFetch(core, this); return false; }
     }
 }

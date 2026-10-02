@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações MVE de redução para registrador geral: soma, mínimo/máximo e produtos acumulados ao
@@ -36,6 +38,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAddAcrossVector(core, this); }
     }
 
     /// `VADDLV` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
@@ -57,6 +60,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR_LONG; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAddAcrossVectorLong(core, this); }
     }
 
     /// `VABAV_S`/`VABAV_U` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -79,6 +83,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAbsoluteDifferenceAccumulate(core, this); }
     }
 
     /// `VMLADAV_S`/`VMLADAV_U`/`VMLSDAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -109,6 +114,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUAL_ACCUMULATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDualAccumulate(core, this); }
     }
 
     /// `VMLALDAV_S`/`VMLALDAV_U`/`VMLSLDAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -138,6 +144,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDualAccumulateLong(core, this); }
     }
 
     /// `VRMLALDAVH_S`/`VRMLALDAVH_U`/`VRMLSLDAVH` (perfil M, B16.13b, MVE/Helium,
@@ -167,6 +174,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorRoundingDualAccumulateHigh(core, this); }
     }
 
     /// `VMAXV_S`/`VMAXV_U`/`VMINV_S`/`VMINV_U`/`VMAXAV`/`VMINAV` (perfil M, B16.13b, MVE/Helium,
@@ -192,6 +200,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorMinMaxAcrossVector(core, this); }
     }
 
     /// `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_FP`,
@@ -219,5 +228,6 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             /// Condição necessária para executar.
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpMinMaxAcrossVector(core, this); }
     }
 }

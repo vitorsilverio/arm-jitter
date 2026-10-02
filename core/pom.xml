@@ -46,7 +46,12 @@
                          baixo em 0,1pp. **O número só sobe**: quem aumenta a cobertura sobe o piso no
                          mesmo commit; baixar o piso para fazer o build passar não é uma opção — o
                          caminho é cobrir o código novo. Medição de 2026-10-02: linha 94,02%, branch
-                         89,48%. A E15.22 fecha com os dois em 1.000. -->
+                         89,48%. A E15.22 fecha com os dois em 1.000.
+                         Única exceção, decidida pelo usuário na E15.5 (2026-10-02): o piso de branch
+                         desceu de 0,894 para 0,892 porque sair um `switch` COBERTO encolhe o denominador
+                         (360 branches cobertos a menos) sem nenhum branch perdido a mais (2738 antes e
+                         depois); medição: linha 94,00%, branch 89,26%. -->
+
                     <execution>
                         <id>jacoco-check</id>
                         <phase>verify</phase>
@@ -66,7 +71,7 @@
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.894</minimum>
+                                            <minimum>0.892</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
 
@@ -38,6 +40,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a leitura.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.LOAD; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeLoad(core, this); }
     }
 
     /// Operação de escrita de memória.
@@ -63,6 +66,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a escrita.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.STORE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeStore(core, this); return false; }
     }
 
     /// `LDREX{,B,H,D}` (ARMv6/v6K) e `LDREX` de 32 bits Thumb-2 (B2.7 PR3): lê a memória no
@@ -84,6 +88,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a leitura.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.LOAD_EXCLUSIVE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeLoadExclusive(core, this); return false; }
     }
 
     /// `STREX{,B,H,D}` (ARMv6/v6K) e `STREX` de 32 bits Thumb-2 (B2.7 PR3): escreve a memória em
@@ -105,6 +110,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a escrita.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.STORE_EXCLUSIVE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeStoreExclusive(core, this); return false; }
     }
 
     /// `CLREX` (ARMv6K): abre o monitor de exclusividade do core.
@@ -112,6 +118,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar (CLREX vive no espaço incondicional → AL).
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.CLEAR_EXCLUSIVE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.memoryExecutor().executeClearExclusive(core, this); return false; }
     }
 
     /// Transferência de palavra dupla (LDRD/STRD): dois acessos de 32 bits consecutivos a
@@ -138,6 +145,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a operação.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.DOUBLE_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeDoubleTransfer(core, this); }
     }
 
     /// Troca valor de memória com registrador.
@@ -157,6 +165,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar a troca.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.SWAP; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeSwap(core, this); }
     }
 
     /// Lê um valor de endereço absoluto literal (pool de constantes relativo ao PC).
@@ -179,6 +188,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
         }
 
         @Override public int kind() { return Kind.LOAD_LITERAL; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.memoryExecutor().executeLoadLiteral(core, this); }
     }
 
     /// Transferência sequencial de múltiplos registradores.
@@ -202,6 +212,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.MULTIPLE_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeMultipleTransfer(core, this); }
     }
 
     /// Operação de push THUMB.
@@ -213,6 +224,7 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.PUSH; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.transferExecutor().executePush(core, this); return false; }
     }
 
     /// Operação de pop THUMB.
@@ -224,5 +236,6 @@ public sealed interface MemoryOp extends IrOp permits MemoryOp.Load, MemoryOp.St
             /// Condição necessária para executar.
             Condition condition) implements MemoryOp {
         @Override public int kind() { return Kind.POP; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executePop(core, this); }
     }
 }

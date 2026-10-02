@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações NEON de movimentação de dados: load/store de estruturas, permutação, extração,
@@ -51,6 +53,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// "double spacing", `D<n>`, `D<n+2>`, ...).
             int stride) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_STORE_MULTIPLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadStoreMultiple(core, this); return false; }
     }
 
     /// `VLD1`-`VLD4`/`VST1`-`VST4` NEON A32, forma "single structure to one lane" (B13.3) —
@@ -82,6 +85,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// byte, `0`-`3` halfword, `0`-`1` word).
             int index) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_STORE_SINGLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadStoreSingle(core, this); return false; }
     }
 
     /// `VLD1R`-`VLD4R` NEON A32, forma "single structure to all lanes" (B13.3) — lê UM elemento
@@ -110,6 +114,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// (`bit t` do encoding, arranjo de 128 bits nomeado por DOIS `D`).
             boolean quad) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_ALL_LANES; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadAllLanes(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "1-reg-and-modified-immediate" (B13.9): `VMOV`/`VMVN`/`VORR`/
@@ -137,6 +142,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// inicia o `Q`. Também é FONTE em `ORR`/`BIC` (leem `Vd` atual).
             int vd) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_MODIFIED_IMMEDIATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonModifiedImmediate(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VSWP`/`VTRN`/`VUZP`/`VZIP` (B13.14, "2-reg-misc grouping"
@@ -165,6 +171,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// par que inicia o `Q`.
             int vm) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_SWAP_PERMUTE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonSwapPermute(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VEXT` (B13.14, fora do sub-layout "2-reg-misc": bit24=0
@@ -192,6 +199,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// {@link #vd}).
             int vm) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_EXTRACT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonExtract(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VTBL`/`VTBX` (B13.14, fora do sub-layout "2-reg-misc":
@@ -220,6 +228,7 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// Registrador `D` com os índices (um por byte).
             int vm) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_TABLE_LOOKUP; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonTableLookup(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `VDUP` escalar (B13.14, `VDUP_scalar`, fora do sub-layout
@@ -245,5 +254,6 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             /// Registrador fonte, em índice de `D` (`0`-`31`).
             int vm) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_DUPLICATE_SCALAR; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonDuplicateScalar(core, this); return false; }
     }
 }

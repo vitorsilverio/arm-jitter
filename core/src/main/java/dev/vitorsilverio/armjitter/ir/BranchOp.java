@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.InstructionSet;
 
@@ -26,6 +28,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Conjunto de instruções esperado após o branch.
             InstructionSet targetSet) implements BranchOp {
         @Override public int kind() { return Kind.BRANCH; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeBranch(core, this); }
     }
 
     /// Branch exchange, usado para trocar entre ARM e THUMB (e BLX quando `link`).
@@ -41,6 +44,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Condição necessária para tomar o branch.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.BRANCH_EXCHANGE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeBranchExchange(core, this); }
     }
 
     /// Primeira metade de `BL` THUMB.
@@ -52,6 +56,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.THUMB_BL_PREFIX; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.branchExecutor().executeThumbBlPrefix(core, this); return false; }
     }
 
     /// Segunda metade de `BL`/`BLX` THUMB.
@@ -65,6 +70,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.THUMB_BL_SUFFIX; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeThumbBlSuffix(core, this); }
     }
 
     /// `TBB`/`TBH` (Thumb-2, ARMv6T2+, B2.4): lê um byte (`TBB`) ou halfword (`TBH`) sem sinal de
@@ -98,6 +104,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Condição necessária para executar o desvio.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.TABLE_BRANCH; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeTableBranch(core, this); }
     }
 
     /// `CBZ`/`CBNZ` (Thumb-1, ARMv6T2+, B2.4): desvia para `target` (já resolvido pelo decoder)
@@ -118,6 +125,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// IT block, então este campo pode carregar uma condição não-AL nesse caso raro).
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.COMPARE_BRANCH_ZERO; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeCompareBranchZero(core, this); }
     }
 
     /// `BXNS`/`BLXNS` (perfil M, B15.4): branch-exchange com troca de estado Secure/Non-secure —
@@ -139,6 +147,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             /// Condição necessária para tomar o branch.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.SECURE_BRANCH_EXCHANGE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeSecureBranchExchange(core, this); }
     }
 
     /// `DLS`/`WLS`/`DLSTP`/`WLSTP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension): grava
@@ -169,6 +178,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
         }
 
         @Override public int kind() { return Kind.LOOP_START; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeLoopStart(core, this); }
     }
 
     /// `LE`/`LETP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension). **Achado medido contra
@@ -193,5 +203,6 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
         }
 
         @Override public int kind() { return Kind.LOOP_END; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeLoopEnd(core, this); }
     }
 }

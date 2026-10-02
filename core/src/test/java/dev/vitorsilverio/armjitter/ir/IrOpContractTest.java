@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
@@ -31,8 +30,9 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /// Rede de segurança da E15 (task E15.1): TODO `record` permitido de {@link IrOp} passa por cada
-/// ponto de roteamento do pipeline de 32 bits — os dois dispatchers do interpretador
-/// ({@link IrBlockExecutor#execute} por `Kind` e {@link IrBlockExecutor#executeOp} por tipo), a
+/// ponto de roteamento do pipeline de 32 bits — os dois caminhos do interpretador
+/// ({@link IrBlockExecutor#execute}, com caso próprio para os `Kind` quentes, e
+/// {@link IrBlockExecutor#executeOp}, que é a ponte {@link IrOp#execute} de cada `record`), a
 /// política de emissão nativa ({@link AsmNativePolicy}) contra o compilador que ela autoriza
 /// ({@link AsmBlockCompiler}) e a {@link DeadCodeEliminationPass}.
 ///
@@ -60,8 +60,10 @@ class IrOpContractTest {
     /// endereçamento de `RFE`: a dupla lida fica em `[R0-8, R0+8)`).
     private static final int SAVED_STATE_WINDOW_BYTES = 8;
     private static final int WORD_BYTES = 4;
-    /// Valor fora de `IrOp.Kind` — nenhum `record` devolve isso de `kind()`.
-    private static final int UNKNOWN_KIND = -1;
+    /// Imediato de `MOVT` usado para observar que a op rodou (metade alta de `R0`).
+    private static final int MOVE_TOP_IMMEDIATE = 0x1234;
+    private static final int HALF_WORD_BITS = 16;
+    private static final int LOW_HALF_MASK = 0xFFFF;
     /// Índice do PC (`R15`) — escrever nele é o que tira várias ops da emissão nativa.
     private static final int PC = 15;
     /// `op2` de `SMLAWy`/`SMULWy` em {@link IntegerOp.DspMultiply} — a única forma que também lê `Rn`.
@@ -241,13 +243,18 @@ class IrOpContractTest {
                 .map(recordClass -> Named.of(displayName(recordClass), IrOpSamples.<IrOp>sample(recordClass)));
     }
 
-    /// Um `Kind` que nenhum `record` devolve é recusado, nunca despachado para o executor errado.
+    /// O gate acima vale só para os dois avanços: qualquer outra op depois de o PC ter mudado no
+    /// mesmo bloco continua executando (aqui, um `MOVT` depois de uma instrução indefinida).
     @Test
-    void unknownKindIsRejected() {
-        IrBlock block = blockOf(IrOpSamples.sample(SystemOp.MemoryBarrier.class));
-        block.kindsArray()[block.kindsArray().length - 1] = UNKNOWN_KIND;
+    void otherOpsStillRunAfterThePcChanged() {
+        IrOp moveTop = IrOpSamples.sample(IntegerOp.MoveTop.class, Map.of("immediate16", MOVE_TOP_IMMEDIATE));
+        IrBlock block = new IrBlock(BLOCK_START, BLOCK_END, List.of(
+                new IrOp.Fetch(BLOCK_START, INSTRUCTION_SIZE), new IrOp.Cycle(1),
+                IrOpSamples.sample(SystemOp.Undefined.class), moveTop));
+        ArmCore core = newCore(A_PROFILE);
 
-        assertThrows(IllegalStateException.class,
-                () -> new IrBlockExecutor(A_PROFILE).execute(block, newCore(A_PROFILE)));
+        new IrBlockExecutor(A_PROFILE).execute(block, core);
+
+        assertEquals((MOVE_TOP_IMMEDIATE << HALF_WORD_BITS) | (REGISTER_SEED_BASE & LOW_HALF_MASK), core.register(0));
     }
 }

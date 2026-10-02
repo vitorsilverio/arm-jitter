@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações da Cryptographic Extension do AArch32 (AES, SHA-1, SHA-256).
@@ -31,6 +33,7 @@ public sealed interface NeonCryptoOp extends NeonOp permits NeonCryptoOp.Aes, Ne
             /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
             int vm) implements NeonCryptoOp {
         @Override public int kind() { return Kind.NEON_CRYPTO_AES; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonCryptoAes(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `SHA1H`/`SHA1SU1`/`SHA256SU0` ("Cryptographic two-register
@@ -52,6 +55,7 @@ public sealed interface NeonCryptoOp extends NeonOp permits NeonCryptoOp.Aes, Ne
             /// Registrador fonte, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
             int vm) implements NeonCryptoOp {
         @Override public int kind() { return Kind.NEON_CRYPTO_SHA; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonCryptoSha(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits — `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/
@@ -78,5 +82,6 @@ public sealed interface NeonCryptoOp extends NeonOp permits NeonCryptoOp.Aes, Ne
             /// Terceiro operando, em índice de `D` PAR que inicia o `Q` (`0`-`31`).
             int vm) implements NeonCryptoOp {
         @Override public int kind() { return Kind.NEON_CRYPTO_SHA_THREE_REGISTER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonCryptoShaThree(core, this); return false; }
     }
 }

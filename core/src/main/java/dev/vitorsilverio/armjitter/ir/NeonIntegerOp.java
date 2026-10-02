@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações NEON de aritmética inteira: "three same", pareadas, alargantes, estreitantes,
@@ -39,6 +41,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_THREE_SAME; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeNeonThreeSame(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, forma "pairwise" (B13.4): `VPADD`/`VPMAX`/`VPMIN`. Concatena
@@ -65,6 +68,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_PAIRWISE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonPairwise(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por IMEDIATO (B13.7):
@@ -99,6 +103,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte do valor deslocado, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_SHIFT_IMMEDIATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonShiftImmediate(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por imediato ESTREITANTE
@@ -127,6 +132,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte (`Q`, 128 bits), em índice de `D` par que inicia o `Q`.
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_SHIFT_NARROW_IMMEDIATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonShiftNarrowImmediate(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" com deslocamento por imediato ALARGANTE
@@ -155,6 +161,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte (`D`, 64 bits), em índice de `D` (`0`-`31`).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_SHIFT_WIDEN_IMMEDIATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonShiftWidenImmediate(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "two registers, or three registers of different lengths",
@@ -184,6 +191,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2 (`D`, 64 bits), em índice de `D` (`0`-`31`).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_WIDENING; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonWidening(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "three-reg-different-lengths", forma **Wide** (B13.10):
@@ -209,6 +217,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2 (`D`, 64 bits, ESTREITO), em índice de `D` (`0`-`31`).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_WIDE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonWide(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "three-reg-different-lengths", forma **Narrow**/"half
@@ -236,6 +245,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2 (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_NARROW; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonNarrow(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar", forma **mesma largura**/"doubling high
@@ -279,6 +289,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// word — já extraído pelo decoder).
             int index) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_THREE_SAME_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonThreeSameByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar", forma **alargando** (B13.11):
@@ -312,6 +323,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// extraído pelo decoder).
             int index) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_WIDENING_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonWideningByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" INTEIRA, sub-grupo `size==0b11`
@@ -347,6 +359,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// inicia o `Q`.
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_UNARY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonUnary(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous", sub-grupo `size==0b11`
@@ -370,6 +383,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte (`Q`, 128 bits, LARGO), em índice de `D` par que inicia o `Q`.
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_NARROW_UNARY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonNarrowUnary(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSDOT`/`VUDOT`/`VUSDOT` (B13.18,
@@ -402,6 +416,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonDotProduct(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSDOT_scalar`/`VUDOT_scalar`/
@@ -435,6 +450,7 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Índice da lane de 32 bits dentro de {@link #vm}: `0`-`1` (um `D` guarda 2 lanes).
             int index) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonDotProductByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VSMMLA`/`VUMMLA`/`VUSMMLA` (B13.19,
@@ -467,5 +483,6 @@ public sealed interface NeonIntegerOp extends NeonOp permits NeonIntegerOp.Three
             /// Registrador fonte 2 (duas colunas de 8 bytes), em índice de `D` (ver {@link #vd}).
             int vm) implements NeonIntegerOp {
         @Override public int kind() { return Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonMatrixMultiplyAccumulate(core, this); return false; }
     }
 }

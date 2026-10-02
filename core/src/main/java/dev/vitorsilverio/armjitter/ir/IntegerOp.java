@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações A32/T32 de processamento de dados em registrador geral: aritmética e lógica (`ALU`),
@@ -32,6 +34,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condicao necessaria para executar a operacao.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.ALU; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.aluExecutor().execute(core, this); }
     }
 
     /// Operacao de multiplicacao baixa, com acumulador opcional.
@@ -60,6 +63,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.MULTIPLY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeMultiply(core, this); return false; }
     }
 
     /// Operação de multiplicação longa, com acumulador opcional.
@@ -100,6 +104,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
         }
 
         @Override public int kind() { return Kind.LONG_MULTIPLY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeLongMultiply(core, this); return false; }
     }
 
     /// Aritmética de saturação ARMv5TE (QADD/QSUB/QDADD/QDSUB). `op`: 0=QADD, 1=QSUB,
@@ -116,6 +121,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SATURATING; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSaturating(core, this); return false; }
     }
 
     /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A, B14.3) — espelho de 32 bits de
@@ -136,6 +142,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.CRC32; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeCrc32(core, this); return false; }
     }
 
     /// Multiplicações DSP ARMv5TE. `op2`: 0=SMLAxy, 1=SMLAW(x=0)/SMULW(x=1), 2=SMLALxy, 3=SMULxy.
@@ -159,6 +166,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_MULTIPLY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspMultiply(core, this); return false; }
     }
 
     /// `SMLAD{X}`/`SMLSD{X}`/`SMLALD{X}`/`SMLSLD{X}` (B9.1, ARMv6). Ver Javadoc de
@@ -181,6 +189,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_DUAL_MULTIPLY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspDualMultiply(core, this); return false; }
     }
 
     /// `SMMLA{R}`/`SMMLS{R}` (B9.1, ARMv6). Ver Javadoc de
@@ -201,6 +210,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_TOP_WORD_MULTIPLY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspTopWordMultiply(core, this); return false; }
     }
 
     /// Aritmética paralela ARMv6 em lanes de 8/16 bits (SADD16/UQSUB8/SHASX/...). A operação-base
@@ -221,6 +231,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.PARALLEL_ALU; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeParallelAlu(core, this); return false; }
     }
 
     /// `SEL` (ARMv6): seleciona cada byte do resultado de Rn ou Rm conforme o flag GE
@@ -235,6 +246,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SEL; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSel(core, this); return false; }
     }
 
     /// Saturação ARMv6 (`SSAT`/`USAT`/`SSAT16`/`USAT16`): satura o operando (possivelmente
@@ -258,6 +270,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.SATURATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeSaturate(core, this); return false; }
     }
 
     /// `USAD8`/`USADA8` (ARMv6): soma das diferenças absolutas dos quatro bytes (sem sinal)
@@ -274,6 +287,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.ABS_DIFF_SUM; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeAbsDiffSum(core, this); return false; }
     }
 
     /// `MOVT` (Thumb-2, B2.2): escreve um imediato de 16 bits na metade ALTA de `dst`,
@@ -286,6 +300,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.MOVE_TOP; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeMoveTop(core, this); return false; }
     }
 
     /// `SBFX`/`UBFX` (ARM/Thumb-2, ARMv6T2+, B3.1): extrai `width` bits de `src` a partir do bit
@@ -304,6 +319,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_FIELD_EXTRACT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitFieldExtract(core, this); return false; }
     }
 
     /// `BFI`/`BFC` (ARM/Thumb-2, ARMv6T2+, B3.1): substitui `width` bits de `dst` a partir do bit
@@ -321,6 +337,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_FIELD_INSERT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitFieldInsert(core, this); return false; }
     }
 
     /// `RBIT` (ARM/Thumb-2, ARMv6T2+, B3.1): inverte a ordem dos 32 bits de `src`. Nunca toca flags.
@@ -332,6 +349,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.BIT_REVERSE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeBitReverse(core, this); return false; }
     }
 
     /// `SDIV`/`UDIV` (ARM/Thumb-2, ARMv7, B3.1): divisão inteira truncada para zero. Divisão por
@@ -349,6 +367,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar a operação.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DIVIDE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDivide(core, this); return false; }
     }
 
     /// `CLRM {list}` (perfil M com Security Extension, B16.15): zera `R0`-`R12`/`LR` (bits 0-14 de
@@ -359,5 +378,6 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             /// Condição necessária para executar.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.CLEAR_MULTIPLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeClrm(core, this); return false; }
     }
 }

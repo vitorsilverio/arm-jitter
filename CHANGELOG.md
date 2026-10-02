@@ -8,6 +8,13 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
 
 ### Adicionado
+- **`IrOp#execute(IrBlockExecutor, ArmCore, int blockEndPc)`** (`E15.5`): cada operação do IR de 32 bits se roteia sozinha
+  para o executor da sua família, numa ponte de uma linha; devolve se o PC mudou. Os dois `switch` de 189 casos de
+  `IrBlockExecutor` saíram: `executeOp` equivale a `op.execute(this, core, blockEndPc)`, e o laço de `execute` mantém caso
+  próprio só para `Cycle`/`Fetch` e para os 12 `Kind` do núcleo ARMv4T medidos como quentes (roteá-los pela ponte custava
+  até 15% de throughput interpretado no gbaemu). Esquecer a ponte num record novo é erro de compilação; o
+  `IllegalStateException("IrOp kind desconhecido")` deixou de existir. `IrBlockExecutor#neonExecutor()` é novo, ao lado
+  dos accessors das outras famílias.
 - **`Ir64Op#execute(Aarch64Core)`** (`E15.4`): cada operação do IR A64 executa a si mesma, delegando numa linha para o
   executor da sua família. É o único dispatch do interpretador A64 — o `switch` de 212 casos de `Ir64BlockExecutor` saiu —
   e esquecer a ponte num record novo é erro de compilação, não `IllegalStateException` em runtime. `Ir64Op.Cycle` e

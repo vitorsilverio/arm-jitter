@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações VFP (ponto flutuante escalar de 32 bits): aritmética, comparação, conversão,
@@ -95,6 +97,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a operação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_ALU; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpAlu(core, this); return false; }
     }
 
     /// `VSEL` (B14.4, ARMv8-A, espaço VFP incondicional): `vd = selectCondition ? vn : vm` — cópia
@@ -121,6 +124,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: `VSEL` é incondicional).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SELECT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSelect(core, this); return false; }
     }
 
     /// `VRINT{A,N,P,M}` (B14.5, ARMv8-A, espaço VFP incondicional): `vd = roundToIntegral(vm,
@@ -145,6 +149,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_ROUND; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpRound(core, this); return false; }
     }
 
     /// `VCVT{A,N,P,M}{S,U}` (B14.5, ARMv8-A, espaço VFP incondicional): converte `vm` (ponto
@@ -168,6 +173,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT_ROUNDED; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvertRounded(core, this); return false; }
     }
 
     /// `VMOVX`/`VINS` (B14.6, ARMv8-A, `ArmFeature.FP16_ARITHMETIC`, espaço VFP incondicional):
@@ -188,6 +194,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}: espaço incondicional).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_MOVE_HALF_LANE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpMoveHalfLane(core, this); return false; }
     }
 
     // ── B14.6b: aritmética `_hp` (FEAT_FP16) — Kind/records PRÓPRIOS (Armadilha 2 de B14.6:
@@ -219,6 +226,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a operação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_ALU_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpAluHalf(core, this); return false; }
     }
 
     /// `VMOV.F16 Vd,#imm` (B14.6b): grava um imediato de meia precisão já expandido
@@ -231,6 +239,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a operação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_MOVE_IMMEDIATE_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpMoveImmediateHalf(core, this); return false; }
     }
 
     /// `VCMP_hp`/`VCMPE_hp` (B14.6b): compara `vd` com `vm` (ou com zero) em meia precisão e grava
@@ -247,6 +256,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a comparação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_COMPARE_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCompareHalf(core, this); return false; }
     }
 
     /// `VSEL_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de {@link Select}, sem
@@ -264,6 +274,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SELECT_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSelectHalf(core, this); return false; }
     }
 
     /// `VRINT{A,N,P,M}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de {@link Round}
@@ -279,6 +290,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_ROUND_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpRoundHalf(core, this); return false; }
     }
 
     /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b, espaço VFP incondicional) — mesma semântica de
@@ -296,6 +308,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição de execução do BLOCO (sempre {@link Condition#AL}).
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT_ROUNDED_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvertRoundedHalf(core, this); return false; }
     }
 
     /// `VCVT_fix_hp` (B14.6b) — mesma semântica de {@link ConvertFixed} em meia precisão:
@@ -314,6 +327,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a conversão.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT_FIXED_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvertFixedHalf(core, this); return false; }
     }
 
     /// `VLDR_hp` (B14.6b) — mesma semântica de {@link Load} em meia precisão: carrega
@@ -332,6 +346,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar o load.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_LOAD_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpLoadHalf(core, this); return false; }
     }
 
     /// `VSTR_hp` (B14.6b) — ver {@link LoadHalf}.
@@ -347,6 +362,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar o store.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_STORE_HALF; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpStoreHalf(core, this); return false; }
     }
 
     /// Direção de conversão de {@link ConvertHalfPrecision} (`VCVTB`/`VCVTT`, B22.7). O nome diz
@@ -384,6 +400,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a conversão.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT_HALF_PRECISION; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvertHalfPrecision(core, this); return false; }
     }
 
     /// `VJCVT.S32.F64 Sd, Dm` (B22.7, `FEAT_JSCVT`, ARMv8.3-A): `ToInt32` do JavaScript — trunca
@@ -399,6 +416,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a operação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_JAVASCRIPT_CONVERT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpJavascriptConvert(core, this); return false; }
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm` (VFPv3-d16): grava um imediato de ponto flutuante já
@@ -414,6 +432,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a operação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_MOVE_IMMEDIATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpMoveImmediate(core, this); return false; }
     }
 
     /// `VCMP`/`VCMPE` (com ou sem `VCMPE`/`VCMP` `#0.0`): compara `vd` com `vm` (ou com zero) e
@@ -436,6 +455,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a comparação.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_COMPARE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCompare(core, this); return false; }
     }
 
     /// Direção/tipos de uma conversão `VCVT` (forma default, arredondamento round-toward-zero para
@@ -487,6 +507,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a conversão.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvert(core, this); return false; }
     }
 
     /// `VLDR`: carrega `Vd` de `[base + offsetBytes]` (sempre `P=1,W=0` — VFP não tem writeback
@@ -514,6 +535,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar o load.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_LOAD; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpLoad(core, this); return false; }
     }
 
     /// `VSTR`: grava `Vd` em `[base + offsetBytes]` (ver {@link Load}).
@@ -532,6 +554,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar o store.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_STORE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpStore(core, this); return false; }
     }
 
     /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: transfere `count` registradores consecutivos
@@ -561,6 +584,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a transferência.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_MULTIPLE_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpMultipleTransfer(core, this); return false; }
     }
 
     /// `VMOV Rt, Sn` / `VMOV Sn, Rt` (`FMRS`/`FMSR`): transfere um único registrador `S` de/para
@@ -588,6 +612,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a transferência.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCoreTransfer(core, this); return false; }
 
         /// Forma sem lane (`VMOV_single`/`VMOV_half`/`VMOV_to_gp` de 32 bits) — mantém a assinatura anterior.
         public CoreTransfer(boolean toArmRegister, int armRegister, int vn, boolean halfWidth, Condition condition) {
@@ -614,6 +639,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a transferência.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCorePairTransfer(core, this); return false; }
     }
 
     /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`): transfere o FPSCR completo de/para um registrador ARM.
@@ -628,6 +654,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a transferência.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SYSTEM_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSystemTransfer(core, this); return false; }
     }
 
     // -- VFP (B9.5): VMOV_64_sp (par de S consecutivos) e VCVT_fix (fixed-point). --
@@ -649,6 +676,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condicao necessaria para executar a transferencia.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER_SINGLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCorePairTransferSingle(core, this); return false; }
     }
 
     /// `VCVT_fix_{sp,dp}` (ARM DDI 0406C A8.8.397, VFPv3): converte, no MESMO registrador `vd`
@@ -673,6 +701,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condicao necessaria para executar a conversao.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CONVERT_FIXED; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpConvertFixed(core, this); return false; }
     }
 
     /// `VLDR_sysreg`/`VSTR_sysreg` (perfil M, B15.3, `target/isa-decode/m-nocp.decode`): move o
@@ -696,6 +725,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a transferência.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_SYSREG_MEMORY_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpSysregMemoryTransfer(core, this); return false; }
     }
 
     /// `VLLDM`/`VLSTM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): salva/restaura o banco
@@ -714,6 +744,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para disparar a exceção.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VLLDM_VLSTM; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVlldmVlstm(core, this); }
     }
 
     /// `VSCCLRM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): zera um intervalo contíguo
@@ -734,5 +765,6 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             /// Condição necessária para executar a limpeza.
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VSCCLRM; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVscclrm(core, this); return false; }
     }
 }

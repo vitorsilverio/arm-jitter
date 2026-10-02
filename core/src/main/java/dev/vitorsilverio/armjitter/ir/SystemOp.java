@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
@@ -37,6 +39,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar a transferência.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.PSR_TRANSFER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executePsrTransfer(core, this); return false; }
     }
 
     /// `HVC` (B9.8.2, ARM DDI 0406C A8.8.65): entra em Hyp mode via `ArmException#HVC` — ao
@@ -49,6 +52,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// contrário de {@link Breakpoint}, que é incondicional).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.HVC; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeHvc(core, this, blockEndPc); }
     }
 
     /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20): entra em Monitor mode via `ArmException#SMC` —
@@ -62,6 +66,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// espaço condicional de {@link Hvc}/{@link Swi}).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SMC; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeSmc(core, this, blockEndPc); }
     }
 
     /// `ERET` (B9.8.4, A32, ARM DDI 0406C B9.3.3): retorna de exceção — `PC`←`ELR_hyp` (Hyp mode)
@@ -75,6 +80,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// espaço condicional de {@link Hvc}/{@link Smc}/{@link Swi}).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.ERET; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeEret(core, this, blockEndPc); }
     }
 
     /// `MRS` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64): lê um registrador geral ou `SPSR` de
@@ -99,6 +105,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.MRS_BANK; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMrsBank(core, this, blockEndPc); }
     }
 
     /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou `SPSR`
@@ -118,6 +125,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.MSR_BANK; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMsrBank(core, this, blockEndPc); }
     }
 
     /// Operação SWI delegada ao dispatcher do host.
@@ -127,6 +135,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para disparar a SWI.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SWI; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeSwi(core, this, blockEndPc); }
     }
 
     /// `BKPT` (B7.5, ARMv5T+) **e** `HLT` (B14.1b, ARMv8-A de 32 bits) — imediato delegado ao
@@ -141,6 +150,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Imediato da instrução BKPT/HLT.
             int immediate) implements SystemOp {
         @Override public int kind() { return Kind.BREAKPOINT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeBreakpoint(core, this, blockEndPc); }
     }
 
     /// Transferência de registrador de coprocessador (`MCR`/`MRC`), delegada ao barramento de coprocessador do core.
@@ -164,6 +174,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar a transferência.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.COPROCESSOR; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeCoprocessor(core, this); }
     }
 
     /// Transferência DUPLA de registrador de coprocessador (`MCRR`/`MRRC`, F3), delegada ao
@@ -188,6 +199,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar a transferência.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.COPROCESSOR_DOUBLE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeCoprocessorDouble(core, this); }
     }
 
     /// Instrução não implementada/indefinida que deve entrar no vetor `0x04`.
@@ -197,6 +209,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para disparar a exceção.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.UNDEFINED; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeUndefined(core, this); }
     }
 
     /// `CPS`/`CPSIE`/`CPSID` (ARMv6): altera os bits A/I/F e/ou o modo do CPSR pelo mesmo
@@ -222,6 +235,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (espaço incondicional → sempre AL).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.CHANGE_PROCESSOR_STATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeChangeProcessorState(core, this); return false; }
     }
 
     /// `SETEND` (ARMv6): seta o bit E (endianness de dados) do CPSR.
@@ -231,6 +245,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (espaço incondicional → sempre AL).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SET_ENDIANNESS; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeSetEndianness(core, this); return false; }
     }
 
     /// `SRS` (ARMv6): empilha LR e SPSR ATUAIS na pilha (`R13`) de um modo alvo.
@@ -246,6 +261,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (espaço incondicional → sempre AL).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.STORE_RETURN_STATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeStoreReturnState(core, this); }
     }
 
     /// `RFE` (ARMv6): carrega PC e CPSR da pilha apontada por `base` (Rn).
@@ -261,6 +277,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (espaço incondicional → sempre AL).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.RETURN_FROM_EXCEPTION; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeReturnFromException(core, this); }
     }
 
     /// `WFI` (ARMv6K hint): coloca o core em HALT até uma interrupção.
@@ -268,6 +285,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (disfarçada de MSR — pode ser condicional).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.WAIT_FOR_INTERRUPT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeWaitForInterrupt(core, this); return false; }
     }
 
     /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 — B2.5): barreira de memória.
@@ -282,6 +300,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (espaço incondicional em Thumb-2 → sempre AL).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.MEMORY_BARRIER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeMemoryBarrier(core, this); return false; }
     }
 
     /// Grava o ITSTATE\[7:0\] do CPSR (Thumb-2 IT block, B2.4 — ver
@@ -303,6 +322,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar esta gravação.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SET_IT_STATE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeSetItState(core, this); return false; }
     }
 
     /// `MRS`/`MSR` na forma SYSm do perfil M (B7.4): transfere um registrador especial Cortex-M
@@ -324,6 +344,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar a transferência.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.M_PROFILE_SYSTEM_REGISTER; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeMProfileSystemRegister(core, this); return false; }
     }
 
     /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de acessar
@@ -341,6 +362,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar a exceção.
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.NOCP; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeNocp(core, this); }
     }
 
     /// `SG` (Secure Gateway, perfil M, B15.4): entra em estado Secure e limpa o `bit0` de `LR` —
@@ -351,5 +373,6 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             /// Condição necessária para executar (sempre {@link Condition#AL} em Thumb comum).
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SECURE_GATEWAY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeSecureGateway(core, this); return false; }
     }
 }

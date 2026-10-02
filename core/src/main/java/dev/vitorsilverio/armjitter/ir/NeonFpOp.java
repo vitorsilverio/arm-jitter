@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
+import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
 /// Operações NEON de ponto flutuante: aritmética, conversão, números complexos (`FEAT_FCMA`),
@@ -45,6 +47,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FP_THREE_SAME; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFpThreeSame(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "pairwise" de PONTO FLUTUANTE (B13.6 F32, B13.24 F16):
@@ -71,6 +74,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte 2 (metade alta do resultado), índice de `D`.
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FP_PAIRWISE; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFpPairwise(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-reg-and-shift" `VCVT` fixo↔float F32 (B13.8) e F16 (B13.24):
@@ -107,6 +111,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_CONVERT_FIXED_POINT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonConvertFixedPoint(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "2-regs-plus-scalar" de PONTO FLUTUANTE F32 (B13.11) e F16
@@ -145,6 +150,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Índice do elemento dentro de {@link #vm} (já extraído pelo decoder).
             int index) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FP_THREE_SAME_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFpThreeSameByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" de PONTO FLUTUANTE, sub-grupo
@@ -172,6 +178,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// inicia o `Q`.
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FP_UNARY; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFpUnary(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "two-register miscellaneous" de PONTO FLUTUANTE, conversão de
@@ -198,6 +205,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// inicia o `Q` de entrada, na forma larga (`WIDEN_F16`) é o `D` único de entrada.
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FP_CONVERT_PRECISION; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFpConvertPrecision(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VCMLA`/`VCADD` (B13.17, `FEAT_FCMA`): trata
@@ -233,6 +241,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// índice de `D` (ver {@link #vd}).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_COMPLEX; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonComplex(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VCMLA_scalar` (B13.17, `FEAT_FCMA`): como
@@ -266,6 +275,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Índice do par complexo dentro de {@link #vm}: `0`-`1` para F16, sempre `0` para F32.
             int index) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_COMPLEX_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonComplexByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFML`/`VFMSL` (B13.20, `FEAT_FHM`, forma
@@ -300,6 +310,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte 2: índice de `S` (`0`-`31`, `quad=false`) ou de `D` (`quad=true`).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFusedMultiplyAddLong(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFML_scalar`/`VFMSL_scalar` (B13.20,
@@ -334,6 +345,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// (`quad=true`).
             int index) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFusedMultiplyAddLongByElement(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VDOT_b16` (B13.21, `FEAT_BF16`): produto
@@ -357,6 +369,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte 2, em índice de `D` (ver {@link #vd}).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BFLOAT16; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonDotProductBFloat16(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VDOT_b16_scal` (B13.21): como
@@ -384,6 +397,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// pares).
             int index) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_DOT_PRODUCT_BY_ELEMENT_BFLOAT16; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonDotProductByElementBFloat16(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VMMLA_b16` (B13.21, `FEAT_BF16`):
@@ -410,6 +424,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// {@link #vd}).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonMatrixMultiplyAccumulateBFloat16(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFMA_b16` (B13.21, `FEAT_BF16`, forma
@@ -442,6 +457,7 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Registrador fonte 2: o `D` par que inicia o `Q` (`Vm.8H`, lido elemento a elemento).
             int vm) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BFLOAT16; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFusedMultiplyAddLongBFloat16(core, this); return false; }
     }
 
     /// NEON/Advanced SIMD de 32 bits, `neon-shared` — `VFMA_b16_scal` (B13.21, mnemônicos
@@ -466,5 +482,6 @@ public sealed interface NeonFpOp extends NeonOp permits NeonFpOp.FpThreeSame, Ne
             /// Índice do elemento `bf16` de {@link #vm} usado em TODA a operação (`0`-`3`).
             int index) implements NeonFpOp {
         @Override public int kind() { return Kind.NEON_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT_BFLOAT16; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonFusedMultiplyAddLongByElementBFloat16(core, this); return false; }
     }
 }
