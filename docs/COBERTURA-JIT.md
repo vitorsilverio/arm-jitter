@@ -33,12 +33,12 @@ de 64 bits; a coluna existe para tornar a ausência visível (task A10.8).
 
 > **ASM 32 bits: 57 de 189** operações emitidas nativamente (mais 9 condicionais).
 > **Truffle 32 bits: 66 de 189** operações com nó especializado.
-> **ASM 64 bits: 61 de 212** `Kind` emitidos nativamente.
+> **ASM 64 bits: 53 de 212** `Kind` emitidos nativamente.
 > **Truffle 64 bits: 0 de 212** — o backend não existe (A10.8).
 
 A escada que fecha cada gap: `tasks/trilha-c-perf/c12-plano-jit-nativo.md` (ASM, C12.2-C12.8) e `tasks/trilha-a-truffle/a10-plano-truffle-completo.md` (Truffle, A10.3-A10.8).
 
-> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `116` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `61/96`.
+> Conciliação com a medição do `ROADMAP-100-ARM.md` (2026-09-02): o `66/73` de ASM 32 bits daquele documento = as `57` `✅` incondicionais **mais** as `9` `⚠️` (nativas no caminho comum); as `116` linhas a mais aqui são os `Kind` de NEON por imediato de B13.7/B13.8 (todas `❌`). ASM 64 bits seguia `24/95`; `VECTOR_FP_CONVERT_PRECISION` (B19.4) levou o denominador a 96, ainda `❌` — daí `53/96`.
 
 ## Tabela A — pipeline de 32 bits
 
@@ -278,14 +278,14 @@ Linhas = os 212 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 | `DIVIDE` | ✅ | ❌ |
 | `LOAD_EXCLUSIVE` | ✅ | ❌ |
 | `STORE_EXCLUSIVE` | ✅ | ❌ |
-| `SYSTEM_REGISTER` | ✅ | ❌ |
-| `SYSTEM_INSTRUCTION` | ✅ | ❌ |
-| `EXCEPTION_RETURN` | ✅ | ❌ |
+| `SYSTEM_REGISTER` | ❌ | ❌ |
+| `SYSTEM_INSTRUCTION` | ❌ | ❌ |
+| `EXCEPTION_RETURN` | ❌ | ❌ |
 | `FP64_ALU` | ✅ | ❌ |
 | `FP64_MOVE_IMMEDIATE` | ✅ | ❌ |
 | `FP64_COMPARE` | ✅ | ❌ |
 | `FP64_CONVERT` | ✅ | ❌ |
-| `PRIVILEGED_CALL` | ✅ | ❌ |
+| `PRIVILEGED_CALL` | ❌ | ❌ |
 | `CONDITIONAL_COMPARE` | ✅ | ❌ |
 | `LOGICAL_SHIFTED_REGISTER` | ✅ | ❌ |
 | `SHIFT_VARIABLE` | ✅ | ❌ |
@@ -301,10 +301,10 @@ Linhas = os 212 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 | `EVALUATE_INTO_FLAGS` | ✅ | ❌ |
 | `ROTATE_INTO_FLAGS` | ✅ | ❌ |
 | `CONVERT_FLAGS` | ✅ | ❌ |
-| `INTERRUPT_MASK` | ✅ | ❌ |
-| `BREAKPOINT` | ✅ | ❌ |
-| `UNDEFINED_INSTRUCTION_TRAP` | ✅ | ❌ |
-| `ADDRESS_TRANSLATE` | ✅ | ❌ |
+| `INTERRUPT_MASK` | ❌ | ❌ |
+| `BREAKPOINT` | ❌ | ❌ |
+| `UNDEFINED_INSTRUCTION_TRAP` | ❌ | ❌ |
+| `ADDRESS_TRANSLATE` | ❌ | ❌ |
 | `FP64_MULTIPLY_ADD` | ✅ | ❌ |
 | `FP64_CONDITIONAL_SELECT` | ✅ | ❌ |
 | `FP64_CONDITIONAL_COMPARE` | ✅ | ❌ |
@@ -475,6 +475,14 @@ Linhas = os 212 `Ir64Op.Kind`. `Ir64NativePolicy` casa por `Kind` e **não tem c
 
 Entrada da escada C12.3-C12.6.
 
+- `SYSTEM_REGISTER`
+- `SYSTEM_INSTRUCTION`
+- `EXCEPTION_RETURN`
+- `PRIVILEGED_CALL`
+- `INTERRUPT_MASK`
+- `BREAKPOINT`
+- `UNDEFINED_INSTRUCTION_TRAP`
+- `ADDRESS_TRANSLATE`
 - `VECTOR_ARITHMETIC_THREE_SAME`
 - `VECTOR_ARITHMETIC_PAIRWISE`
 - `VECTOR_ARITHMETIC_WIDENING`

@@ -163,7 +163,7 @@ class Asm64CodeEmitterPerOpTest {
     /// op nativa de sistema teria.
     @Test
     void interpretedOpHypervisorCallEntersEl2() {
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.PrivilegedCall(true)));
+        assertFalse(Ir64NativePolicy.supports(new Ir64Op.PrivilegedCall(true)));
 
         Ir64Block block = blockOf(0x6000, new Ir64Op.PrivilegedCall(true));
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());

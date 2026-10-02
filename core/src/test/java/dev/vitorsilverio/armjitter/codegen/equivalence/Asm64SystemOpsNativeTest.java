@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.codegen.equivalence;
 
 import dev.vitorsilverio.armjitter.codegen64.Asm64CodeEmitter;
+import dev.vitorsilverio.armjitter.codegen64.Asm64FallbackPolicy;
 import dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
@@ -18,10 +19,11 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/// Aceite da task C12.10: os 8 `Kind` de sistema são aceitos por {@link Ir64NativePolicy}, o bloco
-/// compila como bytecode (política padrão `WHOLE_BLOCK`, sem cair no interpretado) e o estado final
+/// Aceite da task C12.10: os 8 `Kind` de sistema, sob `PER_OP`, compilam como bytecode via helper (o default
+/// `WHOLE_BLOCK` os recusa — blocos frios, ver a task) e o estado final
 /// é idêntico ao de {@link InterpretedIr64CodeEmitter} (G1). As 4 ops que lançam exceção de guest
 /// (`HVC`/`BRK`/`UNDEFINED`) ficam DENTRO do `try` do bloco — o teste "no meio" é o aceite central
 /// (classe de bug da E7: exceção de guest escapando para o host).
@@ -63,23 +65,26 @@ class Asm64SystemOpsNativeTest {
 
     /// Compara com o interpretado e garante que o bloco foi para bytecode, não para o fallback.
     private void assertNativeAndEquivalent(Ir64Block block, EquivalencePairFactory64 pairFactory) {
-        Asm64CodeEmitter asm = new Asm64CodeEmitter();
-        assertTrue(asm.isNativeSupported(block), "bloco com op de sistema deve ser nativo");
+        Asm64CodeEmitter asm = new Asm64CodeEmitter(Asm64FallbackPolicy.PER_OP);
         harness.assertEquivalent(interpreted, asm, block, pairFactory);
         assertEquals(1, asm.nativeBlockCount());
         assertEquals(0, asm.fallbackBlockCount());
+        assertTrue(asm.perOpFallbackOpCount() >= 1, "a op de sistema vai pelo helper");
     }
 
     @Test
-    void allEightSystemKindsAreSupported() {
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0)));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL)));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.ExceptionReturn()));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.PrivilegedCall(true)));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.InterruptMask(true, 0b0010)));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.Breakpoint(0x1234)));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.UndefinedInstructionTrap()));
-        assertTrue(Ir64NativePolicy.supports(new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)));
+    void allEightSystemKindsGoThroughHelperNotWholeBlockPolicy() {
+        // Default WHOLE_BLOCK os recusa de propósito (blocos frios, ver a task): só PER_OP os compila.
+        assertFalse(new Asm64CodeEmitter().isNativeSupported(blockOf(0x1000, new Ir64Op.PrivilegedCall(true))));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.PrivilegedCall(true)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.ExceptionReturn()));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.PrivilegedCall(true)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.InterruptMask(true, 0b0010)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.Breakpoint(0x1234)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.UndefinedInstructionTrap()));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)));
     }
 
     @Test
